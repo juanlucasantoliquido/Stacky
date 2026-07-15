@@ -1,0 +1,16 @@
+/* Plan 135 F7 — guardado fallido visible, cambios conservados.
+   NOTA: este archivo no existía en el repo (AgentConfigModal.tsx lo importa
+   pero nunca tuvo .module.css propio — gap preexistente ajeno a este plan;
+   tsc no lo detecta por la declaración ambient de *.module.css). Se crea acá
+   con SOLO la regla que este plan necesita; no se reconstruyen los estilos
+   de saveBtn/cancelBtn/etc. que el componente ya asumía indefinidos. */
+.saveError {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: 6px;
+  color: #fecaca;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

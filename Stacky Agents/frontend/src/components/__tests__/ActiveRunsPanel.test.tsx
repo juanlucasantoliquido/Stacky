@@ -159,4 +159,39 @@ describe("ActiveRunsPanel", () => {
       );
     }
   });
+
+  it("muestra un aviso inline cuando cancelar falla, sin ocultar el panel", async () => {
+    mockRuns([RUN]);
+    mockCancel.mockRejectedValueOnce(new Error("500 INTERNAL SERVER ERROR: boom"));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/No se pudo cancelar #42/i)).toBeDefined(),
+    );
+    // El panel sigue visible con el run listado.
+    expect(screen.getByText("#42")).toBeDefined();
+  });
+
+  it("el botón Reintentar del aviso re-dispara la cancelación sin nuevo confirm", async () => {
+    mockRuns([RUN]);
+    mockCancel.mockRejectedValueOnce(new Error("timeout"));
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    wrap(<ActiveRunsPanel />);
+
+    await waitFor(() => expect(screen.getByText("#42")).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/No se pudo cancelar #42/i)).toBeDefined(),
+    );
+
+    confirmSpy.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /^reintentar$/i }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockCancel).toHaveBeenCalledTimes(2));
+  });
 });

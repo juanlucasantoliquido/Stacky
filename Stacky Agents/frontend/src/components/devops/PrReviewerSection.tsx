@@ -113,7 +113,7 @@ export const PrReviewerSection: React.FC<PrReviewerSectionProps> = ({ ctx }) => 
     setConfirmMerge(false);
     PrReview.actions(activeProject)
       .then((r) => setActions(r.actions))
-      .catch(() => setActions([]));
+      .catch((e) => { setActions([]); setError(errMsg(e)); });
   };
 
   const loadPreview = async () => {

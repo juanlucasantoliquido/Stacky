@@ -4,6 +4,7 @@ import { Move, X } from "lucide-react";
 import { Executions } from "../api/endpoints";
 import useLocalStorageState from "../hooks/useLocalStorageState";
 import { useActiveRunsGlobal } from "../hooks/useActiveRunsGlobal";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./ActiveRunsPanel.module.css";
 
 /**
@@ -41,7 +42,7 @@ export default function ActiveRunsPanel() {
     "top-right"
   );
 
-  const { data } = useActiveRunsGlobal();
+  const { data, isError: fetchFailed, dataUpdatedAt } = useActiveRunsGlobal();
 
   const cancelMutation = useMutation({
     mutationFn: (id: number) => Executions.cancel(id),
@@ -138,6 +139,37 @@ export default function ActiveRunsPanel() {
           );
         })}
       </ul>
+      {fetchFailed && (
+        <div className={styles.staleNotice} role="status">
+          {/* [ADICIÓN ARQUITECTO 2] hora del último dato bueno, directo del
+              UseQueryResult del contrato 134 — cero mecanismos nuevos. */}
+          Sin conexión con el backend — mostrando el último estado conocido
+          {dataUpdatedAt > 0 ? ` (${new Date(dataUpdatedAt).toLocaleTimeString()})` : ""}.
+        </div>
+      )}
+      {cancelMutation.isError && (
+        <div className={styles.cancelError} role="alert">
+          <span className={styles.cancelErrorText}>
+            No se pudo cancelar #{cancelMutation.variables}:{" "}
+            {formatLoadErrorMessage(cancelMutation.error)}
+          </span>
+          <button
+            type="button"
+            className={styles.cancelRetry}
+            onClick={() => cancelMutation.mutate(cancelMutation.variables as number)}
+          >
+            Reintentar
+          </button>
+          <button
+            type="button"
+            className={styles.cancelDismiss}
+            aria-label="Descartar aviso de cancelación"
+            onClick={() => cancelMutation.reset()}
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
 } from "../api/endpoints";
 import { visualFor, partitionSectionsByTier, isModifiedFromDefault } from "./harnessVisuals";
 import { useHarnessUiPrefs } from "./useHarnessUiPrefs";
+import Toast, { type ToastState } from "./Toast";
+import { classifyFlagUpdateOutcome } from "../utils/flagUpdateOutcome";
 import styles from "./HarnessFlagsPanel.module.css";
 
 // Plan 63 F3 — Panel de flags por categorías colapsables.
@@ -351,6 +353,7 @@ export default function HarnessFlagsPanel() {
   });
 
   const [apiError, setApiError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<ToastState | null>(null);
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
   const [onlyModified, setOnlyModified] = useState(false);
@@ -506,10 +509,11 @@ export default function HarnessFlagsPanel() {
   const handleUpdate = (key: string, value: boolean | number | string) => {
     update.mutate({ [key]: value }, {
       onSuccess: (data) => {
-        // Plan 84 F3.4 — aviso post-PUT si hay keys que requieren reinicio
-        if (data.restart_required_keys && data.restart_required_keys.length > 0) {
-          const keys = data.restart_required_keys.join(", ");
-          setApiError(`Guardado. Requiere reiniciar el backend: ${keys}`);
+        // Plan 135 F5: "guardado + requiere reinicio" es un ÉXITO con
+        // condición — canal warning, nunca el canal de error (antes: :512).
+        const outcome = classifyFlagUpdateOutcome(data);
+        if (outcome.kind === "warning") {
+          setSaveNotice({ variant: "warning", title: "Guardado", body: outcome.message! });
         }
       },
     });
@@ -680,6 +684,7 @@ export default function HarnessFlagsPanel() {
 
       {saving && <div className={styles.status}>Guardando...</div>}
       {apiError && <div className={styles.errorText}>{apiError}</div>}
+      {saveNotice && <Toast toast={saveNotice} onClose={() => setSaveNotice(null)} />}
 
       {/* Plan 78 F4 — Toggle Simple ↔ Experto.
           [C12] role="group" + aria-label comunican selección mutuamente excluyente. */}

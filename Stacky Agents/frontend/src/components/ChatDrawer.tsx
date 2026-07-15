@@ -17,6 +17,8 @@ import { AgentRoles, Agents, Chat, DocsRag, Projects, Tickets } from "../api/end
 import type { ChatTurnMessage, ChatToolLog, DocsRagSource } from "../api/endpoints";
 import type { Ticket } from "../types";
 import { useWorkbench } from "../store/workbench";
+import LoadErrorState from "./LoadErrorState";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./ChatDrawer.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -59,6 +61,8 @@ export default function ChatDrawer() {
   const [ticketQuery, setTicketQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
+  const [ticketsLoadError, setTicketsLoadError] = useState<string | null>(null);
+  const [ticketsReloadKey, setTicketsReloadKey] = useState(0);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   // ── Workspace root for tool_executor file writes ─────────────────────────
@@ -161,6 +165,7 @@ export default function ChatDrawer() {
   // ── Load tickets when agent / project changes ──────────────────────────────
   useEffect(() => {
     if (!chatDrawerOpen || !selectedAgent) return;
+    setTicketsLoadError(null);
     // WS1: Tickets.list solo acepta project (sin agent_filename)
     Tickets.list(activeProject?.name ?? undefined)
       .then((t) => {
@@ -172,8 +177,8 @@ export default function ChatDrawer() {
           if (match) setSelectedTicket(match);
         }
       })
-      .catch(() => {});
-  }, [chatDrawerOpen, selectedAgent, activeProject?.name]);
+      .catch((e) => setTicketsLoadError(formatLoadErrorMessage(e)));
+  }, [chatDrawerOpen, selectedAgent, activeProject?.name, ticketsReloadKey]);
 
   // ── Ticket filter ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -521,6 +526,14 @@ export default function ChatDrawer() {
                   onChange={(e) => setTicketQuery(e.target.value)}
                   placeholder="Buscar por título o ID…"
                 />
+                {ticketsLoadError && (
+                  <LoadErrorState
+                    compact
+                    what="los tickets"
+                    error={ticketsLoadError}
+                    onRetry={() => setTicketsReloadKey((k) => k + 1)}
+                  />
+                )}
                 {filteredTickets.length > 0 && (
                   <div className={styles.ticketList}>
                     {filteredTickets.map((t) => (

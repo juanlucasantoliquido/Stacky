@@ -19,6 +19,7 @@ import {
   type CIPreviewResponse,
   type CIMonitorResponse,
 } from "../api/endpoints";
+import Toast, { type ToastState } from "./Toast";
 
 interface Props {
   project: string;
@@ -34,7 +35,7 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
   const [previewLoading, setPreviewLoading] = useState(false);
   const [triggerLoading, setTriggerLoading] = useState(false);
   const [monitorData, setMonitorData] = useState<CIMonitorResponse | null>(null);
-  const [toast, setToast] = useState<{ msg: string; kind: "info" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
   const pollCountRef = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,7 +62,7 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
   }, []);
 
   const showToast = (msg: string, kind: "info" | "error" = "info") => {
-    setToast({ msg, kind });
+    setToast({ variant: kind === "error" ? "error" : "success", body: msg });
     setTimeout(() => { if (mountedRef.current) setToast(null); }, 5000);
   };
 
@@ -148,15 +149,7 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
       )}
 
       {/* Toast */}
-      {toast && (
-        <div style={{
-          marginBottom: 8, padding: "6px 10px", borderRadius: 4, fontSize: 13,
-          background: toast.kind === "error" ? "#fdecea" : "#e8f5e9",
-          color: toast.kind === "error" ? "#c62828" : "#2e7d32",
-        }}>
-          {toast.msg}
-        </div>
-      )}
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
       {/* Botón principal */}
       <button

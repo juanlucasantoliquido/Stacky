@@ -12,6 +12,7 @@
  */
 import { useEffect, useState } from "react";
 import { AgentRoles, type AgentRoleEntry } from "../api/endpoints";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./AgentConfigModal.module.css";
 
 interface Props {
@@ -39,6 +40,7 @@ export default function AgentConfigModal({ onClose }: Props) {
     Record<string, Partial<Omit<AgentRoleEntry, "name" | "description">>>
   >({});
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     AgentRoles.list()
@@ -80,13 +82,17 @@ export default function AgentConfigModal({ onClose }: Props) {
       return;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       await AgentRoles.update(dirty);
       setSaved(true);
       setDirty({});
       setTimeout(() => onClose(), 900);
-    } catch {
-      // ignore -- changes still applied locally
+    } catch (e) {
+      // Plan 135 F7: el PUT falló — los cambios NO quedaron en el server (al
+      // reabrir, el useEffect de carga los pisa). `dirty` se conserva (las
+      // limpiezas están en el try, no corren ante throw) => reintento 1-click.
+      setSaveError(formatLoadErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -185,6 +191,11 @@ export default function AgentConfigModal({ onClose }: Props) {
           </div>
         )}
 
+        {saveError && (
+          <div role="alert" className={styles.saveError}>
+            No se pudo guardar: {saveError}. Tus cambios siguen en el formulario — reintentá con «Guardar».
+          </div>
+        )}
         <footer className={styles.footer}>
           <button
             className={styles.cancelBtn}

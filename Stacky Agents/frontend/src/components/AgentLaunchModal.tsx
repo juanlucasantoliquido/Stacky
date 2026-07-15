@@ -12,6 +12,8 @@ import {
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import PixelAvatar from "./PixelAvatar";
+import LoadErrorState from "./LoadErrorState";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./AgentLaunchModal.module.css";
 
 interface TicketComment { author: string; date: string; text: string; }
@@ -62,6 +64,8 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filtered, setFiltered] = useState<Ticket[]>([]);
+  const [ticketsLoadError, setTicketsLoadError] = useState<string | null>(null);
+  const [ticketsReloadKey, setTicketsReloadKey] = useState(0);
   const [selected, setSelected] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -107,10 +111,11 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
 
   // load tickets once + initial bridge health probe (informativo, no bloqueante)
   useEffect(() => {
+    setTicketsLoadError(null);
     Tickets.list(activeProjectName).then((t) => {
       setTickets(t);
       setFiltered(t.slice(0, 20));
-    }).catch(() => {});
+    }).catch((e) => setTicketsLoadError(formatLoadErrorMessage(e)));
     searchRef.current?.focus();
 
     // Probe inicial del bridge — si está caído, mostramos un aviso suave
@@ -127,7 +132,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
       void probeClaude();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProjectName]);
+  }, [activeProjectName, ticketsReloadKey]);
 
   // debounced filter
   useEffect(() => {
@@ -352,7 +357,14 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
 
         {/* Ticket list */}
         <div className={styles.list}>
-          {filtered.length === 0 ? (
+          {ticketsLoadError ? (
+            <LoadErrorState
+              compact
+              what="los tickets"
+              error={ticketsLoadError}
+              onRetry={() => setTicketsReloadKey((k) => k + 1)}
+            />
+          ) : filtered.length === 0 ? (
             <div className={styles.empty}>No se encontraron tickets</div>
           ) : (
             filtered.map((t) => (

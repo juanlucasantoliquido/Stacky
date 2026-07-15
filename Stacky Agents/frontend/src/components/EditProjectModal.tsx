@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Projects, Mantis, type MantisProject, type MantisListParams } from "../api/endpoints";
 import type { AgentWorkflowConfig, InitProjectPayload, Project, TrackerType } from "../types";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -55,6 +56,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const [trackerStates, setTrackerStates] = useState<string[]>([]);
   const [workflows, setWorkflows] = useState<Record<string, AgentWorkflowConfig>>({});
   const [savingWorkflow, setSavingWorkflow] = useState<string | null>(null);
+  const [workflowSaveError, setWorkflowSaveError] =
+    useState<{ filename: string; message: string } | null>(null);
 
   // Carga el usuario guardado para mostrarlo en el placeholder
   useEffect(() => {
@@ -119,10 +122,17 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
     const wf = workflows[filename];
     if (!wf) return;
     setSavingWorkflow(filename);
+    setWorkflowSaveError(null);
     try {
       await Projects.putAgentWorkflow(project.name, filename, wf);
-    } catch { /* ignore */ }
-    finally { setSavingWorkflow(null); }
+    } catch (e) {
+      // Plan 135 F7: antes el catch tragaba el error silenciosamente — el
+      // operador creía que guardó. El estado local `workflows` se conserva
+      // => reintento 1-click.
+      setWorkflowSaveError({ filename, message: formatLoadErrorMessage(e) });
+    } finally {
+      setSavingWorkflow(null);
+    }
   }
 
   async function loadMantisProjects() {
@@ -708,6 +718,11 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                       >
                         {savingWorkflow === filename ? "Guardando…" : "💾 Guardar workflow"}
                       </button>
+                      {workflowSaveError?.filename === filename && (
+                        <div role="alert" className={styles.saveError}>
+                          No se pudo guardar el workflow: {workflowSaveError.message}. Tus cambios siguen en el formulario — reintentá.
+                        </div>
+                      )}
                     </div>
                   </details>
                 );

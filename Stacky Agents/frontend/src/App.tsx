@@ -22,6 +22,8 @@ import ShortcutsCheatsheet from "./components/ShortcutsCheatsheet";
 import DemoModeBanner from "./components/DemoModeBanner";
 import CodexConsoleDock from "./components/CodexConsoleDock";
 import ActiveRunsPanel from "./components/ActiveRunsPanel";
+import PageErrorBoundary from "./components/PageErrorBoundary";
+import { probeFlagHealth, nextEnabledState } from "./utils/flagHealth";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
@@ -90,21 +92,24 @@ export default function App() {
   useEffect(() => {
     initPreferences();
     initUiSections();
-    // Plan 74: comprobar si el migrador está habilitado (flag backend)
-    fetch("/api/migrator/health")
-      .then((r) => r.json())
-      .then((d: { flag_enabled?: boolean }) => setMigradorEnabled(d.flag_enabled === true))
-      .catch(() => setMigradorEnabled(false));
-    // Plan 87: comprobar si DevOps está habilitado (flag backend)
-    fetch("/api/devops/health")
-      .then((r) => r.json())
-      .then((d: { flag_enabled?: boolean }) => setDevopsEnabled(d.flag_enabled === true))
-      .catch(() => setDevopsEnabled(false));
-    // Plan 122: comprobar si el Comparador de BD está habilitado (flag backend)
-    fetch("/api/db-compare/health")
-      .then((r) => r.json())
-      .then((d: { flag_enabled?: boolean }) => setDbCompareEnabled(d.flag_enabled === true))
-      .catch(() => setDbCompareEnabled(false));
+    // Plan 135 F6: solo un JSON válido con flag_enabled===true|false es
+    // veredicto. Fallo de red/parseo => retry (≤2, backoff) y, si persiste,
+    // "unknown" que CONSERVA el estado previo (nextEnabledState) en vez de
+    // ocultar el tab toda la sesión. La desactivación real de la flag
+    // (JSON ok con flag_enabled=false) sigue ocultando el tab, igual que hoy.
+    let alive = true;
+    void probeFlagHealth("/api/migrator/health").then((v) => {
+      if (alive) setMigradorEnabled((prev) => nextEnabledState(prev, v));
+    });
+    void probeFlagHealth("/api/devops/health").then((v) => {
+      if (alive) setDevopsEnabled((prev) => nextEnabledState(prev, v));
+    });
+    void probeFlagHealth("/api/db-compare/health").then((v) => {
+      if (alive) setDbCompareEnabled((prev) => nextEnabledState(prev, v));
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -268,20 +273,22 @@ export default function App() {
         )}
       </nav>
 
-      {tab === "team"     && <TeamScreen />}
-      {tab === "tickets"  && <TicketBoard />}
-      {tab === "review"   && <ReviewInboxPage />}
-      {tab === "unblocker" && <UnblockerPage />}
-      {tab === "pm"       && sections.pm   && <PMCommandCenter />}
-      {tab === "logs"     && sections.logs && <SystemLogsPage />}
-      {tab === "settings" && <SettingsPage />}
-      {tab === "docs"     && sections.docs && <DocsPage />}
-      {tab === "memory"   && sections.memory && <MemoryPage />}
-      {tab === "diagnostics" && <DiagnosticsPage />}
-      {tab === "history"     && <ExecutionHistoryPage />}
-      {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
-      {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
-      {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
+      <PageErrorBoundary resetKey={tab}>
+        {tab === "team"     && <TeamScreen />}
+        {tab === "tickets"  && <TicketBoard />}
+        {tab === "review"   && <ReviewInboxPage />}
+        {tab === "unblocker" && <UnblockerPage />}
+        {tab === "pm"       && sections.pm   && <PMCommandCenter />}
+        {tab === "logs"     && sections.logs && <SystemLogsPage />}
+        {tab === "settings" && <SettingsPage />}
+        {tab === "docs"     && sections.docs && <DocsPage />}
+        {tab === "memory"   && sections.memory && <MemoryPage />}
+        {tab === "diagnostics" && <DiagnosticsPage />}
+        {tab === "history"     && <ExecutionHistoryPage />}
+        {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
+        {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
+        {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
+      </PageErrorBoundary>
 
       <CommandPalette
         open={paletteOpen}

@@ -1,6 +1,6 @@
 # Plan 135 — Cero errores mudos en la UI: distinguir error de vacío, contener crashes y un canal único de feedback
 
-**Estado:** CRITICADO v2 — v1 RECHAZADO (2 BLOQUEANTES) y corregido in place; listo para implementar (crítica adversarial 2026-07-14; v1 PROPUESTO 2026-07-13)
+**Estado:** IMPLEMENTADO F0..F8 (2026-07-15). Smoke manual de 6 pasos de flujos felices (F8) NO ejecutado — requiere la app viva con actividad concurrente confirmada en el mismo árbol; queda listo para el operador. (CRITICADO v2 — v1 RECHAZADO (2 BLOQUEANTES) y corregido in place; crítica adversarial 2026-07-14; v1 PROPUESTO 2026-07-13)
 **Origen:** auditoría UX multi-lente 2026-07-13, pedido del operador de mejorar UX sin romper nada; precedente real: el 500 mudo del revisor de PRs (2026-07-11) que costó una sesión de debugging.
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero store nuevo, cero migración.
 **Flag:** NO lleva flag (decisión de diseño justificada en §3.1, por fase).

@@ -6,6 +6,7 @@ import { useExecutionStream } from "../hooks/useExecutionStream";
 import { useWorkbench } from "../store/workbench";
 import type { LogLine } from "../types";
 import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./CodexConsoleDock.module.css";
 
 /** Distancia (px) al fondo dentro de la cual seguimos auto-scrolleando. */
@@ -53,6 +54,10 @@ export default function CodexConsoleDock() {
   const setMinimized = useWorkbench((state) => state.setCodexConsoleMinimized);
   const [input, setInput] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
+  const [closeState, setCloseState] = useState<{ closing: boolean; error: string | null }>({
+    closing: false,
+    error: null,
+  });
   const stream = useExecutionStream(executionId);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -125,6 +130,25 @@ export default function CodexConsoleDock() {
       el.scrollHeight - el.scrollTop - el.clientHeight < AUTOSCROLL_THRESHOLD;
   };
 
+  // Plan 135 F3: cerrar una sesión interactiva VIVA implica cancelarla en el
+  // backend. Si el cancel falla, NO desmontamos la consola (antes: catch mudo
+  // + setExecution(null) → run zombie invisible, precedente 1800s). El
+  // operador ve el error y reintenta con otro click.
+  const handleClose = async () => {
+    if (closeState.closing) return;
+    if (isInteractiveRun && status === "running" && !stream.done) {
+      setCloseState({ closing: true, error: null });
+      try {
+        await Executions.cancel(executionId);
+      } catch (e) {
+        setCloseState({ closing: false, error: formatLoadErrorMessage(e) });
+        return; // la consola sigue abierta y viva
+      }
+    }
+    setCloseState({ closing: false, error: null });
+    setExecution(null);
+  };
+
   return (
     <>
     <section className={minimized ? styles.dockMinimized : styles.dock} aria-label={`Consola ${runtimeLabel}`}>
@@ -171,21 +195,23 @@ export default function CodexConsoleDock() {
           <button
             type="button"
             className={styles.iconButton}
-            onClick={() => {
-              // En una sesión interactiva viva, cerrar la consola finaliza la
-              // sesión (cierra stdin → el agente termina). Para sólo ocultarla
-              // sin matarla, usar minimizar.
-              if (isInteractiveRun && status === "running" && !stream.done) {
-                void Executions.cancel(executionId).catch(() => {});
-              }
-              setExecution(null);
-            }}
+            onClick={() => { void handleClose(); }}
+            disabled={closeState.closing}
             title="Cerrar consola (finaliza la sesión)"
           >
             <X size={15} />
           </button>
         </div>
       </header>
+
+      {closeState.error && (
+        <div className={styles.closeError} role="alert">
+          No se pudo finalizar la sesión: {closeState.error} — la consola sigue abierta.
+          <button type="button" onClick={() => { void handleClose(); }}>
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {!minimized && (
         <div className={styles.body} ref={bodyRef} onScroll={handleScroll}>

@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AgentCompletion, type AgentCompletionPayload } from "../api/endpoints";
 import type { AgentExecution } from "../types";
 import { getErrorInfo } from "../utils/agentCompletionErrors";
+import Toast, { type ToastState } from "./Toast";
 import styles from "./RecoverExecutionButton.module.css";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -34,36 +35,6 @@ interface Props {
   onRecovered?: () => void;
   /** Compact: usado en el grafo (solo icono + texto corto). */
   compact?: boolean;
-}
-
-// ─── Toast interno ────────────────────────────────────────────────────────────
-
-type ToastVariant = "success" | "warning" | "error";
-
-interface ToastState {
-  variant: ToastVariant;
-  title: string;
-  body: string;
-  correlationId?: string;
-}
-
-function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
-  return (
-    <div
-      className={`${styles.toast} ${styles[`toast_${toast.variant}`]}`}
-      data-correlation-id={toast.correlationId ?? undefined}
-      role="alert"
-      aria-live="assertive"
-    >
-      <div className={styles.toastHeader}>
-        <strong className={styles.toastTitle}>{toast.title}</strong>
-        <button className={styles.toastClose} onClick={onClose} aria-label="Cerrar notificación">
-          ✕
-        </button>
-      </div>
-      <p className={styles.toastBody}>{toast.body}</p>
-    </div>
-  );
 }
 
 // ─── Diálogo de confirmación force=true ───────────────────────────────────────

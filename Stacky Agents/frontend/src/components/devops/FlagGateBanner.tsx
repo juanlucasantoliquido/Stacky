@@ -9,6 +9,7 @@
  */
 import React, { useState } from 'react';
 import { HarnessFlags } from '../../api/endpoints';
+import { classifyFlagUpdateOutcome } from '../../utils/flagUpdateOutcome';
 import styles from './devops.module.css';
 
 export interface FlagGateBannerProps {
@@ -26,21 +27,23 @@ export const FlagGateBanner: React.FC<FlagGateBannerProps> = ({
 }) => {
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const handleActivate = async () => {
     setActivating(true);
     setError(null);
+    setNotice(null);
     try {
       const result = await HarnessFlags.update({ [flagKey]: true });
-      if (result.ok) {
-        onEnabled();
-      } else {
-        setError(result.error || 'Error al activar la flag');
+      const outcome = classifyFlagUpdateOutcome(result);
+      if (outcome.kind === 'error') {
+        setError(outcome.message);
+        return; // sin onEnabled: la flag NO quedó activa
       }
-      // Si hay restart_required, mostramos aviso (no aplica a flags DevOps, pero por robustez)
-      if (result.restart_required_keys && result.restart_required_keys.length > 0) {
-        setError('El cambio quedó guardado pero requiere reiniciar el backend');
+      if (outcome.kind === 'warning') {
+        setNotice('Flag activada. Requiere reiniciar el backend para aplicar.');
       }
+      onEnabled();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error de red al activar';
       setError(msg);
@@ -67,6 +70,11 @@ export const FlagGateBanner: React.FC<FlagGateBannerProps> = ({
       {error && (
         <div className={styles.textDanger} style={{ marginTop: '8px', fontSize: '0.9em' }}>
           {error}
+        </div>
+      )}
+      {notice && (
+        <div style={{ marginTop: '8px', fontSize: '0.9em', color: '#fcd34d' }} role="status">
+          {notice}
         </div>
       )}
     </div>

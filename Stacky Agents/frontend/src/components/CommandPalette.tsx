@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Agents, Packs, Projects, Tickets } from "../api/endpoints";
+import LoadErrorState from "./LoadErrorState";
 import styles from "./CommandPalette.module.css";
 
 type CommandKind = "ticket" | "agent" | "pack" | "project" | "nav";
@@ -46,12 +47,15 @@ export default function CommandPalette({ open, onClose, onNavigate }: Props) {
   const [packs, setPacks] = useState<{ id: string; name: string }[]>([]);
   const [projects, setProjects] = useState<{ name: string }[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [loadFailed, setLoadFailed] = useState<string[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setQuery("");
     setSelectedIdx(0);
+    setLoadFailed([]);
     inputRef.current?.focus();
 
     Tickets.list()
@@ -62,23 +66,23 @@ export default function CommandPalette({ open, onClose, onNavigate }: Props) {
           title: t.title,
         })))
       )
-      .catch(() => setTickets([]));
+      .catch(() => { setTickets([]); setLoadFailed((p) => [...p, "tickets"]); });
     Agents.vsCodeAgents()
       .then((rows: any[]) => setAgents(rows.map((a) => ({
         filename: a.filename,
         name: a.name,
       }))))
-      .catch(() => setAgents([]));
+      .catch(() => { setAgents([]); setLoadFailed((p) => [...p, "agentes"]); });
     Packs.list?.()
       .then((rows: any[]) => setPacks((rows || []).map((p) => ({ id: p.id, name: p.name }))))
-      .catch(() => setPacks([]));
+      .catch(() => { setPacks([]); setLoadFailed((p) => [...p, "packs"]); });
     Projects.list?.()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : res?.projects ?? [];
         setProjects(list.map((p: any) => ({ name: p.name })));
       })
-      .catch(() => setProjects([]));
-  }, [open]);
+      .catch(() => { setProjects([]); setLoadFailed((p) => [...p, "proyectos"]); });
+  }, [open, reloadKey]);
 
   const allCommands: Command[] = useMemo(() => {
     const commands: Command[] = [];
@@ -226,6 +230,13 @@ export default function CommandPalette({ open, onClose, onNavigate }: Props) {
             }}
           />
         </div>
+        {loadFailed.length > 0 && (
+          <LoadErrorState
+            compact
+            what={loadFailed.join(", ")}
+            onRetry={() => setReloadKey((k) => k + 1)}
+          />
+        )}
         <ul className={styles.list} role="listbox">
           {filtered.length === 0 ? (
             <li className={styles.empty}>Sin resultados</li>

@@ -13,6 +13,7 @@ import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
 import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
+import LoadErrorState from "../components/LoadErrorState";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -738,7 +739,7 @@ export default function TicketBoard() {
     isStale,
   } = useTicketSync({ intervalMs: 45_000, syncOnMount: true });
 
-  const { data: tickets, isLoading } = useQuery<Ticket[]>({
+  const { data: tickets, isLoading, isError: isTicketsError, error: ticketsError, refetch: refetchTickets } = useQuery<Ticket[]>({
     queryKey: ["tickets", activeProjectName],
     queryFn: () => Tickets.list(activeProjectName),
     refetchInterval: 45_000,
@@ -746,13 +747,19 @@ export default function TicketBoard() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: hierarchy, isLoading: isHierarchyLoading } = useQuery<TicketHierarchy>({
+  const { data: hierarchy, isLoading: isHierarchyLoading, isError: isHierarchyError, error: hierarchyError, refetch: refetchHierarchy } = useQuery<TicketHierarchy>({
     queryKey: ["tickets-hierarchy", activeProjectName],
     queryFn: () => Tickets.hierarchy(activeProjectName),
     refetchInterval: 45_000,
     staleTime: 22_500,
     enabled: viewMode === "tree" || viewMode === "graph",
   });
+
+  // Plan 135: error de PRIMERA carga (sin datos previos). react-query v5
+  // conserva `data` del último fetch exitoso ante errores de refetch, así que
+  // si hay data seguimos mostrando el board (stale) y NO lo tapamos con error.
+  const ticketsUnavailable = isTicketsError && tickets === undefined;
+  const hierarchyUnavailable = isHierarchyError && hierarchy === undefined;
 
   // Requerimiento B: identidad ADO del operador. Solo se resuelve cuando el
   // operador desmarca "Mostrar todas" (modo "Mis tareas"), para no golpear ADO
@@ -1004,11 +1011,25 @@ export default function TicketBoard() {
 
       {/* Lista */}
       <main className={styles.main}>
+        {ticketsUnavailable && (
+          <LoadErrorState
+            what="los tickets"
+            error={ticketsError}
+            onRetry={() => { void refetchTickets(); }}
+          />
+        )}
         {/* Vista jerárquica */}
         {viewMode === "tree" && (
           <>
             {isHierarchyLoading && <div className={styles.loading}>Cargando jerarquía…</div>}
-            {!isHierarchyLoading && filteredEpics.length === 0 && filteredOrphans.length === 0 && (
+            {!isHierarchyLoading && hierarchyUnavailable && (
+              <LoadErrorState
+                what="la jerarquía de tickets"
+                error={hierarchyError}
+                onRetry={() => { void refetchHierarchy(); }}
+              />
+            )}
+            {!isHierarchyLoading && !hierarchyUnavailable && filteredEpics.length === 0 && filteredOrphans.length === 0 && (
               <div className={styles.empty}>
                 No hay tickets. Hacé clic en «Sincronizar ADO».
               </div>

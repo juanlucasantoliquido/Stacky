@@ -22,6 +22,7 @@ import {
   type PendingTaskItem,
   type CreateChildTaskResponse,
 } from "../api/endpoints";
+import Toast, { type ToastState } from "./Toast";
 import styles from "./CreateChildTaskButton.module.css";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -60,7 +61,7 @@ export default function CreateChildTaskButton({
   const [dryRun, setDryRun] = useState(false);
   const [rfResults, setRfResults] = useState<RfResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [toast, setToast] = useState<{ ok: boolean; message: string } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   // ── Fetch de pending-tasks ─────────────────────────────────────────────────
   const { data: pendingData, isError: fetchError } = useQuery({
@@ -163,12 +164,12 @@ export default function CreateChildTaskButton({
 
     // Toast resumen
     if (errorCount === 0) {
-      setToast({ ok: true, message: `${createdCount} Task(s) creada(s) en ADO exitosamente.` });
+      setToast({ variant: "success", body: `${createdCount} Task(s) creada(s) en ADO exitosamente.` });
       if (createdCount > 0) onTaskCreated?.();
     } else {
       setToast({
-        ok: false,
-        message: `${createdCount} ok, ${errorCount} con error. Revisar resultados.`,
+        variant: "error",
+        body: `${createdCount} ok, ${errorCount} con error. Revisar resultados.`,
       });
     }
   }, [epicAdoId, isRunning, selected, pendingTasks, reason, dryRun, qc, onTaskCreated]);
@@ -362,16 +363,7 @@ export default function CreateChildTaskButton({
             )}
 
             {/* Toast interno */}
-            {toast && (
-              <div
-                role="alert"
-                aria-live="assertive"
-                className={toast.ok ? styles.resultOk : styles.errorMsg}
-                style={{ padding: "8px 10px", borderRadius: 4, fontSize: 12, marginTop: 8 }}
-              >
-                {toast.message}
-              </div>
-            )}
+            {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
             {/* Footer */}
             <footer className={styles.footer}>

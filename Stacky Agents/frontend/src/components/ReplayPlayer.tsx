@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import LoadErrorState from "./LoadErrorState";
+import { formatLoadErrorMessage } from "../utils/loadError";
 import styles from "./ReplayPlayer.module.css";
 
 interface Event {
@@ -29,6 +31,8 @@ export default function ReplayPlayer({ executionId, open, onClose }: Props) {
   const [cursorMs, setCursorMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const rafRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
 
@@ -36,11 +40,12 @@ export default function ReplayPlayer({ executionId, open, onClose }: Props) {
     if (!open || executionId == null) return;
     setCursorMs(0);
     setPlaying(false);
+    setLoadError(null);
     api
       .get<EventsResponse>(`/api/executions/${executionId}/events`)
       .then((d) => setEvents(d.events))
-      .catch(() => setEvents([]));
-  }, [open, executionId]);
+      .catch((err) => { setEvents([]); setLoadError(formatLoadErrorMessage(err)); });
+  }, [open, executionId, reloadKey]);
 
   const totalMs = events.length > 0
     ? (events[events.length - 1].t_relative_ms ?? 0)
@@ -120,7 +125,16 @@ export default function ReplayPlayer({ executionId, open, onClose }: Props) {
           <div className={styles.progressFill} style={{ width: `${progress}%` }} />
         </div>
         <ul className={styles.log}>
-          {events.length === 0 ? (
+          {loadError ? (
+            <li className={styles.empty}>
+              <LoadErrorState
+                compact
+                what="los eventos de la grabación"
+                error={loadError}
+                onRetry={() => setReloadKey((k) => k + 1)}
+              />
+            </li>
+          ) : events.length === 0 ? (
             <li className={styles.empty}>
               Esta ejecución no tiene timeline de eventos registrado.
             </li>

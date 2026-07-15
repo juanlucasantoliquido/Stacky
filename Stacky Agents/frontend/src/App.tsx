@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import UnblockerPage from "./pages/UnblockerPage";
@@ -24,6 +24,7 @@ import CodexConsoleDock from "./components/CodexConsoleDock";
 import ActiveRunsPanel from "./components/ActiveRunsPanel";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import { probeFlagHealth, nextEnabledState } from "./utils/flagHealth";
+import { toggleNavTab } from "./services/uiGuards";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
@@ -59,6 +60,10 @@ function tabFromPath(pathname: string): Tab {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>(() => tabFromPath(window.location.pathname));
+  // Plan 136 F7 — espejo del tab para handlers registrados con deps [] (el
+  // closure del keydown quedaba congelado en el valor de montaje).
+  const tabRef = useRef(tab);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const sections = useUiSectionsStore((s) => s.sections);
@@ -136,9 +141,11 @@ export default function App() {
         setCheatsheetOpen((v) => !v);
       } else if (isToggleNav) {
         ev.preventDefault();
-        setTab((t) => (t === "team" ? "tickets" : "team"));
-        const path = TAB_PATHS[tab === "team" ? "tickets" : "team"];
-        window.history.pushState({}, "", path);
+        // Plan 136 F7 — usar el tab ACTUAL (tabRef) y reusar selectTab, que ya
+        // hace pushState con guard de pathname. PROHIBIDO meter pushState dentro
+        // del updater de setTab: la app monta en <React.StrictMode> (main.tsx:13)
+        // y en dev los updaters se invocan DOS veces (duplicaría el historial).
+        selectTab(toggleNavTab(tabRef.current));
       }
     };
     window.addEventListener("keydown", onKeyDown);

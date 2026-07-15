@@ -4,6 +4,7 @@ import ConfigTransferPanel from "../components/ConfigTransferPanel";
 import ClientProfileEditor from "../components/ClientProfileEditor";
 import HarnessFlagsPanel from "../components/HarnessFlagsPanel";
 import LocalLlmPlaygroundPanel from "../components/LocalLlmPlaygroundPanel";
+import ConfirmButton from "../components/ConfirmButton";
 import { Webhooks } from "../api/endpoints";
 import {
   LOCKED_SECTIONS,
@@ -192,6 +193,7 @@ function WebhooksPanel() {
   const [event, setEvent] = useState("exec.completed");
   const [format, setFormat] = useState<"raw" | "teams">("raw");
   const [secret, setSecret] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -207,7 +209,8 @@ function WebhooksPanel() {
   }, []);
 
   const create = async () => {
-    if (!url.trim()) return;
+    if (!url.trim() || creating) return;
+    setCreating(true);
     setError(null);
     try {
       await Webhooks.create({
@@ -221,6 +224,8 @@ function WebhooksPanel() {
       load();
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -269,7 +274,7 @@ function WebhooksPanel() {
           onChange={(e) => setSecret(e.target.value)}
           placeholder="Secret opcional (HMAC)"
         />
-        <button className={styles.subTab} onClick={create}>Crear</button>
+        <button className={styles.subTab} onClick={create} disabled={creating || !url.trim()}>{creating ? "Creando…" : "Crear"}</button>
       </div>
 
       {loading && <div className={styles.rowHint}>Cargando webhooks…</div>}
@@ -282,9 +287,12 @@ function WebhooksPanel() {
             <span className={styles.rowHint}>{row.url}</span>
             <span className={styles.rowHint}>fires={row.fires} · last={row.last_status ?? "-"}</span>
           </div>
-          <button className={styles.subTab} onClick={() => deactivate(row.id)}>
-            Desactivar
-          </button>
+          <ConfirmButton
+            className={styles.subTab}
+            label="Desactivar"
+            confirmLabel="⚠ Confirmar"
+            onConfirm={() => deactivate(row.id)}
+          />
         </div>
       ))}
     </div>

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AgentRuntime, AgentType, AgentWorkflowConfig, ContextBlock, Project, VsCodeAgent } from "../types";
+import { migrateWorkbenchPersist, projectChangeReset, WORKBENCH_PERSIST_VERSION } from "./workbenchPure";
 
 interface WorkbenchState {
   activeTicketId: number | null;
@@ -116,7 +117,16 @@ export const useWorkbench = create<WorkbenchState>()(
       activeExecutionId: null,
       systemPromptOverride: a?.system_prompt ?? null,
     }),
-  setActiveProject: (p) => set({ activeProject: p }),
+  setActiveProject: (p) =>
+    set((s) => {
+      // Plan 136 F5 — higiene: al cambiar de proyecto, el ticket activo, los
+      // bloques y el ChatDrawer del proyecto anterior dejan de tener sentido
+      // (riesgo real: lanzar un agente contra un ticket ajeno). La primera
+      // asignación (boot, TopBar.tsx:85) y el re-set del mismo proyecto no
+      // resetean nada. Lógica pura y testeada en workbenchPure.ts.
+      const reset = projectChangeReset(s.activeProject?.name ?? null, p?.name ?? null);
+      return reset ? { activeProject: p, ...reset } : { activeProject: p };
+    }),
   setPinnedAgents: (agents) => set({ pinnedAgents: agents }),
   setAgentWorkflows: (wf) => set({ agentWorkflows: wf }),
   setTeamLoading: (loading) => set({ teamLoading: loading }),
@@ -131,28 +141,18 @@ export const useWorkbench = create<WorkbenchState>()(
     {
       name: "stacky-workbench",
       storage: createJSONStorage(() => localStorage),
-      // Solo persistimos la preferencia de runtime: el resto del estado
-      // (ticket activo, ejecuciones, bloques) es efímero por sesión y no
-      // debe sobrevivir a una recarga.
-      partialize: (state) => ({ agentRuntime: state.agentRuntime }),
-      version: 2, // Plan 37 — default Claude Code CLI + remapeo del reset a Copilot del Plan 36
-      migrate: (persisted: unknown, fromVersion: number) => {
-        const valid: AgentRuntime[] = ["github_copilot", "codex_cli", "claude_code_cli"];
-        const prev = (persisted ?? {}) as { agentRuntime?: unknown };
-        let rt: AgentRuntime =
-          typeof prev.agentRuntime === "string" && valid.includes(prev.agentRuntime as AgentRuntime)
-            ? (prev.agentRuntime as AgentRuntime)
-            : "claude_code_cli";
-        // Plan 37 — el Plan 36 (v1) reseteó la preferencia persistida a
-        // github_copilot, dejando operadores en Copilot Free (solo Haiku) sin
-        // quererlo. En el salto v1→v2 remapeamos ese copilot heredado a Claude
-        // Code CLI (default útil). Una elección explícita de Codex se preserva;
-        // el operador puede volver a Copilot manualmente desde el selector.
-        if (fromVersion < 2 && rt === "github_copilot") {
-          rt = "claude_code_cli";
-        }
-        return { agentRuntime: rt };
-      },
+      // Persistimos la preferencia de runtime y la consola abierta (Plan 136 F6:
+      // sobrevive al F5; CodexConsoleDock valida al rehidratar que el run siga
+      // vivo y la limpia en silencio si no). El resto del estado (ticket activo,
+      // ejecuciones, bloques) sigue siendo efímero por sesión.
+      partialize: (state) => ({
+        agentRuntime: state.agentRuntime,
+        codexConsoleExecutionId: state.codexConsoleExecutionId,
+        codexConsoleMinimized: state.codexConsoleMinimized,
+      }),
+      version: WORKBENCH_PERSIST_VERSION,
+      migrate: (persisted: unknown, fromVersion: number) =>
+        migrateWorkbenchPersist(persisted, fromVersion),
     }
   )
 );

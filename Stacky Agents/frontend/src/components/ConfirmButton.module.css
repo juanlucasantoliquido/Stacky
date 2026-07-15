@@ -1,0 +1,15 @@
+/* ConfirmButton — estado "armed" (plan 136 F3).
+   Copiado LITERAL de la clase .dangerConfirm de FinishWorkButton.module.css
+   (mismo look de "estás por ejecutar algo destructivo"). */
+.armed {
+  background: #dc2626;
+  color: #fff;
+  border: 1px solid #ef4444;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+.armed:hover:not(:disabled) { background: #b91c1c; }
+.armed:disabled { opacity: 0.6; cursor: not-allowed; }

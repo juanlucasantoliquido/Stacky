@@ -14,6 +14,7 @@ import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import PixelAvatar from "./PixelAvatar";
 import LoadErrorState from "./LoadErrorState";
 import { formatLoadErrorMessage } from "../utils/loadError";
+import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import styles from "./AgentLaunchModal.module.css";
 
 interface TicketComment { author: string; date: string; text: string; }
@@ -274,7 +275,9 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
 
   // close on backdrop click
   function handleBackdrop(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target !== e.currentTarget) return;
+    const dirty = selected != null || message.trim().length > 0;
+    if (shouldCloseOnBackdrop({ dirty, busy: loading })) onClose();
   }
 
   const displayName = agent.name ?? agent.filename.replace(/\.agent\.md$/i, "");

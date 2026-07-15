@@ -17,12 +17,15 @@
 
 import React, { useState } from "react";
 import type { IntentBriefDTO } from "../api/endpoints";
+import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import styles from "./IntentPreflightModal.module.css";
 
 interface IntentPreflightModalProps {
   intent: IntentBriefDTO;
   onApprove: (corrections?: string) => void;
   onCancel: () => void;
+  /** Plan 136 F1 — true mientras el POST está en vuelo: deshabilita ambos botones de avance. */
+  busy?: boolean;
 }
 
 function confidenceBadgeClass(confidence: number): string {
@@ -35,6 +38,7 @@ export default function IntentPreflightModal({
   intent,
   onApprove,
   onCancel,
+  busy,
 }: IntentPreflightModalProps) {
   const [corrections, setCorrections] = useState("");
   const highAssumptions = intent.assumptions.filter((a) => a.impact === "high");
@@ -52,7 +56,7 @@ export default function IntentPreflightModal({
 
   return (
     <div className={styles.backdrop} onClick={(e) => {
-      if (e.target === e.currentTarget) onCancel();
+      if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty: corrections.trim().length > 0, busy: busy === true })) onCancel();
     }}>
       <div className={styles.modal} role="dialog" aria-modal="true">
         <header className={styles.header}>
@@ -158,14 +162,15 @@ export default function IntentPreflightModal({
           <button
             className={styles.primaryBtn}
             onClick={handleApproveAsIs}
+            disabled={busy}
             type="button"
           >
-            Arrancar así
+            {busy ? "Lanzando…" : "Arrancar así"}
           </button>
           <button
             className={styles.secondaryBtn}
             onClick={handleApproveWithCorrections}
-            disabled={!corrections.trim()}
+            disabled={busy || !corrections.trim()}
             title={!corrections.trim() ? "Escribí una corrección primero" : undefined}
             type="button"
           >

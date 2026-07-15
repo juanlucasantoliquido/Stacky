@@ -17,6 +17,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Tickets, type FinishWorkResponse } from "../api/endpoints";
 import type { Ticket } from "../types";
 import { useWorkbench } from "../store/workbench";
+import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import styles from "./FinishWorkButton.module.css";
 
 interface Props {
@@ -121,7 +122,12 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
       </button>
 
       {open && (
-        <div className={styles.overlay} onClick={handleClose}>
+        <div
+          className={styles.overlay}
+          onClick={() => {
+            if (shouldCloseOnBackdrop({ dirty: reason.trim().length > 0, busy: isBusy })) handleClose();
+          }}
+        >
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <header className={styles.header}>
               <h3 className={styles.title}>Terminar trabajo manualmente</h3>

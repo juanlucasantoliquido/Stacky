@@ -7,6 +7,7 @@ import { useWorkbench } from "../store/workbench";
 import type { LogLine } from "../types";
 import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
 import { formatLoadErrorMessage } from "../utils/loadError";
+import { restoreConsoleDecision } from "../services/uiGuards";
 import styles from "./CodexConsoleDock.module.css";
 
 /** Distancia (px) al fondo dentro de la cual seguimos auto-scrolleando. */
@@ -70,6 +71,30 @@ export default function CodexConsoleDock() {
     enabled: executionId != null,
     refetchInterval: stream.done ? false : 5000,
   });
+
+  // Plan 136 F6 — validación de la consola RESTAURADA tras un reload.
+  // Determinismo del origen: en el PRIMER render tras montar (el dock se monta
+  // una sola vez, globalmente, en App.tsx), executionId solo puede ser != null
+  // si vino de la rehidratación del persist — el operador aún no pudo clickear
+  // nada. Capturamos ese valor inicial en un ref y lo validamos UNA vez con la
+  // query que este dock ya hace (Executions.byId): si el run no está vivo
+  // (running/preparing/queued), limpiamos en silencio. Si el operador abre otra
+  // consola antes de resolver, la validación se descarta.
+  const restoredIdRef = useRef<number | null>(executionId);
+  useEffect(() => {
+    const restoredId = restoredIdRef.current;
+    if (restoredId == null) return;
+    if (executionId !== restoredId) {
+      restoredIdRef.current = null; // el operador ya cambió de consola: no validar
+      return;
+    }
+    if (!executionQ.isSuccess && !executionQ.isError) return; // sin veredicto aún
+    restoredIdRef.current = null; // validar una sola vez
+    if (restoreConsoleDecision(executionQ.data?.status, executionQ.isError) === "clear") {
+      setExecution(null); // run terminado/inexistente: cerrar en silencio
+    }
+  }, [executionId, executionQ.isSuccess, executionQ.isError, executionQ.data, setExecution]);
+
   const sendInput = useMutation({
     mutationFn: (text: string) => Executions.sendCodexInput(executionId!, text),
     onSuccess: () => setInput(""),

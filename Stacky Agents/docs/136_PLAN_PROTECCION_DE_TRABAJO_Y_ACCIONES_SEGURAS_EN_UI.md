@@ -1,7 +1,7 @@
 # Plan 136 — Protección de trabajo y acciones seguras en la UI: ni pérdida de lo tipeado, ni acciones destructivas accidentales, ni estado stale peligroso
 
 **Versión:** v2 (crítica adversarial v1 → v2, 2026-07-14)
-**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-14; propuesto v1 2026-07-13)
+**Estado:** IMPLEMENTADO F0..F8 (2026-07-15). Smoke manual de 7 pasos (F8) NO ejecutado — requiere la app viva con actividad concurrente confirmada; queda listo para el operador. (CRITICADO v2 — APROBADO-CON-CAMBIOS 2026-07-14; propuesto v1 2026-07-13)
 **Origen:** auditoría UX multi-lente 2026-07-13, pedido del operador de mejorar UX sin romper nada.
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero flag de harness.
 **Flag:** NO lleva flag (decisión justificada en §3.1, precedente plan 132 §3.1).

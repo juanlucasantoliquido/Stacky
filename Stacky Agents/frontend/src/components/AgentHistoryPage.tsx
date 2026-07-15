@@ -148,15 +148,27 @@ function FileDetail({ ticketId, att, mode: initialMode, onClose, onDeleted }: Fi
     setSaving(true);
     setError(null);
     try {
-      await Tickets.deleteAttachments(ticketId, [{ id: att.id, url: att.url, name: att.name }]);
+      // Plan 136 F4 — orden atómico: subir la versión NUEVA antes de borrar la
+      // vieja. En ADO upload_attachment SIEMPRE crea un blob nuevo con UUID
+      // propio (no pisa por nombre — backend/services/ado_client.py:667-699),
+      // así que el peor caso es un nombre duplicado transitorio, nunca pérdida.
       const res = await Tickets.uploadAttachment(ticketId, att.name, editContent);
       if (!res.ok) {
-        setError(res.error ?? "Error al guardar");
+        setError(res.error ?? "Error al guardar (el adjunto original quedó intacto)");
         return;
+      }
+      try {
+        await Tickets.deleteAttachments(ticketId, [{ id: att.id, url: att.url, name: att.name }]);
+      } catch {
+        setError(
+          "La versión nueva se subió, pero no se pudo borrar la anterior: " +
+          "quedó una versión duplicada con el mismo nombre. Borrala a mano desde la lista."
+        );
+        return; // no cerrar: que el operador vea el aviso
       }
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(`${String(e)} (el adjunto original quedó intacto)`);
     } finally {
       setSaving(false);
     }

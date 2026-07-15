@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Projects, Mantis, type MantisProject, type MantisListParams } from "../api/endpoints";
 import type { AgentWorkflowConfig, InitProjectPayload, Project, TrackerType } from "../types";
 import { formatLoadErrorMessage } from "../utils/loadError";
+import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -42,6 +43,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Plan 136 F2 — hay cambios tipeados sin guardar (protege el backdrop).
+  const [dirty, setDirty] = useState(false);
   const [loadedUser, setLoadedUser] = useState<string | null>(null);
   const [docsChecking, setDocsChecking] = useState(false);
   const [docsCheckMessage, setDocsCheckMessage] = useState<string | null>(null);
@@ -184,6 +187,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
 
   function patch(key: keyof InitProjectPayload, value: unknown) {
     setForm((f) => ({ ...f, [key]: value }));
+    setDirty(true);
   }
 
   function docsPath(kind: "technical" | "functional"): string {
@@ -200,6 +204,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
       },
     }));
     setDocsCheckMessage(null);
+    setDirty(true);
   }
 
   function buildPayload(): Partial<InitProjectPayload> {
@@ -296,7 +301,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   }
 
   return (
-    <div className={styles.backdrop} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={styles.backdrop} onClick={(e) => { if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty, busy: saving })) onClose(); }}>
       <div className={styles.panel}>
         <h2 className={styles.title}>✎ Editar Proyecto: {project.display_name || project.name}</h2>
 

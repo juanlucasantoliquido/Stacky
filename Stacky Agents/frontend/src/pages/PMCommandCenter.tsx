@@ -15,6 +15,7 @@ import {
   type PmSprintSnapshotRow,
 } from "../api/pm";
 import WeeklyDigestCard from "../components/WeeklyDigestCard";
+import { useWorkbench } from "../store/workbench";
 import styles from "./PMCommandCenter.module.css";
 
 type SeverityFilter = "ALL" | "HIGH" | "MEDIUM" | "LOW" | "CRITICAL";
@@ -854,8 +855,10 @@ export default function PMCommandCenter() {
     persistModel(model);
   };
 
+  const pmProject = useWorkbench((s) => s.activeProject?.name ?? null);
+
   const sprintQuery = useQuery({
-    queryKey: ["pm.sprint.current"],
+    queryKey: ["pm.sprint.current", pmProject],
     queryFn: async () => {
       try {
         return await PmApi.sprintCurrent();
@@ -870,7 +873,7 @@ export default function PMCommandCenter() {
   });
 
   const risksQuery = useQuery({
-    queryKey: ["pm.risks", severityFilter, showAcked],
+    queryKey: ["pm.risks", pmProject, severityFilter, showAcked],
     queryFn: async () => {
       const params: Parameters<typeof PmApi.listRisks>[0] = {};
       if (severityFilter !== "ALL") params.severity = severityFilter;

@@ -16,6 +16,8 @@ import {
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import IntentPreflightModal from "./IntentPreflightModal";
+import { canGenerateEpic, shouldCloseOnBackdrop } from "../services/uiGuards";
+import { clearBriefDraft, readBriefDraft, writeBriefDraft } from "../services/briefDraft";
 import type { AgentRuntime } from "../types";
 import styles from "./EpicFromBriefModal.module.css";
 
@@ -90,7 +92,10 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
 
   const [step, setStep] = useState<Step>("brief");
-  const [brief, setBrief] = useState("");
+  // Plan 136 F2 — re-hidratar el borrador de la sesión (clave por proyecto).
+  const [brief, setBrief] = useState<string>(() =>
+    readBriefDraft(window.sessionStorage, activeProjectName)
+  );
   const [executionId, setExecutionId] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createdAdoId, setCreatedAdoId] = useState<number | null>(null);
@@ -104,6 +109,10 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   // Plan 42 F6 — id de la ejecución en curso para el botón Stop.
   const [runningExecutionId, setRunningExecutionId] = useState<number | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  // Plan 136 F1 — true mientras el POST de runBrief está en vuelo (ambos caminos:
+  // handleGenerate y handleApproveIntent). Bloquea el doble-submit que duplicaba
+  // runs y épicas auto-publicadas en ADO.
+  const [isLaunching, setIsLaunching] = useState(false);
 
   // Plan 55 F2 — Preview de publicación (solo-lectura).
   const [epicPreview, setEpicPreview] = useState<{
@@ -280,8 +289,14 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
 
   useEffect(() => () => stopPolling(), []);
 
+  // Plan 136 F2 — borrador write-through: cada tecla persiste; vacío ⇒ se borra la clave.
+  useEffect(() => {
+    writeBriefDraft(window.sessionStorage, activeProjectName, brief);
+  }, [brief, activeProjectName]);
+
   async function handleGenerate() {
-    if (!brief.trim()) return;
+    if (!brief.trim() || isLaunching) return;
+    setIsLaunching(true);
     setErrorMsg(null);
     setRunningExecutionId(null);
     try {
@@ -329,12 +344,15 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
       const msg = e instanceof Error ? e.message : String(e);
       setErrorMsg(msg || "No se pudo lanzar el Agente de Negocio.");
       setStep("error");
+    } finally {
+      setIsLaunching(false);
     }
   }
 
   // Plan 41 F4 — re-llamar runBrief con approved:true (+ corrections si las hay).
   async function handleApproveIntent(corrections: string | undefined) {
-    if (!brief.trim()) return;
+    if (!brief.trim() || isLaunching) return;
+    setIsLaunching(true);
     setErrorMsg(null);
     setStep("running");
     setRunningExecutionId(null);
@@ -368,6 +386,8 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
       const msg = e instanceof Error ? e.message : String(e);
       setErrorMsg(msg || "No se pudo lanzar el Agente de Negocio.");
       setStep("error");
+    } finally {
+      setIsLaunching(false);
     }
   }
 
@@ -409,6 +429,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
         confirm: true,
       });
       setCreatedAdoId(res.ado_id);
+      clearBriefDraft(window.sessionStorage, activeProjectName);
       setStep("done");
       onCreated?.({ ado_id: res.ado_id, title: res.title });
     } catch (e) {
@@ -419,11 +440,20 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   }
 
   function handleBackdrop(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target !== e.currentTarget) return;
+    // dirty: hay brief tipeado o el flujo ya avanzó (running/creating/error).
+    // En "done" no hay nada que perder: el backdrop vuelve a cerrar.
+    const dirty = step !== "done" && (brief.trim().length > 0 || step !== "brief");
+    const busy = isLaunching || step === "running" || step === "creating";
+    if (shouldCloseOnBackdrop({ dirty, busy })) onClose();
   }
 
-  const canGenerate = brief.trim().length > 0 && step === "brief"
-    && !(agentRuntime === "claude_code_cli" && !claudeReady);
+  const canGenerate = canGenerateEpic({
+    step,
+    briefEmpty: brief.trim().length === 0,
+    isLaunching,
+    claudeGateBlocked: agentRuntime === "claude_code_cli" && !claudeReady,
+  });
 
   return (
     <div className={styles.overlay} onClick={handleBackdrop}>
@@ -546,7 +576,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
                     : undefined
                 }
               >
-                ▶ Generar épica con Agente de Negocio
+                {isLaunching ? "Lanzando…" : "▶ Generar épica con Agente de Negocio"}
               </button>
             </footer>
           </div>
@@ -662,6 +692,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
       {showPreflightModal && preflightIntent && (
         <IntentPreflightModal
           intent={preflightIntent}
+          busy={isLaunching}
           onApprove={(corrections) => {
             void handleApproveIntent(corrections);
           }}

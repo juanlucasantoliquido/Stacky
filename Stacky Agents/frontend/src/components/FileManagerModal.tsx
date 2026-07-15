@@ -1,5 +1,7 @@
 ﻿import React from "react";
 import { Tickets, type TicketAttachment } from "../api/endpoints";
+import ConfirmButton from "./ConfirmButton";
+import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import styles from "./FileManagerModal.module.css";
 
 interface Props {
@@ -94,7 +96,12 @@ export default function FileManagerModal({ ticketId, ticketLabel, onClose }: Pro
   const allSelected = !!attachments && attachments.length > 0 && selected.size === attachments.length;
 
   return (
-    <div className={styles.backdrop} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className={styles.backdrop}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty: selected.size > 0, busy: deleting })) onClose();
+      }}
+    >
       <div className={styles.modal}>
         <div className={styles.header}>
           <span className={styles.title}>
@@ -118,13 +125,14 @@ export default function FileManagerModal({ ticketId, ticketLabel, onClose }: Pro
                     {selected.size} seleccionado{selected.size !== 1 ? "s" : ""}
                   </span>
                 )}
-                <button
+                <ConfirmButton
                   className={styles.deleteBtn}
-                  disabled={selected.size === 0 || deleting}
-                  onClick={handleDelete}
-                >
-                  {deleting ? "Borrando..." : "Borrar (" + selected.size + ")"}
-                </button>
+                  label={deleting ? "Borrando..." : `Borrar (${selected.size})`}
+                  confirmLabel={`⚠ Confirmar borrado (${selected.size})`}
+                  disabled={selected.size === 0}
+                  busy={deleting}
+                  onConfirm={handleDelete}
+                />
               </div>
             )}
 

@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { AgentRoles, type AgentRoleEntry } from "../api/endpoints";
 import { formatLoadErrorMessage } from "../utils/loadError";
+import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import styles from "./AgentConfigModal.module.css";
 
 interface Props {
@@ -105,7 +106,9 @@ export default function AgentConfigModal({ onClose }: Props) {
   return (
     <div
       className={styles.overlay}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty: Object.keys(dirty).length > 0, busy: saving })) onClose();
+      }}
     >
       <div
         className={styles.modal}

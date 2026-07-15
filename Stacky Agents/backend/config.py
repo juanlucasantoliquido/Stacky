@@ -1118,5 +1118,22 @@ class Config:
         "STACKY_CODEBASE_MEMORY_MCP_BINARY_PATH", ""
     )
 
+    # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ──────
+    # Default OFF: opt-in del operador vía UI (categoría "interfaz_ui"). Decisión
+    # de criterio 2026-07-15 (directiva de default ON aplicada con juicio, NO a
+    # ciegas): ninguna de las 4 excepciones duras aplica literalmente (no bypassea
+    # revisión humana, es 100% reversible byte-a-byte con OFF, su prerequisito el
+    # plan 138 ya está implementado, no reduce seguridad) — pero es el reemplazo
+    # COMPLETO del chrome de navegación primario de toda la app (no una capacidad
+    # incremental), mismo patrón ya establecido y sin objeciones en el plan 119
+    # (STACKY_DEVOPS_UI_V2_ENABLED, también default OFF para un rediseño de UI de
+    # esa magnitud) — se preserva la consistencia con ese precedente en vez de
+    # imponerle al operador mono-usuario un cambio de paradigma de navegación
+    # visible en cada pantalla sin que lo haya elegido él mismo.
+    # Con OFF la interfaz es byte-idéntica a la actual.
+    STACKY_UI_SHELL_V2_ENABLED: bool = os.getenv(
+        "STACKY_UI_SHELL_V2_ENABLED", "false"
+    ).strip().lower() == "true"
+
 
 config = Config()

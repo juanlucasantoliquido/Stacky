@@ -362,6 +362,7 @@ def health():
         "ado_pat_present": pat_present,
         "auto_create_tasks_enabled": auto_create_tasks,
         "local_llm_enabled": bool(getattr(_config.config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
+        "shell_v2_enabled": bool(getattr(_config.config, "STACKY_UI_SHELL_V2_ENABLED", False)),  # Plan 139
         "watchers": {"output_watcher": output_watcher_info},
         "warnings": warnings,
     })

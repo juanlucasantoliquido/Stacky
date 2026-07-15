@@ -1,0 +1,137 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 232px;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-right: var(--border-width) solid var(--border);
+  padding: var(--space-5) var(--space-3);
+  gap: var(--space-5);
+  overflow-y: auto;
+  transition: width var(--duration-base) var(--ease-in-out);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  flex: 1 1 auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.groupLabel {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 var(--space-3) var(--space-1);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.item:hover {
+  background: var(--status-neutral-bg);
+  color: var(--text-primary);
+}
+
+.item.active {
+  background: var(--status-info-bg);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+.item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.itemLabel {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemBadge {
+  flex-shrink: 0;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  color: var(--status-info-text);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--border);
+}
+
+/* ── Colapsado (estado explícito del operador) ── */
+.collapsed {
+  width: 60px;
+  padding: var(--space-5) var(--space-2);
+}
+.collapsed .itemLabel,
+.collapsed .groupLabel,
+.collapsed .itemBadge {
+  display: none;
+}
+.collapsed .item {
+  justify-content: center;
+  padding: var(--space-3) 0;
+}
+.collapsed .footer {
+  justify-content: center;
+}
+
+/* ── Responsive: riel de iconos automático en pantallas angostas ── */
+@media (max-width: 820px) {
+  .sidebar {
+    width: 60px;
+    padding: var(--space-5) var(--space-2);
+  }
+  .itemLabel,
+  .groupLabel,
+  .itemBadge {
+    display: none;
+  }
+  .item {
+    justify-content: center;
+    padding: var(--space-3) 0;
+  }
+  .footer {
+    justify-content: center;
+  }
+}

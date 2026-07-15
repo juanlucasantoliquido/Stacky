@@ -106,6 +106,9 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
     CategorySpec("comparador_bd", "Comparador de BD entre ambientes",
         "Serie 122-126 — comparación de esquema/datos entre ambientes, snapshots, scripts de paridad y backups.",
         tier="simple", intent="Comparar bases entre ambientes y generar scripts de paridad"),
+    CategorySpec("interfaz_ui", "Interfaz",
+        "Aspecto y disposición de la aplicación: estilo de navegación (fila de pestañas o barra lateral agrupada) y presentación general.",
+        tier="simple", intent="Elegir el estilo de navegación y la presentación de la app"),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza).",
         tier="advanced", intent="Flags sin categorizar (no debería haber ninguna)"),
@@ -288,6 +291,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
         "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",    # Plan 126
         "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
+    ),
+    "interfaz_ui": (
+        "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2883,6 +2889,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=100,
         max_value=200000,
+    ),
+    # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
+    # Default OFF (decisión de criterio, ver comentario largo en config.py):
+    # reemplaza el chrome de navegación completo; mismo patrón sin objeciones
+    # del plan 119 (STACKY_DEVOPS_UI_V2_ENABLED, también default OFF).
+    FlagSpec(
+        key="STACKY_UI_SHELL_V2_ENABLED",
+        type="bool",
+        label="Shell v2: navegación lateral agrupada",
+        description=(
+            "Plan 139 — Reemplaza la fila de pestañas superior por una barra lateral "
+            "agrupada por temas (Trabajo, Observabilidad, Conocimiento, Plataforma, "
+            "Configuración) con iconografía y una barra superior renovada. Default OFF: "
+            "con OFF la interfaz es idéntica a la actual. Solo cambia la presentación; "
+            "mismas pantallas y misma navegación."
+        ),
+        group="global",
     ),
 )
 

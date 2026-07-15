@@ -1236,6 +1236,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: se corta antes la espera. De fábrica son 120 segundos.",
         example="Como el tiempo que esperás al teléfono antes de cortar y volver a intentar.",
     ),
+    "STACKY_UI_SHELL_V2_ENABLED": PlainHelp(
+        what="Muestra la navegación de la app como un menú lateral agrupado por temas, en vez de la fila de solapas de arriba.",
+        on_effect="Si la activás: la navegación pasa a una barra lateral con secciones que podés plegar; son las mismas pantallas, ordenadas por tema.",
+        off_effect="Si la apagás: la app usa la fila de solapas clásica de arriba, exactamente como venía.",
+        example="Como pasar de una fila de solapas apretadas a un menú lateral tipo panel de control, con las opciones ordenadas por tema.",
+    ),
 }
 
 

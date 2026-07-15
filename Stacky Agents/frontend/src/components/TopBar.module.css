@@ -196,3 +196,24 @@
   border-radius: 1px;
   animation: progress-slide 1.4s ease-in-out infinite;
 }
+
+/* Plan 139 — re-estilo profesional del shell v2 (aditivo; solo con flag ON). */
+.barV2 {
+  box-shadow: var(--shadow-1);
+  border-bottom-color: var(--border);
+}
+.barV2 .main {
+  gap: var(--space-7);
+  padding: var(--space-4) var(--space-6);
+}
+.barV2 .brand {
+  gap: var(--space-4);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+.barV2 .actions {
+  gap: var(--space-5);
+}
+.barV2 .version {
+  font-size: var(--text-xs);
+}

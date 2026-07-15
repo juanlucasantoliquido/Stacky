@@ -12,9 +12,10 @@ import styles from "./TopBar.module.css";
 
 interface TopBarProps {
   onGoToTeam?: () => void;
+  shellV2?: boolean;   // Plan 139 — aplica el re-estilo v2 (aditivo)
 }
 
-export default function TopBar({ onGoToTeam }: TopBarProps) {
+export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
   // Plan 134 F4: fuente VIVA — la misma query compartida del panel global
   // (services/activeRuns.ts). El campo de workbench que este badge leía antes
   // estaba muerto: solo lo seteaba useAgentRun (consumidor huérfano
@@ -139,7 +140,7 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
   }
 
   return (
-    <header className={styles.bar}>
+    <header className={`${styles.bar} ${shellV2 ? styles.barV2 : ""}`}>
       <div className={styles.main}>
         <div className={styles.brand}>
           {onGoToTeam && (

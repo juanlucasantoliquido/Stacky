@@ -2599,8 +2599,8 @@ export const OperationalHealth = {
 
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
 export const Health = {
-  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean }> =>
-    api.get<{ version?: string; ok?: boolean; healthy?: boolean }>("/api/diag/health"),
+  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }> =>
+    api.get<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }>("/api/diag/health"),
 };
 
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────

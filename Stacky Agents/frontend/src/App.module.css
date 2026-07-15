@@ -53,3 +53,19 @@
   line-height: 16px;
   text-align: center;
 }
+
+/* Plan 139 — App Shell v2 (solo con flag ON; token-only). */
+.shellLayout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.shellContent {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}

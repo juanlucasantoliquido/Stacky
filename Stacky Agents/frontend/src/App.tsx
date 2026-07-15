@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import UnblockerPage from "./pages/UnblockerPage";
@@ -31,6 +32,10 @@ import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
 import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
 import { reviewBadgeLabel } from "./services/reviewInbox";
+import AppSidebar from "./components/shell/AppSidebar";
+import {
+  computeVisibleTabs, parseCollapsed, SIDEBAR_COLLAPSED_KEY,
+} from "./components/shell/shellNav";
 import styles from "./App.module.css";
 
 type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare";
@@ -73,6 +78,18 @@ export default function App() {
   const [devopsEnabled, setDevopsEnabled] = useState(false);
   // Plan 122: tab Comparador BD visible solo si el flag está ON en el backend
   const [dbCompareEnabled, setDbCompareEnabled] = useState(false);
+  // Plan 139: App Shell v2 (sidebar agrupada) — flag leída una sola vez al montar.
+  const [shellV2Enabled, setShellV2Enabled] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+    () => parseCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY)),
+  );
+  const toggleSidebar = () => {
+    setSidebarCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "true" : "false");
+      return next;
+    });
+  };
 
   useGlobalExecutionNotifier();
   const reviewCount = useReviewInboxCount();
@@ -112,6 +129,16 @@ export default function App() {
     void probeFlagHealth("/api/db-compare/health").then((v) => {
       if (alive) setDbCompareEnabled((prev) => nextEnabledState(prev, v));
     });
+    // Plan 139: lee la flag del shell v2 una sola vez al montar (recargar la
+    // página para ver el efecto de un toggle; no hay re-montaje en caliente).
+    fetch("/api/diag/health")
+      .then((r) => r.json())
+      .then((d: { shell_v2_enabled?: boolean }) => {
+        if (alive) setShellV2Enabled(d.shell_v2_enabled === true);
+      })
+      .catch(() => {
+        if (alive) setShellV2Enabled(false);
+      });
     return () => {
       alive = false;
     };
@@ -164,138 +191,179 @@ export default function App() {
     else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");
   }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled]);
 
+  const visibleTabs = computeVisibleTabs({
+    sections: {
+      pm: !!sections.pm, logs: !!sections.logs,
+      docs: !!sections.docs, memory: !!sections.memory,
+    },
+    migradorEnabled, devopsEnabled, dbCompareEnabled,
+  });
+
+  // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
+  // fuente (reviewBadge = reviewBadgeLabel(reviewCount)); AppSidebar decide su
+  // propia presentación (itemBadge) — no se reusa el markup navBadge de v1.
+  const shellBadges: Partial<Record<Tab, ReactNode>> = {
+    review: reviewBadge,
+  };
+
+  // Plan 139 §3.7 — extraído verbatim de las 14 líneas de montaje (mismos
+  // condicionales exactos); un fragment de React es transparente en el DOM,
+  // así que se renderiza IGUAL en ambas ramas (v1 nav / v2 sidebar): cero
+  // remount extra, mismo timing de montaje/desmontaje.
+  const pages = (
+    <>
+      {tab === "team"     && <TeamScreen />}
+      {tab === "tickets"  && <TicketBoard />}
+      {tab === "review"   && <ReviewInboxPage />}
+      {tab === "unblocker" && <UnblockerPage />}
+      {tab === "pm"       && sections.pm   && <PMCommandCenter />}
+      {tab === "logs"     && sections.logs && <SystemLogsPage />}
+      {tab === "settings" && <SettingsPage />}
+      {tab === "docs"     && sections.docs && <DocsPage />}
+      {tab === "memory"   && sections.memory && <MemoryPage />}
+      {tab === "diagnostics" && <DiagnosticsPage />}
+      {tab === "history"     && <ExecutionHistoryPage />}
+      {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
+      {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
+      {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
+    </>
+  );
+
   return (
     <div className={styles.appRoot}>
       <DemoModeBanner />
-      <TopBar onGoToTeam={() => selectTab("team")} />
+      <TopBar onGoToTeam={() => selectTab("team")} shellV2={shellV2Enabled} />
       <HealthBanner />
 
-      {/* Tabs de navegación principal */}
-      <nav className={styles.nav}>
-        <button
-          className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
-          onClick={() => selectTab("team")}
-        >
-          ⚡ Mi Equipo
-        </button>
-        <button
-          className={`${styles.navTab} ${tab === "tickets" ? styles.active : ""}`}
-          onClick={() => selectTab("tickets")}
-        >
-          📋 Tickets ADO
-        </button>
-        <button
-          className={`${styles.navTab} ${tab === "review" ? styles.active : ""}`}
-          onClick={() => selectTab("review")}
-        >
-          🧭 Revisión
-          {reviewBadge != null && (
-            <span
-              className={styles.navBadge}
-              aria-label={`${reviewCount} ejecuciones esperando revisión`}
+      {shellV2Enabled ? (
+        <div className={styles.shellLayout}>
+          <AppSidebar
+            activeTab={tab}
+            onSelect={selectTab}
+            visibleTabs={visibleTabs}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={toggleSidebar}
+            badges={shellBadges}
+          />
+          <main className={styles.shellContent}>
+            <PageErrorBoundary resetKey={tab}>{pages}</PageErrorBoundary>
+          </main>
+        </div>
+      ) : (
+        <>
+          {/* Tabs de navegación principal */}
+          <nav className={styles.nav}>
+            <button
+              className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
+              onClick={() => selectTab("team")}
             >
-              {reviewBadge}
-            </span>
-          )}
-        </button>
-        <button
-          className={`${styles.navTab} ${tab === "unblocker" ? styles.active : ""}`}
-          onClick={() => selectTab("unblocker")}
-        >
-          🧹 Desatascador
-        </button>
-        {sections.pm && (
-          <button
-            className={`${styles.navTab} ${tab === "pm" ? styles.active : ""}`}
-            onClick={() => selectTab("pm")}
-          >
-            📊 PM
-          </button>
-        )}
-        {sections.logs && (
-          <button
-            className={`${styles.navTab} ${tab === "logs" ? styles.active : ""}`}
-            onClick={() => selectTab("logs")}
-          >
-            🔍 System Logs
-          </button>
-        )}
-        <button
-          className={`${styles.navTab} ${tab === "settings" ? styles.active : ""}`}
-          onClick={() => selectTab("settings")}
-        >
-          ⚙️ Configuración
-        </button>
-        {sections.docs && (
-          <button
-            className={`${styles.navTab} ${tab === "docs" ? styles.active : ""}`}
-            onClick={() => selectTab("docs")}
-          >
-            📄 Docs
-          </button>
-        )}
-        {sections.memory && (
-          <button
-            className={`${styles.navTab} ${tab === "memory" ? styles.active : ""}`}
-            onClick={() => selectTab("memory")}
-          >
-            Memoria
-          </button>
-        )}
-        <button
-          className={`${styles.navTab} ${tab === "diagnostics" ? styles.active : ""}`}
-          onClick={() => selectTab("diagnostics")}
-        >
-          🩺 Diagnóstico
-        </button>
-        <button
-          className={`${styles.navTab} ${tab === "history" ? styles.active : ""}`}
-          onClick={() => selectTab("history")}
-        >
-          📋 Historial
-        </button>
-        {migradorEnabled && (
-          <button
-            className={`${styles.navTab} ${tab === "migrador" ? styles.active : ""}`}
-            onClick={() => selectTab("migrador")}
-          >
-            Migrador
-          </button>
-        )}
-        {devopsEnabled && (
-          <button
-            className={`${styles.navTab} ${tab === "devops" ? styles.active : ""}`}
-            onClick={() => selectTab("devops")}
-          >
-            DevOps
-          </button>
-        )}
-        {dbCompareEnabled && (
-          <button
-            className={`${styles.navTab} ${tab === "dbcompare" ? styles.active : ""}`}
-            onClick={() => selectTab("dbcompare")}
-          >
-            Comparador BD
-          </button>
-        )}
-      </nav>
+              ⚡ Mi Equipo
+            </button>
+            <button
+              className={`${styles.navTab} ${tab === "tickets" ? styles.active : ""}`}
+              onClick={() => selectTab("tickets")}
+            >
+              📋 Tickets ADO
+            </button>
+            <button
+              className={`${styles.navTab} ${tab === "review" ? styles.active : ""}`}
+              onClick={() => selectTab("review")}
+            >
+              🧭 Revisión
+              {reviewBadge != null && (
+                <span
+                  className={styles.navBadge}
+                  aria-label={`${reviewCount} ejecuciones esperando revisión`}
+                >
+                  {reviewBadge}
+                </span>
+              )}
+            </button>
+            <button
+              className={`${styles.navTab} ${tab === "unblocker" ? styles.active : ""}`}
+              onClick={() => selectTab("unblocker")}
+            >
+              🧹 Desatascador
+            </button>
+            {sections.pm && (
+              <button
+                className={`${styles.navTab} ${tab === "pm" ? styles.active : ""}`}
+                onClick={() => selectTab("pm")}
+              >
+                📊 PM
+              </button>
+            )}
+            {sections.logs && (
+              <button
+                className={`${styles.navTab} ${tab === "logs" ? styles.active : ""}`}
+                onClick={() => selectTab("logs")}
+              >
+                🔍 System Logs
+              </button>
+            )}
+            <button
+              className={`${styles.navTab} ${tab === "settings" ? styles.active : ""}`}
+              onClick={() => selectTab("settings")}
+            >
+              ⚙️ Configuración
+            </button>
+            {sections.docs && (
+              <button
+                className={`${styles.navTab} ${tab === "docs" ? styles.active : ""}`}
+                onClick={() => selectTab("docs")}
+              >
+                📄 Docs
+              </button>
+            )}
+            {sections.memory && (
+              <button
+                className={`${styles.navTab} ${tab === "memory" ? styles.active : ""}`}
+                onClick={() => selectTab("memory")}
+              >
+                Memoria
+              </button>
+            )}
+            <button
+              className={`${styles.navTab} ${tab === "diagnostics" ? styles.active : ""}`}
+              onClick={() => selectTab("diagnostics")}
+            >
+              🩺 Diagnóstico
+            </button>
+            <button
+              className={`${styles.navTab} ${tab === "history" ? styles.active : ""}`}
+              onClick={() => selectTab("history")}
+            >
+              📋 Historial
+            </button>
+            {migradorEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "migrador" ? styles.active : ""}`}
+                onClick={() => selectTab("migrador")}
+              >
+                Migrador
+              </button>
+            )}
+            {devopsEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "devops" ? styles.active : ""}`}
+                onClick={() => selectTab("devops")}
+              >
+                DevOps
+              </button>
+            )}
+            {dbCompareEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "dbcompare" ? styles.active : ""}`}
+                onClick={() => selectTab("dbcompare")}
+              >
+                Comparador BD
+              </button>
+            )}
+          </nav>
 
-      <PageErrorBoundary resetKey={tab}>
-        {tab === "team"     && <TeamScreen />}
-        {tab === "tickets"  && <TicketBoard />}
-        {tab === "review"   && <ReviewInboxPage />}
-        {tab === "unblocker" && <UnblockerPage />}
-        {tab === "pm"       && sections.pm   && <PMCommandCenter />}
-        {tab === "logs"     && sections.logs && <SystemLogsPage />}
-        {tab === "settings" && <SettingsPage />}
-        {tab === "docs"     && sections.docs && <DocsPage />}
-        {tab === "memory"   && sections.memory && <MemoryPage />}
-        {tab === "diagnostics" && <DiagnosticsPage />}
-        {tab === "history"     && <ExecutionHistoryPage />}
-        {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
-        {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
-        {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
-      </PageErrorBoundary>
+          <PageErrorBoundary resetKey={tab}>{pages}</PageErrorBoundary>
+        </>
+      )}
 
       <CommandPalette
         open={paletteOpen}

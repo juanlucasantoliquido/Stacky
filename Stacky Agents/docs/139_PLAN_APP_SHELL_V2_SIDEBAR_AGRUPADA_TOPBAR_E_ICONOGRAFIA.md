@@ -1,6 +1,20 @@
 # Plan 139 — App Shell v2: sidebar agrupada, TopBar profesional e iconografía
 
-**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — v1 propuesto 2026-07-15
+**Estado:** IMPLEMENTADO F0-F5 (2026-07-15) — falta el smoke manual §12 (pendiente del operador,
+sin dev server vivo para ejecutarlo en esta sesión). Doc previo: CRITICADO v1→v2 · APROBADO-CON-CAMBIOS.
+
+**Decisión de criterio sobre `STACKY_UI_SHELL_V2_ENABLED` (directiva operador 2026-07-15):**
+se mantiene **default OFF**, tal como pedía este doc, PESE a la directiva general de default
+ON. Razonamiento explícito: ninguna de las 4 excepciones duras aplica literalmente (no
+bypassea revisión humana, es 100% reversible byte-a-byte con OFF — KPI-1 —, su prerequisito
+el plan 138 ya está implementado, no reduce seguridad). Pero esto reemplaza el chrome de
+navegación COMPLETO de toda la app (no una capacidad incremental) — el cambio de mayor
+"blast radius visual" de toda la serie 131-141 — y el propio codebase ya tiene un precedente
+sin objeciones para exactamente esta categoría de cambio: el plan 119
+(`STACKY_DEVOPS_UI_V2_ENABLED`, rediseño de UI de magnitud comparable) también default OFF.
+Mantener consistencia con ese precedente evita imponerle al operador mono-usuario un cambio de
+paradigma de navegación visible en cada pantalla sin que él lo haya elegido — más alineado con
+"human-in-the-loop" y "cero trabajo extra pero con control" que forzar el ON.
 
 **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
 

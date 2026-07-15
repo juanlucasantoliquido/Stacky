@@ -1,17 +1,29 @@
 # Plan 146 — Fixes verificados de bajo esfuerzo: import `AgentExecution`, `mkdir` del ledger SQLite, contrato de `Config` fallback
 
-- **Estado:** PROPUESTO v1
+- **Estado:** CRITICADO v1→v2 · VEREDICTO: **APROBADO-CON-CAMBIOS**
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8)
+- **Crítica v2 (juez adversarial):** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8) — 2026-07-15
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)
 - **Cluster de este plan:** "Fixes verificados de bajo esfuerzo + blindaje de contratos de Config/imports con tests"
 - **Hallazgos que cierra:** **V1** (import `Execution`→`AgentExecution`), **V5** (`mkdir` del SQLite ledger + dedup de warning), **V4** (contrato `Config.CLAUDE_CODE_CLI_MODEL_FALLBACK` + re-deploy)
+
+### CHANGELOG v1 → v2 (crítica adversarial)
+Todas las citas `[V]` del v1 se **re-verificaron contra el código real** y son correctas (`ado_edit_learning.py:259` import roto; `db.py:302` `session_scope`; `models.py:207/219` `AgentExecution`/`metadata_json`; `config.py:216-217` `CLAUDE_CODE_CLI_MODEL_FALLBACK`; 4 call-sites SQLite sin `mkdir`; `_append_jsonl:79` sí lo hace; meta-test parsea solo el `.sh`). Cambios de v2:
+
+- **C1 (MEDIO-ALTO) — Cambio de comportamiento subestimado.** `app.py:444-446`: el daemon del sweep está **gated por `STACKY_ADO_EDIT_LEARNING_ENABLED`, default ON** (promovido 2026-07-15). Hoy el sweep **crashea en el `ImportError` ANTES de llegar al loop de ADO** → 0 llamadas ADO. Tras el fix, cada ciclo consulta `AgentExecution` y llama `fetch_work_item_updates` + `save_observation` + `mark_learned` en **~todas** las instalaciones. La afirmación v1 "sin cambio de comportamiento observable salvo la desaparición del error" era **inexacta**: se **revive trabajo real de fondo**. Corregido en §1/§3.2 + nuevo riesgo R8.
+- **C2 (MEDIO) — Reuso.** El fix reimplementaba el decode de metadata en vez de usar el accessor canónico `AgentExecution.metadata_dict` (`models.py:259-261`). Cambio B reescrito para preferir `metadata_dict`.
+- **C3 (MEDIO) — [ADICIÓN ARQUITECTO] Dedup robusto.** El guard `_sqlite_warned` de un solo booleano **silenciaba para siempre** cualquier fallo SQLite **nuevo/distinto** posterior. Reemplazado por dedup **por firma `(tipo+mensaje de la excepción)` con re-emisión temporal** (`_SQLITE_WARN_STATE` + `_SQLITE_WARN_INTERVAL_S`; el mismo error desde 4 call-sites colapsa a 1 warning, pero una causa distinta aflora). Semántica idéntica a `log_throttle.log_throttled` de 145 → migración trivial. Preserva observabilidad de fallos persistentes.
+- **C4 (MEDIO-BAJO) — Fidelidad de test.** `_RealShapedRun` no tenía `metadata_dict`; ahora lo expone para ejercitar el path canónico (blinda C2).
+- **C5 (BAJO) — Orden.** Se suavizó la afirmación "146 antes que 145" (no verificable y en tensión con lo que declara 145); 146 es autónomo en cualquier orden.
+- **C6 (BAJO) — Re-deploy.** Reencuadrado como paso de **release del plan** (ships V1+V5+V4), no acción específica de V4; DEV toma el fix al reiniciar sin re-deploy.
+- **C7 (BAJO) — Allowlist.** Nota: `tests/harness_ratchet_allowlist.txt` puede no existir hoy (el meta-test lo trata como vacío); no crearlo.
 
 ---
 
 ## 1. Título, objetivo e impacto esperado
 
-Este plan corrige tres defectos **verificados contra el código real del working tree** que hoy generan ruido masivo y dejan funcionalidad muerta, y añade **tests de contrato** que impiden su regresión. Los tres son de bajo esfuerzo, invisibles al operador y sin cambio de comportamiento observable salvo la desaparición del error:
+Este plan corrige tres defectos **verificados contra el código real del working tree** que hoy generan ruido masivo y dejan funcionalidad muerta, y añade **tests de contrato** que impiden su regresión. Los tres son de bajo esfuerzo e invisibles al operador. **Advertencia de comportamiento (C1):** V5 y V4 no cambian comportamiento observable salvo la desaparición del error; **V1 sí revive trabajo de fondo real** — hoy el sweep crashea en el `ImportError` **antes** de llamar a ADO (0 llamadas), y tras el fix pasará a hacer polling de ADO + escritura de lecciones/memoria en cada ciclo. Ese daemon está **gated por `STACKY_ADO_EDIT_LEARNING_ENABLED` (default ON desde 2026-07-15, `app.py:446`)**, así que la revivificación se activa en ~todas las instalaciones; el ledger de idempotencia acota el trabajo repetido (ver R8):
 
 1. **V1 (ALTO, `[V]`)** — `services/ado_edit_learning.py:259` hace `from models import Execution, session_scope`; en `models.py` la clase es `AgentExecution` (línea 207) y **`session_scope` no vive en `models` sino en `db.py:302`**. Cada barrido de `sweep_recent_runs` con DB viva explota con `ImportError` (capturado como `sweep_recent_runs: error general`), **318 veces** en los logs de DEV. Además, tras arreglar el import aparece un **segundo bug verificado no listado en el reporte**: la función lee `run.metadata` (el objeto `MetaData` de SQLAlchemy) en vez de `run.metadata_json` (la columna real), por lo que el sweep degradaría a **no-op silencioso** (nunca aprende) aun con el import corregido.
 2. **V5 (MEDIO, `[INF]`)** — `services/ado_edit_ledger.py` abre `sqlite3.connect(_get_db_path())` en 4 funciones **sin garantizar el directorio padre**; si `data_dir()` no existe, falla con `unable to open database file` (**42 veces**: 30 en `_create_table_if_needed`, 12 en `mark_learned`) y lo advierte en cada ciclo.
@@ -38,8 +50,8 @@ Este es el plan de **quick wins verificados**: junto con el 144 (bloqueo crític
 ## 3. Principios y guardarraíles (rieles duros de Stacky, codificados por fase)
 
 1. **Paridad de 3 runtimes (Codex CLI / Claude Code CLI / GitHub Copilot Pro):** V1 y V5 son **runtime-agnósticos** — el sweep de ADO edit learning y el ledger SQLite corren igual sin importar qué runtime ejecutó el run; el fix aplica **idéntico** a los 3, sin ramas por runtime. V4 es específico del runner de **Claude Code CLI** (`CLAUDE_CODE_CLI_MODEL_FALLBACK`); el test de contrato guarda los atributos que lee `claude_code_cli_runner.py`. Codex (`codex_cli_runner.py`) y Copilot no tienen ese atributo y **no lo necesitan**: su ausencia no los afecta (degradación = n/a). Se detalla el impacto por runtime en cada fase.
-2. **Cero trabajo extra al operador:** F1/F2/F3 son invisibles y automáticas. La **única** acción de operador es RE-PUBLICAR el deploy (V4) — es una **acción de release one-time** de un fix ya commiteado, **no** config nueva ni paso recurrente. No dispara ninguna de las 4 excepciones duras (no bypasea revisión humana, no es destructiva, no requiere prerequisito nuevo en instalación default, no reduce seguridad). Se marca explícitamente como "Trabajo del operador".
-3. **Human-in-the-loop:** ningún cambio agrega autonomía proactiva. El sweep de learning y el ledger ya existían y ya eran automáticos (background); acá solo se los arregla.
+2. **Cero trabajo extra al operador:** F1/F2/F3 son invisibles y automáticas. La única acción de operador es RE-PUBLICAR el deploy — es una **acción de release del plan** (ships V1+V5+V4 juntos, **no** específica de V4; **C6**), one-time, de fixes ya commiteados, **no** config nueva ni paso recurrente. En **DEV** el fix surte efecto con solo reiniciar el proceso (corre de fuente, sin re-deploy); solo el **binario del DEPLOY** necesita re-publish. No dispara ninguna de las 4 excepciones duras (no bypasea revisión humana, no es destructiva, no requiere prerequisito nuevo en instalación default, no reduce seguridad). Se marca explícitamente como "Trabajo del operador".
+3. **Human-in-the-loop:** ningún cambio agrega autonomía proactiva. El ledger ya era automático. El sweep de learning también estaba cableado como daemon (`app.py:446`, flag default ON), pero **crasheaba en cada ciclo** (V1) → estaba muerto. El fix lo **revive** a su comportamiento diseñado (Plan 60): aprender de ediciones humanas sobre work items. No es autonomía nueva (no toma decisiones por el operador; solo observa ediciones y guarda lecciones), pero **sí es trabajo de fondo real que hoy no ocurre** — clasificado honestamente en R8. No agrega ninguna superficie de acción para el operador.
 4. **Mono-operador sin auth real:** no se toca ninguna superficie de auth/RBAC.
 5. **No degradar performance/seguridad/estabilidad/DX; backward-compatible; reusar lo existente:** se reusa el patrón de fixtures de `test_ado_edit_sweep.py`, el ledger JSONL de fallback ya presente, y el ratchet `HARNESS_TEST_FILES`. Los cambios son quirúrgicos y compatibles hacia atrás (el `_FakeRun` de los tests existentes sigue funcionando por diseño del fix).
 
@@ -107,7 +119,7 @@ Ninguna de estas correcciones expone umbrales/endpoints/backoff que el operador 
 
 **Casos borde:**
 - El array `HARNESS_TEST_FILES` del `.sh` es un **ratchet: sólo crece**. No borres ni reordenes entradas existentes; sólo agregá la tuya.
-- No pongas la entrada en `tests/harness_ratchet_allowlist.txt` (esa lista es para tests excluidos con motivo; solaparía y rompería `test_allowlist_no_se_solapa_con_ratchet`).
+- No pongas la entrada en `tests/harness_ratchet_allowlist.txt` (esa lista es para tests excluidos con motivo; solaparía y rompería `test_allowlist_no_se_solapa_con_ratchet`). **Nota (C7):** ese archivo hoy **puede no existir** — el meta-test lo trata como vacío (`_allowlist()` retorna `set()` si falta). **No lo crees**; tu test va al `.sh`.
 
 **Criterio de aceptación BINARIO + comando:**
 - El meta-test del ratchet pasa (clasifica el archivo nuevo y no referencia inexistentes):
@@ -177,9 +189,11 @@ def test_sweep_recent_runs_real_import_path_no_import_error(monkeypatch, caplog)
 
 
 def test_sweep_reads_metadata_json_from_real_shaped_run(monkeypatch):
-    """V1 (2º bug): un run 'real' expone metadata en .metadata_json (str JSON),
-    y su .metadata NO es un dict (simula el objeto MetaData de SQLAlchemy de
-    AgentExecution). El sweep debe leer metadata_json y extraer epic_ado_id.
+    """V1 (2º bug) + C2/C4: un run 'real' refleja EXACTAMENTE la forma de
+    AgentExecution (models.py:207): expone la columna `.metadata_json` (str JSON),
+    la property canónica `.metadata_dict` (dict parseado) y `.metadata` = el
+    registro MetaData de SQLAlchemy (NO dict). El sweep debe leer el dict correcto
+    (vía `metadata_dict` canónico) y extraer epic_ado_id — nunca el objeto MetaData.
     """
     from services.ado_edit_learning import sweep_recent_runs, LearnResult
 
@@ -187,6 +201,11 @@ def test_sweep_reads_metadata_json_from_real_shaped_run(monkeypatch):
         id = 7
         metadata_json = _json.dumps({"epic_ado_id": 999, "project_name": "P"})
         metadata = object()  # NO es dict: emula MetaData de SQLAlchemy
+
+        @property
+        def metadata_dict(self) -> dict:
+            # Espejo fiel de AgentExecution.metadata_dict (models.py:259-261).
+            return _json.loads(self.metadata_json)
 
     seen = {}
 
@@ -207,7 +226,7 @@ def test_sweep_reads_metadata_json_from_real_shaped_run(monkeypatch):
     assert result == 1
 ```
 
-> **Nota TDD:** antes del fix, el 1er test falla porque `from models import Execution` lanza ImportError → se captura → se loguea "error general" (assert falla). El 2º falla porque `json.loads(object())` lanza TypeError → `meta={}` → `epic_ado_id` None → `continue` → `result==0` y `seen` vacío.
+> **Nota TDD:** antes del fix, el 1er test falla porque `from models import Execution` lanza ImportError → se captura → se loguea "error general" (assert falla). El 2º falla porque el código v1 lee `run.metadata` (= `object()`) → `json.loads(object())` lanza TypeError → `meta={}` → `epic_ado_id` None → `continue` → `result==0` y `seen` vacío. Tras el fix (Cambio B), el sweep lee `run.metadata_dict` (accessor canónico) → `{"epic_ado_id":999,...}` → `seen["ado_id"]==999`, `result==1`.
 
 **Correr (debe estar en ROJO antes de tocar el código):**
 ```powershell
@@ -234,7 +253,7 @@ Cambio A (import, líneas actuales 258-266):
                  )
 ```
 
-Cambio B (lectura de metadata, líneas actuales 270-278):
+Cambio B (lectura de metadata, líneas actuales 270-278) — **C2: reusa el accessor canónico `AgentExecution.metadata_dict` (`models.py:259-261`) en vez de reimplementar el decode JSON**:
 ```diff
          for run in raw_runs:
              try:
@@ -243,23 +262,32 @@ Cambio B (lectura de metadata, líneas actuales 270-278):
 -                    if isinstance(run.metadata, dict)
 -                    else json.loads(run.metadata or "{}")
 -                )
-+                # Preferir metadata_json (columna real de AgentExecution,
-+                # models.py:219). Fallback a .metadata SOLO si es str/dict
-+                # (compat con el _FakeRun de test_ado_edit_sweep.py); nunca
-+                # usar el objeto MetaData de SQLAlchemy.
-+                raw_meta = getattr(run, "metadata_json", None)
-+                if raw_meta is None:
-+                    _m = getattr(run, "metadata", None)
-+                    raw_meta = _m if isinstance(_m, (str, dict)) else None
-+                meta = raw_meta if isinstance(raw_meta, dict) else json.loads(raw_meta or "{}")
++                # Accessor CANÓNICO de AgentExecution: la property .metadata_dict
++                # (models.py:259-261) hace _json_loads(self.metadata_json) or {}.
++                # Preferirla evita reimplementar el decode y nunca toca el objeto
++                # MetaData de SQLAlchemy expuesto en .metadata.
++                meta = getattr(run, "metadata_dict", None)
++                if not isinstance(meta, dict):
++                    # Fallback para el _FakeRun de test_ado_edit_sweep.py (expone
++                    # .metadata dict, sin la property canónica) y para formas que
++                    # solo traen la columna cruda metadata_json.
++                    raw_meta = getattr(run, "metadata_json", None)
++                    if not isinstance(raw_meta, (str, bytes)):
++                        _m = getattr(run, "metadata", None)
++                        raw_meta = _m if isinstance(_m, (str, dict)) else None
++                    meta = raw_meta if isinstance(raw_meta, dict) else json.loads(raw_meta or "{}")
              except Exception:
                  meta = {}
 ```
 
 **Casos borde cubiertos por el fix:**
-- `AgentExecution` real con `metadata_json=None` (columna nullable): `getattr → None` → cae a `.metadata` (MetaData) → no es str/dict → `raw_meta=None` → `json.loads("{}")` → `{}`. No crashea.
-- `_FakeRun` de los tests existentes (`.metadata` dict, sin `metadata_json`): `getattr(run,"metadata_json",None) → None` → cae a `.metadata` dict → `raw_meta=dict` → `meta=dict`. **Sigue funcionando** (backward-compatible).
-- `metadata_json` con JSON inválido: `json.loads` lanza → `except` → `meta={}`. No crashea.
+- `AgentExecution` real con `metadata_json` poblado: `run.metadata_dict` → dict parseado. Path canónico, sin fallback.
+- `AgentExecution` real con `metadata_json=None` (columna nullable): `run.metadata_dict` → `_json_loads(None) or {}` → `{}`. No crashea, sin fallback.
+- `_FakeRun` de los tests existentes (`.metadata` dict, **sin** `metadata_dict` ni `metadata_json`): `getattr(run,"metadata_dict",None) → None` → no dict → `metadata_json` None → `.metadata` es dict → `raw_meta=dict` → `meta=dict`. **Sigue funcionando** (backward-compatible).
+- Forma que solo trae `metadata_json` cruda (sin la property): `metadata_dict` None → `metadata_json` str → `json.loads(str)`. No crashea.
+- `metadata_json` con JSON inválido: cualquier `json.loads` lanza → `except` externo → `meta={}`. No crashea.
+
+> **Por qué `metadata_dict` y no leer `metadata_json` crudo:** la property centraliza el contrato de serialización del modelo (`models.py:259-261`). Si mañana la metadata se cifra/comprime, el sweep sigue correcto sin tocarlo. Reusa lo existente (riel duro), no lo duplica.
 
 **Criterio de aceptación BINARIO + comando:**
 - Los dos tests nuevos de F1 pasan **y** los tests preexistentes de sweep siguen verdes (no-regresión del `_FakeRun`):
@@ -301,7 +329,7 @@ def test_ledger_creates_parent_dir_when_missing(monkeypatch, tmp_path):
     nested_db = tmp_path / "no" / "existe" / "aun" / "ledger.db"
     monkeypatch.setattr(lm, "_get_db_path", lambda: str(nested_db))
     monkeypatch.setattr(lm, "_get_jsonl_path", lambda: tmp_path / "ledger.jsonl")
-    monkeypatch.setattr(lm, "_sqlite_warned", False, raising=False)
+    monkeypatch.setattr(lm, "_SQLITE_WARN_STATE", {})
 
     lm.mark_learned(111, 3, "run-x")
 
@@ -309,14 +337,15 @@ def test_ledger_creates_parent_dir_when_missing(monkeypatch, tmp_path):
     assert lm.already_learned(111, 3) is True
 
 
-def test_ledger_warns_once_when_sqlite_unavailable(monkeypatch, tmp_path, caplog):
-    """V5: si SQLite es inutilizable, se emite UNA sola advertencia por proceso
-    (no una por cada operación). El resto degrada silencioso a JSONL."""
+def test_ledger_warns_once_per_signature_when_sqlite_unavailable(monkeypatch, tmp_path, caplog):
+    """V5: ante el MISMO fallo repetido, se emite UNA sola advertencia (dedup por
+    firma). El resto degrada silencioso a JSONL. Todas las operaciones lanzan la
+    misma OperationalError → una firma → un warning."""
     import sqlite3
     import services.ado_edit_ledger as lm
 
     monkeypatch.setattr(lm, "_get_jsonl_path", lambda: tmp_path / "ledger.jsonl")
-    monkeypatch.setattr(lm, "_sqlite_warned", False, raising=False)
+    monkeypatch.setattr(lm, "_SQLITE_WARN_STATE", {})
 
     def _boom(*a, **k):
         raise sqlite3.OperationalError("unable to open database file")
@@ -333,16 +362,58 @@ def test_ledger_warns_once_when_sqlite_unavailable(monkeypatch, tmp_path, caplog
         r for r in caplog.records
         if r.levelno == logging.WARNING and "SQLite no disponible" in r.getMessage()
     ]
-    assert len(warnings) == 1, f"esperaba 1 warning dedup, hubo {len(warnings)}"
+    assert len(warnings) == 1, f"esperaba 1 warning dedup por firma, hubo {len(warnings)}"
+
+
+def test_ledger_rewarns_on_distinct_sqlite_failure(monkeypatch, tmp_path, caplog):
+    """C3: un fallo con firma DISTINTA vuelve a advertir. Un booleano global de un
+    solo disparo lo habría silenciado para siempre; el dedup por firma NO oculta un
+    fallo nuevo/persistente."""
+    import sqlite3
+    import services.ado_edit_ledger as lm
+
+    monkeypatch.setattr(lm, "_get_jsonl_path", lambda: tmp_path / "ledger.jsonl")
+    monkeypatch.setattr(lm, "_SQLITE_WARN_STATE", {})
+    # No consumir el iterador con _create_table_if_needed intermedio:
+    monkeypatch.setattr(lm, "_create_table_if_needed", lambda: None)
+
+    errs = iter([
+        sqlite3.OperationalError("unable to open database file"),
+        sqlite3.OperationalError("database disk image is malformed"),  # firma distinta
+    ])
+
+    def _boom_seq(*a, **k):
+        raise next(errs)
+
+    monkeypatch.setattr(lm, "_connect", _boom_seq)
+
+    with caplog.at_level(logging.WARNING):
+        lm.already_learned(1, 1)   # 1ª firma → warning
+        lm.already_learned(2, 2)   # 2ª firma distinta → warning
+
+    warnings = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "SQLite no disponible" in r.getMessage()
+    ]
+    assert len(warnings) == 2, f"cada firma distinta debe advertir una vez, hubo {len(warnings)}"
 ```
 
-> **Nota TDD:** `test_ledger_creates_parent_dir_when_missing` falla antes del fix porque, sin `mkdir`, `sqlite3.connect(nested_db)` lanza y no crea el archivo → `nested_db.exists()` es `False`. `test_ledger_warns_once_when_sqlite_unavailable` referencia los símbolos nuevos `_connect` y `_sqlite_warned` (no existen aún) → falla hasta implementarlos.
+> **Nota TDD:** `test_ledger_creates_parent_dir_when_missing` falla antes del fix porque, sin `mkdir`, `sqlite3.connect(nested_db)` lanza y no crea el archivo → `nested_db.exists()` es `False`. Los dos tests de warning referencian los símbolos nuevos `_connect` y `_SQLITE_WARN_STATE` (no existen aún) → fallan hasta implementarlos. El 3º (`rewarns_on_distinct`) además fija el contrato de **no silenciar fallos nuevos** (fallaría con un guard de booleano único, que produciría 1 warning en vez de 2).
 
 **IMPLEMENTACIÓN — editar `Stacky Agents/backend/services/ado_edit_ledger.py`:**
 
+0. En el bloque de imports (línea 9-15), agregar `import time` (para el throttle temporal por firma).
+
 1. Bajo la constante `_TABLE` (línea 19), agregar el estado y los helpers nuevos:
    ```python
-   _sqlite_warned = False  # dedup: una sola advertencia de SQLite no disponible por proceso
+   # C3 — dedup de warnings de SQLite POR FIRMA (no un booleano global de un solo
+   # disparo). Un booleano único silenciaría PARA SIEMPRE cualquier fallo nuevo o
+   # persistente posterior; el dedup por firma re-emite ante un error distinto y
+   # a lo sumo una vez por intervalo. Semántica idéntica a
+   # services/log_throttle.log_throttled (Plan 145): cuando 145 aterrice, migrar
+   # es reemplazar este helper por una llamada (ver cross-ref al final de F2).
+   _SQLITE_WARN_STATE: dict[str, float] = {}   # firma -> ts monotónico del último warning
+   _SQLITE_WARN_INTERVAL_S = 300.0             # re-emite una firma a lo sumo cada 5 min
 
 
    def _connect() -> "sqlite3.Connection":
@@ -361,14 +432,26 @@ def test_ledger_warns_once_when_sqlite_unavailable(monkeypatch, tmp_path, caplog
 
 
    def _warn_sqlite_unavailable(where: str, exc: Exception) -> None:
-       """Loguea UNA sola advertencia por proceso; el resto va a DEBUG."""
-       global _sqlite_warned
-       if not _sqlite_warned:
+       """Loguea con dedup POR FIRMA (tipo + mensaje de la excepción) y throttle.
+
+       - Firma nueva (fallo distinto)  -> WARNING una vez.
+       - Misma firma dentro del intervalo -> DEBUG (silenciado, no oculto).
+       - Misma firma tras _SQLITE_WARN_INTERVAL_S -> vuelve a WARNING (heartbeat),
+         para que un fallo PERSISTENTE no desaparezca de los logs para siempre.
+       La firma NO incluye `where` a propósito: el mismo error desde 4 call-sites
+       colapsa a 1 warning (cumple el KPI 42 -> <=1), pero un error de otra causa
+       (p. ej. 'disk image is malformed') sí aflora.
+       """
+       sig = f"{type(exc).__name__}:{exc}"
+       now = time.monotonic()
+       last = _SQLITE_WARN_STATE.get(sig)
+       if last is None or (now - last) >= _SQLITE_WARN_INTERVAL_S:
+           _SQLITE_WARN_STATE[sig] = now
            logger.warning(
                "ado_edit_ledger: SQLite no disponible (%s): %s — degradando a "
-               "JSONL. Se omiten advertencias siguientes.", where, exc,
+               "JSONL. Repeticiones de esta firma se omiten por %ss.",
+               where, exc, int(_SQLITE_WARN_INTERVAL_S),
            )
-           _sqlite_warned = True
        else:
            logger.debug("ado_edit_ledger: SQLite falló (%s): %s", where, exc)
    ```
@@ -382,7 +465,7 @@ def test_ledger_warns_once_when_sqlite_unavailable(monkeypatch, tmp_path, caplog
 
 **Casos borde cubiertos:**
 - `data_dir()` inexistente pero creable → `mkdir` lo crea → SQLite persiste (ya no cae a JSONL). Es el caso de los 42 warnings.
-- `data_dir()` verdaderamente no escribible (permisos) → `mkdir` no puede → `sqlite3.connect` lanza → **una** advertencia + JSONL (idempotencia preservada por `_append_jsonl`, que ya hace su propio `mkdir` en la línea 79).
+- `data_dir()` verdaderamente no escribible (permisos) → `mkdir` no puede → `sqlite3.connect` lanza → **una advertencia por firma** + JSONL (idempotencia preservada por `_append_jsonl`, que ya hace su propio `mkdir` en la línea 79). Si más tarde surge un fallo de **otra** causa (corrupción, disco lleno), su firma distinta **sí** aflora (C3).
 - `_append_jsonl` **no se toca** (ya crea su dir padre).
 
 **Criterio de aceptación BINARIO + comando:**
@@ -398,7 +481,7 @@ Select-String -Path "backend\services\ado_edit_ledger.py" -Pattern "sqlite3\.con
 ```
 → **una única coincidencia**, dentro de `def _connect(`.
 
-**Cross-ref y no-dependencia:** el Plan **145** provee un helper común de dedup/rate-limit de warnings que 147/148 consumen. Como **146 se implementa antes que 145** (orden global), 146 usa su **propio guard local mínimo** (`_sqlite_warned` + `_warn_sqlite_unavailable`), sin depender de 145. Migrar a helper común es opcional y queda **fuera de scope**. La causa raíz de la ruta mal resuelta la ataca **147**; 146 sólo aplica el `mkdir` defensivo local.
+**Cross-ref y no-dependencia (C5):** el Plan **145** provee `services/log_throttle.log_throttled(key, logger, level, msg, *args, min_interval_s=60.0)` — dedup/rate-limit temporal por `key` — que **145 declara para 147/148** (no lista a 146 como consumidor). **Independiente del orden de aterrizaje**, 146 es **autónomo**: usa su guard local `_warn_sqlite_unavailable` + `_SQLITE_WARN_STATE`, cuya semántica (throttle por firma) es **idéntica** a `log_throttled`, de modo que migrar es trivial (reemplazar el helper por `log_throttled(sig, logger, logging.WARNING, msg, where, exc, min_interval_s=_SQLITE_WARN_INTERVAL_S)`) **si y cuando** 145 ya esté disponible. Migrar es opcional y queda **fuera de scope**. La causa raíz de la ruta mal resuelta la ataca **147**; 146 sólo aplica el `mkdir` defensivo local.
 
 **Flag que la protege:** ninguna (fix defensivo; ver §3.1). **Default:** n/a.
 **Impacto por runtime:** idéntico en los 3 (persistencia SQLite/JSONL, sin lógica por runtime). **Fallback:** JSONL append-only (ya existente).
@@ -471,7 +554,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 - **Codex CLI / GitHub Copilot Pro:** no leen `CLAUDE_CODE_CLI_MODEL_FALLBACK`; su ausencia no los afecta. El contrato no los obliga (degradación = n/a). Si en el futuro se quiere el mismo blindaje para el runner de Codex, se extiende la lista con los atributos que lee `codex_cli_runner.py` — **fuera de scope** de este plan.
 - **Fallback:** el propio `_spawn_claude_with_fallback` (runner, líneas 313-392) ya reintenta con `CLAUDE_CODE_CLI_MODEL_FALLBACK`; el test sólo garantiza que el atributo exista para que ese fallback no crashee.
 
-**Trabajo del operador (ACCIÓN DE RELEASE, one-time):** RE-PUBLICAR el deploy para que la versión desplegada (v1.0.77+) incluya el fix de `CLAUDE_CODE_CLI_MODEL_FALLBACK` ya commiteado en el working tree. Es una publicación normal (`deployment/Prepare-Publication.ps1` → `deployment/build_release.ps1`), **no** config nueva ni paso recurrente. Este plan **no** ejecuta el release (no toca código de build); sólo lo deja documentado como pendiente de operador. No dispara ninguna de las 4 excepciones duras.
+**Trabajo del operador (ACCIÓN DE RELEASE del plan, one-time — C6):** RE-PUBLICAR el deploy para que la versión desplegada (v1.0.77+) incluya los fixes ya commiteados en el working tree. **Ojo:** el re-deploy **no es específico de V4** — un único re-publish lleva V1 + V5 + V4 al binario. En **DEV** los tres fixes surten efecto con solo reiniciar el proceso (corre de fuente), **sin** re-deploy; el re-publish solo hace falta para el **binario del DEPLOY** (donde V4 es además un crash latente en v1.0.76). Es una publicación normal (`deployment/Prepare-Publication.ps1` → `deployment/build_release.ps1`), **no** config nueva ni paso recurrente. Este plan **no** ejecuta el release (no toca código de build); sólo lo deja documentado como pendiente de operador. No dispara ninguna de las 4 excepciones duras.
 
 ---
 
@@ -507,11 +590,12 @@ Select-String -Path "backend\scripts\run_harness_tests.sh" -Pattern "test_plan14
 |---|---|---|---|---|
 | R1 | Un modelo menor "arregla" sólo `Execution→AgentExecution` y deja `session_scope` importándose de `models` → nuevo `ImportError: cannot import name 'session_scope' from 'models'`. | Media | Alto | El diff de F1 (Cambio A) es explícito: **dos** líneas de import (`from models import AgentExecution` + `from db import session_scope`). El test `test_sweep_recent_runs_real_import_path_no_import_error` lo detecta (fallaría igual). |
 | R2 | El fix de metadata rompe `test_ado_edit_sweep.py` (que usa `_FakeRun.metadata` dict). | Baja | Medio | El fix es backward-compatible por diseño (`getattr` prefiere `metadata_json`, cae a `.metadata` si es dict). F1 exige correr `test_ado_edit_sweep.py` verde. |
-| R3 | El guard `_sqlite_warned` contamina entre tests (estado de módulo global). | Media | Bajo | Ambos tests de F2 hacen `monkeypatch.setattr(lm, "_sqlite_warned", False, raising=False)` (auto-revertido por monkeypatch). |
+| R3 | El estado `_SQLITE_WARN_STATE` contamina entre tests (dict de módulo global). | Media | Bajo | Los tres tests de F2 hacen `monkeypatch.setattr(lm, "_SQLITE_WARN_STATE", {})` (auto-revertido por monkeypatch). |
 | R4 | Olvidar registrar el test nuevo en `run_harness_tests.sh` → `test_harness_ratchet_meta.py` falla. | Media | Bajo | F0 lo hace primero y F4 lo re-verifica. |
 | R5 | `sweep_recent_runs` sin `_db_runs` toca la DB real en el test. | Baja | Medio | El test **no** mockea el import pero **sí** inyecta `db.session_scope` falso (monkeypatch) → cero acceso a DB real; hermético. |
 | R6 | El re-deploy (V4) se olvida y el binario sigue vulnerable. | Media | Medio | Marcado explícito como "Trabajo del operador" en F3; el test de contrato garantiza que el código a publicar es correcto. |
 | R7 | `metadata_json` de runs reales no contiene `epic_ado_id` (se guarda en otra columna). | Baja | Bajo | El fix es correcto respecto a la columna real (`models.py:219`); si el dato no estuviera ahí, el sweep degrada a no-op **sin** warning (comportamiento seguro), y sería un hallazgo separado fuera de V1. |
+| **R8** | **Revivir el sweep (V1) enciende trabajo de fondo real** (polling ADO `fetch_work_item_updates` + `save_observation` + `mark_learned`) que hoy NO ocurre — el daemon está gated por `STACKY_ADO_EDIT_LEARNING_ENABLED` **default ON** (`app.py:446`), así que se activa en ~todas las instalaciones. | Media | Medio | **Es el comportamiento diseñado** (Plan 60), hoy muerto por V1. Acotado por: (a) el **ledger de idempotencia** evita re-aprender `(ado_id, rev)` ya vistos → tras la 1ª pasada el trabajo por run cae a ~0; (b) solo procesa runs con `epic_ado_id`/`issue_ado_id` en metadata (la mayoría no lo tiene → `continue` sin tocar ADO, R7); (c) el `try/except` por run aísla fallos de ADO (no propaga). Si el operador quisiera mantenerlo apagado, **la flag ya existe** (`STACKY_ADO_EDIT_LEARNING_ENABLED=false`) y es la vía por UI/config; este plan **no** cambia su default. Documentado en §1/§3.3. |
 
 ---
 
@@ -531,7 +615,7 @@ Select-String -Path "backend\scripts\run_harness_tests.sh" -Pattern "test_plan14
 
 ### 7.1 Glosario (términos Stacky usados)
 - **`sweep_recent_runs`:** barrido periódico (background) que lee `AgentExecution` recientes y aprende de ediciones humanas sobre work items de ADO (ADO edit learning, Plan 60).
-- **`AgentExecution`:** modelo ORM de una ejecución de agente (`models.py:207`); su metadata operativa vive en la columna `metadata_json` (`models.py:219`), **no** en `.metadata` (que es el registro `MetaData` de SQLAlchemy).
+- **`AgentExecution`:** modelo ORM de una ejecución de agente (`models.py:207`); su metadata operativa vive en la columna `metadata_json` (`models.py:219`) y se lee con el **accessor canónico `metadata_dict`** (property, `models.py:259-261`), **no** con `.metadata` (que es el registro `MetaData` de SQLAlchemy). El fix de F1 usa `metadata_dict` (C2).
 - **`session_scope`:** context manager de sesión SQLAlchemy (`db.py:302`), **no** exportado por `models`.
 - **`ado_edit_ledger`:** ledger de idempotencia (SQLite + fallback JSONL) que garantiza que cada `(ado_id, rev)` se aprende una sola vez (`services/ado_edit_ledger.py`, Plan 60 F3).
 - **`config` / `Config`:** `Config` es la clase (`config.py:54`); `config = Config()` (`config.py:1110`) es la instancia que importan los runners.
@@ -541,7 +625,7 @@ Select-String -Path "backend\scripts\run_harness_tests.sh" -Pattern "test_plan14
 ### 7.2 Orden de implementación (numerado)
 1. **F0** — crear `tests/test_plan146_verified_fixes.py` (scaffold) + registrarlo en `run_harness_tests.sh` y `.ps1`; verificar `test_harness_ratchet_meta.py` verde.
 2. **F1** — escribir los 2 tests de V1 (rojo) → aplicar Cambios A y B en `ado_edit_learning.py` → verde + no-regresión de `test_ado_edit_sweep.py`.
-3. **F2** — escribir los 2 tests de V5 (rojo) → agregar `_connect`/`_warn_sqlite_unavailable`/`_sqlite_warned` y reemplazar los 4 call-sites en `ado_edit_ledger.py` → verde + no-regresión de `test_ado_edit_ledger.py`.
+3. **F2** — escribir los 3 tests de V5 (rojo: mkdir + dedup-por-firma + rewarns-distinto) → agregar `import time`, `_connect`, `_warn_sqlite_unavailable`, `_SQLITE_WARN_STATE`/`_SQLITE_WARN_INTERVAL_S` y reemplazar los 4 call-sites en `ado_edit_ledger.py` → verde + no-regresión de `test_ado_edit_ledger.py`.
 4. **F3** — escribir los tests de contrato de V4 (verdes con el working tree actual) → documentar el re-deploy como acción de operador.
 5. **F4** — verificación integral (5 comandos) + checks estáticos.
 
@@ -549,17 +633,19 @@ Select-String -Path "backend\scripts\run_harness_tests.sh" -Pattern "test_plan14
 
 ### 7.3 Definición de Hecho (DoD global)
 - [ ] `tests/test_plan146_verified_fixes.py` existe, está en `HARNESS_TEST_FILES` (`.sh` + `.ps1`) y `test_harness_ratchet_meta.py` pasa.
-- [ ] `ado_edit_learning.py` importa `AgentExecution` (models) + `session_scope` (db) y lee `metadata_json`; sin referencias a `Execution` ni a `db.query(Execution)`.
-- [ ] `ado_edit_ledger.py` abre SQLite sólo vía `_connect()` (con `mkdir parents=True, exist_ok=True`) y advierte una sola vez vía `_warn_sqlite_unavailable`.
+- [ ] `ado_edit_learning.py` importa `AgentExecution` (models) + `session_scope` (db) y lee la metadata vía el accessor canónico `metadata_dict` (`models.py:259-261`); sin referencias a `Execution` ni a `db.query(Execution)`.
+- [ ] `ado_edit_ledger.py` abre SQLite sólo vía `_connect()` (con `mkdir parents=True, exist_ok=True`) y advierte con **dedup por firma + throttle** vía `_warn_sqlite_unavailable` (`_SQLITE_WARN_STATE`); un fallo de firma distinta vuelve a aflorar (test `rewarns_on_distinct`).
 - [ ] `Config` expone los 12 atributos del contrato del runner de Claude (test parametrizado verde).
 - [ ] Los 5 comandos de F4 terminan con 0 fallos (corridos **por archivo** con `backend/.venv/Scripts/python.exe`).
 - [ ] Sin flags nuevas (justificado en §3.1). Sin trabajo recurrente de operador. Backward-compatible.
-- [ ] **Pendiente de operador (fuera del código):** re-publicar el deploy (v1.0.77+) con el fix de `CLAUDE_CODE_CLI_MODEL_FALLBACK` (V4).
+- [ ] Comportamiento de V1 documentado honestamente (R8): revive trabajo de fondo real (sweep ADO), gated por `STACKY_ADO_EDIT_LEARNING_ENABLED` default ON; el plan **no** cambia ese default.
+- [ ] **Pendiente de operador (fuera del código):** re-publicar el deploy (v1.0.77+) — es el **paso de release del plan** que lleva V1+V5+V4 al binario. **DEV** ya toma los fixes al reiniciar el proceso (corre de fuente), **sin** re-deploy.
 
 ---
 
 ### Anexo — Discrepancias de anchor detectadas contra el código real (2026-07-15)
-- **V1 / anchor del reporte:** el reporte dice "corregir el import al nombre real (`AgentExecution`)". Verificación real: `session_scope` **no** existe en `models.py` (está en `db.py:302`); el fix correcto requiere **dos** imports, no un simple rename. Además, el reporte no lista el segundo bug `[V]`: `ado_edit_learning.py:273-275` lee `run.metadata` (objeto `MetaData`) en vez de `run.metadata_json`; sin arreglarlo, el sweep queda como no-op silencioso. Ambos cubiertos en F1.
+- **V1 / anchor del reporte:** el reporte dice "corregir el import al nombre real (`AgentExecution`)". Verificación real: `session_scope` **no** existe en `models.py` (está en `db.py:302`); el fix correcto requiere **dos** imports, no un simple rename. Además, el reporte no lista el segundo bug `[V]`: `ado_edit_learning.py:272-276` lee `run.metadata` (objeto `MetaData` de SQLAlchemy) en vez de la metadata real; sin arreglarlo, el sweep queda como no-op silencioso. El accessor **canónico** es la property `AgentExecution.metadata_dict` (`models.py:259-261`), que el fix reusa en vez de reimplementar el decode (C2). Ambos cubiertos en F1.
+- **V1 / comportamiento (C1):** el daemon del sweep está gated por `STACKY_ADO_EDIT_LEARNING_ENABLED` **default ON** (`app.py:446`, promovido 2026-07-15) y hoy crashea en el `ImportError` **antes** de tocar ADO. El fix no es "silencioso": **revive trabajo de fondo real** (polling ADO + escritura de lecciones) en ~todas las instalaciones. Documentado en §1/§3.3 y R8.
 - **V5:** confirmado `services/ado_edit_ledger.py`; los 4 call-sites `sqlite3.connect(_get_db_path())` (`_create_table_if_needed`, `already_learned`, `mark_learned`, `processed_revs_for`) carecen de `mkdir`; `_append_jsonl` (línea 79) ya lo hace.
 - **V4:** confirmado `config.py:216-217` con el fix presente; `config = Config()` en `config.py:1110`; el runner lo consume vía `from config import config` (`claude_code_cli_runner.py:49`).
 - **Anchors D4 / 404 / D1-D2 provistos como contexto:** pertenecen a los Planes 144/145 y quedan **fuera de scope** aquí (no son discrepancias, sólo delimitación de alcance).

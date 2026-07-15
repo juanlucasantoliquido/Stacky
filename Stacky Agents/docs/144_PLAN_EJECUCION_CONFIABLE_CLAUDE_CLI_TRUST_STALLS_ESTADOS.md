@@ -1,11 +1,31 @@
 # Plan 144 — Ejecución confiable de Claude CLI en deploy: trust de workspace + cierre rápido de stalls/timeouts + contrato de estados terminales
 
-- **Estado:** PROPUESTO v1
+- **Estado:** CRITICADO v1→v2 · VEREDICTO: **APROBADO-CON-CAMBIOS**
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8)
+- **Crítica/mejora v2:** StackyArchitectaUltraEficientCode (juez adversarial, perfil normal)
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)
 - **Cubre hallazgos:** **D1** (trust de workspace), **D2** (stall watchdog opaco), **D3** (ticket colgado 120 min), **D4** (vocabulario de estados divergente).
 - **Cross-refs:** 145 (higiene/observabilidad de logs), 146 (quick-wins verificados: V1/V4/V5), 147 (rutas de proyecto V2/D8). Este plan **no** toca esos alcances; solo declara dependencias.
+
+---
+
+## 0. Changelog v1 → v2 (crítica adversarial)
+
+Todas las citas `[V]` del v1 fueron re-verificadas contra el código real (repo root `N:\GIT\RS\STACKY\Stacky\Stacky Agents`). Núcleo confirmado: `ticket_status.py:35` (`VALID_STATUSES` **sin** `needs_review`), `ticket_status.py:110-111` (`raise ValueError`), `agent_completion.py:44` (`TERMINAL_STATUSES` **con** `needs_review`), codex degrada a `needs_review` (`codex_cli_runner.py:761`, `:851`), `_run_pre_run_checks` (`claude_code_cli_runner.py:2689-2731`, con `log`/`_mark_terminal`/`ticket_status`/`config` en scope), `on_execution_end` (`ticket_status.py:214-266`), `STACKY_STALL_WATCHDOG_SECONDS` default 600 (`config.py:688-689`), `_CATEGORY_KEYS`/`runtimes_cli` (`harness_flags.py:114-124`), `_CURATED_DEFAULTS_ON` (`test_harness_flags.py:467`), tests preexistentes existen. **La FOCO-crítica #1 (auto-set opt-in default OFF, nunca automático) quedó confirmada correcta** — no es bloqueante.
+
+Cambios aplicados (detalle inline en cada fase afectada):
+
+- **C0 (F2, ROMPE TEST — bloqueante de implementación):** el v1 declara `requires="CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED"` en la FlagSpec de AUTOSET pero NO agrega la arista al mapa congelado `_REQUIRES_MAP_FROZEN` de `tests/test_harness_flags_requires.py:120`, ni corre ese archivo. `test_requires_map_is_frozen:187` asevera `actual == _REQUIRES_MAP_FROZEN` → **falla** al implementar. Corregido: F2 agrega la arista al mapa y corre `test_harness_flags_requires.py` en F2/F5. (R4/profundidad-1 y R1 verificados OK: `PREFLIGHT` está registrada y NO declara `requires` propio → cadena de profundidad 1, válida.)
+- **C1 (F4, coupling real):** `trust_ok` del `stall_meta` NO se poblaba: el builder del stall lee el `metadata` local del streaming (`:1350`), que nunca recibe la key `"trust"` (el preflight la escribe en `row.metadata_dict`, otra función/scope). Corregido: el stall builder lee el trust **persistido** desde `row.metadata_dict`; se documenta que `trust_ok` solo aporta señal con preflight OFF; test nuevo.
+- **C2 (§2/F1, atribución causal):** los paths de *stall* (`claude:1629`, `codex:726`) llaman `on_execution_end(final_status="error")` — `"error"` **siempre** fue válido, nunca estallaron por D4. Los verdaderos afectados por D4 son los paths `needs_review` (codex runaway `:761`, autocorrect `:851`, y el path dinámico de calidad claude `:1732`). Narrativa corregida (el fix F0/F1 sigue siendo correcto).
+- **C3 (F4, ambigüedad para modelos menores):** se fija el mapeo EXACTO del `stall_meta` de codex (6 keys idénticas a claude, `trust_ok=True` n/a documentado) y se limpia el ternario muerto `if False` de `codex_cli_runner.py:715`.
+- **C4 (F4, contrato UI):** se agrega verificación de que el endpoint GET de ejecución serializa `metadata.stall` (si no, el drawer no muestra nada) + test backend.
+- **C5 (cross-plan 147):** el keying de trust debe usar el `cwd` resuelto (`_resolve_cwd`), no el `workspace_root` crudo, para no driftear cuando 147 estandarice la resolución de raíz.
+- **C6 (citas):** refs de línea de codex corregidas a los `on_execution_end` reales (`:761`, `:851`).
+- **C7 (F1 test):** `test_no_ticket_is_noop` se hace hermético (patch de `_POST_HOOKS`).
+- **C8 (backward-compat UI):** grep del enum de `stacky_status` en frontend para garantizar que `needs_review` renderiza (label/color).
+- **[ADICIÓN ARQUITECTO]:** test de contrato que **escanea el fuente** de los 3 runners y asevera que todo literal `final_status="..."` ∈ `VALID_TICKET_STATUSES` (guarda proactiva del bug D4, complementa al `_coerce_terminal_status` defensivo).
 
 ---
 
@@ -29,7 +49,8 @@
 ## 2. Por qué ahora / gap que se cierra
 
 - **Es el bloqueo #1 de producción.** El reporte lo marca Crítico: *"los runs mueren o cuelgan 2h. Sin esto, el deploy no ejecuta agentes"* (§7, candidato #1). No es cosmético: la instancia desplegada no puede ejecutar agentes contra RSPACIFICO.
-- **La causa raíz de D3 es D4, y está viva en el working tree, no solo en el deploy.** Verificado [V]: `services/agent_completion.py:44` define `TERMINAL_STATUSES` **con** `needs_review`, pero `services/ticket_status.py:35` define `VALID_STATUSES` **sin** `needs_review`, y `set_status` (`ticket_status.py:110-111`) hace `raise ValueError(f"Estado inválido: '{new_status}'. Válidos: {sorted(VALID_STATUSES)}")`. Cualquier `on_execution_end(final_status="needs_review")` estalla. Esto ocurre HOY en ambos runners (Claude y Codex): el runner de Codex degrada a `needs_review` en runaway (`codex_cli_runner.py:759-761`) y en autocorrect (`:832-836`). Por eso D3 tiene **dependencia dura** de D4.
+- **La causa raíz de D3 es D4, y está viva en el working tree, no solo en el deploy.** Verificado [V]: `services/agent_completion.py:44` define `TERMINAL_STATUSES` **con** `needs_review`, pero `services/ticket_status.py:35` define `VALID_STATUSES` **sin** `needs_review`, y `set_status` (`ticket_status.py:110-111`) hace `raise ValueError(f"Estado inválido: '{new_status}'. Válidos: {sorted(VALID_STATUSES)}")`. Cualquier `on_execution_end(final_status="needs_review")` estalla. Esto ocurre HOY en ambos runners: el runner de Codex degrada a `needs_review` en runaway (`codex_cli_runner.py:761`, `on_execution_end(final_status="needs_review")`) y en autocorrect (`:851`); en Claude el path dinámico de calidad/contrato pasa un `final_status` variable a `on_execution_end` (`claude_code_cli_runner.py:1732`) que puede ser `needs_review`. Por eso D3 tiene **dependencia dura** de D4.
+- **Precisión causal (corregida en v2, C2).** Los paths de **stall** NO son los que estrancaban el ticket: tanto Claude (`claude_code_cli_runner.py:1629-1635`) como Codex (`codex_cli_runner.py:726-728`) llaman `on_execution_end(final_status="error")`, y `"error"` **siempre** estuvo en `VALID_STATUSES` → nunca dispararon el `ValueError` de D4 ni dejaron el ticket en `running`. Los tickets 120/121 recuperados por el reaper (D3) provinieron de los paths `needs_review` (codex `:761`/`:851`, claude dinámico `:1732`), que sí estallaban. El fix F0/F1 es correcto; esta nota solo afina la atribución.
 - **El watchdog ya existe y funciona, pero es opaco.** `claude_code_cli_runner.py:1300-1323` mata el run a `STACKY_STALL_WATCHDOG_SECONDS` (default 600, `config.py:688-689`) y guarda `metadata["stall"] = {detected_at, last_event_at}` (`:1617-1621`). Falta la **última señal conocida** (qué estaba haciendo el run) y la correlación con el estado de trust, que es justo lo que un operador necesita para no repetir el run a ciegas.
 - **No hay ningún preflight de trust.** Verificado [V]: grep de `hasTrustDialogAccepted` / `has not been trusted` / `trust` en `claude_code_cli_runner.py` → **0 coincidencias**. Stacky lanza el CLI y recibe el `code 1` sin haberlo anticipado.
 
@@ -46,7 +67,7 @@
 4. **Mono-operador sin auth.** Ningún cambio toca identidad/roles.
 5. **No degradar performance/seguridad/estabilidad/DX; reutilizar.** El preflight es una lectura de un JSON pequeño (`~/.claude.json`) una vez por run, antes del spawn (costo despreciable). El reaper de 120 min **se conserva intacto** como red de seguridad (no se acorta ni se elimina). Se reutiliza `ticket_status`, `TERMINAL_STATUSES`, el `metadata["stall"]` existente y el patrón de flags del arnés.
 
-**Patrón triple de flags (regla dura del repo).** Una flag nueva **default ON** exige: (i) `FlagSpec(..., default=True)` en `services/harness_flags.py`; (ii) su key en `_CURATED_DEFAULTS_ON` de `tests/test_harness_flags.py:467`; (iii) default `"true"` en `config.py`. Una flag **default OFF** **no** lleva `default=` en su `FlagSpec` (si lo lleva, `default_is_known` se vuelve True y rompe `test_default_known_only_for_curated`, `test_harness_flags.py:700`); su default OFF vive solo en `config.py` (`"false"`). **Toda** flag nueva debe además agregarse a `_CATEGORY_KEYS` (`harness_flags.py:114`) o rompe `test_every_registry_flag_is_categorized`.
+**Patrón triple de flags (regla dura del repo).** Una flag nueva **default ON** exige: (i) `FlagSpec(..., default=True)` en `services/harness_flags.py`; (ii) su key en `_CURATED_DEFAULTS_ON` de `tests/test_harness_flags.py:467`; (iii) default `"true"` en `config.py`. Una flag **default OFF** **no** lleva `default=` en su `FlagSpec` (si lo lleva, `default_is_known` se vuelve True y rompe `test_default_known_only_for_curated`, `test_harness_flags.py:700`); su default OFF vive solo en `config.py` (`"false"`). **Toda** flag nueva debe además agregarse a `_CATEGORY_KEYS` (`harness_flags.py:114`) o rompe `test_every_registry_flag_is_categorized`. **Y toda flag con `requires=X` (regla dura Plan 82, C0):** (i) `X` debe estar registrada en `FLAG_REGISTRY` y **no** declarar `requires` propio (R1/R4 profundidad-1, validado en runtime por `validate_requires_graph()`, `harness_flags.py:2924`); (ii) la arista debe agregarse a `_REQUIRES_MAP_FROZEN` de `tests/test_harness_flags_requires.py:120` o rompe `test_requires_map_is_frozen:187`; (iii) ese archivo debe correrse en los comandos de cierre.
 
 ---
 
@@ -117,16 +138,33 @@ from services.status_vocabulary import TERMINAL_STATUSES
 3. `test_completion_terminal_is_shared` — `from services.agent_completion import TERMINAL_STATUSES as A; from services.status_vocabulary import TERMINAL_STATUSES as B; assert A is B` (misma referencia, no copia).
 4. `test_set_status_accepts_needs_review` — sembrar un `Ticket` en DB de test, llamar `ticket_status.set_status(tid, "needs_review", changed_by="test")` y aseverar que **no** lanza y que `get_current_status(tid) == "needs_review"`. (Reproduce D4 end-to-end.)
 5. `test_set_status_rejects_garbage` — `set_status(tid, "banana", ...)` sigue lanzando `ValueError` (no aflojamos la validación).
+6. **[ADICIÓN ARQUITECTO] `test_all_runner_final_status_literals_subset`** — escanear el **fuente** de los 3 runners y asegurar que TODO literal `final_status="..."` que se pasa a `on_execution_end` pertenece a `VALID_TICKET_STATUSES`. Implementación EXACTA:
+   ```python
+   import re, inspect
+   from services import claude_code_cli_runner, codex_cli_runner
+   from services.status_vocabulary import VALID_TICKET_STATUSES
+
+   def _literals(mod):
+       src = inspect.getsource(mod)
+       return set(re.findall(r'final_status\s*=\s*"([a-z_]+)"', src))
+
+   def test_all_runner_final_status_literals_subset():
+       found = _literals(claude_code_cli_runner) | _literals(codex_cli_runner)
+       assert found, "esperaba al menos un literal final_status en los runners"
+       assert found <= VALID_TICKET_STATUSES, (
+           f"literales fuera del vocabulario: {sorted(found - VALID_TICKET_STATUSES)}")
+   ```
+   **Por qué (evidencia):** hoy los literales reales son `{completed, error, needs_review}` más paths **dinámicos** `final_status=final_status` (`claude:1732`, `codex:1017`) — los dinámicos los cubre el `_coerce_terminal_status` de F1; este test pinza los **literales** para que, el día que un runtime nuevo introduzca un terminal nuevo fuera del vocabulario unificado, falle en test en vez de estrancar un ticket en producción (clase de bug de D4, de forma proactiva no solo defensiva). Falla si alguien agrega, p.ej., `final_status="failed"` sin sumarlo a `status_vocabulary`.
 
 **Comando:** `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_status_vocabulary_contract.py -q`
 
-**Criterio de aceptación BINARIO:** los 5 tests pasan. Verificación adicional: `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_status_vocabulary_contract.py backend/tests/test_stale_recovery_guardian.py backend/tests/test_cutover_p5.py -q` (por archivo cada uno; ninguno regresa rojo).
+**Criterio de aceptación BINARIO:** los 6 tests pasan (5 de contrato de vocabulario + el escaneo de fuente de la ADICIÓN ARQUITECTO). Verificación adicional: `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_status_vocabulary_contract.py backend/tests/test_stale_recovery_guardian.py backend/tests/test_cutover_p5.py -q` (por archivo cada uno; ninguno regresa rojo).
 
 **Flag:** ninguna. Es un **fix de bug verificado** (reconcilia dos vocabularios divergentes; solo *agrega* `needs_review` a lo aceptado por el ticket). No introduce comportamiento opt-in. **Justificación de no-flag:** un bug así, protegido por flag, dejaría el bug vivo con la flag OFF; el test de contrato es la protección correcta.
 
 **Impacto por runtime + fallback:**
 - **Claude Code CLI:** su path de completion (`_maybe_autopublish_epic`, gate de contrato `:1658-1665`) que fuerza `needs_review` ahora transiciona el ticket sin estallar.
-- **Codex CLI:** su runaway/autocorrect (`codex_cli_runner.py:759-761`, `:832-836`) que degrada a `needs_review` ahora transiciona sin estallar. **Fallback:** ninguno necesario (el fix es automático vía el módulo compartido).
+- **Codex CLI:** su runaway (`codex_cli_runner.py:761`) y autocorrect (`:851`) que llaman `on_execution_end(final_status="needs_review")` ahora transicionan sin estallar. **Fallback:** ninguno necesario (el fix es automático vía el módulo compartido).
 - **GitHub Copilot:** su completion pasa por el mismo `agent_completion`/`ticket_status`; hereda el fix. **Fallback:** ninguno.
 
 **Trabajo del operador:** ninguno.
@@ -166,13 +204,13 @@ Dentro de `on_execution_end`, antes de `set_status(ticket_id, final_status, ...)
 ```
 (La firma pública de `on_execution_end` no cambia; el blindaje es interno.)
 
-**Nota sobre el reaper (D3):** **no se modifica** `recover_stale_running_tickets` ni `EXECUTION_TIMEOUT_MINUTES` (120, `ticket_status.py:40`). El reaper queda como backstop. El acortamiento del lazo se logra porque F0+F1 hacen que la transición inmediata (que **ya se invoca** en el stall de ambos runners: `claude:1629-1635`, `codex:726-728`) ahora **sí** complete en vez de estallar.
+**Nota sobre el reaper (D3):** **no se modifica** `recover_stale_running_tickets` ni `EXECUTION_TIMEOUT_MINUTES` (120, `ticket_status.py:40`). El reaper queda como backstop. El acortamiento del lazo se logra porque F0 hace que los paths que sí estallaban (`needs_review`: codex `:761`/`:851`, claude dinámico `:1732`) ahora **completen** la transición inmediata, y F1 blinda cualquier valor futuro inesperado del `final_status` variable (`claude:1732`, `codex:1017`) para que nunca deje el ticket en `running`. **Precisión (C2):** los paths de *stall* (`claude:1629-1635`, `codex:726-728`) ya transicionaban bien porque usan `final_status="error"` (siempre válido); no eran los afectados por D4, pero heredan el blindaje de F1 sin cambio de comportamiento.
 
 **Tests PRIMERO (`test_ticket_status_robust_transition.py`), casos EXACTOS:**
 1. `test_needs_review_end_transitions_immediately` — sembrar ticket `running`; `on_execution_end(ticket_id=..., execution_id=..., final_status="needs_review", agent_type="developer")`; aseverar `get_current_status == "needs_review"` y **no** excepción. (Regresión directa de D3 pre-F0/F1: antes estallaba y dejaba `running`.)
 2. `test_unknown_status_coerces_to_error` — `on_execution_end(..., final_status="weird_state")`; aseverar `get_current_status == "error"` (no `running`, no excepción).
 3. `test_error_end_unchanged` — `final_status="error"` sigue funcionando igual (no regresión).
-4. `test_no_ticket_is_noop` — `on_execution_end` sobre `ticket_id` inexistente no lanza (comportamiento preexistente de `set_status:115-117`).
+4. `test_no_ticket_is_noop` — `on_execution_end` sobre `ticket_id` inexistente no lanza. **Hermético (C2 crítica):** `on_execution_end` NO solo llama `set_status` (noop en ticket ausente, `ticket_status.py:115-117`); también corre `_run_post_hooks` (`:260`). Para que el test no dependa de hooks registrados por otros módulos al importar, parchear la lista de hooks: `monkeypatch.setattr(ticket_status, "_POST_HOOKS", [])` (y `_PRE_HOOKS` si aplica) antes de invocar. Aserción: no excepción.
 
 **Comando:** `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_ticket_status_robust_transition.py -q`
 
@@ -198,6 +236,7 @@ Dentro de `on_execution_end`, antes de `set_status(ticket_id, final_status, ...)
 - **EDITAR** `backend/config.py` (bloque Claude CLI, junto a `:246`).
 - **EDITAR** `backend/services/harness_flags.py` (`FLAG_REGISTRY` y `_CATEGORY_KEYS`).
 - **EDITAR** `backend/tests/test_harness_flags.py` (`_CURATED_DEFAULTS_ON`, `:467`).
+- **EDITAR** `backend/tests/test_harness_flags_requires.py` (`_REQUIRES_MAP_FROZEN`, `:120-184`) — **obligatorio por C0** (la AUTOSET declara `requires`).
 - **CREAR** `backend/tests/test_claude_workspace_trust.py`.
 - **CREAR** `backend/tests/test_claude_trust_preflight.py`.
 
@@ -354,6 +393,12 @@ Guardar además `metadata["trust"]` en el path OK para que F4 lo correlacione (a
 
 **`test_harness_flags.py._CURATED_DEFAULTS_ON` (`:467`):** agregar **solo** `"CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED"` (la default-ON). **NO** agregar la AUTOSET.
 
+**`test_harness_flags_requires.py._REQUIRES_MAP_FROZEN` (`:120-184`) — OBLIGATORIO (C0):** como la AUTOSET declara `requires="CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED"`, hay que agregar la arista al mapa congelado o `test_requires_map_is_frozen` (`:187`) falla:
+```python
+    "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED": "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",  # Plan 144 F3
+```
+Verificado que NO viola R4 (profundidad 1): `CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED` NO declara `requires` propio, y está registrada en `FLAG_REGISTRY` (R1 OK). `validate_requires_graph()` (`harness_flags.py:2924`) sigue devolviendo `[]`.
+
 **Tests PRIMERO:**
 
 `backend/tests/test_claude_workspace_trust.py` (usa `tmp_path` como `home`):
@@ -379,9 +424,10 @@ Guardar además `metadata["trust"]` en el path OK para que F4 lo correlacione (a
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_claude_workspace_trust.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_claude_trust_preflight.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_harness_flags.py -q
+backend/.venv/Scripts/python.exe -m pytest backend/tests/test_harness_flags_requires.py -q
 ```
 
-**Criterio de aceptación BINARIO:** los 3 comandos verdes. En particular `test_harness_flags.py` no debe reportar drift (prueba de que el patrón triple/OFF quedó bien).
+**Criterio de aceptación BINARIO:** los 4 comandos verdes. En particular `test_harness_flags.py` no debe reportar drift del patrón triple/OFF, y `test_harness_flags_requires.py` no debe reportar drift del mapa `requires` (prueba de que la arista AUTOSET→PREFLIGHT quedó registrada — C0).
 
 **Flag(s):** `CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED` (default **ON**, kill-switch; **sin excepción dura** — solo detecta y falla accionable, no reduce seguridad). Configurable desde UI (aparece en Runtimes CLI vía `FLAG_REGISTRY`).
 
@@ -433,11 +479,13 @@ backend/.venv/Scripts/python.exe -m pytest backend/tests/test_harness_flags.py -
 
 **Archivos EXACTOS:**
 - **EDITAR** `backend/services/claude_code_cli_runner.py` (tracking de última señal en `_on_stream_event` `:1002-1011`; enriquecer `stall_meta` en `:1617-1621`).
-- **EDITAR** `backend/services/codex_cli_runner.py` (enriquecer `stall_meta` en `:712-718` — paridad).
+- **EDITAR** `backend/services/codex_cli_runner.py` (enriquecer `stall_meta` en `:710-718`, limpiar ternario muerto `if False` de `:715` — paridad, C3).
 - **CREAR** `frontend/src/utils/stallReason.ts`.
 - **CREAR** `frontend/src/utils/__tests__/stallReason.test.ts`.
 - **EDITAR** `frontend/src/components/ExecutionDetailDrawer.tsx` (mostrar la razón de stall si `metadata.stall` presente).
+- **EDITAR (condicional, C4)** `backend/api/executions.py` (serializer de `get_execution`) **solo si** no expone ya `metadata` con el sub-dict `stall` (verificar con grep antes).
 - **CREAR** `backend/tests/test_claude_stall_signal.py`.
+- **CREAR** `backend/tests/test_execution_metadata_serialization.py`.
 
 **Backend — tracking de última señal en Claude (`_on_stream_event`, `:1002`):** agregar una lista mutable junto a `_last_event_wall`/`_last_event_mono` (`:991-993`):
 ```python
@@ -453,23 +501,50 @@ Dentro de `_on_stream_event`, tras actualizar los timestamps:
         else:
             _last_event_kind[0] = etype
 ```
-En el bloque `failed_stall` (`:1617-1621`), enriquecer `stall_meta`:
+En el bloque `failed_stall` (`:1617-1621`), enriquecer `stall_meta`. **C1 (fix de coupling):** el `trust_ok` NO puede leerse de `metadata.get("trust")` — el `metadata` local del streaming (`:1350`) nunca recibe la key `"trust"` (el preflight F2 la escribe en `row.metadata_dict`, otra función/scope, vía `_run_pre_run_checks`). Hay que leer el trust **persistido** desde la fila, con fallback a una lectura on-demand (que es donde el dato tiene valor diagnóstico real: el caso preflight OFF en el que el CLI cuelga en el diálogo de trust en vez de salir `code 1`):
 ```python
+            # C1 — trust persistido por el preflight (F2) o lectura on-demand si preflight estaba OFF.
+            trust_ok: bool | None = None
+            try:
+                with session_scope() as _s:
+                    _row = _s.get(AgentExecution, execution_id)
+                    _persisted = (_row.metadata_dict.get("trust") if _row else None) or {}
+                if "trusted" in _persisted:
+                    trust_ok = bool(_persisted["trusted"])
+                elif workspace_root:  # preflight OFF: diagnosticar el cuelgue de trust ahora
+                    from services import claude_workspace_trust as _cwt
+                    trust_ok = _cwt.read_workspace_trust(str(cwd)).trusted
+            except Exception:  # noqa: BLE001 — diagnóstico best-effort, nunca romper el cierre del run
+                trust_ok = None
             stall_meta = {
                 "detected_at": datetime.utcnow().isoformat(),
                 "last_event_at": _last_event_wall[0].isoformat(),
                 "last_signal": _last_event_kind[0],
                 "seconds_idle": round(time.monotonic() - _last_event_mono[0]),
                 "watchdog_seconds": stall_watchdog_sec,
-                "trust_ok": bool((metadata.get("trust") or {}).get("trusted", True)),
+                "trust_ok": trust_ok,  # True/False si se conoce; None si indeterminado.
             }
             metadata["stall"] = stall_meta
 ```
+(Nota semántica: con preflight ON, todo run que llega al watchdog **ya pasó** el trust — el preflight bloquea los no-confiados antes del streaming (`_run_pre_run_checks` retorna False en `:545`) — así que `trust_ok` será `True`. El campo solo agrega señal cuando el preflight está OFF; por eso la lectura on-demand. `None` = indeterminado, no "no confiado".)
+
 Y el `log("error", ...)` del stall (`:1628`) pasa a incluir la señal:
 ```python
             log("error", f"run terminado por inactividad ({stall_watchdog_sec}s) — última señal: {_last_event_kind[0]}")
 ```
-**Codex (paridad, `:712-718`):** mismo enriquecimiento de `stall_meta` (`last_signal` desde el contador de actividad de codex; si no hay tipado de evento, usar `"stream_line"` como último-conocido y `seconds_idle`). El objetivo es que ambos runners escriban el **mismo esquema** `metadata["stall"]`.
+**Codex (paridad, `:710-718`) — mapeo EXACTO (C3), para no dejar ambigüedad a modelos menores.** El `stall_meta` de codex hoy tiene solo `{detected_at, last_event_at}` y arrastra un ternario muerto `... if False else ...` en `:715` (limpiarlo al tocar el bloque). Codex NO tipa eventos (solo `_codex_last_event_mono`, un timestamp) ni tiene concepto de trust. Escribir las **mismas 6 keys** con estos valores exactos:
+```python
+            stall_meta = {
+                "detected_at": datetime.utcnow().isoformat(),
+                "last_event_at": datetime.utcnow().isoformat(),
+                "last_signal": "stream_line" if _codex_last_event_mono[0] != _codex_started_mono else "none",
+                "seconds_idle": round(_time.monotonic() - _codex_last_event_mono[0]),
+                "watchdog_seconds": _codex_stall_watchdog_sec,
+                "trust_ok": True,  # n/a en Codex (sin ~/.claude.json); True fijo documentado para paridad de esquema.
+            }
+            metadata["stall"] = stall_meta
+```
+(Si `_codex_started_mono` no existe como símbolo, usar el `_time.monotonic()` capturado al inicio del run; el objetivo es solo distinguir "hubo alguna señal" de "ninguna". El objetivo global es que ambos runners escriban el **mismo conjunto de keys** `metadata["stall"]` — verificado por `test_stall_schema_parity` en F5.)
 
 **Frontend — helper puro (`frontend/src/utils/stallReason.ts`):**
 ```ts
@@ -499,6 +574,8 @@ export function formatStallReason(stall: StallMeta | null | undefined): string |
 ```
 **Wiring en `ExecutionDetailDrawer.tsx`:** leer `execution.metadata?.stall` (tipo `Record<string, unknown>`, ya existe `metadata?` en el tipo de ejecución, `endpoints.ts:2032`), pasar a `formatStallReason`, y si devuelve string, renderizar un bloque de aviso (reusar el estilo de error existente del drawer). Cambio mínimo, sin lógica nueva de red.
 
+**C4 — verificar el contrato de serialización ANTES de cablear la UI (paso obligatorio).** El drawer asume `execution.metadata.stall`, pero el backend persiste el stall en `AgentExecution.metadata_dict` (columna `metadata_json`). Hay que confirmar que el endpoint GET de ejecución expone ese campo como `metadata` (no como `metadata_json` u omitido). Verificación literal: `grep -nE '"metadata"|metadata_dict|metadata_json' backend/api/executions.py` y localizar el serializer de `get_execution`. Si el serializer NO incluye `metadata` (o el sub-dict `stall`), **agregarlo** (aditivo) — sin eso, el drawer nunca vería la razón del stall. **Test backend obligatorio:** `backend/tests/test_execution_metadata_serialization.py::test_get_execution_exposes_stall` — sembrar un `AgentExecution` con `metadata_dict={"stall": {...6 keys...}}`, pegarle al endpoint (o al serializer) y aseverar que la respuesta contiene `metadata["stall"]` con las 6 keys. Binario: pasa/falla.
+
 **Tests PRIMERO:**
 
 `frontend/src/utils/__tests__/stallReason.test.ts` (vitest puro, sin RTL — respeta el gap estructural jsdom/RTL del repo):
@@ -507,16 +584,22 @@ export function formatStallReason(stall: StallMeta | null | undefined): string |
 3. stall con `last_signal:"none"` → contiene "Sin señales previas".
 4. stall con `trust_ok:false` → contiene "workspace no confiado".
 
-`backend/tests/test_claude_stall_signal.py` (unit del esquema): construir un `stall_meta` como en el runner y aseverar que tiene las claves `{detected_at,last_event_at,last_signal,seconds_idle,watchdog_seconds,trust_ok}`. (Test del contrato de esquema, sin spawnear el CLI.)
+`backend/tests/test_claude_stall_signal.py` (unit del esquema + correlación de trust, sin spawnear el CLI):
+5. `test_stall_meta_has_six_keys` — construir un `stall_meta` como en el runner y aseverar las claves exactas `{detected_at,last_event_at,last_signal,seconds_idle,watchdog_seconds,trust_ok}`.
+6. **C1 `test_trust_ok_from_persisted_untrusted`** — sembrar un `AgentExecution` con `metadata_dict={"trust":{"trusted":False,...}}`, ejecutar la lógica de derivación de `trust_ok` (extraerla a un helper puro `_derive_stall_trust_ok(execution_id, cwd)` en el runner para poder testearla sin stream) y aseverar `trust_ok is False`.
+7. **C1 `test_trust_ok_indeterminate_is_none`** — sin key `trust` persistida y sin `workspace_root` → `trust_ok is None` (indeterminado, NO `False`).
+
+`backend/tests/test_execution_metadata_serialization.py` (C4): `test_get_execution_exposes_stall` — descrito arriba en el wiring UI.
 
 **Comandos:**
 ```
 frontend/node_modules/.bin/vitest run frontend/src/utils/__tests__/stallReason.test.ts
 frontend/node_modules/.bin/tsc --noEmit
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_claude_stall_signal.py -q
+backend/.venv/Scripts/python.exe -m pytest backend/tests/test_execution_metadata_serialization.py -q
 ```
 
-**Criterio de aceptación BINARIO:** vitest del helper verde, `tsc --noEmit` sin errores nuevos, pytest del esquema verde.
+**Criterio de aceptación BINARIO:** vitest del helper verde, `tsc --noEmit` sin errores nuevos, pytest del esquema/correlación verde, y el test de serialización confirma `metadata.stall` en la respuesta del endpoint.
 
 **Flag:** ninguna. **Justificación:** enriquecimiento aditivo de un `metadata`/log ya existente y de un render condicional; no cambia comportamiento de ejecución, es backward-compatible (si `metadata.stall` no tiene los campos nuevos, el helper degrada).
 
@@ -550,8 +633,10 @@ backend/.venv/Scripts/python.exe -m pytest backend/tests/test_ticket_status_robu
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_claude_workspace_trust.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_claude_trust_preflight.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_claude_stall_signal.py -q
+backend/.venv/Scripts/python.exe -m pytest backend/tests/test_execution_metadata_serialization.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_plan144_parity.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_harness_flags.py -q
+backend/.venv/Scripts/python.exe -m pytest backend/tests/test_harness_flags_requires.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_stale_recovery_guardian.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_cutover_p5.py -q
 backend/.venv/Scripts/python.exe -m pytest backend/tests/test_b6_cancel_sync.py -q
@@ -559,7 +644,7 @@ frontend/node_modules/.bin/vitest run frontend/src/utils/__tests__/stallReason.t
 frontend/node_modules/.bin/tsc --noEmit
 ```
 
-**Criterio de aceptación BINARIO:** todos verdes, corridos **por archivo**. Ningún test preexistente citado (harness_flags, stale_recovery, cutover_p5, b6_cancel) regresa rojo.
+**Criterio de aceptación BINARIO:** todos verdes, corridos **por archivo**. Ningún test preexistente citado (harness_flags, harness_flags_requires, stale_recovery, cutover_p5, b6_cancel) regresa rojo.
 
 **Flag:** ninguna (fase de verificación).
 
@@ -576,7 +661,9 @@ frontend/node_modules/.bin/tsc --noEmit
 | R3 | Coerción defensiva `_coerce_terminal_status` enmascara un bug real (estado válido nuevo tratado como error). | Baja | Un estado terminal legítimo futuro caería a `error`. | Logea `warning` explícito con el estado desconocido; el vocabulario canónico vive en un solo módulo (F0), así que agregar un estado nuevo es un cambio de una línea + test. |
 | R4 | El preflight agrega latencia al arranque del run. | Muy baja | +ms por run. | Es una lectura de un JSON local pequeño, una vez, antes del spawn. Despreciable frente al costo del turno. Kill-switch `CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED=false` disponible. |
 | R5 | Sesión concurrente en el árbol movió `ticket_status.py`/`agent_completion.py` mientras se implementa (hay actividad multiagente confirmada en esta rama). | Media | Merge/anchors desalineados. | Los cambios son quirúrgicos y por símbolo (no por línea). Re-verificar `VALID_STATUSES`/`TERMINAL_STATUSES` con grep antes de editar. `git add` con paths explícitos. |
-| R6 | `metadata["trust"]` no siempre presente al construir `stall_meta` (run sin workspace_root). | Baja | `trust_ok` cae a default. | `(metadata.get("trust") or {}).get("trusted", True)` → default optimista `True` (no marca falsamente "no confiado"). |
+| R6 | Trust no persistido/indeterminado al construir `stall_meta` (run sin `workspace_root`, o preflight OFF). | Baja | `trust_ok` no concluyente. | **Corregido en v2 (C1):** `trust_ok` se deriva del trust **persistido** (`row.metadata_dict`), con fallback a lectura on-demand cuando el preflight estaba OFF; si sigue indeterminado → `None` (NO `False`, no marca falsamente "no confiado"). Con preflight ON, todo stall que llega al watchdog ya está confiado → `True`. |
+| R7 | **Cross-plan 147 (V2 repo_root/workspace_root):** si 147 cambia la resolución de raíz/cwd después de este plan, el key de trust puede driftear y reintroducir falsos "no confiado". | Media | Preflight marca no-confiado un workspace que sí lo está. | El keying de trust normaliza vía `Path(...).resolve()` sobre el mismo `workspace_root`/`cwd` que `_resolve_cwd` (`claude_code_cli_runner.py:2627`) produce. **Regla de orden:** si 147 aterriza, re-verificar que `_normalize_project_key` y `_resolve_cwd` sigan resolviendo el mismo path. AUTOSET (opt-in) escribe exactamente el key que el preflight leerá, cerrando el drift para quien lo active. |
+| R8 | **Backward-compat UI (C8):** agregar `needs_review` al vocabulario de `stacky_status` podría sorprender a un `switch`/enum del frontend que renderiza el estado (sin label/color → estado en blanco). | Baja | Celda de estado sin etiqueta para `needs_review`. | Antes de cerrar F0, `grep -rnE "stacky_status|needs_review" frontend/src` para ubicar el enum/labels; garantizar que `needs_review` tenga label y color. La columna DB es `String` libre (`models.py`), sin constraint que rompa. Cambio de UI mínimo si falta. |
 
 ---
 
@@ -606,7 +693,7 @@ frontend/node_modules/.bin/tsc --noEmit
 ### Orden de implementación (numerado)
 1. **F0** — `status_vocabulary.py` + rewire `ticket_status`/`agent_completion` + `test_status_vocabulary_contract.py`. (Desbloquea D3.)
 2. **F1** — `_coerce_terminal_status` + uso en `on_execution_end` + `test_ticket_status_robust_transition.py`.
-3. **F2** — `claude_workspace_trust.py` + wiring preflight + flags (patrón triple para PREFLIGHT, OFF para AUTOSET) + `config.py` + `_CATEGORY_KEYS` + `_CURATED_DEFAULTS_ON` + `test_claude_workspace_trust.py` + `test_claude_trust_preflight.py`.
+3. **F2** — `claude_workspace_trust.py` + wiring preflight + flags (patrón triple para PREFLIGHT, OFF para AUTOSET) + `config.py` + `_CATEGORY_KEYS` + `_CURATED_DEFAULTS_ON` + **`_REQUIRES_MAP_FROZEN` (arista AUTOSET→PREFLIGHT, C0)** + `test_claude_workspace_trust.py` + `test_claude_trust_preflight.py`.
 4. **F3** — formalizar auto-set (ya cableado en F2) + tests de escritura/idempotencia. Excepción dura (d) citada.
 5. **F4** — enriquecer `stall_meta` (Claude + Codex) + `stallReason.ts` + wiring en `ExecutionDetailDrawer.tsx` + tests (vitest + tsc + pytest esquema).
 6. **F5** — `test_plan144_parity.py` + verificación integral (correr TODOS los comandos por archivo, pegar output real).
@@ -616,7 +703,7 @@ frontend/node_modules/.bin/tsc --noEmit
 - [ ] Un fin de run con `needs_review` transiciona el ticket inmediatamente; un estado desconocido cae a `error`, nunca deja `running`. (D3)
 - [ ] Un run sobre workspace no confiado, con AUTOSET OFF, **no** muere con `code 1` mudo: queda `error` con remedio exacto en `error_message`. (D1)
 - [ ] Con AUTOSET ON (opt-in), el workspace se confía automáticamente (con backup) y el run procede. Excepción dura (d) citada. (D1)
-- [ ] `CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED` (ON) y `CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED` (OFF) aparecen en la UI (Runtimes CLI) y `test_harness_flags.py` no reporta drift.
+- [ ] `CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED` (ON) y `CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED` (OFF) aparecen en la UI (Runtimes CLI); `test_harness_flags.py` no reporta drift del patrón triple **y** `test_harness_flags_requires.py` no reporta drift del mapa `requires` (arista AUTOSET→PREFLIGHT registrada, C0).
 - [ ] Todo stall reporta `last_signal` + `trust_ok` en `metadata["stall"]` y en el log; el drawer muestra la razón humana. Claude y Codex comparten esquema. (D2)
 - [ ] Paridad documentada y testeada: D3/D4 aplican a los 3 runtimes; trust es no-op en Codex/Copilot.
 - [ ] Todos los comandos de la verificación integral (§F5) verdes, corridos por archivo, con output real pegado.

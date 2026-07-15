@@ -1,6 +1,6 @@
 # Plan 141 — Tema claro/oscuro/sistema y accesibilidad visual
 
-**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — v1 propuesto 2026-07-15
+**Estado:** CRITICADO v2→v3 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — traza: v1 propuesto 2026-07-15 → v2 (juez 2026-07-15) → v3 (segundo pase adversarial 2026-07-15)
 **Autor:** StackyArchitectaUltraEficientCode
 **Depende de:** plan 138 **v2** (tokens semánticos + primitivas UI, incluye `--spinner-track`)
 IMPLEMENTADO. La serie pendiente 132→134→135→136 aterriza ANTES (orden congelado por plan 134
@@ -36,6 +36,55 @@ el gate de contraste WCAG por test puro y el anti-FOUC síncrono son de primer n
   no haya doble-anillo ni recorte por `overflow`.
 
 Impacto en la serie: depende del 138 **v2** (token `--spinner-track`). 139/140 sin cambios.
+
+---
+
+## § 0.bis Changelog de crítica v2 → v3 (segundo pase adversarial, 2026-07-15)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 1 IMPORTANTE; 2 MENORES). El v2 ya era
+excelente: el gate WCAG por test puro, el anti-drift de color y el tripwire dark son de
+primer nivel; los ratios de §6 se re-verificaron numéricamente (mínimo claro 4.87; excepción
+dark 2.28) y matchean byte a byte. El segundo pase se concentró en tres cosas que el v2 dejó:
+robustez del anti-FOUC nativo, el acoplamiento del conteo `.toBe(53)` y el idioma del selector.
+
+- **C3 (IMPORTANTE) — resuelto in place — reconciliación del conteo `REQUIRED.length === 53`
+  (F2) con el anti-drift (F3).** Los dos tests codifican el MISMO censo de tokens de color en
+  formas distintas: F2 con un literal `.toBe(53)` y F3 mecánicamente sobre el `:root` base.
+  En el camino feliz (138 con su contrato §10.1 congelado) ambos son consistentes (52 tokens
+  de color no-invariantes + `--color-scheme` = 53; verificado token por token). PERO si un
+  plan futuro agrega/quita UN token de color en el `:root` base, el anti-drift (F3) rompería
+  y su mensaje guiaría a agregar el token a `REQUIRED`, dejando `REQUIRED.length === 54` y
+  rompiendo F2 SIN guía de cómo reconciliar → modelo menor trabado entre dos verdes
+  contradictorios. Fix: se declara **F3 anti-drift como FUENTE DE VERDAD de completitud** y
+  `.toBe(53)` como tripwire secundario que se bumpea JUNTO; se completó la instrucción del
+  comentario del anti-drift (ahora dice explícitamente "bumpeá el literal `.toBe(N)`") y se
+  agregó una fila de riesgo (§9) y una nota de contrato (§12). Cero cambio de comportamiento.
+- **[ADICIÓN ARQUITECTO v3] — `color-scheme` nativo síncrono en el anti-FOUC.** El snippet de
+  F1 (y `applyEffectiveTheme`) seteaba `data-theme` pero NO el `color-scheme` nativo del
+  `<html>` de forma síncrona; ese esquema recién se aplicaba cuando `theme.css` parsea
+  `--color-scheme`. En prod `theme.css` es render-blocking y no había flash, pero en dev (Vite
+  inyecta el CSS por JS, NO render-blocking) y en el instante previo al primer composite, el
+  fondo/scrollbars/controles nativos del UA se pintaban con el esquema por defecto (claro).
+  Ahora el snippet y el controlador setean también `document.documentElement.style.colorScheme
+  = effective` de forma síncrona (inline style, gana por especificidad y se mantiene en sync).
+  Invisible, cero costo, byte-idéntico en dark (`colorScheme="dark"` == `color-scheme: dark`
+  de hoy), 3 runtimes N/A, human-in-the-loop N/A, sin dependencias. El test F1 verifica el
+  literal `style.colorScheme` en el snippet y en el controlador.
+- **C4 (MENOR) — documentado — idioma del selector (`role="radiogroup"` + `<input radio>`).**
+  Los `<input type="radio">` nativos con el mismo `name` YA forman un grupo de radios con
+  navegación por flechas y roving tabindex del navegador; `role="radiogroup"` + `aria-label`
+  es un patrón VÁLIDO y anunciable por lectores de pantalla (los radios nativos aportan el
+  `role="radio"` implícito que el `radiogroup` requiere). `<fieldset>/<legend>` sería el idioma
+  HTML más puro pero arrastra estilos/legend por defecto que la grilla CSS debería neutralizar;
+  se DEFIERE para evitar churn y reescritura del test F4. Se documenta como decisión consciente
+  en F4 (nota de a11y). Sin regresión funcional.
+- **Confirmados (refutados como bugs):** (a) `resolveColor`/`block()`/`composite()` correctos;
+  `var(--text-muted)` resuelve bien para `--status-neutral-text` en claro; las SOMBRAS
+  (`--shadow-*`,`--card-shadow`,`--focus-ring`) tienen `rgba(` ⇒ `isColor=true` y están TODAS
+  en el bloque claro ⇒ el anti-drift NO da falso positivo. (c) el flash nativo solo existía en
+  dev/edge y queda cerrado por la ADICIÓN v3. (e) sin falso-verde material: el `not.toContain
+  ("box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.25)")` lleva prefijo `box-shadow:` y NO colisiona
+  con la definición del token `--focus-ring`; los ratios §6 se recomputaron y matchean.
 
 ---
 
@@ -203,10 +252,15 @@ fase para dejar constancia.
   `localStorage.setItem`. **No hay `ReactDOM` re-render/re-mount**; las CSS custom properties
   re-cascadean solas. Prohibido implementar el tema vía estado global de React que fuerce
   re-render del árbol.
-- Anti-FOUC: snippet inline SÍNCRONO en `<head>` que setea `data-theme` ANTES del primer
-  paint. Para `dark` (default) no hay flash porque base ya es dark; para `light` el atributo
-  llega antes de pintar ⇒ sin flash. Prohibido resolver el tema tras el primer render de
-  React (causaría FOUC).
+- Anti-FOUC: snippet inline SÍNCRONO en `<head>` que setea `data-theme` **y `color-scheme`
+  nativo** ANTES del primer paint. Para `dark` (default) no hay flash porque base ya es dark;
+  para `light` el atributo llega antes de pintar ⇒ sin flash. **[ADICIÓN ARQUITECTO v3]** además
+  se fija `document.documentElement.style.colorScheme = effective` de forma síncrona: en prod
+  `theme.css` es render-blocking (aplica `--color-scheme` antes del paint), pero en dev el CSS
+  se inyecta por JS y NO bloquea render, así que sin este seteo el fondo/scrollbars/controles
+  nativos del UA parpadearían en el esquema por defecto (claro) antes de que cargue `theme.css`.
+  El inline style gana por especificidad y `applyEffectiveTheme` lo mantiene en sync. Prohibido
+  resolver el tema tras el primer render de React (causaría FOUC).
 
 ### 3.5 Sin dependencias nuevas (binario)
 
@@ -367,6 +421,10 @@ describe("Plan 141 F1 — anti-FOUC inline en index.html", () => {
     // debe existir un <script> clásico (sin type=module) con la lógica de tema
     expect(/<script>[\s\S]*stacky\.ui\.theme[\s\S]*<\/script>/.test(html)).toBe(true);
   });
+  it("[ADICIÓN ARQUITECTO v3] setea también el color-scheme nativo de forma síncrona", () => {
+    // evita el flash de fondo/scrollbars/controles UA en modo claro antes de theme.css
+    expect(html).toContain("style.colorScheme");
+  });
 });
 
 describe("Plan 141 F1 — wiring en main.tsx", () => {
@@ -385,6 +443,9 @@ describe("Plan 141 F1 — controlador delega en el núcleo puro", () => {
     expect(ctrl).toContain("THEME_STORAGE_KEY");
     expect(ctrl).toContain('setAttribute("data-theme"');
     expect(ctrl).toContain("prefers-color-scheme: dark");
+  });
+  it("[ADICIÓN ARQUITECTO v3] applyEffectiveTheme fija el color-scheme nativo", () => {
+    expect(ctrl).toContain("style.colorScheme");
   });
 });
 ```
@@ -425,6 +486,10 @@ function prefersDark(): boolean {
 export function applyEffectiveTheme(effective: EffectiveTheme): void {
   try {
     document.documentElement.setAttribute("data-theme", effective);
+    // [ADICIÓN ARQUITECTO v3] color-scheme nativo síncrono: alinea el fondo, los scrollbars
+    // y los controles nativos del UA con el tema SIN esperar a que theme.css aplique
+    // --color-scheme. El inline style gana por especificidad; se mantiene en sync acá.
+    document.documentElement.style.colorScheme = effective;
   } catch {
     /* sin DOM: no-op */
   }
@@ -502,8 +567,11 @@ posible). El snippet DEBE ser lógicamente idéntico a `resolveTheme`/`normalize
 ```html
     <title>Stacky Agents</title>
     <script>
-      /* Plan 141 — anti-FOUC: fija data-theme antes del primer paint.
-         DEBE mantenerse en sync con src/services/theme.ts (resolveTheme). */
+      /* Plan 141 — anti-FOUC: fija data-theme Y color-scheme nativo antes del primer paint.
+         DEBE mantenerse en sync con src/services/theme.ts (resolveTheme) y con
+         applyEffectiveTheme (themeController.ts). Setear color-scheme de forma SÍNCRONA
+         evita el flash de fondo/scrollbars/controles nativos del UA en modo claro antes de
+         que theme.css aplique --color-scheme (sobre todo en dev: el CSS no es render-blocking). */
       (function () {
         try {
           var raw = localStorage.getItem("stacky.ui.theme");
@@ -512,19 +580,23 @@ posible). El snippet DEBE ser lógicamente idéntico a `resolveTheme`/`normalize
             !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
           var effective = choice === "system" ? (prefersDark ? "dark" : "light") : choice;
           document.documentElement.setAttribute("data-theme", effective);
+          document.documentElement.style.colorScheme = effective; // [ADICIÓN ARQUITECTO v3]
         } catch (e) {
           document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.style.colorScheme = "dark";
         }
       })();
     </script>
 ```
 
 **Casos borde cubiertos:**
-- `localStorage` lanza (modo privado) → `catch` → `data-theme="dark"` (byte-idéntico).
+- `localStorage` lanza (modo privado) → `catch` → `data-theme="dark"` **y `colorScheme="dark"`**
+  (byte-idéntico).
 - `matchMedia` inexistente → `prefersDark=false`; en modo `system` cae a `light` (correcto:
   ausencia de "prefiere dark" ⇒ claro).
 - `initThemeController` re-aplica el MISMO valor que el snippet (idempotente): no hay salto
-  visual entre el anti-FOUC y el montaje de React.
+  visual entre el anti-FOUC y el montaje de React. El `colorScheme` inline seteado por el
+  snippet coincide con el que re-aplica `applyEffectiveTheme` (mismo `effective`).
 
 **Paso 6 (verde):** `npx vitest run src/__tests__/themeBootstrap.test.ts` y `npx tsc --noEmit`.
 
@@ -641,6 +713,11 @@ describe("Plan 141 F2 — bloque claro completo y correcto", () => {
   it("re-apunta los 53 tokens de color con valor exacto", () => {
     const missing = REQUIRED.filter(([n, v]) => !LIGHT.includes(`${n}: ${v};`));
     expect(missing.map(([n]) => n)).toEqual([]);
+    // CONTEO ACOPLADO (C3): 52 tokens de color no-invariantes del :root base del 138
+    // (contrato §10.1) + `--color-scheme` = 53. La FUENTE DE VERDAD de completitud es el
+    // anti-drift de F3 (themeContrast.test.ts), que deriva el censo del base mecánicamente.
+    // Este `.toBe(53)` es un tripwire SECUNDARIO: si F3 obliga a agregar/quitar un token de
+    // color en el base, actualizá REQUIRED y BUMPEÁ este literal EN EL MISMO commit.
     expect(REQUIRED.length).toBe(53);
   });
   it("NO duplica tokens invariantes al tema (spacing/tipografía/radio/motion/border-width)", () => {
@@ -916,9 +993,12 @@ describe("Plan 141 F3 — anti-drift de color base ↔ tema claro", () => {
     const drift = Object.keys(BASE)
       .filter((k) => isColor(BASE[k]) && !INVARIANT.has(k) && !(k in LIGHT))
       .sort();
-    // Si `drift` NO está vacío: agregá cada token al bloque :root[data-theme="light"] de
-    // theme.css (y a REQUIRED de themeLightTokens.test.ts). Sólo va a INVARIANT si es texto
-    // invariante sobre un solid. Esto impide que un plan futuro introduzca un color dark-only.
+    // ESTE gate es la FUENTE DE VERDAD de completitud del bloque claro (C3). Si `drift` NO
+    // está vacío, reconciliá en el MISMO commit: (1) agregá cada token al bloque
+    // :root[data-theme="light"] de theme.css; (2) agregalo a REQUIRED de
+    // themeLightTokens.test.ts; (3) BUMPEÁ el literal `.toBe(N)` de esa misma suite (F2) al
+    // nuevo conteo. Sólo va a INVARIANT si es texto invariante sobre un solid. Esto impide
+    // que un plan futuro introduzca un color dark-only sin decisión consciente.
     expect(drift, `Tokens de color sin re-apuntar en claro: ${drift.join(", ")}`).toEqual([]);
   });
 });
@@ -1113,6 +1193,16 @@ type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" |
   correcto).
 - El componente no llama a ningún endpoint: es 100 % local (a diferencia de otros paneles de
   Settings). Sin dependencia de backend ⇒ paridad total de runtimes.
+
+**Nota de a11y (C4, decisión consciente):** los `<input type="radio">` son NATIVOS y comparten
+`name="stacky-theme"` ⇒ el navegador ya aporta grupo de radios, navegación por flechas y roving
+tabindex, y cada radio tiene `role="radio"` implícito. Envolverlos en `role="radiogroup"` +
+`aria-label` es un patrón VÁLIDO y anunciable por lectores de pantalla (el `radiogroup` tiene
+hijos `role="radio"` reales y nombre accesible por el `aria-label`). La alternativa
+`<fieldset>/<legend>` sería el idioma HTML más puro, pero arrastra borde/posicionamiento de
+`legend` por defecto que la grilla CSS debería neutralizar; se DEFIERE para no introducir churn
+ni reescribir el test F4. Cada `<input>` va dentro de su `<label>` ⇒ asociación de etiqueta
+implícita correcta. Sin regresión funcional.
 
 **Paso 6 (verde):** `npx vitest run src/components/__tests__/AppearanceSettings.test.ts`,
 `npx vitest run src/__tests__/uiDebtRatchet.test.ts` (el nuevo `.tsx`/`.module.css` no debe
@@ -1312,6 +1402,7 @@ hasta que F4 expone el selector: propiedad deliberada de despliegue seguro.
 | `dbcompare.module.css` sigue el SO, no `data-theme` ⇒ inconsistencia si operador elige claro con SO en oscuro. | Baja | Documentado en §10 (fuera de scope). Es un componente detrás de flag; no afecta la operación principal. |
 | La regla global `:focus-visible` quita el `outline` nativo; si un ancestro tiene `overflow:hidden` el ring por box-shadow podría recortarse. | Baja | Mismo patrón que el app ya usa para inputs (theme.css:107). Componentes con overflow ya definen su propio `outline` (devops.module.css:250) y ganan por especificidad. |
 | `animation-iteration-count: 1` deja un spinner en su fotograma final. | Baja | Con `animation-duration: 0.01ms` completa al instante; keyframes de rotación terminan en 360° = estado inicial. Comportamiento esperado de reduced-motion. |
+| Conteo acoplado `REQUIRED.length === 53` (F2) vs anti-drift mecánico (F3): un plan futuro que agregue/quite un token de color en el `:root` base puede dejar F2 y F3 con condiciones de pase contradictorias. | Media | **F3 anti-drift es la FUENTE DE VERDAD de completitud** (deriva el censo del base); `.toBe(53)` es tripwire secundario. La guía de reconciliación (agregar a light + REQUIRED + bumpear `.toBe(N)` en el mismo commit) está en el comentario del anti-drift (F3) y en §12. En el camino feliz (138 §10.1 congelado) ambos son consistentes: 52 color no-invariantes + `--color-scheme` = 53, verificado token a token. |
 
 ---
 
@@ -1339,7 +1430,11 @@ Con el frontend corriendo (`npm run dev` en `Stacky Agents/frontend`):
    como hoy (dark). En DevTools, `document.documentElement.getAttribute("data-theme")` = `"dark"`.
 2. **Cambiar a Claro:** Configuración → Apariencia → "Claro". La UI cambia a claro al
    instante, sin recargar ni parpadear. `data-theme` = `"light"`.
-3. **Persistencia:** recargar (F5). Sigue en claro, SIN flash oscuro previo (anti-FOUC).
+3. **Persistencia + anti-FOUC nativo:** recargar (F5). Sigue en claro, SIN flash oscuro previo
+   (anti-FOUC). Verificar en DevTools que `document.documentElement.style.colorScheme === "light"`
+   y que scrollbars/controles nativos (p. ej. un `<select>`) NO parpadean en oscuro al recargar.
+   Repetir en `npm run dev` (donde el CSS no es render-blocking): sin la [ADICIÓN v3] habría un
+   flash de fondo claro→UA; con ella, no.
 4. **Cambiar a Sistema, SO en oscuro:** elegir "Sistema" con el SO en modo oscuro ⇒ app
    oscura. Cambiar el SO a claro EN VIVO (sin recargar) ⇒ la app pasa a claro sola (listener
    `matchMedia`). Volver el SO a oscuro ⇒ app oscura.
@@ -1369,3 +1464,9 @@ Con el frontend corriendo (`npm run dev` en `Stacky Agents/frontend`):
   Todo token de color nuevo que sea foreground/background de UI debería sumarse al gate.
 - Paleta clara: bloque `:root[data-theme="light"]` en `theme.css` (53 tokens de color). Todo
   token de color nuevo en el `:root` base DEBE re-apuntarse acá o justificarse como invariante.
+  **Fuente de verdad de completitud:** el anti-drift de `themeContrast.test.ts` (F3). Al agregar
+  un token de color al base, reconciliá en el mismo commit: bloque claro + `REQUIRED` de
+  `themeLightTokens.test.ts` + bumpear su literal `.toBe(N)`.
+- Anti-FOUC (contrato): el `<html>` recibe `data-theme` **y `style.colorScheme`** de forma
+  síncrona (snippet inline de `index.html` + `applyEffectiveTheme`). Cualquier plan que toque el
+  bootstrap del tema DEBE preservar ambos seteos síncronos.

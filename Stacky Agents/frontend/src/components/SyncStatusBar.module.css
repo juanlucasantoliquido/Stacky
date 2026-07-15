@@ -41,15 +41,15 @@
   flex-shrink: 0;
 }
 
-.dot.green  { background: #22c55e; }
-.dot.yellow { background: #f59e0b; }
-.dot.red    { background: #ef4444; }
+.dot.green  { background: var(--status-success-solid); }
+.dot.yellow { background: var(--status-warning-solid); }
+.dot.red    { background: var(--status-danger-solid); }
 
 .spinner {
   width: 11px;
   height: 11px;
   border: 2px solid rgba(148, 163, 184, 0.24);
-  border-top-color: #60a5fa;
+  border-top-color: var(--status-info-hot);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   flex-shrink: 0;
@@ -68,11 +68,11 @@
 }
 
 .labelStale {
-  color: #fdba74;
+  color: var(--status-warning-muted-text);
 }
 
 .labelError {
-  color: #fca5a5;
+  color: var(--status-danger-soft-text);
 }
 
 .btn {

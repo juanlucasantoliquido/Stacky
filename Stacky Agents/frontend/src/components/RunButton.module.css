@@ -1,7 +1,3 @@
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 @keyframes pulse-bg {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.75; }
@@ -12,7 +8,7 @@
   align-items: center;
   gap: 7px;
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-solid);
   border: 1px solid rgba(240, 246, 252, 0.1);
   padding: 7px 18px;
   font-family: var(--font-sans);
@@ -29,7 +25,7 @@
 }
 
 .btn:active:not(:disabled) {
-  background: #1f6feb;
+  background: var(--accent-active);
 }
 
 .btn:disabled {
@@ -45,25 +41,14 @@
 
 .running {
   background: var(--warn);
-  color: #1c1810;
+  color: var(--text-on-warn);
   border-color: rgba(0, 0, 0, 0.15);
   animation: pulse-bg 1.6s ease-in-out infinite;
   cursor: default;
 }
 
 .running:hover:not(:disabled) {
-  background: #e3b341;
-}
-
-.spinner {
-  display: inline-block;
-  width: 13px;
-  height: 13px;
-  border: 2px solid rgba(28, 24, 16, 0.25);
-  border-top-color: #1c1810;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
+  background: var(--warn-hover);
 }
 
 .cancel {

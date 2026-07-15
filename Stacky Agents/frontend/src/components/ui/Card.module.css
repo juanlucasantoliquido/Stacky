@@ -1,0 +1,11 @@
+.card {
+  background: var(--bg-panel);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+}
+
+.elevated { box-shadow: var(--shadow-2); }
+
+.padNone { padding: 0; }
+.padSm   { padding: var(--space-4); }
+.padMd   { padding: var(--space-6); }

@@ -1,0 +1,13 @@
+@keyframes uiSpin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  border-radius: var(--radius-full);
+  border-style: solid;
+  animation-name: uiSpin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  flex-shrink: 0;
+}

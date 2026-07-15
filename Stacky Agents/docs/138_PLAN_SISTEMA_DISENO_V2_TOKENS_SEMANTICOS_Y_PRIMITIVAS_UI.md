@@ -1,7 +1,7 @@
 # Plan 138 — Sistema de diseño v2: tokens semánticos y primitivas UI
 
 **Versión:** v2 (criticado 2026-07-15) — v1 propuesto 2026-07-14
-**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15)
+**Estado:** IMPLEMENTADO F0-F6 (2026-07-15). Doc previo: CRITICADO v1→v2 · APROBADO-CON-CAMBIOS. Nota: `PipelineStatus.module.css` tenía un 7º hex (`.nextLabel strong`) no listado en la tabla de F3 — sustituido igual por `--status-info-text` (mismo valor exacto, R2) para cumplir el criterio binario "grep → 0"; los totales absolutos de deuda drift-earon levemente vs. el snapshot del doc (esperado, KPI-3 es por-archivo).
 **Origen:** pedido del operador de "mejorar drásticamente la UI y UX de Stacky Agents".
 **Serie:** UI/UX **138 → 139 → 140 → 141** (orden de implementación CONGELADO; este plan es la FUNDACIÓN).
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero flag de harness, cero dependencia nueva (`package.json` NO se toca).

@@ -1,6 +1,6 @@
 # Plan 140 — Estados universales: skeletons de carga, vacíos accionables y jerarquía visual de datos
 
-**Estado:** PROPUESTO v1 (2026-07-15 — serie UI/UX 138→139→140→141)
+**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — v1 propuesto 2026-07-15
 **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
 **Depende de:** Plan 138 (tokens semánticos + primitivas `ui/`) IMPLEMENTADO y mergeado; Plan 139 (siguiente en la serie) aterriza antes.
 **Se implementa DESPUÉS de:** 138 y 139.
@@ -11,6 +11,33 @@
 > implemente **sin inferir nada**. Cada fase trae archivos exactos, símbolos exactos, copys literales,
 > tests primero con comando exacto y criterio de aceptación binario. Si algo no está escrito acá,
 > **NO lo inventes**: parás y preguntás al operador.
+
+---
+
+## § 0. Changelog de crítica v1 → v2 (juez adversarial, 2026-07-15)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 1 IMPORTANTE; 2 MENORES). Plan sólido:
+helpers puros con casos frontera exactos, gate STOP droppable en F8, deslinde 135 claro.
+
+- **C1 (IMPORTANTE) — resuelto in place [ADICIÓN ARQUITECTO].** *Trampa vacío-vs-error.* El
+  branch de VACÍO (`items.length === 0`) TAMBIÉN captura el caso de ERROR (una query que falla
+  suele devolver 0 elementos). El v1 mapeaba `length===0 → <EmptyState "no hay datos">`, así
+  que **un fetch fallido renderiza un falso vacío** ("Sin historial todavía", con copy que
+  AFIRMA que no hay datos) — engañando al operador y siendo, encima, MÁS engañoso que el texto
+  plano que reemplaza. Fix (respeta el deslinde con 135, NO implementa UI de error): el
+  `EmptyState` de vacío se renderiza **sólo** cuando la query resolvió OK con 0 elementos —
+  `!<query>.isError && length===0`. En estado de error NO se muestra EmptyState; ese canal es
+  del Plan 135. Aplicado a F4/F5/F6/F8 (regla global en §10.7) + añadido a los tests de adopción.
+- **C2 (MENOR) — documentado.** F3 reemplaza el botón crudo de `EmptyState` (que hoy renderiza
+  `▶ {finalAction}` vía `.action`) por la primitiva `Button` primaria: se pierde el glifo `▶` y
+  cambia el estilo de acción de las variantes existentes (`executions/packs/tickets`).
+  Verificado: **0 importadores actuales del compartido** (§3.1) ⇒ nada en producción se rompe;
+  es una mejora de jerarquía, intencional y reversible por revert.
+- **C3 (MENOR) — mitigado.** Los tests fs+regex de adopción no observan el render (no hay
+  RTL/jsdom); combinados con C1 pasarían aun con el falso-vacío. Se agrega a los tests de F4/F5
+  la verificación de que el branch de vacío referencia el guard `isError` (patrón textual).
+
+139/138/141 sin cambios por esta crítica.
 
 ---
 
@@ -238,6 +265,13 @@ La serie 132→134→135→136 aterriza ANTES. Archivos que ellos editan fuerte:
    - Test de un archivo: `npx vitest run <ruta-relativa-al-frontend>`
    - Typecheck global: `npx tsc --noEmit`
    - Ratchet 138: `npx vitest run src/__tests__/uiDebtRatchet.test.ts`
+7. **Regla vacío-vs-error (C1, OBLIGATORIA en F4-F8):** el `EmptyState` de VACÍO se renderiza
+   SÓLO cuando la query resolvió OK con 0 elementos. La condición de vacío SIEMPRE lleva el
+   guard `!<query>.isError` además de `<longitud> === 0` (ej.: `!historyQ.isError &&
+   items.length === 0`). En estado de ERROR **NUNCA** se muestra `EmptyState` (sería un falso
+   vacío). Este plan **NO** implementa UI de error (dominio 135): en error simplemente NO se
+   entra al branch de vacío; se deja el render por defecto de la superficie. Usá el nombre real
+   de la query de cada archivo (localizá `isLoading` para hallarla).
 
 ---
 
@@ -635,11 +669,13 @@ describe("Plan 140 F3 — EmptyState presets", () => {
    ```tsx
    {isLoading ? (
      <div className={styles.tableWrapper}><SkeletonList rows={8} rowHeight={28} ariaLabel="Cargando historial" /></div>
-   ) : items.length === 0 ? (
+   ) : (!historyQ.isError && items.length === 0) ? (   // C1: guard vacío-vs-error (§10.7)
      <EmptyState variant="history" />
    ) : ( … tabla sin cambios … )}
    ```
-   (el `Sin ejecuciones` de `:180-181` pasa a `<EmptyState variant="history" />`).
+   (el `Sin ejecuciones` de `:180-181` pasa a `<EmptyState variant="history" />`). **En error
+   (`historyQ.isError`) NO se muestra EmptyState** (falso vacío): cae al branch de tabla, sin
+   copy engañoso; el canal de error es 135.
 4. Columna Inicio (`:207`): `{fmtDate(item.started_at)}` → `{formatRelativeTime(item.started_at)}`.
 5. Columna Estado (`:211-215`): reemplazar el `<span className={statusBadge…}>` por
    ```tsx
@@ -656,6 +692,7 @@ describe("Plan 140 F4 — adopción Historial", () => {
   const src = () => readFileSync(SRC, "utf-8");
   it("importa y usa SkeletonList", () => { expect(/import SkeletonList/.test(src())).toBe(true); expect(/<SkeletonList\b/.test(src())).toBe(true); });
   it("usa EmptyState compartido", () => { expect(/from ["']\.\.\/components\/EmptyState["']/.test(src())).toBe(true); expect(/<EmptyState\b/.test(src())).toBe(true); });
+  it("guarda el vacío contra error (C1, §10.7): usa isError en la condición", () => { expect(/isError/.test(src())).toBe(true); });
   it("usa StatusChip + runStatus", () => { expect(/<StatusChip\b/.test(src())).toBe(true); expect(/runStatusTone\(/.test(src())).toBe(true); });
   it("usa formatRelativeTime y ya no toLocaleString ni statusClass", () => {
     expect(/formatRelativeTime\(/.test(src())).toBe(true);
@@ -682,12 +719,12 @@ describe("Plan 140 F4 — adopción Historial", () => {
 1. Imports nuevos: `EmptyState`, `SkeletonList`, `{ StatusChip }` de `../components/ui`, `{ runStatusTone, runStatusLabel }`, `{ formatRelativeTime }`.
 2. **Borrar** la función `timeAgo` (`:21-32`). Conservar `summarizeCause`.
 3. CARGA (`:98`): `{executionsQ.isLoading && <div className={styles.empty}>Cargando ejecuciones…</div>}` → `{executionsQ.isLoading && <SkeletonList rows={6} rowHeight={28} ariaLabel="Cargando ejecuciones" />}`.
-4. VACÍO (`:99-101`): reemplazar por `{!executionsQ.isLoading && sortedRows.length === 0 && <EmptyState variant="review" />}`.
+4. VACÍO (`:99-101`, guard C1 §10.7): reemplazar por `{!executionsQ.isLoading && !executionsQ.isError && sortedRows.length === 0 && <EmptyState variant="review" />}`. En error NO se muestra EmptyState (dominio 135).
 5. Status (`:120-124`): reemplazar el `<span className={badge…}>` por `<td><StatusChip tone={runStatusTone(row.status)} size="sm">{runStatusLabel(row.status)}</StatusChip></td>`.
 6. Terminado (`:126`): `{timeAgo(row.completed_at || row.started_at)}` → `{formatRelativeTime(row.completed_at || row.started_at)}`.
 7. En `ReviewInboxPage.module.css`: **borrar** las clases muertas `.badge/.error/.review` si dejan de referenciarse (grep antes). No tocar el resto.
 
-**Test primero (`frontend/src/pages/__tests__/ReviewInboxPage.adoption.test.ts`):** calca F4 con `SRC` = `.../ReviewInboxPage.tsx`, mismos 4 `it` adaptados (`<SkeletonList>`, `<EmptyState variant="review"`, `<StatusChip>` + `runStatusTone`, `formatRelativeTime` presente y `function timeAgo` ausente y `toLocale` ausente).
+**Test primero (`frontend/src/pages/__tests__/ReviewInboxPage.adoption.test.ts`):** calca F4 con `SRC` = `.../ReviewInboxPage.tsx`, mismos `it` adaptados (`<SkeletonList>`, `<EmptyState variant="review"`, `<StatusChip>` + `runStatusTone`, `formatRelativeTime` presente y `function timeAgo` ausente y `toLocale` ausente, **y el guard `isError` de C1 presente en la condición del vacío**).
 
 **Comando:** `npx vitest run src/pages/__tests__/ReviewInboxPage.adoption.test.ts && npx tsc --noEmit`
 **Criterio (binario):** 4 `it` verdes; `tsc` 0; ratchet verde.
@@ -705,7 +742,7 @@ describe("Plan 140 F4 — adopción Historial", () => {
 **Cambios exactos en `DocsPage.tsx`:**
 1. Imports: `EmptyState`, `SkeletonList`, `{ formatRelativeTime }`. (Acá **no** hay StatusChip: Docs no muestra estados de run.)
 2. CARGA de contenido (`:265`): `<p>Cargando documentación...</p>` → `<SkeletonList rows={6} rowHeight={20} ariaLabel="Cargando documentación" />`.
-3. VACÍO de índice (`:331` `<div className={styles.emptyState}>…</div>`): reemplazar el contenido del vacío por `<EmptyState variant="docs" />`. Si en ese scope existe un handler de reindex, pasarlo como `onAction={<handler>}`; si no, omitir (queda sin botón). **Confirmar por lectura** si el handler es accesible; si no lo es, NO inventarlo.
+3. VACÍO de índice (`:331` `<div className={styles.emptyState}>…</div>`): reemplazar el contenido del vacío por `<EmptyState variant="docs" />`. **Guard C1 (§10.7):** mostrar el `EmptyState` de índice vacío SÓLO si la query del índice NO está en error (`!<indexQuery>.isError`); en error NO mostrarlo (dominio 135). Si en ese scope existe un handler de reindex, pasarlo como `onAction={<handler>}`; si no, omitir (queda sin botón). **Confirmar por lectura** si el handler es accesible; si no lo es, NO inventarlo.
 4. Sello "Indexado" (`:347`): `Indexado: {new Date(indexData.indexed_at).toLocaleTimeString()}` → `Indexado: {formatRelativeTime(indexData.indexed_at)}`.
 5. **NO tocar** `:409` (`"No se pudo cargar el grafo." : "Cargando grafo..."`): el ternario mezcla error+carga y el error es dominio 135. Dejar como está; documentar en §12 que 135/141 lo unifican.
 
@@ -805,6 +842,8 @@ describe("Plan 140 F7 — adopción Equipo", () => {
    />
    ```
    Confirmar por lectura si el handler de sync está en scope; si no, dejar sin `actionLabel/onAction`.
+   **Guard C1 (§10.7):** renderizar este vacío SÓLO cuando la lista NO esté en error
+   (`!<query>.isError && <lista vacía>`); en error NO mostrar EmptyState (dominio 135).
 4. **PROHIBIDO** tocar: banners running (`:359`, `:366`, `:638-641`), conteo "corriendo" (`:860-863`), `EpicGroup` running, modo grafo (`:1054`) y cualquier `runningExecution/runningByTicket`.
 
 **Test primero (`frontend/src/pages/__tests__/TicketBoard.adoption.test.ts`):**

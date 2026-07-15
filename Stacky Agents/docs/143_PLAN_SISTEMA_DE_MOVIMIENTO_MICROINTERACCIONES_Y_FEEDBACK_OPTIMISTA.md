@@ -916,16 +916,18 @@ idéntico, fallback N/A. **Trabajo del operador:** ninguno.
 
 ## 9. Próximos planes UX/UI recomendados (roadmap liviano; NO son planes completos)
 
-Candidatos a 144/145 que se apoyan en la fundación 138-143 ya montada (una línea de rationale c/u):
+Candidatos (numeración final **150/151/152** — se renumeró desde 144/145/146 para no colisionar con
+una serie de confiabilidad ajena 144-149 de otra sesión) que se apoyan en la fundación 138-143 ya
+montada (una línea de rationale c/u). **YA PROPUESTOS como planes completos:**
 
-- **144 — Densidad adaptativa / responsive:** tokens de densidad (`cómodo` / `compacto`) que
+- **150 — Densidad adaptativa / responsive:** tokens de densidad (`cómodo` / `compacto`) que
   reescalan la escala de spacing del 138 según viewport o preferencia; alto valor en tableros densos
   (`TicketBoard`) y pantallas chicas. Reusa spacing del 138 + motion del 143 para transicionar la
   densidad suavemente.
-- **145 — Onboarding / first-run guiado:** tour de capacidades para operador nuevo (dónde está cada
+- **151 — Onboarding / first-run guiado:** tour de capacidades para operador nuevo (dónde está cada
   cosa), aprovechando el sistema de diseño + micro-interacciones ya consistentes; reduce la curva sin
   agregar backend (estado local + `localStorage`).
-- **146 — Centro de notificaciones/actividad unificado:** consolida toasts (135) + señales
+- **152 — Centro de notificaciones/actividad unificado:** consolida toasts (135) + señales
   persistentes de runs (134) + KPIs de costos (142) en un único feed con las micro-interacciones de
   entrada/salida del 143; un solo lugar para "qué pasó / qué está pasando".
 

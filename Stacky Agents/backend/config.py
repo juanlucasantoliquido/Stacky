@@ -88,20 +88,20 @@ class Config:
     LOCAL_LLM_TIMEOUT_SEC = int(os.getenv("LOCAL_LLM_TIMEOUT_SEC", "120"))
 
     # Plan 117 — Insights locales de ejecuciones. Default OFF (el operador activa por UI).
-    STACKY_LOCAL_INSIGHTS_ENABLED = os.getenv("STACKY_LOCAL_INSIGHTS_ENABLED", "false").lower() in (
+    STACKY_LOCAL_INSIGHTS_ENABLED = os.getenv("STACKY_LOCAL_INSIGHTS_ENABLED", "true").lower() in (
         "1", "true", "yes",
     )
     STACKY_LOCAL_INSIGHTS_SWEEP_SEC = int(os.getenv("STACKY_LOCAL_INSIGHTS_SWEEP_SEC", "180"))
     STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE = int(os.getenv("STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE", "3"))
     STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS = int(os.getenv("STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS", "7"))
     STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED = os.getenv(
-        "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED", "false"
+        "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 122 — Comparador de BD entre ambientes (núcleo, serie 122-126) ────
     # Default OFF: opt-in del operador vía UI (categoría "capacidades_optin").
     STACKY_DB_COMPARE_ENABLED: bool = os.getenv(
-        "STACKY_DB_COMPARE_ENABLED", "false"
+        "STACKY_DB_COMPARE_ENABLED", "true"
     ).strip().lower() == "true"
     STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC: int = int(
         os.getenv("STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC", "10")
@@ -110,7 +110,7 @@ class Config:
     # ── Plan 126 — Comparador de BD entre ambientes (paridad de DATOS) ─────────
     # Default OFF: opt-in doble del operador vía UI (flag hija del master 122).
     STACKY_DB_COMPARE_DATA_DIFF_ENABLED: bool = os.getenv(
-        "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", "false"
+        "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", "true"
     ).strip().lower() == "true"
     STACKY_DB_COMPARE_DATA_MAX_ROWS: int = int(
         os.getenv("STACKY_DB_COMPARE_DATA_MAX_ROWS", "5000")
@@ -817,10 +817,10 @@ class Config:
 
     # Plan 41 — Pre-vuelo de Intención. Default OFF → byte-idéntico al actual.
     INTENT_PREFLIGHT_ENABLED: bool = os.getenv(
-        "INTENT_PREFLIGHT_ENABLED", "false"
+        "INTENT_PREFLIGHT_ENABLED", "true"
     ).lower() in ("1", "true", "yes", "on")
     INTENT_PREFLIGHT_AUTO_APPROVE: bool = os.getenv(
-        "INTENT_PREFLIGHT_AUTO_APPROVE", "false"
+        "INTENT_PREFLIGHT_AUTO_APPROVE", "true"
     ).lower() in ("1", "true", "yes", "on")
     INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF: float = float(
         os.getenv("INTENT_PREFLIGHT_AUTO_APPROVE_MIN_CONF", "0.8")
@@ -866,7 +866,7 @@ class Config:
 
     # C0/C1 — Guarda prompt_text en metadata (privacidad: default OFF).
     STACKY_TRACE_PROMPT_TEXT_ENABLED: bool = os.getenv(
-        "STACKY_TRACE_PROMPT_TEXT_ENABLED", "false"
+        "STACKY_TRACE_PROMPT_TEXT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 53 — Selector adaptativo de modelo/effort por confidence de grounding
@@ -923,7 +923,7 @@ class Config:
     # byte-idéntico al comportamiento actual (el agente sigue proponiendo el
     # estado vía el body del run).
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
-        "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "false"
+        "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Si true (default), infiere pipelines CI de GitLab cuando el tracker es gitlab.
     STACKY_GITLAB_CI_INFERENCE: bool = os.getenv(
@@ -931,10 +931,14 @@ class Config:
     ).lower() in ("1", "true", "yes")
     # Plan 71 — Si ON, los endpoints ado-pipeline-status y ado-pipeline-batch
     # enrutan por el sub-puerto CIProvider (AdoCIProvider / GitLabCIProvider)
-    # en vez de llamar directamente a infer_pipeline. OFF (default): comportamiento
-    # pre-Plan-71 byte-idéntico.
+    # en vez de llamar directamente a infer_pipeline. Default ON (2026-07-15):
+    # verificado que NO comparte el bug de STACKY_TICKETS_PROVIDER_ENABLED
+    # (AdoCIProvider delega a infer_pipeline existente, no construye su propio
+    # cliente); 60/61 tests de la familia Plan 71/72 verdes con el flag forzado,
+    # 1 falla pre-existente sin relación (test_monitor_pipeline_not_implemented,
+    # golpea ADO real incluso con el flag OFF).
     STACKY_PIPELINE_PROVIDER_ENABLED: bool = os.getenv(
-        "STACKY_PIPELINE_PROVIDER_ENABLED", "false"
+        "STACKY_PIPELINE_PROVIDER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Plan 72 — Trigger y monitoreo de pipelines CI (HITL). Default ON
     # (activado 2026-07-05, decisión explícita del operador).

@@ -5891,19 +5891,19 @@ def _epic_sanitize_enabled() -> bool:
 
 
 def _epic_gate_enabled() -> bool:
-    """Plan 51 F3 — lee STACKY_EPIC_GATE_ENABLED (default OFF).
-    Barrido 2026-07-15: se intentó promover a ON pero se revirtió — bloquea
-    publish en muchos fixtures de test que usan HTML de épica mínimo/sintético
-    (rf_empty_body y similares), con acoplamiento amplio no evidente desde el
-    docstring (ver test_autopublish_rescue.py). Necesita auditoría de fixtures
-    antes de promoverse, no un flip ciego."""
-    return os.getenv("STACKY_EPIC_GATE_ENABLED", "false").strip().lower() == "true"
+    """Plan 51 F3 — lee STACKY_EPIC_GATE_ENABLED (default ON, promovido 2026-07-15
+    tras auditar fixtures: la causa raíz real era _VALID_EPIC en
+    test_autopublish_rescue.py con RF sin cuerpo (rf_empty_body correctamente
+    detectado por el gate), no un bug del gate; fixture corregido con contenido
+    real. Verificado: 105 tests verdes en la familia epic_* con el flag forzado ON."""
+    return os.getenv("STACKY_EPIC_GATE_ENABLED", "true").strip().lower() == "true"
 
 
 def _epic_catalog_gate_enabled() -> bool:
-    """Plan 51 F3 — lee STACKY_EPIC_CATALOG_GATE_ENABLED (default OFF).
-    Bloqueo por catálogo: opt-in dentro de opt-in."""
-    return os.getenv("STACKY_EPIC_CATALOG_GATE_ENABLED", "false").strip().lower() == "true"
+    """Plan 51 F3 — lee STACKY_EPIC_CATALOG_GATE_ENABLED (default ON, promovido
+    2026-07-15: la config del catálogo se arma después desde la UI; sin catálogo
+    poblado, golden_catalog_diff devuelve [] y este bloqueo es NO-OP)."""
+    return os.getenv("STACKY_EPIC_CATALOG_GATE_ENABLED", "true").strip().lower() == "true"
 
 
 def _regression_gate_enabled() -> bool:
@@ -6055,8 +6055,9 @@ def _structural_epic_warnings(html: str | None) -> list[str]:
 
 
 def _catalog_grounding_warnings_enabled() -> bool:
-    """Plan 50 F3 — lee STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED (default OFF)."""
-    return os.getenv("STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED", "false").strip().lower() == "true"
+    """Plan 50 F3 — lee STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED (default ON,
+    promovido 2026-07-15: mismo NO-OP sin catálogo poblado que EPIC_CATALOG_GATE)."""
+    return os.getenv("STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED", "true").strip().lower() == "true"
 
 
 def catalog_unknown_processes(html: str | None, process_catalog: list | None) -> list[str]:

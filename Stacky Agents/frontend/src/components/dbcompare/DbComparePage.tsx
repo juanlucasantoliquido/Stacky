@@ -4,6 +4,7 @@ import type { CompareRun, DbCompareHealth, DbEnvironment, DbSnapshot, DiffAction
 import { EMPTY_FILTERS, filterDiffItems, type DiffFilters } from "./filterLogic";
 import { buildSnapshotCounts } from "./snapshotCounts";
 import { EnvironmentsPanel } from "./EnvironmentsPanel";
+import { DbCompareSettingsSection } from "./DbCompareSettingsSection";
 import { ScriptsPanel } from "./ScriptsPanel";
 import { CompareWizard } from "./CompareWizard";
 import { RunProgress } from "./RunProgress";
@@ -136,6 +137,8 @@ export function DbComparePage() {
           ))}
         </div>
       )}
+
+      <DbCompareSettingsSection />
 
       <RunsTimeline runs={runs} activeRunId={activeRun?.run_id ?? null} onSelectRun={handleSelectHistoricalRun} />
 

@@ -601,14 +601,27 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_QUALITY_CONVERGENCE_ENABLED",
     "STACKY_ADO_EDIT_LEARNING_ENABLED",
     "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",
-    # NOTA: STACKY_TICKETS_PROVIDER_ENABLED y STACKY_PIPELINE_PROVIDER_ENABLED
-    # (Plan 70/71) se intentaron promover y se REVIRTIERON: rompen tests que
-    # mockean _ado_client_for_ticket en vez del TrackerProvider/CIProvider
-    # (ver test_epic_grounding.py). Quedan OFF hasta un pase de migración dedicado.
-    # NOTA: STACKY_EPIC_GATE_ENABLED (Plan 51) se intentó promover y se
-    # REVIRTIÓ: bloquea publish en fixtures de test con HTML de épica
-    # mínimo/sintético en varios archivos (ver test_autopublish_rescue.py).
-    # Queda OFF hasta auditar esos fixtures.
+    "STACKY_EPIC_GATE_ENABLED",
+    "STACKY_PIPELINE_PROVIDER_ENABLED",
+    # ── Segunda pasada (operador 2026-07-15): "dejá todo ON, la config se hace
+    # después desde la UI" — prerequisito faltante YA NO es motivo de OFF. ──
+    "STACKY_LOCAL_INSIGHTS_ENABLED",
+    "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",
+    "STACKY_DB_COMPARE_ENABLED",
+    "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",
+    "INTENT_PREFLIGHT_ENABLED",
+    "INTENT_PREFLIGHT_AUTO_APPROVE",  # min_conf queda en su default 0.8
+    "STACKY_TRACE_PROMPT_TEXT_ENABLED",  # nota: persiste texto crudo de prompts en traza local
+    "STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
+    "STACKY_EPIC_CATALOG_GATE_ENABLED",
+    "STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED",
+    # NOTA: STACKY_TICKETS_PROVIDER_ENABLED (Plan 70) sigue OFF — BLOQUEADA,
+    # ver diagnóstico técnico exacto en [[barrido-flags-default-on-2026-07-15]]:
+    # AdoTrackerProvider construye su cliente vía build_ado_client() directo
+    # (services/project_context.py), no vía _ado_client_for_ticket; los tests
+    # existentes mockean el segundo, no el primero. STACKY_PIPELINE_PROVIDER_ENABLED
+    # (Plan 71, hermana) SÍ se promovió: AdoCIProvider delega a infer_pipeline
+    # existente sin este problema de seam, verificado con la familia Plan 71/72.
 }
 
 
@@ -702,11 +715,11 @@ def test_declared_default_falls_back_to_type_zero():
     from services.harness_flags import FLAG_REGISTRY, declared_default, default_is_known
 
     by_key = {s.key: s for s in FLAG_REGISTRY}
-    # bool sin default → False (STACKY_TASK_GATE_ENABLED se promovió a default=True
-    # el 2026-07-15; STACKY_EPIC_CATALOG_GATE_ENABLED sigue sin default declarado
-    # porque depende de un catálogo de procesos curado — ver excepción de
-    # prerequisito en el informe del barrido de flags).
-    bool_spec = by_key["STACKY_EPIC_CATALOG_GATE_ENABLED"]
+    # bool sin default → False (varias promociones sucesivas 2026-07-15 fueron
+    # agotando los ejemplos previos; STACKY_ISSUE_PHASE_COMMENTS_ENABLED sigue
+    # sin default declarado: dispara auto-post de comentarios a ADO, excepción
+    # dura E1 — ver el informe del barrido de flags).
+    bool_spec = by_key["STACKY_ISSUE_PHASE_COMMENTS_ENABLED"]
     assert declared_default(bool_spec) is False
     assert default_is_known(bool_spec) is False
     # int sin default → 0

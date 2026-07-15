@@ -14,14 +14,18 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("LLM_BACKEND", "mock")
 
 
-def test_master_flag_declared_default_off():
+def test_master_flag_declared_default_on():
+    """Promovido a default ON 2026-07-15 (directiva operador: "dejá todo ON, la
+    config se hace después desde la UI"). Read-only hasta que el operador
+    registre un ambiente en EnvironmentsPanel; sin ambientes registrados la
+    tab queda visible pero vacía (no dispara ninguna conexión sola)."""
     from services.harness_flags import FLAG_REGISTRY
     from config import Config
 
     by_key = {s.key: s for s in FLAG_REGISTRY}
     spec = by_key["STACKY_DB_COMPARE_ENABLED"]
     assert spec.type == "bool"
-    assert Config.STACKY_DB_COMPARE_ENABLED is False
+    assert Config.STACKY_DB_COMPARE_ENABLED is True
 
 
 def test_timeout_flag_bounds():

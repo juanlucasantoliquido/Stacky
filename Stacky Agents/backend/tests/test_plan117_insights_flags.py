@@ -50,14 +50,28 @@ def test_numeric_bounds():
             _spec("STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS").max_value) == (1, 90)
 
 
-def test_no_explicit_default_on_new_flags():
-    for k in _ALL:
+def test_no_explicit_default_on_numeric_children():
+    """Los 3 hijos numéricos nunca declaran default en el spec (valor real vive
+    en Config, mismo gotcha que STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC)."""
+    for k in (
+        "STACKY_LOCAL_INSIGHTS_SWEEP_SEC",
+        "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE",
+        "STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS",
+    ):
         assert _spec(k).default is None, k
 
 
-def test_config_defaults_off():
-    assert config.STACKY_LOCAL_INSIGHTS_ENABLED is False
+def test_master_and_narrative_default_on():
+    """Promovidos a default ON 2026-07-15 (directiva operador: requiere modelo
+    local/Ollama instalado, pero eso se configura después desde la UI; sin
+    modelo local disponible el endpoint degrada, no revienta)."""
+    assert _spec(_MASTER).default is True
+    assert _spec("STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED").default is True
+
+
+def test_config_defaults():
+    assert config.STACKY_LOCAL_INSIGHTS_ENABLED is True
     assert config.STACKY_LOCAL_INSIGHTS_SWEEP_SEC == 180
     assert config.STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE == 3
     assert config.STACKY_LOCAL_INSIGHTS_LOOKBACK_DAYS == 7
-    assert config.STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED is False
+    assert config.STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED is True

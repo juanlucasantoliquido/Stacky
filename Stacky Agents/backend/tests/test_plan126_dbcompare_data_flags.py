@@ -15,7 +15,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("LLM_BACKEND", "mock")
 
 
-def test_data_diff_enabled_flag_declared_default_off():
+def test_data_diff_enabled_flag_declared_default_on():
+    """Promovido a default ON 2026-07-15 junto con el master. Read-only hasta
+    que el operador registre ambientes; NO-OP sin ellos."""
     from services.harness_flags import FLAG_REGISTRY
     from config import Config
 
@@ -23,7 +25,7 @@ def test_data_diff_enabled_flag_declared_default_off():
     spec = by_key["STACKY_DB_COMPARE_DATA_DIFF_ENABLED"]
     assert spec.type == "bool"
     assert spec.requires == "STACKY_DB_COMPARE_ENABLED"
-    assert Config.STACKY_DB_COMPARE_DATA_DIFF_ENABLED is False
+    assert Config.STACKY_DB_COMPARE_DATA_DIFF_ENABLED is True
 
 
 def test_data_max_rows_flag_bounds_sin_default_curado():

@@ -35,7 +35,11 @@ def test_flag_categorized_in_flujo_funcional():
     assert categorize(FLAG_KEY) == "flujo_funcional"
 
 
-def test_flag_default_off(monkeypatch):
+def test_flag_default_on(monkeypatch):
+    """Promovido a default ON 2026-07-15: sin tracker_state_machine configurado
+    por proyecto/agente, deterministic_task_states_enabled() queda ON pero el
+    lector real degrada al estado que proponga el agente si no hay config
+    (ver harness/task_states.py) — no revienta, la config se arma después."""
     monkeypatch.delenv(FLAG_KEY, raising=False)
     # Recargar config para reflejar la ausencia de la env var.
     import importlib
@@ -43,7 +47,7 @@ def test_flag_default_off(monkeypatch):
     import config as config_module
 
     importlib.reload(config_module)
-    assert config_module.Config.STACKY_DETERMINISTIC_TASK_STATES_ENABLED is False
+    assert config_module.Config.STACKY_DETERMINISTIC_TASK_STATES_ENABLED is True
     importlib.reload(config_module)
 
 

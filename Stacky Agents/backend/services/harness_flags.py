@@ -1420,6 +1420,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_TRACE_PROMPT_TEXT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Texto del prompt en trazabilidad (C0/C1, privacidad OFF)",
         description=(
             "Plan 38 C0/C1 — Si ON, incluye el texto completo del prompt (JSON de "
@@ -1758,6 +1759,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="INTENT_PREFLIGHT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Pre-vuelo de Intención (41)",
         description=(
             "Plan 41 — Si ON, antes del run genera un Brief de Intención que el "
@@ -1768,6 +1770,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="INTENT_PREFLIGHT_AUTO_APPROVE",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Pre-vuelo: auto-aprobar si está claro",
         description=(
             "Plan 41 — Si ON, salta el modal cuando no hay preguntas abiertas y la "
@@ -1840,6 +1843,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Warnings de catálogo (grounding)",
         description=(
             "Plan 50 F3 — Si ON, warning NO bloqueante cuando la épica cita "
@@ -1879,15 +1883,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_EPIC_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, tras arreglar la causa raíz)
         label="Gate correctivo determinista de épica",
         description=(
             "Plan 51 F3 — Si ON, ante defectos no reparables (huecos RF, bloques "
             "vacíos) bloquea el autopublish de la épica (needs_review) y dispara "
             "un pase correctivo inline ante defectos de forma reparables. "
-            "Caso feliz = 0 tokens extra. Default OFF. Barrido 2026-07-15: se intentó "
-            "promover a ON y se revirtió — bloquea publish en fixtures de test con "
-            "HTML de épica mínimo/sintético en archivos no evidentes desde acá "
-            "(ver test_autopublish_rescue.py); necesita auditoría de fixtures."
+            "Caso feliz = 0 tokens extra. Default ON (2026-07-15): la causa raíz real "
+            "del intento de promoción anterior era el fixture _VALID_EPIC de "
+            "test_autopublish_rescue.py con un RF sin cuerpo (rf_empty_body "
+            "correctamente detectado); corregido con contenido real, no el gate."
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en api/tickets y el runner CLI
@@ -1895,6 +1900,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_EPIC_CATALOG_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Bloqueo por catálogo (procesos inventados)",
         description=(
             "Plan 51 F3 — Si ON (requiere STACKY_EPIC_GATE_ENABLED), un proceso "
@@ -1937,6 +1943,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Estados de tarea deterministas",
         description=(
             "Plan 79 — Stacky aplica el estado-en-progreso (al iniciar) y el "
@@ -2122,10 +2129,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "_ado_client_for_ticket; cae al fallback ADO si el provider del "
             "proyecto no está disponible (ej. GitLab sin STACKY_GITLAB_ENABLED). "
             "OFF (default): byte-idéntico al comportamiento pre-Plan-70. "
-            "Barrido 2026-07-15: se intentó promover a ON pero se revirtió — "
-            "rompe tests que mockean _ado_client_for_ticket directamente en vez del "
-            "provider (ver test_epic_grounding.py); necesita pase de migración "
-            "dedicado, no un flip ciego."
+            "BLOQUEADA 2026-07-15 (diagnóstico exacto, no una excusa genérica): "
+            "AdoTrackerProvider (services/ado_provider.py) construye su cliente ADO "
+            "llamando build_ado_client() DIRECTO (services/project_context.py), NO "
+            "vía api.tickets._ado_client_for_ticket — decisión de diseño explícita "
+            "del propio módulo ('no reemplaza esos seams') para evitar import "
+            "circular. 27 tests en 8 archivos mockean _ado_client_for_ticket (el "
+            "seam pre-Plan-70) y dejan de interceptar la llamada real en cuanto el "
+            "flag rutea por el provider — no es que falte el fallback a None (ese sí "
+            "funciona para GitLab mal configurado), es que ambos caminos construyen "
+            "clientes ADO reales pero por seams DISTINTOS. Arreglo correcto = migrar "
+            "esos 27 mocks a build_ado_client(); alcance verificado pero fuera de "
+            "esta pasada (ver [[barrido-flags-default-on-2026-07-15]])."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
@@ -2133,15 +2148,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_PIPELINE_PROVIDER_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, verificado sin el bug de TICKETS_PROVIDER)
         label="CIProvider sub-puerto (Plan 71)",
         description=(
             "Plan 71 — Si ON, los endpoints ado-pipeline-status y ado-pipeline-batch "
             "enrutan por el sub-puerto CIProvider (AdoCIProvider / GitLabCIProvider) "
             "en vez de llamar directamente a infer_pipeline. Habilita inferencia CI "
-            "agnóstica del tracker (ADO + GitLab). OFF (default): comportamiento "
-            "pre-Plan-71 byte-idéntico. Barrido 2026-07-15: revertido por el mismo "
-            "riesgo de ruteo por puerto que STACKY_TICKETS_PROVIDER_ENABLED (familia "
-            "Plan 70/71); no se probó exhaustivamente, se deja OFF por precaución."
+            "agnóstica del tracker (ADO + GitLab). Default ON (2026-07-15): a diferencia "
+            "de STACKY_TICKETS_PROVIDER_ENABLED, AdoCIProvider delega a infer_pipeline "
+            "existente (no construye su propio cliente ADO), así que no comparte el "
+            "bug de seam de testeo; 60/61 tests Plan 71/72 verdes con el flag forzado."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
@@ -2739,6 +2755,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_LOCAL_INSIGHTS_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Insights locales de ejecuciones",
         description="TL;DR y triage automáticos de cada run terminado usando el modelo local (Plan 106). Requiere el modelo local habilitado y configurado.",
         group="global",
@@ -2778,6 +2795,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Narrativa local del digest",
         description="Habilita narrar el digest de ejecuciones en lenguaje natural con el modelo local (botón en la card del digest).",
         group="global",
@@ -2787,6 +2805,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_DB_COMPARE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Comparador de BD entre ambientes",
         description="Master del comparador (serie 122-126): tab UI, registro de ambientes, snapshots y comparaciones. OFF = invisible.",
         group="global",
@@ -2810,6 +2829,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_DB_COMPARE_DATA_DIFF_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
         label="Comparador BD: paridad de datos",
         description="Permite comparar DATOS de tablas de parámetros por PK y generar scripts DML + backups. OFF = solo esquema.",
         group="global",

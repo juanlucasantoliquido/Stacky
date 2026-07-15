@@ -8,7 +8,11 @@ import pytest
 
 from api import tickets
 
-_VALID_EPIC = "<h1>Épica</h1>\n<h2>RF-01 algo</h2>"
+# Cuerpo real bajo el heading RF (no vacío): con STACKY_EPIC_GATE_ENABLED=true
+# (default ON desde 2026-07-15) un RF sin contenido clasifica rf_empty_body y
+# bloquea needs_review; estos tests prueban rescate/recovery, no el gate, así
+# que el fixture necesita ser una épica genuinamente completa.
+_VALID_EPIC = "<h1>Épica</h1>\n<h2>RF-01 algo</h2>\n<p>El módulo procesa el algo end-to-end.</p>"
 
 
 def _publish_ok(**_kw):

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, Response, abort, jsonify, request
 from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import joinedload
 
 import log_streamer
 from db import session_scope
@@ -57,6 +58,9 @@ def list_executions():
 
     with session_scope() as session:
         q = session.query(AgentExecution)
+        # Plan 134 F1: eager-load del ticket para servir project/ticket_title sin
+        # N+1 (la relación es lazy="select" por default — models.py:234).
+        q = q.options(joinedload(AgentExecution.ticket))
         if project_ctx is not None:
             q = q.join(Ticket, Ticket.id == AgentExecution.ticket_id).filter(
                 or_(
@@ -79,7 +83,7 @@ def list_executions():
         if days and days > 0:
             q = q.filter(AgentExecution.started_at >= (datetime.utcnow() - timedelta(days=days)))
         rows = q.order_by(AgentExecution.started_at.desc()).limit(limit).all()
-        return jsonify([r.to_dict(include_output=False) for r in rows])
+        return jsonify([r.to_dict(include_output=False, include_ticket_context=True) for r in rows])
 
 
 @bp.get("/<int:execution_id>")
@@ -88,7 +92,7 @@ def get_execution(execution_id: int):
         row = session.get(AgentExecution, execution_id)
         if row is None:
             abort(404)
-        return jsonify(row.to_dict())
+        return jsonify(row.to_dict(include_ticket_context=True))
 
 
 @bp.get("/<int:execution_id>/logs")

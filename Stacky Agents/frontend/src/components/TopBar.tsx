@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWorkbench } from "../store/workbench";
+import { useActiveRunsGlobal } from "../hooks/useActiveRunsGlobal";
 import { Projects, Health } from "../api/endpoints";
 import type { AgentWorkflowConfig, Project } from "../types";
 import NewProjectModal from "./NewProjectModal";
@@ -14,8 +15,13 @@ interface TopBarProps {
 }
 
 export default function TopBar({ onGoToTeam }: TopBarProps) {
-  const runningExecutionId = useWorkbench((s) => s.runningExecutionId);
-  const isRunning = runningExecutionId != null;
+  // Plan 134 F4: fuente VIVA — la misma query compartida del panel global
+  // (services/activeRuns.ts). El campo de workbench que este badge leía antes
+  // estaba muerto: solo lo seteaba useAgentRun (consumidor huérfano
+  // InputContextEditor) y los flujos reales (launchAgentWithRuntime) nunca lo
+  // tocaron (grep gate del plan: 0 referencias al nombre viejo en este archivo).
+  const activeRunsCount = useActiveRunsGlobal().data?.length ?? 0;
+  const isRunning = activeRunsCount > 0;
   const setActiveProject = useWorkbench((s) => s.setActiveProject);
   const setPinnedAgents = useWorkbench((s) => s.setPinnedAgents);
   const setAgentWorkflows = useWorkbench((s) => s.setAgentWorkflows);
@@ -196,7 +202,9 @@ export default function TopBar({ onGoToTeam }: TopBarProps) {
           {isRunning && (
             <span className={styles.runningBadge}>
               <span className={styles.badgeSpinner} aria-hidden="true" />
-              Agente trabajando…
+              {activeRunsCount === 1
+                ? "Agente trabajando…"
+                : `${activeRunsCount} agentes trabajando…`}
             </span>
           )}
           <CostCapIndicator projectName={activeProjectName || null} />

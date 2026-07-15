@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Executions, Agents } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
+import { fetchReviewInbox, reviewInboxQueryKey } from "../services/reviewInbox";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./ReviewInboxPage.module.css";
 
@@ -38,14 +39,8 @@ export default function ReviewInboxPage() {
   const [busyExecutionId, setBusyExecutionId] = useState<number | null>(null);
 
   const executionsQ = useQuery({
-    queryKey: ["review-inbox", activeProjectName],
-    queryFn: () =>
-      Executions.list({
-        project: activeProjectName,
-        status: ["needs_review", "error"],
-        limit: 200,
-        days: 30,
-      }),
+    queryKey: reviewInboxQueryKey(activeProjectName),
+    queryFn: () => fetchReviewInbox(activeProjectName),
     refetchInterval: 30000,
   });
 

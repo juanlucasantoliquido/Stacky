@@ -277,7 +277,7 @@ class AgentExecution(Base):
             return None
         return int((self.completed_at - self.started_at).total_seconds() * 1000)
 
-    def to_dict(self, include_output: bool = True) -> dict:
+    def to_dict(self, include_output: bool = True, include_ticket_context: bool = False) -> dict:
         d = {
             "id": self.id,
             "ticket_id": self.ticket_id,
@@ -297,6 +297,14 @@ class AgentExecution(Base):
             "pack_step": self.pack_step,
             "contract_result": self.contract_result,
         }
+        if include_ticket_context:
+            # Plan 134 F1: contexto de ticket para vistas globales (panel de runs,
+            # notificaciones). Opt-in: el default False deja byte-idéntico a todos
+            # los callers existentes. Guard `is not None` por ejecuciones cuyo
+            # ticket fue borrado (trap conocida de tasks eliminadas).
+            t = self.ticket
+            d["project"] = t.stacky_project_name if t is not None else None
+            d["ticket_title"] = t.title[:120] if t is not None else None
         if include_output:
             d["output"] = self.output
         return d

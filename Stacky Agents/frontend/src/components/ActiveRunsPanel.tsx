@@ -1,12 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Move, X } from "lucide-react";
 
 import { Executions } from "../api/endpoints";
 import useLocalStorageState from "../hooks/useLocalStorageState";
-import type { AgentExecution } from "../types";
+import { useActiveRunsGlobal } from "../hooks/useActiveRunsGlobal";
 import styles from "./ActiveRunsPanel.module.css";
-
-const REFRESH_MS = 5_000;
 
 /**
  * Esquinas de pantalla entre las que se puede mover el panel (Plan operador
@@ -28,23 +26,6 @@ function nextCorner(current: Corner): Corner {
   return CORNERS[(idx + 1) % CORNERS.length];
 }
 
-/**
- * Trae TODOS los runs activos (running/preparing/queued) SIN filtro de proyecto.
- * A propósito no filtramos por proyecto: el objetivo es poder cancelar cualquier
- * ejecución activa —incluidos runs huérfanos/colgados de otro proyecto o cuyo
- * stacky_status quedó desincronizado— que el board no logra mostrar.
- */
-async function fetchActiveRuns(): Promise<AgentExecution[]> {
-  const [running, preparing, queued] = await Promise.all([
-    Executions.list({ status: "running", all_projects: true }),
-    Executions.list({ status: "preparing", all_projects: true }),
-    Executions.list({ status: "queued", all_projects: true }),
-  ]);
-  const byId = new Map<number, AgentExecution>();
-  for (const e of [...running, ...preparing, ...queued]) byId.set(e.id, e);
-  return [...byId.values()].sort((a, b) => b.id - a.id);
-}
-
 export default function ActiveRunsPanel() {
   const qc = useQueryClient();
 
@@ -60,11 +41,7 @@ export default function ActiveRunsPanel() {
     "top-right"
   );
 
-  const { data } = useQuery({
-    queryKey: ["executions", "active-global"],
-    queryFn: fetchActiveRuns,
-    refetchInterval: REFRESH_MS,
-  });
+  const { data } = useActiveRunsGlobal();
 
   const cancelMutation = useMutation({
     mutationFn: (id: number) => Executions.cancel(id),
@@ -132,8 +109,12 @@ export default function ActiveRunsPanel() {
             <li key={e.id} className={styles.item}>
               <span className={styles.dot} aria-hidden />
               <span className={styles.id}>#{e.id}</span>
-              <span className={styles.meta}>
-                ticket {e.ticket_id} · {e.agent_type} · {e.status}
+              <span
+                className={styles.meta}
+                title={`${e.project ?? "proyecto ?"} · ticket ${e.ticket_id}${e.ticket_title ? ` · ${e.ticket_title}` : ""} · ${e.agent_type} · ${e.status}`}
+              >
+                {e.project ? `${e.project} · ` : ""}
+                {e.ticket_title ?? `ticket ${e.ticket_id}`} · {e.agent_type} · {e.status}
               </span>
               <button
                 type="button"
@@ -144,7 +125,7 @@ export default function ActiveRunsPanel() {
                   if (cancelling) return;
                   if (
                     window.confirm(
-                      `¿Cancelar la ejecución #${e.id} (ticket ${e.ticket_id}, ${e.agent_type})? Se detendrá la sesión del agente.`
+                      `¿Cancelar la ejecución #${e.id}? ${e.project ? `[${e.project}] ` : ""}${e.ticket_title ?? `ticket ${e.ticket_id}`} · ${e.agent_type}. Se detendrá la sesión del agente.`
                     )
                   ) {
                     cancelMutation.mutate(e.id);

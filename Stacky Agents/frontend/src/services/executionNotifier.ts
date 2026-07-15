@@ -7,6 +7,7 @@
  *
  * El backend ya emite eventos vía SSE; este módulo solo reacciona.
  */
+import { shouldNotifyExecution } from "./notifierCore";
 
 const SOUND_KEY = "stacky.notify.sound";
 const DESKTOP_KEY = "stacky.notify.desktop";
@@ -76,21 +77,72 @@ export async function requestDesktopPermission(): Promise<boolean> {
   return granted;
 }
 
+/** Plan 134 F6: apagado explícito del aviso de escritorio desde la UI. */
+export function setDesktopEnabled(enabled: boolean): void {
+  localStorage.setItem(DESKTOP_KEY, enabled ? "true" : "false");
+}
+
+/** Plan 134 F6: beep de prueba — el click del toggle es el gesto de usuario que
+ *  desbloquea el AudioContext del navegador, y de paso confirma que se oye. */
+export function playTestBeep(): void {
+  playBeep();
+}
+
+/** [ADICIÓN ARQUITECTO] Plan 134 F6 v2: notificación de escritorio de PRUEBA —
+ *  valida el pipeline completo (permiso + render + click-para-volver) sin tener
+ *  que esperar el fin de un run real. */
+export function sendTestDesktopNotification(): void {
+  if (!isDesktopEnabled()) return;
+  try {
+    const n = new Notification("Stacky · notificación de prueba", {
+      body: "Así se verá el aviso de fin de run.",
+      silent: true,
+    });
+    n.onclick = () => {
+      try {
+        window.focus();
+        n.close();
+      } catch {
+        // ignore
+      }
+    };
+    window.setTimeout(() => n.close(), 6000);
+  } catch {
+    // ignore
+  }
+}
+
 interface FinishedPayload {
   agent_type: string;
   ticket_label?: string;
   status: "completed" | "error" | "cancelled" | "needs_review";
+  /** Plan 134 F2 (v2): dedup por run — defensa en profundidad contra dobles
+   *  montajes (StrictMode) y carreras. El emisor es ÚNICO: el notificador
+   *  global (C3); el SSE del dock ya no notifica. */
+  execution_id?: number;
 }
 
 let lastNotifiedAt = 0;
-const MIN_GAP_MS = 1500;
+const MIN_GAP_MS = 1500; // solo fallback para payloads legacy SIN execution_id
+const notifiedExecIds = new Map<number, number>();
+// El beep conserva un gate corto propio: 5 fines simultáneos = 1 solo beep
+// (el aviso de escritorio y el título SÍ salen uno por run).
+let lastBeepAt = 0;
+const BEEP_GAP_MS = 1000;
 
 export function notifyExecutionFinished(payload: FinishedPayload): void {
   const now = Date.now();
-  if (now - lastNotifiedAt < MIN_GAP_MS) return;
-  lastNotifiedAt = now;
+  if (payload.execution_id != null) {
+    if (!shouldNotifyExecution(payload.execution_id, now, notifiedExecIds)) return;
+  } else {
+    if (now - lastNotifiedAt < MIN_GAP_MS) return;
+    lastNotifiedAt = now;
+  }
 
-  if (isSoundEnabled()) playBeep();
+  if (isSoundEnabled() && now - lastBeepAt >= BEEP_GAP_MS) {
+    lastBeepAt = now;
+    playBeep();
+  }
 
   if (isDesktopEnabled()) {
     try {
@@ -98,16 +150,18 @@ export function notifyExecutionFinished(payload: FinishedPayload): void {
       const title = `Stacky · agente ${payload.agent_type} ${verb}`;
       const body = payload.ticket_label ?? "Ejecución finalizada.";
       const n = new Notification(title, { body, silent: true });
+      // Plan 134: click en la notificación = volver a la pestaña de Stacky.
+      n.onclick = () => {
+        try {
+          window.focus();
+          n.close();
+        } catch {
+          // ignore
+        }
+      };
       window.setTimeout(() => n.close(), 6000);
     } catch {
       // ignore
     }
   }
-
-  // Status bar flash (window icon won't change but title does).
-  const originalTitle = document.title;
-  document.title = "🤖 done — " + originalTitle;
-  window.setTimeout(() => {
-    document.title = originalTitle;
-  }, 4000);
 }

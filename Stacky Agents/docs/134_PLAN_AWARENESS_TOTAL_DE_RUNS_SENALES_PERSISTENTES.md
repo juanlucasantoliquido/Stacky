@@ -1,6 +1,6 @@
 # Plan 134 — Awareness total de runs: notificaciones accesibles y señales persistentes
 
-**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (crítica adversarial 2026-07-14; v1 PROPUESTO 2026-07-13)
+**Estado:** IMPLEMENTADO F0..F8 (2026-07-15). Smoke manual de 8 pasos (F8) NO ejecutado — requiere agentes reales corriendo contra el sistema compartido con actividad concurrente confirmada; los 8 pasos quedan listos para que el operador los corra en ~5 min. (CRITICADO v2 — APROBADO-CON-CAMBIOS, crítica adversarial 2026-07-14; v1 PROPUESTO 2026-07-13)
 **Origen:** auditoría UX multi-lente 2026-07-13, pedido del operador de mejorar UX sin romper nada.
 **Alcance:** frontend + 1 cambio backend aditivo (2 campos JSON opt-in en la serialización de ejecuciones). Cero migraciones, cero endpoints nuevos, cero stores nuevos.
 **Flag:** NINGUNA fase lleva flag de harness (decisión de diseño justificada en §3.1, por fase).

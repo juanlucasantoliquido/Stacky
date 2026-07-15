@@ -137,6 +137,9 @@ export interface AgentExecution {
   pack_run_id?: number | null;
   pack_step?: number | null;
   contract_result?: ContractResult | null;  // N1
+  /** Plan 134: contexto de ticket — presente solo cuando el backend lo incluye. */
+  project?: string | null;
+  ticket_title?: string | null;
   // P2.3: campo portado de WS2 — nombre del .agent.md asociado a la ejecucion
   agent_filename?: string | null;
 }

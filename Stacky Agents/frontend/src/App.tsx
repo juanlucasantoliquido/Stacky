@@ -26,6 +26,8 @@ import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
+import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
+import { reviewBadgeLabel } from "./services/reviewInbox";
 import styles from "./App.module.css";
 
 type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare";
@@ -66,6 +68,8 @@ export default function App() {
   const [dbCompareEnabled, setDbCompareEnabled] = useState(false);
 
   useGlobalExecutionNotifier();
+  const reviewCount = useReviewInboxCount();
+  const reviewBadge = reviewBadgeLabel(reviewCount);
 
   const selectTab = (next: Tab) => {
     setTab(next);
@@ -173,6 +177,14 @@ export default function App() {
           onClick={() => selectTab("review")}
         >
           🧭 Revisión
+          {reviewBadge != null && (
+            <span
+              className={styles.navBadge}
+              aria-label={`${reviewCount} ejecuciones esperando revisión`}
+            >
+              {reviewBadge}
+            </span>
+          )}
         </button>
         <button
           className={`${styles.navTab} ${tab === "unblocker" ? styles.active : ""}`}

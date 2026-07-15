@@ -12,9 +12,18 @@ import {
   type OptionalSection,
 } from "../services/uiSections";
 import { useUiSectionsStore } from "../store/uiSectionsStore";
+import {
+  isDesktopEnabled,
+  isSoundEnabled,
+  playTestBeep,
+  requestDesktopPermission,
+  sendTestDesktopNotification,
+  setDesktopEnabled,
+  setSoundEnabled,
+} from "../services/executionNotifier";
 import styles from "./SettingsPage.module.css";
 
-type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "harness" | "playground";
+type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "notifications" | "harness" | "playground";
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
@@ -131,6 +140,12 @@ export default function SettingsPage() {
           Webhooks
         </button>
         <button
+          className={`${styles.subTab} ${sub === "notifications" ? styles.active : ""}`}
+          onClick={() => setSub("notifications")}
+        >
+          Notificaciones
+        </button>
+        <button
           className={`${styles.subTab} ${sub === "harness" ? styles.active : ""}`}
           onClick={() => setSub("harness")}
         >
@@ -150,6 +165,7 @@ export default function SettingsPage() {
         {sub === "client-profile" && <ClientProfileEditor />}
         {sub === "transfer" && <ConfigTransferPanel />}
         {sub === "webhooks" && <WebhooksPanel />}
+        {sub === "notifications" && <NotificationsPanel />}
         {sub === "harness" && <HarnessFlagsPanel />}
         {sub === "playground" && <LocalLlmPlaygroundPanel />}
       </div>
@@ -271,6 +287,88 @@ function WebhooksPanel() {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Plan 134 F6 — Notificaciones de fin de run (opt-in, default OFF intacto).
+ * Escribe las MISMAS claves localStorage que ya lee services/executionNotifier
+ * (stacky.notify.sound / stacky.notify.desktop): cero mecanismos nuevos.
+ */
+function NotificationsPanel() {
+  const [sound, setSound] = useState<boolean>(() => isSoundEnabled());
+  const [desktop, setDesktop] = useState<boolean>(() => isDesktopEnabled());
+  const [permission, setPermission] = useState<string>(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission
+  );
+
+  const toggleSound = () => {
+    const next = !sound;
+    setSoundEnabled(next);
+    setSound(next);
+    if (next) playTestBeep();
+  };
+
+  const toggleDesktop = async () => {
+    if (desktop) {
+      setDesktopEnabled(false);
+      setDesktop(false);
+      return;
+    }
+    const granted = await requestDesktopPermission();
+    setDesktop(granted);
+    setPermission(
+      typeof Notification === "undefined" ? "unsupported" : Notification.permission
+    );
+  };
+
+  return (
+    <div className={styles.sectionsPanel}>
+      <p className={styles.sectionsIntro}>
+        Avisos al terminar una ejecución — de cualquier runtime y cualquier proyecto.
+        Ambos son opt-in y quedan guardados en este navegador.
+      </p>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>
+          <span className={styles.rowTitle}>Sonido al terminar un run</span>
+          <span className={styles.rowHint}>
+            Beep corto (al activarlo se reproduce uno de prueba).
+          </span>
+        </div>
+        <button className={styles.subTab} onClick={toggleSound}>
+          {sound ? "Desactivar" : "Activar"}
+        </button>
+      </div>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>
+          <span className={styles.rowTitle}>Notificación de escritorio</span>
+          <span className={styles.rowHint}>
+            {permission === "denied"
+              ? "El navegador tiene el permiso BLOQUEADO para este sitio; habilitalo en la configuración del navegador y reintentá."
+              : permission === "unsupported"
+                ? "Este navegador no soporta notificaciones de escritorio."
+                : "Requiere permiso del navegador (se pide al activar). Click en la notificación = volver a Stacky."}
+          </span>
+        </div>
+        <button
+          className={styles.subTab}
+          onClick={toggleDesktop}
+          disabled={permission === "unsupported" || (permission === "denied" && !desktop)}
+        >
+          {desktop ? "Desactivar" : "Activar"}
+        </button>
+        {/* [ADICIÓN ARQUITECTO] v2: prueba end-to-end del aviso de escritorio. */}
+        {desktop && (
+          <button
+            className={styles.subTab}
+            onClick={() => sendTestDesktopNotification()}
+            title="Envía una notificación de prueba para validar permiso y visibilidad"
+          >
+            Enviar prueba
+          </button>
+        )}
+      </div>
     </div>
   );
 }

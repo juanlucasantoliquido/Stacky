@@ -349,6 +349,8 @@ HARNESS_TEST_FILES=(
   tests/test_flag_wiring.py
   # — Plan 86 — Flags para mortales: ayuda en lenguaje llano —
   tests/test_harness_flags_help.py
+  # — Plan 134 — Awareness total de runs: project/ticket_title en ejecuciones —
+  tests/test_executions_ticket_context.py
 )
 
 pass=0

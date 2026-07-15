@@ -45,6 +45,34 @@
   display: inline-block;
 }
 
+.resetBtn {
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #333);
+  background: var(--color-surface-2, #1b1b1b);
+  color: var(--color-text, #ddd);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.resetBtn:hover {
+  border-color: var(--color-accent, #4a9eff);
+  color: var(--color-accent, #4a9eff);
+}
+
+.hint {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #888);
+  background: color-mix(in srgb, var(--color-surface, #141414) 78%, transparent);
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  pointer-events: none;
+  user-select: none;
+}
+
 .canvasBox {
   position: relative;
   flex: 1 1 auto;

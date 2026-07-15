@@ -21,12 +21,15 @@ from config import config
 logger = logging.getLogger("stacky_agents.llm_router")
 
 
-CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6"]
+CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-5", "claude-sonnet-4-6"]
 MOCK_MODELS = ["mock-1.0"]
 
-# §5.2 — cap duro: NUNCA un modelo Claude superior a Sonnet 4.6.
-# Cualquier tier prohibido (opus / fable) se mapea a este tope.
-CLAUDE_CAP_MODEL = "claude-sonnet-4-6"
+# §5.2 — cap duro: NUNCA un modelo Claude superior a Sonnet, en ningún tier
+# (opus / fable siguen prohibidos). El tope es el PRIMARIO vigente del CLI
+# (Sonnet 5); claude-sonnet-4-6 sigue siendo un modelo Claude válido — ahora
+# es el FALLBACK que usa claude_code_cli_runner si sonnet-5 no arranca, no el
+# tope superior de este clamp.
+CLAUDE_CAP_MODEL = "claude-sonnet-5"
 _FORBIDDEN_CLAUDE_TIER = ("opus", "fable")
 # Plan 43 F1 — Opus explícitamente permitido cuando allow_opus=True (solo brief→épica).
 _OPUS_ALLOWLIST = {"claude-opus-4-8"}
@@ -135,10 +138,10 @@ class RoutingDecision:
 
 # Default por agente para Claude.
 DEFAULT_BY_AGENT_CLAUDE: dict[str, str] = {
-    "business":   "claude-sonnet-4-6",
-    "functional": "claude-sonnet-4-6",
-    "technical":  "claude-sonnet-4-6",
-    "developer":  "claude-sonnet-4-6",
+    "business":   "claude-sonnet-5",
+    "functional": "claude-sonnet-5",
+    "technical":  "claude-sonnet-5",
+    "developer":  "claude-sonnet-5",
     "qa":         "claude-haiku-4-5",
 }
 
@@ -261,15 +264,15 @@ def decide(
             return RoutingDecision(model="gpt-4o-mini", reason="qa rápido (qa + <6k tok)")
         return RoutingDecision(model=default, reason="default por agente (copilot)")
 
-    # Claude / anthropic — §5.2: cap duro en sonnet-4-6, jamás opus/fable.
+    # Claude / anthropic — §5.2: cap duro en sonnet (primario sonnet-5), jamás opus/fable.
     # "Complejo" = sonnet (antes opus); "simple" = haiku; default seguro = sonnet.
-    default = DEFAULT_BY_AGENT_CLAUDE.get(agent_type, "claude-sonnet-4-6")
+    default = DEFAULT_BY_AGENT_CLAUDE.get(agent_type, "claude-sonnet-5")
     if fingerprint_complexity == "XL":
-        decision = RoutingDecision(model="claude-sonnet-4-6", reason="complexity=XL (fingerprint) -> sonnet (cap §5.2)")
+        decision = RoutingDecision(model="claude-sonnet-5", reason="complexity=XL (fingerprint) -> sonnet (cap §5.2)")
     elif tokens > 30_000:
-        decision = RoutingDecision(model="claude-sonnet-4-6", reason=f"contexto grande ({tokens} tok > 30k) -> sonnet (cap §5.2)")
+        decision = RoutingDecision(model="claude-sonnet-5", reason=f"contexto grande ({tokens} tok > 30k) -> sonnet (cap §5.2)")
     elif agent_type == "developer" and tokens > 12_000:
-        decision = RoutingDecision(model="claude-sonnet-4-6", reason=f"developer + contexto {tokens} tok > 12k -> sonnet (cap §5.2)")
+        decision = RoutingDecision(model="claude-sonnet-5", reason=f"developer + contexto {tokens} tok > 12k -> sonnet (cap §5.2)")
     elif agent_type == "qa" and tokens < 6_000:
         decision = RoutingDecision(model="claude-haiku-4-5", reason="qa rápido (qa + <6k tok)")
     elif agent_type == "functional" and tokens < 3_000:
@@ -296,7 +299,7 @@ def decide(
             # Uprade: el encargo es L/XL pero las reglas base eligieron haiku
             # (p.ej. qa + pocos tokens). Forzar sonnet.
             decision = RoutingDecision(
-                model="claude-sonnet-4-6",
+                model="claude-sonnet-5",
                 reason=f"complexity={fingerprint_complexity} → sonnet (upgrade por dificultad alta, I1.2)",
             )
 

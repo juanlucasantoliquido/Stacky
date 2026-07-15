@@ -185,11 +185,11 @@ class Config:
     # H2.1 — Gate de contrato post-run (mismo patrón que F1.1 para claude).
     # Si ON, outputs con errores duros degradan a needs_review.
     CODEX_CLI_CONTRACT_GATE_ENABLED: bool = os.getenv(
-        "CODEX_CLI_CONTRACT_GATE_ENABLED", "false"
+        "CODEX_CLI_CONTRACT_GATE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # H2.3 — Loop de autocorrección via codex exec resume.
     CODEX_CLI_AUTOCORRECT_ENABLED: bool = os.getenv(
-        "CODEX_CLI_AUTOCORRECT_ENABLED", "false"
+        "CODEX_CLI_AUTOCORRECT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     CODEX_CLI_AUTOCORRECT_MAX_RETRIES: int = int(
         os.getenv("CODEX_CLI_AUTOCORRECT_MAX_RETRIES", "2")
@@ -199,15 +199,23 @@ class Config:
     # H7.1 — Re-runs con exec resume + delta prompt para codex. OFF default; allowlist
     # CSV vacía = todos los proyectos (mismo patrón que CLAUDE_CODE_CLI_RESUME_*).
     CODEX_CLI_RESUME_ENABLED: bool = os.getenv(
-        "CODEX_CLI_RESUME_ENABLED", "false"
+        "CODEX_CLI_RESUME_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     CODEX_CLI_RESUME_PROJECTS: str = os.getenv("CODEX_CLI_RESUME_PROJECTS", "")
 
     # Claude Code CLI runtime
     CLAUDE_CODE_CLI_BIN = os.getenv("CLAUDE_CODE_CLI_BIN", "claude")
-    # Modelo por defecto FIJO para toda invocación del CLI (requisito operador):
-    # sonnet 4.6. Configurable vía .env; vacío = delegar al router (legacy).
-    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "claude-sonnet-4-6")
+    # Modelo por defecto FIJO para toda invocación del CLI (requisito operador,
+    # 2026-07-12: sonnet-5 pasó a ser el primario). Configurable vía .env;
+    # vacío = delegar al router (legacy).
+    CLAUDE_CODE_CLI_MODEL = os.getenv("CLAUDE_CODE_CLI_MODEL", "claude-sonnet-5")
+    # Modelo de FALLBACK: solo se usa si el intento con CLAUDE_CODE_CLI_MODEL
+    # falla casi de inmediato al arrancar (CLI rechaza --model, error de spawn,
+    # etc. — ver claude_code_cli_runner._spawn_claude_with_fallback). El runner
+    # reintenta UNA vez con este modelo antes de darse por vencido.
+    CLAUDE_CODE_CLI_MODEL_FALLBACK = os.getenv(
+        "CLAUDE_CODE_CLI_MODEL_FALLBACK", "claude-sonnet-4-6"
+    )
     # Reasoning effort del CLI (`--effort`). Valores válidos: low|medium|high.
     # Default fijo: medium. Vacío o inválido = no se pasa el flag.
     CLAUDE_CODE_CLI_EFFORT = os.getenv("CLAUDE_CODE_CLI_EFFORT", "medium")
@@ -236,11 +244,11 @@ class Config:
     # en vez de completed (la validación/persistencia de contract_result y
     # confidence corre SIEMPRE; esto solo gobierna el cambio de status).
     CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED", "false"
+        "CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # F1.3 — Loop de autocorrección sobre stdin al fin de cada turno.
     CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED", "false"
+        "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Cap de mensajes correctivos por run (plan: máx 1-2).
     CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES = int(
@@ -249,7 +257,7 @@ class Config:
     # F1.4 — settings.json efímero con hook PostToolUse de validación de
     # artifacts, pasado vía --settings. Solo hooks; NO toca permisos (§5.3).
     CLAUDE_CODE_CLI_HOOKS_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_HOOKS_ENABLED", "false"
+        "CLAUDE_CODE_CLI_HOOKS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Cómo se referencia la persona del agente (.agent.md) al CLI:
     #   "append" (default): vía --append-system-prompt-file se envía solo el
@@ -270,14 +278,14 @@ class Config:
     # F2.2 — Conocimiento del proyecto (anti-patterns/decisiones/constraints/
     # glossary) en el system prompt del CLI. Dueño único por tipo (anti B6).
     CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED", "false"
+        "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_PROJECTS = os.getenv(
         "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_PROJECTS", ""
     )
     # F2.3 — Re-runs con --resume + delta prompt (usa session_id de F1.2).
     CLAUDE_CODE_CLI_RESUME_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_RESUME_ENABLED", "false"
+        "CLAUDE_CODE_CLI_RESUME_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     CLAUDE_CODE_CLI_RESUME_PROJECTS = os.getenv(
         "CLAUDE_CODE_CLI_RESUME_PROJECTS", ""
@@ -322,7 +330,7 @@ class Config:
     STACKY_MEMORY_INJECT_SCOPES = os.getenv("STACKY_MEMORY_INJECT_SCOPES", "")
     # F2.1 — Stacky MCP server inyectado vía --mcp-config. Por proyecto, OFF default.
     CLAUDE_CODE_CLI_MCP_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_MCP_ENABLED", "false"
+        "CLAUDE_CODE_CLI_MCP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     CLAUDE_CODE_CLI_MCP_PROJECTS = os.getenv(
         "CLAUDE_CODE_CLI_MCP_PROJECTS", ""
@@ -353,16 +361,16 @@ class Config:
 
     # ── Plan 23 (Fase U0) — capa perceptible ───────────────────────────────
     STACKY_ADO_RUN_FOOTER_ENABLED: bool = os.getenv(
-        "STACKY_ADO_RUN_FOOTER_ENABLED", "false"
+        "STACKY_ADO_RUN_FOOTER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_WEBHOOKS_V2_ENABLED: bool = os.getenv(
-        "STACKY_WEBHOOKS_V2_ENABLED", "false"
+        "STACKY_WEBHOOKS_V2_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_DESKTOP_NOTIFY_ENABLED: bool = os.getenv(
-        "STACKY_DESKTOP_NOTIFY_ENABLED", "false"
+        "STACKY_DESKTOP_NOTIFY_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_LIVE_TELEMETRY_ENABLED: bool = os.getenv(
-        "STACKY_LIVE_TELEMETRY_ENABLED", "false"
+        "STACKY_LIVE_TELEMETRY_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # ── U1.2 — Self-review contra acceptance criteria ───────────────────────
     # off: no ejecuta review (retro-compat exacta)
@@ -384,7 +392,7 @@ class Config:
         os.getenv("STACKY_DIGEST_INTERVAL_HOURS", "0")
     )
     STACKY_PIPELINES_ENABLED: bool = os.getenv(
-        "STACKY_PIPELINES_ENABLED", "false"
+        "STACKY_PIPELINES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # ── V0.1 — Perfil del arnés aplicado en boot ──────────────────────────────
     # "" (default) = no aplicar perfil. "off"|"safe"|"full" = aplicar en startup,
@@ -413,7 +421,7 @@ class Config:
     )
     # E1.1 — Gate + pase correctivo único dirigido al fallo ejecutable.
     STACKY_EXEC_REPAIR_ENABLED: bool = os.getenv(
-        "STACKY_EXEC_REPAIR_ENABLED", "false"
+        "STACKY_EXEC_REPAIR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_EXEC_REPAIR_MAX_RETRIES: int = int(
         os.getenv("STACKY_EXEC_REPAIR_MAX_RETRIES", "1")
@@ -423,11 +431,11 @@ class Config:
         "STACKY_FAKE_GREEN_GUARD_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_FAKE_GREEN_GUARD_HARD: bool = os.getenv(
-        "STACKY_FAKE_GREEN_GUARD_HARD", "false"
+        "STACKY_FAKE_GREEN_GUARD_HARD", "true"
     ).lower() in ("1", "true", "yes")
     # E2.1 — Bloque exec_verification en el payload de la ejecución (read-only).
     STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED: bool = os.getenv(
-        "STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED", "false"
+        "STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # E2.2 — KPIs de verificación ejecutable en harness_health.
     STACKY_EXEC_VERIFICATION_KPIS_ENABLED: bool = os.getenv(
@@ -437,7 +445,7 @@ class Config:
     # ── Plan 32 — Contrato de Aceptación Ejecutable (A0.1-A2.2) ─────────────
     # A0.1 — Derivador de contrato + juez determinista.
     STACKY_ACCEPTANCE_CONTRACT_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_CONTRACT_ENABLED", "false"
+        "STACKY_ACCEPTANCE_CONTRACT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # off | annotate | gate
     STACKY_ACCEPTANCE_CONTRACT_MODE: str = os.getenv(
@@ -451,21 +459,21 @@ class Config:
     )
     # A1.1 — Inyección como blanco + gate + pase correctivo.
     STACKY_ACCEPTANCE_GATE_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_GATE_ENABLED", "false"
+        "STACKY_ACCEPTANCE_GATE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_ACCEPTANCE_REPAIR_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_REPAIR_ENABLED", "false"
+        "STACKY_ACCEPTANCE_REPAIR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES: int = int(
         os.getenv("STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES", "1")
     )
     # A1.2 — Guard de independencia (inmutabilidad del contrato).
     STACKY_ACCEPTANCE_INTEGRITY_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_INTEGRITY_ENABLED", "false"
+        "STACKY_ACCEPTANCE_INTEGRITY_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # A2.1 — Bloque acceptance_contract en el payload de la ejecución (read-only).
     STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED: bool = os.getenv(
-        "STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED", "false"
+        "STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # A2.2 — KPIs del contrato en harness_health.
     STACKY_ACCEPTANCE_KPIS_ENABLED: bool = os.getenv(
@@ -482,7 +490,7 @@ class Config:
     # ── Plan 58 — Bucle de convergencia de calidad determinista (épica) ────────
     # OFF por defecto: con OFF el pase correctivo de épica es single-shot (idéntico al actual).
     STACKY_QUALITY_CONVERGENCE_ENABLED: bool = os.getenv(
-        "STACKY_QUALITY_CONVERGENCE_ENABLED", "false"
+        "STACKY_QUALITY_CONVERGENCE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Máximo de PASES CORRECTIVOS del bucle (>=1). 1 == single-shot actual. Default 2.
     STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS: int = int(
@@ -496,7 +504,7 @@ class Config:
     # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
     # OFF por defecto: con OFF enrich_blocks es byte-idéntico al plan 64.
     STACKY_PROCESS_DISCIPLINE_ENABLED: bool = os.getenv(
-        "STACKY_PROCESS_DISCIPLINE_ENABLED", "false"
+        "STACKY_PROCESS_DISCIPLINE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 109 — Grafo documental READ-ONLY (default OFF, editable por UI) ───
@@ -614,7 +622,7 @@ class Config:
     # OFF default: tokenizer y ranking byte-idénticos. ON: fold de acentos +
     # sinónimos del dominio sobre el QUERY (corpus sin cambios).
     STACKY_RETRIEVAL_EXPANSION_ENABLED: bool = os.getenv(
-        "STACKY_RETRIEVAL_EXPANSION_ENABLED", "false"
+        "STACKY_RETRIEVAL_EXPANSION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── I2.1 — Re-ranking de bloques por relevancia al ticket ─────────────────
@@ -724,7 +732,7 @@ class Config:
     # Q1.1 — Pase correctivo único de criterios incumplidos.
     # OFF default: sin pase correctivo.
     STACKY_CRITERIA_REPAIR_ENABLED: bool = os.getenv(
-        "STACKY_CRITERIA_REPAIR_ENABLED", "false"
+        "STACKY_CRITERIA_REPAIR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_CRITERIA_REPAIR_MAX_RETRIES: int = int(
         os.getenv("STACKY_CRITERIA_REPAIR_MAX_RETRIES", "1")
@@ -733,7 +741,7 @@ class Config:
     # Q1.2 — Few-shot de outputs aprobados en runtimes CLI.
     # OFF default: CLI sin few-shot (byte-idéntico).
     STACKY_CLI_FEWSHOT_ENABLED: bool = os.getenv(
-        "STACKY_CLI_FEWSHOT_ENABLED", "false"
+        "STACKY_CLI_FEWSHOT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_CLI_FEWSHOT_K: int = int(os.getenv("STACKY_CLI_FEWSHOT_K", "2"))
     STACKY_CLI_FEWSHOT_PROJECTS: str = os.getenv("STACKY_CLI_FEWSHOT_PROJECTS", "")
@@ -749,24 +757,24 @@ class Config:
     # G0.1 — Gate de precondiciones determinista antes de lanzar el run.
     # OFF default: run_agent byte-idéntico.
     STACKY_RUN_PREFLIGHT_GATE_ENABLED: bool = os.getenv(
-        "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "false"
+        "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # G1.1 — Verificación post-create de que la task existe en ADO antes de
     # marcar consumed. OFF default: output_watcher byte-idéntico.
     STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED: bool = os.getenv(
-        "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED", "false"
+        "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # G1.2 — Grounding determinista de referencias del output (rutas/IDs).
     # OFF default: finalize_run byte-idéntico.
     STACKY_OUTPUT_GROUNDING_ENABLED: bool = os.getenv(
-        "STACKY_OUTPUT_GROUNDING_ENABLED", "false"
+        "STACKY_OUTPUT_GROUNDING_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # G1.2 — Pase correctivo de grounding via Q1.1 (solo si seam disponible).
     # Exige STACKY_CRITERIA_REPAIR_ENABLED y STACKY_OUTPUT_GROUNDING_ENABLED.
     STACKY_OUTPUT_GROUNDING_REPAIR: bool = os.getenv(
-        "STACKY_OUTPUT_GROUNDING_REPAIR", "false"
+        "STACKY_OUTPUT_GROUNDING_REPAIR", "true"
     ).lower() in ("1", "true", "yes")
 
     # G2.1 — KPIs de integridad en harness-health (read-only).
@@ -866,7 +874,7 @@ class Config:
     # ON: bajo confidence escala a Opus/max; alto confidence baja a Sonnet/low.
     # El override manual del operador (model/effort en el body del request) SIEMPRE gana.
     STACKY_ADAPTIVE_SELECTOR_ENABLED: bool = os.getenv(
-        "STACKY_ADAPTIVE_SELECTOR_ENABLED", "false"
+        "STACKY_ADAPTIVE_SELECTOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 54 — Memoria que empuja: rechazos como anti-patrones ────────────
@@ -1052,7 +1060,7 @@ class Config:
 
     # Plan 116 — Doctor de conexiones DevOps (determinista). Default OFF, editable por UI.
     STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", "false"
+        "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.

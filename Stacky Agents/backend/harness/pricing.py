@@ -20,9 +20,12 @@ import os
 logger = logging.getLogger("stacky.harness.pricing")
 
 # USD por millón de tokens (input, output). Match por prefijo de model id.
-# Anthropic: catálogo oficial 2026 (sonnet-4-6 = 3/15, haiku-4-5 = 1/5).
+# Anthropic: catálogo oficial 2026 (sonnet-5/sonnet-4-6 = 3/15, haiku-4-5 = 1/5).
 DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-4": (5.0, 25.0),
+    # Primario actual del CLI (config.CLAUDE_CODE_CLI_MODEL). Prefijo propio
+    # porque "claude-sonnet-5" NO matchea "claude-sonnet-4" (prefijos distintos).
+    "claude-sonnet-5": (3.0, 15.0),
     "claude-sonnet-4": (3.0, 15.0),
     "claude-haiku-4": (1.0, 5.0),
     "claude-fable-5": (10.0, 50.0),

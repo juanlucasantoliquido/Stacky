@@ -37,7 +37,7 @@ class TestFlagOff:
                 backend="anthropic",
             )
         # developer default es sonnet; S con flag OFF no debería degradar a haiku
-        assert d.model == "claude-sonnet-4-6"
+        assert d.model == "claude-sonnet-5"
 
     def test_flag_off_XL_does_not_upgrade_if_already_handled(self):
         """Con flag OFF las reglas I1.2 no se aplican. XL ya tiene regla existente."""
@@ -50,7 +50,7 @@ class TestFlagOff:
                 backend="anthropic",
             )
         # XL ya tiene regla preexistente → sonnet
-        assert d.model == "claude-sonnet-4-6"
+        assert d.model == "claude-sonnet-5"
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ class TestDowngradeByLowComplexity:
                 backend="anthropic",
             )
         # M = default por agente = sonnet
-        assert d.model == "claude-sonnet-4-6"
+        assert d.model == "claude-sonnet-5"
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ class TestUpgradeByHighComplexity:
                 fingerprint_complexity="L",
                 backend="anthropic",
             )
-        assert d.model == "claude-sonnet-4-6"
+        assert d.model == "claude-sonnet-5"
         assert "complexity=L" in d.reason or "L" in d.reason or "sonnet" in d.reason.lower()
 
     def test_XL_complexity_upgrade_to_sonnet(self):
@@ -137,7 +137,7 @@ class TestUpgradeByHighComplexity:
                 fingerprint_complexity="XL",
                 backend="anthropic",
             )
-        assert d.model == "claude-sonnet-4-6"
+        assert d.model == "claude-sonnet-5"
 
 
 # ---------------------------------------------------------------------------

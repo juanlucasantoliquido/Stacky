@@ -12,11 +12,14 @@ interface Props {
   onRerun?: (model: string) => void;
 }
 
-const ALT_MODELS = ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"];
+const ALT_MODELS = ["claude-opus-4-7", "claude-sonnet-5", "claude-haiku-4-5"];
 
 const MODEL_LABEL: Record<string, string> = {
   "claude-opus-4-7": "Opus",
-  "claude-sonnet-4-6": "Sonnet",
+  "claude-sonnet-5": "Sonnet",
+  // Fallback del CLI (config.CLAUDE_CODE_CLI_MODEL_FALLBACK) — sigue siendo
+  // un modelo Claude válido que puede aparecer en decision.model.
+  "claude-sonnet-4-6": "Sonnet 4.6 (fallback)",
   "claude-haiku-4-5": "Haiku",
 };
 

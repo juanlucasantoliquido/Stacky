@@ -204,6 +204,23 @@ def start_claude_code_cli_run(
     return execution_id
 
 
+# R1.2 — Tickets pool cuyos runs son ONE-SHOT (sin consola conversacional):
+# apenas llega el `result` terminal se cierra stdin y la sesión sale limpia.
+#   -1 = brief→épica (comportamiento histórico)
+#   -7 = Documentador (plan 113, doc_documenter._CONVERSATION_ADO_ID): pipeline
+#        autónomo en background — nadie responde por consola; sin esto el
+#        proceso quedaba vivo esperando input del operador y el run del
+#        Documentador se colgaba hasta el timeout (1800s).
+# Las consolas multi-turno reales (-3 doctor, -4 DevOps, -5 remota, -6 PRs y
+# tickets positivos) NO van acá: siguen conversacionales.
+_ONE_SHOT_ADO_IDS = frozenset({-1, -7})
+
+
+def _is_one_shot(t_ado_id) -> bool:
+    """True si el ticket pool corre en modo one-shot (cerrar al primer result)."""
+    return t_ado_id in _ONE_SHOT_ADO_IDS
+
+
 def cancel(execution_id: int, *, grace_seconds: float = 8.0) -> bool:
     """Cierra la sesión Claude Code CLI de forma ordenada.
 
@@ -258,6 +275,121 @@ def _format_cli_error(return_code: int | None, stderr_excerpt: str) -> str:
     if stderr_excerpt:
         return f"{base}: {stderr_excerpt[:500]}"
     return base
+
+
+# ── Fallback sonnet-5 → sonnet-4-6 en el spawn ───────────────────────────────
+# El operador fijó sonnet-5 como modelo PRIMARIO del CLI (config.CLAUDE_CODE_CLI_MODEL,
+# nuevo default) con sonnet-4-6 como FALLBACK (config.CLAUDE_CODE_CLI_MODEL_FALLBACK):
+# si el binario `claude` rechaza --model (versión vieja del CLI sin soporte para
+# sonnet-5 todavía, typo de configuración, etc.) el runner reintenta UNA vez con
+# el fallback antes de darse por vencido. Ambos intentos quedan logueados.
+_MODEL_FAILURE_GRACE_SEC = 2.0
+_MODEL_FAILURE_PATTERNS = (
+    "unknown model",
+    "invalid model",
+    "model not found",
+    "no such model",
+    "unsupported model",
+    "unrecognized model",
+    "not a valid model",
+    "model_not_found",
+    "does not exist",
+)
+
+
+def _looks_like_model_error(stderr_text: str) -> bool:
+    """Heurística: ¿el stderr sugiere que el CLI rechazó --model?
+
+    No hay contrato documentado del mensaje real del binario `claude`, así que
+    esto es best-effort (ver docstring del módulo, supuesto §6). Un exit-code
+    != 0 dentro de la ventana de gracia YA dispara el reintento en
+    `_spawn_claude_with_fallback` aunque este helper no matchee nada — el
+    matching solo enriquece el log, no es la condición de reintento.
+    """
+    low = (stderr_text or "").lower()
+    return any(p in low for p in _MODEL_FAILURE_PATTERNS)
+
+
+def _spawn_claude_with_fallback(
+    *,
+    primary_model: str,
+    fallback_model: str | None,
+    build_cmd,
+    cwd,
+    creationflags: int,
+    env: dict,
+    log,
+) -> tuple[subprocess.Popen, list[str], str]:
+    """Lanza `claude` con `primary_model`; si falla rápido, reintenta con `fallback_model`.
+
+    "Falla rápido" = el proceso termina (poll() != None) dentro de
+    `_MODEL_FAILURE_GRACE_SEC` desde el spawn. Un run real de Claude Code nunca
+    termina en <2s (el turno tarda segundos/minutos), así que una salida dentro
+    de esa ventana es atribuible al spawn/modelo (CLI rechaza --model, error de
+    spawn, etc.), no a un turno legítimo corto.
+
+    Se reintenta A LO SUMO UNA VEZ (primary → fallback, nunca un loop). El
+    `proc` del ÚLTIMO intento disponible se devuelve SIEMPRE tal cual —
+    vivo o ya muerto — sin que este helper toque sus streams: si hasta el
+    fallback falla, el manejo de exit-code/stderr preexistente aguas abajo
+    (que lee proc.stdout/stderr en threads propios) sigue cubriendo ese caso
+    exactamente igual que antes de este cambio. Solo se hace un `communicate()`
+    (para loguear el motivo) sobre los intentos INTERMEDIOS que se descartan.
+
+    Devuelve (proc, cmd_usado, modelo_efectivo).
+    """
+    attempts = [primary_model]
+    if fallback_model and fallback_model != primary_model:
+        attempts.append(fallback_model)
+
+    for i, model in enumerate(attempts):
+        is_last_attempt = i == len(attempts) - 1
+        cmd = build_cmd(model)
+        log("info", f"claude code cli intento {i + 1}/{len(attempts)} con modelo {model!r}")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(cwd),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            creationflags=creationflags,
+            env=env,
+        )
+
+        if is_last_attempt:
+            # Nada más para reintentar: se devuelve tal cual (vivo o no) y el
+            # manejo de error preexistente hace su trabajo si murió.
+            return proc, cmd, model
+
+        deadline = time.time() + _MODEL_FAILURE_GRACE_SEC
+        while proc.poll() is None and time.time() < deadline:
+            time.sleep(0.05)
+
+        if proc.poll() is None:
+            # Sigue vivo pasada la ventana de gracia: arranque exitoso.
+            return proc, cmd, model
+
+        # Terminó dentro de la ventana de gracia y hay fallback disponible:
+        # se descarta este proceso (nadie más va a leer sus streams) y se
+        # reintenta con el siguiente modelo de la lista.
+        try:
+            _, err_text = proc.communicate(timeout=2)
+        except Exception:  # noqa: BLE001 — ya está muerto, best-effort
+            err_text = ""
+        rc = proc.returncode
+        model_error = _looks_like_model_error(err_text)
+        log(
+            "warn",
+            f"claude code cli terminó de inmediato con modelo {model!r} (rc={rc}, "
+            f"¿error de modelo?={model_error}); reintentando con fallback {attempts[i + 1]!r}",
+        )
+
+    # Inalcanzable: el loop siempre retorna en la última iteración (is_last_attempt).
+    raise RuntimeError("_spawn_claude_with_fallback: no se pudo lanzar claude con ningún modelo")
 
 
 def _classify_run_outcome(
@@ -715,20 +847,15 @@ def _run_in_background(
         if effort_override:
             log("info", f"effort_override explícito → {effort_override} (prioridad sobre adaptativo)")
 
-        cmd = _build_command(
-            model_override=routed_model,
-            system_prompt_file=system_prompt_file,
-            settings_file=hooks_settings_file,
-            mcp_config_file=mcp_config_file,
-            resume_session_id=resume_session_id,
-            effort_override=_effective_effort,
-        )
-        log("info", f"claude code cli cwd={cwd}")
-        log("info", "claude code cli command: " + _display_command(cmd))
-        log(
-            "info",
-            f"loaded {len(all_agents)} Stacky agent prompt(s); selected {selected_agent.filename}",
-        )
+        def _build_cli_command(model_for_attempt: str) -> list[str]:
+            return _build_command(
+                model_override=model_for_attempt,
+                system_prompt_file=system_prompt_file,
+                settings_file=hooks_settings_file,
+                mcp_config_file=mcp_config_file,
+                resume_session_id=resume_session_id,
+                effort_override=_effective_effort,
+            )
 
         creationflags = 0
         if os.name == "nt":
@@ -738,19 +865,34 @@ def _run_in_background(
         # hasta que el operador la cierra/cancela o Claude termina por su cuenta.
         session_timeout = config.CLAUDE_CODE_CLI_TIMEOUT if config.CLAUDE_CODE_CLI_TIMEOUT > 0 else None
 
-        proc = subprocess.Popen(
-            cmd,
-            cwd=str(cwd),
-            stdin=subprocess.PIPE,      # interactivo: prompt + respuestas del operador
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
+        # Primario sonnet-5 (routed_model) con fallback a
+        # config.CLAUDE_CODE_CLI_MODEL_FALLBACK (sonnet-4-6 por default) si el
+        # CLI rechaza el primero casi de inmediato (spawn error, --model
+        # inválido, etc.). Ver _spawn_claude_with_fallback.
+        proc, cmd, _effective_model = _spawn_claude_with_fallback(
+            primary_model=routed_model or "",
+            fallback_model=(config.CLAUDE_CODE_CLI_MODEL_FALLBACK or None),
+            build_cmd=_build_cli_command,
+            cwd=cwd,
             creationflags=creationflags,
             env=build_agent_env(extra={"STACKY_EXECUTION_ID": str(execution_id)}),
+            log=log,
         )
+        if _effective_model != routed_model:
+            log(
+                "warn",
+                f"claude code cli usó el modelo fallback {_effective_model!r} "
+                f"(primario {routed_model!r} no arrancó)",
+            )
+        routed_model = _effective_model
+
+        log("info", f"claude code cli cwd={cwd}")
+        log("info", "claude code cli command: " + _display_command(cmd))
+        log(
+            "info",
+            f"loaded {len(all_agents)} Stacky agent prompt(s); selected {selected_agent.filename}",
+        )
+
         spawn_epoch = time.time()
         log("info", f"claude code cli process started pid={proc.pid}")
         with _PROCESSES_LOCK:
@@ -852,10 +994,10 @@ def _run_in_background(
         # R1.2 — ¿el agente emitió un `result` terminal exitoso? Si sí, el run
         # completó su trabajo aunque después la sesión quede ociosa.
         _result_ok_seen: list[bool] = [False]
-        # R1.2 — run de un solo turno (brief→épica usa el pool ticket ado_id=-1):
-        # no hay conversación in-page, así que cerramos stdin apenas llega el
-        # result terminal para salir limpio sin esperar al watchdog.
-        _one_shot = (t_ado_id == -1)
+        # R1.2 — run de un solo turno (pipelines sin consola conversacional):
+        # cerramos stdin apenas llega el result terminal para salir limpio sin
+        # esperar al watchdog ni al operador.
+        _one_shot = _is_one_shot(t_ado_id)
 
         def _on_stream_event(event: dict) -> None:
             nonlocal last_telemetry_emit
@@ -1759,7 +1901,7 @@ def _check_cli_egress(
     Nunca lanza: cualquier error interno → None (best-effort, no bloquea el run).
     """
     import os as _os  # noqa: PLC0415 — evitar shadowing del módulo os del módulo
-    if _os.environ.get("STACKY_CLI_EGRESS_ENABLED", "false").lower() not in {"1", "true", "yes"}:
+    if _os.environ.get("STACKY_CLI_EGRESS_ENABLED", "true").lower() not in {"1", "true", "yes"}:
         return None
     try:
         from services import egress_policies  # noqa: PLC0415

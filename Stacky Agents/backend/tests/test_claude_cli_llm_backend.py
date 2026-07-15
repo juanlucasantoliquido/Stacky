@@ -92,6 +92,64 @@ def test_claude_cli_backend_timeout_raises(monkeypatch):
     assert "timeout" in str(ei.value).lower()
 
 
+def test_claude_cli_backend_falls_back_to_sonnet46_on_model_rejection(monkeypatch):
+    """Primario (config.CLAUDE_CODE_CLI_MODEL, sonnet-5) rechazado -> reintenta
+    UNA vez con config.CLAUDE_CODE_CLI_MODEL_FALLBACK (sonnet-4-6) y loguea ambos."""
+    monkeypatch.setattr(config, "LLM_BACKEND", "claude_cli")
+    monkeypatch.setattr(config, "CLAUDE_CODE_CLI_MODEL", "claude-sonnet-5")
+    monkeypatch.setattr(config, "CLAUDE_CODE_CLI_MODEL_FALLBACK", "claude-sonnet-4-6")
+    monkeypatch.setattr(copilot_bridge, "_resolve_claude_bin", lambda: "claude")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        model_arg = cmd[cmd.index("--model") + 1]
+        if model_arg == "claude-sonnet-5":
+            return _completed(stderr="unknown model 'claude-sonnet-5'", rc=1)
+        return _completed(stdout=json.dumps({
+            "type": "result", "subtype": "success", "is_error": False,
+            "result": "RESPUESTA-FALLBACK",
+            "usage": {"input_tokens": 5, "output_tokens": 2},
+        }))
+
+    monkeypatch.setattr(copilot_bridge.subprocess, "run", fake_run)
+    _logs, on_log = _collector()
+    resp = copilot_bridge.invoke(agent_type="technical", system="SYS", user="USR", on_log=on_log)
+
+    assert resp.text == "RESPUESTA-FALLBACK"
+    assert resp.metadata["model"] == "claude-sonnet-4-6"
+    assert len(calls) == 2
+    assert calls[0][calls[0].index("--model") + 1] == "claude-sonnet-5"
+    assert calls[1][calls[1].index("--model") + 1] == "claude-sonnet-4-6"
+    warn_logs = [msg for level, msg in _logs if level == "warn"]
+    assert any("reintentando con fallback" in msg for msg in warn_logs)
+
+
+def test_claude_cli_backend_explicit_model_never_falls_back(monkeypatch):
+    """Un `model=` explícito del caller (no el default de config) NUNCA degrada
+    en silencio a otro modelo — si falla, se propaga el error tal cual."""
+    monkeypatch.setattr(config, "LLM_BACKEND", "claude_cli")
+    monkeypatch.setattr(config, "CLAUDE_CODE_CLI_MODEL_FALLBACK", "claude-sonnet-4-6")
+    monkeypatch.setattr(copilot_bridge, "_resolve_claude_bin", lambda: "claude")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return _completed(stderr="boom", rc=1)
+
+    monkeypatch.setattr(copilot_bridge.subprocess, "run", fake_run)
+    _logs, on_log = _collector()
+    with pytest.raises(RuntimeError):
+        copilot_bridge._invoke_claude_cli(
+            agent_type="technical", system="SYS", user="USR", on_log=on_log,
+            execution_id=None, model="claude-haiku-4-5",
+        )
+    # Un solo intento: el override explícito no dispara el fallback de config.
+    assert len(calls) == 1
+
+
 def test_parse_claude_cli_json_variants():
     text, tin, tout, finish = copilot_bridge._parse_claude_cli_json(
         json.dumps({"result": "ok", "usage": {"input_tokens": 3, "output_tokens": 4}, "subtype": "success"})

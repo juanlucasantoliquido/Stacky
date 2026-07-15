@@ -49,10 +49,12 @@ def test_flag_spec_bool_not_env_only_requires_panel():
     assert s.requires == "STACKY_DEVOPS_PANEL_ENABLED"
 
 
-def test_flag_default_off_in_config():
-    # Sin STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED en el env → atributo False.
+def test_flag_default_on_in_config():
+    # Sin STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED en el env → atributo True
+    # (promovido 2026-07-15: diagnóstico determinista, solo con click del
+    # operador, sin costo; ninguna de las 4 excepciones duras aplica).
     from config import Config
-    assert Config().STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED is False
+    assert Config().STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED is True
 
 
 def test_health_payload_has_connection_doctor_key(monkeypatch):

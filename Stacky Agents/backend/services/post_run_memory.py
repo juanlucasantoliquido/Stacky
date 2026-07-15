@@ -191,7 +191,7 @@ _OPERATOR_NOTE_MAX = 2000
 
 
 def _operator_note_enabled() -> bool:
-    return os.getenv("STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED", "false").lower() in {
+    return os.getenv("STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED", "true").lower() in {
         "1", "true", "on", "yes",
     }
 

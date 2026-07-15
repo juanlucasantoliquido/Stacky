@@ -84,7 +84,7 @@ def memory_injection_enabled(project_name: str | None) -> bool:
     """
     import os
 
-    master = os.getenv("STACKY_MEMORY_INJECTION_ENABLED", "false").lower() in {
+    master = os.getenv("STACKY_MEMORY_INJECTION_ENABLED", "true").lower() in {
         "1",
         "true",
         "on",

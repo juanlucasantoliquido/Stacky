@@ -2680,6 +2680,9 @@ export interface DocumenterStatusResponse {
   run_id?: string;
   state?: string;
   current_mode?: string | null;
+  /** Fix "no me hizo nada" (Tarea 2) — execution_id en curso para enganchar
+   *  la consola en vivo (CodexConsoleDock) mientras el modo actual corre. */
+  current_execution_id?: number | null;
   written?: string[];
   skipped?: [string, string][];
   health_before?: DocumenterHealth | null;
@@ -3652,6 +3655,15 @@ export const LocalLlmApi = {
       model: string;
       execution_id: number;
     }>("/api/llm/suggest-pipeline", body),
+  /** Analiza el estado de un ticket con el modelo local usando TODO su contexto (HITL, sin tools). */
+  ticketInsight: (ticketId: number, body?: { model?: string; question?: string }) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      execution_id: number;
+      context_stats: { has_epic: boolean; children: number; comments: number; executions: number };
+    }>(`/api/llm/ticket-insight/${ticketId}`, body ?? {}),
 };
 
 /** Plan 122 — núcleo del Comparador de BD entre ambientes (serie 122-126). */

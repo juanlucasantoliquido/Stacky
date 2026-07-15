@@ -441,9 +441,9 @@ def create_app() -> Flask:
         logger.info("local insights daemon armed")
 
     # ── Plan 60 — Aprendizaje bidireccional de ediciones humanas en ADO ──────
-    # STACKY_ADO_EDIT_LEARNING_ENABLED=false => apagado (default, byte-idéntico).
+    # STACKY_ADO_EDIT_LEARNING_ENABLED=true => default ON (promovido 2026-07-15).
     _ado_edit_learning_on = os.environ.get(
-        "STACKY_ADO_EDIT_LEARNING_ENABLED", "false"
+        "STACKY_ADO_EDIT_LEARNING_ENABLED", "true"
     ).strip().lower() in ("1", "true", "on", "yes")
     if _ado_edit_learning_on:
         _ado_edit_seconds = int(os.environ.get("STACKY_ADO_EDIT_SWEEP_HOURS", "6")) * 3600

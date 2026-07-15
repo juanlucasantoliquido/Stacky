@@ -20,11 +20,14 @@ import type { AgentRuntime } from "../types";
 import styles from "./EpicFromBriefModal.module.css";
 
 // Plan 43 F3 — modelos para claude_code_cli. Opus 4.8 es de primera clase en brief→épica
-// (backend pasa allow_opus=True). Sonnet 4.6 es el default. Haiku 4.5 (id válido) opcional.
+// (backend pasa allow_opus=True). Sonnet 5 es el default/primario (config.CLAUDE_CODE_CLI_MODEL);
+// sonnet-4-6 sigue siendo un modelo Claude válido — ahora el fallback del CLI ante fallo de
+// arranque del primario, y también seleccionable acá como opción explícita. Haiku 4.5 opcional.
 const CLAUDE_MODELS: { value: string; label: string }[] = [
-  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (recomendado)" },
+  { value: "claude-sonnet-5", label: "Sonnet 5 (recomendado)" },
   { value: "claude-opus-4-8", label: "Opus 4.8 (mayor calidad, más lento, mayor costo)" },
   { value: "claude-haiku-4-5", label: "Haiku 4.5 (más rápido, menor costo)" },
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (fallback del CLI)" },
 ];
 
 // Plan 43 F3 — efforts oficiales de Claude CLI con matriz de soporte por modelo.
@@ -93,7 +96,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   const [createdAdoId, setCreatedAdoId] = useState<number | null>(null);
 
   // Plan 42 F3 — selector de modelo y esfuerzo.
-  const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-4-6");
+  const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5");
   const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
   // Plan 45 F3 — selector de tipo de work item (Epic | Issue).
   const [workItemType, setWorkItemType] = useState<"Epic" | "Issue">("Epic");
@@ -145,9 +148,9 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
 
   function handleRuntimeChange(rt: AgentRuntime) {
     setAgentRuntime(rt);
-    // Plan 42 F3 — resetear modelo a sonnet-4-6 si el runtime no es claude_code_cli.
+    // Plan 42 F3 — resetear modelo a sonnet-5 (primario) si el runtime no es claude_code_cli.
     if (rt !== "claude_code_cli") {
-      setSelectedModel("claude-sonnet-4-6");
+      setSelectedModel("claude-sonnet-5");
     }
     // Plan 43 F2 — el probe se dispara vía useEffect([agentRuntime]); no abrir config automáticamente.
   }

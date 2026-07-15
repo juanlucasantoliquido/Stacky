@@ -296,6 +296,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Gate de contrato (claude)",
         description="F1.1 — Si ON, outputs con errores duros degradan el run a needs_review.",
         group="claude_code_cli",
@@ -303,6 +304,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Autocorrección stdin (claude)",
         description="F1.3 — Loop de autocorrección al fin de cada turno via stdin.",
         group="claude_code_cli",
@@ -319,6 +321,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_HOOKS_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Hooks PostToolUse (claude)",
         description="F1.4 — settings.json efímero con hook de validación de artifacts.",
         group="claude_code_cli",
@@ -326,6 +329,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Conocimiento de proyecto (claude)",
         description="F2.2 — Anti-patrones/decisiones/constraints/glosario en el system prompt.",
         group="claude_code_cli",
@@ -341,6 +345,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_RESUME_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Resume de sesión (claude)",
         description="F2.3 — Re-runs con --resume + delta prompt.",
         group="claude_code_cli",
@@ -356,6 +361,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_MCP_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="MCP server (claude)",
         description="F2.1 — Stacky MCP server inyectado vía --mcp-config.",
         group="claude_code_cli",
@@ -416,6 +422,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_MEMORY_INJECTION_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Inyección de memoria colaborativa",
         description="F2.5 — Inyecta observaciones curadas en el user prompt.",
         group="global",
@@ -480,6 +487,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_CLI_EGRESS_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Egress check en CLI (claude + codex)",
         description=(
             "H3.3 — Si ON, corre egress_policies.check sobre el prompt final de cada "
@@ -492,6 +500,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CODEX_CLI_CONTRACT_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Gate de contrato (codex)",
         description="H2.1 — Si ON, outputs con errores duros degradan el run a needs_review.",
         group="codex_cli",
@@ -499,6 +508,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CODEX_CLI_AUTOCORRECT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Autocorrección exec resume (codex)",
         description="H2.3 — Loop de autocorrección al fin del run via codex exec resume.",
         group="codex_cli",
@@ -543,6 +553,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CODEX_CLI_RESUME_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Resume de sesión (codex)",
         description="H7.1 — Re-runs con codex exec resume + delta prompt (paridad con claude F2.3).",
         group="codex_cli",
@@ -595,6 +606,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ADO_RUN_FOOTER_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Firma visible Stacky en ADO",
         description="U0.2 — Agrega footer con agente/runtime/modelo/run en comentarios y tasks.",
         group="global",
@@ -602,6 +614,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_WEBHOOKS_V2_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Webhooks v2 multi-runtime",
         description="U0.3 — Emite exec.completed/failed/needs_review para todos los runtimes.",
         group="global",
@@ -609,6 +622,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_DESKTOP_NOTIFY_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Notificación desktop global",
         description="U0.4 — Toast del SO al cerrar runs, incluso fuera del browser.",
         group="global",
@@ -616,6 +630,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_LIVE_TELEMETRY_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Telemetría en vivo en consola",
         description="U0.5 — Emite eventos SSE telemetry con turnos/tokens/costo durante el run.",
         group="global",
@@ -654,6 +669,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_PIPELINES_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Pipelines orquestados",
         description="U2.1 — Habilita /api/pipelines y encadenamiento por etapas con pausa en fallos.",
         group="global",
@@ -676,6 +692,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_RUN_ADVISOR_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Advisor de runtime/modelo (recomendación)",
         description=(
             "V1.2 — Si ON, el endpoint /advise recomienda runtime+modelo según los "
@@ -803,6 +820,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_RETRIEVAL_EXPANSION_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Expansión de query en retrieval",
         description=(
             "I2.3 — Fold de acentos + sinónimos del dominio sobre el query de "
@@ -997,6 +1015,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_CRITERIA_REPAIR_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Pase correctivo de criterios incumplidos",
         description=(
             "Q1.1 — Si self-review detecta criterios incumplidos, envía un único "
@@ -1020,6 +1039,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_CLI_FEWSHOT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Few-shot de outputs aprobados (runtimes CLI)",
         description=(
             "Q1.2 — Inyecta ejemplos de outputs aprobados del mismo agente/proyecto "
@@ -1064,6 +1084,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_RUN_PREFLIGHT_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Gate de precondiciones pre-run (G0.1)",
         description=(
             "G0.1 — Verifica precondiciones deterministas antes de lanzar el run: "
@@ -1077,6 +1098,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Verificación post-create de task en ADO (G1.1)",
         description=(
             "G1.1 — Después del POST auto-create, verifica vía ado_read_cache que "
@@ -1089,6 +1111,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_OUTPUT_GROUNDING_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Grounding de referencias del output (G1.2)",
         description=(
             "G1.2 — Extrae rutas/IDs del output y verifica su existencia "
@@ -1100,6 +1123,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_OUTPUT_GROUNDING_REPAIR",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Pase correctivo de grounding (G1.2)",
         description=(
             "G1.2 — Si hay referencias no ancladas y Q1.1 (STACKY_CRITERIA_REPAIR_ENABLED) "
@@ -1195,6 +1219,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_EXEC_REPAIR_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Pase correctivo ante fallo ejecutable (E1.1)",
         description=(
             "E1.1 — Si verificación en modo 'gate' detecta hard failures, intenta un "
@@ -1227,6 +1252,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_FAKE_GREEN_GUARD_HARD",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Guard anti-verde-falso: hard fail",
         description=(
             "E1.2 — Si ON, verde-falso detectado es HARD (gateable); por defecto es soft-warn."
@@ -1236,6 +1262,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Card de verificación ejecutable en verdict (E2.1)",
         description=(
             "E2.1 — Incluye el bloque exec_verification en el payload de la ejecución "
@@ -1259,6 +1286,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ACCEPTANCE_CONTRACT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Contrato de aceptación ejecutable (A0.1)",
         description=(
             "A0.1 — Deriva chequeos ejecutables desde el ticket (LLM bajo clamp_model), "
@@ -1298,6 +1326,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ACCEPTANCE_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Gate del contrato de aceptación (A1.1)",
         description=(
             "A1.1 — Ejecuta los chequeos del contrato en finalize_run. "
@@ -1308,6 +1337,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ACCEPTANCE_REPAIR_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Pase correctivo del contrato (A1.1)",
         description=(
             "A1.1 — Único pase correctivo dirigido al chequeo en rojo. Solo runtimes "
@@ -1329,6 +1359,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ACCEPTANCE_INTEGRITY_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Guard de independencia del contrato (A1.2)",
         description=(
             "A1.2 — Los artefactos del contrato se ejecutan desde ubicación de solo-arnés. "
@@ -1340,6 +1371,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Card de contrato en verdict (A2.1)",
         description=(
             "A2.1 — Incluye acceptance_contract en el payload de la ejecución (read-only). "
@@ -1459,6 +1491,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_INJECT_PROCESS_CATALOG",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Inyección de diccionario de procesos en context (F0)",
         description=(
             "Plan 42 F0 — Si ON, inyecta un bloque 'process-catalog' construido desde "
@@ -1471,6 +1504,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_RAG_CATALOG_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="RAG catálogo de procesos",
         description=(
             "Plan 64 — Si ON, inyecta solo los top-K procesos más relevantes al ticket "
@@ -1622,6 +1656,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Disciplina de procesos: reusar por default (Plan 67)",
         description=(
             "Plan 67 — Si ON, inyecta un bloque 'process-discipline' que decide "
@@ -1635,6 +1670,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Preflight de grounding en épica (F2)",
         description=(
             "Plan 42 F2 — Si ON, antes de publicar la épica en ADO verifica que el "
@@ -1648,6 +1684,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_EPIC_SUMMARY_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Resumen post-épica accionable (F4)",
         description=(
             "Plan 42 F4 — Si ON, tras publicar la épica adjunta en metadata['epic_summary'] "
@@ -1660,6 +1697,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_PROJECT_AUTOPROFILE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Auto-perfilado de proyecto desde docs (F5)",
         description=(
             "Plan 42 F5 — Si ON, habilita GET /api/projects/{project}/autoprofile que "
@@ -1708,6 +1746,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Nota del operador → memoria",
         description=(
             "Plan 47 — Si ON, la nota humana de una run revisada se guarda como "
@@ -1749,6 +1788,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ARTIFACT_RESCUE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Rescate de épica desde disco",
         description=(
             "Plan 47 — Si ON, cuando el agente narra en vez de devolver el HTML "
@@ -1844,7 +1884,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 51 F3 — Si ON, ante defectos no reparables (huecos RF, bloques "
             "vacíos) bloquea el autopublish de la épica (needs_review) y dispara "
             "un pase correctivo inline ante defectos de forma reparables. "
-            "Caso feliz = 0 tokens extra. Default OFF."
+            "Caso feliz = 0 tokens extra. Default OFF. Barrido 2026-07-15: se intentó "
+            "promover a ON y se revirtió — bloquea publish en fixtures de test con "
+            "HTML de épica mínimo/sintético en archivos no evidentes desde acá "
+            "(ver test_autopublish_rescue.py); necesita auditoría de fixtures."
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en api/tickets y el runner CLI
@@ -1866,6 +1909,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_TASK_GATE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Gate determinista del flujo funcional (Task)",
         description=(
             "Plan 61 — Si ON, clasifica defectos del pending-task.json antes de crear "
@@ -1878,6 +1922,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_TASK_GATE_BLOCKING",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Bloqueo del flujo funcional (Task)",
         description=(
             "Plan 61 — Requiere STACKY_TASK_GATE_ENABLED. Si ON, un defecto de "
@@ -1906,6 +1951,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ADAPTIVE_SELECTOR_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Selector adaptativo modelo/effort (Plan 53)",
         description=(
             "Plan 53 — Si ON, ajusta automáticamente modelo y effort según el "
@@ -1988,6 +2034,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_QUALITY_CONVERGENCE_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Bucle de convergencia de calidad (épica)",
         description=(
             "Plan 58 — Si ON, el pase correctivo de épica re-evalúa el gate y reintenta "
@@ -2010,6 +2057,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_ADO_EDIT_LEARNING_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Aprender de ediciones en ADO (plan 60)",
         description=(
             "Plan 60 — Si ON, Stacky lee de vuelta las correcciones humanas del WI publicado "
@@ -2073,7 +2121,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "TrackerProvider (get_tracker_provider) en vez de por "
             "_ado_client_for_ticket; cae al fallback ADO si el provider del "
             "proyecto no está disponible (ej. GitLab sin STACKY_GITLAB_ENABLED). "
-            "OFF (default): byte-idéntico al comportamiento pre-Plan-70."
+            "OFF (default): byte-idéntico al comportamiento pre-Plan-70. "
+            "Barrido 2026-07-15: se intentó promover a ON pero se revirtió — "
+            "rompe tests que mockean _ado_client_for_ticket directamente en vez del "
+            "provider (ver test_epic_grounding.py); necesita pase de migración "
+            "dedicado, no un flip ciego."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
@@ -2087,7 +2139,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "enrutan por el sub-puerto CIProvider (AdoCIProvider / GitLabCIProvider) "
             "en vez de llamar directamente a infer_pipeline. Habilita inferencia CI "
             "agnóstica del tracker (ADO + GitLab). OFF (default): comportamiento "
-            "pre-Plan-71 byte-idéntico."
+            "pre-Plan-71 byte-idéntico. Barrido 2026-07-15: revertido por el mismo "
+            "riesgo de ruteo por puerto que STACKY_TICKETS_PROVIDER_ENABLED (familia "
+            "Plan 70/71); no se probó exhaustivamente, se deja OFF por precaución."
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
@@ -2437,6 +2491,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",
         type="bool",
+        default=True,  # promovida a default ON (operador 2026-07-15, barrido de flags 122-141 + revision general)
         label="Doctor de conexiones DevOps (Plan 116)",
         description=(
             "Plan 116 — Tira de salud de conexiones en el panel DevOps: diagnostica "

@@ -5891,7 +5891,12 @@ def _epic_sanitize_enabled() -> bool:
 
 
 def _epic_gate_enabled() -> bool:
-    """Plan 51 F3 — lee STACKY_EPIC_GATE_ENABLED (default OFF)."""
+    """Plan 51 F3 — lee STACKY_EPIC_GATE_ENABLED (default OFF).
+    Barrido 2026-07-15: se intentó promover a ON pero se revirtió — bloquea
+    publish en muchos fixtures de test que usan HTML de épica mínimo/sintético
+    (rf_empty_body y similares), con acoplamiento amplio no evidente desde el
+    docstring (ver test_autopublish_rescue.py). Necesita auditoría de fixtures
+    antes de promoverse, no un flip ciego."""
     return os.getenv("STACKY_EPIC_GATE_ENABLED", "false").strip().lower() == "true"
 
 
@@ -5914,13 +5919,13 @@ def _regression_gate_blocking() -> bool:
 
 
 def _task_gate_enabled() -> bool:
-    """Plan 61 F0 — lee STACKY_TASK_GATE_ENABLED (default OFF)."""
-    return os.getenv("STACKY_TASK_GATE_ENABLED", "false").strip().lower() == "true"
+    """Plan 61 F0 — lee STACKY_TASK_GATE_ENABLED (default ON, promovido 2026-07-15)."""
+    return os.getenv("STACKY_TASK_GATE_ENABLED", "true").strip().lower() == "true"
 
 
 def _task_gate_blocking() -> bool:
-    """Plan 61 F0 — lee STACKY_TASK_GATE_BLOCKING (default OFF)."""
-    return os.getenv("STACKY_TASK_GATE_BLOCKING", "false").strip().lower() == "true"
+    """Plan 61 F0 — lee STACKY_TASK_GATE_BLOCKING (default ON, promovido 2026-07-15)."""
+    return os.getenv("STACKY_TASK_GATE_BLOCKING", "true").strip().lower() == "true"
 
 
 _CHECK_EMOJIS = "✅☑✔✓🟢❌⬜□▢"
@@ -6434,7 +6439,7 @@ def autopublish_epic_from_run(
         # épica en Agentes/outputs y narra en el output → produced_files=[] pero el
         # artefacto EXISTE. Rescatarlo es más barato y robusto que regenerar.
         _rescue_enabled = _os.getenv(
-            "STACKY_ARTIFACT_RESCUE_ENABLED", "false"
+            "STACKY_ARTIFACT_RESCUE_ENABLED", "true"
         ).lower() in {"1", "true", "on", "yes"}
         _rescued = None
         if _rescue_enabled:
@@ -6595,7 +6600,7 @@ def autopublish_epic_from_run(
 
     # Plan 60 F1 — Sellar baseline (HTML + rev) para aprendizaje bidireccional (default OFF).
     _learning_enabled = _os.getenv(
-        "STACKY_ADO_EDIT_LEARNING_ENABLED", "false"
+        "STACKY_ADO_EDIT_LEARNING_ENABLED", "true"
     ).strip().lower() in ("1", "true", "on", "yes")
     _published_html: str | None = None
     _baseline_rev: int | None = None

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 # Conservadores para no sub-estimar.
 PRICING: dict[str, dict[str, float]] = {
     "claude-haiku-4-5":   {"input": 1.00,  "output": 5.00},
+    "claude-sonnet-5":    {"input": 3.00,  "output": 15.00},
     "claude-sonnet-4-6":  {"input": 3.00,  "output": 15.00},
     "claude-opus-4-7":    {"input": 15.00, "output": 75.00},
     "mock-1.0":           {"input": 0.00,  "output": 0.00},
@@ -41,6 +42,7 @@ OUTPUT_RATIO: dict[str, float] = {
 # Latencia típica (ms) por modelo + agente — proxy grosero.
 LATENCY_BASE_MS: dict[str, int] = {
     "claude-haiku-4-5":   1200,
+    "claude-sonnet-5":    3500,
     "claude-sonnet-4-6":  3500,
     "claude-opus-4-7":    8000,
     "mock-1.0":           1600,
@@ -96,8 +98,8 @@ def _estimate_input_tokens(blocks: list[dict]) -> int:
     return total
 
 
-def estimate(*, agent_type: str, blocks: list[dict], model: str = "claude-sonnet-4-6") -> CostEstimate:
-    pricing = PRICING.get(model, PRICING["claude-sonnet-4-6"])
+def estimate(*, agent_type: str, blocks: list[dict], model: str = "claude-sonnet-5") -> CostEstimate:
+    pricing = PRICING.get(model, PRICING["claude-sonnet-5"])
     tokens_in = _estimate_input_tokens(blocks)
     ratio = OUTPUT_RATIO.get(agent_type, 0.4)
     tokens_out = int(tokens_in * ratio)

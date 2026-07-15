@@ -1190,7 +1190,7 @@ def _check_cli_egress(
 
     Nunca lanza: cualquier error interno → None (best-effort, no bloquea el run).
     """
-    if os.environ.get("STACKY_CLI_EGRESS_ENABLED", "false").lower() not in {"1", "true", "yes"}:
+    if os.environ.get("STACKY_CLI_EGRESS_ENABLED", "true").lower() not in {"1", "true", "yes"}:
         return None
     try:
         from services import egress_policies  # noqa: PLC0415

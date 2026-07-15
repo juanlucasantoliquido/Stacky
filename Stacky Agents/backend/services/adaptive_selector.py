@@ -10,7 +10,7 @@ Separación de responsabilidades:
   lógica pura. El caller (api/agents.py) la invoca solo con flag ON.
 
 Tabla de fallback por runtime (documentada, no en código — la capa de clamp ya cubre):
-- claude_code_cli: soporta Sonnet 4.6 + Opus 4.8 (allowlist); efforts low/medium/high/max.
+- claude_code_cli: soporta Sonnet 5 (primario) + Opus 4.8 (allowlist); efforts low/medium/high/max.
 - codex_cli: model_override Claude es inerte (runner usa su modelo nativo); effort viaja
   pero el runner lo interpreta según su matriz. Degradación = default del runtime.
 - github_copilot: usa copilot bridge; model_override Claude inerte. Igual que codex.
@@ -27,7 +27,7 @@ from services import llm_router
 logger = logging.getLogger("stacky_agents.adaptive_selector")
 
 # Modelos canónicos (reusar nombres de llm_router; NO hardcodear strings sueltos).
-_MODEL_SONNET = llm_router.CLAUDE_CAP_MODEL          # "claude-sonnet-4-6"
+_MODEL_SONNET = llm_router.CLAUDE_CAP_MODEL          # "claude-sonnet-5"
 _MODEL_OPUS = "claude-opus-4-8"                      # debe estar en llm_router._OPUS_ALLOWLIST
 
 # Guard de coherencia (cero costo, atrapa drift de allowlist en import):

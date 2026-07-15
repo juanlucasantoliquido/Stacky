@@ -147,9 +147,15 @@ def test_flag_on_high_confidence_saves_cost():
 
 
 def test_operator_model_override_wins():
-    """G4: si el operador envía model explícito con flag ON y confidence bajo, su modelo gana."""
+    """G4: si el operador envía model explícito con flag ON y confidence bajo, su modelo gana.
+
+    NOTA: el modelo enviado en el body es un literal de fixture (un Claude
+    válido cualquiera, en este caso el fallback del CLI) — deliberadamente
+    NO se compara contra `_MODEL_SONNET`/CLAUDE_CAP_MODEL (el tope actual es
+    sonnet-5): lo que se prueba es que el override explícito del operador pasa
+    sin tocar, no que coincida con el cap.
+    """
     from config import config
-    from services.adaptive_selector import _MODEL_SONNET
     app = _make_app()
     with patch.object(config, "STACKY_ADAPTIVE_SELECTOR_ENABLED", True):
         with patch("services.adaptive_selector._load_last_project_confidence", return_value=0.1):
@@ -158,8 +164,8 @@ def test_operator_model_override_wins():
                     r = _post_brief(c, body={"model": "claude-sonnet-4-6", "effort": "low"})
                 assert r.status_code == 202
                 call_kwargs = run_agent.call_args.kwargs
-                # El operador fijó ambos → selector NO propone ninguno.
-                assert call_kwargs.get("model_override") == _MODEL_SONNET
+                # El operador fijó ambos → selector NO propone ninguno; pasa intacto.
+                assert call_kwargs.get("model_override") == "claude-sonnet-4-6"
                 assert call_kwargs.get("effort_override") == "low"
 
 

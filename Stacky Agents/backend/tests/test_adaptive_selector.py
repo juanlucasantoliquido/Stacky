@@ -18,8 +18,10 @@ if str(_BACKEND) not in sys.path:
 
 # ── F0: Flag default OFF ──────────────────────────────────────────────────────
 
-def test_flag_default_off():
-    """F0: STACKY_ADAPTIVE_SELECTOR_ENABLED existe y es False por default."""
+def test_flag_default_on():
+    """F0: STACKY_ADAPTIVE_SELECTOR_ENABLED existe y es True por default
+    (promovido 2026-07-15: el override manual del operador siempre gana,
+    ninguna de las 4 excepciones duras aplica)."""
     import os
     # Guardar y eliminar la env var para asegurar el default.
     original = os.environ.pop("STACKY_ADAPTIVE_SELECTOR_ENABLED", None)
@@ -29,8 +31,8 @@ def test_flag_default_off():
         importlib.reload(_config_mod)
         from config import Config
         fresh = Config()
-        assert fresh.STACKY_ADAPTIVE_SELECTOR_ENABLED is False, (
-            "STACKY_ADAPTIVE_SELECTOR_ENABLED debe ser False por default"
+        assert fresh.STACKY_ADAPTIVE_SELECTOR_ENABLED is True, (
+            "STACKY_ADAPTIVE_SELECTOR_ENABLED debe ser True por default"
         )
     finally:
         if original is not None:

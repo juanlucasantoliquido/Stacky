@@ -12,6 +12,7 @@ import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
+import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -511,6 +512,11 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                 </div>
               </div>
             )}
+
+            {/* Análisis de estado con IA local: resumen + puntos débiles +
+                incoherencias entre agentes, con TODO el contexto del ticket
+                (épica, hijas, comentarios y outputs). Gratis, corre local. */}
+            <TicketLocalInsightButton ticketId={ticket.id} />
 
             {ticket.description && (
               <details className={styles.descDetails}>

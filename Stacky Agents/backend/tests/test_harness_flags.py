@@ -357,14 +357,16 @@ def test_convergence_flags_registered():
     assert "STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS" in keys
 
 
-def test_convergence_enabled_default_off():
-    """Con env limpio, STACKY_QUALITY_CONVERGENCE_ENABLED debe ser False."""
+def test_convergence_enabled_default_on():
+    """Con env limpio, STACKY_QUALITY_CONVERGENCE_ENABLED debe ser True
+    (promovido 2026-07-15: solo reintenta el pase correctivo ya existente,
+    ninguna de las 4 excepciones duras aplica)."""
     env_backup = os.environ.pop("STACKY_QUALITY_CONVERGENCE_ENABLED", None)
     try:
         from importlib import reload
         import config as cfg_module
         reload(cfg_module)
-        assert cfg_module.Config().STACKY_QUALITY_CONVERGENCE_ENABLED is False
+        assert cfg_module.Config().STACKY_QUALITY_CONVERGENCE_ENABLED is True
     finally:
         if env_backup is not None:
             os.environ["STACKY_QUALITY_CONVERGENCE_ENABLED"] = env_backup
@@ -547,6 +549,66 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_CODEBASE_MEMORY_MCP_ENABLED",
     "STACKY_GITLAB_DEEP_LINKS_ENABLED",
     "STACKY_ADO_PREWARM_ENABLED",
+    # ── Barrido de flags 122-141 + revisión general (operador 2026-07-15) ──
+    # Cada key de este bloque no dispara ninguna de las 4 excepciones duras:
+    # (1) acción automática que bypasea revisión humana (auto-publicar/crear
+    # ticket/ejecutar remoto/mensaje externo), (2) destructiva/irreversible,
+    # (3) prerequisito no garantizado en instalación default, (4) reduce
+    # seguridad por default. Ver informe de la tarea para el detalle por flag.
+    "CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED",
+    "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED",
+    "CLAUDE_CODE_CLI_HOOKS_ENABLED",
+    "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED",
+    "CLAUDE_CODE_CLI_RESUME_ENABLED",
+    "CLAUDE_CODE_CLI_MCP_ENABLED",
+    "STACKY_MEMORY_INJECTION_ENABLED",
+    "STACKY_CLI_EGRESS_ENABLED",  # security-positivo: agrega chequeo, no lo quita
+    "CODEX_CLI_CONTRACT_GATE_ENABLED",
+    "CODEX_CLI_AUTOCORRECT_ENABLED",
+    "CODEX_CLI_RESUME_ENABLED",
+    "STACKY_ADO_RUN_FOOTER_ENABLED",
+    "STACKY_WEBHOOKS_V2_ENABLED",
+    "STACKY_DESKTOP_NOTIFY_ENABLED",
+    "STACKY_LIVE_TELEMETRY_ENABLED",
+    "STACKY_PIPELINES_ENABLED",
+    "STACKY_RUN_ADVISOR_ENABLED",  # solo sugiere (nunca fuerza); sin consumidor real hoy
+    "STACKY_RETRIEVAL_EXPANSION_ENABLED",
+    "STACKY_CRITERIA_REPAIR_ENABLED",
+    "STACKY_CLI_FEWSHOT_ENABLED",
+    "STACKY_RUN_PREFLIGHT_GATE_ENABLED",
+    "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
+    "STACKY_OUTPUT_GROUNDING_ENABLED",
+    "STACKY_OUTPUT_GROUNDING_REPAIR",
+    "STACKY_EXEC_REPAIR_ENABLED",
+    "STACKY_FAKE_GREEN_GUARD_HARD",
+    "STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED",
+    "STACKY_ACCEPTANCE_CONTRACT_ENABLED",  # derive() aun sin wiring real (gap señalado en informe)
+    "STACKY_ACCEPTANCE_GATE_ENABLED",
+    "STACKY_ACCEPTANCE_REPAIR_ENABLED",
+    "STACKY_ACCEPTANCE_INTEGRITY_ENABLED",
+    "STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED",
+    "STACKY_INJECT_PROCESS_CATALOG",  # ya estaba ON en el call-site real; ratifica el registro
+    "STACKY_RAG_CATALOG_ENABLED",
+    "STACKY_PROCESS_DISCIPLINE_ENABLED",
+    "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED",  # ya estaba ON en el call-site real; ratifica el registro
+    "STACKY_EPIC_SUMMARY_ENABLED",  # ya estaba ON en el call-site real; ratifica el registro
+    "STACKY_PROJECT_AUTOPROFILE_ENABLED",
+    "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
+    "STACKY_ARTIFACT_RESCUE_ENABLED",
+    "STACKY_TASK_GATE_ENABLED",
+    "STACKY_TASK_GATE_BLOCKING",
+    "STACKY_ADAPTIVE_SELECTOR_ENABLED",
+    "STACKY_QUALITY_CONVERGENCE_ENABLED",
+    "STACKY_ADO_EDIT_LEARNING_ENABLED",
+    "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED",
+    # NOTA: STACKY_TICKETS_PROVIDER_ENABLED y STACKY_PIPELINE_PROVIDER_ENABLED
+    # (Plan 70/71) se intentaron promover y se REVIRTIERON: rompen tests que
+    # mockean _ado_client_for_ticket en vez del TrackerProvider/CIProvider
+    # (ver test_epic_grounding.py). Quedan OFF hasta un pase de migración dedicado.
+    # NOTA: STACKY_EPIC_GATE_ENABLED (Plan 51) se intentó promover y se
+    # REVIRTIÓ: bloquea publish en fixtures de test con HTML de épica
+    # mínimo/sintético en varios archivos (ver test_autopublish_rescue.py).
+    # Queda OFF hasta auditar esos fixtures.
 }
 
 
@@ -640,8 +702,11 @@ def test_declared_default_falls_back_to_type_zero():
     from services.harness_flags import FLAG_REGISTRY, declared_default, default_is_known
 
     by_key = {s.key: s for s in FLAG_REGISTRY}
-    # bool sin default → False
-    bool_spec = by_key["STACKY_TASK_GATE_ENABLED"]
+    # bool sin default → False (STACKY_TASK_GATE_ENABLED se promovió a default=True
+    # el 2026-07-15; STACKY_EPIC_CATALOG_GATE_ENABLED sigue sin default declarado
+    # porque depende de un catálogo de procesos curado — ver excepción de
+    # prerequisito en el informe del barrido de flags).
+    bool_spec = by_key["STACKY_EPIC_CATALOG_GATE_ENABLED"]
     assert declared_default(bool_spec) is False
     assert default_is_known(bool_spec) is False
     # int sin default → 0
@@ -747,11 +812,13 @@ def test_rag_catalog_enabled_in_registry():
     assert "STACKY_RAG_CATALOG_TOP_K" in keys
 
 
-def test_rag_catalog_enabled_is_bool_off_by_default():
+def test_rag_catalog_enabled_is_bool_on_by_default():
+    """Promovido 2026-07-15: mejora grounding sin costo si el catálogo está
+    vacío (degrada con gracia); ninguna de las 4 excepciones duras aplica."""
     from services.harness_flags import FLAG_REGISTRY
     spec = next(s for s in FLAG_REGISTRY if s.key == "STACKY_RAG_CATALOG_ENABLED")
     assert spec.type == "bool"
-    assert spec.default is None  # no tiene default declarado → OFF por type-zero
+    assert spec.default is True
 
 
 def test_rag_catalog_top_k_is_int():

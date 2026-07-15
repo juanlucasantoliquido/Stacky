@@ -84,3 +84,108 @@ def test_invoke_uses_selected_runtime(monkeypatch):
     assert captured["runtime"] == "claude_code_cli"
     assert captured["agent_type"] == "Documentador"
     assert len(props) == 1  # el output se parseó
+
+
+# ---------------------------------------------------------------------------
+# Fix "no me hizo nada" — Tarea 2: on_execution_started expone el execution_id
+# apenas se crea (para enganchar la consola en vivo ANTES de que termine el modo).
+# ---------------------------------------------------------------------------
+
+def test_invoke_calls_on_execution_started_before_waiting(monkeypatch):
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "run_agent", lambda **kw: 777)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 5)
+    monkeypatch.setattr(doc_documenter, "_wait_and_read_output",
+                        lambda eid, timeout_s=1800: _WELL_FORMED)
+    seen = []
+    doc_documenter.invoke_documenter(
+        DocumenterMode.RECONSTRUIR, [{"id": "x"}], "P", runtime="claude_code_cli",
+        on_execution_started=seen.append)
+    assert seen == [777]
+
+
+def test_invoke_without_callback_still_works(monkeypatch):
+    """Backward-compat: callers que no pasan on_execution_started (ninguno lo
+    hacía antes de este fix) siguen funcionando igual."""
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "run_agent", lambda **kw: 1)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 5)
+    monkeypatch.setattr(doc_documenter, "_wait_and_read_output",
+                        lambda eid, timeout_s=1800: _WELL_FORMED)
+    props = doc_documenter.invoke_documenter(
+        DocumenterMode.RECONSTRUIR, [{"id": "x"}], "P", runtime="claude_code_cli")
+    assert len(props) == 1
+
+
+def test_broken_callback_never_crashes_the_run(monkeypatch):
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "run_agent", lambda **kw: 1)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 5)
+    monkeypatch.setattr(doc_documenter, "_wait_and_read_output",
+                        lambda eid, timeout_s=1800: _WELL_FORMED)
+
+    def _boom(execution_id):
+        raise RuntimeError("callback roto")
+
+    props = doc_documenter.invoke_documenter(
+        DocumenterMode.RECONSTRUIR, [{"id": "x"}], "P", runtime="claude_code_cli",
+        on_execution_started=_boom)
+    assert len(props) == 1  # el run sigue pese al callback roto
+
+
+# ---------------------------------------------------------------------------
+# Fix "no me hizo nada" — Tarea 1: 0 proposals ya NO es 100% silencioso.
+# ---------------------------------------------------------------------------
+
+def test_empty_result_reason_reports_execution_error(monkeypatch):
+    class _FakeExec:
+        status = "error"
+        error_message = "'Config' object has no attribute 'CLAUDE_CODE_CLI_MODEL_FALLBACK'"
+
+    class _FakeSession:
+        def get(self, model, eid):
+            return _FakeExec()
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    import db as _db
+    monkeypatch.setattr(_db, "session_scope", lambda: _FakeSession())
+    reason = doc_documenter._empty_result_reason(42, "")
+    assert "error" in reason
+    assert "CLAUDE_CODE_CLI_MODEL_FALLBACK" in reason
+
+
+def test_empty_result_reason_reports_format_mismatch(monkeypatch):
+    class _FakeExec:
+        status = "completed"
+        error_message = None
+
+    class _FakeSession:
+        def get(self, model, eid):
+            return _FakeExec()
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    import db as _db
+    monkeypatch.setattr(_db, "session_scope", lambda: _FakeSession())
+    reason = doc_documenter._empty_result_reason(42, "el modelo preguntó algo, sin bloques")
+    assert "<<<DOC" in reason
+
+
+def test_invoke_documenter_logs_reason_when_zero_proposals(monkeypatch, caplog):
+    import agent_runner
+    monkeypatch.setattr(agent_runner, "run_agent", lambda **kw: 1)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 5)
+    monkeypatch.setattr(doc_documenter, "_wait_and_read_output",
+                        lambda eid, timeout_s=1800: "narración sin bloques DOC")
+    monkeypatch.setattr(doc_documenter, "_empty_result_reason",
+                        lambda eid, raw: "motivo-de-prueba")
+    with caplog.at_level("WARNING"):
+        props = doc_documenter.invoke_documenter(
+            DocumenterMode.ENRIQUECER, [{"id": "x"}], "P", runtime="claude_code_cli")
+    assert props == []
+    assert any("motivo-de-prueba" in r.message for r in caplog.records)

@@ -838,7 +838,7 @@ def project_autoprofile(project: str):
     Devuelve 404 si el flag está OFF o si no hay docs configurados para el proyecto.
     """
     import os as _os
-    if _os.getenv("STACKY_PROJECT_AUTOPROFILE_ENABLED", "false").lower() not in {"1", "true", "on"}:
+    if _os.getenv("STACKY_PROJECT_AUTOPROFILE_ENABLED", "true").lower() not in {"1", "true", "on"}:
         return jsonify({"ok": False, "error": "feature_disabled"}), 404
 
     if not project:
@@ -970,7 +970,7 @@ def estimate_cost():
     payload = request.get_json(force=True, silent=True) or {}
     agent_type = payload.get("agent_type")
     context_blocks = payload.get("context_blocks") or []
-    model = payload.get("model", "claude-sonnet-4-6")
+    model = payload.get("model", "claude-sonnet-5")
 
     if not agent_type:
         abort(400, "agent_type is required")

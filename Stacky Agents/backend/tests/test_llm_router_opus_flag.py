@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def test_opus48_capped_by_default():
     from services import llm_router
-    assert llm_router.clamp_model("claude-opus-4-8", allow_opus=False) == "claude-sonnet-4-6"
+    assert llm_router.clamp_model("claude-opus-4-8", allow_opus=False) == "claude-sonnet-5"
 
 
 def test_opus48_allowed_when_flag_true():
@@ -23,11 +23,13 @@ def test_opus48_allowed_when_flag_true():
 
 def test_opus48_capped_when_no_second_arg():
     from services import llm_router
-    assert llm_router.clamp_model("claude-opus-4-8") == "claude-sonnet-4-6"
+    assert llm_router.clamp_model("claude-opus-4-8") == "claude-sonnet-5"
 
 
 def test_sonnet_untouched_with_allow_opus():
     from services import llm_router
+    assert llm_router.clamp_model("claude-sonnet-5", allow_opus=True) == "claude-sonnet-5"
+    # sonnet-4-6 (fallback del CLI) tambien sigue siendo un modelo Claude valido.
     assert llm_router.clamp_model("claude-sonnet-4-6", allow_opus=True) == "claude-sonnet-4-6"
 
 
@@ -38,17 +40,17 @@ def test_haiku_untouched_with_allow_opus():
 
 def test_fable_still_blocked_with_allow_opus():
     from services import llm_router
-    assert llm_router.clamp_model("claude-fable-5", allow_opus=True) == "claude-sonnet-4-6"
+    assert llm_router.clamp_model("claude-fable-5", allow_opus=True) == "claude-sonnet-5"
 
 
 def test_opus47_not_in_allowlist():
     from services import llm_router
-    assert llm_router.clamp_model("claude-opus-4-7", allow_opus=True) == "claude-sonnet-4-6"
+    assert llm_router.clamp_model("claude-opus-4-7", allow_opus=True) == "claude-sonnet-5"
 
 
 def test_empty_with_allow_opus():
     from services import llm_router
-    assert llm_router.clamp_model("", allow_opus=True) == "claude-sonnet-4-6"
+    assert llm_router.clamp_model("", allow_opus=True) == "claude-sonnet-5"
 
 
 # Integración: run_brief pasa allow_opus=True SIEMPRE

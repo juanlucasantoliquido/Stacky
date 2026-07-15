@@ -26,6 +26,14 @@ def test_estimate_basic_sonnet():
     assert estimate_cost("claude-sonnet-4-6", 1_000_000, 1_000_000) == 18.0
 
 
+def test_estimate_sonnet5_primary_model_has_own_price_entry():
+    """claude-sonnet-5 (primario actual del CLI) NO matchea el prefijo
+    "claude-sonnet-4" -- necesita su propia entrada en DEFAULT_PRICES."""
+    from harness.pricing import estimate_cost
+
+    assert estimate_cost("claude-sonnet-5", 1_000_000, 1_000_000) == 18.0
+
+
 def test_estimate_haiku():
     from harness.pricing import estimate_cost
 

@@ -187,6 +187,57 @@ def invoke(
 
 # ── Modelo local (Plan 106) ───────────────────────────────────────────────────
 
+def _list_installed_local_models(endpoint: str, timeout_sec: int = 5) -> list[str]:
+    """Lista los modelos instalados en el servidor local (OpenAI-compatible /v1/models).
+
+    Best-effort: cualquier error de red o de forma devuelve []. Se usa solo para
+    el fallback de modelo cuando el server responde 404 model-not-found.
+    """
+    base = endpoint.split("/v1/")[0] if "/v1/" in endpoint else endpoint
+    try:
+        resp = requests.get(f"{base}/v1/models", timeout=timeout_sec)
+        if resp.status_code != 200:
+            return []
+        raw = resp.json()
+    except (requests.RequestException, ValueError):
+        return []
+    items = raw.get("data") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        return []
+    out: list[str] = []
+    for it in items:
+        mid = it.get("id") or it.get("name") if isinstance(it, dict) else it
+        if isinstance(mid, str) and mid.strip():
+            out.append(mid.strip())
+    return out
+
+
+def _pick_fallback_local_model(requested: str, installed: list[str]) -> str | None:
+    """Elige el mejor modelo instalado cuando `requested` no existe en el server.
+
+    Orden de preferencia: mismo nombre base con otro tag (qwen3:32b → qwen3:8b),
+    misma familia por prefijo (qwen3 → qwen3-coder:30b), familia sin dígitos
+    (qwen3 → qwen2.5-coder:14b), y como último recurso el primero instalado.
+    """
+    if not installed:
+        return None
+    ordered = sorted(installed)
+    req_base = (requested or "").split(":", 1)[0].lower()
+    same_base = [m for m in ordered if m.split(":", 1)[0].lower() == req_base]
+    if same_base:
+        return same_base[0]
+    if req_base:
+        family = [m for m in ordered if m.lower().startswith(req_base)]
+        if family:
+            return family[0]
+        stem = req_base.rstrip("0123456789.-_")
+        if stem:
+            loose = [m for m in ordered if m.lower().startswith(stem)]
+            if loose:
+                return loose[0]
+    return ordered[0]
+
+
 def invoke_local_llm(
     *,
     agent_type: str,
@@ -209,7 +260,8 @@ def invoke_local_llm(
             "LOCAL_LLM_ENDPOINT no está configurado. Sételo en el panel del Arnés "
             "(ej. http://localhost:11434/v1/chat/completions para Ollama)."
         )
-    resolved_model = model or config.LOCAL_LLM_MODEL
+    requested_model = model or config.LOCAL_LLM_MODEL
+    resolved_model = requested_model
     timeout_sec = int(getattr(config, "LOCAL_LLM_TIMEOUT_SEC", 120))
 
     payload = {
@@ -220,28 +272,55 @@ def invoke_local_llm(
         ],
         "stream": False,
     }
+
+    def _post():
+        try:
+            return requests.post(
+                endpoint,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=timeout_sec,
+            )
+        except requests.Timeout:
+            raise RuntimeError(
+                f"Endpoint local no respondió en {timeout_sec}s ({endpoint}). "
+                "Verificá que Ollama/LLM server esté corriendo, o subí "
+                "LOCAL_LLM_TIMEOUT_SEC en el panel del Arnés."
+            )
+        except requests.ConnectionError as e:
+            raise RuntimeError(
+                f"No se pudo conectar al endpoint local ({endpoint}): {e}"
+            )
+
     on_log("info", f"Invocando modelo local {resolved_model} en {endpoint}")
-    try:
-        response = requests.post(
-            endpoint,
-            headers={"Content-Type": "application/json"},
-            json=payload,
-            timeout=timeout_sec,
-        )
-    except requests.Timeout:
-        raise RuntimeError(
-            f"Endpoint local no respondió en {timeout_sec}s ({endpoint}). "
-            "Verificá que Ollama/LLM server esté corriendo, o subí "
-            "LOCAL_LLM_TIMEOUT_SEC en el panel del Arnés."
-        )
-    except requests.ConnectionError as e:
-        raise RuntimeError(
-            f"No se pudo conectar al endpoint local ({endpoint}): {e}"
-        )
+    response = _post()
+    installed: list[str] = []
+    if response.status_code == 404 and "not found" in response.text.lower():
+        # El modelo configurado no está instalado en el server local (p. ej. la flag
+        # LOCAL_LLM_MODEL quedó con el default de fábrica). Fallback automático al
+        # mejor modelo instalado y UN solo reintento, dejando rastro en los logs.
+        installed = _list_installed_local_models(endpoint)
+        fallback = _pick_fallback_local_model(resolved_model, installed)
+        if fallback and fallback != resolved_model:
+            on_log(
+                "warn",
+                f"Modelo '{resolved_model}' no está instalado en el server local; "
+                f"usando '{fallback}' (instalados: {', '.join(installed)}). "
+                "Configurá LOCAL_LLM_MODEL en el panel del Arnés para fijar el modelo.",
+            )
+            resolved_model = fallback
+            payload["model"] = fallback
+            response = _post()
     if response.status_code != 200:
         body = response.text[:500]
+        hint = (
+            f" Modelos instalados en el server local: {', '.join(installed)}. "
+            "Elegí uno en la flag LOCAL_LLM_MODEL del panel del Arnés."
+            if installed
+            else ""
+        )
         raise RuntimeError(
-            f"Endpoint local devolvió HTTP {response.status_code}: {body}"
+            f"Endpoint local devolvió HTTP {response.status_code}: {body}{hint}"
         )
     raw = response.json()
     choices = raw.get("choices") or []
@@ -253,10 +332,14 @@ def invoke_local_llm(
     if not content:
         raise RuntimeError("Respuesta del modelo local vacía")
     on_log("info", f"Modelo local respondió con {len(content)} chars")
+    metadata = {"model": resolved_model, "backend": "local_llm"}
+    if resolved_model != requested_model:
+        metadata["requested_model"] = requested_model
+        metadata["model_fallback"] = True
     return BridgeResponse(
         text=content,
         format="markdown",
-        metadata={"model": resolved_model, "backend": "local_llm"},
+        metadata=metadata,
     )
 
 
@@ -825,7 +908,11 @@ def _invoke_claude_cli(
     from services.agent_env import build_agent_env  # filtra secretos del subproceso
 
     started = time.time()
-    chosen_model = model or config.CLAUDE_CODE_CLI_MODEL or "claude-sonnet-4-6"
+    primary_model = model or config.CLAUDE_CODE_CLI_MODEL or "claude-sonnet-5"
+    # Fallback solo aplica al modelo por-defecto (config), NUNCA a un `model`
+    # explícito pasado por el caller — un override explícito es intención,
+    # no algo que degradar en silencio.
+    fallback_model = None if model else (config.CLAUDE_CODE_CLI_MODEL_FALLBACK or None)
 
     if _is_cancelled(execution_id):
         raise CancelledError("cancelled by user")
@@ -833,54 +920,91 @@ def _invoke_claude_cli(
     claude_bin = _resolve_claude_bin()
     prompt = (f"{system.strip()}\n\n{user.strip()}".strip() if system else (user or "")).strip()
 
-    cmd = [
-        claude_bin, "-p",
-        "--output-format", "json",
-        "--model", chosen_model,
-        "--dangerously-skip-permissions",
-    ]
     # Completion interna: tope acotado (no el cap de sesión del agente, que es 30 min).
     timeout_sec = 300
-
-    on_log("info", f"invocando claude CLI (cuenta Claude, sin Copilot) model={chosen_model}")
-    logger.info("invocando claude_cli model=%s agent=%s", chosen_model, agent_type)
 
     creationflags = 0
     if os.name == "nt":
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_sec,
-            cwd=tempfile.gettempdir(),
-            env=build_agent_env(),
-            creationflags=creationflags,
+    # Primario (config.CLAUDE_CODE_CLI_MODEL, sonnet-5) con UN reintento al
+    # fallback (config.CLAUDE_CODE_CLI_MODEL_FALLBACK, sonnet-4-6) si el CLI
+    # rechaza el modelo (exit != 0). El timeout NO dispara fallback (no es un
+    # motivo atribuible al modelo; reintentar duplicaría la espera).
+    attempts = [primary_model]
+    if fallback_model and fallback_model != primary_model:
+        attempts.append(fallback_model)
+
+    chosen_model = primary_model
+    proc: subprocess.CompletedProcess | None = None
+    for i, candidate in enumerate(attempts):
+        is_last_attempt = i == len(attempts) - 1
+        cmd = [
+            claude_bin, "-p",
+            "--output-format", "json",
+            "--model", candidate,
+            "--dangerously-skip-permissions",
+        ]
+        on_log(
+            "info",
+            f"invocando claude CLI (cuenta Claude, sin Copilot) intento "
+            f"{i + 1}/{len(attempts)} model={candidate}",
         )
-    except subprocess.TimeoutExpired as exc:
-        on_log("error", f"claude CLI timeout tras {timeout_sec}s")
-        logger.error("claude_cli timeout tras %ss", timeout_sec)
-        raise RuntimeError(f"claude_cli timeout tras {timeout_sec}s") from exc
+        logger.info(
+            "invocando claude_cli intento=%d/%d model=%s agent=%s",
+            i + 1, len(attempts), candidate, agent_type,
+        )
 
-    if _is_cancelled(execution_id):
-        raise CancelledError("cancelled by user")
+        try:
+            proc = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout_sec,
+                cwd=tempfile.gettempdir(),
+                env=build_agent_env(),
+                creationflags=creationflags,
+            )
+        except subprocess.TimeoutExpired as exc:
+            on_log("error", f"claude CLI timeout tras {timeout_sec}s (model={candidate})")
+            logger.error("claude_cli timeout tras %ss (model=%s)", timeout_sec, candidate)
+            raise RuntimeError(f"claude_cli timeout tras {timeout_sec}s") from exc
 
-    if proc.returncode != 0:
+        if _is_cancelled(execution_id):
+            raise CancelledError("cancelled by user")
+
+        if proc.returncode == 0:
+            chosen_model = candidate
+            break
+
         err = (proc.stderr or "").strip()[:1500]
-        on_log("error", f"claude CLI exit {proc.returncode}: {err}")
-        logger.error("claude_cli exit=%s stderr=%s", proc.returncode, err)
-        raise RuntimeError(f"claude_cli exit {proc.returncode}: {err or '(sin stderr)'}")
+        if is_last_attempt:
+            on_log("error", f"claude CLI exit {proc.returncode}: {err}")
+            logger.error("claude_cli exit=%s stderr=%s model=%s", proc.returncode, err, candidate)
+            raise RuntimeError(f"claude_cli exit {proc.returncode}: {err or '(sin stderr)'}")
 
+        on_log(
+            "warn",
+            f"claude CLI falló con model={candidate} (exit {proc.returncode}: {err}); "
+            f"reintentando con fallback {attempts[i + 1]}",
+        )
+        logger.warning(
+            "claude_cli exit=%s model=%s; reintentando con fallback %s",
+            proc.returncode, candidate, attempts[i + 1],
+        )
+
+    assert proc is not None  # el loop siempre corre >=1 vez y retorna/raisea antes de salir sin éxito
     text, tokens_in, tokens_out, finish = _parse_claude_cli_json(proc.stdout)
     if not text:
         # Sin result parseable: usar stdout crudo como último recurso (mejor que vacío).
         text = (proc.stdout or "").strip()
-    on_log("info", f"completado claude_cli tokens_in={tokens_in} tokens_out={tokens_out}")
+    on_log(
+        "info",
+        f"completado claude_cli model={chosen_model} tokens_in={tokens_in} tokens_out={tokens_out}",
+    )
 
     return BridgeResponse(
         text=text,

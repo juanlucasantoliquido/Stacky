@@ -82,7 +82,7 @@ def test_fa04_router_upgrades_for_xl_complexity():
         backend="anthropic",
     )
     # §5.2 — XL escala a sonnet, NUNCA opus (cap duro).
-    assert d.model == "claude-sonnet-4-6"
+    assert d.model == "claude-sonnet-5"
     assert "XL" in d.reason
 
 
@@ -90,14 +90,14 @@ def test_fa04_router_override_opus_is_clamped():
     from services import llm_router
 
     # §5.2 — override del operador a opus se respeta como intención de forzar,
-    # pero clampeado al tope permitido (sonnet-4-6).
+    # pero clampeado al tope permitido (sonnet-5, primario actual del CLI).
     d = llm_router.decide(
         agent_type="qa",
         blocks=[{"kind": "auto", "title": "x", "content": "x"}],
         override="claude-opus-4-7",
         backend="anthropic",
     )
-    assert d.model == "claude-sonnet-4-6"
+    assert d.model == "claude-sonnet-5"
     assert "clamp" in d.reason.lower()
 
 

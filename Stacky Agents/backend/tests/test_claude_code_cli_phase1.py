@@ -282,18 +282,25 @@ def test_skip_permissions_default_true_decision_5_3(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Defaults duros: modelo sonnet-4-6 + effort medium en TODA invocación CLI
+# Defaults duros: modelo sonnet-5 (primario) + effort medium en TODA invocación CLI
 # ---------------------------------------------------------------------------
 
-def test_build_command_defaults_sonnet46_and_medium_effort():
+def test_build_command_defaults_sonnet5_and_medium_effort():
     from config import config
     from services import claude_code_cli_runner as r
 
-    assert config.CLAUDE_CODE_CLI_MODEL == "claude-sonnet-4-6"
+    assert config.CLAUDE_CODE_CLI_MODEL == "claude-sonnet-5"
     assert config.CLAUDE_CODE_CLI_EFFORT == "medium"
     cmd = r._build_command(model_override=None)
-    assert cmd[cmd.index("--model") + 1] == "claude-sonnet-4-6"
+    assert cmd[cmd.index("--model") + 1] == "claude-sonnet-5"
     assert cmd[cmd.index("--effort") + 1] == "medium"
+
+
+def test_fallback_model_default_is_sonnet46():
+    """El fallback default es sonnet-4-6 (el antiguo primario) — nunca vacío ni opus/fable."""
+    from config import config
+
+    assert config.CLAUDE_CODE_CLI_MODEL_FALLBACK == "claude-sonnet-4-6"
 
 
 def test_build_command_model_override_wins_over_default():
@@ -319,3 +326,160 @@ def test_build_command_effort_configurable_and_validated(monkeypatch):
     monkeypatch.setattr(config, "CLAUDE_CODE_CLI_EFFORT", "")
     cmd = r._build_command(model_override=None)
     assert "--effort" not in cmd
+
+
+# ---------------------------------------------------------------------------
+# Fallback sonnet-5 → sonnet-4-6 en el spawn (_spawn_claude_with_fallback).
+# ---------------------------------------------------------------------------
+
+def test_looks_like_model_error_detects_known_patterns():
+    from services import claude_code_cli_runner as r
+
+    assert r._looks_like_model_error("Error: unknown model 'claude-sonnet-5'")
+    assert r._looks_like_model_error("model claude-x-9 does not exist")
+    assert r._looks_like_model_error("INVALID MODEL specified")
+    assert not r._looks_like_model_error("some unrelated stack trace")
+    assert not r._looks_like_model_error("")
+    assert not r._looks_like_model_error(None)
+
+
+class _FakeAliveProc:
+    """Simula un `claude` que arrancó bien: poll() nunca deja de ser None."""
+
+    def poll(self):
+        return None
+
+
+class _FakeDeadProc:
+    """Simula un `claude` que murió casi al toque con un exit code dado."""
+
+    def __init__(self, returncode: int, stderr_text: str):
+        self.returncode = returncode
+        self._stderr_text = stderr_text
+        self.communicate_called = False
+
+    def poll(self):
+        return self.returncode
+
+    def communicate(self, timeout=None):
+        self.communicate_called = True
+        return "", self._stderr_text
+
+
+def test_spawn_with_fallback_primary_succeeds_single_attempt(monkeypatch):
+    """El primario (sonnet-5) arranca bien → nunca se llega a tocar el fallback."""
+    from services import claude_code_cli_runner as r
+
+    calls: list[list[str]] = []
+
+    def fake_popen(cmd, **kwargs):
+        calls.append(cmd)
+        return _FakeAliveProc()
+
+    monkeypatch.setattr(r.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(r, "_MODEL_FAILURE_GRACE_SEC", 0.05)
+
+    logs: list[tuple[str, str]] = []
+    proc, cmd, model = r._spawn_claude_with_fallback(
+        primary_model="claude-sonnet-5",
+        fallback_model="claude-sonnet-4-6",
+        build_cmd=lambda m: ["claude", "--model", m],
+        cwd=".",
+        creationflags=0,
+        env={},
+        log=lambda level, msg: logs.append((level, msg)),
+    )
+    assert model == "claude-sonnet-5"
+    assert len(calls) == 1
+    assert cmd == ["claude", "--model", "claude-sonnet-5"]
+
+
+def test_spawn_with_fallback_primary_fails_fast_retries_fallback(monkeypatch):
+    """Sonnet-5 rechazado casi al toque → reintenta UNA vez con sonnet-4-6 y loguea ambos."""
+    from services import claude_code_cli_runner as r
+
+    responses = [
+        _FakeDeadProc(1, "Error: unknown model 'claude-sonnet-5'"),
+        _FakeAliveProc(),
+    ]
+    calls: list[list[str]] = []
+
+    def fake_popen(cmd, **kwargs):
+        calls.append(cmd)
+        return responses.pop(0)
+
+    monkeypatch.setattr(r.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(r, "_MODEL_FAILURE_GRACE_SEC", 0.05)
+
+    logs: list[tuple[str, str]] = []
+    proc, cmd, model = r._spawn_claude_with_fallback(
+        primary_model="claude-sonnet-5",
+        fallback_model="claude-sonnet-4-6",
+        build_cmd=lambda m: ["claude", "--model", m],
+        cwd=".",
+        creationflags=0,
+        env={},
+        log=lambda level, msg: logs.append((level, msg)),
+    )
+    assert model == "claude-sonnet-4-6"
+    assert calls == [
+        ["claude", "--model", "claude-sonnet-5"],
+        ["claude", "--model", "claude-sonnet-4-6"],
+    ]
+    assert any("intento 1/2" in msg and "claude-sonnet-5" in msg for _, msg in logs)
+    assert any("intento 2/2" in msg and "claude-sonnet-4-6" in msg for _, msg in logs)
+    assert any("reintentando con fallback" in msg for _, msg in logs)
+
+
+def test_spawn_with_fallback_both_fail_returns_last_proc_untouched(monkeypatch):
+    """Si hasta el fallback falla, el proc del último intento se devuelve intacto
+    (sin communicate()) para que el manejo de error preexistente lo procese solo."""
+    from services import claude_code_cli_runner as r
+
+    responses = [_FakeDeadProc(1, "boom"), _FakeDeadProc(1, "boom again")]
+    calls: list[list[str]] = []
+
+    def fake_popen(cmd, **kwargs):
+        calls.append(cmd)
+        return responses.pop(0)
+
+    monkeypatch.setattr(r.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(r, "_MODEL_FAILURE_GRACE_SEC", 0.05)
+
+    proc, cmd, model = r._spawn_claude_with_fallback(
+        primary_model="claude-sonnet-5",
+        fallback_model="claude-sonnet-4-6",
+        build_cmd=lambda m: ["claude", "--model", m],
+        cwd=".",
+        creationflags=0,
+        env={},
+        log=lambda level, msg: None,
+    )
+    assert model == "claude-sonnet-4-6"
+    assert len(calls) == 2
+    assert proc.communicate_called is False
+
+
+def test_spawn_with_fallback_no_fallback_configured_single_attempt(monkeypatch):
+    """fallback_model=None (o igual al primario) → un solo intento, sin ventana de gracia."""
+    from services import claude_code_cli_runner as r
+
+    calls: list[list[str]] = []
+
+    def fake_popen(cmd, **kwargs):
+        calls.append(cmd)
+        return _FakeDeadProc(1, "boom")
+
+    monkeypatch.setattr(r.subprocess, "Popen", fake_popen)
+
+    proc, cmd, model = r._spawn_claude_with_fallback(
+        primary_model="claude-sonnet-5",
+        fallback_model=None,
+        build_cmd=lambda m: ["claude", "--model", m],
+        cwd=".",
+        creationflags=0,
+        env={},
+        log=lambda level, msg: None,
+    )
+    assert model == "claude-sonnet-5"
+    assert len(calls) == 1

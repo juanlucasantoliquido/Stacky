@@ -7,26 +7,27 @@ from __future__ import annotations
 import os
 
 
-def test_task_gate_disabled_by_default(monkeypatch):
-    """Sin env var, _task_gate_enabled() == False."""
+def test_task_gate_enabled_by_default(monkeypatch):
+    """Sin env var, _task_gate_enabled() == True (promovido 2026-07-15:
+    clasificación determinista de defectos, no depende de catálogo)."""
     monkeypatch.delenv("STACKY_TASK_GATE_ENABLED", raising=False)
     # Reimportar para asegurar el lector usa os.getenv en call time
     from api.tickets import _task_gate_enabled
-    assert _task_gate_enabled() is False
+    assert _task_gate_enabled() is True
 
 
-def test_task_gate_blocking_disabled_by_default(monkeypatch):
-    """Sin env var, _task_gate_blocking() == False."""
+def test_task_gate_blocking_enabled_by_default(monkeypatch):
+    """Sin env var, _task_gate_blocking() == True (promovido 2026-07-15)."""
     monkeypatch.delenv("STACKY_TASK_GATE_BLOCKING", raising=False)
     from api.tickets import _task_gate_blocking
-    assert _task_gate_blocking() is False
+    assert _task_gate_blocking() is True
 
 
-def test_task_gate_enabled_reads_env(monkeypatch):
-    """Con STACKY_TASK_GATE_ENABLED=true, _task_gate_enabled() == True."""
-    monkeypatch.setenv("STACKY_TASK_GATE_ENABLED", "true")
+def test_task_gate_disabled_reads_env(monkeypatch):
+    """Con STACKY_TASK_GATE_ENABLED=false, _task_gate_enabled() == False."""
+    monkeypatch.setenv("STACKY_TASK_GATE_ENABLED", "false")
     from api.tickets import _task_gate_enabled
-    assert _task_gate_enabled() is True
+    assert _task_gate_enabled() is False
 
 
 def test_flags_registered_in_registry():

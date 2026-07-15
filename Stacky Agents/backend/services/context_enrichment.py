@@ -788,7 +788,7 @@ def _inject_process_catalog_block(
         if not isinstance(profile, dict):
             return blocks
 
-        rag_enabled = os.getenv("STACKY_RAG_CATALOG_ENABLED", "false").lower() in {
+        rag_enabled = os.getenv("STACKY_RAG_CATALOG_ENABLED", "true").lower() in {
             "1", "true", "on"
         }
         block: dict | None = None

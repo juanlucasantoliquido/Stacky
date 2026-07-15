@@ -401,6 +401,218 @@ def playground_route():
     })
 
 
+# ── Análisis de estado de ticket con IA local ────────────────────────────────
+# Reúne TODO el contexto del ticket (épica padre, tasks hijas, comentarios del
+# tracker y outputs de agentes) y le pide al modelo local un diagnóstico:
+# resumen de estado, puntos débiles e incoherencias entre agentes. HITL puro.
+
+_TICKET_INSIGHT_MAX_DESC = 3000
+_TICKET_INSIGHT_MAX_COMMENTS = 15
+_TICKET_INSIGHT_MAX_COMMENT_CHARS = 800
+_TICKET_INSIGHT_MAX_EXECUTIONS = 10
+_TICKET_INSIGHT_MAX_OUTPUT_CHARS = 1500
+
+_TICKET_INSIGHT_SYSTEM = (
+    "Sos un PM técnico senior y auditor de calidad de un equipo de agentes IA. "
+    "Analizás el estado real de tickets con mirada crítica: detectás huecos, "
+    "riesgos y contradicciones entre lo que dicen los distintos agentes, los "
+    "comentarios y el estado del ticket. Respondés en castellano, en markdown."
+    + _HITL_RULES
+)
+
+
+def _clip(text: str | None, limit: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + " …[truncado]"
+
+
+def _fetch_ticket_comments_safe(ticket) -> list[dict]:
+    """Comentarios del tracker, best-effort: cualquier error → [] (nunca rompe)."""
+    if (ticket.ado_id or 0) <= 0:
+        return []
+    try:
+        from api.tickets import _ado_client_for_ticket, _provider_for_ticket
+        from services.ado_sync import _html_to_text
+
+        provider = _provider_for_ticket(ticket=ticket)
+        if provider is not None:
+            raw = provider.fetch_comments(str(ticket.ado_id))
+        else:
+            raw = _ado_client_for_ticket(ticket=ticket).fetch_comments(ticket.ado_id)
+        return [
+            {
+                "author": c.get("author", ""),
+                "date": c.get("date", ""),
+                "text": _html_to_text(c.get("text", "")),
+            }
+            for c in raw
+            if c.get("text")
+        ]
+    except Exception:
+        return []
+
+
+def _ticket_line(t) -> str:
+    return (
+        f"- [{t.work_item_type or 'Item'} ADO-{t.ado_id}] \"{t.title}\" · "
+        f"estado ADO: {t.ado_state or '—'} · estado Stacky: {t.stacky_status or 'idle'}"
+        + (f" · asignado: {t.assigned_to_ado}" if t.assigned_to_ado else "")
+    )
+
+
+def _build_ticket_insight_context(session, ticket) -> tuple[str, dict]:
+    """Arma el contexto textual (épica + ticket + hijas + comentarios + agentes).
+
+    Devuelve (texto, stats) con truncados defensivos para no reventar la ventana
+    de contexto del modelo local.
+    """
+    parts: list[str] = []
+
+    parts.append("== TICKET ==")
+    parts.append(_ticket_line(ticket))
+    if ticket.description:
+        parts.append(f"Descripción:\n{_clip(ticket.description, _TICKET_INSIGHT_MAX_DESC)}")
+
+    epic = None
+    if ticket.parent_ado_id:
+        epic = (
+            session.query(Ticket)
+            .filter(Ticket.ado_id == ticket.parent_ado_id, Ticket.project == ticket.project)
+            .first()
+        )
+    if epic is not None:
+        parts.append("\n== ÉPICA / PADRE ==")
+        parts.append(_ticket_line(epic))
+        if epic.description:
+            parts.append(f"Descripción:\n{_clip(epic.description, _TICKET_INSIGHT_MAX_DESC // 2)}")
+
+    children = []
+    if (ticket.ado_id or 0) > 0:
+        children = (
+            session.query(Ticket)
+            .filter(Ticket.parent_ado_id == ticket.ado_id, Ticket.project == ticket.project)
+            .order_by(Ticket.ado_id)
+            .all()
+        )
+    if children:
+        parts.append(f"\n== TASKS/HIJAS ({len(children)}) ==")
+        for child in children:
+            parts.append(_ticket_line(child))
+
+    comments = _fetch_ticket_comments_safe(ticket)
+    if comments:
+        recent = comments[:_TICKET_INSIGHT_MAX_COMMENTS]
+        parts.append(f"\n== COMENTARIOS DEL TRACKER ({len(recent)} de {len(comments)}) ==")
+        for c in recent:
+            parts.append(
+                f"- [{c['date']}] {c['author']}: {_clip(c['text'], _TICKET_INSIGHT_MAX_COMMENT_CHARS)}"
+            )
+    else:
+        parts.append("\n== COMENTARIOS DEL TRACKER ==\n(sin comentarios o tracker no accesible)")
+
+    scope_ids = [ticket.id] + [c.id for c in children]
+    executions = (
+        session.query(AgentExecution)
+        .filter(AgentExecution.ticket_id.in_(scope_ids))
+        .order_by(AgentExecution.started_at.desc())
+        .limit(_TICKET_INSIGHT_MAX_EXECUTIONS)
+        .all()
+    )
+    if executions:
+        parts.append(f"\n== EJECUCIONES DE AGENTES ({len(executions)} más recientes) ==")
+        for ex in reversed(executions):  # cronológico para que el modelo siga la historia
+            started = ex.started_at.isoformat() if ex.started_at else "—"
+            header = (
+                f"--- Ejecución #{ex.id} · agente: {ex.agent_type} · estado: {ex.status}"
+                + (f" · veredicto: {ex.verdict}" if ex.verdict else "")
+                + f" · {started} ---"
+            )
+            parts.append(header)
+            if ex.error_message:
+                parts.append(f"Error: {_clip(ex.error_message, 500)}")
+            if ex.output:
+                parts.append(_clip(ex.output, _TICKET_INSIGHT_MAX_OUTPUT_CHARS))
+    else:
+        parts.append("\n== EJECUCIONES DE AGENTES ==\n(sin ejecuciones registradas)")
+
+    stats = {
+        "has_epic": epic is not None,
+        "children": len(children),
+        "comments": len(comments),
+        "executions": len(executions),
+    }
+    return "\n".join(parts), stats
+
+
+@bp.post("/ticket-insight/<int:ticket_id>")
+def ticket_insight_route(ticket_id: int):
+    """Analiza el estado de un ticket con el modelo local (HITL, sin tools).
+
+    Body opcional: {"model": str, "question": str}
+    200: {"ok": true, "analysis": str, "model": str, "execution_id": int,
+          "context_stats": {...}} | 404 ticket inexistente | 502 fallo del modelo.
+    """
+    guard = _guard()
+    if guard:
+        return guard
+    body = request.get_json(silent=True) or {}
+    question = (body.get("question") or "").strip()
+
+    with session_scope() as session:
+        ticket = session.get(Ticket, ticket_id)
+        if ticket is None:
+            return jsonify({"error": "ticket_not_found"}), 404
+        context_text, stats = _build_ticket_insight_context(session, ticket)
+        execution_id = _create_execution(
+            session, ticket.id, "local_llm_ticket_insight",
+            {"ticket_id": ticket.id, "ado_id": ticket.ado_id, **stats},
+        )
+
+    user_prompt = (
+        "Analizá el estado REAL del siguiente ticket usando TODO su contexto "
+        "(épica padre, tasks hijas, comentarios del tracker y resultados de los "
+        "agentes que trabajaron sobre él).\n\n"
+        f"{context_text}\n\n"
+        + (f"Pregunta puntual del operador: {question}\n\n" if question else "")
+        + "Respondé en markdown con EXACTAMENTE estas secciones:\n"
+        "## Resumen del estado\n"
+        "(2-5 oraciones: dónde está parado el ticket hoy)\n"
+        "## Puntos débiles y riesgos\n"
+        "(lista concreta; si un agente dejó algo a medias o sin verificar, nombralo)\n"
+        "## Incoherencias detectadas\n"
+        "(contradicciones entre outputs de agentes, comentarios y estados; "
+        "si no encontrás ninguna, decilo explícitamente)\n"
+        "## Próximos pasos sugeridos\n"
+        "(acciones concretas priorizadas; el operador decide)\n"
+    )
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+
+    try:
+        response = invoke_local_llm(
+            agent_type="local_llm_ticket_insight",
+            system=_TICKET_INSIGHT_SYSTEM,
+            user=user_prompt,
+            on_log=lambda level, msg: None,
+            execution_id=execution_id,
+            model=body.get("model"),
+        )
+    except Exception as e:
+        _finish_execution(execution_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": execution_id}), 502
+    _finish_execution(execution_id, status="completed", output=response.text)
+    resolved_model = (response.metadata or {}).get("model") or _config.config.LOCAL_LLM_MODEL
+    return jsonify({
+        "ok": True,
+        "analysis": response.text,
+        "model": resolved_model,
+        "execution_id": execution_id,
+        "context_stats": stats,
+    })
+
+
 @bp.post("/insights/<int:execution_id>/generate")
 def generate_insight_route(execution_id: int):
     """Plan 117 — Genera/regenera el insight local de UNA ejecución (acción HITL).

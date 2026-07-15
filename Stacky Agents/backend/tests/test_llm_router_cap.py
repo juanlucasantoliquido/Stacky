@@ -1,8 +1,9 @@
 """F3.2 / §5.2 — Cap duro de routing de modelos.
 
-Regla dura: simples -> claude-haiku-4-5; complejas -> claude-sonnet-4-6;
-NUNCA un modelo superior a Sonnet 4.6 (ni Opus ni Fable), en ningun runtime,
-ni siquiera por override del operador.
+Regla dura: simples -> claude-haiku-4-5; complejas -> claude-sonnet-5 (primario);
+NUNCA un modelo superior a Sonnet (ni Opus ni Fable), en ningun runtime,
+ni siquiera por override del operador. claude-sonnet-4-6 sigue siendo un
+modelo Claude valido -- ahora es el FALLBACK del CLI, no el tope de este clamp.
 
 Backend anthropic para ejercitar el path Claude del router.
 """
@@ -23,7 +24,7 @@ os.environ["LLM_BACKEND"] = "anthropic"
 from services import llm_router  # noqa: E402
 
 _FORBIDDEN = re.compile(r"opus|fable", re.IGNORECASE)
-_CAP = "claude-sonnet-4-6"
+_CAP = "claude-sonnet-5"
 
 
 def _blocks(tokens_approx: int) -> list[dict]:
@@ -39,6 +40,8 @@ def test_clamp_model_maps_forbidden_to_sonnet():
 
 def test_clamp_model_preserves_allowed():
     assert llm_router.clamp_model("claude-haiku-4-5") == "claude-haiku-4-5"
+    assert llm_router.clamp_model("claude-sonnet-5") == "claude-sonnet-5"
+    # sonnet-4-6 (fallback del CLI) sigue siendo un modelo Claude valido: pasa sin tocar.
     assert llm_router.clamp_model("claude-sonnet-4-6") == "claude-sonnet-4-6"
 
 

@@ -1,8 +1,32 @@
 # Plan 143 — Sistema de movimiento, micro-interacciones y feedback óptimista
 
-**Versión:** v1 (propuesto 2026-07-15)
-**Estado:** PROPUESTO v1
+**Versión:** v2 (criticado 2026-07-15)
+**Estado:** CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
 **Autor:** StackyArchitectaUltraEficientCode
+
+### CHANGELOG v1→v2 (juez adversarial; refs C#)
+- **C1 (IMPORTANTE):** los conteos por-archivo de KPI-3 y §6 (F3/F4) contaban DECLARACIONES de
+  `transition` (líneas), pero el ratchet cuenta LITERALES de tiempo (`TIME_RE`): una línea
+  `transition: a 0.12s, b 0.12s` cuenta **2**, no 1. Verificado por grep 2026-07-15:
+  `TicketSelector`=5 literales (no 3), `AgentRuntimeSelector`/`AgentSelector`/`AgentCard`=2 (no 1).
+  Corregidos los números y reencuadrado KPI-3 como **monotonía por-archivo** (garantía binaria dura;
+  los números son ilustrativos, el baseline los recomputa).
+- **C2 (IMPORTANTE):** F2 fuerza `components/shell/`→0 asumiendo que el ratchet de COLOR del 139
+  ("0 hex") implica limpieza de MOTION — no lo implica. Si `shell/` (139) tuviera un tiempo
+  OFF-SCALE, F1 (tabla §6.F3.T: "no migrar off-scale") contradiría a F2 (forzado 0) ⇒ deadlock para
+  un modelo menor. Agregado STOP explícito en F1 Paso 2.
+- **C3 (MENOR):** §2/§3 citaban **139** declaraciones (grep de líneas); el conteo hoy es **137**
+  (±2 por WIP ajeno). Aclarado que es nivel-declaración, deriva con WIP, y NO es lo que gatea el
+  ratchet (que cuenta literales).
+- **C4 (MENOR):** F6 entrega `useOptimisticPending` + utilidades SIN consumidor en este plan; la
+  reversión-ante-fallo queda probada a nivel LÓGICA (test), no visual. Documentado + primer adoptante
+  recomendado como plan futuro.
+- **C5 (MENOR):** `.u-pending` con `pointer-events: none` puede soft-lockear un control si la promesa
+  envuelta nunca resuelve. Agregada advertencia en el JSDoc del hook (el adoptante garantiza settle).
+- **C6 (MENOR) + [ADICIÓN ARQUITECTO]:** el guard de layout de KPI-4 era frágil (solo `transition:
+  <propLayout>` al inicio del valor; se saltea `transition: opacity, width`). Reescrito a un regex
+  robusto que detecta CUALQUIER propiedad de layout animada en shorthand o longhand, y se sumó el
+  **contrato visual del feedback óptimista** (`.u-pending` DEBE atenuar y bloquear) al mismo test.
 **Origen:** cierre de la serie UI/UX "mejorar drásticamente la UI y UX de Stacky". Es a MOTION
 lo que el plan 138 fue a color/spacing: la capa que hace que 138→141 se sientan premium y vivas.
 **Depende de:** plan 138 v2 (tokens `--duration-*` / `--ease-*` + primitivas `ui/` + ratchet de deuda)
@@ -47,13 +71,18 @@ respetando el `prefers-reduced-motion` del plan 141 (consumido, NO reimplementad
   (`--duration-*`, `--ease-*`) siguen presentes con su valor (consumidos, no alterados).
 - **KPI-2:** `npx vitest run src/__tests__/motionDebtRatchet.test.ts` exit 0 — baseline congelado;
   `components/ui/` y `components/shell/` con deuda de motion CERO (forzado mecánico).
-- **KPI-3:** tras F1+F3+F4+F5, la deuda de motion por archivo SOLO baja: `Skeleton.module.css`
-  1→0, `TicketSelector.module.css` 3→0, `AgentRuntimeSelector.module.css` 1→0,
-  `AgentSelector.module.css` 1→0, `AgentCard.module.css` 1→0, `FileSelectorModal.module.css` 5→1
-  (medido por el propio ratchet; la garantía dura es la monotonía por-archivo).
+- **KPI-3:** tras F1+F3+F4+F5, la deuda de motion por archivo SOLO baja. La deuda = nº de LITERALES
+  de tiempo + `cubic-bezier` (lo que cuentan `TIME_RE`/`CUBIC_RE`); una línea
+  `transition: a 0.12s, b 0.12s` cuenta **2**, no 1 (C1). Números verificados por grep 2026-07-15:
+  `Skeleton.module.css` 1→0, `TicketSelector.module.css` **5→0**, `AgentRuntimeSelector.module.css`
+  **2→0**, `AgentSelector.module.css` **2→0**, `AgentCard.module.css` **2→0**,
+  `FileSelectorModal.module.css` 5→1. **La garantía dura y BINARIA es la monotonía por-archivo que
+  verifica el ratchet**; estos números son ilustrativos (el baseline los recomputa mecánicamente,
+  §F2 Paso 3 — NO copiarlos a mano).
 - **KPI-4:** `npx vitest run src/__tests__/motionA11yGuard.test.ts` exit 0 — `theme.css` conserva
   EXACTAMENTE 1 bloque `@media (prefers-reduced-motion: reduce)` (el del plan 141 F5: 143 no lo
-  duplica ni lo elimina) y las utilidades nuevas no animan ninguna propiedad de layout (§4.4).
+  duplica ni lo elimina); las utilidades nuevas no animan ninguna propiedad de layout (§4.4, guard
+  robusto C6); y `.u-pending` cumple el contrato visual del feedback óptimista (atenúa + bloquea).
 - **KPI-5:** `npx vitest run src/hooks/__tests__/useOptimisticPending.test.ts` exit 0 y
   `npx tsc --noEmit` exit 0.
 
@@ -80,10 +109,12 @@ dueño ni gate.** Es el análogo exacto de lo que el 138 hizo para color:
 
 ```
 grep -rEn 'transition[^:]*:[^;]*[0-9]+m?s' --include='*.module.css' . | grep -vE 'var\(--(duration|ease|transition)' | wc -l
-  => 139   (declaraciones transition con tiempo literal, fuera de tokens)
+  => 139   (declaraciones-línea; deriva ±2 con WIP ajeno: 137 al re-medir 2026-07-15 — C3)
 grep -rEn '@keyframes' --include='*.module.css' . | wc -l
   => 41    (bloques @keyframes repartidos en ~30 archivos)
 ```
+> Nota (C3): estos son conteos de LÍNEAS, orientativos y volátiles ante WIP ajeno. La métrica dura
+> que gatea el gate es la que recomputa el ratchet (LITERALES por archivo), no estos números.
 
 Top archivos por transiciones hardcodeadas (grep): `TicketBoard.module.css` (12),
 `ChatDrawer.module.css` (10), `TicketGraphView.module.css` (9), `AgentHistoryPage.module.css` (9),
@@ -99,8 +130,13 @@ transiciones), no las de BUCLE. Este plan cierra ambas costuras.
 Verificados por grep el 2026-07-15. El ratchet de F2 los recalcula mecánicamente (NO se copian a
 mano al baseline):
 
-- **139** declaraciones `transition:` con tiempo literal fuera de tokens.
-- **41** bloques `@keyframes` en `.module.css` de features.
+- **~137-139** declaraciones `transition:` con tiempo literal fuera de tokens. Es un grep de
+  LÍNEAS (`grep -c`) y **deriva ±2 según WIP ajeno** (medido 139 al proponer, 137 al criticar
+  2026-07-15). NO es la métrica que gatea el ratchet: éste cuenta LITERALES por archivo (típicamente
+  2 por declaración de 2 propiedades), por eso los números por-archivo de KPI-3 son mayores que el
+  nº de líneas. La monotonía la garantiza el baseline recomputado, no este número (C1, C3).
+- **41** bloques `@keyframes` en `.module.css` de features (contexto; el ratchet NO los cuenta:
+  gobierna DURACIÓN/easing, no la forma del keyframe).
 - **0** declaraciones `animation:` con tiempo literal que además ya usen `var(--duration|ease)`
   (o sea: hoy no hay animaciones parcialmente tokenizadas — todas están 100% hardcodeadas o viven
   en `ui/` con tokens del 138).
@@ -165,8 +201,10 @@ Las utilidades y presets de este plan SOLO animan propiedades que **no fuerzan r
 `transform` y `opacity` (composite, GPU) y `color`/`background-color`/`border-color`/`fill`/`stroke`
 y `box-shadow` (paint, sin reflow). **PROHIBIDO** que un token/preset/utilidad de este plan anime
 `width`, `height`, `top`, `left`, `right`, `bottom`, `margin`, `padding` u otra propiedad de layout.
-KPI-4 (`motionA11yGuard.test.ts`) verifica que el bloque de utilidades no contenga `transition:
-width|height|top|left|right|bottom|margin|padding`.
+KPI-4 (`motionA11yGuard.test.ts`) verifica con un regex ROBUSTO (C6) que ninguna propiedad de layout
+(`width|height|top|left|right|bottom|inset|margin|padding|inline-size|block-size`) aparezca como
+propiedad animada en un `transition`/`transition-property` (shorthand o longhand, en cualquier
+posición del valor) ni en los `@keyframes` del bloque 143.
 
 ### 4.5 Paridad de los 3 runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro)
 
@@ -357,10 +395,18 @@ valor), STOP y reportar — no inventar.
 ```
 grep -rEn '[0-9]*\.?[0-9]+m?s|cubic-bezier' "Stacky Agents/frontend/src/components/shell/" --include='*.module.css'
 ```
-Resultado ESPERADO: vacío (139 §... deja `components/shell/**` token-only). Si devuelve alguna línea
-con tiempo literal o `cubic-bezier` inline, tokenizarla con la **tabla de mapeo §6.F3.T** (misma
-mecánica que el Skeleton: literal → `var(--duration-*)` / `cubic-bezier(...)` → `var(--ease-out-expo)`),
-byte-idéntico. Documentar cada reemplazo en el commit.
+Resultado ESPERADO: vacío. **OJO (C2):** el ratchet del 139 es de COLOR ("0 hex"), NO garantiza que
+`shell/` esté limpio de MOTION. Dos ramas:
+- Si devuelve líneas con tiempo literal ON-SCALE (`0.12s`/`0.2s`/`0.4s`/`0.7s`/`1.4s`) o
+  `cubic-bezier(0.16, 1, 0.3, 1)`: tokenizar con la **tabla §6.F3.T** (literal → `var(--duration-*)`
+  / `cubic-bezier(...)` → `var(--ease-out-expo)`), byte-idéntico. Documentar cada reemplazo en el commit.
+- Si devuelve algún tiempo **OFF-SCALE** (`0.1s`, `0.15s`, `0.6s`, `0.8s`, `1.2s`, `1.6s`, u otro
+  fuera de la tabla): **STOP y reportar**. NO forzar: un off-scale no es tokenizable byte-idéntico y
+  el forced-0 de `shell/` en F2 (Paso 1, `it` tercero) sería inalcanzable ⇒ el plan quedaría
+  bloqueado. Es la ÚNICA situación donde el forced-0 de `shell/` es inválido; requiere decisión de
+  diseño del operador (snap al scale = cambio visual), fuera de scope (§8). Si `components/shell/` ni
+  siquiera existe (139 no implementado), este paso es vacío-trivial y el forced-0 de F2 pasa sin
+  archivos: continuar normal.
 
 **Paso 3 — verde:** `npx vitest run src/__tests__/uiPrimitives.test.ts` (test de las primitivas del
 138 F2) sigue verde, y `npx tsc --noEmit` exit 0. El cambio es solo CSS: no afecta lógica.
@@ -586,7 +632,8 @@ seguro (no está en la lista prohibida R6 ni en el scope de 138-141).
 
 Si cualquier ancla no existe (WIP ajeno cambió el archivo), STOP y reportar.
 
-**Paso 2 — apretar el ratchet:** el archivo pasa de deuda 3 → 0. Regenerar baseline:
+**Paso 2 — apretar el ratchet:** el archivo pasa de deuda **5 → 0** (4×`0.12s` en las 2 transiciones
++ 1×`1.4s`; C1). Regenerar baseline:
 ```powershell
 $env:MOTION_DEBT_REGEN='1'; npx vitest run src/__tests__/motionDebtRatchet.test.ts; Remove-Item Env:\MOTION_DEBT_REGEN
 ```
@@ -640,7 +687,7 @@ Cualquier ancla ausente ⇒ STOP y reportar.
 
 **Paso 2 — apretar ratchet + verde:** regenerar baseline (comando de F3 Paso 2); luego
 `npx vitest run src/__tests__/motionDebtRatchet.test.ts` y `npx tsc --noEmit` exit 0. Los 3 archivos
-salen del baseline (deuda 1 → 0 cada uno).
+salen del baseline (deuda **2 → 0** cada uno: cada declaración anima 2 propiedades = 2 literales `0.12s`; C1).
 
 **Criterio de aceptación (binario):** los 3 archivos ya no contienen `0.12s`
 (`grep -c '0.12s' <archivo>` = 0); ratchet verde; tsc exit 0.
@@ -700,6 +747,14 @@ exit 0. El baseline debe mostrar `components/FileSelectorModal.module.css: 1`.
 `theme.css` y un hook de estado "acción en vuelo", ambos tokenizados y reduced-motion-safe.
 **Valor:** da a cualquier feature una forma consistente y de una línea de sumar micro-interacción y
 feedback inmediato, sin reinventar timing ni romper el ratchet.
+**Nota de consumidor (C4):** este plan NO cablea las utilidades ni el hook a ninguna feature (§8: no
+edita features; la lista prohibida R6 cubre casi todos los botones de acción). Por eso la reversión
+óptimista ante fallo queda probada a nivel LÓGICA (`runWithPending`, test de rechazo) y CONTRATO CSS
+(`.u-pending` atenúa+bloquea, KPI-4), pero NO validada visualmente en un flujo real. Primer adoptante
+recomendado: un plan futuro que envuelva UNA acción segura fuera de R6 (p.ej. el botón "Encolar" de un
+selector ya migrado) para probar el lazo end-to-end. Mientras tanto la capa es adopción-cero =
+cambio-cero (no hay dead-code de runtime: las clases sin uso no se emiten, el hook sin import no entra
+al bundle).
 
 **Archivos:**
 - EDITAR `frontend/src/theme.css` (APPEND al final, tras el bloque de a11y del 141 F5)
@@ -750,6 +805,13 @@ import { useCallback, useState } from "react";
  * NO reemplaza las señales persistentes de runs (plan 134) ni el surfacing de errores
  * (plan 135): es solo el estado visual "encolando/guardando" mientras dura una promesa.
  * Presentación pura, sin backend.
+ *
+ * CONTRATO DEL ADOPTANTE (C5): la promesa `op()` DEBE resolver O rechazar. `run` des-marca
+ * `pending` en `finally`, así que un éxito o un error revierten el estado óptimista y liberan el
+ * control (`.u-pending` vuelve a interactivo). Pero una promesa que NUNCA settlea dejaría el
+ * control atenuado + `pointer-events: none` para siempre (soft-lock). Si la acción puede colgarse,
+ * el adoptante DEBE imponer un timeout/AbortController antes de pasarla a `run`.
+ * `run` re-lanza el error (no lo traga): el surfacing lo hace el plan 135, no este hook.
  */
 export interface OptimisticPending {
   /** true mientras la operación envuelta está en vuelo. */
@@ -812,17 +874,40 @@ describe("Plan 143 F6 — deslinde con 141 (reduced-motion)", () => {
   });
 });
 
-describe("Plan 143 F6 — utilidades de micro-interacción presentes y sin reflow", () => {
+describe("Plan 143 F6 — utilidades presentes, sin reflow y con contrato óptimista", () => {
+  const BLOCK = THEME.slice(THEME.indexOf("/* ─── Micro-interacciones tokenizadas (Plan 143)"));
+
   it("existen las utilidades tokenizadas", () => {
     for (const cls of [".u-pressable", ".u-pending", ".u-fade-in", ".u-fade-in-up", ".u-transition-colors"]) {
       expect(THEME, `Falta la utilidad ${cls}`).toContain(cls);
     }
   });
-  it("las utilidades no animan propiedades de layout (§4.4)", () => {
-    const block = THEME.slice(THEME.indexOf("/* ─── Micro-interacciones tokenizadas (Plan 143)"));
-    for (const bad of ["transition: width", "transition: height", "transition: top", "transition: left", "transition: margin", "transition: padding"]) {
-      expect(block.includes(bad), `Utilidad anima layout: ${bad}`).toBe(false);
+
+  // [ADICIÓN ARQUITECTO] guard ROBUSTO (C6): detecta CUALQUIER propiedad de layout animada, en
+  // shorthand o longhand y en cualquier posición del valor — no solo "transition: width". Cubre
+  // "transition: opacity, width 0.2s" y "transition-property: height", que el guard v1 se salteaba.
+  const LAYOUT = "width|height|top|left|right|bottom|inset|margin|padding|inline-size|block-size";
+  it("ninguna utilidad anima propiedades de layout (§4.4)", () => {
+    const re = new RegExp(`transition(?:-property)?\\s*:[^;{}]*\\b(?:${LAYOUT})\\b`, "g");
+    const offenders = BLOCK.match(re) || [];
+    expect(offenders, `Utilidad anima layout (reflow): ${offenders.join(" | ")}`).toEqual([]);
+    // Los @keyframes del bloque 143 solo pueden animar opacity/transform (sin layout).
+    const kfs = BLOCK.match(/@keyframes[\s\S]*?\}\s*\}/g) || [];
+    for (const kf of kfs) {
+      const bad = kf.match(new RegExp(`\\b(?:${LAYOUT})\\s*:`, "g"));
+      expect(bad, `keyframe anima layout: ${kf.slice(0, 48)}`).toBeNull();
     }
+  });
+
+  // [ADICIÓN ARQUITECTO] contrato VISUAL del feedback óptimista (C4/C5): .u-pending DEBE atenuar
+  // (opacity < 1) Y bloquear (pointer-events: none). Así el "en vuelo" es inequívoco y quitar la
+  // clase revierte el estado: blinda la reversión-ante-fallo que el hook garantiza en su `finally`.
+  it(".u-pending atenúa y bloquea (contrato de feedback óptimista)", () => {
+    const m = BLOCK.match(/\.u-pending\s*\{[^}]*\}/);
+    expect(m, "Falta el bloque .u-pending").not.toBeNull();
+    const body = m ? m[0] : "";
+    expect(/opacity\s*:\s*0?\.\d+/.test(body), ".u-pending debe atenuar (opacity < 1)").toBe(true);
+    expect(/pointer-events\s*:\s*none/.test(body), ".u-pending debe bloquear la interacción").toBe(true);
   });
 });
 ```
@@ -893,6 +978,7 @@ idéntico, fallback N/A. **Trabajo del operador:** ninguno.
 | `theme.css` es zona caliente (138/141 lo editan) y el append colisiona | Baja | Se APENDEA al final (patrón del 141 F5), sin tocar reglas existentes; pre-flight `git status`; staging quirúrgico. No se toca `main.tsx`. |
 | El hook se solapa con 134 (awareness de runs) o 135 (errores mudos) | Baja | Deslinde explícito en el JSDoc del hook: es estado LOCAL y EFÍMERO de una acción en vuelo; no persiste señales ni surfacea errores. Complementa, no reemplaza. |
 | Regenerar el baseline "esconde" una regresión de otro archivo | Baja | El modo `MOTION_DEBT_REGEN=1` corre `assertNoIncrease` contra el baseline previo ANTES de reescribir y rechaza si algo subió (igual que el 138 F0). |
+| `components/shell/` (139) tiene motion OFF-SCALE ⇒ F2 fuerza shell/→0 pero F1 no puede tokenizarlo byte-idéntico (C2) | Media | F1 Paso 2 bifurca: on-scale ⇒ tokenizar; **off-scale ⇒ STOP y reportar** (el forced-0 de shell/ es inválido, requiere decisión de diseño). Si shell/ no existe (139 no implementado), el paso es vacío-trivial. |
 
 ---
 

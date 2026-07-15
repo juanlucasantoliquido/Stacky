@@ -1,18 +1,19 @@
 """tests/test_plan131_incident_flag.py — Plan 131 F0.
 
-Alta de la flag STACKY_INCIDENT_RESOLVER_ENABLED (editable por UI, default OFF)
-y del endpoint GET /api/incidents/status (siempre 200, gate ausente).
+Alta de la flag STACKY_INCIDENT_RESOLVER_ENABLED (editable por UI, default ON
+desde 2026-07-15 — promoción housekeeping, patrón capacidades_optin) y del
+endpoint GET /api/incidents/status (siempre 200, gate ausente).
 Patrón de fixture app/client: tests/test_plan109_flag.py.
 """
 import pytest
 
 
-def test_flag_default_off(monkeypatch):
+def test_flag_default_on(monkeypatch):
     monkeypatch.delenv("STACKY_INCIDENT_RESOLVER_ENABLED", raising=False)
     import importlib
     import config
     importlib.reload(config)
-    assert config.config.STACKY_INCIDENT_RESOLVER_ENABLED is False
+    assert config.config.STACKY_INCIDENT_RESOLVER_ENABLED is True
     importlib.reload(config)  # restaurar estado de import normal para el resto de la suite
 
 
@@ -65,9 +66,9 @@ def test_flagspec_registered():
     assert spec is not None
     assert spec.type == "bool"
     assert spec.env_only is False
-    # Guardarraíl §3.7: sin default= declarado (curación via _CURATED_DEFAULTS_ON
-    # es solo para flags default ON; esta flag es default OFF, no curada).
-    assert spec.default is None
+    # Promovida a default ON 2026-07-15 (housekeeping, patrón capacidades_optin):
+    # default=True declarado + curada en _CURATED_DEFAULTS_ON (test_harness_flags.py).
+    assert spec.default is True
     # Centinela test_every_registry_flag_is_categorized exige bijección completa.
     assert "STACKY_INCIDENT_RESOLVER_ENABLED" in _CATEGORY_KEYS["capacidades_optin"]
 

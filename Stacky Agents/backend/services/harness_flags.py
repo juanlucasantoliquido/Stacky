@@ -2730,9 +2730,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "funcional + técnico en una pasada) desglosa la incidencia dev-ready; Stacky "
             "publica el Issue en el tracker linkeado a su épica, sube los archivos como "
             "attachments y escribe el doc del incidente en el grafo documental. "
-            "Publicación siempre con preview y confirmación del operador. Default OFF."
+            "Publicación siempre con preview y confirmación del operador. Default ON "
+            "(promovida 2026-07-15, patrón capacidades_optin: botón invocado a mano, "
+            "sin costo ni publicación automática)."
         ),
         group="global",
+        default=True,
         env_only=False,
     ),
 )

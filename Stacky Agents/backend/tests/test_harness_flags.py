@@ -547,6 +547,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_CODEBASE_MEMORY_MCP_ENABLED",
     "STACKY_GITLAB_DEEP_LINKS_ENABLED",
     "STACKY_ADO_PREWARM_ENABLED",
+    # ── Activación operador 2026-07-15 — Plan 131 (mismo patrón "capacidades
+    # opt-in": botón invocado a mano en Tickets, sin autopublicación ni costo
+    # automático; publish siempre con preview+confirmación humana) ──
+    "STACKY_INCIDENT_RESOLVER_ENABLED",
 }
 
 

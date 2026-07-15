@@ -1,10 +1,22 @@
 # 148 — Degradación explícita de integraciones no configuradas (ADO / Jira / LLM local)
 
-- **Estado:** PROPUESTO v1
+- **Estado:** CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8)
+- **Crítica v2:** StackyArchitectaUltraEficientCode (juez adversarial, perfil normal · Opus 4.8) — 2026-07-15
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)
 - **Cierra hallazgos:** **D6** (502 en LLM local y en identidad ADO), **V3** (Sync ADO falla ~975× por PAT expirado / proyecto inexistente), **V8** (Sync Jira saltado 448× sin credenciales), **D9** (identidad ADO no resuelta: api-version bajo preview 11×).
+
+### CHANGELOG v1 → v2 (crítica adversarial, evidencia verificada contra código)
+
+- **C1 [ALTA] — bug `config` (módulo) vs `config.config` (instancia) en F5(b).** En `api/tickets.py`, `config` es el **módulo** (`import config` `:39`); la flag vive en `class Config` (`config.py`) y se lee como `config.config.STACKY_...`. El snippet v1 de F5(b) usaba `getattr(config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True)` → siempre devolvía el default `True` (el módulo no tiene ese atributo) → **el branch OFF era inalcanzable y `test_ado_user_flag_off_502` fallaría**, rompiendo el revert byte-a-byte. Corregido a `config.config` (patrón real del archivo: `:410/:446/:865/:922`). Gotcha de memoria (Plan 131).
+- **C2 [MEDIA] — F3 sobre-declaraba "deja de martillar ADO".** `should_skip` solo se cablea en `_startup_sync`; las rutas periódicas `sync`/`sync-v2` (`:702/:5661`, board cada 45 s vía `useTicketSync`) **alimentan** el breaker pero **no lo consultan** → el board sigue pegándole a ADO con el PAT muerto. Redacción del Valor corregida + [ADICIÓN ARQUITECTO F3.1] backoff honesto opcional en `sync-v2`.
+- **C3 [MEDIA] — key del breaker derivada 3 veces distinto → `should_skip` puede no matchear `record_failure`.** `_startup_sync` usa `target_project`; F3(b) usa `ctx0.tracker_project or project_name`; F5(b) usa `project_name` crudo. Congelado un **único helper `ado_breaker_project(project_name)`** en F1 (contrato de key), consumido por los 3 sitios. **[ADICIÓN ARQUITECTO]**
+- **C4 [MEDIA] — línea rota `if False else` en F6 `integrations_reset`** (código muerto entregado verbatim a un modelo menor). Reemplazada por lectura simple de `project`.
+- **C5 [BAJA-MEDIA] — la superficie de los 11× (`resolve_me_unique_name` `ado_identity.py:142`, callers `tickets.py:638` + `ticket_assigner.py:396`) queda sin dedup.** El reporte (`:106`) confirma que la causa REAL es el preview (no un 401), así que F0 elimina hoy la causa; se documenta el límite y se ofrece dedup aditivo opcional para robustez futura.
+- **C6 [BAJA] — `all_states()`/`get_state(*split)` podían lanzar `TypeError` ante una key malformada** en el JSON persistido, violando el invariante "NUNCA lanza". Guardado + test `test_all_states_survives_malformed_key`.
+- **C7 [BAJA] — cita `[V]` imprecisa:** `JiraConfigError` es la **clase en `jira_client.py:49`**; el mensaje "Credenciales Jira no encontradas" se **lanza en `:104`**. Corregido.
+- **Verificado contra código [V]:** `ado_client.py:32` `_API_VERSION="7.1"`, `:354` `get_authenticated_user`, `:366` connectionData; `app.py:55/:82/:137`; `tickets.py:293` (`:303`/`:335` ambos 502), `:5499/:5543/:5548/:5544`; `local_llm_analysis.py:616/:639`; `local_insights.py:225` `_local_llm_reachable(timeout=3.0)`; `harness_flags.py` `_CATEGORY_KEYS["fiabilidad_ciclo_vida"]:225`, `FLAG_REGISTRY:295`; reporte `:106` (string preview literal).
 
 ---
 
@@ -82,6 +94,8 @@ F1 (breaker core)           ─┼─→ F2 (flag) ─→ F3 (ADO sync) ─→ F
 
 **Objetivo (1 frase):** que la resolución de identidad ADO (`get_authenticated_user`) use la `api-version` que ADO acepta para `connectionData`, para que la identidad **resuelva** en vez de fallar como preview.
 **Valor:** elimina los 11× `No se pudo resolver identidad ADO para 'me'` y corta en la raíz uno de los dos 502 de `ado-user` (D6).
+
+> **Precisión de causa raíz [C5] [V]:** el warning de los 11× lo emite `services/ado_identity.py:142` (`resolve_me_unique_name`, `except Exception`), cuyos callers son `tickets.py:638` (asignación) y `ticket_assigner.py:396` (auto-assign) — **no** `get_ado_user`. `resolve_me_unique_name` llama `build_ado_client(...).get_authenticated_user()` (`:140`), que es EXACTAMENTE la función que F0 corrige → el fix está en el lugar correcto. El reporte (`:106`) captura el string literal del error: `"...The requested version ... is under preview. The -preview flag must be supplied..."` → **la causa REAL es el preview, no un 401**, así que el fix de api-version lleva los 11× a 0. **Residual (aditivo, no v1):** si en el futuro la identidad fallara por otra causa (p. ej. PAT 401), `:142` re-warnearía por ciclo sin dedup (F5 solo cubre `get_ado_user`, que no es su caller). Cerrar eso con un `record_failure("ado_identity", ...)` en `:142` es una mejora aditiva declarada, fuera del alcance de v1.
 
 **Archivo a editar (único):** `backend/services/ado_client.py`
 
@@ -167,6 +181,21 @@ def _iso(ts: float) -> str:
 def integration_key(integration: str, project: str | None) -> str:
     return f"{integration}::{(project or '').upper()}"
 
+def ado_breaker_project(project_name: str | None) -> str | None:
+    """[C3] Única derivación de la parte 'project' de la key para integraciones ADO.
+    TODOS los productores/consumidores del breaker ADO (should_skip en _startup_sync,
+    record_failure en _ado_sync_error_response y en get_ado_user) DEBEN usar esto para
+    que la key coincida (si no, should_skip nunca matchea lo que abrió record_failure).
+    Resuelve el tracker_project real del contexto y cae al nombre crudo si no hay ctx.
+    NUNCA lanza."""
+    try:
+        from services.project_context import resolve_project_context
+        ctx = resolve_project_context(project_name=project_name)
+        tp = (ctx.tracker_project if ctx else None) or project_name
+    except Exception:
+        tp = project_name
+    return (tp or "").strip() or None
+
 def _path() -> Path: return data_dir() / _FILENAME
 def _load() -> dict:
     p = _path()
@@ -241,7 +270,16 @@ def get_state(integration: str, project: str | None) -> BreakerState:
                         max(0, int(retry_ts - _now())))
 
 def all_states() -> dict[str, BreakerState]:
-    return {k: get_state(*k.split("::", 1)) for k in _load().keys()}
+    # [C6] Guardar contra keys malformadas en el JSON (invariante "NUNCA lanza"):
+    # partition siempre devuelve 3 partes; get_state acepta ("", ...) sin romper.
+    out: dict[str, BreakerState] = {}
+    for k in _load().keys():
+        integ, _sep, proj = k.partition("::")
+        try:
+            out[k] = get_state(integ, proj or None)
+        except Exception:
+            logger.debug("integration_breaker: key malformada ignorada: %r", k, exc_info=True)
+    return out
 ```
 
 **Clasificador** — mismo módulo, función pura:
@@ -275,9 +313,11 @@ def classify_ado_error(exc) -> tuple[str, str]:
 - `test_classify_project_missing`: `AdoApiError("The following project does not exist: RSPACIFICO")` → `REASON_ADO_PROJECT_MISSING`.
 - `test_persistence_across_reload`: abrir, recargar el módulo (o llamar `_load` fresco) → sigue abierto (verifica persistencia en disco).
 - `test_io_failure_degrades_closed`: monkeypatchear `data_dir` a una ruta imposible → `should_skip` no lanza y devuelve `False`.
+- `test_all_states_survives_malformed_key` **[C6]**: escribir a mano un JSON con una key sin `"::"` (p. ej. `{"basura": {"open": true}}`) → `all_states()` **no lanza** y devuelve un dict (la key basura se ignora o se mapea sin romper).
+- `test_ado_breaker_project_stable_key` **[C3]**: con `resolve_project_context` monkeypatcheado, `ado_breaker_project("RSPACIFICO")` devuelve el `tracker_project` esperado; sin ctx (excepción) cae al nombre crudo; garantiza que productores y consumidores computen la MISMA key.
 
 Comando: `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_integration_breaker.py -q`
-**Criterio de aceptación (binario):** 11 verdes; exit 0.
+**Criterio de aceptación (binario):** 13 verdes; exit 0.
 **Flag:** ninguna (módulo de infraestructura; el comportamiento observable lo activan sus consumidores bajo la flag de F2). Justificado: no cambia nada por sí solo.
 **Impacto por runtime:** N/A (infra pura). Sin fallback específico.
 **Trabajo del operador:** ninguno.
@@ -341,25 +381,30 @@ Comando: `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_harness_
 ### F3 — Cablear el breaker en el sync de ADO (V3)
 
 **Objetivo (1 frase):** que el sync ADO consulte `should_skip` antes de golpear la red, y ante PAT expirado / proyecto inexistente registre el fallo en el breaker (dedup) en vez de re-warnear cada ciclo.
-**Valor:** colapsa 941 warnings a ~1 por transición; deja de martillar ADO con un PAT muerto.
+**Valor:** colapsa 941 warnings a ~1 por transición y **deja de reintentar el sync ADO EN EL ARRANQUE** (el grueso de los 941 viene de re-arranques + `create_app()` de pytest). **[C2 aclaración honesta]** La ruta periódica del board (`sync-v2`, cada 45 s vía `useTicketSync`) **alimenta** el breaker pero **por diseño v1 mantiene su cadencia y su 502** (el board tiene su propio backoff/`syncError`); NO se afirma que el board deje de tocar ADO. Ver F3.1 (opcional) para el backoff honesto del board.
 
 **Archivos a editar (dos):**
 
 **(a) `backend/app.py` — `_startup_sync` (`:105-139`, branch ADO):**
 Antes de construir el cliente y llamar `_ado_sync`, si la flag está ON, chequear el breaker; envolver el `except AdoApiError` para clasificar y registrar:
 ```python
-# dentro del branch else (ADO), reemplazar el bloque try/except AdoApiError:
+# dentro del branch else (ADO), reemplazar el bloque try/except AdoApiError.
+# NOTA [C1]: en app.py `config` es la INSTANCIA (`from config import config`, :34),
+# por eso `getattr(config, "STACKY_...")` es correcto aquí (a diferencia de tickets.py,
+# donde `config` es el módulo y hay que usar `config.config` — ver F5(b)).
 from services import integration_breaker as _brk
 _degr = getattr(config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True)
-if _degr and _brk.should_skip("ado_sync", target_project):
-    logger.debug("sync ADO omitido: breaker abierto para %s", target_project)
+# [C3] key única: la MISMA derivación que usan las rutas sync/ado-user.
+_bkey = _brk.ado_breaker_project(active) if active else target_project
+if _degr and _brk.should_skip("ado_sync", _bkey):
+    logger.debug("sync ADO omitido: breaker abierto para %s", _bkey)
 else:
     try:
         from services.project_context import build_ado_client
         client = build_ado_client(project_name=active) if active else None
         result = _ado_sync(client=client)
         if _degr:
-            _brk.record_success("ado_sync", target_project)
+            _brk.record_success("ado_sync", _bkey)
         logger.info("sync ADO ok: project=%s fetched=%d created=%d updated=%d removed=%d",
                     result["project"], result["fetched"], result["created"],
                     result["updated"], result["removed"])
@@ -368,7 +413,7 @@ else:
     except AdoApiError as e:
         if _degr:
             reason, message = _brk.classify_ado_error(e)
-            _brk.record_failure("ado_sync", target_project, reason, message)  # WARNING solo en transición
+            _brk.record_failure("ado_sync", _bkey, reason, message)  # WARNING solo en transición
         else:
             logger.warning("sync ADO falló: %s", e)
     except Exception:
@@ -380,16 +425,30 @@ else:
 En `_ado_sync_error_response` (`:293`), cuando la flag está ON, además de responder, registrar el fallo en el breaker. Insertar al inicio de la función (antes de los returns), pero **solo** registrar (no cambiar el status todavía — el 200 lo hace F5 para `ado-user`; para `sync`/`sync-v2` mantener 502 porque el board ya hace backoff propio con `useTicketSync` y muestra `syncError`):
 ```python
 def _ado_sync_error_response(exc, *, route_label, project_name):
-    from config import config as _cfg
-    if getattr(_cfg, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+    # [C1] `config` en tickets.py es el MÓDULO → leer la flag por `config.config`.
+    if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
         from services import integration_breaker as _brk
-        ctx0 = resolve_project_context(project_name=project_name)
-        _tp = (ctx0.tracker_project if ctx0 else None) or project_name
+        _tp = _brk.ado_breaker_project(project_name)  # [C3] misma key que _startup_sync/ado-user
         reason, message = _brk.classify_ado_error(exc)
         _brk.record_failure("ado_sync", _tp, reason, message)
     ...  # resto igual
 ```
+> Callers de `_ado_sync_error_response` (verificado [V]): `sync` (`:702`), `ado-user` (`:5543`, **bypaseado** cuando la flag ON — F5(b) responde antes), `sync-v2` (`:5661`). Los tres son ADO sync/identidad → registrar `"ado_sync"` no mis-etiqueta ningún fallo ajeno.
 > **Importante:** la ruta `sync-v2` sigue devolviendo 502 (el board la maneja); lo que cambia es que ahora **alimenta el breaker**, de modo que el próximo `_startup_sync` y el endpoint `ado-user` (F5) ya saben que ADO está caído. No se toca el flujo del board.
+
+**[ADICIÓN ARQUITECTO F3.1 — opcional, aditivo, NO bloquea v1]:** backoff honesto del board.
+Para que el board **también** deje de martillar ADO con un PAT muerto (cerrar del todo el "Valor" de F3 sin engañar), agregar al inicio de la ruta `sync-v2` (`:5661`), **con la flag ON**, un chequeo temprano `should_skip`:
+```python
+if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+    from services import integration_breaker as _brk
+    if _brk.should_skip("ado_sync", _brk.ado_breaker_project(project_name)):
+        st = _brk.get_state("ado_sync", _brk.ado_breaker_project(project_name))
+        return jsonify({"ok": False, "error": "ado_degraded", "degraded": True,
+                        "reason": st.reason, "message": st.message,
+                        "retry_after": st.retry_after,
+                        "seconds_until_retry": st.seconds_until_retry}), 200  # 200 "degradado", no red
+```
+`useTicketSync` ya tolera `!ok` con `syncError`; con `degraded:true` puede mostrar el mismo banner de F6 y respetar el backoff (no golpea ADO hasta `retry_after`). **Es aditivo**: si no se implementa, v1 sigue correcto (board mantiene su cadencia). Test opcional `test_sync_v2_skips_when_breaker_open` en `test_plan148_ado_sync_breaker.py`. **Marcado explícito para que el implementador decida** — si lo hace, actualizar el "Valor" de F3; si no, la aclaración honesta [C2] ya cubre el alcance real.
 
 **Impacto por runtime:** N/A (capa tracker; corran los agentes con el runtime que sea, el sync ADO es el mismo). Sin fallback por runtime.
 
@@ -495,10 +554,16 @@ Antes del `return jsonify(result), 502` final (`:639`), interceptar el caso "LLM
 Cambiar el branch `except (AdoApiError, _AdoApiError)` para que, con la flag ON, devuelva **200 linked:false** (alineado con el patrón que el propio endpoint ya usa en `:5548` cuando no hay `unique_name`):
 ```python
     except (AdoApiError, _AdoApiError) as exc:
-        if getattr(config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+        # [C1] En tickets.py `config` es el MÓDULO (`import config`, :39). La flag vive
+        # en la clase Config → hay que leerla por `config.config` (patrón real del
+        # archivo: :410/:446/:865/:922). Con `config` pelado, getattr devolvería SIEMPRE
+        # el default True y el branch OFF sería inalcanzable (test_ado_user_flag_off_502
+        # fallaría). ESTE es el fix del hallazgo C1.
+        if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
             from services import integration_breaker as _brk
             reason, message = _brk.classify_ado_error(exc)
-            _brk.record_failure("ado_identity", project_name, reason, message)
+            _brk.record_failure("ado_identity", _brk.ado_breaker_project(project_name),  # [C3] key consistente
+                                reason, message)
             return jsonify({
                 "ok": True, "linked": False, "degraded": True,
                 "reason": reason, "message": message, "source": "ado",
@@ -577,7 +642,11 @@ def integrations_status():
 def integrations_reset(integration: str):
     """Acción HITL: el operador pide reintentar YA (tras renovar la credencial)."""
     from services import integration_breaker as _brk
-    project = (request.args.get("project") or request.json.get("project") if request.is_json else None) if False else request.args.get("project")
+    # [C4] project viene del querystring (el banner reenvía el 'project' que /status
+    # ya devolvió, byte-idéntico, para que la key del reset matchee la de apertura).
+    project = request.args.get("project")
+    if project is None and request.is_json:
+        project = (request.get_json(silent=True) or {}).get("project")
     _brk.reset(integration, project)
     return jsonify({"ok": True, "integration": integration, "project": project})
 ```
@@ -626,7 +695,9 @@ Componente que hace `GET /api/integrations/status` (refetch cada 60 s), y **si `
 | R4 | Persistencia del breaker corrupta / disco no escribible. | `_load`/`_save` degradan a `{}`/no-op silencioso (test `test_io_failure_degrades_closed`); nunca lanzan → jamás rompen el arranque ni un request. |
 | R5 | La flag OFF debe volver **exacto** al comportamiento previo. | Cada branch conserva el path legacy literal (`"sync ADO falló:"`, `"sync Jira saltado:"`, 502) tras `if _degr: ... else: <legacy>`. Tests `*_flag_off_*` lo fijan. |
 | R6 | El write-site del secreto (F6-b) no es un único punto claro. | F6-b es **aditivo/opcional**; el botón "Reintentar ahora" (endpoint reset) cubre el caso HITL. No bloquea el plan. **[INF]** |
-| R7 | Cross-ref 145 (dedup helper) aún no implementado. | El breaker **es** el mecanismo de dedup (WARNING solo en transición). No depende de 145; si 145 aporta un rate-limiter, se puede sumar luego sin cambiar contratos. |
+| R7 | Cross-ref 145 (dedup helper `log_throttle.py`) aún no implementado. | El breaker **es** el mecanismo de dedup (WARNING solo en transición). **No depende de 145** (ver §8 CROSS-FLAGS); si 145 aporta un rate-limiter, se puede sumar luego sin cambiar contratos. **Orden:** 148 puede implementarse antes o después de 145 sin bloqueo. |
+| R8 | **[C2]** El board (`sync-v2`, 45 s) sigue tocando ADO con un PAT muerto (solo `_startup_sync` consulta `should_skip`). | Riesgo real de rate-limit/lockout de ADO si el PAT está revocado y el board insiste. Mitigación v1: la cadencia del board es la actual (sin regresión) y sus warnings ya no se emiten (van al breaker en transición). Mitigación completa: **F3.1** (backoff honesto en `sync-v2`, aditivo). Decidir explícito al implementar. |
+| R9 | **[C3]** `should_skip` (arranque) y `record_failure` (rutas) computan la key con derivaciones distintas → el skip no matchea lo abierto. | Un **único** `integration_breaker.ado_breaker_project(project_name)` usado por los 3 sitios (arranque, `_ado_sync_error_response`, `get_ado_user`). Test `test_ado_breaker_project_stable_key`. |
 
 ---
 
@@ -666,7 +737,8 @@ Componente que hace `GET /api/integrations/status` (refetch cada 60 s), y **si `
 
 ### Definición de Hecho (DoD) global
 - [ ] F0 verde: `test_ado_connection_data_api_version.py` (2/2); connectionData usa `-preview`, GA intactos.
-- [ ] F1 verde: `test_integration_breaker.py` (11/11); breaker persiste, backoff, dedup, degrada a cerrado ante IO.
+- [ ] F1 verde: `test_integration_breaker.py` (13/13); breaker persiste, backoff, dedup, degrada a cerrado ante IO, `all_states` sobrevive keys malformadas [C6], `ado_breaker_project` da key estable [C3].
+- [ ] **[C1] Anti-regresión `config.config`:** en `tickets.py` la flag se lee por `config.config.STACKY_INTEGRATION_DEGRADATION_ENABLED` (NO `config.` pelado); `test_ado_user_flag_off_502` verde lo prueba (si estuviera mal, ese test da 200 en vez de 502).
 - [ ] F2 verde: `test_harness_flags.py` + `test_plan148_integration_degradation.py`; flag default ON, curada y categorizada.
 - [ ] F3 verde: `test_plan148_ado_sync_breaker.py` (5/5); ADO abre/omite/cierra; flag OFF preserva warning legacy.
 - [ ] F4 verde: `test_plan148_jira_sync_breaker.py` (4/4); Jira sin creds abre 1 vez; flag OFF legacy.
@@ -685,7 +757,17 @@ Componente que hace `GET /api/integrations/status` (refetch cada 60 s), y **si `
 - **[V]** `app.py:55` `_startup_sync`; Jira skip `:82`; ADO fail `:137`; `_startup_sync(logger)` invocado en `create_app` (`:354`); no hay daemon de sync ADO periódico (loops en `app.py` = digest/memory_review/local_insights_sweep/ado_edit_sweep).
 - **[V]** `api/tickets.py:293` `_ado_sync_error_response` (ambos branches 502); `:5499` `get_ado_user` (502 en `:5543`; ya devuelve `linked:false` 200 en `:5548`); `sync` `:702`, `sync-v2` `:5661`.
 - **[V]** `api/local_llm_analysis.py:616` `generate_insight_route` (502 en `:639`); `local_insights.py:225` `_local_llm_reachable`, `:286` `generate_insight_for_execution` (returns dict, nunca lanza).
-- **[V]** `jira_client.py:103` `JiraConfigError("Credenciales Jira no encontradas...")`.
+- **[V]** `jira_client.py:49` `class JiraConfigError(RuntimeError)`; el mensaje `"Credenciales Jira no encontradas. ..."` se lanza en `:104`.
 - **[V]** flags: `harness_flags.py` FlagSpec `:21`, `_CATEGORY_KEYS` `:114`, `fiabilidad_ciclo_vida` `:225`, FLAG_REGISTRY `:295`; `test_harness_flags.py` `_CURATED_DEFAULTS_ON` `:467`, `test_every_registry_flag_is_categorized` `:628`, `test_default_known_only_for_curated` `:700`; `config.py` patrón `:81`/`:91`.
 - **[V]** venv `backend/.venv/Scripts/python.exe`; vitest `^4.1.9` en `frontend/package.json`.
 - **[INF]** valor exacto `7.1-preview` aceptado por el tenant (F0 R3); write-site único del secreto para F6-b; punto de montaje del banner y consumidor de `ado-user` en frontend (confirmar por grep antes de editar).
+
+---
+
+## 8. CROSS-FLAGS — interacción con la serie 144–149
+
+- **Flag nueva:** `STACKY_INTEGRATION_DEGRADATION_ENABLED` (bool, **default ON**, kill-switch, patrón triple + categoría `fiabilidad_ciclo_vida`). Excepción dura de "cero trabajo": ninguna — es default ON e invisible; el estado "no configurado" es el estado degradado esperado (excepción dura **(c)** en §3.2 para el prerequisito credencial externa, no para la flag).
+- **145 (`log_throttle.py`):** este plan **NO consume** `log_throttle.py` (contra la premisa del encabezado de tarea). Diseño deliberado (R7): el breaker **es** su propio dedup (WARNING solo en transición cerrado→abierto). **Orden libre:** 148 puede ir antes o después de 145. Si 145 aterriza primero, se puede *opcionalmente* envolver el WARNING de transición del breaker con el throttler, pero no es necesario.
+- **146 (`ado_edit_ledger`):** 146 toca `services/ado_client.py` por otro símbolo (`ado_edit_ledger`). 148 toca `ado_client.py` **solo en F0** (constante nueva junto a `:32` + URL en `:366`). **Sin colisión** de líneas/símbolos; si ambos se implementan en ramas separadas, el merge es trivial (regiones disjuntas). Verificar con `git diff` que 146 no reescriba `get_authenticated_user`.
+- **144 (trust/estados) / 147 (repo_root/watchers) / 149 (intake/excepciones tipadas):** superficies disjuntas (ver §6 "Fuera de scope"). 149 introduce excepciones tipadas en endpoints devops/console/agents — **no** toca `tickets.py`/`local_llm_analysis.py`/`app.py:_startup_sync`, así que no pisa a 148.
+- **Flags default ON tocadas:** ninguna existente se modifica; solo se agrega la nueva. `STACKY_LOCAL_INSIGHTS_ENABLED`/`LOCAL_LLM_ENABLED` se **leen** (F5), no se cambian.

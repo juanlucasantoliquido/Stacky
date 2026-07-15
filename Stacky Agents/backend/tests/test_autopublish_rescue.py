@@ -26,7 +26,9 @@ def _call(output, **extra):
 
 
 def test_rescue_disabled_returns_epic_not_in_output(monkeypatch):
-    monkeypatch.delenv("STACKY_ARTIFACT_RESCUE_ENABLED", raising=False)
+    # STACKY_ARTIFACT_RESCUE_ENABLED pasó a default ON el 2026-07-15 (barrido de
+    # flags): se fuerza OFF acá para seguir cubriendo ese camino explícitamente.
+    monkeypatch.setenv("STACKY_ARTIFACT_RESCUE_ENABLED", "false")
     with patch("services.artifact_rescue.find_rescued_html") as m_find:
         res = _call("narración sin épica alguna")
     assert res.error and res.error.startswith("epic_not_in_output")

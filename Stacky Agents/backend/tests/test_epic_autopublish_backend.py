@@ -181,11 +181,13 @@ def test_autopublish_gate_blocks_on_gap_when_enabled(_app_ctx, monkeypatch):
 
 
 def test_autopublish_gate_off_publishes_gap_epic(_app_ctx, monkeypatch):
-    """Plan 51 F3 — con el gate OFF (default), el comportamiento es idéntico al
-    actual: la épica con hueco se publica igual (no-regresión)."""
+    """Plan 51 F3 — con el gate OFF explícito, el comportamiento es idéntico al
+    actual: la épica con hueco se publica igual (no-regresión).
+    STACKY_EPIC_GATE_ENABLED pasó a default ON el 2026-07-15 (barrido de flags);
+    se fuerza OFF acá para seguir cubriendo ese camino de no-regresión."""
     from api.tickets import autopublish_epic_from_run
 
-    monkeypatch.delenv("STACKY_EPIC_GATE_ENABLED", raising=False)
+    monkeypatch.setenv("STACKY_EPIC_GATE_ENABLED", "false")
     mock_client = _mock_ado(monkeypatch, ado_id=6002)
 
     result = autopublish_epic_from_run(
@@ -261,10 +263,12 @@ def test_autopublish_seals_published_html_when_learning_enabled(_app_ctx, monkey
 
 
 def test_autopublish_no_baseline_when_learning_disabled(_app_ctx, monkeypatch):
-    """Plan 60 F1 — con el flag OFF (default), published_html y baseline_rev son None."""
+    """Plan 60 F1 — con el flag OFF explícito, published_html y baseline_rev son None.
+    STACKY_ADO_EDIT_LEARNING_ENABLED pasó a default ON el 2026-07-15 (barrido de
+    flags); se fuerza OFF acá para seguir cubriendo ese camino."""
     from api.tickets import autopublish_epic_from_run
 
-    monkeypatch.delenv("STACKY_ADO_EDIT_LEARNING_ENABLED", raising=False)
+    monkeypatch.setenv("STACKY_ADO_EDIT_LEARNING_ENABLED", "false")
     _mock_ado(monkeypatch, ado_id=7002)
 
     result = autopublish_epic_from_run(

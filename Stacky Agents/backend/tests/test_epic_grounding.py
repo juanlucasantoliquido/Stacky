@@ -95,6 +95,10 @@ def test_autopublish_attaches_grounding_warnings_not_blocks(_app_ctx, monkeypatc
     """Grounding ON, epic sin grounding → warnings adjuntos en resultado pero ado_id presente."""
     monkeypatch.setenv("STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "true")
     monkeypatch.setenv("STACKY_EPIC_SUMMARY_ENABLED", "false")
+    # STACKY_EPIC_GATE_ENABLED es default ON desde 2026-07-15 (barrido de flags) y
+    # agrega su propia entrada "epic_gate: decision=..." a grounding_warnings; se
+    # aísla en OFF para testear grounding-preflight solo, sin acoplar a ese flag.
+    monkeypatch.setenv("STACKY_EPIC_GATE_ENABLED", "false")
     _mock_ado_for_grounding(monkeypatch)
     from api.tickets import autopublish_epic_from_run
     output = "```html\n" + EPIC_NO_GROUNDING + "\n```"
@@ -111,6 +115,8 @@ def test_autopublish_no_warnings_when_flag_off(_app_ctx, monkeypatch):
     """Grounding OFF → grounding_warnings vacío aunque la épica no cite módulos."""
     monkeypatch.setenv("STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "false")
     monkeypatch.setenv("STACKY_EPIC_SUMMARY_ENABLED", "false")
+    # Ver nota de aislamiento en test_autopublish_attaches_grounding_warnings_not_blocks.
+    monkeypatch.setenv("STACKY_EPIC_GATE_ENABLED", "false")
     _mock_ado_for_grounding(monkeypatch, ado_id=7778)
     from api.tickets import autopublish_epic_from_run
     output = "```html\n" + EPIC_NO_GROUNDING + "\n```"
@@ -154,6 +160,8 @@ def test_autopublish_attaches_epic_summary_when_flag_on(_app_ctx, monkeypatch):
     """Summary ON → epic_summary en el resultado con rf_count."""
     monkeypatch.setenv("STACKY_EPIC_SUMMARY_ENABLED", "true")
     monkeypatch.setenv("STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "false")
+    # Ver nota de aislamiento en test_autopublish_attaches_grounding_warnings_not_blocks.
+    monkeypatch.setenv("STACKY_EPIC_GATE_ENABLED", "false")
     _mock_ado_for_grounding(monkeypatch, ado_id=7780)
     from api.tickets import autopublish_epic_from_run
     output = "```html\n" + EPIC_NO_GROUNDING + "\n```"

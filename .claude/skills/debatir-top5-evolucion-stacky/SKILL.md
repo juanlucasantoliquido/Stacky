@@ -125,7 +125,10 @@ Antes de la ronda 1, mirá si hay un `Stacky Agents/docs/_roadmap/TOP5_*.md` pre
 - **3 runtimes con paridad:** Codex CLI, Claude Code CLI, GitHub Copilot Pro. Cada idea funciona en los 3
   o degrada con fallback explícito. Nada atado a un runtime (ojo deudas de paridad reales: style_memory
   copilot-only, speculative.py).
-- **Cero trabajo extra al operador:** invisible/automático u opt-in con default seguro (off).
+- **Cero trabajo extra al operador:** invisible/automático u opt-in con default **ON**, salvo que dispare
+  una de las 4 EXCEPCIONES DURAS citada explícitamente: (1) acción automática que bypasea revisión humana
+  (única ya aceptada: épica-desde-brief), (2) destructiva/irreversible, (3) prerequisito no garantizado en
+  instalación default, (4) reduce seguridad por default.
 - **Human-in-the-loop innegociable:** amplificar al operador, jamás reemplazarlo. Autonomía proactiva que
   lo saque del lazo = RECHAZO. (Excepción ya decidida: épica-desde-brief auto-publica; no reabrir.)
 - **Mono-operador sin auth real:** nada de RBAC/multiusuario/roles/403 (es teatro; `current_user` es un
@@ -219,7 +222,9 @@ TAREA: Proponé un portafolio de 8-12 ideas (más de 5, para que compitan). Por 
 
 RIELES DUROS (si una idea los viola, NO la propongas o degradala con fallback explícito):
 - 3 runtimes con paridad (Codex/Claude Code/Copilot) o fallback explícito.
-- Cero trabajo extra al operador (invisible u opt-in default off).
+- Cero trabajo extra al operador (invisible u opt-in default ON, salvo una de las 4 excepciones duras
+  citada explícitamente: bypass de revisión humana, destructiva/irreversible, prerequisito no garantizado,
+  o reduce seguridad).
 - Human-in-the-loop innegociable (amplificar, nunca reemplazar; sin autonomía proactiva).
 - Mono-operador sin auth real (sin RBAC).
 - No degradar; reusar lo existente (memoria colaborativa, flags del arnés, telemetría, gates golden).

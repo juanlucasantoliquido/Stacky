@@ -13,7 +13,7 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
 - Justo después de correr `proponer-plan-stacky`, para endurecer el plan recién generado antes de implementarlo.
 - Cuando el operador quiere una segunda opinión adversarial sobre un plan existente ("criticá el plan 39", "mejorá el último plan", "¿este plan está listo para implementar?").
 - Antes de delegar un plan a modelos menores (Haiku, Codex, GitHub Copilot Pro): valida que cada paso sea literal y a prueba de ambigüedad.
-- Cuando se sospecha scope creep, flags sin default seguro, o pasos que rompen alguno de los 3 runtimes.
+- Cuando se sospecha scope creep, una flag nueva en OFF sin excepción dura citada, o pasos que rompen alguno de los 3 runtimes.
 - NO la uses para generar un plan nuevo desde cero (eso es `proponer-plan-stacky`) ni para implementar producto.
 
 ## Resultado (entregable)
@@ -38,7 +38,7 @@ Al ejecutarse, la skill produce:
 ## Restricciones no negociables
 
 - Paridad de los 3 runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro): toda crítica y todo fix deben preservar que cada ítem funcione en los 3 o degrade con fallback explícito. Marcar cualquier cosa atada a un solo runtime.
-- Cero trabajo extra al operador: las mejoras propuestas deben ser invisibles/automáticas u opt-in con default seguro (off). Prohibido introducir pasos manuales nuevos o nueva carga de config como parte del "fix".
+- Cero trabajo extra al operador: las mejoras propuestas deben ser invisibles/automáticas u opt-in con default **ON**, salvo que dispare una de las 4 EXCEPCIONES DURAS citada explícitamente: (1) acción automática que bypasea revisión humana — auto-publicar/auto-crear ticket/auto-ejecutar remoto/mensaje externo, única ya aceptada: épica-desde-brief—; (2) destructiva/irreversible; (3) prerequisito no garantizado en instalación default; (4) reduce seguridad por default. Prohibido introducir pasos manuales nuevos o nueva carga de config como parte del "fix".
 - Human-in-the-loop innegociable: el operador se amplifica, nunca se reemplaza. La crítica debe RECHAZAR (o exigir cambio en) cualquier feature del plan que saque al humano del lazo o introduzca autonomía proactiva.
 - Mono-operador sin auth real: marcar como sobre-ingeniería cualquier RBAC/multiusuario; `current_user` es un header sin validar, no protege nada.
 - No degradar performance, seguridad, estabilidad ni DX; backward-compatible. Reusar lo existente (memoria colaborativa, flags del arnés, telemetría/observabilidad) en vez de reinventar — y exigirlo en los fixes.
@@ -68,18 +68,24 @@ PASO 2 — RED-TEAM (atacá el plan con ESTE checklist, sin piedad):
 - [ ] Frases vagas: cazá "etc.", "según corresponda", "ajustar lo necesario", "donde aplique" y similares. Cada una es un hallazgo.
 - [ ] TDD / tests primero: ¿cada fase tiene archivo de test NOMBRADO, casos concretos, y comando exacto para correrlo? ¿El criterio de aceptación es BINARIO (pasa/falla), no subjetivo?
 - [ ] Paridad de los 3 runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ¿cada ítem funciona en los 3, o degrada con fallback explícito? Marcá cualquier cosa atada a un solo runtime.
-- [ ] Cero trabajo extra al operador: ¿el plan agrega algún paso manual nuevo o nueva carga de config? Debe ser invisible/automático u opt-in con default seguro (off). Marcá lo que cargue al operador.
+- [ ] Cero trabajo extra al operador: ¿el plan agrega algún paso manual nuevo o nueva carga de config? Debe ser invisible/automático u opt-in con default **ON**, salvo que cite cuál de las 4 excepciones duras aplica (bypass de revisión humana, destructiva/irreversible, prerequisito no garantizado, reduce seguridad). Marcá lo que cargue al operador.
 - [ ] Human-in-the-loop: ¿alguna feature saca al humano del lazo o introduce autonomía proactiva? Eso es RECHAZO o cambio obligatorio. El operador se amplifica, nunca se reemplaza.
 - [ ] Mono-operador sin auth real: ¿hay RBAC/multiusuario/roles/403? Es teatro; marcalo como sobre-ingeniería.
 - [ ] No degradar: ¿el plan compromete performance, seguridad, estabilidad o DX? ¿Es backward-compatible?
 - [ ] Reuso: ¿reinventa algo que ya existe (memoria colaborativa, flags del arnés, telemetría/observabilidad)? Exigí reusar.
-- [ ] Flags: ¿toda flag nueva tiene default SEGURO (off)? Marcá flags sin default o con default peligroso.
+- [ ] Flags: ¿toda flag nueva tiene default **ON**? Si el plan la declara OFF, ¿CITA EXPLÍCITAMENTE cuál de
+  las 4 excepciones duras aplica — (1) acción automática que bypasea revisión humana (auto-publicar/
+  auto-crear ticket/auto-ejecutar remoto/mensaje externo; única ya aceptada: épica-desde-brief), (2)
+  destructiva/irreversible, (3) prerequisito no garantizado en instalación default (credenciales externas,
+  servicio local no instalado, catálogo/config sin armar), (4) reduce seguridad por default? Una flag nueva
+  en OFF SIN citar cuál de las 4 aplica es una BRECHA (marcala como hallazgo, no la dejes pasar con un
+  "default seguro" genérico). Marcá también flags sin default declarado.
 - [ ] Orden de fases y dependencias: ¿alguna fase depende de algo que se hace después? ¿Hay scope creep (cosas fuera del objetivo del plan)?
 - [ ] Casos borde y riesgos no contemplados: zombie/timeout, JSON inválido, mismatch ordinal vs id, runs pegados en "running", BD read-only, etc. (usá tu conocimiento del ecosistema Stacky).
 Para CADA hallazgo, producí: ID (C1, C2, ...), SEVERIDAD (BLOQUEANTE / IMPORTANTE / MENOR), QUÉ está mal, POR QUÉ importa, FIX concreto. Rankeá la lista por severidad (BLOQUEANTE primero).
 
 PASO 3 — VEREDICTO DE JUEZ (binario, con criterios):
-- RECHAZADO: si hay >=1 hallazgo BLOQUEANTE (saca al humano del lazo, rompe un runtime sin fallback, agrega trabajo manual obligatorio, flag sin default seguro que sea riesgosa, o ambigüedad que impide implementar).
+- RECHAZADO: si hay >=1 hallazgo BLOQUEANTE (saca al humano del lazo, rompe un runtime sin fallback, agrega trabajo manual obligatorio, flag nueva en OFF sin citar cuál de las 4 excepciones duras aplica, o ambigüedad que impide implementar).
 - APROBADO-CON-CAMBIOS: si no hay BLOQUEANTES pero sí >=1 IMPORTANTE.
 - APROBADO: solo si todo es MENOR o cosmético. (Aun así, igual aplicás la regla de oro: agregás al menos una mejora de alto valor.)
 - Declará el veredicto y los criterios binarios que lo justifican.
@@ -97,7 +103,7 @@ FORMATO DE SALIDA (en este orden, denso, sin relleno):
 4. MEJORA APLICADA: el plan v2 (texto completo reescrito) o el bloque de patches; con encabezado v1->v2 + changelog; y la(s) "[ADICIÓN ARQUITECTO]" señaladas.
 5. RESUMEN (5 líneas).
 
-RESTRICCIONES NO NEGOCIABLES (valen para tus críticas Y tus fixes): paridad de 3 runtimes con fallback explícito; cero trabajo extra al operador (invisible u opt-in default off); human-in-the-loop (amplificar, nunca reemplazar; prohibida autonomía proactiva); mono-operador sin auth real (sin RBAC); no degradar performance/seguridad/estabilidad/DX; backward-compatible; reusar lo existente; flags con default seguro; literal a prueba de modelos menores; eficiencia de tokens. Nunca cierres con "nada que agregar".
+RESTRICCIONES NO NEGOCIABLES (valen para tus críticas Y tus fixes): paridad de 3 runtimes con fallback explícito; cero trabajo extra al operador (invisible u opt-in default ON, salvo excepción dura citada); human-in-the-loop (amplificar, nunca reemplazar; prohibida autonomía proactiva); mono-operador sin auth real (sin RBAC); no degradar performance/seguridad/estabilidad/DX; backward-compatible; reusar lo existente; flags nuevas en default ON salvo que citen cuál de las 4 excepciones duras aplica; literal a prueba de modelos menores; eficiencia de tokens. Nunca cierres con "nada que agregar".
 ```
 
 ## Checklist de aceptación

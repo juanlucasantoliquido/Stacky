@@ -48,7 +48,9 @@ def _seed(*, verdict, note, project="ONP", with_ticket=True):
 
 
 def test_disabled_returns_none(app_ctx, monkeypatch):
-    monkeypatch.delenv("STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED", raising=False)
+    # STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED pasó a default ON el 2026-07-15
+    # (barrido de flags): se fuerza OFF acá para seguir cubriendo ese camino.
+    monkeypatch.setenv("STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED", "false")
     from services import post_run_memory
     eid = _seed(verdict="rejected", note="falta batch")
     with patch("services.memory_store.save_observation") as save:

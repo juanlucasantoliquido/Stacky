@@ -289,7 +289,12 @@ def test_pytest_failure_is_hard(tmp_path):
 def test_pytest_timeout_is_could_not_verify(tmp_path):
     import subprocess as _sp
     test_file = tmp_path / "test_slow.py"
-    test_file.write_text("def test_slow():\n    import time; time.sleep(100)\n")
+    # Assert real (no vacío) para que FakeGreenGuard (default ON desde 2026-07-15,
+    # barrido de flags) no lo marque hard_failed antes de llegar a PytestRunner:
+    # este test solo quiere ejercitar el timeout de PytestRunner, no FakeGreenGuard.
+    test_file.write_text(
+        "def test_slow():\n    import time; time.sleep(100)\n    assert True\n"
+    )
 
     from config import Config
     with patch.object(Config, "STACKY_EXEC_VERIFICATION_ENABLED", True), \

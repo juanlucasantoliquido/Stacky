@@ -154,7 +154,9 @@ def _write_pt(base: Path, rf_id="RF-001", epic_id="149", extra: dict | None = No
 
 
 def test_gate_off_response_has_no_task_gate_key(client_gate, epic_149, tmp_repo_gate, monkeypatch):
-    monkeypatch.delenv("STACKY_TASK_GATE_ENABLED", raising=False)
+    # STACKY_TASK_GATE_ENABLED pasó a default ON el 2026-07-15 (barrido de flags):
+    # se fuerza OFF acá para seguir cubriendo ese camino explícitamente.
+    monkeypatch.setenv("STACKY_TASK_GATE_ENABLED", "false")
     _, rel = _write_pt(tmp_repo_gate)
     with patch("api.tickets._ado_client_for_ticket", return_value=_FakeAdo()):
         resp = client_gate.post(
@@ -258,7 +260,9 @@ def test_gate_blocking_dry_run_no_400(client_gate, epic_149, tmp_repo_gate, monk
 
 def test_gate_plan_file_missing_emits_defect(client_gate, epic_149, tmp_repo_gate, monkeypatch):
     monkeypatch.setenv("STACKY_TASK_GATE_ENABLED", "true")
-    monkeypatch.delenv("STACKY_TASK_GATE_BLOCKING", raising=False)
+    # STACKY_TASK_GATE_BLOCKING pasó a default ON el 2026-07-15 (barrido de
+    # flags): se fuerza OFF acá para seguir cubriendo el camino "annotate, no bloquea".
+    monkeypatch.setenv("STACKY_TASK_GATE_BLOCKING", "false")
     # plan_de_pruebas_path apunta a un archivo que NO existe
     _, rel = _write_pt(tmp_repo_gate, rf_id="RF-006", extra={
         "plan_de_pruebas_path": "Agentes/outputs/epic-149/RF-006-slug/no-existe.md"
@@ -298,7 +302,9 @@ def test_gate_verdict_present_in_success_response(client_gate, epic_149, tmp_rep
 
 
 def test_evaluate_task_gate_not_called_when_flag_off(client_gate, epic_149, tmp_repo_gate, monkeypatch):
-    monkeypatch.delenv("STACKY_TASK_GATE_ENABLED", raising=False)
+    # STACKY_TASK_GATE_ENABLED pasó a default ON el 2026-07-15 (barrido de flags):
+    # se fuerza OFF acá para seguir cubriendo la anti-regresión F4.
+    monkeypatch.setenv("STACKY_TASK_GATE_ENABLED", "false")
     from harness import task_gate as tg_mod
     mock_fn = MagicMock(side_effect=AssertionError("no debería llamarse"))
     _, rel = _write_pt(tmp_repo_gate, rf_id="RF-008")

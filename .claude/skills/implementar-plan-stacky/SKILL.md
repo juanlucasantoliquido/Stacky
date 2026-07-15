@@ -43,9 +43,19 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
   desde la UI** — no solo como variable de entorno. Concretamente: backend que lee el valor + endpoint
   para leerlo/setearlo + control en el frontend, **reusando las superficies de configuración que ya
   existen** (p. ej. `api/client_profile.py` + su panel, el modal de settings de Claude Code, o el panel de
-  flags del arnés `services/harness_flags.py`) en vez de inventar una pantalla nueva. Default seguro (off).
-  ÚNICA excepción: un kill-switch puramente INTERNO que el operador nunca toca (telemetría, defaults de
-  arnés horneados) puede quedar env-only — pero si hay duda de si el operador querría tocarlo, va a la UI.
+  flags del arnés `services/harness_flags.py`) en vez de inventar una pantalla nueva. **Default: ON**, salvo
+  que la flag dispare una de las 4 EXCEPCIONES DURAS (y si aplica alguna, hay que citarla explícitamente,
+  no alcanza un "default seguro" genérico):
+  1. Acción automática que bypasea la revisión humana (auto-publicar, auto-crear tickets en ADO/tracker,
+     auto-ejecutar comandos remotos/DevOps, enviar mensajes externos). Única excepción ya aceptada:
+     épica-desde-brief auto-publica.
+  2. Acción destructiva o irreversible.
+  3. Depende de un prerequisito NO garantizado en una instalación default (credenciales externas, un
+     servicio local no instalado como Ollama, un catálogo/config que el operador todavía no armó).
+  4. Cambia el comportamiento de seguridad reduciéndolo por default.
+  ÚNICA excepción de forma (no de fondo): un kill-switch puramente INTERNO que el operador nunca toca
+  (telemetría, defaults de arnés horneados) puede quedar env-only — pero si hay duda de si el operador
+  querría tocarlo, va a la UI.
 - **Test-first de verdad (TDD) y CERO falsos verdes.** Por cada fase: primero el test nombrado en el plan,
   después el código, y se **corre el test realmente** con el intérprete/venv correcto del repo. Un test que
   no se corrió NO está verde. Si falla y no lo podés arreglar, se reporta BLOQUEADA con el output real; no
@@ -54,9 +64,10 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
 - **3 runtimes con paridad:** Codex CLI, Claude Code CLI, GitHub Copilot Pro. La implementación preserva
   que cada cosa funcione en los 3 o degrade con fallback explícito. Nada nuevo atado a un solo runtime
   (ojo deudas reales de paridad: style_memory copilot-only).
-- **Cero trabajo extra al operador:** la feature es invisible/automática u opt-in con default off; sin
-  pasos manuales nuevos. (No confundir con la regla de UI: "configurable por UI" ≠ "obligatorio
-  configurar"; el default debe funcionar sin que el operador toque nada.)
+- **Cero trabajo extra al operador:** la feature es invisible/automática u opt-in con default **ON** salvo
+  que dispare una de las 4 excepciones duras (ver arriba); sin pasos manuales nuevos. (No confundir con la
+  regla de UI: "configurable por UI" ≠ "obligatorio configurar"; el default debe funcionar sin que el
+  operador toque nada.)
 - **Human-in-the-loop innegociable:** amplificar al operador, jamás reemplazarlo. Sin autonomía proactiva.
 - **Mono-operador sin auth real:** nada de RBAC/multiusuario/roles/403 (`current_user` es un header sin
   validar).
@@ -97,8 +108,8 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
    el plan toca + sus tests vecinos. No releas el repo entero.
 5. **Implementar fase por fase (TDD).** Para CADA fase F0..Fn, en orden:
    a. Escribí/ajustá el test nombrado en el plan (primero).
-   b. Implementá el código mínimo de la fase (archivos/símbolos exactos del plan; flags con default off;
-      config del operador con su control de UI).
+   b. Implementá el código mínimo de la fase (archivos/símbolos exactos del plan; flags con default ON
+      salvo que citen una de las 4 excepciones duras; config del operador con su control de UI).
    c. **Corré el test de esa fase** con el comando exacto del backend (y `tsc --noEmit` si tocaste UI).
    d. Verificá el criterio binario de la fase. Si pasa, seguí; si no, arreglá o marcá BLOQUEADA con el
       output real y seguí a lo que no dependa de ella. Nunca avances declarando verde lo que no corriste.
@@ -138,13 +149,18 @@ PASO 1 — CONFIG POR UI (regla dura): por cada flag/parámetro del plan que el 
 ajustar, NO basta una env var: tiene que quedar activable/editable desde la UI. Wiring = backend que lee
 el valor + endpoint leer/setear + control en el frontend, REUSANDO una superficie existente
 (api/client_profile.py + su panel, el modal de settings de Claude Code, o el panel de flags del arnés
-services/harness_flags.py). Default seguro (off). Solo un kill-switch puramente interno que el operador
-nunca toca puede quedar env-only; ante la duda, va a la UI. Listá qué controles de UI vas a agregar antes
-de codear.
+services/harness_flags.py). Default: ON, salvo que dispare una de las 4 EXCEPCIONES DURAS (citá cuál
+aplica, no un "default seguro" genérico): (1) acción automática que bypasea revisión humana —
+auto-publicar/auto-crear ticket/auto-ejecutar remoto/mensaje externo, única excepción ya aceptada:
+épica-desde-brief—; (2) destructiva/irreversible; (3) prerequisito no garantizado en instalación default
+(credenciales externas, servicio local no instalado, catálogo/config sin armar); (4) reduce seguridad por
+default. Solo un kill-switch puramente interno que el operador nunca toca puede quedar env-only; ante la
+duda, va a la UI. Listá qué controles de UI vas a agregar antes de codear.
 
 PASO 2 — IMPLEMENTAR FASE POR FASE (TDD, en orden de dependencia):
 - Por CADA fase: (a) test nombrado del plan PRIMERO; (b) código mínimo (archivos/símbolos EXACTOS del
-  plan; flags default off); (c) CORRÉ el test de esa fase de verdad; (d) verificá el criterio binario.
+  plan; flags default ON salvo que citen una de las 4 excepciones duras); (c) CORRÉ el test de esa fase de
+  verdad; (d) verificá el criterio binario.
 - Tests backend (por archivo, venv del repo):
   Stacky Agents/backend/.venv/Scripts/python.exe -m pytest "Stacky Agents/backend/tests/<archivo>.py" -q
 - Frontend (si tocaste UI): en Stacky Agents/frontend/ -> npx tsc --noEmit (0 errores). Vitest NO está
@@ -156,8 +172,8 @@ PASO 2 — IMPLEMENTAR FASE POR FASE (TDD, en orden de dependencia):
 
 PASO 3 — RIELES DUROS (respetalos en el código que escribís):
 - 3 runtimes con paridad o fallback explícito (nada atado a un runtime; ojo style_memory copilot-only).
-- Cero trabajo extra al operador (default off, sin pasos manuales nuevos; configurable por UI ≠ obligatorio
-  configurar).
+- Cero trabajo extra al operador (default ON salvo excepción dura citada; sin pasos manuales nuevos;
+  configurable por UI ≠ obligatorio configurar).
 - Human-in-the-loop (sin autonomía proactiva). Mono-operador sin auth (sin RBAC). No degradar; reusar lo
   existente (memoria colaborativa, flags del arnés, telemetría, gates golden, client_profile).
 
@@ -183,8 +199,10 @@ controles de UI agregados; lista de flags + default; hash del commit; pendientes
 - [ ] Pre-flight: el plan tenía fases/archivos/símbolos/tests/criterios binarios; si era ambiguo, NO se
       implementó y se rebotó a `criticar-y-mejorar-plan`.
 - [ ] **Toda flag/config que el operador deba setear quedó activable/editable desde la UI** (backend +
-      endpoint + control de frontend, reusando una superficie existente), con default seguro off. Solo
-      kill-switches internos quedaron env-only, justificados.
+      endpoint + control de frontend, reusando una superficie existente), con default **ON** salvo que se
+      citara explícitamente cuál de las 4 excepciones duras aplica (bypass de revisión humana,
+      destructiva/irreversible, prerequisito no garantizado, reduce seguridad). Solo kill-switches internos
+      quedaron env-only, justificados.
 - [ ] Se trabajó en una rama (no en `main`).
 - [ ] Tras la implementación se hizo un commit en la rama (mensaje `plan-<NN>` + trailer de co-autoría
       `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`, sin `--no-verify`); el `push`

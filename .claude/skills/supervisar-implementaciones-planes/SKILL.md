@@ -58,8 +58,11 @@ El número de los planes objetivo NUNCA se hardcodea: el universo se resuelve en
   que el **operador** deba setear, tiene que quedar activable/editable **desde la UI** (backend que lee el
   valor + endpoint leer/setear + control de frontend, reusando una superficie existente: `api/client_profile.py`
   + su panel, el modal de settings de Claude Code, o el panel de flags del arnés `services/harness_flags.py`),
-  no solo env var. Default seguro (off). ÚNICA excepción: kill-switch puramente interno que el operador
-  nunca toca.
+  no solo env var. Default **ON**, salvo que dispare una de las 4 EXCEPCIONES DURAS (citá cuál
+  explícitamente, no un "default seguro" genérico): (1) acción automática que bypasea revisión humana —
+  auto-publicar/auto-crear ticket/auto-ejecutar remoto/mensaje externo, única ya aceptada: épica-desde-
+  brief—; (2) destructiva/irreversible; (3) prerequisito no garantizado en instalación default; (4) reduce
+  seguridad por default. ÚNICA excepción de forma: kill-switch puramente interno que el operador nunca toca.
 - **3 runtimes con paridad:** Codex CLI, Claude Code CLI, GitHub Copilot Pro. Lo que completes funciona en
   los 3 o degrada con fallback explícito (ojo deudas reales: style_memory copilot-only).
 - **Human-in-the-loop innegociable** (amplificar, jamás reemplazar; sin autonomía proactiva).

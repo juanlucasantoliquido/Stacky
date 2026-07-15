@@ -1,7 +1,7 @@
 # Plan 138 — Sistema de diseño v2: tokens semánticos y primitivas UI
 
-**Versión:** v1 (propuesto 2026-07-14)
-**Estado:** PROPUESTO v1 (2026-07-14)
+**Versión:** v2 (criticado 2026-07-15) — v1 propuesto 2026-07-14
+**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15)
 **Origen:** pedido del operador de "mejorar drásticamente la UI y UX de Stacky Agents".
 **Serie:** UI/UX **138 → 139 → 140 → 141** (orden de implementación CONGELADO; este plan es la FUNDACIÓN).
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero flag de harness, cero dependencia nueva (`package.json` NO se toca).
@@ -13,6 +13,37 @@
 > firmas de props y comandos son LITERALES. Prohibido desviarse de los nombres exactos,
 > prohibido "mejorar" valores o alcance. Todo lo ambiguo ya fue decidido acá.
 > Regla de la casa: los `:NN` citados son ORIENTATIVOS; el TEXTO/símbolo citado es NORMATIVO.
+
+---
+
+## 0. Changelog de crítica v1 → v2 (juez adversarial, 2026-07-15)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 2 IMPORTANTES; 1 MENOR). Plan de
+altísima calidad; los cambios endurecen el contrato de la serie sin ampliar alcance.
+
+- **C1 (IMPORTANTE) — resuelto in place.** Las primitivas embebían literales `rgba(...)`
+  NO tokenizados que la ratchet NO cuenta (solo cuenta hex) y que asumen fondo oscuro: el
+  `trackColor` por defecto del `Spinner` (`rgba(255, 255, 255, 0.15)`) queda **invisible
+  sobre el fondo claro del plan 141**. Fix: se agrega el token **`--spinner-track`** (§10.1.B),
+  el `Spinner` lo usa por defecto, y el plan 141 lo re-apunta en el bloque claro. Byte-idéntico
+  en dark (`--spinner-track: rgba(255, 255, 255, 0.15)`), themeable en claro. (Los overrides
+  explícitos sobre fondos de color —`Button loading`, `RunButton` warn— se dejan como están:
+  su pista lee bien sobre el fondo coloreado en ambos temas.)
+- **C2 (IMPORTANTE) — resuelto in place.** KPI-3 fijaba un TOTAL ABSOLUTO de hex (≤ 1.214)
+  que es un snapshot frágil (119 y otros planes mergean hex antes de que aterrice el 138). Se
+  reescribe a términos **por-archivo** (la única garantía que el ratchet realmente da); el
+  total absoluto queda como orientativo.
+- **C3 (MENOR) — resuelto in place.** La regla "deuda 0 forzada" del ratchet solo cubría
+  `components/ui/`; el plan 139 crea archivos en `components/shell/`. Se extiende el forzado a
+  **`components/ui/` y `components/shell/`** para que el invariante "chrome/primitivas siempre
+  en 0" sea mecánico, no incidental.
+- **[ADICIÓN ARQUITECTO]** — el token `--spinner-track` (C1) es un fix de SERIE: cierra una
+  costura no-themeable que ni 138 ni 141 v1 resolvían, respetando "tokens-only" de R4, 3
+  runtimes (presentación pura), cero trabajo del operador y byte-identidad dark. El plan 141
+  v2 lo consume en su bloque claro (`REQUIRED` pasa de 52 a 53 tokens).
+
+Impacto en la serie: 141 v2 agrega `--spinner-track` a su lista `REQUIRED` de tokens claros.
+139/140 no requieren cambios por esta crítica (el forced-0 extendido los beneficia).
 
 ---
 
@@ -34,16 +65,20 @@ baseline JSON por archivo) que garantiza que la deuda visual solo puede BAJAR; y
 
 **KPIs (todos binarios):**
 
-- **KPI-1:** `npx vitest run src/__tests__/themeTokens.test.ts` verde — los 68 tokens
+- **KPI-1:** `npx vitest run src/__tests__/themeTokens.test.ts` verde — los 69 tokens
   nuevos de §10.1 existen en `theme.css` con su valor EXACTO y los tokens legacy
   (`--bg-base`, `--accent`, etc.) conservan su valor actual sin cambios.
 - **KPI-2:** `npx vitest run src/__tests__/uiPrimitives.test.ts` verde — las 8 primitivas
   de §10.2 existen en `frontend/src/components/ui/`, el barrel `index.ts` las re-exporta,
   y NINGÚN archivo de `components/ui/` contiene hex ni `style={{` literal.
-- **KPI-3:** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` verde — baseline
-  congelado; tras F3-F5 los 3 ejemplares quedan con hex = 0 (`PipelineStatus.module.css`
-  6→0, `SyncStatusBar.module.css` 6→0, `RunButton.module.css` 5→0) y el total de hex en
-  `.module.css` baja de 1.231 a ≤ 1.214.
+- **KPI-3 (por-archivo, no total absoluto):** `npx vitest run
+  src/__tests__/uiDebtRatchet.test.ts` verde — baseline congelado; tras F3-F5 los 3
+  ejemplares quedan con hex = 0 POR ARCHIVO (`PipelineStatus.module.css` 6→0,
+  `SyncStatusBar.module.css` 6→0, `RunButton.module.css` 5→0) y NINGÚN archivo aumenta su
+  contador respecto del baseline. (El total absoluto de hex —~1.231 hoy, orientativo
+  snapshot 2026-07-14— es informativo: baja ~17 con estas 3 migraciones, pero NO es un
+  criterio binario porque otros planes —p. ej. 119— mergean hex antes de que aterrice el
+  138; la garantía dura es la monotonía por-archivo del ratchet.)
 - **KPI-4:** `npx tsc --noEmit` termina con exit code 0 y `npx vitest run` (suite
   completa frontend) verde.
 - **KPI-5:** cero cambio visual — cada sustitución hex→`var(--token)` de F3-F5 usa un
@@ -305,7 +340,11 @@ function assertNoIncrease(current: Baseline, baseline: Baseline): string[] {
   const check = (kind: keyof Baseline) => {
     for (const [file, count] of Object.entries(current[kind])) {
       const allowedBase = baseline[kind][file] ?? 0;
-      const allowed = file.startsWith("components/ui/") ? 0 : allowedBase;
+      // Chrome/primitivas del sistema de diseño: SIEMPRE 0 (invariante mecánico).
+      // Cubre ui/ (plan 138) y shell/ (plan 139).
+      const forcedZero =
+        file.startsWith("components/ui/") || file.startsWith("components/shell/");
+      const allowed = forcedZero ? 0 : allowedBase;
       if (count > allowed) {
         errors.push(
           `${kind} REGRESION en ${file}: ${count} > ${allowed} permitido. ` +
@@ -342,13 +381,13 @@ describe("uiDebtRatchet (plan 138 F0)", () => {
     expect(errs, errs.join("\n")).toEqual([]);
   });
 
-  it("components/ui/ nace y se mantiene con deuda CERO", () => {
+  it("components/ui/ y components/shell/ nacen y se mantienen con deuda CERO", () => {
     const current = computeCurrent();
     const dirty = [
       ...Object.keys(current.hexByFile),
       ...Object.keys(current.inlineStyleByFile),
-    ].filter((f) => f.startsWith("components/ui/"));
-    expect(dirty, `Archivos de components/ui/ con hex o style={{ literal: ${dirty.join(", ")}`).toEqual([]);
+    ].filter((f) => f.startsWith("components/ui/") || f.startsWith("components/shell/"));
+    expect(dirty, `Archivos de ui/ o shell/ con hex o style={{ literal: ${dirty.join(", ")}`).toEqual([]);
   });
 });
 ```
@@ -393,7 +432,7 @@ cuenta (no es `.module.css` — ahí los hex son legítimos: son los tokens).
 
 ### F1 — Tokens semánticos en `theme.css` (aditivo, byte-compatible, theme-ready)
 
-**Objetivo (1 frase):** extender `:root` de `theme.css` con los 68 tokens congelados de
+**Objetivo (1 frase):** extender `:root` de `theme.css` con los 69 tokens congelados de
 §10.1 sin alterar ningún valor existente.
 **Valor:** da nombre semántico a los valores que la UI ya usa, habilita las primitivas de
 F2 y deja la estructura lista para el tema claro del plan 141.
@@ -450,6 +489,7 @@ const FROZEN_TOKENS: Array<[string, string]> = [
   ["--text-on-solid", "#ffffff"],
   ["--text-on-warn", "#1c1810"],
   ["--focus-ring", "0 0 0 3px rgba(56, 139, 253, 0.25)"],
+  ["--spinner-track", "rgba(255, 255, 255, 0.15)"],
   // §10.1.C Spacing
   ["--space-1", "2px"],
   ["--space-2", "4px"],
@@ -516,8 +556,8 @@ const LEGACY_TOKENS: Array<[string, string]> = [
 ];
 
 describe("themeTokens (plan 138 F1)", () => {
-  it("tokens nuevos: 68 nombres con valor exacto", () => {
-    expect(FROZEN_TOKENS.length).toBe(68);
+  it("tokens nuevos: 69 nombres con valor exacto", () => {
+    expect(FROZEN_TOKENS.length).toBe(69);
     const missing = FROZEN_TOKENS.filter(([n, v]) => !FLAT.includes(`${n}: ${v};`));
     expect(missing, "Tokens faltantes o con valor distinto: " + missing.map(([n]) => n).join(", ")).toEqual([]);
   });
@@ -584,6 +624,8 @@ de cierre `}` del `:root` (hoy `theme.css:46`), después de `--avatar-border: 8p
   --text-on-solid: #ffffff;
   --text-on-warn: #1c1810;
   --focus-ring: 0 0 0 3px rgba(56, 139, 253, 0.25);
+  /* Pista del spinner (translúcida): el 141 la re-apunta en el bloque claro (C1). */
+  --spinner-track: rgba(255, 255, 255, 0.15);
 
   /* Escala de spacing */
   --space-1: 2px;
@@ -781,7 +823,7 @@ describe("uiPrimitives (plan 138 F2)", () => {
     const { spinnerStyle } = await import("../components/ui/Spinner");
     expect(spinnerStyle(undefined, undefined, undefined, undefined)).toEqual({
       width: "14px", height: "14px", borderWidth: "2px",
-      borderColor: "rgba(255, 255, 255, 0.15)", borderTopColor: "var(--accent)",
+      borderColor: "var(--spinner-track)", borderTopColor: "var(--accent)",
       animationDuration: "800ms",
     });
     expect(spinnerStyle(13, "var(--text-on-warn)", "rgba(28, 24, 16, 0.25)", 700)).toEqual({
@@ -825,7 +867,7 @@ export interface SpinnerProps {
   size?: number;
   /** Color del arco. Default "var(--accent)". */
   color?: string;
-  /** Color de la pista. Default "rgba(255, 255, 255, 0.15)". */
+  /** Color de la pista. Default "var(--spinner-track)" (themeable por el plan 141). */
   trackColor?: string;
   /** Duración de la vuelta en ms. Default 800. */
   durationMs?: number;
@@ -844,7 +886,7 @@ export function spinnerStyle(
     width: `${s}px`,
     height: `${s}px`,
     borderWidth: "2px",
-    borderColor: trackColor ?? "rgba(255, 255, 255, 0.15)",
+    borderColor: trackColor ?? "var(--spinner-track)",
     borderTopColor: color ?? "var(--accent)",
     animationDuration: `${durationMs ?? 800}ms`,
   };
@@ -1665,7 +1707,7 @@ commitear; staging SIEMPRE con pathspec explícito (§3.2).
   diseño: el patrón `*PartKeys`/`*Style` testea las funciones puras SIN depender de los
   class names generados; los fs-tests validan el CSS como texto. Cero RTL/jsdom (R5).
 - **R-6 · Un modelo menor "mejora" un valor (p. ej. redondea `0.28` a `0.3`).**
-  Mitigación: `themeTokens.test.ts` congela los 68 valores byte a byte; cualquier desvío
+  Mitigación: `themeTokens.test.ts` congela los 69 valores byte a byte; cualquier desvío
   es rojo inmediato.
 - **R-7 · `Button`/`Tabs` de F2 no se parecen a algún botón/tab existente puntual.**
   No es riesgo de este plan: NINGÚN componente existente se migra a `Button`/`Tabs` acá
@@ -1791,6 +1833,7 @@ Esta sección es COPY-PASTEABLE y es la única fuente de verdad de nombres. Los 
 | `--text-on-solid` | `#ffffff` |
 | `--text-on-warn` | `#1c1810` |
 | `--focus-ring` | `0 0 0 3px rgba(56, 139, 253, 0.25)` |
+| `--spinner-track` | `rgba(255, 255, 255, 0.15)` |
 
 **C. Spacing**
 
@@ -1856,7 +1899,7 @@ re-exportadas por `frontend/src/components/ui/index.ts`.
 | `SectionHeader` | `components/ui/SectionHeader.tsx` | `interface SectionHeaderProps { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; }` |
 | `Tabs` | `components/ui/Tabs.tsx` | `interface TabItem { id: string; label: ReactNode; icon?: ReactNode; badge?: ReactNode; }` · `interface TabsProps { items: TabItem[]; activeId: string; onChange: (id: string) => void; size?: "sm" \| "md"; "aria-label"?: string; }` — default `size="md"`. Pura: `tabPartKeys(active, size)` |
 | `Skeleton` | `components/ui/Skeleton.tsx` | `interface SkeletonProps { width?: number \| string; height?: number \| string; radius?: number \| string; lines?: number; className?: string; }` — defaults `width="100%"`, `height=14`, `radius="var(--radius-sm)"`, `lines=1`. Pura: `skeletonStyle(width, height, radius): CSSProperties` |
-| `Spinner` | `components/ui/Spinner.tsx` | `interface SpinnerProps { size?: number; color?: string; trackColor?: string; durationMs?: number; label?: string; }` — defaults `size=14`, `color="var(--accent)"`, `trackColor="rgba(255, 255, 255, 0.15)"`, `durationMs=800`, `label="Cargando"`. Pura: `spinnerStyle(size, color, trackColor, durationMs): CSSProperties` |
+| `Spinner` | `components/ui/Spinner.tsx` | `interface SpinnerProps { size?: number; color?: string; trackColor?: string; durationMs?: number; label?: string; }` — defaults `size=14`, `color="var(--accent)"`, `trackColor="var(--spinner-track)"`, `durationMs=800`, `label="Cargando"`. Pura: `spinnerStyle(size, color, trackColor, durationMs): CSSProperties` |
 
 **Contratos EXTERNOS que la serie consume pero este plan NO crea:**
 - `EmptyState` — YA existe en `components/EmptyState.tsx` (props `EmptyState.tsx:12-19`);
@@ -1870,6 +1913,7 @@ re-exportadas por `frontend/src/components/ui/index.ts`.
   `frontend/src/__tests__/uiDebtBaseline.json` (claves relativas a `src/`, separador `/`).
 - Regex congeladas: hex `/#[0-9a-fA-F]{3,8}\b/g` sobre `*.module.css`; inline
   `/style=\{\{/g` sobre `*.tsx`. `theme.css` fuera del conteo (no es module.css).
-- Regla: contador por archivo ≤ baseline (ausente = 0); `components/ui/**` siempre 0.
+- Regla: contador por archivo ≤ baseline (ausente = 0); `components/ui/**` y
+  `components/shell/**` (plan 139) SIEMPRE 0 (forzado, no incidental).
 - Regeneración: `UI_DEBT_REGEN=1 npx vitest run src/__tests__/uiDebtRatchet.test.ts`
   (rechaza aumentos; poda entradas de archivos borrados).

@@ -310,7 +310,22 @@ def documenter_status():
         "branch": rec.get("branch"), "degraded": rec.get("degraded"),
         "diff_stat": rec.get("diff_stat", ""), "reason": rec.get("reason", ""),
         "error": rec.get("error"),
+        # Plan 137 F5 — preview/citas por archivo + modos saltados por
+        # short-circuit (F3). Con V2 OFF ambos quedan [] (KPI-6, sin romper
+        # al frontend actual que los ignora).
+        "files": rec.get("files", []),
+        "modes_skipped": rec.get("modes_skipped", []),
     })
+
+
+@bp.get("/documenter/runs")
+def documenter_runs():
+    """Plan 137 F4 — Historial de corridas persistidas. 404 si el master 113
+    está OFF; lista vacía si la V2 (persistencia) está OFF."""
+    if not _documenter_enabled():
+        return jsonify({"ok": False, "error": "documenter_disabled"}), 404
+    from services import doc_documenter
+    return jsonify({"ok": True, "runs": doc_documenter.list_runs()})
 
 
 @bp.post("/staleness/fix")

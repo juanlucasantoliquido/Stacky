@@ -622,6 +622,10 @@ _CURATED_DEFAULTS_ON = {
     # existentes mockean el segundo, no el primero. STACKY_PIPELINE_PROVIDER_ENABLED
     # (Plan 71, hermana) SÍ se promovió: AdoCIProvider delega a infer_pipeline
     # existente sin este problema de seam, verificado con la familia Plan 71/72.
+    # Plan 137 — Documentador v2 (evidencia+citas+historial): decisión de criterio
+    # tomada al implementar (el plan proponía OFF citando la regla vieja; ninguna
+    # de las 4 excepciones duras aplica).
+    "STACKY_DOCS_DOCUMENTER_V2_ENABLED",
 }
 
 

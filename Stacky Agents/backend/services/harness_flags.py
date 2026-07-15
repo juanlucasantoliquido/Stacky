@@ -141,6 +141,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_RAG_HYBRID_ALPHA", "STACKY_DOCS_RAG_HYBRID_BETA",
         "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",  # Plan 112 — pesos + tope vecinos
         "STACKY_DOCS_DOCUMENTER_MAX_FILES",  # Plan 113 — tope de archivos por run
+        "STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS",  # Plan 137 — tope de evidencia de código
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -272,6 +273,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_GRAPH_ENABLED",            # Plan 109 — grafo documental read-only (tab Docs)
         "STACKY_DOCS_STALENESS_ENABLED",        # Plan 114 — chip staleness doc↔código
         "STACKY_DOCS_DOCUMENTER_ENABLED",       # Plan 113 — botón "Lanzar Documentador"
+        "STACKY_DOCS_DOCUMENTER_V2_ENABLED",    # Plan 137 — evidencia real + citas + historial
         "STACKY_DOCS_RAG_HYBRID_ENABLED",       # Plan 112 — retrieval híbrido docs
         "STACKY_CAPS_ADVISOR_ENABLED",          # I3.3 — GET /metrics/caps-advisor (solo lectura)
         "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",# Plan 74 — migrador ADO→GitLab (dry-run + HITL)
@@ -1636,6 +1638,39 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DOCS_DOCUMENTER_ENABLED",
         min_value=1,
         max_value=500,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_DOCUMENTER_V2_ENABLED",
+        default=True,  # promovida a default ON (directiva operador 2026-07-15: ninguna
+        # de las 4 excepciones duras aplica — sin autopublish, no destructivo, sin
+        # prerequisito externo no garantizado, no reduce seguridad)
+        type="bool",
+        label="Documentador v2: evidencia, citas e historial (Plan 137)",
+        description=(
+            "Plan 137 — Activa evidencia real de código (árbol + símbolos con línea) en "
+            "el contexto del Documentador, verificación determinista de citas [V] contra "
+            "el filesystem, short-circuit de modos sin targets (ahorra invocaciones LLM), "
+            "historial persistente de corridas (sobrevive a un restart) y preview por "
+            "archivo en el panel de revisión. Requiere STACKY_DOCS_DOCUMENTER_ENABLED=true."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS",
+        type="int",
+        label="Documentador v2: tope de caracteres de evidencia",
+        description=(
+            "Plan 137 — Máximo de caracteres de evidencia de código (árbol + símbolos) "
+            "que se agregan al contexto del Documentador por módulo. Default 12000. Solo "
+            "aplica con STACKY_DOCS_DOCUMENTER_V2_ENABLED=true."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=1000,
+        max_value=100000,
     ),
     FlagSpec(
         key="STACKY_DOCS_STALENESS_ENABLED",

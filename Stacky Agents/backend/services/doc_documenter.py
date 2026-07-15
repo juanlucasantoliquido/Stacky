@@ -8,6 +8,7 @@ el aplicador determinista escribe. Nunca push, nunca merge automático, nunca st
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import subprocess
@@ -235,13 +236,45 @@ def _subgraph_block(project_name: str) -> dict:
 
 def _module_context_block(project_name: str, module: str) -> dict:
     """Bloque de contexto para RECONSTRUIR/COMPLETAR un módulo (árbol + símbolos)."""
+    from config import config as _cfg
+    content = f"Documentá el módulo '{module}'. Citá archivo:línea del código real."
+    if bool(getattr(_cfg, "STACKY_DOCS_DOCUMENTER_V2_ENABLED", False)):
+        try:
+            from services import doc_evidence, doc_indexer
+            ws = doc_indexer.list_doc_sources(project_name).get("workspace_root")
+            if ws:
+                ev = doc_evidence.build_module_evidence(
+                    str(ws), module,
+                    max_chars=int(getattr(_cfg, "STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS", 12000)))
+                if ev:
+                    content = content + "\n\nEVIDENCIA DEL CODIGO (única fuente válida para [V]):\n" + ev
+        except Exception as exc:
+            logger.warning("doc_documenter: evidencia v2 no disponible: %s", exc)
     return {
         "id": f"module-{module}",
         "kind": "module-tree",
         "title": f"Módulo: {module}",
-        "content": f"Documentá el módulo '{module}'. Citá archivo:línea del código real.",
+        "content": content,
         "source": {"type": "module", "module": module},
     }
+
+
+def should_invoke_mode(mode: DocumenterMode, plan: DocumenterPlan,
+                       orphan_count: int) -> tuple[bool, str]:
+    """(True, "") si el modo tiene trabajo; (False, razón) si no.
+    Reglas EXACTAS (sin flag acá; el gate por flag lo hace el caller):
+    - NORMALIZAR  → (False, "sin_notas_para_normalizar") si plan.notes_to_normalize == []
+    - ACTUALIZAR  → (False, "sin_notas_stale") si plan.notes_to_update == []
+    - ENRIQUECER  → (False, "sin_huerfanas") si orphan_count == 0
+    - RECONSTRUIR y COMPLETAR → SIEMPRE (True, "") (usan ["<repo>"] como fallback hoy).
+    Pura, sin I/O, nunca lanza."""
+    if mode == DocumenterMode.NORMALIZAR and not plan.notes_to_normalize:
+        return False, "sin_notas_para_normalizar"
+    if mode == DocumenterMode.ACTUALIZAR and not plan.notes_to_update:
+        return False, "sin_notas_stale"
+    if mode == DocumenterMode.ENRIQUECER and orphan_count == 0:
+        return False, "sin_huerfanas"
+    return True, ""
 
 
 def build_context_for_mode(mode: DocumenterMode, plan: DocumenterPlan,
@@ -495,6 +528,16 @@ class ApplyResult:
     skipped: list[tuple[str, str]] = field(default_factory=list)  # (path, reason)
     branch: str | None = None
     degraded: bool = False
+    files: list[dict] = field(default_factory=list)  # Plan 137 F2/F5 — citas + preview por archivo
+
+
+def _v2_enabled() -> bool:
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_DOCS_DOCUMENTER_V2_ENABLED", False))
+
+
+# Plan 137 F5 — tope de preview por archivo expuesto en el reporte/panel.
+_PREVIEW_MAX_CHARS = 4000
 
 
 def _safe_rel_path(path: str) -> str | None:
@@ -514,11 +557,15 @@ def _is_canonical(norm: str) -> bool:
 
 
 def apply_proposals(proposals: list[DocProposal], target_root: str,
-                    branch_name: str | None, *, degraded: bool = False) -> ApplyResult:
+                    branch_name: str | None, *, degraded: bool = False,
+                    workspace_root: str | None = None) -> ApplyResult:
     """Valida y escribe las propuestas bajo target_root (worktree o carpeta-sombra).
 
     Reglas duras (rechazo = skip con razón, nunca crashea): anti-traversal,
     docs/sistema/ read-only, marcas obligatorias, tope de archivos, upsert idempotente.
+
+    Plan 137 F2/F5: si workspace_root no es None (solo con V2 ON), cada archivo
+    escrito OK anota citations {total,ok,bad} + content_preview en result.files.
     """
     from pathlib import Path as _Path
     from config import config as _config
@@ -545,6 +592,16 @@ def apply_proposals(proposals: list[DocProposal], target_root: str,
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(prop.content, encoding="utf-8")  # upsert: create==patch (overwrite)
             result.written.append(norm)
+            if workspace_root is not None:
+                from services import doc_evidence
+                citations = doc_evidence.verify_citations(
+                    prop.content + " " + ",".join(prop.sources), workspace_root)
+                result.files.append({
+                    "path": norm,
+                    "action": prop.action,
+                    "citations": citations,
+                    "content_preview": prop.content[:_PREVIEW_MAX_CHARS],
+                })
         except Exception as exc:
             logger.warning("doc_documenter: no se pudo escribir %s: %s", norm, exc)
             result.skipped.append((prop.path, f"write_error:{exc}"))
@@ -628,7 +685,8 @@ def _new_run_record(project_name: str, runtime: str) -> dict:
             "written": [], "skipped": [],
             "health_before": None, "health_after": None, "branch": None,
             "degraded": False, "diff_stat": "", "target_root": None,
-            "worktree": None, "error": None, "reason": ""}
+            "worktree": None, "error": None, "reason": "",
+            "modes_skipped": [], "files": []}
 
 
 def start_documenter_run(project_name: str, runtime: str, *,
@@ -663,7 +721,89 @@ def _update_run(run_id: str, **fields) -> None:
 def get_run(run_id: str) -> dict | None:
     with _registry_lock:
         rec = _run_registry.get(run_id)
-        return dict(rec) if rec is not None else None
+        if rec is not None:
+            return dict(rec)
+    # Plan 137 F4 — fallback a disco: tras un restart del backend el registry
+    # en memoria está vacío, pero el reporte terminal (o el snapshot "running"
+    # de C2) puede seguir persistido si la V2 está ON.
+    if _v2_enabled():
+        try:
+            path = _runs_dir() / f"{run_id}.json"
+            if path.is_file():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("doc_documenter: no se pudo leer run persistido %s: %s", run_id, exc)
+    return None
+
+
+def _runs_dir() -> Path:
+    """runtime_paths.data_dir()/documenter_runs (mkdir parents+exist_ok). Nunca
+    lanza: ante error de resolución usa un directorio temporal de fallback."""
+    try:
+        from runtime_paths import data_dir
+        d = data_dir() / "documenter_runs"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    except Exception as exc:
+        logger.warning("doc_documenter: no se pudo resolver _runs_dir (%s), uso fallback temp", exc)
+        d = Path(tempfile.gettempdir()) / "stacky-documenter-runs"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+
+def _persist_run_report(run_id: str, report: dict) -> None:
+    """Best-effort, inerte si no _v2_enabled(). Escribe (upsert) el reporte en
+    _runs_dir()/<run_id>.json. Retención (C7): tras escribir, si quedan más de
+    100 .json, borra los más viejos por mtime dejando 100."""
+    if not _v2_enabled():
+        return
+    try:
+        runs_dir = _runs_dir()
+        path = runs_dir / f"{run_id}.json"
+        path.write_text(json.dumps(report, ensure_ascii=False, default=str), encoding="utf-8")
+        stale = sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[100:]
+        for old in stale:
+            try:
+                old.unlink()
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("doc_documenter: no se pudo persistir run %s: %s", run_id, exc)
+
+
+def list_runs(limit: int = 20) -> list[dict]:
+    """Historial de corridas persistidas (más nuevas primero). [] si no
+    _v2_enabled() o ante error de listado; un .json individual corrupto se
+    saltea sin abortar el resto (nunca lanza)."""
+    if not _v2_enabled():
+        return []
+    out: list[dict] = []
+    try:
+        files = sorted(_runs_dir().glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    except Exception as exc:
+        logger.warning("doc_documenter: no se pudo listar runs: %s", exc)
+        return []
+    for path in files[:limit]:
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            files_field = report.get("files", []) or []
+            citations_ok = sum((f.get("citations") or {}).get("ok", 0) for f in files_field)
+            citations_total = sum((f.get("citations") or {}).get("total", 0) for f in files_field)
+            out.append({
+                "run_id": path.stem,
+                "state": report.get("state"),
+                "modes": report.get("modes", []),
+                "branch": report.get("branch"),
+                "written_count": len(report.get("written", []) or []),
+                "skipped_count": len(report.get("skipped", []) or []),
+                "degraded": report.get("degraded", False),
+                "mtime_iso": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+                "citations_ok": citations_ok,
+                "citations_total": citations_total,
+            })
+        except Exception as exc:
+            logger.warning("doc_documenter: run persistido corrupto %s: %s", path, exc)
+    return out
 
 
 def _run_documenter_thread(run_id: str, project_name: str, runtime: str, *,
@@ -685,6 +825,10 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
     Plan 114: si forced_modes viene, reemplaza los modos del plan (p. ej. [ACTUALIZAR]);
     si only_note viene, el run queda acotado a esa sola nota (target de ACTUALIZAR).
     """
+    # Plan 137 F4 (C6) — identidad de persistencia: las corridas síncronas
+    # (sin run_id, p. ej. tests o invocaciones directas) no colisionan entre sí.
+    persist_id = run_id or f"sync-{uuid.uuid4().hex[:8]}"
+
     plan = plan_documenter_run(project_name)
     if forced_modes:
         plan.modes = list(forced_modes)
@@ -707,10 +851,36 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         branch = None
     if run_id:
         _update_run(run_id, branch=branch, degraded=degraded, worktree=worktree)
+    # Plan 137 F4 (C2) — snapshot inicial "running" apenas se conoce la rama:
+    # si el proceso muere a mitad de run, la rama creada no queda huérfana e
+    # invisible — el historial la muestra igual (inerte si V2 está OFF).
+    _persist_run_report(persist_id, {
+        "state": "running", "branch": branch, "degraded": degraded,
+        "worktree": worktree, "target_root": target_root,
+        "modes": [str(m.value) for m in plan.modes],
+        "written": [], "skipped": [],
+    })
+
+    # Plan 137 F3 — short-circuit: no invocar el LLM para un modo sin targets.
+    # orphan_count se calcula UNA vez, solo si la V2 está ON (ahorra el cómputo
+    # del grafo cuando nadie lo va a consultar).
+    orphan_count = -1  # -1 = no evaluado (flag OFF) ⇒ should_invoke_mode no se consulta
+    if _v2_enabled():
+        try:
+            from services import doc_graph
+            orphan_count = len(doc_graph.build_graph(project_name=project_name).get("orphans", []) or [])
+        except Exception:
+            orphan_count = 1  # degradación conservadora: ante error, invocar igual
 
     all_props: list[DocProposal] = []
     mode_diagnostics: list[str] = []
+    modes_skipped: list[dict] = []
     for mode in plan.modes:
+        if _v2_enabled():
+            ok, why = should_invoke_mode(mode, plan, orphan_count)
+            if not ok:
+                modes_skipped.append({"mode": str(mode.value), "reason": why})
+                continue
         if run_id:
             _update_run(run_id, current_mode=str(mode.value))
         ctx = build_context_for_mode(mode, plan, project_name)
@@ -736,7 +906,10 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
                       else "no se pudo lanzar el agente (ver logs de backend)")
             mode_diagnostics.append(f"{mode.value}: {reason}")
 
-    result = apply_proposals(all_props, write_root, branch, degraded=degraded)
+    result = apply_proposals(
+        all_props, write_root, branch, degraded=degraded,
+        workspace_root=(workspace_root if _v2_enabled() else None),
+    )
 
     diff_stat = ""
     if worktree and not degraded:
@@ -776,7 +949,10 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         "worktree": worktree,
         "error": error_summary,
         "current_execution_id": None,
+        "modes_skipped": modes_skipped,
+        "files": result.files,
     }
     if run_id:
         _update_run(run_id, **report)
+    _persist_run_report(persist_id, report)
     return report

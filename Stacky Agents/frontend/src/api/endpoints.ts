@@ -2674,6 +2674,15 @@ export interface DocumenterHealth {
   uncovered_modules?: string[];
 }
 
+/** Plan 137 F5/F6 — archivo escrito por el Documentador v2: preview + citas
+ *  [V] verificadas contra el filesystem real (report-only, nunca bloquea). */
+export interface DocumenterFileEntry {
+  path: string;
+  action: string;
+  content_preview?: string;
+  citations?: { total: number; ok: number; bad: string[] };
+}
+
 /** Plan 113 — estado de un run del Documentador. */
 export interface DocumenterStatusResponse {
   ok: boolean;
@@ -2692,6 +2701,24 @@ export interface DocumenterStatusResponse {
   diff_stat?: string;
   reason?: string;
   error?: string | null;
+  /** Plan 137 F5 — por archivo escrito: preview + citas verificadas. [] con V2 OFF. */
+  files?: DocumenterFileEntry[];
+  /** Plan 137 F3 — modos sin targets que el short-circuit no invocó. [] con V2 OFF. */
+  modes_skipped?: { mode: string; reason: string }[];
+}
+
+/** Plan 137 F4 — una corrida del historial persistido (GET /documenter/runs). */
+export interface DocumenterRunEntry {
+  run_id: string;
+  state?: string;
+  modes?: string[];
+  branch?: string | null;
+  written_count?: number;
+  skipped_count?: number;
+  degraded?: boolean;
+  mtime_iso?: string;
+  citations_ok?: number;
+  citations_total?: number;
 }
 
 export interface DocsIndexResponse {
@@ -2761,6 +2788,13 @@ export const Docs = {
   /** Plan 113 — estado del run del Documentador. */
   documenterStatus: (runId: string): Promise<DocumenterStatusResponse> =>
     api.get<DocumenterStatusResponse>(`/api/docs/documenter/status?run=${encodeURIComponent(runId)}`),
+
+  /** Plan 137 F4 — historial de corridas persistidas. 404 si el master 113 está OFF;
+   *  runs: [] si la V2 (persistencia) está OFF. */
+  documenterRuns: (): Promise<{ ok: boolean; runs: DocumenterRunEntry[]; error?: string }> =>
+    api.get<{ ok: boolean; runs: DocumenterRunEntry[]; error?: string }>(
+      `/api/docs/documenter/runs`
+    ),
 
   /** Plan 113 — conserva (keep) o descarta (discard) la rama del run. */
   documenterDecide: (

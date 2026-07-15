@@ -307,6 +307,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: cada uso toca menos archivos; si el trabajo es más grande, corta al llegar al tope y te avisa.",
         example="Ponerlo en 40 es como decirle 'escribí hasta 40 documentos por vez y si falta más, avisame'.",
     ),
+    "STACKY_DOCS_DOCUMENTER_V2_ENABLED": PlainHelp(
+        what="Mejora el Documentador con evidencia real del código, verificación de citas, historial de usos anteriores y una vista previa de lo escrito antes de aceptarlo.",
+        on_effect="Si la activás: el Documentador lee el código real antes de escribir, marca qué citas están verificadas contra archivos reales, guarda un historial de usos anteriores, y te muestra un adelanto de cada archivo antes de decidir.",
+        off_effect="Si la apagás: el Documentador vuelve a funcionar como antes, sin evidencia de código, sin historial ni vista previa.",
+        example="Es como pasar de 'confiá en lo que escribió' a 'mirá exactamente qué código leyó y qué escribió antes de aceptarlo'.",
+    ),
+    "STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS": PlainHelp(
+        what="Cuánto código como máximo le mostrás al Documentador como evidencia antes de que escriba.",
+        on_effect="Si subís el número: le mostrás más código de una vez, con más contexto pero un uso más pesado.",
+        off_effect="Si lo bajás: le mostrás menos código; el uso es más liviano pero con menos contexto.",
+        example="Ponerlo en 12000 es como darle hasta 12000 letras de código para que lea antes de escribir.",
+    ),
     "STACKY_DOCS_STALENESS_ENABLED": PlainHelp(
         what="Detecta las notas de documentación que quedaron viejas porque el código que describen cambió después.",
         on_effect="Si la activás: en el grafo de documentos las referencias a código que cambió se pintan en rojo punteado, y la nota muestra un aviso con un botón para pedir que el Documentador la actualice (solo esa nota).",

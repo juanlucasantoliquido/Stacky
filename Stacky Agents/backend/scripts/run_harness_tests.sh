@@ -351,6 +351,12 @@ HARNESS_TEST_FILES=(
   tests/test_harness_flags_help.py
   # — Plan 134 — Awareness total de runs: project/ticket_title en ejecuciones —
   tests/test_executions_ticket_context.py
+  # — Plan 137 F0 — Documentador v2: flags + esqueleto de evidencia —
+  tests/test_doc_evidence.py
+  # — Plan 137 F3 — Documentador v2: pipeline short-circuit + persistencia —
+  tests/test_documenter_v2_pipeline.py
+  # — Plan 137 F4 — Documentador v2: endpoint historial de corridas —
+  tests/test_plan137_endpoints.py
 )
 
 pass=0

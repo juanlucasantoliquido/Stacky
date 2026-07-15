@@ -110,10 +110,14 @@ def test_decide_discard_calls_discard_branch(app_on, monkeypatch):
 
 def test_run_selects_modes_from_health(monkeypatch):
     # Integra selector + orquestador: mock de build_graph (health) + invoke_documenter.
+    # Plan 137: orphans NO vacío — con V2 ON (default) un orphans=[] cortocircuita
+    # ENRIQUECER (should_invoke_mode); este test verifica la SELECCIÓN de modos por
+    # salud, no el short-circuit, así que necesita huérfanas reales para que
+    # invoke_documenter se llame en ambos modos (paridad con la intención original).
     import services.doc_graph as dg
     monkeypatch.setattr(dg, "build_graph",
                         lambda project_name=None, **k: {"doc_health": {"status": "SIN_DOCS"},
-                                                        "nodes": [], "orphans": []})
+                                                        "nodes": [], "orphans": ["docs/huerfana.md"]})
     monkeypatch.setattr(doc_documenter, "_resolve_target_paths",
                         lambda p: (None, None, None))  # → degradado, sin git
     seen_modes = []
@@ -155,10 +159,12 @@ def test_run_documenter_exposes_current_execution_id_while_running(monkeypatch, 
     """Fix "no me hizo nada" — Tarea 2: run_documenter debe llamar
     on_execution_started y reflejarlo en el run record ANTES de que el modo
     termine (para que el polling del frontend lo vea mientras corre)."""
+    # Plan 137: orphans NO vacío para que ENRIQUECER no se corte por short-circuit
+    # (V2 ON default) — este test verifica el enganche de execution_id, no el corte.
     import services.doc_graph as dg
     monkeypatch.setattr(dg, "build_graph",
                         lambda project_name=None, **k: {"doc_health": {"status": "SANA"},
-                                                        "nodes": [], "orphans": []})
+                                                        "nodes": [], "orphans": ["docs/huerfana.md"]})
     monkeypatch.setattr(doc_documenter, "_resolve_target_paths",
                         lambda p: (None, None, str(tmp_path)))
     monkeypatch.chdir(tmp_path)  # evita crear .stacky-docs-proposed en el repo
@@ -183,10 +189,12 @@ def test_run_documenter_surfaces_error_when_all_modes_empty(monkeypatch, tmp_pat
     """Fix "no me hizo nada" — Tarea 1: si TODOS los modos devuelven 0
     propuestas, el reporte final debe traer un "error" visible (antes quedaba
     100% silencioso: written=[] y skipped=[] sin ninguna pista)."""
+    # Plan 137: orphans NO vacío para que ENRIQUECER se invoque de verdad (si no,
+    # el short-circuit de V2 lo saltea y este test no ejercita invoke_documenter).
     import services.doc_graph as dg
     monkeypatch.setattr(dg, "build_graph",
                         lambda project_name=None, **k: {"doc_health": {"status": "SANA"},
-                                                        "nodes": [], "orphans": []})
+                                                        "nodes": [], "orphans": ["docs/huerfana.md"]})
     monkeypatch.setattr(doc_documenter, "_resolve_target_paths",
                         lambda p: (None, None, str(tmp_path)))
     monkeypatch.chdir(tmp_path)  # evita crear .stacky-docs-proposed en el repo
@@ -208,10 +216,12 @@ def test_run_documenter_surfaces_error_when_all_modes_empty(monkeypatch, tmp_pat
 def test_run_documenter_error_stays_none_when_something_was_written(monkeypatch, tmp_path):
     # tmp_path (no ".", no _resolve_target_paths→None) para no escribir en el
     # CWD del repo (evita ensuciar el working tree con una carpeta-sombra real).
+    # Plan 137: orphans NO vacío — si no, el short-circuit de ENRIQUECER (V2 ON
+    # default) evita invocar invoke_documenter y este test no escribiría nada.
     import services.doc_graph as dg
     monkeypatch.setattr(dg, "build_graph",
                         lambda project_name=None, **k: {"doc_health": {"status": "SANA"},
-                                                        "nodes": [], "orphans": []})
+                                                        "nodes": [], "orphans": ["docs/huerfana.md"]})
     monkeypatch.setattr(doc_documenter, "_resolve_target_paths",
                         lambda p: (None, None, str(tmp_path)))
     monkeypatch.chdir(tmp_path)

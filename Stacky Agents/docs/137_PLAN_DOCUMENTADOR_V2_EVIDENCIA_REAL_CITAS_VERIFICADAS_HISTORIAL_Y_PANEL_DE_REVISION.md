@@ -1,7 +1,9 @@
 # Plan 137 — Documentador v2: evidencia real de código, citas [V] verificadas, historial persistente y panel de revisión
 
 **Versión:** v1 -> v2 (crítica adversarial aplicada)
-**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-14)
+**Estado:** IMPLEMENTADO F0-F6 (2026-07-15) — ver nota de criterio sobre el default de flag más abajo en esta sección.
+
+**Nota de implementación (decisión de criterio, directiva operador 2026-07-15):** las 2 flags (`STACKY_DOCS_DOCUMENTER_V2_ENABLED` y `STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS`) se promovieron a **default ON** (patrón triple: `default=True` en `FlagSpec` + `_CURATED_DEFAULTS_ON` + `"true"` en `config.py`), NO a OFF como decía este doc. Ninguna de las 4 excepciones duras aplica: no autopublica ni saltea revisión humana (el operador sigue decidiendo keep/discard igual que en el 113), no es destructivo/irreversible (report-only: las citas malas nunca bloquean nada, F2 §6), no depende de un prerequisito externo no garantizado (usa el filesystem local, nada de red), y no reduce seguridad (docs/sistema/ sigue read-only). El master `STACKY_DOCS_DOCUMENTER_ENABLED` (plan 113) ya estaba ON.
 
 **CHANGELOG v1 -> v2:**
 - **C1 (IMPORTANTE):** el registro en `HARNESS_TEST_FILES` se reparte por fase (F0 registra solo `test_doc_evidence.py`; F3 registra `test_documenter_v2_pipeline.py`; F4 registra `test_plan137_endpoints.py`) — v1 registraba en F0 archivos que recién existían en F3/F4 y rompía el script de harness entre fases.

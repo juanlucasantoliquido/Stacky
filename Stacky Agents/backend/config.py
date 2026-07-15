@@ -534,6 +534,18 @@ class Config:
         os.getenv("STACKY_DOCS_DOCUMENTER_MAX_FILES", "40") or "40"
     )
 
+    # ── Plan 137 — Documentador v2: evidencia real, citas verificadas,
+    # historial persistente y panel de revisión. Promovida a default ON
+    # (directiva operador 2026-07-15: ninguna de las 4 excepciones duras
+    # aplica — no autopublica, no destructivo, sin prerequisito externo no
+    # garantizado, no reduce seguridad; el master del 113 ya está ON). ──
+    STACKY_DOCS_DOCUMENTER_V2_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_DOCUMENTER_V2_ENABLED", "true"
+    ).lower() == "true"
+    STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS: int = int(
+        os.getenv("STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS", "12000") or "12000"
+    )
+
     # ── Plan 114 — Doctor de staleness doc↔código (default OFF, editable por UI) ─
     STACKY_DOCS_STALENESS_ENABLED: bool = os.getenv(
         "STACKY_DOCS_STALENESS_ENABLED", "true"

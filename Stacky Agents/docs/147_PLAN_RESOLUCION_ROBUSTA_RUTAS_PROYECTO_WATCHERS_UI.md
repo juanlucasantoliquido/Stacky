@@ -1,11 +1,26 @@
 # 147 — Resolución robusta de rutas de proyecto + estado UI de watchers
 
-- **Estado:** PROPUESTO v1
+- **Estado:** CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8)
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)
 - **Cierra:** **V2 [ALTO]** (`outputs_dir`/`repo_root` mal resuelto → output_watcher ciego, 4.761×) + **D8 [BAJO][V]** (`repo_root()` no resoluble → watchers inactivos, silencioso).
 - **Cross-ref:** 144 (D4 estados / D2-D3 stalls), 145 (helper de dedup + aislar pytest), 146 (V1 import, V5 mkdir ledger, V4 re-deploy fallback), 148/149 (degradación / intake).
+
+### CHANGELOG v1 → v2 (juez adversarial + arquitecto)
+
+Diagnóstico núcleo **verificado contra código** (V2 reproducido: en este checkout `parents[4]`=`…\GIT\RS` → `outputs_dir`=`…\GIT\RS\Agentes\outputs` mal formado; sentinel/throttle/docstring/consumidores `[V]`). TDD RED/GREEN sólido; los 5 tests conservados siguen verdes con el nuevo `repo_root()` (re-verificado caso por caso). Fixes aplicados:
+
+- **C1 [IMPORTANTE]** — Los 3 tests nuevos **no se registraban** en el ratchet del arnés → rompen `test_harness_ratchet_meta.py:43-53` `[V]` (falla si un `tests/test_*.py` no está en `HARNESS_TEST_FILES` de `scripts/run_harness_tests.sh` ni en `tests/harness_ratchet_allowlist.txt`). **Fix:** sub-tarea explícita en F2/F3 para registrar cada archivo en `run_harness_tests.sh` **y** `.ps1` (paridad sh/ps1); F4 corre el meta-test como criterio binario.
+- **C2 [IMPORTANTE]** — Ruta errónea de `HealthBanner.tsx`: F3 decía `backend/frontend/…`; el real es `frontend/src/components/HealthBanner.tsx` (el frontend **no** cuelga de `backend/`) `[V]`. **Fix:** ruta corregida.
+- **C3 [MODERADO]** — Claim falso "el banner renderiza cualquier check": el `HealthBanner` muestra **sólo el peor** (primer `error`, si no primer `warning`, `HealthBanner.tsx:70-72` `[V]`); `_check_watchers_active` al final queda **enmascarado** por warnings previos (ej. `tracker`). **Fix:** claim corregido + el check de watchers se prioriza (va **antes** de los checks de integración opcionales) y se declara `/api/diag/health` como fuente canónica del campo.
+- **C4 [MODERADO]** — Los archivos de test nuevos referenciaban un `conftest` **inexistente** (no hay `conftest.py` en backend `[V]`) para el `sys.path`. Bajo `python -m pytest` desde cwd=backend resuelve por cwd, pero es frágil y engañoso. **Fix:** bootstrap `sys.path.insert(0, str(ROOT))` al tope de cada archivo (patrón `test_diag_endpoint.py:22-24`); comentario del conftest eliminado.
+- **C5 [MODERADO]** — Red de regresión de F4 angosta para un cambio en `repo_root()` (6 consumidores no-test). **Fix:** F4 corre también los tests de los consumidores; R1 elevado a evidencia dura (grep confirmó que **ningún** consumer usa `repo_root()` para ubicar el repo de Stacky).
+- **C6 [MODERADO]** — "Backward-compat (b) idéntico" impreciso: en dev con proyecto activo el código actual **ignora** `workspace_root` y devuelve `parents[4]`; F1 lo **cambia** (fix de V2). **Fix:** reclasificado como cambio INTENCIONAL en dev.
+- **C7 [BAJO]** — Justificación de orden 145↔147 apostaba a "147 antes que 145" (dudoso). **Fix:** reencuadrado como "sin dependencia dura en ningún orden".
+- **C8 [BAJO]** — `watchers_active` del endpoint no respeta el kill-switch (sólo el banner). **Fix:** asimetría declarada explícitamente.
+- **C9 [NIT]** — F2 decía "mover `active` arriba" cuando ya está en `app.py:158`. **Fix:** nota corregida.
+- **[ADICIÓN ARQUITECTO]** — Test del caso borde `parents[4]` con <5 niveles (`IndexError`→None, sin crash) que §4 afirmaba cubrir sin blindar; + aserción R1 dura en F4.
 
 ---
 
@@ -40,8 +55,15 @@
 
 ### Política de flags de este plan
 
-- **F1 (endurecer `repo_root`) NO lleva flag.** Es un **fix de bug verificado**: hoy emite una ruta mal formada (`…\GIT\RS\Agentes\outputs`) que rompe el watcher. Corregirlo no agrega comportamiento opt-in. **Backward-compat garantizada** para los tres caminos que hoy funcionan: (a) `STACKY_REPO_ROOT` seteado → idéntico; (b) proyecto activo con `workspace_root` → idéntico (y ahora también aplica en dev, que antes lo ignoraba = mejora); (c) layout embebido `<repo>/Tools/Stacky/…` → idéntico. **Sólo cambia** el caso hoy roto (overshoot) que pasa de "ruta mal formada" a "sentinel inexistente explícito" — estrictamente mejor. Justificación de "sin flag": corrige código roto, no introduce feature.
+- **F1 (endurecer `repo_root`) NO lleva flag.** Es un **fix de bug verificado**: hoy emite una ruta mal formada (`…\GIT\RS\Agentes\outputs`) que rompe el watcher. Corregirlo no agrega comportamiento opt-in. Clasificación honesta de los caminos (C6):
+  - (a) `STACKY_REPO_ROOT` seteado → **idéntico** (retorno temprano intacto; todos los tests que usan override no cambian).
+  - (b-frozen) congelado con proyecto activo → **idéntico** (`workspace_root`).
+  - (c) layout embebido `<repo>/Tools/Stacky/…` no-congelado → **idéntico** (mismo `<repo>`).
+  - (b-dev) **dev no-congelado con proyecto activo → CAMBIO INTENCIONAL (éste es el fix de V2):** el código actual **ignora** `workspace_root` en dev y devuelve `parents[4]` (la ruta mal formada); F1 ahora devuelve `workspace_root`. No es "idéntico": es la corrección. Seguro porque **ningún** consumer de `repo_root()` espera el repo de Stacky — todos arman `<workspace>/Agentes/outputs` (verificado por grep, ver §4.F1 y R1).
+  - (d) dev standalone/no-embebido sin proyecto → pasa de "ruta mal formada (`parents[4]` overshoot)" a "sentinel inexistente explícito" — estrictamente mejor.
+  - Justificación de "sin flag": corrige código roto, no introduce feature.
 - **F3 (check de watchers en el banner) lleva kill-switch env-only, default ON:** `STACKY_WATCHERS_HEALTH_CHECK` (default `"true"`). **NO** es una flag del arnés (`FLAG_REGISTRY`), por lo que **el patrón triple NO aplica** — sigue el precedente exacto de `STACKY_OPERATIONAL_HEALTH_ENABLED` (`api/diag.py:579` `[V]`: `os.getenv(..., "true")`, sin entrada en `FLAG_REGISTRY`). No hay nada que el operador configure (es un kill-switch interno de observabilidad), así que no requiere UI. Regla citada: "Kill-switch interno default ON puede ser env-only".
+  - **Alcance del kill-switch (C8, declarado):** apaga **sólo** el **check del banner** (`_check_watchers_active` en `/api/diag/local`) para eliminar ruido visual. **NO** apaga los campos `watchers_active`/`watchers_inactive_reason` de `/api/diag/health`, que son **data pasiva de observabilidad** (siempre presentes, backward-compatible, útiles para monitoreo/scripts). Asimetría intencional: el operador puede silenciar el aviso sin perder la señal en el endpoint.
 
 ---
 
@@ -87,6 +109,17 @@ def test_source_layout_repo_root_none_when_standalone(monkeypatch, tmp_path):
     """Checkout no embebido (overshoot) → None (NO ruta mal formada)."""
     monkeypatch.setattr(runtime_paths, "_module_path",
                         lambda: _standalone_module_path(tmp_path).resolve())
+    assert runtime_paths._source_layout_repo_root() is None
+
+
+def test_source_layout_repo_root_none_when_shallow(monkeypatch):
+    """[ADICIÓN ARQUITECTO] Módulo con <5 niveles de padres → None, sin crash.
+
+    Blinda el caso borde documentado en §4 (`parents[4]` IndexError → None) que
+    v1 afirmaba cubrir sin test. Un checkout raro (p. ej. módulo en la raíz de
+    una unidad) no debe tumbar la resolución."""
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: Path("C:/x/runtime_paths.py"))  # sólo 1 nivel de padre
     assert runtime_paths._source_layout_repo_root() is None
 
 
@@ -282,16 +315,25 @@ def repo_root() -> Path:
                 )
 ```
 
-> Nota: `get_active_project` ya se importa dentro de la función (`app.py:153` `[V]`); mover su cálculo arriba del `logger.info` no cambia dependencias.
+> Nota (C9): `get_active_project` ya se importa dentro de la función (`app.py:153` `[V]`) y `active` **ya se computa antes** del `logger.info` (`app.py:158` `[V]`). El cambio de este bloque es **sólo** reemplazar el `if not od_exists:` (líneas 163-168) por la variante con la rama `if active is None`; no hay que reordenar nada.
 
-**Cross-ref 145.** Los duplicados que quedan provienen de que **pytest escribe al mismo log diario** (V7); su aislamiento lo resuelve 145. Cuando 145 publique su **helper de dedup**, este preflight puede migrar a él; **147 no bloquea en 145** (orden global: 147 se implementa antes que 145) y se auto-contiene con el downgrade a INFO. `[INF]`
+**Cross-ref 145 (C7 — sin dependencia dura, en NINGÚN orden).** Los duplicados que quedan provienen de que **pytest escribe al mismo log diario** (V7); su aislamiento lo resuelve 145. Este plan **no consume** `services/log_throttle.py`: usa su **propio** throttle (`_warned_unresolved_repo_root`, ya existente) + el downgrade a INFO. Por lo tanto **147 no depende de 145 en ningún orden de implementación**: si 145 ya existe, migrar el preflight a su helper de dedup es una **mejora opcional futura**; si no existe todavía, el mecanismo propio basta. No se apuesta a un orden específico entre 145 y 147. `[INF]`
 
 **Archivo de test (nuevo):** `backend/tests/test_completion_preflight.py`
 
 ```python
 import logging
+import sys
 from pathlib import Path
-import app  # noqa: E402  (import de módulo backend; ver sys.path en conftest)
+
+# Bootstrap sys.path (C4): NO hay conftest.py en backend; cada test file agrega
+# backend/ a sys.path antes de importar módulos backend (patrón de
+# test_diag_endpoint.py:22-24). Bajo `python -m pytest` desde cwd=backend el cwd
+# ya está en sys.path, pero esto lo hace robusto ante otros cwd / plain pytest.
+ROOT = Path(__file__).resolve().parent.parent  # backend/
+sys.path.insert(0, str(ROOT))
+
+import app  # noqa: E402  (módulo backend)
 
 def test_preflight_no_active_project_logs_info_not_warning(monkeypatch, caplog, tmp_path):
     missing = tmp_path / "no_existe" / "Agentes" / "outputs"
@@ -322,8 +364,10 @@ def test_preflight_active_project_missing_dir_warns(monkeypatch, caplog, tmp_pat
 
 > Los `monkeypatch.setattr("<módulo>.<símbolo>", ...)` apuntan al **módulo fuente** porque `_log_completion_preflight` hace imports **locales** (`from services.agent_html_output import outputs_dir`, etc., `app.py:150-153` `[V]`), que se resuelven en el momento de la llamada.
 
+**Registro en ratchet del arnés (C1 — OBLIGATORIO).** `test_completion_preflight.py` es un archivo **nuevo**: agregarlo a `HARNESS_TEST_FILES` en `backend/scripts/run_harness_tests.sh` **y** en `backend/scripts/run_harness_tests.ps1` (paridad sh/ps1). Si no, `test_harness_ratchet_meta.py::test_ratchet_clasifica_todos_los_tests` (`:43-53` `[V]`) falla porque detecta un `tests/test_*.py` no clasificado. Alternativa sólo si el test no corre aislado en el arnés: alta en `tests/harness_ratchet_allowlist.txt` con motivo (no es el caso: corre aislado).
+
 **Comando:** `cd backend && .venv/Scripts/python.exe -m pytest tests/test_completion_preflight.py -q`
-**Criterio de aceptación (binario):** ambos tests **GREEN**: sin proyecto → sin WARNING "NO existe"; con proyecto activo + dir ausente → WARNING presente.
+**Criterio de aceptación (binario):** ambos tests **GREEN**: sin proyecto → sin WARNING "NO existe"; con proyecto activo + dir ausente → WARNING presente. Y `test_harness_ratchet_meta.py` sigue **GREEN** tras registrar el archivo.
 **Flag:** ninguna (ajuste de nivel de log de un fix). **Runtime:** idéntico a los 3. **Trabajo del operador:** ninguno.
 
 ---
@@ -335,7 +379,7 @@ def test_preflight_active_project_missing_dir_warns(monkeypatch, caplog, tmp_pat
 **Archivos a editar/crear:**
 - `backend/api/diag.py` (editar `health()`)
 - `backend/services/local_diagnostics.py` (agregar `_check_watchers_active` + registro)
-- `backend/frontend/src/components/HealthBanner.tsx` (agregar entrada en `FIX_HINT`)
+- `frontend/src/components/HealthBanner.tsx` (agregar entrada en `FIX_HINT`) — **C2: ruta relativa a `Stacky Agents/`; el frontend NO cuelga de `backend/`.** `[V]`
 
 **F3.a — Campo estructurado en `/api/diag/health`.** En `api/diag.py` `health()` (`:285-367` `[V]`), computar el estado y agregarlo al payload:
 
@@ -366,7 +410,7 @@ y sumar al `jsonify({...})` de retorno (`:353-367`) las claves:
 ```
 (No se remueve nada del payload existente → backward-compatible.)
 
-**F3.b — Check dedicado en el banner** (`services/local_diagnostics.py`). Registrar en `run_local_diagnostics()` (lista de `checks`, `:28-37` `[V]`) un nuevo `_check_watchers_active()` **al final** de la lista:
+**F3.b — Check dedicado en el banner** (`services/local_diagnostics.py`). Registrar en `run_local_diagnostics()` (lista de `checks`, `:28-37` `[V]`) un nuevo `_check_watchers_active()` **justo después de `_check_backend()`** (C3): el `HealthBanner` muestra **un solo** check —el peor: primer `error`, si no primer `warning` (`HealthBanner.tsx:70-72` `[V]`)— así que ubicarlo al final lo dejaría **enmascarado** por cualquier warning previo (`tracker`, `gh_auth`, `database`…). Como "sin proyecto activo" es la **causa raíz** de "no pasa nada", va temprano para ganar prioridad entre los warnings:
 
 ```python
 def _check_watchers_active() -> dict:
@@ -409,6 +453,7 @@ y en `run_local_diagnostics()`:
 ```python
     checks = [
         _check_backend(),
+        _check_watchers_active(),   # ← D8 (C3: temprano; es causa raíz, gana prioridad)
         _check_tracker(),
         _check_cli_runtimes(),
         _check_gh_auth(),
@@ -416,11 +461,10 @@ y en `run_local_diagnostics()`:
         _check_vscode_bridge(),
         _check_database_storage(),
         _check_orphan_runs(),
-        _check_watchers_active(),   # ← D8
     ]
 ```
 
-> Reusa el helper `_result` (`:436-449` `[V]`) y el patrón `id/label/status/message/detail`. El `HealthBanner` ya renderiza cualquier check `warning`/`error` (`HealthBanner.tsx:70-78` `[V]`), así que el aviso aparece **sin** tocar la lógica de render.
+> Reusa el helper `_result` (`:436-449` `[V]`) y el patrón `id/label/status/message/detail`. **C3 (corrección de claim):** el `HealthBanner` **no** renderiza "cualquier check": muestra **uno solo**, el peor (primer `error`, si no primer `warning`, `HealthBanner.tsx:70-72` `[V]`). Por eso el orden importa (watchers va temprano). El campo `watchers_active` de `/api/diag/health` (F3.a) es la **fuente canónica no-enmascarable** del estado; el banner es la superficie de conveniencia. El render en sí no se toca.
 
 **F3.c — Fix-hint del banner** (`HealthBanner.tsx`). Agregar la entrada en `FIX_HINT` (`:50-56` `[V]`):
 ```ts
@@ -432,6 +476,10 @@ y en `run_local_diagnostics()`:
 
 1. `backend/tests/test_watchers_health_check.py` — unit de `_check_watchers_active`:
 ```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # backend/ (C4: sin conftest)
+
 import services.local_diagnostics as ld
 
 def test_no_active_project_warns(monkeypatch, tmp_path):
@@ -462,6 +510,10 @@ def test_kill_switch_disables(monkeypatch):
 
 2. `backend/tests/test_diag_health_watchers.py` — contrato del endpoint:
 ```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # backend/ (C4: sin conftest)
+
 import app as app_module
 
 def _client(monkeypatch):
@@ -483,10 +535,13 @@ def test_health_reports_watchers_active_fields(monkeypatch):
 
 **Comando:** `cd backend && .venv/Scripts/python.exe -m pytest tests/test_diag_health_watchers.py -q`
 
+**Registro en ratchet del arnés (C1 — OBLIGATORIO).** `test_watchers_health_check.py` y `test_diag_health_watchers.py` son **nuevos**: agregar **ambos** a `HARNESS_TEST_FILES` en `backend/scripts/run_harness_tests.sh` **y** `backend/scripts/run_harness_tests.ps1` (paridad). Si no, `test_harness_ratchet_meta.py` (`:43-53` `[V]`) los detecta sin clasificar y falla.
+
 **Frontend:** `cd frontend && npx tsc --noEmit` (debe dar **0 errores**). No hay test RTL (gap estructural jsdom/@testing-library ausente); el render del banner se valida en el smoke de F4.
 
 **Criterio de aceptación (binario):**
 - Los 2 archivos de test backend **GREEN**.
+- `test_harness_ratchet_meta.py` **GREEN** tras registrar los 2 archivos.
 - `npx tsc --noEmit` → 0 errores.
 - `GET /api/diag/health` incluye `watchers_active` y `watchers_inactive_reason`.
 - `GET /api/diag/local` incluye un check `id="watchers"`.
@@ -505,7 +560,9 @@ def test_health_reports_watchers_active_fields(monkeypatch):
    - `cd backend && .venv/Scripts/python.exe -m pytest tests/test_completion_preflight.py -q`
    - `cd backend && .venv/Scripts/python.exe -m pytest tests/test_watchers_health_check.py -q`
    - `cd backend && .venv/Scripts/python.exe -m pytest tests/test_diag_health_watchers.py -q`
-   - Regresión de vecinos: `cd backend && .venv/Scripts/python.exe -m pytest tests/test_diag_endpoint.py -q` (no debe romperse por las claves nuevas).
+   - **Ratchet:** `cd backend && .venv/Scripts/python.exe -m pytest tests/test_harness_ratchet_meta.py -q` (los 3 archivos nuevos deben quedar clasificados — C1).
+   - **Regresión de consumidores de `repo_root()` (C5 — ampliado; F1 toca una función muy consumida):** correr por archivo los tests de los 6 consumidores no-test verificados:
+     `tests/test_diag_endpoint.py`, `tests/test_artifact_context.py`, y —si existen— los de `artifact_rescue`, `output_watcher`, `qa_browser`, `agent_html_output` (localizar con `ls tests/ | grep -E 'artifact_rescue|output_watcher|qa_browser|agent_html_output'`). Ninguno debe romperse: los que usan `STACKY_REPO_ROOT`/override no cambian (retorno temprano), y **ningún consumer espera el repo de Stacky** (R1 dura, ver §5).
 2. **Frontend:** `cd frontend && npx tsc --noEmit` → 0 errores.
 3. **Smoke manual (documentar resultado):**
    - Arrancar backend **sin** proyecto activo.
@@ -523,7 +580,7 @@ def test_health_reports_watchers_active_fields(monkeypatch):
 
 | # | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|---|
-| R1 | Un consumidor de `repo_root()` dependía del `parents[4]` overshoot en dev standalone y ahora recibe el sentinel. | Baja | Medio | Todos los call-sites de `repo_root()` no-test arman `Agentes/outputs` para el **workspace del proyecto** (`[V]` §4.F1). Con proyecto activo resuelve igual; sin proyecto, el sentinel degrada a no-op (dir inexistente ya tolerado). Tests usan `STACKY_REPO_ROOT`. |
+| R1 | Un consumidor de `repo_root()` dependía del `parents[4]` overshoot en dev standalone y ahora recibe el sentinel; o dependía del `parents[4]` en dev con proyecto activo y ahora recibe `workspace_root`. | Baja | Medio | **Evidencia dura (grep exhaustivo, C5):** los 6 consumidores no-test —`api/diag.py` (display), `app.py` (log), `services/agent_html_output.py` (`outputs_dir`/`resolve_html_path`), `services/artifact_context.py`, `services/artifact_rescue.py`, `api/qa_browser.py`— **todos** arman `<repo_root>/Agentes/outputs` o hacen `relative_to(repo_root())` sobre el **workspace del cliente**. **Ninguno** usa `repo_root()` para ubicar el repo de Stacky (`api/docs.py:245` usa una variable local homónima, no la función). Con proyecto activo resuelve al workspace correcto (mejor que antes); sin proyecto, el sentinel degrada a no-op (dir inexistente ya tolerado, cf. `artifact_rescue.py:82` "NUNCA devuelve None"). Regresión cubierta en F4. |
 | R2 | El test viejo `test_not_frozen_uses_source_layout` (tautológico) queda obsoleto. | Alta | Bajo | Se **reemplaza** explícitamente en F0 por tests que validan el layout embebido de verdad. |
 | R3 | `create_app()` en `test_diag_health_watchers.py` con side-effects que ensucian por-archivo. | Media | Bajo | F3 ofrece alternativa `test_request_context` + llamada directa a `health()`; elegir la que corra limpio (verificar, no asumir). |
 | R4 | El operador confunde "watchers inactivos (esperado)" con "sistema roto". | Baja | Bajo | El mensaje del banner es **accionable y no alarmista** ("Activá un proyecto"), status `warning` (no `error`), con botón directo. |
@@ -564,10 +621,12 @@ def test_health_reports_watchers_active_fields(monkeypatch):
 
 ### Definición de Hecho (DoD) global
 - [ ] `repo_root()` **nunca** devuelve una ruta sin segmento de proyecto: o `STACKY_REPO_ROOT`, o `workspace_root` del proyecto activo (frozen **y** dev), o layout embebido válido, o el sentinel inexistente.
-- [ ] `test_runtime_paths.py` verde, incluyendo `test_not_frozen_standalone_returns_sentinel` y `test_active_project_wins_even_not_frozen`.
+- [ ] `test_runtime_paths.py` verde, incluyendo `test_not_frozen_standalone_returns_sentinel`, `test_active_project_wins_even_not_frozen` y `test_source_layout_repo_root_none_when_shallow` (caso borde <5 niveles, [ADICIÓN]).
 - [ ] Preflight: sin proyecto activo → **INFO** (no WARNING); proyecto activo + dir ausente → **WARNING** accionable. `test_completion_preflight.py` verde.
-- [ ] `/api/diag/health` expone `watchers_active` + `watchers_inactive_reason`; `/api/diag/local` incluye check `watchers`; banner con fix-hint "Activar proyecto". Tests backend verdes + `tsc --noEmit` 0.
+- [ ] `/api/diag/health` expone `watchers_active` + `watchers_inactive_reason`; `/api/diag/local` incluye check `watchers` (ubicado temprano, C3); banner con fix-hint "Activar proyecto" en `frontend/src/components/HealthBanner.tsx` (C2). Tests backend verdes + `tsc --noEmit` 0.
+- [ ] **Ratchet (C1):** los 3 archivos de test nuevos registrados en `run_harness_tests.sh` **y** `.ps1`; `test_harness_ratchet_meta.py` verde.
+- [ ] **Regresión de consumidores de `repo_root()` (C5):** tests de los 6 consumidores por-archivo en verde (F4.1).
 - [ ] Smoke manual observado (6 puntos de F4) con output pegado.
 - [ ] Paridad 3 runtimes: sin ramas por runtime; comportamiento idéntico.
 - [ ] Cero trabajo extra al operador; backward-compatible; ningún subsistema reinventado.
-- [ ] Memoria actualizada con el hecho durable (resolución hardened + contrato de `_source_layout_repo_root`).
+- [ ] Memoria actualizada con el hecho durable (resolución hardened + contrato de `_source_layout_repo_root` + registro de tests nuevos en el ratchet).

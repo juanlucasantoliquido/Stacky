@@ -1,6 +1,6 @@
 # Plan 139 — App Shell v2: sidebar agrupada, TopBar profesional e iconografía
 
-**Estado:** PROPUESTO v1 (2026-07-15 — serie UI/UX 138-141)
+**Estado:** CRITICADO v1→v2 · **VEREDICTO: APROBADO-CON-CAMBIOS** (2026-07-15) — v1 propuesto 2026-07-15
 
 **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
 
@@ -18,6 +18,40 @@ tokens o primitivas: solo se consumen por su nombre EXACTO.**
 lleva **pre-flight obligatorio** (`git status -- "<ruta>"` antes de tocar CADA archivo; si hay
 WIP ajeno sin commitear → **STOP**, avisar al operador, no editar). Staging quirúrgico
 siempre: `git add -- <paths>` explícitos, **NUNCA** `git add -A`.
+
+---
+
+## § 0. Changelog de crítica v1 → v2 (juez adversarial, 2026-07-15)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 2 IMPORTANTES; 2 MENORES). Plan muy
+riguroso: flag OFF byte-idéntica, contratos §3.x con evidencia, modelo de nav puro y testeable.
+
+Verificado contra el código real (2026-07-15): los símbolos del test F0 —`declared_default`,
+`default_is_known`, `categorize`, `_CATEGORY_KEYS` (harness_flags.py:2787/2802/2807/114) y
+`PlainHelp`/`PLAIN_HELP` (harness_flags_help.py)— **EXISTEN y ya se usan** en
+`test_harness_flags.py`. El F0 es implementable tal cual.
+
+- **C1 (IMPORTANTE) — resuelto in place [ADICIÓN ARQUITECTO].** La operación más riesgosa es
+  la de F3 paso (f)/(g): MOVER el bloque `<nav>` de 14 botones y extraer las 14 páginas a un
+  `const pages`. KPI-1 (byte-identidad OFF) sólo lo cubría el smoke manual (no hay RTL/jsdom).
+  Un modelo menor podría borrar/alterar un botón ⇒ **regresión OFF silenciosa**. Fix: (a)
+  instrucción reforzada "MOVER verbatim, NO reescribir"; (b) nuevo test mecánico fs+regex
+  `shellIntegration.test.ts` (F5) que verifica que `App.tsx` conserva `<nav
+  className={styles.nav}>`, wirea `AppSidebar`/`computeVisibleTabs`/`shellV2Enabled`, y que el
+  fragment `const pages = (` existe con sus condicionales de montaje. Guarda barata de
+  KPI-1/§3.7 sin RTL.
+- **C2 (IMPORTANTE) — reforzado in place.** El espejo del badge de 134 (F3 paso e) quedaba como
+  objeto `shellBadges` vacío con un comentario; si 134 ya aterrizó y el implementador no lo
+  espeja, el sidebar v2 **degrada silenciosamente** vs la nav (que muestra el badge de
+  Revisión). Fix: se convierte en paso OBLIGATORIO con checklist en el DoD y verificación en el
+  pre-flight `grep`.
+- **C3 (MENOR) — documentado.** El toggle de colapso es INERTE a < 820px (el media query fuerza
+  el riel de iconos). Se documenta en §6.3 y §15 para que no se lea como bug.
+- **C4 (MENOR) — documentado.** Doble `GET /api/diag/health` (TopBar + App) en montaje; GET
+  liviano, 1 request extra, memoización queda fuera de scope (ya en R7).
+
+138/140/141 sin cambios por esta crítica (138 v2 ya extiende el forced-0 del ratchet a
+`components/shell/**`, lo que beneficia a este plan).
 
 ---
 
@@ -205,9 +239,11 @@ Sección normativa. Cada ítem es un **contrato binario** que el implementador v
 4. `AppSidebar.module.css` — estilos **token-only** (0 hex).
 5. `__tests__/shellNav.test.ts` — vitest puro (sin RTL).
 6. `__tests__/shellIcons.test.ts` — vitest puro (sin RTL).
+7. `__tests__/shellIntegration.test.ts` — **[ADICIÓN ARQUITECTO]** guard fs+regex de
+   byte-identidad OFF sobre `App.tsx` (F5, vitest puro).
 
 ### Nuevo (backend)
-7. `backend/tests/test_plan139_shell_flag.py` — pytest del F0.
+8. `backend/tests/test_plan139_shell_flag.py` — pytest del F0.
 
 ### Modificados
 - `backend/config.py` — atributo `STACKY_UI_SHELL_V2_ENABLED`.
@@ -276,6 +312,9 @@ opción 1:1 con la nav de hoy.
   `stacky.ui.theme` del 138 §10.1 y `stacky.devops.selectedServer` de `DevOpsPage.tsx:175`).
 - Valores: string `"true"` / `"false"`. `parseCollapsed(raw)` = `raw === "true"`
   (null/ausente ⇒ `false`, sidebar expandido por defecto).
+- **Nota (C3):** a < 820px de ancho el media query de `AppSidebar.module.css` fuerza el riel
+  de iconos SIEMPRE; en ese rango el toggle de colapso queda INERTE (comportamiento esperado,
+  no bug). El estado persistido se respeta al volver a ≥ 820px.
 
 ---
 
@@ -1075,8 +1114,10 @@ const visibleTabs = computeVisibleTabs({
 });
 
 // [Contrato §3.2 — Plan 134] Espejar el/los badge(s) de la nav v1 aquí.
-// Si el pre-flight encontró un badge en el botón "review", copiar esa MISMA
-// expresión como `review: <expr>`. Si 134 no aterrizó, dejar el objeto vacío.
+// PASO OBLIGATORIO (C2): si el pre-flight `grep -n "review" App.tsx` encontró un badge en el
+// botón "review" (lo agrega 134, que aterriza ANTES), copiar esa MISMA expresión como
+// `review: <expr>` — de lo contrario el sidebar v2 pierde el badge y DEGRADA vs la nav.
+// Si (y sólo si) 134 no aterrizó y la nav v1 NO tiene badge, dejar el objeto vacío.
 const shellBadges: Partial<Record<Tab, React.ReactNode>> = {
   // review: <expresión de badge del Plan 134>,
 };
@@ -1106,7 +1147,10 @@ const pages = (
 ```
 
 **(g) Render condicional** — reemplazar, dentro del `return`, el bloque `<nav>…</nav>` +
-las 14 líneas de páginas por:
+las 14 líneas de páginas por lo de abajo. **REGLA DURA (C1):** el contenido de la `<nav>` v1
+y las 14 líneas de páginas se **MUEVEN tal cual (cut & paste), NO se reescriben ni se
+re-tipean**; cualquier alteración rompe la byte-identidad OFF (KPI-1). El test
+`shellIntegration.test.ts` (F5) verifica que la `<nav>` y el `const pages` sobrevivieron.
 ```tsx
 <TopBar onGoToTeam={() => selectTab("team")} shellV2={shellV2Enabled} />
 <HealthBanner />
@@ -1279,6 +1323,45 @@ git add -- "Stacky Agents/frontend/src/components/TopBar.tsx" \
 
 ---
 
+## § 11.5. Fase F5 — Guard mecánico de byte-identidad OFF (frontend) [ADICIÓN ARQUITECTO]
+
+**Objetivo:** un test fs+regex (sin RTL) que impide que la reubicación de la `<nav>` v1 y la
+extracción de `pages` (F3) rompan la byte-identidad OFF (KPI-1) o el cero-remount (§3.7). Cierra
+el hueco: hoy KPI-1 sólo lo cubría el smoke manual.
+
+**Corre DESPUÉS de F3** (ya wireó `App.tsx`). Archivo NUEVO:
+`frontend/src/components/shell/__tests__/shellIntegration.test.ts`:
+
+```ts
+import { describe, it, expect } from "vitest";
+import * as fs from "fs";
+
+const APP = fs.readFileSync(new URL("../../../App.tsx", import.meta.url), "utf-8");
+
+describe("Plan 139 F5 — integración shell v2 en App.tsx (guard byte-identidad OFF)", () => {
+  it("conserva la <nav> v1 verbatim (rama OFF byte-idéntica, KPI-1)", () => {
+    expect(APP).toContain('<nav className={styles.nav}>');
+  });
+  it("wirea el sidebar v2 y el modelo puro (rama ON)", () => {
+    expect(APP).toContain("<AppSidebar");
+    expect(APP).toContain("computeVisibleTabs");
+    expect(APP).toContain("shellV2Enabled");
+  });
+  it("extrae el fragment `pages` con sus condicionales de montaje (§3.7, cero remount)", () => {
+    expect(APP).toContain("const pages = (");
+    expect(APP).toContain('tab === "team"');
+    expect(APP).toContain('tab === "dbcompare"');
+  });
+});
+```
+
+**Comando:** `npx vitest run src/components/shell/__tests__/shellIntegration.test.ts`
+**Criterio BINARIO:** los 3 `it` verdes; `npx tsc --noEmit` 0 errores.
+**Flag / runtime / operador:** ninguno (test puro).
+**Staging:** `git add -- "Stacky Agents/frontend/src/components/shell/__tests__/shellIntegration.test.ts"`
+
+---
+
 ## § 12. Smoke manual final (obligatorio — no hay RTL/jsdom)
 
 Levantar el frontend contra un backend local. Ejecutar **ambos** casos.
@@ -1335,7 +1418,8 @@ Levantar el frontend contra un backend local. Ejecutar **ambos** casos.
 3. **F2** — `shellIcons.ts` + `AppSidebar.tsx` + `.module.css` + test de iconos (verde, 0 hex).
 4. **F3** — integración en `App.tsx` (+ `App.module.css`, `endpoints.ts`); smoke OFF + ON.
 5. **F4** — TopBar profesional gateada; smoke comparativo TopBar.
-6. Smoke manual §12 completo (OFF y ON).
+6. **F5** — guard mecánico `shellIntegration.test.ts` (byte-identidad OFF; corre tras F3).
+7. Smoke manual §12 completo (OFF y ON).
 
 Cada fase: pre-flight → test-first (donde aplica) → implementar → validar → criterio binario →
 staging quirúrgico. **No** avanzar a la siguiente fase con la anterior en rojo.
@@ -1346,7 +1430,7 @@ staging quirúrgico. **No** avanzar a la siguiente fase con la anterior en rojo.
 
 - [ ] `pytest tests/test_plan139_shell_flag.py` verde; `tests/test_harness_flags.py` y
       `tests/test_harness_flags_help.py` verdes (sin regresión).
-- [ ] `vitest run` de `shellNav.test.ts` y `shellIcons.test.ts` verdes.
+- [ ] `vitest run` de `shellNav.test.ts`, `shellIcons.test.ts` y `shellIntegration.test.ts` verdes.
 - [ ] `npx tsc --noEmit` → 0 errores.
 - [ ] `git status -- "Stacky Agents/frontend/package.json"` **limpio** (cero dependencias nuevas).
 - [ ] `grep -cE '#[0-9a-fA-F]{3,8}\b'` = **0** en `AppSidebar.module.css`; sin aumento en

@@ -382,6 +382,14 @@ HARNESS_TEST_FILES=(
   tests/test_completion_preflight.py
   tests/test_watchers_health_check.py
   tests/test_diag_health_watchers.py
+  # — Plan 148 — Degradación explícita de integraciones no configuradas (ADO/Jira/LLM) —
+  tests/test_ado_connection_data_api_version.py
+  tests/test_integration_breaker.py
+  tests/test_plan148_integration_degradation.py
+  tests/test_plan148_ado_sync_breaker.py
+  tests/test_plan148_jira_sync_breaker.py
+  tests/test_plan148_graceful_degradation.py
+  tests/test_plan148_integrations_api.py
 )
 
 pass=0

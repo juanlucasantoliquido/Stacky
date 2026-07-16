@@ -501,6 +501,16 @@ def write_ado_auth(name: str, pat: str) -> Path:
     payload: dict = {}
     set_encrypted_secret(payload, "pat", normalized, format_field="pat_format", preencoded=True)
     write_json_file(auth_file, payload)
+    # Plan 148 F6(b) — aditivo: al renovar el PAT, limpiar el breaker para que el
+    # próximo sync reintente sin esperar el backoff. NUNCA debe romper el guardado
+    # de la credencial (mismo invariante "NUNCA lanza" del breaker, F1).
+    try:
+        from services import integration_breaker as _brk
+        _tp = _brk.ado_breaker_project(name)
+        _brk.reset("ado_sync", _tp)
+        _brk.reset("ado_identity", _tp)
+    except Exception:
+        pass
     return auth_file
 
 
@@ -515,6 +525,15 @@ def write_jira_auth(name: str, url: str, user: str, token: str) -> Path:
     payload = {"url": url.rstrip("/"), "user": user}
     set_encrypted_secret(payload, "token", token, format_field="token_format")
     write_json_file(auth_file, payload)
+    # Plan 148 F6(b) — aditivo: al cargar credenciales Jira, limpiar el breaker
+    # (misma razón que write_ado_auth). NUNCA debe romper el guardado.
+    try:
+        from services import integration_breaker as _brk
+        cfg = get_project_config(name) or {}
+        jira_proj = ((cfg.get("issue_tracker") or {}).get("project") or "").strip() or None
+        _brk.reset("jira_sync", jira_proj)
+    except Exception:
+        pass
     return auth_file
 
 

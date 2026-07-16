@@ -71,19 +71,37 @@ def _startup_sync(logger) -> None:
     if tracker_type == "jira":
         from services.jira_sync import sync_tickets as jira_sync
         from services.jira_client import JiraApiError, JiraConfigError
-        try:
-            result = jira_sync(tracker_config=tracker)
-            logger.info(
-                "sync Jira ok: project=%s fetched=%d created=%d updated=%d removed=%d",
-                result["project"], result["fetched"], result["created"],
-                result["updated"], result["removed"],
-            )
-        except JiraConfigError as e:
-            logger.warning("sync Jira saltado: %s", e)
-        except JiraApiError as e:
-            logger.warning("sync Jira falló: %s", e)
-        except Exception:
-            logger.exception("sync Jira error inesperado en arranque")
+        from services import integration_breaker as _brk
+        # NOTA [C1]: en app.py `config` es la INSTANCIA (`from config import config`,
+        # :34) -> `getattr(config, "STACKY_...")` es correcto aquí (mismo patrón
+        # que la rama ADO de F3).
+        _degr = getattr(config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True)
+        _jira_proj = (tracker.get("project") or "").strip() or None
+        if _degr and _brk.should_skip("jira_sync", _jira_proj):
+            logger.debug("sync Jira omitido: breaker abierto")
+        else:
+            try:
+                result = jira_sync(tracker_config=tracker)
+                if _degr:
+                    _brk.record_success("jira_sync", _jira_proj)
+                logger.info(
+                    "sync Jira ok: project=%s fetched=%d created=%d updated=%d removed=%d",
+                    result["project"], result["fetched"], result["created"],
+                    result["updated"], result["removed"],
+                )
+            except JiraConfigError as e:
+                if _degr:
+                    _brk.record_failure(
+                        "jira_sync", _jira_proj,
+                        _brk.REASON_JIRA_NOT_CONFIGURED,
+                        "Credenciales Jira no configuradas. Cargalas en la Caja Fuerte.",
+                    )
+                else:
+                    logger.warning("sync Jira saltado: %s", e)
+            except JiraApiError as e:
+                logger.warning("sync Jira falló: %s", e)
+            except Exception:
+                logger.exception("sync Jira error inesperado en arranque")
 
     elif tracker_type == "mantis":
         from services.mantis_sync import sync_tickets as mantis_sync
@@ -121,22 +139,42 @@ def _startup_sync(logger) -> None:
         purged = purge_non_project_tickets(target_project)
         if purged:
             logger.info("purgados %d tickets ajenos al proyecto %s", purged, target_project)
-        try:
-            from services.project_context import build_ado_client
+        # Plan 148 F3 — circuit-breaker: si esta integración ya está marcada como
+        # caída (PAT expirado / proyecto inexistente) dentro de la ventana de
+        # backoff, NO reintentar la red; solo re-loguear en DEBUG.
+        # NOTA [C1]: en app.py `config` es la INSTANCIA (`from config import config`,
+        # :34), por eso `getattr(config, "STACKY_...")` es correcto aquí (a
+        # diferencia de tickets.py, donde `config` es el módulo y hay que usar
+        # `config.config` — ver F5(b)).
+        from services import integration_breaker as _brk
+        _degr = getattr(config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True)
+        # [C3] key única: la MISMA derivación que usan las rutas sync/ado-user.
+        _bkey = _brk.ado_breaker_project(active) if active else target_project
+        if _degr and _brk.should_skip("ado_sync", _bkey):
+            logger.debug("sync ADO omitido: breaker abierto para %s", _bkey)
+        else:
+            try:
+                from services.project_context import build_ado_client
 
-            client = build_ado_client(project_name=active) if active else None
-            result = _ado_sync(client=client)
-            logger.info(
-                "sync ADO ok: project=%s fetched=%d created=%d updated=%d removed=%d",
-                result["project"], result["fetched"], result["created"],
-                result["updated"], result["removed"],
-            )
-        except AdoConfigError as e:
-            logger.warning("sync ADO saltado: %s", e)
-        except AdoApiError as e:
-            logger.warning("sync ADO falló: %s", e)
-        except Exception:
-            logger.exception("sync ADO error inesperado en arranque")
+                client = build_ado_client(project_name=active) if active else None
+                result = _ado_sync(client=client)
+                if _degr:
+                    _brk.record_success("ado_sync", _bkey)
+                logger.info(
+                    "sync ADO ok: project=%s fetched=%d created=%d updated=%d removed=%d",
+                    result["project"], result["fetched"], result["created"],
+                    result["updated"], result["removed"],
+                )
+            except AdoConfigError as e:
+                logger.warning("sync ADO saltado: %s", e)
+            except AdoApiError as e:
+                if _degr:
+                    reason, message = _brk.classify_ado_error(e)
+                    _brk.record_failure("ado_sync", _bkey, reason, message)  # WARNING solo en transición
+                else:
+                    logger.warning("sync ADO falló: %s", e)
+            except Exception:
+                logger.exception("sync ADO error inesperado en arranque")
 
 
 def _log_completion_preflight(logger) -> None:

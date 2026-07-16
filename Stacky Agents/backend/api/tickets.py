@@ -296,6 +296,15 @@ def _ado_sync_error_response(
     route_label: str,
     project_name: str | None,
 ):
+    # Plan 148 F3(b) — alimentar el circuit-breaker con este fallo (dedup: WARNING
+    # solo en la transición cerrado->abierto). [C1] `config` en tickets.py es el
+    # MODULO (`import config`, :39) -> hay que leer la flag por `config.config`
+    # (patron real del archivo: :410/:446/:865/:922), NUNCA `config` pelado.
+    if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+        from services import integration_breaker as _brk
+        _tp = _brk.ado_breaker_project(project_name)  # [C3] misma key que _startup_sync/ado-user
+        reason, message = _brk.classify_ado_error(exc)
+        _brk.record_failure("ado_sync", _tp, reason, message)
     ctx = resolve_project_context(project_name=project_name)
     status_code = getattr(exc, "status_code", None)
     if status_code not in {401, 403}:
@@ -5540,6 +5549,23 @@ def get_ado_user():
     except (AdoConfigError, _AdoConfigError) as exc:
         return jsonify({"ok": False, "linked": False, "error": "config", "message": str(exc)}), 400
     except (AdoApiError, _AdoApiError) as exc:
+        # Plan 148 F5(b) — degradacion explicita (D6). [C1] En tickets.py `config`
+        # es el MODULO (`import config`, :39). La flag vive en la clase Config ->
+        # hay que leerla por `config.config` (patron real del archivo:
+        # :410/:446/:865/:922). Con `config` pelado, getattr devolveria SIEMPRE el
+        # default True y el branch OFF seria inalcanzable
+        # (test_ado_user_flag_off_502 fallaria). ESTE es el fix del hallazgo C1.
+        if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+            from services import integration_breaker as _brk
+            reason, message = _brk.classify_ado_error(exc)
+            _brk.record_failure("ado_identity", _brk.ado_breaker_project(project_name),  # [C3] key consistente
+                                reason, message)
+            return jsonify({
+                "ok": True, "linked": False, "degraded": True,
+                "reason": reason, "message": message, "source": "ado",
+                "stacky_user": stacky_user, "project": project_name,
+                "ado_status_code": getattr(exc, "status_code", None),
+            }), 200
         return _ado_sync_error_response(exc, route_label="ado-user", project_name=project_name)
     except Exception as exc:  # noqa: BLE001
         logger.exception("ado-user — fallo inesperado")
@@ -5621,6 +5647,23 @@ def sync_from_ado_v2():
     now = _sync_time.time()
     triggered_by = request.headers.get("X-Stacky-Trigger", "manual")
     project_name = _request_project_name()
+
+    # Plan 148 F3.1 (aditivo) — backoff honesto: si el breaker ADO ya esta
+    # abierto (PAT vencido/proyecto inexistente), no golpear la red de nuevo;
+    # el board ya tolera !ok con syncError y puede respetar retry_after.
+    # [C1] `config` en tickets.py es el MODULO -> leer por `config.config`.
+    if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+        from services import integration_breaker as _brk
+        _bkey_v2 = _brk.ado_breaker_project(project_name)  # [C3] misma key que _startup_sync/ado-user
+        if _brk.should_skip("ado_sync", _bkey_v2):
+            st = _brk.get_state("ado_sync", _bkey_v2)
+            return jsonify({
+                "ok": False, "error": "ado_degraded", "degraded": True,
+                "reason": st.reason, "message": st.message,
+                "retry_after": st.retry_after,
+                "seconds_until_retry": st.seconds_until_retry,
+            }), 200  # 200 "degradado", no red
+
     ctx = resolve_project_context(project_name=project_name)
     sync_scope = ctx.stacky_project_name if ctx else "__global__"
     last_sync_ts = _last_sync_ts_by_project.get(sync_scope, 0.0)

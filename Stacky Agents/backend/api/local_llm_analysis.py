@@ -636,4 +636,22 @@ def generate_insight_route(execution_id: int):
         return jsonify(result), 404
     if err == "insight_excluded":
         return jsonify(result), 409
+    # Plan 148 F5(a) — degradacion explicita: si la generacion fallo porque el
+    # modelo local esta caido/no instalado, NO 502 (rompe la UI). Responder 200
+    # available:false. `_config` en este archivo es el MODULO (`import config as
+    # _config`, :20) -> se lee por `_config.config` (mismo patron ya usado en
+    # este archivo, ver :626/:41/:48).
+    if getattr(_config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
+        from services.local_insights import _local_llm_reachable
+        if not _local_llm_reachable():
+            from services import integration_breaker as _brk
+            _brk.record_failure(
+                "local_llm", None, _brk.REASON_LOCAL_LLM_DOWN,
+                "El modelo local no está disponible (servidor caído o modelo no instalado).",
+            )
+            return jsonify({
+                "ok": False, "available": False, "reason": _brk.REASON_LOCAL_LLM_DOWN,
+                "message": "El modelo local no está disponible. Verificá que Ollama/servidor local esté corriendo.",
+                "execution_id": execution_id,
+            }), 200
     return jsonify(result), 502

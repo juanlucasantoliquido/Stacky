@@ -235,6 +235,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_RUNAWAY_MAX_COST_USD", "STACKY_RUN_REPAIR_ENABLED",
         "STACKY_TRANSIENT_RUN_RETRY_ENABLED", "STACKY_TRANSIENT_RUN_RETRY_MAX",
         "STACKY_ARTIFACT_INTAKE_ENABLED", "STACKY_ARTIFACT_RESCUE_ENABLED",
+        "STACKY_INTEGRATION_DEGRADATION_ENABLED",  # Plan 148 — degradacion de integraciones
     ),
     "observabilidad_notif": (
         "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
@@ -1895,6 +1896,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en autopublish_epic_from_run
+    ),
+    # ── Plan 148 — Degradación explícita de integraciones no configuradas ────
+    FlagSpec(
+        key="STACKY_INTEGRATION_DEGRADATION_ENABLED",
+        type="bool",
+        default=True,  # kill-switch, default ON (curada en _CURATED_DEFAULTS_ON)
+        label="Degradación explícita de integraciones no configuradas",
+        description=(
+            "Circuit-breaker + backoff para ADO/Jira/LLM local cuando no están "
+            "configurados o caídos: deja de reintentar cada ciclo, muestra el estado "
+            "en la UI y responde 200 available/linked:false en vez de 502. OFF = "
+            "comportamiento previo (reintenta siempre, 502 crudos)."
+        ),
+        group="global",
+        env_only=False,
     ),
     FlagSpec(
         key="STACKY_PUSH_REJECTIONS_ENABLED",

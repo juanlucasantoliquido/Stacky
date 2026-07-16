@@ -140,8 +140,16 @@ def test_generate_endpoint_not_found_404():
 
 
 def test_generate_endpoint_model_failure_502():
+    """Modelo local VIVO pero la invocación falla (error genuino) -> sigue 502.
+
+    Plan 148 F5(a): distinto de "modelo no disponible" (eso degrada a 200
+    available:false). _local_llm_reachable=True fija que el modelo está arriba
+    pero la llamada específica falló -- así el fixture (endpoint fake http://x)
+    no se confunde con "caído" ahora que la reachability es el discriminador.
+    """
     eid = _mk()
-    with mock.patch("copilot_bridge.invoke_local_llm", side_effect=RuntimeError("down")):
+    with mock.patch("copilot_bridge.invoke_local_llm", side_effect=RuntimeError("down")), \
+         mock.patch("services.local_insights._local_llm_reachable", return_value=True):
         r = _llm_client().post(f"/api/llm/insights/{eid}/generate", json={})
     assert r.status_code == 502
     with db.session_scope() as s:

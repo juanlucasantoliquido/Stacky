@@ -1,9 +1,10 @@
 # 148 — Degradación explícita de integraciones no configuradas (ADO / Jira / LLM local)
 
-- **Estado:** CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
+- **Estado:** IMPLEMENTADO F0..F6 (2026-07-16) · CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8)
 - **Crítica v2:** StackyArchitectaUltraEficientCode (juez adversarial, perfil normal · Opus 4.8) — 2026-07-15
+- **Implementación:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Sonnet 5) — 2026-07-16. F0..F5 tal cual el plan; F3.1 (opcional) implementado; F6(b) con write-site único encontrado (`project_manager.py::write_ado_auth/write_jira_auth`, mejor que lo previsto por el plan). Los 5 usos de `getattr(config...)`/`getattr(_config...)` verificados contra el import real de cada archivo: los 7 call-sites del plan ya estaban correctos (ninguna corrección de código necesaria; ver commit).
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)
 - **Cierra hallazgos:** **D6** (502 en LLM local y en identidad ADO), **V3** (Sync ADO falla ~975× por PAT expirado / proyecto inexistente), **V8** (Sync Jira saltado 448× sin credenciales), **D9** (identidad ADO no resuelta: api-version bajo preview 11×).
 

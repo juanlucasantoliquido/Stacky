@@ -3857,3 +3857,36 @@ export const DbCompare = {
       { tables },
     ),
 };
+
+// ── Plan 148 — Degradación explícita de integraciones no configuradas ────────
+
+export interface IntegrationHealthItem {
+  key: string;
+  integration: string;
+  project: string;
+  reason: string;
+  title: string;
+  action: string;
+  vault: boolean;
+  message: string;
+  retry_after: string | null;
+  seconds_until_retry: number;
+}
+
+export interface IntegrationsStatusResponse {
+  enabled: boolean;
+  integrations: IntegrationHealthItem[];
+}
+
+export const Integrations = {
+  /** GET /api/integrations/status — SIEMPRE 200; enabled:false si la flag master está OFF. */
+  status: () => api.get<IntegrationsStatusResponse>("/api/integrations/status"),
+  /** POST /api/integrations/{integration}/reset — acción HITL "Reintentar ahora". */
+  reset: (integration: string, project: string | null) =>
+    api.post<{ ok: boolean; integration: string; project: string | null }>(
+      `/api/integrations/${encodeURIComponent(integration)}/reset${
+        project ? `?project=${encodeURIComponent(project)}` : ""
+      }`,
+      {},
+    ),
+};

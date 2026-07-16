@@ -30,6 +30,11 @@ from services.secrets_store import read_secret_from_file
 logger = logging.getLogger("stacky_agents.ado")
 
 _API_VERSION = "7.1"
+# D9 (auditoria 2026-07-15, Plan 148): connectionData es un recurso PREVIEW en ADO;
+# con api-version="7.1" a secas ADO responde "under preview. The -preview flag must
+# be supplied". El sufijo -preview lo resuelve. NO cambiar _API_VERSION global (los
+# endpoints GA wiql/workitems/attachments deben seguir en 7.1 sin sufijo).
+_CONNECTION_DATA_API_VERSION = "7.1-preview"
 _TIMEOUT_SEC = 30
 
 # Plan 52 F1 — tope duro de páginas para la búsqueda idempotente de comentarios.
@@ -363,7 +368,7 @@ class AdoClient:
         Lanza AdoApiError si el PAT es inválido o ADO no responde JSON.
         """
         base_org = f"https://dev.azure.com/{urllib.parse.quote(self.org)}"
-        url = f"{base_org}/_apis/connectionData?api-version={_API_VERSION}"
+        url = f"{base_org}/_apis/connectionData?api-version={_CONNECTION_DATA_API_VERSION}"
         data = self._request("GET", url)
         user = data.get("authenticatedUser") or {}
         props = user.get("properties") or {}

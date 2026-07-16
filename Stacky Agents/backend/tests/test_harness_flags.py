@@ -634,6 +634,9 @@ _CURATED_DEFAULTS_ON = {
     # default ON (detecta+falla temprano, no reduce seguridad). AUTOSET (F3)
     # NO entra acá: excepción dura #4 (reduce seguridad por default), OFF a propósito.
     "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
+    # Plan 148 — Degradación explícita de integraciones no configuradas: kill-switch
+    # default ON (breaker + 200-en-vez-de-502; OFF revierte byte-a-byte).
+    "STACKY_INTEGRATION_DEGRADATION_ENABLED",
 }
 
 

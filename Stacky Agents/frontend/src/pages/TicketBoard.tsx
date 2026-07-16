@@ -7,6 +7,7 @@ import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent }
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import { useTicketSync } from "../hooks/useTicketSync";
 import { SyncStatusBar } from "../components/SyncStatusBar";
+import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import FinishWorkButton from "../components/FinishWorkButton";
@@ -947,6 +948,9 @@ export default function TicketBoard() {
           </button>
         </div>
       </header>
+
+      {/* Plan 148 F6 — estado de integraciones no configuradas (ADO/Jira/LLM local) */}
+      <IntegrationHealthBanner />
 
       {/* Plan 38 B2 — Modal Épica desde Brief */}
       {epicBriefOpen && (

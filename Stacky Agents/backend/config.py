@@ -1168,5 +1168,11 @@ class Config:
         "STACKY_UI_SHELL_V2_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # Plan 148 — Degradación explícita de integraciones no configuradas. Default ON
+    # (kill-switch). Espejo del default=True de la FlagSpec homónima.
+    STACKY_INTEGRATION_DEGRADATION_ENABLED = os.getenv(
+        "STACKY_INTEGRATION_DEGRADATION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
 
 config = Config()

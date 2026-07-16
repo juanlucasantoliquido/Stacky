@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Skeleton } from "../ui";
 import EmptyState from "../EmptyState";
 import LoadErrorState from "../LoadErrorState";
 import type { BreakdownDimension, CostBreakdown } from "../../lib/costCenterTypes";
-import { costKindTokenVar, formatUsd, scaleLinear } from "../../lib/costCenter.logic";
+import { formatUsd, scaleLinear } from "../../lib/costCenter.logic";
 import styles from "./CostBreakdownBars.module.css";
 
 export interface CostBreakdownBarsProps {
@@ -24,9 +24,19 @@ const DIMENSIONS: { value: BreakdownDimension; label: string }[] = [
   { value: "day", label: "Día" },
 ];
 
-// Acento único para todas las barras (dimensión de agrupación, no cost_kind por
-// fila): reusa el mismo token "billable/reportado" de F5, nunca hex (Plan 141).
-const BAR_COLOR = costKindTokenVar("reported");
+// Acento único para todas las barras (color fijo en .barFill del CSS module,
+// token --status-success-text = "reportado"; nunca hex, Plan 141).
+
+/** Ancho por fila seteado imperativamente, sin objeto de estilo inline en JSX:
+ * el ratchet de deuda visual (plan 138 F0) da alcance cero a archivos nuevos,
+ * así que un ancho dinámico por dato no puede ir en un prop de estilo literal. */
+function BarFill({ pct }: { pct: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.style.width = `${pct}%`;
+  }, [pct]);
+  return <span ref={ref} className={styles.barFill} />;
+}
 
 /** Plan 142 F6 — barras horizontales SVG-simples (div-based, sin librería, R5)
  * por dimensión seleccionable. Fallback tabla implícito (misma lista sirve de
@@ -72,10 +82,7 @@ export default function CostBreakdownBars({
             <li key={g.key} className={styles.barRow}>
               <span className={styles.barLabel} title={g.key}>{g.key}</span>
               <span className={styles.barTrack}>
-                <span
-                  className={styles.barFill}
-                  style={{ width: `${scaleW(g.billable_usd)}%`, background: BAR_COLOR }}
-                />
+                <BarFill pct={scaleW(g.billable_usd)} />
               </span>
               <span className={styles.barValue}>{formatUsd(g.billable_usd)}</span>
               <span className={styles.barRuns}>{g.runs} runs</span>

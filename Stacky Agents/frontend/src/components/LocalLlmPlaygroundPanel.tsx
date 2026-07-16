@@ -12,6 +12,8 @@
  */
 import { useEffect, useState } from "react";
 import { LocalLlmApi } from "../api/endpoints";
+import EgressSentinelBlock from "./EgressSentinelBlock";
+import type { EgressSentinelData } from "./EgressSentinelBlock";
 import styles from "./LocalLlmPlaygroundPanel.module.css";
 
 export default function LocalLlmPlaygroundPanel() {
@@ -29,6 +31,12 @@ export default function LocalLlmPlaygroundPanel() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [resultModel, setResultModel] = useState<string | null>(null);
+
+  // Plan 121 — Centinela de egreso: escaneo on-demand pre-flight.
+  const [scanText, setScanText] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<EgressSentinelData | null>(null);
 
   const loadModels = () => {
     setLoadingModels(true);
@@ -72,6 +80,30 @@ export default function LocalLlmPlaygroundPanel() {
       setError(`No se pudo probar el modelo local: ${msg}`);
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleScan = async () => {
+    if (!scanText.trim()) return;
+    setScanning(true);
+    setScanError(null);
+    setScanResult(null);
+    try {
+      const res = await LocalLlmApi.scanEgress({ text: scanText, kind: "manual" });
+      setScanResult({
+        status: res.status,
+        findings: res.findings ?? [],
+        deterministic_classes: res.deterministic_classes ?? [],
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Error desconocido";
+      setScanError(
+        msg.includes("egress_sentinel_disabled")
+          ? 'Activá "Centinela de egreso (IA local)" en Configuración → Arnés'
+          : msg,
+      );
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -180,6 +212,33 @@ export default function LocalLlmPlaygroundPanel() {
           <pre className={styles.resultBody}>{result || "(respuesta vacía)"}</pre>
         </div>
       )}
+
+      {/* Plan 121 — Centinela de egreso: escaneo on-demand pre-flight (HITL). */}
+      <div className={styles.field}>
+        <label className={styles.label}>Centinela de egreso</label>
+        <p className={styles.intro}>
+          Pegá un texto y escaneálo ANTES de mandarlo: la IA local busca contraseñas,
+          claves u otros datos sensibles, incluso narrados en lenguaje natural.
+        </p>
+        <textarea
+          className={styles.textarea}
+          value={scanText}
+          onChange={(e) => setScanText(e.target.value)}
+          placeholder="Pegá acá el texto que querés revisar antes de enviarlo…"
+          rows={4}
+        />
+        <div className={styles.actions}>
+          <button
+            className={styles.primaryBtn}
+            onClick={() => void handleScan()}
+            disabled={scanning || !scanText.trim()}
+          >
+            {scanning ? "Escaneando…" : "Escanear antes de enviar"}
+          </button>
+        </div>
+        {scanError && <div className={styles.errorText}>{scanError}</div>}
+        <EgressSentinelBlock sentinel={scanResult} />
+      </div>
     </div>
   );
 }

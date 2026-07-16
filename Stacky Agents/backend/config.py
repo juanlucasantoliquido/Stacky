@@ -122,6 +122,14 @@ class Config:
         os.getenv("STACKY_DB_COMPARE_DATA_MAX_ROWS", "5000")
     )
 
+    # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
+    STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
+        "1", "true", "yes",
+    )
+    STACKY_EGRESS_SENTINEL_MAX_PER_CYCLE = int(os.getenv("STACKY_EGRESS_SENTINEL_MAX_PER_CYCLE", "3"))
+    STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS = int(os.getenv("STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS", "7"))
+    STACKY_EGRESS_SENTINEL_MAX_CHARS = int(os.getenv("STACKY_EGRESS_SENTINEL_MAX_CHARS", "24000"))
+
     # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
     # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
     STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in (

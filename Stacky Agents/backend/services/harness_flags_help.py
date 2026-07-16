@@ -1205,6 +1205,31 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la tarjeta muestra solo los números, sin el botón de narrar.",
         example="Como pedirle a alguien que en vez de la planilla te cuente en dos frases cómo venimos.",
     ),
+    # ── Plan 121 — Centinela local de egreso ────────────────────────────────
+    "STACKY_EGRESS_SENTINEL_ENABLED": PlainHelp(
+        what="Un revisor que usa la IA de tu propia máquina para detectar si en el texto que se manda a un asistente hay contraseñas, claves u otros datos sensibles escritos en lenguaje natural.",
+        on_effect="Si la activás: cada tanto se revisan las últimas ejecuciones en tu propia máquina y, si encuentra algo sensible, lo anota (nunca bloquea nada por sí sola; la decisión sigue siendo tuya).",
+        off_effect="Si la apagás: no se hace ninguna revisión adicional; sigue funcionando el detector de patrones exactos que ya existía antes.",
+        example="Como un corrector que lee lo que vas a enviar y te avisa 'ojo, acá pusiste una clave', pero vos seguís decidiendo si lo mandás.",
+    ),
+    "STACKY_EGRESS_SENTINEL_MAX_PER_CYCLE": PlainHelp(
+        what="Cuántas ejecuciones como máximo revisa el detector de datos sensibles en cada pasada.",
+        on_effect="Si subís el número: revisa más ejecuciones por pasada, pero usa más la CPU/GPU de tu máquina.",
+        off_effect="Si lo dejás con el valor de fábrica: revisa hasta 3 por pasada.",
+        example="Como cuántas cartas leés de una sentada antes de hacer una pausa.",
+    ),
+    "STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS": PlainHelp(
+        what="Hasta qué antigüedad hacia atrás, en días, se revisan ejecuciones en busca de datos sensibles.",
+        on_effect="Si subís el número: también se revisan ejecuciones más viejas.",
+        off_effect="Si lo dejás con el valor de fábrica: solo mira los últimos 7 días.",
+        example="Como decidir hasta qué fecha vieja revisás el correo pendiente.",
+    ),
+    "STACKY_EGRESS_SENTINEL_MAX_CHARS": PlainHelp(
+        what="Cuánto texto como máximo (en caracteres) se le manda a la IA local para revisar en cada ejecución.",
+        on_effect="Si subís el número: revisa textos más largos completos, pero cada revisión tarda más.",
+        off_effect="Con el valor 0: no hay límite, revisa el texto completo sin recortar.",
+        example="Como leer un documento entero versus solo las primeras páginas para ahorrar tiempo.",
+    ),
     # ── Plan 110 — Revisor de PRs ──────────────────────────────────────────
     "STACKY_DEPLOYMENTS_ENABLED": PlainHelp(
         what="Una sección 'Despliegues' que te deja llevar tu app a cada servidor (o a tu propia máquina) con pocos clicks, con historial y vuelta atrás inmediata.",

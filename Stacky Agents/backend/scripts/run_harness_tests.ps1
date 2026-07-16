@@ -363,6 +363,12 @@ $HarnessTestFiles = @(
   "tests/test_plan149_intake_reason_codes.py"
   "tests/test_plan149_intake_quarantine_surface.py"
   "tests/test_plan149_prewrite_hook_message.py"
+  # Plan 121 - Centinela local de egreso (secretos/PII semantico)
+  "tests/test_plan121_egress_sentinel_flags.py"
+  "tests/test_plan121_secret_patterns.py"
+  "tests/test_plan121_sentinel_core.py"
+  "tests/test_plan121_sentinel_sweep.py"
+  "tests/test_plan121_sentinel_api.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

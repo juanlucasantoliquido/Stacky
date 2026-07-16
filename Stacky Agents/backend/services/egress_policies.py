@@ -32,7 +32,7 @@ class EgressPolicy(Base):
 
     id = Column(Integer, primary_key=True)
     project = Column(String(80))   # None = global
-    data_class = Column(String(40), nullable=False)  # pii | financial | production | regulatory
+    data_class = Column(String(40), nullable=False)  # pii | financial | production | regulatory | secrets
     allowed_llms = Column(String(400))   # CSV; vacío = ninguno permitido
     action = Column(String(20), default="block")  # block | warn | allow
     active = Column(Boolean, default=True)
@@ -76,6 +76,19 @@ _DETECTORS: dict[str, list[re.Pattern[str]]] = {
     ],
     "regulatory": [
         re.compile(r"\b(SOX|BCRA|GDPR|HIPAA|PCI[-\s]DSS|compliance)\b", re.IGNORECASE),
+    ],
+    # Plan 121 — secretos concretos (capa determinista, sin LLM).
+    "secrets": [
+        re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),                        # GitHub PAT clásico
+        re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}\b"),               # GitHub PAT fine-grained
+        re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}\b"),                   # GitLab PAT
+        re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                           # AWS access key id
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),             # clave privada PEM
+        re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),               # token Slack
+        re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}\b"),  # JWT
+        re.compile(r"(?i)\b(password|passwd|pwd|contrase[nñ]a)\s*[=:]\s*\S{4,}"),          # password=...
+        re.compile(r"(?i);\s*password\s*=\s*[^;\s]{4,}"),              # connection string
+        re.compile(r"(?i)\bauthorization:\s*bearer\s+[A-Za-z0-9._-]{16,}"),                # header Bearer
     ],
 }
 

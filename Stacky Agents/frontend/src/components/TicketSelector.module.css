@@ -30,7 +30,7 @@
   font-size: 11px;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 
 .refresh:hover:not(:disabled) {
@@ -75,7 +75,7 @@
   flex-direction: column;
   gap: 2px;
   border-left: 3px solid transparent;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 
 .row:hover {
@@ -151,7 +151,7 @@
   border-radius: 50%;
   background: #facc15;
   flex-shrink: 0;
-  animation: selectorPulse 1.4s infinite;
+  animation: selectorPulse var(--duration-pulse) infinite;
 }
 
 @keyframes selectorPulse {

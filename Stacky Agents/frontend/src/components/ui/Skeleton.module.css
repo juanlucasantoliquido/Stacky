@@ -6,7 +6,7 @@
 .skeleton {
   display: block;
   background: var(--bg-elev);
-  animation: uiSkeletonPulse 1.4s var(--ease-in-out) infinite;
+  animation: uiSkeletonPulse var(--duration-pulse) var(--ease-in-out) infinite;
 }
 
 .stack {

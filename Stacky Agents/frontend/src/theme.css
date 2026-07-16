@@ -134,6 +134,21 @@
   --ease-in-out: ease-in-out;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* ─── Motion de nivel superior (Plan 143) ──────────────────────────
+     Construido SOBRE los tokens atómicos del plan 138 (--duration-*, --ease-*).
+     NO redefine ni altera ningún token del 138. El plan 141 F5 neutraliza todo
+     esto cuando el SO pide prefers-reduced-motion (no se reimplementa acá). */
+  /* Duraciones de BUCLE (animaciones infinitas: spinners, pulsos). Complementan
+     las duraciones de INTERACCIÓN fast/base/slow del 138 (que son para transiciones). */
+  --duration-spin: 0.7s;
+  --duration-pulse: 1.4s;
+  /* Presets de transición por familia de propiedad. Uso: transition: var(--transition-colors);
+     Solo animan propiedades sin reflow (color-family/transform/opacity/box-shadow), §4.4. */
+  --transition-colors: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), fill var(--duration-fast) var(--ease-standard), stroke var(--duration-fast) var(--ease-standard);
+  --transition-transform: transform var(--duration-base) var(--ease-out-expo);
+  --transition-opacity: opacity var(--duration-fast) var(--ease-standard);
+  --transition-elevation: box-shadow var(--duration-base) var(--ease-standard);
+
   /* Bordes / theme-ready */
   --border-width: 1px;
   --color-scheme: dark;
@@ -334,4 +349,34 @@ a:hover {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ─── Micro-interacciones tokenizadas (Plan 143) ───────────────────────
+   Utilidades OPT-IN: un feature las adopta agregando la clase; sin adopción, cero
+   cambio visual. Solo animan transform/opacity/box-shadow/color-family (nunca layout
+   → sin reflow, §4.4). El plan 141 F5 las neutraliza globalmente bajo prefers-reduced-motion. */
+
+.u-transition-colors { transition: var(--transition-colors); }
+.u-transition-transform { transition: var(--transition-transform); }
+.u-transition-elevation { transition: var(--transition-elevation); }
+
+/* "Presionable": hundimiento sutil al hacer :active. */
+.u-pressable { transition: var(--transition-transform); }
+.u-pressable:active { transform: translateY(1px); }
+
+/* Entrada de listas/paneles (una sola vez). */
+.u-fade-in { animation: uiFadeIn var(--duration-base) var(--ease-out-expo) both; }
+.u-fade-in-up { animation: uiFadeInUp var(--duration-base) var(--ease-out-expo) both; }
+@keyframes uiFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes uiFadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Feedback óptimista: acción en vuelo (encolando/guardando). Atenúa y bloquea la
+   interacción sin ocultar el control. Combinar con aria-busy="true" en el elemento. */
+.u-pending {
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-standard);
 }

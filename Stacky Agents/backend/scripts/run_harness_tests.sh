@@ -358,6 +358,12 @@ HARNESS_TEST_FILES=(
   tests/test_documenter_v2_pipeline.py
   # — Plan 137 F4 — Documentador v2: endpoint historial de corridas —
   tests/test_plan137_endpoints.py
+  # — Plan 142 — Centro de Costos + Codeburn: KPIs de tokens y USD —
+  tests/test_cost_analytics_extract.py
+  tests/test_cost_analytics_aggregate.py
+  tests/test_cost_center_api.py
+  tests/test_cost_reconciliation_audit.py
+  tests/test_cost_codeburn_import.py
   # — Plan 144 — Ejecucion confiable Claude CLI: trust, stalls, estados —
   tests/test_status_vocabulary_contract.py
   tests/test_ticket_status_robust_transition.py

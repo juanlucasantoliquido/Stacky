@@ -1165,7 +1165,7 @@ PLAIN_HELP: dict[str, PlainHelp] = {
     "LOCAL_LLM_MODEL": PlainHelp(
         what="El nombre exacto del modelo que tenés cargado en tu servidor local.",
         on_effect="Si lo cambiás: las consultas piden ese modelo puntual al servidor local.",
-        off_effect="Si lo dejás con el valor de fábrica: se pide 'qwen3:32b'.",
+        off_effect="Si lo dejás con el valor de fábrica: se pide 'qwen3:32b'. Si ese modelo no está instalado en tu servidor, Stacky elige automáticamente el más parecido de los que tenés instalados y te lo avisa en los logs.",
         example="Como pedir un plato por su nombre exacto del menú de tu propio servidor.",
     ),
     "LOCAL_LLM_TIMEOUT_SEC": PlainHelp(
@@ -1241,6 +1241,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         on_effect="Si la activás: la navegación pasa a una barra lateral con secciones que podés plegar; son las mismas pantallas, ordenadas por tema.",
         off_effect="Si la apagás: la app usa la fila de solapas clásica de arriba, exactamente como venía.",
         example="Como pasar de una fila de solapas apretadas a un menú lateral tipo panel de control, con las opciones ordenadas por tema.",
+    ),
+    "STACKY_DEVOPS_UI_V2_ENABLED": PlainHelp(
+        what="Enciende el rediseño minimalista del panel DevOps (header, tabs, servidores en tabla).",
+        on_effect="Si la activás: el panel DevOps cambia de look — header con resumen de estado, tabs subrayadas, tabla de servidores en vez de lista. Cero cambios de comportamiento.",
+        off_effect="Si la apagás: el panel DevOps se ve exactamente igual que hoy.",
+        example="Como cambiar el tema visual de una app sin tocar ninguna función: mismo contenido, otro traje.",
     ),
 }
 

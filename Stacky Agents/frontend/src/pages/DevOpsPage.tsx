@@ -18,6 +18,9 @@ import { useQuery } from '@tanstack/react-query';
 import { DevOps } from '../api/endpoints';
 import { FlagGateBanner } from '../components/devops/FlagGateBanner';
 import { ConnectionHealthStrip } from '../components/devops/ConnectionHealthStrip'; // Plan 116
+import styles from './DevOpsPage.module.css'; // Plan 119
+import { DevOpsHeaderV2 } from './DevOpsHeaderV2'; // Plan 119
+import { DevOpsTabsV2 } from './DevOpsTabsV2'; // Plan 119
 
 // Health con index signature para keys aditivas (plan 88/90)
 export interface DevOpsHealth {
@@ -36,6 +39,7 @@ export interface DevOpsHealth {
   remote_target_enabled?: boolean; // Plan 108 — agente/ambientes anclados al servidor seleccionado
   pr_reviewer_enabled?: boolean; // Plan 110 — Revisor de PRs
   connection_doctor_enabled?: boolean; // Plan 116 — doctor de conexiones
+  ui_v2_enabled?: boolean; // Plan 119 — shell minimalista
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -196,6 +200,9 @@ export const DevOpsPage: React.FC = () => {
     setMountedIds((prev) => new Set([...prev, id]));
   };
 
+  // Plan 119 — shell v2 (presentación pura, conmutado por flag; default OFF = idéntico a hoy).
+  const uiV2 = ctx.health.ui_v2_enabled === true;
+
   if (healthQuery.isLoading) {
     return <div style={{ padding: '20px' }}>Cargando salud DevOps...</div>;
   }
@@ -209,53 +216,70 @@ export const DevOpsPage: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <h2 style={{ marginTop: 0 }}>DevOps</h2>
+    <div
+      className={uiV2 ? styles.page : undefined}
+      style={uiV2 ? undefined : { padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
+      {uiV2 ? (
+        <DevOpsHeaderV2
+          health={ctx.health}
+          servers={ctx.servers ?? []}
+          serversEnabled={ctx.health.servers_enabled === true}
+          selectedAlias={selectedAlias}
+          onSelectServer={onSelectServer}
+        />
+      ) : (
+        <h2 style={{ marginTop: 0 }}>DevOps</h2>
+      )}
 
-      {/* Plan 116 — tira de salud de conexiones (shell; gate por health key, OFF = idéntico) */}
+      {/* Plan 116 — tira de salud de conexiones. INTOCABLE: NO condicionar a uiV2 (Plan 119 fix C1). */}
       {ctx.health.connection_doctor_enabled === true && (
         <ConnectionHealthStrip onGotoSection={handleTabClick} />
       )}
 
-      {/* Barra de sub-tabs - C20 flexWrap para soportar 5+ secciones */}
-      <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-        {DEVOPS_SECTIONS.map((s) => (
-          <button
-            key={s.id}
-            role="tab"
-            aria-selected={activeId === s.id}
-            aria-controls={`devops-panel-${s.id}`}
-            onClick={() => handleTabClick(s.id)}
-            disabled={!ctx.health.flag_enabled}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: activeId === s.id ? '#007bff' : '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: ctx.health.flag_enabled ? 'pointer' : 'not-allowed',
-              opacity: ctx.health.flag_enabled ? 1 : 0.5,
-            }}
-          >
-            {s.icon ? `${s.icon} ` : ''}
-            {s.label}
-          </button>
-        ))}
-        {/* Plan 91 F6 — selector de servidor activo (scoping aditivo) */}
-        {ctx.health.servers_enabled === true && (ctx.servers?.length ?? 0) >= 1 && (
-          <select
-            value={selectedAlias ?? ''}
-            onChange={(e) => onSelectServer(e.target.value || null)}
-            style={{ padding: '8px', marginLeft: 'auto' }}
-            title="Servidor activo para las secciones que lo usen"
-          >
-            <option value="">— ninguno —</option>
-            {(ctx.servers ?? []).map((s) => (
-              <option key={s.alias} value={s.alias}>{s.alias}</option>
-            ))}
-          </select>
-        )}
-      </div>
+      {/* Barra de sub-tabs — Plan 119: v2 usa DevOpsTabsV2 (underline); v1 conserva el legacy Bootstrap. */}
+      {uiV2 ? (
+        <DevOpsTabsV2 sections={DEVOPS_SECTIONS} activeId={activeId} onSelect={handleTabClick} health={ctx.health} />
+      ) : (
+        <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+          {DEVOPS_SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              role="tab"
+              aria-selected={activeId === s.id}
+              aria-controls={`devops-panel-${s.id}`}
+              onClick={() => handleTabClick(s.id)}
+              disabled={!ctx.health.flag_enabled}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: activeId === s.id ? '#007bff' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: ctx.health.flag_enabled ? 'pointer' : 'not-allowed',
+                opacity: ctx.health.flag_enabled ? 1 : 0.5,
+              }}
+            >
+              {s.icon ? `${s.icon} ` : ''}
+              {s.label}
+            </button>
+          ))}
+          {/* Plan 91 F6 — selector de servidor activo (scoping aditivo). Plan 119: SOLO en v1 (en v2 vive en el header). */}
+          {!uiV2 && ctx.health.servers_enabled === true && (ctx.servers?.length ?? 0) >= 1 && (
+            <select
+              value={selectedAlias ?? ''}
+              onChange={(e) => onSelectServer(e.target.value || null)}
+              style={{ padding: '8px', marginLeft: 'auto' }}
+              title="Servidor activo para las secciones que lo usen"
+            >
+              <option value="">— ninguno —</option>
+              {(ctx.servers ?? []).map((s) => (
+                <option key={s.alias} value={s.alias}>{s.alias}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       {/* Render de secciones con gate declarativo (C20) */}
       {DEVOPS_SECTIONS.map((s) => {

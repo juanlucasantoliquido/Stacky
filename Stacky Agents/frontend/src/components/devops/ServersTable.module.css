@@ -1,0 +1,25 @@
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl thead th { text-align: left; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); padding: 0 14px 10px; border-bottom: 1px solid var(--border); }
+.right { text-align: right; }
+.tbl tbody td { padding: 13px 14px; border-bottom: 1px solid var(--border-muted); vertical-align: middle; }
+.tbl tbody tr { transition: background 0.1s; }
+.tbl tbody tr:hover { background: var(--bg-panel); }
+.tbl tbody tr:hover .rowActions, .tbl tbody tr:focus-within .rowActions { opacity: 1; }  /* revelar también por teclado */
+.name { display: flex; align-items: center; gap: 10px; }
+.n { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 500; color: var(--text-primary); }
+.active { font-size: 0.68rem; color: var(--accent-hot); letter-spacing: 0.03em; }
+.host, .user { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-muted); }
+.state { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }
+.txtOk { color: var(--text-muted); }
+.txtWarn { color: var(--warn); }
+.lat { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.75rem; margin-left: 4px; }
+.rowActions { display: flex; gap: 16px; justify-content: flex-end; opacity: 0.35; transition: opacity 0.12s; }
+.actionsCell { text-align: right; white-space: nowrap; }
+.footnote { margin-top: 28px; color: var(--text-faint); font-size: 0.75rem; }
+.ico { width: 14px; height: 14px; flex: 0 0 auto; }
+.icoOk { color: var(--success); }
+.icoWarn { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) {
+  .tbl tbody tr, .rowActions { transition: none; }
+  .rowActions { opacity: 1; }  /* sin reveal por hover si el usuario evita animaciones */
+}

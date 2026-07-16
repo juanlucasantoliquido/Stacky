@@ -3349,6 +3349,7 @@ export const DevOps = {
       env_sandbox_enabled?: boolean; // Plan 107
       pr_reviewer_enabled?: boolean; // Plan 110
       connection_doctor_enabled?: boolean; // Plan 116
+      ui_v2_enabled?: boolean; // Plan 119
     }>("/api/devops/health"),
   /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
   connectionsHealth: () =>
@@ -3750,6 +3751,24 @@ export const LocalLlmApi = {
       "/api/llm/analyze-code",
       body,
     ),
+  /**
+   * Análisis de estado de un ticket con IA local: reúne épica padre, tasks
+   * hijas, comentarios del tracker y outputs de agentes, y devuelve resumen
+   * de estado + puntos débiles + incoherencias (HITL, sin tools).
+   */
+  ticketInsight: (ticketId: number, body?: { model?: string; question?: string }) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      execution_id: number;
+      context_stats: {
+        has_epic: boolean;
+        children: number;
+        comments: number;
+        executions: number;
+      };
+    }>(`/api/llm/ticket-insight/${ticketId}`, body ?? {}),
   suggestPipeline: (body: {
     project: string;
     stack: string;

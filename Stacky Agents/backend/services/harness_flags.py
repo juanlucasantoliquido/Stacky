@@ -215,6 +215,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
         "STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS",  # Plan 110 v2.1 — tope del diff del camino solo-local (velocidad, 0=sin límite)
         "STACKY_PR_REVIEW_TIMEOUT_SEC",     # Plan 110 — timeout de la revisión Haiku
+        "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 119 — rediseño minimalista del shell DevOps
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2892,6 +2893,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         min_value=10,
         max_value=600,
+    ),
+    # ── Plan 119 — Rediseño minimalista del shell DevOps ──────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_UI_V2_ENABLED",
+        type="bool",
+        label="Shell DevOps minimalista (Plan 119)",
+        description=(
+            "Plan 119 — Reemplaza el shell del panel DevOps (header, sub-tabs y "
+            "selector de servidor) por un diseño minimalista que usa los tokens de "
+            "theme.css, y la sección Servidores por una tabla. Solo presentación: "
+            "cero cambios de comportamiento. Default OFF: con la flag apagada la UI "
+            "es idéntica a la actual."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # profundidad 1 (master del panel, no una flag hija)
+        # SIN default= (solo _CURATED_DEFAULTS_ON puede; default OFF vive en config.py).
     ),
     # ── Plan 117 — Insights locales de ejecuciones (TL;DR + triage + digest narrado) ──
     FlagSpec(

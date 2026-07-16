@@ -187,6 +187,7 @@ _REQUIRES_MAP_FROZEN = {
     # Drift preexistente destrabado al implementar Plan 144 (ajeno a este plan):
     # Plan 142 F7 declaraba requires= pero nunca sumó la arista acá.
     "STACKY_COST_CODEBURN_IMPORT_PATH": "STACKY_COST_CODEBURN_IMPORT_ENABLED",  # Plan 142
+    "STACKY_DEVOPS_UI_V2_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 119
 }
 
 

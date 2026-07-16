@@ -1112,6 +1112,11 @@ class Config:
         "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 119 — Rediseño minimalista del shell DevOps (default OFF, editable por UI).
+    STACKY_DEVOPS_UI_V2_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_UI_V2_ENABLED", "false"
+    ).lower() in ("1", "true", "yes", "on")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

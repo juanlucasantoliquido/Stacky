@@ -115,3 +115,20 @@ api_bp.register_blueprint(db_compare_bp)  # Plan 122 — url_prefix="/db-compare
 @api_bp.get("/health")
 def health():
     return {"ok": True}
+
+
+@api_bp.get("/v1/pipeline/status")
+def pipeline_status_shim():
+    """Plan 145 — shim de compatibilidad. La ruta real nunca existió; un cliente
+    externo/legacy (fuera del repo) la pollea ~11k-12k/día generando ruido 404.
+    Respondemos un 200 estable y neutro para silenciarlo. Kill-switch:
+    STACKY_PIPELINE_STATUS_SHIM=false vuelve a 404."""
+    import os
+    from flask import abort
+
+    if os.getenv("STACKY_PIPELINE_STATUS_SHIM", "true").lower() == "false":
+        abort(404)
+    return {
+        "status": "unknown",
+        "detail": "compatibility shim — no pipeline status is tracked at this endpoint",
+    }, 200

@@ -34,7 +34,13 @@ def _project_agents_dir_if_configured() -> Path | None:
     if candidate.is_dir():
         return candidate.resolve()
 
-    _config_logger.warning(
+    from services.log_throttle import log_state_change  # lazy: evita ciclo de import
+
+    log_state_change(
+        "config.agents_dir_invalid",  # key
+        str(raw),  # state: re-loguea si cambia el path malo
+        _config_logger,
+        logging.WARNING,
         "agents_dir configurado para el proyecto activo no existe o no es carpeta: %s. "
         "Uso la fuente canónica de Stacky Agents.",
         raw,

@@ -321,6 +321,12 @@ $HarnessTestFiles = @(
   "tests/test_claude_stall_signal.py"
   "tests/test_execution_metadata_serialization.py"
   "tests/test_plan144_parity.py"
+  # Plan 145 - Higiene y observabilidad de logs: 404, ANSI, dedup, pytest
+  "tests/test_plan145_log_throttle.py"
+  "tests/test_plan145_ansi_strip.py"
+  "tests/test_plan145_pytest_log_isolation.py"
+  "tests/test_plan145_pipeline_status_shim.py"
+  "tests/test_plan145_agents_dir_dedup.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

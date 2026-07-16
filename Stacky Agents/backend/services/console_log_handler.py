@@ -80,7 +80,10 @@ def install_console_log_handler() -> None:
         if _installed:
             return
         handler = _SystemLogHandler()
-        formatter = logging.Formatter("%(asctime)s [%(name)s] %(message)s")
+        from services.local_file_logging import _AnsiStrippingFormatter, _strip_ansi_enabled  # lazy
+
+        fmt_cls = _AnsiStrippingFormatter if _strip_ansi_enabled() else logging.Formatter
+        formatter = fmt_cls("%(asctime)s [%(name)s] %(message)s")
         handler.setFormatter(formatter)
         logging.getLogger().addHandler(handler)
         _installed = True

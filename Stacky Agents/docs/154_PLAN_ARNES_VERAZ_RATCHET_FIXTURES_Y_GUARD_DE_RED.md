@@ -589,7 +589,7 @@ def test_allowlist_grandfathered_solo_baja():
 - **Triage completo de los ~198 grandfathered:** F6 solo CONGELA el contador. Evaluar archivo por archivo si puede entrar al arnés es un plan aparte (la deuda queda visible y acotada).
 - **Tests flaky conocidos de heartbeat monitor** (`test_stale_recovery_guardian`, `test_cutover_p5`): ya allowlisteados con motivo, disco real + thread daemon vs sqlite; NO se persiguen acá.
 - **Cualquier cambio al código de producción del intake** (`services/artifact_intake.py`, la lógica de validación/cuarentena de `services/output_watcher.py`): su comportamiento es by-design del plan de robustez de intake. Este plan solo INSERTA el gate test-only de F5.iii junto al early-return existente, sin tocar la validación.
-- **Migrar las ocurrencias legacy de la allowlist de F4** (`STACKY_ARTIFACT_INTAKE_ENABLED`, etc.) a `config.config`: quedan congeladas con motivo; migrarlas es trabajo futuro que el propio meta-test forzará a limpiar (la allowlist solo baja).
+- **Migrar las ocurrencias legacy de la allowlist de F4** (todas las entradas que la allowlist congele en F0 de esa fase, `STACKY_ARTIFACT_INTAKE_ENABLED` incluida) a `config.config`: quedan congeladas con motivo; migrarlas es trabajo futuro que el propio meta-test forzará a limpiar (la allowlist solo baja).
 - **El campo `total` del endpoint history:** registrado como BACKLOG en F4 (opcional, viaja gratis); no es criterio de aceptación de este plan.
 - **Los 7 tests reales rojos revelados por el fix del daemon del plan 146** (6 mode_a + 1 plan105): NO — esos son EXACTAMENTE T3 y T2 de este plan, SÍ están en scope (F2 y F3). Se lista acá para evitar la confusión inversa.
 

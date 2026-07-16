@@ -3786,15 +3786,6 @@ export const LocalLlmApi = {
       model: string;
       execution_id: number;
     }>("/api/llm/suggest-pipeline", body),
-  /** Analiza el estado de un ticket con el modelo local usando TODO su contexto (HITL, sin tools). */
-  ticketInsight: (ticketId: number, body?: { model?: string; question?: string }) =>
-    api.post<{
-      ok: boolean;
-      analysis: string;
-      model: string;
-      execution_id: number;
-      context_stats: { has_epic: boolean; children: number; comments: number; executions: number };
-    }>(`/api/llm/ticket-insight/${ticketId}`, body ?? {}),
 };
 
 /** Plan 122 — núcleo del Comparador de BD entre ambientes (serie 122-126). */

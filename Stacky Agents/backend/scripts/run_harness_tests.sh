@@ -378,6 +378,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan145_pytest_log_isolation.py
   tests/test_plan145_pipeline_status_shim.py
   tests/test_plan145_agents_dir_dedup.py
+  # — Plan 147 — Resolución robusta de rutas de proyecto + estado UI de watchers —
+  tests/test_completion_preflight.py
+  tests/test_watchers_health_check.py
+  tests/test_diag_health_watchers.py
 )
 
 pass=0

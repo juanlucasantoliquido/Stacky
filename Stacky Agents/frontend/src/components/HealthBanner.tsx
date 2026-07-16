@@ -53,6 +53,7 @@ const FIX_HINT: Record<string, { label: string; href?: string; tab?: string }> =
   vscode_vsix: { label: "Abrir Diagnóstico", tab: "diagnostics" },
   gh_auth: { label: "Abrir Diagnóstico", tab: "diagnostics" },
   database: { label: "Abrir Diagnóstico", tab: "diagnostics" },
+  watchers: { label: "Activar proyecto", tab: "settings" },
 };
 
 export default function HealthBanner() {

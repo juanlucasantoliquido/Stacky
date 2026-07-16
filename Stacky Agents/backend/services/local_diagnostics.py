@@ -27,6 +27,7 @@ def run_local_diagnostics() -> dict:
     started = time.monotonic()
     checks = [
         _check_backend(),
+        _check_watchers_active(),   # ← D8 (C3: temprano; es causa raíz, gana prioridad)
         _check_tracker(),
         _check_cli_runtimes(),
         _check_gh_auth(),
@@ -56,6 +57,42 @@ def run_local_diagnostics() -> dict:
 
 def _check_backend() -> dict:
     return _result("backend", "Backend up", "ok", "El backend respondió esta misma request.")
+
+
+def _check_watchers_active() -> dict:
+    """D8 — Estado explícito 'sin proyecto activo → watchers inactivos'.
+
+    Kill-switch env-only default ON: STACKY_WATCHERS_HEALTH_CHECK=false lo apaga.
+    """
+    if os.getenv("STACKY_WATCHERS_HEALTH_CHECK", "true").strip().lower() == "false":
+        return _result("watchers", "Watchers de artifacts", "ok",
+                       "Check deshabilitado (STACKY_WATCHERS_HEALTH_CHECK=false).")
+    from runtime_paths import repo_root, _UNRESOLVED_REPO_ROOT
+    from services.agent_html_output import outputs_dir
+
+    active = get_active_project()
+    try:
+        rr = repo_root()
+        od = outputs_dir()
+        od_exists = od.exists()
+    except Exception as exc:  # noqa: BLE001
+        return _result("watchers", "Watchers de artifacts", "warning",
+                       f"No se pudo resolver outputs_dir: {exc}")
+
+    unresolved = rr == _UNRESOLVED_REPO_ROOT
+    detail = {"active_project": active, "repo_root": str(rr),
+              "outputs_dir": str(od), "outputs_dir_exists": od_exists}
+
+    if active is None:
+        return _result("watchers", "Watchers de artifacts", "warning",
+            "Sin proyecto activo → los watchers no escanean artifacts; los runs "
+            "no se cerrarán automáticamente. Activá un proyecto.", detail)
+    if unresolved or not od_exists:
+        return _result("watchers", "Watchers de artifacts", "warning",
+            f"outputs_dir no resuelve para '{active}' ({od}). Los watchers no "
+            "escanean. Revisá workspace_root del proyecto / STACKY_REPO_ROOT.", detail)
+    return _result("watchers", "Watchers de artifacts", "ok",
+                   f"Watchers escaneando {od}.", detail)
 
 
 def _check_tracker() -> dict:

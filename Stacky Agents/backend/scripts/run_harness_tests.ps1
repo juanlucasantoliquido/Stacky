@@ -334,6 +334,10 @@ $HarnessTestFiles = @(
   "tests/test_plan145_pytest_log_isolation.py"
   "tests/test_plan145_pipeline_status_shim.py"
   "tests/test_plan145_agents_dir_dedup.py"
+  # Plan 147 - Resolucion robusta de rutas de proyecto + estado UI de watchers
+  "tests/test_completion_preflight.py"
+  "tests/test_watchers_health_check.py"
+  "tests/test_diag_health_watchers.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

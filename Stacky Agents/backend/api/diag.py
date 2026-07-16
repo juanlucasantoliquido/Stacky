@@ -350,6 +350,24 @@ def health():
     if auto_create_tasks and not pat_present:
         warnings.append("auto-create de Tasks habilitado pero ADO PAT ausente → las Tasks no se crearán")
 
+    # Estado explícito de watchers (D8): activos SOLO si hay proyecto activo y
+    # el outputs_dir resuelto existe (o sea, repo_root no es el sentinel).
+    from runtime_paths import _UNRESOLVED_REPO_ROOT
+    repo_root_unresolved = (repo_root_path is not None
+                            and Path(repo_root_path) == _UNRESOLVED_REPO_ROOT)
+    if active_project is None:
+        watchers_active = False
+        watchers_inactive_reason = "sin_proyecto_activo"
+    elif repo_root_unresolved:
+        watchers_active = False
+        watchers_inactive_reason = "repo_root_no_resoluble"
+    elif not outputs_exists:
+        watchers_active = False
+        watchers_inactive_reason = "outputs_dir_inexistente"
+    else:
+        watchers_active = True
+        watchers_inactive_reason = None
+
     return jsonify({
         "ok": True,
         "healthy": not warnings,
@@ -361,6 +379,8 @@ def health():
         "active_project": active_project,
         "ado_pat_present": pat_present,
         "auto_create_tasks_enabled": auto_create_tasks,
+        "watchers_active": watchers_active,
+        "watchers_inactive_reason": watchers_inactive_reason,
         "local_llm_enabled": bool(getattr(_config.config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
         "shell_v2_enabled": bool(getattr(_config.config, "STACKY_UI_SHELL_V2_ENABLED", False)),  # Plan 139
         "watchers": {"output_watcher": output_watcher_info},

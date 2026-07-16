@@ -37,11 +37,83 @@ def test_env_override_wins_even_when_frozen(monkeypatch, tmp_path):
     assert runtime_paths.repo_root() == tmp_path.resolve()
 
 
-def test_not_frozen_uses_source_layout(monkeypatch):
-    """Layout de fuentes → parents[4] desde backend/runtime_paths.py."""
+# --- helpers de fabricación de layout (paths, sin crear dirs) ---
+def _embedded_module_path(root: Path) -> Path:
+    # <root>/Tools/Stacky/Stacky Agents/backend/runtime_paths.py  → parents[4]==root
+    return root / "Tools" / "Stacky" / "Stacky Agents" / "backend" / "runtime_paths.py"
+
+def _standalone_module_path(root: Path) -> Path:
+    # <root>/STACKY/Stacky/Stacky Agents/backend/runtime_paths.py → parents[4]==root, NO embebido
+    return root / "STACKY" / "Stacky" / "Stacky Agents" / "backend" / "runtime_paths.py"
+
+
+def test_source_layout_repo_root_matches_embedded(monkeypatch, tmp_path):
+    """El helper devuelve <repo> SOLO si el layout embebido Tools/Stacky/... calza."""
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: _embedded_module_path(tmp_path).resolve())
+    assert runtime_paths._source_layout_repo_root() == tmp_path.resolve()
+
+
+def test_source_layout_repo_root_none_when_standalone(monkeypatch, tmp_path):
+    """Checkout no embebido (overshoot) → None (NO ruta mal formada)."""
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: _standalone_module_path(tmp_path).resolve())
+    assert runtime_paths._source_layout_repo_root() is None
+
+
+def test_source_layout_repo_root_none_when_shallow(monkeypatch):
+    """[ADICIÓN ARQUITECTO] Módulo con <5 niveles de padres → None, sin crash.
+
+    Blinda el caso borde documentado en §4 (`parents[4]` IndexError → None) que
+    v1 afirmaba cubrir sin test. Un checkout raro (p. ej. módulo en la raíz de
+    una unidad) no debe tumbar la resolución."""
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: Path("C:/x/runtime_paths.py"))  # sólo 1 nivel de padre
+    assert runtime_paths._source_layout_repo_root() is None
+
+
+def test_not_frozen_embedded_layout_uses_repo_root(monkeypatch, tmp_path):
+    """No congelado + layout embebido + sin proyecto → devuelve <repo> embebido."""
     monkeypatch.setattr(runtime_paths, "is_frozen", lambda: False)
-    expected = Path(runtime_paths.__file__).resolve().parents[4]
-    assert runtime_paths.repo_root() == expected
+    monkeypatch.setattr(runtime_paths, "_active_workspace_root", lambda: None)
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: _embedded_module_path(tmp_path).resolve())
+    assert runtime_paths.repo_root() == tmp_path.resolve()
+
+
+def test_not_frozen_standalone_returns_sentinel(monkeypatch, tmp_path):
+    """No congelado + checkout no embebido + sin proyecto → sentinel, NO parents[4] (V2)."""
+    monkeypatch.setattr(runtime_paths, "is_frozen", lambda: False)
+    monkeypatch.setattr(runtime_paths, "_active_workspace_root", lambda: None)
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: _standalone_module_path(tmp_path).resolve())
+    result = runtime_paths.repo_root()
+    assert result == runtime_paths._UNRESOLVED_REPO_ROOT
+    assert not result.exists()
+
+
+def test_active_project_wins_even_not_frozen(monkeypatch, tmp_path):
+    """CLAVE: en dev el workspace_root del proyecto activo gana sobre parents[4]."""
+    monkeypatch.setattr(runtime_paths, "is_frozen", lambda: False)
+    monkeypatch.setattr(runtime_paths, "_active_workspace_root", lambda: tmp_path)
+    # aunque el layout embebido resolviera, el proyecto activo tiene prioridad
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: _embedded_module_path(tmp_path / "other").resolve())
+    assert runtime_paths.repo_root() == tmp_path
+
+
+def test_warning_throttled_non_frozen_standalone(monkeypatch, caplog):
+    """El WARNING 'no resoluble' se emite UNA vez también en dev standalone."""
+    import logging
+    monkeypatch.setattr(runtime_paths, "is_frozen", lambda: False)
+    monkeypatch.setattr(runtime_paths, "_active_workspace_root", lambda: None)
+    monkeypatch.setattr(runtime_paths, "_module_path",
+                        lambda: _standalone_module_path(Path("Z:/nope")).resolve())
+    with caplog.at_level(logging.WARNING, logger="stacky.runtime_paths"):
+        for _ in range(5):
+            runtime_paths.repo_root()
+    warnings = [r for r in caplog.records if "no resoluble" in r.getMessage()]
+    assert len(warnings) == 1
 
 
 def test_frozen_with_active_project_uses_workspace_root(monkeypatch, tmp_path):

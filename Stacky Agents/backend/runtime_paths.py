@@ -96,44 +96,80 @@ def _active_workspace_root() -> Path | None:
     return None
 
 
+# Nombres de los directorios intermedios del layout EMBEBIDO:
+#   <repo>/Tools/Stacky/Stacky Agents/backend/runtime_paths.py
+# Sólo si estos calzan exactamente, parents[4] es un <repo> bien formado.
+_EMBEDDED_SUFFIX = ("Tools", "Stacky", "Stacky Agents", "backend", "runtime_paths.py")
+
+
+def _module_path() -> Path:
+    """Path resuelto de este módulo. Indirección para poder testear la
+    resolución de layout sin depender de la ubicación real del archivo."""
+    return Path(__file__).resolve()
+
+
+def _source_layout_repo_root() -> Path | None:
+    """<repo> SÓLO si el layout embebido Tools/Stacky/Stacky Agents/backend calza.
+
+    Devuelve `parents[4]` únicamente cuando reconstruir ese path con el sufijo
+    embebido reproduce EXACTAMENTE la ubicación del módulo. En un checkout
+    standalone o mal anidado (p. ej. `<x>/STACKY/Stacky/Stacky Agents/backend`)
+    el sufijo no calza y devolvemos None en vez de una ruta que sobrepasa el
+    <repo> real (causa raíz de V2). Resolución puramente ESTRUCTURAL: no
+    consulta el filesystem (no depende de que exista `Agentes/`).
+    """
+    here = _module_path()
+    try:
+        candidate = here.parents[4]
+    except IndexError:
+        return None
+    if candidate.joinpath(*_EMBEDDED_SUFFIX) == here:
+        return candidate
+    return None
+
+
 def repo_root() -> Path:
     """Root del repo donde el agente escribe `Agentes/outputs`.
 
-    Prioridad:
-      1. `STACKY_REPO_ROOT` — override explícito (tests y deploys).
-      2. Congelado (deploy portable): `workspace_root` del proyecto activo. El
-         exe vive fuera del repo del cliente, así que contar `parents` desde
-         el módulo empaquetado no aplica.
-      3. Congelado **sin** proyecto activo: sentinel inexistente
-         (`_UNRESOLVED_REPO_ROOT`) + WARNING. NO se cae a `parents[4]`: en un
-         deploy embebido (`<repo>/Tools/Stacky/.../backend/_internal/`) ese path
-         apunta a `<repo>/Tools/Stacky`, no a `<repo>`, y el watcher terminaba
-         escaneando un directorio equivocado para siempre (causa raíz C1).
-      4. Layout de fuentes (no congelado): `backend/runtime_paths.py` →
-         parents[4] = `<repo>` (`<repo>/Tools/Stacky/Stacky Agents/backend/`).
+    Prioridad (JAMÁS emite una ruta sin segmento de proyecto):
+      1. `STACKY_REPO_ROOT` — override explícito (tests / deploys).
+      2. `workspace_root` del proyecto activo (`_active_workspace_root()`).
+         Aplica en congelado Y en dev: si hay proyecto activo, esa es la raíz
+         donde el agente escribe, sin importar frozen/no-frozen.
+      3. No congelado + layout EMBEBIDO válido (`_source_layout_repo_root()`):
+         `<repo>` desde `<repo>/Tools/Stacky/Stacky Agents/backend/`.
+      4. Cualquier otro caso (congelado sin proyecto; dev standalone/no
+         embebido): sentinel inexistente `_UNRESOLVED_REPO_ROOT` + WARNING
+         throttled. NUNCA se cae a `parents[4]` a ciegas (evita la ruta
+         plausible-pero-mal-formada `…\\GIT\\RS\\Agentes\\outputs` — causa V2).
     """
     global _warned_unresolved_repo_root
     env = os.getenv("STACKY_REPO_ROOT", "").strip()
     if env:
         return Path(env).expanduser().resolve()
-    if is_frozen():
-        ws = _active_workspace_root()
-        if ws is not None:
-            _warned_unresolved_repo_root = False  # rearmar el warning
-            return ws
-        # Deploy congelado sin proyecto activo: no resoluble todavía. Devolver un
-        # sentinel inexistente en lugar de parents[4] (ver punto 3 del docstring).
-        if not _warned_unresolved_repo_root:
-            logger.warning(
-                "repo_root() no resoluble: deploy congelado sin proyecto activo. "
-                "Devuelvo sentinel inexistente (%s); los watchers no escanearán "
-                "hasta que se active un proyecto con workspace_root. Seteá "
-                "STACKY_REPO_ROOT para forzar la resolución.",
-                _UNRESOLVED_REPO_ROOT,
-            )
-            _warned_unresolved_repo_root = True
-        return _UNRESOLVED_REPO_ROOT
-    return Path(__file__).resolve().parents[4]
+
+    ws = _active_workspace_root()
+    if ws is not None:
+        _warned_unresolved_repo_root = False  # rearmar el warning
+        return ws
+
+    if not is_frozen():
+        src = _source_layout_repo_root()
+        if src is not None:
+            _warned_unresolved_repo_root = False
+            return src
+
+    # No resoluble: ni override, ni proyecto activo, ni layout embebido válido.
+    if not _warned_unresolved_repo_root:
+        logger.warning(
+            "repo_root() no resoluble: sin proyecto activo y sin STACKY_REPO_ROOT "
+            "(frozen=%s). Devuelvo sentinel inexistente (%s); los watchers no "
+            "escanearán hasta activar un proyecto con workspace_root o setear "
+            "STACKY_REPO_ROOT.",
+            is_frozen(), _UNRESOLVED_REPO_ROOT,
+        )
+        _warned_unresolved_repo_root = True
+    return _UNRESOLVED_REPO_ROOT
 
 
 def frontend_dist_dir() -> Path | None:

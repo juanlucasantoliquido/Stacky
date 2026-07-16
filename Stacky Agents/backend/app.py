@@ -161,11 +161,23 @@ def _log_completion_preflight(logger) -> None:
             rr, od, od_exists, active or "(ninguno)",
         )
         if not od_exists:
-            logger.warning(
-                "preflight: outputs_dir NO existe (%s) — el output_watcher no "
-                "encontrará artifacts. Revisá proyecto activo / STACKY_REPO_ROOT.",
-                od,
-            )
+            if active is None:
+                # Estado ESPERADO: sin proyecto activo no hay workspace_root, así
+                # que outputs_dir aún no resuelve. No es un error → INFO, no WARNING.
+                logger.info(
+                    "preflight: sin proyecto activo → outputs_dir aún no resoluble "
+                    "(%s). Los watchers escanearán al activar un proyecto. "
+                    "(Estado visible en /api/diag/health y en el banner de salud.)",
+                    od,
+                )
+            else:
+                # Proyecto activo PERO el dir no existe → misconfig real, accionable.
+                logger.warning(
+                    "preflight: proyecto activo '%s' pero outputs_dir NO existe (%s) "
+                    "— el output_watcher no encontrará artifacts. Revisá "
+                    "workspace_root del proyecto / STACKY_REPO_ROOT.",
+                    active, od,
+                )
 
         auto_create = (
             os.getenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true").lower() != "false"

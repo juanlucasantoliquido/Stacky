@@ -357,6 +357,14 @@ HARNESS_TEST_FILES=(
   tests/test_documenter_v2_pipeline.py
   # — Plan 137 F4 — Documentador v2: endpoint historial de corridas —
   tests/test_plan137_endpoints.py
+  # — Plan 144 — Ejecucion confiable Claude CLI: trust, stalls, estados —
+  tests/test_status_vocabulary_contract.py
+  tests/test_ticket_status_robust_transition.py
+  tests/test_claude_workspace_trust.py
+  tests/test_claude_trust_preflight.py
+  tests/test_claude_stall_signal.py
+  tests/test_execution_metadata_serialization.py
+  tests/test_plan144_parity.py
 )
 
 pass=0

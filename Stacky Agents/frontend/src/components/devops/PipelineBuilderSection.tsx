@@ -37,6 +37,7 @@ import {
   type StepDraft,
 } from '../../devops/specBuilder';
 import { PIPELINE_PRESETS, type PipelinePreset, type StackId } from '../../devops/pipelinePresets';
+import { consumePendingPreset } from './deploymentsModel'; // Plan 120 F8 — puente Despliegues -> Pipelines
 import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES, STACK_OPTIONS, filterSnippetsByStack, isStackId } from '../../devops/pipelineStepSnippets';
 import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes';
 import { splitSpecVariables } from '../../devops/variablesModel';
@@ -112,6 +113,20 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   // Cargar borradores al montar
   useEffect(() => {
     loadDrafts();
+  }, []);
+
+  // Plan 120 F8 — puente "Despliegues -> Pipelines": si el operador vino del
+  // CTA "Crear pipeline de deploy", preseleccionar el preset sugerido por el
+  // stack detectado (one-shot: se limpia la key aunque el preset no exista).
+  useEffect(() => {
+    const pending = consumePendingPreset(localStorage.getItem('stacky.devops.pendingPreset'));
+    if (!pending) return;
+    localStorage.removeItem('stacky.devops.pendingPreset');
+    const preset = PIPELINE_PRESETS.find((p) => p.id === pending.presetId);
+    if (preset) {
+      setSpec(preset.build());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Plan 106 F5 — health del modelo local: 404 (flag OFF) => botón oculto (KPI-1/KPI-5).

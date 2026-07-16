@@ -1117,6 +1117,26 @@ class Config:
         "STACKY_DEVOPS_UI_V2_ENABLED", "false"
     ).lower() in ("1", "true", "yes", "on")
 
+    # ── Plan 120 — Centro de Despliegues ──────────────────────────────────────
+    # Deploy multi-destino, rollback 1-click, verificación post-deploy y DORA
+    # local. Todo default OFF/seguro; editable por UI (HarnessFlagsPanel,
+    # categoría "DevOps").
+    STACKY_DEPLOYMENTS_ENABLED: bool = os.getenv(
+        "STACKY_DEPLOYMENTS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_DEPLOYMENTS_EXECUTE_ENABLED: bool = os.getenv(
+        "STACKY_DEPLOYMENTS_EXECUTE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED: bool = os.getenv(
+        "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_DEPLOYMENTS_RETAIN_RELEASES: int = int(
+        os.getenv("STACKY_DEPLOYMENTS_RETAIN_RELEASES", "3")
+    )
+    STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC: int = int(
+        os.getenv("STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", "30")
+    )
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

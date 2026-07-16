@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -86,8 +87,11 @@ def append_audit(alias: str, entry: dict) -> None:
     from services.server_registry import validate_alias
     if not validate_alias(alias):
         raise ValueError(f"alias inválido: {alias!r}")
-    # Assert defensivo: sin secretos
-    assert "password" not in str(entry).lower()
+    # Assert defensivo: sin secretos. "no_password" es un CÓDIGO de error legítimo
+    # (no un secreto) — se excluye del substring-check para no auto-rechazar auditorías
+    # honestas de esa falla (Plan 120 F2, latente desde Plan 105).
+    _entry_str = str(entry).lower().replace("no_password", "")
+    assert "password" not in _entry_str
     assert "SR_PASS" not in str(entry)
 
     entry = dict(entry)
@@ -247,6 +251,39 @@ def check_winrm(alias: str) -> dict:
                 "remediation": build_winrm_remediation(host, kind)}
 
 
+def _invoke_winrm(host: str, sr_user: str, password: str, command: str, timeout_s: int) -> dict:
+    """Helper PRIVADO compartido por `run_remote` y `run_deploy_step` (Plan 120 F2,
+    cero duplicación). Invoca `remote_exec_invoke.ps1` vía env (riel §3.1: la
+    credencial JAMÁS viaja por argv). Devuelve {"stdout","stderr","exit_code",
+    "error"} — "error" es None en éxito, o "winrm_error"/"timeout"."""
+    ps1 = Path(__file__).parent / "remote_exec_invoke.ps1"
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-ExecutionPolicy", "Bypass", "-File", str(ps1)],
+            env={**os.environ,
+                 "SR_HOST": host,
+                 "SR_USER": sr_user,
+                 "SR_PASS": password,
+                 "SR_CMD": command,
+                 "SR_TIMEOUT": str(timeout_s)},
+            capture_output=True,
+            text=True,
+            timeout=timeout_s + 15,
+        )
+        exit_code = result.returncode
+        return {
+            "stdout": result.stdout or "",
+            "stderr": result.stderr or "",
+            "exit_code": exit_code,
+            "error": "winrm_error" if exit_code != 0 else None,
+        }
+    except subprocess.TimeoutExpired:
+        return {"stdout": "", "stderr": "", "exit_code": None, "error": "timeout"}
+    except Exception:  # noqa: BLE001
+        return {"stdout": "", "stderr": "", "exit_code": None, "error": "winrm_error"}
+
+
 def run_remote(
     alias: str,
     command: str,
@@ -292,6 +329,10 @@ def run_remote(
         error_key = "command_not_read_only"
 
     # 3) resolver server y credencial
+    # §2.3 / F2 (Plan 120): el contrato REAL de get_credential es
+    # (username, domain, password) — NUNCA (username, password, host). El host
+    # sale del registro (`server`), no de la credencial.
+    sr_user = ""
     if error_key is None:
         if not keyring_available():
             error_key = "keyring_unavailable"
@@ -301,39 +342,25 @@ def run_remote(
             except Exception:
                 error_key = "server_not_found"
             else:
-                try:
-                    username, password, host = get_credential(alias)
-                    if not password:
-                        error_key = "no_password"
-                except Exception:
+                host = (server or {}).get("host") or ""
+                if not host:
                     error_key = "server_not_found"
+                else:
+                    try:
+                        username, domain, password = get_credential(alias)
+                        sr_user = f"{domain}\\{username}" if domain else username
+                        if not password:
+                            error_key = "no_password"
+                    except Exception:
+                        error_key = "server_not_found"
 
     # 4) ejecución remota (sino hay error)
     if error_key is None:
-        ps1 = Path(__file__).parent / "remote_exec_invoke.ps1"
-        try:
-            result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-NonInteractive",
-                 "-ExecutionPolicy", "Bypass", "-File", str(ps1)],
-                env={**_config.os.environ,
-                     "SR_HOST": host,
-                     "SR_USER": username,
-                     "SR_PASS": password,
-                     "SR_CMD": command,
-                     "SR_TIMEOUT": str(timeout_s)},
-                capture_output=True,
-                text=True,
-                timeout=timeout_s + 15,
-            )
-            stdout_val = result.stdout or ""
-            stderr_val = result.stderr or ""
-            exit_code = result.returncode
-            if exit_code != 0:
-                error_key = "winrm_error"
-        except subprocess.TimeoutExpired:
-            error_key = "timeout"
-        except Exception:
-            error_key = "winrm_error"
+        invoked = _invoke_winrm(host, sr_user, password, command, timeout_s)
+        stdout_val = invoked["stdout"]
+        stderr_val = invoked["stderr"]
+        exit_code = invoked["exit_code"]
+        error_key = invoked["error"]
 
     # 5) truncar output
     if len(stdout_val) > _OUTPUT_CAP:
@@ -364,5 +391,201 @@ def run_remote(
         "stdout": stdout_val,
         "stderr": stderr_val,
         "exit_code": exit_code,
+        "duration_ms": duration_ms,
+    }
+
+
+def _resolve_target(alias: str):
+    """Resuelve (host, sr_user, password, error_key) para el riel de deploy.
+    Comparte el contrato real (username, domain, password) de get_credential
+    (§2.3). error_key None ⇒ los 3 primeros valores son utilizables."""
+    from services.server_registry import get_server, get_credential, keyring_available
+
+    if not keyring_available():
+        return None, None, None, "keyring_unavailable"
+    try:
+        server = get_server(alias)
+    except Exception:
+        return None, None, None, "server_not_found"
+    host = (server or {}).get("host") or ""
+    if not host:
+        return None, None, None, "server_not_found"
+    try:
+        username, domain, password = get_credential(alias)
+    except Exception:
+        return None, None, None, "server_not_found"
+    if not password:
+        return None, None, None, "no_password"
+    sr_user = f"{domain}\\{username}" if domain else username
+    return host, sr_user, password, None
+
+
+def run_deploy_step(
+    alias: str,
+    command: str,
+    *,
+    timeout_s: int = _TIMEOUT_S_DEFAULT,
+    read_only: bool,
+    run_id: str,
+) -> dict:
+    """Plan 120 F2 — transporte WinRM del motor de deploy. Misma mecánica y
+    shape que `run_remote`, con gating PROPIO (NO depende de
+    STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED): `read_only=True` exige
+    STACKY_DEPLOYMENTS_ENABLED; `read_only=False` exige ADEMÁS
+    STACKY_DEPLOYMENTS_EXECUTE_ENABLED. Audita SIEMPRE con kind="deploy"."""
+    import config as _config
+
+    start = time.time()
+    error_key = None
+    exit_code = None
+    stdout_val = ""
+    stderr_val = ""
+
+    if not getattr(_config.config, "STACKY_DEPLOYMENTS_ENABLED", False):
+        error_key = "deployments_disabled"
+    elif sys.platform != "win32":
+        error_key = "remote_exec_windows_only"
+    elif not read_only and not getattr(_config.config, "STACKY_DEPLOYMENTS_EXECUTE_ENABLED", False):
+        error_key = "deployments_execute_disabled"
+    else:
+        timeout_s = min(max(timeout_s, 1), _TIMEOUT_S_MAX)
+
+    if error_key is None and read_only and not is_read_only_command(command):
+        error_key = "command_not_read_only"
+
+    host = sr_user = password = None
+    if error_key is None:
+        host, sr_user, password, error_key = _resolve_target(alias)
+
+    if error_key is None:
+        invoked = _invoke_winrm(host, sr_user, password, command, timeout_s)
+        stdout_val = invoked["stdout"]
+        stderr_val = invoked["stderr"]
+        exit_code = invoked["exit_code"]
+        error_key = invoked["error"]
+
+    if len(stdout_val) > _OUTPUT_CAP:
+        stdout_val = stdout_val[:_OUTPUT_CAP] + "...[truncated]"
+    if len(stderr_val) > _OUTPUT_CAP:
+        stderr_val = stderr_val[:_OUTPUT_CAP] + "...[truncated]"
+
+    duration_ms = int((time.time() - start) * 1000)
+
+    append_audit(alias, {
+        "kind": "deploy",
+        "run_id": run_id,
+        "command": command,
+        "read_only": read_only,
+        "ok": error_key is None,
+        "error": error_key,
+        "exit_code": exit_code,
+        "duration_ms": duration_ms,
+        "stdout_sha256": hashlib.sha256(stdout_val.encode()).hexdigest() if stdout_val else "",
+        "stdout_bytes": len(stdout_val),
+    })
+
+    return {
+        "ok": error_key is None,
+        "error": error_key,
+        "stdout": stdout_val,
+        "stderr": stderr_val,
+        "exit_code": exit_code,
+        "duration_ms": duration_ms,
+    }
+
+
+_REMOTE_PATH_RE = re.compile(r"^[A-Za-z]:\\")
+
+
+def push_file_winrm(
+    alias: str,
+    local_path: str,
+    remote_path: str,
+    *,
+    timeout_s: int = _TIMEOUT_S_DEFAULT,
+    run_id: str,
+) -> dict:
+    """Plan 120 F2 — copia `local_path` a `remote_path` EN el destino vía
+    PSSession (`deploy_transfer_invoke.ps1`). Mismo gating de escritura que
+    `run_deploy_step(read_only=False)`. Audita SIEMPRE `kind="deploy_transfer"`
+    con el tamaño local — JAMÁS el path/env con la credencial."""
+    import config as _config
+
+    start = time.time()
+    error_key = None
+    local_size = None
+
+    if not getattr(_config.config, "STACKY_DEPLOYMENTS_ENABLED", False):
+        error_key = "deployments_disabled"
+    elif not getattr(_config.config, "STACKY_DEPLOYMENTS_EXECUTE_ENABLED", False):
+        error_key = "deployments_execute_disabled"
+    elif sys.platform != "win32":
+        error_key = "remote_exec_windows_only"
+
+    if error_key is None:
+        p = Path(local_path)
+        if not p.is_file():
+            error_key = "local_file_not_found"
+        else:
+            local_size = p.stat().st_size
+
+    if error_key is None:
+        if '"' in remote_path or not _REMOTE_PATH_RE.match(remote_path or ""):
+            error_key = "invalid_remote_path"
+
+    host = sr_user = password = None
+    if error_key is None:
+        host, sr_user, password, error_key = _resolve_target(alias)
+
+    exit_code = None
+    stderr_val = ""
+    if error_key is None:
+        timeout_s = min(max(timeout_s, 1), _TIMEOUT_S_MAX)
+        ps1 = Path(__file__).parent / "deploy_transfer_invoke.ps1"
+        try:
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive",
+                 "-ExecutionPolicy", "Bypass", "-File", str(ps1)],
+                env={**os.environ,
+                     "SR_HOST": host,
+                     "SR_USER": sr_user,
+                     "SR_PASS": password,
+                     "SR_LOCAL_ZIP": local_path,
+                     "SR_REMOTE_ZIP": remote_path,
+                     "SR_TIMEOUT": str(timeout_s)},
+                capture_output=True,
+                text=True,
+                timeout=timeout_s + 30,
+            )
+            exit_code = result.returncode
+            stderr_val = result.stderr or ""
+            if exit_code != 0:
+                error_key = "winrm_error"
+        except subprocess.TimeoutExpired:
+            error_key = "timeout"
+        except Exception:  # noqa: BLE001
+            error_key = "winrm_error"
+
+    if len(stderr_val) > _OUTPUT_CAP:
+        stderr_val = stderr_val[:_OUTPUT_CAP] + "...[truncated]"
+
+    duration_ms = int((time.time() - start) * 1000)
+
+    append_audit(alias, {
+        "kind": "deploy_transfer",
+        "run_id": run_id,
+        "remote_path": remote_path,
+        "bytes": local_size,
+        "ok": error_key is None,
+        "error": error_key,
+        "exit_code": exit_code,
+        "duration_ms": duration_ms,
+    })
+
+    return {
+        "ok": error_key is None,
+        "error": error_key,
+        "exit_code": exit_code,
+        "stderr": stderr_val,
         "duration_ms": duration_ms,
     }

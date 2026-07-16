@@ -116,11 +116,14 @@ class TestF1RunRemote:
         mock_result.returncode = 0
 
         with self._mock_flag_on():
-            with mock.patch("services.server_registry.get_credential", return_value=("user", "pass", "host")):
-                with mock.patch("services.remote_exec.subprocess.run", return_value=mock_result):
-                    result = _remote_exec.run_remote(
-                        "srv1", "Get-ChildItem", mode="read_only", conversation_id=456, user="test"
-                    )
+            # Plan 120 F2 (fix §2.3): contrato real es (username, domain, password);
+            # el host sale de get_server, NO de get_credential.
+            with mock.patch("services.server_registry.get_server", return_value={"host": "host"}):
+                with mock.patch("services.server_registry.get_credential", return_value=("user", "", "pass")):
+                    with mock.patch("services.remote_exec.subprocess.run", return_value=mock_result):
+                        result = _remote_exec.run_remote(
+                            "srv1", "Get-ChildItem", mode="read_only", conversation_id=456, user="test"
+                        )
 
         assert result["ok"] is True
         assert result["stdout"] == "hola"
@@ -150,8 +153,10 @@ class TestF1RunRemote:
 
         with self._mock_flag_on():
             with mock.patch("services.remote_exec.subprocess.run", side_effect=fake_run):
-                with mock.patch("services.server_registry.get_credential", return_value=("user", "S3cr3t!", "host")):
-                    _remote_exec.run_remote("srv1", "Get-Process", mode="write", user="test")
+                # Plan 120 F2 (fix §2.3): contrato real es (username, domain, password).
+                with mock.patch("services.server_registry.get_server", return_value={"host": "host"}):
+                    with mock.patch("services.server_registry.get_credential", return_value=("user", "", "S3cr3t!")):
+                        _remote_exec.run_remote("srv1", "Get-Process", mode="write", user="test")
 
         # Password en env, NO en args
         assert "SR_PASS" in captured_env
@@ -189,9 +194,11 @@ class TestF1RunRemote:
         monkeypatch.setattr(_remote_exec, "_audit_dir", lambda: tmp_path)
 
         with self._mock_flag_on():
-            with mock.patch("services.server_registry.get_credential", return_value=("user", "pass", "host")):
-                with mock.patch("services.remote_exec.subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 120)):
-                    result = _remote_exec.run_remote("srv1", "Get-Process", mode="read_only")
+            # Plan 120 F2 (fix §2.3): contrato real es (username, domain, password).
+            with mock.patch("services.server_registry.get_server", return_value={"host": "host"}):
+                with mock.patch("services.server_registry.get_credential", return_value=("user", "", "pass")):
+                    with mock.patch("services.remote_exec.subprocess.run", side_effect=subprocess.TimeoutExpired("cmd", 120)):
+                        result = _remote_exec.run_remote("srv1", "Get-Process", mode="read_only")
 
         assert result["ok"] is False
         assert result["error"] == "timeout"

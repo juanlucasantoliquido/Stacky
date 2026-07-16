@@ -62,6 +62,9 @@ def _health_payload() -> dict:
         "pr_reviewer_enabled": bool(getattr(cfg, "STACKY_PR_REVIEWER_ENABLED", False)),  # Plan 110
         "connection_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", False)),  # Plan 116
         "ui_v2_enabled": bool(getattr(cfg, "STACKY_DEVOPS_UI_V2_ENABLED", False)),  # Plan 119
+        "deployments_enabled": bool(getattr(cfg, "STACKY_DEPLOYMENTS_ENABLED", False)),  # Plan 120
+        "deployments_execute_enabled": bool(getattr(cfg, "STACKY_DEPLOYMENTS_EXECUTE_ENABLED", False)),  # Plan 120
+        "deployments_ai_enabled": bool(getattr(cfg, "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED", False)),  # Plan 120
     }
 
 

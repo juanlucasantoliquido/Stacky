@@ -1303,6 +1303,19 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el panel DevOps se ve exactamente igual que hoy.",
         example="Como cambiar el tema visual de una app sin tocar ninguna función: mismo contenido, otro traje.",
     ),
+    # ── Plan 127 — Reuso IA local: análisis de errores + doctor local DevOps ──
+    "STACKY_EXEC_ERROR_ANALYSIS_ENABLED": PlainHelp(
+        what="Agrega un botón en el detalle de una ejecución fallida que le pide al modelo local de tu máquina una explicación del error y qué hacer.",
+        on_effect="Si la activás (viene así de fábrica): al abrir un run fallido ves el botón 'Analizar error con IA local'; el resultado queda guardado en esa ejecución.",
+        off_effect="Si la apagás: el botón desaparece y pedir el análisis devuelve un error claro.",
+        example="Como pedirle a un colega que mire los logs de un fallo y te diga en dos párrafos qué pasó y qué probar.",
+    ),
+    "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED": PlainHelp(
+        what="Alternativa gratis al doctor de sección: analiza pipeline/ambientes/publicaciones con el modelo local, sin salir de tu máquina.",
+        on_effect="Si la activás (viene así de fábrica): en cada sección del panel DevOps aparece 'Doctor local (no sale de tu máquina)' con respuesta inmediata.",
+        off_effect="Si la apagás: solo queda disponible el doctor en la nube del panel DevOps.",
+        example="Como tener un segundo revisor que trabaja gratis y offline, además del experto en la nube.",
+    ),
 }
 
 

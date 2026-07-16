@@ -6,6 +6,7 @@ import type { ExecutionLocalInsight } from "../api/endpoints";
 import ExecutionInsightBlock from "./ExecutionInsightBlock";
 import EgressSentinelBlock from "./EgressSentinelBlock";
 import type { EgressSentinelData } from "./EgressSentinelBlock";
+import ExecutionErrorAnalysisBlock from "./ExecutionErrorAnalysisBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
 import { formatStallReason, type StallMeta } from "../utils/stallReason";
@@ -106,6 +107,14 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
             {/* Plan 121 — hallazgos del centinela local de egreso */}
             <EgressSentinelBlock
               sentinel={(metadata.egress_sentinel ?? null) as EgressSentinelData | null}
+            />
+
+            {/* Plan 127 C1 — análisis de error con IA local (forense, HITL) */}
+            <ExecutionErrorAnalysisBlock
+              executionId={executionId}
+              status={content.status}
+              metadata={metadata}
+              onRegenerated={() => execQ.refetch()}
             />
 
             <section className={styles.section}>

@@ -25,6 +25,10 @@ export const PipelineDoctorPanel: React.FC<PipelineDoctorPanelProps> = ({ ctx, p
   const [error, setError] = useState<string | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentError, setAgentError] = useState<string | null>(null);
+  // Plan 127 C2 — explicar UN job con IA local, por job_id.
+  const [localBusyJobId, setLocalBusyJobId] = useState<string | null>(null);
+  const [localErrorByJob, setLocalErrorByJob] = useState<Record<string, string>>({});
+  const [localAnalysisByJob, setLocalAnalysisByJob] = useState<Record<string, string>>({});
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
 
   if (ctx.health.doctor_enabled !== true) {
@@ -50,6 +54,22 @@ export const PipelineDoctorPanel: React.FC<PipelineDoctorPanelProps> = ({ ctx, p
       setError(e instanceof Error ? e.message : 'Error al diagnosticar el pipeline');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExplainLocal = async (jobId: string) => {
+    setLocalBusyJobId(jobId);
+    setLocalErrorByJob((prev) => ({ ...prev, [jobId]: '' }));
+    try {
+      const res = await DevOps.doctorExplainFailure({ project, pipeline_id: pipelineId, job_id: jobId });
+      setLocalAnalysisByJob((prev) => ({ ...prev, [jobId]: res.analysis }));
+    } catch (e: unknown) {
+      setLocalErrorByJob((prev) => ({
+        ...prev,
+        [jobId]: e instanceof Error ? e.message : 'Error al explicar el fallo con IA local',
+      }));
+    } finally {
+      setLocalBusyJobId(null);
     }
   };
 
@@ -127,6 +147,30 @@ export const PipelineDoctorPanel: React.FC<PipelineDoctorPanelProps> = ({ ctx, p
                       <a href={job.web_url} target="_blank" rel="noreferrer" style={{ fontSize: '12px' }}>
                         Ver el log completo en el tracker
                       </a>
+                    </div>
+                  )}
+                  {ctx.health.local_doctor_enabled === true && (
+                    <div style={{ marginTop: '6px' }}>
+                      <button
+                        onClick={() => void handleExplainLocal(job.job_id)}
+                        disabled={localBusyJobId === job.job_id}
+                        style={{ fontSize: '12px', padding: '4px 10px' }}
+                      >
+                        {localBusyJobId === job.job_id ? 'Explicando (IA local)…' : 'Explicar con IA local'}
+                      </button>
+                      {localErrorByJob[job.job_id] && (
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#c0392b' }}>
+                          {localErrorByJob[job.job_id]}
+                        </div>
+                      )}
+                      {localAnalysisByJob[job.job_id] && (
+                        <details open style={{ marginTop: '6px' }}>
+                          <summary style={{ fontSize: '12px', cursor: 'pointer' }}>Explicación (IA local)</summary>
+                          <pre style={{ marginTop: '4px', fontSize: '11px', whiteSpace: 'pre-wrap', maxHeight: '200px', overflow: 'auto' }}>
+                            {localAnalysisByJob[job.job_id]}
+                          </pre>
+                        </details>
+                      )}
                     </div>
                   )}
                 </div>

@@ -62,6 +62,48 @@ SECTION_DOCTORS: dict[str, dict[str, str]] = {
 }
 
 
+def build_doctor_context_blocks(section_id: str, project: str, payload: dict) -> list[dict] | None:
+    """Bloques de contexto del doctor de una sección. None si la sección no existe.
+    MUTA payload agregando yaml_ado/yaml_gitlab para pipeline (comportamiento actual).
+    Compartida por el doctor cloud (Plan 104) y el doctor local (Plan 127)."""
+    spec = SECTION_DOCTORS.get(section_id)
+    if spec is None:
+        return None
+
+    import json
+    # YAML SERVER-SIDE: el frontend NO tiene el YAML renderizado (vive en el estado
+    # local de PipelineYamlPreview.tsx, no se sube al padre). El backend lo renderiza
+    # desde el `spec` con el patron EXACTO de preview_route (api/pipeline_generator.py).
+    # Solo para la seccion pipeline y si el generador esta ON; degrada a null si el
+    # spec no valida.
+    if section_id == "pipeline" and isinstance(payload.get("spec"), dict) and getattr(
+        _config.config, "STACKY_PIPELINE_GENERATOR_ENABLED", False
+    ):
+        try:
+            from services.pipeline_spec import dict_to_spec
+            from services.pipeline_renderers import to_ado_yaml, to_gitlab_yaml
+            _spec_obj = dict_to_spec(payload["spec"])
+            payload["yaml_ado"] = to_ado_yaml(_spec_obj)
+            payload["yaml_gitlab"] = to_gitlab_yaml(_spec_obj)
+        except Exception:
+            payload.setdefault("yaml_ado", None)
+            payload.setdefault("yaml_gitlab", None)
+
+    # `kind` se OMITE del context_block: es seguro porque los consumidores usan
+    # `.get("kind", ...)` con default. El plan 90 SÍ setea kind="raw-conversation"
+    # (devops_agent.py) -- omitirlo no rompe, solo hereda el default.
+    return [{
+        "id": f"doctor-{section_id}",
+        "title": spec["title"],
+        "content": (
+            f"{spec['instruction']}\n\n"
+            f"== CONTEXTO DE LA SECCION ({section_id}) ==\n"
+            f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
+        ),
+        "source": {"type": "devops_panel", "section": section_id},
+    }]
+
+
 @bp.post("/<section_id>/doctor")
 def section_doctor_route(section_id: str):
     """Invoca al doctor IA de la seccion. Flag STACKY_DEVOPS_SECTION_DOCTOR_ENABLED."""
@@ -86,38 +128,7 @@ def section_doctor_route(section_id: str):
     if runtime not in ("claude_code_cli", "codex_cli", "github_copilot"):
         return jsonify({"error": "runtime_no_soportado"}), 400
 
-    import json
-    # YAML SERVER-SIDE: el frontend NO tiene el YAML renderizado (vive en el estado
-    # local de PipelineYamlPreview.tsx, no se sube al padre). El backend lo renderiza
-    # desde el `spec` con el patron EXACTO de preview_route (api/pipeline_generator.py).
-    # Solo para la seccion pipeline y si el generador esta ON; degrada a null si el
-    # spec no valida.
-    if section_id == "pipeline" and isinstance(payload.get("spec"), dict) and getattr(
-        _config.config, "STACKY_PIPELINE_GENERATOR_ENABLED", False
-    ):
-        try:
-            from services.pipeline_spec import dict_to_spec
-            from services.pipeline_renderers import to_ado_yaml, to_gitlab_yaml
-            _spec_obj = dict_to_spec(payload["spec"])
-            payload["yaml_ado"] = to_ado_yaml(_spec_obj)
-            payload["yaml_gitlab"] = to_gitlab_yaml(_spec_obj)
-        except Exception:
-            payload.setdefault("yaml_ado", None)
-            payload.setdefault("yaml_gitlab", None)
-
-    # `kind` se OMITE del context_block: es seguro porque los consumidores usan
-    # `.get("kind", ...)` con default. El plan 90 SÍ setea kind="raw-conversation"
-    # (devops_agent.py) -- omitirlo no rompe, solo hereda el default.
-    context_blocks = [{
-        "id": f"doctor-{section_id}",
-        "title": spec["title"],
-        "content": (
-            f"{spec['instruction']}\n\n"
-            f"== CONTEXTO DE LA SECCION ({section_id}) ==\n"
-            f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
-        ),
-        "source": {"type": "devops_panel", "section": section_id},
-    }]
+    context_blocks = build_doctor_context_blocks(section_id, project, payload)
 
     # run_agent exige ticket_id: int. Patron EXACTO del plan 90: crear un Ticket
     # ancla ANTES de invocar (devops_agent.py). Usamos ado_id=-3 para distinguir
@@ -181,4 +192,84 @@ def section_doctor_route(section_id: str):
         "conversation_id": doctor_ticket_id,   # el frontend lo usa para linkear al panel del 90
         "runtime": runtime,
         "section": section_id,
+    })
+
+
+@bp.post("/<section_id>/doctor/local")
+def section_doctor_local_route(section_id: str):
+    """Plan 127 C3 — doctor de sección con el modelo LOCAL (síncrono, HITL).
+    NO exige STACKY_DEVOPS_AGENT_ENABLED (no usa agent_runner) ni
+    STACKY_DEVOPS_SECTION_DOCTOR_ENABLED (camino independiente al cloud)."""
+    if not getattr(_config.config, "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED", False):
+        abort(404)
+
+    from api.local_llm_analysis import (
+        _create_execution,
+        _ensure_internal_ticket,
+        _finish_execution,
+        _guard,
+    )
+
+    guard = _guard()
+    if guard:
+        return guard
+
+    body = request.get_json(silent=True) or {}
+    project = body.get("project")
+    payload = body.get("payload")
+    if not project or not isinstance(payload, dict):
+        return jsonify({"error": "project y payload son obligatorios"}), 400
+
+    blocks = build_doctor_context_blocks(section_id, project, payload)
+    if blocks is None:
+        return jsonify({"error": "unknown_section", "section": section_id}), 404
+
+    from services.local_insights import HITL_RULES
+    from services.pr_review_sanitize import redact_secrets
+
+    system = (
+        "Sos un ingeniero DevOps senior. Analizá el contexto de la sección y "
+        "respondé en markdown con secciones 'Hallazgos' y 'Cambios sugeridos'." + HITL_RULES
+    )
+    user = redact_secrets("\n\n".join(b["content"] for b in blocks))
+
+    from db import session_scope
+
+    with session_scope() as session:
+        ticket = _ensure_internal_ticket(session, project)
+        analyzer_id = _create_execution(
+            session, ticket.id, "local_llm_devops_doctor",
+            {"section": section_id, "project": project},
+        )
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+    import time
+
+    t0 = time.monotonic()
+    try:
+        response = invoke_local_llm(
+            agent_type="local_llm_devops_doctor",
+            system=system,
+            user=user,
+            on_log=lambda level, msg: None,
+            execution_id=analyzer_id,
+            model=body.get("model"),
+        )
+    except Exception as e:
+        _finish_execution(analyzer_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": analyzer_id}), 502
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    resolved_model = (
+        (response.metadata or {}).get("model") or body.get("model")
+        or _config.config.LOCAL_LLM_MODEL
+    )
+    _finish_execution(analyzer_id, status="completed", output=response.text[:10000])
+    return jsonify({
+        "ok": True,
+        "analysis": response.text,
+        "model": resolved_model,
+        "execution_id": analyzer_id,
+        "section": section_id,
+        "elapsed_ms": elapsed_ms,
     })

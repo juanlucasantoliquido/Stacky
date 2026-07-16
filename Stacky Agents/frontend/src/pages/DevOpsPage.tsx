@@ -43,6 +43,7 @@ export interface DevOpsHealth {
   deployments_enabled?: boolean; // Plan 120 — Centro de Despliegues
   deployments_execute_enabled?: boolean; // Plan 120 — ejecutar deploy/rollback
   deployments_ai_enabled?: boolean; // Plan 120 — diagnóstico IA de deploys fallidos
+  local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

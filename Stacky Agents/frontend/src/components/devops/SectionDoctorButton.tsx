@@ -11,8 +11,9 @@
  * este botón nunca aplica cambios.
  */
 import { useState } from 'react';
-import { SectionDoctorApi } from '../../api/endpoints';
+import { SectionDoctorApi, LocalLlmApi } from '../../api/endpoints';
 import { useWorkbench } from '../../store/workbench';
+import { buildLocalDoctorBody } from '../../devops/doctorModel';
 import styles from './devops.module.css';
 
 type Runtime = "claude_code_cli" | "codex_cli" | "github_copilot";
@@ -42,11 +43,16 @@ export function SectionDoctorButton(props: {
   buildPayload: () => Record<string, unknown>;
   disabled?: boolean;
   gateMessage?: string;  // si la flag está OFF, el padre pasa el mensaje y el botón se deshabilita
+  localDoctorEnabled?: boolean;  // Plan 127 — health.local_doctor_enabled (conjunción H5)
 }) {
   const [runtime, setRuntime] = useState<Runtime>('claude_code_cli');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [executionId, setExecutionId] = useState<number | null>(null);
+  // Plan 127 C3 — doctor local: estado propio, panel inline (NO navega a la consola).
+  const [localBusy, setLocalBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [localAnalysis, setLocalAnalysis] = useState<string | null>(null);
   // Abre el CodexConsoleDock EXISTENTE por execution_id (igual que
   // DevOpsAgentSection.tsx). La consola se indexa por execution_id, NO por
   // conversación — por eso muestra el markdown del doctor aunque su ticket
@@ -76,6 +82,23 @@ export function SectionDoctorButton(props: {
     }
   };
 
+  // Plan 127 C3 — doctor local: gratis, sin egreso, panel inline (no navega a la consola).
+  const handleLocal = async () => {
+    if (localBusy || noProject) return;
+    setLocalBusy(true);
+    setLocalError(null);
+    setLocalAnalysis(null);
+    try {
+      const body = buildLocalDoctorBody(props.project, props.buildPayload());
+      const res = await LocalLlmApi.sectionDoctorLocal(props.sectionId, body);
+      setLocalAnalysis(res.analysis);
+    } catch (e: unknown) {
+      setLocalError(parseDoctorError(e));
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
   return (
     <div style={{ marginTop: '8px' }}>
       <select value={runtime} onChange={(e) => setRuntime(e.target.value as Runtime)} disabled={busy}>
@@ -98,6 +121,30 @@ export function SectionDoctorButton(props: {
         <p className={styles.textMuted}>
           Análisis lanzado (execution #{executionId}). La consola con la respuesta IA se abrió abajo.
         </p>
+      )}
+
+      {/* Plan 127 C3 — doctor local: solo si el health del panel lo habilita (conjunción H5). */}
+      {props.localDoctorEnabled === true && (
+        <div style={{ marginTop: '8px' }}>
+          <button
+            onClick={() => void handleLocal()}
+            disabled={localBusy || noProject}
+            style={{ marginLeft: '0' }}
+          >
+            {localBusy ? 'Analizando (puede tardar 1-3 minutos)…' : 'Doctor local (no sale de tu máquina)'}
+          </button>
+          {localError && <p className={styles.textMuted}>No pude analizar ({localError}).</p>}
+          {localAnalysis && (
+            <details open style={{ marginTop: '6px' }}>
+              <summary className={styles.textMuted} style={{ cursor: 'pointer' }}>
+                Análisis local
+              </summary>
+              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', marginTop: '4px' }}>
+                {localAnalysis}
+              </pre>
+            </details>
+          )}
+        </div>
       )}
     </div>
   );

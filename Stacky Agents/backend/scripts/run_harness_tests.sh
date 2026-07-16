@@ -414,6 +414,14 @@ HARNESS_TEST_FILES=(
   tests/test_plan121_sentinel_core.py
   tests/test_plan121_sentinel_sweep.py
   tests/test_plan121_sentinel_api.py
+  # — Plan 127 · Reuso IA local: análisis de errores + doctor local DevOps —
+  tests/test_plan127_flags.py
+  tests/test_plan127_diag_snapshot.py
+  tests/test_plan127_error_analysis_core.py
+  tests/test_plan127_error_analysis_api.py
+  tests/test_plan127_doctor_context.py
+  tests/test_plan127_devops_doctor_local.py
+  tests/test_plan127_ci_explain_local.py
 )
 
 pass=0

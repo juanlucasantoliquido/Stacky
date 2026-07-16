@@ -3353,6 +3353,7 @@ export const DevOps = {
       deployments_enabled?: boolean; // Plan 120
       deployments_execute_enabled?: boolean; // Plan 120
       deployments_ai_enabled?: boolean; // Plan 120
+      local_doctor_enabled?: boolean; // Plan 127
     }>("/api/devops/health"),
   /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
   connectionsHealth: () =>
@@ -3434,6 +3435,19 @@ export const DevOps = {
       no_failures_found: boolean;
       failed_jobs_total: number;
     }>("/api/devops/doctor/diagnose", { project, pipeline_id: pipelineId }),
+  /**
+   * POST /api/devops/doctor/explain-failure — Plan 127 C2. Explica UN job
+   * fallido con el modelo local (HITL). El log NO se persiste.
+   */
+  doctorExplainFailure: (body: { project: string; pipeline_id: string; job_id: string }) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      job_id: string;
+      execution_id: number;
+      error?: string;
+    }>("/api/devops/doctor/explain-failure", body),
 };
 
 export interface DevOpsConversationItem {
@@ -3913,6 +3927,30 @@ export const LocalLlmApi = {
       findings: Array<{ data_class: string; severity: string; excerpt_masked: string; rationale: string }>;
       deterministic_classes: string[];
     }>("/api/llm/egress-sentinel/scan", body),
+  /** Plan 127 C1 — análisis de errores de UNA ejecución con el modelo local (HITL). */
+  errorAnalysis: (executionId: number, body: { model?: string } = {}) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      analyzer_execution_id: number;
+      elapsed_ms: number;
+      error?: string;
+    }>(`/api/llm/executions/${executionId}/error-analysis`, body),
+  /** Plan 127 C3 — doctor de sección con el modelo local (síncrono, HITL). */
+  sectionDoctorLocal: (
+    sectionId: string,
+    body: { project: string; payload: object; model?: string },
+  ) =>
+    api.post<{
+      ok: boolean;
+      analysis: string;
+      model: string;
+      execution_id: number;
+      section: string;
+      elapsed_ms: number;
+      error?: string;
+    }>(`/api/devops/sections/${encodeURIComponent(sectionId)}/doctor/local`, body),
 };
 
 /** Plan 122 — núcleo del Comparador de BD entre ambientes (serie 122-126). */

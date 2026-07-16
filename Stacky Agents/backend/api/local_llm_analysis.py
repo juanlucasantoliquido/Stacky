@@ -12,6 +12,7 @@ que se reenvía a invoke_local_llm; si no viene, se usa el default de la flag LO
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 
 import requests
@@ -752,4 +753,109 @@ def egress_sentinel_findings_route():
     return jsonify({
         "items": flagged[:limit],
         "summary": {"scanned_total": scanned_total, "flagged_total": len(flagged)},
+    })
+
+
+_ERROR_ANALYSIS_FALLBACK_PROJECT = "__error_analysis__"
+
+
+@bp.post("/executions/<int:execution_id>/error-analysis")
+def error_analysis_route(execution_id: int):
+    """Plan 127 C1 — análisis del fallo de UNA ejecución con el modelo local (HITL).
+
+    404 LOCAL_LLM_ENABLED off (_guard) | 404 STACKY_EXEC_ERROR_ANALYSIS_ENABLED off
+    | 404 execution inexistente | 409 nada que analizar | 502 fallo del modelo
+    | 503 endpoint local vacío | 400 POST sin body JSON (_guard; mandar json={}).
+    """
+    guard = _guard()
+    if guard:
+        return guard
+    if not getattr(_config.config, "STACKY_EXEC_ERROR_ANALYSIS_ENABLED", False):
+        return jsonify({"error": "error_analysis_disabled"}), 404
+
+    body = request.get_json(silent=True) or {}
+
+    from api.diag import build_diagnosis_snapshot  # import lazy (patrón del repo)
+
+    snapshot = build_diagnosis_snapshot(execution_id)
+    if snapshot is None:
+        return jsonify({"error": "execution_not_found"}), 404
+
+    with session_scope() as session:
+        target_row = session.get(AgentExecution, execution_id)
+        output_text = target_row.output or ""
+        status = target_row.status
+        error_message = target_row.error_message or ""
+        ticket_row = (
+            session.get(Ticket, target_row.ticket_id) if target_row.ticket_id else None
+        )
+        project = (
+            (ticket_row.project if ticket_row and ticket_row.project else None)
+            or _ERROR_ANALYSIS_FALLBACK_PROJECT
+        )
+
+    from services.error_analysis import (
+        ERROR_ANALYSIS_KEY,
+        build_error_analysis_prompt,
+        cap_analysis,
+        is_analyzable,
+    )
+
+    if not is_analyzable(status, error_message):
+        return jsonify({"error": "nothing_to_analyze", "status": status}), 409
+
+    system, user = build_error_analysis_prompt(snapshot, output_text)
+
+    with session_scope() as session:
+        ticket = _ensure_internal_ticket(session, project)
+        analyzer_id = _create_execution(
+            session, ticket.id, "local_llm_error_analyst",
+            {"target_execution_id": execution_id},
+        )
+
+    from copilot_bridge import invoke_local_llm  # import lazy (patrón del repo)
+
+    t0 = time.monotonic()
+    try:
+        response = invoke_local_llm(
+            agent_type="local_llm_error_analyst",
+            system=system,
+            user=user,
+            on_log=lambda level, msg: None,
+            execution_id=analyzer_id,
+            model=body.get("model"),
+        )
+    except Exception as e:
+        _finish_execution(analyzer_id, status="error", error=str(e))
+        return jsonify({"ok": False, "error": str(e), "execution_id": analyzer_id}), 502
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+    from services.pr_review_sanitize import redact_secrets  # Plan 110
+
+    analysis = cap_analysis(redact_secrets(response.text))
+    resolved_model = (
+        (response.metadata or {}).get("model") or body.get("model")
+        or _config.config.LOCAL_LLM_MODEL
+    )
+    _finish_execution(analyzer_id, status="completed", output=analysis)
+
+    with session_scope() as session:
+        row = session.get(AgentExecution, execution_id)
+        md = row.metadata_dict or {}
+        md[ERROR_ANALYSIS_KEY] = {
+            "analysis": analysis,
+            "model": resolved_model,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "analyzer_execution_id": analyzer_id,
+            "elapsed_ms": elapsed_ms,
+        }
+        row.metadata_dict = md
+
+    return jsonify({
+        "ok": True,
+        "analysis": analysis,
+        "model": resolved_model,
+        "analyzer_execution_id": analyzer_id,
+        "elapsed_ms": elapsed_ms,
     })

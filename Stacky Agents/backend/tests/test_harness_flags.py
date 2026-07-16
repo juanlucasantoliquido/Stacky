@@ -643,6 +643,10 @@ _CURATED_DEFAULTS_ON = {
     # Plan 149 F4 — Superficie de cuarentena de intake en Desatascador: kill-switch
     # default ON (OFF revierte a json.loads plano, legacy byte-idéntico).
     "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",
+    # ── Activación operador 2026-07-12 — Plan 127: reuso IA local ON por default
+    # (directiva explícita "HACELO DEFAULT ON"; HITL on-demand, cero costo pasivo) ──
+    "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",
+    "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",
 }
 
 

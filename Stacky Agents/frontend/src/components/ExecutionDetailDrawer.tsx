@@ -6,6 +6,7 @@ import type { ExecutionLocalInsight } from "../api/endpoints";
 import ExecutionInsightBlock from "./ExecutionInsightBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
+import { formatStallReason, type StallMeta } from "../utils/stallReason";
 import styles from "./ExecutionDetailDrawer.module.css";
 
 interface Props {
@@ -55,6 +56,8 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
   const intakeErrors = Array.isArray(metadata.intake_errors)
     ? metadata.intake_errors.map((x) => String(x))
     : [];
+  // Plan 144 F4 — razón humana del stall (watchdog de inactividad).
+  const stallReason = formatStallReason(metadata.stall as StallMeta | null | undefined);
 
   const title = useMemo(() => {
     if (!content) return "Detalle de ejecución";
@@ -137,6 +140,13 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                 </ul>
               )}
             </section>
+
+            {stallReason && (
+              <section className={styles.section}>
+                <h4>Inactividad (stall)</h4>
+                <pre className={styles.errorBlock}>{stallReason}</pre>
+              </section>
+            )}
 
             {content.error_message && (
               <section className={styles.section}>

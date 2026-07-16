@@ -32,7 +32,9 @@ from models import Ticket
 
 logger = logging.getLogger("stacky.ticket_status")
 
-VALID_STATUSES = frozenset({"idle", "running", "completed", "error", "cancelled"})
+from services.status_vocabulary import VALID_TICKET_STATUSES
+
+VALID_STATUSES = VALID_TICKET_STATUSES
 
 # Timeout (en minutos) tras el cual una AgentExecution en estado 'running' se
 # considera colgada y el reaper la fuerza a 'error'. Configurable por env.
@@ -91,6 +93,21 @@ class TicketStatusEvent(Base):
 
 
 # ── API pública del servicio ───────────────────────────────────────────────────
+
+
+def _coerce_terminal_status(requested: str) -> str:
+    """Devuelve `requested` si es un estado válido; si no, cae a 'error' con log.
+
+    Blindaje D3 (Plan 144 F1): un fin de run SIEMPRE debe sacar al ticket de
+    'running'. Un estado no reconocido nunca debe propagar una excepción que
+    lo estranque."""
+    if requested in VALID_STATUSES:
+        return requested
+    logger.warning(
+        "on_execution_end: estado terminal desconocido '%s' → coercionado a 'error'",
+        requested,
+    )
+    return "error"
 
 
 def set_status(
@@ -247,6 +264,8 @@ def on_execution_end(
         metadata = dict(metadata_override)
     else:
         metadata = None
+
+    final_status = _coerce_terminal_status(final_status)
 
     set_status(
         ticket_id,

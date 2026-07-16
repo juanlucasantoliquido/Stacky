@@ -991,6 +991,8 @@ def _run_in_background(
         _last_event_wall: list[datetime] = [datetime.utcnow()]
         _last_event_mono: list[float] = [time.monotonic()]
         _stall_fired: list[bool] = [False]
+        # Plan 144 F4 — último tipo de señal del stream (diagnóstico de stall).
+        _last_event_kind: list[str] = ["none"]
         # R1.2 — ¿el agente emitió un `result` terminal exitoso? Si sí, el run
         # completó su trabajo aunque después la sesión quede ociosa.
         _result_ok_seen: list[bool] = [False]
@@ -1003,6 +1005,14 @@ def _run_in_background(
             nonlocal last_telemetry_emit
             _last_event_wall[0] = datetime.utcnow()
             _last_event_mono[0] = time.monotonic()
+            # Plan 144 F4 — última señal conocida (diagnóstico humano del stall).
+            etype = event.get("type") or "unknown"
+            if etype == "assistant":
+                _last_event_kind[0] = "assistant_text"
+            elif etype == "tool_use" or event.get("name"):
+                _last_event_kind[0] = f"tool_use:{event.get('name') or '?'}"
+            else:
+                _last_event_kind[0] = etype
             _capture_result_telemetry(stream_telemetry, event)
             # R1.2 — un `result` terminal sin is_error = el agente entregó su
             # trabajo. Lo recordamos para clasificar bien un stall posterior y
@@ -1614,9 +1624,16 @@ def _run_in_background(
             return_code=return_code,
         )
         if _outcome_kind == "failed_stall":
+            # Plan 144 F4 (C1) — trust persistido (F2) o lectura on-demand si
+            # el preflight estaba OFF (diagnóstico best-effort).
+            trust_ok = _derive_stall_trust_ok(execution_id, cwd)
             stall_meta = {
                 "detected_at": datetime.utcnow().isoformat(),
                 "last_event_at": _last_event_wall[0].isoformat(),
+                "last_signal": _last_event_kind[0],
+                "seconds_idle": round(time.monotonic() - _last_event_mono[0]),
+                "watchdog_seconds": stall_watchdog_sec,
+                "trust_ok": trust_ok,  # True/False si se conoce; None si indeterminado.
             }
             metadata["stall"] = stall_meta
             _mark_terminal(
@@ -1625,7 +1642,8 @@ def _run_in_background(
                 error="stalled: stream sin eventos",
                 metadata=metadata,
             )
-            log("error", "run terminado por watchdog de inactividad (stall)")
+            log("error",
+                f"run terminado por inactividad ({stall_watchdog_sec}s) — última señal: {_last_event_kind[0]}")
             ticket_status.on_execution_end(
                 ticket_id=ticket_id,
                 execution_id=execution_id,
@@ -2675,6 +2693,34 @@ def _push(
     logger.log(backend_level, "[exec=%s] %s", execution_id, message)
 
 
+def _derive_stall_trust_ok(execution_id: int, cwd: str | Path | None) -> bool | None:
+    """Plan 144 F4 (C1) — deriva `trust_ok` para stall_meta.
+
+    Prioriza el trust PERSISTIDO por el preflight (F2, `row.metadata_dict["trust"]`).
+    Si no hay key persistida (preflight estaba OFF), hace una lectura on-demand
+    sobre `cwd` — es justo el caso con mayor valor diagnóstico: el CLI colgado
+    en el diálogo de trust en vez de salir con code 1. Extraída como función
+    pura (sin stream) para ser testeable de forma aislada.
+
+    Returns:
+        True/False si el trust se conoce; None si es indeterminado (nunca
+        False por ausencia de dato — evitar falso "no confiado").
+    """
+    trust_ok: bool | None = None
+    try:
+        with session_scope() as _s:
+            _row = _s.get(AgentExecution, execution_id)
+            _persisted = (_row.metadata_dict.get("trust") if _row else None) or {}
+        if "trusted" in _persisted:
+            trust_ok = bool(_persisted["trusted"])
+        elif cwd:
+            from services import claude_workspace_trust as _cwt
+            trust_ok = _cwt.read_workspace_trust(str(cwd)).trusted
+    except Exception:  # noqa: BLE001 — diagnóstico best-effort, nunca romper el cierre del run
+        trust_ok = None
+    return trust_ok
+
+
 def _mark_status(execution_id: int, status: str, error: str | None = None) -> None:
     with session_scope() as session:
         row = session.get(AgentExecution, execution_id)
@@ -2728,6 +2774,42 @@ def _run_pre_run_checks(
 
     for warning in result.warnings:
         log("warn", warning)
+
+    # Plan 144 F2/F3 — preflight de confianza de workspace (solo Claude CLI).
+    if config.CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED and workspace_root:
+        from services import claude_workspace_trust as _cwt
+        trust = _cwt.read_workspace_trust(workspace_root)
+        if not trust.trusted:
+            if config.CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED:
+                # F3 — comportamiento explícito opt-in (excepción dura d).
+                trust = _cwt.set_workspace_trusted(workspace_root)
+                log("warn",
+                    f"trust auto-set: workspace confiado automáticamente "
+                    f"(projects[{trust.project_key}].hasTrustDialogAccepted=true)")
+            else:
+                remedio = (
+                    f"El workspace no está confiado por Claude Code CLI. "
+                    f"Abrí `claude` una vez en {trust.project_key} y aceptá el diálogo de confianza, "
+                    f"o activá 'Auto-confiar workspace (claude)' en Config → Runtimes CLI, "
+                    f"o seteá projects[\"{trust.project_key}\"].hasTrustDialogAccepted=true en {trust.config_path}."
+                )
+                log("error", f"pre-run bloqueado (trust): {remedio}")
+                _mark_terminal(execution_id, status="error", error=remedio,
+                               metadata={"trust": {"trusted": False, "project_key": trust.project_key}})
+                if ticket_id is not None:
+                    ticket_status.on_execution_end(
+                        ticket_id=ticket_id, execution_id=execution_id,
+                        final_status="error", agent_type=agent_type, error=remedio)
+                return False
+        else:
+            with session_scope() as session:
+                row = session.get(AgentExecution, execution_id)
+                if row is not None:
+                    current_md = row.metadata_dict
+                    current_md["trust"] = {"trusted": True, "project_key": trust.project_key}
+                    row.metadata_dict = current_md
+    # (fin bloque trust)
+
     return True
 
 

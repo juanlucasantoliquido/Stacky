@@ -250,6 +250,19 @@ class Config:
     CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED = os.getenv(
         "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # Plan 144 F2 — preflight de confianza de workspace (hasTrustDialogAccepted
+    # en ~/.claude.json). Kill-switch default ON: detecta+falla temprano con
+    # remedio accionable en vez de code 1 mudo; no reduce seguridad.
+    CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Plan 144 F3 — auto-set opt-in de hasTrustDialogAccepted. Default OFF:
+    # excepción dura (d) "reduce seguridad por default" (escribe un setting de
+    # seguridad de ~/.claude.json). Activable solo por decisión explícita del
+    # operador desde la UI (panel de flags del arnés).
+    CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED = os.getenv(
+        "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
     # Cap de mensajes correctivos por run (plan: máx 1-2).
     CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES = int(
         os.getenv("CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES", "2")

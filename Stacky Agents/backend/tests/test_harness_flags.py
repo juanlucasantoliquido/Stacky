@@ -630,6 +630,10 @@ _CURATED_DEFAULTS_ON = {
     # STACKY_COST_CODEBURN_IMPORT_ENABLED (F7) NO entra acá: excepción dura #3
     # (prerequisito externo no garantizado), default OFF a propósito.
     "STACKY_COST_CENTER_ENABLED",
+    # Plan 144 F2 — preflight de confianza de workspace (claude): kill-switch
+    # default ON (detecta+falla temprano, no reduce seguridad). AUTOSET (F3)
+    # NO entra acá: excepción dura #4 (reduce seguridad por default), OFF a propósito.
+    "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
 }
 
 

@@ -41,7 +41,7 @@ logger = logging.getLogger("stacky.agent_completion_gateway")
 # ── Constantes ────────────────────────────────────────────────────────────────
 
 ACTIVE_STATUSES = frozenset({"preparing", "running", "queued"})
-TERMINAL_STATUSES = frozenset({"completed", "error", "cancelled", "needs_review"})
+from services.status_vocabulary import TERMINAL_STATUSES
 
 _GATEWAY_SOURCE = "completion_gateway"
 

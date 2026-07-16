@@ -121,6 +121,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_ENABLED", "CLAUDE_CODE_CLI_PROJECT_KNOWLEDGE_PROJECTS",
         "CLAUDE_CODE_CLI_RESUME_ENABLED", "CLAUDE_CODE_CLI_RESUME_PROJECTS",
         "CLAUDE_CODE_CLI_MCP_ENABLED", "CLAUDE_CODE_CLI_MCP_PROJECTS",
+        "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED", "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED",  # Plan 144
         "CODEX_CLI_CONTRACT_GATE_ENABLED", "CODEX_CLI_AUTOCORRECT_ENABLED",
         "CODEX_CLI_AUTOCORRECT_MAX_RETRIES", "CODEX_CLI_MODEL_DENYLIST",
         "CODEX_CLI_RESUME_ENABLED", "CODEX_CLI_RESUME_PROJECTS",
@@ -383,6 +384,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Proyectos — MCP",
         description="Allowlist CSV de proyectos. Vacío = todos.",
         group="claude_code_cli",
+    ),
+    FlagSpec(
+        key="CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
+        type="bool",
+        default=True,  # Plan 144 F2 — kill-switch default ON (detecta+falla temprano; no reduce seguridad).
+        label="Preflight de confianza de workspace (claude)",
+        description="Antes de lanzar claude, verifica hasTrustDialogAccepted del workspace; si no, falla temprano con remedio en vez de code 1 mudo.",
+        group="claude_code_cli",
+    ),
+    FlagSpec(
+        key="CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED",
+        type="bool",
+        # SIN default= → default_is_known False → NO va en _CURATED_DEFAULTS_ON (default OFF via config.py).
+        label="Auto-confiar workspace (claude)",
+        description="OPT-IN. Si el workspace no está confiado, escribe hasTrustDialogAccepted=true en ~/.claude.json (setting de seguridad). OFF por defecto.",
+        group="claude_code_cli",
+        requires="CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
     ),
     FlagSpec(
         key="STACKY_CONTEXT_BUDGET_ENABLED",

@@ -608,6 +608,7 @@ def _run_in_background(
         # al proc.wait() original (byte-identico al comportamiento previo).
         import time as _time
         _codex_stall_watchdog_sec = config.STACKY_STALL_WATCHDOG_SECONDS
+        _codex_started_mono = _time.monotonic()  # Plan 144 F4 — distingue "hubo señal" de "ninguna".
         _codex_last_event_mono: list[float] = [_time.monotonic()]
         _codex_stall_fired: list[bool] = [False]
 
@@ -709,11 +710,17 @@ def _run_in_background(
 
         # R1.1 — si el stall watchdog disparó, marcar failed/stalled y salir.
         if _codex_stall_fired[0]:
+            # Plan 144 F4 (C3) — paridad de esquema con claude: mismas 6 keys.
+            # Codex no tipa eventos (solo el timestamp de última actividad) ni
+            # tiene concepto de trust (sin ~/.claude.json) — trust_ok=True fijo,
+            # documentado como n/a para paridad de esquema.
             stall_meta = {
                 "detected_at": datetime.utcnow().isoformat(),
-                "last_event_at": datetime.utcfromtimestamp(
-                    started.timestamp() + (_codex_last_event_mono[0] - _time.monotonic())
-                ).isoformat() if False else datetime.utcnow().isoformat(),
+                "last_event_at": datetime.utcnow().isoformat(),
+                "last_signal": "stream_line" if _codex_last_event_mono[0] != _codex_started_mono else "none",
+                "seconds_idle": round(_time.monotonic() - _codex_last_event_mono[0]),
+                "watchdog_seconds": _codex_stall_watchdog_sec,
+                "trust_ok": True,  # n/a en Codex (sin ~/.claude.json); True fijo documentado.
             }
             metadata["stall"] = stall_meta
             _mark_terminal(

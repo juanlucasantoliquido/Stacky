@@ -15,6 +15,7 @@ import MigratorPage from "./pages/MigratorPage"; // Plan 74
 import { DevOpsPage } from "./pages/DevOpsPage"; // Plan 87
 import { DbComparePage } from "./components/dbcompare/DbComparePage"; // Plan 122
 import CostCenterPage from "./pages/CostCenterPage"; // Plan 142
+import PlansBoardPage from "./pages/PlansBoardPage"; // Plan 128
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -39,7 +40,7 @@ import {
 } from "./components/shell/shellNav";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -57,6 +58,7 @@ const TAB_PATHS: Record<Tab, string> = {
   devops: "/devops",
   dbcompare: "/dbcompare", // Plan 122 [FIX C3]
   costcenter: "/costcenter", // Plan 142
+  planes: "/planes",
 };
 
 function tabFromPath(pathname: string): Tab {
@@ -95,6 +97,8 @@ export default function App() {
       return next;
     });
   };
+  // Plan 128: tab Planes visible solo si el flag está ON en el backend
+  const [planesEnabled, setPlanesEnabled] = useState(false);
 
   useGlobalExecutionNotifier();
   const reviewCount = useReviewInboxCount();
@@ -136,6 +140,9 @@ export default function App() {
     });
     void probeFlagHealth("/api/metrics/cost-center/health").then((v) => {
       if (alive) setCostCenterEnabled((prev) => nextEnabledState(prev, v));
+    });
+    void probeFlagHealth("/api/plans-board/health").then((v) => {
+      if (alive) setPlanesEnabled((prev) => nextEnabledState(prev, v));
     });
     // Plan 139: lee la flag del shell v2 una sola vez al montar (recargar la
     // página para ver el efecto de un toggle; no hay re-montaje en caliente).
@@ -198,14 +205,15 @@ export default function App() {
     else if (tab === "devops" && !devopsEnabled) selectTab("team");
     else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");
     else if (tab === "costcenter" && !costCenterEnabled) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled]);
+    else if (tab === "planes" && !planesEnabled) selectTab("team");
+  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
       pm: !!sections.pm, logs: !!sections.logs,
       docs: !!sections.docs, memory: !!sections.memory,
     },
-    migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled,
+    migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled,
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -236,6 +244,7 @@ export default function App() {
       {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
       {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
       {tab === "costcenter"  && costCenterEnabled && <CostCenterPage />} {/* Plan 142 */}
+      {tab === "planes"      && planesEnabled && <PlansBoardPage />} {/* Plan 128 */}
     </>
   );
 
@@ -375,6 +384,14 @@ export default function App() {
                 onClick={() => selectTab("costcenter")}
               >
                 💰 Centro de Costos
+              </button>
+            )}
+            {planesEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "planes" ? styles.active : ""}`}
+                onClick={() => selectTab("planes")}
+              >
+                🧭 Planes
               </button>
             )}
           </nav>

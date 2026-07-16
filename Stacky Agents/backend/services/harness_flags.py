@@ -258,6 +258,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
+        "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -3178,6 +3179,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",
         default=True,
+    ),
+    # ── Plan 128 — Tablero de evolución de planes (solo lectura) ──────────────
+    FlagSpec(
+        key="STACKY_PLANS_BOARD_ENABLED",
+        type="bool",
+        label="Tablero de evolución de planes",
+        description=(
+            "Tab 'Planes' de solo lectura: estado del pipeline "
+            "proponer→criticar→implementar→supervisar por cada plan de docs/, "
+            "aprobación del supervisor, commits sin push y acción sugerida copiable."
+        ),
+        group="global",
+        # SIN default= (queda None: opt-in, no curada en _CURATED_DEFAULTS_ON).
+        # SIN requires= (no tiene master). SIN env_only= (queda UI-editable).
     ),
 )
 

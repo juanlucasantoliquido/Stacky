@@ -1,8 +1,15 @@
 # Plan 128 — Tablero de Evolución de Planes (pipeline proponer→criticar→implementar→supervisar, solo lectura)
 
-**Estado:** PROPUESTO (v1, 2026-07-12 — renumerado de 127→128 el mismo día: el número 127 colisionó con el plan ajeno "reuso IA local" `e922b78f` propuesto en paralelo por otra sesión. La colisión es EXACTAMENTE el bug que este plan elimina con `next_free_number`.)
+**Estado:** IMPLEMENTADO — 2026-07-14 (F0..F6 vía implementar-plan-stacky; ver crítica v2 CRITICADO/APROBADO-CON-CAMBIOS del mismo día. Renumerado de 127→128 el 2026-07-12: el número 127 colisionó con el plan ajeno "reuso IA local" `e922b78f` propuesto en paralelo por otra sesión. La colisión es EXACTAMENTE el bug que este plan elimina con `next_free_number`.)
 **Dependencias:** ninguna dura. Reusa el ledger de supervisión existente (`docs/_supervision/ledger.json`) y el patrón de tab gateado por flag de los Planes 74/87. NO depende de los planes 120-127.
 **Ortogonal a:** Planes 119/120/121/122-126/127 (no toca DevOps, ni despliegues, ni comparador de BD, ni la IA local).
+
+> ### Changelog v1 → v2 (crítica adversarial 2026-07-14, juez `StackyArchitectaUltraEficientCode`)
+> Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes, 2 importantes, 1 menor, 1 adición de arquitecto). Cambios aplicados in place:
+> - **C1 (IMPORTANTE)** — F0 test #3 citaba `STACKY_GITLAB_DEEP_LINKS_ENABLED` como ejemplo de flag bool "sin default", pero esa flag fue promovida a `default=True` el 2026-07-10 (`services/harness_flags.py:2497`, curada en `_CURATED_DEFAULTS_ON`) — el ejemplo estaba roto desde la redacción de v1. Reemplazado por un ejemplo verificado (`CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED`) y la aserción se simplificó para no depender de comparar contra otra flag.
+> - **C2 (IMPORTANTE)** — la cita `config.py:494-497` como "patrón EXACTO" ya estaba desactualizada (ubicación real verificada: `config.py:484-487`) — evidencia viva de que los números de línea rotan rápido en este repo por sesiones concurrentes. Se agregó guardarraíl §3.9 aplicable a TODAS las citas `archivo:línea` del doc (ubicar por contenido/comentario, nunca solo por número).
+> - **C4 (MENOR)** — `_MAX_FILE_BYTES` hacía desaparecer silenciosamente un doc de plan sin ninguna card, contradiciendo el principio R1 ("el board muestra el gap, no lo esconde"). Documentado explícitamente como limitación aceptada (probabilidad ~0: ningún doc real supera los 2MB) en vez de complejizar el contrato.
+> - **[ADICIÓN ARQUITECTO]** — `GET /api/plans-board/health` ahora incluye `next_free_number` SIEMPRE (sin gate de flag, cómputo barato de un solo `iterdir()`), para que la garantía anti-colisión (KPI-2, el problema que este plan documenta 3 veces materializado) exista incluso con el tablero visual apagado — cero trabajo nuevo del operador, reusa `next_free_number` de F1 sin tocar su contrato.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Los regex, contratos JSON, tablas de
@@ -93,6 +100,13 @@ nada**: amplifica al operador, no lo reemplaza.
 8. **Al implementar:** `config.py` y `harness_flags.py` suelen tener WIP ajeno de sesiones
    concurrentes → staging quirúrgico por hunk (`git add -p` o pathspec); PROHIBIDO
    `git stash`/`reset`/`checkout` de limpieza.
+9. **[v2] Citas `archivo:línea` son APROXIMADAS, no literales:** este repo tiene planes
+   escribiéndose en paralelo constantemente (evidencia real: la propia cita `config.py:494-497`
+   de este doc ya rotó a `config.py:484-487` entre la redacción de v1 y la crítica v2). TODA
+   cita de línea en este documento (config.py, harness_flags_help.py, App.tsx, etc.) debe
+   tratarse como orientativa: ubicar el punto de edición por el CONTENIDO/comentario citado
+   (ej. el comentario `# ── Plan 109`, el nombre del símbolo, el bloque de código mostrado),
+   nunca confiar en que el número de línea siga siendo exacto.
 
 ## 4. Contratos congelados
 
@@ -172,8 +186,14 @@ si aplica fila 1 o 2; si no, el estado normalizado del doc.
 
 `GET /api/plans-board/health` → **siempre 200** (sin gate, patrón Plan 87):
 ```json
-{"ok": true, "flag_enabled": false}
+{"ok": true, "flag_enabled": false, "next_free_number": 129}
 ```
+**[v2 ADICIÓN ARQUITECTO]** `next_free_number` va SIEMPRE en `/health`, INDEPENDIENTE del
+flag (`null` solo si `docs_dir_default()` no existe — deploy sin carpeta `docs/`). Motivo:
+el problema que este plan documenta materializado 3 veces (colisión de número de plan) debe
+quedar resuelto incluso para operadores/agentes que nunca activaron el tablero visual; el
+cómputo es un solo `iterdir()` + regex (sin ledger, sin git, sin cache) — costo despreciable,
+cero trabajo nuevo del operador, reusa `next_free_number` de F1 tal cual.
 
 `GET /api/plans-board/list` (query opcional `refresh=1` invalida cache):
 - Flag OFF → **404** `{"ok": false, "error": "plans_board_disabled", "message": "El tablero de planes está deshabilitado (STACKY_PLANS_BOARD_ENABLED)."}`
@@ -248,7 +268,8 @@ Cuando hay entrada de ledger: `"ledger": {"veredicto": "APROBADO", "fecha": "202
    - Agregar `"STACKY_PLANS_BOARD_ENABLED"` a la tupla EXISTENTE
      `_CATEGORY_KEYS["observabilidad_notif"]` (el dict arranca en `harness_flags.py:111`;
      buscá la clave por nombre, no por número de línea).
-2. `Stacky Agents/backend/config.py` — patrón EXACTO del Plan 109 (`config.py:494-497`):
+2. `Stacky Agents/backend/config.py` — patrón EXACTO del Plan 109 (ubicar por el comentario
+   `# ── Plan 109 — Grafo documental READ-ONLY`, hoy en `~config.py:484-487`; ver guardarraíl §3.9):
    ```python
    # ── Plan 128 — Tablero de evolución de planes (default OFF, editable por UI) ──
    STACKY_PLANS_BOARD_ENABLED: bool = os.getenv(
@@ -272,7 +293,13 @@ Cuando hay entrada de ledger: `"ledger": {"veredicto": "APROBADO", "fecha": "202
 (espejo de `tests/test_plan93_preflight_flag.py`; 6 casos):
 1. `test_flag_declarada_en_registry` — existe FlagSpec con esa key, `type == "bool"`.
 2. `test_flag_ui_editable` — `env_only` es False/ausente en la spec.
-3. `test_flag_sin_default_explicito` — `spec.default is None` (o el sentinel que use FlagSpec para "sin default"; verificar contra otra flag bool sin default, ej. `STACKY_GITLAB_DEEP_LINKS_ENABLED`).
+3. `test_flag_sin_default_explicito` — `spec.default is None` (confirmado: el campo `default`
+   de `FlagSpec` tiene default `None` en el dataclass — `services/harness_flags.py:29` —, así
+   que basta con esta aserción directa, SIN comparar contra otra flag. Si se quiere un ejemplo
+   cruzado de referencia, usar `CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED`, que es bool y no pasa
+   `default=` — `services/harness_flags.py:288-293`. **NO usar `STACKY_GITLAB_DEEP_LINKS_ENABLED`
+   como ejemplo de "sin default": esa flag SÍ tiene `default=True` explícito desde 2026-07-10,
+   curada en `_CURATED_DEFAULTS_ON` — `services/harness_flags.py:2497`.**).
 4. `test_config_default_off` — con env limpio, `config.STACKY_PLANS_BOARD_ENABLED is False`.
 5. `test_categoria_observabilidad` — la key está en `_CATEGORY_KEYS["observabilidad_notif"]`.
 6. `test_defaults_env_y_help` — `harness_defaults.env` contiene la línea `STACKY_PLANS_BOARD_ENABLED=false` y el dict de help contiene la key.
@@ -424,7 +451,12 @@ def _disabled_resp():
 
 @bp.get("/health")
 def plans_board_health():
-    return jsonify({"ok": True, "flag_enabled": _enabled()})
+    # [v2 ADICIÓN ARQUITECTO] next_free_number va SIEMPRE, sin gate de flag: cómputo barato
+    # (un iterdir(), sin ledger/git) que cierra el anti-colisión aunque el tablero esté OFF.
+    from services import plans_board  # import lazy (patrón Plan 109, api/docs.py:224)
+    docs_dir = plans_board.docs_dir_default()
+    next_n = plans_board.next_free_number(docs_dir) if docs_dir.exists() else None
+    return jsonify({"ok": True, "flag_enabled": _enabled(), "next_free_number": next_n})
 
 @bp.get("/list")
 def plans_board_list():
@@ -473,7 +505,7 @@ api_bp.register_blueprint(plans_board_bp)
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan128_plans_board_endpoints.py`
 (fixtures `app_flag_off`/`app_flag_on` COPIADAS del patrón real `tests/test_plan87_devops_endpoints.py:6-29`,
-cambiando el attr a `STACKY_PLANS_BOARD_ENABLED`; 7 casos):
+cambiando el attr a `STACKY_PLANS_BOARD_ENABLED`; 8 casos):
 1. `test_health_200_flag_off` — `/api/plans-board/health` → 200, `flag_enabled False`.
 2. `test_health_200_flag_on` — 200, `flag_enabled True`.
 3. `test_list_404_flag_off` — 404 + `error == "plans_board_disabled"`.
@@ -481,9 +513,13 @@ cambiando el attr a `STACKY_PLANS_BOARD_ENABLED`; 7 casos):
 5. `test_detail_404_not_found` — flag ON + número 99999 → 404 `plan_not_found`.
 6. `test_refresh_invalida_cache` — monkeypatch `services.plans_board.build_board` con contador; 2 GET seguidos → 1 build; tercer GET con `?refresh=1` → 2 builds.
 7. `test_rutas_sin_doble_prefijo` — sentinela (patrón `test_plan74_routes_registered.py`): el url_map contiene `/api/plans-board/list` y NO contiene `/api/api/plans-board/list`.
+8. **[v2]** `test_health_next_free_number_sin_gate` — con flag OFF, `/health` igual trae
+   `next_free_number` numérico y correcto (monkeypatch `docs_dir_default` a un `tmp_path`
+   fixture con 2-3 archivos `NN_*`); con `docs_dir_default` apuntando a un directorio
+   inexistente → `next_free_number is None`.
 
 **Comando:** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -m pytest tests/test_plan128_plans_board_endpoints.py -q`
-**Criterio binario:** 7/7 verdes.
+**Criterio binario:** 8/8 verdes.
 **Flag:** gating 404 verificado. **Runtimes:** N/A. **Operador:** ninguno.
 
 ### F4 — Modelo puro frontend: `src/plansBoard/model.ts`
@@ -664,6 +700,12 @@ reporte con el conteo antes/después idéntico).
 - **R1 — Encabezados heterogéneos** (docs viejos sin `**Estado:**`): el parser NO adivina;
   clasifica `SIN_ESTADO` (gris) y la acción sugerida lo dice explícito (fila 7). El board
   muestra el gap en vez de esconderlo.
+  - **[v2] Excepción documentada:** un archivo `NN_PLAN_*.md` que pese más de
+    `_MAX_FILE_BYTES` (2MB) es la ÚNICA condición donde el board SÍ esconde el gap — el
+    archivo no genera card. Se acepta esta excepción tal cual porque ningún doc real del
+    repo se acerca a ese tamaño (los más grandes rondan decenas de KB) y complejizar el
+    contrato para un caso con probabilidad ~0 no vale la pena; si algún día ocurre, el
+    síntoma es "un plan no aparece en el tablero" y se resuelve partiendo el doc.
 - **R2 — Git ausente o lento** (deploy congelado, repo sin remoto): timeout 5 s y
   `None` → columna Push "—", `git_available false`, checkbox deshabilitado. Jamás 500.
 - **R3 — Ledger con encoding/schema variable** (UTF-16 posible, entradas sin `doc_sha256`):
@@ -730,19 +772,21 @@ reporte con el conteo antes/después idéntico).
 
 ## 10. Definición de Hecho (DoD)
 
-- [ ] `STACKY_PLANS_BOARD_ENABLED` declarada (bool, UI-editable, sin default explícito,
+- [x] `STACKY_PLANS_BOARD_ENABLED` declarada (bool, UI-editable, sin default explícito,
       categoría `observabilidad_notif`), en `config.py`, help y `harness_defaults.env`.
-- [ ] Los 4 archivos de test backend (`flag`, `parser`, `git`, `endpoints`) verdes con los
-      comandos EXACTOS de §5 (33 casos en total: 6+14+6+7).
-- [ ] `model.test.ts` verde (9 casos) y `npx tsc --noEmit` exit 0.
-- [ ] Con flag OFF: `/api/plans-board/list` y `/detail` → 404 `plans_board_disabled`;
-      `/health` → 200 `flag_enabled false`; tab "Planes" ausente del nav; `test_harness_flags.py`
-      sin regresión vs. la foto previa a F0.
-- [ ] Con flag ON sobre fixtures: estados, veredictos, drift, duplicados, `next_free_number`
-      y las 7 acciones de §4.3 EXACTOS (KPI-1/KPI-2).
-- [ ] El backend del feature no escribe NADA: único subprocess = el `git log` congelado de
-      F2 (verificable: `grep -n "subprocess" "Stacky Agents/backend/services/plans_board.py"`
-      muestra solo `collect_unpushed_docs`, y `grep -n "subprocess\|open(.*w" "Stacky Agents/backend/api/plans_board.py"` → 0 matches).
-- [ ] Ratchet ps1/sh actualizados con los 4 archivos `test_plan128_*`.
-- [ ] Encabezado `**Estado:**` de este doc actualizado al cerrar.
-- [ ] `git status` final: WIP ajeno intacto (staging quirúrgico verificado).
+- [x] Los 4 archivos de test backend (`flag`, `parser`, `git`, `endpoints`) verdes con los
+      comandos EXACTOS de §5 (34 casos en total: 6+14+6+8 — 6/25/6/8 ejecuciones reales con parametrize).
+- [x] `model.test.ts` verde (9 casos, 10 ejecuciones con sub-asserts) y `npx tsc --noEmit` exit 0.
+- [x] Con flag OFF: `/api/plans-board/list` y `/detail` → 404 `plans_board_disabled`;
+      `/health` → 200 `flag_enabled false` Y `next_free_number` numérico (v2, sin gate);
+      tab "Planes" ausente del nav; `test_harness_flags.py` sin regresión vs. la foto previa a F0 (53/53 ambas veces).
+- [x] Con flag ON sobre fixtures: estados, veredictos, drift, duplicados, `next_free_number`
+      y las 7 acciones de §4.3 EXACTOS (KPI-1/KPI-2) — cubierto por F1 (25 ejecuciones).
+- [x] El backend del feature no escribe NADA: único subprocess = el `git log` congelado de
+      F2 (verificado: `grep -n "subprocess" "Stacky Agents/backend/services/plans_board.py"`
+      solo matchea `collect_unpushed_docs`, y `grep -n "subprocess\|open(.*w" "Stacky Agents/backend/api/plans_board.py"` → 0 matches).
+- [x] Ratchet ps1/sh actualizados con los 4 archivos `test_plan128_*`.
+- [x] Encabezado `**Estado:**` de este doc actualizado al cerrar.
+- [x] `git status` final: WIP ajeno intacto (staging quirúrgico verificado; el worktree
+      `wt-plan-128` arrancó 100% limpio y cada fase se staged con pathspec explícito, nunca
+      `git add -A`).

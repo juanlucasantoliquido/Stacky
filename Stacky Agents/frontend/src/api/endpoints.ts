@@ -13,6 +13,7 @@ import type { PreflightCheck } from "../devops/preflightModel";
 import type { DoctorJob } from "../devops/doctorModel";
 import type { DocGraphResponse } from "../docs/docGraphModel";
 export type { DocGraphResponse };
+import type { BoardDto, PlanCardDto } from "../plansBoard/model"; // Plan 128
 import type {
   DbEnvironment,
   DbCompareHealth,
@@ -4091,4 +4092,21 @@ export const Integrations = {
       }`,
       {},
     ),
+};
+
+/** Plan 128 — Tablero de evolución de planes (solo lectura, gateado por STACKY_PLANS_BOARD_ENABLED). */
+export interface PlansBoardDetailDto {
+  ok: boolean;
+  plan: PlanCardDto;
+  duplicates: PlanCardDto[];
+  head_excerpt: string;
+}
+
+export const PlansBoard = {
+  /** Siempre 200; incluye next_free_number sin gate de flag. */
+  health: () => api.get<{ ok: boolean; flag_enabled: boolean; next_free_number: number | null }>("/api/plans-board/health"),
+  list: (refresh = false) =>
+    api.get<BoardDto>(`/api/plans-board/list${refresh ? "?refresh=1" : ""}`),
+  detail: (number: number) =>
+    api.get<PlansBoardDetailDto>(`/api/plans-board/detail/${number}`),
 };

@@ -1229,5 +1229,9 @@ class Config:
         "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 128 — Tablero de evolución de planes (default OFF, editable por UI) ──
+    STACKY_PLANS_BOARD_ENABLED: bool = os.getenv(
+        "STACKY_PLANS_BOARD_ENABLED", "false"
+    ).strip().lower() == "true"
 
 config = Config()

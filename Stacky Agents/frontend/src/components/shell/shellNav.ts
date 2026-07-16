@@ -5,7 +5,7 @@
 export type ShellTab =
   | "team" | "tickets" | "review" | "unblocker" | "pm" | "logs"
   | "settings" | "docs" | "memory" | "diagnostics" | "history"
-  | "migrador" | "devops" | "dbcompare" | "costcenter";
+  | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
 
 export interface ShellTabMeta {
   label: string;
@@ -27,6 +27,7 @@ export const TAB_META: Record<ShellTab, ShellTabMeta> = {
   migrador:    { label: "Migrador",      iconName: "ArrowRightLeft" },
   dbcompare:   { label: "Comparador BD", iconName: "Database" },
   costcenter:  { label: "Centro de Costos", iconName: "DollarSign" },
+  planes:      { label: "Planes",        iconName: "Compass" },
   settings:    { label: "Configuración", iconName: "Settings" },
 };
 
@@ -38,7 +39,7 @@ export interface ShellNavGroup {
 
 export const SHELL_NAV_GROUPS: ShellNavGroup[] = [
   { id: "trabajo",        label: "Trabajo",        tabs: ["team", "tickets", "review", "unblocker"] },
-  { id: "observabilidad", label: "Observabilidad", tabs: ["pm", "logs", "history", "diagnostics", "costcenter"] },
+  { id: "observabilidad", label: "Observabilidad", tabs: ["pm", "logs", "history", "diagnostics", "costcenter", "planes"] },
   { id: "conocimiento",   label: "Conocimiento",   tabs: ["docs", "memory"] },
   { id: "plataforma",     label: "Plataforma",     tabs: ["devops", "migrador", "dbcompare"] },
   { id: "configuracion",  label: "Configuración",  tabs: ["settings"] },
@@ -50,6 +51,7 @@ export interface VisibilityInput {
   devopsEnabled: boolean;
   dbCompareEnabled: boolean;
   costCenterEnabled: boolean;
+  planesEnabled: boolean;
 }
 
 // Tabs SIEMPRE visibles (espejo del render actual de App.tsx: no dependen de gate).
@@ -67,6 +69,7 @@ export function computeVisibleTabs(input: VisibilityInput): Set<ShellTab> {
   if (input.devopsEnabled) v.add("devops");
   if (input.dbCompareEnabled) v.add("dbcompare");
   if (input.costCenterEnabled) v.add("costcenter");
+  if (input.planesEnabled) v.add("planes");
   return v;
 }
 

@@ -1,0 +1,304 @@
+/* Plan 128 — Tablero de evolución de planes */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.subtitle {
+  color: var(--text-muted, #888);
+  font-size: 0.875rem;
+}
+
+.loading {
+  color: var(--text-muted, #888);
+  padding: 2rem;
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--danger, #e53935);
+  border-radius: 6px;
+  color: var(--danger, #e53935);
+}
+
+.retryBtn {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.heroCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  background: var(--bg-surface, #fff);
+  min-width: 90px;
+}
+
+.heroWarn {
+  border-color: #f59e0b;
+}
+
+.heroLabel {
+  font-size: 0.72rem;
+  color: var(--text-muted, #888);
+}
+
+.heroValue {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.chipCard {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 9999px;
+  font-size: 0.8rem;
+}
+
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+}
+
+.refreshBtn {
+  margin-left: auto;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.refreshBtn:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.filterInput {
+  flex: 1;
+  min-width: 220px;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  color: var(--text, #333);
+  font-size: 0.875rem;
+}
+
+.filterSelect {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  color: var(--text, #333);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.filterCheck {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #555);
+}
+
+.empty {
+  color: var(--text-muted, #888);
+  text-align: center;
+  padding: 3rem;
+  font-size: 0.9rem;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  background: var(--bg-header, #f5f5f5);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  border-bottom: 1px solid var(--border, #ddd);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.45rem 0.75rem;
+  vertical-align: middle;
+}
+
+.row {
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-light, #eee);
+  transition: background 0.12s;
+}
+
+.row:hover {
+  background: var(--bg-hover, #f9f9f9);
+}
+
+.dupBadge {
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.titleCell {
+  max-width: 360px;
+}
+
+.subCell {
+  color: var(--text-muted, #888);
+  font-size: 0.75rem;
+}
+
+.stateChip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.actionCell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.copyBtn {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.copyBtn:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.copyFailBanner {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  background: var(--danger, #e53935);
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 50;
+}
+
+.drawer {
+  width: min(480px, 100%);
+  height: 100%;
+  background: var(--bg-surface, #fff);
+  padding: 1.5rem;
+  overflow-y: auto;
+  position: relative;
+}
+
+.drawerClose {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  border: none;
+  background: transparent;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: var(--text-muted, #888);
+}
+
+.drawerCopyRow {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.dupWarning {
+  color: #f59e0b;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+}
+
+.headExcerpt {
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--bg-header, #f5f5f5);
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}

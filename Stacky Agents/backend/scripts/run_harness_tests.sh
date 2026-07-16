@@ -241,6 +241,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan120_executor.py
   tests/test_plan120_api.py
   tests/test_plan120_ai_diagnosis.py
+  # — Plan 128 · Tablero de evolución de planes (solo lectura) —
+  tests/test_plan128_plans_board_flag.py
+  tests/test_plan128_plans_board_parser.py
+  tests/test_plan128_plans_board_git.py
+  tests/test_plan128_plans_board_endpoints.py
   # — Plan 61 · Gate determinista del flujo funcional (Task) —
   tests/test_task_gate_flags.py
   tests/test_task_gate.py

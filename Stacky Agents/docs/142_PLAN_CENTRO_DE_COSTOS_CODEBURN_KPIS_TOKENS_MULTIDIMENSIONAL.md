@@ -1,6 +1,6 @@
 # Plan 142 — Centro de Costos + Codeburn: KPIs de tokens y USD multidimensionales
 
-> Estado: CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS (2026-07-15)
+> Estado: IMPLEMENTADO F0..F8 (2026-07-16, commit a24f8848) · CRITICADO v1→v2 previo: APROBADO-CON-CAMBIOS (2026-07-15)
 > Rama sugerida de trabajo: `plan-142-centro-de-costos`
 > Flag maestra: `STACKY_COST_CENTER_ENABLED` (default **ON**, activable/desactivable desde UI) — ver §3.7 y F3 para la justificación del cambio v2 (directiva operador: flags nuevas default ON salvo excepción dura; una vista read-only no califica para ninguna de las 4).
 > Runtime: 3 runtimes con paridad y fallback explícito (claude_code_cli / codex_cli / github_copilot)

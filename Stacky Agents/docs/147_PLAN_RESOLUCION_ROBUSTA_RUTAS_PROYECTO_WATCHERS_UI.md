@@ -1,6 +1,6 @@
 # 147 — Resolución robusta de rutas de proyecto + estado UI de watchers
 
-- **Estado:** CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
+- **Estado:** IMPLEMENTADO F0..F4 (2026-07-16, commit 057f72a5) · CRITICADO v1→v2 previo: APROBADO-CON-CAMBIOS
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8)
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)

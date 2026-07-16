@@ -1,6 +1,6 @@
 # Plan 146 — Fixes verificados de bajo esfuerzo: import `AgentExecution`, `mkdir` del ledger SQLite, contrato de `Config` fallback
 
-- **Estado:** CRITICADO v1→v2 · VEREDICTO: **APROBADO-CON-CAMBIOS**
+- **Estado:** IMPLEMENTADO F0..F4 (2026-07-16, commits 743f8c84/4e68db61) · CRITICADO v1→v2 previo: **APROBADO-CON-CAMBIOS**
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8)
 - **Crítica v2 (juez adversarial):** StackyArchitectaUltraEficientCode (perfil: normal, heredado de Opus 4.8) — 2026-07-15

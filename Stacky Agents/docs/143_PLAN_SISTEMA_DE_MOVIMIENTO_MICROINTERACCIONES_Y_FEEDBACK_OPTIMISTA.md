@@ -1,7 +1,7 @@
 # Plan 143 — Sistema de movimiento, micro-interacciones y feedback óptimista
 
 **Versión:** v2 (criticado 2026-07-15)
-**Estado:** CRITICADO v1→v2 · VEREDICTO: APROBADO-CON-CAMBIOS
+**Estado:** IMPLEMENTADO F0..F6 (2026-07-16, commit f64d01ff) · CRITICADO v1→v2 previo: APROBADO-CON-CAMBIOS
 **Autor:** StackyArchitectaUltraEficientCode
 
 ### CHANGELOG v1→v2 (juez adversarial; refs C#)

@@ -2447,19 +2447,39 @@ def _scan_pending_tasks_for_epic(repo_root: Path, ado_id: int) -> tuple[list[dic
     consumed: list[dict] = []
 
     for pt_file in iter_epic_pending_task_files(repo_root, ado_id):
+        raw_text: str | None = None
         try:
             # utf-8-sig tolera un BOM accidental (otra causa común de parse fallido).
-            payload = json.loads(pt_file.read_text(encoding="utf-8-sig"))
+            raw_text = pt_file.read_text(encoding="utf-8-sig")
+            payload = json.loads(raw_text)
         except Exception as exc:
             try:
                 rel_err = str(pt_file.relative_to(repo_root)).replace("\\", "/")
             except ValueError:
                 rel_err = str(pt_file)
+            reason_code = None
+            err_msg = str(exc)[:300]
+            # Plan 149 F4 — con el flag ON, rutear por intake para que el mensaje
+            # del board coincida EXACTAMENTE con el rechazo real del watcher
+            # (antes: json.loads plano acá vs. reparador de intake en el watcher,
+            # mensajes divergentes). Flag OFF ⇒ byte-idéntico al legacy.
+            if raw_text is not None and getattr(
+                config.config, "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", True
+            ):
+                from services import artifact_intake
+                res = artifact_intake.validate_and_normalize(
+                    raw=raw_text, kind="pending_task_json",
+                    ticket_context={"valid_ado_ids": [ado_id]},
+                )
+                if not res.ok:
+                    reason_code = res.reason_code
+                    err_msg = "; ".join(res.errors) or err_msg
             logger.warning("pending-task: no se pudo parsear %s: %s", pt_file, exc)
             parse_errors.append({
                 "rf_id": pt_file.parent.name,
                 "pending_task_path": rel_err,
-                "error": str(exc)[:300],
+                "error": err_msg,
+                "reason_code": reason_code,  # Plan 149 F4 — None con flag OFF (legacy)
             })
             continue
 
@@ -3868,6 +3888,68 @@ def _reset_stale_consumed_marker(
             operation_id, pt_file, exc,
         )
     return cleaned
+
+
+@bp.post("/reintake-pending-task")
+def reintake_pending_task():
+    """Plan 149 F5 — Re-procesa 1-click un pending-task.json (human-in-the-loop).
+
+    Body: {"pending_task_path": "<rel_al_repo>", "epic_ado_id": <int>, "project": <str?>}
+    - Valida por intake; si sigue inválido → 422 tipado con reason_code + errors.
+    - Si es válido → limpia la cuarentena de ese path y llama al create-child-task
+      idempotente existente. Devuelve el resultado.
+    """
+    from api.errors import ValidationError, ResourceNotFoundError, set_exec_id  # noqa: F401
+    if not getattr(config.config, "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", True):
+        abort(404)   # kill-switch: endpoint inerte
+
+    body = _body_json()
+    rel = (body.get("pending_task_path") or "").strip()
+    epic_ado_id = body.get("epic_ado_id")
+    if not rel or epic_ado_id is None:
+        raise ValidationError("pending_task_path y epic_ado_id son obligatorios")
+
+    repo_root, _scan = _resolve_artifact_repo_root(body)
+    pt_key = repo_root / rel                 # C3: MISMA forma que ve el watcher (sin .resolve())
+    pt_resolved = pt_key.resolve()           # solo para lectura + guard anti-traversal
+    # Guard anti path traversal: debe caer dentro del repo_root.
+    if repo_root.resolve() not in pt_resolved.parents:
+        raise ValidationError("pending_task_path fuera del repo")
+    if not pt_resolved.is_file():
+        raise ResourceNotFoundError(f"no existe el archivo: {rel}")
+
+    from services import artifact_intake
+    raw = pt_resolved.read_text(encoding="utf-8")
+    res = artifact_intake.validate_and_normalize(
+        raw=raw, kind="pending_task_json",
+        ticket_context={"valid_ado_ids": [int(epic_ado_id)]})
+    if not res.ok:
+        raise ValidationError(
+            "el pending-task.json sigue inválido; corregilo y reintentá",
+            details={"reason_code": res.reason_code, "errors": res.errors})
+
+    # C3 — Limpiar cuarentena vía helper público (clave derivada IGUAL que el
+    # watcher), para permitir también el reproceso del watcher. pt_key NO está
+    # .resolve()-eado.
+    from services.output_watcher import clear_quarantine
+    clear_quarantine(pt_key)
+
+    # Reusar el create-child-task idempotente (self-HTTP, mismo patrón que
+    # output_watcher._auto_create_pending_tasks).
+    import requests
+    port = getattr(config.config, "PORT", int(os.getenv("PORT", "5050")))
+    resp = requests.post(
+        f"http://127.0.0.1:{port}/api/tickets/by-ado/{int(epic_ado_id)}/create-child-task",
+        json={"pending_task_path": rel, "operator_reason": "re-intake 1-click (Plan 149)",
+              "completion_source": "operator_reintake",
+              **({"project": body["project"]} if body.get("project") else {})},
+        timeout=60)
+    out = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+    return jsonify({
+        "ok": resp.status_code == 200 and out.get("ok") is not False,
+        "create_child_task": out,
+        "status_code": resp.status_code,
+    }), (200 if resp.status_code == 200 else resp.status_code)
 
 
 @bp.post("/by-ado/<int:ado_id>/create-child-task")

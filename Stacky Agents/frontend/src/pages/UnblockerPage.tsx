@@ -210,6 +210,44 @@ function UnblockerCard({
     [_processFiles]
   );
 
+  // Plan 149 F5 — re-intake 1-click de un pending-task.json en cuarentena
+  // (human-in-the-loop: el operador lo dispara desde el board, nunca automático).
+  const reprocessPendingTask = useCallback(async (pendingTaskPath: string) => {
+    if (!item.ado_id) return;
+    setBusy(true);
+    setActionMessage("Re-procesando pending-task.json...");
+    try {
+      const result = await Tickets.reintakePendingTask({
+        pending_task_path: pendingTaskPath,
+        epic_ado_id: item.ado_id,
+        project: activeProjectName,
+      });
+      if (!result.ok) {
+        const reason =
+          result.details?.errors?.join("; ") || result.message || result.error ||
+          "el archivo sigue inválido";
+        throw new Error(reason);
+      }
+      // C7 — un 200 con create_child_task.ok=false es un fallo lógico blando
+      // (idempotente-consumed, etc.): surfacearlo igual, nunca asumir éxito
+      // solo por el status HTTP.
+      const cct = result.create_child_task as
+        | { ok?: boolean; message?: string; error?: string; task_ado_id?: number }
+        | undefined;
+      if (cct && cct.ok === false) {
+        throw new Error(cct.message || cct.error || "create-child-task no pudo completar la Task.");
+      }
+      setActionMessage(
+        cct?.task_ado_id ? `Task creada: ADO-${cct.task_ado_id}` : "Re-procesado correctamente."
+      );
+      onChanged();
+    } catch (err) {
+      setActionMessage((err as Error)?.message ?? "No se pudo re-procesar el archivo.");
+    } finally {
+      setBusy(false);
+    }
+  }, [item.ado_id, activeProjectName, onChanged]);
+
   return (
     <article
       className={`${styles.card} ${dropActive ? styles.cardDropActive : ""}`}
@@ -317,6 +355,29 @@ function UnblockerCard({
         <ul className={styles.blockers}>
           {item.blockers.map((b, i) => (
             <li key={i}>⚠ {b}</li>
+          ))}
+        </ul>
+      )}
+
+      {/* Plan 149 F4/F5 — pending-task.json rechazados por intake, con causa
+          exacta (reason_code) y botón de re-procesamiento 1-click. */}
+      {item.parse_errors.length > 0 && (
+        <ul className={styles.blockers}>
+          {item.parse_errors.map((pe) => (
+            <li key={`pe-${pe.rf_id}-${pe.pending_task_path}`}>
+              ⚠ {pe.rf_id}: {pe.error}
+              {pe.reason_code && (
+                <code className={styles.pathCode}> [{pe.reason_code}]</code>
+              )}
+              {" "}
+              <button
+                className={styles.actionBtn}
+                onClick={() => reprocessPendingTask(pe.pending_task_path)}
+                disabled={busy}
+              >
+                {busy ? "Procesando..." : "Re-procesar"}
+              </button>
+            </li>
           ))}
         </ul>
       )}

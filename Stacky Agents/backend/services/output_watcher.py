@@ -825,6 +825,11 @@ def _resolve_effective_epic_ado_id(
 # mtime), se reprocesa. Key: str(path) → st_mtime_ns.
 _SEEN_TERMINAL_PENDING: dict[str, int] = {}
 
+# Plan 149 F4 — retiene el motivo de cuarentena por path (mismo key que
+# _SEEN_TERMINAL_PENDING) para que el board Desatascador y el diag global (F7)
+# puedan mostrar la causa EXACTA en vez de solo el log.
+_QUARANTINE_REASON: dict[str, str] = {}
+
 # HTTP que indican un fallo ESTRUCTURAL del pending-task.json (no transitorio):
 # reintentar idéntico no ayuda hasta que el operador corrija el archivo/carpeta
 # (padre inexistente, jerarquía no soportada, schema/epic_id inválido). Los 5xx y
@@ -854,12 +859,35 @@ def _quarantine_pending_once(pt_file: Path, reason: str) -> bool:
     if _SEEN_TERMINAL_PENDING.get(key) == mtime_ns:
         return False  # ya logueado para este contenido
     _SEEN_TERMINAL_PENDING[key] = mtime_ns
+    _QUARANTINE_REASON[key] = reason
     logger.error(
         "output_watcher mode_a: pending-task con fallo terminal (se omite hasta "
         "corregir el archivo/carpeta) en %s: %s",
         pt_file, reason,
     )
     return True
+
+
+def quarantine_snapshot() -> dict[str, dict]:
+    """Plan 149 F4/F7 — Snapshot read-only de la cuarentena para diag/board.
+    path -> {reason, mtime_ns}."""
+    return {
+        k: {"reason": _QUARANTINE_REASON.get(k, ""), "mtime_ns": v}
+        for k, v in _SEEN_TERMINAL_PENDING.items()
+    }
+
+
+def clear_quarantine(pt_file: Path) -> bool:
+    """Plan 149 F5 (C3) — Limpia la cuarentena de UN path derivando la clave
+    EXACTAMENTE igual que _quarantine_pending_once (key = str(pt_file)). Devuelve
+    True si había algo que limpiar. Los callers DEBEN usar este helper en vez de
+    poppear el dict privado con un path resuelto aparte: en Windows
+    str((repo_root/rel).resolve()) puede divergir de cómo el watcher guardó la
+    clave, dejando el pop en un no-op silencioso."""
+    key = str(pt_file)
+    existed = _SEEN_TERMINAL_PENDING.pop(key, None) is not None
+    _QUARANTINE_REASON.pop(key, None)
+    return existed
 
 
 def _pending_is_quarantined(pt_file: Path) -> bool:

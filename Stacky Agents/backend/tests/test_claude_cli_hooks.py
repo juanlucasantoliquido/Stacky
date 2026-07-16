@@ -76,7 +76,9 @@ def test_validate_artifact_endpoint(client, tmp_path):
     body = r.get_json()
     assert body["valid"] is False
     assert body["kind"] == "pending_task"
-    assert any("JSON inválido" in e for e in body["errors"])
+    # Plan 149 F6 — el mensaje ahora se clasifica (empty/truncated/malformed) vía
+    # classify_json_failure; "{broken" (sin cierre) clasifica como "truncado".
+    assert any("truncad" in e for e in body["errors"])
 
     # archivo no-artifact → valid true, kind other
     other = tmp_path / "notas.md"

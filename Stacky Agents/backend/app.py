@@ -561,21 +561,70 @@ def create_app() -> Flask:
 
         HTTPExceptions (4xx / 5xx raised via abort()) are re-raised so that
         Flask handles them normally — we only intercept true 500s.
+
+        Plan 149 (V6): `StackyApiError` se mapea a su status+envelope tipado;
+        cualquier otra excepción sigue siendo un 500 (tipado si el flag está ON).
         """
         from werkzeug.exceptions import HTTPException
         if isinstance(exc, HTTPException):
-            return exc
+            return exc  # 4xx/5xx de abort() → Flask los maneja (sin cambio)
+
+        from api.errors import StackyApiError, build_error_envelope
+        # `config` ya es la INSTANCIA en este módulo (from config import config,
+        # import top-level) — leer el flag directo, sin `.config` (gotcha
+        # config-vs-config.config: acá NO hace falta el doble acceso).
+        typed_on = getattr(config, "STACKY_TYPED_ERROR_ENVELOPE_ENABLED", True)
+        rid = g.get("request_id", "")
+        exec_id = g.get("exec_id")  # F2 lo setea; None si el endpoint no lo declaró
+        endpoint, method = request.path, request.method
+        user = request.headers.get("X-User-Email", "anonymous")
+
+        if isinstance(exc, StackyApiError):
+            # C1 — Discriminar por severidad, NO por "es tipado":
+            #   • 4xx (validation/not_found/conflict) = error de CLIENTE esperado → WARNING sin traceback.
+            #   • 5xx (internal/upstream/integration_unavailable) = bug o fallo real de
+            #     dependencia que ops DEBE ver con detalle → ERROR con exc= (traceback vía __cause__).
+            # Sin esto, un bug envuelto en InternalError/UpstreamError quedaría mudo (Plan 135).
+            if exc.http_status >= 500:
+                stacky_logger.error(
+                    "http.middleware", "typed_api_error", exc=exc,
+                    error_type=exc.error_type, endpoint=endpoint, method=method,
+                    user=user, exec_id=exec_id, request_id=rid,
+                    tags=["http", "typed_error", exc.error_type],
+                )
+                logger.exception(
+                    "typed 5xx in %s %s [type=%s exec_id=%s]",
+                    method, endpoint, exc.error_type, exec_id,
+                )
+            else:
+                stacky_logger.warning(
+                    "http.middleware", "typed_api_error",
+                    error_type=exc.error_type, endpoint=endpoint, method=method,
+                    user=user, exec_id=exec_id, request_id=rid,
+                    tags=["http", "typed_error", exc.error_type],
+                )
+            if not typed_on:
+                return jsonify({"error": exc.message, "request_id": rid}), exc.http_status
+            env = build_error_envelope(
+                error_type=exc.error_type, message=exc.message, request_id=rid,
+                exec_id=exec_id, endpoint=endpoint, method=method, details=exc.details,
+            )
+            return jsonify(env), exc.http_status
+
+        # Excepción NO tipada: es un bug → mantener traceback completo (no tragarlo).
         stacky_logger.error(
-            "http.middleware",
-            "unhandled_exception",
-            exc=exc,
-            endpoint=request.path,
-            method=request.method,
-            user=request.headers.get("X-User-Email", "anonymous"),
-            tags=["http", "unhandled_exception"],
+            "http.middleware", "unhandled_exception", exc=exc,
+            endpoint=endpoint, method=method, user=user, exec_id=exec_id,
+            request_id=rid, tags=["http", "unhandled_exception"],
         )
-        logger.exception("unhandled exception in %s %s", request.method, request.path)
-        return jsonify({"error": "Internal server error", "request_id": g.get("request_id", "")}), 500
+        logger.exception("unhandled exception in %s %s [exec_id=%s]", method, endpoint, exec_id)
+        if not typed_on:
+            return jsonify({"error": "Internal server error", "request_id": rid}), 500
+        env = build_error_envelope(
+            error_type="internal", message="Internal server error", request_id=rid,
+            exec_id=exec_id, endpoint=endpoint, method=method,
+        )
+        return jsonify(env), 500
 
     if dist_dir is not None:
         dist_path = Path(dist_dir)

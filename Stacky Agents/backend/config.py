@@ -1174,5 +1174,17 @@ class Config:
         "STACKY_INTEGRATION_DEGRADATION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 149 F0 — Envelope de errores tipado (V6). Default ON (kill-switch).
+    # Espejo del default=True de la FlagSpec homónima.
+    STACKY_TYPED_ERROR_ENVELOPE_ENABLED: bool = os.getenv(
+        "STACKY_TYPED_ERROR_ENVELOPE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 149 F4 — Superficie de cuarentena de intake en Desatascador. Default ON
+    # (kill-switch). Espejo del default=True de la FlagSpec homónima.
+    STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED: bool = os.getenv(
+        "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
 
 config = Config()

@@ -495,11 +495,24 @@ def run():
             from services import run_slots
             run_slots.release()
         abort(400, f"unknown agent_type: {agent_type}")
+    except (RuntimeError, ValueError) as exc:
+        # Plan 149 F2 (C1) — fallos ESPERADOS de config/estado inválido del
+        # dispatcher: tipar como InternalError correlacionado. NO agregar
+        # `except Exception`: un bug (p.ej. AttributeError) DEBE propagar a F1
+        # y loguearse a ERROR con traceback, no volverse un InternalError "esperado".
+        if _slot_held:
+            from services import run_slots
+            run_slots.release()
+        from api.errors import InternalError
+        raise InternalError(f"fallo al lanzar el run: {exc}") from exc
     except Exception:
         if _slot_held:
             from services import run_slots
             run_slots.release()
         raise
+
+    from api.errors import set_exec_id
+    set_exec_id(execution_id)  # Plan 149 F2 — correlación exec_id en el envelope de error
 
     resp_body = {
         "execution_id": execution_id,

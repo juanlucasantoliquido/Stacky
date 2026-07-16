@@ -80,16 +80,26 @@ def exec_route():
                 if meta.get("write_enabled") and meta.get("server_alias") == alias:
                     mode = "write"
 
-    # Ejecutar
+    # Ejecutar. Plan 149 F2 (C1): solo los fallos ESPERADOS de transporte se tipan
+    # como UpstreamError (502); cualquier OTRA excepción propaga a F1 → 500 ERROR
+    # con traceback, NO se enmascara como upstream "esperado".
     from services.remote_exec import run_remote
-    result = run_remote(
-        alias,
-        command,
-        mode=mode,
-        conversation_id=conversation_id,
-        user=current_user(),
-        timeout_s=timeout_s,
-    )
+    try:
+        result = run_remote(
+            alias,
+            command,
+            mode=mode,
+            conversation_id=conversation_id,
+            user=current_user(),
+            timeout_s=timeout_s,
+        )
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        from api.errors import UpstreamError
+        raise UpstreamError(f"remote_exec inaccesible: {exc}") from exc
+
+    if conversation_id:
+        from api.errors import set_exec_id
+        set_exec_id(conversation_id)   # correlación por conversación
 
     # Mapeo HTTP
     if not result["ok"]:
@@ -226,6 +236,9 @@ def create_conversation():
     if launch_error is not None:
         return launch_error
 
+    from api.errors import set_exec_id
+    set_exec_id(execution_id)  # Plan 149 F2 — correlación exec_id
+
     return jsonify({
         "ok": True,
         "conversation_id": cid,
@@ -284,6 +297,8 @@ def conversation_message(cid: int):
             else:
                 from services.codex_cli_runner import send_input
             result = send_input(last_id, message, user=current_user())
+            from api.errors import set_exec_id
+            set_exec_id(last_id)  # Plan 149 F2 — correlación exec_id
             return jsonify({
                 "ok": True,
                 "mode": result.get("mode", "stdin"),
@@ -322,6 +337,9 @@ def conversation_message(cid: int):
     )
     if launch_error is not None:
         return launch_error
+
+    from api.errors import set_exec_id
+    set_exec_id(execution_id)  # Plan 149 F2 — correlación exec_id
 
     return jsonify({"ok": True, "execution_id": execution_id}), 202
 
@@ -378,41 +396,48 @@ def list_conversations():
     from models import AgentExecution
 
     result = []
-    with session_scope() as session:
-        stmt = select(Ticket).where(
-            Ticket.ado_id == _CONSOLE_ADO_ID,
-        ).order_by(Ticket.created_at.desc())
-        tickets = session.execute(stmt).scalars().all()
+    # Plan 149 F2 — el session_scope de lectura es el endpoint con más unhandled
+    # del reporte; un fallo de DB acá es infraestructura (no un bug de lógica),
+    # tiparlo InternalError correlacionado en vez de dejarlo caer al 500 mudo.
+    try:
+        with session_scope() as session:
+            stmt = select(Ticket).where(
+                Ticket.ado_id == _CONSOLE_ADO_ID,
+            ).order_by(Ticket.created_at.desc())
+            tickets = session.execute(stmt).scalars().all()
 
-        # Construir items COMPLETOS DENTRO de session_scope (C1 v2)
-        for t in tickets:
-            meta = _conv_meta(t)
-            if meta.get("server_alias") != server_alias:
-                continue
+            # Construir items COMPLETOS DENTRO de session_scope (C1 v2)
+            for t in tickets:
+                meta = _conv_meta(t)
+                if meta.get("server_alias") != server_alias:
+                    continue
 
-            item = {
-                "id": t.id,
-                "title": t.title,
-                "ado_state": t.ado_state,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-                "server_alias": meta.get("server_alias"),
-                "write_enabled": meta.get("write_enabled", False),
-            }
-
-            # Último execution con query correcto (patrón plan 90)
-            last = (
-                session.query(AgentExecution)
-                .filter(AgentExecution.ticket_id == t.id)
-                .filter(AgentExecution.agent_type == "devops")
-                .order_by(AgentExecution.id.desc())
-                .first()
-            )
-            if last is not None:
-                item["last_execution"] = {
-                    "id": last.id,
-                    "status": last.status,  # "status", no "state"
+                item = {
+                    "id": t.id,
+                    "title": t.title,
+                    "ado_state": t.ado_state,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                    "server_alias": meta.get("server_alias"),
+                    "write_enabled": meta.get("write_enabled", False),
                 }
 
-            result.append(item)
+                # Último execution con query correcto (patrón plan 90)
+                last = (
+                    session.query(AgentExecution)
+                    .filter(AgentExecution.ticket_id == t.id)
+                    .filter(AgentExecution.agent_type == "devops")
+                    .order_by(AgentExecution.id.desc())
+                    .first()
+                )
+                if last is not None:
+                    item["last_execution"] = {
+                        "id": last.id,
+                        "status": last.status,  # "status", no "state"
+                    }
+
+                result.append(item)
+    except Exception as exc:
+        from api.errors import InternalError
+        raise InternalError(f"fallo al listar conversaciones: {exc}") from exc
 
     return jsonify(result), 200

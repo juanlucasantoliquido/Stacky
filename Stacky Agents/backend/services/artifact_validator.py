@@ -148,11 +148,19 @@ def validate_pending_task_file(path: Path | str, *, check_db: bool = True) -> Ar
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
+        # Plan 149 F6 — alinear el mensaje con la clasificación de F3
+        # (classify_json_failure, símbolo público compartido con artifact_intake).
+        from services.artifact_intake import classify_json_failure
+        code = classify_json_failure(raw)
         result.valid = False
-        result.errors.append(
-            f"JSON inválido (línea {exc.lineno}, col {exc.colno}): {exc.msg}. "
-            "Reescribí el archivo completo con JSON válido (sin comentarios ni comas finales)."
-        )
+        result.errors.append({
+            "empty": "el archivo está vacío; escribí el pending-task.json completo antes de terminar.",
+            "truncated": "el JSON quedó truncado (objeto sin cerrar); reescribí el archivo completo.",
+            "malformed": (
+                f"JSON inválido (línea {exc.lineno}, col {exc.colno}): {exc.msg}. "
+                "Reescribí el archivo completo."
+            ),
+        }[code])
         return result
 
     if not isinstance(payload, dict):

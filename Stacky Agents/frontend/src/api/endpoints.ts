@@ -307,6 +307,18 @@ export const Tickets = {
     return api.get<UnblockerBoardResponse>(`/api/tickets/unblocker-board${qs ? `?${qs}` : ""}`);
   },
 
+  /**
+   * Plan 149 F5 — Re-procesa 1-click un pending-task.json en cuarentena:
+   * valida por intake y, si es válido, reusa create-child-task idempotente.
+   * POST /api/tickets/reintake-pending-task (human-in-the-loop, opt-in).
+   */
+  reintakePendingTask: (payload: {
+    pending_task_path: string;
+    epic_ado_id: number;
+    project?: string | null;
+  }): Promise<ReintakePendingTaskResponse> =>
+    api.post<ReintakePendingTaskResponse>(`/api/tickets/reintake-pending-task`, payload),
+
   rescueArtifact: (
     adoId: number,
     payload: {
@@ -469,6 +481,21 @@ export interface UnblockerParseError {
   rf_id: string;
   pending_task_path: string;
   error: string;
+  // Plan 149 F4 — causa exacta del rechazo de intake ("empty"|"truncated"|
+  // "malformed"|"schema"|"anti_ordinal"); null con el kill-switch OFF (legacy).
+  reason_code?: string | null;
+}
+
+// Plan 149 F5 — re-intake 1-click de un pending-task.json en cuarentena.
+export interface ReintakePendingTaskResponse {
+  ok: boolean;
+  create_child_task?: Record<string, unknown>;
+  status_code?: number;
+  // Envelope tipado (Plan 149 F0/F1) cuando la respuesta es un error 4xx/5xx.
+  error?: string;
+  error_type?: string;
+  message?: string;
+  details?: { reason_code?: string | null; errors?: string[] };
 }
 
 // Fix ADO-241: pending-task consumido cuya Task fue borrada en ADO. El archivo

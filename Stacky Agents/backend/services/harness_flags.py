@@ -236,6 +236,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TRANSIENT_RUN_RETRY_ENABLED", "STACKY_TRANSIENT_RUN_RETRY_MAX",
         "STACKY_ARTIFACT_INTAKE_ENABLED", "STACKY_ARTIFACT_RESCUE_ENABLED",
         "STACKY_INTEGRATION_DEGRADATION_ENABLED",  # Plan 148 — degradacion de integraciones
+        "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",  # Plan 149 F4 — cuarentena intake en board
     ),
     "observabilidad_notif": (
         "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
@@ -249,6 +250,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
+        "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -716,6 +718,35 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
         default=True,  # Grupo A — validación/reparación determinista anti-ordinal (causa raíz task-not-created).
+    ),
+    # ── Plan 149 F0 — Envelope de errores tipado (V6) ───────────────────────────
+    FlagSpec(
+        key="STACKY_TYPED_ERROR_ENVELOPE_ENABLED",
+        type="bool",
+        label="Envelope de errores tipado (API)",
+        description=(
+            "Plan 149 — Si ON, los errores no atrapados se devuelven como "
+            "envelope tipado {error_type, message, request_id, exec_id} en vez "
+            "de un 500 mudo. OFF = respuesta legacy byte-idéntica."
+        ),
+        group="global",
+        env_only=True,
+        default=True,
+    ),
+    # ── Plan 149 F4 — Superficie de cuarentena de intake en Desatascador ───────
+    FlagSpec(
+        key="STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",
+        type="bool",
+        label="Superficie de cuarentena de intake en Desatascador",
+        description=(
+            "Plan 149 — Si ON, el board Desatascador muestra pending-task.json "
+            "rechazados por intake con su causa exacta (reason_code) y habilita "
+            "el re-procesamiento 1-click. OFF = comportamiento legacy (json.loads "
+            "plano)."
+        ),
+        group="global",
+        env_only=True,
+        default=True,
     ),
     # ── V1.2 — Smart dispatch v1 (advisor) ─────────────────────────────────────
     FlagSpec(

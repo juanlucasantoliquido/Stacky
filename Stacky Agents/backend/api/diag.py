@@ -181,6 +181,23 @@ def output_watcher_stats():
     })
 
 
+@bp.get("/intake-quarantine")
+def intake_quarantine():
+    """Plan 149 F7 — Snapshot read-only GLOBAL de la cuarentena de intake.
+
+    Complementa el board Desatascador (epic-scoped) con una vista total, incluidos
+    archivos cuya Epic no resuelve. Read-only, sin efectos. Gobernado por el mismo
+    kill-switch que la superficie del board (F4), sin flag nueva.
+    """
+    if not getattr(_config.config, "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", True):
+        return jsonify({"enabled": False, "items": []})
+    from services.output_watcher import quarantine_snapshot
+    snap = quarantine_snapshot()
+    items = [{"path": k, "reason": v.get("reason", ""), "mtime_ns": v.get("mtime_ns")}
+              for k, v in snap.items()]
+    return jsonify({"enabled": True, "count": len(items), "items": items})
+
+
 @bp.get("/metrics")
 def metrics():
     """Métricas operacionales del lifecycle de ejecuciones.

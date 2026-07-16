@@ -637,6 +637,12 @@ _CURATED_DEFAULTS_ON = {
     # Plan 148 — Degradación explícita de integraciones no configuradas: kill-switch
     # default ON (breaker + 200-en-vez-de-502; OFF revierte byte-a-byte).
     "STACKY_INTEGRATION_DEGRADATION_ENABLED",
+    # Plan 149 F0 — Envelope de errores tipado: kill-switch default ON (OFF revierte
+    # a forma legacy byte-idéntica).
+    "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",
+    # Plan 149 F4 — Superficie de cuarentena de intake en Desatascador: kill-switch
+    # default ON (OFF revierte a json.loads plano, legacy byte-idéntico).
+    "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",
 }
 
 

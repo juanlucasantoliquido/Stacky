@@ -37,6 +37,9 @@ class IntakeResult:
     repaired: bool
     repairs: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Plan 149 F3 — causa exacta del rechazo (None si ok=True):
+    # "empty" | "truncated" | "malformed" | "schema" | "anti_ordinal"
+    reason_code: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -44,7 +47,24 @@ class IntakeResult:
             "repaired": self.repaired,
             "repairs": list(self.repairs),
             "errors": list(self.errors),
+            "reason_code": self.reason_code,
         }
+
+
+def classify_json_failure(text: str) -> str:
+    """Clasifica un JSON no parseable: 'empty' | 'truncated' | 'malformed'.
+
+    Contrato compartido (C8, símbolo público): lo consumen artifact_intake (F3)
+    y artifact_validator (F6). Heurística conservadora: 'empty' es exacto;
+    'truncated' vs 'malformed' solo afecta el TEXTO del mensaje, nunca ok/valid.
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return "empty"
+    # más '{' que '}' ⇒ objeto sin cerrar ⇒ escritura truncada
+    if stripped.count("{") > stripped.count("}"):
+        return "truncated"
+    return "malformed"
 
 
 def validate_and_normalize(
@@ -111,29 +131,48 @@ def _intake_pending_task(raw: str, ticket_context: dict) -> IntakeResult:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
-        return IntakeResult(
-            ok=False, normalized=None, repaired=bool(repairs), repairs=repairs,
-            errors=[
+        # Plan 149 F3 — clasificar la causa exacta (empty/truncated/malformed)
+        # con mensaje accionable distinto por clase.
+        code = classify_json_failure(text)
+        hint = {
+            "empty": (
+                "el archivo está vacío o solo tiene espacios; el agente no llegó "
+                "a escribir el contenido. Reescribí el pending-task.json completo."
+            ),
+            "truncated": (
+                "el JSON quedó truncado (objeto sin cerrar); probablemente la "
+                "escritura se cortó. Reescribí el archivo completo con JSON válido."
+            ),
+            "malformed": (
                 f"JSON inválido tras reparaciones (línea {exc.lineno}, col {exc.colno}): "
                 f"{exc.msg}. Reescribí el archivo completo con JSON válido."
-            ],
+            ),
+        }[code]
+        return IntakeResult(
+            ok=False, normalized=None, repaired=bool(repairs), repairs=repairs,
+            errors=[hint], reason_code=code,
         )
 
     if not isinstance(payload, dict):
         return IntakeResult(
             ok=False, normalized=None, repaired=bool(repairs), repairs=repairs,
             errors=["el JSON raíz debe ser un objeto, no una lista/escalar"],
+            reason_code="malformed",
         )
 
     # schema (reusa el contrato canónico de artifact_validator)
-    errors = _validate_schema(payload)
+    schema_errors = _validate_schema(payload)
     # regla anti-ordinal (ids referenciados deben existir en el contexto real)
-    errors += _validate_anti_ordinal(payload, ticket_context)
+    anti_ordinal_errors = _validate_anti_ordinal(payload, ticket_context)
+    errors = schema_errors + anti_ordinal_errors
 
     if errors:
+        # Aditivo (C-plan F3 paso 4): schema tiene prioridad si ambos fallan
+        # (campos faltantes es más fundamental que una referencia ordinal).
+        reason_code = "schema" if schema_errors else "anti_ordinal"
         return IntakeResult(
             ok=False, normalized=None, repaired=bool(repairs), repairs=repairs,
-            errors=errors,
+            errors=errors, reason_code=reason_code,
         )
 
     return IntakeResult(

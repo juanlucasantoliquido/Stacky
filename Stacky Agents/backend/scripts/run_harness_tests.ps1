@@ -346,6 +346,12 @@ $HarnessTestFiles = @(
   "tests/test_plan148_jira_sync_breaker.py"
   "tests/test_plan148_graceful_degradation.py"
   "tests/test_plan148_integrations_api.py"
+  # Plan 149 - Robustez de intake de artefactos + excepciones tipadas en endpoints
+  "tests/test_plan149_flags.py"
+  "tests/test_plan149_typed_errors.py"
+  "tests/test_plan149_intake_reason_codes.py"
+  "tests/test_plan149_intake_quarantine_surface.py"
+  "tests/test_plan149_prewrite_hook_message.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

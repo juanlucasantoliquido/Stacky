@@ -98,6 +98,7 @@ $HarnessTestFiles = @(
   "tests/test_ado_edit_ledger.py",
   "tests/test_ado_edit_learning.py",
   "tests/test_ado_edit_sweep.py",
+  "tests/test_plan146_verified_fixes.py",
   "tests/test_plan81_negative_golden_from_edits.py",
   # Plan 87 - Panel DevOps: creador gráfico de pipelines
   "tests/test_plan87_devops_flag.py",

@@ -256,11 +256,12 @@ def sweep_recent_runs(
     try:
         # En producción: leer runs de la DB viva
         if _db_runs is None:
-            from models import Execution, session_scope
+            from models import AgentExecution
+            from db import session_scope
             with session_scope() as db:
                 raw_runs = (
-                    db.query(Execution)
-                    .order_by(Execution.id.desc())
+                    db.query(AgentExecution)
+                    .order_by(AgentExecution.id.desc())
                     .limit(_SWEEP_RUN_LIMIT)
                     .all()
                 )
@@ -269,11 +270,20 @@ def sweep_recent_runs(
 
         for run in raw_runs:
             try:
-                meta = (
-                    run.metadata
-                    if isinstance(run.metadata, dict)
-                    else json.loads(run.metadata or "{}")
-                )
+                # Accessor CANÓNICO de AgentExecution: la property .metadata_dict
+                # (models.py:259-261) hace _json_loads(self.metadata_json) or {}.
+                # Preferirla evita reimplementar el decode y nunca toca el objeto
+                # MetaData de SQLAlchemy expuesto en .metadata.
+                meta = getattr(run, "metadata_dict", None)
+                if not isinstance(meta, dict):
+                    # Fallback para el _FakeRun de test_ado_edit_sweep.py (expone
+                    # .metadata dict, sin la property canónica) y para formas que
+                    # solo traen la columna cruda metadata_json.
+                    raw_meta = getattr(run, "metadata_json", None)
+                    if not isinstance(raw_meta, (str, bytes)):
+                        _m = getattr(run, "metadata", None)
+                        raw_meta = _m if isinstance(_m, (str, dict)) else None
+                    meta = raw_meta if isinstance(raw_meta, dict) else json.loads(raw_meta or "{}")
             except Exception:
                 meta = {}
 

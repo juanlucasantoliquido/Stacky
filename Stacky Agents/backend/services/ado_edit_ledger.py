@@ -11,12 +11,62 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger("stacky_agents.services.ado_edit_ledger")
 
 _TABLE = "ado_edit_learned"
+
+# C3 — dedup de warnings de SQLite POR FIRMA (no un booleano global de un solo
+# disparo). Un booleano único silenciaría PARA SIEMPRE cualquier fallo nuevo o
+# persistente posterior; el dedup por firma re-emite ante un error distinto y
+# a lo sumo una vez por intervalo. Semántica idéntica a
+# services/log_throttle.log_throttled (Plan 145): cuando 145 aterrice, migrar
+# es reemplazar este helper por una llamada (ver cross-ref al final de F2).
+_SQLITE_WARN_STATE: dict[str, float] = {}   # firma -> ts monotónico del último warning
+_SQLITE_WARN_INTERVAL_S = 300.0             # re-emite una firma a lo sumo cada 5 min
+
+
+def _connect() -> "sqlite3.Connection":
+    """Abre la DB SQLite del ledger garantizando el directorio padre.
+
+    Centraliza TODA apertura de conexión: crea el dir padre (mkdir -p) antes
+    de conectar para evitar 'unable to open database file' cuando data_dir()
+    aún no existe. (Causa raíz de la resolución de rutas: ver Plan 147.)
+    """
+    db_path = _get_db_path()
+    try:
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass  # si el mkdir falla, la connect de abajo reporta el error real
+    return sqlite3.connect(db_path)
+
+
+def _warn_sqlite_unavailable(where: str, exc: Exception) -> None:
+    """Loguea con dedup POR FIRMA (tipo + mensaje de la excepción) y throttle.
+
+    - Firma nueva (fallo distinto)  -> WARNING una vez.
+    - Misma firma dentro del intervalo -> DEBUG (silenciado, no oculto).
+    - Misma firma tras _SQLITE_WARN_INTERVAL_S -> vuelve a WARNING (heartbeat),
+      para que un fallo PERSISTENTE no desaparezca de los logs para siempre.
+    La firma NO incluye `where` a propósito: el mismo error desde 4 call-sites
+    colapsa a 1 warning (cumple el KPI 42 -> <=1), pero un error de otra causa
+    (p. ej. 'disk image is malformed') sí aflora.
+    """
+    sig = f"{type(exc).__name__}:{exc}"
+    now = time.monotonic()
+    last = _SQLITE_WARN_STATE.get(sig)
+    if last is None or (now - last) >= _SQLITE_WARN_INTERVAL_S:
+        _SQLITE_WARN_STATE[sig] = now
+        logger.warning(
+            "ado_edit_ledger: SQLite no disponible (%s): %s — degradando a "
+            "JSONL. Repeticiones de esta firma se omiten por %ss.",
+            where, exc, int(_SQLITE_WARN_INTERVAL_S),
+        )
+    else:
+        logger.debug("ado_edit_ledger: SQLite falló (%s): %s", where, exc)
 
 
 def _get_db_path() -> str:
@@ -34,7 +84,7 @@ def _get_jsonl_path() -> Path:
 def _create_table_if_needed() -> None:
     """Crea la tabla si no existe. Se llama en cada punto de entrada (idempotente)."""
     try:
-        con = sqlite3.connect(_get_db_path())
+        con = _connect()
         con.execute(
             f"CREATE TABLE IF NOT EXISTS {_TABLE} ("
             "ado_id INTEGER NOT NULL, "
@@ -47,7 +97,7 @@ def _create_table_if_needed() -> None:
         con.commit()
         con.close()
     except Exception as exc:
-        logger.warning("ado_edit_ledger: no se pudo crear tabla SQLite: %s", exc)
+        _warn_sqlite_unavailable("create_table", exc)
 
 
 def _read_jsonl() -> set[tuple[int, int]]:
@@ -97,14 +147,14 @@ def already_learned(ado_id: int, rev: int) -> bool:
     """
     _create_table_if_needed()
     try:
-        con = sqlite3.connect(_get_db_path())
+        con = _connect()
         row = con.execute(
             f"SELECT 1 FROM {_TABLE} WHERE ado_id=? AND rev=?", (ado_id, rev)
         ).fetchone()
         con.close()
         return row is not None
     except Exception as exc:
-        logger.warning("ado_edit_ledger: SQLite falló en already_learned: %s", exc)
+        _warn_sqlite_unavailable("already_learned", exc)
         # Fallback: JSONL
         try:
             return (ado_id, rev) in _read_jsonl()
@@ -118,7 +168,7 @@ def mark_learned(ado_id: int, rev: int, run_id: str | None) -> None:
     ts = datetime.now(timezone.utc).isoformat()
     db_ok = False
     try:
-        con = sqlite3.connect(_get_db_path())
+        con = _connect()
         con.execute(
             f"INSERT OR IGNORE INTO {_TABLE} (ado_id, rev, run_id, learned_at) VALUES (?,?,?,?)",
             (ado_id, rev, run_id, ts),
@@ -127,7 +177,7 @@ def mark_learned(ado_id: int, rev: int, run_id: str | None) -> None:
         con.close()
         db_ok = True
     except Exception as exc:
-        logger.warning("ado_edit_ledger: SQLite falló en mark_learned: %s", exc)
+        _warn_sqlite_unavailable("mark_learned", exc)
 
     # Siempre escribir JSONL (best-effort doble barrera)
     _append_jsonl(ado_id, rev, run_id)
@@ -140,13 +190,13 @@ def processed_revs_for(ado_id: int) -> set[int]:
     """Devuelve el set de revs ya aprendidas para el ado_id dado."""
     _create_table_if_needed()
     try:
-        con = sqlite3.connect(_get_db_path())
+        con = _connect()
         rows = con.execute(
             f"SELECT rev FROM {_TABLE} WHERE ado_id=?", (ado_id,)
         ).fetchall()
         con.close()
         return {int(r[0]) for r in rows}
     except Exception as exc:
-        logger.warning("ado_edit_ledger: SQLite falló en processed_revs_for: %s", exc)
+        _warn_sqlite_unavailable("processed_revs_for", exc)
         # Fallback JSONL
         return {rev for (ai, rev) in _read_jsonl() if ai == ado_id}

@@ -1,13 +1,24 @@
 # Plan 152 — Centro de notificaciones / actividad unificado
 
-> **Estado:** PROPUESTO v1 · **Autor:** StackyArchitectaUltraEficientCode · **Fecha:** 2026-07-15
-> **Serie UX/UI:** aterriza DESPUÉS de 134→(138→139→140→141→143), idealmente tras 135 y 142.
-> **Depende de (reuso, no reimplementación):** 134 (infra de runs `activeRuns.ts`/`useActiveRunsGlobal` — YA existe), 139 (TopBar donde vive la campana), 140 (`EmptyState`/`Skeleton` para vacío/carga), 143 (tokens `--transition-*` + `prefers-reduced-motion` de 141), 135 (fuente de errores, pub/sub), 142 (fuente de costos, pub/sub).
-> **Runtimes:** 100% frontend (presentación + reuso de la infra existente) ⇒ idéntico en Codex, Claude Code y GitHub Copilot Pro.
-> **Flag:** `STACKY_NOTIFICATION_CENTER_ENABLED` — **default ON** (UI aditiva, opt-out). Ninguna de las 4 excepciones duras aplica (§4.4).
-> **Backend nuevo:** NINGÚN endpoint/ruta/streaming/persistencia nuevos. El único toque backend es el registro canónico del flag (config pura, F3), gateado vía el endpoint EXISTENTE `/api/harness-flags`.
+> **Estado:** CRITICADO v2 · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (adversarial) · **Versión:** v1 -> v2 (criticado 2026-07-16)
+> **Serie UX/UI:** las series 131-141, 142-143 y 144-149 están **IMPLEMENTADAS** (verificado en árbol 2026-07-16). Este plan aterriza sobre infra REAL, no sobre planes en papel.
+> **Depende de (reuso, no reimplementación — TODO existe hoy):** 134 (`activeRuns.ts`/`useActiveRunsGlobal`), 138 (primitivas `ui/IconButton.tsx`, `ui/Skeleton.tsx`), 140 (`EmptyState.tsx`), 141/143 (tokens tema+motion en `theme.css`), 135 (`PageErrorBoundary.tsx`, `Toast.tsx`), 142 (`CostCapIndicator.tsx`).
+> **Runtimes:** 100% frontend (presentación + reuso de la infra existente) ⇒ idéntico en Codex, Claude Code y GitHub Copilot Pro. Sin dependencia de SSE; el refresco es el polling react-query ya existente.
+> **Flag:** `STACKY_NOTIFICATION_CENTER_ENABLED` — **default ON** (UI aditiva, opt-out por `HarnessFlagsPanel`). Ninguna de las 4 excepciones duras aplica (§4.4).
+> **Backend nuevo:** NINGÚN endpoint/ruta/streaming/persistencia nuevos. Único toque backend: registro canónico del flag (config pura, F3), leído vía el endpoint EXISTENTE `/api/harness-flags`.
 
-> **NOTA DE NUMERACIÓN (resuelta).** Este plan se propuso originalmente como **146**, pero ese número —y toda la franja **144–149**— ya estaba tomado en disco por una serie concurrente de confiabilidad/observabilidad de OTRA sesión (`docs/146_PLAN_FIXES_VERIFICADOS_IMPORT_LEDGER_FALLBACK_CONTRATOS.md` y hermanos, derivados de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`). El orquestador **renumeró este plan a 152** (y a sus hermanos UX/UI a **150 = densidad/responsive** y **151 = onboarding**), **sin tocar** la serie ajena 144–149. Todas las referencias internas ya están actualizadas a **152**. Ver §7 R9.
+## CHANGELOG v1 -> v2 (crítica adversarial 2026-07-16)
+
+- **C1 (IMPORTANTE, premisas stale):** v1 trataba 135/140/142/143 como "en papel" y diseñaba degradaciones (`<button>` propio en vez de `IconButton`, placeholder en vez de `Skeleton`, tokens "que pueden faltar"). HOY todo existe (verificado: `frontend/src/components/ui/IconButton.tsx`, `ui/Skeleton.tsx`, `EmptyState.tsx`, `PageErrorBoundary.tsx`, `Toast.tsx`, `CostCapIndicator.tsx`). v2 REUSA las primitivas reales (F4) y elimina los branches de degradación de 138/140/143. La degradación honesta §4.5 queda SOLO como contrato de extensibilidad futura de `kind`s.
+- **C2 (IMPORTANTE, flag OFF no gateaba la captura):** v1 decía "la captura corre siempre". Con flag OFF eso disparaba `Executions.byId` + escrituras a localStorage de una feature apagada (degrada red/CPU). v2: `useRunActivityCapture(enabled: boolean)` con early-return.
+- **C3 (IMPORTANTE, anclas de línea stale):** el árbol cambió desde v1 (sesión concurrente). Re-anclado: `useGlobalExecutionNotifier()` en `App.tsx:99` (no :70), `<TopBar ... shellV2={...}/>` en `App.tsx:245` (no :158), `styles.actions` en `TopBar.tsx:202`, `<CostCapIndicator/>` en `:211`, `FLAG_REGISTRY` en `harness_flags.py:309` (no :295), `_CATEGORY_KEYS` en `:117` (no :114), `HarnessFlags.list` en `endpoints.ts:908` (no :873). Regla v2: anclar ediciones por TEXTO normativo; los números de línea son referencia del día, no ancla.
+- **C4 (IMPORTANTE, vaguedad de categoría):** v1 decía "si no fuera `capacidades_optin`, usar la más cercana" (frase vaga prohibida). Verificado: `capacidades_optin` EXISTE (`harness_flags.py:103`). v2 la fija literal, sin alternativa.
+- **C5 (IMPORTANTE, ratchet uiDebtRatchet omitido):** F4 crea .tsx nuevos y v1 no citaba el gate real del plan 138. v2 agrega **KPI-7**: `npx vitest run src/__tests__/uiDebtRatchet.test.ts` → exit 0, y la regla dura: 0 `style={}` inline en los .tsx nuevos (todo en `.module.css` con tokens; para anchos dinámicos usar ref+effect imperativo, gotcha conocido).
+- **C6 (MENOR, venv ambiguo):** "venv del repo" no es literal para modelos menores. Verificado: el venv real es `N:\GIT\RS\STACKY\Stacky\.venv`. v2 fija el comando exacto (KPI-5).
+- **C7 (MENOR, gotcha grep-gate propio):** KPI-6 grepea `setInterval|new EventSource|fetch\(` sobre los archivos nuevos. v2 agrega la regla: los COMENTARIOS de esos archivos tienen PROHIBIDO contener esos literales (gotcha recurrente comentario-choca-con-su-gate, 6 ocurrencias históricas).
+- **C8 (MENOR, divergencia semántica declarada):** `severityFromRunStatus` separa `error→"error"` de `needs_review→"attention"`, mientras `combineOutcome` (`notifierCore.ts:34`) colapsa ambos en `attention`. v2 lo declara como refinamiento consciente (el feed distingue fallo de revisión), no como reuso literal.
+- **C9 (MENOR, semántica de leído):** abrir el panel marca todo leído en ese instante; eventos que lleguen con el panel abierto cuentan como no-leídos hasta la próxima apertura. v2 lo fija como comportamiento esperado (test F1 caso 4b).
+- **[ADICIÓN ARQUITECTO] F6 — Wiring REAL de las fuentes 135 y 142 (una línea por fuente, ancla verificada):** v1 dejaba el seam "para cuando aterricen". Ya aterrizaron. v2 agrega F6: publicar `kind:"error"` desde `PageErrorBoundary.componentDidCatch` (`PageErrorBoundary.tsx:29`, verificado) y `kind:"cost"` desde `CostCapIndicator` en la TRANSICIÓN a `alert|over|blocked` (verificado: `CostCapResponse.state`). El centro nace UNIFICADO de verdad (runs + errores + costos) el día 1, no "runs-only con promesa".
 
 ---
 
@@ -15,10 +26,10 @@
 
 Hoy las señales de "qué pasó / qué está pasando" en Stacky están **dispersas y efímeras**:
 - Los fines de run producen aviso de escritorio + beep + título de pestaña, pero **no dejan rastro** consultable (`executionNotifier.ts` / `tabTitle.ts` son side-effects, no un feed).
-- Los errores de la UI (plan 135) serán toasts **efímeros** (se van solos).
-- Los KPIs de costo (plan 142) viven en su propia vista, **sin push** cuando algo cruza un umbral.
+- Los errores de la UI (plan 135, **implementado**) se muestran en `Toast.tsx` / `PageErrorBoundary.tsx` pero son **efímeros o locales a la página**.
+- Los costos (plan 142, **implementado**) viven en `CostCapIndicator` y el Centro de Costos, **sin push** consultable cuando algo cruza umbral.
 
-No existe **un solo lugar** que responda "¿qué pasó mientras no miraba?". Este plan crea ese lugar: un **Centro de Actividad** client-side (campana en la TopBar + feed desplegable con no-leídos) que **agrega** las fuentes ya existentes/planeadas sin reinventar streaming ni polling, y que **degrada honestamente** si una fuente todavía no está implementada.
+No existe **un solo lugar** que responda "¿qué pasó mientras no miraba?". Este plan crea ese lugar: un **Centro de Actividad** client-side (campana en la TopBar + feed desplegable con no-leídos) que **agrega** las fuentes ya existentes sin reinventar streaming ni polling.
 
 ---
 
@@ -26,71 +37,73 @@ No existe **un solo lugar** que responda "¿qué pasó mientras no miraba?". Est
 
 **Objetivo:** un centro de notificaciones **informativo** (nunca ejecutor) que acumula eventos con timestamp/tipo/severidad/leído, muestra un contador de no-leídos en la TopBar, y ofrece navegación ("ver run") a la superficie relevante — **amplificando** al operador, sin agregarle trabajo ni pasos.
 
-**KPIs (todos BINARIOS, con comando exacto):**
+**KPIs (todos BINARIOS, con comando exacto; vitest/tsc desde `Stacky Agents/frontend/`):**
 - **KPI-1 — Reducer puro verde:** `npx vitest run src/services/__tests__/activityReducer.test.ts` → exit 0 (dedup por key, tope N=50, no-leídos, agrupación, mute, hydrate tolerante).
-- **KPI-2 — Store singleton verde:** `npx vitest run src/services/__tests__/activityCenter.test.ts` → exit 0 (pub/sub, `markAllRead`, persistencia guardada, **degradación: fuentes ausentes ⇒ sin sección**).
-- **KPI-3 — Captura de runs pura verde:** `npx vitest run src/services/__tests__/runCapture.test.ts` → exit 0 (`diffFinishedIds`).
-- **KPI-4 — Tipos verdes:** `npx tsc --noEmit` (desde `frontend/`) → exit 0 (campana + panel + wiring compilan).
-- **KPI-5 — Flag canónico verde:** `python -m pytest "backend/tests/test_harness_flags.py" -q` (venv del repo) → exit 0 (`test_default_known_only_for_curated` + `test_every_registry_flag_is_categorized` pasan con el flag nuevo).
-- **KPI-6 — Cero polls nuevos (grep binario):** `grep -rEn "new EventSource|setInterval|refetchInterval|fetch\(" src/services/activityCenter.ts src/services/activityReducer.ts src/services/runCapture.ts src/hooks/useRunActivityCapture.ts` → **0 matches** (la única fuente de refresco es la query compartida `useActiveRunsGlobal`, reusada; `Executions.byId` on-finish no es un poll).
+- **KPI-2 — Store singleton verde:** `npx vitest run src/services/__tests__/activityCenter.test.ts` → exit 0 (pub/sub, `markAllRead`, persistencia guardada, extensibilidad: kinds sin eventos ⇒ sin sección).
+- **KPI-3 — Captura de runs pura verde:** `npx vitest run src/services/__tests__/runCapture.test.ts` → exit 0 (`diffFinishedIds` + `shouldPublishCostTransition`).
+- **KPI-4 — Tipos verdes:** `npx tsc --noEmit` → exit 0 (campana + panel + wiring compilan).
+- **KPI-5 — Flag canónico verde:** desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend`: `N:\GIT\RS\STACKY\Stacky\.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` → exit 0 (`test_default_known_only_for_curated` + `test_every_registry_flag_is_categorized` pasan con el flag nuevo). **No se crea archivo de test backend nuevo ⇒ NO hay alta en `HARNESS_TEST_FILES`** (run_harness_tests.sh queda intacto).
+- **KPI-6 — Cero polls nuevos (grep binario):** `grep -rEn "new EventSource|setInterval|refetchInterval|fetch\(" src/services/activityCenter.ts src/services/activityReducer.ts src/services/runCapture.ts src/hooks/useRunActivityCapture.ts` → **0 matches**. La única fuente de refresco es la query compartida `useActiveRunsGlobal`; `Executions.byId` on-finish no es un poll. **Regla anti-gotcha (C7): PROHIBIDO que los comentarios/JSDoc de esos 4 archivos contengan los literales `setInterval`, `EventSource`, `refetchInterval` o `fetch(`** — reescribir la prosa del comentario, el gate siempre gana.
+- **KPI-7 — Ratchet de deuda UI verde (C5):** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` → exit 0. Los .tsx nuevos de F4 tienen alcance cero-deuda: **0 `style={}` inline**; todo estilo en `.module.css` con tokens.
 
 ---
 
-## 3. Por qué ahora / gap (evidencia por grep)
+## 3. Por qué ahora / gap (evidencia por grep, re-verificada 2026-07-16)
 
-### 3.1 Evidencia de la infra YA existente que se REUSA (leída, no supuesta)
+### 3.1 Infra YA existente que se REUSA (leída, no supuesta)
 
-| Símbolo reusado | Archivo:línea | Qué aporta a 152 |
+| Símbolo reusado | Archivo:línea (hoy) | Qué aporta a 152 |
 |---|---|---|
-| `useActiveRunsGlobal()` | `frontend/src/hooks/useActiveRunsGlobal.ts:12` | Query compartida react-query de runs activos (running/preparing/queued, all_projects), refresco 5 s, `refetchIntervalInBackground:true` (`:22`). **Todos los consumidores comparten `queryKey` ⇒ UNA sola request.** |
-| `ACTIVE_RUNS_QUERY_KEY`, `ACTIVE_RUNS_REFRESH_MS`, `mergeActiveRuns`, `fetchActiveRuns` | `frontend/src/services/activeRuns.ts:12,13,20,30` | Fuente única de runs; diseñada explícitamente para ser compartida por panel + TopBar + notificador (comentario `activeRuns.ts:1-8`). |
-| Patrón diff prev/current + `Executions.byId` | `frontend/src/hooks/useGlobalExecutionNotifier.ts:19-43` | Detección de "run que desapareció del set activo" → confirma status final con `Executions.byId` (`:28`). 152 **replica el diff** (extraído a helper puro) sin tocar este archivo caliente. |
-| `buildNotificationBody(row)` | `frontend/src/services/notifierCore.ts:52` | Cuerpo humano "proyecto · ticket" — se reusa tal cual para el texto del evento. |
-| `combineOutcome`/`FinishOutcome` | `frontend/src/services/notifierCore.ts:33` | Semántica de severidad pegajosa (attention nunca lo pisa completed) — base de `severityFromRunStatus`. |
-| Slot de acciones de la TopBar | `frontend/src/components/TopBar.tsx:201` (`<div className={styles.actions}>`), vecinos `<CostCapIndicator>` (`:210`) y `<StreakBadge/>` (`:211`) | Lugar EXACTO donde se inserta la campana. |
-| Montaje del notificador global | `frontend/src/App.tsx:70` (`useGlobalExecutionNotifier()`), TopBar en `App.tsx:158` | Punto EXACTO donde 152 monta `useRunActivityCapture()` (hermano, 0 requests nuevos). |
-| Gating de feature por flag backend | `frontend/src/App.tsx:104-107` (`fetch("/api/db-compare/health") → flag_enabled`) y endpoint EXISTENTE `HarnessFlags.list()` (`frontend/src/api/endpoints.ts:873-874`), campo `HarnessFlagView.value` (`endpoints.ts:675`) | Patrón para leer el valor efectivo del flag SIN endpoint nuevo. |
-| `EmptyState` compartido | `frontend/src/components/EmptyState.tsx:1-90` (presets `executions\|packs\|tickets\|agents\|history\|generic`; props `variant/title/message/actionLabel/onAction/icon` `:12-19`) | Estado vacío del feed. **YA existe hoy** (aunque con 0 importadores; 152 es uno de sus primeros consumidores reales). |
-| `lucide-react ^0.453.0` | `package.json` (verificado por plan 139 §6.2) | Icono `Bell` para la campana — sin agregar dependencia. |
-| Tokens de movimiento | `theme.css` (plan 143 F2): `--transition-opacity`, `--transition-transform` | Entrada/salida barata del panel/ítems. Si 143 no aterrizó, `var(--transition-*)` es indefinido y la propiedad no se anima (degrade instantáneo, sin branch). |
+| `useActiveRunsGlobal()` | `frontend/src/hooks/useActiveRunsGlobal.ts:12` | Query compartida react-query de runs activos, refresco 5 s. Todos los consumidores comparten `queryKey` ⇒ UNA sola request. |
+| `ACTIVE_RUNS_QUERY_KEY`, `ACTIVE_RUNS_REFRESH_MS`, `mergeActiveRuns`, `fetchActiveRuns` | `frontend/src/services/activeRuns.ts:12,13,20,30` | Fuente única de runs, diseñada para ser compartida. |
+| Patrón diff prev/current + `Executions.byId` | `frontend/src/hooks/useGlobalExecutionNotifier.ts` | Detección de "run que desapareció del set activo" → confirma status final. 152 replica el diff en helper puro SIN tocar este archivo caliente. |
+| `buildNotificationBody(row)` | `frontend/src/services/notifierCore.ts:52` | Cuerpo humano "proyecto · ticket" — se reusa tal cual. |
+| `combineOutcome`/`FinishOutcome` | `frontend/src/services/notifierCore.ts:33` | Semántica pegajosa base. **152 la refina (C8):** `error→"error"` ≠ `needs_review→"attention"` (divergencia consciente, el feed distingue fallo de revisión). |
+| Slot de acciones de la TopBar | `frontend/src/components/TopBar.tsx:202` (`<div className={styles.actions}>`), vecinos `<CostCapIndicator>` (`:211`) y `<StreakBadge/>` (`:212`) | Lugar EXACTO donde se inserta la campana. Ancla = el TEXTO, no la línea. |
+| Montaje de hooks globales | `frontend/src/App.tsx:99` (`useGlobalExecutionNotifier();`), `<TopBar onGoToTeam={...} shellV2={...}/>` en `App.tsx:245` | Punto EXACTO donde 152 monta `useRunActivityCapture(notifEnabled)`. |
+| Endpoint de flags existente | `HarnessFlags.list()` en `frontend/src/api/endpoints.ts:908`; `HarnessFlagView.value: boolean \| number \| string` (`endpoints.ts:710`) | Lectura del valor efectivo del flag SIN endpoint nuevo. Comparar con `=== true` (el flag es bool). |
+| `EmptyState` | `frontend/src/components/EmptyState.tsx` (presets `executions\|packs\|tickets\|agents\|history\|generic`) | Estado vacío del feed. Existe hoy. |
+| `IconButton`, `Skeleton` (plan 138, **implementado**) | `frontend/src/components/ui/IconButton.tsx`, `ui/Skeleton.tsx` (verificados en árbol) | La campana ES un `IconButton`; la carga usa `Skeleton`. **v2 elimina el `<button>` propio y el placeholder ad-hoc de v1 (C1): duplicar la primitiva viola reuso.** |
+| Tokens tema/motion (141/143, **implementados**) | `theme.css`: `--transition-opacity`, `--transition-transform`, `--focus-ring` | Entrada/salida del panel. 152 JAMÁS escribe `@media (prefers-reduced-motion)` (dueño único: 141 F5). |
+| Fuente de errores (135, **implementado**) | `frontend/src/components/PageErrorBoundary.tsx:29` (`componentDidCatch`), `Toast.tsx` | Punto de publicación `kind:"error"` (F6). |
+| Fuente de costos (142, **implementado**) | `frontend/src/components/CostCapIndicator.tsx` (`CostCapResponse.state: "unset"\|"ok"\|"alert"\|"over"\|"blocked"`) | Punto de publicación `kind:"cost"` en transición de estado (F6). |
+| `lucide-react ^0.453.0` | `package.json` | Icono `Bell` — sin dependencia nueva. |
 
-### 3.2 Evidencia de AUSENCIA de un centro de notificaciones actual
+### 3.2 Evidencia de AUSENCIA de un centro de notificaciones
 
-- `grep -rEn "notification\|bell\|campana\|unread" frontend/src/components` → solo `RecoverExecutionButton.tsx` y `CreateChildTaskButton.tsx` (botones ajenos). **No hay campana, contador de no-leídos ni feed.** El gap es real.
+- `grep -rEn "publishActivity|activityCenter" frontend/src` → **0 matches** (re-verificado 2026-07-16). `grep -riEn "notification|bell|unread" frontend/src/components` → solo botones ajenos. No hay campana, contador ni feed. El gap es real.
 
-### 3.3 Tabla de dependencias (estado real hoy)
+### 3.3 Tabla de dependencias (estado real 2026-07-16 — C1)
 
 | Fuente / dependencia | Plan | Estado hoy | Rol en 152 |
 |---|---|---|---|
-| Runs activos/finalizados | 134 | **Infra existe** (en implementación concurrente; `activeRuns.ts`/`useActiveRunsGlobal` leídos en el árbol) | Fuente **base garantizada** (F2). |
-| TopBar donde va la campana | 139 | TopBar actual existe; shell v2 en papel (flag `STACKY_APP_SHELL_V2` OFF) | Se usa el slot `styles.actions` actual. La campana **no** depende de shell v2. |
-| `EmptyState` / `Skeleton` | 140 | `EmptyState` **existe hoy**; `Skeleton`/`SkeletonList` en papel | Vacío con `EmptyState` (presente); carga con placeholder token-only si `Skeleton` no está. |
-| Tokens `--transition-*` + reduced-motion | 143 (+141) | En papel | Se referencian por `var()`; degrade instantáneo si faltan. 152 **jamás** escribe `@media (prefers-reduced-motion)`. |
-| Errores UI (Toast/ErrorBoundary) | 135 | **En papel** | Fuente **pub/sub**: 135 publicará `kind:"error"`. Ausente ⇒ sección error nunca aparece. |
-| Costos / KPIs de tokens | 142 | **En papel** | Fuente **pub/sub**: 142 publicará `kind:"cost"`. Ausente ⇒ sección cost nunca aparece. |
+| Runs activos/finalizados | 134 | **IMPLEMENTADO** | Fuente base (F2). |
+| TopBar (slot campana) | 139 | **IMPLEMENTADO**, flag `STACKY_UI_SHELL_V2_ENABLED` default OFF | La campana va en el slot `styles.actions` de la TopBar ACTUAL; funciona igual con shell v1 (flag OFF, default) y v2 (misma TopBar, prop `shellV2`). **No depende del valor del flag de 139.** |
+| `EmptyState` / `Skeleton` / `IconButton` | 140/138 | **IMPLEMENTADOS** | Se usan directo, sin fallback ad-hoc (C1). |
+| Tokens `--transition-*` + reduced-motion | 143+141 | **IMPLEMENTADOS** | Se referencian por `var()`. |
+| Errores UI | 135 | **IMPLEMENTADO** (`PageErrorBoundary`, `Toast`) | Publica `kind:"error"` (F6a). |
+| Costos | 142 | **IMPLEMENTADO** (`CostCapIndicator`, Centro de Costos) | Publica `kind:"cost"` en transición (F6b). |
 
 ---
 
-## 4. Principios, guardarraíles y regla de degradación
+## 4. Principios, guardarraíles y regla de extensibilidad
 
-1. **Reuso, no reinvención.** El refresco de runs es la query compartida `useActiveRunsGlobal` (0 requests nuevos: react-query dedup por `queryKey`). 152 no crea intervalos, ni EventSource, ni fetch de polling (KPI-6).
+1. **Reuso, no reinvención.** El refresco de runs es la query compartida `useActiveRunsGlobal` (0 requests nuevos). 152 no crea intervalos, ni EventSource, ni fetch de polling (KPI-6). UI con primitivas de 138 (KPI-7).
 2. **Human-in-the-loop.** El centro es **informativo**. Cada notificación puede llevar UNA acción de **navegación** ("ver run" → `selectTab`). **Prohibido** ejecutar acciones destructivas, publicar, crear tickets o mutar estado desde el centro. Amplifica, no reemplaza.
-3. **Cero trabajo extra al operador.** UI aditiva, opt-out. La campana aparece sola; silenciar tipos y opt-out son opcionales, nunca requeridos.
-4. **No degradar performance.** Tope **N=50** eventos (cola acotada). Animación solo de props baratas (`opacity`/`transform`). Reducer/store son O(1)–O(n≤50) puros en memoria. Sin backend nuevo.
+3. **Cero trabajo extra al operador.** UI aditiva, opt-out. La campana aparece sola; silenciar tipos y opt-out son opcionales, nunca requeridos. Anti-ruido: dedup por `key`, agrupación por `kind`, mute por `kind`, publicación de costos SOLO en transición (no en cada poll).
+4. **No degradar performance.** Tope **N=50** eventos (cola acotada). Animación solo de `opacity`/`transform`. Reducer/store puros O(n≤50) en memoria. Sin backend nuevo. **Con flag OFF la captura NO corre** (C2): cero requests, cero escrituras.
 5. **Mono-operador sin auth.** No hay roles; el feed es local a la sesión del navegador (más `localStorage` acotado). No es un log auditable multi-usuario.
-6. **Backward-compatible.** Todas las firmas nuevas son aditivas. Los archivos calientes (`App.tsx`, `TopBar.tsx`) reciben ediciones **aditivas de una línea**, ancladas por texto normativo (§6.F4). Con el flag OFF, la TopBar queda **idéntica** a hoy.
+6. **Backward-compatible.** Firmas nuevas aditivas. Archivos calientes (`App.tsx`, `TopBar.tsx`, `PageErrorBoundary.tsx`, `CostCapIndicator.tsx`) reciben ediciones **aditivas mínimas ancladas por texto normativo**. Con flag OFF, la TopBar queda **idéntica** a hoy.
 
 ### 4.4 Confirmación: ninguna de las 4 excepciones duras aplica
 
-La directiva de barrido (flags nuevas → default ON, salvo 4 excepciones reservadas para flags **destructivas / autónomas / de riesgo de seguridad / experimentales-inestables**) **no** afecta a este flag: el Centro de Actividad es UI **aditiva, informativa, sin autonomía, sin escritura destructiva, sin superficie de seguridad ni de pérdida de datos**. Por lo tanto: **default ON**.
+El Centro de Actividad es UI **aditiva, informativa, sin autonomía, sin escritura destructiva, sin superficie de seguridad ni de pérdida de datos**: (1) no bypasea revisión humana, (2) no es destructivo/irreversible, (3) no requiere prerequisito no garantizado (todo lo que consume existe en la instalación default), (4) no reduce seguridad. Por lo tanto: **default ON**.
 
-### 4.5 REGLA DE DEGRADACIÓN HONESTA (contrato central)
+### 4.5 REGLA DE EXTENSIBILIDAD (antes "degradación honesta")
 
-> **Cada fuente se feature-detecta por PRESENCIA DE EVENTOS, no por import.** El seam es un **pub/sub** (`publishActivity`). El panel renderiza **solo** las secciones (`kind`) que tienen al menos un evento (`groupByKind` no crea bucket vacío). Consecuencia: si 135 o 142 **no** están implementados, **nadie publica** `error`/`cost`, esas secciones **nunca aparecen** — sin import de 135/142, sin dependencia dura, sin error. 152 funciona **parcial** (solo `run`) desde el día 1 y **completo** a medida que 135/142 aterricen y agreguen su línea `publishActivity(...)`.
+> Con 135/142 ya implementados (C1), esta regla deja de ser un plan de contingencia y queda como **contrato de extensibilidad**: el seam es un **pub/sub** (`publishActivity`). El panel renderiza **solo** las secciones (`kind`) con al menos un evento (`groupByKind` no crea bucket vacío). Un `kind` futuro (p. ej. `"deploy"`) se enchufa con UNA línea `publishActivity(...)` en su fuente, sin tocar 152. Kinds desconocidos se renderizan bajo su nombre (forward-compatible).
 >
-> **La única fuente con acoplamiento estático es `run` (134)**, porque reusa `useActiveRunsGlobal`; esa infra **existe hoy** (leída), así que el acoplamiento está satisfecho. Si por reordenamiento 134 no estuviera, F2 no compilaría (fallo ruidoso en tsc), y F2 se pospone — el resto del plan (campana vacía + seam) sigue funcionando.
->
-> **Cómo se testea (mock de fuentes ausentes):** KPI-2 incluye un test que publica **solo** eventos `run` y asegura que `groupByKind(snapshot)` **no** contiene buckets `error` ni `cost`; y otro que publica un `kind` silenciado (mute) y asegura que no entra al snapshot.
+> **Cómo se testea:** KPI-2 incluye un test que publica solo eventos `run` y asegura que `groupByKind(snapshot)` no contiene buckets `error` ni `cost`; y otro que publica un `kind` silenciado (mute) y asegura que no entra al snapshot.
 
 ---
 
@@ -102,24 +115,26 @@ La directiva de barrido (flags nuevas → default ON, salvo 4 excepciones reserv
 | **kind** | Fuente/categoría del evento: `"run" \| "error" \| "cost"` (extensible sin romper: buckets desconocidos se renderizan bajo su nombre). |
 | **severity** | `"info" \| "success" \| "attention" \| "error"` — solo estética (color/icono), no comportamiento. |
 | **nav** | Intención de navegación opcional `{ tab: string; executionId?: number }`. Se ejecuta vía `selectTab` del `App`. **Nunca** destructiva. |
-| **no-leído (unread)** | Evento con `ts > lastReadAt`. Abrir el panel setea `lastReadAt = Date.now()` (marca todo leído). |
+| **no-leído (unread)** | Evento con `ts > lastReadAt`. Abrir el panel setea `lastReadAt = Date.now()`. Eventos que llegan con el panel ya abierto quedan no-leídos hasta la próxima apertura (C9, comportamiento esperado). |
 | **tope N** | Cap de la cola = **50** eventos (`ACTIVITY_CAP`). Al llegar al tope se descarta el más viejo. |
-| **seam / pub-sub** | `publishActivity(evt)` (fuentes escriben) + `subscribeActivity(cb)` (UI lee). Único punto de acoplamiento entre 152 y 135/142. |
+| **seam / pub-sub** | `publishActivity(evt)` (fuentes escriben) + `subscribeActivity(cb)` (UI lee). Único punto de acoplamiento entre 152 y sus fuentes. |
 | **mute** | Silenciar un `kind`: eventos de ese kind se descartan en `publishActivity` (no se guardan, no cuentan). Config del operador por UI (opcional), persistida en `localStorage`. |
+| **transición de costo** | Cambio de `CostCapResponse.state` desde `unset\|ok` hacia `alert\|over\|blocked` (o entre estos tres). Solo la TRANSICIÓN publica evento; el poll de 60 s repetido en el mismo estado NO re-publica (anti-ruido, F6b). |
 
 ---
 
-## 6. Fases F0..F5
+## 6. Fases F0..F6
 
-> **Pre-flight OBLIGATORIO por fase que toque archivo caliente** (`App.tsx`, `TopBar.tsx`): `git status -- "<ruta>"`. Si hay WIP ajeno (hoy 134/135/139 los editan), **STOP y avisar al orquestador** antes de editar. Staging quirúrgico por path explícito. **El implementador NO commitea** (lo hace el orquestador).
+> **Pre-flight OBLIGATORIO por fase que toque archivo caliente** (`App.tsx`, `TopBar.tsx`, `PageErrorBoundary.tsx`, `CostCapIndicator.tsx`): `git status -- "<ruta>"`. Si hay WIP ajeno, **STOP y avisar al orquestador** antes de editar. Staging quirúrgico por path explícito. **El implementador NO commitea** (lo hace el orquestador).
 >
-> **Comandos vitest/tsc** se corren desde `Stacky Agents/frontend/`. **pytest** con el venv del repo, **por archivo**.
+> **Comandos vitest/tsc** se corren desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend`, **por archivo** (gotcha vitest test-order pollution). **pytest** con `N:\GIT\RS\STACKY\Stacky\.venv\Scripts\python.exe`, **por archivo** (C6).
+> **Anclas:** toda edición se ancla por TEXTO normativo citado; los `archivo:línea` de este doc son referencia del 2026-07-16 y pueden derivar (C3).
 
 ---
 
 ### F0 — Contrato + reducer PURO (tests primero)
 
-**Objetivo (1 frase):** definir tipos y la lógica pura de acumulación (dedup, tope, no-leídos, agrupación, mute, hydrate) — el corazón testeable sin DOM. **Valor:** toda la corrección vive acá y se blinda con tests puros (no hay `@testing-library/react` ni jsdom en el repo — verificado; los helpers no tocan DOM).
+**Objetivo (1 frase):** definir tipos y la lógica pura de acumulación (dedup, tope, no-leídos, agrupación, mute, hydrate) — el corazón testeable sin DOM. **Valor:** toda la corrección vive acá y se blinda con tests puros (no hay `@testing-library/react` ni jsdom en `package.json` — gap estructural verificado; los helpers no tocan DOM).
 
 **Archivos:**
 - NUEVO `frontend/src/services/activityReducer.ts`
@@ -150,7 +165,7 @@ export function markAllRead(s: ActivityState, nowMs: number): ActivityState;    
 export function groupByKind(events: ActivityEvent[]): Record<string, ActivityEvent[]>; // solo kinds presentes
 export function isMuted(s: ActivityState, kind: ActivityKind): boolean;
 export function setMuted(s: ActivityState, kind: ActivityKind, on: boolean): ActivityState;
-export function severityFromRunStatus(status: string): Severity;               // reusa semántica de combineOutcome
+export function severityFromRunStatus(status: string): Severity;               // refina combineOutcome (C8): error ≠ needs_review
 export function serializeState(s: ActivityState): string;                      // JSON, recorta a ACTIVITY_CAP
 export function hydrateState(raw: string | null): ActivityState;               // tolerante: corrupto/null → emptyState()
 ```
@@ -166,12 +181,12 @@ export function appendEvent(s, e) {
 }
 export function groupByKind(events) {
   const out: Record<string, ActivityEvent[]> = {};
-  for (const e of events) (out[e.kind] ??= []).push(e);       // FUENTE AUSENTE: kind sin eventos ⇒ nunca crea bucket
+  for (const e of events) (out[e.kind] ??= []).push(e);       // kind sin eventos ⇒ nunca crea bucket
   return out;
 }
 export function severityFromRunStatus(status) {
   if (status === "error") return "error";
-  if (status === "needs_review") return "attention";
+  if (status === "needs_review") return "attention";          // C8: refinamiento consciente vs combineOutcome
   if (status === "completed") return "success";
   return "info";                                              // cancelled/desconocido: informativo, no alarma
 }
@@ -188,7 +203,7 @@ export function hydrateState(raw) {
 3. `appendEvent` respeta `ACTIVITY_CAP=50` (51 eventos → longitud 50, se cae el más viejo).
 4. `unreadCount` cuenta solo `ts > lastReadAt` (borde `ts === lastReadAt` → leído).
 5. `markAllRead` deja `unreadCount === 0`.
-6. `groupByKind` con eventos solo `run` → **sin** claves `error`/`cost` (degradación).
+6. `groupByKind` con eventos solo `run` → **sin** claves `error`/`cost` (extensibilidad §4.5).
 7. `isMuted`/`setMuted` round-trip.
 8. `severityFromRunStatus`: error→"error", needs_review→"attention", completed→"success", cancelled→"info".
 9. `hydrateState(null)` y `hydrateState("{corrupto")` → `emptyState()` sin throw.
@@ -224,15 +239,17 @@ export function __resetActivityForTests(): void;           // limpia estado + st
 - Persistencia vía wrapper `safeStorage` interno: `try { localStorage.getItem/setItem } catch {}` y `typeof localStorage !== "undefined"` (tolerante a entorno node de vitest y a modo privado). **Nunca throw.**
 - Hidrata al primer acceso (lazy) con `hydrateState(safeStorage.get(LS_STATE_KEY))`.
 - `publishActivity`: si `isMuted(state, e.kind)` → **descarta** (no guarda, no notifica). Si no, `state = appendEvent(...)`, persiste `serializeState`, notifica a todos los `subscribers`.
+- **C7:** los comentarios de este archivo NO pueden contener los literales del grep KPI-6.
 
 **Tests (`activityCenter.test.ts`) — usan `__resetActivityForTests()` en `beforeEach`:**
 1. `publishActivity` + `getActivitySnapshot` refleja el evento; subscriber es llamado 1 vez.
 2. `unsubscribe` deja de recibir notificaciones.
 3. `getActivitySnapshot` estable: sin publish entre dos llamadas → **misma referencia** (`===`).
 4. `markActivityRead` → `unreadCount(getActivitySnapshot()) === 0`.
+4b. (C9) publish DESPUÉS de `markActivityRead` → `unreadCount === 1` (lo nuevo queda no-leído).
 5. Dedup end-to-end: publicar `run:1` dos veces → snapshot con 1 solo evento.
 6. Tope: publicar 60 eventos → snapshot con 50.
-7. **Degradación (mock de fuentes ausentes):** publicar solo `kind:"run"` → `groupByKind` sin `error`/`cost`.
+7. **Extensibilidad:** publicar solo `kind:"run"` → `groupByKind` sin `error`/`cost`.
 8. **Mute:** `setActivityMuted("error", true)` y luego `publishActivity({kind:"error"...})` → snapshot NO contiene el evento.
 9. Persistencia guardada: con `localStorage` disponible, tras publish el `safeStorage` tiene JSON válido; con `localStorage` forzado a throw (stub), `publishActivity` no rompe.
 
@@ -241,12 +258,12 @@ export function __resetActivityForTests(): void;           // limpia estado + st
 
 ---
 
-### F2 — Captura de runs (reuso de la query compartida, 0 requests nuevos)
+### F2 — Captura de runs (reuso de la query compartida, 0 requests nuevos, gateada por flag)
 
 **Objetivo:** poblar la categoría `run` reusando `useActiveRunsGlobal` (misma `queryKey` ⇒ 0 requests nuevos) y confirmando el status final on-finish. **Valor:** el feed tiene contenido real desde el día 1 sin tocar archivos calientes ni agregar polling.
 
 **Archivos:**
-- NUEVO `frontend/src/services/runCapture.ts` (lógica pura del diff)
+- NUEVO `frontend/src/services/runCapture.ts` (lógica pura del diff + helper de transición de costo para F6b)
 - NUEVO `frontend/src/services/__tests__/runCapture.test.ts`
 - NUEVO `frontend/src/hooks/useRunActivityCapture.ts` (wiring react-query, sin lógica testeable-crítica)
 
@@ -255,24 +272,27 @@ export function __resetActivityForTests(): void;           // limpia estado + st
 // runCapture.ts
 export function diffFinishedIds(prev: Set<number> | null, current: Set<number>): number[];
 // devuelve ids que estaban en prev y ya NO están en current (finalizaron/desaparecieron)
+export function shouldPublishCostTransition(prev: string | null, next: string): boolean;
+// true SOLO si next ∈ {"alert","over","blocked"} y next !== prev  (helper puro para F6b)
 
 // useRunActivityCapture.ts
-export function useRunActivityCapture(): void;  // hook sin retorno; se monta una vez en App
+export function useRunActivityCapture(enabled: boolean): void;  // C2: enabled=false ⇒ early-return total
 ```
 
-**Pseudocódigo `useRunActivityCapture` (replica el patrón de `useGlobalExecutionNotifier.ts:19-43`, SIN editar ese archivo):**
+**Pseudocódigo `useRunActivityCapture` (replica el patrón de `useGlobalExecutionNotifier.ts`, SIN editar ese archivo):**
 ```ts
-export function useRunActivityCapture() {
+export function useRunActivityCapture(enabled: boolean) {
   const activeQ = useActiveRunsGlobal();               // MISMA query compartida ⇒ 0 requests nuevos
   const prev = useRef<Set<number> | null>(null);
   useEffect(() => {
+    if (!enabled) return;                              // C2: flag OFF ⇒ cero trabajo (ni byId ni storage)
     if (activeQ.data == null) return;                  // sin snapshot (carga/error): no comparar
     const current = new Set(activeQ.data.map(e => e.id));
     const finished = diffFinishedIds(prev.current, current);
     prev.current = current;                            // PRIMER snapshot: prev era null ⇒ diff = [] (no falsos positivos)
     for (const id of finished) {
       const key = `run:${id}`;
-      // EVENTO DUPLICADO / doble-emisión con 134: si ya está en el store, NO re-consultamos byId
+      // doble-emisión con el notificador de 134: si ya está en el store, NO re-consultamos byId
       if (getActivitySnapshot().events.some(e => e.key === key)) continue;
       void Executions.byId(id).then(row => {
         publishActivity({
@@ -281,27 +301,28 @@ export function useRunActivityCapture() {
           title: `Agente ${row.agent_type || "agente"} — ${row.status}`,
           body: buildNotificationBody(row),           // reuso notifierCore.ts:52
           ts: Date.now(),
-          nav: { tab: "team", executionId: row.id },  // navegación NO destructiva
+          nav: { tab: "team", executionId: row.id },  // "team" verificado: selectTab("team") en App.tsx:245
         });
       }).catch(() => { /* byId falló: se ignora, no se inventa evento */ });
     }
-  }, [activeQ.data]);
+  }, [activeQ.data, enabled]);
 }
 ```
 
-**Casos borde cubiertos:** primer snapshot (`prev=null` ⇒ sin eventos), sin cambios (diff vacío), varios fines simultáneos (loop), evento duplicado (guard por key + store dedup), `byId` con error (catch silencioso, no inventa evento), cola llena (el store recorta).
+**Casos borde cubiertos:** primer snapshot (`prev=null` ⇒ sin eventos), sin cambios (diff vacío), varios fines simultáneos (loop), evento duplicado (guard por key + store dedup), `byId` con error (catch silencioso), cola llena (el store recorta), flag OFF (early-return, C2).
 
 **Tests puros (`runCapture.test.ts`):**
 1. `diffFinishedIds(null, {1,2})` → `[]` (primer snapshot).
 2. `diffFinishedIds({1,2}, {2})` → `[1]`.
-3. `diffFinishedIds({1,2,3}, {}))` → `[1,2,3]`.
+3. `diffFinishedIds({1,2,3}, {})` → `[1,2,3]`.
 4. `diffFinishedIds({1}, {1,2})` → `[]` (aparecer no es finalizar).
 5. `diffFinishedIds({1}, {1})` → `[]` (sin cambios).
+6. `shouldPublishCostTransition(null,"ok")` → false; `("ok","alert")` → true; `("alert","alert")` → false; `("alert","over")` → true; `("over","ok")` → false.
 
 **Comando:** `npx vitest run src/services/__tests__/runCapture.test.ts` — **criterio: exit 0.**
-**Flag:** n/a (la captura corre siempre; el gating es de la UI, F4). **Runtime:** reusa el polling por intervalo de `activeRuns.ts` (no SSE) ⇒ idéntico en los 3 runtimes; **no hay dependencia de SSE que degradar**. **Trabajo del operador:** ninguno.
+**Flag:** la captura entera recibe `enabled` desde F3/F4 (C2). **Runtime:** reusa el polling por intervalo de `activeRuns.ts` (no SSE) ⇒ idéntico en los 3 runtimes. **Trabajo del operador:** ninguno.
 
-> **Nota de costo (declarada):** on-finish, `useRunActivityCapture` puede disparar un `Executions.byId` que `useGlobalExecutionNotifier` (134) también dispara. Es **1 request por run finalizado** (no un poll), acotado por el nº de runs concurrentes, y **solo** cuando `run:${id}` no está ya en el store. Se elige este costo mínimo para **no editar** el archivo caliente `useGlobalExecutionNotifier.ts`. Optimización futura (fuera de scope): que 134 publique al seam y F2 se apague — ver §8.
+> **Nota de costo (declarada):** on-finish, `useRunActivityCapture` puede disparar un `Executions.byId` que `useGlobalExecutionNotifier` (134) también dispara. Es **1 request por run finalizado** (no un poll), acotado por runs concurrentes, y **solo** cuando `run:${id}` no está ya en el store. Se elige este costo mínimo para **no editar** el archivo caliente `useGlobalExecutionNotifier.ts`. Optimización futura (fuera de scope): que 134 publique al seam y este diff se apague (§8).
 
 ---
 
@@ -311,34 +332,36 @@ export function useRunActivityCapture() {
 
 **Archivos (config pura, único toque backend):**
 - `backend/services/harness_flags.py`:
-  - Agregar `FlagSpec` a `FLAG_REGISTRY` (tupla en `harness_flags.py:295`), tipo `bool`, `default=True`, `env_only=False`, con `label`/`description`/`plain_help` (`what/on_effect/off_effect/example`).
-  - Agregar la key `"STACKY_NOTIFICATION_CENTER_ENABLED"` a `_CATEGORY_KEYS` (`harness_flags.py:114`) bajo la categoría **`capacidades_optin`** (features opt-in; verificar el id exacto por grep — si no fuera `capacidades_optin`, usar la categoría de experiencia/UI existente más cercana). *(Sin esto rompe `test_every_registry_flag_is_categorized`, ver `harness_flags.py:293-295`.)*
+  - Agregar `FlagSpec` a `FLAG_REGISTRY` (tupla, hoy `harness_flags.py:309`), tipo `bool`, `default=True`, `env_only=False`, con `label`/`description`/`plain_help` (`what/on_effect/off_effect/example`).
+  - Agregar la key `"STACKY_NOTIFICATION_CENTER_ENABLED"` a `_CATEGORY_KEYS` (hoy `harness_flags.py:117`) bajo la categoría **`capacidades_optin`** — id VERIFICADO existente (`harness_flags.py:103`, C4; sin alternativas). *(Sin esto rompe `test_every_registry_flag_is_categorized`.)*
 - `backend/tests/test_harness_flags.py`:
-  - Agregar la key a `_CURATED_DEFAULTS_ON` (set en `test_harness_flags.py:467`). *(Sin esto rompe `test_default_known_only_for_curated`; gotcha: `default=True` fuera de la curada rompe el ratchet.)*
+  - Agregar la key a `_CURATED_DEFAULTS_ON` (set, hoy `test_harness_flags.py:467`). *(Sin esto rompe `test_default_known_only_for_curated`; gotcha: `default=True` fuera de la curada rompe el ratchet.)*
 - `backend/config.py`:
-  - Alta del default efectivo `"true"` (env_only=False exige alta en `config.py`; el default runtime vive acá, no solo en `FlagSpec`).
-- **NO** regenerar `deployment/.../harness_defaults.env` (política §3.11 del plan 127; drift preexistente conocido, no se toca).
+  - Alta del default efectivo `"true"` (el default RUNTIME vive en `config.py`; solo FlagSpec = cosmético — gotcha conocido).
+- **NO** regenerar `deployment/.../harness_defaults.env` (generador `deployment/export_harness_defaults.py`; prohibido tocarlo a mano, plan 133 §3.6; drift preexistente conocido).
+- **Ratchet de tests backend:** NO se crea archivo `test_*.py` nuevo ⇒ NO hay alta en `HARNESS_TEST_FILES` (sh ni ps1). El flag no usa `requires=` ⇒ NO se toca `test_harness_flags_requires.py`.
 
-**Gating en el frontend (parte de F4, se describe acá por dependencia):** en `App.tsx`, junto al patrón `dbCompareEnabled` (`App.tsx:104-107`), leer el valor efectivo vía el endpoint existente:
+**Gating en el frontend (parte de F4, se describe acá por dependencia):** en `App.tsx`, leer el valor efectivo vía el endpoint existente (`HarnessFlags.list()`, `endpoints.ts:908`). NOTA: `probeFlagHealth` (135 F6, `App.tsx:134`) es para endpoints health, NO aplica acá:
 ```ts
 const [notifEnabled, setNotifEnabled] = useState(true);   // FAIL-OPEN: default ON aunque el flag no esté en la respuesta
 useEffect(() => {
   HarnessFlags.list()
     .then(r => {
       const f = r.flags.find(x => x.key === "STACKY_NOTIFICATION_CENTER_ENABLED");
-      setNotifEnabled(f ? f.value === true : true);        // ausente ⇒ true (aditivo)
+      setNotifEnabled(f ? f.value === true : true);        // value es boolean para flags bool (endpoints.ts:710)
     })
     .catch(() => setNotifEnabled(true));                   // error ⇒ true (no romper UI aditiva)
 }, []);
 ```
 
-**Tests:** `python -m pytest "backend/tests/test_harness_flags.py" -q` (venv del repo, por archivo).
-**Comando/criterio binario:** exit 0 (en particular `test_default_known_only_for_curated` y `test_every_registry_flag_is_categorized`).
-**Flag:** este ES el flag, default **ON**. **Runtime:** el flag se lee igual en los 3 runtimes (config backend + endpoint compartido). **Trabajo del operador:** ninguno (default ON; opt-out opcional desde el panel de flags).
+**Tests/comando (C6, literal):** desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend`:
+`N:\GIT\RS\STACKY\Stacky\.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q`
+**Criterio binario:** exit 0 (en particular `test_default_known_only_for_curated` y `test_every_registry_flag_is_categorized`).
+**Flag:** este ES el flag, default **ON**. **Runtime:** se lee igual en los 3 (config backend + endpoint compartido). **Trabajo del operador:** ninguno (default ON; opt-out opcional desde el panel de flags).
 
 ---
 
-### F4 — Campana + panel + wiring (UI)
+### F4 — Campana + panel + wiring (UI, primitivas reales de 138/140)
 
 **Objetivo:** la campana con contador de no-leídos en la TopBar y el panel-feed desplegable con estados vacío/carga (140), micro-interacciones (143) y navegación no destructiva. **Valor:** la superficie visible del centro.
 
@@ -347,13 +370,15 @@ useEffect(() => {
 - `frontend/src/components/NotificationPanel.tsx` + `NotificationPanel.module.css`
 - NUEVO `frontend/src/hooks/useActivityCenter.ts`
 
-**Archivos CALIENTES editados (aditivo, anclado por texto normativo; pre-flight `git status` OBLIGATORIO):**
+**Regla dura (C5/KPI-7):** los .tsx nuevos tienen **0 `style={}` inline** (gate `src/__tests__/uiDebtRatchet.test.ts`, alcance cero-deuda para archivos nuevos). Todo estilo en `.module.css` con tokens de `theme.css`. Si algún ancho/valor es dinámico, usar ref + effect imperativo (patrón documentado, NO replicar la deuda heredada de `PipelineStatus`).
+
+**Archivos CALIENTES editados (aditivo, anclado por TEXTO normativo; pre-flight `git status` OBLIGATORIO):**
 - `frontend/src/App.tsx`:
-  - Junto a `useGlobalExecutionNotifier();` (`App.tsx:70`) agregar `useRunActivityCapture();` y el gating `notifEnabled` (F3).
-  - En `<TopBar onGoToTeam={...} />` (`App.tsx:158`) pasar props aditivas: `notificationsEnabled={notifEnabled}` y `onActivityNavigate={(nav) => selectTab(nav.tab)}`.
+  - Junto a la línea `useGlobalExecutionNotifier();` (hoy `App.tsx:99`) agregar `useRunActivityCapture(notifEnabled);` y el estado `notifEnabled` (F3).
+  - En el JSX `<TopBar onGoToTeam={() => selectTab("team")} shellV2={shellV2Enabled} />` (hoy `App.tsx:245`) pasar props aditivas: `notificationsEnabled={notifEnabled}` y `onActivityNavigate={(nav) => selectTab(nav.tab)}`.
 - `frontend/src/components/TopBar.tsx`:
-  - Firma: agregar props opcionales `notificationsEnabled?: boolean` y `onActivityNavigate?: (nav: { tab: string; executionId?: number }) => void` a `TopBarProps` (`TopBar.tsx:13`).
-  - Render: dentro de `<div className={styles.actions}>` (`TopBar.tsx:201`), **antes** de `<CostCapIndicator/>` (`:210`), insertar:
+  - Firma: agregar props opcionales `notificationsEnabled?: boolean` y `onActivityNavigate?: (nav: { tab: string; executionId?: number }) => void` a `TopBarProps`.
+  - Render: dentro de `<div className={styles.actions}>` (hoy `TopBar.tsx:202`), **antes** de `<CostCapIndicator` (hoy `:211`), insertar:
     `{notificationsEnabled && <NotificationBell onNavigate={onActivityNavigate} />}`
 
 **Símbolos:**
@@ -367,53 +392,82 @@ export function useActivityCenter(): {
 };   // usa useSyncExternalStore(subscribeActivity, getActivitySnapshot). SIN requests nuevos.
 ```
 
-**`NotificationBell.tsx`:**
-- Icono `Bell` de `lucide-react` (sin dep nueva). **NO** depende de la primitiva `IconButton` (139): usa un `<button>` propio token-only para no acoplarse a un plan en papel (degrade honesto).
+**`NotificationBell.tsx` (C1: primitivas reales, sin fallback ad-hoc):**
+- Usa **`IconButton` de `components/ui`** (existe, plan 138 implementado) con icono `Bell` de `lucide-react` (sin dep nueva).
 - Badge de no-leídos: muestra `unread` (o `"9+"` si `unread > 9`); oculto si `unread === 0`.
-- Click → toggle del panel; **al ABRIR** llama `markRead()`.
-- `aria-label="Notificaciones"`, `aria-expanded`, foco visible (reusa `--focus-ring` de 141 si existe).
+- Click → toggle del panel; **al ABRIR** llama `markRead()` (C9: lo que llegue con el panel abierto queda no-leído hasta la próxima apertura).
+- `aria-label="Notificaciones"`, `aria-expanded`, foco visible con `--focus-ring` (141, existe).
 
 **`NotificationPanel.tsx`:**
 - Lista `groups` en orden `run` → `error` → `cost` → (otros). Cada sección solo si tiene eventos (§4.5).
-- **VACÍO** (0 eventos totales): `<EmptyState variant="history" .../>` (componente EXISTE, `EmptyState.tsx`). Regla vacío-vs-error de 140: EmptyState solo cuando no hay error de fuente base.
-- **CARGA** (primer snapshot de runs pendiente y 0 eventos): placeholder token-only (o `Skeleton` de 138 **si existe**; si no, un `<div>` con `--space-*`). No agrega requests/timers.
-- **Micro-interacciones (143):** panel y ítems con `transition: var(--transition-opacity), var(--transition-transform);` (entrada/salida). Si los tokens no existen (143 no aterrizó), la propiedad no anima — degrade instantáneo, **sin branch**. **152 NUNCA escribe `@media (prefers-reduced-motion)`** (dueño único: 141 F5).
+- **VACÍO** (0 eventos totales): `<EmptyState variant="history" .../>` (existe). Regla vacío-vs-error de 140: `EmptyState` solo cuando no hay error de fuente base.
+- **CARGA** (primer snapshot de runs pendiente y 0 eventos): **`Skeleton` de `components/ui`** (existe, C1). No agrega requests/timers.
+- **Micro-interacciones (143, implementado):** panel e ítems con `transition: var(--transition-opacity), var(--transition-transform);`. **152 NUNCA escribe `@media (prefers-reduced-motion)`** (dueño único: 141 F5).
 - Cada ítem: `title`, `body`, hora relativa, color/icono por `severity`, y botón **"Ver"** → `onNavigate(item.nav)`. **Solo navegación**; prohibido cualquier acción destructiva/de escritura.
 - (Opcional) engranaje → mute por `kind` (`setActivityMuted`), persistido; es config por UI, no requerida.
 
-**Tests:** los componentes React **no** son testeables sin `@testing-library/react`/jsdom (ausentes en `package.json` — gap estructural verificado). Por lo tanto:
-- **Criterio binario de F4:** `npx tsc --noEmit` (desde `frontend/`) → **exit 0**.
-- **Verificación conductual:** smoke manual documentado (§9.2), no bloqueante para el gate binario pero requerido para DoD.
+**Tests:** los componentes React **no** son testeables sin `@testing-library/react`/jsdom (ausentes en `package.json` — gap estructural verificado; este plan NO las agrega). Por lo tanto:
+- **Criterios binarios de F4:** `npx tsc --noEmit` → exit 0 **y** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` → exit 0 (KPI-7).
+- **Verificación conductual:** smoke manual documentado (§9.2), requerido para DoD.
 
-**Comando:** `npx tsc --noEmit` — **criterio: exit 0.**
-**Flag:** gateado por `notificationsEnabled` (F3); OFF ⇒ TopBar idéntica a hoy. **Runtime:** 100% presentación, idéntico en los 3. **Trabajo del operador:** ninguno.
+**Flag:** gateado por `notificationsEnabled` (F3); OFF ⇒ TopBar idéntica a hoy y captura apagada (C2). **Runtime:** 100% presentación, idéntico en los 3. **Trabajo del operador:** ninguno.
 
 ---
 
-### F5 — Seam para fuentes 135/142 + degradación testeada + mute
+### F5 — Seam pub/sub documentado + extensibilidad testeada + mute
 
-**Objetivo:** dejar documentado y testeado el contrato pub/sub para que 135 (errores) y 142 (costos) se enchufen con UNA línea cuando aterricen, sin que 152 dependa de ellos. **Valor:** el centro crece solo, sin re-tocar 152.
+**Objetivo:** dejar documentado y testeado el contrato pub/sub para fuentes futuras (`kind`s nuevos), sin que 152 dependa de ellas. **Valor:** el centro crece con UNA línea por fuente nueva, sin re-tocar 152.
 
 **Archivos:**
-- (Doc/contrato) esta sección + comentario JSDoc en `activityCenter.ts:publishActivity`.
-- Extensión de tests en `activityCenter.test.ts` (ya listada en F1 casos 7-8): degradación (solo `run` ⇒ sin `error`/`cost`) y mute.
+- (Doc/contrato) esta sección + comentario JSDoc en `activityCenter.ts:publishActivity` (C7: sin literales del grep KPI-6 en la prosa).
+- Extensión de tests en `activityCenter.test.ts` (ya listada en F1 casos 7-8): extensibilidad (solo `run` ⇒ sin `error`/`cost`) y mute.
 
-**Contrato para 135 (cuando implemente su Toast/ErrorBoundary, F5 de 135):** agregar en el punto donde hoy mostraría el toast de error:
+**Contrato genérico para una fuente futura (ejemplo `kind:"deploy"`):**
 ```ts
-publishActivity({ key: `error:${Date.now()}:${slug}`, kind: "error", severity: "error",
-                  title: "Error en la UI", body: message, ts: Date.now(),
-                  nav: surface ? { tab: surface } : undefined });
+publishActivity({ key: `deploy:${targetId}`, kind: "deploy" as ActivityKind, severity: "info",
+                  title: "Deploy finalizado", body: targetName, ts: Date.now(),
+                  nav: { tab: "devops" } });
 ```
-**Contrato para 142 (cuando implemente KPIs, al cruzar umbral/cap):**
-```ts
-publishActivity({ key: `cost:${projectName}:${bucket}`, kind: "cost", severity: "attention",
-                  title: "Costo cruzó umbral", body: `${projectName}: ${usd} USD`, ts: Date.now(),
-                  nav: { tab: "costs" } });
-```
-**Degradación (ya en §4.5):** sin esas líneas, no hay eventos `error`/`cost`, y el panel no muestra esas secciones. **Nada que importar, nada que romper.**
+Sin esa línea, no hay eventos de ese kind y el panel no muestra esa sección. **Nada que importar en 152, nada que romper.**
 
 **Tests:** cubiertos por `activityCenter.test.ts` (casos 7-8). **Comando:** `npx vitest run src/services/__tests__/activityCenter.test.ts` — **criterio: exit 0.**
 **Flag:** heredado de F3. **Runtime:** idéntico. **Trabajo del operador:** mute opcional por UI; nada requerido.
+
+---
+
+### F6 — [ADICIÓN ARQUITECTO] Wiring REAL de las fuentes 135 (errores) y 142 (costos)
+
+**Justificación:** v1 dejaba estas fuentes "para cuando aterricen"; 135 y 142 están **implementados hoy** (C1). Con dos ediciones aditivas de una línea (más un ref), el centro nace **unificado de verdad** (runs + errores + costos) el día 1. Human-in-the-loop intacto (solo informa), cero requests nuevos (reusa datos que esos componentes ya tienen), anti-ruido garantizado por dedup + publicación solo-en-transición.
+
+**F6a — Errores (fuente 135). Archivo caliente:** `frontend/src/components/PageErrorBoundary.tsx` (pre-flight `git status` obligatorio).
+- Ancla: método `componentDidCatch(error: Error, info: React.ErrorInfo)` (hoy `PageErrorBoundary.tsx:29`). Agregar al FINAL del método (sin tocar su lógica existente):
+```ts
+publishActivity({ key: `error:${Date.now()}`, kind: "error", severity: "error",
+                  title: "Error en la UI", body: String(error?.message || error), ts: Date.now() });
+```
+- Import aditivo: `import { publishActivity } from "../services/activityCenter";`
+- Sin `nav` (el boundary no sabe la superficie destino; no inventar). El evento queda consultable aunque el toast/boundary se haya ido — exactamente el gap que motiva 152.
+
+**F6b — Costos (fuente 142). Archivo caliente:** `frontend/src/components/CostCapIndicator.tsx` (pre-flight obligatorio).
+- Ancla: el `.then((d) => { if (!cancelled) setData(d); })` del `refresh()` (verificado). Cambiar a:
+```ts
+.then((d) => {
+  if (cancelled) return;
+  if (shouldPublishCostTransition(prevStateRef.current, d.state)) {
+    publishActivity({ key: `cost:${d.project ?? "global"}:${d.state}`, kind: "cost", severity: "attention",
+                      title: `Costo mensual en estado ${d.state}`,
+                      body: `$${d.spent_usd.toFixed(2)} / $${d.monthly_cap_usd.toFixed(2)} (${d.spent_pct.toFixed(0)}%)`,
+                      ts: Date.now() });
+  }
+  prevStateRef.current = d.state;
+  setData(d);
+})
+```
+- Agregar `const prevStateRef = useRef<string | null>(null);` e imports aditivos (`useRef`, `publishActivity`, `shouldPublishCostTransition`).
+- **Anti-ruido crítico:** el poll de 60 s de este componente repite el mismo `state`; `shouldPublishCostTransition` (helper puro, testeado en F2 caso 6) publica SOLO en transición hacia/entre `alert|over|blocked`. La key incluye el `state` ⇒ re-transiciones al mismo estado deduplican; una transición nueva (`alert`→`over`) genera evento nuevo. Jamás se re-marca no-leído por el poll.
+
+**Tests:** la lógica de decisión es `shouldPublishCostTransition` (pura, F2 caso 6, KPI-3). Los componentes en sí quedan cubiertos por `npx tsc --noEmit` (KPI-4) + smoke §9.2 (casos 6-7).
+**Flag:** ambos wirings publican al store; con flag OFF la campana no se renderiza y el store solo acumula en memoria/localStorage acotado (≤50) — impacto nulo. **Runtime:** idéntico en los 3. **Trabajo del operador:** ninguno.
 
 ---
 
@@ -421,54 +475,56 @@ publishActivity({ key: `cost:${projectName}:${bucket}`, kind: "cost", severity: 
 
 | # | Riesgo | Mitigación |
 |---|---|---|
-| R1 | **Acoplamiento con services que la sesión 134 edita AHORA** (`useGlobalExecutionNotifier.ts`, `activeRuns.ts` untracked/modified). | 152 **no edita** esos archivos: reusa por import (`useActiveRunsGlobal`, `buildNotificationBody`) y replica el diff en `runCapture.ts`. Consumo por NOMBRE; si un export faltara, tsc falla ruidoso (contrato defensivo). |
-| R2 | **Doble `byId` / doble evento** con el notificador de 134. | Dedup por `key=run:${id}` en el store + guard "si ya está en el store, no consultar byId". Doble emisión es **inofensiva** (dedup) y el byS extra es acotado (§F2 nota de costo). |
-| R3 | **Ediciones a `App.tsx`/`TopBar.tsx` chocan con 134/135/139.** | Ediciones **aditivas de una línea** ancladas a texto normativo estable (`useGlobalExecutionNotifier();`, `<div className={styles.actions}>`). Pre-flight `git status` por archivo; WIP ajeno ⇒ STOP. |
-| R4 | **135/142 no implementados al aterrizar 152.** | Degradación honesta §4.5: pub/sub data-driven, secciones ausentes sin import ni error; testeado (KPI-2 caso 7). |
-| R5 | **`Skeleton`/`IconButton` (138/139) o tokens `--transition-*` (143) no existen aún.** | La campana usa `<button>` propio (no `IconButton`); la carga usa placeholder token-only (no `Skeleton` duro); los `var(--transition-*)` degradan a sin-animación. `EmptyState` sí existe hoy (verificado) y se usa. |
-| R6 | **`useSyncExternalStore` re-render infinito** por snapshot inestable. | `getActivitySnapshot` devuelve **referencia estable** entre cambios (test KPI-2 caso 3). |
-| R7 | **Crecimiento sin límite / localStorage lleno.** | Tope duro `ACTIVITY_CAP=50` (testeado); `safeStorage` con try/catch tolerante a cuota. |
-| R8 | **`localStorage` corrupto** rompe el arranque. | `hydrateState` tolerante (JSON inválido → `emptyState()`, testeado). |
-| R9 | **Colisión de numeración** (propuesto como 146; franja 144–149 ocupada por una serie concurrente ajena). | RESUELTO: el orquestador renumeró este plan a **152** (hermanos UX/UI a 150/151), sin tocar la serie ajena 144–149. Referencias internas actualizadas. |
+| R1 | **Sesiones concurrentes editando los mismos archivos calientes** (`App.tsx`, `TopBar.tsx`, `PageErrorBoundary.tsx`, `CostCapIndicator.tsx`). | Ediciones aditivas mínimas ancladas a TEXTO normativo (no líneas, C3). Pre-flight `git status` por archivo; WIP ajeno ⇒ STOP. Staging quirúrgico por path explícito. |
+| R2 | **Doble `byId` / doble evento** con el notificador de 134. | Dedup por `key=run:${id}` en el store + guard "si ya está en el store, no consultar byId". Doble emisión es inofensiva (dedup) y el byId extra es acotado (§F2 nota de costo). |
+| R3 | **Ruido del poll de costos (60 s)** re-publicando el mismo estado. | `shouldPublishCostTransition` publica SOLO en transición (F6b, testeado F2 caso 6); key incluye el estado ⇒ dedup. |
+| R4 | **`useSyncExternalStore` re-render infinito** por snapshot inestable. | `getActivitySnapshot` devuelve referencia estable entre cambios (test F1 caso 3). |
+| R5 | **Crecimiento sin límite / localStorage lleno.** | Tope duro `ACTIVITY_CAP=50` (testeado); `safeStorage` con try/catch tolerante a cuota. |
+| R6 | **`localStorage` corrupto** rompe el arranque. | `hydrateState` tolerante (JSON inválido → `emptyState()`, testeado). |
+| R7 | **Flag OFF dejando trabajo residual.** | C2: `useRunActivityCapture(enabled)` early-return; campana no renderizada; F6a/F6b publican a un store inerte y acotado (sin UI, sin requests propios). |
+| R8 | **Gate KPI-6 disparado por comentarios propios** (gotcha recurrente 6x). | C7: prohibición explícita de los literales del grep en comentarios de los 4 archivos fuente. |
+| R9 | **uiDebtRatchet rojo por inline styles en .tsx nuevos.** | C5/KPI-7: 0 `style={}`; anchos dinámicos vía ref+effect imperativo. |
+| R10 | **Colisión de numeración** (v1 se propuso como 146; franja 144-149 ocupada por serie concurrente). | RESUELTO: renumerado a 152 (hermanos 150/151), serie ajena 144-149 intacta. Referencias internas actualizadas. |
 
 ---
 
 ## 8. Fuera de scope
 
-- **NO es un log auditable.** Es un feed efímero de conveniencia, local al navegador, acotado a 50 eventos. La telemetría/auditoría real es backend (métricas/costos), fuera de este plan.
+- **NO es un log auditable.** Es un feed efímero de conveniencia, local al navegador, acotado a 50 eventos. La telemetría/auditoría real es backend, fuera de este plan.
 - **NO agrega backend** (endpoint, ruta, streaming, tabla, persistencia server-side). Único toque backend: registro del flag (config pura).
 - **NO ejecuta acciones.** Solo navegación no destructiva. Nada de publicar, crear tickets, cancelar runs, etc. desde el centro.
-- **NO reimplementa** streaming/polling: reusa `useActiveRunsGlobal`. **NO** crea intervalos/EventSource/fetch de polling (KPI-6).
-- **NO redefine** `prefers-reduced-motion` ni el focus ring (dueño: 141). **NO** crea un Toast en `components/ui/` (contrato externo de 135).
+- **NO reimplementa** streaming/polling: reusa `useActiveRunsGlobal` y los polls ya existentes de `CostCapIndicator`. **NO** crea intervalos/EventSource/fetch de polling (KPI-6).
+- **NO redefine** `prefers-reduced-motion` ni el focus ring (dueño: 141). **NO** modifica el Toast de 135 (F6a engancha en el boundary, no en el toast).
+- **NO agrega** `@testing-library/react`/jsdom (gap estructural preexistente; el gate de componentes es tsc + ratchet + smoke).
 - **Optimización futura (no acá):** que 134 publique fines de run directamente al seam para apagar el `byId` extra de F2.
-- **NO** implementa las fuentes 135/142; solo deja el seam para que se enchufen.
 
 ---
 
 ## 9. Orden de implementación + DoD
 
 ### 9.1 Orden (por dependencia)
-`F0 (reducer puro)` → `F1 (store + pub/sub)` → `F2 (captura runs)` → `F3 (flag canónico)` → `F4 (campana + panel + wiring)` → `F5 (seam 135/142 + degradación testeada)`.
+`F0 (reducer puro)` → `F1 (store + pub/sub)` → `F2 (captura runs + helper transición)` → `F3 (flag canónico)` → `F4 (campana + panel + wiring)` → `F5 (seam documentado)` → `F6 (wiring fuentes 135/142)`.
 
-- F0/F1/F2 son puros/backend-agnósticos y no tocan archivos calientes → se pueden hacer primero sin coordinar.
+- F0/F1/F2 son puros y no tocan archivos calientes → primero, sin coordinar.
 - F3 es backend-config aislado.
-- **F4 es la única fase que edita archivos calientes** (`App.tsx`, `TopBar.tsx`): hacerla al final, con pre-flight `git status` por archivo y coordinación si hay WIP ajeno.
+- **F4 y F6 editan archivos calientes** (`App.tsx`, `TopBar.tsx`, `PageErrorBoundary.tsx`, `CostCapIndicator.tsx`): al final, con pre-flight `git status` por archivo y STOP si hay WIP ajeno.
 
-### 9.2 Smoke manual (DoD conductual de F4, documentado)
+### 9.2 Smoke manual (DoD conductual, documentado)
 1. Con flag ON: la campana aparece en la TopBar (junto al indicador de costo). Sin runs, el panel muestra `EmptyState`.
 2. Lanzar un agente; al finalizar, aparece 1 evento `run` con severidad correcta y badge de no-leídos = 1.
 3. Abrir el panel → badge vuelve a 0 (marcado leído). "Ver" navega a la superficie de runs.
-4. Flag OFF (desde `HarnessFlagsPanel`): la campana desaparece; TopBar idéntica a hoy; sin errores en consola.
+4. Flag OFF (desde `HarnessFlagsPanel`): la campana desaparece; TopBar idéntica a hoy; sin errores en consola; sin requests `byId` de la captura (Network tab).
 5. Recargar la página: los eventos recientes (≤50) y el estado leído persisten.
+6. (F6a) Forzar un error de render en una página (o simularlo) → aparece evento `error` en el feed.
+7. (F6b) Con un proyecto con cap configurado cerca del umbral: al cruzar `alert`, aparece UN evento `cost`; el poll siguiente NO duplica ni re-marca no-leído.
 
 ### 9.3 Definition of Done
-- KPI-1..KPI-6 en verde (comandos §2), con el **output real** leído por el implementador (cero falsos verdes).
-- Smoke §9.2 ejecutado y OK.
+- KPI-1..KPI-7 en verde (comandos §2), con el **output real** leído por el implementador (cero falsos verdes).
+- Smoke §9.2 ejecutado y OK (casos 6-7 pueden simularse).
 - Pre-flight `git status` sin WIP ajeno pisado; staging quirúrgico por paths explícitos.
-- Grep de degradación: publicar solo `run` no genera secciones `error`/`cost` (KPI-2 caso 7 verde).
-- Sin regenerar `harness_defaults.env`.
+- Sin regenerar `harness_defaults.env`; sin altas en `HARNESS_TEST_FILES` (no hay test backend nuevo).
 
 ---
 
 ### Resumen ejecutivo
-152 crea el **Centro de Actividad**: una campana en la TopBar con contador de no-leídos y un feed desplegable que **agrega** runs (134), errores (135) y costos (142) en un solo lugar, **reusando** la query compartida `useActiveRunsGlobal` (0 requests nuevos) y un **pub/sub data-driven** que hace que las fuentes aún no implementadas simplemente **no aparezcan** (degradación honesta, testeada). Es 100% frontend (idéntico en los 3 runtimes), aditivo y opt-out (default ON), **informativo y solo-navegación** (human-in-the-loop), con la lógica crítica en **helpers puros testeables sin DOM**.
+152 crea el **Centro de Actividad**: una campana (`IconButton` + `Bell`) en la TopBar con contador de no-leídos y un feed desplegable que **unifica desde el día 1** runs (134), errores (135, wiring real en `PageErrorBoundary`) y costos (142, wiring real en `CostCapIndicator`, solo-en-transición), **reusando** la query compartida `useActiveRunsGlobal` (0 requests nuevos) y un **pub/sub extensible** donde cada fuente futura se enchufa con una línea. Es 100% frontend (idéntico en los 3 runtimes), aditivo y opt-out (flag default ON, gateando también la captura), **informativo y solo-navegación** (human-in-the-loop), con la lógica crítica en **helpers puros testeables sin DOM** y gates binarios que incluyen el ratchet de deuda UI.

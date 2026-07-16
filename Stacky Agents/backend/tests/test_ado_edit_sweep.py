@@ -157,3 +157,23 @@ def test_smoke_no_daemon_thread_when_flag_off(monkeypatch):
     monkeypatch.delenv("STACKY_ADO_EDIT_LEARNING_ENABLED", raising=False)
     daemon_names = {t.name for t in threading.enumerate()}
     assert "stacky-ado-edit-daemon" not in daemon_names
+
+
+def test_no_daemon_thread_under_test_mode_even_with_flag_on(monkeypatch):
+    """STACKY_TEST_MODE (seteado por conftest.py en toda corrida de pytest) evita
+    que create_app() arme el daemon del sweep, aunque la flag esté ON. Sin este
+    freno, cada test que llama create_app() arma un thread nuevo que ejecuta
+    sweep_recent_runs() (SQLAlchemy) de inmediato y nunca se limpia entre tests;
+    acumulados, corren contra engines/conexiones ya descartados de tests previos
+    y producen un access violation nativo (reproducido en
+    test_plan105_remote_console_api.py tras Plan 146 F1, que sacó a este daemon
+    de su ImportError permanente)."""
+    import os
+    import threading
+    os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("STACKY_ADO_EDIT_LEARNING_ENABLED", "true")
+    monkeypatch.setenv("STACKY_TEST_MODE", "1")
+    from app import create_app
+    create_app()
+    daemon_names = {t.name for t in threading.enumerate()}
+    assert "stacky-ado-edit-daemon" not in daemon_names

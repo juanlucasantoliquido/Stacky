@@ -492,7 +492,14 @@ def create_app() -> Flask:
 
     # ── Plan 60 — Aprendizaje bidireccional de ediciones humanas en ADO ──────
     # STACKY_ADO_EDIT_LEARNING_ENABLED=true => default ON (promovido 2026-07-15).
-    _ado_edit_learning_on = os.environ.get(
+    # STACKY_TEST_MODE (Plan 145, la setea backend/tests/conftest.py) desarma este
+    # daemon en pytest: sweep_recent_runs() pega contra SQLAlchemy de inmediato al
+    # arrancar, sin esperar el primer sleep, y create_app() se llama una vez por
+    # test en varios archivos — acumula threads que corren contra engines ya
+    # descartados de tests previos y producen un access violation nativo (visto
+    # en test_plan105_remote_console_api.py tras Plan 146 F1).
+    _test_mode = os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+    _ado_edit_learning_on = (not _test_mode) and os.environ.get(
         "STACKY_ADO_EDIT_LEARNING_ENABLED", "true"
     ).strip().lower() in ("1", "true", "on", "yes")
     if _ado_edit_learning_on:

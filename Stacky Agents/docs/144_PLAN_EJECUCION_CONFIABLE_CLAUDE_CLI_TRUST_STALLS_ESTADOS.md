@@ -1,9 +1,10 @@
 # Plan 144 — Ejecución confiable de Claude CLI en deploy: trust de workspace + cierre rápido de stalls/timeouts + contrato de estados terminales
 
-- **Estado:** CRITICADO v1→v2 · VEREDICTO: **APROBADO-CON-CAMBIOS**
+- **Estado:** IMPLEMENTADO F0..F5 (2026-07-16, commits da6d3609/2832bcf9) · CRITICADO v1→v2 · VEREDICTO: **APROBADO-CON-CAMBIOS**
 - **Fecha:** 2026-07-15
 - **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8)
 - **Crítica/mejora v2:** StackyArchitectaUltraEficientCode (juez adversarial, perfil normal)
+- **Implementación:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Sonnet 5) — 92/92 tests propios verdes; ver `plan-144-status` en memoria para detalle por fase y flakiness preexistente descartada (test_stale_recovery_guardian.py/test_cutover_p5.py, heartbeat_monitor lee disco real).
 - **Serie:** 144–149 (derivada de `docs/reportes/2026-07-15_AUDITORIA_LOGS_deploy_vs_dev.md`)
 - **Cubre hallazgos:** **D1** (trust de workspace), **D2** (stall watchdog opaco), **D3** (ticket colgado 120 min), **D4** (vocabulario de estados divergente).
 - **Cross-refs:** 145 (higiene/observabilidad de logs), 146 (quick-wins verificados: V1/V4/V5), 147 (rutas de proyecto V2/D8). Este plan **no** toca esos alcances; solo declara dependencias.

@@ -1,4 +1,4 @@
-# Plan 156 — Identidad de build, drift proceso-vs-repo y huellas de regresión
+﻿# Plan 163 — Identidad de build, drift proceso-vs-repo y huellas de regresión
 
 > **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 con auditoría empírica de los logs del deploy (07-14/07-16). El gap viene verificado del debate; toda la evidencia archivo:línea de este doc fue **re-verificada contra el worktree el 2026-07-16** y se corrigió el drift encontrado (ver §2 y el bloque "DRIFT CORREGIDO"). Los números de línea son referencia de ese día — **toda edición se ancla por TEXTO normativo citado, no por número de línea**.
@@ -260,10 +260,10 @@ def get_build_drift() -> bool:
 
 ```python
         "version": get_app_version(),
-        "source_commit": get_source_commit(),   # Plan 156 F1 — identidad de build
-        "built_at": get_built_at(),              # Plan 156 F1
-        "repo_head": get_repo_head(),            # Plan 156 F1 — solo dev (None en deploy)
-        "build_drift": get_build_drift(),        # Plan 156 F1 — solo dev
+        "source_commit": get_source_commit(),   # Plan 163 F1 — identidad de build
+        "built_at": get_built_at(),              # Plan 163 F1
+        "repo_head": get_repo_head(),            # Plan 163 F1 — solo dev (None en deploy)
+        "build_drift": get_build_drift(),        # Plan 163 F1 — solo dev
 ```
 
 Ampliar el import existente `from services.app_version import get_app_version` (`:36`) a `from services.app_version import get_app_version, get_source_commit, get_built_at, get_repo_head, get_build_drift`.
@@ -280,7 +280,7 @@ Ampliar el import existente `from services.app_version import get_app_version` (
 
 (Nota para el implementador: como las cachés son de módulo, cada test que las use debe **resetearlas** al inicio, p. ej. `app_version._SOURCE_COMMIT_RESOLVED = False`. Documentarlo con un `pytest.fixture(autouse=True)` que resetee las 5 cachés.)
 
-**Paso 4 — Registrar** `tests/test_app_version_build_identity.py` en `run_harness_tests.sh` (`  tests/test_app_version_build_identity.py`) Y `.ps1` (`  "tests/test_app_version_build_identity.py"`), en un bloque nuevo (sh: `  # — Plan 156 · Identidad de build y huellas —`; ps1: `  # Plan 156 - Identidad de build y huellas`).
+**Paso 4 — Registrar** `tests/test_app_version_build_identity.py` en `run_harness_tests.sh` (`  tests/test_app_version_build_identity.py`) Y `.ps1` (`  "tests/test_app_version_build_identity.py"`), en un bloque nuevo (sh: `  # — Plan 163 · Identidad de build y huellas —`; ps1: `  # Plan 163 - Identidad de build y huellas`).
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_app_version_build_identity.py -q` → exit 0; `grep -c "test_app_version_build_identity.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`.
 
@@ -414,7 +414,7 @@ useEffect(() => {
 **Paso 1 — `backend/services/lifecycle_log.py`:**
 
 ```python
-"""Plan 156 F3 — evento de shutdown estructurado en system_logs.
+"""Plan 163 F3 — evento de shutdown estructurado en system_logs.
 
 Escribe UNA fila al apagarse el proceso grácilmente (atexit / SIGTERM / SIGINT).
 Escritura SINCRONA en el main thread (mismo patron seguro que
@@ -488,7 +488,7 @@ def install_shutdown_hook() -> None:
 
 ```python
     from services.lifecycle_log import install_shutdown_hook
-    install_shutdown_hook()   # Plan 156 F3 — firmar el shutdown en system_logs
+    install_shutdown_hook()   # Plan 163 F3 — firmar el shutdown en system_logs
 ```
 
 `create_app()` corre en el main thread al importar (`app = create_app()`, `:704`), así que `signal.signal` es válido. Con el reloader de Flask dev, `create_app` puede correr en un proceso hijo; el `except (ValueError, OSError)` cubre el caso de no-main-thread sin romper.
@@ -502,7 +502,7 @@ def install_shutdown_hook() -> None:
 | `test_install_idempotente` | `install_shutdown_hook()` dos veces no lanza y deja `_INSTALLED is True` (no cuenta handlers, sólo que no rompe). |
 | `test_log_shutdown_no_lanza_sin_db` | Con `session_scope` monkeypatcheado para lanzar, `log_shutdown("x")` **no** propaga la excepción (nunca bloquea el apagado). |
 
-**Paso 4 — Registrar** `tests/test_lifecycle_shutdown_log.py` en el bloque Plan 156 de `run_harness_tests.sh` y `.ps1`.
+**Paso 4 — Registrar** `tests/test_lifecycle_shutdown_log.py` en el bloque Plan 163 de `run_harness_tests.sh` y `.ps1`.
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_lifecycle_shutdown_log.py -q` → exit 0; `grep -c "test_lifecycle_shutdown_log.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`.
 
@@ -691,7 +691,7 @@ def install_shutdown_hook() -> None:
 - [ ] Huella de regresión (planes tipo-fix): si el plan MATA una clase de error, ¿registra su huella en `Stacky Agents/docs/sistema/error_fingerprints.json` (id, patrón, plan/commit, fecha, guard_test)? Es convención, no bloqueante: marcá su ausencia como MENOR.
 ```
 
-**Paso 4 — Registrar** `tests/test_error_fingerprints_catalog.py` en el bloque Plan 156 de `run_harness_tests.sh` y `.ps1`.
+**Paso 4 — Registrar** `tests/test_error_fingerprints_catalog.py` en el bloque Plan 163 de `run_harness_tests.sh` y `.ps1`.
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_catalog.py -q` → exit 0; el catálogo es `.json` bajo `docs/sistema/`; `grep -c "test_error_fingerprints_catalog.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`; `grep -c "error_fingerprints.json" .claude/skills/criticar-y-mejorar-plan/SKILL.md` → `≥ 1`.
 
@@ -712,7 +712,7 @@ def install_shutdown_hook() -> None:
 **Paso 1 — `backend/services/error_fingerprints.py` (fuente única de la lógica de scan):**
 
 ```python
-"""Plan 156 F5 — loader + scanner del catalogo de huellas de regresion.
+"""Plan 163 F5 — loader + scanner del catalogo de huellas de regresion.
 
 Fuente UNICA de la logica de grep (el smoke de PowerShell consume el MISMO
 catalogo). Sustrato del futuro plan de analisis local de logs con clustering."""
@@ -754,7 +754,7 @@ def scan_text(text: str, fingerprints: list[dict] | None = None) -> list[str]:
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Smoke NEGATIVO de huellas de regresion (Plan 156 F5).
+    Smoke NEGATIVO de huellas de regresion (Plan 163 F5).
 .DESCRIPTION
     Lee docs/sistema/error_fingerprints.json y, por cada huella resolved+log_guarded,
     grepea el log objetivo. Si ENCUENTRA alguna, FALLA (exit 1): una clase de error
@@ -805,7 +805,7 @@ exit 0
 | `test_solo_guardadas` | `guarded_fingerprints()` devuelve sólo entradas `resolved` + `log_guarded`; NO incluye `ado_workitem_type_vs402323` (open) ni `pm_no_snapshot_404` (by_design). |
 | `test_scan_multiple` | `scan_text` sobre un texto que concatena las muestras "match" de TODAS las guardadas → devuelve todos sus ids (grep NEGATIVO detecta cada regresión). |
 
-**Paso 4 — Registrar** `tests/test_error_fingerprints_scan.py` en el bloque Plan 156 de `run_harness_tests.sh` y `.ps1`.
+**Paso 4 — Registrar** `tests/test_error_fingerprints_scan.py` en el bloque Plan 163 de `run_harness_tests.sh` y `.ps1`.
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_scan.py -q` → exit 0; `grep -c "test_error_fingerprints_scan.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`. **Verificación manual (documentada):** crear un log de fixture con la línea `"GET /api/v1/pipeline/status HTTP/1.1" 404 -` → `pwsh -File deployment/smoke_fingerprints.ps1 -LogPath <fixture>` → exit 1; un log limpio → exit 0.
 
@@ -862,7 +862,7 @@ Correr `npx tsc --noEmit` al terminar F2. Cada test SIEMPRE por archivo con el v
 - **`built_at` sale de `generated_at`** del manifest (el manifest NO tiene `built_at`). NO agregar campos al build.
 - **RTL/jsdom NO están en `frontend/package.json`.** Prohibido `render()`/`renderHook`. El test del chip es de **lógica pura** (`buildIdentity.ts`) + `tsc --noEmit`. El banner de drift se verifica por smoke manual.
 - **`.tsx` y el uiDebtRatchet:** el TopBar ya existe; NO introducir `style={{}}` inline nuevos (usar clases de `TopBar.module.css` con tokens de `theme.css`). El plan hermano del latido único puede haber sumado un ratchet de diálogos nativos: **no** agregar `confirm/alert/prompt` nuevos en el TopBar.
-- **Tests backend nuevos van registrados** en `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` **Y** su `.ps1`, o el meta-test ratchet cae. Formato: sh `  tests/<archivo>.py` bajo `# — Plan 156 · ... —`; ps1 `  "tests/<archivo>.py"` bajo `# Plan 156 - ...`.
+- **Tests backend nuevos van registrados** en `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` **Y** su `.ps1`, o el meta-test ratchet cae. Formato: sh `  tests/<archivo>.py` bajo `# — Plan 163 · ... —`; ps1 `  "tests/<archivo>.py"` bajo `# Plan 163 - ...`.
 - **Gotcha comentario-choca-con-gate (recurrido 6+ veces):** este plan **no** introduce ningún grep-gate sobre código/prosa (el smoke grepa **logs**). Aun así, no escribir en comentarios de código literales de log que un futuro gate pudiera cazar; los patrones viven sólo en el catálogo `.json` y en los `self_test`.
 - **venv backend real:** `backend\.venv\Scripts\python.exe` (py3.13). El `.venv` del worktree `C:/wt/uxlog` puede no existir → correr los tests en el checkout principal `N:\GIT\RS\STACKY\Stacky`.
 - **Escribir a SQLAlchemy en atexit** es seguro **sólo desde el main thread** (patrón de `stacky_logger._flush_on_exit`). `log_shutdown` abre su propio `session_scope` síncrono; NO delegar a un thread daemon (gotcha crash nativo daemon vs teardown).

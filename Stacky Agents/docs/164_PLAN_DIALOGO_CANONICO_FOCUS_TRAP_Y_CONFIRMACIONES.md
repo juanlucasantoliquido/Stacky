@@ -1,4 +1,4 @@
-# Plan 157 — Un diálogo para gobernarlos a todos: primitiva canónica, focus-trap y confirmaciones de marca
+﻿# Plan 164 — Un diálogo para gobernarlos a todos: primitiva canónica, focus-trap y confirmaciones de marca
 
 > **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 con auditoría empírica del árbol de frontend. El gap viene verificado del debate; toda la evidencia archivo:línea de este doc fue **re-verificada y RECONTADA en frío contra el worktree** y se corrigió el drift encontrado (ver §2 y los bloques "DRIFT CORREGIDO"). Los números de línea son referencia de ese día — **toda edición se ancla por TEXTO/símbolo citado, no por número de línea**.

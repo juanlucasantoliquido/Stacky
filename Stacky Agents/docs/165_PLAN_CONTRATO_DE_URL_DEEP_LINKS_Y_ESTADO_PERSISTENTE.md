@@ -1,4 +1,4 @@
-# Plan 158 — El contrato de URL: la columna vertebral de la navegación (deep-links y estado persistente)
+﻿# Plan 165 — El contrato de URL: la columna vertebral de la navegación (deep-links y estado persistente)
 
 > **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 sobre la navegación del panel. El gap viene verificado del debate; **toda** la evidencia archivo:línea de este doc fue **re-verificada contra el worktree `C:/wt/uxlog`** y se corrigió el drift encontrado (ver §2 y los bloques "DRIFT CORREGIDO"). Los números de línea son referencia de ese día — **toda edición se ancla por TEXTO/símbolo citado, no por número de línea**.
@@ -147,7 +147,7 @@ Este es el hallazgo más importante del debate, y **no es lo que el debate creí
 **Paso 1 — `frontend/src/services/routes.ts`** (100% puro, sin JSX, sin `window` en las funciones puras — el `window` queda en los wrappers que las llaman desde `App.tsx`):
 
 ```ts
-// frontend/src/services/routes.ts — Plan 158 F1
+// frontend/src/services/routes.ts — Plan 165 F1
 // Contrato de URL tipado de Stacky. Router CASERO (NO react-router).
 // Parser/serializer PUROS: no tocan window (App.tsx pasa pathname/search).
 
@@ -278,7 +278,7 @@ export function serializeRoute(s: RouteState): string {
 **Paso 1 — `frontend/src/services/routeFilters.ts`** (puro; convierte los objetos de filtros a/desde `Record<string,string>` de query, SIN `offset`):
 
 ```ts
-// frontend/src/services/routeFilters.ts — Plan 158 F2
+// frontend/src/services/routeFilters.ts — Plan 165 F2
 // Serialización PURA de filtros de página a/desde querystring. offset NUNCA se
 // serializa (la paginación no se comparte ni se persiste — ver plan §3.7).
 

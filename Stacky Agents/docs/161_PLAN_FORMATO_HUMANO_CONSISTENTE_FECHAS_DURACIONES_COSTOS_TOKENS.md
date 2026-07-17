@@ -1,6 +1,16 @@
 # Plan 161 — Formato humano consistente: fechas, duraciones, costos USD, tokens y tamaños
 
-**Estado: PROPUESTO v1 — 2026-07-17**
+**Estado: CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-17 (v1 -> v2)**
+
+## Changelog v1 -> v2 (crítica adversarial)
+
+- **C1 (IMPORTANTE, resuelto):** el ratchet gateaba solo `toLocale*`/`toFixed`; un archivo nuevo podía evadirlo con `Intl.NumberFormat`/`Intl.DateTimeFormat`. F1 pasa a un ARRAY de regexes que suma ambas familias (verificado 2026-07-17: 0 usos de `new Intl.` en `frontend/src` ⇒ el baseline inicial NO cambia).
+- **C2 (IMPORTANTE, resuelto):** un ISO date-only (`"YYYY-MM-DD"`) parsea como medianoche UTC en JS ⇒ con `tz="local"` la fecha retrocedía un día en zonas negativas (AR = UTC-3). `dateParts` normaliza date-only a medianoche LOCAL solo en modo local; +2 casos de test exactos y deterministas en cualquier zona.
+- **C3 (IMPORTANTE, resuelto):** divergencia no declarada entre el corte absoluto de `formatRelativeTime.ts:33` (getters **UTC**) y `formatDate` default local. Ahora está documentada y CONGELADA en §4.F0.c.2 (se acepta; prohibido "alinear" el contrato ajeno).
+- **C4 (IMPORTANTE, resuelto):** F2 dejaba "elegir UNA de las dos formas" de import en `ExecutionDetailDrawer` — violaba §3.1 (cero criterio del implementador). Ahora hay UNA forma final obligatoria (borrar la local primero, import directo sin alias).
+- **C5 (MENOR, resuelto):** `formatTokens` NO es textualmente idéntica a `costCenter.logic.ts:14-20` (el canónico agrega `Math.round`); se documenta que la igualdad vale para enteros (los conteos reales lo son; delta solo teórico).
+- **C6 (MENOR, resuelto):** PMCommandCenter tiene 20 matches, no 19 (`:435` contiene dos `toFixed`). Números corregidos; el residual sigue ≤ 4.
+- **[ADICIÓN ARQUITECTO]:** export #11 `formatDurationBetween(startIso, endIso)` — mata el patrón hand-rolled `getTime() - getTime()` (hoy en `components/devops/deploymentsModel.ts`, adoptante futuro congelado en baseline) con reglas y tests exactos. K1 actualizado a 11 exports; riesgo R9 nuevo (evasión Intl).
 
 ## 1. Objetivo
 
@@ -10,7 +20,7 @@ Crear el módulo canónico ÚNICO de formateo de presentación del frontend (`sr
 
 | # | KPI | Verificación |
 |---|-----|--------------|
-| K1 | `src/services/format.ts` exporta EXACTAMENTE las 10 funciones del catálogo (§4.F0) y su test pasa | `npx vitest run src/services/format.test.ts` exit 0 |
+| K1 | `src/services/format.ts` exporta EXACTAMENTE las 11 funciones del catálogo (§4.F0) y su test pasa | `npx vitest run src/services/format.test.ts` exit 0 |
 | K2 | Ratchet activo con baseline commiteado y regla solo-baja | `npx vitest run src/__tests__/formatDebtRatchet.test.ts` exit 0 y existe `src/__tests__/formatDebtBaseline.json` |
 | K3 | En el baseline final NO figuran (0 matches): `pages/ExecutionHistoryPage.tsx`, `components/ExecutionDetailDrawer.tsx`, `pages/SystemLogsPage.tsx`, `lib/costCenter.logic.ts`, `components/CostPreview.tsx`, `components/CostCapIndicator.tsx`; y `pages/PMCommandCenter.tsx` figura con ≤ 4 | inspección de `formatDebtBaseline.json` |
 | K4 | Compila sin errores | `npx tsc --noEmit` exit 0 desde `Stacky Agents/frontend` |
@@ -83,7 +93,7 @@ export const MESES_ABREV = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ag
 
 Nada más cambia en ese archivo. (Aditivo: su test existente no importa `MESES_ABREV`, sigue verde.)
 
-#### F0.b — Catálogo congelado (10 exports de `src/services/format.ts`)
+#### F0.b — Catálogo congelado (11 exports de `src/services/format.ts`)
 
 ```ts
 export type FormatTz = "local" | "utc";
@@ -98,6 +108,7 @@ export function formatTokens(n: number | null | undefined): string;             
 export function formatInt(n: number | null | undefined): string;                                 // 8
 export function formatBytes(n: number | null | undefined): string;                               // 9
 export function formatPercent(pct: number | null | undefined, decimals: number = 0): string;     // 10
+export function formatDurationBetween(startIso: string | null | undefined, endIso: string | null | undefined): string; // 11 [ADICIÓN ARQUITECTO]
 ```
 
 Cabecera obligatoria del archivo (copiar tal cual):
@@ -123,7 +134,11 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 function dateParts(iso: string | null | undefined, tz: FormatTz):
   { y: number; mo: number; day: number; h: number; mi: number; s: number } | null {
   if (!iso) return null;
-  const d = new Date(iso);
+  // C2: date-only ("YYYY-MM-DD") parsea como medianoche UTC en JS; en modo local
+  // se normaliza a medianoche LOCAL para que la fecha nunca retroceda un día
+  // en zonas negativas (AR = UTC-3). En modo utc se deja tal cual (ya es UTC).
+  const s = tz === "local" && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso;
+  const d = new Date(s);
   if (Number.isNaN(d.getTime())) return null;
   return tz === "utc"
     ? { y: d.getUTCFullYear(), mo: d.getUTCMonth(), day: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds() }
@@ -133,6 +148,7 @@ function dateParts(iso: string | null | undefined, tz: FormatTz):
 
 **2) `formatDate(iso, tz)`** → `"{D} {mes} {YYYY}"` con `mes` de `MESES_ABREV` (importada de `../utils/formatRelativeTime`), día SIN cero a la izquierda (coherente con el corte absoluto de `formatRelativeTime.ts:33`).
 - `dateParts` null → `"—"`. Si no: `` `${p.day} ${MESES_ABREV[p.mo]} ${p.y}` ``.
+- **Nota CONGELADA (C3):** el corte absoluto de `formatRelativeTime.ts:33` usa getters **UTC**; `formatDate` default `local` usa la zona del operador. Cerca de medianoche pueden divergir ±1 día entre una fecha relativa-cortada y una absoluta en la misma pantalla. Decisión: SE ACEPTA (el relativo no muestra hora y su contrato es ajeno e intocable, §3.10); PROHIBIDO "alinearlo" tocando `formatRelativeTime.ts` más allá del export de F0.a.
 
 **3) `formatTime(iso, tz)`** → `"{HH}:{mm}:{ss}"` 24h, todo con `pad2`.
 - `dateParts` null → `"—"`. Si no: `` `${pad2(p.h)}:${pad2(p.mi)}:${pad2(p.s)}` ``.
@@ -162,7 +178,7 @@ return `${sign}$${abs.toFixed(2)}`;
 ```
 Sin separador de miles (hoy ninguna superficie agrupa miles en USD).
 
-**7) `formatTokens(n)`** — compacta, IDÉNTICA a `costCenter.logic.ts:14-20` (contrato del plan 142; la delegación de F4 depende de esta igualdad):
+**7) `formatTokens(n)`** — compacta, idéntica a `costCenter.logic.ts:14-20` PARA ENTEROS (contrato del plan 142; la delegación de F4 depende de esta igualdad en el dominio real: los conteos de tokens son enteros. Delta teórico documentado, C5: el canónico agrega `Math.round`, la del 142 hace `String(n)` directo para no-enteros — irrelevante con datos reales):
 ```ts
 if (n === null || n === undefined || Number.isNaN(n)) return "—";
 const r = Math.round(n);
@@ -193,6 +209,17 @@ return `${(n / 1024 ** 3).toFixed(1)} GB`;
 ```ts
 if (pct === null || pct === undefined || Number.isNaN(pct)) return "—";
 return `${pct.toFixed(decimals)}%`;
+```
+
+**11) `formatDurationBetween(startIso, endIso)` [ADICIÓN ARQUITECTO]** — duración entre dos timestamps sin que cada superficie haga la resta a mano (hoy `components/devops/deploymentsModel.ts` hand-rollea `getTime() - getTime()`; queda congelado en baseline como adoptante futuro; toda superficie con `started_at`/`finished_at` es candidata):
+```ts
+export function formatDurationBetween(startIso: string | null | undefined, endIso: string | null | undefined): string {
+  if (!startIso || !endIso) return "—";
+  const a = new Date(startIso).getTime();
+  const b = new Date(endIso).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return "—";
+  return formatDuration(b - a);
+}
 ```
 
 #### F0.d — Justificación de cada regla canónica (por qué minimiza el cambio visual)
@@ -266,6 +293,11 @@ Import: `import { describe, it, expect } from "vitest";` y todas las funciones d
 | formatPercent | `85.34`, decimals `1` | `"85.3%"` |
 | formatPercent | `0` | `"0%"` |
 | formatPercent | `-5` | `"-5%"` |
+| formatDate | `"2026-07-03"` (date-only), utc | `"3 jul 2026"` |
+| formatDate | `"2026-07-03"` (date-only), local | `"3 jul 2026"` (C2: determinista en CUALQUIER zona horaria; nunca retrocede un día) |
+| formatDurationBetween | `(null, "2026-07-03T00:00:00Z")` y `("no-es-fecha", "2026-07-03T00:00:00Z")` | `"—"` (ambos) |
+| formatDurationBetween | `("2026-07-03T00:00:00Z", "2026-07-03T00:04:05Z")` | `"4m 5s"` |
+| formatDurationBetween | `("2026-07-03T01:00:00Z", "2026-07-03T00:00:00Z")` (fin < inicio) | `"—"` |
 | formatRelativeTime (re-export) | `formatRelativeTime("2026-07-17T11:59:30Z", Date.parse("2026-07-17T12:00:00Z"))` | `"recién"` (prueba que el re-export resuelve) |
 
 **Criterio de aceptación (binario):** `npx vitest run src/services/format.test.ts` exit 0 y `npx tsc --noEmit` exit 0. TDD: correr el test ANTES de crear `format.ts` y verificar que falla por módulo inexistente; recién ahí implementar.
@@ -287,7 +319,7 @@ Import: `import { describe, it, expect } from "vitest";` y todas las funciones d
 **Especificación (copiar el patrón EXACTO de `src/__tests__/uiDebtRatchet.test.ts`, incluidas las funciones `countMatches`, `listFiles`, `sortKeys`, `readBaseline`, `assertNoIncrease` y el guard de regen de `uiDebtRatchet.test.ts:104-111`), con estos parámetros:**
 
 - `BASELINE_PATH` = `src/__tests__/formatDebtBaseline.json`; shape `{ "formatByFile": Record<string, number> }`.
-- Regex única: `const FORMAT_RE = /\.(toLocaleString|toLocaleDateString|toLocaleTimeString|toFixed)\s*\(/g;`
+- Regexes (C1 — array; la deuda de un archivo es la SUMA de matches de todas, patrón `reduce` idéntico a `RAW_CONTROL_RES` del plan 162 F0): `const FORMAT_RES: RegExp[] = [/\.(toLocaleString|toLocaleDateString|toLocaleTimeString|toFixed)\s*\(/g, /\bnew\s+Intl\.(NumberFormat|DateTimeFormat|RelativeTimeFormat)\s*\(/g];` — la segunda cierra la vía de evasión vía `Intl` (verificado 2026-07-17: 0 usos de `new Intl.` en `frontend/src` ⇒ el baseline inicial NO cambia).
 - Alcance del scan: archivos bajo `src/` cuyo path termina en `.ts` o `.tsx` (rutas normalizadas a `/` como en `uiDebtRatchet.test.ts:37`).
 - **Allowlist (excluidos del conteo, único lugar legítimo de esos métodos):** exactamente estos 3 rel-paths: `services/format.ts`, `services/format.test.ts`, `__tests__/formatDebtRatchet.test.ts`. (El tercero es el propio ratchet: se auto-excluye porque su fuente contiene la regex — exclusión explícita, NO ofuscar la regex.)
 - Forced-zero (invariante mecánico, igual que `uiDebtRatchet.test.ts:80-82`): archivos bajo `components/ui/` y `components/shell/` tienen permitido 0 SIEMPRE.
@@ -323,7 +355,7 @@ Import: `import { describe, it, expect } from "vitest";` y todas las funciones d
 4. NO tocar el import existente de `formatRelativeTime` (guardarraíl §3.10).
 
 `ExecutionDetailDrawer.tsx`:
-1. Agregar: `import { formatDuration as formatDurationCanonical, formatCostUsd, formatInt } from "../services/format";` — el alias evita colisión mientras se edita; al final la local se borra y el alias se puede simplificar a import directo `formatDuration` (elegir UNA de las dos formas y compilar).
+1. Forma final ÚNICA (C4 — cero criterio del implementador): PRIMERO ejecutar el paso 2 (borrar la local `formatDuration`), DESPUÉS agregar `import { formatDuration, formatCostUsd, formatInt } from "../services/format";` — import directo SIN alias. PROHIBIDO dejar alias en el estado final.
 2. BORRAR la local `formatDuration` (ancla: `function formatDuration(durationMs?: number | null): string`, hoy :20-25); call-sites → canónica. Cambio visual congelado: `"2.5m"` → `"2m 30s"`; marcador `"-"` → `"—"`.
 3. En `formatMaybeCurrency` (ancla: `function formatMaybeCurrency(value: unknown): string`, hoy :27-32): conservar la función (su guard de `unknown` es dominio del drawer) pero el cuerpo pasa a: `if (value == null) return "—"; const n = Number(value); if (Number.isFinite(n)) return formatCostUsd(n); return String(value);`
 4. En la local `formatTokens` (ancla: `function formatTokens(value: unknown): string`, hoy :34-39): conservar guard, cuerpo numérico → `return formatInt(n);` y marcador `"—"`. Cambio visual congelado: separador de miles ya no depende del navegador.
@@ -335,7 +367,7 @@ Import: `import { describe, it, expect } from "vitest";` y todas las funciones d
 4. Ancla `Total {stats.total.toLocaleString()}` (hoy :205) → `Total {formatInt(stats.total)}`.
 5. Ancla `{total.toLocaleString()} total events` (hoy :370) → `{formatInt(total)} total events`.
 
-**Criterio de aceptación (binario):** (a) `npx tsc --noEmit` exit 0; (b) `npx vitest run src/__tests__/formatDebtRatchet.test.ts` exit 0; (c) `npx vitest run src/pages/__tests__/ExecutionHistoryPage.adoption.test.ts` exit 0; (d) el conteo de `FORMAT_RE` en los 3 archivos es 0 — verificable porque el ratchet en modo normal pasa y, tras el regen de F5, esos archivos desaparecen del baseline.
+**Criterio de aceptación (binario):** (a) `npx tsc --noEmit` exit 0; (b) `npx vitest run src/__tests__/formatDebtRatchet.test.ts` exit 0; (c) `npx vitest run src/pages/__tests__/ExecutionHistoryPage.adoption.test.ts` exit 0; (d) el conteo de `FORMAT_RES` en los 3 archivos es 0 — verificable porque el ratchet en modo normal pasa y, tras el regen de F5, esos archivos desaparecen del baseline.
 
 **Flag:** sin flag. **Runtimes:** idéntico los 3; fallback N/A. **Trabajo del operador: ninguno.** Smoke manual documentado (no bloqueante): abrir Historial de Ejecuciones y Logs del Sistema, confirmar que duraciones se ven `4m 5s` y costos `$0.0042`/`$1.23`.
 
@@ -343,7 +375,7 @@ Import: `import { describe, it, expect } from "vitest";` y todas las funciones d
 
 ### F3 — Migración ejemplar 2: PM Command Center
 
-**Objetivo:** la superficie con MÁS formatters crudos del repo (19 matches, `src/pages/PMCommandCenter.tsx`) pasa al canónico. Valor: KPIs, timestamps y costos del tablero PM coherentes con el resto de la app.
+**Objetivo:** la superficie con MÁS formatters crudos del repo (20 matches — `:435` contiene dos `toFixed`, C6 — `src/pages/PMCommandCenter.tsx`) pasa al canónico. Valor: KPIs, timestamps y costos del tablero PM coherentes con el resto de la app.
 
 **Archivo:** `src/pages/PMCommandCenter.tsx`. **Pre-flight:** `git status --porcelain -- "Stacky Agents/frontend/src/pages/PMCommandCenter.tsx"` → si hay `M`, STOP.
 
@@ -441,6 +473,7 @@ Import a agregar: `import { formatDate, formatTime, formatDateTime, formatDurati
 | R6 | Tests de fecha no deterministas por zona horaria de la máquina | Parámetro `tz: "local" | "utc"` (default local en runtime); asserts exactos solo con `"utc"`; `"local"` se testea por shape/regex — mismo patrón de inyección que `formatRelativeTime.ts:15` con `nowMs` |
 | R7 | Test-order pollution de vitest (gotcha conocido del repo) | Todos los comandos son POR ARCHIVO; nunca `npx vitest run` completo |
 | R8 | Edge cosmético heredado: `formatTokens(999_999)` → `"1000.0k"` | Heredado tal cual del contrato 142 (`costCenter.logic.ts:17-18`) a propósito: la igualdad de reglas es prerequisito de la delegación de F4; queda documentado como edge conocido, no corregirlo en este plan |
+| R9 | Evasión del ratchet vía `Intl.NumberFormat`/`Intl.DateTimeFormat` (hoy 0 usos en `frontend/src`) | La segunda regex de F1 (C1) los cuenta como deuda: cualquier uso futuro nace como regresión detectada por el ratchet |
 
 ## 6. Fuera de scope
 

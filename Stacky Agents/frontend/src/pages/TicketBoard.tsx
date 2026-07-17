@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tickets, Agents, FlowConfig, Executions, Memory, type StackyMemoryTicketBadge } from "../api/endpoints";
+import { Tickets, Agents, FlowConfig, Executions, Memory, Incidents, type StackyMemoryTicketBadge } from "../api/endpoints";
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
@@ -17,6 +17,7 @@ import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
 import LoadErrorState from "../components/LoadErrorState";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
+import IncidentResolverModal from "../components/IncidentResolverModal";
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -705,6 +706,19 @@ export default function TicketBoard() {
   const [viewMode, setViewMode] = useLocalStorageState<ViewMode>("ticketBoard.viewMode", "graph");
   // Plan 38 B2 — Modal épica desde brief
   const [epicBriefOpen, setEpicBriefOpen] = useState(false);
+  // Plan 131 — Modal resolutor de incidencias (botón invisible con flag OFF)
+  const [incidentModalOpen, setIncidentModalOpen] = useState(false);
+  const [incidentsEnabled, setIncidentsEnabled] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const s = await Incidents.status();
+        setIncidentsEnabled(s.enabled);
+      } catch {
+        setIncidentsEnabled(false);
+      }
+    })();
+  }, []);
   // Requerimiento B: "Mostrar todas las tareas" — arranca MARCADO por defecto
   // (decisión de negocio). Al desmarcar se filtra a "solo asignadas a mí".
   const [showAll, setShowAll] = useLocalStorageState<boolean>("ticketBoard.showAll", true);
@@ -883,6 +897,16 @@ export default function TicketBoard() {
           >
             + Nueva Épica desde brief
           </button>
+          {/* Plan 131 — Resolutor de incidencias (invisible con flag OFF) */}
+          {incidentsEnabled && (
+            <button
+              className={styles.syncBtn}
+              onClick={() => setIncidentModalOpen(true)}
+              title="Reportar una incidencia con fotos, archivos y texto"
+            >
+              🚑 Resolver incidencia
+            </button>
+          )}
           {/* Toggle vista */}
           <div className={styles.viewToggle}>
             <button
@@ -956,6 +980,13 @@ export default function TicketBoard() {
       {epicBriefOpen && (
         <EpicFromBriefModal
           onClose={() => setEpicBriefOpen(false)}
+        />
+      )}
+
+      {/* Plan 131 — Modal Resolutor de Incidencias */}
+      {incidentModalOpen && (
+        <IncidentResolverModal
+          onClose={() => setIncidentModalOpen(false)}
         />
       )}
 

@@ -6132,6 +6132,59 @@ def _looks_like_epic(html: str | None) -> bool:
     return has_heading and has_rf_block
 
 
+# ── Plan 131 — Resolutor de incidencias: guard anti-narración + parsing ────────
+
+_INCIDENT_REQUIRED_SECTIONS = (
+    "ANALISIS FUNCIONAL", "ANALISIS TECNICO", "PASOS DE REPRODUCCION", "CRITERIOS DE ACEPTACION",
+)
+
+
+def _looks_like_incident(html: str | None) -> bool:
+    """Valida que `html` tenga estructura de desglose de incidencia real — NO
+    narración del agente (espejo de `_looks_like_epic`). Exige al menos un
+    heading (<h1>/<h2>) Y al menos 3 de las 4 secciones obligatorias
+    (case-insensitive, literales sin acentos). Idempotente; seguro ante None/''."""
+    if not html or not str(html).strip():
+        return False
+    text = str(html)
+    if re.search(r"<h[12][^>]*>", text, re.IGNORECASE) is None:
+        return False
+    plain = re.sub(r"<[^>]+>", " ", text).upper()
+    matched = sum(1 for section in _INCIDENT_REQUIRED_SECTIONS if section in plain)
+    return matched >= 3
+
+
+def _parse_related_epic(html: str | None) -> dict:
+    """Extrae {epic_id, confidence, reason} de la sección EPICA RELACIONADA
+    (formato 'EPICA: <id|ninguna> | CONFIANZA: <0-100> | RAZON: ...'). Pura;
+    NUNCA lanza; cualquier campo no matcheado queda en None."""
+    result: dict = {"epic_id": None, "confidence": None, "reason": None}
+    if not html:
+        return result
+    plain = re.sub(r"<[^>]+>", " ", str(html))
+
+    m = re.search(r"EPICA:\s*(ninguna|\d+)", plain, re.IGNORECASE)
+    if m and m.group(1).strip().lower() != "ninguna":
+        try:
+            result["epic_id"] = int(m.group(1))
+        except ValueError:
+            result["epic_id"] = None
+
+    m = re.search(r"CONFIANZA:\s*(\d{1,3})", plain, re.IGNORECASE)
+    if m:
+        try:
+            result["confidence"] = max(0, min(100, int(m.group(1))))
+        except ValueError:
+            result["confidence"] = None
+
+    m = re.search(r"RAZON:\s*([^|<\n]{1,300})", plain, re.IGNORECASE)
+    if m:
+        reason = m.group(1).strip()
+        result["reason"] = reason or None
+
+    return result
+
+
 def _epic_grounding_warnings(html: str | None) -> list[str]:
     """Plan 42 F2 — Detecta si una épica cita módulos/procesos fuente o marca supuestos.
 
@@ -7242,6 +7295,260 @@ def epic_payload_preview():
         "grounding_warnings": preview.grounding_warnings,
         "publishable_runtime": runtime == "claude_code_cli",
     }), 200
+
+
+# ── Plan 131 F5 — Preview + Publish del resolutor de incidencias ──────────────
+
+
+def _incident_h1_title(html: str, fallback_text: str) -> str:
+    """Título del Issue = texto del <h1>; si falta, primeras 8 palabras del
+    texto del operador (§4.3)."""
+    m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.IGNORECASE | re.DOTALL)
+    if m:
+        title = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+        if title:
+            return title
+    words = (fallback_text or "").split()
+    return "[INC] " + " ".join(words[:8])
+
+
+@bp.get("/incident-preview")
+def incident_preview():
+    """Plan 131 F5 — Preview solo-lectura del desglose de una incidencia.
+
+    GET /api/tickets/incident-preview?execution_id=<id>&incident_id=<id>
+    Espejo de epic_payload_preview (arriba): NO toca el tracker, NO modifica
+    el incidente salvo la transición condicional analizando→analizada (C8).
+    """
+    if not getattr(config.config, "STACKY_INCIDENT_RESOLVER_ENABLED", False):
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    from services import incident_store
+
+    execution_id_str = request.args.get("execution_id", "").strip()
+    incident_id = request.args.get("incident_id", "").strip()
+    if not execution_id_str or not execution_id_str.isdigit() or not incident_id:
+        return jsonify({"ok": False, "error": "invalid_request"}), 400
+
+    incident = incident_store.get_incident(incident_id)
+    if incident is None:
+        return jsonify({"ok": False, "error": "incident_not_found"}), 404
+
+    execution_id = int(execution_id_str)
+    with session_scope() as db:
+        run = _get_run_for_preview(execution_id, db=db)
+        if run is None:
+            return jsonify({"ok": False, "error": "run_not_found"}), 404
+        output = run.output
+
+    html = _extract_epic_html_raw(output)
+    if not _looks_like_incident(html):
+        return jsonify({
+            "ok": False, "error": "incident_not_in_output", "publishable": False,
+        }), 200
+
+    title = _incident_h1_title(html, incident.get("text", ""))
+    related = _parse_related_epic(html)
+
+    # C8 — transición CONDICIONAL e idempotente: solo analizando→analizada;
+    # cualquier otro status (analizada/publicada/error) queda intacto.
+    if incident.get("status") == "analizando":
+        incident_store.update_incident(incident_id, status="analizada", title=title)
+
+    return jsonify({
+        "ok": True,
+        "title": title,
+        "html": html,
+        "related_epic": related,
+        "publishable": True,
+    }), 200
+
+
+def _incident_publish_terminal_error(incident_id: str, exc: Exception):
+    """C7 — contrato de error terminal: el incidente queda en status='error'
+    SIN tracker_id (re-publicable); nunca escribe el doc F6; 502 tracker_error."""
+    from services import incident_store
+    from services.stacky_logger import logger as stacky_logger
+
+    incident_store.update_incident(incident_id, status="error", error=str(exc))
+    stacky_logger.info(
+        "incidents", "incident_publish_failed", incident_id=incident_id, error=str(exc),
+    )
+    return jsonify({"ok": False, "error": "tracker_error", "message": str(exc)}), 502
+
+
+@bp.post("/incidents/publish")
+def publish_incident():
+    """Plan 131 F5 — Publica el Issue en el tracker activo, linkeado a su
+    épica relacionada, con los archivos del incidente como attachments
+    nativos. Human-in-the-loop duro: confirm debe ser exactamente true."""
+    if not getattr(config.config, "STACKY_INCIDENT_RESOLVER_ENABLED", False):
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    from services import incident_store
+
+    body = _body_json()
+    confirm = body.get("confirm")
+    if confirm is not True:
+        return jsonify({
+            "ok": False,
+            "error": "confirmation_required",
+            "message": "Debes enviar confirm:true para publicar (human-in-the-loop).",
+        }), 400
+
+    incident_id = (body.get("incident_id") or "").strip()
+    incident = incident_store.get_incident(incident_id) if incident_id else None
+    if incident is None:
+        return jsonify({"ok": False, "error": "incident_not_found"}), 404
+    if incident.get("tracker_id"):
+        return jsonify({
+            "ok": False, "error": "already_published", "tracker_id": incident["tracker_id"],
+        }), 409
+
+    try:
+        execution_id = int(body.get("execution_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_execution_id"}), 400
+
+    work_item_type = body.get("work_item_type") or "Issue"
+    if work_item_type not in ("Issue", "Bug"):
+        return jsonify({"ok": False, "error": "invalid_work_item_type"}), 400
+
+    with session_scope() as db:
+        run = _get_run_for_preview(execution_id, db=db)
+        output = run.output if run is not None else None
+        project_name = getattr(run, "project_name", None) if run is not None else None
+
+    html = _extract_epic_html_raw(output)
+    if not _looks_like_incident(html):
+        return jsonify({"ok": False, "error": "incident_not_in_output"}), 422
+
+    title = _incident_h1_title(html, incident.get("text", ""))
+    related = _parse_related_epic(html)
+
+    # override_epic_id: null explícito = publicar SIN épica (ignora la del
+    # agente); ausente = usar la del agente; entero = usar ese id.
+    if "override_epic_id" in body:
+        epic_id = body.get("override_epic_id")
+    else:
+        epic_id = related.get("epic_id")
+
+    from services.tracker_provider import (
+        TrackerApiError,
+        TrackerItem,
+        get_tracker_provider,
+    )
+
+    try:
+        provider = get_tracker_provider(project_name)
+    except Exception as exc:  # noqa: BLE001 — provider mal configurado, etc.
+        return _incident_publish_terminal_error(incident_id, exc)
+
+    # C1 — CONGELADO: fields DEBE incluir System.Title/System.Description
+    # duplicados (la rama WS1 de AdoClient.create_work_item ignora los
+    # parámetros posicionales title/description cuando fields no es None).
+    fields = {
+        "System.Title": title,
+        "System.Description": html,
+        "System.Tags": "incidencia; stacky-incident",
+    }
+
+    def _build_item(parent_id: str | None) -> "TrackerItem":
+        return TrackerItem(
+            item_type=work_item_type,
+            title=title,
+            description_html=html,
+            labels=("incidencia",),
+            parent_id=parent_id,
+            fields=fields,
+        )
+
+    warnings: list[str] = []
+    epic_link_mode = "none" if epic_id is None else "parent"
+    created = None
+    try:
+        created = provider.create_item(_build_item(str(epic_id) if epic_id is not None else None))
+    except TrackerApiError as exc:
+        if epic_id is None:
+            return _incident_publish_terminal_error(incident_id, exc)
+        # Reintento UNA vez sin parent — la publicación nunca falla POR EL LINK.
+        try:
+            created = provider.create_item(_build_item(None))
+            epic_link_mode = "none"
+        except Exception as retry_exc:  # noqa: BLE001
+            return _incident_publish_terminal_error(incident_id, retry_exc)
+        try:
+            provider.post_comment(
+                str(epic_id),
+                f"<p>Incidencia relacionada publicada: <strong>{_html.escape(title)}</strong>.</p>",
+            )
+            epic_link_mode = "comment"
+        except Exception as comment_exc:  # noqa: BLE001 — fallback best-effort
+            warnings.append(f"epic_comment_failed:{comment_exc}")
+    except Exception as exc:  # noqa: BLE001 — TrackerError/TrackerConfigError/cualquiera
+        return _incident_publish_terminal_error(incident_id, exc)
+
+    tracker_id = str((created or {}).get("iid") or (created or {}).get("id") or "")
+    if tracker_id == "":
+        return _incident_publish_terminal_error(
+            incident_id, RuntimeError("el tracker no devolvió un id de work item"),
+        )
+
+    url = ""
+    try:
+        url = provider.item_url(tracker_id) or ""
+    except Exception:  # noqa: BLE001
+        pass
+    if not url:
+        url = (created or {}).get("web_url") or (created or {}).get("url") or ""
+
+    # Attachments — por CADA archivo, try/except individual; fallo → warning,
+    # NUNCA aborta la publicación ya hecha.
+    from services.incident_store import incidents_root
+    incident_dir = incidents_root() / incident_id
+    for f in incident.get("files") or []:
+        try:
+            att = provider.upload_attachment(str(incident_dir / f["stored_name"]), f["stored_name"])
+            provider.link_attachment(str(tracker_id), att)
+        except Exception:  # noqa: BLE001
+            warnings.append(f"attachment_failed:{f.get('stored_name')}")
+
+    # F6 (C13) — incident_docs se crea en la fase siguiente; import protegido
+    # para que F5 quede verde sin F6. Escritura SIEMPRE best-effort (§4.5).
+    doc_path = None
+    try:
+        from services import incident_docs
+        doc_path = incident_docs.write_incident_doc(incident, title, html, related)
+    except Exception:  # noqa: BLE001
+        doc_path = None
+    if doc_path is None:
+        warnings.append("doc_write_failed")
+
+    incident_store.update_incident(
+        incident_id,
+        status="publicada",
+        tracker_id=tracker_id,
+        tracker_url=url,
+        epic_id=epic_id,
+        doc_path=doc_path,
+        title=title,
+    )
+
+    from services.stacky_logger import logger as stacky_logger
+    stacky_logger.info(
+        "incidents", "incident_published",
+        incident_id=incident_id, tracker_id=tracker_id, epic_link_mode=epic_link_mode,
+    )
+
+    return jsonify({
+        "ok": True,
+        "tracker_id": tracker_id,
+        "url": url,
+        "epic_id": epic_id,
+        "epic_link_mode": epic_link_mode,
+        "doc_path": doc_path,
+        "warnings": warnings,
+    }), 201
 
 
 # ── Plan 55 F3 — Portafolio brief→N épicas (preview de molécula) ──────────────

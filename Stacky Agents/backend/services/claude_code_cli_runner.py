@@ -211,9 +211,11 @@ def start_claude_code_cli_run(
 #        autónomo en background — nadie responde por consola; sin esto el
 #        proceso quedaba vivo esperando input del operador y el run del
 #        Documentador se colgaba hasta el timeout (1800s).
+#   -8 = Incident Pool (Plan 131 C14, resolutor de incidencias): mismo patrón,
+#        el agente unificado corre en background sin consola conversacional.
 # Las consolas multi-turno reales (-3 doctor, -4 DevOps, -5 remota, -6 PRs y
 # tickets positivos) NO van acá: siguen conversacionales.
-_ONE_SHOT_ADO_IDS = frozenset({-1, -7})
+_ONE_SHOT_ADO_IDS = frozenset({-1, -7, -8})
 
 
 def _is_one_shot(t_ado_id) -> bool:
@@ -1026,9 +1028,11 @@ def _run_in_background(
         # R1.2 — ¿el agente emitió un `result` terminal exitoso? Si sí, el run
         # completó su trabajo aunque después la sesión quede ociosa.
         _result_ok_seen: list[bool] = [False]
-        # R1.2 — run de un solo turno (pipelines sin consola conversacional):
-        # cerramos stdin apenas llega el result terminal para salir limpio sin
-        # esperar al watchdog ni al operador.
+        # R1.2 — run de un solo turno (pool tickets sintéticos: brief→épica
+        # ado_id=-1, Documentador ado_id=-7, resolutor de incidencias Plan 131
+        # ado_id=-8): no hay consola conversacional, así que cerramos stdin
+        # apenas llega el result terminal para salir limpio sin esperar al
+        # watchdog ni al operador.
         _one_shot = _is_one_shot(t_ado_id)
 
         def _on_stream_event(event: dict) -> None:

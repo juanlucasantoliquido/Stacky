@@ -4142,3 +4142,70 @@ export const GlobalSearchApi = {
       signal ? { signal } : undefined
     ),
 };
+
+// ── Plan 131 — Resolutor de incidencias multimodal ──────────────────────────
+
+import type {
+  IncidentDTO,
+  IncidentPreviewDTO,
+  IncidentStatusDTO,
+} from "../incidents/incidentModel";
+export type { IncidentDTO, IncidentPreviewDTO, IncidentStatusDTO };
+
+export const Incidents = {
+  status: () => api.get<IncidentStatusDTO>("/api/incidents/status"),
+
+  /** multipart/form-data — el cliente `api.post` fija Content-Type: application/json
+   * y no sirve para subir archivos; se usa fetch directo (client.ts:85-86, apiBase). */
+  create: async (text: string, files: File[]): Promise<{ ok: boolean; incident: IncidentDTO }> => {
+    const formData = new FormData();
+    formData.append("text", text);
+    for (const f of files) formData.append("files", f);
+    const res = await fetch(`${apiBase}/api/incidents`, {
+      method: "POST",
+      headers: { "X-User-Email": "dev@local" },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.message || data?.error || `${res.status} ${res.statusText}`);
+    }
+    return data;
+  },
+
+  list: () => api.get<{ ok: boolean; incidents: IncidentDTO[] }>("/api/incidents"),
+
+  get: (incidentId: string) =>
+    api.get<{ ok: boolean; incident: IncidentDTO }>(`/api/incidents/${encodeURIComponent(incidentId)}`),
+
+  runAnalysis: (payload: {
+    incident_id: string;
+    runtime?: import("../types").AgentRuntime;
+    project?: string | null;
+    model?: string | null;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  }) =>
+    api.post<{ execution_id: number; status: string }>("/api/agents/run-incident", payload),
+
+  preview: (executionId: number, incidentId: string) =>
+    api.get<IncidentPreviewDTO>(
+      `/api/tickets/incident-preview?execution_id=${executionId}&incident_id=${encodeURIComponent(incidentId)}`
+    ),
+
+  publish: (payload: {
+    incident_id: string;
+    execution_id: number;
+    confirm: true;
+    override_epic_id?: number | null;
+    work_item_type?: "Issue" | "Bug";
+  }) =>
+    api.post<{
+      ok: boolean;
+      tracker_id: string;
+      url: string;
+      epic_id: number | null;
+      epic_link_mode: "parent" | "comment" | "none";
+      doc_path: string | null;
+      warnings: string[];
+    }>("/api/tickets/incidents/publish", payload),
+};

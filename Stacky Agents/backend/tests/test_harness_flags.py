@@ -657,6 +657,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_ADO_BLOCKER_BLOCK_ENABLED",
     "STACKY_RUN_DIRECTIVE_ENABLED",
     "STACKY_REQUIRED_BLOCKS_ENABLED",
+    # ── Activación operador 2026-07-15 — Plan 131 (mismo patrón "capacidades
+    # opt-in": botón invocado a mano en Tickets, sin autopublicación ni costo
+    # automático; publish siempre con preview+confirmación humana) ──
+    "STACKY_INCIDENT_RESOLVER_ENABLED",
 }
 
 

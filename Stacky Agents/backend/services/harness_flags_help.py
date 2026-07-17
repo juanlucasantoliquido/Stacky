@@ -1364,6 +1364,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la card desaparece y el endpoint devuelve 404. El gate de 'Preparar Publicación' NO depende de esta flag (su bypass es -SkipCodeIntegrity).",
         example="Antes de publicar, el gate te dice 'api/devops_servers.py:223 — invalid syntax' en 2 segundos, en vez de un ModuleNotFoundError críptico tras minutos de build.",
     ),
+    # ── Plan 131 — Resolutor de incidencias multimodal ──────────────────────
+    "STACKY_INCIDENT_RESOLVER_ENABLED": PlainHelp(
+        what="Un botón en Tickets para reportar una incidencia con fotos, archivos y texto, y convertirla en un ticket listo para el desarrollador.",
+        on_effect="Si la activás: aparece el botón 'Resolver incidencia'; el agente arma el análisis completo y, tras tu revisión y confirmación, Stacky publica el ticket con sus adjuntos y lo enlaza a su épica.",
+        off_effect="Si la apagás: el botón desaparece y todo vuelve a como estaba; las incidencias se redactan a mano como siempre.",
+        example="Ves una pantalla rota: sacás la captura, la arrastrás al modal con dos líneas de contexto, y en dos clicks tenés el ticket armado, adjuntado y enlazado en el tracker.",
+    ),
 }
 
 

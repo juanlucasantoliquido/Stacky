@@ -874,6 +874,198 @@ def run_brief():
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
 
 
+@bp.post("/run-incident")
+def run_incident():
+    """Plan 131 F4 — Lanza el IncidentAnalyst sobre una incidencia capturada.
+
+    Espejo de run_brief (arriba) con las diferencias EXACTAS del plan §5 F4:
+    input=incident_id (no brief), pool ticket ado_id=-8 ("Incident Pool
+    Ticket"), agent_type="incident", contenido=build_incident_prompt (con
+    catálogo real de épicas vía get_tracker_provider — C4), SIN preflight de
+    intención, SIN validación de work_item_type, SIN el guard
+    _AUTOPUBLISH_RUNTIME (acá nadie autopublica: los 3 runtimes son válidos).
+    """
+    if not config.STACKY_INCIDENT_RESOLVER_ENABLED:
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    from db import session_scope
+    from models import Ticket
+    from services import incident_context, incident_store
+
+    payload = request.get_json(force=True, silent=True) or {}
+
+    incident_id = (payload.get("incident_id") or "").strip()
+    incident = incident_store.get_incident(incident_id) if incident_id else None
+    if incident is None:
+        return jsonify({"ok": False, "error": "incident_not_found"}), 400
+    if incident.get("status") not in ("capturada", "analizada", "error"):
+        return jsonify({"ok": False, "error": "invalid_status"}), 400
+
+    runtime_raw = payload.get("runtime") or "github_copilot"
+    project_name = (payload.get("project") or "").strip() or None
+    vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
+
+    # Plan 42 F3 / Plan 53 F2 — modelo y effort por-run con selector adaptativo
+    # (passthrough IDÉNTICO a run_brief — punto 7 del plan).
+    from services import llm_router as _llm_router
+    from services import adaptive_selector  # Plan 53
+
+    _requested_model_raw = (payload.get("model") or "").strip()
+    _requested_model: str | None = _requested_model_raw or None
+
+    _requested_effort_raw = (payload.get("effort") or "").strip().lower()
+
+    _operator_explicitly_set_model = _requested_model is not None
+    _operator_explicitly_set_effort = _requested_effort_raw in {"low", "medium", "high", "xhigh", "max"}
+
+    _base_model: str | None = _requested_model if _operator_explicitly_set_model else None
+    _base_effort: str = _requested_effort_raw if _operator_explicitly_set_effort else "high"
+
+    _adaptive_trace: dict | None = None
+    if (
+        config.STACKY_ADAPTIVE_SELECTOR_ENABLED
+        and not (_operator_explicitly_set_model and _operator_explicitly_set_effort)
+    ):
+        _conf = adaptive_selector._load_last_project_confidence(project_name)
+        _sel = adaptive_selector.select(_conf, base_model=_base_model, base_effort=_base_effort)
+
+        if not _operator_explicitly_set_model:
+            _base_model = _sel.model
+        if not _operator_explicitly_set_effort:
+            _base_effort = _sel.effort
+        logger.info("run_incident: selector adaptativo conf=%s -> %s", _conf, _sel.reason)
+        _adaptive_trace = {
+            "enabled": True,
+            "input_confidence": _conf,
+            "reason": _sel.reason,
+            "proposed_model": _sel.model,
+            "proposed_effort": _sel.effort,
+        }
+
+    model_override: str | None = (
+        _llm_router.clamp_model(_base_model, allow_opus=True) if _base_model else None
+    )
+    effort_override: str = _base_effort if _base_effort in {"low", "medium", "high", "xhigh", "max"} else "high"
+    effort_override = _clamp_effort_for_model(effort_override, model_override)
+
+    if _adaptive_trace is not None:
+        _adaptive_trace["final_model"] = model_override
+        _adaptive_trace["final_effort"] = effort_override
+
+    logger.info("run_incident: modelo efectivo=%s effort=%s", model_override, effort_override)
+
+    # Auto-resolve el .agent.md del IncidentAnalyst para runtimes CLI.
+    if runtime_raw in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
+        incident_context.ensure_incident_agent_file()
+        vscode_agent_filename = "IncidentAnalyst.agent.md"
+
+    # Obtener o crear el Incident Pool Ticket para este proyecto (ado_id=-8,
+    # C3 — sentinel verificado libre: -1 brief, -2 devops, -3 doctor secciones,
+    # -4 consola remota, -5 análisis LLM local, -6 PR review, -7 documenter).
+    pool_project = project_name or "default"
+    with session_scope() as session:
+        pool_ticket = (
+            session.query(Ticket)
+            .filter_by(ado_id=-8, project=pool_project)
+            .first()
+        )
+        if pool_ticket is None:
+            pool_ticket = Ticket(
+                ado_id=-8,
+                external_id=-8,
+                project=pool_project,
+                stacky_project_name=pool_project,
+                title="Incident Pool Ticket",
+                work_item_type="Task",
+                ado_state="Active",
+            )
+            session.add(pool_ticket)
+            session.flush()
+        pool_ticket_id = pool_ticket.id
+
+    # Catálogo de épicas real del tracker configurado (C4 — fábrica real
+    # get_tracker_provider; create_epic_from_brief publica ADO-directo y NO
+    # expone ningún helper de provider que espejar acá).
+    catalog: list[dict] = []
+    try:
+        from services.tracker_provider import get_tracker_provider
+        provider = get_tracker_provider(project_name)
+        catalog = incident_context.fetch_epic_catalog(provider)
+    except Exception as exc:  # noqa: BLE001 — catálogo es best-effort, nunca 500
+        logger.info("run_incident: catálogo de épicas no disponible (%s)", exc)
+        catalog = []
+
+    prompt = incident_context.build_incident_prompt(incident, catalog)
+    context_blocks = [
+        {
+            "id": "incident",
+            "kind": "raw-conversation",
+            "title": "Incidencia del operador",
+            "content": prompt,
+            "source": {"type": "incident_modal", "incident_id": incident_id},
+        }
+    ]
+
+    user = current_user()
+
+    try:
+        execution_id = agent_runner.run_agent(
+            agent_type="incident",
+            ticket_id=pool_ticket_id,
+            context_blocks=context_blocks,
+            user=user,
+            runtime=runtime_raw,
+            vscode_agent_filename=vscode_agent_filename,
+            project_name=project_name,
+            use_few_shot=False,
+            use_anti_patterns=False,
+            model_override=model_override,
+            effort_override=effort_override,
+        )
+    except agent_runner.UnknownAgentError:
+        abort(400, "agent_type 'incident' no está registrado")
+    except Exception as exc:  # noqa: BLE001 — Plan 39 B1: nunca 500 genérico
+        logger.exception(
+            "run_incident: fallo al lanzar agente runtime=%s project=%s",
+            runtime_raw, project_name,
+        )
+        return jsonify({
+            "ok": False,
+            "error": "agent_launch_failed",
+            "runtime": runtime_raw,
+            "message": str(exc),
+        }), 502
+
+    logger.info(
+        "run_incident: execution_id=%s runtime=%s incident_id=%s",
+        execution_id, runtime_raw, incident_id,
+    )
+
+    incident_store.update_incident(incident_id, status="analizando", execution_id=execution_id)
+
+    from services.stacky_logger import logger as stacky_logger
+    stacky_logger.info(
+        "incidents", "incident_analysis_started",
+        incident_id=incident_id, execution_id=execution_id, runtime=runtime_raw,
+    )
+
+    # Plan 53 F5 — Traza opcional del selector adaptativo en metadata del run.
+    if _adaptive_trace is not None:
+        try:
+            from db import session_scope as _sc131
+            from models import AgentExecution as _AE131
+            with _sc131() as _s131:
+                _ex131 = _s131.get(_AE131, execution_id)
+                if _ex131 is not None:
+                    _md131 = dict(_ex131.metadata_dict or {})
+                    _md131["adaptive_selector"] = _adaptive_trace
+                    _ex131.metadata_dict = _md131
+        except Exception as _e131:  # noqa: BLE001 — traza es opcional; nunca bloquea el run
+            logger.warning("run_incident: no se pudo persistir traza adaptive_selector: %s", _e131)
+
+    return jsonify({"execution_id": execution_id, "status": "running"}), 202
+
+
 @bp.get("/autoprofile/<project>")
 def project_autoprofile(project: str):
     """Plan 42 F5 — Deriva un perfil de proyecto desde los docs locales (determinista, sin LLM).

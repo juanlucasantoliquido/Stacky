@@ -943,6 +943,14 @@ class Config:
         "STACKY_ISSUE_FROM_BRIEF_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 131 — Resolutor de incidencias multimodal (botón + intake + agente unificado
+    # + publish tracker + doc en grafo). Promovida a default ON 2026-07-15 (directiva
+    # operador: "no quiero flags default off que sirvan y no sean nocivas" — sin
+    # autopublicación, siempre preview+confirmación humana antes de publicar).
+    STACKY_INCIDENT_RESOLVER_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_RESOLVER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 77 — Postea análisis funcional/técnico/implementación de un Issue como
     # comentarios idempotentes en el mismo WI (sin tickets hijos). Default OFF.
     STACKY_ISSUE_PHASE_COMMENTS_ENABLED: bool = os.getenv(

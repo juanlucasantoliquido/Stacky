@@ -58,6 +58,7 @@ from .db_compare import bp as db_compare_bp  # Plan 122 — comparador de BD
 from .integrations import bp as integrations_bp  # Plan 148 — estado de integraciones no configuradas
 from .plans_board import bp as plans_board_bp  # Plan 128 — tablero de evolución de planes
 from .global_search import bp as global_search_bp  # Plan 129 — paleta: búsqueda profunda
+from .incidents import bp as incidents_bp  # Plan 131 — resolutor de incidencias multimodal
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -118,6 +119,7 @@ api_bp.register_blueprint(db_compare_bp)  # Plan 122 — url_prefix="/db-compare
 api_bp.register_blueprint(integrations_bp)  # Plan 148 — url_prefix="/integrations" → /api/integrations/...
 api_bp.register_blueprint(plans_board_bp)  # Plan 128 — url_prefix="/plans-board" → /api/plans-board/...
 api_bp.register_blueprint(global_search_bp)  # Plan 129 — url_prefix="/search" → /api/search/...
+api_bp.register_blueprint(incidents_bp)  # Plan 131 — url_prefix="/incidents" → /api/incidents/...
 
 
 @api_bp.get("/health")

@@ -309,6 +309,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_ADO_PREWARM_ENABLED",           # I0.3 — prewarm caché ADO (inerte sin TTL>0)
         "STACKY_DB_COMPARE_ENABLED",            # Plan 122 — comparador de BD entre ambientes (master, default OFF)
         "STACKY_CODE_INTEGRITY_ENABLED",        # Plan 130 — gate determinista sintaxis+imports (card Diagnóstico)
+        "STACKY_INCIDENT_RESOLVER_ENABLED",     # Plan 131 — botón "Resolver incidencia" (default ON, promovida 08df035b)
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -3289,6 +3290,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         default=True,  # Default ON (activado 2026-07-13, decisión explícita del operador — patrón triple Plan 127 §3.6)
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_RESOLVER_ENABLED",
+        type="bool",
+        label="Resolutor de incidencias multimodal (Plan 131)",
+        description=(
+            "Plan 131 — Botón 'Resolver incidencia' en Tickets: el operador carga fotos, "
+            "archivos y texto libre; el agente unificado IncidentAnalyst (negocio + "
+            "funcional + técnico en una pasada) desglosa la incidencia dev-ready; Stacky "
+            "publica el Issue en el tracker linkeado a su épica, sube los archivos como "
+            "attachments y escribe el doc del incidente en el grafo documental. "
+            "Publicación siempre con preview y confirmación del operador. Default ON "
+            "(promovida 2026-07-15, patrón capacidades_optin: botón invocado a mano, "
+            "sin costo ni publicación automática)."
+        ),
+        group="global",
+        default=True,
+        env_only=False,
     ),
 )
 

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Projects, Mantis, type MantisProject, type MantisListParams } from "../api/endpoints";
 import type { InitProjectPayload, TrackerType } from "../types";
+import { Field, Input, Select, Textarea, Checkbox, firstErrorFieldId } from "./ui";
+import useOptimisticPending from "../hooks/useOptimisticPending";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -37,7 +39,8 @@ const EMPTY: InitProjectPayload = {
 
 export default function NewProjectModal({ onClose, onCreated }: Props) {
   const [form, setForm] = useState<InitProjectPayload>({ ...EMPTY });
-  const [saving, setSaving] = useState(false);
+  const { pending: saving, run, pendingClass } = useOptimisticPending();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [docsChecking, setDocsChecking] = useState(false);
   const [docsCheckMessage, setDocsCheckMessage] = useState<string | null>(null);
@@ -49,6 +52,12 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
 
   function patch(key: keyof InitProjectPayload, value: unknown) {
     setForm((f) => ({ ...f, [key]: value }));
+    setFieldErrors((fe) => {
+      if (!(key in fe)) return fe;
+      const next = { ...fe };
+      delete next[key as string];
+      return next;
+    });
   }
 
   function docsPath(kind: "technical" | "functional"): string {
@@ -187,31 +196,44 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
     }
   }
 
-  async function handleSubmit() {
-    setError(null);
-    if (!form.name.trim()) { setError("Ingresá un nombre de proyecto"); return; }
-    if (!form.workspace_root.trim()) { setError("Ingresá el workspace root"); return; }
-
-    if (form.tracker_type === "azure_devops") {
-      if (!form.organization?.trim()) { setError("Ingresá la organización de Azure DevOps"); return; }
-      if (!form.ado_project?.trim()) { setError("Ingresá el proyecto de Azure DevOps"); return; }
-    } else if (form.tracker_type === "jira") {
-      if (!form.jira_url?.trim()) { setError("Ingresá la URL de Jira"); return; }
-      if (!form.jira_key?.trim()) { setError("Ingresá la clave del proyecto Jira"); return; }
+  function validate(f: InitProjectPayload): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!f.name.trim()) errs.name = "Ingresá un nombre de proyecto";
+    if (!f.workspace_root.trim()) errs.workspace_root = "Ingresá el workspace root";
+    if (f.tracker_type === "azure_devops") {
+      if (!f.organization?.trim()) errs.organization = "Ingresá la organización de Azure DevOps";
+      if (!f.ado_project?.trim()) errs.ado_project = "Ingresá el proyecto de Azure DevOps";
+    } else if (f.tracker_type === "jira") {
+      if (!f.jira_url?.trim()) errs.jira_url = "Ingresá la URL de Jira";
+      if (!f.jira_key?.trim()) errs.jira_key = "Ingresá la clave del proyecto Jira";
     } else {
-      if (!form.mantis_url?.trim()) { setError("Ingresá la URL de Mantis"); return; }
-      if (!form.mantis_project_id?.trim()) { setError("Selecci\u00f3n un proyecto de Mantis"); return; }
-      const protocol = form.mantis_protocol || "rest";
+      if (!f.mantis_url?.trim()) errs.mantis_url = "Ingresá la URL de Mantis";
+      if (!f.mantis_project_id?.trim()) errs.mantis_project_id = "Seleccioná un proyecto de Mantis";
+      const protocol = f.mantis_protocol || "rest";
       if (protocol === "soap") {
-        if (!form.mantis_username?.trim()) { setError("Ingres\u00e1 el usuario de Mantis (SOAP)"); return; }
+        if (!f.mantis_username?.trim()) errs.mantis_username = "Ingresá el usuario de Mantis (SOAP)";
       } else {
-        if (!form.mantis_token?.trim()) { setError("Ingres\u00e1 el token de API de Mantis"); return; }
+        if (!f.mantis_token?.trim()) errs.mantis_token = "Ingresá el token de API de Mantis";
       }
     }
+    return errs;
+  }
 
-    setSaving(true);
+  // [ADICIÓN ARQUITECTO] Orden VISUAL del form (para foco-al-primer-error).
+  const NP_FIELD_DOM_ORDER = ["name", "workspace_root", "organization", "ado_project", "jira_url", "jira_key", "mantis_url", "mantis_project_id", "mantis_username", "mantis_token"] as const;
+
+  async function handleSubmit() {
+    setError(null);
+    const errs = validate(form);
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      // [ADICIÓN ARQUITECTO] foco al primer campo con error.
+      const fid = firstErrorFieldId("np", NP_FIELD_DOM_ORDER, errs);
+      if (fid) document.getElementById(fid)?.focus();
+      return;
+    }
     try {
-      const result = await Projects.init(buildPayload());
+      const result = await run(() => Projects.init(buildPayload()));
       if (result.ok) {
         onCreated(result.project.name, result.project.display_name);
         onClose();
@@ -220,12 +242,10 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
       }
     } catch (e: any) {
       setError(e?.message || "Error de conexión");
-    } finally {
-      setSaving(false);
     }
   }
 
-  const isAdo    = form.tracker_type === "azure_devops";
+    const isAdo    = form.tracker_type === "azure_devops";
   const isJira   = form.tracker_type === "jira";
   const isMantis = form.tracker_type === "mantis";
 
@@ -236,46 +256,64 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
 
         <div className={styles.body}>
           {/* Nombre / display */}
-          <label className={styles.label}>Nombre interno del proyecto (ID, en mayúsculas)</label>
-          <input
-            className={styles.input}
-            type="text"
-            placeholder="Ej: RSPACIFICO, B2IMPACT"
-            value={form.name}
-            onChange={(e) => patch("name", e.target.value.toUpperCase())}
-          />
+          <Field label="Nombre interno del proyecto (ID, en mayúsculas)" labelClassName={styles.label} error={fieldErrors.name} id="np-name">
+            {(ctl) => (
+              <Input
+                {...ctl}
+                invalid={Boolean(fieldErrors.name)}
+                className={styles.input}
+                type="text"
+                placeholder="Ej: RSPACIFICO, B2IMPACT"
+                value={form.name}
+                onChange={(e) => patch("name", e.target.value.toUpperCase())}
+              />
+            )}
+          </Field>
 
-          <label className={styles.label}>Nombre para mostrar</label>
-          <input
-            className={styles.input}
-            type="text"
-            placeholder="Ej: RS Pacífico"
-            value={form.display_name ?? ""}
-            onChange={(e) => patch("display_name", e.target.value)}
-          />
+          <Field label="Nombre para mostrar" labelClassName={styles.label}>
+            {(ctl) => (
+              <Input
+                {...ctl}
+                className={styles.input}
+                type="text"
+                placeholder="Ej: RS Pacífico"
+                value={form.display_name ?? ""}
+                onChange={(e) => patch("display_name", e.target.value)}
+              />
+            )}
+          </Field>
 
-          <label className={styles.label}>Workspace root (ruta al código fuente)</label>
-          <input
-            className={styles.input}
-            type="text"
-            placeholder="Ej: C:\Repos\MiProyecto\trunk"
-            value={form.workspace_root}
-            onChange={(e) => patch("workspace_root", e.target.value)}
-          />
+          <Field label="Workspace root (ruta al código fuente)" labelClassName={styles.label} error={fieldErrors.workspace_root} id="np-workspace_root">
+            {(ctl) => (
+              <Input
+                {...ctl}
+                invalid={Boolean(fieldErrors.workspace_root)}
+                className={styles.input}
+                type="text"
+                placeholder="Ej: C:\Repos\MiProyecto\trunk"
+                value={form.workspace_root}
+                onChange={(e) => patch("workspace_root", e.target.value)}
+              />
+            )}
+          </Field>
 
-          <label className={styles.label}>Carpeta de agentes</label>
-          <div className={styles.pathRow}>
-            <input
-              className={styles.input}
-              type="text"
-              placeholder="Vacío = Stacky/agents"
-              value={form.agents_dir ?? ""}
-              onChange={(e) => patch("agents_dir", e.target.value)}
-            />
-            <button type="button" className={styles.btnPath} onClick={browseAgentsDir}>
-              Examinar...
-            </button>
-          </div>
+          <Field label="Carpeta de agentes" labelClassName={styles.label}>
+            {(ctl) => (
+              <div className={styles.pathRow}>
+                <Input
+                  {...ctl}
+                  className={styles.input}
+                  type="text"
+                  placeholder="Vacío = Stacky/agents"
+                  value={form.agents_dir ?? ""}
+                  onChange={(e) => patch("agents_dir", e.target.value)}
+                />
+                <button type="button" className={styles.btnPath} onClick={browseAgentsDir}>
+                  Examinar...
+                </button>
+              </div>
+            )}
+          </Field>
 
           <div className={styles.docsPathSection}>
             <span className={styles.trackerHeading}>Documentación del proyecto (opcional)</span>
@@ -283,33 +321,41 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               Si dejás ambas vacías, Stacky mantiene el autodiscovery actual de carpetas <code>docs/</code>.
             </p>
 
-            <label className={styles.label}>Documentación técnica</label>
-            <div className={styles.pathRow}>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: C:\Docs\MiProyecto\tecnica"
-                value={docsPath("technical")}
-                onChange={(e) => patchDocsPath("technical", e.target.value)}
-              />
-              <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
-                Examinar...
-              </button>
-            </div>
+            <Field label="Documentación técnica" labelClassName={styles.label}>
+              {(ctl) => (
+                <div className={styles.pathRow}>
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: C:\Docs\MiProyecto\tecnica"
+                    value={docsPath("technical")}
+                    onChange={(e) => patchDocsPath("technical", e.target.value)}
+                  />
+                  <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
+                    Examinar...
+                  </button>
+                </div>
+              )}
+            </Field>
 
-            <label className={styles.label}>Documentación funcional / manual</label>
-            <div className={styles.pathRow}>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: C:\Docs\MiProyecto\funcional"
-                value={docsPath("functional")}
-                onChange={(e) => patchDocsPath("functional", e.target.value)}
-              />
-              <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
-                Examinar...
-              </button>
-            </div>
+            <Field label="Documentación funcional / manual" labelClassName={styles.label}>
+              {(ctl) => (
+                <div className={styles.pathRow}>
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: C:\Docs\MiProyecto\funcional"
+                    value={docsPath("functional")}
+                    onChange={(e) => patchDocsPath("functional", e.target.value)}
+                  />
+                  <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
+                    Examinar...
+                  </button>
+                </div>
+              )}
+            </Field>
 
             <div className={styles.docsActions}>
               <button type="button" className={styles.btnLoadProjects} onClick={testDocsPaths} disabled={docsChecking}>
@@ -351,41 +397,59 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
           {isAdo && (
             <div className={styles.trackerFields}>
               <span className={styles.trackerHeading}>🔷 Azure DevOps</span>
-              <label className={styles.label}>Organización ADO</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: UbimiaPacifico"
-                value={form.organization ?? ""}
-                onChange={(e) => patch("organization", e.target.value)}
-              />
-              <label className={styles.label}>Proyecto ADO</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: Strategist_Pacifico"
-                value={form.ado_project ?? ""}
-                onChange={(e) => patch("ado_project", e.target.value)}
-              />
-              <label className={styles.label}>Personal Access Token (PAT)</label>
-              <input
-                className={styles.input}
-                type="password"
-                placeholder="Pegá tu PAT de Azure DevOps"
-                value={form.pat ?? ""}
-                onChange={(e) => patch("pat", e.target.value)}
-              />
+              <Field label="Organización ADO" labelClassName={styles.label} error={fieldErrors.organization} id="np-organization">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.organization)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: UbimiaPacifico"
+                    value={form.organization ?? ""}
+                    onChange={(e) => patch("organization", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Proyecto ADO" labelClassName={styles.label} error={fieldErrors.ado_project} id="np-ado_project">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.ado_project)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: Strategist_Pacifico"
+                    value={form.ado_project ?? ""}
+                    onChange={(e) => patch("ado_project", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Personal Access Token (PAT)" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="password"
+                    placeholder="Pegá tu PAT de Azure DevOps"
+                    value={form.pat ?? ""}
+                    onChange={(e) => patch("pat", e.target.value)}
+                  />
+                )}
+              </Field>
               <details className={styles.advanced}>
                 <summary>🔍 Opciones avanzadas ADO</summary>
                 <div className={styles.advancedBody}>
-                  <label className={styles.labelSm}>Area Path (opcional)</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    placeholder="Ej: Strategist_Pacifico\AgendaWeb"
-                    value={form.area_path ?? ""}
-                    onChange={(e) => patch("area_path", e.target.value)}
-                  />
+                  <Field label="Area Path (opcional)" labelClassName={styles.labelSm}>
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="text"
+                        placeholder="Ej: Strategist_Pacifico\AgendaWeb"
+                        value={form.area_path ?? ""}
+                        onChange={(e) => patch("area_path", e.target.value)}
+                      />
+                    )}
+                  </Field>
                 </div>
               </details>
             </div>
@@ -395,65 +459,89 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
           {isJira && (
             <div className={styles.trackerFields}>
               <span className={`${styles.trackerHeading} ${styles.trackerHeadingJira}`}>🔵 Jira</span>
-              <label className={styles.label}>URL de la instancia Jira</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: https://empresa.atlassian.net  o  https://jira.intranet.com"
-                value={form.jira_url ?? ""}
-                onChange={(e) => patch("jira_url", e.target.value)}
-              />
-              <label className={styles.label}>Clave del proyecto (project key)</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: B2IM, PROJ, DEV"
-                value={form.jira_key ?? ""}
-                onChange={(e) => patch("jira_key", e.target.value)}
-              />
-              <label className={styles.label}>Usuario / Email</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: me@empresa.com"
-                value={form.jira_user ?? ""}
-                onChange={(e) => patch("jira_user", e.target.value)}
-              />
-              <label className={styles.label}>API Token</label>
-              <input
-                className={styles.input}
-                type="password"
-                placeholder="Pegá tu API token de Jira"
-                value={form.jira_token ?? ""}
-                onChange={(e) => patch("jira_token", e.target.value)}
-              />
+              <Field label="URL de la instancia Jira" labelClassName={styles.label} error={fieldErrors.jira_url} id="np-jira_url">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.jira_url)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: https://empresa.atlassian.net  o  https://jira.intranet.com"
+                    value={form.jira_url ?? ""}
+                    onChange={(e) => patch("jira_url", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Clave del proyecto (project key)" labelClassName={styles.label} error={fieldErrors.jira_key} id="np-jira_key">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.jira_key)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: B2IM, PROJ, DEV"
+                    value={form.jira_key ?? ""}
+                    onChange={(e) => patch("jira_key", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Usuario / Email" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: me@empresa.com"
+                    value={form.jira_user ?? ""}
+                    onChange={(e) => patch("jira_user", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="API Token" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="password"
+                    placeholder="Pegá tu API token de Jira"
+                    value={form.jira_token ?? ""}
+                    onChange={(e) => patch("jira_token", e.target.value)}
+                  />
+                )}
+              </Field>
               <details className={styles.advanced}>
                 <summary className={styles.advancedJira}>🔍 Opciones avanzadas Jira</summary>
                 <div className={styles.advancedBody}>
-                  <label className={styles.labelSm}>Versión API</label>
-                  <select
-                    className={styles.select}
-                    value={form.api_version ?? "3"}
-                    onChange={(e) => patch("api_version", e.target.value)}
-                  >
-                    <option value="3">v3 — Jira Cloud (*.atlassian.net)</option>
-                    <option value="2">v2 — Jira Server / Data Center</option>
-                  </select>
-                  <label className={styles.labelSm}>JQL personalizado (opcional)</label>
-                  <textarea
-                    className={styles.textarea}
-                    placeholder="Ej: assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
-                    value={form.jql ?? ""}
-                    onChange={(e) => patch("jql", e.target.value)}
+                  <Field label="Versión API" labelClassName={styles.labelSm}>
+                    {(ctl) => (
+                      <Select
+                        {...ctl}
+                        className={styles.select}
+                        value={form.api_version ?? "3"}
+                        onChange={(e) => patch("api_version", e.target.value)}
+                      >
+                        <option value="3">v3 — Jira Cloud (*.atlassian.net)</option>
+                        <option value="2">v2 — Jira Server / Data Center</option>
+                      </Select>
+                    )}
+                  </Field>
+                  <Field label="JQL personalizado (opcional)" labelClassName={styles.labelSm}>
+                    {(ctl) => (
+                      <Textarea
+                        {...ctl}
+                        className={styles.textarea}
+                        placeholder="Ej: assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+                        value={form.jql ?? ""}
+                        onChange={(e) => patch("jql", e.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Checkbox
+                    labelClassName={styles.checkboxRow}
+                    checked={form.verify_ssl === false}
+                    onChange={(e) => patch("verify_ssl", !e.target.checked)}
+                    label="Desactivar verificación SSL (redes corporativas con CA custom)"
                   />
-                  <label className={styles.checkboxRow}>
-                    <input
-                      type="checkbox"
-                      checked={form.verify_ssl === false}
-                      onChange={(e) => patch("verify_ssl", !e.target.checked)}
-                    />
-                    Desactivar verificación SSL (redes corporativas con CA custom)
-                  </label>
                 </div>
               </details>
               <p className={styles.note}>
@@ -486,45 +574,64 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
                 </button>
               </div>
 
-              <label className={styles.label}>URL de la instancia Mantis</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: https://mantis.empresa.com"
-                value={form.mantis_url ?? ""}
-                onChange={(e) => patch("mantis_url", e.target.value)}
-              />
+              <Field label="URL de la instancia Mantis" labelClassName={styles.label} error={fieldErrors.mantis_url} id="np-mantis_url">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.mantis_url)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: https://mantis.empresa.com"
+                    value={form.mantis_url ?? ""}
+                    onChange={(e) => patch("mantis_url", e.target.value)}
+                  />
+                )}
+              </Field>
 
               {/* Credenciales según protocolo */}
               {form.mantis_protocol === "soap" ? (
                 <>
-                  <label className={styles.label}>Usuario de Mantis</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    placeholder="Usuario de Mantis (ej: admin)"
-                    value={form.mantis_username ?? ""}
-                    onChange={(e) => patch("mantis_username", e.target.value)}
-                  />
-                  <label className={styles.label}>Contraseña</label>
-                  <input
-                    className={styles.input}
-                    type="password"
-                    placeholder="Contraseña de Mantis"
-                    value={form.mantis_password ?? ""}
-                    onChange={(e) => patch("mantis_password", e.target.value)}
-                  />
+                  <Field label="Usuario de Mantis" labelClassName={styles.label} error={fieldErrors.mantis_username} id="np-mantis_username">
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        invalid={Boolean(fieldErrors.mantis_username)}
+                        className={styles.input}
+                        type="text"
+                        placeholder="Usuario de Mantis (ej: admin)"
+                        value={form.mantis_username ?? ""}
+                        onChange={(e) => patch("mantis_username", e.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field label="Contraseña" labelClassName={styles.label}>
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="password"
+                        placeholder="Contraseña de Mantis"
+                        value={form.mantis_password ?? ""}
+                        onChange={(e) => patch("mantis_password", e.target.value)}
+                      />
+                    )}
+                  </Field>
                 </>
               ) : (
                 <>
-                  <label className={styles.label}>API Token</label>
-                  <input
-                    className={styles.input}
-                    type="password"
-                    placeholder="Token de API de Mantis (Mi Cuenta → Tokens API)"
-                    value={form.mantis_token ?? ""}
-                    onChange={(e) => patch("mantis_token", e.target.value)}
-                  />
+                  <Field label="API Token" labelClassName={styles.label} error={fieldErrors.mantis_token} id="np-mantis_token">
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        invalid={Boolean(fieldErrors.mantis_token)}
+                        className={styles.input}
+                        type="password"
+                        placeholder="Token de API de Mantis (Mi Cuenta → Tokens API)"
+                        value={form.mantis_token ?? ""}
+                        onChange={(e) => patch("mantis_token", e.target.value)}
+                      />
+                    )}
+                  </Field>
                 </>
               )}
 
@@ -543,24 +650,29 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
 
               {mantisProjects.length > 0 && (
                 <>
-                  <label className={styles.label}>Proyecto Mantis</label>
-                  <select
-                    className={styles.select}
-                    value={form.mantis_project_id ?? ""}
-                    onChange={(e) => {
-                      const selected = mantisProjects.find((p) => p.id === e.target.value);
-                      patch("mantis_project_id", e.target.value);
-                      patch("mantis_project_name", selected?.name ?? "");
-                    }}
-                  >
-                    <option value="">— Seleccioná un proyecto —</option>
-                    {mantisProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        #{p.id} — {p.name}
-                        {p.description ? ` (${p.description.slice(0, 40)})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <Field label="Proyecto Mantis" labelClassName={styles.label} error={fieldErrors.mantis_project_id} id="np-mantis_project_id">
+                    {(ctl) => (
+                      <Select
+                        {...ctl}
+                        invalid={Boolean(fieldErrors.mantis_project_id)}
+                        className={styles.select}
+                        value={form.mantis_project_id ?? ""}
+                        onChange={(e) => {
+                          const selected = mantisProjects.find((p) => p.id === e.target.value);
+                          patch("mantis_project_id", e.target.value);
+                          patch("mantis_project_name", selected?.name ?? "");
+                        }}
+                      >
+                        <option value="">— Seleccioná un proyecto —</option>
+                        {mantisProjects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            #{p.id} — {p.name}
+                            {p.description ? ` (${p.description.slice(0, 40)})` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Field>
                   {form.mantis_project_id && (
                     <p className={styles.note}>
                       Proyecto seleccionado: <strong>{form.mantis_project_name || form.mantis_project_id}</strong>
@@ -580,14 +692,12 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               <details className={styles.advanced}>
                 <summary>🔍 Opciones avanzadas Mantis</summary>
                 <div className={styles.advancedBody}>
-                  <label className={styles.checkboxRow}>
-                    <input
-                      type="checkbox"
-                      checked={form.verify_ssl === false}
-                      onChange={(e) => patch("verify_ssl", !e.target.checked)}
-                    />
-                    Desactivar verificación SSL (redes corporativas con CA custom)
-                  </label>
+                  <Checkbox
+                    labelClassName={styles.checkboxRow}
+                    checked={form.verify_ssl === false}
+                    onChange={(e) => patch("verify_ssl", !e.target.checked)}
+                    label="Desactivar verificación SSL (redes corporativas con CA custom)"
+                  />
                 </div>
               </details>
 
@@ -608,7 +718,12 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
           <button className={styles.btnGhost} onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button className={styles.btnAccent} onClick={handleSubmit} disabled={saving}>
+          <button
+            className={`${styles.btnAccent} ${pendingClass}`.trim()}
+            onClick={handleSubmit}
+            disabled={saving}
+            aria-busy={saving || undefined}
+          >
             {saving ? "Inicializando…" : "Crear e inicializar"}
           </button>
         </div>

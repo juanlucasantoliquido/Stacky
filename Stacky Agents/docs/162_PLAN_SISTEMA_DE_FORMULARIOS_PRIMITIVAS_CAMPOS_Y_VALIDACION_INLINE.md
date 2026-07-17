@@ -1,6 +1,12 @@
 # Plan 162 — Sistema de formularios: primitivas de campos, validación inline y estados de envío
 
-**Estado: CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-17 (v1 -> v2)**
+**Estado: IMPLEMENTADO — F0..F5 — 2026-07-17 (v1 -> v2 -> implementado)**
+
+> Nota de implementación: F0-F4 verdes con output real. F5 (gate final) 6/8 comandos
+> verdes; `uiDebtRatchet`/`motionDebtRatchet` fallan por drift AJENO preexistente
+> (`components/devops/ServersSection.tsx`, `pages/PlansBoardPage.tsx/.module.css`,
+> `pages/DevOpsPage.module.css` — ninguno tocado por este plan, confirmado limpio
+> contra HEAD). `tsc --noEmit` en 0. Detalle completo en la memoria `plan-162-status`.
 
 ## Changelog v1 -> v2 (crítica adversarial)
 

@@ -10,6 +10,7 @@ import ExecutionErrorAnalysisBlock from "./ExecutionErrorAnalysisBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
 import { formatStallReason, type StallMeta } from "../utils/stallReason";
+import { formatDuration, formatCostUsd, formatInt } from "../services/format";
 import styles from "./ExecutionDetailDrawer.module.css";
 
 interface Props {
@@ -17,24 +18,17 @@ interface Props {
   onClose: () => void;
 }
 
-function formatDuration(durationMs?: number | null): string {
-  if (!durationMs || durationMs <= 0) return "-";
-  const seconds = durationMs / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  return `${(seconds / 60).toFixed(1)}m`;
-}
-
 function formatMaybeCurrency(value: unknown): string {
-  if (value == null) return "-";
+  if (value == null) return "—";
   const n = Number(value);
-  if (Number.isFinite(n)) return `$${n.toFixed(4)}`;
+  if (Number.isFinite(n)) return formatCostUsd(n);
   return String(value);
 }
 
 function formatTokens(value: unknown): string {
-  if (value == null) return "-";
+  if (value == null) return "—";
   const n = Number(value);
-  if (Number.isFinite(n)) return n.toLocaleString();
+  if (Number.isFinite(n)) return formatInt(n);
   return String(value);
 }
 

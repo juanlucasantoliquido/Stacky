@@ -1,0 +1,8 @@
+/* Plan 162 — base intencionalmente vacía: el look de reposo es el global de
+   theme.css (bloque "Controls"). Solo estados. Cero hex, cero tiempos (ratchets 138/143). */
+.textarea {
+}
+
+.invalid {
+  border-color: var(--danger);
+}

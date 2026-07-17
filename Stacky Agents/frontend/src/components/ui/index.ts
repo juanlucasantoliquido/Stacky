@@ -20,3 +20,15 @@ export { default as Skeleton, skeletonStyle } from "./Skeleton";
 export type { SkeletonProps } from "./Skeleton";
 export { default as Spinner, spinnerStyle } from "./Spinner";
 export type { SpinnerProps } from "./Spinner";
+
+// Plan 162 — primitivas de formulario (aditivo al contrato 138 §10.2).
+export { default as Field, fieldControlProps, firstErrorFieldId } from "./Field";
+export type { FieldProps, FieldControlProps } from "./Field";
+export { default as Input, inputPartKeys } from "./Input";
+export type { InputProps } from "./Input";
+export { default as Select, selectPartKeys } from "./Select";
+export type { SelectProps } from "./Select";
+export { default as Textarea, textareaPartKeys } from "./Textarea";
+export type { TextareaProps } from "./Textarea";
+export { default as Checkbox, checkboxPartKeys } from "./Checkbox";
+export type { CheckboxProps } from "./Checkbox";

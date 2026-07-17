@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SystemLogs, type SystemLogEntry } from "../api/endpoints";
+import { formatDate, formatTime, formatDuration, formatInt } from "../services/format";
 import styles from "./SystemLogsPage.module.css";
 
 const PAGE_SIZE = 100;
@@ -19,18 +20,8 @@ function levelClass(level: string): string {
 }
 
 function fmtTs(ts: string): string {
-  try {
-    const d = new Date(ts);
-    return d.toLocaleString("es-AR", { hour12: false });
-  } catch {
-    return ts;
-  }
-}
-
-function fmtMs(ms: number | null): string {
-  if (ms == null) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  const d = formatDate(ts);
+  return d === "—" ? "—" : `${d} ${formatTime(ts)}`;
 }
 
 // ── Detail Modal ────────────────────────────────────────────────────────────
@@ -54,7 +45,7 @@ function DetailModal({ log, onClose }: DetailModalProps) {
     ["Method", log.method ?? "—"],
     ["Endpoint", log.endpoint ?? "—"],
     ["Status Code", log.status_code ?? "—"],
-    ["Duration", fmtMs(log.duration_ms)],
+    ["Duration", formatDuration(log.duration_ms)],
     ["Tags", log.tags?.join(", ") || "—"],
   ];
 
@@ -202,7 +193,7 @@ export default function SystemLogsPage() {
               WARN {stats.by_level["WARNING"] ?? 0}
             </span>
             <span className={`${styles.statBadge} ${styles.info}`}>
-              Total {stats.total.toLocaleString()}
+              Total {formatInt(stats.total)}
             </span>
           </div>
         )}
@@ -339,7 +330,7 @@ export default function SystemLogsPage() {
                   <td style={{ color: log.status_code && log.status_code >= 400 ? "#f87171" : undefined }}>
                     {log.status_code ?? "—"}
                   </td>
-                  <td>{fmtMs(log.duration_ms)}</td>
+                  <td>{formatDuration(log.duration_ms)}</td>
                 </tr>
               ))}
             </tbody>
@@ -367,7 +358,7 @@ export default function SystemLogsPage() {
           Next →
         </button>
         {isFetching && <span style={{ color: "#a78bfa", fontSize: 11 }}>Refreshing…</span>}
-        <span className={styles.total}>{total.toLocaleString()} total events</span>
+        <span className={styles.total}>{formatInt(total)} total events</span>
       </div>
 
       {/* Detail Modal */}

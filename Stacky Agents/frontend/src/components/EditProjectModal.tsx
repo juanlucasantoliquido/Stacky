@@ -3,6 +3,8 @@ import { Projects, Mantis, type MantisProject, type MantisListParams } from "../
 import type { AgentWorkflowConfig, InitProjectPayload, Project, TrackerType } from "../types";
 import { formatLoadErrorMessage } from "../utils/loadError";
 import { shouldCloseOnBackdrop } from "../services/uiGuards";
+import { Field, Input, Select, Textarea, Checkbox, firstErrorFieldId } from "./ui";
+import useOptimisticPending from "../hooks/useOptimisticPending";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -41,7 +43,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
     gitlab_group:         project.gitlab_group ?? "",
     gitlab_auth_file:     project.gitlab_auth_file ?? "",
   });
-  const [saving, setSaving] = useState(false);
+  const { pending: saving, run, pendingClass } = useOptimisticPending();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   // Plan 136 F2 — hay cambios tipeados sin guardar (protege el backdrop).
   const [dirty, setDirty] = useState(false);
@@ -188,6 +191,12 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   function patch(key: keyof InitProjectPayload, value: unknown) {
     setForm((f) => ({ ...f, [key]: value }));
     setDirty(true);
+    setFieldErrors((fe) => {
+      if (!(key in fe)) return fe;
+      const next = { ...fe };
+      delete next[key as string];
+      return next;
+    });
   }
 
   function docsPath(kind: "technical" | "functional"): string {
@@ -279,15 +288,27 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const isMantis = form.tracker_type === "mantis";
   const isGitlab = form.tracker_type === "gitlab";
 
+  function validate(f: typeof form): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!String(f.workspace_root ?? "").trim()) errs.workspace_root = "Ingresá el workspace root";
+    return errs;
+  }
+
+  // [ADICIÓN ARQUITECTO] Orden VISUAL del form (para foco-al-primer-error).
+  const EP_FIELD_DOM_ORDER = ["workspace_root"] as const;
+
   async function handleSubmit() {
     setError(null);
-    if (!String(form.workspace_root ?? "").trim()) {
-      setError("Ingresá el workspace root");
+    const errs = validate(form);
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      // [ADICIÓN ARQUITECTO] foco al primer campo con error.
+      const fid = firstErrorFieldId("ep", EP_FIELD_DOM_ORDER, errs);
+      if (fid) document.getElementById(fid)?.focus();
       return;
     }
-    setSaving(true);
     try {
-      const res = await Projects.update(project.name, buildPayload());
+      const res = await run(() => Projects.update(project.name, buildPayload()));
       if (res.ok) {
         onSaved();
       } else {
@@ -295,8 +316,6 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
       }
     } catch (e: any) {
       setError(e?.message || "Error de conexión");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -306,36 +325,49 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
         <h2 className={styles.title}>✎ Editar Proyecto: {project.display_name || project.name}</h2>
 
         <div className={styles.body}>
-          <label className={styles.label}>Nombre para mostrar</label>
-          <input
-            className={styles.input}
-            type="text"
-            value={form.display_name ?? ""}
-            onChange={(e) => patch("display_name", e.target.value)}
-          />
+          <Field label="Nombre para mostrar" labelClassName={styles.label}>
+            {(ctl) => (
+              <Input
+                {...ctl}
+                className={styles.input}
+                type="text"
+                value={form.display_name ?? ""}
+                onChange={(e) => patch("display_name", e.target.value)}
+              />
+            )}
+          </Field>
 
-          <label className={styles.label}>Workspace root</label>
-          <input
-            className={styles.input}
-            type="text"
-            placeholder="Ej: C:\Repos\MiProyecto\trunk"
-            value={form.workspace_root ?? ""}
-            onChange={(e) => patch("workspace_root", e.target.value)}
-          />
+          <Field label="Workspace root" labelClassName={styles.label} error={fieldErrors.workspace_root} id="ep-workspace_root">
+            {(ctl) => (
+              <Input
+                {...ctl}
+                invalid={Boolean(fieldErrors.workspace_root)}
+                className={styles.input}
+                type="text"
+                placeholder="Ej: C:\Repos\MiProyecto\trunk"
+                value={form.workspace_root ?? ""}
+                onChange={(e) => patch("workspace_root", e.target.value)}
+              />
+            )}
+          </Field>
 
-          <label className={styles.label}>Carpeta de agentes</label>
-          <div className={styles.pathRow}>
-            <input
-              className={styles.input}
-              type="text"
-              placeholder="Vacío = Stacky/agents"
-              value={form.agents_dir ?? ""}
-              onChange={(e) => patch("agents_dir", e.target.value)}
-            />
-            <button type="button" className={styles.btnPath} onClick={browseAgentsDir}>
-              Examinar...
-            </button>
-          </div>
+          <Field label="Carpeta de agentes" labelClassName={styles.label}>
+            {(ctl) => (
+              <div className={styles.pathRow}>
+                <Input
+                  {...ctl}
+                  className={styles.input}
+                  type="text"
+                  placeholder="Vacío = Stacky/agents"
+                  value={form.agents_dir ?? ""}
+                  onChange={(e) => patch("agents_dir", e.target.value)}
+                />
+                <button type="button" className={styles.btnPath} onClick={browseAgentsDir}>
+                  Examinar...
+                </button>
+              </div>
+            )}
+          </Field>
 
           <div className={styles.docsPathSection}>
             <span className={styles.trackerHeading}>Documentación del proyecto (opcional)</span>
@@ -343,33 +375,41 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
               Estas rutas reemplazan el autodiscovery de <code>docs/</code> para el panel Docs.
             </p>
 
-            <label className={styles.label}>Documentación técnica</label>
-            <div className={styles.pathRow}>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: C:\Docs\MiProyecto\tecnica"
-                value={docsPath("technical")}
-                onChange={(e) => patchDocsPath("technical", e.target.value)}
-              />
-              <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
-                Examinar...
-              </button>
-            </div>
+            <Field label="Documentación técnica" labelClassName={styles.label}>
+              {(ctl) => (
+                <div className={styles.pathRow}>
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: C:\Docs\MiProyecto\tecnica"
+                    value={docsPath("technical")}
+                    onChange={(e) => patchDocsPath("technical", e.target.value)}
+                  />
+                  <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("technical")}>
+                    Examinar...
+                  </button>
+                </div>
+              )}
+            </Field>
 
-            <label className={styles.label}>Documentación funcional / manual</label>
-            <div className={styles.pathRow}>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: C:\Docs\MiProyecto\funcional"
-                value={docsPath("functional")}
-                onChange={(e) => patchDocsPath("functional", e.target.value)}
-              />
-              <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
-                Examinar...
-              </button>
-            </div>
+            <Field label="Documentación funcional / manual" labelClassName={styles.label}>
+              {(ctl) => (
+                <div className={styles.pathRow}>
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: C:\Docs\MiProyecto\funcional"
+                    value={docsPath("functional")}
+                    onChange={(e) => patchDocsPath("functional", e.target.value)}
+                  />
+                  <button type="button" className={styles.btnPath} onClick={() => browseDocsPath("functional")}>
+                    Examinar...
+                  </button>
+                </div>
+              )}
+            </Field>
 
             <div className={styles.docsActions}>
               <button type="button" className={styles.btnLoadProjects} onClick={testDocsPaths} disabled={docsChecking}>
@@ -416,38 +456,54 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
           {isAdo && (
             <div className={styles.trackerFields}>
               <span className={styles.trackerHeading}>🔷 Azure DevOps</span>
-              <label className={styles.label}>Organización ADO</label>
-              <input
-                className={styles.input}
-                type="text"
-                value={form.organization ?? ""}
-                onChange={(e) => patch("organization", e.target.value)}
-              />
-              <label className={styles.label}>Proyecto ADO</label>
-              <input
-                className={styles.input}
-                type="text"
-                value={form.ado_project ?? ""}
-                onChange={(e) => patch("ado_project", e.target.value)}
-              />
-              <label className={styles.label}>Personal Access Token (PAT)</label>
-              <input
-                className={styles.input}
-                type="password"
-                placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Pegá tu PAT de Azure DevOps"}
-                value={form.pat ?? ""}
-                onChange={(e) => patch("pat", e.target.value)}
-              />
+              <Field label="Organización ADO" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    value={form.organization ?? ""}
+                    onChange={(e) => patch("organization", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Proyecto ADO" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    value={form.ado_project ?? ""}
+                    onChange={(e) => patch("ado_project", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Personal Access Token (PAT)" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="password"
+                    placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Pegá tu PAT de Azure DevOps"}
+                    value={form.pat ?? ""}
+                    onChange={(e) => patch("pat", e.target.value)}
+                  />
+                )}
+              </Field>
               <details className={styles.advanced}>
                 <summary>🔍 Opciones avanzadas ADO</summary>
                 <div className={styles.advancedBody}>
-                  <label className={styles.labelSm}>Area Path (opcional)</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    value={form.area_path ?? ""}
-                    onChange={(e) => patch("area_path", e.target.value)}
-                  />
+                  <Field label="Area Path (opcional)" labelClassName={styles.labelSm}>
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="text"
+                        value={form.area_path ?? ""}
+                        onChange={(e) => patch("area_path", e.target.value)}
+                      />
+                    )}
+                  </Field>
                 </div>
               </details>
             </div>
@@ -456,36 +512,52 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
           {isJira && (
             <div className={styles.trackerFields}>
               <span className={`${styles.trackerHeading} ${styles.trackerHeadingJira}`}>🔵 Jira</span>
-              <label className={styles.label}>URL de la instancia Jira</label>
-              <input
-                className={styles.input}
-                type="text"
-                value={form.jira_url ?? ""}
-                onChange={(e) => patch("jira_url", e.target.value)}
-              />
-              <label className={styles.label}>Clave del proyecto</label>
-              <input
-                className={styles.input}
-                type="text"
-                value={form.jira_key ?? ""}
-                onChange={(e) => patch("jira_key", e.target.value)}
-              />
-              <label className={styles.label}>Usuario / Email</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder={loadedUser ? `${loadedUser} (usuario actual)` : "usuario@empresa.com"}
-                value={form.jira_user ?? ""}
-                onChange={(e) => patch("jira_user", e.target.value)}
-              />
-              <label className={styles.label}>API Token</label>
-              <input
-                className={styles.input}
-                type="password"
-                placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Pegá tu API token de Jira"}
-                value={form.jira_token ?? ""}
-                onChange={(e) => patch("jira_token", e.target.value)}
-              />
+              <Field label="URL de la instancia Jira" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    value={form.jira_url ?? ""}
+                    onChange={(e) => patch("jira_url", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Clave del proyecto" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    value={form.jira_key ?? ""}
+                    onChange={(e) => patch("jira_key", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Usuario / Email" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder={loadedUser ? `${loadedUser} (usuario actual)` : "usuario@empresa.com"}
+                    value={form.jira_user ?? ""}
+                    onChange={(e) => patch("jira_user", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="API Token" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="password"
+                    placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Pegá tu API token de Jira"}
+                    value={form.jira_token ?? ""}
+                    onChange={(e) => patch("jira_token", e.target.value)}
+                  />
+                )}
+              </Field>
             </div>
           )}
 
@@ -512,45 +584,61 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                 </button>
               </div>
 
-              <label className={styles.label}>URL de la instancia Mantis</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: https://mantis.empresa.com"
-                value={form.mantis_url ?? ""}
-                onChange={(e) => patch("mantis_url", e.target.value)}
-              />
+              <Field label="URL de la instancia Mantis" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: https://mantis.empresa.com"
+                    value={form.mantis_url ?? ""}
+                    onChange={(e) => patch("mantis_url", e.target.value)}
+                  />
+                )}
+              </Field>
 
               {/* Credenciales según protocolo */}
               {form.mantis_protocol === "soap" ? (
                 <>
-                  <label className={styles.label}>Usuario de Mantis</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    placeholder={project.has_credentials ? "••••  (dejar vacío para no cambiar)" : "Usuario de Mantis"}
-                    value={form.mantis_username ?? ""}
-                    onChange={(e) => patch("mantis_username", e.target.value)}
-                  />
-                  <label className={styles.label}>Contraseña</label>
-                  <input
-                    className={styles.input}
-                    type="password"
-                    placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Contraseña de Mantis"}
-                    value={form.mantis_password ?? ""}
-                    onChange={(e) => patch("mantis_password", e.target.value)}
-                  />
+                  <Field label="Usuario de Mantis" labelClassName={styles.label}>
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="text"
+                        placeholder={project.has_credentials ? "••••  (dejar vacío para no cambiar)" : "Usuario de Mantis"}
+                        value={form.mantis_username ?? ""}
+                        onChange={(e) => patch("mantis_username", e.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field label="Contraseña" labelClassName={styles.label}>
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="password"
+                        placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Contraseña de Mantis"}
+                        value={form.mantis_password ?? ""}
+                        onChange={(e) => patch("mantis_password", e.target.value)}
+                      />
+                    )}
+                  </Field>
                 </>
               ) : (
                 <>
-                  <label className={styles.label}>API Token</label>
-                  <input
-                    className={styles.input}
-                    type="password"
-                    placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Token de API de Mantis"}
-                    value={form.mantis_token ?? ""}
-                    onChange={(e) => patch("mantis_token", e.target.value)}
-                  />
+                  <Field label="API Token" labelClassName={styles.label}>
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="password"
+                        placeholder={project.has_credentials ? "••••••••  (dejar vacío para no cambiar)" : "Token de API de Mantis"}
+                        value={form.mantis_token ?? ""}
+                        onChange={(e) => patch("mantis_token", e.target.value)}
+                      />
+                    )}
+                  </Field>
                 </>
               )}
 
@@ -569,24 +657,28 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
 
               {mantisProjects.length > 0 && (
                 <>
-                  <label className={styles.label}>Proyecto Mantis</label>
-                  <select
-                    className={styles.select}
-                    value={form.mantis_project_id ?? ""}
-                    onChange={(e) => {
-                      const selected = mantisProjects.find((p) => p.id === e.target.value);
-                      patch("mantis_project_id", e.target.value);
-                      patch("mantis_project_name", selected?.name ?? "");
-                    }}
-                  >
-                    <option value="">— Seleccioná un proyecto —</option>
-                    {mantisProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        #{p.id} — {p.name}
-                        {p.description ? ` (${p.description.slice(0, 40)})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <Field label="Proyecto Mantis" labelClassName={styles.label}>
+                    {(ctl) => (
+                      <Select
+                        {...ctl}
+                        className={styles.select}
+                        value={form.mantis_project_id ?? ""}
+                        onChange={(e) => {
+                          const selected = mantisProjects.find((p) => p.id === e.target.value);
+                          patch("mantis_project_id", e.target.value);
+                          patch("mantis_project_name", selected?.name ?? "");
+                        }}
+                      >
+                        <option value="">— Seleccioná un proyecto —</option>
+                        {mantisProjects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            #{p.id} — {p.name}
+                            {p.description ? ` (${p.description.slice(0, 40)})` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Field>
                 </>
               )}
 
@@ -606,38 +698,54 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
               <p className={styles.note}>
                 El token de acceso se lee del archivo de autenticación. Nunca se guarda en el perfil.
               </p>
-              <label className={styles.label}>URL base del GitLab</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: https://gitlab.com"
-                value={form.gitlab_url ?? ""}
-                onChange={(e) => patch("gitlab_url", e.target.value)}
-              />
-              <label className={styles.label}>Proyecto (namespace/repo)</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: mi-org/mi-repo"
-                value={form.gitlab_project ?? ""}
-                onChange={(e) => patch("gitlab_project", e.target.value)}
-              />
-              <label className={styles.label}>Grupo (opcional, para Epics nativos)</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: mi-org"
-                value={form.gitlab_group ?? ""}
-                onChange={(e) => patch("gitlab_group", e.target.value)}
-              />
-              <label className={styles.label}>Ruta al archivo de token</label>
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: C:\secrets\gitlab_token.txt"
-                value={form.gitlab_auth_file ?? ""}
-                onChange={(e) => patch("gitlab_auth_file", e.target.value)}
-              />
+              <Field label="URL base del GitLab" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: https://gitlab.com"
+                    value={form.gitlab_url ?? ""}
+                    onChange={(e) => patch("gitlab_url", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Proyecto (namespace/repo)" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: mi-org/mi-repo"
+                    value={form.gitlab_project ?? ""}
+                    onChange={(e) => patch("gitlab_project", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Grupo (opcional, para Epics nativos)" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: mi-org"
+                    value={form.gitlab_group ?? ""}
+                    onChange={(e) => patch("gitlab_group", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Ruta al archivo de token" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: C:\secrets\gitlab_token.txt"
+                    value={form.gitlab_auth_file ?? ""}
+                    onChange={(e) => patch("gitlab_auth_file", e.target.value)}
+                  />
+                )}
+              </Field>
               <p className={styles.note}>
                 El archivo debe contener solo el token en texto plano (sin comillas ni saltos de línea extra).
               </p>
@@ -661,58 +769,70 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                   <details key={filename} className={styles.advanced} style={{ marginBottom: 8 }}>
                     <summary style={{ fontWeight: 600, cursor: "pointer" }}>🤖 {label}</summary>
                     <div className={styles.advancedBody}>
-                      <label className={styles.labelSm}>Estados visibles (allowed_states)</label>
-                      <p style={{ fontSize: 11, color: "var(--text-muted, #999)", margin: "2px 0 6px" }}>
-                        Estados del tracker que este agente puede procesar. Uno por línea.
-                        {trackerStates.length > 0 && (
-                          <> Disponibles: <strong>{trackerStates.join(", ")}</strong></>
+                      <Field label="Estados visibles (allowed_states)" labelClassName={styles.labelSm}>
+                        {(ctl) => (
+                          <>
+                            <p style={{ fontSize: 11, color: "var(--text-muted, #999)", margin: "2px 0 6px" }}>
+                              Estados del tracker que este agente puede procesar. Uno por línea.
+                              {trackerStates.length > 0 && (
+                                <> Disponibles: <strong>{trackerStates.join(", ")}</strong></>
+                              )}
+                            </p>
+                            <Textarea
+                              {...ctl}
+                              className={styles.input}
+                              rows={3}
+                              style={{ resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
+                              value={wf.allowed_states.join("\n")}
+                              onChange={(e) =>
+                                patchWorkflow(filename, "allowed_states",
+                                  e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))
+                              }
+                            />
+                          </>
                         )}
-                      </p>
-                      <textarea
-                        className={styles.input}
-                        rows={3}
-                        style={{ resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
-                        value={wf.allowed_states.join("\n")}
-                        onChange={(e) =>
-                          patchWorkflow(filename, "allowed_states",
-                            e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))
-                        }
+                      </Field>
+
+                      <Field label="Estado de transición (transition_state)" labelClassName={styles.labelSm} labelStyle={{ marginTop: 8 }}>
+                        {(ctl) => (
+                          <>
+                            <p style={{ fontSize: 11, color: "var(--text-muted, #999)", margin: "2px 0 6px" }}>
+                              Estado al que se moverá el ticket cuando el agente termine.
+                            </p>
+                            {trackerStates.length > 0 ? (
+                              <Select
+                                {...ctl}
+                                className={styles.input}
+                                value={wf.transition_state}
+                                onChange={(e) => patchWorkflow(filename, "transition_state", e.target.value)}
+                              >
+                                <option value="">— Sin transición automática —</option>
+                                {trackerStates.map((s) => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </Select>
+                            ) : (
+                              <Input
+                                {...ctl}
+                                className={styles.input}
+                                type="text"
+                                placeholder="Ej: In Progress"
+                                value={wf.transition_state}
+                                onChange={(e) => patchWorkflow(filename, "transition_state", e.target.value)}
+                              />
+                            )}
+                          </>
+                        )}
+                      </Field>
+
+                      <Checkbox
+                        labelClassName={styles.labelSm}
+                        labelStyle={{ marginTop: 8 }}
+                        style={{ marginRight: 6 }}
+                        checked={wf.requires_prior_output}
+                        onChange={(e) => patchWorkflow(filename, "requires_prior_output", e.target.checked)}
+                        label="Requiere output del agente anterior (requires_prior_output)"
                       />
-
-                      <label className={styles.labelSm} style={{ marginTop: 8 }}>Estado de transición (transition_state)</label>
-                      <p style={{ fontSize: 11, color: "var(--text-muted, #999)", margin: "2px 0 6px" }}>
-                        Estado al que se moverá el ticket cuando el agente termine.
-                      </p>
-                      {trackerStates.length > 0 ? (
-                        <select
-                          className={styles.input}
-                          value={wf.transition_state}
-                          onChange={(e) => patchWorkflow(filename, "transition_state", e.target.value)}
-                        >
-                          <option value="">— Sin transición automática —</option>
-                          {trackerStates.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          className={styles.input}
-                          type="text"
-                          placeholder="Ej: In Progress"
-                          value={wf.transition_state}
-                          onChange={(e) => patchWorkflow(filename, "transition_state", e.target.value)}
-                        />
-                      )}
-
-                      <label className={styles.labelSm} style={{ marginTop: 8 }}>
-                        <input
-                          type="checkbox"
-                          style={{ marginRight: 6 }}
-                          checked={wf.requires_prior_output}
-                          onChange={(e) => patchWorkflow(filename, "requires_prior_output", e.target.checked)}
-                        />
-                        Requiere output del agente anterior (requires_prior_output)
-                      </label>
 
                       <button
                         type="button"
@@ -748,7 +868,12 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
           <button className={styles.btnGhost} onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button className={styles.btnAccent} onClick={handleSubmit} disabled={saving}>
+          <button
+            className={`${styles.btnAccent} ${pendingClass}`.trim()}
+            onClick={handleSubmit}
+            disabled={saving}
+            aria-busy={saving || undefined}
+          >
             {saving ? "Guardando…" : "Guardar cambios"}
           </button>
         </div>

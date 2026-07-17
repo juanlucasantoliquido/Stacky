@@ -1,11 +1,48 @@
 # Plan 160 — Resolutor de Incidencias: reparación automática del desglose HTML + pegado de imágenes desde el portapapeles
 
-**Estado:** PROPUESTO v1
+**Estado:** IMPLEMENTADO F0-F1 (2026-07-17) — ver `plan-160-status.md`
+
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**CHANGELOG v1 -> v2:**
+- **C1 (IMPORTANTE, resuelto):** el `onPaste` se mueve del div del paso intake al div raíz
+  del modal (`styles.modal`, línea 260) con gate `step === "intake"` DENTRO del handler —
+  el paste funciona con el foco en cualquier control del modal (header, footer, botón
+  cerrar), no solo dentro del body del intake.
+- **C2 (IMPORTANTE, resuelto):** `extractPastedImageFiles` ya NO defaultea a `.png` para
+  MIME desconocidos: un MIME `image/*` fuera del allowlist (p.ej. `image/svg+xml`,
+  `image/tiff`) se IGNORA. Renombrarlo a `.png` colaba por `validateFiles` (valida por
+  extensión) contenido cuya extensión real el backend rechaza, y SVG es vector activo de
+  scripting. Test nuevo agregado (7 casos frontend, no 6).
+- **C3 (IMPORTANTE, resuelto):** eliminado el hedge "si `create_incident` no existe con
+  esa firma...". Firma VERIFICADA contra el código: `create_incident(text: str, files:
+  list[tuple[str, bytes]]) -> dict` (`services/incident_store.py:106`). Cero inferencia.
+- **C4 (IMPORTANTE, resuelto):** documentada la interacción con el cierre one-shot: el
+  runner cierra stdin apenas ve `_result_ok_seen` (runner `:1054-1055` -> `:1327-1334`)
+  SIN considerar repair pendiente, con gracia de 20s (`:1335-1343`). El turno de reintento
+  debe completar dentro de esa gracia. `sent: true` en metadata NO garantiza re-emisión
+  completada — contrato aclarado en §4.0.2 y fila nueva en Riesgos (§5).
+- **C5 (MENOR, resuelto):** precisiones literales: los comandos con `&&` se corren en
+  Git Bash (NO PowerShell 5.1); la línea 1 de `incidentModel.test.ts`
+  (`import { describe, it, expect } from "vitest";`) NO se toca al editar el bloque de
+  imports.
+- **C6 (MENOR, resuelto):** conteos de tests actualizados en criterios y DoD (backend 6,
+  frontend 7) tras C2 y la adición del arquitecto.
+- **C7 (MENOR, resuelto):** anotado que el campo `repair` del 422 de publish no tiene
+  consumidor UI hoy (el modal maneja publish por excepción) — es diagnóstico para
+  API/curl; prohibido removerlo en limpiezas futuras.
+- **[ADICIÓN ARQUITECTO] Transparencia del repair exitoso:** cuando el reintento SÍ
+  recupera el HTML, el operador se entera: `GET /incident-preview` OK ahora también
+  devuelve `repair`, y el modal muestra una nota discreta en el paso preview ("Stacky
+  detectó un fallo de formato y lo reparó automáticamente"). Cero acciones automáticas
+  invisibles (coherente con Planes 134/135); test backend nuevo incluido.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Los nombres de símbolos, las rutas, los
 > literales de mensajes y los comandos son LITERALES: prohibido desviarse de los nombres
 > exactos, prohibido "mejorar" el alcance. Todo lo ambiguo ya fue decidido acá.
+> Los comandos con `&&` se ejecutan en **Git Bash** (en PowerShell 5.1 `&&` es error de
+> parser).
 
 **Dependencias:** ninguna dura. Reusa: el guard anti-narración y el pase correctivo de
 épica ya existentes (Plan 51 `harness/epic_gate.py`, fix robusto brief→épica
@@ -44,7 +81,8 @@ Este plan resuelve ambas en dos fases independientes del mismo componente:
 - **F0** agrega un pase correctivo automático (reintento) al resolutor de incidencias,
   reusando EXACTAMENTE el patrón ya probado de `epic_repair` (fix robusto brief→épica),
   más diagnóstico accionable en la consola de ejecución y en la respuesta de preview/
-  publish cuando el reintento no alcanza.
+  publish cuando el reintento no alcanza, y transparencia en el preview cuando el
+  reintento SÍ alcanza ([ADICIÓN ARQUITECTO]).
 - **F1** agrega pegado de imágenes desde el portapapeles al modal, reusando el mismo
   pipeline de validación/subida que ya usan drag&drop y el selector de archivos.
 
@@ -54,7 +92,8 @@ Este plan resuelve ambas en dos fases independientes del mismo componente:
   fallo de forma pasa primero por el reintento automático, igual que ya ocurre en
   brief→épica desde el fix robusto de julio 2026). Cuando el reintento no alcanza, el
   operador ve en el modal que YA se reintentó (no repite el mismo intento a mano
-  esperando un resultado distinto).
+  esperando un resultado distinto). Cuando el reintento alcanza, el operador ve que hubo
+  una reparación automática (cero acciones invisibles).
 - Incidencia B: 0 pasos manuales de "guardar captura a disco → abrir selector de
   archivos → buscarla" para adjuntar una captura de pantalla; Ctrl+V la agrega
   directamente.
@@ -103,12 +142,18 @@ la más rápida para el caso de uso real (el operador toma un screenshot y lo pe
 - **Human-in-the-loop innegociable.** El reintento de F0 es "el agente vuelve a intentar
   ANTES de mostrarle el resultado al operador para su revisión" — nunca auto-publica.
   El botón "Publicar" sigue exigiendo `confirm:true` explícito del operador
-  (`api/tickets.py:7391-7397`, sin cambios). F0 NO toca esa exigencia.
+  (`api/tickets.py:7391-7397`, sin cambios). F0 NO toca esa exigencia. Además, toda
+  reparación automática queda VISIBLE para el operador ([ADICIÓN ARQUITECTO], §4.0.6):
+  ninguna acción automática es invisible.
 - **Mono-operador sin auth real.** Nada de RBAC. No aplica a ninguna de las dos fases.
 - **No degradar. Reusar, no reinventar.** F0 reusa el patrón `epic_repair` símbolo por
   símbolo (mismas variables shadow, mismo presupuesto de reintentos, mismo
   `_send_system_message`, mismo lugar de sellado en `metadata`). F1 reusa
-  `handleFilesSelected`/`validateFiles` — CERO lógica de validación nueva.
+  `handleFilesSelected`/`validateFiles` — CERO lógica de validación nueva. F0 NO agrega
+  superficie XSS nueva: el HTML reparado fluye por el MISMO pipeline
+  `_extract_epic_html_raw` → preview → `dangerouslySetInnerHTML`
+  (`IncidentResolverModal.tsx:376-380`) que el HTML de primer intento — superficie
+  preexistente del Plan 131, sin cambios de sanitización en este plan.
 
 ---
 
@@ -118,8 +163,8 @@ la más rápida para el caso de uso real (el operador toma un screenshot y lo pe
 
 **Objetivo en 1 frase:** cuando el agente de incidencias narra en vez de HTML, Stacky le
 pide UNA vez que re-emita el HTML antes de cerrar la sesión (mismo patrón que
-brief→épica), y si el reintento no alcanza, el operador lo sabe con evidencia concreta en
-vez de un mensaje genérico.
+brief→épica), y el operador SIEMPRE se entera del desenlace: si el reintento no alcanzó,
+lo ve con evidencia concreta; si alcanzó, ve que hubo reparación automática.
 
 **Valor:** convierte un error duro sin recurso en un fallo autocorregible en la mayoría de
 los casos (mismo comportamiento que ya redujo esta clase de error en brief→épica), y
@@ -258,6 +303,19 @@ agregá:
 `agent_type` y `final_output` ya son variables disponibles en ese closure (usadas por el
 bloque de épica inmediatamente anterior; no las declares de nuevo).
 
+**Interacción con el cierre one-shot (C4 — leer antes de implementar, NO modificar):**
+el loop principal cierra stdin apenas `_result_ok_seen[0]` es True
+(`claude_code_cli_runner.py:1327-1334`) y arma una gracia de 20s
+(`_one_shot_close_deadline`, `:1334-1343`) tras la cual TERMINA el proceso. El mensaje
+de reintento se escribe al stdin DENTRO del procesamiento del mismo evento `result`
+(reader thread), antes de que el loop principal alcance el cierre — el CLI lo consume
+como un turno más aunque el stdin se cierre después. Consecuencia: **el turno de
+reintento debe completar dentro de esa gracia**; si tarda más, el proceso se termina y
+el output reparado puede quedar truncado. Esta mecánica es EXACTAMENTE la misma que ya
+rige para `epic_repair` (aceptada en producción) — NO extiendas el deadline ni toques
+`_result_ok_seen`/`_one_shot_close_deadline` en este plan: cambiaría el comportamiento
+de épica y excede el scope.
+
 **Paso C.** Ubicá (por el símbolo, cerca de la línea 1466-1467):
 
 ```python
@@ -278,11 +336,16 @@ Contrato de la clave nueva de metadata (nunca renombrar): `metadata["incident_re
 = {"attempted": bool, "reason": "narration_not_incident", "sent": bool}` o
 `{"attempted": False, "reason": "narration_not_incident", "budget_exhausted": True}`.
 `None` (ausente) si nunca se disparó (HTML ya era válido, flag OFF, runtime sin resume, u
-otro `agent_type`).
+otro `agent_type`). **Semántica de `sent` (C4):** `sent: true` significa "el mensaje de
+reintento se escribió al stdin del CLI"; NO garantiza que el turno de reintento haya
+completado antes del cierre one-shot (gracia de 20s, ver arriba). El veredicto final de
+si el HTML quedó válido lo da SIEMPRE `_looks_like_incident` sobre el output final en
+preview/publish — nunca infieras éxito desde `sent`.
 
 #### 4.0.3 — `backend/api/tickets.py`: diagnóstico accionable en preview/publish
 
-**GET /incident-preview.** Ubicá (por el símbolo, cerca de la línea 7337-7348):
+**GET /incident-preview (rama de fallo).** Ubicá (por el símbolo, cerca de la línea
+7337-7348):
 
 ```python
     execution_id = int(execution_id_str)
@@ -318,6 +381,35 @@ Reemplazalo por:
         }), 200
 ```
 
+**GET /incident-preview (rama OK) — [ADICIÓN ARQUITECTO].** Ubicá (mismo endpoint, el
+return final exitoso, cerca de la línea 7358-7364):
+
+```python
+    return jsonify({
+        "ok": True,
+        "title": title,
+        "html": html,
+        "related_epic": related,
+        "publishable": True,
+    }), 200
+```
+
+Reemplazalo por:
+
+```python
+    return jsonify({
+        "ok": True,
+        "title": title,
+        "html": html,
+        "related_epic": related,
+        "publishable": True,
+        "repair": repair_meta,
+    }), 200
+```
+
+(`repair_meta` ya quedó asignada arriba por el primer reemplazo; con run sin repair vale
+`None` y el frontend no muestra nada — backward-compatible.)
+
 **POST /incidents/publish.** Ubicá (por el símbolo, cerca de la línea 7417-7424):
 
 ```python
@@ -349,6 +441,11 @@ Reemplazalo por:
 un `dict` (nunca `None`), así que `.get("incident_repair")` es seguro sin chequeo
 adicional de tipo.
 
+**Nota (C7):** el campo `repair` del 422 de publish NO tiene consumidor UI hoy (el modal
+maneja los fallos de publish por excepción, `IncidentResolverModal.tsx:241-245`); existe
+como diagnóstico para consumo por API/curl y para paridad de contrato con preview. NO
+removerlo en limpiezas futuras por "no tener callers".
+
 #### 4.0.4 — Tests PRIMERO: `backend/tests/test_incident_repair_guard.py` (NUEVO)
 
 Creá el archivo con EXACTAMENTE este contenido:
@@ -360,8 +457,9 @@ Guard anti-narración del pase correctivo del resolutor de incidencias.
 Espejo de tests/test_epic_narration_guard.py (predicado de disparo +
 flag de gobierno), pero para _looks_like_incident/_extract_epic_html_raw
 y el agent_type=="incident" del pase correctivo embebido en
-claude_code_cli_runner.py. NO arranca subprocesos ni toca red/DB: prueba
-la lógica pura, al estilo test_stall_watchdog.
+claude_code_cli_runner.py. NO arranca subprocesos ni toca red/DB real:
+prueba la lógica pura + endpoints con run mockeado, al estilo
+test_stall_watchdog.
 """
 from __future__ import annotations
 
@@ -382,6 +480,8 @@ VALID_INCIDENT_HTML = (
     "<h2>CRITERIOS DE ACEPTACION</h2><p>Criterio uno.</p>"
 )
 
+REPAIR_META_SENT = {"attempted": True, "reason": "narration_not_incident", "sent": True}
+
 
 def _incident_repair_should_fire(current_output: str) -> bool:
     """Espejo de la condición de disparo del pase correctivo de incidencia
@@ -389,6 +489,18 @@ def _incident_repair_should_fire(current_output: str) -> bool:
     from api.tickets import _extract_epic_html_raw, _looks_like_incident
 
     return not _looks_like_incident(_extract_epic_html_raw(current_output))
+
+
+def _make_fake_run(output_text: str):
+    class _FakeRun:
+        output = output_text
+        project_name = "Pacifico"
+
+        @property
+        def metadata_dict(self):
+            return {"incident_repair": dict(REPAIR_META_SENT)}
+
+    return _FakeRun()
 
 
 def test_incident_repair_fires_on_narration():
@@ -438,16 +550,8 @@ def test_incident_preview_repair_field_present_when_repaired(monkeypatch):
 
     incident = incident_store.create_incident(text="algo se rompió", files=[])
 
-    class _FakeRun:
-        output = NARRATION_OUTPUT
-        project_name = "Pacifico"
-
-        @property
-        def metadata_dict(self):
-            return {"incident_repair": {"attempted": True, "reason": "narration_not_incident", "sent": True}}
-
     import api.tickets as t_mod
-    monkeypatch.setattr(t_mod, "_get_run_for_preview", lambda *a, **k: _FakeRun())
+    monkeypatch.setattr(t_mod, "_get_run_for_preview", lambda *a, **k: _make_fake_run(NARRATION_OUTPUT))
     monkeypatch.setattr(t_mod.config.config, "STACKY_INCIDENT_RESOLVER_ENABLED", True)
 
     from app import create_app
@@ -457,21 +561,44 @@ def test_incident_preview_repair_field_present_when_repaired(monkeypatch):
     resp = client.get(f"/api/tickets/incident-preview?execution_id=1&incident_id={incident['id']}")
     data = resp.get_json()
     assert data["error"] == "incident_not_in_output"
-    assert data["repair"] == {"attempted": True, "reason": "narration_not_incident", "sent": True}
+    assert data["repair"] == REPAIR_META_SENT
+
+
+def test_incident_preview_ok_includes_repair_field(monkeypatch):
+    """[ADICIÓN ARQUITECTO] GET /incident-preview OK: si el run fue reparado
+    (metadata["incident_repair"].attempted) y el HTML quedó válido, la
+    respuesta OK también incluye "repair" — el modal muestra la nota de
+    transparencia (cero acciones automáticas invisibles)."""
+    from services import incident_store
+
+    incident = incident_store.create_incident(text="algo se rompió", files=[])
+
+    import api.tickets as t_mod
+    monkeypatch.setattr(t_mod, "_get_run_for_preview", lambda *a, **k: _make_fake_run(VALID_INCIDENT_HTML))
+    monkeypatch.setattr(t_mod.config.config, "STACKY_INCIDENT_RESOLVER_ENABLED", True)
+
+    from app import create_app
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    resp = client.get(f"/api/tickets/incident-preview?execution_id=1&incident_id={incident['id']}")
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["repair"] == REPAIR_META_SENT
 ```
 
-Si `incident_store.create_incident` no existe con esa firma exacta, ubicá la función real
-de creación de incidencias en `backend/services/incident_store.py` (grep por `def
-create_incident`) y ajustá SOLO esa línea de setup del último test al contrato real —
-el resto del archivo no depende de esa firma.
+Firma VERIFICADA contra el código (C3, cero inferencia): `create_incident(text: str,
+files: list[tuple[str, bytes]]) -> dict` en `services/incident_store.py:106` — la
+llamada `create_incident(text="algo se rompió", files=[])` es válida tal cual está
+escrita arriba; NO la "ajustes".
 
-**Comando:**
+**Comando (Git Bash):**
 ```
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_incident_repair_guard.py -q
 ```
 
 **Criterio de aceptación (binario):** el comando anterior sale con `0 failed` (exit code
-0). Los 5 tests declarados arriba están en verde.
+0). Los 6 tests declarados arriba están en verde.
 
 #### 4.0.5 — Registrar el test nuevo en el ratchet
 
@@ -480,7 +607,7 @@ falla si un `tests/test_*.py` nuevo no está listado en `HARNESS_TEST_FILES`
 (`backend/scripts/run_harness_tests.sh`) ni en el allowlist. Ubicá en
 `backend/scripts/run_harness_tests.sh` el bloque de tests de Plan 131 (busca la línea
 `tests/test_plan131_incident_preview_publish.py`) y agregá, inmediatamente después de
-`tests/test_plan131_incident_api.py`:
+`tests/test_plan131_incident_api.py` (línea 446 en la versión actual):
 
 ```
   tests/test_incident_repair_guard.py
@@ -492,7 +619,7 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_harn
 ```
 sale en verde (el test nuevo queda clasificado).
 
-#### 4.0.6 — Frontend: tipo `repair` + mensaje de error más útil
+#### 4.0.6 — Frontend: tipo `repair` + mensaje de error más útil + nota de transparencia
 
 **`frontend/src/incidents/incidentModel.ts`.** Ubicá:
 
@@ -528,8 +655,9 @@ export interface IncidentPreviewDTO {
 }
 ```
 
-**`frontend/src/components/IncidentResolverModal.tsx`.** Ubicá (dentro de
-`loadPreview`, por el string exacto `p.error === "incident_not_in_output"`):
+**`frontend/src/components/IncidentResolverModal.tsx` — mensaje de error.** Ubicá (dentro
+de `loadPreview`, por el string exacto `p.error === "incident_not_in_output"`, cerca de
+la línea 189-193):
 
 ```tsx
         setErrorMsg(
@@ -551,6 +679,32 @@ Reemplazalo por:
         );
 ```
 
+**`IncidentResolverModal.tsx` — nota de transparencia [ADICIÓN ARQUITECTO].** Ubicá el
+paso preview (por el string exacto, cerca de la línea 373-375):
+
+```tsx
+        {step === "preview" && preview && (
+          <div className={styles.body}>
+            {preview.title && <div className={styles.previewTitle}>{preview.title}</div>}
+```
+
+Reemplazalo por:
+
+```tsx
+        {step === "preview" && preview && (
+          <div className={styles.body}>
+            {preview.repair?.attempted && (
+              <p className={styles.hint}>
+                ℹ️ Stacky detectó un fallo de formato en la primera respuesta del agente
+                y lo reparó automáticamente. Revisá el desglose antes de publicar.
+              </p>
+            )}
+            {preview.title && <div className={styles.previewTitle}>{preview.title}</div>}
+```
+
+(`styles.hint` ya existe y se usa en este mismo componente, línea 327 — cero CSS nuevo,
+cero inline-style: compatible con el uiDebtRatchet del Plan 138.)
+
 **Criterio de aceptación (binario):**
 ```
 cd "Stacky Agents/frontend" && npx tsc --noEmit
@@ -561,8 +715,9 @@ backward-compatible).
 
 **Impacto por runtime:** el campo `repair` puede venir `null`/ausente en Codex CLI y
 GitHub Copilot Pro (nunca se disparó el pase correctivo, ver §3) — el mensaje de error
-cae al branch corto de siempre (`p.repair?.attempted` es falsy con `undefined`), CERO
-cambio de comportamiento visible en esos runtimes.
+cae al branch corto de siempre y la nota de transparencia no se muestra
+(`p.repair?.attempted` es falsy con `undefined`/`null`), CERO cambio de comportamiento
+visible en esos runtimes.
 
 ---
 
@@ -598,8 +753,11 @@ este repo NO tiene `@testing-library/react`/jsdom instalados, así que toda lóg
 debe quedar testeable sin renderizar el componente).
 
 Agregá a `frontend/src/incidents/incidentModel.test.ts`, DESPUÉS del último test
-existente del archivo, importando `extractPastedImageFiles` (agregalo también al bloque
-`import { ... } from "./incidentModel"` de la línea 2-10):
+existente del archivo, el bloque `describe` de abajo, e incorporá
+`extractPastedImageFiles` y `type ClipboardFileItem` al bloque
+`import { ... } from "./incidentModel"` de las líneas 2-10. **La línea 1 del archivo
+(`import { describe, it, expect } from "vitest";`) NO se toca (C5).** El bloque de
+imports queda así:
 
 ```ts
 import {
@@ -613,9 +771,11 @@ import {
   type IncidentPreviewDTO,
   type ClipboardFileItem,
 } from "./incidentModel";
+```
 
-// ... (resto del archivo sin cambios) ...
+Y el bloque de tests nuevo:
 
+```ts
 describe("extractPastedImageFiles", () => {
   function mockItem(kind: string, type: string, file: File | null): ClipboardFileItem {
     return { kind, type, getAsFile: () => file };
@@ -647,6 +807,12 @@ describe("extractPastedImageFiles", () => {
     expect(result[0].type).toBe("image/png");
   });
 
+  it("MIME image/* fuera del allowlist (svg) se ignora, no se renombra a .png", () => {
+    const svg = new File(["<svg onload=alert(1)/>"], "image.svg", { type: "image/svg+xml" });
+    const items = [mockItem("file", "image/svg+xml", svg)];
+    expect(extractPastedImageFiles(items)).toEqual([]);
+  });
+
   it("item de imagen sin File real (getAsFile null) se ignora sin lanzar", () => {
     const items = [mockItem("file", "image/png", null)];
     expect(extractPastedImageFiles(items)).toEqual([]);
@@ -671,13 +837,13 @@ describe("extractPastedImageFiles", () => {
 });
 ```
 
-**Comando:**
+**Comando (Git Bash):**
 ```
 cd "Stacky Agents/frontend" && npx vitest run src/incidents/incidentModel.test.ts
 ```
 
 **Criterio de aceptación (binario):** el comando anterior sale con todos los tests en
-verde (exit code 0), incluidos los 6 casos nuevos de `extractPastedImageFiles`.
+verde (exit code 0), incluidos los 7 casos nuevos de `extractPastedImageFiles`.
 
 #### 4.1.2 — Implementación: `extractPastedImageFiles` en `incidentModel.ts`
 
@@ -694,7 +860,13 @@ export interface ClipboardFileItem {
 
 /** MIME -> extensión, alineada 1:1 con IMAGE_EXTENSIONS del backend
  * (services/incident_store.py:27) para que validateFiles nunca rechace una
- * imagen pegada por extensión desconocida. */
+ * imagen pegada por extensión desconocida. Es un ALLOWLIST cerrado (C2):
+ * un MIME image/* que no esté acá (p.ej. image/svg+xml, image/tiff) se
+ * IGNORA en vez de renombrarse a .png — renombrar colaría por validateFiles
+ * (que valida por extensión) contenido cuya extensión real el backend
+ * rechaza, y SVG además es vector activo de scripting. Esos archivos siguen
+ * pudiendo adjuntarse por selector/drag&drop, donde conservan su extensión
+ * real y la validación existente decide. */
 const CLIPBOARD_IMAGE_EXT: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
@@ -704,24 +876,25 @@ const CLIPBOARD_IMAGE_EXT: Record<string, string> = {
 };
 
 /**
- * Extrae SOLO los items de tipo imagen de un evento `paste`, ignorando (sin
- * bloquear) items no-imagen: texto (`kind === "string"`, p.ej. el usuario
- * pegando texto normal en el textarea) y archivos no-imagen (p.ej. un PDF
- * copiado desde el explorador junto con una captura). Cada imagen se
- * renombra "pegado-<timestamp>-<índice><ext>" porque el navegador entrega
- * clipboard images con nombres genéricos ("image.png") que colisionarían
- * en la lista de archivos si se pegan varias veces. Pura salvo por
- * `getAsFile()`/`Date.now()`; segura ante lista vacía o `getAsFile()` que
- * devuelve null.
+ * Extrae SOLO los items de imagen del allowlist de un evento `paste`,
+ * ignorando (sin bloquear) items no-imagen: texto (`kind === "string"`,
+ * p.ej. el usuario pegando texto normal en el textarea) y archivos
+ * no-imagen (p.ej. un PDF copiado desde el explorador junto con una
+ * captura). Cada imagen se renombra "pegado-<timestamp>-<índice><ext>"
+ * porque el navegador entrega clipboard images con nombres genéricos
+ * ("image.png") que colisionarían en la lista de archivos si se pegan
+ * varias veces. Pura salvo por `getAsFile()`/`Date.now()`; segura ante
+ * lista vacía o `getAsFile()` que devuelve null.
  */
 export function extractPastedImageFiles(items: ClipboardFileItem[]): File[] {
   const out: File[] = [];
   const ts = Date.now();
   items.forEach((item, idx) => {
     if (item.kind !== "file" || !item.type.startsWith("image/")) return;
+    const ext = CLIPBOARD_IMAGE_EXT[item.type];
+    if (!ext) return; // C2 — MIME image/* fuera del allowlist: ignorar.
     const file = item.getAsFile();
     if (!file) return;
-    const ext = CLIPBOARD_IMAGE_EXT[item.type] ?? ".png";
     out.push(new File([file], `pegado-${ts}-${idx}${ext}`, { type: item.type }));
   });
   return out;
@@ -768,6 +941,9 @@ Inmediatamente DESPUÉS, agregá:
 
 ```tsx
   function handlePaste(e: React.ClipboardEvent) {
+    // C1 — el handler vive en el div raíz del modal pero solo actúa en el
+    // paso intake (en preview/running/error/done, pegar no hace nada).
+    if (step !== "intake") return;
     const items = e.clipboardData?.items;
     if (!items) return;
     const imageFiles = extractPastedImageFiles(Array.from(items));
@@ -781,23 +957,28 @@ Inmediatamente DESPUÉS, agregá:
   }
 ```
 
-**Paso C — wiring en el JSX.** Ubicá el contenedor del paso "intake" (por el símbolo,
-cerca de la línea 275-276):
+**Paso C — wiring en el JSX (C1).** Ubicá el div raíz del modal (por el string exacto,
+cerca de la línea 260):
 
 ```tsx
-        {step === "intake" && (
-          <div className={styles.body}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Resolver incidencia">
 ```
 
 Reemplazalo por:
 
 ```tsx
-        {step === "intake" && (
-          <div className={styles.body} onPaste={handlePaste}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Resolver incidencia" onPaste={handlePaste}>
 ```
 
-Esto cubre el paste sin importar qué hijo tiene el foco (textarea, dropzone, o el propio
-contenedor) porque el evento `paste` de React burbujea por el árbol sintético.
+**Por qué el div raíz y no el body del intake (C1):** el evento `paste` se despacha en el
+elemento con foco y burbujea por el árbol sintético de React. Con el handler en el body
+del intake, Ctrl+V se pierde si el foco está en el header, en el botón cerrar o en
+cualquier control fuera de ese div. En el raíz del modal cubre el foco en CUALQUIER
+control del modal; el caso inicial (modal recién abierto) ya está cubierto porque el
+textarea tiene `autoFocus` (línea 313). El gate por paso vive DENTRO del handler (Paso
+B), así el wiring es un único atributo. NO usar un listener global de `document`
+(descartado: riesgo de stale-closure sobre el estado `files` y captura de pastes ajenos
+al modal).
 
 **Paso D — hint de descubribilidad (sin la cual el operador no se entera de que Ctrl+V
 funciona).** Ubicá (por el string exacto, cerca de la línea 327):
@@ -836,9 +1017,13 @@ es intake de UI antes de lanzar el análisis.
 | Riesgo | Mitigación |
 |---|---|
 | El reintento de F0 tampoco alcanza (el modelo sigue narrando tras el pase correctivo) | Presupuesto acotado (comparte `CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES` con autocorrect/criteria_repair/epic_repair — nunca reintenta más de una vez para incidente, nunca indefinidamente); el operador ve el mensaje enriquecido ("ya se reintentó y no se recuperó") en vez de uno genérico, y puede relanzar el análisis completo desde el modal (`handleAnalyze`, sin cambios). |
+| (C4) El turno de reintento no completa dentro de la gracia one-shot (~20s tras el cierre de stdin, runner `:1327-1343`) y el proceso se termina con el output reparado truncado | Limitación PREEXISTENTE compartida con `epic_repair` (aceptada en producción; la re-emisión es re-formateo de contenido ya computado, típicamente rápida). El contrato de metadata lo hace explícito: `sent: true` ≠ reparación completada; el veredicto lo da `_looks_like_incident` en preview/publish. NO se toca el deadline en este plan (cambiaría épica; ver §4.0.2). Si la telemetría de `metadata["incident_repair"]` muestra truncamientos frecuentes, un plan futuro evalúa extender la gracia para AMBOS pases. |
 | El pase correctivo de incidente compite con el de épica si algún día un run mixto tuviera ambos `agent_type` | No aplica: son condiciones mutuamente excluyentes (`agent_type=="business"` vs `agent_type=="incident"`), y cada `_on_stream_event` corresponde a UNA ejecución con UN `agent_type` fijo (`IncidentAgent.type = "incident"`, `backend/agents/incident.py:8`). |
-| Pegar un archivo NO-imagen (p.ej. copiar un `.docx` desde el explorador de Windows) dispara `handlePaste` sin agregarlo | Comportamiento esperado y ya cubierto por el test "ignora archivos no-imagen": `extractPastedImageFiles` filtra por `type.startsWith("image/")`; el operador sigue pudiendo adjuntar ese archivo con el selector o drag&drop existentes (sin regresión, sin bloqueo). |
+| El HTML reparado introduce contenido malicioso que la UI renderiza (`dangerouslySetInnerHTML`) | Sin superficie nueva: el HTML reparado pasa por el MISMO pipeline (`_extract_epic_html_raw` → preview → render, `IncidentResolverModal.tsx:376-380`) que el de primer intento, con la misma (no-)sanitización preexistente del Plan 131. Este plan no cambia esa superficie ni en más ni en menos (ver §3 y §6). |
+| Pegar un archivo NO-imagen (p.ej. copiar un `.docx` desde el explorador de Windows) dispara `handlePaste` sin agregarlo | Comportamiento esperado y ya cubierto por el test "ignora archivos no-imagen": `extractPastedImageFiles` filtra por `type.startsWith("image/")` + allowlist de MIME (C2); el operador sigue pudiendo adjuntar ese archivo con el selector o drag&drop existentes (sin regresión, sin bloqueo). |
+| (C2) Imagen pegada con MIME `image/*` exótico (svg/tiff/heic) renombrada a `.png` colaría contenido mislabeled por la validación por extensión | Resuelto por diseño: allowlist cerrado `CLIPBOARD_IMAGE_EXT`; MIME fuera del mapa se ignora (test dedicado con `image/svg+xml`). El archivo puede adjuntarse por selector/drag&drop, donde conserva su extensión real y decide la validación existente. |
 | Pegar texto normal en el textarea deja de funcionar por el nuevo `onPaste` | Mitigado por diseño: `handlePaste` solo llama `e.preventDefault()` cuando `imageFiles.length > 0`; con clipboard de solo texto (`kind === "string"`), `imageFiles` queda vacío y el paste nativo del navegador continúa sin interferencia (cubierto por el test "ignora items de texto"). |
+| (C1) Ctrl+V con el foco fuera del modal (p.ej. `document.body` tras un click en zona no focuseable) no dispara el handler | Residual aceptado: el `onPaste` en el div raíz cubre el foco en cualquier control del modal, y el `autoFocus` del textarea (línea 313) cubre el flujo principal (abrir modal → pegar). El listener global de `document` se descartó explícitamente (stale-closure sobre `files` + captura de pastes ajenos al modal). Si el paste "no anda", un click en el textarea lo restablece — y el hint (Paso D) ancla la expectativa. |
 | Doble pase correctivo confunde el log de consola (epic_repair + incident_repair loguean con el mismo prefijo genérico) | Prefijos de log distintos y explícitos ya en el pseudocódigo: `"epic_repair: ..."` vs `"incident_repair: ..."` — mismo patrón de logging que ya distingue `criteria_repair`/`run_repair`/`epic_repair` entre sí hoy. |
 
 ---
@@ -852,12 +1037,17 @@ es intake de UI antes de lanzar el análisis.
   stdin-vivo equivalente en `codex_cli_runner.py`/runner de Copilot, que hoy NO existe ni
   para `epic_repair`; es un problema estructural más grande que excede esta incidencia
   puntual — ver precedente citado en §3).
+- Extender la gracia post-result del cierre one-shot (`_one_shot_close_deadline`, 20s,
+  runner `:1327-1343`) — compartida con `epic_repair`; tocarla acá cambiaría el
+  comportamiento de épica (C4).
 - Bucle de convergencia multi-iteración estilo Plan 58 (`STACKY_QUALITY_CONVERGENCE_ENABLED`)
   para incidencias. F0 replica la rama "legacy" single-shot de `epic_repair`
   (líneas 1183-1237 de `claude_code_cli_runner.py`), NO la rama de convergencia
   (líneas 1128-1182) — un solo reintento es proporcional al problema reportado.
   Extenderlo a convergencia queda para un plan futuro si la telemetría de
   `metadata["incident_repair"]` muestra que un solo reintento no alcanza en la práctica.
+- Sanitización nueva del HTML del desglose antes del render (superficie preexistente del
+  Plan 131, idéntica con o sin repair — ver §3 y Riesgos).
 - Pegar archivos no-imagen desde el portapapeles (p.ej. texto largo como adjunto .txt).
   El pedido del operador fue específicamente sobre imágenes; texto pegado sigue yendo al
   campo de texto libre, que es su destino natural.
@@ -880,6 +1070,10 @@ es intake de UI antes de lanzar el análisis.
   apenas llega el primer evento `result` terminal, sin esperar input del operador por
   consola (usado por brief→épica `-1`, Documentador `-7`, Resolutor de Incidencias `-8`).
   `services/claude_code_cli_runner.py:216-223`.
+- **Gracia one-shot (C4):** ventana de ~20s entre el cierre de stdin post-result y la
+  terminación forzada del proceso (`_one_shot_close_deadline`,
+  `claude_code_cli_runner.py:1327-1343`). El turno de reintento de cualquier pase
+  correctivo one-shot (épica o incidencia) vive dentro de esa ventana.
 - **Guard anti-narración:** validador puro (`_looks_like_epic`/`_looks_like_incident`)
   que distingue el artefacto HTML real de una narración en prosa del agente explicando lo
   que va a hacer en vez de hacerlo.
@@ -897,48 +1091,70 @@ es intake de UI antes de lanzar el análisis.
 
 1. F0 — `config.py` (flag nueva).
 2. F0 — `claude_code_cli_runner.py` (pase correctivo inline).
-3. F0 — `api/tickets.py` (diagnóstico en preview/publish).
+3. F0 — `api/tickets.py` (diagnóstico en preview/publish + campo `repair` en la rama OK).
 4. F0 — `tests/test_incident_repair_guard.py` + registro en `run_harness_tests.sh` +
    correr ambos comandos de test hasta verde.
-5. F0 — frontend: tipo `repair` + mensaje de error enriquecido + `tsc --noEmit` verde.
+5. F0 — frontend: tipo `repair` + mensaje de error enriquecido + nota de transparencia +
+   `tsc --noEmit` verde.
 6. F1 — `incidentModel.ts` (`extractPastedImageFiles`) + `incidentModel.test.ts` (tests
    primero, correrlos en rojo, luego implementar hasta verde).
-7. F1 — `IncidentResolverModal.tsx` (import + `handlePaste` + wiring JSX + hint) +
-   `tsc --noEmit` verde.
+7. F1 — `IncidentResolverModal.tsx` (import + `handlePaste` + wiring en el div raíz +
+   hint) + `tsc --noEmit` verde.
 8. Smoke manual del operador (opcional, no bloqueante): abrir el modal, copiar un
    screenshot (PrtScn/Win+Shift+S), Ctrl+V dentro del modal, confirmar que aparece en la
    lista de archivos con nombre `pegado-...`.
 
 F0 y F1 son independientes entre sí — se pueden implementar y verificar en cualquier
-orden relativo, o en paralelo por dos sesiones distintas, sin conflicto de archivos
+orden relativo, o en paralelo por dos sesiones distintas, casi sin conflicto de archivos
 (F0 toca `config.py`/`claude_code_cli_runner.py`/`api/tickets.py`/test backend; F1 toca
-solo `incidentModel.ts`/`incidentModel.test.ts`/`IncidentResolverModal.tsx`). El único
-archivo compartido es `IncidentResolverModal.tsx` (F0 lo toca vía `incidentModel.ts`'s
-tipo `IncidentPreviewDTO` consumido ahí; F1 le agrega el handler `onPaste`) — si se
-implementan en paralelo, el merge es aditivo (imports distintos, funciones distintas,
-sin overlap de líneas salvo el bloque de imports, donde ambos agregan un símbolo nuevo a
-la misma lista).
+`incidentModel.ts`/`incidentModel.test.ts`/`IncidentResolverModal.tsx`). Los archivos
+compartidos son `incidentModel.ts` (F0 agrega `IncidentRepairMetaDTO`; F1 agrega
+`extractPastedImageFiles`) e `IncidentResolverModal.tsx` (F0 agrega la nota de
+transparencia y el mensaje enriquecido; F1 agrega el handler `onPaste` y el hint) — si
+se implementan en paralelo, el merge es aditivo (símbolos distintos, sin overlap de
+líneas salvo bloques de imports/exports). Tras un merge así, correr `npx tsc --noEmit` +
+los dos comandos de test (gotcha conocido del repo: el 3-way merge puede duplicar líneas
+de cierre sin marcar conflicto).
 
 ## Definición de Hecho (DoD) — global
 
-- [ ] `STACKY_INCIDENT_REPAIR_ENABLED` existe en `config.py`, default `True`, sin
+- [x] `STACKY_INCIDENT_REPAIR_ENABLED` existe en `config.py`, default `True`, sin
       `FlagSpec` en `harness_flags.py` (precedente `STACKY_EPIC_REPAIR_ENABLED`).
-- [ ] El pase correctivo de incidencia está wireado en `claude_code_cli_runner.py`,
+- [x] El pase correctivo de incidencia está wireado en `claude_code_cli_runner.py`,
       gateado por `agent_type=="incident"`, comparte presupuesto con autocorrect, sella
-      `metadata["incident_repair"]`.
-- [ ] `GET /incident-preview` y `POST /incidents/publish` devuelven el campo `repair` en
-      la respuesta de fallo `incident_not_in_output`.
-- [ ] `tests/test_incident_repair_guard.py` — 5 tests, todos verdes, registrado en
+      `metadata["incident_repair"]`, y NO toca `_result_ok_seen` ni
+      `_one_shot_close_deadline` (C4).
+- [x] `GET /incident-preview` devuelve el campo `repair` tanto en la rama de fallo
+      `incident_not_in_output` como en la rama OK ([ADICIÓN ARQUITECTO]);
+      `POST /incidents/publish` lo devuelve en su 422.
+- [x] `tests/test_incident_repair_guard.py` — 6 tests, todos verdes, registrado en
       `HARNESS_TEST_FILES` de `run_harness_tests.sh`.
-- [ ] `tests/test_harness_ratchet_meta.py` verde (nada sin clasificar).
-- [ ] `incidentModel.ts` exporta `extractPastedImageFiles` + `ClipboardFileItem` +
-      `IncidentRepairMetaDTO`; `incidentModel.test.ts` tiene 6 tests nuevos, todos
-      verdes.
-- [ ] `IncidentResolverModal.tsx` tiene `handlePaste` wireado en `onPaste` del
-      contenedor del paso intake, y el hint menciona Ctrl+V.
-- [ ] `npx tsc --noEmit` en `Stacky Agents/frontend` sale 0 errores.
-- [ ] Cero flags nuevas requieren acción del operador (ambas default ON / sin flag).
-- [ ] Codex CLI y GitHub Copilot Pro: comportamiento de F0 sin cambios (degradación ya
+- [x] `tests/test_harness_ratchet_meta.py` — el test nuevo queda clasificado (no
+      aparece en el listado de sin-clasificar). El meta-test sigue en rojo por
+      DRIFT PREEXISTENTE de otros planes (125/126/139/98/122, confirmado
+      reproduciendo el fallo con este cambio stasheado) — ajeno a este plan, no
+      corresponde a esta implementación arreglarlo.
+- [x] `incidentModel.ts` exporta `extractPastedImageFiles` + `ClipboardFileItem` +
+      `IncidentRepairMetaDTO`; `extractPastedImageFiles` ignora MIME fuera del allowlist
+      (C2); `incidentModel.test.ts` tiene 7 tests nuevos, todos verdes.
+- [x] `IncidentResolverModal.tsx` tiene `handlePaste` con gate interno por paso, wireado
+      en `onPaste` del div raíz del modal (`styles.modal`, C1), el hint menciona Ctrl+V,
+      y el paso preview muestra la nota de transparencia cuando `preview.repair?.attempted`.
+- [x] `npx tsc --noEmit` en `Stacky Agents/frontend` sale 0 errores.
+- [x] Cero flags nuevas requieren acción del operador (ambas default ON / sin flag).
+- [x] Codex CLI y GitHub Copilot Pro: comportamiento de F0 sin cambios (degradación ya
       aceptada, mismo precedente que `epic_repair`); F1 funciona igual en los 3.
-- [ ] `git diff` de esta implementación no toca ningún archivo del scope de Plan 159
+- [x] `git diff` de esta implementación no toca ningún archivo del scope de Plan 159
       (catálogo de modelos) ni reimplementa nada de ese plan.
+
+## Nota de implementación (2026-07-17)
+
+Implementado F0+F1 completos en la rama `feat/plan-160-incident-repair-paste-images`.
+Regresión detectada y corregida durante la implementación: el helper `_patch_run` de
+`tests/test_plan131_incident_preview_publish.py` (preexistente, NO parte del alcance
+original del plan) construía un `MagicMock()` sin `metadata_dict`; el nuevo código de
+F0 (`run.metadata_dict.get("incident_repair")`) devolvía otro `MagicMock` no
+serializable a JSON → 500. Fix aditivo de una línea (`fake_run.metadata_dict = {}`) en
+ese helper, confirmado necesario y suficiente (19/19 tests de ese archivo verdes tras
+el fix). Smoke manual de Ctrl+V (paso 8 del Orden de implementación) queda pendiente
+para el operador.

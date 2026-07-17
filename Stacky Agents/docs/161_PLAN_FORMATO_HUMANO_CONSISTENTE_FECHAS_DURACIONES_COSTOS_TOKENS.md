@@ -1,6 +1,8 @@
 # Plan 161 — Formato humano consistente: fechas, duraciones, costos USD, tokens y tamaños
 
-**Estado: CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-17 (v1 -> v2)**
+**Estado: IMPLEMENTADO — F0..F5 — 2026-07-17 (v1 -> v2 -> implementación)**
+
+**Nota de implementación (2026-07-17):** F0-F5 completas y verificadas con output real. Único gap: F5.3 pasos 8 (`uiDebtRatchet.test.ts`) y 9 (`motionDebtRatchet.test.ts`) fallan por deuda visual/motion preexistente YA COMMITEADA en HEAD (commits `43ec5b5d` plan-131, `fb6868c9` plan-131 F7 y otros de la serie 129/143), en archivos completamente ajenos a este plan (`IncidentResolverModal.module.css`, `PlansBoardPage.module.css`, `HarnessFlagsPanel.module.css`, `DevOpsPage.module.css`, componentes DevOps) — ningún archivo tocado por plan 161 aparece en esas regresiones. No se corrigieron por estar fuera de alcance (evitar inventar alcance, §"Fuera de scope"). Ver memoria `gotcha-ratchet-meta-drift-planes-no-relacionados`.
 
 ## Changelog v1 -> v2 (crítica adversarial)
 

@@ -13,6 +13,7 @@ import {
   canAnalyze,
   summarizeRelatedEpic,
   pickResumableIncident,
+  extractPastedImageFiles,
   type IncidentStatusDTO,
 } from "../incidents/incidentModel";
 import type { AgentRuntime } from "../types";
@@ -123,6 +124,22 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
     if (e.dataTransfer.files?.length) handleFilesSelected(e.dataTransfer.files);
   }
 
+  function handlePaste(e: React.ClipboardEvent) {
+    // C1 — el handler vive en el div raíz del modal pero solo actúa en el
+    // paso intake (en preview/running/error/done, pegar no hace nada).
+    if (step !== "intake") return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles = extractPastedImageFiles(Array.from(items));
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      handleFilesSelected(imageFiles);
+    }
+    // Sin imágenes en el portapapeles (solo texto, p.ej. pegando en el
+    // textarea): NO se llama preventDefault, el paste de texto sigue su
+    // curso normal hacia el input/textarea enfocado.
+  }
+
   function removeFile(idx: number) {
     const merged = files.filter((_, i) => i !== idx);
     setFiles(merged);
@@ -188,7 +205,9 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
       } else {
         setErrorMsg(
           p.error === "incident_not_in_output"
-            ? "El agente narró en vez de devolver el desglose HTML. Revisá la consola y reintentá."
+            ? p.repair?.attempted
+              ? "El agente narró en vez de devolver el desglose HTML. Stacky ya reintentó automáticamente una vez y no se recuperó. Revisá la consola de la ejecución y reintentá manualmente."
+              : "El agente narró en vez de devolver el desglose HTML. Revisá la consola y reintentá."
             : `No se pudo generar el preview: ${p.error ?? "error desconocido"}`
         );
         setStep("error");
@@ -257,7 +276,7 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
 
   return (
     <div className={styles.overlay} onClick={handleBackdrop}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Resolver incidencia">
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Resolver incidencia" onPaste={handlePaste}>
         <header className={styles.header}>
           <h2 className={styles.title}>🚑 Resolver incidencia</h2>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">✕</button>
@@ -324,7 +343,7 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
                 multiple
                 onChange={(e) => e.target.files && handleFilesSelected(e.target.files)}
               />
-              <p className={styles.hint}>Arrastrá capturas o logs acá, o hacé click para elegir archivos.</p>
+              <p className={styles.hint}>Arrastrá capturas o logs acá, pegá una imagen (Ctrl+V) o hacé click para elegir archivos.</p>
             </div>
 
             {files.length > 0 && (
@@ -372,6 +391,12 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
 
         {step === "preview" && preview && (
           <div className={styles.body}>
+            {preview.repair?.attempted && (
+              <p className={styles.hint}>
+                ℹ️ Stacky detectó un fallo de formato en la primera respuesta del agente
+                y lo reparó automáticamente. Revisá el desglose antes de publicar.
+              </p>
+            )}
             {preview.title && <div className={styles.previewTitle}>{preview.title}</div>}
             <div
               className={styles.previewHtml}

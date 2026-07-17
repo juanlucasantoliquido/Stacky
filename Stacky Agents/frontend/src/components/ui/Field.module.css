@@ -1,0 +1,24 @@
+/* Plan 162 — display:contents: los hijos participan del layout del padre como si
+   no hubiera wrapper ⇒ byte-idéntico con el patrón label+control hermanos de hoy. */
+.field {
+  display: contents;
+}
+
+.label {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.required {
+  color: var(--danger);
+}
+
+.help {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.error {
+  color: var(--status-danger-text);
+  font-size: 12px;
+}

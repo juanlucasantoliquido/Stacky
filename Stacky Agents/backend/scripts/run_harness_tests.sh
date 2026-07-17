@@ -444,6 +444,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan131_incident_preview_publish.py
   tests/test_plan131_incident_docs.py
   tests/test_plan131_incident_api.py
+  tests/test_incident_repair_guard.py
   # — Plan 133 — Contrato de inyección de contexto por agente —
   tests/test_context_contract_flags.py
   tests/test_run_ticket_refresh.py

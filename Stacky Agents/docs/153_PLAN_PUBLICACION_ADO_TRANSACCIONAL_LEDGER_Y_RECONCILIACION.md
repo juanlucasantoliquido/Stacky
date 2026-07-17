@@ -1,10 +1,21 @@
 # Plan 153 — Publicación ADO transaccional: ledger + reconciliación
 
-> **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
+> **Estado:** CRITICADO-Y-MEJORADO (v2, 2026-07-17, juez StackyArchitectaUltraEficientCode) · **Autor:** StackyArchitectaUltraEficientCode
+>
+> **CHANGELOG v1 → v2 (crítica adversarial 2026-07-17; citas re-verificadas contra el árbol vivo):**
+> - **C1 (IMPORTANTE) — drift masivo de líneas en `tickets.py` + ocurrencia TRAMPA.** Las líneas del bloque 6300-8000 driftearon +53 a +307. Reales HOY: `_PublishedEpic` NamedTuple `:6384-6388`; construcción `return _PublishedEpic(...)` `:6467` y `:6923`; `get_work_item(... System.Rev)` `:6790-6791`; `create_work_item(... Epic)` `:6452` y `:6906`. **Los DOS targets de F3 son `:7885` (branch provider `_tracker_item_from_kwargs(work_item_type="Feature", ...)` dentro de `publish_epic_children`) y `:7942` (branch ADO `ado.create_work_item(work_item_type="Feature", ...)`).** Existe una **TERCERA** ocurrencia de `work_item_type="Feature"` en `:7748` dentro de `build_epic_children_plan` (constructor `ChildNodePreview` del PREVIEW) que **NO se debe tocar**. F3 corregida con esta desambiguación explícita. `return jsonify(... 200)` de `create_epic_children` real en `:8031-8037`; comentario `# Plan 70 F8` real cercano en `:7870`.
+> - **C2 (MENOR) — flag `STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED` real en `config.py:770-771`** (citada `:747-749`, drift +23; símbolo y default `"true"` confirmados). Corregido.
+> - **C3 (IMPORTANTE) — `test_publish_idempotent_guard.py` NO está registrado hoy** en `run_harness_tests.sh` ni `.ps1` (el gotcha #4 v1 asumía que sí). Además el `.ps1` usa la variable `$HarnessTestFiles` (línea 13), no el token literal `HARNESS_TEST_FILES`. F1 y gotcha #4 corregidos: como el plan MODIFICA ese archivo, se registra también (aditivo); KPI-6 grepea el NOMBRE del archivo, así que funciona igual en ambos scripts.
+> - **C4 (MENOR) — inconsistencia preview↔realidad.** Con el mapeo Feature→tipo-disponible, el `ChildNodePreview` (`:7748`) sigue mostrando "Feature" mientras el create real usa "Issue". Se documenta en §7 (Fuera de scope): el warning F3 hace visible la divergencia; propagar el tipo resuelto al preview es otro plan.
+> - **C5 (MENOR) — cita de import en `metrics.py:367`**: real es `from services import harness_health as hh` (no `import services.harness_health as hh`); alias `hh` correcto. Corregido en §2.5.
+> - **[ADICIÓN ARQUITECTO] — centinela de migración one-shot real.** v1 corría un scan `LIKE` de TODA la tabla de ejecuciones en CADA arranque (idempotente pero con costo por boot no acotado). v2 agrega un centinela persistido (`execution_id = _MIGRATION_SENTINEL_ID = -153`, `source="migration_sentinel"`, `status="posted"`) que short-circuita la migración en arranques subsiguientes con un único SELECT indexado. Es seguro porque tras F1 `_attempt_publish` ya NO escribe markers legacy nuevos (no aparecen markers `pending` después del deploy). Invisible a UI y métrica (`snapshot_stuck` solo surface pending/failed; `count_persist_failures` solo cuenta pending; el sentinel es posted). Ver F2.
+> - Veredicto v2: **APROBADO-CON-CAMBIOS** (0 bloqueantes). Los anchors de TEXTO de todas las ediciones se confirmaron existentes; los números de línea de este doc son referencia 2026-07-17.
+>
+> · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 con auditoría de logs del deploy (roadmap top-5, ítem R1). Toda la evidencia archivo:línea de este doc fue **re-verificada contra el árbol el 2026-07-16**; los números de línea son referencia de ese día — **toda edición se ancla por TEXTO normativo citado, no por número de línea**.
 > **Orden en el roadmap:** este plan se implementa **primero**, junto con el plan del arnés veraz (son independientes entre sí; ninguno bloquea al otro).
 > **Runtimes:** este plan es **backend + UI de diagnóstico**, agnóstico del runtime de agentes (Codex CLI, Claude Code CLI, GitHub Copilot Pro). El camino de publicación a ADO (`_attempt_publish` → `ado_publisher`) es el MISMO para los 3 runtimes, así que la paridad es automática. Se declara igual por fase.
-> **Flags nuevas:** **NINGUNA.** Se reusa `STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED` (existente, `backend/config.py:747-749`, default efectivo `"true"`). Mismo contrato de flag, mecanismo nuevo. NO se toca `FLAG_REGISTRY`, NO se toca `_CURATED_DEFAULTS_ON`, NO hay panel de flags nuevo.
+> **Flags nuevas:** **NINGUNA.** Se reusa `STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED` (existente, `backend/config.py:770-771`, default efectivo `"true"`). Mismo contrato de flag, mecanismo nuevo. NO se toca `FLAG_REGISTRY`, NO se toca `_CURATED_DEFAULTS_ON`, NO hay panel de flags nuevo.
 > **Human-in-the-loop:** el sweep de reconciliación **JAMÁS republica solo**. Solo marca y lista. El desbloqueo es SIEMPRE una acción humana 1-click (el humano dispara, el sistema ejecuta).
 
 ---
@@ -39,13 +50,13 @@
 
 ### 2.2 L3 — Hijos de épica perdidos semi-silenciosos (VS402323 8x en logs)
 
-- `backend/api/tickets.py:7635` — `work_item_type="Feature"` **hardcodeado** en el fallback ADO de `publish_epic_children` (llamada `ado.create_work_item(...)` que abre en `:7634`). Hay un segundo call-site hardcodeado en el branch provider: `:7578` (`_tracker_item_from_kwargs(work_item_type="Feature", ...)`).
+- `backend/api/tickets.py:7942` — `work_item_type="Feature"` **hardcodeado** en el fallback ADO de `publish_epic_children` (`def` en `:7850`; llamada `ado.create_work_item(...)`). Hay un segundo call-site hardcodeado en el branch provider de la misma función: `:7885` (`_tracker_item_from_kwargs(work_item_type="Feature", ...)`). **OJO (v2): existe una TERCERA ocurrencia de `work_item_type="Feature"` en `:7748`, dentro de `build_epic_children_plan` (`def` en `:7727`), que construye el `ChildNodePreview` del preview — esa NO es un create-call y NO se toca en F3.**
 - Cuando el template del proyecto ADO (p. ej. **Basic**: Epic/Issue/Task) no define el tipo `Feature`, ADO responde error **VS402323** — visto **8 veces** en los logs del deploy auditados el 2026-07-16.
-- `backend/api/tickets.py:7724-7730` — el endpoint `create_epic_children` devuelve el error **dentro del body con HTTP 200** (`return jsonify({... "error": result.error, ...}), 200`). El operador no se entera de que la épica quedó sin hijos.
+- `backend/api/tickets.py:8031-8037` — el endpoint `create_epic_children` (`def` en `:7986`) devuelve el error **dentro del body con HTTP 200** (`return jsonify({... "error": result.error, ...}), 200`). El operador no se entera de que la épica quedó sin hijos.
 
 ### 2.3 L7 — GET extra frágil de `System.Rev`
 
-- `backend/api/tickets.py:6736-6741` — tras publicar la épica, `autopublish_epic_from_run` hace un `get_work_item(published.ado_id, fields=["System.Rev"])` **extra** para sellar el baseline de edit-learning, cuando la respuesta del POST de creación (`create_work_item`, `wi` en `:6399-6414`) **ya trae `rev`**. Un fallo de red en ese GET degrada el baseline (warning `:6741`).
+- `backend/api/tickets.py:6790-6791` — tras publicar la épica, `autopublish_epic_from_run` (`def` en `:6580`) hace un `get_work_item(published.ado_id, fields=["System.Rev"])` **extra** para sellar el baseline de edit-learning, cuando la respuesta del POST de creación (`create_work_item`, `wi` en `:6452-6467`) **ya trae `rev`**. Un fallo de red en ese GET degrada el baseline (warning contiguo).
 
 ### 2.4 Métrica aproximada en harness-health
 
@@ -63,12 +74,12 @@
 | `_attempt_publish` | `backend/services/agent_completion_internal.py:603-674` | Punto ÚNICO de integración del guard (F1). Ya lee la flag con el patrón correcto: `from config import config as _cfg` (`:625`). |
 | `AgentExecution.metadata_json` / `metadata_dict` | `backend/models.py:219` / `:260-265` | Donde viven los markers legacy que la migración F2 lee. **NO existe `.metadata`** (nombre reservado SQLAlchemy). |
 | `fetch_states()` | `backend/services/ado_client.py:393-414` | Ya llama a `_apis/wit/workitemtypes`; F3 agrega un método hermano que devuelve los NOMBRES de tipos. |
-| Endpoint harness-health | `backend/api/metrics.py:353` (`def harness_health()`, importa `services.harness_health as hh` en `:367`) | Consumidor de la métrica migrada. |
+| Endpoint harness-health | `backend/api/metrics.py:353` (`def harness_health()`, importa con `from services import harness_health as hh` en `:367`) | Consumidor de la métrica migrada. |
 | Registro de blueprints | `backend/api/__init__.py` (patrón `from .diag import bp as diag_bp`, `:17`, + registro más abajo en el mismo archivo) | Donde se registra el blueprint nuevo de F2. **Los blueprints se registran ahí, NO en `app.py`** (gotcha conocido). |
 | `HarnessHealthCard` montada en Diagnóstico | `frontend/src/pages/DiagnosticsPage.tsx:203` | El panel F2 se monta inmediatamente debajo, en la misma página. |
 | Patrón de data-fetch de tarjeta | `frontend/src/components/OperationalHealthCard.tsx` (useEffect + api.get, declarado ahí mismo: "igual que HarnessHealthCard.tsx") | Patrón a calcar para `PublishLedgerPanel.tsx`. |
 | `Tickets.createEpicChildren` | `frontend/src/api/endpoints.ts:390-402`; consumidor único `frontend/src/components/EpicChildrenPanel.tsx:88` | F3 extiende el tipo de respuesta con `warnings?: string[]` (aditivo) y muestra warnings en el panel. |
-| `_PublishedEpic` | `backend/api/tickets.py:6331-6335` (NamedTuple `ado_id/title/url`), construida en `:6414` y `:6870` | F4 le agrega `rev: int \| None = None`. |
+| `_PublishedEpic` | `backend/api/tickets.py:6384-6388` (NamedTuple `ado_id/title/url`), construida en `:6467` y `:6923` | F4 le agrega `rev: int \| None = None`. |
 | Patrón test con DB real | p. ej. `backend/tests/test_ado_publisher_attachments.py:11,21` | `os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")` ANTES de cualquier import de app + `init_db()` en el test. |
 
 ---
@@ -366,13 +377,33 @@ Y en los TRES desenlaces del POST (anclas de texto, hoy `:646-674`), agregar bes
 **`migrate_legacy_markers()` — implementación EXACTA:**
 
 ```python
+_MIGRATION_SENTINEL_ID = -153  # [ADICIÓN ARQUITECTO v2] centinela: id negativo (nunca colisiona con execution_id real, autoincrement > 0)
+
+
 def migrate_legacy_markers() -> dict:
     """One-shot idempotente. Lee markers legacy publish_intent 'pending' de
     AgentExecution.metadata_json y los materializa como filas del ledger.
     NUNCA muta metadata_json (historia inmutable): la idempotencia es la
-    existencia de la fila (UNIQUE execution_id). NUNCA postea a ADO."""
+    existencia de la fila (UNIQUE execution_id). NUNCA postea a ADO.
+
+    [ADICIÓN ARQUITECTO v2] Short-circuit por centinela: tras la primera
+    corrida exitosa se inserta una fila centinela (execution_id=-153,
+    source='migration_sentinel', status='posted'). En arranques subsiguientes
+    un único SELECT indexado detecta el centinela y retorna sin el scan LIKE
+    de toda la tabla. Es seguro porque tras F1 _attempt_publish ya NO escribe
+    markers legacy nuevos: no aparecen markers 'pending' despues del deploy."""
     from models import AgentExecution
     from services.ado_publisher import AgentHtmlPublish
+
+    # Short-circuit: si el centinela ya existe, la migracion ya corrio => salir barato.
+    with session_scope() as session:
+        _already = (
+            session.query(PublishLedgerEntry.id)
+            .filter(PublishLedgerEntry.execution_id == _MIGRATION_SENTINEL_ID)
+            .first()
+        )
+    if _already is not None:
+        return {"migrated_posted": 0, "migrated_pending": 0, "skipped": 0, "sentinel_skip": True}
 
     migrated_posted = 0
     migrated_pending = 0
@@ -410,8 +441,19 @@ def migrate_legacy_markers() -> dict:
                     execution_id=exec_id, status=STATUS_PENDING, source="migration",
                 ))
                 migrated_pending += 1
+    # [ADICIÓN ARQUITECTO v2] sellar el centinela para short-circuitear los proximos arranques.
+    try:
+        with session_scope() as session:
+            session.add(PublishLedgerEntry(
+                execution_id=_MIGRATION_SENTINEL_ID, status=STATUS_POSTED, source="migration_sentinel",
+            ))
+            session.flush()
+    except IntegrityError:
+        pass  # carrera improbable (2 arranques simultaneos): el UNIQUE garantiza 1 solo centinela
     return {"migrated_posted": migrated_posted, "migrated_pending": migrated_pending, "skipped": skipped}
 ```
+
+> **Nota v2 — el centinela es invisible a UI y métrica:** `snapshot_stuck` solo devuelve `pending_stale` + `failed` (el centinela es `posted`), `count_persist_failures` solo cuenta `pending`, y `partitionLedger` del frontend concatena `pending_stale` + `failed`. El centinela (`source="migration_sentinel"`, id `-153`) NUNCA aparece en el panel ni infla `counts` de forma engañosa. Los tests F2 verifican `sentinel_skip` en la 2ª corrida.
 
 **Enganche en `backend/app.py`** — ancla de texto: la llamada `init_db()` (hoy `app.py:243`). Inmediatamente después, agregar:
 
@@ -463,6 +505,8 @@ def migrate_legacy_markers() -> dict:
 | `test_migracion_marker_pending_sin_publicacion_queda_pending` | Ejecución con marker legacy y sin fila `agent_html_publish` ok → fila ledger `pending`, `source=="migration"`. |
 | `test_migracion_marker_con_publicacion_ok_queda_posted` | Con fila `AgentHtmlPublish(status="ok", execution_id=X, ado_id=77, ...)` → ledger `posted` con `ado_ids==[77]`. |
 | `test_migracion_idempotente` | Ejecutarla 2 veces → segunda corrida `migrated_* == 0`, mismas filas. |
+| `test_migracion_sentinel_short_circuita` | Tras 1ª corrida existe fila `execution_id==-153, source=="migration_sentinel"`; 2ª corrida devuelve `sentinel_skip==True` y NO vuelve a escanear (mock/espía sobre `AgentExecution` query no invocado, o simplemente `migrated_*==0` con la key `sentinel_skip`). |
+| `test_snapshot_y_metrica_ignoran_sentinel` | Con solo el centinela presente: `snapshot_stuck()` → `pending_stale==[]`, `failed==[]`; `count_persist_failures(since)==0`; `counts["posted"]` incluye al centinela pero el panel no lo muestra. |
 | `test_migracion_no_muta_metadata` | El `metadata_json` de la ejecución es byte-idéntico antes/después. |
 | `test_snapshot_stuck_clasifica` | Fila pending con `updated_at` forzada 31 min atrás → en `pending_stale`; fila failed → en `failed`; fila posted → solo en `counts`. |
 | `test_endpoint_get_lista` | GET `/api/publish-ledger` → 200, body con `enabled`, `pending_stale`, `failed`, `counts`. |
@@ -551,7 +595,7 @@ def _resolve_feature_type(client, project_name: str | None) -> tuple[str, str | 
 
 (`import time as _time` si no existe ya un alias en el módulo; verificar con grep antes de agregar.)
 
-**Uso en `publish_epic_children`:** al inicio de la función (ancla de texto: antes del comentario `# Plan 70 F8 — branch provider para publish_epic_children (GAP-E)`, hoy `:7563`), resolver UNA vez:
+**Uso en `publish_epic_children`** (`def` en `:7850`)**:** al inicio de la función (ancla de texto: antes del comentario `# Plan 70 F8 — branch provider para publish_epic_children (GAP-E)`, hoy `:7870`), resolver UNA vez:
 
 ```python
     child_feature_type = "Feature"
@@ -563,9 +607,9 @@ def _resolve_feature_type(client, project_name: str | None) -> tuple[str, str | 
         pass
 ```
 
-y reemplazar los DOS literales hardcodeados por la variable: `_tracker_item_from_kwargs(work_item_type=child_feature_type, ...)` (hoy `:7578`) y `ado.create_work_item(work_item_type=child_feature_type, ...)` (hoy `:7635`). Los `work_item_type="Task"` NO se tocan (Basic define Task). Extender el NamedTuple `_ChildrenPublishResult` con campo aditivo `warnings: list = []` y poblar `[type_warning]` cuando no sea None, en los `return` de ambos branches.
+y reemplazar **EXACTAMENTE los DOS literales** `work_item_type="Feature"` **que están DENTRO de `publish_epic_children`** por la variable: el del branch provider `_tracker_item_from_kwargs(work_item_type=child_feature_type, ...)` (hoy `:7885`) y el del branch ADO `ado.create_work_item(work_item_type=child_feature_type, ...)` (hoy `:7942`). **NO tocar la TERCERA ocurrencia de `work_item_type="Feature"` en `:7748`** (constructor `ChildNodePreview` dentro de `build_epic_children_plan` — es el modelo del preview, no un create-call). **Desambiguación obligatoria para el implementador:** `grep -n 'work_item_type="Feature"' backend/api/tickets.py` devuelve HOY 3 líneas (`:7748`, `:7885`, `:7942`); solo las 2 que caen dentro del cuerpo de `publish_epic_children` (branch provider + branch ADO) se editan. Los `work_item_type="Task"` NO se tocan (Basic define Task). Extender el NamedTuple `_ChildrenPublishResult` con campo aditivo `warnings: list = []` y poblar `[type_warning]` cuando no sea None, en los `return` de ambos branches.
 
-**Endpoint `create_epic_children`** — reemplazar el `return` final (ancla de texto: `return jsonify({` con `"created_ids": result.created_ids`, hoy `:7724-7730`) por:
+**Endpoint `create_epic_children`** (`def` en `:7986`) — reemplazar el `return` final (ancla de texto: `return jsonify({` con `"created_ids": result.created_ids`, hoy `:8031-8037`) por:
 
 ```python
     warnings = list(getattr(result, "warnings", []) or [])
@@ -612,11 +656,11 @@ y reemplazar los DOS literales hardcodeados por la variable: `_tracker_item_from
 - NUEVO `backend/tests/test_autopublish_rev_from_response.py`
 
 **Cambios EXACTOS:**
-1. `_PublishedEpic` (hoy `:6331-6335`): agregar campo aditivo `rev: int | None = None` (NamedTuple con default — no rompe los constructores existentes).
-2. En `_publish_epic_to_ado`, en AMBOS branches (provider `:6388-6396` y ADO `:6398-6414`): capturar `_rev = wi.get("rev")` del dict de respuesta y construir `_PublishedEpic(..., rev=int(_rev) if _rev else None)`. Aplicar lo mismo en el segundo constructor de `:6870` (misma función patrón, flujo Issue).
-3. En `autopublish_epic_from_run`, bloque de baseline (ancla de texto: `_wi_rev = _rev_client.get_work_item(published.ado_id, fields=["System.Rev"])`, hoy `:6737`): anteponer `if published.rev is not None: _baseline_rev = published.rev` y ejecutar el GET actual SOLO en el `else` (fallback cuando la respuesta no trajo rev — p. ej. providers que no lo exponen).
+1. `_PublishedEpic` (hoy `:6384-6388`): agregar campo aditivo `rev: int | None = None` (NamedTuple con default — no rompe los constructores existentes).
+2. En `_publish_epic_to_ado` (`def` en `:6416`), en AMBOS branches (provider ~`:6441` y ADO ~`:6451-6467`): capturar `_rev = wi.get("rev")` del dict de respuesta y construir `_PublishedEpic(..., rev=int(_rev) if _rev else None)`. Aplicar lo mismo en el segundo constructor `:6923` (`_publish_issue_to_ado`, `def` en `:6876`, flujo Issue).
+3. En `autopublish_epic_from_run` (`def` en `:6580`), bloque de baseline (ancla de texto: `_wi_rev = _rev_client.get_work_item(published.ado_id, fields=["System.Rev"])`, hoy `:6790-6791`): anteponer `if published.rev is not None: _baseline_rev = published.rev` y ejecutar el GET actual SOLO en el `else` (fallback cuando la respuesta no trajo rev — p. ej. providers que no lo exponen).
 
-**Justificación de corrección:** entre el `create_work_item` (`:6690`) y el sellado del baseline (`:6733-6741`) el flujo de épica no ejecuta ninguna otra escritura ADO sobre ese work item (verificado leyendo el rango 2026-07-16), así que el `rev` de la respuesta de creación ES el rev vigente al sellar.
+**Justificación de corrección:** entre el `create_work_item` del flujo autopublish (`work_item_type="Epic"` en ~`:6700`) y el sellado del baseline (~`:6790`) el flujo de épica no ejecuta ninguna otra escritura ADO sobre ese work item (verificado leyendo el rango 2026-07-17), así que el `rev` de la respuesta de creación ES el rev vigente al sellar.
 
 **Tests (`tests/test_autopublish_rev_from_response.py`):**
 - `test_rev_de_respuesta_evita_get`: ado fake cuyo `create_work_item` devuelve `{"id": 1, "rev": 1, "fields": {...}, "_links": ...}` y cuyo `get_work_item` incrementa un contador → tras el flujo, `baseline_rev == 1` y contador `get_work_item == 0`.
@@ -666,6 +710,7 @@ y reemplazar los DOS literales hardcodeados por la variable: `_tracker_item_from
 - **Tocar `ado_write_operations`/outbox**: tabla distinta con propósito distinto; intacta.
 - **RBAC/permisos en los endpoints nuevos**: Stacky es mono-operador sin auth real.
 - **UI de configuración nueva**: no hay flags nuevas que configurar.
+- **Propagar el tipo mapeado al preview (`ChildNodePreview`, `:7748`)**: v2 deja el preview mostrando "Feature" aunque el create real mapee a "Issue" en templates Basic. El warning de F3 hace visible esa divergencia al operador; alinear el texto del preview con el tipo resuelto es un plan aparte (requiere resolver el tipo en el path de preview, que hoy no habla con ADO).
 
 ---
 
@@ -674,7 +719,7 @@ y reemplazar los DOS literales hardcodeados por la variable: `_tracker_item_from
 1. **`config.config` vs módulo `config`:** en `api/tickets.py` la instancia de flags es `config.config`; `getattr(config, FLAG)` sobre el MÓDULO devuelve siempre el default y mata el branch OFF (bit real de los planes 131 y 148). En `agent_completion_internal.py` el patrón correcto ya está escrito en `:625` (`from config import config as _cfg`) — calcarlo.
 2. **`session_scope` vive en `db.py:302`** (NO en models.py). Los markers viven en `AgentExecution.metadata_json` (str JSON, `models.py:219`) con property `metadata_dict` (`models.py:260-265`). **NO existe `.metadata`** — es nombre reservado de SQLAlchemy.
 3. **Sin daemons:** el sweep de este plan es una función pura on-read. Si durante la implementación alguien decide convertirlo en thread/daemon: gate OBLIGATORIO con `STACKY_TEST_MODE` (gotcha plan 146: un daemon sin gate crasheó pytest a nivel nativo).
-4. **Ratchet de tests:** TODO `test_*.py` backend nuevo va registrado en `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` **Y** de `backend/scripts/run_harness_tests.ps1`, o el meta-test del ratchet cae. Son 2 archivos nuevos seguros (`test_publish_ledger.py`, `test_epic_children_type_mapping.py`) + 1 opcional (`test_autopublish_rev_from_response.py`). Verificar también que `test_publish_idempotent_guard.py` (modificado) ya esté registrado: `grep test_publish_idempotent_guard scripts/run_harness_tests.sh`.
+4. **Ratchet de tests:** TODO `test_*.py` backend nuevo va registrado en la lista de archivos del ratchet en `backend/scripts/run_harness_tests.sh` (variable `HARNESS_TEST_FILES=(`, `:20`) **Y** en `backend/scripts/run_harness_tests.ps1` (variable **`$HarnessTestFiles`**, `:13` — OJO: el `.ps1` NO usa el token literal `HARNESS_TEST_FILES`, usa `$HarnessTestFiles`; el grep de KPI-6 busca el NOMBRE del archivo de test, así que matchea igual en ambos), o el meta-test del ratchet cae. Son 2 archivos nuevos seguros (`test_publish_ledger.py`, `test_epic_children_type_mapping.py`) + 1 opcional (`test_autopublish_rev_from_response.py`). **CORRECCIÓN v2:** `test_publish_idempotent_guard.py` (que este plan MODIFICA) **NO está registrado hoy** en ninguno de los dos scripts (verificado 2026-07-17). Como se modifica, registrarlo también es aditivo y correcto; agregarlo a ambas listas junto con los nuevos. Verificar el estado real con `grep -n test_publish_idempotent_guard scripts/run_harness_tests.sh scripts/run_harness_tests.ps1` antes de tocar.
 5. **Prosa vs grep-gates:** los comentarios/docstrings del código NUEVO tienen PROHIBIDO contener literales que colisionen con los greps de verificación de este plan (p. ej. no escribir en un comentario del panel la cadena `style={` ni escribir en comentarios de `publish_ledger.py` frases que un gate futuro grepee). Gotcha recurrente (6 ocurrencias históricas): reescribir la prosa, el gate siempre gana.
 6. **`DATABASE_URL` antes de los imports:** en cada test nuevo, `os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")` va ANTES de importar cualquier módulo de la app (si un import de app corre primero, el engine queda apuntando a la DB real).
 7. **pytest por archivo / vitest por archivo:** la suite completa da falsos rojos por contaminación de orden en ambos lados. Comandos exactos en cada fase.

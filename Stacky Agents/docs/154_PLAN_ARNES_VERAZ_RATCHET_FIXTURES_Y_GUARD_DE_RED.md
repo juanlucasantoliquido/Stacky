@@ -1,6 +1,16 @@
 # Plan 154 — Arnés veraz: ratchet, fixtures y guard de red
 
-> **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
+> **Estado:** CRITICADO-Y-MEJORADO (v2, 2026-07-17, juez StackyArchitectaUltraEficientCode) · **Autor:** StackyArchitectaUltraEficientCode
+>
+> **CHANGELOG v1 → v2 (crítica adversarial 2026-07-17; citas y conteos re-verificados contra el árbol vivo):**
+> - **C1 (IMPORTANTE) — riesgo de EGRESS durante la propia implementación por el orden F4-antes-de-F5.** El orden real es F0→F1→F3→F4→F5→F2→F6, pero `test_execution_history_default_on` (F4) llama `create_app()` **antes** de que exista el gate de `_startup_sync` (F5.ii). En la máquina dev (con proyecto activo Ubimia-STAB-SAAS configurado), correr ese test durante F4 dispara el sync real contra la org ADO productiva — exactamente el egress que el plan combate. **Fix v2:** el test parchea `app._startup_sync` a no-op, y la **[ADICIÓN ARQUITECTO]** de F5.i hace `create_app()` herméticamente seguro en TODA la suite (no-op de `_startup_sync` vía fixture autouse bajo `STACKY_TEST_MODE`), cerrando la ventana independientemente del orden y de una futura regresión del gate F5.ii.
+> - **C2 (MENOR) — conteos del ratchet drifearon** (planes paralelos agregaron tests). Reconteo REAL 2026-07-17: `total: 581, ratchet: 354, allow: 198, sin_clasificar: 29` (v1 citaba 536/308/198/30). El plan ya se auto-cubre exigiendo reconteo en frío en F0; se refrescan los números de referencia y se marca que la LISTA exacta de sin-clasificar sale del scan de F0, no del heredado.
+> - **C3 (MENOR) — line-drifts (anchors de texto intactos):** `config.py` default `"true"` real en `:537-538` (v1: `:519-521`); `FlagSpec` de `STACKY_EXECUTION_HISTORY_ENABLED` en `harness_flags.py:1593-1603` (v1: `:1507-1518`) y curada en `:255` (v1: `:244`); gate del daemon edit-learning en `app.py:530` (v1: `:501-504`); `_conv_meta` def en `devops_remote_console.py:38` (v1: `:43-46`); `test_f2_write_mode_toggle_audited` def en `:344` (fixture interno en `:359`). Corregidos.
+> - **C4 (MENOR) — aserción de F2 con literal engañoso.** El `assert on_disk["epic_id"] == <ado id del epic del test>  # p. ej. 40207` se ancla ahora al MISMO `epic_ado_id` que el test pasa a la factory/helper, no a un literal hardcodeado por test.
+> - **[ADICIÓN ARQUITECTO]** — hermeticidad suite-wide de `create_app()` (no-op de `_startup_sync` bajo pytest en `conftest.py`), defensa-en-profundidad sobre el gate de call-site F5.ii y cierre estructural de C1. Ver F5.i.
+> - Veredicto v2: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 1 IMPORTANTE de orden/egress resuelto). Todos los anchors de texto verificados existentes; números de línea son referencia 2026-07-17.
+>
+> · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 con auditoría empírica del arnés y de los logs del deploy. Toda la evidencia archivo:línea de este doc fue **re-verificada contra el árbol el 2026-07-16**; los números de línea son referencia de ese día — **toda edición se ancla por TEXTO normativo citado, no por número de línea**.
 > **Orden en el roadmap:** este plan se implementa **primero**, junto con el plan del ledger de publicación (son independientes entre sí; ninguno bloquea al otro). Es prerequisito moral del resto del roadmap: todo lo demás se construye sobre un arnés que dice la verdad.
 > **Runtimes:** este plan es **infraestructura de tests backend**, 100% agnóstico del runtime de agentes (Codex CLI, Claude Code CLI, GitHub Copilot Pro). Ninguna fase toca el camino de ejecución de agentes; la paridad de los 3 runtimes es automática por vacuidad. Se declara igual por fase.
@@ -32,8 +42,8 @@
 ### 2.1 T1 — El meta-test del ratchet está ROJO HOY (30 archivos sin clasificar)
 
 - `backend/tests/test_harness_ratchet_meta.py:43` — `test_ratchet_clasifica_todos_los_tests` exige que TODO `tests/test_*.py` esté en `HARNESS_TEST_FILES` (`backend/scripts/run_harness_tests.sh`) o en `tests/harness_ratchet_allowlist.txt`.
-- Conteo en frío 2026-07-16 (replicando la lógica exacta del meta-test): **536** archivos `test_*.py` totales, **308** en `HARNESS_TEST_FILES`, **198** en la allowlist → **30 sin clasificar**. El meta-test SÍ está en el arnés (`run_harness_tests.sh:60`) → **la corrida completa del arnés está roja HOY**.
-- Los 30 (lista exacta verificada; recontar en F0 porque otros planes corren en paralelo): `test_ado_client_stacky_name_resolution`, `test_documenter_autonomy`, `test_local_llm_model_fallback_and_ticket_insight`, `test_plan122_dbcompare_{api,engine,flags,registry,snapshot}`, `test_plan123_dbcompare_{api,diff,export,runs}`, `test_plan125_dbcompare_{bundle,emitters_oracle,emitters_sqlserver,flatten,preflight,scripts_api,sqlnames,toposort}`, `test_plan126_dbcompare_{data_api,data_diff,data_flags,data_scripts,sqlvalues}`, `test_plan139_shell_flag`, `test_plan98_bootstrap_{endpoint,flag}`, `test_plan98_profile_key_{patch,validators}`.
+- Conteo en frío **2026-07-17** (reconteo v2, replicando la lógica exacta del meta-test): **581** archivos `test_*.py` totales, **354** en `HARNESS_TEST_FILES`, **198** en la allowlist → **29 sin clasificar** (v1 citaba 536/308/198/30 al 2026-07-16; planes paralelos agregaron tests). El meta-test SÍ está en el arnés (`run_harness_tests.sh:60`) → **la corrida completa del arnés está roja HOY**.
+- La LISTA exacta de sin-clasificar es un blanco móvil (planes en paralelo): **la fuente de verdad es el scan en frío de F0**, no esta enumeración. Al 2026-07-16 los 30 eran (referencia, recontar en F0): `test_ado_client_stacky_name_resolution`, `test_documenter_autonomy`, `test_local_llm_model_fallback_and_ticket_insight`, `test_plan122_dbcompare_{api,engine,flags,registry,snapshot}`, `test_plan123_dbcompare_{api,diff,export,runs}`, `test_plan125_dbcompare_{bundle,emitters_oracle,emitters_sqlserver,flatten,preflight,scripts_api,sqlnames,toposort}`, `test_plan126_dbcompare_{data_api,data_diff,data_flags,data_scripts,sqlvalues}`, `test_plan139_shell_flag`, `test_plan98_bootstrap_{endpoint,flag}`, `test_plan98_profile_key_{patch,validators}`.
 
 ### 2.2 T3 — 6 rojos en `tests/test_output_watcher.py` que son bugs de FIXTURE, no de producto
 
@@ -46,13 +56,13 @@
 ### 2.3 T2 — Falso verde + rojo hermano en `tests/test_plan105_remote_console_api.py`
 
 - El archivo SÍ está en el arnés (`run_harness_tests.sh:164`) → miembro **rojo HOY**. Tiene 13 tests.
-- **El rojo** `test_f2_exec_write_requires_conversation_flag` (def `:125`): su fixture (`:140`) escribe `description='{...,"write_enabled":False}'` — `False` con mayúscula es **literal Python, JSON inválido**. La cadena de fallos: `_conv_meta` tolerante devuelve `{}` ante JSON inválido (`api/devops_remote_console.py:43-46`); el toggle de write-mode (`:366-368`) hace `meta = _conv_meta(ticket)` → `ticket.description = json.dumps(meta)`, **reescribiendo la description y PERDIENDO `server_alias`**; el gate de ejecución exige `meta.get("server_alias") == alias` (`:80`) → `mode` queda `read_only` para siempre. Probado empíricamente: con `json.dumps` el test pasa.
+- **El rojo** `test_f2_exec_write_requires_conversation_flag` (def `:125`): su fixture (`:140`) escribe `description='{...,"write_enabled":False}'` — `False` con mayúscula es **literal Python, JSON inválido**. La cadena de fallos: `_conv_meta` tolerante devuelve `{}` ante JSON inválido (`api/devops_remote_console.py:38-40`); el toggle de write-mode (`:367`) hace `meta = _conv_meta(ticket)` → `ticket.description = json.dumps(meta)`, **reescribiendo la description y PERDIENDO `server_alias`**; el gate de ejecución exige `meta.get("server_alias") == alias` (`:80`) → `mode` queda `read_only` para siempre. Probado empíricamente: con `json.dumps` el test pasa.
 - **El falso verde** `test_f2_write_mode_wrong_alias_stays_read_only` (def `:172`, literal `True` en el fixture `:187`): pasa por la razón equivocada — el JSON inválido hace que `_conv_meta` devuelva `{}` y el modo quede `read_only` SIN ejercitar jamás el branch de mismatch de alias que el test dice probar.
-- **Tercera ocurrencia detectada en la verificación de este plan (drift respecto del debate, que citaba 2):** `test_f2_write_mode_toggle_audited` (fixture `:359`, literal `False`). Hoy pasa igual porque solo aserta la entrada de auditoría, pero su conversación también tiene la description corrupta. Se corrige junto con las otras dos.
+- **Tercera ocurrencia detectada en la verificación de este plan (drift respecto del debate, que citaba 2):** `test_f2_write_mode_toggle_audited` (def `:344`, fixture con literal `False` en `:359`). Hoy pasa igual porque solo aserta la entrada de auditoría, pero su conversación también tiene la description corrupta. Se corrige junto con las otras dos.
 
 ### 2.4 L4 — Clase "config-mal-leída" (3ra ocurrencia conocida)
 
-- `backend/api/executions.py:291` — lee la env var `STACKY_EXECUTION_HISTORY_ENABLED` directo del entorno con **default hardcodeado `"false"`**, ignorando `backend/config.py:519-521` (default `"true"`) y la `FlagSpec` curada default ON (`services/harness_flags.py:1507-1518`, curada en `:244`).
+- `backend/api/executions.py:291-292` — lee la env var `STACKY_EXECUTION_HISTORY_ENABLED` directo del entorno con **default hardcodeado `"false"`** (texto real: `if _os.getenv("STACKY_EXECUTION_HISTORY_ENABLED", "false").lower() not in {"1", "true", "on"}:`), ignorando `backend/config.py:537-538` (default `"true"`) y la `FlagSpec` curada default ON (`services/harness_flags.py:1593-1603`, curada en `:255`).
 - `backend/.env.example:191` documenta "default: false" (drift de doc).
 - **Consecuencia:** `GET /api/executions/history` devuelve `404 feature_disabled` en cualquier entorno sin la env var explícita (deploy fresco) — **la página de historial está muerta** aunque la flag curada diga ON.
 - Ocurrencias previas de la misma clase: plan 131 y plan 148 (gotcha `config` módulo vs `config.config` instancia en `api/tickets.py`). Tres ocurrencias = clase de bug, no accidente → merece meta-test (F4).
@@ -60,7 +70,7 @@
 ### 2.5 T4+L5 — Egress de red REAL desde pytest (a la org ADO productiva)
 
 - Los logs auditados muestran GET/POST reales a `dev.azure.com` **org productiva Ubimia-STAB-SAAS** durante corridas de tests (`System.Rev` de un WI mock `123`, `POST $Feature`) más **80 POSTs al backend dev vivo**.
-- Causa 1 verificada: `_startup_sync` (`backend/app.py:55`, invocado en `:404` dentro de `create_app`) **NO está gateado por `STACKY_TEST_MODE`**. Si hay proyecto activo configurado, cualquier test que llame `create_app()` dispara sync real contra ADO. El único gate de test-mode existente es el del daemon edit-learning (`app.py:501-504`) — el patrón exacto a calcar.
+- Causa 1 verificada: `_startup_sync` (`backend/app.py:55`, invocado en `:404` dentro de `create_app`) **NO está gateado por `STACKY_TEST_MODE`**. Si hay proyecto activo configurado, cualquier test que llame `create_app()` dispara sync real contra ADO. El único gate de test-mode existente es el del daemon edit-learning (`app.py:530`, texto: `_test_mode = os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")`) — el patrón exacto a calcar.
 - Causa 2 verificada: el self-POST del watcher sale de `services/output_watcher.py:990` (`http://127.0.0.1:{port}/api/tickets/by-ado/{id}/create-child-task`). Es **loopback**, así que un guard "bloquear no-loopback" NO lo toca — pero si el backend dev está vivo en ese puerto (escenario real conocido: dos backends vivos en la misma máquina), el test **crea tasks reales en la DB viva**.
 - La infraestructura de gating YA existe: `tests/conftest.py:11` setea `STACKY_TEST_MODE=1` para toda la suite. Falta **consumirla** en estos 2 puntos.
 
@@ -73,7 +83,7 @@
 | Símbolo | Archivo:línea (2026-07-16) | Rol en 154 |
 |---|---|---|
 | `test_ratchet_clasifica_todos_los_tests` + helpers `_ratchet_files`/`_allowlist`/`_all_test_files` | `backend/tests/test_harness_ratchet_meta.py:18-55` | F0 replica su lógica para la baseline; F6 agrega un test hermano en el MISMO archivo (ya registrado en el arnés → cero registro extra). |
-| Gate test-mode del daemon edit-learning | `backend/app.py:501-504` (`_test_mode = os.environ.get("STACKY_TEST_MODE", ...)`) | Patrón EXACTO que F5.ii calca para `_startup_sync`. |
+| Gate test-mode del daemon edit-learning | `backend/app.py:530` (`_test_mode = os.environ.get("STACKY_TEST_MODE", ...)`) | Patrón EXACTO que F5.ii calca para `_startup_sync`. |
 | `tests/conftest.py` | `backend/tests/conftest.py:11` (`os.environ.setdefault("STACKY_TEST_MODE", "1")`) | F5.i agrega ahí el fixture autouse del guard de sockets. |
 | Check del flag auto-create del watcher | `services/output_watcher.py:981` (early-return si el flag es `"false"`) | Ancla de F5.iii: el gate test-only se inserta inmediatamente después, replicando la MISMA forma de retorno. |
 | `_PENDING_TASK_REQUIRED_FIELDS` | `backend/api/tickets.py:48-52` | Contrato canónico de 9 campos que la factory de F2 satisface. |
@@ -147,7 +157,7 @@
 2. Copiar la salida completa (números + lista) en el resumen de implementación y en el mensaje de commit de F1.
 3. Confirmar el rojo actual: `.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q` → debe FALLAR hoy con la lista de sin-clasificar en el mensaje. Si ya está verde (otro plan lo arregló en paralelo), STOP en F1 y reportar al orquestador; el resto de fases sigue igual.
 
-**Criterio de aceptación BINARIO:** la salida del snippet (números exactos + lista) está pegada en el resumen/commit. Al 2026-07-16 la referencia es `total: 536, ratchet: 308, allow: 198, sin_clasificar: 30`.
+**Criterio de aceptación BINARIO:** la salida del snippet (números exactos + lista) está pegada en el resumen/commit. Referencia **2026-07-17** (v2, reconteo del juez): `total: 581, ratchet: 354, allow: 198, sin_clasificar: 29` (al 2026-07-16 era 536/308/198/30). Usar SIEMPRE el número que devuelve el snippet al implementar, no el de referencia.
 
 **Flag:** N/A. **Runtimes:** N/A (solo lectura). **Trabajo del operador: ninguno.**
 
@@ -263,7 +273,7 @@ def make_intake_payload(
     from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
     on_disk = _json.loads(pt_path.read_text(encoding="utf-8"))
     assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
-    assert on_disk["epic_id"] == <ado id del epic del test>   # p. ej. 40207
+    assert on_disk["epic_id"] == epic_ado_id   # C4 v2: el MISMO valor que el test pasó al helper/factory, NO un literal hardcodeado
     assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
     assert call["body"]["pending_task_path"]  # el POST referencia el artefacto
 ```
@@ -410,8 +420,12 @@ def test_execution_history_default_on(monkeypatch):
     import os
     os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.delenv("STACKY_EXECUTION_HISTORY_ENABLED", raising=False)
-    from app import create_app
-    app = create_app()
+    import app as _app_mod
+    # C1 v2 — F4 se implementa ANTES que F5.ii: hacer create_app() hermetico aca
+    # tambien (defensa-en-profundidad; sin esto, en la maquina dev con proyecto
+    # activo este test dispararia el _startup_sync REAL contra la org ADO productiva).
+    monkeypatch.setattr(_app_mod, "_startup_sync", lambda *a, **k: None)
+    app = _app_mod.create_app()
     client = app.test_client()
     resp = client.get("/api/executions/history")
     assert resp.status_code == 200, resp.get_data(as_text=True)
@@ -481,6 +495,27 @@ def _no_network_egress(monkeypatch):
 
 Notas de diseño: se patchea `socket.socket.connect` (capa única por la que pasan `requests`, `urllib` y `socket.create_connection`); familias no-INET (p. ej. AF_UNIX) pasan de largo; loopback queda permitido — el caso "loopback pero servidor real vivo" lo cubre (iii). Limitación conocida y aceptada: UDP `sendto` sin `connect` no pasa por acá (no hay emisores UDP en este repo).
 
+**[ADICIÓN ARQUITECTO v2] — `create_app()` hermético en toda la suite** (segundo fixture autouse en el MISMO `conftest.py`, inmediatamente después del guard de sockets):
+
+```python
+@pytest.fixture(autouse=True)
+def _no_startup_sync(monkeypatch):
+    """Plan 154 F5.i (adicion v2) — bajo STACKY_TEST_MODE, _startup_sync es no-op
+    en CUALQUIER create_app() de la suite. Defensa-en-profundidad sobre el gate
+    de call-site F5.ii: si F5.ii se regresiona o si un test corre antes de F5
+    (orden real F4->F5), create_app() NUNCA dispara el sync real contra ADO.
+    En runtime normal (sin STACKY_TEST_MODE) NO aplica: byte-identico al actual."""
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() not in ("1", "true", "yes"):
+        yield
+        return
+    import app as _app_mod
+    if hasattr(_app_mod, "_startup_sync"):
+        monkeypatch.setattr(_app_mod, "_startup_sync", lambda *a, **k: None)
+    yield
+```
+
+(Por qué es seguro y no rompe `test_startup_sync_gateado_en_test_mode`: ese test parchea `app._startup_sync` con su PROPIO `MagicMock` DENTRO del test — un patch más interno que gana — y aserta `not called`; como el gate F5.ii ya salta la invocación bajo test-mode, el mock del test tampoco se llama y la aserción pasa. Este fixture solo garantiza que, ante una regresión del gate, la invocación caiga en un no-op en vez de salir a la red. El fixture del guard de sockets [F5.i] igual atraparía el egress a `dev.azure.com`, pero esta capa es más barata y más clara en el mensaje.)
+
 **(ii) Gate de `_startup_sync` en `backend/app.py`:**
 
 1. Agregar helper module-level (cerca de `def _startup_sync`, hoy `:55`):
@@ -500,7 +535,7 @@ def _is_test_mode() -> bool:
         _startup_sync(logger)
 ```
 
-3. En el gate del daemon edit-learning (ancla de texto: la línea `_test_mode = os.environ.get("STACKY_TEST_MODE", ...)`, hoy `:501`), reemplazar esa línea por `_test_mode = _is_test_mode()` (dedupe; el resto del bloque queda igual).
+3. En el gate del daemon edit-learning (ancla de texto: la línea `_test_mode = os.environ.get("STACKY_TEST_MODE", ...)`, hoy `:530`), reemplazar esa línea por `_test_mode = _is_test_mode()` (dedupe; el resto del bloque queda igual).
 4. El gate va en el CALL-SITE a propósito: un test que quiera probar `_startup_sync` la sigue pudiendo llamar directo. Antes de editar, grepear `_startup_sync` en `backend/tests/` — si algún test asertara que corre durante `create_app()`, reportar al orquestador (a hoy no se conoce ninguno).
 
 **(iii) Opt-in test-only del self-POST del watcher** — ancla de texto: el early-return del flag auto-create (`if os.getenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true").lower() == "false":`, hoy `services/output_watcher.py:981`). INMEDIATAMENTE después de ese bloque (replicando la MISMA forma de retorno que usa ese early-return — leerla en el archivo, no asumirla), insertar:

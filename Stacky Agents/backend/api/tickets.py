@@ -7340,11 +7340,13 @@ def incident_preview():
         if run is None:
             return jsonify({"ok": False, "error": "run_not_found"}), 404
         output = run.output
+        repair_meta = run.metadata_dict.get("incident_repair")
 
     html = _extract_epic_html_raw(output)
     if not _looks_like_incident(html):
         return jsonify({
             "ok": False, "error": "incident_not_in_output", "publishable": False,
+            "repair": repair_meta,
         }), 200
 
     title = _incident_h1_title(html, incident.get("text", ""))
@@ -7361,6 +7363,7 @@ def incident_preview():
         "html": html,
         "related_epic": related,
         "publishable": True,
+        "repair": repair_meta,
     }), 200
 
 
@@ -7418,10 +7421,11 @@ def publish_incident():
         run = _get_run_for_preview(execution_id, db=db)
         output = run.output if run is not None else None
         project_name = getattr(run, "project_name", None) if run is not None else None
+        repair_meta = run.metadata_dict.get("incident_repair") if run is not None else None
 
     html = _extract_epic_html_raw(output)
     if not _looks_like_incident(html):
-        return jsonify({"ok": False, "error": "incident_not_in_output"}), 422
+        return jsonify({"ok": False, "error": "incident_not_in_output", "repair": repair_meta}), 422
 
     title = _incident_h1_title(html, incident.get("text", ""))
     related = _parse_related_epic(html)

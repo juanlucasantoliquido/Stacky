@@ -24,6 +24,8 @@ import {
   setSoundEnabled,
 } from "../services/executionNotifier";
 import { readQueryParam } from "../utils/queryParams";
+import { Input, Select, Checkbox } from "../components/ui";
+import useOptimisticPending from "../hooks/useOptimisticPending";
 import styles from "./SettingsPage.module.css";
 
 type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "notifications" | "harness" | "playground" | "appearance";
@@ -75,15 +77,13 @@ function SectionsVisibilityPanel() {
               <span className={styles.rowTitle}>{meta.title}</span>
               <span className={styles.rowHint}>{meta.hint}</span>
             </div>
-            <label className={styles.toggle}>
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={disabled}
-                onChange={(e) => toggle(key, e.target.checked)}
-              />
-              <span className={styles.toggleSlider} />
-            </label>
+            <Checkbox
+              labelClassName={styles.toggle}
+              checked={checked}
+              disabled={disabled}
+              onChange={(e) => toggle(key, e.target.checked)}
+              label={<span className={styles.toggleSlider} />}
+            />
           </div>
         );
       })}
@@ -211,7 +211,7 @@ function WebhooksPanel() {
   const [event, setEvent] = useState("exec.completed");
   const [format, setFormat] = useState<"raw" | "teams">("raw");
   const [secret, setSecret] = useState("");
-  const [creating, setCreating] = useState(false);
+  const { pending: creating, run, pendingClass } = useOptimisticPending();
 
   const load = () => {
     setLoading(true);
@@ -228,22 +228,21 @@ function WebhooksPanel() {
 
   const create = async () => {
     if (!url.trim() || creating) return;
-    setCreating(true);
     setError(null);
     try {
-      await Webhooks.create({
-        url: url.trim(),
-        event,
-        format,
-        secret: secret.trim() || undefined,
+      await run(async () => {
+        await Webhooks.create({
+          url: url.trim(),
+          event,
+          format,
+          secret: secret.trim() || undefined,
+        });
+        setUrl("");
+        setSecret("");
+        load();
       });
-      setUrl("");
-      setSecret("");
-      load();
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
-    } finally {
-      setCreating(false);
     }
   };
 
@@ -263,36 +262,39 @@ function WebhooksPanel() {
       </p>
 
       <div className={styles.row}>
-        <input
+        <Input
           className={styles.inputInline}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://example.com/webhook"
+          aria-label="URL del webhook"
         />
       </div>
       <div className={styles.row}>
-        <select className={styles.selectInline} value={event} onChange={(e) => setEvent(e.target.value)}>
+        <Select className={styles.selectInline} value={event} onChange={(e) => setEvent(e.target.value)} aria-label="Evento del webhook">
           <option value="exec.completed">exec.completed</option>
           <option value="exec.failed">exec.failed</option>
           <option value="exec.needs_review">exec.needs_review</option>
-        </select>
-        <select
+        </Select>
+        <Select
           className={styles.selectInline}
           value={format}
           onChange={(e) => setFormat(e.target.value as "raw" | "teams")}
+          aria-label="Formato del webhook"
         >
           <option value="raw">raw</option>
           <option value="teams">teams</option>
-        </select>
+        </Select>
       </div>
       <div className={styles.row}>
-        <input
+        <Input
           className={styles.inputInline}
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
           placeholder="Secret opcional (HMAC)"
+          aria-label="Secret HMAC opcional"
         />
-        <button className={styles.subTab} onClick={create} disabled={creating || !url.trim()}>{creating ? "Creando…" : "Crear"}</button>
+        <button className={`${styles.subTab} ${pendingClass}`.trim()} onClick={create} disabled={creating || !url.trim()} aria-busy={creating || undefined}>{creating ? "Creando…" : "Crear"}</button>
       </div>
 
       {loading && <div className={styles.rowHint}>Cargando webhooks…</div>}

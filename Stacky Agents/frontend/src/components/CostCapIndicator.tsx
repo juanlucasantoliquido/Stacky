@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { formatCostUsd, formatPercent } from "../services/format";
 import styles from "./CostCapIndicator.module.css";
 
 interface CostCapResponse {
@@ -50,12 +51,12 @@ export default function CostCapIndicator({ projectName }: Props) {
     data.state === "over" || data.state === "blocked" ? styles.over :
     styles.ok;
 
-  const title = `Costo mensual: $${data.spent_usd.toFixed(2)} / $${data.monthly_cap_usd.toFixed(2)} (${data.spent_pct.toFixed(0)}%)`;
+  const title = `Costo mensual: ${formatCostUsd(data.spent_usd)} / ${formatCostUsd(data.monthly_cap_usd)} (${formatPercent(data.spent_pct)})`;
 
   return (
     <span className={`${styles.chip} ${stateClass}`} title={title}>
       <span aria-hidden="true">💰</span>
-      ${data.spent_usd.toFixed(2)}/{data.monthly_cap_usd.toFixed(0)}
+      {formatCostUsd(data.spent_usd)}/{Math.round(data.monthly_cap_usd)}
       <span className={styles.bar} aria-hidden="true">
         <span
           className={styles.fill}

@@ -965,6 +965,16 @@ class Config:
         "STACKY_EPIC_REPAIR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 160 F0 — pase correctivo del resolutor de incidencias: si el
+    # IncidentAgent (one-shot, ado_id=-8) devuelve narración en vez del HTML
+    # del desglose, se le pide UNA vez por stdin que re-emita SOLO el HTML
+    # antes de cerrar la sesión. Espejo de STACKY_EPIC_REPAIR_ENABLED. Reusa
+    # el presupuesto de reintentos del autocorrect. OFF -> solo fallo ruidoso
+    # (incident_not_in_output), sin retry.
+    STACKY_INCIDENT_REPAIR_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_REPAIR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # C0/C1 — Trazabilidad de ejecución (agent_type, prompt_sha, produced_files).
     STACKY_EXECUTION_TRACE_ENABLED: bool = os.getenv(
         "STACKY_EXECUTION_TRACE_ENABLED", "true"

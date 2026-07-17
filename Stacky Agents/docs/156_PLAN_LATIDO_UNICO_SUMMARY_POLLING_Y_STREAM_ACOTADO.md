@@ -1,6 +1,17 @@
-# Plan 155 — Latido único: summary de polling y stream acotado
+# Plan 156 — Latido único: summary de polling y stream acotado
 
-> **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
+> **Estado:** CRITICADO-Y-MEJORADO (v2, 2026-07-17, juez StackyArchitectaUltraEficientCode) · **Autor:** StackyArchitectaUltraEficientCode
+>
+> **CHANGELOG v1 → v2 (crítica adversarial 2026-07-17; citas re-verificadas contra el árbol vivo — notablemente exactas):**
+> - **C1 (IMPORTANTE) — reducir blast-radius del refactor de `list_executions` (endpoint caliente).** v1 pedía "reescribir el cuerpo de `list_executions` para que use el helper". v2 lo vuelve **no invasivo por default**: F1 solo AGREGA `_query_active_executions` y lo consume el `summary`; **`list_executions` queda byte-idéntico**. La garantía "nunca divergen" la sostiene el TEST de paridad (compara salidas dict-a-dict), no un refactor DRY del endpoint vivo. Si el implementador igual quiere DRY-ear `list_executions`, es OPCIONAL y debe correr TODOS los `tests/test_*execution*.py` y pegar su salida.
+> - **C2 (MENOR) — precisión del KPI "6→1".** Son 2 scopes distintos (`activeRuns`/TopBar/notificador usan `all_projects`; `useRunningStatus` usa `project`) ⇒ hasta **2 requests por tick** (1 por scope), no 1 global. Sigue siendo 6→≤2. Aclarado en la tabla de impacto.
+> - **C3 (MENOR) — reconteo de diálogos nativos.** Scan en frío 2026-07-17: **32 ocurrencias en 16 archivos** (v1 citaba ~35/~17). El plan ya exige recontar en frío en F6; se refresca la referencia.
+> - **C4 (MENOR) — costo del `appendBounded`.** Copia el `Set seen` por cada línea (O(cap)/línea). Aceptable para las tasas de log observadas; documentado en Riesgos con la optimización barata opcional (el `seen` es interno al ref, se puede mutar in-place; solo `lines`/`dropped` van a `setState`).
+> - **C5 (MENOR) — `intervalMs` del reloj.** F4 hardcodeaba `intervalMs={45_000}` en TicketBoard; v2 pide derivarlo de la constante real de intervalo de `useTicketSync` para preservar EXACTO el umbral de stale (intervalMs*2), no un mágico.
+> - **[ADICIÓN ARQUITECTO] — idle backoff del poller.** Cuando el último summary vino VACÍO (0 en running+preparing+queued — el caso común), el `refetchInterval` se multiplica ×2 sobre el base, apilándose con el backoff de visibilidad. Recorta aún más el polling ocioso (invisible, automático, cero trabajo del operador, backward-compatible). Ver F2 Paso 2 y su test.
+> - Veredicto v2: **APROBADO-CON-CAMBIOS** (0 bloqueantes; 1 IMPORTANTE de blast-radius resuelto). Todos los anchors de texto verificados; números de línea referencia 2026-07-17.
+>
+> · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 con auditoría empírica de los logs del deploy y del árbol de frontend. Toda la evidencia archivo:línea de este doc fue **re-verificada contra el árbol el 2026-07-16**; los números de línea son referencia de ese día — **toda edición se ancla por TEXTO normativo citado, no por número de línea**.
 > **Orden en el roadmap:** **tercero**, después del plan del ledger de publicación transaccional (153) y el del arnés veraz (154). Independiente de ambos: ninguno lo bloquea a él ni él a ellos. Sus fases F1/F2 son **GATE** del plan del centro de notificaciones y actividad unificada (152, aún sin implementar): ese plan DEBE consumir el canal de summary de F1/F2 en lugar de nacer con poller propio.
 > **Runtimes:** este plan es **UI de observación + un endpoint backend de lectura**, 100% agnóstico del runtime de agentes (Codex CLI, Claude Code CLI, GitHub Copilot Pro). Ninguna fase toca el camino de ejecución de agentes ni el de publicación; el endpoint nuevo agrega objetos ya serializados por el mismo `to_dict` que ven los 3 runtimes. La paridad de runtimes es automática por vacuidad. Se declara igual por fase.
@@ -16,7 +27,7 @@
 **KPIs binarios (comandos exactos; backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend` con `.venv\Scripts\python.exe` — el venv real verificado en disco es `backend\.venv` py3.13, `backend/venv` NO existe; frontend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend` con `npx vitest run`):**
 
 - **KPI-1 — Summary verde y con paridad:** `.venv\Scripts\python.exe -m pytest tests/test_executions_summary.py -q` → exit 0 (incluye el test de paridad exacta de campos vs `/api/executions`).
-- **KPI-2 — Poller central verde:** `npx vitest run src/services/__tests__/executionsSummary.test.ts` → exit 0 (una request por tick vía react-query core; backoff de visibilidad ×4).
+- **KPI-2 — Poller central verde:** `npx vitest run src/services/__tests__/executionsSummary.test.ts` → exit 0 (una request por tick y scope vía react-query core; backoff de visibilidad ×4; idle backoff ×2 sin runs activos — adición v2).
 - **KPI-3 — Ring-buffer verde:** `npx vitest run src/hooks/__tests__/logRingBuffer.test.ts` → exit 0 (20.000 líneas → `lines.length ≤ 5000` Y `seen.size ≤ 5000` Y `dropped === 15000`).
 - **KPI-4 — Reloj aislado verde:** `npx vitest run src/components/__tests__/syncStatus.test.ts` → exit 0 (helpers puros de "hace Xs" y stale) **y** `grep -c "setInterval" src/hooks/useTicketSync.ts` → `0`.
 - **KPI-5 — Filtro de access-log verde:** `.venv\Scripts\python.exe -m pytest tests/test_access_log_suppress_pollers.py -q` → exit 0 (las rutas nuevas se descartan del FileHandler; el mecanismo env `STACKY_ACCESS_LOG_SUPPRESS_PATHS` sigue intacto).
@@ -28,7 +39,7 @@
 
 | Métrica | Hoy | Con el plan |
 |---|---|---|
-| GET `/api/executions` de runs activos por tick | 6 | 1 (`/api/executions/summary`) |
+| GET `/api/executions` de runs activos por tick | 6 | ≤ 2 (`/api/executions/summary`, 1 por scope activo: `all_projects` + `project`; react-query deduplica N suscriptores del mismo scope a 1 request) |
 | Líneas de polling en el access-log del archivo | ~87-89% del total | ~0 (suprimidas por el filtro) |
 | Líneas del stream retenidas en memoria del frontend | ilimitado | ≤ 5000 (+ Set de dedup ≤ 5000) |
 | Re-renders de TicketBoard por minuto causados por el reloj | 60 | ~0 |
@@ -75,7 +86,7 @@
 
 ### 2.6 Infra existente que se REUSA (leída, no supuesta)
 
-| Símbolo | Archivo:línea (2026-07-16) | Rol en 155 |
+| Símbolo | Archivo:línea (2026-07-16) | Rol en 156 |
 |---|---|---|
 | `list_executions` + su query | `backend/api/executions.py:28-86` | F1 extrae la construcción de filtros a un helper y la reusa por estado; el serializer es `to_dict(include_output=False, include_ticket_context=True)` (`:86`) — el summary usa EXACTAMENTE el mismo. |
 | Blueprint `executions` | `backend/api/executions.py:24` (`url_prefix="/executions"`, registrado bajo `/api`) | La ruta nueva es `@bp.get("/summary")` → resuelve a `/api/executions/summary`. La ruta estática `/summary` NO colisiona con `/<int:execution_id>` (`:89`): el conversor `int` no matchea "summary" y Flask prioriza rutas estáticas. |
@@ -182,13 +193,13 @@ Todos esos campos vienen de `to_dict(include_ticket_context=True)`; como el summ
 **Archivos:**
 - MODIFICADO `backend/api/executions.py` (extraer helper de filtros + nueva ruta `/summary`)
 - NUEVO `backend/tests/test_executions_summary.py`
-- MODIFICADO `backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` (registrar el test, bloque `# — Plan 155 · Latido único —`)
+- MODIFICADO `backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` (registrar el test, bloque `# — Plan 156 · Latido único —`)
 
 **Paso 1 — Extraer el armado de la query a un helper** (refactor mínimo y seguro; las pruebas existentes de executions deben seguir verdes). En `backend/api/executions.py`, agregar a nivel de módulo (cerca de `list_executions`) un helper que encapsule EXACTAMENTE los filtros que hoy están inline en `list_executions:59-85`:
 
 ```python
 def _query_active_executions(session, *, project_ctx, status_values, limit):
-    """Plan 155 F1 — misma logica de filtro/orden que list_executions, aislada
+    """Plan 156 F1 — misma logica de filtro/orden que list_executions, aislada
     para que /api/executions y /api/executions/summary NUNCA diverjan."""
     q = session.query(AgentExecution).options(joinedload(AgentExecution.ticket))
     if project_ctx is not None:
@@ -209,14 +220,14 @@ def _query_active_executions(session, *, project_ctx, status_values, limit):
     return q.order_by(AgentExecution.started_at.desc()).limit(limit).all()
 ```
 
-Y reescribir el cuerpo de `list_executions` para que use este helper cuando corresponda (conservando su soporte de `ticket_id`, `agent_type`, `days`, que el summary NO necesita — el summary solo filtra por estado y scope). **Regla dura:** el refactor NO debe cambiar la salida de `/api/executions`; correr las pruebas existentes de executions tras el cambio (buscar con `ls tests | grep -i execution` y correr las que apliquen por archivo).
+**Regla dura (C1 v2 — blast-radius mínimo):** el helper es NUEVO y lo consume ÚNICAMENTE el endpoint `summary` (Paso 2). **`list_executions` NO se toca** — queda byte-idéntico. La garantía "el summary y `/api/executions` nunca divergen" NO depende de compartir código: la sostiene el TEST de paridad de campos (Paso 3), que compara las salidas reales dict-a-dict. Reescribir `list_executions` para que también use el helper (DRY) es **OPCIONAL** y, por ser un endpoint caliente y central, se desaconseja en este plan; si el implementador igual lo hace, DEBE correr TODOS los archivos `tests/test_*execution*.py` (listar con `ls tests | grep -i execution`, correr CADA uno por archivo) y pegar su salida verde en el resumen — no "los que apliquen".
 
 **Paso 2 — Nueva ruta** (misma blueprint `bp`, después de `list_executions`):
 
 ```python
 @bp.get("/summary")
 def executions_summary():
-    """Plan 155 F1 — latido unico: running/preparing/queued en UNA respuesta.
+    """Plan 156 F1 — latido unico: running/preparing/queued en UNA respuesta.
 
     Shape: {"scope": "project"|"all_projects",
             "running":[...], "preparing":[...], "queued":[...]}
@@ -257,7 +268,7 @@ def executions_summary():
 | `test_summary_scope_project_filtra` | Con dos proyectos seeded, `scope=project` (proyecto activo) NO trae ejecuciones del otro proyecto; `scope=all_projects` las trae todas. |
 | `test_summary_vacio_ok` | Sin ejecuciones activas → las 3 keys presentes con arrays vacíos, HTTP 200. |
 
-**Paso 4 — Registrar** `tests/test_executions_summary.py` en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 155 · Latido único —`, mismo formato que las entradas vecinas: `  tests/test_executions_summary.py` en sh; `  "tests/test_executions_summary.py",` en ps1).
+**Paso 4 — Registrar** `tests/test_executions_summary.py` en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 156 · Latido único —`, mismo formato que las entradas vecinas: `  tests/test_executions_summary.py` en sh; `  "tests/test_executions_summary.py",` en ps1).
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_executions_summary.py -q` → exit 0; las pruebas existentes de executions siguen verdes; `grep -c "test_executions_summary.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`.
 
@@ -298,18 +309,32 @@ import { mergeActiveRuns } from "./activeRuns";
 
 export const EXECUTIONS_SUMMARY_REFRESH_MS = 5_000;
 export const HIDDEN_TAB_BACKOFF_FACTOR = 4;
+export const IDLE_BACKOFF_FACTOR = 2; // [ADICIÓN ARQUITECTO v2] sin runs activos => pollea ×2 más lento
 
 /** Query key central: TODOS los consumidores de runs activos la comparten
  *  => react-query hace 1 sola request por tick aunque haya N suscriptores. */
 export const executionsSummaryQueryKey = (scope: "project" | "all_projects") =>
   ["executions", "summary", scope] as const;
 
-/** refetchInterval PURO: ×4 cuando la pestaña esta oculta. */
+/** true si el summary NO tiene ningun run activo (caso comun). */
+export function summaryIsIdle(s: ExecutionsSummary | undefined): boolean {
+  if (!s) return false; // sin dato aun: no aplicar idle backoff
+  return s.running.length === 0 && s.preparing.length === 0 && s.queued.length === 0;
+}
+
+/** refetchInterval PURO: ×4 con pestaña oculta, ×2 adicional si no hay runs
+ *  activos ([ADICIÓN ARQUITECTO v2] — recorta el polling ocioso, el caso comun).
+ *  Los factores se APILAN (multiplican). Ej.: visible+idle=10s; hidden+idle=40s;
+ *  visible+activo=5s (responsive mientras hay algo que mirar). */
 export function summaryRefetchInterval(
   visibility: DocumentVisibilityState,
+  lastSummary?: ExecutionsSummary,
   baseMs: number = EXECUTIONS_SUMMARY_REFRESH_MS,
 ): number {
-  return visibility === "hidden" ? baseMs * HIDDEN_TAB_BACKOFF_FACTOR : baseMs;
+  let ms = baseMs;
+  if (visibility === "hidden") ms *= HIDDEN_TAB_BACKOFF_FACTOR;
+  if (summaryIsIdle(lastSummary)) ms *= IDLE_BACKOFF_FACTOR;
+  return ms;
 }
 
 export function fetchExecutionsSummary(scope: "project" | "all_projects") {
@@ -337,7 +362,7 @@ export function selectRunningByTicket(
 
 (El orden `preparing, running, queued` de `selectRunningByTicket` replica EXACTAMENTE el de `useRunningStatus.ts:91/99` para no cambiar cuál ejecución gana en el Map.)
 
-**Paso 3 — Migrar `activeRuns.ts`:** `fetchActiveRuns()` deja de hacer 3 llamadas y pasa a `const s = await fetchExecutionsSummary("all_projects"); return selectActiveRuns(s);`. Conservar `mergeActiveRuns` (lo reusa el selector). Los consumidores que usan `ACTIVE_RUNS_QUERY_KEY` deben migrar a `executionsSummaryQueryKey("all_projects")` con `refetchInterval: () => summaryRefetchInterval(document.visibilityState)` para compartir la MISMA cache que useRunningStatus (mismo scope ⇒ misma key ⇒ 1 request). Documentar en el `useQuery` que la key es compartida.
+**Paso 3 — Migrar `activeRuns.ts`:** `fetchActiveRuns()` deja de hacer 3 llamadas y pasa a `const s = await fetchExecutionsSummary("all_projects"); return selectActiveRuns(s);`. Conservar `mergeActiveRuns` (lo reusa el selector). Los consumidores que usan `ACTIVE_RUNS_QUERY_KEY` deben migrar a `executionsSummaryQueryKey("all_projects")` con `refetchInterval: (query) => summaryRefetchInterval(document.visibilityState, query.state.data)` (forma `(query)=>number` para el idle backoff) para compartir la MISMA cache que useRunningStatus del mismo scope (misma key ⇒ 1 request). Documentar en el `useQuery` que la key es compartida.
 
 **Paso 4 — Migrar `useRunningStatus.ts`:** reemplazar los 3 `useQuery` (`:61-80`) por UNO:
 
@@ -345,7 +370,9 @@ export function selectRunningByTicket(
 const { data: summary } = useQuery<ExecutionsSummary>({
   queryKey: executionsSummaryQueryKey("project"),
   queryFn: () => fetchExecutionsSummary("project"),
-  refetchInterval: () => summaryRefetchInterval(document.visibilityState),
+  // [ADICIÓN ARQUITECTO v2] la forma (query)=>number recibe el ultimo dato,
+  // para aplicar el idle backoff cuando no hay runs activos.
+  refetchInterval: (query) => summaryRefetchInterval(document.visibilityState, query.state.data),
   staleTime: 0,
 });
 const { ids, byTicket } = useMemo(
@@ -362,7 +389,8 @@ Mantener la Fuente 1 (stacky_status del listado de tickets, `:48-58`) tal cual �
 
 | Test | Qué afirma |
 |---|---|
-| `test_backoff_visibilidad` | `summaryRefetchInterval("visible", 5000) === 5000`; `summaryRefetchInterval("hidden", 5000) === 20000`. |
+| `test_backoff_visibilidad` | Firma nueva `summaryRefetchInterval(visibility, lastSummary?, baseMs?)`: `summaryRefetchInterval("visible", undefined, 5000) === 5000`; `summaryRefetchInterval("hidden", undefined, 5000) === 20000`. |
+| `test_idle_backoff` (ADICIÓN v2) | Con un summary VACÍO (`{running:[],preparing:[],queued:[],scope:"project"}`): `summaryRefetchInterval("visible", vacio, 5000) === 10000`; `summaryRefetchInterval("hidden", vacio, 5000) === 40000`. Con summary CON runs: `summaryRefetchInterval("visible", conRuns, 5000) === 5000`. Con `undefined` (aún sin dato): NO aplica idle → 5000. |
 | `test_selectActiveRuns_dedup_orden` | Dos listas con un id repetido → una sola aparición, orden id desc (reusa mergeActiveRuns). |
 | `test_selectRunningByTicket` | Set con los ticket_ids correctos; Map se queda con la PRIMERA ejecución por ticket en orden preparing→running→queued. |
 | `test_una_sola_request_por_key` | Con `@tanstack/react-query` core (`QueryClient` + dos `QueryObserver` con la MISMA `executionsSummaryQueryKey("project")` y una `queryFn` mockeada que cuenta invocaciones), tras un fetch la `queryFn` fue llamada **exactamente 1 vez** (prueba de que N suscriptores ⇒ 1 request). Sin DOM: react-query core corre en node. |
@@ -499,7 +527,7 @@ export function isStaleAt(
 - `const secs = secondsSince(lastSyncedAt, now); const stale = isStaleAt(lastSyncedAt, intervalMs, now);` (helpers puros del Paso 1).
 - Envolver el export con `export default React.memo(SyncStatusBar)` para que un cambio de `now` en el padre no lo re-renderice de más y, sobre todo, para que su propio tic-tac NO suba al padre.
 
-**Paso 4 — `TicketBoard.tsx`:** en el uso de `useTicketSync` (`:751-757`) dejar de desestructurar `secondsSinceSync`/`isStale`; en el `<SyncStatusBar .../>` (`:995-1000`) pasar `lastSyncedAt={lastSyncedAt}` e `intervalMs={45_000}` en vez de `secondsSinceSync`/`isStale`.
+**Paso 4 — `TicketBoard.tsx`:** en el uso de `useTicketSync` (`:751-757`) dejar de desestructurar `secondsSinceSync`/`isStale`; en el `<SyncStatusBar .../>` (`:994-1000`) pasar `lastSyncedAt={lastSyncedAt}` e `intervalMs={<el intervalo REAL>}` en vez de `secondsSinceSync`/`isStale`. **C5 v2:** NO hardcodear `45_000` — usar la MISMA constante/valor de intervalo que `useTicketSync` usaba para calcular `isStale` (grepear en `useTicketSync.ts` el valor con el que se comparaba en `:70-74`, p. ej. la constante del refetch del sync, y pasarla o exportarla). Así el umbral de stale (`intervalMs*2`) queda IDÉNTICO al de hoy; un mágico distinto cambiaría sutilmente cuándo se marca stale.
 
 **Paso 5 — Test** `frontend/src/components/__tests__/syncStatus.test.ts` (puro):
 
@@ -522,7 +550,7 @@ export function isStaleAt(
 **Archivos:**
 - MODIFICADO `backend/services/local_file_logging.py` (solo la tupla `_DEFAULT_SUPPRESSED_PATHS`, `:68`)
 - NUEVO `backend/tests/test_access_log_suppress_pollers.py`
-- MODIFICADO `backend/scripts/run_harness_tests.sh` y `.ps1` (registrar el test, bloque `# — Plan 155 · Latido único —`)
+- MODIFICADO `backend/scripts/run_harness_tests.sh` y `.ps1` (registrar el test, bloque `# — Plan 156 · Latido único —`)
 
 **Paso 1 — Ampliar el default** (ancla de texto: `_DEFAULT_SUPPRESSED_PATHS = ("/api/v1/pipeline/status",)`, `:68`). Reemplazar por:
 
@@ -549,7 +577,7 @@ _DEFAULT_SUPPRESSED_PATHS = (
 
 (Para `test_env_extra`: `_suppressed_paths()` lee la env en cada llamada, así que el monkeypatch basta; no hay estado global cacheado.)
 
-**Paso 3 — Registrar** el test en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 155 · Latido único —`).
+**Paso 3 — Registrar** el test en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 156 · Latido único —`).
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_access_log_suppress_pollers.py -q` → exit 0; `grep -c "test_access_log_suppress_pollers.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`. **Verificación manual (documentada):** arrancar el backend dev en frío, dejar la UI abierta 1 minuto, abrir el `data/logs/stacky-*.log` del día → sin líneas de acceso de los 4 paths suprimidos.
 
@@ -573,7 +601,7 @@ _DEFAULT_SUPPRESSED_PATHS = (
 
 - Requiere `(` después del identificador ⇒ una prosa como `"sin window.confirm)"` (comentario real en `ConfirmButton.tsx`) NO matchea, y `obj.confirm(` (método ajeno) tampoco (lookbehind `(?<![.\w])`, salvo el prefijo explícito `window.`).
 - Escanear `.ts` y `.tsx` bajo `src/` EXCLUYENDO cualquier ruta que contenga `/__tests__/` (para que el propio archivo del ratchet no se cuente).
-- **DRIFT CORREGIDO respecto del debate:** el debate contó "20 ocurrencias en 12 archivos"; un scan en frío 2026-07-16 con este regex encuentra **materialmente más** (~35 llamadas reales en ~17 archivos, p. ej. `AgentHistoryPage.tsx` ×8, `devops/PipelineBuilderSection.tsx` ×5, `TopBar.tsx` ×2, `useAgentRun.ts` ×1 — nótese que este último es `.ts`, por eso el scan DEBE incluir `.ts`, no solo `.tsx`). **NO confiar en el 20**: el conteo real es el que dé el scan al momento de implementar (otros planes tocan frontend en paralelo). Recontar y congelar ESE número.
+- **DRIFT CORREGIDO respecto del debate:** el debate contó "20 ocurrencias en 12 archivos"; un scan en frío **2026-07-17** encuentra **materialmente más** (~**32 llamadas en ~16 archivos**; v1 estimaba ~35/~17): top `AgentHistoryPage.tsx` ×8, `devops/PipelineBuilderSection.tsx` ×5, y varios con ×2 (`TicketBoard.tsx`, `ProductionFlow.tsx`, `devops/ServersSection.tsx`, `devops/VariablesSection.tsx`, `TopBar.tsx`). El scan **DEBE incluir `.ts`** además de `.tsx` (hay hooks `.ts` con estas llamadas), no solo `.tsx`. **NO confiar en ningún número heredado**: el conteo EXACTO es el que dé el regex del plan al momento de implementar (otros planes tocan frontend en paralelo; además el lookbehind del regex del plan excluye métodos `obj.confirm(`, así que puede dar ≤32). Recontar y congelar ESE número.
 
 **Paso 2 — Extender el test** `uiDebtRatchet.test.ts`:
 - Agregar a `interface Baseline` el campo `nativeDialogByFile: Record<string, number>;`.
@@ -623,6 +651,7 @@ Correr `npx tsc --noEmit` al terminar cada fase de frontend (F2/F3/F4/F6). Cada 
 | R5 | La supresión de log oculta un error real en un poller (un 500 en `/api/streak`). | El filtro solo mira el path como substring; werkzeug loguea el código de estado en la MISMA línea, así que un 500 igual queda suprimido. **Aceptado**: estos endpoints ya tienen su propio manejo de error y UI (HealthBanner/CostCapIndicator/StreakBadge); el archivo no es el canal de diagnóstico de sus fallos. Si se quisiera, `STACKY_ACCESS_LOG_SUPPRESS=false` restaura el access-log completo (mecanismo existente). |
 | R6 | El baseline de F6 se hardcodea al 20 del debate y rompe por drift. | El plan es explícito: **recontar en frío**, nunca confiar en 20. El regen del baseline captura el número real del día. |
 | R7 | Un `.tsx`/`.ts` nuevo de este plan introduce deuda (inline-style o diálogo nativo) que rompe el ratchet. | Los archivos nuevos (`executionsSummary.ts`, `logRingBuffer.ts`, `syncStatus.ts`) son lógica pura sin JSX ni diálogos; `SyncStatusBar`/`LogsPanel` usan clases de `*.module.css` (para estilos dinámicos, ref+effect imperativo, NUNCA `style={{}}` — gotcha uiDebtRatchet conocido). |
+| R8 (C4 v2) | `appendBounded` reconstruye el `Set seen` por CADA línea (`new Set(state.seen)`), O(cap) por append. | **Aceptable** para las tasas de log observadas (decenas–cientos de líneas/seg × cap 5000 = trabajo despreciable en JS moderno). Optimización barata OPCIONAL si algún día hay un stream de alto volumen: como `seen` es interno al `useRef` (NO va a `setState` — solo `lines`/`dropped` lo hacen), se puede MUTAR in-place (`state.seen.add/delete`) y devolver el mismo `Set`, evitando la copia por línea; conservar el contrato de no-op del `!==` devolviendo el mismo `RingState` cuando la línea es duplicado. No se aplica ahora para no tocar un diseño ya testeado; queda documentado. |
 
 ---
 

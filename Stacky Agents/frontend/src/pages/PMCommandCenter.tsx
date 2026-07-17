@@ -16,31 +16,18 @@ import {
 } from "../api/pm";
 import WeeklyDigestCard from "../components/WeeklyDigestCard";
 import { useWorkbench } from "../store/workbench";
+import {
+  formatDate,
+  formatTime,
+  formatDateTime,
+  formatDuration,
+  formatCostUsd,
+  formatTokens,
+  formatPercent,
+} from "../services/format";
 import styles from "./PMCommandCenter.module.css";
 
 type SeverityFilter = "ALL" | "HIGH" | "MEDIUM" | "LOW" | "CRITICAL";
-
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function fmtDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("es-AR", { hour12: false });
-  } catch {
-    return iso;
-  }
-}
 
 function healthClass(kpis: PmSprintKpis | null): string {
   if (!kpis || kpis.total_items === 0) return styles.healthGray;
@@ -94,16 +81,16 @@ function SprintHealthCard({ snapshot, capturedAt }: SprintHealthCardProps) {
       <div className={styles.sprintTop}>
         <h2 className={styles.sprintName}>{snapshot?.sprint_name ?? "Sin sprint sincronizado"}</h2>
         <span className={styles.sprintMeta}>
-          {fmtDate(iteration?.start_date ?? snapshot?.start_date ?? null)}
+          {formatDate(iteration?.start_date ?? snapshot?.start_date ?? null)}
           {" → "}
-          {fmtDate(iteration?.end_date ?? snapshot?.end_date ?? null)}
+          {formatDate(iteration?.end_date ?? snapshot?.end_date ?? null)}
         </span>
         <span className={`${styles.healthPill} ${healthClass(kpis)}`}>
           {healthLabel(kpis)}
         </span>
         {capturedAt && (
           <span className={styles.sprintMeta}>
-            Último sync: {fmtDateTime(capturedAt)}
+            Último sync: {formatDateTime(capturedAt)}
           </span>
         )}
       </div>
@@ -111,7 +98,7 @@ function SprintHealthCard({ snapshot, capturedAt }: SprintHealthCardProps) {
       <div className={styles.kpiGrid}>
         <KpiCard
           label="Completion"
-          value={kpis ? `${kpis.completion_rate_pct.toFixed(0)}%` : "—"}
+          value={kpis ? formatPercent(kpis.completion_rate_pct) : "—"}
           sub={
             kpis && kpis.committed_story_points > 0
               ? `${kpis.completed_story_points}/${kpis.committed_story_points} pts`
@@ -132,7 +119,7 @@ function SprintHealthCard({ snapshot, capturedAt }: SprintHealthCardProps) {
         <KpiCard
           label="Bugs"
           value={kpis ? `${kpis.bug_count}` : "—"}
-          sub={kpis ? `${kpis.bug_rate_pct.toFixed(1)}% del sprint` : undefined}
+          sub={kpis ? `${formatPercent(kpis.bug_rate_pct, 1)} del sprint` : undefined}
         />
         <KpiCard
           label="Días restantes"
@@ -198,7 +185,7 @@ function RiskFeed({ risks, onAcknowledge, ackInFlight }: RiskFeedProps) {
               {r.rule && <span className={styles.riskRule}>{r.rule}</span>}
               {r.acknowledged ? (
                 <span className={styles.ackedMark}>
-                  ✓ acknowledged por {r.acknowledged_by ?? "?"} ({fmtDateTime(r.acknowledged_at)})
+                  ✓ acknowledged por {r.acknowledged_by ?? "?"} ({formatDateTime(r.acknowledged_at)})
                 </span>
               ) : (
                 <button
@@ -219,7 +206,7 @@ function RiskFeed({ risks, onAcknowledge, ackInFlight }: RiskFeedProps) {
                   {r.affected_items.length > 8 ? ` (+${r.affected_items.length - 8} más)` : ""}
                 </span>
               )}
-              <span>Detectado: {fmtDateTime(r.detected_at)}</span>
+              <span>Detectado: {formatDateTime(r.detected_at)}</span>
             </div>
           </div>
         );
@@ -229,19 +216,6 @@ function RiskFeed({ risks, onAcknowledge, ackInFlight }: RiskFeedProps) {
 }
 
 // ── AI Usage Panel ────────────────────────────────────────────────────────────
-
-function fmtNum(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toString();
-}
-
-function fmtCost(usd: number): string {
-  if (usd === 0) return "$0";
-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
-  if (usd < 1) return `$${usd.toFixed(3)}`;
-  return `$${usd.toFixed(2)}`;
-}
 
 interface AIUsagePanelProps {
   report: PmAiUsageReport | null;
@@ -260,11 +234,11 @@ function AIUsagePanel({ report, windowHours, onWindowChange, loading }: AIUsageP
     <tr key={key}>
       <td className={styles.mono}>{key}</td>
       <td className={styles.numeric}>{data.calls}</td>
-      <td className={styles.numeric}>{fmtNum(data.tokens_in)}</td>
-      <td className={styles.numeric}>{fmtNum(data.tokens_out)}</td>
-      <td className={styles.numeric}>{fmtCost(data.cost_usd)}</td>
+      <td className={styles.numeric}>{formatTokens(data.tokens_in)}</td>
+      <td className={styles.numeric}>{formatTokens(data.tokens_out)}</td>
+      <td className={styles.numeric}>{formatCostUsd(data.cost_usd)}</td>
       <td className={styles.numeric}>
-        {data.calls > 0 ? `${((data.success / data.calls) * 100).toFixed(0)}%` : "—"}
+        {data.calls > 0 ? formatPercent((data.success / data.calls) * 100) : "—"}
       </td>
     </tr>
   );
@@ -276,7 +250,7 @@ function AIUsagePanel({ report, windowHours, onWindowChange, loading }: AIUsageP
         <span className={styles.advisoryBadge}>advisory_only</span>
         <span className={styles.aiWindow}>
           Ventana: últimas {windowHours}h
-          {report?.window_start && ` · desde ${new Date(report.window_start).toLocaleString("es-AR")}`}
+          {report?.window_start && ` · desde ${formatDateTime(report.window_start)}`}
         </span>
         <select
           className={styles.aiSelector}
@@ -293,25 +267,25 @@ function AIUsagePanel({ report, windowHours, onWindowChange, loading }: AIUsageP
       <div className={styles.aiTotalsGrid}>
         <div className={styles.aiKpi}>
           <div className={styles.aiKpiLabel}>Costo USD</div>
-          <div className={styles.aiKpiValue}>{loading ? "..." : fmtCost(totals?.cost_usd ?? 0)}</div>
+          <div className={styles.aiKpiValue}>{loading ? "..." : formatCostUsd(totals?.cost_usd ?? 0)}</div>
           <div className={styles.aiKpiSub}>{totals?.calls ?? 0} llamadas</div>
         </div>
         <div className={styles.aiKpi}>
           <div className={styles.aiKpiLabel}>Tokens in</div>
-          <div className={styles.aiKpiValue}>{fmtNum(totals?.tokens_in ?? 0)}</div>
+          <div className={styles.aiKpiValue}>{formatTokens(totals?.tokens_in ?? 0)}</div>
         </div>
         <div className={styles.aiKpi}>
           <div className={styles.aiKpiLabel}>Tokens out</div>
-          <div className={styles.aiKpiValue}>{fmtNum(totals?.tokens_out ?? 0)}</div>
+          <div className={styles.aiKpiValue}>{formatTokens(totals?.tokens_out ?? 0)}</div>
         </div>
         <div className={styles.aiKpi}>
           <div className={styles.aiKpiLabel}>Total tokens</div>
-          <div className={styles.aiKpiValue}>{fmtNum(totals?.tokens_total ?? 0)}</div>
+          <div className={styles.aiKpiValue}>{formatTokens(totals?.tokens_total ?? 0)}</div>
         </div>
         <div className={styles.aiKpi}>
           <div className={styles.aiKpiLabel}>Success rate</div>
           <div className={styles.aiKpiValue}>
-            {totals && totals.calls > 0 ? `${totals.success_rate_pct.toFixed(0)}%` : "—"}
+            {totals && totals.calls > 0 ? formatPercent(totals.success_rate_pct) : "—"}
           </div>
           <div className={styles.aiKpiSub}>
             {totals?.success ?? 0}/{totals?.calls ?? 0}
@@ -320,7 +294,7 @@ function AIUsagePanel({ report, windowHours, onWindowChange, loading }: AIUsageP
         <div className={styles.aiKpi}>
           <div className={styles.aiKpiLabel}>Latencia avg</div>
           <div className={styles.aiKpiValue}>
-            {totals && totals.calls > 0 ? `${(totals.latency_ms_avg / 1000).toFixed(1)}s` : "—"}
+            {totals && totals.calls > 0 ? formatDuration(totals.latency_ms_avg) : "—"}
           </div>
         </div>
       </div>
@@ -377,14 +351,14 @@ function AIUsagePanel({ report, windowHours, onWindowChange, loading }: AIUsageP
                 className={`${styles.aiRecentRow} ${!r.success ? styles.failed : ""}`}
               >
                 <span className={styles.aiTimestamp}>
-                  {new Date(r.timestamp).toLocaleTimeString("es-AR", { hour12: false })}
+                  {formatTime(r.timestamp)}
                 </span>
                 <span className={styles.aiAgent}>{r.agent_kind}</span>
                 <span className={styles.aiModel}>{r.model}</span>
                 <span className={styles.aiTokens}>
-                  {fmtNum(r.tokens_in)}↓ {fmtNum(r.tokens_out)}↑
+                  {formatTokens(r.tokens_in)}↓ {formatTokens(r.tokens_out)}↑
                 </span>
-                <span className={styles.aiCost}>{fmtCost(r.cost_usd)}</span>
+                <span className={styles.aiCost}>{formatCostUsd(r.cost_usd)}</span>
                 {!r.success && <span className={styles.aiErr}>{r.error ?? "error"}</span>}
               </div>
             ))}
@@ -494,7 +468,7 @@ function AIControlPanel({
           {sentimentReport && (
             <div className={styles.gateMetrics}>
               <span>{sentimentReport.passed}/{sentimentReport.total} fixtures</span>
-              <span>{fmtCost(sentimentReport.cost_usd_total)}</span>
+              <span>{formatCostUsd(sentimentReport.cost_usd_total)}</span>
               <span>{sentimentReport.tokens_in_total + sentimentReport.tokens_out_total} tokens</span>
               <span>{sentimentReport.duration_ms}ms</span>
             </div>
@@ -530,7 +504,7 @@ function AIControlPanel({
           {recReport && (
             <div className={styles.gateMetrics}>
               <span>{recReport.passed}/{recReport.total} fixtures</span>
-              <span>{fmtCost(recReport.cost_usd_total)}</span>
+              <span>{formatCostUsd(recReport.cost_usd_total)}</span>
               <span>{recReport.tokens_in_total + recReport.tokens_out_total} tokens</span>
               <span>{recReport.duration_ms}ms</span>
             </div>
@@ -568,7 +542,7 @@ function AIControlPanel({
       {lastRecRun && (
         <div className={styles.gateMetrics} style={{ marginTop: 8 }}>
           <span>Última generación: {lastRecRun.generated} OK, {lastRecRun.rejected} rechazadas</span>
-          <span>{fmtCost(lastRecRun.cost_usd)} · {lastRecRun.tokens_in + lastRecRun.tokens_out} tokens</span>
+          <span>{formatCostUsd(lastRecRun.cost_usd)} · {lastRecRun.tokens_in + lastRecRun.tokens_out} tokens</span>
           <span>modelo: {lastRecRun.model}</span>
           {lastRecRun.rejected > 0 && (
             <span style={{ color: "#fde68a" }}>
@@ -611,11 +585,11 @@ function RecommendationFeed({ recommendations, onAcknowledge, ackInFlight }: Rec
               <span className={`${styles.priorityBadge} ${prioClass}`}>{r.priority}</span>
               <span className={styles.recCategory}>{r.category}</span>
               <span className={styles.recConfidence}>
-                conf {(r.confidence * 100).toFixed(0)}%
+                conf {formatPercent(r.confidence * 100)}
               </span>
               {r.acknowledged ? (
                 <span className={styles.ackedMark}>
-                  ✓ ack {r.acknowledged_by} ({fmtDateTime(r.acknowledged_at)})
+                  ✓ ack {r.acknowledged_by} ({formatDateTime(r.acknowledged_at)})
                 </span>
               ) : (
                 <button
@@ -632,7 +606,7 @@ function RecommendationFeed({ recommendations, onAcknowledge, ackInFlight }: Rec
             <div className={styles.recMeta}>
               <span>ID: {r.rec_id}</span>
               <span>modelo: {r.model}</span>
-              <span>generado: {fmtDateTime(r.generated_at)}</span>
+              <span>generado: {formatDateTime(r.generated_at)}</span>
               <span className={styles.advisoryBadge}>
                 advisory · publish_recommended: {r.publish_recommended ? "true" : "false"}
               </span>
@@ -749,7 +723,7 @@ function CommentsExplorer({
         <div className={styles.gateMetrics} style={{ marginBottom: 8 }}>
           <span>
             Último analyze: {lastAnalyze.analyzed} OK · {lastAnalyze.failures} fallos ·
-            costo {fmtCost(lastAnalyze.cost_usd)}
+            costo {formatCostUsd(lastAnalyze.cost_usd)}
           </span>
           {!lastAnalyze.gate_passed && (
             <span style={{ color: "#fca5a5" }}>
@@ -779,7 +753,7 @@ function CommentsExplorer({
                 <div className={styles.commentHeader}>
                   <span className={`${styles.sentimentBadge} ${sCls}`}>
                     {c.ai_analyzed
-                      ? `${c.sentiment_label ?? "neutral"} ${c.sentiment_score != null ? `(${(c.sentiment_score * 100).toFixed(0)}%)` : ""}`
+                      ? `${c.sentiment_label ?? "neutral"} ${c.sentiment_score != null ? `(${formatPercent(c.sentiment_score * 100)})` : ""}`
                       : "unanalyzed"}
                   </span>
                   <span>{c.author ?? "?"}</span>
@@ -788,7 +762,7 @@ function CommentsExplorer({
                 <div className={styles.commentText}>{stripHashMarker(c.text_plain)}</div>
                 <div className={styles.commentMeta}>
                   <span>id interno: {c.id}</span>
-                  <span>indexed: {fmtDateTime(c.indexed_at)}</span>
+                  <span>indexed: {formatDateTime(c.indexed_at)}</span>
                 </div>
               </div>
             );

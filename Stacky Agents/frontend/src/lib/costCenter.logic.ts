@@ -5,18 +5,16 @@
  * instalados (gap estructural — ver R6): el gate de los .tsx (F6) es tsc.
  */
 import type { CostKind, TopRun } from "./costCenterTypes";
+import { formatCostUsd, formatTokens as formatTokensCanonical } from "../services/format";
 
 export function formatUsd(n: number | null): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "n/d";
-  return `$${n.toFixed(2)}`;
+  return formatCostUsd(n);
 }
 
 export function formatTokens(n: number | null): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "n/d";
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
+  return formatTokensCanonical(n);
 }
 
 export function formatPct(n: number): string {

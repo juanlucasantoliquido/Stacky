@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { Agents } from "../api/endpoints";
 import type { AgentType, ContextBlock } from "../types";
+import { formatCostUsd, formatDuration, formatTokens } from "../services/format";
 import styles from "./CostPreview.module.css";
 
 interface Props {
@@ -69,15 +70,15 @@ export default function CostPreview({ agentType, blocks }: Props) {
 
   const costStr = estimate.cost_usd_total < 0.01
     ? `<$0.01`
-    : `$${estimate.cost_usd_total.toFixed(2)}`;
+    : formatCostUsd(estimate.cost_usd_total);
   const latencyStr = estimate.latency_ms < 1000
     ? `${estimate.latency_ms}ms`
-    : `${(estimate.latency_ms / 1000).toFixed(1)}s`;
+    : formatDuration(estimate.latency_ms);
 
   return (
     <div className={styles.box} title={`Modelo: ${estimate.model}`}>
       <span className={styles.tokens}>
-        {(estimate.tokens_in / 1000).toFixed(1)}k → {(estimate.tokens_out / 1000).toFixed(1)}k tok
+        {formatTokens(estimate.tokens_in)} → {formatTokens(estimate.tokens_out)} tok
       </span>
       <span className={styles.dot}>·</span>
       <span className={styles.cost}>{costStr}</span>

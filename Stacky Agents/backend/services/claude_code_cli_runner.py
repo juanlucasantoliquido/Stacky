@@ -1009,6 +1009,12 @@ def _run_in_background(
         _epic_repair_result: list[dict | None] = [None]       # [0] = meta o None
         _epic_repair_done: list[bool] = [False]               # flag mutable para closure
 
+        # Plan 160 F0 — pase correctivo del resolutor de incidencias (flag ON
+        # default). Espejo de _epic_repair_result/_epic_repair_done, gateado
+        # por agent_type=="incident" en vez de "business".
+        _incident_repair_result: list[dict | None] = [None]
+        _incident_repair_done: list[bool] = [False]
+
         # H5 — Runaway guard: límite de turnos y costo por run.
         from harness.runaway_guard import RunLimits, RunawayGuard
         _runaway_guard = RunawayGuard(
@@ -1235,6 +1241,53 @@ def _run_in_background(
                                 }
                 except Exception as _exc_er:  # noqa: BLE001
                     log("warn", f"epic_repair falló (no crítico): {_exc_er}")
+            # Plan 160 F0 — pase correctivo del resolutor de incidencias
+            # (último turno, solo una vez, stdin todavía abierto). Si el
+            # IncidentAgent one-shot devolvió narración en vez del HTML del
+            # desglose, le pedimos UNA vez que re-emita SOLO el HTML.
+            if (
+                not _incident_repair_done[0]
+                and event.get("type") == "result"
+                and getattr(config, "STACKY_INCIDENT_REPAIR_ENABLED", False)
+                and _one_shot
+                and (agent_type or "").lower() == "incident"
+            ):
+                _incident_repair_done[0] = True
+                try:
+                    from api.tickets import _extract_epic_html_raw, _looks_like_incident
+
+                    _current_output_inc = "\n".join(final_output) if final_output else ""
+                    _clean_inc = _extract_epic_html_raw(_current_output_inc)
+                    if not _looks_like_incident(_clean_inc):
+                        _ac_used_inc = autocorrect.attempts if autocorrect is not None else 0
+                        _ac_budget_inc = config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
+                        if _ac_used_inc < _ac_budget_inc:
+                            _INCIDENT_REPAIR_MSG = (
+                                "Tu último mensaje no cumple el contrato del desglose de "
+                                "incidencia. Re-emití AHORA, como único contenido del "
+                                "mensaje, EXCLUSIVAMENTE el HTML del desglose con las "
+                                "secciones RESUMEN EJECUTIVO, CONTEXTO DE NEGOCIO, ANALISIS "
+                                "FUNCIONAL, ANALISIS TECNICO, PASOS DE REPRODUCCION, "
+                                "CRITERIOS DE ACEPTACION, ARCHIVOS Y MODULOS PROBABLES, "
+                                "EPICA RELACIONADA, PRIORIDAD Y ESTIMACION. SIN narración, "
+                                "SIN preámbulo, SIN escribirlo en un archivo."
+                            )
+                            _sent_inc = _send_system_message(execution_id, _INCIDENT_REPAIR_MSG)
+                            _incident_repair_result[0] = {
+                                "attempted": True,
+                                "reason": "narration_not_incident",
+                                "sent": bool(_sent_inc),
+                            }
+                            log("info", f"incident_repair: reintento solicitado (sent={_sent_inc})")
+                        else:
+                            _incident_repair_result[0] = {
+                                "attempted": False,
+                                "reason": "narration_not_incident",
+                                "budget_exhausted": True,
+                            }
+                            log("info", "incident_repair: presupuesto agotado, no se reintenta")
+                except Exception as _exc_ir:  # noqa: BLE001
+                    log("warn", f"incident_repair falló (no crítico): {_exc_ir}")
             # H5 — chequear runaway en cada evento con datos de telemetría.
             if not _runaway_triggered:
                 reason = _runaway_guard.observe(
@@ -1465,6 +1518,9 @@ def _run_in_background(
         # Fix robusto brief→épica — sello del pase correctivo de épica (aditivo).
         if _epic_repair_result[0] is not None:
             metadata["epic_repair"] = _epic_repair_result[0]
+        # Plan 160 F0 — sello del pase correctivo de incidencia (aditivo).
+        if _incident_repair_result[0] is not None:
+            metadata["incident_repair"] = _incident_repair_result[0]
         # Plan 58 F4 — telemetría del bucle de convergencia (C4: solo en este scope,
         # no dentro de _on_stream_event donde metadata no está en scope).
         if getattr(config, "STACKY_QUALITY_CONVERGENCE_ENABLED", False) and _epic_repair_result[0] is not None:

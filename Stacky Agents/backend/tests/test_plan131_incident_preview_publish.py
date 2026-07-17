@@ -114,6 +114,10 @@ def _patch_run(monkeypatch, output: str | None, execution_id: int = 1):
     fake_run.id = execution_id
     fake_run.output = output
     fake_run.project_name = None
+    # Plan 160 F0 — real metadata_dict siempre devuelve dict (models.py:260-261);
+    # sin esto, el MagicMock().get(...) del código nuevo de repair no es
+    # JSON-serializable y el endpoint responde 500.
+    fake_run.metadata_dict = {}
     monkeypatch.setattr(t_mod, "_get_run_for_preview", lambda eid, *, db: fake_run, raising=False)
 
 

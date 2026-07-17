@@ -15,28 +15,10 @@ import SkeletonList from "../components/SkeletonList";
 import { StatusChip } from "../components/ui";
 import { runStatusTone, runStatusLabel } from "../utils/runStatus";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
+import { formatDuration, formatCostUsd } from "../services/format";
 import { useWorkbench } from "../store/workbench";
 import { readQueryParam } from "../utils/queryParams";
 import styles from "./ExecutionHistoryPage.module.css";
-
-// ---------------------------------------------------------------------------
-// Helpers de formato
-// ---------------------------------------------------------------------------
-
-function fmtDuration(ms: number | null): string {
-  if (ms == null) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  const rem = Math.round(s % 60);
-  return `${m}m ${rem}s`;
-}
-
-function fmtCost(cost: number | null): string {
-  if (cost == null) return "—";
-  return `$${cost.toFixed(4)}`;
-}
 
 // ---------------------------------------------------------------------------
 // Filtros
@@ -210,8 +192,8 @@ export default function ExecutionHistoryPage() {
                   <td className={styles.mono}>{item.runtime ?? "—"}</td>
                   <td className={styles.mono}>{item.model ?? "—"}</td>
                   <td><StatusChip tone={runStatusTone(item.status)} size="sm">{runStatusLabel(item.status)}</StatusChip></td>
-                  <td className={styles.numCell}>{fmtDuration(item.duration_ms)}</td>
-                  <td className={styles.numCell}>{fmtCost(item.cost_usd)}</td>
+                  <td className={styles.numCell}>{formatDuration(item.duration_ms)}</td>
+                  <td className={styles.numCell}>{formatCostUsd(item.cost_usd)}</td>
                   <td className={styles.mono}>
                     {item.prompt_sha
                       ? <span title={item.prompt_sha}>{item.prompt_sha.slice(0, 7)}</span>

@@ -390,6 +390,15 @@ $HarnessTestFiles = @(
   "tests/test_plan130_code_integrity_flag.py"
   "tests/test_plan130_code_integrity_service.py"
   "tests/test_plan130_code_integrity_endpoint_cli.py"
+  # Plan 131 - Resolutor de incidencias multimodal
+  "tests/test_plan131_incident_flag.py"
+  "tests/test_plan131_incident_store.py"
+  "tests/test_plan131_incident_agent.py"
+  "tests/test_plan131_incident_context.py"
+  "tests/test_plan131_run_incident.py"
+  "tests/test_plan131_incident_preview_publish.py"
+  "tests/test_plan131_incident_docs.py"
+  "tests/test_plan131_incident_api.py"
   # Plan 133 - Contrato de inyeccion de contexto por agente
   "tests/test_context_contract_flags.py"
   "tests/test_run_ticket_refresh.py"

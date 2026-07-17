@@ -1,6 +1,49 @@
 # Plan 158 — Centro de Costos: fix de telemetría real en Claude Code CLI (paridad con Codex)
 
-**Estado:** PROPUESTO v1
+**Estado:** CRITICADO v2 (v1 RECHAZADO por C1 bloqueante — corregido en esta versión; listo para implementar)
+
+> **Versión: v1 -> v2** — crítica adversarial 2026-07-17 (StackyArchitectaUltraEficientCode, juez).
+>
+> **Desambiguación de número (C5):** existe OTRO doc numerado "158" ("Contrato de URL / deep-links")
+> en la rama SIN MERGEAR `plans-ux-logs-final`. ESTE doc es el 158 de Centro de Costos. Toda
+> referencia cruzada a "plan 158" debe citar el título completo; al consolidar ramas, renumerar uno.
+>
+> **CHANGELOG v1 -> v2:**
+> - **C1 (BLOQUEANTE, resuelto):** el archivo de test F0 nunca creaba las tablas: los 3 tests de
+>   backfill fallaban SIEMPRE con `OperationalError: no such table` (el `conftest.py` de tests sólo
+>   setea `STACKY_TEST_MODE`, no inicializa DB — verificado), dejando el criterio de F4/F7
+>   insatisfacible tal como estaba escrito. Fix: `import db` + `db.init_db()` a nivel módulo del test
+>   (patrón existente `test_plan117_insights_api.py:16-27`).
+> - **C2 (resuelto):** F5 usaba `group="observabilidad"` — valor inexistente; la FlagSpec vecina del
+>   Plan 142 usa `group="observabilidad_notif"` (`harness_flags.py:1651`). Corregido en ambas FlagSpec.
+> - **C3 (resuelto):** F7 citaba `backend/run_harness_tests.sh` (NO existe). Path real verificado:
+>   `backend/scripts/run_harness_tests.sh` — el meta-test `tests/test_harness_ratchet_meta.py:13,21`
+>   parsea EXACTAMENTE ese archivo con regex `^\s*(tests/[\w/]+\.py)\s*$`. Instrucción ahora literal
+>   (formato de línea incluido) y criterio binario robusto a drift ajeno del ratchet.
+> - **C4 (resuelto):** F6 usaba `datetime` sin import (verificado: `app.py` NO importa datetime a
+>   nivel módulo — grep 0 hits) y la prosa decía "en background" cuando el código corre síncrono.
+>   Fix: import local determinista, gate `STACKY_TEST_MODE` (mismo patrón del daemon Plan 146,
+>   `app.py:524-530`) para que `create_app()` bajo pytest jamás dispare el backfill, y prosa corregida.
+> - **C6 (resuelto):** §2.5 actualizado — en esta rama existen 159-162 y NO existe `155_*.md`
+>   (hueco por loop paralelo); 159 es eje SELECCIÓN de modelo, no telemetría de costo. Sin colisión.
+> - **C7 (resuelto):** §2.3 ahora cita que `routed_model` es fallback-aware
+>   (`claude_code_cli_runner.py:913-919` reasigna `routed_model = _effective_model`): el fix atribuye
+>   SIEMPRE el modelo que efectivamente corrió, incluso si el spawn cayó al modelo fallback.
+> - **C8 (resuelto):** referencias de línea imprecisas en F5 (`_CATEGORY_KEYS` "262",
+>   `_CURATED_DEFAULTS_ON` "467") reemplazadas por ubicación por grep con los literales exactos.
+> - **[ADICIÓN ARQUITECTO]:** nuevo test puro `test_runtime_parity_matrix_no_unknown` en F0 — matriz
+>   de paridad de los 3 runtimes en un solo test (claude_code_cli/codex_cli/github_copilot ->
+>   `cost_kind != "unknown"`): red de regresión permanente contra la clase EXACTA de bug de este plan
+>   (un runner que deriva de las claves canónicas del extractor). Sin DB, sin trabajo del operador.
+> - **Verificaciones v2 que FORTALECEN el plan (sin cambio de diseño):** `persist()` escribe
+>   `t.to_dict()` que NO incluye `raw` (`harness/telemetry.py:40-50,135`) → `harness_telemetry.raw.model`
+>   nunca existe en filas persistidas → `metadata["model"]` top-level es el ÚNICO canal de modelo hacia
+>   el extractor (confirma Defecto A como causa raíz única); `extract_cost_row` SÍ lee tokens desde
+>   `claude_telemetry.usage` (`cost_analytics.py:88-89`) → el backfill de `model` solo (F4) desbloquea
+>   estimación histórica REAL; `from config import config` (`claude_code_cli_runner.py:49`) y `logger`
+>   de módulo (`:66`) confirman que el código de F1/F3 compila tal cual está escrito;
+>   `telemetry.py:19-24` importa `session_scope` top-level explícitamente "para que los tests puedan
+>   monkeypatch" → el patrón de mocking de F0 es el previsto por el módulo.
 
 ## 1. Título, objetivo e impacto
 
@@ -68,12 +111,17 @@ dict `metadata` (líneas 1394-1415), la línea 1400 escribe:
 ```
 
 `routed_model` se calculó en la línea 837 (`routed_model = model_override or config.CLAUDE_CODE_CLI_MODEL`)
-y sigue en scope hasta el final de la función. Pero la clave se llama `claude_code_model`, NO `model`.
+y sigue en scope hasta el final de la función. Además — verificado v2 (C7) — `routed_model` es
+**fallback-aware**: si el spawn cayó al modelo fallback, la línea 919 lo reasigna
+(`routed_model = _effective_model`, `claude_code_cli_runner.py:913-919`), así que SIEMPRE refleja el
+modelo que efectivamente corrió. Pero la clave se llama `claude_code_model`, NO `model`.
 `cost_analytics.py:86` sólo lee `md.get("model")` (o `harness_telemetry.raw.model`) — **nunca
 `claude_code_model`**. Resultado: para TODA ejecución `claude_code_cli`, `extract_cost_row()` nunca
 conoce el modelo usado, así que el fallback `estimate_cost(model, tokens_in, tokens_out)`
 (`harness/pricing.py:69-98`) siempre devuelve `None` (línea 79: `if not model: return None`) aunque haya
-tokens disponibles.
+tokens disponibles. Nota v2: `persist()` escribe `t.to_dict()`, que NO incluye `raw`
+(`harness/telemetry.py:40-50,135`) — por eso `harness_telemetry.raw.model` nunca existe en filas
+persistidas y el top-level `metadata["model"]` es el ÚNICO canal posible del modelo hacia el extractor.
 
 **Defecto B — nunca se llama a `harness.telemetry.persist()`.** Grep dirigido confirmó CERO ocurrencias
 de `harness_telemetry`, `from_claude_stream` o `telemetry.persist` en todo `claude_code_cli_runner.py`
@@ -149,11 +197,15 @@ pricing. **Conclusión: github_copilot ya tiene paridad real. No se toca ningún
 runtime.** (`copilot_bridge.py` nunca devuelve `cost_usd`, pero no lo necesita: es suscripción plana,
 `_SUBSCRIPTION_RUNTIMES` en `cost_analytics.py:31` ya lo marca `nominal` con hint de pricing.)
 
-### 2.5 Planes 150-157 — sin duplicación
+### 2.5 Planes vecinos — sin duplicación (actualizado v2, C6)
 
-Se escanearon los títulos de 150 (densidad adaptativa), 151 (onboarding), 152 (centro de
-notificaciones), 153 (publicación ADO transaccional), 154 (arnés veraz ratchet), 156 (latido único),
-157 (comparador BD). Ninguno toca telemetría de costo ni `claude_code_cli_runner.py`. Sin colisión.
+Se escanearon 150 (densidad adaptativa), 151 (onboarding), 152 (centro de notificaciones), 153
+(publicación ADO transaccional), 154 (arnés veraz ratchet), 156 (latido único), 157 (comparador BD),
+159 (catálogo unificado modelos/efforts — eje de SELECCIÓN de modelo del CLI, NO telemetría de costo)
+y 160-162 (resolutor HTML/paste, formato humano, formularios). Ninguno toca la telemetría de costo ni
+`claude_code_cli_runner.py`. Notas v2: en esta rama NO existe `155_*.md` (hueco de numeración por el
+loop paralelo), y existe OTRO doc numerado 158 en la rama sin mergear `plans-ux-logs-final` (ver nota
+de desambiguación del encabezado). Sin colisión funcional.
 
 ## 3. Principios y guardarraíles (NO negociables)
 
@@ -212,6 +264,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("LLM_BACKEND", "mock")
+
+import db  # noqa: E402
+
+# C1 (v2) — crear las tablas en la DB in-memory compartida ANTES de cualquier
+# session_scope. Sin esto, los tests de backfill fallan SIEMPRE con
+# "no such table" (el conftest.py de tests sólo setea STACKY_TEST_MODE, no
+# inicializa DB). Patrón existente: test_plan117_insights_api.py:16-27.
+db.init_db()
 
 
 def _make_fake_scope(fake_row):
@@ -363,6 +423,50 @@ def test_baseline_without_fix_is_unknown_documents_the_bug():
     assert row.cost_usd is None
 
 
+def test_runtime_parity_matrix_no_unknown():
+    """[ADICIÓN ARQUITECTO v2] Matriz de paridad de los 3 runtimes en UN test.
+
+    La metadata canónica que cada runner produce POST-fix debe dar
+    cost_kind != "unknown" en el extractor. Es la red de regresión permanente
+    contra la clase exacta de bug de este plan: un runner que deriva de las
+    claves canónicas. Verde ANTES y DESPUÉS del fix (el extractor ya soporta
+    estas formas; el bug era que claude_code_cli no las PRODUCÍA)."""
+    from services.cost_analytics import extract_cost_row
+
+    matrix = {
+        # claude_code_cli post-F3: model top-level + claude_telemetry.usage sin costo
+        "claude_code_cli": {
+            "runtime": "claude_code_cli",
+            "model": "claude-sonnet-4-6",
+            "claude_telemetry": {"usage": {"input_tokens": 1000, "output_tokens": 1000}},
+        },
+        # codex_cli (ya correcto hoy): harness_telemetry persistido con costo estimado
+        "codex_cli": {
+            "runtime": "codex_cli",
+            "harness_telemetry": {
+                "runtime": "codex_cli", "total_cost_usd": 0.5, "cost_estimated": True,
+                "input_tokens": 1000, "output_tokens": 1000,
+            },
+        },
+        # github_copilot (ya correcto hoy, §2.4): claves canónicas del bridge
+        "github_copilot": {
+            "runtime": "github_copilot",
+            "model": "claude-sonnet-4-6",
+            "tokens_in": 1000,
+            "tokens_out": 1000,
+        },
+    }
+    expected_kind = {
+        "claude_code_cli": "estimated",
+        "codex_cli": "estimated",
+        "github_copilot": "nominal",
+    }
+    for runtime, md in matrix.items():
+        row = extract_cost_row(md)
+        assert row.cost_kind == expected_kind[runtime], (runtime, row)
+        assert row.cost_kind != "unknown"
+
+
 # ---------------------------------------------------------------------------
 # F4 — backfill idempotente (claude_code_model -> model en filas históricas)
 # ---------------------------------------------------------------------------
@@ -447,9 +551,11 @@ def test_backfill_claude_model_key_ignores_other_runtimes():
 
 **Criterio de aceptación F0 (binario):** el comando de arriba debe fallar HOY con `AttributeError:
 module 'services.claude_code_cli_runner' has no attribute '_finalize_cost_telemetry'` (o
-`ImportError` en `services.cost_analytics.backfill_claude_model_key`) en TODOS los tests salvo
-`test_baseline_without_fix_is_unknown_documents_the_bug`, que debe pasar en verde ya mismo (documenta
-el bug tal cual existe hoy). **Trabajo del operador: ninguno** (sólo ejecutar el comando).
+`ImportError` en `services.cost_analytics.backfill_claude_model_key`) en TODOS los tests salvo los
+DOS tests ancla — `test_baseline_without_fix_is_unknown_documents_the_bug` y
+`test_runtime_parity_matrix_no_unknown` ([ADICIÓN ARQUITECTO] v2) — que deben pasar en verde ya
+mismo (documentan el "antes" del bug y el contrato de paridad que el extractor ya soporta).
+**Trabajo del operador: ninguno** (sólo ejecutar el comando).
 
 ---
 
@@ -727,8 +833,9 @@ def backfill_claude_model_key() -> dict:
 
 **Criterio de aceptación (binario):** los 3 tests de backfill en verde; el resto de F0 (finalize_cost_telemetry
 + end-to-end) también en verde a esta altura (F1+F3 ya aplicados). Con esto, **`test_plan158_claude_cli_cost_parity.py`
-completo debe estar en verde**, salvo el test ancla `test_baseline_without_fix_is_unknown_documents_the_bug`
-que sigue en verde (documenta el "antes", no cambia).
+completo debe estar en verde**, incluyendo los 2 tests ancla (`test_baseline_without_fix_is_unknown_documents_the_bug`
+y `test_runtime_parity_matrix_no_unknown`), que siguen en verde sin cambio (documentan el "antes" y el
+contrato de paridad).
 
 **Flag que protege este cambio:** `STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED` (F2), default **ON**
 — gatea el DISPARO automático en F6, no la función en sí (la función siempre existe y es segura de
@@ -768,7 +875,7 @@ punto exacto:
             "en ejecuciones claude_code_cli (paridad con codex_cli). Kill-switch: "
             "OFF revierte al comportamiento previo exacto (sin cambios de datos)."
         ),
-        group="observabilidad",
+        group="observabilidad_notif",
     ),
     FlagSpec(
         key="STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",
@@ -781,12 +888,14 @@ punto exacto:
             "tienen la clave vieja pero no la canónica. Idempotente, aditivo, nunca "
             "inventa costo."
         ),
-        group="observabilidad",
+        group="observabilidad_notif",
     ),
 ```
 
-b) Agregar ambas keys a `_CATEGORY_KEYS["observabilidad_notif"]` (la tupla que ya contiene
-`"STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED"`, línea 262):
+b) Agregar ambas keys a `_CATEGORY_KEYS["observabilidad_notif"]` — v2 (C8): la clave del dict abre en
+la línea 252 y la entrada `"STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142` está en la línea 263;
+ubicar el punto exacto con grep de ese literal dentro de `harness_flags.py` y agregar las 2 keys
+inmediatamente después:
 
 ```python
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
@@ -797,8 +906,9 @@ b) Agregar ambas keys a `_CATEGORY_KEYS["observabilidad_notif"]` (la tupla que y
 
 **2. `Stacky Agents/backend/tests/test_harness_flags.py`**
 
-Agregar ambas keys al set `_CURATED_DEFAULTS_ON` (línea 467, mismo bloque donde ya está
-`"STACKY_COST_CENTER_ENABLED"`):
+Agregar ambas keys al set `_CURATED_DEFAULTS_ON` — v2 (C8): el set abre en la línea 467 y la entrada
+`"STACKY_COST_CENTER_ENABLED"` está en la línea 632; ubicarla con grep de ese literal dentro de
+`test_harness_flags.py` y agregar las 2 keys inmediatamente después:
 
 ```python
     "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
@@ -861,12 +971,24 @@ después de su definición, antes de la línea 404 donde se invoca), y llamarla 
 def _plan158_maybe_backfill_claude_model(logger) -> None:
     """Plan 158 F6 — corre backfill_claude_model_key() una sola vez (marker file).
 
-    Nunca bloquea ni rompe el arranque: cualquier excepción se loguea y se
-    sigue. Con la flag OFF, no hace nada (ni siquiera chequea el marker).
+    Corre SÍNCRONO dentro de create_app(), acotado a _BACKFILL_MAX_ROWS=20000
+    filas (segundos, no minutos). Deliberadamente NO usa thread daemon: gotcha
+    conocido de crashes nativos daemon-threads vs SQLAlchemy teardown (Plan 146).
+    Nunca rompe el arranque: cualquier excepción se loguea y se sigue. Con la
+    flag OFF, no hace nada. Bajo pytest (STACKY_TEST_MODE — v2/C4, patrón
+    idéntico al gate del daemon Plan 146 en app.py:524-530) tampoco hace nada:
+    los tests que invocan create_app() no deben escanear la DB ni escribir
+    marker files.
     """
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
+        return
     if not getattr(config, "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED", True):
         return
     try:
+        # v2 (C4): app.py NO importa datetime a nivel módulo (grep verificado,
+        # 0 hits) — import local determinista, NO agregar import top-level.
+        from datetime import datetime as _dt
+
         from runtime_paths import data_dir
         marker = data_dir() / "plan158_claude_model_backfill.done"
         if marker.exists():
@@ -878,7 +1000,7 @@ def _plan158_maybe_backfill_claude_model(logger) -> None:
             result["scanned"], result["updated"],
         )
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(datetime.utcnow().isoformat(), encoding="utf-8")
+        marker.write_text(_dt.utcnow().isoformat(), encoding="utf-8")
     except Exception:
         logger.exception("plan158 backfill falló (no crítico, se reintenta en el próximo arranque)")
 ```
@@ -890,12 +1012,14 @@ Y en el punto de la línea 404:
     _plan158_maybe_backfill_claude_model(logger)
 ```
 
-**Nota:** si `datetime` no está importado a nivel de módulo en `app.py`, usar el import ya existente
-(verificar con grep `from datetime import` al inicio del archivo antes de agregar uno duplicado — si ya
-existe `datetime.utcnow` en uso en otras partes de `app.py`, reusar ese import).
+**Nota v2 (C4):** `os` YA está importado en `app.py` (se usa `os.environ` en la línea 530); `config`
+YA está importado. `datetime` NO está importado a nivel módulo (grep verificado: 0 hits) — por eso el
+código de arriba usa un import LOCAL (`from datetime import datetime as _dt`); NO agregar imports
+top-level a `app.py`.
 
 **Test:** no hay test de arranque completo de `create_app()` con backfill en este plan (sería un test
-de integración pesado, fuera de proporción para un marker file). Verificación manual (F7).
+de integración pesado, fuera de proporción para un marker file); el gate `STACKY_TEST_MODE` garantiza
+además que ningún test existente que invoque `create_app()` dispare el backfill. Verificación manual (F7).
 
 **Criterio de aceptación (binario):** arrancar el backend una vez
 (`"Stacky Agents/backend/.venv/Scripts/python.exe" app.py` o el comando de arranque habitual del
@@ -906,9 +1030,10 @@ segunda vez y confirmar que la línea de log NO vuelve a aparecer (el marker ya 
 **Flag que protege este cambio:** `STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED` (F2), default **ON**.
 
 **Impacto por runtime:** el backfill sólo toca filas `claude_code_cli` (F4 ya filtra por runtime); cero
-impacto en `codex_cli`/`github_copilot`. **Trabajo del operador: ninguno** — corre solo, una vez, en
-background del arranque normal (no bloquea el health check ni retrasa el primer request; el query está
-acotado a `_BACKFILL_MAX_ROWS=20000` filas).
+impacto en `codex_cli`/`github_copilot`. **Trabajo del operador: ninguno** — corre solo, UNA vez,
+síncrono al final del arranque normal (v2/C4: prosa corregida — NO es un thread en background; es una
+pasada acotada a `_BACKFILL_MAX_ROWS=20000` filas que tarda segundos y evita el gotcha de daemon
+threads del Plan 146).
 
 ---
 
@@ -935,12 +1060,23 @@ desde tests unitarios — cerrar el ciclo con la señal que el operador ya puede
    Todos deben quedar en verde completo (ninguno se toca en su contrato, sólo se agrega código nuevo
    aditivo — no debe romperse ninguno de estos 6 archivos preexistentes).
 
-2. **Registrar los 7 archivos de test tocados/creados en `HARNESS_TEST_FILES`** (patrón obligatorio del
-   repo — un `test_*.py` nuevo que no se registra rompe el meta-test del ratchet). Archivo:
-   `Stacky Agents/backend/run_harness_tests.sh` (o el archivo equivalente que enumera
-   `HARNESS_TEST_FILES` — confirmar el nombre exacto del archivo con
-   `grep -rn "HARNESS_TEST_FILES" "Stacky Agents/backend"` antes de editar). Agregar la línea del
-   archivo nuevo: `test_plan158_claude_cli_cost_parity.py`.
+2. **Registrar el archivo de test NUEVO en `HARNESS_TEST_FILES`** (patrón obligatorio del repo — un
+   `test_*.py` nuevo que no se registra rompe el meta-test del ratchet). Archivo EXACTO — v2 (C3),
+   verificado, no adivinar: `Stacky Agents/backend/scripts/run_harness_tests.sh` (el meta-test
+   `Stacky Agents/backend/tests/test_harness_ratchet_meta.py:13,21` parsea EXACTAMENTE ese path con la
+   regex `^\s*(tests/[\w/]+\.py)\s*$`). Agregar UNA línea con el mismo formato que las existentes
+   (dos espacios de indentación + path relativo a backend):
+
+   ```
+     tests/test_plan158_claude_cli_cost_parity.py
+   ```
+
+   Verificación binaria robusta a drift ajeno (el ratchet puede tener rojo PREEXISTENTE por tests de
+   otros planes sin registrar — gotcha conocido): correr
+   `"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_ratchet_meta.py" -v`
+   y verificar que, verde o rojo, el mensaje de fallo NO incluya
+   `tests/test_plan158_claude_cli_cost_parity.py` entre los "no clasificados". Los otros 6 archivos de
+   F7 paso 1 ya existen y ya están clasificados: no se tocan.
 
 3. **Señal operador-visible (manual, opcional, no bloqueante):** con el backend corriendo y al menos
    una ejecución NUEVA de `claude_code_cli` completada después de este fix, abrir el Centro de Costos
@@ -950,10 +1086,11 @@ desde tests unitarios — cerrar el ciclo con la señal que el operador ya puede
    parte del criterio binario de aceptación del plan (requiere una ejecución real del CLI, fuera del
    control determinista de un test).
 
-**Criterio de aceptación (binario) de F7:** los 7 comandos pytest del paso 1 en verde; el archivo de
-test nuevo aparece en `HARNESS_TEST_FILES`. **Trabajo del operador: ninguno** para los pasos 1-2 (los
-corre quien implementa); el paso 3 es opcional y sólo para confirmación visual del propio operador si
-lo desea.
+**Criterio de aceptación (binario) de F7:** los 7 comandos pytest del paso 1 en verde; la línea
+`tests/test_plan158_claude_cli_cost_parity.py` presente en `HARNESS_TEST_FILES` de
+`scripts/run_harness_tests.sh` y el meta-test del ratchet no lo reporta entre los "no clasificados"
+(paso 2). **Trabajo del operador: ninguno** para los pasos 1-2 (los corre quien implementa); el paso 3
+es opcional y sólo para confirmación visual del propio operador si lo desea.
 
 ## 5. Riesgos y mitigaciones
 
@@ -966,6 +1103,7 @@ lo desea.
 | R5 | Romper el contrato congelado de `extract_cost_row`/`cost_analytics.py` del Plan 142. | Cero líneas de `extract_cost_row`, `CostRow`, `summarize`, `burn`, `breakdown` se tocan — se agrega SOLO una función nueva al final del archivo (`backfill_claude_model_key`), verificado en F4. `test_cost_analytics_extract.py`/`test_cost_analytics_aggregate.py` deben seguir verdes sin modificación (F7 paso 1). |
 | R6 | Romper `test_harness_flags.py` al agregar 2 flags nuevas. | Patrón canónico triple coherente en los 3 puntos (F2 `config.py` + F5 `FlagSpec.default=True` + F5 `_CURATED_DEFAULTS_ON`), idéntico byte a byte al usado por Plan 142 para `STACKY_COST_CENTER_ENABLED` — ya verificado que ese patrón no rompe el ratchet `test_default_known_only_for_curated`. |
 | R7 | El operador corre `claude_code_cli` bajo un plan de suscripción (OAuth) donde el CLI directamente nunca reporta `total_cost_usd` ni siquiera parcialmente. | Cubierto: el fallback de estimación (`_maybe_estimate_cost` en `harness/telemetry.py:53-66`, ya existente, no se toca) calcula el costo desde tokens + modelo — que es exactamente lo que este plan garantiza que esté disponible (Defecto A). El resultado se clasifica `cost_kind="estimated"`, visible como tal en la UI (no se disfraza de "reportado"). |
+| R8 (v2) | Un test existente o futuro que invoque `create_app()` dispara el backfill de F6: escanea la DB de test y escribe marker files fuera del sandbox del test. | Gate `STACKY_TEST_MODE` al inicio de `_plan158_maybe_backfill_claude_model` (C4): bajo pytest (`tests/conftest.py` setea la variable) la función retorna ANTES de tocar DB, disco o marker — patrón idéntico al gate del daemon del Plan 146 (`app.py:524-530`), ya probado. |
 
 ## 6. Fuera de scope (explícito)
 
@@ -1019,8 +1157,8 @@ lo desea.
 
 ### Orden de implementación (numerado, por dependencia)
 
-1. **F0** — tests TDD (rojo por diseño, salvo el test ancla). Ningún archivo de producción tocado
-   todavía.
+1. **F0** — tests TDD (rojo por diseño, salvo los 2 tests ancla: baseline + matriz de paridad v2).
+   Ningún archivo de producción tocado todavía.
 2. **F1** — `_finalize_cost_telemetry()` en `claude_code_cli_runner.py` (función nueva, no wireada
    aún). Hace pasar los 4 tests unitarios de F0.
 3. **F2** — 2 flags en `config.py` (prerequisito de F3/F6).
@@ -1034,7 +1172,9 @@ lo desea.
 
 ### Definición de Hecho (DoD) global
 
-- [ ] F0: `test_plan158_claude_cli_cost_parity.py` existe y falla HOY (antes de F1) salvo el test ancla.
+- [ ] F0: `test_plan158_claude_cli_cost_parity.py` existe y falla HOY (antes de F1) salvo los 2 tests
+      ancla (`test_baseline_without_fix_is_unknown_documents_the_bug` y
+      `test_runtime_parity_matrix_no_unknown` — [ADICIÓN ARQUITECTO] v2), que están en verde desde F0.
 - [ ] F1: 4 tests unitarios de `_finalize_cost_telemetry` en verde.
 - [ ] F2: `config.STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED` y
       `config.STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED` legibles, ambos `True` por default.
@@ -1044,9 +1184,12 @@ lo desea.
       sólo agrega `backfill_claude_model_key` al final.
 - [ ] F5: `test_harness_flags.py` verde completo, incluyendo el test nuevo de las 2 flags de Plan 158.
 - [ ] F6: log de arranque confirma el backfill corriendo una vez; marker file presente; segundo
-      arranque no repite el backfill.
+      arranque no repite el backfill; el gate `STACKY_TEST_MODE` está presente al inicio de la
+      función (v2/C4 — bajo pytest no corre nada).
 - [ ] F7: los 7 archivos de test listados corren en verde POR ARCHIVO (nunca la suite completa junta);
-      `test_plan158_claude_cli_cost_parity.py` registrado en `HARNESS_TEST_FILES`.
+      la línea `tests/test_plan158_claude_cli_cost_parity.py` registrada en `HARNESS_TEST_FILES` de
+      `scripts/run_harness_tests.sh` (v2/C3 — path exacto) y el meta-test del ratchet no la reporta
+      entre los "no clasificados".
 - [ ] Guardarraíles: cero cambios en `extract_cost_row`/`CostRow`/endpoints `/cost-summary|burn|breakdown`
       (Plan 142 intacto); cero cambios en `copilot_bridge.py`/`agent_runner.py`/`agents/base.py`
       (github_copilot ya tenía paridad, verificado §2.4); cero cambios de frontend; ambas flags nuevas

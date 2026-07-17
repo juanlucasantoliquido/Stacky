@@ -431,12 +431,24 @@ HARNESS_TEST_FILES=(
   tests/test_plan127_doctor_context.py
   tests/test_plan127_devops_doctor_local.py
   tests/test_plan127_ci_explain_local.py
+  # — Plan 130 — Gate determinista de integridad de código pre-publicación —
+  tests/test_plan130_code_integrity_flag.py
+  tests/test_plan130_code_integrity_service.py
+  tests/test_plan130_code_integrity_endpoint_cli.py
 )
 
 pass=0
 fail=0
 missing=0
 declare -a failed_files=()
+
+# Plan 130 [ADICION ARQUITECTO] — chequeo informativo de integridad de código.
+# NO cambia pass/fail/exit: si un SyntaxError en un módulo compartido rompe la
+# COLECCIÓN de pytest en decenas de archivos del arnés a la vez, esto señala la
+# causa raíz real (file:line) en segundos, antes del loop principal.
+echo "== Plan 130: integridad de codigo (informativo) =="
+"$PYTHON" scripts/check_code_integrity.py || true
+echo ""
 
 for f in "${HARNESS_TEST_FILES[@]}"; do
   if [[ ! -f "$f" ]]; then

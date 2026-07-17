@@ -18,6 +18,7 @@ param(
     [switch]$SkipInstallerExe,
     [switch]$RequireInstallerExe,
     [switch]$SkipSmokeTest,
+    [switch]$SkipCodeIntegrity,
     [switch]$ExportConfig,
     [switch]$NoPause
 )
@@ -371,6 +372,28 @@ try {
     }
 
     Write-OK "Version a generar: $releaseVersion"
+
+    if (-not $SkipCodeIntegrity) {
+        Write-Step "Verificando integridad del codigo backend (sintaxis + imports)"
+        $backendDir = Join-Path $appRoot "backend"
+        $ciPython = Join-Path $backendDir ".venv\Scripts\python.exe"
+        if (-not (Test-Path $ciPython)) { $ciPython = "python" }
+        $ciExit = 2
+        try {
+            & $ciPython (Join-Path $backendDir "scripts\check_code_integrity.py")
+            $ciExit = $LASTEXITCODE
+        } catch {
+            $ciExit = 2
+        }
+        if ($ciExit -eq 1) {
+            throw "Integridad de codigo FALLO: hay errores de sintaxis o imports rotos (detalle arriba). Corregilos antes de publicar o usa -SkipCodeIntegrity."
+        }
+        if ($ciExit -eq 2) {
+            Write-Warn "El verificador de integridad no pudo correr; se continua (usa -SkipCodeIntegrity para silenciar)."
+        } else {
+            Write-OK "Codigo backend sin errores de sintaxis ni imports rotos"
+        }
+    }
 
     if (-not $SkipDependencyInstall) {
         Write-Step "Preparando dependencias de build"

@@ -647,6 +647,7 @@ _CURATED_DEFAULTS_ON = {
     # (directiva explícita "HACELO DEFAULT ON"; HITL on-demand, cero costo pasivo) ──
     "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",
     "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",
+    "STACKY_CODE_INTEGRITY_ENABLED",  # Plan 130 — default ON (operador 2026-07-13)
 }
 
 

@@ -386,10 +386,22 @@ $HarnessTestFiles = @(
   "tests/test_plan127_doctor_context.py"
   "tests/test_plan127_devops_doctor_local.py"
   "tests/test_plan127_ci_explain_local.py"
+  # Plan 130 - Gate deterministico de integridad de codigo pre-publicacion
+  "tests/test_plan130_code_integrity_flag.py"
+  "tests/test_plan130_code_integrity_service.py"
+  "tests/test_plan130_code_integrity_endpoint_cli.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0
 $failed = @()
+
+# Plan 130 [ADICION ARQUITECTO] - chequeo informativo de integridad de codigo.
+# NO cambia $pass/$fail/exit: si un SyntaxError en un modulo compartido rompe
+# la COLECCION de pytest en decenas de archivos del arnes a la vez, esto senala
+# la causa raiz real (file:line) en segundos, antes del loop principal.
+Write-Host "== Plan 130: integridad de codigo (informativo) =="
+& $python "scripts\check_code_integrity.py"
+Write-Host ""
 
 foreach ($f in $HarnessTestFiles) {
   if (-not (Test-Path $f)) {

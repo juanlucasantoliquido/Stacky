@@ -2676,6 +2676,15 @@ export const OperationalHealth = {
     api.get<OperationalHealthReport>("/api/diag/operational-health"),
 };
 
+// ── Plan 130 — Verificador de integridad de código ────────────────────────────
+export const CodeIntegrity = {
+  get: () =>
+    fetch("/api/diag/code-integrity").then((r) => {
+      if (!r.ok) throw new Error(`code integrity ${r.status}`);
+      return r.json();
+    }),
+};
+
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
 export const Health = {
   get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }> =>

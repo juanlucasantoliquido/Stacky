@@ -304,6 +304,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_GITLAB_DEEP_LINKS_ENABLED",     # Plan 75 — deep links GitLab clickeables
         "STACKY_ADO_PREWARM_ENABLED",           # I0.3 — prewarm caché ADO (inerte sin TTL>0)
         "STACKY_DB_COMPARE_ENABLED",            # Plan 122 — comparador de BD entre ambientes (master, default OFF)
+        "STACKY_CODE_INTEGRITY_ENABLED",        # Plan 130 — gate determinista sintaxis+imports (card Diagnóstico)
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -3203,6 +3204,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 129 — La paleta de comandos busca también ejecuciones, documentos, servidores DevOps y flags vía /api/search/global (local, sin IA). OFF = paleta actual sin cambios.",
         group="global",
         # SIN default= (no curada en _CURATED_DEFAULTS_ON; el default efectivo OFF vive en config.py — gotcha Plan 63/81).
+    ),
+    FlagSpec(
+        key="STACKY_CODE_INTEGRITY_ENABLED",
+        type="bool",
+        label="Verificador de integridad de código",
+        description=(
+            "Gate determinista pre-publicación: sintaxis (ast.parse) e imports de "
+            "primera parte de todo el backend, en segundos, sin ejecutar código y sin IA. "
+            "Expone GET /api/diag/code-integrity y la card en Diagnóstico."
+        ),
+        group="global",
+        default=True,  # Default ON (activado 2026-07-13, decisión explícita del operador — patrón triple Plan 127 §3.6)
     ),
 )
 

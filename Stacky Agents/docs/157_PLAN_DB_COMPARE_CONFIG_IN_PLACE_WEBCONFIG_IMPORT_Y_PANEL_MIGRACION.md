@@ -1,6 +1,14 @@
 # Plan 157 — Comparador de BD: configuración de ambientes en contexto, import automático desde `web.config` (agente local) y Panel de Migración siempre visible
 
-**Estado:** PROPUESTO (v1, 2026-07-17, autor `StackyArchitectaUltraEficientCode`)
+**Estado:** CRITICADO-Y-MEJORADO (v2, 2026-07-17, juez `StackyArchitectaUltraEficientCode`). v1 → v2: APROBADO-CON-CAMBIOS. Todas las citas `archivo:línea` del plan fueron **re-verificadas contra el árbol el 2026-07-17** y son correctas (ninguna drifteada). v2 endurece 4 puntos IMPORTANTES + agrega un guardarraíl de seguridad nuevo.
+
+**CHANGELOG v1→v2:**
+- **C1 (F1, ambigüedad Oracle):** `_infer_engine` para Oracle reescrito a reglas 100% literales (nada de "parece TNS/EZConnect"). Ver F1.
+- **C2 (F2, seguridad — lectura de archivo arbitrario):** el modo `path` ya NO lee cualquier `.xml`/`.config` del disco: se restringe por allowlist de raíces (`app_root()`, `projects_dir()`, `data_dir()`) vía prefijo de `realpath`; se prefiere el modo `content` (FileReader del browser). Ver F2 §Lectura segura.
+- **C3 (F2, seguridad — fuga de secreto en cache):** `sweep_expired` ahora se INVOCA (barrido lazy al inicio de cada import/confirm) + cap de tamaño del cache; el password ya no queda residente indefinidamente si el operador parsea y no confirma. Ver F2.
+- **C4 (F2, correctitud):** dispatch XML-vs-datasource literal (`raw.lstrip().startswith("<")`); `pop_parsed(import_id, index)` descarta SOLO ese índice (permite importar 2+ ambientes del mismo `web.config`). Ver F2.
+- **C5/C6 (MENORES):** venv literal único en comandos; `reloadEnvironments` se dispara tras confirm (F5); nota de fixture ≥4 chars para el detector de egreso (F3).
+- **[ADICIÓN ARQUITECTO]** (F2/F3): **auto-chequeo de egreso fail-closed** en TODA respuesta de import/confirm — antes de devolver el body, se pasa el JSON serializado por `egress_policies.detect_classes`; si detecta clase `secrets`, el endpoint aborta con 500 y loguea alerta enmascarada en vez de filtrar. Convierte el invariante "el password nunca sale en la respuesta" de promesa a **gate ejecutable en runtime**. Ver F2 y test nuevo en F3.
 **Serie previa:** 122 (núcleo/ambientes) → 123 (motor diff) → 124 (UI inmersiva) → 125 (scripts + backups) → 126 (paridad de datos). **TODA la serie 122-126 está IMPLEMENTADA en `main`.** Este plan es la **capa de UX/configuración** encima de ese comparador; NO reimplementa nada de la serie.
 **Dependencias:** serie 122-126 IMPLEMENTADA (verificado en `main`: `backend/services/dbcompare_registry.py`, `backend/api/db_compare.py`, `frontend/src/components/dbcompare/DbComparePage.tsx` y hermanos existen). Master `STACKY_DB_COMPARE_ENABLED` ya está ON por default (`backend/config.py:119-121`).
 **Ortogonal a:** Plan 74 (Migrador ADO→GitLab — es OTRA cosa, ver Glosario y F6), Planes 116/119/120/121.
@@ -54,6 +62,7 @@ Este plan cierra esas 4 brechas SIN tocar el motor de comparación:
    - (e) **Parseo 100% local, sin egreso**: el parser es una función pura de stdlib (`xml.etree.ElementTree` + regex), **sin LLM y sin red**. Ninguna credencial se envía a ningún servicio externo. (Esto es más seguro que usar un modelo: la credencial jamás toca un prompt.)
 3. **Config del operador SIEMPRE por UI (regla dura de la casa).** Las 3 flags nuevas se registran en `_CATEGORY_KEYS` bajo la categoría `comparador_bd` (ya existe, `services/harness_flags.py:106,314`) → aparecen y se togglean desde el panel de flags del arnés. Nada es "solo env var".
 4. **Cero trabajo extra al operador / opt-in default ON.** Las 3 flags nacen **default ON** (mejoras de UX bajo un master —`STACKY_DB_COMPARE_ENABLED`— que el operador ya activó). Ninguna de las 4 excepciones duras aplica: no bypassean revisión humana (el operador confirma cada import), no son destructivas (crear un registro de ambiente es reversible con "Eliminar", `EnvironmentsPanel.tsx:57`), no requieren prerequisito no garantizado (el parser usa solo stdlib; si `keyring` falta ya hay degradación 503 existente), y no reducen seguridad por default (la reducen a cero: menos transcripción manual = menos exposición). Backward-compatible al 100%.
+   - **Nota de rigor (C7 v2):** `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` es la única que expone un endpoint que lee del FS. Su default ON es correcto SOLO porque (i) no lee nada sin acción explícita del operador (HITL), (ii) el modo `path` está restringido por allowlist de raíces (C2/F2) y se prefiere `content`, y (iii) el self-check de egreso fail-closed (ADICIÓN v2) protege la respuesta. Si por cualquier motivo C2 o la ADICIÓN NO se implementan, esta flag DEBE nacer OFF (excepción dura 4: reduce seguridad por default). Con ambas implementadas, default ON es seguro.
 5. **Paridad de 3 runtimes.** Es una feature de PANEL (backend Flask + React). El "agente local" es un módulo Python del backend que corre en el proceso local del backend — **no depende de Codex/Claude/Copilot**; funciona idéntico en los 3. Fallback declarado por fase.
 6. **No reinventar.** Reusar keyring, `mask_excerpt`, `egress_policies`, el registro de ambientes y los endpoints de scripts ya existentes.
 
@@ -137,7 +146,7 @@ Casos:
 - `test_las_tres_flags_categorizadas_en_comparador_bd` — las 3 están en `_CATEGORY_KEYS["comparador_bd"]`.
 Comando (venv del repo, por archivo):
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_ux_flags.py tests/test_harness_flags_requires.py tests/test_harness_flags.py -q
+cd "Stacky Agents/backend" && "./.venv/Scripts/python.exe" -m pytest tests/test_plan157_dbcompare_ux_flags.py tests/test_harness_flags_requires.py tests/test_harness_flags.py -q
 ```
 (usar el intérprete real del repo: `backend/.venv` según memoria de entorno; si no existe, `../venv`.)
 
@@ -172,8 +181,15 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 - **Username:** `user id` o `uid` o `user`.
 - **Password:** `password` o `pwd` → va al segundo elemento de la tupla; `has_password = bool(valor no vacío)`.
 - **Integrated Security:** `integrated security` in (`sspi`, `true`, `yes`) → `integrated_security = True`, `has_password = False` aunque no haya user/pass.
-- **Engine (`_infer_engine`):** si `provider_name` (lower) contiene `oracle` → `"oracle"`; si contiene `sqlclient` o `sqlserver` o `system.data.sqlclient` → `"sqlserver"`. Si no hay provider: si la conn string tiene `initial catalog` o `integrated security` → `"sqlserver"`; si `data source` parece TNS/EZConnect (`/` o `:` con `service`) → `"oracle"`; si no se puede decidir → `""` (el operador elige en la UI).
-- **Oracle host/port/db:** de `data source` EZConnect `host:port/service` → host, port, database=service; si es TNS alias (sin `:`), `host = alias`, `port = None`, `database = ""`.
+- **Engine (`_infer_engine`, reglas LITERALES en orden — C1 v2):**
+  1. `pn = provider_name.lower()`. Si `"oracle"` in `pn` → `"oracle"`. Si (`"sqlclient"` in `pn`) o (`"sqlserver"` in `pn`) → `"sqlserver"`.
+  2. Si no hubo match por provider, mirar las keys ya parseadas (`_split_kv`):
+     - Si existe la key `initial catalog` **o** la key `integrated security` → `"sqlserver"`.
+     - Sino, tomar `ds = keys.get("data source", "")`. **Regla Oracle literal (sin "parece"):** si `ds` contiene el carácter `/` (EZConnect `host:port/service` o `host/service` siempre lleva `/`) **o** `ds` contiene la subcadena `(description=` (formato TNS descriptor, siempre empieza así, case-insensitive) → `"oracle"`.
+     - En cualquier otro caso → `""` (el operador elige engine en la UI; NO adivinar).
+- **Oracle host/port/db (LITERAL — C1 v2):** trabajar sobre `ds = keys.get("data source", "")`:
+  - Si `ds` contiene `/`: separar en `left, service = ds.split("/", 1)`; `database = service.strip()`. Si `left` contiene `:` → `host, port_str = left.rsplit(":", 1)`, `port = int(port_str)` si es dígito, sino `None`; si no contiene `:` → `host = left.strip()`, `port = None`.
+  - Si `ds` NO contiene `/` (TNS alias u otro): `host = ds.strip()`, `port = None`, `database = ""`.
 - **`masked_raw`:** reconstruir la conn string original reemplazando el value de cualquier key en `SENSITIVE_KEYS` por `****`. Este es el ÚNICO string que puede ir a logs/UI.
 
 **Regla de seguridad DURA en este módulo:** el módulo NO importa `logging` para loguear values; NO hace `requests`/`urllib`/socket; NO importa nada de LLM. La password en claro existe solo como valor de retorno de las funciones, nunca como atributo de `ParsedConnection` ni en `masked_raw`.
@@ -188,7 +204,7 @@ Casos (fixtures string inline, sin archivos):
 - `test_password_nunca_en_parsedconnection` — para todos los casos: serializar `ParsedConnection` a dict y afirmar que ningún value contiene la password en claro.
 Comando:
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_webconfig_parse.py -q
+cd "Stacky Agents/backend" && "./.venv/Scripts/python.exe" -m pytest tests/test_plan157_dbcompare_webconfig_parse.py -q
 ```
 **Criterio BINARIO:** todos los casos pasan; en especial `test_password_nunca_en_parsedconnection` y `masked_raw` sin secreto.
 **Flag:** `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` (el módulo es puro; la fase se prueba sin flag). 
@@ -206,27 +222,47 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 **Archivo a editar (cache transitoria):** `backend/services/dbcompare_config_import.py` (agregar cache en memoria).
 
 **Símbolos EXACTOS:**
-- En `dbcompare_config_import.py`: `_IMPORT_CACHE: dict[str, dict]` (in-memory, protegido por `threading.Lock`), `def stash_parsed(conns_with_pw) -> str` (genera `import_id` uuid4, guarda `[(ParsedConnection, password)]` con timestamp), `def pop_parsed(import_id, index) -> tuple[ParsedConnection, str | None]` (recupera y descarta), `def sweep_expired(ttl_sec=600)` (borra entradas viejas). El password vive SOLO en este cache de proceso, con TTL, nunca en disco.
+- En `dbcompare_config_import.py`: `_IMPORT_CACHE: dict[str, dict]` (in-memory, protegido por `threading.Lock`). El password vive SOLO en este cache de proceso, con TTL, nunca en disco. Funciones:
+  - `def stash_parsed(conns_with_pw) -> str` — llama `sweep_expired()` PRIMERO (barrido lazy, C3 v2); si tras el barrido `len(_IMPORT_CACHE) >= _MAX_IMPORTS` (const `_MAX_IMPORTS = 32`) descarta la entrada más vieja (cap anti-crecimiento, C3 v2); genera `import_id` uuid4; guarda `{"ts": time.monotonic(), "items": [(ParsedConnection, password), ...]}`.
+  - `def pop_parsed(import_id, index) -> tuple[ParsedConnection, str | None]` — llama `sweep_expired()` primero; recupera `items[index]` y lo **reemplaza por un tombstone** `(None, None)` DENTRO de la entrada (descarta SOLO ese índice, C4 v2 — permite confirmar 2+ conexiones del mismo `web.config`); si TODOS los índices quedaron consumidos, borra la entrada entera; si `import_id` no existe o el índice ya fue consumido → devuelve `(None, None)` (el endpoint responde 404).
+  - `def sweep_expired(ttl_sec=600)` — borra toda entrada con `time.monotonic() - ts > ttl_sec`. Se invoca lazy desde `stash_parsed`/`pop_parsed` (NO requiere thread de background — C3 v2).
 - En `api/db_compare.py`:
   - `POST /environments/import-config` → `import_config_route()`. Body: `{"path": "<ruta local>"}` **o** `{"content": "<texto xml/datasource>"}`. Gate `_require_enabled()` (`api/db_compare.py:27`) **y** nueva `_require_webconfig_import_enabled()` (403 si `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` OFF). Devuelve `{"import_id": str, "connections": [preview...]}` donde cada `preview` = `ParsedConnection` a dict **sin password** + `index`.
   - `POST /environments/import-config/confirm` → `confirm_import_route()`. Body: `{"import_id": str, "index": int, "alias": str, "overrides": {...}}`. Recupera del cache, hace `upsert_environment(...)` (`services/dbcompare_registry.py`) con los campos, y si había password llama `set_password(alias, password)` (`dbcompare_registry.py:179`). Devuelve `{"ok": true, "alias": ...}`. NUNCA devuelve la password.
 
-**Lectura de archivo local segura (reglas DURAS, en `import_config_route`):**
-- Si viene `path`: `os.path.realpath`, rechazar si no existe (404), si es directorio (400), si tamaño > `1_000_000` bytes (413), o si extensión no ∈ (`.config`, `.xml`) (415). El backend corre **local** (mono-operador) → leer el archivo del FS del operador es local, sin egreso.
-- Si viene `content`: cap de `1_000_000` chars.
-- **Nunca** loguear `path` con su contenido ni el `content`; a lo sumo `logger.info("import-config: %d conexiones detectadas", n)` (solo el conteo).
+**Lectura de archivo local segura (reglas DURAS, en `import_config_route` — C2 v2):**
+- **Modo preferido = `content`** (el frontend F4 modo B usa `FileReader` y manda `content`, así el backend NUNCA toca el FS por un path del cliente). `content`: cap de `1_000_000` chars.
+- Modo `path` (opcional, solo para archivos ya locales del operador): validaciones EN ORDEN, todas obligatorias:
+  1. `rp = os.path.realpath(path)`.
+  2. **Allowlist de raíces (anti path-traversal / anti lectura arbitraria):** `rp` DEBE empezar (prefijo de ruta, comparando con `os.path.normcase`) por alguna de: `runtime_paths.app_root()`, `runtime_paths.projects_dir()`, `runtime_paths.data_dir()` (importar de `backend/runtime_paths.py`, funciones existentes citadas en `CLAUDE.md`). Si no cae bajo ninguna raíz → **403** `{"error":"path_fuera_de_allowlist"}`. (Motivo: el endpoint HTTP no debe poder leer CUALQUIER `.xml`/`.config` del disco; se restringe al workspace del producto. Aunque el backend es mono-operador, si bindea a una interfaz no-loopback un cliente LAN no debe poder enumerar configs del disco.)
+  3. Rechazar: no existe → 404; es directorio → 400; tamaño > `1_000_000` bytes → 413; extensión (lower) no ∈ (`.config`, `.xml`) → 415.
+- **Nunca** loguear `path` completo con su contenido ni el `content`; a lo sumo `logger.info("import-config: %d conexiones detectadas", n)` (solo el conteo).
 
-**Pseudocódigo `import_config_route`:**
+**Pseudocódigo `import_config_route` (dispatch y self-check LITERALES — C4 + ADICIÓN v2):**
 ```
 enabled? no -> 403
 body = request.get_json()
-raw = leer_de_path_o_content(body)   # con las validaciones de arriba
+raw = leer_de_path_o_content(body)   # con las validaciones/allowlist de arriba
+parece_xml = raw.lstrip().startswith("<")          # C4 v2: literal, sin heurística
 conns = parse_webconfig(raw) if parece_xml else [parse_connection_string(raw)]
 import_id = stash_parsed(conns)
 previews = [ {**asdict(pc), "index": i}  # asdict NO tiene password (F1 garantiza)
             for i,(pc,_pw) in enumerate(conns) ]
-return {"import_id": import_id, "connections": previews}
+resp = {"import_id": import_id, "connections": previews}
+_egress_selfcheck(resp)              # ADICIÓN v2 (ver abajo): 500 fail-closed si detecta secrets
+return resp
 ```
+
+**[ADICIÓN ARQUITECTO] `_egress_selfcheck(payload: dict) -> None` (helper en `api/db_compare.py`, aplicado en import Y confirm):**
+```
+import json
+from services import egress_policies
+blob = json.dumps(payload, ensure_ascii=False)
+if "secrets" in egress_policies.detect_classes(blob):   # detect_classes: egress_policies.py:96
+    logger.error("import-config: self-check de egreso BLOQUEÓ una respuesta con posible secreto")  # sin el valor
+    abort(500)   # fail-closed: preferimos romper a filtrar
+```
+Convierte el invariante "el password nunca viaja al browser" en un **gate ejecutable**: si un bug futuro dejara colar un secreto en el preview/confirm, el endpoint corta con 500 en vez de filtrar. Costo: una serialización + un regex-scan por respuesta (payloads chicos). Reusa `egress_policies` (no reinventa).
 
 **Test PRIMERO (TDD):** `backend/tests/test_plan157_dbcompare_import_api.py` (usar `app.test_client()`, monkeypatch de `keyring` como los tests plan122)
 Casos:
@@ -238,7 +274,7 @@ Casos:
 - `test_logs_no_contienen_password` — capturar logs (`caplog`) durante import+confirm y afirmar que la password en claro no aparece.
 Comando:
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_import_api.py -q
+cd "Stacky Agents/backend" && "./.venv/Scripts/python.exe" -m pytest tests/test_plan157_dbcompare_import_api.py -q
 ```
 **Criterio BINARIO:** todos pasan; `test_import_content_devuelve_previews_sin_password`, `test_confirm_crea_ambiente_y_setea_keyring` y `test_logs_no_contienen_password` son bloqueantes.
 **Flag:** `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` (default ON). Con OFF, los 2 endpoints devuelven 403 y no se registran en la UI.
@@ -264,13 +300,14 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 - (b) **Enmascarar en UI:** `test_b_masked_raw_sin_secreto` (reusa F1) + verificación en F4 (input `type="password"`, criterio de F4).
 - (c) **Sin texto plano en disco/respuesta:** `test_c_environments_json_sin_password` — tras confirm, leer `data_dir()/db_compare/environments.json` y afirmar que no contiene la password ni la key `password` (el `_save` de `dbcompare_registry.py:65-71` ya lo bloquea; el test lo certifica end-to-end) + `test_c_respuesta_confirm_sin_password`.
 - (d) **Advertencia explícita:** cubierto por F4 (banner presente); acá se documenta el texto exacto del banner (§3.2.d).
-- (e) **Parseo local sin egreso:** `test_e_parser_no_hace_red` — monkeypatch de `socket.socket` / `urllib.request.urlopen` para que lancen si se invocan, y correr `parse_webconfig` sobre un fixture grande → no se invoca ninguna → sin excepción; y `test_e_detector_egreso_marca_connstring` — `egress_policies.detect_classes("...Password=x;...")` incluye `"secrets"`.
+- (e) **Parseo local sin egreso:** `test_e_parser_no_hace_red` — monkeypatch de `socket.socket` / `urllib.request.urlopen` para que lancen si se invocan, y correr `parse_webconfig` sobre un fixture grande → no se invoca ninguna → sin excepción; y `test_e_detector_egreso_marca_connstring` — `egress_policies.detect_classes("...Password=Secr3t;...")` incluye `"secrets"`. **Gotcha de fixture (C5 v2):** el regex de `egress_policies.py:89` exige `\S{4,}` tras `password=`; usar un password de **≥4 caracteres** en el fixture (`Secr3t`, NO `p`) o el test falla por diseño del detector.
+- **(ADICIÓN v2) Self-check de egreso en la respuesta:** `test_f_import_response_pasa_selfcheck` — con un `content` que SÍ trae password, el body de `import` y `confirm` pasa `_egress_selfcheck` sin abortar (previews enmascarados ⇒ no matchea `secrets`); y `test_f_selfcheck_aborta_si_secreto_colara` — monkeypatch que fuerza un preview con `password` en claro ⇒ el endpoint responde **500** (fail-closed), y la respuesta NO contiene el secreto.
 
 Comando:
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_secret_guardrails.py -q
+cd "Stacky Agents/backend" && "./.venv/Scripts/python.exe" -m pytest tests/test_plan157_dbcompare_secret_guardrails.py -q
 ```
-**Criterio BINARIO:** los 6 tests (a,c×2,e×2 + reuso b) pasan.
+**Criterio BINARIO:** los 8 tests (a, c×2, e×2, reuso b, + test_f×2 del self-check ADICIÓN v2) pasan.
 **Flag:** protegida por `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` (los guardarraíles aplican cuando el import está activo).
 **Impacto por runtime:** idéntico. Fallback: N/A (invariantes de seguridad, no degradan).
 **Trabajo del operador:** ninguno.
@@ -323,6 +360,7 @@ cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/__tests__
 **Cambios exactos:**
 - Mover el render de `<EnvironmentsPanel .../>` (hoy en `DbComparePage.tsx:200`, al fondo) a **arriba**, justo debajo del header/driverWarning (antes de `RunsTimeline`), envuelto en un `<details open={environments.length===0}>` o sección colapsable "Bases de datos configuradas" para no molestar cuando ya hay ambientes.
 - Estado vacío: si `environments.length === 0`, mostrar un CTA prominente "➕ Agregar una base de datos para empezar" que abre el `EnvSetupWizard` (F4). El `CompareWizard` (`CompareWizard.tsx`) ya recibe `environments`; si hay <2, mostrar inline "Necesitás al menos 2 ambientes para comparar — agregá otro" con botón al wizard.
+- **Refresco tras alta (C6 v2, obligatorio):** `DbComparePage` mantiene su propio estado `environments` (`DbComparePage.tsx:31`) y `reloadEnvironments()` (`:47`), SEPARADO del estado interno de `EnvironmentsPanel`. El `EnvSetupWizard` (F4) DEBE recibir una prop `onCreated={reloadEnvironments}` y llamarla tras `confirmImport`/`upsertEnvironment` OK; sin esto, el CTA de estado vacío y el `CompareWizard` quedan con la lista vieja. Pasar el mismo callback al `EnvironmentsPanel` montado en modo Manual.
 - Gate: todo el bloque nuevo bajo `STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED`. Con OFF, la página queda EXACTAMENTE como en `main` (EnvironmentsPanel al fondo).
 
 **Test PRIMERO (TDD, lógica pura):** `frontend/src/components/dbcompare/__tests__/envPlacement.test.ts` (nuevo helper `envPlacementLogic.ts` con `shouldShowEmptyCta(envs, flagOn): boolean` y `shouldNudgeAddMore(envs): boolean`).
@@ -385,7 +423,8 @@ cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/__tests__
 | 2 | Parser falla con un `web.config` real raro | `parse_webconfig` degrada a `[]` sin crashear; modo Manual siempre disponible; el operador ve y edita el preview antes de confirmar (HITL). |
 | 3 | Colisión conceptual con el tab "Migrador" (ADO→GitLab) | Nombre distinto ("Migración de BD"), Glosario explícito, no se toca `MigratorPage.tsx` ni su flag. |
 | 4 | `keyring` no instalado | Degradación 503 existente (`api/db_compare.py:120-127`); ambiente se crea, password se setea manual luego. |
-| 5 | Cache de password en memoria con TTL retiene secreto | `pop_parsed` descarta al confirmar; `sweep_expired` (TTL 600s); proceso local mono-operador; nunca persiste a disco. |
+| 5 | Cache de password en memoria retiene secreto si el operador parsea y no confirma | **C3 v2:** `sweep_expired` se INVOCA lazy en cada `stash_parsed`/`pop_parsed` (TTL 600s) + cap `_MAX_IMPORTS=32`; `pop_parsed` deja tombstone por índice; proceso local mono-operador; nunca persiste a disco. |
+| 8 | Lectura de archivo arbitrario del FS vía endpoint (`path`) | **C2 v2:** allowlist de raíces (`app_root`/`projects_dir`/`data_dir`) por prefijo de `realpath`; modo `content` (FileReader) preferido; extensión/tamaño/tipo validados; self-check de egreso fail-closed en la respuesta. |
 | 6 | Regresión silenciosa del comparador (sus tests no estaban en el ratchet) | F0/F7 agregan los 4 tests nuevos a `HARNESS_TEST_FILES`. |
 | 7 | Datos productivos con PII en diff de datos (Plan 126) | Fuera de scope de este plan; se deja anotado para un plan futuro de masking de PII en el export de datos. |
 

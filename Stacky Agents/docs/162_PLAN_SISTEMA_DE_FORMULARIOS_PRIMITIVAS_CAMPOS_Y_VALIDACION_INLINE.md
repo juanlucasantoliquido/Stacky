@@ -1,6 +1,18 @@
 # Plan 162 — Sistema de formularios: primitivas de campos, validación inline y estados de envío
 
-**Estado: PROPUESTO v1 — 2026-07-17**
+**Estado: CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-17 (v1 -> v2)**
+
+## Changelog v1 -> v2 (crítica adversarial)
+
+- **C1 (IMPORTANTE, resuelto):** F4 §3 decía "migrar cualquier otro control crudo restante" — lista ABIERTA que violaba el propio G10. Verificado por grep 2026-07-17: `SettingsPage.tsx` tiene EXACTAMENTE 5 controles crudos (:79, :266, :274, :279, :289), todos ya enumerados; la lista queda CERRADA.
+- **C2 (IMPORTANTE, resuelto):** F3 dejaba al implementador decidir si crear `validate` en `EditProjectModal`. Verificado: el submit (`:282-297`) valida SOLO `workspace_root` (`:284-285`) ⇒ `validate` SE CREA con exactamente esa key; único Field con `error`.
+- **C3 (IMPORTANTE, resuelto):** pasar `required` a Field agrega un ` *` visible ⇒ rompería G1 (byte-idéntico). PROHIBIDO `required` en las migraciones F2-F4 (regla (g) nueva de F2 §6); la prop queda para superficies nuevas futuras.
+- **C4 (MENOR, resuelto):** el mensaje real de `NewProjectModal.tsx:203` tiene un typo preexistente ("Selección un proyecto de Mantis"); v1 lo "traducía 1:1" sin notarlo. v2 CONGELA el texto corregido "Seleccioná un proyecto de Mantis" como ÚNICO mensaje que cambia (fix intencional declarado).
+- **C5 (MENOR, resuelto):** el contrato documentado de `.u-pending` (`theme.css:376-377`) pide combinar con `aria-busy="true"`; los 3 botones de submit (F2/F3/F4) lo agregan (`aria-busy={<pending> || undefined}`).
+- **C6 (MENOR, resuelto):** K4 solo daba el comando `grep` (Git Bash); se agrega el equivalente PowerShell.
+- **C7 (MENOR, resuelto):** el criterio de F0 "~70 entradas" no era binario; ahora es piso binario "≥ 60".
+- **C8 (MENOR, resuelto):** riesgo nuevo R9 — el merge 3-way silencioso puede duplicar los exports agregados al final del barrel si otra rama también apendea (gotcha real de la casa); mitigación tsc+grep post-merge.
+- **[ADICIÓN ARQUITECTO]:** foco automático al PRIMER campo con error al fallar el submit — helper puro `firstErrorFieldId` en `Field.tsx` (con test), ids DOM estables `np-*`/`ep-*` y orden visual congelado. Accesibilidad de teclado real, cero trabajo del operador, idéntico en los 3 runtimes.
 
 > Nota de numeración: este plan iba a ser el 160, pero `160_PLAN_RESOLUTOR_INCIDENCIAS_REPARACION_HTML_Y_PEGADO_IMAGENES.md` ya existe (loop paralelo) y el 161 está reservado para el plan hermano de esta misma corrida. Toda referencia interna usa **plan 162**.
 
@@ -15,7 +27,7 @@ Dotar a Stacky de un **sistema de formularios de primera clase**: 5 primitivas n
 | K1 | Las 5 primitivas existen, con `.module.css` par, y el barrel las exporta | `cd "Stacky Agents/frontend"` + `npx vitest run src/__tests__/formPrimitives.test.ts` | exit 0 |
 | K2 | Ratchet de formularios activo y deuda congelada por archivo | `npx vitest run src/__tests__/formDebtRatchet.test.ts` | exit 0 |
 | K3 | Los 3 archivos migrados tienen **0** controles crudos | abrir `src/__tests__/formDebtBaseline.json` | no existen las claves `components/NewProjectModal.tsx`, `components/EditProjectModal.tsx`, `pages/SettingsPage.tsx` |
-| K4 | `useOptimisticPending` pasa de 0 a ≥3 consumidores reales | `grep -rl "useOptimisticPending" "Stacky Agents/frontend/src" --include=*.tsx` | ≥ 3 archivos `.tsx` |
+| K4 | `useOptimisticPending` pasa de 0 a ≥3 consumidores reales | Git Bash: `grep -rl "useOptimisticPending" "Stacky Agents/frontend/src" --include=*.tsx` · PowerShell (C6): `(Get-ChildItem "Stacky Agents/frontend/src" -Recurse -Filter *.tsx | Select-String -List -Pattern "useOptimisticPending").Count` | ≥ 3 archivos `.tsx` |
 | K5 | Cero regresión de tipos ni de ratchets previos | `npx tsc --noEmit` + `npx vitest run src/__tests__/uiDebtRatchet.test.ts` + `npx vitest run src/__tests__/motionDebtRatchet.test.ts` | exit 0 los tres |
 | K6 | Look en reposo byte-idéntico: ningún `.module.css` de features tocado | `git diff --name-only` del trabajo del plan | ningún `*.module.css` fuera de `components/ui/` |
 
@@ -194,7 +206,7 @@ npx vitest run src/__tests__/formDebtRatchet.test.ts          # DEBE pasar
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación (binario):** los 3 comandos de vitest se comportan exactamente como se indica (rojo, regen, verde) y `tsc` exit 0. `formDebtBaseline.json` existe y contiene ~70 entradas con conteos > 0 (los números exactos los fija el REGEN; NO editarlo a mano).
+**Criterio de aceptación (binario):** los 3 comandos de vitest se comportan exactamente como se indica (rojo, regen, verde) y `tsc` exit 0. `formDebtBaseline.json` existe y contiene ≥ 60 entradas con conteos > 0 (piso binario, C7; los números exactos los fija el REGEN; NO editarlo a mano).
 
 **Flag:** sin flag — es un test, no toca runtime (precedente: 138 F0, 143 F2). **Runtimes:** N/A (tooling de test, idéntico en los 3; fallback N/A). **Trabajo del operador: ninguno.**
 
@@ -272,6 +284,13 @@ describe("formPrimitives (plan 162 F1)", () => {
     });
   });
 
+  it("firstErrorFieldId: primer error según orden DOM (ADICIÓN ARQUITECTO)", async () => {
+    const { firstErrorFieldId } = await import("../components/ui/Field");
+    expect(firstErrorFieldId("np", ["a", "b"], {})).toBeNull();
+    expect(firstErrorFieldId("np", ["a", "b"], { b: "x" })).toBe("np-b");
+    expect(firstErrorFieldId("np", ["a", "b"], { a: "x", b: "y" })).toBe("np-a");
+  });
+
   it("partKeys de controles: base e invalid", async () => {
     const { inputPartKeys } = await import("../components/ui/Input");
     const { selectPartKeys } = await import("../components/ui/Select");
@@ -347,6 +366,17 @@ export function fieldControlProps(id: string, hasError: boolean, hasHelp: boolea
   if (hasError) out["aria-invalid"] = true;
   if (describedBy) out["aria-describedby"] = describedBy;
   return out;
+}
+
+/** [ADICIÓN ARQUITECTO] Devuelve el id DOM del primer campo con error según el
+    orden visual declarado, o null. Pura, testeable sin React ni DOM. */
+export function firstErrorFieldId(
+  prefix: string,
+  domOrder: readonly string[],
+  errors: Record<string, string>,
+): string | null {
+  const k = domOrder.find((key) => key in errors);
+  return k ? `${prefix}-${k}` : null;
 }
 
 export interface FieldProps {
@@ -454,7 +484,7 @@ export default function Checkbox({ label, labelClassName, className, ...rest }: 
 
 ```ts
 // Plan 162 — primitivas de formulario (aditivo al contrato 138 §10.2).
-export { default as Field, fieldControlProps } from "./Field";
+export { default as Field, fieldControlProps, firstErrorFieldId } from "./Field";
 export type { FieldProps, FieldControlProps } from "./Field";
 export { default as Input, inputPartKeys } from "./Input";
 export type { InputProps } from "./Input";
@@ -497,7 +527,7 @@ npx tsc --noEmit
 
 1. Imports: agregar
    ```ts
-   import { Field, Input, Select, Checkbox } from "./ui";
+   import { Field, Input, Select, Checkbox, firstErrorFieldId } from "./ui";
    import useOptimisticPending from "../hooks/useOptimisticPending";
    ```
 2. Estado: agregar `const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});` y reemplazar `const [saving, setSaving] = useState(false);` (ancla: `NewProjectModal.tsx:40`) por
@@ -538,14 +568,23 @@ npx tsc --noEmit
      }
      return errs;
    }
+
+   // [ADICIÓN ARQUITECTO] Orden VISUAL del form (para foco-al-primer-error).
+   const NP_FIELD_DOM_ORDER = ["name", "workspace_root", "organization", "ado_project", "jira_url", "jira_key", "mantis_url", "mantis_project_id", "mantis_username", "mantis_token"] as const;
    ```
+   Nota (C4): el mensaje actual de `NewProjectModal.tsx:203` dice "Selección un proyecto de Mantis" (typo preexistente). Queda CONGELADO el texto corregido "Seleccioná un proyecto de Mantis" de la tabla de arriba: es el ÚNICO mensaje que cambia respecto del código actual (fix intencional de typo); los demás son byte-idénticos.
 5. `handleSubmit` reescrito (reemplaza el cuerpo completo de `NewProjectModal.tsx:190-226`):
    ```ts
    async function handleSubmit() {
      setError(null);
      const errs = validate(form);
      setFieldErrors(errs);
-     if (Object.keys(errs).length > 0) return;
+     if (Object.keys(errs).length > 0) {
+       // [ADICIÓN ARQUITECTO] foco al primer campo con error (ids de la regla (h)).
+       const fid = firstErrorFieldId("np", NP_FIELD_DOM_ORDER, errs);
+       if (fid) document.getElementById(fid)?.focus();
+       return;
+     }
      try {
        const result = await run(() => Projects.init(buildPayload()));
        if (result.ok) {
@@ -576,13 +615,14 @@ npx tsc --noEmit
      )}
    </Field>
    ```
-   Reglas cerradas del patrón: (a) el `className` de la feature se CONSERVA tal cual; (b) `labelClassName` = la clase que el label tenía (`styles.label` o `styles.labelSm`); (c) `error={fieldErrors.<key>}` SOLO en los campos con key en `validate` — los demás campos van sin `error` (Field sigue aportando `htmlFor`/`id`); (d) selects nativos (anclas `:434` "Versión API" y `:547` "Proyecto Mantis") ⇒ `Select` con las mismas `<option>` como children; (e) checkboxes envueltos en `styles.checkboxRow` (anclas `:449-456` y `:583-590`) ⇒ `Checkbox` con `labelClassName={styles.checkboxRow}` y `label` = el JSX interno existente sin modificar; (f) los inputs con botón "examinar" al lado (anclas `:266-284`, `:286-312`) conservan su div contenedor: Field envuelve label+div, el control dentro del div recibe `{...ctl}` vía la render-prop.
+   Reglas cerradas del patrón: (a) el `className` de la feature se CONSERVA tal cual; (b) `labelClassName` = la clase que el label tenía (`styles.label` o `styles.labelSm`); (c) `error={fieldErrors.<key>}` SOLO en los campos con key en `validate` — los demás campos van sin `error` (Field sigue aportando `htmlFor`/`id`); (d) selects nativos (anclas `:434` "Versión API" y `:547` "Proyecto Mantis") ⇒ `Select` con las mismas `<option>` como children; (e) checkboxes envueltos en `styles.checkboxRow` (anclas `:449-456` y `:583-590`) ⇒ `Checkbox` con `labelClassName={styles.checkboxRow}` y `label` = el JSX interno existente sin modificar; (f) los inputs con botón "examinar" al lado (anclas `:266-284`, `:286-312`) conservan su div contenedor: Field envuelve label+div, el control dentro del div recibe `{...ctl}` vía la render-prop; (g) PROHIBIDO pasar `required` a Field en las migraciones F2-F4 (C3): agregaría un ` *` visible y rompería G1 — la prop queda solo para superficies NUEVAS futuras; (h) [ADICIÓN ARQUITECTO] todo Field cuyo campo tiene key en `validate` pasa además `id={"np-" + <key>}` (ids DOM estables para el foco-al-primer-error; en F3 el prefijo es `"ep-"`), los Field sin key en `validate` no pasan `id` (usan el `useId()` default).
 7. Footer (ancla `:607-614`): los botones nativos NO se reemplazan por la primitiva Button (cambiaría el look — fuera de scope). Solo el botón de submit suma el feedback del 143:
    ```tsx
    <button
      className={`${styles.btnAccent} ${pendingClass}`.trim()}
      onClick={handleSubmit}
      disabled={saving}
+     aria-busy={saving || undefined}
    >
      {saving ? "Inicializando…" : "Crear e inicializar"}
    </button>
@@ -615,8 +655,8 @@ npx tsc --noEmit
 
 **Cambios (mismo procedimiento cerrado de F2, con estas anclas):**
 1. Imports y estado: ídem F2 §1-2. `saving` viene de `const [saving, setSaving] = useState(false);` (ancla `EditProjectModal.tsx:44`) ⇒ reemplazar por el hook. ATENCIÓN: `savingWorkflow` (ancla `:61`) es OTRO estado, de los workflows — NO tocarlo; el botón "Guardar workflow" (ancla `:721-724`) queda como está.
-2. Migrar TODOS los pares label+control, los 2 selects nativos (anclas `:573` y `:687`) y todo textarea/checkbox del archivo con las reglas (a)-(f) de F2 §6. La validación inline usa la MISMA técnica: extraer las condiciones que hoy setean `setError` de campo faltante en el submit de este modal a una `validate(...)` pura con los mismos mensajes; si este modal no valida campos antes del POST (solo errores de API), entonces `validate` no se crea y los Field van sin `error` — decisión determinista: crear `validate` SOLO si el submit actual contiene chequeos `if (!... .trim())` previos al llamado de API.
-3. Submit principal (anclas `:748-752`, botones `styles.btnGhost`/`styles.btnAccent` con `{saving ? "Guardando…" : "Guardar cambios"}`): mismo tratamiento que F2 §5 y §7 (`run(...)` + `pendingClass`). El backdrop con `shouldCloseOnBackdrop({ dirty, busy: saving })` (ancla `:304`, plan 136) sigue leyendo `saving` del hook sin cambios.
+2. Migrar TODOS los pares label+control, los 2 selects nativos (anclas `:573` y `:687`) y todo textarea/checkbox del archivo con las reglas (a)-(h) de F2 §6 (prefijo de ids: `"ep-"`). Validación inline RESUELTA (C2 — verificado 2026-07-17, sin decisión del implementador): el submit actual (`EditProjectModal.tsx:282-297`) valida SOLO el workspace root (ancla `if (!String(form.workspace_root ?? "").trim())`, `:284-285`). Se crea `validate` con EXACTAMENTE una key: `function validate(f: typeof form): Record<string, string> { const errs: Record<string, string> = {}; if (!String(f.workspace_root ?? "").trim()) errs.workspace_root = "Ingresá el workspace root"; return errs; }`. El ÚNICO Field con `error` es el de workspace root (`id="ep-workspace_root"`); todos los demás van sin `error`. Foco-al-primer-error: `firstErrorFieldId("ep", ["workspace_root"], errs)` con el mismo patrón de F2 §5.
+3. Submit principal (anclas `:748-752`, botones `styles.btnGhost`/`styles.btnAccent` con `{saving ? "Guardando…" : "Guardar cambios"}`): mismo tratamiento que F2 §5 y §7 (`run(...)` + `pendingClass` + `aria-busy={saving || undefined}`, C5). El backdrop con `shouldCloseOnBackdrop({ dirty, busy: saving })` (ancla `:304`, plan 136) sigue leyendo `saving` del hook sin cambios.
 4. Regen del baseline como F2 §8.
 
 **Comandos exactos:** los mismos 5 de F2.
@@ -641,8 +681,8 @@ npx tsc --noEmit
    - Input de URL (ancla `:266-271`) ⇒ `<Input className={styles.inputInline} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/webhook" aria-label="URL del webhook" />`
    - Los 2 selects (anclas `:274-278` y `:279-286`) ⇒ `Select` con `aria-label="Evento del webhook"` y `aria-label="Formato del webhook"`, mismas options/props.
    - Input de secret (ancla `:289-294`) ⇒ `Input` con `aria-label="Secret HMAC opcional"`.
-   - Botón "Crear" (ancla `:295`): `className={`${styles.subTab} ${pendingClass}`.trim()}`, resto igual (`disabled={creating || !url.trim()}` se conserva).
-3. Toggle checkbox (ancla `:78-79`, `<label className={styles.toggle}>` con un input checkbox adentro): ⇒ `<Checkbox labelClassName={styles.toggle} label={<JSX interno existente sin modificar>} checked={...} onChange={...} />` conservando exactamente los props actuales del input. Migrar del mismo modo cualquier otro control crudo restante del archivo hasta dejarlo en deuda 0 (el ratchet es el árbitro: la clave `pages/SettingsPage.tsx` debe desaparecer del baseline).
+   - Botón "Crear" (ancla `:295`): `className={`${styles.subTab} ${pendingClass}`.trim()}` + `aria-busy={creating || undefined}` (C5), resto igual (`disabled={creating || !url.trim()}` se conserva).
+3. Toggle checkbox (ancla `:78-79`, `<label className={styles.toggle}>` con un input checkbox adentro): ⇒ `<Checkbox labelClassName={styles.toggle} label={<JSX interno existente sin modificar>} checked={...} onChange={...} />` conservando exactamente los props actuales del input. LISTA CERRADA (C1 — verificada por grep 2026-07-17): los ÚNICOS 5 controles crudos de `SettingsPage.tsx` son el toggle (`:79`), el input de URL (`:266`), los 2 selects (`:274`, `:279`) y el input de secret (`:289`); con §2 y este §3 el archivo queda en deuda 0 y la clave `pages/SettingsPage.tsx` desaparece del baseline. Si tras un rebase apareciera un control nuevo, el ratchet lo reporta ⇒ STOP y avisar al orquestador (no improvisar la migración).
 4. Regen del baseline como F2 §8.
 
 **Comandos exactos:** los mismos 5 de F2.
@@ -672,7 +712,7 @@ npx tsc --noEmit
 ```
 
 **Smoke manual (checklist para el operador o quien supervise; NO bloquea el cierre de código, se documenta como pendiente si no se ejecuta — precedente 132 F3/134 F8):**
-1. Abrir "Nuevo proyecto": look idéntico al actual en reposo. Submit vacío ⇒ errores inline bajo Nombre y Workspace root (rojos, sin alert ni toast); tipear en el campo ⇒ su error desaparece.
+1. Abrir "Nuevo proyecto": look idéntico al actual en reposo. Submit vacío ⇒ errores inline bajo Nombre y Workspace root (rojos, sin alert ni toast) y el foco salta al PRIMER campo con error (ADICIÓN ARQUITECTO); tipear en el campo ⇒ su error desaparece.
 2. Submit válido ⇒ botón "Crear e inicializar" se atenúa y bloquea de inmediato (`.u-pending`) hasta resolver.
 3. "Editar proyecto": ídem 1-2 con "Guardar cambios"; guardar un workflow sigue funcionando igual (estado `savingWorkflow` intacto).
 4. Settings → webhooks: crear un webhook muestra el botón "Crear" atenuado durante el POST; los selects abren con esquema oscuro correcto (color-scheme, `theme.css:251-254`).
@@ -695,7 +735,8 @@ npx tsc --noEmit
 | R5 | Colisión de alcance con el plan paralelo `160` (Resolutor de incidencias: toca `IncidentResolverModal.tsx`) | `IncidentResolverModal.tsx` explícitamente NO se migra en este plan (queda en baseline); §6 |
 | R6 | Cambio de DOM (id/aria/clase extra) rompe algún test/snapshot existente | No hay RTL/jsdom ni snapshots de DOM en el frontend (`package.json:24-31`); los ratchets existentes son fs+regex y se corren todos en cada fase |
 | R7 | `Checkbox` altera spacing al reemplazar el label envolvente | El label conserva la clase de la feature vía `labelClassName` y el contenido se renderiza sin wrapper extra (F1); smoke visual en F5 |
-| R8 | Un modelo menor "mejora" el look de los botones de footer migrándolos a Button | Prohibición explícita en F2 §7: los botones nativos de footer NO se tocan salvo agregar `pendingClass` |
+| R8 | Un modelo menor "mejora" el look de los botones de footer migrándolos a Button | Prohibición explícita en F2 §7: los botones nativos de footer NO se tocan salvo agregar `pendingClass` (+ `aria-busy`, C5) |
+| R9 | Merge 3-way silencioso duplica los exports agregados al final del barrel `components/ui/index.ts` si otra rama también apendea (gotcha real de la casa) | Tras cualquier merge que toque el barrel: `npx tsc --noEmit` (un re-export duplicado es error de compilación) + grep de líneas `export { default as` duplicadas en el barrel (C8) |
 
 ## 6. Fuera de scope
 

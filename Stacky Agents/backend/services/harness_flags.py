@@ -285,6 +285,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EGRESS_SENTINEL_ENABLED", "STACKY_EGRESS_SENTINEL_MAX_PER_CYCLE",  # Plan 121
         "STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS", "STACKY_EGRESS_SENTINEL_MAX_CHARS",  # Plan 121
         "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",  # Plan 127 — análisis de errores con IA local
+        "STACKY_PALETTE_DEEP_SEARCH_ENABLED",  # Plan 129 — búsqueda profunda multi-fuente (paleta)
     ),
     "capacidades_optin": (
         # Activación operador 2026-07-10 — features que el operador invoca a demanda
@@ -3193,6 +3194,15 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         # SIN default= (queda None: opt-in, no curada en _CURATED_DEFAULTS_ON).
         # SIN requires= (no tiene master). SIN env_only= (queda UI-editable).
+    ),
+    # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente ──
+    FlagSpec(
+        key="STACKY_PALETTE_DEEP_SEARCH_ENABLED",
+        type="bool",
+        label="Búsqueda profunda en la paleta (Ctrl+K)",
+        description="Plan 129 — La paleta de comandos busca también ejecuciones, documentos, servidores DevOps y flags vía /api/search/global (local, sin IA). OFF = paleta actual sin cambios.",
+        group="global",
+        # SIN default= (no curada en _CURATED_DEFAULTS_ON; el default efectivo OFF vive en config.py — gotcha Plan 63/81).
     ),
 )
 

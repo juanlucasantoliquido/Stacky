@@ -57,6 +57,7 @@ from .pr_review import bp as pr_review_bp  # Plan 110 — revisor de PRs (Haiku 
 from .db_compare import bp as db_compare_bp  # Plan 122 — comparador de BD
 from .integrations import bp as integrations_bp  # Plan 148 — estado de integraciones no configuradas
 from .plans_board import bp as plans_board_bp  # Plan 128 — tablero de evolución de planes
+from .global_search import bp as global_search_bp  # Plan 129 — paleta: búsqueda profunda
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -116,6 +117,7 @@ api_bp.register_blueprint(pr_review_bp)  # Plan 110 — url_prefix="/pr-review" 
 api_bp.register_blueprint(db_compare_bp)  # Plan 122 — url_prefix="/db-compare" → /api/db-compare/...
 api_bp.register_blueprint(integrations_bp)  # Plan 148 — url_prefix="/integrations" → /api/integrations/...
 api_bp.register_blueprint(plans_board_bp)  # Plan 128 — url_prefix="/plans-board" → /api/plans-board/...
+api_bp.register_blueprint(global_search_bp)  # Plan 129 — url_prefix="/search" → /api/search/...
 
 
 @api_bp.get("/health")

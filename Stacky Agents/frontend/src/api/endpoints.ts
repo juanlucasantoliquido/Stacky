@@ -4110,3 +4110,26 @@ export const PlansBoard = {
   detail: (number: number) =>
     api.get<PlansBoardDetailDto>(`/api/plans-board/detail/${number}`),
 };
+
+/** Plan 129 — Paleta global: búsqueda profunda multi-fuente (opt-in, flag OFF por defecto). */
+export interface GlobalSearchHit {
+  kind: string;
+  id: string;
+  label: string;
+  hint: string;
+  nav: string;
+}
+
+export interface GlobalSearchGroup {
+  kind: string;
+  hits: GlobalSearchHit[];
+}
+
+export const GlobalSearchApi = {
+  health: () => api.get<{ ok: boolean; flag_enabled: boolean }>("/api/search/health"),
+  query: (q: string, limit = 8, signal?: AbortSignal) =>
+    api.get<{ ok: boolean; query: string; groups: GlobalSearchGroup[] }>(
+      `/api/search/global?q=${encodeURIComponent(q)}&limit=${limit}`,
+      signal ? { signal } : undefined
+    ),
+};

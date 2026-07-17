@@ -13,7 +13,7 @@
  * - Rutas: /api/devops/<feature>/...
  * - Persistencia: keys devops_<feature>__* en client_profile (riel GET→merge→PUT)
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DevOps } from '../api/endpoints';
 import { FlagGateBanner } from '../components/devops/FlagGateBanner';
@@ -21,6 +21,7 @@ import { ConnectionHealthStrip } from '../components/devops/ConnectionHealthStri
 import styles from './DevOpsPage.module.css'; // Plan 119
 import { DevOpsHeaderV2 } from './DevOpsHeaderV2'; // Plan 119
 import { DevOpsTabsV2 } from './DevOpsTabsV2'; // Plan 119
+import { readQueryParam } from '../utils/queryParams'; // Plan 129
 
 // Health con index signature para keys aditivas (plan 88/90)
 export interface DevOpsHealth {
@@ -203,6 +204,21 @@ export const DevOpsPage: React.FC = () => {
     if (alias) localStorage.setItem('stacky.devops.selectedServer', alias);
     else localStorage.removeItem('stacky.devops.selectedServer');
   };
+
+  // Plan 129 — deep-link receptor: ?server=<alias> preselecciona el servidor
+  // al montar (una sola vez, cuando la lista de servidores ya cargó). Reusa
+  // selectedAlias/onSelectServer ya existentes (Plan 91 F6). Si el alias no
+  // existe en la lista, se ignora en silencio.
+  const appliedServerDeepLink = useRef(false);
+  useEffect(() => {
+    if (appliedServerDeepLink.current) return;
+    if (!serversQuery.data) return;
+    appliedServerDeepLink.current = true;
+    const raw = readQueryParam('server');
+    if (!raw) return;
+    const exists = (serversQuery.data.servers ?? []).some((s) => s.alias === raw);
+    if (exists) onSelectServer(raw);
+  }, [serversQuery.data]);
 
   // C8 — LITERAL: si el alias persistido ya no existe, es null (no crashear).
   const selected = (serversQuery.data?.servers ?? []).find((s) => s.alias === selectedAlias) ?? null;

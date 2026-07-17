@@ -602,6 +602,11 @@ class Config:
         "STACKY_DOCS_STALENESS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente (default OFF, editable por UI) ─
+    STACKY_PALETTE_DEEP_SEARCH_ENABLED: bool = os.getenv(
+        "STACKY_PALETTE_DEEP_SEARCH_ENABLED", "false"
+    ).strip().lower() == "true"
+
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
         "QA_BROWSER_DEFAULT_BASE_URL",
         "http://localhost:35017/AgendaWeb/",

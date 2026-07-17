@@ -99,6 +99,8 @@ export default function App() {
   };
   // Plan 128: tab Planes visible solo si el flag está ON en el backend
   const [planesEnabled, setPlanesEnabled] = useState(false);
+  // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
+  const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
   useGlobalExecutionNotifier();
   const reviewCount = useReviewInboxCount();
@@ -143,6 +145,9 @@ export default function App() {
     });
     void probeFlagHealth("/api/plans-board/health").then((v) => {
       if (alive) setPlanesEnabled((prev) => nextEnabledState(prev, v));
+    });
+    void probeFlagHealth("/api/search/health").then((v) => {
+      if (alive) setDeepSearchEnabled((prev) => nextEnabledState(prev, v));
     });
     // Plan 139: lee la flag del shell v2 una sola vez al montar (recargar la
     // página para ver el efecto de un toggle; no hay re-montaje en caliente).
@@ -404,6 +409,7 @@ export default function App() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onNavigate={navigateTo}
+        deepSearchEnabled={deepSearchEnabled}
       />
       <ShortcutsCheatsheet
         open={cheatsheetOpen}

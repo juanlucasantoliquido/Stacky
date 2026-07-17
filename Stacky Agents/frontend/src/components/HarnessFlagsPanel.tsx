@@ -188,7 +188,10 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
   })();
 
   return (
-    <div className={`${styles.flagRow} ${isActive ? styles.activeRow : ""} ${isInert ? styles.inertRow : ""}`}>
+    <div
+      id={`flag-row-${flag.key}`}
+      className={`${styles.flagRow} ${isActive ? styles.activeRow : ""} ${isInert ? styles.inertRow : ""}`}
+    >
       <div className={styles.flagLabel}>
         <div className={styles.flagMeta}>
           <span className={styles.flagName}>{flag.label}</span>
@@ -345,12 +348,30 @@ function FlagRow({ flag, allFlags, onUpdate, onLocate, saving }: FlagRowProps) {
   );
 }
 
-export default function HarnessFlagsPanel() {
+interface HarnessFlagsPanelProps {
+  /** Plan 129 — deep-link receptor: key de la flag a resaltar (?flag=<key> en Settings). */
+  highlightKey?: string | null;
+}
+
+export default function HarnessFlagsPanel({ highlightKey = null }: HarnessFlagsPanelProps = {}) {
   const qc = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["harness-flags"],
     queryFn: () => HarnessFlags.list(),
   });
+
+  // Plan 129 — deep-link: una vez que los flags cargaron, scrollear + resaltar
+  // 2s la fila de highlightKey (id="flag-row-<key>" agregado en FlagRow). Si
+  // la key no existe, no hay elemento con ese id: no-op silencioso.
+  useEffect(() => {
+    if (!highlightKey || !data) return;
+    const el = document.getElementById(`flag-row-${highlightKey}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add(styles.flagHighlight);
+    const timer = setTimeout(() => el.classList.remove(styles.flagHighlight), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightKey, data]);
 
   const [apiError, setApiError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<ToastState | null>(null);

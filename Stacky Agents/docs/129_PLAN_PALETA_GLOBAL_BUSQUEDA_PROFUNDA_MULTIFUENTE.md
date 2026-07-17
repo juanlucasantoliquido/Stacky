@@ -1,6 +1,6 @@
 # Plan 129 — Paleta global: búsqueda profunda multi-fuente y navegación total (Ctrl+K que encuentra TODO)
 
-**Estado:** PROPUESTO (v1, 2026-07-13)
+**Estado:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS. v1 era 2026-07-13.
 **Dependencias duras:** ninguna. Reusa sustrato ya implementado: `CommandPalette` existente,
 `doc_indexer` (DocTree), `server_registry` (Plan 91), `FLAG_REGISTRY` (HarnessFlagsPanel),
 modelos `Ticket`/`AgentExecution`, patrón health-check de flags (Planes 74/87).
@@ -11,6 +11,64 @@ tablero de planes). NO usa IA: es búsqueda determinista local.
 > Copilot Pro) lo implemente SIN inferir nada. Los nombres de archivos, símbolos, flags,
 > rutas HTTP y navegaciones son LITERALES: prohibido desviarse, prohibido "mejorar" el
 > alcance. Todo lo ambiguo ya fue decidido acá.
+
+## Changelog v1 → v2 (crítica adversarial, juez: StackyArchitectaUltraEficientCode)
+
+Veredicto: **APROBADO-CON-CAMBIOS** (0 BLOQUEANTES, 5 IMPORTANTES, 2 MENORES). Todo verificado
+leyendo el código real de este worktree, no por memoria. Cambios aplicados in place:
+
+- **C1 (IMPORTANTE)** — §4.4/F1: el nodo de `doc_indexer` usa la clave `"path"`, NO `"rel_path"`
+  (verificado `doc_indexer.py:154,169`, función `_make_node`/`_make_folder_node`). El plan v1
+  citaba `rel_path` en la tabla de fuentes y en el nav; corregido a `path` en todo el documento.
+  También se reemplaza la instrucción vaga "discriminar por el campo que distingue archivo de
+  carpeta" (v1 pedía "leer la forma real" sin decirla) por el literal exacto:
+  `node["kind"] == "file"` descarta `"folder"`.
+- **C2 (IMPORTANTE)** — F0: v1 decía registrar el blueprint en `app.py` ("buscar el bloque de
+  register_blueprint existente"). Verificado: `app.py:187` solo tiene
+  `app.register_blueprint(api_bp)` (un único agregador). El registro real de cada blueprint
+  hijo vive en `Stacky Agents/backend/api/__init__.py` (import línea 12 + registro línea 88
+  para `docs_bp`, mismo patrón a replicar). Corregido con archivo, líneas y patrón exactos.
+- **C3 (IMPORTANTE)** — F3: v1 pedía que `mergeDeepResults` devuelva `Command[]` con nuevos
+  `kind` (`execution`, `doc`, `server`, `flag`), pero `CommandPalette.tsx` declara
+  `type CommandKind` (línea 5, sin `export`, solo 5 valores) e `interface Command` (línea 7,
+  sin `export`) — ni exportados ni con los 4 kinds nuevos. Con eso, `tsc --noEmit` (el propio
+  criterio binario de F3) rompe. Corregido: los tipos se centralizan en
+  `commandPaletteData.ts` (exportados), extendidos a los 9 kinds, y `CommandPalette.tsx` los
+  importa desde ahí.
+- **C4 (IMPORTANTE)** — F4: el receptor de `SettingsPage.tsx` necesita anclar el scroll+resaltado
+  a la fila de una flag concreta, pero `HarnessFlagsPanel.tsx:189`
+  (`<div className={styles.flagRow}...>`) no tiene ningún `id`/atributo direccionable por
+  `flag.key` (verificado, no existe en el archivo). v1 no incluía `HarnessFlagsPanel.tsx` en
+  la lista de archivos de F4. Corregido: se agrega esa fila a F4 con la instrucción exacta de
+  agregar `id={`flag-row-${flag.key}`}` en esa línea.
+- **C5 (IMPORTANTE)** — ratchet de cobertura: verificado `tests/test_harness_ratchet_meta.py`
+  (Plan 49 F4) — falla si un `tests/test_*.py` nuevo no está registrado en `HARNESS_TEST_FILES`
+  de `scripts/run_harness_tests.sh` (y su espejo `.ps1`) ni en la allowlist. v1 no mencionaba
+  este paso para los 3 archivos de test nuevos del backend. Corregido: cada fase backend (F0,
+  F1, F2) ahora incluye el paso de registro; F5 corre el meta-test explícitamente.
+- **C6 (MENOR)** — F0 citaba `config.py:514-516` para el idiom de
+  `STACKY_DOCS_DOCUMENTER_ENABLED`; en este worktree esa constante está en `config.py:503-506`.
+  Corregida la cita.
+- **C7 (MENOR)** — §4.5/F3: `NAV_COMMANDS` incluye "Ir a Migrador"/"Ir a DevOps" de forma
+  estática (13 fijos), pero esos 2 tabs están gateados por flags backend
+  (`migradorEnabled`/`devopsEnabled`, `App.tsx:60-62`); si están OFF, `App.tsx:137-138` ya
+  rebota solo a `team` sin romper nada. Se documenta explícitamente como comportamiento
+  aceptado (no-op inofensivo autocorregido por lógica ya existente), sin exigir cambio de
+  código — no vale la pena filtrar dinámicamente solo para esto y complicaría el criterio
+  binario "exactamente 13" de KPI-1.
+- **[ADICIÓN ARQUITECTO]** — F3: en vez de que `CommandPalette` llame
+  `GlobalSearchApi.health()` en CADA apertura (Ctrl+K), se hoistea el chequeo a `App.tsx`
+  siguiendo EXACTAMENTE el patrón ya establecido y auditado para `migradorEnabled`/
+  `devopsEnabled` (`App.tsx:60-62` declara el estado, `App.tsx:86-89` lo puebla una vez al
+  montar la app vía `fetch(...).then(...).catch(() => false)`). Se agrega
+  `deepSearchEnabled` con el mismo patrón y se pasa como prop a `<CommandPalette>`. Beneficio:
+  cero fetches redundantes por apertura de paleta, consistencia con el único idiom que el
+  repo ya usa para "flag visible en el shell", sin flag nueva, sin trabajo del operador, sin
+  tocar runners.
+
+Todos los fixes preservan: paridad de 3 runtimes (plan no toca runners, sigue N/A), cero
+trabajo extra al operador, human-in-the-loop (la paleta sigue sin ejecutar nada), mono-operador
+sin auth (sin cambios), no degradar, reuso de sustrato existente, flags con default seguro.
 
 ---
 
@@ -87,6 +145,10 @@ La paleta **jamás ejecuta nada**: navega y resalta. Human-in-the-loop intacto.
 7. **Gotcha de flags (Plan 63/81):** la FlagSpec nueva va SIN `default=` (no se agrega a
    `_CURATED_DEFAULTS_ON`); el default efectivo OFF vive en `config.py`. PROHIBIDO
    `default=False` explícito (rompe `test_default_known_only_for_curated`).
+8. **Ratchet de cobertura del arnés (Plan 49 F4):** todo `tests/test_*.py` nuevo DEBE
+   quedar listado en `HARNESS_TEST_FILES` de `scripts/run_harness_tests.sh` Y de
+   `scripts/run_harness_tests.ps1` (mismo bloque), o `tests/test_harness_ratchet_meta.py`
+   falla. Ver pasos explícitos en F0/F1/F2/F5. **[C5]**
 
 ## 4. Diseño congelado
 
@@ -158,7 +220,7 @@ existe: `fuzzyScore`, `CommandPalette.tsx:22-40`).
 |---|---|---|---|---|---|---|
 | `ticket` | `session_scope()` + `select(Ticket).order_by(Ticket.id.desc()).limit(500)` | últimos 500 | `title`, `str(ado_id)` | `T-{ado_id} — {title}` | `ado_state or ""` | `/tickets?ticket={id}` |
 | `execution` | `session_scope()` + `select(AgentExecution).order_by(AgentExecution.id.desc()).limit(300)` | últimos 300 | `str(id)`, `agent_type`, `status` | `Run #{id} · {agent_type} · {status}` | `T-{ado_id del ticket}` si se resuelve barato, sino `""` | `/history?execution={id}` |
-| `doc` | `doc_indexer.build_index()` (`doc_indexer.py:312`, respeta su cache TTL 5 min) | todos los nodos hoja del árbol | `label` del nodo, `rel_path` | `label` del nodo | carpeta padre (`rel_path` sin el filename) | `/docs?path={urllib.parse.quote(rel_path, safe='')}` |
+| `doc` | `doc_indexer.build_index()` (`doc_indexer.py:312`, respeta su cache TTL 5 min) | todos los nodos hoja del árbol (`node["kind"] == "file"`) | `label` del nodo, `node["path"]` | `label` del nodo | carpeta padre (`node["path"]` sin el filename) | `/docs?path={urllib.parse.quote(node["path"], safe='')}` |
 | `server` | `server_registry.list_servers()` (`server_registry.py:84`; ya pasa por `_public`) | todos | `alias`, `host` | `alias` | `host` | `/devops?server={alias}` |
 | `flag` | `harness_flags.FLAG_REGISTRY` (iterar specs como `read_current`, `harness_flags.py:2906`) | todas | `key`, `label`, `description` | `spec.label` | `spec.key` | `/settings?flag={key}` |
 
@@ -166,11 +228,13 @@ Notas duras:
 - Para `execution`, el hint `T-{ado_id}` se resuelve con UN join/select adicional dentro del
   mismo `session_scope`; si falla o no hay ticket, hint `""`. NO hacer N+1: un solo
   `select(Ticket.id, Ticket.ado_id).where(Ticket.id.in_(ids))` para los hits ya filtrados.
-- Para `doc`, aplanar el árbol con un walk iterativo (stack), tomando SOLO nodos con
-  `rel_path` de archivo (los folder nodes de `_make_folder_node` se descartan). El
-  implementador DEBE leer la forma real de los nodos en `doc_indexer.py:138-176`
-  (`_make_node` / `_make_folder_node`) y discriminar por el campo que distingue archivo de
-  carpeta en esa forma real; prohibido asumir nombres sin leerlos.
+- Para `doc`, aplanar el árbol con un walk iterativo (stack). Cada nodo del árbol producido
+  por `doc_indexer.py` es un `dict` con clave `"kind"` que vale `"file"` (`_make_node`,
+  `doc_indexer.py:152`) o `"folder"` (`_make_folder_node`, `doc_indexer.py:167`); tomar SOLO
+  los nodos con `node["kind"] == "file"` (los folder nodes se descartan). El path del
+  documento está en la clave `node["path"]` (NO `rel_path` — ese era un nombre incorrecto de
+  v1 de este plan, corregido en v2: verificado en `doc_indexer.py:154` y `:169`, ambos
+  `_make_node`/`_make_folder_node` devuelven `"path": rel_path` como clave literal `"path"`).
 - Cada fuente COMPLETA va envuelta en `try/except Exception` → `[]` + `logger.warning`
   (usar `services.stacky_logger.logger` como en `api/docs.py`). Una fuente caída jamás
   tumba la respuesta.
@@ -179,14 +243,21 @@ Notas duras:
 
 | Página | Query param | Comportamiento al montar |
 |---|---|---|
-| `frontend/src/pages/ExecutionHistoryPage.tsx` | `execution` (int) | si está presente y existe en la lista cargada (o vía su fetch de detalle ya existente), abrir el detalle/drawer de esa ejecución; si no existe → ignorar en silencio |
+| `frontend/src/pages/ExecutionHistoryPage.tsx` | `execution` (int) | si está presente y existe en la lista cargada (o vía su fetch de detalle ya existente), abrir el detalle/drawer de esa ejecución; si no existe → ignorar en silencio. Reusar el estado `detailId` ya existente (`ExecutionHistoryPage.tsx:81`, `setDetailId`). |
 | `frontend/src/pages/DocsPage.tsx` | `path` (string urlencoded) | seleccionar/abrir ese documento en el visor si el path existe en el índice; si no → ignorar en silencio |
-| `frontend/src/pages/SettingsPage.tsx` | `flag` (string) | hacer scroll hasta la flag en `HarnessFlagsPanel` y resaltarla (clase CSS temporal 2 s); si no existe → ignorar |
-| `frontend/src/pages/DevOpsPage.tsx` | `server` (string) | preseleccionar el servidor con ese alias en la sección de servidores; si no existe → ignorar |
+| `frontend/src/pages/SettingsPage.tsx` | `flag` (string) | hacer scroll hasta la flag en `HarnessFlagsPanel` y resaltarla (clase CSS temporal 2 s); si no existe → ignorar. Requiere el `id` agregado en F4 a `HarnessFlagsPanel.tsx:189`. |
+| `frontend/src/pages/DevOpsPage.tsx` | `server` (string) | preseleccionar el servidor con ese alias en la sección de servidores; si no existe → ignorar. Reusar `selectedAlias`/`onSelectServer` ya existentes (`DevOpsPage.tsx:174,177`). |
 
 Regla común: los receptores leen el param UNA vez al montar (helper compartido
 `readQueryParam`, §F4), NUNCA lanzan acciones (solo selección/scroll/highlight), y ante
 cualquier valor inválido degradan a no-op silencioso.
+
+Nota (C7, MENOR): `NAV_COMMANDS` (F3) incluye "Ir a Migrador" e "Ir a DevOps" de forma
+estática, aunque esos 2 tabs solo son visibles en la barra si sus flags backend
+(`migradorEnabled`/`devopsEnabled`) están ON. Si el operador los ejecuta con la flag
+correspondiente OFF, `App.tsx:137-138` (lógica YA existente, no tocada por este plan) rebota
+sola de vuelta a `team` sin error. Comportamiento aceptado explícitamente: no se filtra
+dinámicamente `NAV_COMMANDS` para no complicar el criterio binario "exactamente 13" de KPI-1.
 
 ## 5. Fases
 
@@ -197,8 +268,8 @@ cualquier valor inválido degradan a no-op silencioso.
 
 **Archivos:**
 - `Stacky Agents/backend/config.py` — agregar `STACKY_PALETTE_DEEP_SEARCH_ENABLED`
-  replicando EXACTAMENTE el idiom de `STACKY_DOCS_DOCUMENTER_ENABLED` (`config.py:514-516`)
-  pero con default `"false"`.
+  replicando EXACTAMENTE el idiom de `STACKY_DOCS_DOCUMENTER_ENABLED` (`config.py:503-506`,
+  corregido en v2: v1 citaba `514-516`, línea incorrecta) pero con default `"false"`.
 - `Stacky Agents/backend/services/harness_flags.py` — agregar al final de `FLAG_REGISTRY`:
 
 ```python
@@ -230,16 +301,29 @@ def search_health():
     return jsonify({"ok": True, "flag_enabled": _enabled()})
 ```
 
-- `Stacky Agents/backend/app.py` — registrar el blueprint junto a los demás (buscar el
-  bloque de `register_blueprint` existente y agregar el import + registro con el MISMO
-  patrón de prefijo que produce `/api/search/health`; verificar contra cómo quedan
-  montados `/api/docs/*` desde `api/docs.py` cuyo `url_prefix` es `"/docs"`).
+- `Stacky Agents/backend/api/__init__.py` (**corregido en v2, C2**: NO es `app.py` — verificado
+  que `app.py:187` solo tiene `app.register_blueprint(api_bp)`, un único agregador; el
+  registro real de cada blueprint hijo vive acá) — replicar EXACTAMENTE el patrón usado para
+  `docs_bp`:
+  - agregar el import junto a los demás (mismo bloque que la línea
+    `from .docs import bp as docs_bp`, `api/__init__.py:12`):
+    `from .global_search import bp as global_search_bp  # Plan 129 — paleta: búsqueda profunda`
+  - agregar el registro junto a los demás (mismo bloque que la línea
+    `api_bp.register_blueprint(docs_bp)`, `api/__init__.py:88`):
+    `api_bp.register_blueprint(global_search_bp)  # Plan 129 — url_prefix="/search" → /api/search/...`
 
 **Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan129_flag.py`:
 1. `test_flag_conocida` — la key aparece en `read_current()`.
 2. `test_flag_default_off` — sin env var, `config.STACKY_PALETTE_DEEP_SEARCH_ENABLED is False`.
 3. `test_flag_no_curada` — la key NO está en `_CURATED_DEFAULTS_ON`.
 4. `test_search_health_siempre_200` — GET `/api/search/health` → 200 con `flag_enabled: false`.
+
+**Registro de ratchet (C5, obligatorio):** agregar la línea
+`tests/test_plan129_flag.py` al bloque `HARNESS_TEST_FILES` de
+`Stacky Agents/backend/scripts/run_harness_tests.sh` Y de
+`Stacky Agents/backend/scripts/run_harness_tests.ps1` (mismo bloque donde están las entradas
+`tests/test_plan127_*.py`/`tests/test_plan128_*.py` más recientes), o
+`tests/test_harness_ratchet_meta.py` falla.
 
 **Comando:** desde `Stacky Agents/backend`: `.venv\Scripts\python.exe -m pytest tests/test_plan129_flag.py -q`
 (el venv real del repo es `.venv`, gotcha Plan 109).
@@ -264,6 +348,8 @@ def search_health():
     `_search_docs(qn, limit)`, `_search_servers(qn, limit)`, `_search_flags(qn, limit)` —
     cada una según §4.4; cada hit es
     `{"kind", "id", "label", "hint", "nav", "score"}` con `id` SIEMPRE str.
+    `_search_docs` filtra por `node["kind"] == "file"` y lee `node["path"]` (NO `rel_path`,
+    corregido en v2 — ver C1).
   - `search_all(q: str, limit_per_source: int = DEFAULT_LIMIT) -> dict` — trim, clamp de
     limit a `[1, MAX_LIMIT]`, corta cada fuente a `limit_per_source`, arma `groups` en
     `GROUP_ORDER` omitiendo vacíos, elimina el campo `score` de los hits serializados.
@@ -282,13 +368,18 @@ monkeypatch de `doc_indexer.build_index`, `server_registry.list_servers` y
    nav `/tickets?ticket={id}`.
 5. `test_executions_hit_y_hint_ticket` — ejecución fixture → label `Run #{id} · {agent_type} · {status}`,
    hint `T-{ado_id}`.
-6. `test_docs_solo_hojas_y_nav_urlencoded` — árbol fixture con carpeta + archivo → solo el
-   archivo aparece; nav contiene el rel_path urlencoded.
+6. `test_docs_solo_hojas_y_nav_urlencoded` — árbol fixture con carpeta (`kind: "folder"`) +
+   archivo (`kind: "file"`, con clave `"path"`) → solo el archivo aparece; nav contiene el
+   `path` urlencoded.
 7. `test_limit_y_orden_estable` — 30 matches → corta a `limit`; orden score desc, id asc.
 8. `test_fuente_rota_no_tumba` — monkeypatch `_search_docs` que raise → respuesta OK sin
    grupo `doc`, los demás grupos presentes.
 9. `test_servers_sin_password` — server fixture → `"password" not in json.dumps(resultado)`.
 10. `test_query_vacia_groups_vacios` — `search_all("  ")` → `{"ok": True, "query": "", "groups": []}`.
+
+**Registro de ratchet (C5, obligatorio):** agregar la línea
+`tests/test_plan129_global_search_service.py` al mismo bloque `HARNESS_TEST_FILES` en ambos
+scripts (`.sh` y `.ps1`).
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan129_global_search_service.py -q`
 **Criterio binario:** 10/10 verdes.
@@ -332,6 +423,11 @@ def search_global():
 4. `test_limit_clamp` — `limit=999` → cada grupo ≤ 20 hits; `limit=abc` → usa default 8.
 5. `test_health_reporta_on` — flag ON → `/api/search/health` `flag_enabled: true`.
 
+**Registro de ratchet (C5, obligatorio):** agregar la línea
+`tests/test_plan129_global_search_api.py` al mismo bloque `HARNESS_TEST_FILES` en ambos
+scripts (`.sh` y `.ps1`). Al terminar F2, los 3 archivos de test backend de este plan deben
+estar los 3 registrados.
+
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan129_global_search_api.py -q`
 **Criterio binario:** 5/5 verdes.
 **Flag:** `STACKY_PALETTE_DEEP_SEARCH_ENABLED` (gate 404).
@@ -358,22 +454,35 @@ export const GlobalSearchApi = {
 };
 ```
 
-- `Stacky Agents/frontend/src/components/commandPaletteData.ts` (NUEVO) — funciones PURAS
-  (testeables sin jsdom, patrón "tests puros" del Plan 119):
+- `Stacky Agents/frontend/src/components/commandPaletteData.ts` (NUEVO) — funciones y tipos
+  PUROS (testeables sin jsdom, patrón "tests puros" del Plan 119). **Corregido en v2 (C3):**
+  este archivo ahora es dueño de los tipos compartidos (v1 no los exportaba desde ningún
+  lado, lo que rompía `tsc --noEmit`):
+  - `export type CommandKind = "ticket" | "agent" | "pack" | "project" | "nav" | "execution" | "doc" | "server" | "flag";`
+    (extiende el `CommandKind` original de `CommandPalette.tsx:5`, que solo tenía los
+    primeros 5 valores, con los 4 kinds nuevos de búsqueda remota).
+  - `export interface Command { id: string; kind: CommandKind; icon: string; label: string; hint?: string; run: () => void; }`
+    (mismo shape que la `interface Command` de `CommandPalette.tsx:7`, ahora exportada desde
+    acá).
   - mover acá `fuzzyScore` desde `CommandPalette.tsx:22-40` (export) y reexportar/importar.
   - `export const NAV_COMMANDS: { id: string; path: string; label: string; icon: string }[]`
     — EXACTAMENTE 13 entradas, una por tab de `App.tsx:30`, con los paths del mapa de
-    rutas de `App.tsx` (leer el objeto `tabFromPath`/mapa de paths real, p.ej.
+    rutas de `App.tsx` (leer el objeto `TAB_PATHS` real, `App.tsx:32-46`, p.ej.
     `history: "/history"` en `App.tsx:43`, y usar ESOS strings literales).
   - `export function mergeDeepResults(localIds: Set<string>, groups: RemoteGroup[]): Command[]`
     — aplana los grupos remotos a `Command[]` (iconos por kind: ticket 🎫, execution 🏃,
     doc 📄, server 🖥️, flag 🚩), descartando hits cuyo `kind + id` ya esté en `localIds`
     (dedup: lo local gana).
 - `Stacky Agents/frontend/src/components/CommandPalette.tsx`:
+  - importar `type { Command, CommandKind }` y `fuzzyScore` desde `./commandPaletteData` en
+    vez de declararlos localmente; eliminar la `interface Command`/`type CommandKind`/
+    `function fuzzyScore` locales (líneas 5-40 de la versión actual).
   - reemplazar el bloque de navs hardcodeado (`:85-128`) por un map sobre `NAV_COMMANDS`.
-  - al abrir (`useEffect` de `:51`), UNA llamada `GlobalSearchApi.health()` → estado
-    `deepEnabled` (catch → `false`; con `false` NO se hace ningún fetch remoto más).
-  - nuevo `useEffect` sobre `query`: si `deepEnabled && query.trim().length >= 2`,
+  - **[ADICIÓN ARQUITECTO]:** el componente YA NO llama `GlobalSearchApi.health()` en su
+    propio `useEffect` de apertura. En su lugar recibe una nueva prop
+    `deepSearchEnabled: boolean` (ver cambio en `App.tsx` más abajo) y la usa directamente
+    como `deepEnabled`.
+  - nuevo `useEffect` sobre `query`: si `deepSearchEnabled && query.trim().length >= 2`,
     debounce 250 ms (setTimeout + clearTimeout) + `AbortController` (abortar el fetch
     anterior), llamar `GlobalSearchApi.query(query)` y guardar `remoteGroups`; en error →
     `[]` en silencio.
@@ -381,6 +490,13 @@ export const GlobalSearchApi = {
     `mergeDeepResults(...)` manteniendo el cap visual actual (40).
   - `run` de cada comando remoto = `onNavigate(hit.nav)` (los query params los consumen
     los receptores de F4).
+- `Stacky Agents/frontend/src/App.tsx` (**nuevo en v2, parte de la ADICIÓN ARQUITECTO**):
+  - agregar `const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);` junto a
+    `migradorEnabled`/`devopsEnabled` (`App.tsx:60-62`).
+  - en el mismo `useEffect` de montaje que puebla esos dos (`App.tsx:82-89`), agregar:
+    `fetch("/api/search/health").then((r) => r.json()).then((d: { flag_enabled?: boolean }) => setDeepSearchEnabled(d.flag_enabled === true)).catch(() => setDeepSearchEnabled(false));`
+  - pasar `deepSearchEnabled` como prop al `<CommandPalette>` existente (buscar dónde se
+    renderiza y agregar el prop nuevo).
 
 **Tests PRIMERO** — `Stacky Agents/frontend/src/components/__tests__/commandPaletteData.test.ts`
 (vitest, funciones puras):
@@ -395,9 +511,10 @@ export const GlobalSearchApi = {
 `npx vitest run src/components/__tests__/commandPaletteData.test.ts` y `npx tsc --noEmit`.
 **Criterio binario:** 4/4 vitest verdes + `tsc` con 0 errores.
 **Flag:** navegación total sin flag (estática, sin riesgo); búsqueda remota gateada por el
-health de `STACKY_PALETTE_DEEP_SEARCH_ENABLED`.
+health de `STACKY_PALETTE_DEEP_SEARCH_ENABLED` (ahora leído una vez en `App.tsx`, no por
+apertura de paleta — ver ADICIÓN ARQUITECTO).
 **Runtimes:** idéntico. Fallback: si el backend no tiene el endpoint (build viejo), el
-health catch → `deepEnabled=false` → paleta actual intacta.
+health catch en `App.tsx` → `deepSearchEnabled=false` → paleta actual intacta.
 **Trabajo del operador:** ninguno (opt-in 1 click para la parte remota).
 
 ### F4 — Receptores de deep-links (frontend)
@@ -420,6 +537,13 @@ export function readQueryParam(name: string): string | null {
   (leer la página antes de tocarla; prohibido duplicar lógica de fetch). Ante param ausente
   o inválido: no-op. Para el highlight de Settings: clase CSS temporal `flagHighlight`
   (outline 2px con el acento actual del tema) removida a los 2000 ms con setTimeout.
+- `Stacky Agents/frontend/src/components/HarnessFlagsPanel.tsx` (**agregado en v2, C4**: v1
+  no incluía este archivo en F4, pero sin este cambio el receptor de `SettingsPage.tsx` no
+  tiene forma de ubicar la fila de una flag — verificado que la fila actual,
+  `HarnessFlagsPanel.tsx:189` `<div className={`${styles.flagRow} ...`}>`, no tiene ningún
+  atributo direccionable por `flag.key`):
+  - agregar `id={`flag-row-${flag.key}`}` a ese `<div>` de la línea 189, sin tocar el resto
+    de sus className/lógica.
 
 **Tests PRIMERO** — `Stacky Agents/frontend/src/utils/__tests__/queryParams.test.ts`
 (vitest; stubear `window.location.search` con `vi.stubGlobal` o asignación en jsdom si está
@@ -443,13 +567,17 @@ genera la búsqueda profunda gateada).
 **Pasos y comandos (todos desde el directorio indicado):**
 1. Backend nuevo: `.venv\Scripts\python.exe -m pytest tests/test_plan129_flag.py tests/test_plan129_global_search_service.py tests/test_plan129_global_search_api.py -q` → todo verde.
 2. No-regresión flags: `.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` → mismo resultado que ANTES del plan (documentar en el reporte los fails preexistentes conocidos del drift `harness_defaults.env`, si siguen).
-3. Frontend: `npx vitest run` (suite completa) y `npx tsc --noEmit` → 0 errores nuevos.
-4. Humo manual (1 minuto, opcional pero recomendado): levantar backend+frontend, flag OFF →
+3. Ratchet de cobertura (**nuevo en v2, C5**):
+   `.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q` → verde (los 3
+   test files nuevos deben quedar registrados en `HARNESS_TEST_FILES` en `.sh` y `.ps1`,
+   F0/F1/F2).
+4. Frontend: `npx vitest run` (suite completa) y `npx tsc --noEmit` → 0 errores nuevos.
+5. Humo manual (1 minuto, opcional pero recomendado): levantar backend+frontend, flag OFF →
    Ctrl+K se ve/actúa como siempre pero con 13 "Ir a…"; prender la flag desde
    HarnessFlagsPanel → tipear 2+ chars muestra grupos remotos; Enter en un run abre el
    historial con el detalle abierto.
 
-**Criterio binario:** pasos 1-3 verdes (el 4 es evidencia adicional, no bloqueante).
+**Criterio binario:** pasos 1-4 verdes (el 5 es evidencia adicional, no bloqueante).
 **Trabajo del operador:** ninguno.
 
 ## 6. Riesgos y mitigaciones
@@ -461,8 +589,9 @@ genera la búsqueda profunda gateada).
 | Fuga de secretos de servidores | solo `_public` (ya redacta password) + test negativo F1.9 |
 | Un origen roto tumba la paleta | try/except por fuente → grupo omitido, log warning (F1.8) |
 | Regresión en la paleta actual | flag OFF = cero fetch nuevo; `fuzzyScore` blindado con test de regresión F3.4 |
-| Colisión con WIP ajeno en archivos compartidos (`config.py`, `harness_flags.py`, `endpoints.ts`) | commits con staging quirúrgico por hunk (patrón Planes 109/110/111); nunca `git add -A` |
+| Colisión con WIP ajeno en archivos compartidos (`config.py`, `harness_flags.py`, `endpoints.ts`, `api/__init__.py`, `App.tsx`) | commits con staging quirúrgico por hunk (patrón Planes 109/110/111); nunca `git add -A` |
 | Drift `harness_defaults.env` | NO regenerar el archivo en este plan (lección Plan 127 §3.11); la flag nueva no lo necesita (default OFF) |
+| Test nuevo no registrado en el ratchet de cobertura (Plan 49 F4) rompe `test_harness_ratchet_meta.py` (**nuevo en v2, C5**) | registrar los 3 `tests/test_plan129_*.py` en `HARNESS_TEST_FILES` de `scripts/run_harness_tests.sh` Y `.ps1` en F0/F1/F2; verificar con el propio meta-test en F5 |
 
 ## 7. Fuera de scope (explícito)
 
@@ -471,6 +600,9 @@ genera la búsqueda profunda gateada).
 - Acciones ejecutables desde la paleta (lanzar runs, publicar, deploy) — prohibido por §3.3.
 - Historial de búsquedas, ranking aprendido, telemetría nueva.
 - Tocar cualquier runner (Codex / Claude Code / Copilot) o `copilot_bridge`.
+- Filtrado dinámico de `NAV_COMMANDS` según flags de tabs (`migradorEnabled`/`devopsEnabled`)
+  — comportamiento actual de rebote silencioso (`App.tsx:137-138`) se considera suficiente
+  (ver C7).
 
 ## 8. Glosario
 
@@ -481,27 +613,41 @@ genera la búsqueda profunda gateada).
 - **_CURATED_DEFAULTS_ON:** set de flags cuyo default declarado es ON; una flag fuera del
   set NO debe declarar `default=` (gotcha Plan 63/81).
 - **session_scope:** context manager de sesión SQLAlchemy (`from db import session_scope`).
-- **doc_indexer:** servicio que indexa el árbol de documentación con cache TTL 5 min.
+- **doc_indexer:** servicio que indexa el árbol de documentación con cache TTL 5 min; cada
+  nodo es un `dict` con clave `"kind"` (`"file"`/`"folder"`) y clave `"path"`.
 - **server_registry:** registro de servidores DevOps (Plan 91); `_public` redacta secretos.
 - **Deep-link receptor:** página que al montar lee un query param y preselecciona la entidad.
+- **Ratchet de cobertura del arnés:** mecanismo (Plan 49 F4,
+  `tests/test_harness_ratchet_meta.py`) que exige que todo test nuevo esté declarado en
+  `HARNESS_TEST_FILES` de `scripts/run_harness_tests.sh`/`.ps1`.
 - **Runtimes:** los 3 motores de agentes de Stacky (Codex CLI, Claude Code CLI, GitHub
   Copilot Pro); este plan no los toca.
 
 ## 9. Orden de implementación
 
-1. F0 (flag + config + health + registro del blueprint).
-2. F1 (servicio con sus 10 tests).
-3. F2 (API con sus 5 tests).
-4. F3 (endpoints.ts + commandPaletteData.ts + CommandPalette + 4 tests + tsc).
-5. F4 (queryParams + 4 receptores + 3 tests + tsc).
-6. F5 (verificación integral + no-regresión + humo manual).
+1. F0 (flag + config + health + registro del blueprint en `api/__init__.py` + registro
+   de ratchet del test file).
+2. F1 (servicio con sus 10 tests + registro de ratchet).
+3. F2 (API con sus 5 tests + registro de ratchet).
+4. F3 (endpoints.ts + commandPaletteData.ts con tipos exportados + CommandPalette + App.tsx
+   con `deepSearchEnabled` + 4 tests + tsc).
+5. F4 (queryParams + 4 receptores + `id` en HarnessFlagsPanel.tsx + 3 tests + tsc).
+6. F5 (verificación integral + ratchet + no-regresión + humo manual).
 
 ## 10. Definición de Hecho (DoD)
 
 - [ ] 19 tests nuevos verdes (4 F0 + 10 F1 + 5 F2) + 7 vitest (4 F3 + 3 F4) + `tsc` 0 errores.
+- [ ] Los 3 test files backend nuevos registrados en `HARNESS_TEST_FILES` (`.sh` y `.ps1`) y
+  `tests/test_harness_ratchet_meta.py` verde.
 - [ ] Flag OFF: `/api/search/global` → 404; paleta idéntica a hoy salvo los 13 "Ir a…".
 - [ ] Flag ON (1 click en HarnessFlagsPanel): buscar 2+ chars muestra grupos de las 5 fuentes.
 - [ ] Ningún hit contiene `password` ni contenido de archivos.
 - [ ] `tests/test_harness_flags.py` sin fails NUEVOS respecto de la línea base.
 - [ ] Ningún runner ni archivo de `copilot_bridge`/runners modificado.
+- [ ] `CommandKind`/`Command` exportados desde `commandPaletteData.ts` y consumidos (no
+  duplicados) en `CommandPalette.tsx`.
+- [ ] `HarnessFlagsPanel.tsx` tiene `id={`flag-row-${flag.key}`}` en la fila de cada flag.
+- [ ] `App.tsx` puebla `deepSearchEnabled` una vez al montar (mismo patrón que
+  `migradorEnabled`/`devopsEnabled`) y `CommandPalette` lo recibe por prop, sin fetch de
+  health propio por apertura.
 - [ ] Commits con staging quirúrgico (solo hunks del plan) y push manual pendiente (regla del pipeline).

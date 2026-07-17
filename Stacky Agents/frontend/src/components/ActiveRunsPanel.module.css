@@ -113,7 +113,7 @@
 
 .item {
   display: grid;
-  grid-template-columns: 10px 44px 1fr auto;
+  grid-template-columns: 10px 44px 1fr auto auto;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
@@ -200,3 +200,25 @@
 }
 .cancelRetry:hover,
 .cancelDismiss:hover { background: rgba(239, 68, 68, 0.2); }
+
+/* Botón "Ver consola" por run: mismo lenguaje visual que cancelBtn/iconBtn.
+   aria-pressed=true = la consola abierta en el dock es la de ESTE run. */
+.consoleBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.consoleBtn:hover,
+.consoleBtn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

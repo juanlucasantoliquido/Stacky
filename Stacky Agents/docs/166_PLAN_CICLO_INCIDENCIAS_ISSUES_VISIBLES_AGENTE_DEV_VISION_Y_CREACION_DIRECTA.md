@@ -1,6 +1,62 @@
 # Plan 166 — Ciclo completo de Incidencias: Issues visibles en Tickets, Agente Dev Resolutor, Visión de capturas y creación directa en lote
 
-**Estado:** PROPUESTO (v1) — 2026-07-17
+**Estado:** CRITICADO (v2) — 2026-07-17 · APROBADO-CON-CAMBIOS por `criticar-y-mejorar-plan`
+
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**CHANGELOG v1 -> v2:**
+- **C1 (IMPORTANTE, resuelto):** F0 omitía el registro en `_CATEGORY_KEYS`
+  (`harness_flags.py:325` lo exige literalmente o `test_every_registry_flag_is_categorized`
+  rompe) y proponía un `group="global"` inventado. v2: los 6 keys van a la MISMA tupla
+  de `_CATEGORY_KEYS` que ya contiene `STACKY_INCIDENT_RESOLVER_ENABLED`, y todos los
+  `FlagSpec` usan `group="global"` (espejo verificado del flag hermano,
+  `harness_flags.py:3308`).
+- **C2 (IMPORTANTE, resuelto):** `_do_publish_incident` estaba subespecificado: el rango a
+  mover está lleno de `return jsonify(...), NNN` y `jsonify` REQUIERE app context — el
+  post-hook corre en el thread del runner SIN contexto y crashearía. v2 fija el contrato
+  literal `(payload: dict, status: int)`, prohíbe `jsonify` dentro del núcleo y especifica
+  la adaptación de `_incident_publish_terminal_error`.
+- **C3 (IMPORTANTE, resuelto):** fallo de autopublish MUDO en modo lote (excepción no-tracker
+  → solo `logger.warning` → la cola mostraba "analizando" para siempre, violando el plan
+  135). v2: el `except` del hook marca `status="error"` en el store (best-effort) y la cola
+  mapea también `analizada` y `capturada`; +1 caso de test.
+- **C4 (IMPORTANTE, resuelto):** contrato del endpoint de visión ambiguo. Verificado:
+  `LOCAL_LLM_ENDPOINT` es la URL COMPLETA de chat-completions
+  (`copilot_bridge.py:257-261`, "ej. http://localhost:11434/v1/chat/completions").
+  v2 declara el mismo contrato para `STACKY_INCIDENT_VISION_ENDPOINT` (FlagSpec + docstring)
+  y reusa `LOCAL_LLM_TIMEOUT_SEC` como timeout default.
+- **C5 (IMPORTANTE, resuelto):** F2 sin presupuesto (N imágenes × 120 s síncronos dentro del
+  request de `run_incident`). v2: cap de tamaño por imagen (reusa `MAX_FILE_BYTES` del
+  intake), máx 6 imágenes por incidente, presupuesto TOTAL 240 s; +1 caso de test.
+- **C6 (IMPORTANTE, resuelto — directiva del operador):** los 2 agentes del ciclo quedaron
+  "muy expertos": nueva sección §3bis con la ficha completa de cada uno (rol, entradas/
+  salidas exactas, herramientas, modelo/runtime con paridad, criterios binarios), prompt
+  experto LARGO del `IncidentDevAgent` (incluye el contrato ⚠️ BLOQUEADO para causas de
+  datos/entorno — exactamente la hipótesis principal del insumo real
+  `docs/incidencias/INC-_inc-prestamos-...md`: gap de datos en RPRES que ningún fix de
+  código resuelve) y refuerzo ADITIVO del prompt del `IncidentAgent` para explotar el OCR
+  (F2b).
+- **C7 (MENOR, resuelto → elevado a [ADICIÓN ARQUITECTO]):** bug real verificado en el
+  cierre del ciclo documental: `write_incident_doc` se llama con el `incident` VIEJO
+  (`api/tickets.py:7538`) ANTES del update de `tracker_id` (`:7544`) → el doc y el índice
+  quedan con `tracker_id:` vacío aun tras publicar (visible en el insumo real). v2 reordena
+  en `_do_publish_incident` y agrega test.
+- **C8 (MENOR, resuelto):** la cola del modal ya no usa un `setInterval` sin acotar
+  (coherencia con el plan 156, latido único): 3000 ms, SOLO con modal abierto y ≥1 ítem no
+  terminal, `clearInterval` en cleanup.
+- **C9 (MENOR, resuelto):** vaguedades podadas: "grupo incidents o global" (decidido por C1),
+  "junto a otros registros de hooks" ahora tiene ancla literal, `incidents_status` es `:14`,
+  `_find_incident_by_execution` con dos alternativas → decidido `incident_store.find_by_execution`.
+- **C10 (MENOR, resuelto):** los tests de endpoint de F3 ahora instruyen espejar los helpers
+  existentes de `test_plan131_incident_preview_publish.py` (`_make_app`/`_patch_run`/mocks
+  de provider) en vez de dejar el setup a inferencia.
+- **[ADICIÓN ARQUITECTO] Cierre del ciclo documental:** ver C7 — tras publicar, el doc del
+  incidente y `INDICE_INCIDENCIAS.md` quedan con el `tracker_id` real y `estado: publicada`
+  (frontmatter refrescado), cerrando el ciclo captura→publicación→doc con trazabilidad.
+  Cero trabajo del operador, agnóstico de runtime, backward-compatible.
+- **Directivas del operador incorporadas:** (1) mínima fricción — F3 crea directo y en lote
+  sin diálogos; (2) DOS ACTORES — el ciclo es cargador → resolutor, sin terceros roles ni
+  triage (verificado: el plan no introduce ninguno); (3) agentes MUY expertos — §3bis.
 
 > Este documento está redactado para que un **MODELO MENOR** (Haiku, Codex CLI o
 > GitHub Copilot Pro) lo implemente **SIN inferir nada**. Los nombres de símbolos,
@@ -120,6 +176,64 @@ respetando los 3 runtimes.
   vitest **por archivo**.
 - **G6 — Ratchet UI cero inline-style:** los `.tsx` nuevos tienen alcance 0 en
   `uiDebtRatchet`; usá clases del `.module.css`, no `style={{}}`.
+- **G7 (C1) — `_CATEGORY_KEYS` obligatorio:** toda flag nueva DEBE agregarse también al
+  dict `_CATEGORY_KEYS` de `services/harness_flags.py` (nota literal en `:325`: "toda flag
+  nueva debe agregarse también a _CATEGORY_KEYS (arriba) o el test
+  `test_every_registry_flag_is_categorized` rompe CI a propósito"). Ancla: la tupla que ya
+  contiene el literal `STACKY_INCIDENT_RESOLVER_ENABLED` (`:312`).
+- **G8 (C2) — `jsonify` requiere app context:** el post-hook de F3 corre en el thread del
+  agent runner SIN request/app context. PROHIBIDO `jsonify` (y todo acceso a `request`)
+  dentro de `_do_publish_incident`; solo dicts y tuplas `(dict, int)`.
+
+---
+
+## 3bis. Los 2 agentes expertos del ciclo (directiva del operador 2026-07-17)
+
+En una incidencia intervienen **DOS ACTORES**: el que la **CARGA** y el que la **RESUELVE**.
+No hay terceros roles, triage ni aprobadores intermedios. El human-in-the-loop del lado
+del resolutor se mantiene: el operador lanza al Dev Resolutor con un click y supervisa su
+salida (el agente comenta con evidencia; NUNCA transiciona ni cierra la Issue solo).
+Cada actor tiene UN agente experto a su servicio:
+
+### 3bis.1 — Agente de INTAKE: `IncidentAgent` (existente, Plan 131 — este plan lo potencia)
+
+| Dimensión | Especificación |
+|---|---|
+| Rol | Analista de Incidencias unificado (negocio + funcional + técnico en una pasada). Ya existe: `agents/incident.py:7` (`type="incident"`, `name="Incident Analyst"`). |
+| Entradas exactas | Bloques `incident-intake` (texto libre del cargador), `attachments-manifest` (manifiesto con texto inline de adjuntos `kind=="text"` + **desde F2** el texto OCR de cada captura), `epic-catalog` (catálogo de épicas del proyecto). Ver `default_blocks` en `agents/incident.py:19`. |
+| Salidas exactas | HTML puro con las secciones RESUMEN EJECUTIVO, CONTEXTO DE NEGOCIO, ANALISIS FUNCIONAL, ANALISIS TECNICO, PASOS DE REPRODUCCION, CRITERIOS DE ACEPTACION, ARCHIVOS Y MODULOS PROBABLES, EPICA RELACIONADA, PRIORIDAD Y ESTIMACION — el formato REAL ya en producción (ver insumo `docs/incidencias/INC-_inc-prestamos-...md`). Gate de forma: `_looks_like_incident` (`api/tickets.py:6142`); reintento automático: Plan 160 F0. |
+| Herramientas | Lectura del repo del proyecto activo (runtime CLI) para anclar ARCHIVOS Y MODULOS PROBABLES a `archivo:línea` reales; PROHIBIDO modificar código. |
+| Modelo/runtime | Los 3 runtimes con paridad (corre vía `agent_runner.run_agent`); la visión NO depende del runtime porque el OCR de F2 entra inline en el prompt (fallback declarado en F2). |
+| Criterios binarios | (a) `_looks_like_incident(html) == True`; (b) si una imagen tiene `ocr_text`, el prompt contiene la sección `"Texto extraído de las capturas (visión)"` (test F2 caso 6); (c) NO le pide nada extra al cargador: normaliza con lo que hay y marca `[PENDIENTE]` solo lo estrictamente ilegible. |
+
+**F2b — refuerzo experto ADITIVO del prompt (editar `agents/incident.py::system_prompt`):**
+al final del string retornado, CONCATENAR (aditivo, sin tocar el texto existente — los
+tests del Plan 131 validan el HTML de salida, no el prompt, pero no se reescribe nada):
+
+```python
+            " Si el contexto incluye la sección 'Texto extraído de las capturas (visión)', "
+            "tratá ese texto como EVIDENCIA PRIMARIA de la incidencia: extraé de ahí "
+            "mensajes de error, códigos, valores de pantalla y nombres de campos, citalos "
+            "textualmente en ANALISIS FUNCIONAL/TECNICO y usalos para los PASOS DE "
+            "REPRODUCCION. Nunca le pidas información adicional al cargador: normalizá con "
+            "lo disponible, distinguí HECHOS (lo que se ve/lee) de HIPOTESIS (lo que "
+            "inferís) marcando las hipótesis como tales, y dejá la incidencia lista para "
+            "que un dev la resuelva sin volver a preguntar."
+```
+
+### 3bis.2 — Agente DEV RESOLUTOR: `IncidentDevAgent` (NUEVO — F4)
+
+| Dimensión | Especificación |
+|---|---|
+| Rol | Dev senior del proyecto activo que TOMA una Issue de incidencia dev-ready y la RESUELVE en el repo, con supervisión del operador (lanzado on-click, F5). |
+| Entradas exactas | El `Ticket` local de la Issue (`work_item_type` ∈ {"Issue","Bug"}): título + descripción HTML (el desglose completo del intake) + doc del incidente si existe (`incident.doc_path`) — vía `build_incident_dev_prompt` (F4). |
+| Salidas exactas | Cambios de código en el repo + comentario final que empieza con `🚀` (contrato de secciones en el prompt de abajo) O, si la causa NO es de código, comentario que empieza con `⚠️ BLOQUEADO` (sin tocar código). NUNCA publica tickets ni transiciona la Issue. |
+| Herramientas | Las del `DeveloperAgent` espejo: `['codebase','search','usages','problems','changes']` (frontmatter del `.agent.md`, F4). |
+| Modelo/runtime | Los 3 runtimes con paridad vía `agent_runner.run_agent` (mismo camino que Developer); passthrough de `model_override`/`effort_override` idéntico a `run_incident`. |
+| Criterios binarios | (a) `"incident_dev" in registry`; (b) endpoint `run-incident-dev` responde 202 con `execution_id`; (c) el system_prompt contiene los literales `"🚀"`, `"⚠️ BLOQUEADO"` y `"criterios de aceptación"` (tests F4). |
+
+El prompt experto literal de este agente está en F4 (§4.4) — es NORMATIVO: se copia
+carácter por carácter.
 
 ---
 
@@ -156,8 +270,8 @@ el panel del Arnés.
 
 | Key | Default | Uso |
 |---|---|---|
-| `STACKY_INCIDENT_VISION_ENDPOINT` | `""` | endpoint OpenAI-compatible de visión; si vacío usa `LOCAL_LLM_ENDPOINT` |
-| `STACKY_INCIDENT_VISION_MODEL` | `""` | modelo de visión; si vacío usa `LOCAL_LLM_MODEL` |
+| `STACKY_INCIDENT_VISION_ENDPOINT` | `""` | **URL COMPLETA de chat-completions** (C4 — mismo contrato que `LOCAL_LLM_ENDPOINT`, ej. `http://localhost:11434/v1/chat/completions`, ver `copilot_bridge.py:257-261`); si vacío usa `LOCAL_LLM_ENDPOINT` |
+| `STACKY_INCIDENT_VISION_MODEL` | `""` | modelo de visión (ej. `llama3.2-vision`, `llava`); si vacío usa `LOCAL_LLM_MODEL` |
 
 **Diff ilustrativo — `config.py`** (agregar después de
 `STACKY_INCIDENT_RESOLVER_ENABLED`, `:950-952`):
@@ -196,8 +310,24 @@ el panel del Arnés.
     ).lower() in ("1", "true", "yes")
 ```
 
-**Diff ilustrativo — `harness_flags.py`** (agregar 4 `FlagSpec` bool + 2 `FlagSpec` str en
-el grupo `"incidents"` o `"global"`; usar `group="incidents"`):
+**Registro en `_CATEGORY_KEYS` (C1/G7 — OBLIGATORIO, o el meta-test rompe):** en
+`services/harness_flags.py`, ubicá la tupla de `_CATEGORY_KEYS` que contiene el literal
+`"STACKY_INCIDENT_RESOLVER_ENABLED"` (`:312`) y agregá inmediatamente después, dentro de
+la MISMA tupla:
+
+```python
+        "STACKY_INCIDENT_TICKET_PERSIST_ENABLED",  # Plan 166 F1 — espejo local de la Issue
+        "STACKY_INCIDENT_VISION_OCR_ENABLED",      # Plan 166 F2 — OCR de capturas
+        "STACKY_INCIDENT_VISION_ENDPOINT",         # Plan 166 F2 — endpoint de visión
+        "STACKY_INCIDENT_VISION_MODEL",            # Plan 166 F2 — modelo de visión
+        "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",    # Plan 166 F3 — creación directa/lote
+        "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
+```
+
+**Diff ilustrativo — `harness_flags.py`** (agregar 4 `FlagSpec` bool + 2 `FlagSpec` str
+inmediatamente DESPUÉS del `FlagSpec` de `STACKY_INCIDENT_RESOLVER_ENABLED` (`:3294-3311`);
+usar `group="global"` — espejo VERIFICADO del flag hermano (`:3308`); NO inventar un grupo
+nuevo (C1)):
 
 ```python
     FlagSpec(
@@ -205,40 +335,40 @@ el grupo `"incidents"` o `"global"`; usar `group="incidents"`):
         type="bool", default=True,
         label="Persistir Issue de incidencia en Tickets",
         description="Al publicar una incidencia, crea el ticket local de la Issue al instante (no esperás al sync de ADO).",
-        group="incidents", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_INCIDENT_VISION_OCR_ENABLED",
         type="bool", default=True,
         label="Procesar capturas (OCR/visión)",
         description="Extrae el texto de las capturas adjuntas y lo suma al desglose. Si no hay modelo de visión configurado, degrada a marcar la captura como pendiente.",
-        group="incidents", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_INCIDENT_VISION_ENDPOINT", type="str", default="",
         label="Endpoint de visión (OpenAI-compatible)",
-        description="URL del endpoint de visión para OCR de capturas. Vacío = usar el endpoint del modelo local del Arnés.",
-        group="incidents", requires="STACKY_INCIDENT_VISION_OCR_ENABLED",
+        description="URL COMPLETA de chat-completions del endpoint de visión (ej. http://localhost:11434/v1/chat/completions). Mismo contrato que el endpoint del modelo local del Arnés. Vacío = usar ese endpoint local.",
+        group="global", requires="STACKY_INCIDENT_VISION_OCR_ENABLED",
     ),
     FlagSpec(
         key="STACKY_INCIDENT_VISION_MODEL", type="str", default="",
         label="Modelo de visión",
         description="Nombre del modelo de visión (ej. llama3.2-vision, llava). Vacío = usar el modelo local del Arnés.",
-        group="incidents", requires="STACKY_INCIDENT_VISION_OCR_ENABLED",
+        group="global", requires="STACKY_INCIDENT_VISION_OCR_ENABLED",
     ),
     FlagSpec(
         key="STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",
         type="bool", default=True,
         label="Crear incidencias directo (sin confirmar)",
         description="Publica la Issue apenas el análisis termina, sin pedir confirmación, y permite cargar varias seguidas. Apagalo para volver al paso de revisión manual.",
-        group="incidents", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
         type="bool", default=True,
         label="Agente Dev Resolutor de Incidencias",
         description="Habilita el botón 'Resolver con agente' en las Issues para que un agente dev analice el repo y proponga el fix.",
-        group="incidents",
+        group="global",
     ),
 ```
 
@@ -261,8 +391,10 @@ agregar las dos `type="str"` (no son bool, no van al set). Editar
 cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest tests/test_harness_flags.py tests/test_harness_flags_requires.py -q
 ```
 
-**Criterio de aceptación BINARIO:** ambos archivos verdes (0 fallos). El endpoint
-`GET /api/harness/flags` (existente) devuelve los 6 keys nuevos.
+**Criterio de aceptación BINARIO:** ambos archivos verdes (0 fallos) — incluye
+`test_every_registry_flag_is_categorized` (verde SOLO si hiciste el paso `_CATEGORY_KEYS`
+de arriba, C1/G7). El endpoint `GET /api/harness/flags` (existente) devuelve los 6 keys
+nuevos.
 
 **Impacto por runtime:** ninguno (sólo definiciones de flags). **Fallback:** N/A.
 **Trabajo del operador:** ninguno.
@@ -379,11 +511,23 @@ desglose lo aproveche en los 3 runtimes.
   (`build_attachments_manifest` `:157` incluye `ocr_text` inline)
 - EDITAR `Stacky Agents/backend/api/agents.py` (`run_incident` `:877` llama al enricher
   antes de `build_incident_prompt` `:998`)
+- EDITAR `Stacky Agents/backend/agents/incident.py` (**F2b** — refuerzo ADITIVO del
+  `system_prompt`, texto literal en §3bis.1; se CONCATENA al final del string existente,
+  sin tocar nada de lo que ya hay)
 
 **Símbolos EXACTOS (nuevos en `incident_vision.py`):**
 - `extract_text_from_image(image_path: Path, mime: str, *, endpoint: str, model: str, timeout_sec: int = 120, on_log=None) -> str | None`
+  — el `timeout_sec` efectivo lo pasa el caller: `int(getattr(_cfg, "LOCAL_LLM_TIMEOUT_SEC", 120))`
+  (C4 — mismo patrón que `copilot_bridge.py:265`; NO se inventa un timeout nuevo).
 - `enrich_incident_with_ocr(incident_id: str) -> dict` — devuelve el incidente actualizado.
-- constante `_VISION_PROMPT` (system) y `_VISION_INSTRUCTION` (user text).
+- Constantes de presupuesto (C5, literales): `_MAX_IMAGES_PER_INCIDENT = 6`,
+  `_TOTAL_OCR_BUDGET_SEC = 240`. El tamaño por imagen ya está acotado por el intake
+  (`incident_store.MAX_FILE_BYTES`, cap aplicado en `api/incidents.py:50-55`); NO hay que
+  re-validarlo, solo documentarlo.
+- constante `_VISION_INSTRUCTION` (user text).
+- **Contrato del endpoint (C4):** `endpoint` es la URL COMPLETA de chat-completions
+  (mismo contrato que `LOCAL_LLM_ENDPOINT`, `copilot_bridge.py:257-261`); se postea
+  directo, sin concatenar paths.
 
 **Pseudocódigo — `extract_text_from_image`** (formato de visión OpenAI EXACTO; Ollama
 llava / llama3.2-vision, LM Studio y OpenAI lo aceptan):
@@ -446,13 +590,26 @@ def enrich_incident_with_ocr(incident_id):
         return incident  # sin modelo de visión → degradación exacta a hoy
     files = incident.get("files") or []
     incident_dir = incident_store.incidents_root() / incident_id
+    timeout_sec = int(getattr(_cfg, "LOCAL_LLM_TIMEOUT_SEC", 120))  # C4
     changed = False
+    processed = 0
+    import time as _time
+    started = _time.monotonic()
     for f in files:
         if f.get("kind") != "image" or f.get("ocr_text"):
             continue
+        # C5 — presupuesto: máx _MAX_IMAGES_PER_INCIDENT imágenes y
+        # _TOTAL_OCR_BUDGET_SEC segundos en total; lo que no entra queda sin
+        # ocr_text (degradación declarada: manifiesto como hoy, [PENDIENTE]).
+        if processed >= _MAX_IMAGES_PER_INCIDENT:
+            break
+        if _time.monotonic() - started > _TOTAL_OCR_BUDGET_SEC:
+            break
         mime = _mime_for_ext(f.get("ext", ""))   # ".png"->"image/png", etc.
         text = extract_text_from_image(incident_dir / f["stored_name"], mime,
-                                       endpoint=endpoint, model=model)
+                                       endpoint=endpoint, model=model,
+                                       timeout_sec=timeout_sec)
+        processed += 1
         if text:
             f["ocr_text"] = text
             changed = True
@@ -505,6 +662,11 @@ de `prompt = incident_context.build_incident_prompt(...)`):
    (degradación).
 6. `test_manifest_includes_ocr_text`: un incidente con `ocr_text` en una imagen →
    `build_attachments_manifest` contiene `"texto extraído de la captura"` y el texto.
+7. `test_enrich_respects_image_cap` (C5): incidente con 8 imágenes; mock de
+   `extract_text_from_image` que cuenta llamadas → se llama exactamente
+   `_MAX_IMAGES_PER_INCIDENT` (6) veces.
+8. `test_incident_prompt_mentions_vision_section` (F2b): `IncidentAgent().system_prompt()`
+   contiene el literal `"Texto extraído de las capturas (visión)"`.
 
 Registrar en `HARNESS_TEST_FILES` (G2).
 
@@ -513,7 +675,7 @@ Registrar en `HARNESS_TEST_FILES` (G2).
 cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest tests/test_incident_vision.py -q
 ```
 
-**Criterio BINARIO:** 6 casos verdes.
+**Criterio BINARIO:** 8 casos verdes.
 
 **Impacto por runtime:**
 - **Claude Code CLI / Codex CLI / GitHub Copilot Pro:** idénticos — todos reciben el texto
@@ -542,8 +704,10 @@ y aceptada por directiva explícita del operador 2026-07-17, precedente épica-d
   - extraer el núcleo de publicación a `_do_publish_incident(incident_id, execution_id, *, work_item_type="Issue", override_epic_id=_UNSET) -> dict` reutilizable.
 - CREAR `Stacky Agents/backend/services/incident_autopublish.py` (post-hook agnóstico).
 - EDITAR `Stacky Agents/backend/app.py` — registrar el post-hook al crear la app.
-- EDITAR `Stacky Agents/backend/services/incident_store.py` — el intake guarda
-  `auto_publish` (bool) y campos de resultado ya existen (`tracker_id`, etc.).
+- EDITAR `Stacky Agents/backend/services/incident_store.py` — (a) `create_incident` acepta
+  y guarda `auto_publish` (bool); (b) NUEVA `find_by_execution(execution_id)` (ver 4.3.3).
+  Los campos de resultado (`tracker_id`, `tracker_url`, `execution_id`, `status`) ya
+  existen — no se agregan.
 - EDITAR `Stacky Agents/backend/api/incidents.py` — `create_incident_endpoint` acepta
   `auto_publish` del form y lo pasa al store.
 - EDITAR frontend: `IncidentResolverModal.tsx`, `incidents/incidentQueue.ts` (NUEVO, modelo
@@ -568,12 +732,40 @@ Reemplazar el bloque `:7407-7413` por:
 Con el flag ON, la ausencia de `confirm` ya no bloquea (el flag ES la autorización
 permanente). Con el flag OFF, el contrato legacy se preserva byte-idéntico.
 
-**4.3.2 — Núcleo reutilizable `_do_publish_incident`:** mover el cuerpo actual de
-`publish_incident` (`:7415-7568`, desde la resolución del incidente hasta el `return
-jsonify(...201)`) a una función pura-de-side-effects `_do_publish_incident(...) -> dict`
-que devuelve el dict de resultado (o lanza). `publish_incident` queda como wrapper HTTP que
-valida el flag/confirm y llama al núcleo. El núcleo es lo que reusará el post-hook.
-(Incluye ya la llamada a `_persist_incident_ticket` de F1.)
+**4.3.2 — Núcleo reutilizable `_do_publish_incident` (contrato EXACTO, C2/G8):** mover el
+cuerpo actual de `publish_incident` (`:7415-7568`, desde la resolución del incidente hasta
+el `return jsonify(...201)`) a `_do_publish_incident(incident_id, execution_id, *,
+work_item_type="Issue", override_epic_id=_UNSET) -> tuple[dict, int]`. Reglas literales:
+
+- **PROHIBIDO `jsonify` y todo acceso a `request` dentro del núcleo** (G8): el post-hook lo
+  invoca desde el thread del agent runner SIN app/request context; `jsonify` ahí lanza
+  `RuntimeError: Working outside of application context`.
+- Cada `return jsonify(X), N` del rango movido se convierte en `return X, N` (dict crudo +
+  status HTTP). `publish_incident` queda como wrapper HTTP: valida flag/confirm, lee el
+  body (`_body_json()` se queda en el wrapper), llama al núcleo y hace
+  `payload, status = _do_publish_incident(...); return jsonify(payload), status`.
+- `_incident_publish_terminal_error` (`:7389`, marca `status="error"` en el store y
+  devuelve `jsonify(...), 502`): correr `grep -n "_incident_publish_terminal_error"
+  api/tickets.py` — si SOLO se llama dentro del rango movido, cambiar su retorno a
+  `(dict, int)` (sin jsonify); si tiene otros callers, crear la variante
+  `_incident_publish_terminal_error_payload(...) -> tuple[dict, int]` y que la vieja la
+  envuelva con jsonify.
+- El núcleo incluye la llamada a `_persist_incident_ticket` de F1.
+- **[ADICIÓN ARQUITECTO] Cierre del ciclo documental (C7 — bug real verificado):** hoy
+  `write_incident_doc` se llama con el dict `incident` VIEJO (`:7538`) ANTES del
+  `update_incident(status="publicada", tracker_id=..., ...)` (`:7544`), así que el doc de
+  `docs/incidencias/` y su línea en `INDICE_INCIDENCIAS.md` quedan con `tracker_id:` vacío
+  y `estado` viejo aun después de publicar (verificable en el insumo real
+  `INC-_inc-prestamos-...md`, frontmatter `tracker_id:` vacío). Dentro del núcleo,
+  REORDENAR: (1) `update_incident(status="publicada", tracker_id=tracker_id,
+  tracker_url=url, epic_id=epic_id, title=title)` PRIMERO (sin `doc_path`); (2)
+  `incident = incident_store.get_incident(incident_id)` (refrescado); (3)
+  `doc_path = incident_docs.write_incident_doc(incident, title, html, related)`
+  (best-effort, mismo try/except de hoy — la escritura es idempotente por marker,
+  `incident_docs.py:62`); (4) `update_incident(incident_id, doc_path=doc_path)` si
+  `doc_path` no es None. Resultado: el doc y el índice nacen con el tracker real y
+  `estado: publicada`. Cero trabajo del operador, agnóstico de runtime,
+  backward-compatible (con flag OFF el orden nuevo es igual de válido).
 
 **4.3.3 — Post-hook agnóstico (`incident_autopublish.py`):**
 
@@ -591,27 +783,52 @@ def maybe_autopublish_incident(*, ticket_id, execution_id, final_status, agent_t
     if agent_type != "incident" or final_status != "completed":
         return
     from services import incident_store
-    # localizar el incidente por execution_id (el store lo guardó al lanzar el análisis)
-    incident = _find_incident_by_execution(execution_id)   # helper que recorre list_incidents()
+    # localizar el incidente por execution_id (el store lo guardó al lanzar el
+    # análisis — VERIFICADO: api/agents.py:1044 hace
+    # update_incident(incident_id, status="analizando", execution_id=execution_id))
+    incident = incident_store.find_by_execution(execution_id)
     if incident is None or not incident.get("auto_publish"):
         return
     if incident.get("tracker_id"):
         return  # ya publicada (idempotente)
     try:
         from api.tickets import _do_publish_incident
-        _do_publish_incident(incident_id=incident["id"], execution_id=execution_id)
-    except Exception as exc:  # noqa: BLE001 — best-effort; el store ya marca error
+        payload, status = _do_publish_incident(
+            incident_id=incident["id"], execution_id=execution_id,
+        )
+        if status >= 400:
+            # Los errores terminales de tracker YA marcan status="error" en el
+            # store (vía _incident_publish_terminal_error). Otros payloads de
+            # error (p.ej. incident_not_in_output 422) NO — marcarlo acá para
+            # que la cola del modal lo muestre (C3, plan 135: cero errores mudos).
+            if (incident_store.get_incident(incident["id"]) or {}).get("status") != "error":
+                incident_store.update_incident(
+                    incident["id"], status="error",
+                    error=str(payload.get("error") or f"http_{status}"),
+                )
+            logger.warning("autopublish incidencia execution=%s status=%s payload=%s",
+                           execution_id, status, payload.get("error"))
+    except Exception as exc:  # noqa: BLE001 — C3: el fallo NUNCA queda mudo
         logger.warning("autopublish incidencia execution=%s falló: %s", execution_id, exc)
+        try:
+            incident_store.update_incident(incident["id"], status="error", error=str(exc))
+        except Exception:  # noqa: BLE001 — best-effort final
+            pass
 
 def register(register_post_hook):
     register_post_hook(maybe_autopublish_incident)
 ```
 
-`_find_incident_by_execution(execution_id)`: recorre `incident_store.list_incidents()` y
-abre `get_incident` del que tenga `execution_id` igual (o agregar
-`incident_store.find_by_execution(execution_id)` — preferido, O(n) sobre el ledger).
+**`incident_store.find_by_execution(execution_id: int) -> dict | None` (NUEVA — decisión
+tomada, C9, sin alternativas):** en `services/incident_store.py`, agregar una función que
+recorre el ledger (`list_incidents()`), encuentra la entrada cuyo `execution_id` coincide
+y devuelve `get_incident(id)` completo, o `None`. O(n) sobre el ledger; suficiente
+(mono-operador).
 
-**Registro en `app.py`** (dentro de `create_app`, junto a otros registros de hooks):
+**Registro en `app.py`** (dentro de `create_app`; ancla literal (C9): buscá con
+`grep -n "register_post_hook" backend/app.py` el registro de hooks existente y agregá el
+bloque inmediatamente DESPUÉS de ese registro; si el grep no da hits dentro de
+`create_app`, agregalo justo ANTES del `return app` final):
 
 ```python
     from services import ticket_status, incident_autopublish
@@ -634,18 +851,29 @@ agrega `formData.append("auto_publish", String(autoPublish))`.
                                trackerId?: string; url?: string; error?: string; }
   export function upsertQueueItem(items: QueueItem[], next: QueueItem): QueueItem[] { /* reemplaza por id o agrega */ }
   export function queueSummary(items: QueueItem[]): { total: number; publicadas: number; errores: number } { /* … */ }
+  export function mapStoreStatus(status: string | null | undefined): QueueItemStatus {
+    /* mapa TOTAL (C3): "capturada"->"capturando"; "analizando"|"analizada"->"analizando";
+       "publicada"->"publicada"; "error" y cualquier otro/null -> "error" */ }
   ```
 - `IncidentResolverModal.tsx`:
   - Leer `Incidents.status()` (ya trae `enabled`); agregar al DTO de status el campo
-    `auto_publish_enabled` (backend `incidents_status` `:13` lo expone leyendo el flag).
+    `auto_publish_enabled` (backend `incidents_status` `:14` lo expone leyendo el flag,
+    mismo patrón `bool(_cfg.STACKY_...)` de `:18`).
   - Cuando `auto_publish_enabled` es **true**: el botón "▶ Analizar" (`:377`) pasa a
     **"➕ Crear incidencia"**. `handleAnalyze` (`:151`) llama
     `Incidents.create(text, files, /*autoPublish*/ true)` → `Incidents.runAnalysis(...)`,
     agrega el ítem a la cola (`upsertQueueItem`, estado `"analizando"`), **limpia el form**
     (`setText("")`, `setFiles([])`) y **queda en `step="intake"`** para la siguiente. NO
-    pasa por `preview`/`approved`. Un `setInterval` liviano refresca la cola vía
-    `Incidents.list()` mapeando cada incidente a `QueueItem` (status del store:
-    `analizando`→"analizando", `publicada`→"publicada", `error`→"error").
+    pasa por `preview`/`approved`. La cola se refresca vía `Incidents.list()` mapeando cada
+    incidente a `QueueItem` con `mapStoreStatus` (función pura en `incidentQueue.ts`, mapa
+    TOTAL de los 5 estados reales del store — C3/C9): `capturada`→"capturando",
+    `analizando`→"analizando", `analizada`→"analizando" (aún sin publicar por el hook),
+    `publicada`→"publicada", `error`→"error"; cualquier otro string→"error".
+    **Polling acotado (C8, coherente con el plan 156 del latido único):** `setInterval` de
+    **3000 ms**, activo SOLO mientras (a) el modal está abierto, (b) `auto_publish_enabled`
+    es true y (c) hay ≥1 `QueueItem` en estado no-terminal ("capturando"/"analizando");
+    `clearInterval` en el cleanup del efecto y al no cumplirse (c). Con la cola vacía o
+    todo terminal: CERO requests.
   - Cuando `auto_publish_enabled` es **false**: comportamiento actual intacto
     (preview + checkbox + publish con `confirm:true`).
   - Render de la cola: una lista `<ul className={styles.queueList}>` con cada `QueueItem`
@@ -665,10 +893,21 @@ agrega `formData.append("auto_publish", String(autoPublish))`.
      `confirm` y flag ON → 201 (no 400).
   6. `test_publish_endpoint_requires_confirm_when_flag_off`: flag OFF y sin `confirm` → 400
      `confirmation_required` (legacy intacto).
+  7. `test_autopublish_marks_error_on_exception` (C3): `_do_publish_incident` mockeado para
+     lanzar `RuntimeError("boom")` → el incidente queda `status="error"` con `error` seteado
+     (la cola nunca se queda muda en "analizando").
+  8. `test_publish_backfills_doc_tracker_id` ([ADICIÓN ARQUITECTO]/C7): publish exitoso
+     (provider mockeado `{"id": 999}`) → el doc escrito en `docs/incidencias/` contiene
+     `tracker_id: 999` en el frontmatter (leer el archivo de `doc_path` del store).
+  **Setup (C10):** espejar los helpers existentes de
+  `tests/test_plan131_incident_preview_publish.py` (`_make_app`, `_patch_run`, mock del
+  provider y `_flag`) — NO inventar un arnés nuevo.
   Registrar en `HARNESS_TEST_FILES` (G2).
-- Frontend nuevo `frontend/src/incidents/incidentQueue.test.ts`:
+- Frontend nuevo `frontend/src/incidents/incidentQueue.test.ts` (4 casos):
   `test upsertQueueItem reemplaza por id`, `test upsertQueueItem agrega nuevo`,
-  `test queueSummary cuenta publicadas y errores`.
+  `test queueSummary cuenta publicadas y errores`,
+  `test mapStoreStatus mapa total incluye analizada y desconocidos` (C3: `"analizada"` →
+  `"analizando"`, `"cualquier-cosa"`/`null` → `"error"`).
 
 **Comandos:**
 ```bash
@@ -678,8 +917,8 @@ cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest tests/test_incident
 cd "Stacky Agents/frontend" && npx vitest run src/incidents/incidentQueue.test.ts
 ```
 
-**Criterio BINARIO:** backend 6 casos + suite `test_plan131_incident_preview_publish.py`
-(existente) siguen verdes; frontend 3 casos verdes; `npx tsc --noEmit` limpio.
+**Criterio BINARIO:** backend 8 casos + suite `test_plan131_incident_preview_publish.py`
+(existente) siguen verdes; frontend 4 casos verdes; `npx tsc --noEmit` limpio.
 
 **Impacto por runtime:** el auto-publish corre en `register_post_hook`, invocado por
 `ticket_status.on_execution_end` para **cualquier** runtime → paridad total Codex / Claude /
@@ -715,20 +954,45 @@ los 3 runtimes.
 - `incident_dev_context.ensure_incident_dev_agent_file() -> Path` (espejo de
   `incident_context.ensure_incident_agent_file()` `:116`).
 
-**`system_prompt()` (literal):**
+**`system_prompt()` (literal, NORMATIVO — C6/§3bis.2; se copia carácter por carácter):**
 
 ```python
     def system_prompt(self) -> str:
         return (
-            "Sos el Dev Resolutor de Incidencias. Recibís una Issue de incidencia con su "
-            "desglose dev-ready (resumen, análisis funcional/técnico, pasos de reproducción, "
-            "criterios de aceptación y archivos/módulos probables). Tu trabajo es RESOLVERLA "
-            "en el repo del proyecto: reproducís, localizás la causa raíz, implementás el fix "
-            "MÍNIMO dentro del alcance de los criterios de aceptación, corrés los tests que "
-            "correspondan y NO inventás. Cada cambio lleva su trazabilidad. Cerrás con un "
-            "comentario que empieza con 🚀 e incluye: archivos modificados, causa raíz, "
-            "diff/resumen del fix, resultados de tests y verificación de los criterios de "
-            "aceptación. PROHIBIDO narrar lo que vas a hacer sin hacerlo: entregás evidencia real."
+            "Sos el Dev Resolutor de Incidencias: un desarrollador SENIOR del proyecto "
+            "activo, experto en su stack y sus convenciones, que toma una Issue de "
+            "incidencia dev-ready y la RESUELVE en el repo con evidencia real.\n\n"
+            "TU ENTRADA es el desglose de la incidencia con estas secciones: RESUMEN "
+            "EJECUTIVO, CONTEXTO DE NEGOCIO, ANALISIS FUNCIONAL, ANALISIS TECNICO, PASOS "
+            "DE REPRODUCCION, CRITERIOS DE ACEPTACION, ARCHIVOS Y MODULOS PROBABLES, "
+            "EPICA RELACIONADA, PRIORIDAD Y ESTIMACION. Usalas así: los CRITERIOS DE "
+            "ACEPTACION definen tu ALCANCE EXACTO (ni más ni menos); ARCHIVOS Y MODULOS "
+            "PROBABLES es tu punto de partida de lectura; el ANALISIS TECNICO puede "
+            "contener HIPOTESIS del analista, no hechos — VERIFICALAS contra el código "
+            "real ANTES de creerlas: leé cada archivo citado, confirmá que la línea y el "
+            "símbolo existen y que la causa propuesta es real. Si el análisis se equivocó, "
+            "decilo con evidencia y resolvé la causa raíz VERDADERA dentro del alcance de "
+            "los criterios de aceptación.\n\n"
+            "METODO OBLIGATORIO: (1) reproducí o localizá el defecto con evidencia "
+            "archivo:línea; (2) implementá el fix MINIMO que cumple los criterios de "
+            "aceptación — sin refactors oportunistas, sin tocar código ajeno al defecto; "
+            "(3) corré los tests/compilación que el proyecto tenga para el área tocada y "
+            "pegá el resultado REAL; (4) si un criterio de aceptación no queda cubierto, "
+            "declaralo explícitamente — PROHIBIDO afirmarlo sin verificarlo.\n\n"
+            "CASO ESPECIAL — la causa NO es de código: si tu verificación muestra que el "
+            "defecto viene de DATOS o ENTORNO (por ejemplo: falta una fila en una tabla "
+            "que un JOIN requiere, una config de ambiente, un job de carga que no corrió), "
+            "NO inventes un workaround de código que lo tape. En ese caso NO modifiques "
+            "nada y cerrá con un comentario que empiece con ⚠️ BLOQUEADO explicando: qué "
+            "verificaste, por qué la causa no es de código, y qué acción externa se "
+            "necesita (con el dato exacto: tabla, registro, proceso).\n\n"
+            "CIERRE NORMAL: un comentario que empieza con 🚀 con EXACTAMENTE estas "
+            "secciones: CAUSA RAIZ (con archivo:línea), ARCHIVOS MODIFICADOS, RESUMEN DEL "
+            "FIX (diff o descripción precisa), TESTS EJECUTADOS Y RESULTADO, CRITERIOS DE "
+            "ACEPTACION VERIFICADOS (uno por uno: cumplido/no cumplido y cómo lo "
+            "comprobaste). PROHIBIDO narrar lo que vas a hacer sin hacerlo: entregás "
+            "evidencia real. NUNCA cerrás ni transicionás la Issue en el tracker: eso lo "
+            "decide el operador."
         )
 ```
 
@@ -759,8 +1023,8 @@ que viaje en el bundle congelado.
 
 **Tests (TDD):** archivo nuevo `backend/tests/test_incident_dev_agent.py`. Casos:
 1. `test_incident_dev_registered`: `from agents import registry; assert "incident_dev" in registry`.
-2. `test_incident_dev_system_prompt_has_contract`: el prompt contiene `"🚀"` y
-   `"criterios de aceptación"`.
+2. `test_incident_dev_system_prompt_has_contract`: el prompt contiene `"🚀"`,
+   `"⚠️ BLOQUEADO"` y `"criterios de aceptación"` (§3bis.2, criterio c).
 3. `test_run_incident_dev_404_when_flag_off`: flag OFF → `POST /api/agents/run-incident-dev` → 404.
 4. `test_run_incident_dev_400_when_not_issue`: ticket con `work_item_type="Task"` → 400 `not_an_issue`.
 5. `test_run_incident_dev_launches`: mock de `agent_runner.run_agent` → 202 con `execution_id`.
@@ -812,9 +1076,11 @@ punta a punta.
 
 **`TicketBoard.tsx::TicketCard`:** calcular
 `const isIssue = ["issue","bug"].includes((ticket.work_item_type ?? "").toLowerCase());`
-(espejo de `isEpic` `:260`). Un flag de disponibilidad se lee una vez en el `TicketBoard`
-raíz (nuevo `Incidents.status()` ya se llama; extender el DTO con `dev_resolver_enabled`
-que el backend expone en `incidents_status`). Cuando `isIssue && devResolverEnabled &&
+(espejo de `isEpic` `:260`). El flag de disponibilidad se lee donde el board YA llama
+`Incidents.status()` (VERIFICADO: `TicketBoard.tsx:715`, `const s = await
+Incidents.status();`) — extender ese mismo consumo con el campo nuevo
+`dev_resolver_enabled` que el backend expone en `incidents_status` (`api/incidents.py:14`,
+mismo patrón que `auto_publish_enabled` de F3). Cuando `isIssue && devResolverEnabled &&
 !isClosed && !isRunning`, renderizar:
 
 ```tsx
@@ -897,11 +1163,14 @@ cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest \
 | # | Riesgo | Mitigación |
 |---|---|---|
 | R1 | Auto-publish (F3) publica una Issue con desglose de baja calidad sin que el operador la vea. | Es la excepción dura #1 pedida por el operador; el desglose igual pasa por `_looks_like_incident` (`:7440`, gate de forma) y el reintento de repair del Plan 160. El operador puede apagar el flag por UI para recuperar el gate. |
-| R2 | El endpoint de visión (F2) es lento o cuelga y demora el análisis. | `timeout_sec` (default 120) + cualquier fallo → `None` (degradación); la extracción es best-effort y no bloquea el run (`try/except` en `run_incident`). |
+| R2 | El endpoint de visión (F2) es lento o cuelga y demora el análisis. | `timeout_sec` = `LOCAL_LLM_TIMEOUT_SEC` (C4) + presupuesto duro (C5: máx 6 imágenes, 240 s totales) + cualquier fallo → `None` (degradación); la extracción es best-effort y no bloquea el run (`try/except` en `run_incident`). |
 | R3 | La imagen contiene datos sensibles y el OCR los mete en la Issue de ADO. | El texto extraído pasa por el mismo centinela de egreso de secretos/PII (Plan 121) que el resto del contenido publicado; no se agrega superficie nueva de egreso (la imagen ya se subía como adjunto). |
 | R4 | `_persist_incident_ticket` (F1) choca con el sync de ADO y duplica la Issue. | Idempotente por `ado_id` (`filter(Ticket.ado_id == ado_id).first()`); el sync upsertea por el mismo `ado_id` (`ado_sync.py:158-161`), no duplica. |
 | R5 | El post-hook de auto-publish (F3) se dispara para runs que no son de incidencia. | Guard `agent_type == "incident"` + `final_status == "completed"` + `incident.auto_publish` al inicio del hook; retorno temprano en todo lo demás. |
 | R6 | Merge con la sesión paralela sobre `api/tickets.py` / `IncidentResolverModal.tsx`. | Cambios aditivos (funciones y ramas nuevas); revisar `git status` en frío antes de commitear (memoria de sesión paralela). |
+| R7 | El post-hook llama código de endpoint fuera del app context y crashea (`jsonify`/`request`). | Contrato C2/G8: `_do_publish_incident` devuelve `(dict, int)`, jamás usa `jsonify` ni `request`; test 1 de F3 lo ejercita desde fuera de un request. |
+| R8 | En lote, un fallo de publicación queda mudo y la cola muestra "analizando" para siempre. | C3: el hook marca `status="error"` en el store ante payload ≥400 o excepción; `mapStoreStatus` es mapa TOTAL (desconocido → "error"); test 7 de F3. |
+| R9 | El agente Dev Resolutor "resuelve" con un workaround de código un defecto que en realidad es de datos/entorno (caso real: fila faltante en RPRES del insumo `INC-_inc-prestamos-...md`). | Prompt experto §3bis.2: contrato ⚠️ BLOQUEADO — verificar antes de creer, prohibido tapar causas de datos con código; el operador decide la acción externa. |
 
 ---
 
@@ -954,8 +1223,10 @@ cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest \
 ### Definición de Hecho (DoD) global
 
 - [ ] Los 6 keys de flags/config nuevos existen en `config.py` + `harness_flags.py`; los 4
-      bool `default=True` están en `_CURATED_DEFAULTS_ON`; las 5 aristas `requires` están en
-      `test_harness_flags_requires.py`. `test_harness_flags*.py` verdes.
+      bool `default=True` están en `_CURATED_DEFAULTS_ON`; los 6 keys están en
+      `_CATEGORY_KEYS` (C1/G7, junto a `STACKY_INCIDENT_RESOLVER_ENABLED`); las 5 aristas
+      `requires` están en `test_harness_flags_requires.py`. `test_harness_flags*.py` verdes
+      (incluye `test_every_registry_flag_is_categorized`).
 - [ ] Publicar una incidencia crea el `Ticket` local de la Issue al instante
       (`test_persist_incident_ticket.py` verde; smoke: aparece en el board sin sync).
 - [ ] Una captura con texto aporta ese texto al desglose vía OCR inline
@@ -969,10 +1240,19 @@ cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest \
 - [ ] Las Issues del board muestran "🔧 Resolver con agente" que lanza el Dev Resolutor
       (`devResolverModel.test.ts` verde + smoke manual); `tsc --noEmit` limpio.
 - [ ] Todos los `test_*.py` nuevos registrados en `HARNESS_TEST_FILES` (ambos scripts).
+- [ ] Tras un publish exitoso, el doc del incidente en `docs/incidencias/` y su línea en
+      `INDICE_INCIDENCIAS.md` tienen el `tracker_id` real ([ADICIÓN ARQUITECTO]/C7 —
+      test 8 de F3 verde).
+- [ ] Los 2 agentes cumplen su ficha de §3bis: `IncidentAgent` con el refuerzo F2b (test 8
+      de F2) y `IncidentDevAgent` con el prompt experto completo (test 2 de F4, literales
+      `🚀` / `⚠️ BLOQUEADO` / `criterios de aceptación`).
+- [ ] El ciclo mantiene DOS ACTORES (cargador → resolutor): ningún rol, estado ni handoff
+      nuevo introduce un tercero (verificación por lectura del diff).
 - [ ] Con TODOS los flags nuevos OFF, el comportamiento es byte-idéntico al de hoy
       (backward-compatible).
 - [ ] `plan-166-status` documentado con el resultado real de los smokes.
 
 ---
 
-_Plan 166 v1 — Stacky Agents. Listo para `criticar-y-mejorar-plan`._
+_Plan 166 v2 — Stacky Agents. Criticado y endurecido por `criticar-y-mejorar-plan`
+(APROBADO-CON-CAMBIOS, 2026-07-17). Listo para `implementar-plan-stacky`._

@@ -103,12 +103,16 @@ def _unique_stored_name(base: str, used: set[str]) -> str:
         i += 1
 
 
-def create_incident(text: str, files: list[tuple[str, bytes]]) -> dict:
+def create_incident(text: str, files: list[tuple[str, bytes]], auto_publish: bool = False) -> dict:
     """Valida, persiste archivos + intake.json, y agrega entrada al ledger.
 
     Lanza ValueError con mensaje claro ante violación de límites:
     'empty_intake', 'too_many_files', 'file_too_big:<name>',
     'ext_not_allowed:<ext>', 'total_too_big'.
+
+    `auto_publish` (Plan 166 F3): si True, el post-hook de autopublish
+    publica la Issue automáticamente sin confirmación al terminar el
+    análisis (ver services/incident_autopublish.py).
     """
     text = (text or "")[:MAX_TEXT_LEN]
     files = files or []
@@ -167,6 +171,9 @@ def create_incident(text: str, files: list[tuple[str, bytes]]) -> dict:
         # Campo aditivo (no rompe §4.1): título derivado para el ledger; se
         # actualiza con el <h1> real del desglose vía update_incident en F5.
         "title": _derive_title(text, len(files_meta)),
+        # Plan 166 F3 — auto_publish: si True, el post-hook publica la Issue
+        # sin confirmación al terminar el análisis.
+        "auto_publish": bool(auto_publish),
     }
     (incident_dir / "intake.json").write_text(
         json.dumps(incident, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -225,3 +232,23 @@ def list_incidents() -> list[dict]:
     with _LEDGER_LOCK:
         entries = list(_read_ledger())
     return sorted(entries, key=lambda e: e.get("created_at") or "", reverse=True)
+
+
+def find_by_execution(execution_id: int) -> dict | None:
+    """Plan 166 F3/C9 — localiza el incidente cuyo `execution_id` coincide.
+
+    NOTA (drift vs plan): los resúmenes del ledger (`list_incidents()`) NO
+    cargan `execution_id` (solo id/created_at/status/title/tracker_id;
+    verificado arriba en `create_incident`/`update_incident`) — ese campo
+    sólo vive en el `intake.json` completo. Enumeramos los ids vía el
+    ledger (misma fuente, mismo O(n)) y comparamos sobre el dict completo
+    de cada uno vía `get_incident`. O(n) sobre el ledger; suficiente
+    (mono-operador)."""
+    for entry in list_incidents():
+        incident_id = entry.get("id")
+        if not incident_id:
+            continue
+        incident = get_incident(incident_id)
+        if incident is not None and incident.get("execution_id") == execution_id:
+            return incident
+    return None

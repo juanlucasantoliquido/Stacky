@@ -995,6 +995,15 @@ def run_incident():
         logger.info("run_incident: catálogo de épicas no disponible (%s)", exc)
         catalog = []
 
+    # Plan 166 F2 — OCR/visión de capturas ANTES de armar el prompt (agnóstico
+    # del runtime de análisis; el texto entra inline para los 3 runtimes).
+    if config.STACKY_INCIDENT_VISION_OCR_ENABLED:
+        try:
+            from services import incident_vision
+            incident = incident_vision.enrich_incident_with_ocr(incident_id) or incident
+        except Exception as exc:  # noqa: BLE001 — visión es best-effort, nunca 500
+            logger.info("run_incident: OCR de capturas no disponible (%s)", exc)
+
     prompt = incident_context.build_incident_prompt(incident, catalog)
     context_blocks = [
         {
@@ -1062,6 +1071,115 @@ def run_incident():
                     _ex131.metadata_dict = _md131
         except Exception as _e131:  # noqa: BLE001 — traza es opcional; nunca bloquea el run
             logger.warning("run_incident: no se pudo persistir traza adaptive_selector: %s", _e131)
+
+    return jsonify({"execution_id": execution_id, "status": "running"}), 202
+
+
+@bp.post("/run-incident-dev")
+def run_incident_dev():
+    """Plan 166 F4 — Lanza el Dev Resolutor sobre una Issue de incidencia
+    dev-ready. Espejo de run_incident (arriba) con las diferencias EXACTAS
+    del plan §4.4: input=ticket_id (no incident_id), valida
+    work_item_type ∈ {"Issue","Bug"}, agent_type="incident_dev",
+    contenido=build_incident_dev_prompt, SIN autopublish (el Dev Resolutor
+    solo comenta con evidencia; nunca publica ni transiciona la Issue)."""
+    if not config.STACKY_INCIDENT_DEV_RESOLVER_ENABLED:
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    from db import session_scope
+    from models import Ticket
+    from services import incident_dev_context
+
+    payload = request.get_json(force=True, silent=True) or {}
+
+    try:
+        ticket_id = int(payload.get("ticket_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_ticket_id"}), 400
+
+    with session_scope() as session:
+        ticket = session.get(Ticket, ticket_id)
+        if ticket is None:
+            return jsonify({"ok": False, "error": "ticket_not_found"}), 404
+        if (ticket.work_item_type or "") not in ("Issue", "Bug"):
+            return jsonify({"ok": False, "error": "not_an_issue"}), 400
+        # Snapshot de los campos que necesitamos fuera de la sesión (evita
+        # DetachedInstanceError tras cerrar el `with`).
+        ticket_ado_id = ticket.ado_id
+        ticket_title = ticket.title
+        ticket_description = ticket.description or ""
+
+    class _TicketSnapshot:
+        ado_id = ticket_ado_id
+        title = ticket_title
+        description = ticket_description
+
+    runtime_raw = payload.get("runtime") or "github_copilot"
+    project_name = (payload.get("project") or "").strip() or None
+    vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
+
+    # Plan 42 F3 / Plan 53 F2 — passthrough IDÉNTICO a run_incident.
+    from services import llm_router as _llm_router
+
+    _requested_model_raw = (payload.get("model") or "").strip()
+    _requested_model: str | None = _requested_model_raw or None
+    _requested_effort_raw = (payload.get("effort") or "").strip().lower()
+    _base_effort: str = _requested_effort_raw if _requested_effort_raw in {"low", "medium", "high", "xhigh", "max"} else "high"
+
+    model_override: str | None = (
+        _llm_router.clamp_model(_requested_model, allow_opus=True) if _requested_model else None
+    )
+    effort_override = _clamp_effort_for_model(_base_effort, model_override)
+
+    # Auto-resolve el .agent.md del Dev Resolutor para runtimes CLI.
+    if runtime_raw in ("codex_cli", "claude_code_cli") and not vscode_agent_filename:
+        incident_dev_context.ensure_incident_dev_agent_file()
+        vscode_agent_filename = "IncidentDevResolver.agent.md"
+
+    context_blocks = [
+        {
+            "id": "issue",
+            "kind": "raw-conversation",
+            "title": "Issue de incidencia",
+            "content": incident_dev_context.build_incident_dev_prompt(_TicketSnapshot),
+            "source": {"type": "ticket_board", "ticket_id": ticket_id},
+        }
+    ]
+
+    user = current_user()
+
+    try:
+        execution_id = agent_runner.run_agent(
+            agent_type="incident_dev",
+            ticket_id=ticket_id,
+            context_blocks=context_blocks,
+            user=user,
+            runtime=runtime_raw,
+            vscode_agent_filename=vscode_agent_filename,
+            project_name=project_name,
+            use_few_shot=False,
+            use_anti_patterns=False,
+            model_override=model_override,
+            effort_override=effort_override,
+        )
+    except agent_runner.UnknownAgentError:
+        abort(400, "agent_type 'incident_dev' no está registrado")
+    except Exception as exc:  # noqa: BLE001 — Plan 39 B1: nunca 500 genérico
+        logger.exception(
+            "run_incident_dev: fallo al lanzar agente runtime=%s project=%s",
+            runtime_raw, project_name,
+        )
+        return jsonify({
+            "ok": False,
+            "error": "agent_launch_failed",
+            "runtime": runtime_raw,
+            "message": str(exc),
+        }), 502
+
+    logger.info(
+        "run_incident_dev: execution_id=%s runtime=%s ticket_id=%s",
+        execution_id, runtime_raw, ticket_id,
+    )
 
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
 

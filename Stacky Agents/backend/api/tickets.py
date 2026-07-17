@@ -7340,7 +7340,20 @@ def incident_preview():
         if run is None:
             return jsonify({"ok": False, "error": "run_not_found"}), 404
         output = run.output
+        run_status = getattr(run, "status", None)
+        precondition_failure = run.metadata_dict.get("precondition_failure")
         repair_meta = run.metadata_dict.get("incident_repair")
+
+    # El run puede haber fallado ANTES de que el agente corriera un solo turno
+    # (gate de precondiciones: repo/outputs_dir/PAT/binario faltante — ver
+    # services/run_preflight.py). En ese caso el output queda vacío y NO es
+    # narración: mostrar "narró" ahí es un falso positivo que oculta la causa
+    # real. Distinguirlo explícitamente con el detalle crudo del gate.
+    if run_status == "failed" and precondition_failure:
+        return jsonify({
+            "ok": False, "error": "run_failed_precondition", "publishable": False,
+            "detail": precondition_failure,
+        }), 200
 
     html = _extract_epic_html_raw(output)
     if not _looks_like_incident(html):
@@ -7369,7 +7382,12 @@ def incident_preview():
 
 def _incident_publish_terminal_error(incident_id: str, exc: Exception):
     """C7 — contrato de error terminal: el incidente queda en status='error'
-    SIN tracker_id (re-publicable); nunca escribe el doc F6; 502 tracker_error."""
+    SIN tracker_id (re-publicable); nunca escribe el doc F6; 502 tracker_error.
+
+    Plan 166 F3/C2/G8 — devuelve (dict, int) SIN jsonify: los 5 callers están
+    todos dentro de `_do_publish_incident`, que corre también fuera de un
+    request context (post-hook de autopublish); `jsonify` ahí lanza
+    RuntimeError. El wrapper HTTP `publish_incident` envuelve el dict."""
     from services import incident_store
     from services.stacky_logger import logger as stacky_logger
 
@@ -7377,36 +7395,59 @@ def _incident_publish_terminal_error(incident_id: str, exc: Exception):
     stacky_logger.info(
         "incidents", "incident_publish_failed", incident_id=incident_id, error=str(exc),
     )
-    return jsonify({"ok": False, "error": "tracker_error", "message": str(exc)}), 502
+    return {"ok": False, "error": "tracker_error", "message": str(exc)}, 502
+
+
+def _persist_incident_ticket(ado_id, title, description_html, url, project_name,
+                             work_item_type, parent_ado_id):
+    """Persiste (idempotentemente) el ticket local de la Issue de incidencia creada
+    en ADO, para que aparezca en el board sin esperar el sync. Plan 166 F1."""
+    if not getattr(config.config, "STACKY_INCIDENT_TICKET_PERSIST_ENABLED", True):
+        return
+    try:
+        with session_scope() as session:
+            existing = session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+            if existing is None:
+                session.add(Ticket(
+                    ado_id=ado_id, external_id=ado_id,
+                    title=title, description=description_html,
+                    work_item_type=work_item_type,          # "Issue" | "Bug"
+                    project=project_name or "",
+                    stacky_project_name=project_name,
+                    ado_url=url,
+                    parent_ado_id=parent_ado_id,             # epic_id si linkeó
+                    ado_state="New",
+                ))
+    except Exception as exc:  # noqa: BLE001 — best-effort, nunca aborta el publish
+        logger.warning("incident publish: no se pudo persistir ticket local ado_id=%s err=%s", ado_id, exc)
 
 
 @bp.post("/incidents/publish")
 def publish_incident():
-    """Plan 131 F5 — Publica el Issue en el tracker activo, linkeado a su
-    épica relacionada, con los archivos del incidente como attachments
-    nativos. Human-in-the-loop duro: confirm debe ser exactamente true."""
+    """Plan 131 F5 / Plan 166 F3 — Publica el Issue en el tracker activo,
+    linkeado a su épica relacionada, con los archivos del incidente como
+    attachments nativos. Wrapper HTTP delgado: valida flag/confirm, lee el
+    body y delega el núcleo en `_do_publish_incident` (reutilizable desde el
+    post-hook de autopublish, C2/G8).
+
+    Human-in-the-loop: con STACKY_INCIDENT_AUTO_PUBLISH_ENABLED OFF, confirm
+    debe ser exactamente true (legacy byte-idéntico). Con el flag ON, el
+    flag ES la autorización permanente (EXCEPCIÓN DURA #1, directiva del
+    operador 2026-07-17)."""
     if not getattr(config.config, "STACKY_INCIDENT_RESOLVER_ENABLED", False):
         return jsonify({"ok": False, "error": "feature_disabled"}), 404
 
-    from services import incident_store
-
     body = _body_json()
+    from config import config as _cfg   # G1: instancia de flags
+    auto_ok = bool(getattr(_cfg, "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED", False))
     confirm = body.get("confirm")
-    if confirm is not True:
+    if confirm is not True and not auto_ok:
         return jsonify({
-            "ok": False,
-            "error": "confirmation_required",
+            "ok": False, "error": "confirmation_required",
             "message": "Debes enviar confirm:true para publicar (human-in-the-loop).",
         }), 400
 
     incident_id = (body.get("incident_id") or "").strip()
-    incident = incident_store.get_incident(incident_id) if incident_id else None
-    if incident is None:
-        return jsonify({"ok": False, "error": "incident_not_found"}), 404
-    if incident.get("tracker_id"):
-        return jsonify({
-            "ok": False, "error": "already_published", "tracker_id": incident["tracker_id"],
-        }), 409
 
     try:
         execution_id = int(body.get("execution_id"))
@@ -7414,8 +7455,44 @@ def publish_incident():
         return jsonify({"ok": False, "error": "invalid_execution_id"}), 400
 
     work_item_type = body.get("work_item_type") or "Issue"
+
+    # override_epic_id: null explícito = publicar SIN épica (ignora la del
+    # agente); ausente = usar la del agente; entero = usar ese id.
+    kwargs: dict = {"work_item_type": work_item_type}
+    if "override_epic_id" in body:
+        kwargs["override_epic_id"] = body.get("override_epic_id")
+
+    payload, status = _do_publish_incident(incident_id, execution_id, **kwargs)
+    return jsonify(payload), status
+
+
+_UNSET = object()  # Plan 166 F3/C2 — sentinel para "override_epic_id ausente"
+
+
+def _do_publish_incident(
+    incident_id: str,
+    execution_id: int,
+    *,
+    work_item_type: str = "Issue",
+    override_epic_id=_UNSET,
+) -> tuple[dict, int]:
+    """Plan 166 F3 (C2/G8) — núcleo PURO de publicación: (dict, int), NUNCA
+    `jsonify` ni `request` (corre también fuera de app/request context, desde
+    el post-hook de autopublish en el thread del agent runner). Reutilizado
+    por el wrapper HTTP `publish_incident` y por
+    `services/incident_autopublish.py::maybe_autopublish_incident`."""
+    from services import incident_store
+
+    incident = incident_store.get_incident(incident_id) if incident_id else None
+    if incident is None:
+        return {"ok": False, "error": "incident_not_found"}, 404
+    if incident.get("tracker_id"):
+        return {
+            "ok": False, "error": "already_published", "tracker_id": incident["tracker_id"],
+        }, 409
+
     if work_item_type not in ("Issue", "Bug"):
-        return jsonify({"ok": False, "error": "invalid_work_item_type"}), 400
+        return {"ok": False, "error": "invalid_work_item_type"}, 400
 
     with session_scope() as db:
         run = _get_run_for_preview(execution_id, db=db)
@@ -7425,15 +7502,13 @@ def publish_incident():
 
     html = _extract_epic_html_raw(output)
     if not _looks_like_incident(html):
-        return jsonify({"ok": False, "error": "incident_not_in_output", "repair": repair_meta}), 422
+        return {"ok": False, "error": "incident_not_in_output", "repair": repair_meta}, 422
 
     title = _incident_h1_title(html, incident.get("text", ""))
     related = _parse_related_epic(html)
 
-    # override_epic_id: null explícito = publicar SIN épica (ignora la del
-    # agente); ausente = usar la del agente; entero = usar ese id.
-    if "override_epic_id" in body:
-        epic_id = body.get("override_epic_id")
+    if override_epic_id is not _UNSET:
+        epic_id = override_epic_id
     else:
         epic_id = related.get("epic_id")
 
@@ -7506,6 +7581,18 @@ def publish_incident():
     if not url:
         url = (created or {}).get("web_url") or (created or {}).get("url") or ""
 
+    # Plan 166 F1 — persistir el ticket local de la Issue al instante.
+    try:
+        _tracker_id_int = int(tracker_id)
+    except (TypeError, ValueError):
+        _tracker_id_int = None
+    if _tracker_id_int is not None:
+        _persist_incident_ticket(
+            ado_id=_tracker_id_int, title=title, description_html=html, url=url,
+            project_name=project_name, work_item_type=work_item_type,
+            parent_ado_id=(epic_id if isinstance(epic_id, int) else None),
+        )
+
     # Attachments — por CADA archivo, try/except individual; fallo → warning,
     # NUNCA aborta la publicación ya hecha.
     from services.incident_store import incidents_root
@@ -7517,8 +7604,21 @@ def publish_incident():
         except Exception:  # noqa: BLE001
             warnings.append(f"attachment_failed:{f.get('stored_name')}")
 
-    # F6 (C13) — incident_docs se crea en la fase siguiente; import protegido
-    # para que F5 quede verde sin F6. Escritura SIEMPRE best-effort (§4.5).
+    # [ADICIÓN ARQUITECTO]/C7 — REORDENADO: primero el update_incident con el
+    # tracker real (SIN doc_path), después refrescar el incidente y recién
+    # ahí escribir el doc — así el doc y el índice nacen con tracker_id real
+    # y estado: publicada (antes: se escribía el doc con el incident VIEJO,
+    # con tracker_id vacío). Escritura del doc SIEMPRE best-effort (§4.5).
+    incident_store.update_incident(
+        incident_id,
+        status="publicada",
+        tracker_id=tracker_id,
+        tracker_url=url,
+        epic_id=epic_id,
+        title=title,
+    )
+    incident = incident_store.get_incident(incident_id) or incident
+
     doc_path = None
     try:
         from services import incident_docs
@@ -7527,16 +7627,8 @@ def publish_incident():
         doc_path = None
     if doc_path is None:
         warnings.append("doc_write_failed")
-
-    incident_store.update_incident(
-        incident_id,
-        status="publicada",
-        tracker_id=tracker_id,
-        tracker_url=url,
-        epic_id=epic_id,
-        doc_path=doc_path,
-        title=title,
-    )
+    else:
+        incident_store.update_incident(incident_id, doc_path=doc_path)
 
     from services.stacky_logger import logger as stacky_logger
     stacky_logger.info(
@@ -7544,7 +7636,7 @@ def publish_incident():
         incident_id=incident_id, tracker_id=tracker_id, epic_link_mode=epic_link_mode,
     )
 
-    return jsonify({
+    return {
         "ok": True,
         "tracker_id": tracker_id,
         "url": url,
@@ -7552,7 +7644,7 @@ def publish_incident():
         "epic_link_mode": epic_link_mode,
         "doc_path": doc_path,
         "warnings": warnings,
-    }), 201
+    }, 201
 
 
 # ── Plan 55 F3 — Portafolio brief→N épicas (preview de molécula) ──────────────

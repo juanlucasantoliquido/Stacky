@@ -631,9 +631,13 @@ _CURATED_DEFAULTS_ON = {
     # (prerequisito externo no garantizado), default OFF a propósito.
     "STACKY_COST_CENTER_ENABLED",
     # Plan 144 F2 — preflight de confianza de workspace (claude): kill-switch
-    # default ON (detecta+falla temprano, no reduce seguridad). AUTOSET (F3)
-    # NO entra acá: excepción dura #4 (reduce seguridad por default), OFF a propósito.
+    # default ON (detecta+falla temprano, no reduce seguridad).
     "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
+    # Plan 144 F3 — auto-set de trust: promovida a default ON por directiva
+    # explícita del operador (2026-07-17): los runs los consumen perfiles no
+    # técnicos y deben ser autosuficientes; la excepción #4 queda levantada
+    # por decisión del operador, con kill-switch en UI.
+    "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED",
     # Plan 148 — Degradación explícita de integraciones no configuradas: kill-switch
     # default ON (breaker + 200-en-vez-de-502; OFF revierte byte-a-byte).
     "STACKY_INTEGRATION_DEGRADATION_ENABLED",
@@ -661,6 +665,12 @@ _CURATED_DEFAULTS_ON = {
     # opt-in": botón invocado a mano en Tickets, sin autopublicación ni costo
     # automático; publish siempre con preview+confirmación humana) ──
     "STACKY_INCIDENT_RESOLVER_ENABLED",
+    # ── Plan 166 — Ciclo completo de incidencias (4 bool default ON; las 2
+    # type="str" NO van acá, no son bool) ──
+    "STACKY_INCIDENT_TICKET_PERSIST_ENABLED",
+    "STACKY_INCIDENT_VISION_OCR_ENABLED",
+    "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",
+    "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
 }
 
 

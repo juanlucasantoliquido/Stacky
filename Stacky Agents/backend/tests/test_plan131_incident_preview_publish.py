@@ -99,13 +99,20 @@ def _make_app():
 
 @contextmanager
 def _flag(enabled: bool):
+    """Plan 166 F3 — este archivo cubre el contrato LEGACY (confirm siempre
+    requerido); fija STACKY_INCIDENT_AUTO_PUBLISH_ENABLED=False para que el
+    gate de confirmación no se relaje aun con el default ON del arnés. El
+    contrato con auto-publish ON vive en tests/test_incident_autopublish.py."""
     import config as cfg
     original = getattr(cfg.config, "STACKY_INCIDENT_RESOLVER_ENABLED", False)
+    original_auto = getattr(cfg.config, "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED", False)
     cfg.config.STACKY_INCIDENT_RESOLVER_ENABLED = enabled
+    cfg.config.STACKY_INCIDENT_AUTO_PUBLISH_ENABLED = False
     try:
         yield
     finally:
         cfg.config.STACKY_INCIDENT_RESOLVER_ENABLED = original
+        cfg.config.STACKY_INCIDENT_AUTO_PUBLISH_ENABLED = original_auto
 
 
 def _patch_run(monkeypatch, output: str | None, execution_id: int = 1):

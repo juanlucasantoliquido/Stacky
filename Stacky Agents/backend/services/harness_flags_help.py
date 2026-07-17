@@ -1371,6 +1371,43 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el botón desaparece y todo vuelve a como estaba; las incidencias se redactan a mano como siempre.",
         example="Ves una pantalla rota: sacás la captura, la arrastrás al modal con dos líneas de contexto, y en dos clicks tenés el ticket armado, adjuntado y enlazado en el tracker.",
     ),
+    # ── Plan 166 — Ciclo completo de incidencias ────────────────────────────
+    "STACKY_INCIDENT_TICKET_PERSIST_ENABLED": PlainHelp(
+        what="Al publicar una incidencia como ticket, la deja visible en el tablero de Tickets al instante, sin esperar la próxima sincronización.",
+        on_effect="Si la activás: apenas publicás la incidencia, aparece en Tickets al toque, lista para asignar o resolver.",
+        off_effect="Si la apagás: la incidencia publicada recién aparece en Tickets después de la próxima sincronización con el sistema de seguimiento.",
+        example="Publicás una incidencia a las 10:03 y ya la ves en el tablero a las 10:03, sin refrescar ni esperar.",
+    ),
+    "STACKY_INCIDENT_VISION_OCR_ENABLED": PlainHelp(
+        what="Lee el texto de las capturas de pantalla que adjuntás a una incidencia (mensajes de error, campos, valores) y lo suma al análisis.",
+        on_effect="Si la activás: el texto que se lee en cada captura se agrega al desglose de la incidencia, como evidencia citada.",
+        off_effect="Si la apagás: las capturas quedan solo como archivo adjunto, sin que se lea ni resuma su contenido.",
+        example="Adjuntás una captura con 'Error 500 en login' y esa frase aparece citada en el análisis de la incidencia.",
+    ),
+    "STACKY_INCIDENT_VISION_ENDPOINT": PlainHelp(
+        what="La ubicación del servicio externo que interpreta las capturas de pantalla adjuntas a una incidencia. Vacío = usa el mismo servicio ya configurado para el modelo local.",
+        on_effect="Si la completás: las capturas se procesan contra ese servicio en particular en lugar del que ya tenés configurado.",
+        off_effect="Si la dejás vacía: se usa el servicio del modelo local ya configurado en el panel, si existe.",
+        example="Tenés un servicio de lectura de imágenes corriendo en tu máquina y pegás su dirección acá para que las capturas se procesen ahí.",
+    ),
+    "STACKY_INCIDENT_VISION_MODEL": PlainHelp(
+        what="Nombre del modelo que interpreta las capturas de pantalla adjuntas a una incidencia. Vacío = usa el mismo modelo configurado para el modelo local.",
+        on_effect="Si lo completás: las capturas se procesan con ese modelo en particular.",
+        off_effect="Si lo dejás vacío: se usa el modelo local ya configurado en el panel, si existe.",
+        example="Instalaste un modelo que lee imágenes y ponés acá su nombre para que las capturas se interpreten con él.",
+    ),
+    "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED": PlainHelp(
+        what="Al terminar el análisis de una incidencia, la publica como ticket de una sola vez, sin pedirte que la revises ni confirmes antes.",
+        on_effect="Si la activás: podés cargar varias incidencias seguidas y cada una se publica sola apenas termina su análisis, sin ningún cartel de confirmación.",
+        off_effect="Si la apagás: volvés al paso de revisar el análisis y confirmar antes de publicar cada incidencia.",
+        example="Cargás tres incidencias una atrás de la otra sin tocar nada más, y las tres terminan publicadas solas mientras seguís trabajando.",
+    ),
+    "STACKY_INCIDENT_DEV_RESOLVER_ENABLED": PlainHelp(
+        what="Agrega un botón en las incidencias publicadas para que un asistente de desarrollo las analice y proponga una solución en el código.",
+        on_effect="Si la activás: aparece el botón 'Resolver con agente' en las incidencias, que lanza el análisis y deja un comentario con la causa y el arreglo propuesto.",
+        off_effect="Si la apagás: el botón desaparece; las incidencias se siguen resolviendo a mano como siempre.",
+        example="Publicás una incidencia, apretás 'Resolver con agente', y en minutos tenés un comentario con la causa real y los archivos que cambió.",
+    ),
 }
 
 

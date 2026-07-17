@@ -310,6 +310,12 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_ENABLED",            # Plan 122 — comparador de BD entre ambientes (master, default OFF)
         "STACKY_CODE_INTEGRITY_ENABLED",        # Plan 130 — gate determinista sintaxis+imports (card Diagnóstico)
         "STACKY_INCIDENT_RESOLVER_ENABLED",     # Plan 131 — botón "Resolver incidencia" (default ON, promovida 08df035b)
+        "STACKY_INCIDENT_TICKET_PERSIST_ENABLED",  # Plan 166 F1 — espejo local de la Issue
+        "STACKY_INCIDENT_VISION_OCR_ENABLED",      # Plan 166 F2 — OCR de capturas
+        "STACKY_INCIDENT_VISION_ENDPOINT",         # Plan 166 F2 — endpoint de visión
+        "STACKY_INCIDENT_VISION_MODEL",            # Plan 166 F2 — modelo de visión
+        "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",    # Plan 166 F3 — creación directa/lote
+        "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -417,9 +423,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED",
         type="bool",
-        # SIN default= → default_is_known False → NO va en _CURATED_DEFAULTS_ON (default OFF via config.py).
+        default=True,  # promovida a default ON (operador 2026-07-17: runs deben ser autosuficientes para perfiles no técnicos; curada en _CURATED_DEFAULTS_ON).
         label="Auto-confiar workspace (claude)",
-        description="OPT-IN. Si el workspace no está confiado, escribe hasTrustDialogAccepted=true en ~/.claude.json (setting de seguridad). OFF por defecto.",
+        description="Si el workspace no está confiado, escribe hasTrustDialogAccepted=true en ~/.claude.json automáticamente. Apagalo si preferís aceptar el diálogo de trust a mano.",
         group="claude_code_cli",
         requires="CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
     ),
@@ -3308,6 +3314,55 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         default=True,
         env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_TICKET_PERSIST_ENABLED",
+        type="bool", default=True,
+        label="Persistir Issue de incidencia en Tickets",
+        description="Al publicar una incidencia, crea el ticket local de la Issue al instante (no esperás al sync de ADO).",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_VISION_OCR_ENABLED",
+        type="bool", default=True,
+        label="Procesar capturas (OCR/visión)",
+        description="Extrae el texto de las capturas adjuntas y lo suma al desglose. Si no hay modelo de visión configurado, degrada a marcar la captura como pendiente.",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_VISION_ENDPOINT", type="str",
+        label="Endpoint de visión (OpenAI-compatible)",
+        description="URL COMPLETA de chat-completions del endpoint de visión (ej. http://localhost:11434/v1/chat/completions). Mismo contrato que el endpoint del modelo local del Arnés. Vacío = usar ese endpoint local.",
+        # requires apunta al ROOT (STACKY_INCIDENT_RESOLVER_ENABLED), NO a
+        # STACKY_INCIDENT_VISION_OCR_ENABLED: ese último ya tiene su propio
+        # requires, y R4 (harness_flags.py::validate_requires_graph) prohíbe
+        # cadenas de profundidad >1. Mismo patrón que STACKY_CODEBASE_MEMORY_MCP_PROJECTS.
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        # SIN default= (verificado: default_is_known() no distingue por type; un
+        # default explícito acá también rompería test_default_known_only_for_curated,
+        # mismo motivo documentado en LOCAL_LLM_ENDPOINT). El default EFECTIVO vive en config.py.
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_VISION_MODEL", type="str",
+        label="Modelo de visión",
+        description="Nombre del modelo de visión (ej. llama3.2-vision, llava). Vacío = usar el modelo local del Arnés.",
+        # Mismo motivo que STACKY_INCIDENT_VISION_ENDPOINT (R4 profundidad 1).
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        # SIN default= (mismo motivo que STACKY_INCIDENT_VISION_ENDPOINT).
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",
+        type="bool", default=True,
+        label="Crear incidencias directo (sin confirmar)",
+        description="Publica la Issue apenas el análisis termina, sin pedir confirmación, y permite cargar varias seguidas. Apagalo para volver al paso de revisión manual.",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
+        type="bool", default=True,
+        label="Agente Dev Resolutor de Incidencias",
+        description="Habilita el botón 'Resolver con agente' en las Issues para que un agente dev analice el repo y proponga el fix.",
+        group="global",
     ),
 )
 

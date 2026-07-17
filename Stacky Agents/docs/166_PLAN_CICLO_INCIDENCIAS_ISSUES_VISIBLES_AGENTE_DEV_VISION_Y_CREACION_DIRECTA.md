@@ -1,6 +1,9 @@
 # Plan 166 — Ciclo completo de Incidencias: Issues visibles en Tickets, Agente Dev Resolutor, Visión de capturas y creación directa en lote
 
-**Estado:** CRITICADO (v2) — 2026-07-17 · APROBADO-CON-CAMBIOS por `criticar-y-mejorar-plan`
+**Estado:** IMPLEMENTADO (F0-F6) — 2026-07-17 · construido por `implementar-plan-stacky` sobre
+la v2 CRITICADO/APROBADO-CON-CAMBIOS. Ver `plan-166-status` (memoria) para el detalle real de
+tests corridos y el smoke manual E2E pendiente (no ejecutado por riesgo de publicar Issues
+reales en el tracker del operador — auto-publish default ON).
 
 ## Versión: v1 -> v2 (crítica adversarial aplicada)
 
@@ -1222,35 +1225,42 @@ cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest \
 
 ### Definición de Hecho (DoD) global
 
-- [ ] Los 6 keys de flags/config nuevos existen en `config.py` + `harness_flags.py`; los 4
+- [x] Los 6 keys de flags/config nuevos existen en `config.py` + `harness_flags.py`; los 4
       bool `default=True` están en `_CURATED_DEFAULTS_ON`; los 6 keys están en
       `_CATEGORY_KEYS` (C1/G7, junto a `STACKY_INCIDENT_RESOLVER_ENABLED`); las 5 aristas
       `requires` están en `test_harness_flags_requires.py`. `test_harness_flags*.py` verdes
-      (incluye `test_every_registry_flag_is_categorized`).
-- [ ] Publicar una incidencia crea el `Ticket` local de la Issue al instante
-      (`test_persist_incident_ticket.py` verde; smoke: aparece en el board sin sync).
-- [ ] Una captura con texto aporta ese texto al desglose vía OCR inline
-      (`test_incident_vision.py` verde); sin endpoint de visión, degrada exacto a hoy.
-- [ ] Con `STACKY_INCIDENT_AUTO_PUBLISH_ENABLED` ON, publicar no requiere `confirm` y el
+      (incluye `test_every_registry_flag_is_categorized`). **63/63 verde.**
+- [x] Publicar una incidencia crea el `Ticket` local de la Issue al instante
+      (`test_persist_incident_ticket.py` verde, 4/4). **Smoke manual (aparece en el board sin
+      sync) NO ejecutado** — ver `plan-166-status` (riesgo de publicar Issues reales).
+- [x] Una captura con texto aporta ese texto al desglose vía OCR inline
+      (`test_incident_vision.py` verde, 8/8); sin endpoint de visión, degrada exacto a hoy.
+- [x] Con `STACKY_INCIDENT_AUTO_PUBLISH_ENABLED` ON, publicar no requiere `confirm` y el
       modal permite cargar varias seguidas sin diálogos
-      (`test_incident_autopublish.py` + `incidentQueue.test.ts` verdes); con el flag OFF, el
-      gate preview+confirm queda byte-idéntico.
-- [ ] El agente `incident_dev` está registrado y su endpoint `run-incident-dev` lanza en los
-      3 runtimes (`test_incident_dev_agent.py` verde).
-- [ ] Las Issues del board muestran "🔧 Resolver con agente" que lanza el Dev Resolutor
-      (`devResolverModel.test.ts` verde + smoke manual); `tsc --noEmit` limpio.
-- [ ] Todos los `test_*.py` nuevos registrados en `HARNESS_TEST_FILES` (ambos scripts).
-- [ ] Tras un publish exitoso, el doc del incidente en `docs/incidencias/` y su línea en
+      (`test_incident_autopublish.py` 8/8 + `incidentQueue.test.ts` 4/4 verdes); con el flag
+      OFF, el gate preview+confirm queda byte-idéntico (regresión de
+      `test_plan131_incident_preview_publish.py` corregida, 19/19 verde).
+- [x] El agente `incident_dev` está registrado y su endpoint `run-incident-dev` lanza en los
+      3 runtimes (`test_incident_dev_agent.py` verde, 6/6; corre vía `agent_runner.run_agent`,
+      agnóstico de runtime, mismo camino que Developer).
+- [x] Las Issues del board muestran "🔧 Resolver con agente" que lanza el Dev Resolutor
+      (`devResolverModel.test.ts` verde, 4/4); `tsc --noEmit` limpio. **Smoke manual (click en
+      vivo) NO ejecutado** — ver `plan-166-status`.
+- [x] Todos los `test_*.py` nuevos registrados en `HARNESS_TEST_FILES` (ambos scripts).
+- [x] Tras un publish exitoso, el doc del incidente en `docs/incidencias/` y su línea en
       `INDICE_INCIDENCIAS.md` tienen el `tracker_id` real ([ADICIÓN ARQUITECTO]/C7 —
-      test 8 de F3 verde).
-- [ ] Los 2 agentes cumplen su ficha de §3bis: `IncidentAgent` con el refuerzo F2b (test 8
+      test 8 de F3 verde, con assert explícito sobre AMBOS archivos).
+- [x] Los 2 agentes cumplen su ficha de §3bis: `IncidentAgent` con el refuerzo F2b (test 8
       de F2) y `IncidentDevAgent` con el prompt experto completo (test 2 de F4, literales
       `🚀` / `⚠️ BLOQUEADO` / `criterios de aceptación`).
-- [ ] El ciclo mantiene DOS ACTORES (cargador → resolutor): ningún rol, estado ni handoff
-      nuevo introduce un tercero (verificación por lectura del diff).
-- [ ] Con TODOS los flags nuevos OFF, el comportamiento es byte-idéntico al de hoy
-      (backward-compatible).
-- [ ] `plan-166-status` documentado con el resultado real de los smokes.
+- [x] El ciclo mantiene DOS ACTORES (cargador → resolutor): ningún rol, estado ni handoff
+      nuevo introduce un tercero (verificación por lectura del diff — el Dev Resolutor NUNCA
+      publica ni transiciona, solo comenta).
+- [x] Con TODOS los flags nuevos OFF, el comportamiento es byte-idéntico al de hoy
+      (backward-compatible — verificado por los tests `*_disabled`/`*_flag_off`/`*_noop` de
+      cada fase).
+- [x] `plan-166-status` documentado con el resultado real de los smokes (incluye los 2 smokes
+      manuales NO ejecutados y por qué).
 
 ---
 

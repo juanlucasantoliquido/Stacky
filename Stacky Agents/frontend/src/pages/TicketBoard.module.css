@@ -567,6 +567,31 @@
   border-color: rgba(99,102,241,0.6);
 }
 
+/* Plan 166 F5 — Dev Resolutor de Incidencias (acento ámbar, mismo color que
+   el badge de work item type "Issue" en workItemTypeColor.ts). */
+.resolveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-solid);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.resolveBtn:hover:not(:disabled) {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-solid);
+}
+.resolveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* B6 — Botón cancelar run (rojo, junto a Finish work) */
 .cancelRunBtn {
   display: inline-flex;

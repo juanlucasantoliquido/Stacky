@@ -7,6 +7,10 @@ export interface IncidentStatusDTO {
   max_files: number;
   max_file_mb: number;
   allowed_extensions: string[];
+  /** Plan 166 F3 — con true, el modal crea directo y en lote sin diálogos. */
+  auto_publish_enabled?: boolean;
+  /** Plan 166 F5 — con true, el board muestra "Resolver con agente" en las Issues. */
+  dev_resolver_enabled?: boolean;
 }
 
 export interface IncidentFileDTO {
@@ -53,6 +57,11 @@ export interface IncidentRepairMetaDTO {
   budget_exhausted?: boolean;
 }
 
+export interface IncidentPreconditionFailureDTO {
+  check: string | null;
+  detail: string | null;
+}
+
 export interface IncidentPreviewDTO {
   ok: boolean;
   title?: string | null;
@@ -61,6 +70,7 @@ export interface IncidentPreviewDTO {
   publishable: boolean;
   error?: string | null;
   repair?: IncidentRepairMetaDTO | null;
+  detail?: IncidentPreconditionFailureDTO | null;
 }
 
 /** Espejo cliente de los límites §4.1 (backend/services/incident_store.py). */

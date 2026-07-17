@@ -698,6 +698,13 @@ def create_app() -> Flask:
 
             return send_from_directory(dist_path, "index.html")
 
+    # Plan 166 F3 — registra el post-hook de auto-publicación de incidencias
+    # (agnóstico de runtime: corre en ticket_status.on_execution_end para
+    # cualquier runtime). No hubo registro previo de register_post_hook en
+    # create_app; este es el primero.
+    from services import ticket_status, incident_autopublish
+    incident_autopublish.register(ticket_status.register_post_hook)
+
     return app
 
 

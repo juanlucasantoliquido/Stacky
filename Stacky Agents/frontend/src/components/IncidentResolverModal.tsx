@@ -16,8 +16,30 @@ import {
   extractPastedImageFiles,
   type IncidentStatusDTO,
 } from "../incidents/incidentModel";
+import {
+  upsertQueueItem,
+  queueSummary,
+  mapStoreStatus,
+  isNonTerminal,
+  type QueueItem,
+} from "../incidents/incidentQueue";
 import type { AgentRuntime } from "../types";
 import styles from "./IncidentResolverModal.module.css";
+
+const QUEUE_POLL_INTERVAL_MS = 3000; // Plan 166 F3/C8 — coherente con el latido único (plan 156)
+
+function queueStatusClass(status: QueueItem["status"]): string {
+  switch (status) {
+    case "publicada":
+      return styles.queueStatusPublicada;
+    case "error":
+      return styles.queueStatusError;
+    case "analizando":
+      return styles.queueStatusAnalizando;
+    default:
+      return styles.queueStatusCapturando;
+  }
+}
 
 type Step = "intake" | "running" | "preview" | "publishing" | "done" | "error";
 
@@ -73,6 +95,9 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
   // [ADICIÓN ARQUITECTO] Reanudación de incidencias en curso.
   const [resumable, setResumable] = useState<IncidentDTO | null>(null);
 
+  // Plan 166 F3 — cola de incidencias en modo lote (auto_publish_enabled).
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
 
@@ -101,6 +126,40 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
   }, []);
 
   useEffect(() => () => stopPolling(), []);
+
+  // Plan 166 F3/C8 — polling de la cola: SOLO mientras el modal está abierto
+  // (efecto vivo), auto_publish_enabled es true, y hay ≥1 QueueItem en
+  // estado no-terminal. Con la cola vacía o todo terminal: CERO requests
+  // (el efecto no arma el interval; el cleanup lo limpia al dejar de cumplirse).
+  const autoPublishEnabled = Boolean(status?.auto_publish_enabled);
+  const queueHasNonTerminal = queue.some((item) => isNonTerminal(item.status));
+
+  useEffect(() => {
+    if (!autoPublishEnabled || !queueHasNonTerminal) return;
+    const id = setInterval(async () => {
+      try {
+        const res = await Incidents.list();
+        setQueue((prev) => {
+          let next = prev;
+          for (const inc of res.incidents ?? []) {
+            if (!prev.some((q) => q.id === inc.id)) continue; // solo lo que YA está en la cola
+            next = upsertQueueItem(next, {
+              id: inc.id,
+              title: inc.title || prev.find((q) => q.id === inc.id)?.title || inc.id,
+              status: mapStoreStatus(inc.status),
+              trackerId: inc.tracker_id ?? undefined,
+              url: inc.tracker_url ?? undefined,
+              error: inc.error ?? undefined,
+            });
+          }
+          return next;
+        });
+      } catch {
+        // fallo transitorio de polling — continuar
+      }
+    }, QUEUE_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [autoPublishEnabled, queueHasNonTerminal]);
 
   function stopPolling() {
     if (pollRef.current !== null) {
@@ -150,10 +209,10 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
 
   async function handleAnalyze() {
     setErrorMsg(null);
+    const autoPublish = Boolean(status?.auto_publish_enabled);
     try {
-      const created = await Incidents.create(text.trim(), files);
+      const created = await Incidents.create(text.trim(), files, autoPublish);
       const newIncidentId = created.incident.id;
-      setIncidentId(newIncidentId);
 
       const runResult = await Incidents.runAnalysis({
         incident_id: newIncidentId,
@@ -162,6 +221,25 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
         model: agentRuntime === "claude_code_cli" ? selectedModel : undefined,
         effort: selectedEffort,
       });
+
+      if (autoPublish) {
+        // Plan 166 F3 — modo lote: se agrega a la cola, se limpia el form y
+        // se queda en step="intake" para la siguiente. NO pasa por
+        // preview/approved (la publicación la hace el post-hook del backend).
+        setQueue((prev) =>
+          upsertQueueItem(prev, {
+            id: newIncidentId,
+            title: created.incident.title || text.trim().slice(0, 80) || newIncidentId,
+            status: "analizando",
+          })
+        );
+        setText("");
+        setFiles([]);
+        setValidationErrors([]);
+        return;
+      }
+
+      setIncidentId(newIncidentId);
       setExecutionId(runResult.execution_id);
       setStep("running");
       if (isCliRuntime(agentRuntime)) {
@@ -204,7 +282,9 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
         setStep("preview");
       } else {
         setErrorMsg(
-          p.error === "incident_not_in_output"
+          p.error === "run_failed_precondition"
+            ? `La ejecución no llegó a correr el agente: ${p.detail?.detail ?? p.detail?.check ?? "precondición no cumplida"}.`
+            : p.error === "incident_not_in_output"
             ? p.repair?.attempted
               ? "El agente narró en vez de devolver el desglose HTML. Stacky ya reintentó automáticamente una vez y no se recuperó. Revisá la consola de la ejecución y reintentá manualmente."
               : "El agente narró en vez de devolver el desglose HTML. Revisá la consola y reintentá."
@@ -365,6 +445,31 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
               </div>
             )}
 
+            {autoPublishEnabled && queue.length > 0 && (
+              <div className={styles.queueSection}>
+                <div className={styles.queueHeader}>
+                  Incidencias cargadas: {queueSummary(queue).total}
+                  {" · publicadas: "}
+                  {queueSummary(queue).publicadas}
+                  {queueSummary(queue).errores > 0 && ` · errores: ${queueSummary(queue).errores}`}
+                </div>
+                <ul className={styles.queueList}>
+                  {queue.map((item) => (
+                    <li key={item.id} className={styles.queueItem}>
+                      <span className={styles.queueItemTitle}>{item.title}</span>
+                      <span className={queueStatusClass(item.status)}>{item.status}</span>
+                      {item.status === "publicada" && item.url && (
+                        <a href={item.url} target="_blank" rel="noreferrer">{item.trackerId}</a>
+                      )}
+                      {item.status === "error" && item.error && (
+                        <span className={styles.errorMsg}>{item.error}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <footer className={styles.footer}>
               <button className={styles.cancelBtn} onClick={onClose}>Cancelar</button>
               <button
@@ -372,7 +477,7 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
                 onClick={() => void handleAnalyze()}
                 disabled={!canSubmit}
               >
-                ▶ Analizar
+                {autoPublishEnabled ? "➕ Crear incidencia" : "▶ Analizar"}
               </button>
             </footer>
           </div>

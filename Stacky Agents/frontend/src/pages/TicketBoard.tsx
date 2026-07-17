@@ -31,6 +31,7 @@ import {
   runtimeRequiresVsCodeAgent,
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
+import { canResolveWithAgent } from "../incidents/devResolverModel";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
@@ -240,9 +241,12 @@ interface TicketCardProps {
   /** Feature #4 — mapa determinístico ado_state → agent_type cargado una vez en TicketBoard raíz */
   flowConfigMap: Map<string, string>;
   indent?: boolean;
+  /** Plan 166 F5 — dev_resolver_enabled del mismo Incidents.status() que ya
+   * consume el board (:715). */
+  devResolverEnabled?: boolean;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent, devResolverEnabled }: TicketCardProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -354,6 +358,43 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
       ]);
     }
   }, [activeProjectName, qc, runningExecution]);
+
+  // Plan 166 F5 — "Resolver con agente": lanza el Dev Resolutor sobre esta
+  // Issue. Modelo puro de disponibilidad en incidents/devResolverModel.ts
+  // (RTL/jsdom no soporta tests de render de este componente — gap conocido).
+  const [isResolvingIncident, setIsResolvingIncident] = useState(false);
+  const canResolveIncident = canResolveWithAgent({
+    workItemType: ticket.work_item_type,
+    adoState: ticket.ado_state,
+    isRunning,
+    enabled: Boolean(devResolverEnabled),
+    closedStates: CLOSED_STATES,
+  });
+
+  const handleResolveWithAgent = useCallback(async () => {
+    setIsResolvingIncident(true);
+    setLaunchError(null);
+    try {
+      // Sin selector de modelo/effort por-run en el board (mismo patrón que
+      // handleRunConfirm arriba, que tampoco pasa model_override): el
+      // backend usa su default/selector adaptativo.
+      const result = await Incidents.runDevResolver({
+        ticket_id: ticket.id,
+        runtime: agentRuntime,
+        project: activeProjectName,
+      });
+      openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["executions"] }),
+      ]);
+    } catch (error) {
+      setLaunchError(humanizeAgentLaunchError(error));
+    } finally {
+      setIsResolvingIncident(false);
+    }
+  }, [activeProjectName, agentRuntime, qc, setCodexConsoleExecution, ticket.id]);
 
   return (
     <>
@@ -491,6 +532,17 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
               >
                 ⚙ Run Custom
               </button>
+              {/* Plan 166 F5 — Dev Resolutor de Incidencias, solo en Issues/Bugs. */}
+              {canResolveIncident && (
+                <button
+                  className={styles.resolveBtn}
+                  onClick={(e) => { e.stopPropagation(); void handleResolveWithAgent(); }}
+                  disabled={isResolvingIncident}
+                  title="Resolver esta incidencia con un agente dev"
+                >
+                  {isResolvingIncident ? "⏳ Lanzando…" : "🔧 Resolver con agente"}
+                </button>
+              )}
             </div>
 
             {pipelineQ.data && (
@@ -571,9 +623,11 @@ interface EpicGroupProps {
   memoryBadges: Record<string, StackyMemoryTicketBadge>;
   /** Feature #4 — propagado desde TicketBoard raíz */
   flowConfigMap: Map<string, string>;
+  /** Plan 166 F5 — propagado desde TicketBoard raíz */
+  devResolverEnabled?: boolean;
 }
 
-function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap }: EpicGroupProps) {
+function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap, devResolverEnabled }: EpicGroupProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -686,6 +740,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
                 memoryBadge={memoryBadges[String(child.id)] ?? null}
                 flowConfigMap={flowConfigMap}
                 indent
+                devResolverEnabled={devResolverEnabled}
               />
             ))
           )}
@@ -709,13 +764,18 @@ export default function TicketBoard() {
   // Plan 131 — Modal resolutor de incidencias (botón invisible con flag OFF)
   const [incidentModalOpen, setIncidentModalOpen] = useState(false);
   const [incidentsEnabled, setIncidentsEnabled] = useState(false);
+  // Plan 166 F5 — mismo consumo de Incidents.status() de arriba, extendido
+  // con dev_resolver_enabled para el botón "Resolver con agente" del board.
+  const [devResolverEnabled, setDevResolverEnabled] = useState(false);
   useEffect(() => {
     void (async () => {
       try {
         const s = await Incidents.status();
         setIncidentsEnabled(s.enabled);
+        setDevResolverEnabled(Boolean(s.dev_resolver_enabled));
       } catch {
         setIncidentsEnabled(false);
+        setDevResolverEnabled(false);
       }
     })();
   }, []);
@@ -1084,6 +1144,7 @@ export default function TicketBoard() {
                   vsCodeAgents={vsCodeAgents ?? []}
                   memoryBadges={memoryBadges}
                   flowConfigMap={flowConfigMap}
+                  devResolverEnabled={devResolverEnabled}
                 />
               ))}
               {filteredOrphans.length > 0 && (
@@ -1101,6 +1162,7 @@ export default function TicketBoard() {
                         vsCodeAgents={vsCodeAgents ?? []}
                         memoryBadge={memoryBadges[String(t.id)] ?? null}
                         flowConfigMap={flowConfigMap}
+                        devResolverEnabled={devResolverEnabled}
                       />
                     ))}
                   </div>

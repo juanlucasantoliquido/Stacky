@@ -280,12 +280,12 @@ class Config:
     CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED = os.getenv(
         "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
-    # Plan 144 F3 — auto-set opt-in de hasTrustDialogAccepted. Default OFF:
-    # excepción dura (d) "reduce seguridad por default" (escribe un setting de
-    # seguridad de ~/.claude.json). Activable solo por decisión explícita del
-    # operador desde la UI (panel de flags del arnés).
+    # Plan 144 F3 — auto-set de hasTrustDialogAccepted. Default ON por decisión
+    # explícita del operador (2026-07-17): la función la consumen perfiles no
+    # técnicos y debe ser autosuficiente — sin diálogos manuales de trust.
+    # Kill-switch: OFF desde la UI o env si se quiere volver al opt-in.
     CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED", "false"
+        "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Cap de mensajes correctivos por run (plan: máx 1-2).
     CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES = int(
@@ -949,6 +949,38 @@ class Config:
     # autopublicación, siempre preview+confirmación humana antes de publicar).
     STACKY_INCIDENT_RESOLVER_ENABLED: bool = os.getenv(
         "STACKY_INCIDENT_RESOLVER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 166 F1 — persistir Ticket local al publicar Issue de incidencia
+    # (espejo de _persist_epic_ticket). Default ON: sólo crea un espejo local
+    # idempotente; OFF revierte a "aparece recién tras sync de ADO".
+    STACKY_INCIDENT_TICKET_PERSIST_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_TICKET_PERSIST_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 166 F2 — OCR/visión de capturas → texto inline en el manifiesto.
+    # Default ON con degradación EXACTA al comportamiento de hoy si no hay
+    # endpoint/modelo de visión (marca [PENDIENTE] + adjunto ADO): por eso ON
+    # es seguro y no dispara excepción dura.
+    STACKY_INCIDENT_VISION_OCR_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_VISION_OCR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_INCIDENT_VISION_ENDPOINT: str = os.getenv("STACKY_INCIDENT_VISION_ENDPOINT", "")
+    STACKY_INCIDENT_VISION_MODEL: str = os.getenv("STACKY_INCIDENT_VISION_MODEL", "")
+
+    # Plan 166 F3 — auto-publicación de la Issue de incidencia SIN confirmación
+    # humana, en lote. EXCEPCIÓN DURA #1 (bypass de revisión humana), aceptada
+    # por directiva explícita del operador 2026-07-17 (precedente:
+    # épica-desde-brief). Kill-switch por UI: OFF restaura el gate preview+confirm.
+    STACKY_INCIDENT_AUTO_PUBLISH_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 166 F4/F5 — Agente Dev Resolutor de Incidencias (toma una Issue y la
+    # resuelve en el repo). Default ON: sólo se lanza cuando el operador hace
+    # click en "Resolver con agente" (sin autonomía proactiva).
+    STACKY_INCIDENT_DEV_RESOLVER_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_DEV_RESOLVER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # Plan 77 — Postea análisis funcional/técnico/implementación de un Issue como

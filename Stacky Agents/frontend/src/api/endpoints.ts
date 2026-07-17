@@ -4156,10 +4156,17 @@ export const Incidents = {
   status: () => api.get<IncidentStatusDTO>("/api/incidents/status"),
 
   /** multipart/form-data — el cliente `api.post` fija Content-Type: application/json
-   * y no sirve para subir archivos; se usa fetch directo (client.ts:85-86, apiBase). */
-  create: async (text: string, files: File[]): Promise<{ ok: boolean; incident: IncidentDTO }> => {
+   * y no sirve para subir archivos; se usa fetch directo (client.ts:85-86, apiBase).
+   * `autoPublish` (Plan 166 F3): true = el post-hook publica la Issue sin
+   * confirmación al terminar el análisis (modo lote, sin diálogos). */
+  create: async (
+    text: string,
+    files: File[],
+    autoPublish = false
+  ): Promise<{ ok: boolean; incident: IncidentDTO }> => {
     const formData = new FormData();
     formData.append("text", text);
+    formData.append("auto_publish", String(autoPublish));
     for (const f of files) formData.append("files", f);
     const res = await fetch(`${apiBase}/api/incidents`, {
       method: "POST",
@@ -4208,4 +4215,14 @@ export const Incidents = {
       doc_path: string | null;
       warnings: string[];
     }>("/api/tickets/incidents/publish", payload),
+
+  /** Plan 166 F5 — lanza el Dev Resolutor sobre una Issue de incidencia. */
+  runDevResolver: (payload: {
+    ticket_id: number;
+    runtime?: import("../types").AgentRuntime;
+    project?: string | null;
+    model?: string | null;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  }) =>
+    api.post<{ execution_id: number; status: string }>("/api/agents/run-incident-dev", payload),
 };

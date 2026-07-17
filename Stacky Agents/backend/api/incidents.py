@@ -19,6 +19,12 @@ def incidents_status():
         "max_files": MAX_FILES,
         "max_file_mb": MAX_FILE_BYTES // (1024 * 1024),
         "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
+        # Plan 166 F3 — el modal usa este campo para saltar preview+confirm y
+        # entrar en modo lote (creación directa sin diálogos).
+        "auto_publish_enabled": bool(getattr(_cfg, "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED", False)),
+        # Plan 166 F5 — el board usa este campo para mostrar/ocultar el botón
+        # "Resolver con agente" en las Issues.
+        "dev_resolver_enabled": bool(getattr(_cfg, "STACKY_INCIDENT_DEV_RESOLVER_ENABLED", False)),
     })
 
 
@@ -55,8 +61,11 @@ def create_incident_endpoint():
             }), 400
         files.append((f.filename, data))
 
+    # Plan 166 F3 — auto_publish del form ("true"/"false" string, form-data).
+    auto_publish = (request.form.get("auto_publish") or "").strip().lower() == "true"
+
     try:
-        incident = incident_store.create_incident(text, files)
+        incident = incident_store.create_incident(text, files, auto_publish=auto_publish)
     except ValueError as exc:
         return jsonify({
             "ok": False, "error": "validation_error", "message": str(exc),

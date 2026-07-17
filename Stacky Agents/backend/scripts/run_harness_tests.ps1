@@ -407,6 +407,11 @@ $HarnessTestFiles = @(
   "tests/test_run_directive_block.py"
   "tests/test_agent_contract.py"
   "tests/test_block_priorities_contract.py"
+  # Plan 166 - Ciclo completo de incidencias
+  "tests/test_persist_incident_ticket.py"
+  "tests/test_incident_vision.py"
+  "tests/test_incident_autopublish.py"
+  "tests/test_incident_dev_agent.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

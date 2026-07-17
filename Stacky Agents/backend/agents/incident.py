@@ -31,4 +31,12 @@ class IncidentAgent(BaseAgent):
             "PRIORIDAD Y ESTIMACION. Sos preciso, no inventás: lo no verificable va "
             "como [PENDIENTE: ...]. PROHIBIDO narrar lo que vas a hacer: tu respuesta "
             "es el HTML y nada más."
+            " Si el contexto incluye la sección 'Texto extraído de las capturas (visión)', "
+            "tratá ese texto como EVIDENCIA PRIMARIA de la incidencia: extraé de ahí "
+            "mensajes de error, códigos, valores de pantalla y nombres de campos, citalos "
+            "textualmente en ANALISIS FUNCIONAL/TECNICO y usalos para los PASOS DE "
+            "REPRODUCCION. Nunca le pidas información adicional al cargador: normalizá con "
+            "lo disponible, distinguí HECHOS (lo que se ve/lee) de HIPOTESIS (lo que "
+            "inferís) marcando las hipótesis como tales, y dejá la incidencia lista para "
+            "que un dev la resuelva sin volver a preguntar."
         )

@@ -1,4 +1,4 @@
-# Plan 155 — Comparador de BD: configuración de ambientes en contexto, import automático desde `web.config` (agente local) y Panel de Migración siempre visible
+# Plan 157 — Comparador de BD: configuración de ambientes en contexto, import automático desde `web.config` (agente local) y Panel de Migración siempre visible
 
 **Estado:** PROPUESTO (v1, 2026-07-17, autor `StackyArchitectaUltraEficientCode`)
 **Serie previa:** 122 (núcleo/ambientes) → 123 (motor diff) → 124 (UI inmersiva) → 125 (scripts + backups) → 126 (paridad de datos). **TODA la serie 122-126 está IMPLEMENTADA en `main`.** Este plan es la **capa de UX/configuración** encima de ese comparador; NO reimplementa nada de la serie.
@@ -129,7 +129,7 @@ Este plan cierra esas 4 brechas SIN tocar el motor de comparación:
 ```
    **Motivo (aprendizaje C1 planes 122/126):** `test_requires_map_is_frozen` compara el mapa por igualdad EXACTA; declarar `requires=` sin dar de alta la arista rompe el test. La arista es de profundidad 1 (child → master directo), coherente con la regla `requires` R4 (no encadenar a flag hija).
 
-**Test PRIMERO (TDD):** `backend/tests/test_plan155_dbcompare_ux_flags.py`
+**Test PRIMERO (TDD):** `backend/tests/test_plan157_dbcompare_ux_flags.py`
 Casos:
 - `test_las_tres_flags_existen_en_registry` — las 3 keys están en `FLAG_REGISTRY`.
 - `test_las_tres_flags_default_on` — `flag_default("<key>") is True` para las 3.
@@ -137,7 +137,7 @@ Casos:
 - `test_las_tres_flags_categorizadas_en_comparador_bd` — las 3 están en `_CATEGORY_KEYS["comparador_bd"]`.
 Comando (venv del repo, por archivo):
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan155_dbcompare_ux_flags.py tests/test_harness_flags_requires.py tests/test_harness_flags.py -q
+cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_ux_flags.py tests/test_harness_flags_requires.py tests/test_harness_flags.py -q
 ```
 (usar el intérprete real del repo: `backend/.venv` según memoria de entorno; si no existe, `../venv`.)
 
@@ -146,7 +146,7 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 **Impacto por runtime:** idéntico (config de backend). Fallback: N/A.
 **Trabajo del operador:** ninguno (default ON, togglable por UI de flags).
 
-**Registro en ratchet:** agregar `tests/test_plan155_dbcompare_ux_flags.py` (y los de F1/F2/F3) al array `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh:20` y su espejo `.ps1`. **Criterio:** `test_harness_ratchet_meta.py` verde.
+**Registro en ratchet:** agregar `tests/test_plan157_dbcompare_ux_flags.py` (y los de F1/F2/F3) al array `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh:20` y su espejo `.ps1`. **Criterio:** `test_harness_ratchet_meta.py` verde.
 
 ---
 
@@ -178,7 +178,7 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 
 **Regla de seguridad DURA en este módulo:** el módulo NO importa `logging` para loguear values; NO hace `requests`/`urllib`/socket; NO importa nada de LLM. La password en claro existe solo como valor de retorno de las funciones, nunca como atributo de `ParsedConnection` ni en `masked_raw`.
 
-**Test PRIMERO (TDD):** `backend/tests/test_plan155_dbcompare_webconfig_parse.py`
+**Test PRIMERO (TDD):** `backend/tests/test_plan157_dbcompare_webconfig_parse.py`
 Casos (fixtures string inline, sin archivos):
 - `test_sqlserver_user_pass` — `Server=srv,1433;Database=RS;User ID=rs;Password=Secr3t;` → engine sqlserver, host srv, port 1433, database RS, username rs, has_password True; password devuelto = `"Secr3t"`; `masked_raw` contiene `Password=****` y NO contiene `Secr3t`.
 - `test_sqlserver_integrated_security` — `Data Source=srv\SQLEXPRESS;Initial Catalog=RS;Integrated Security=SSPI;` → integrated_security True, host `srv\SQLEXPRESS`, port None, has_password False.
@@ -188,7 +188,7 @@ Casos (fixtures string inline, sin archivos):
 - `test_password_nunca_en_parsedconnection` — para todos los casos: serializar `ParsedConnection` a dict y afirmar que ningún value contiene la password en claro.
 Comando:
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan155_dbcompare_webconfig_parse.py -q
+cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_webconfig_parse.py -q
 ```
 **Criterio BINARIO:** todos los casos pasan; en especial `test_password_nunca_en_parsedconnection` y `masked_raw` sin secreto.
 **Flag:** `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` (el módulo es puro; la fase se prueba sin flag). 
@@ -228,7 +228,7 @@ previews = [ {**asdict(pc), "index": i}  # asdict NO tiene password (F1 garantiz
 return {"import_id": import_id, "connections": previews}
 ```
 
-**Test PRIMERO (TDD):** `backend/tests/test_plan155_dbcompare_import_api.py` (usar `app.test_client()`, monkeypatch de `keyring` como los tests plan122)
+**Test PRIMERO (TDD):** `backend/tests/test_plan157_dbcompare_import_api.py` (usar `app.test_client()`, monkeypatch de `keyring` como los tests plan122)
 Casos:
 - `test_import_403_si_flag_off` — con `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` OFF → 403.
 - `test_import_content_devuelve_previews_sin_password` — POST content con password → 200, ningún value del JSON contiene la password en claro; `has_password True`.
@@ -238,7 +238,7 @@ Casos:
 - `test_logs_no_contienen_password` — capturar logs (`caplog`) durante import+confirm y afirmar que la password en claro no aparece.
 Comando:
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan155_dbcompare_import_api.py -q
+cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_import_api.py -q
 ```
 **Criterio BINARIO:** todos pasan; `test_import_content_devuelve_previews_sin_password`, `test_confirm_crea_ambiente_y_setea_keyring` y `test_logs_no_contienen_password` son bloqueantes.
 **Flag:** `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` (default ON). Con OFF, los 2 endpoints devuelven 403 y no se registran en la UI.
@@ -256,7 +256,7 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 
 **Archivos a editar/crear:**
 - `backend/services/egress_policies.py` — verificar (y, si falta, agregar) que la clase `secrets` de `_DETECTORS` (`egress_policies.py:81-92`) matchea el patrón `password\s*=` y `connection string` (ya lo hace según evidencia; si el regex no cubre `pwd=`, agregarlo).
-- `backend/tests/test_plan155_dbcompare_secret_guardrails.py` (nuevo).
+- `backend/tests/test_plan157_dbcompare_secret_guardrails.py` (nuevo).
 - `frontend/src/components/dbcompare/CredentialWarningBanner.tsx` (nuevo, punto d — ver F4 para el montaje).
 
 **Invariantes testeadas (mapa requisito → test):**
@@ -268,7 +268,7 @@ cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_pl
 
 Comando:
 ```
-cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan155_dbcompare_secret_guardrails.py -q
+cd "Stacky Agents/backend" && ./.venv/Scripts/python.exe -m pytest tests/test_plan157_dbcompare_secret_guardrails.py -q
 ```
 **Criterio BINARIO:** los 6 tests (a,c×2,e×2 + reuso b) pasan.
 **Flag:** protegida por `STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED` (los guardarraíles aplican cuando el import está activo).

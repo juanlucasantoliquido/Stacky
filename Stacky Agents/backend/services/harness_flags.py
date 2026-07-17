@@ -1171,8 +1171,6 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = run_agent byte-idéntico."
         ),
         group="global",
-        default=True,  # Plan 133 F7 — con F2 el preflight deja de ser solo infra:
-                       # ahora evita runs quemados. Predicados deterministas y locales.
     ),
     # ── Plan 133 — Contrato de inyección de contexto por agente ───────────────
     FlagSpec(

@@ -1,4 +1,4 @@
-# Plan 155 — Latido único: summary de polling y stream acotado
+# Plan 156 — Latido único: summary de polling y stream acotado
 
 > **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
 > **Origen:** debate adversarial 2026-07-16 con auditoría empírica de los logs del deploy y del árbol de frontend. Toda la evidencia archivo:línea de este doc fue **re-verificada contra el árbol el 2026-07-16**; los números de línea son referencia de ese día — **toda edición se ancla por TEXTO normativo citado, no por número de línea**.
@@ -75,7 +75,7 @@
 
 ### 2.6 Infra existente que se REUSA (leída, no supuesta)
 
-| Símbolo | Archivo:línea (2026-07-16) | Rol en 155 |
+| Símbolo | Archivo:línea (2026-07-16) | Rol en 156 |
 |---|---|---|
 | `list_executions` + su query | `backend/api/executions.py:28-86` | F1 extrae la construcción de filtros a un helper y la reusa por estado; el serializer es `to_dict(include_output=False, include_ticket_context=True)` (`:86`) — el summary usa EXACTAMENTE el mismo. |
 | Blueprint `executions` | `backend/api/executions.py:24` (`url_prefix="/executions"`, registrado bajo `/api`) | La ruta nueva es `@bp.get("/summary")` → resuelve a `/api/executions/summary`. La ruta estática `/summary` NO colisiona con `/<int:execution_id>` (`:89`): el conversor `int` no matchea "summary" y Flask prioriza rutas estáticas. |
@@ -182,13 +182,13 @@ Todos esos campos vienen de `to_dict(include_ticket_context=True)`; como el summ
 **Archivos:**
 - MODIFICADO `backend/api/executions.py` (extraer helper de filtros + nueva ruta `/summary`)
 - NUEVO `backend/tests/test_executions_summary.py`
-- MODIFICADO `backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` (registrar el test, bloque `# — Plan 155 · Latido único —`)
+- MODIFICADO `backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` (registrar el test, bloque `# — Plan 156 · Latido único —`)
 
 **Paso 1 — Extraer el armado de la query a un helper** (refactor mínimo y seguro; las pruebas existentes de executions deben seguir verdes). En `backend/api/executions.py`, agregar a nivel de módulo (cerca de `list_executions`) un helper que encapsule EXACTAMENTE los filtros que hoy están inline en `list_executions:59-85`:
 
 ```python
 def _query_active_executions(session, *, project_ctx, status_values, limit):
-    """Plan 155 F1 — misma logica de filtro/orden que list_executions, aislada
+    """Plan 156 F1 — misma logica de filtro/orden que list_executions, aislada
     para que /api/executions y /api/executions/summary NUNCA diverjan."""
     q = session.query(AgentExecution).options(joinedload(AgentExecution.ticket))
     if project_ctx is not None:
@@ -216,7 +216,7 @@ Y reescribir el cuerpo de `list_executions` para que use este helper cuando corr
 ```python
 @bp.get("/summary")
 def executions_summary():
-    """Plan 155 F1 — latido unico: running/preparing/queued en UNA respuesta.
+    """Plan 156 F1 — latido unico: running/preparing/queued en UNA respuesta.
 
     Shape: {"scope": "project"|"all_projects",
             "running":[...], "preparing":[...], "queued":[...]}
@@ -257,7 +257,7 @@ def executions_summary():
 | `test_summary_scope_project_filtra` | Con dos proyectos seeded, `scope=project` (proyecto activo) NO trae ejecuciones del otro proyecto; `scope=all_projects` las trae todas. |
 | `test_summary_vacio_ok` | Sin ejecuciones activas → las 3 keys presentes con arrays vacíos, HTTP 200. |
 
-**Paso 4 — Registrar** `tests/test_executions_summary.py` en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 155 · Latido único —`, mismo formato que las entradas vecinas: `  tests/test_executions_summary.py` en sh; `  "tests/test_executions_summary.py",` en ps1).
+**Paso 4 — Registrar** `tests/test_executions_summary.py` en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 156 · Latido único —`, mismo formato que las entradas vecinas: `  tests/test_executions_summary.py` en sh; `  "tests/test_executions_summary.py",` en ps1).
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_executions_summary.py -q` → exit 0; las pruebas existentes de executions siguen verdes; `grep -c "test_executions_summary.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`.
 
@@ -522,7 +522,7 @@ export function isStaleAt(
 **Archivos:**
 - MODIFICADO `backend/services/local_file_logging.py` (solo la tupla `_DEFAULT_SUPPRESSED_PATHS`, `:68`)
 - NUEVO `backend/tests/test_access_log_suppress_pollers.py`
-- MODIFICADO `backend/scripts/run_harness_tests.sh` y `.ps1` (registrar el test, bloque `# — Plan 155 · Latido único —`)
+- MODIFICADO `backend/scripts/run_harness_tests.sh` y `.ps1` (registrar el test, bloque `# — Plan 156 · Latido único —`)
 
 **Paso 1 — Ampliar el default** (ancla de texto: `_DEFAULT_SUPPRESSED_PATHS = ("/api/v1/pipeline/status",)`, `:68`). Reemplazar por:
 
@@ -549,7 +549,7 @@ _DEFAULT_SUPPRESSED_PATHS = (
 
 (Para `test_env_extra`: `_suppressed_paths()` lee la env en cada llamada, así que el monkeypatch basta; no hay estado global cacheado.)
 
-**Paso 3 — Registrar** el test en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 155 · Latido único —`).
+**Paso 3 — Registrar** el test en `run_harness_tests.sh` Y `.ps1` (bloque `# — Plan 156 · Latido único —`).
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_access_log_suppress_pollers.py -q` → exit 0; `grep -c "test_access_log_suppress_pollers.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`. **Verificación manual (documentada):** arrancar el backend dev en frío, dejar la UI abierta 1 minuto, abrir el `data/logs/stacky-*.log` del día → sin líneas de acceso de los 4 paths suprimidos.
 

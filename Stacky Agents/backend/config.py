@@ -823,9 +823,39 @@ class Config:
     # ── Plan 30 — Integridad verificada contra la realidad ────────────────────
 
     # G0.1 — Gate de precondiciones determinista antes de lanzar el run.
-    # OFF default: run_agent byte-idéntico.
+    # Plan 133 F7 — promovido a default ON (predicados deterministas y locales;
+    # con F2 el preflight evita runs quemados, no solo infra).
     STACKY_RUN_PREFLIGHT_GATE_ENABLED: bool = os.getenv(
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 133 — Contrato de inyección de contexto por agente ───────────────
+    # Todas default ON (patrón triple, directiva del operador: "no quiero flags
+    # default off que sirvan y no sean nocivas").
+
+    # F1 — Refresh just-in-time del ticket al inicio de POST /api/agents/run.
+    STACKY_RUN_TICKET_REFRESH_ENABLED: bool = os.getenv(
+        "STACKY_RUN_TICKET_REFRESH_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # F2 — Preflight de negocio (predicados por agent_type) en POST /run.
+    STACKY_BUSINESS_PREFLIGHT_ENABLED: bool = os.getenv(
+        "STACKY_BUSINESS_PREFLIGHT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # F3 — Bloque 'ado-blocker' server-side dentro de build_ado_context_blocks.
+    STACKY_ADO_BLOCKER_BLOCK_ENABLED: bool = os.getenv(
+        "STACKY_ADO_BLOCKER_BLOCK_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # F4 — Bloque 'run-directive' server-side dentro de enrich_blocks.
+    STACKY_RUN_DIRECTIVE_ENABLED: bool = os.getenv(
+        "STACKY_RUN_DIRECTIVE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # F5 — Validación del contrato declarativo stacky_required_blocks pre-spawn.
+    STACKY_REQUIRED_BLOCKS_ENABLED: bool = os.getenv(
+        "STACKY_REQUIRED_BLOCKS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # G1.1 — Verificación post-create de que la task existe en ADO antes de

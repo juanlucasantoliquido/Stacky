@@ -119,6 +119,12 @@ def enrich_blocks(
         log=log,
     )
     blocks = _inject_epic_structured(ticket_id, agent_type, blocks, log)
+    # Plan 133 F4 — directiva de ejecución server-side (modo A/B), justo después
+    # de ado-epic-structured para que ambos estén disponibles cuando F5 valide
+    # stacky_required_blocks.
+    blocks = _inject_run_directive(
+        ticket_id=ticket_id, agent_type=agent_type, blocks=blocks, log=log
+    )
     blocks = _inject_artifact_context(ticket_id, blocks, log)
 
     # I3.1 — Paralelización de injectors I/O-bound independientes.
@@ -359,12 +365,17 @@ def _dedup_blocks(
 # de recortar (comentarios viejos, similares) queda accesible vía MCP (F2.1).
 _BLOCK_PRIORITY: dict[str, int] = {
     "operator-corrections": 110,  # Plan 41 — correcciones del operador mandan sobre todo
+    "run-directive": 105,        # Plan 133 — directiva server-side, manda casi sobre todo
     "ado-epic-structured": 100,
+    "ado-blocker": 90,           # Plan 133 — bloqueante técnico detectado server-side
     "client-profile": 95,
     "rejection-lessons": 82,  # Plan 48 — restricción dura (rechazos previos del operador)
     "stacky-memory": 80,
     "modal_user_input": 78,
+    "process-catalog": 78,       # Plan 133 — el prompt lo declara lectura OBLIGATORIA
+    "process-discipline": 77,    # Plan 133 — decisión REUSE vs CREATE, no podable
     "operator_note": 76,
+    "acceptance-contract": 76,   # Plan 133 — se autodeclaraba high y era podable
     "acceptance-criteria": 74,   # Q0.1 — alta prioridad, nunca se poda
     "filesystem-artifacts-status": 70,
     "glossary-auto": 60,
@@ -381,7 +392,15 @@ _TRUNCATION_MARKER = (
 
 
 def _block_priority(block: dict) -> int:
-    return _BLOCK_PRIORITY.get(block.get("id") or "", _DEFAULT_PRIORITY)
+    mapped = _BLOCK_PRIORITY.get(block.get("id") or "")
+    if mapped is not None:
+        return mapped
+    # Plan 133 F6 — respeta el campo ad-hoc que algunos bloques ya se autodeclaran
+    # (p. ej. acceptance-contract, context_enrichment.py:~1420) pero que hasta
+    # ahora _block_priority ignoraba (solo miraba el id).
+    if str(block.get("priority") or "").lower() == "high":
+        return _HIGH_PRIORITY_THRESHOLD
+    return _DEFAULT_PRIORITY
 
 
 def _block_token_estimate(block: dict) -> int:
@@ -1019,6 +1038,82 @@ def _inject_epic_structured(
         }
         log("info", f"ado-epic-structured inyectado para Epic ADO-{_epic_ticket.ado_id}")
         return list(blocks) + [_epic_block]
+
+
+def _inject_run_directive(
+    *, ticket_id: int | None, agent_type: str, blocks: list[dict], log: LogFn
+) -> list[dict]:
+    """Plan 133 F4 — Inyecta la directiva de ejecución (modo A/B) calculada
+    server-side por business_preflight, como bloque de máxima prioridad
+    (PREPEND, primero de la lista). Degrada el paso de auto-validación del
+    agente a un cross-check en vez de la única línea de defensa.
+
+    Flag OFF, agent_type != "functional", o ticket sin ado_id positivo (incluye
+    sentinels -1..-8) → retorna blocks sin tocar (identidad).
+    """
+    from config import config
+
+    if not getattr(config, "STACKY_RUN_DIRECTIVE_ENABLED", False):
+        return blocks
+    if agent_type != "functional":
+        return blocks
+    if not ticket_id:
+        return blocks
+    with session_scope() as _rd_sess:
+        _rd_ticket = _rd_sess.get(Ticket, ticket_id)
+        if _rd_ticket is None or not _rd_ticket.ado_id or _rd_ticket.ado_id <= 0:
+            return blocks
+
+    from services import business_preflight, run_ticket_refresh
+
+    try:
+        _bp = business_preflight.evaluate(ticket_id=ticket_id, agent_type=agent_type)
+    except Exception as exc:  # noqa: BLE001 — nunca bloquea el enrich
+        log("warn", f"run-directive: business_preflight falló (continuando): {exc}")
+        return blocks
+
+    try:
+        _snapshot_fresh = bool(
+            run_ticket_refresh.refresh_ticket_snapshot(ticket_id).get("refreshed")
+        )
+    except Exception:  # noqa: BLE001
+        _snapshot_fresh = False
+    _fresh_str = "true" if _snapshot_fresh else "false"
+
+    if _bp.mode in ("A", "B"):
+        content = "\n".join([
+            f"modo: {_bp.mode}",
+            f"razon: {_bp.reason or 'prerequisitos validados'}",
+            f"epic_ado_id: {_bp.epic_ado_id if _bp.epic_ado_id is not None else 'n/a'}",
+            f"estado_validado: {_bp.validated_state if _bp.validated_state is not None else 'n/a'}",
+            f"snapshot_fresh: {_fresh_str}  # F2b — resultado del refresh F1",
+            "Instrucción: Stacky YA validó los prerequisitos de tu contrato. Tu paso de",
+            "validación de modo es un CROSS-CHECK: si tu lectura contradice esta",
+            "directiva, reportá la discrepancia en el output y continuá según TU contrato.",
+        ])
+        block = {
+            "kind": "text",
+            "id": "run-directive",
+            "title": "Directiva de ejecución (validada por Stacky server-side)",
+            "content": content,
+        }
+    else:
+        _reason = _bp.reason or (_bp.warnings[0] if _bp.warnings else "preflight_off")
+        content = "\n".join([
+            "modo: indeterminado",
+            f"razon: {_reason}",
+            f"snapshot_fresh: {_fresh_str}",
+            "Instrucción: Stacky NO pudo validar los prerequisitos esta vez. Aplicá tu",
+            "flujo de detección de modo COMPLETO según tu contrato.",
+        ])
+        block = {
+            "kind": "text",
+            "id": "run-directive",
+            "title": "Directiva de ejecución (validación server-side no disponible)",
+            "content": content,
+        }
+    log("info", f"run-directive inyectado: modo={_bp.mode or 'indeterminado'}")
+    return [block] + list(blocks)
 
 
 def _inject_artifact_context(

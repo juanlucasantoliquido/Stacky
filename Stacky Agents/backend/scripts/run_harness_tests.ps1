@@ -390,6 +390,14 @@ $HarnessTestFiles = @(
   "tests/test_plan130_code_integrity_flag.py"
   "tests/test_plan130_code_integrity_service.py"
   "tests/test_plan130_code_integrity_endpoint_cli.py"
+  # Plan 133 - Contrato de inyeccion de contexto por agente
+  "tests/test_context_contract_flags.py"
+  "tests/test_run_ticket_refresh.py"
+  "tests/test_business_preflight.py"
+  "tests/test_ado_blocker_block.py"
+  "tests/test_run_directive_block.py"
+  "tests/test_agent_contract.py"
+  "tests/test_block_priorities_contract.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -417,6 +417,37 @@ def run():
     if agent_type == "custom" and not payload.get("system_prompt_override"):
         abort(400, "system_prompt_override is required when agent_type=custom")
 
+    # Plan 133 F1 — Refresh just-in-time del snapshot local del ticket (best-effort,
+    # nunca levanta). Corre ANTES del preflight de negocio F2 para que decida sobre
+    # datos frescos del tracker.
+    from services.run_ticket_refresh import refresh_ticket_snapshot
+    _refresh = refresh_ticket_snapshot(ticket_id)
+
+    # Plan 133 F2 — Preflight de negocio: rechaza con 400 accionable ANTES de gastar
+    # el run si el ticket no cumple los prerequisitos deterministas del contrato del
+    # agente (p. ej. functional sobre una Task sin bloqueante). Fail-open ante red.
+    from services.business_preflight import evaluate as business_preflight
+    _bp = business_preflight(ticket_id=ticket_id, agent_type=agent_type)
+    if not _bp.ok:
+        logger.warning(
+            "business_preflight_rejected agent=%s ticket=%s check=%s snapshot_fresh=%s",
+            agent_type, ticket_id, _bp.check, _refresh.get("refreshed"),
+        )
+        from flask import make_response
+        return make_response(
+            _json.dumps({
+                "ok": False,
+                "error": "business_preflight_failed",
+                "check": _bp.check,
+                "message": _bp.reason,
+                "agent_type": agent_type,
+                "ticket_id": ticket_id,
+                "snapshot_fresh": bool(_refresh.get("refreshed")),
+            }),
+            400,
+            {"Content-Type": "application/json"},
+        )
+
     # FA-32 — Diff-based re-execution
     delta_system_prefix: str | None = None
     prev_exec_id = payload.get("previous_execution_id")

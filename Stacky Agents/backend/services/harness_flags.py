@@ -167,6 +167,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     "integridad_grounding": (
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
         "STACKY_OUTPUT_GROUNDING_ENABLED", "STACKY_OUTPUT_GROUNDING_REPAIR",
+        # Plan 133 — Contrato de inyección de contexto por agente.
+        "STACKY_RUN_TICKET_REFRESH_ENABLED", "STACKY_BUSINESS_PREFLIGHT_ENABLED",
+        "STACKY_ADO_BLOCKER_BLOCK_ENABLED", "STACKY_RUN_DIRECTIVE_ENABLED",
+        "STACKY_REQUIRED_BLOCKS_ENABLED",
     ),
     "epicas_ado": (
         "STACKY_EPIC_FROM_BRIEF_ENABLED", "STACKY_BRIEF_MODEL_SELECT_ENABLED",
@@ -1167,6 +1171,77 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "OFF = run_agent byte-idéntico."
         ),
         group="global",
+        default=True,  # Plan 133 F7 — con F2 el preflight deja de ser solo infra:
+                       # ahora evita runs quemados. Predicados deterministas y locales.
+    ),
+    # ── Plan 133 — Contrato de inyección de contexto por agente ───────────────
+    FlagSpec(
+        key="STACKY_RUN_TICKET_REFRESH_ENABLED",
+        type="bool",
+        label="Refresh just-in-time del ticket antes del run",
+        description=(
+            "Plan 133 F1 — Re-sincroniza work_item_type/ado_state/título/"
+            "descripción del ticket desde el tracker (ADO) al inicio de "
+            "POST /api/agents/run, para que preflight e inyección decidan "
+            "sobre datos frescos. Solo tracker ADO; fail-open ante red. "
+            "OFF = /run byte-idéntico."
+        ),
+        group="global",
+        default=True,  # Solo agrega una lectura cacheable; no gasta tokens.
+    ),
+    FlagSpec(
+        key="STACKY_BUSINESS_PREFLIGHT_ENABLED",
+        type="bool",
+        label="Preflight de negocio antes del run",
+        description=(
+            "Plan 133 F2 — Rechaza con 400 accionable el lanzamiento de un "
+            "agente cuyo ticket no cumple los prerequisitos deterministas de "
+            "su contrato (p. ej. FunctionalAnalyst sobre una Task sin "
+            "bloqueante), ANTES de gastar el run. Fail-open ante red. "
+            "OFF = /run byte-idéntico."
+        ),
+        group="global",
+        default=True,  # Ahorra runs quemados; nunca gasta tokens de más.
+    ),
+    FlagSpec(
+        key="STACKY_ADO_BLOCKER_BLOCK_ENABLED",
+        type="bool",
+        label="Bloque 'ado-blocker' server-side",
+        description=(
+            "Plan 133 F3 — Si un comentario ADO contiene el marcador "
+            "bloqueante, lo marca como bloque de contexto de primera clase "
+            "('ado-blocker') en vez de dejar que el agente lo busque entre "
+            "hasta 30 comentarios crudos. OFF = ado_context byte-idéntico."
+        ),
+        group="global",
+        default=True,  # Agrega un bloque chico (~10 líneas); evita abortos.
+    ),
+    FlagSpec(
+        key="STACKY_RUN_DIRECTIVE_ENABLED",
+        type="bool",
+        label="Bloque 'run-directive' server-side",
+        description=(
+            "Plan 133 F4 — Inyecta la decisión de modo (A/B) calculada por "
+            "el backend como bloque de máxima prioridad; el paso de "
+            "auto-validación del agente pasa a ser un cross-check. "
+            "OFF = enrich_blocks byte-idéntico."
+        ),
+        group="global",
+        default=True,  # Agrega un bloque chico; evita abortos de contrato.
+    ),
+    FlagSpec(
+        key="STACKY_REQUIRED_BLOCKS_ENABLED",
+        type="bool",
+        label="Contrato declarativo 'stacky_required_blocks'",
+        description=(
+            "Plan 133 F5 — Valida, post-enriquecimiento y pre-spawn, que los "
+            "bloques de contexto que el .agent.md declara obligatorios "
+            "(frontmatter stacky_required_blocks) hayan sido producidos. Si "
+            "faltan: el run queda failed SIN spawnear el CLI. "
+            "OFF = sin validación (comportamiento actual)."
+        ),
+        group="global",
+        default=True,  # Evita spawnear CLI con contexto incompleto (ahorra tokens).
     ),
     FlagSpec(
         key="STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",

@@ -648,6 +648,15 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",
     "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",
     "STACKY_CODE_INTEGRITY_ENABLED",  # Plan 130 — default ON (operador 2026-07-13)
+    # ── Plan 133 — Contrato de inyección de contexto por agente: 5 flags nuevas
+    # default ON (directiva del operador). STACKY_RUN_PREFLIGHT_GATE_ENABLED (F7,
+    # también promovida acá) y STACKY_CONTEXT_DEDUP_ENABLED ya estaban curadas
+    # arriba (barrido 2026-07-15) — no se duplican acá. ──
+    "STACKY_RUN_TICKET_REFRESH_ENABLED",
+    "STACKY_BUSINESS_PREFLIGHT_ENABLED",
+    "STACKY_ADO_BLOCKER_BLOCK_ENABLED",
+    "STACKY_RUN_DIRECTIVE_ENABLED",
+    "STACKY_REQUIRED_BLOCKS_ENABLED",
 }
 
 

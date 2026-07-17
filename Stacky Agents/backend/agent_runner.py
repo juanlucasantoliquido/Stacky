@@ -700,6 +700,38 @@ def _run_in_background(
             log=log,
         )
 
+        # Plan 133 F5 — garantía pre-spawn de stacky_required_blocks. Este path
+        # (github_copilot) no tiene vscode_agent_filename en su firma —
+        # enforce() es no-op con filename None (copilot puede correr sin
+        # agente VS Code, C5).
+        try:
+            from services import agent_contract
+
+            agent_contract.enforce(vscode_agent_filename=None, blocks=raw_blocks)
+        except agent_contract.AgentContractError as _ac_exc:
+            log("error", f"contrato de contexto incumplido: {_ac_exc}")
+            with session_scope() as _ac_session:
+                _ac_row = _ac_session.get(AgentExecution, execution_id)
+                if _ac_row is not None:
+                    _ac_md = dict(_ac_row.metadata_dict or {})
+                    _ac_md["context_contract_failure"] = {
+                        "agent": None, "detail": str(_ac_exc),
+                    }
+                    _ac_row.metadata_dict = _ac_md
+            _mark_terminal(execution_id, status="error", error=str(_ac_exc))
+            if ticket_id is not None:
+                from services import ticket_status as _ts
+
+                _ts.on_execution_end(
+                    ticket_id=ticket_id,
+                    execution_id=execution_id,
+                    final_status="error",
+                    agent_type=agent_type,
+                    error=str(_ac_exc),
+                )
+            log_streamer.close(execution_id)
+            return
+
         # FA-37 — PII masking ANTES de cualquier procesamiento (cache, prompt, etc.)
         masked_blocks, mask_map = pii_masker.mask_blocks(raw_blocks)
         if mask_map:

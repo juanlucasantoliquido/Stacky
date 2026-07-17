@@ -80,6 +80,28 @@ export function runtimeDisplayLabel(runtime: AgentRuntime): string {
   }
 }
 
+/**
+ * Plan 133 F2 — extrae el mensaje accionable de un 400 business_preflight_failed.
+ *
+ * `api.post` (frontend/src/api/client.ts) lanza un `Error` plano cuyo `message`
+ * embebe el texto crudo del body: `"{status} {statusText}: {bodyText}"`. Acá
+ * localizamos el JSON embebido y validamos el shape exacto que arma el backend
+ * (api/agents.py, hook Plan 133 F2 en POST /api/agents/run).
+ */
+export function parseBusinessPreflightError(error: unknown): string | null {
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  const brace = msg.indexOf("{");
+  if (brace < 0) return null;
+  try {
+    const body = JSON.parse(msg.slice(brace));
+    return body?.error === "business_preflight_failed" && typeof body.message === "string"
+      ? body.message
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function humanizeAgentLaunchError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? "");
 

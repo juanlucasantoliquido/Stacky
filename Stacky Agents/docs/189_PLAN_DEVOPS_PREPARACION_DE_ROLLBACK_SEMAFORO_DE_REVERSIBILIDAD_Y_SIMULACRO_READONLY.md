@@ -1,9 +1,33 @@
 # Plan 189 — DevOps: preparación de rollback — semáforo de reversibilidad y simulacro read-only
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (extiende el Centro de Despliegues 120; hermano de 188 evidencia de fallos)
+
+## Changelog v1 → v2 (crítica C1..C7 + adiciones)
+
+- **C1 (IMPORTANTE):** el pseudocódigo de la ruta llamaba `_smoke_timeout_s()` — helper que vive en
+  `deploy_executor.py:262-264`, NO en `devops_deployments.py` (NameError si se copia literal). v2:
+  la ruta computa INLINE `int(getattr(_config.config, "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", 30))`.
+- **C2 (IMPORTANTE):** el test de paridad KPI-3 era autorreferencial (ambos lados con los mismos
+  args pasan trivialmente). v2 agrega `test_kpi3_espia_argumentos`: monkeypatch-espía sobre
+  `planner.build_rollback_plan` que captura la tupla con la que llama el simulacro y la valida
+  contra la FORMA del call-site real del executor (`deploy_executor.py:312`).
+- **C3 (IMPORTANTE):** el fan-out N+1 (un POST por card) se reemplaza por modo BATCH opcional en el
+  mismo endpoint (`pairs: [...]`, cap 100 → `readiness_map`); la UI hace 1 solo request. El modo
+  single queda intacto.
+- **C4 (MENOR):** `is_locked` se computa UNA vez en el readiness (variable `locked`).
+- **C5 (MENOR):** instrucción de fixture ejecutable: `ls tests/test_plan120*` y espejar el archivo
+  que monkeypatchea `deploy_store` (antes decía "leer UN test existente", vago).
+- **C6 (MENOR):** contrato de respuesta con ejemplo JSON de los DOS modos (solo-readiness / con
+  plan / batch).
+- **C7 (MENOR):** documentada la divergencia INTENCIONAL: el simulacro solo acepta versiones
+  retenidas (más estricto que el `/rollback` real) — decisión de seguridad, no bug.
+- **[ADICIÓN ARQUITECTO 1]:** botón "Copiar comandos" en el modal del simulacro (helper puro
+  `commandsClipboardText` + `navigator.clipboard` con try/catch) — ops manuales en 1 click.
+- **[ADICIÓN ARQUITECTO 2]:** telemetría `stacky_logger.info("rollback_readiness", "preview_built",
+  app_id=…, target=…, batch=bool)` en la ruta (consistencia con `evidence_built` del plan 188).
 
 ---
 
@@ -158,31 +182,61 @@ def simulate_rollback_plan(app_id: str, target: str, to_version: str,
 ```python
 @bp.post("/rollback/preview")
 def rollback_preview_route():
-    """Semáforo + simulacro read-only. NO exige _execute_on(): acá no se ejecuta nada. Plan 189."""
+    """Semáforo + simulacro read-only. NO exige _execute_on(): acá no se ejecuta nada. Plan 189.
+
+    Modos: single {app_id, target[, to_version]} | batch {pairs: [{app_id, target}, ...]} (C3)."""
     _guard_master()  # patrón :37-39
     if not bool(getattr(_config.config, "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED", False)):
         abort(404)
     body = request.get_json(silent=True) or {}
-    app_id, target = body.get("app_id"), body.get("target")
+    from services.rollback_readiness import compute_rollback_readiness, simulate_rollback_plan
+    from services.stacky_logger import logger as stacky_logger
+
+    # C1 — timeout INLINE (la helper _smoke_timeout_s vive en deploy_executor.py:262-264 y
+    # este blueprint NO la tiene; NO importar deploy_executor):
+    smoke_timeout_s = int(getattr(_config.config, "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", 30))
+
+    pairs = body.get("pairs")
+    if isinstance(pairs, list):                      # ── modo BATCH (C3)
+        if len(pairs) > 100:
+            return jsonify({"error": "max 100 pares"}), 400
+        out: dict = {}
+        for p in pairs:
+            a, t = (p or {}).get("app_id"), (p or {}).get("target")
+            if not a or not t:
+                continue                             # pares malformados se omiten, no rompen el batch
+            r = compute_rollback_readiness(a, t)
+            if r is not None:
+                out[f"{a}|{t}"] = r
+        stacky_logger.info("rollback_readiness", "preview_built", batch=True, count=len(out))
+        return jsonify({"readiness_map": out})
+
+    app_id, target = body.get("app_id"), body.get("target")  # ── modo SINGLE
     if not app_id or not target:
         return jsonify({"error": "app_id y target son obligatorios"}), 400
-    from services.rollback_readiness import compute_rollback_readiness, simulate_rollback_plan
     readiness = compute_rollback_readiness(app_id, target)
     if readiness is None:
         return jsonify({"error": "app_not_found"}), 404
     plan = None
     to_version = body.get("to_version")
     if to_version:
-        plan = simulate_rollback_plan(app_id, target, str(to_version), _smoke_timeout_s())
+        plan = simulate_rollback_plan(app_id, target, str(to_version), smoke_timeout_s)
         if plan is None:
             return jsonify({"error": "version_not_retained"}), 404
+    stacky_logger.info("rollback_readiness", "preview_built",
+                       app_id=app_id, target=target, batch=False)  # [ADICIÓN ARQUITECTO 2]
     return jsonify({"readiness": readiness, "plan": plan})
 ```
 
-   (`_smoke_timeout_s()` ya existe en el módulo del executor — **leer `deploy_executor.py:262-264`**:
-   si la helper vive en `deploy_executor`, importarla ahí o replicar la línea
-   `int(getattr(_config.config, "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", 30))` INLINE en la ruta;
-   elegir la opción que NO importe `deploy_executor` desde el servicio nuevo.)
+**Contrato de respuesta (C6, congelado):**
+
+```json
+// single sin to_version:  {"readiness": {...}, "plan": null}
+// single con to_version:  {"readiness": {...}, "plan": {"schema_version": "189.1",
+//                          "to_version": "v2", "smoke_timeout_s": 30, "steps": [...],
+//                          "simulated": true}}
+// batch:                  {"readiness_map": {"miapp|PF-TEST": {...}, "miapp|__local__": {...}}}
+```
 
 5. Edge `STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED → STACKY_DEVOPS_PANEL_ENABLED` en
    `tests/test_harness_flags_requires.py`.
@@ -199,11 +253,16 @@ def rollback_preview_route():
 - `test_preview_404_app_inexistente` (store monkeypatcheado: `get_app` → None).
 - `test_preview_200_execute_off` — con `STACKY_DEPLOYMENTS_EXECUTE_ENABLED` OFF → 200 igual
   (KPI-2 parcial: el preview NO depende de la flag de ejecución).
+- `test_preview_batch_shape` (C3) — body `{"pairs": [{"app_id":"a","target":"t"}]}` → 200 con
+  `readiness_map` y key `"a|t"`; pares malformados (sin target) se omiten sin error.
+- `test_preview_batch_limite` (C3) — 101 pares → 400 "max 100 pares".
+- `test_logger_llamado` — monkeypatch del target EXACTO `services.stacky_logger.logger.info`
+  (import intra-función; mismo patrón que plan 188 C7) → evento `preview_built`.
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan189_readiness_flag.py -q`
 (cwd = `Stacky Agents\backend`; SIEMPRE por archivo).
 
-**Criterio binario:** los 7 tests pasan Y `test_harness_ratchet_meta.py` verde.
+**Criterio binario:** los 10 tests pasan Y `test_harness_ratchet_meta.py` verde.
 
 **Flag:** `STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED` default **ON** (ninguna excepción dura:
 lecturas locales, cero ejecución).
@@ -243,7 +302,8 @@ def compute_rollback_readiness(app_id: str, target: str) -> dict | None:
         reasons.append(REASON_NO_RETAINED)
     elif not candidates:
         reasons.append(REASON_ONLY_CURRENT)
-    if store.is_locked(app_id, target):                       # :175
+    locked = store.is_locked(app_id, target)                  # :175 — C4: UNA sola llamada
+    if locked:
         reasons.append(REASON_RUN_IN_PROGRESS)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -252,7 +312,7 @@ def compute_rollback_readiness(app_id: str, target: str) -> dict | None:
         "candidates": candidates,
         "current_version": current,
         "protected": bool(cfg.get("protected")) if cfg else False,
-        "locked": store.is_locked(app_id, target),
+        "locked": locked,
         "reasons": reasons,
     }
 ```
@@ -330,11 +390,20 @@ Notas duras:
   (`build_switch_commands` :89, `_reject_embedded_quotes` :83): no llevan credenciales, van tal
   cual al preview.
 
-**Tests PRIMERO** — `tests/test_plan189_simulacro.py` (store y planner reales con fixture app en
-memoria vía monkeypatch de `_load_apps`/ledger, o store monkeypatcheado — elegir lo que ya haga
-`tests/test_plan120_*` con el Centro; leer UN test existente del 120 y espejar el estilo de fixture):
+**Divergencia INTENCIONAL documentada (C7):** el simulacro solo acepta `to_version` RETENIDA
+(devuelve 404 `version_not_retained` si no); el `/rollback` real (:262) solo valida presencia. Es
+MÁS estricto a propósito (seguridad del ensayo); NO igualar hacia abajo.
+
+**Tests PRIMERO** — `tests/test_plan189_simulacro.py` (fixture: correr `ls tests/test_plan120*`
+(C5) y ESPEJAR el estilo del archivo que monkeypatchea `deploy_store` — mismo mecanismo de app/ledger
+en memoria):
 - `test_kpi3_paridad_steps` — `simulate_rollback_plan(...)["steps"] ==
   planner.build_rollback_plan(app, target, cfg, to_version, 30)` (comparación `==` literal).
+- `test_kpi3_espia_argumentos` (C2) — monkeypatch-espía sobre
+  `services.rollback_readiness.planner.build_rollback_plan` que captura `args`; llamar
+  `simulate_rollback_plan(app_id, target, "v2", 30)` y assert que la tupla capturada es
+  `(app_dict, target, cfg_dict, "v2", 30)` — la MISMA forma del call-site real
+  `deploy_executor.py:312` (leerlo antes; si el executor usa kwargs, validar kwargs idénticos).
 - `test_none_version_no_retenida` → endpoint 404 `version_not_retained` (test de API con client).
 - `test_kpi2_cero_ejecucion` — monkeypatch `deploy_executor.LocalTransport.run` y
   `remote_exec.run_deploy_step` a `raise AssertionError("ejecución prohibida")`; llamar al endpoint
@@ -345,7 +414,7 @@ memoria vía monkeypatch de `_load_apps`/ledger, o store monkeypatcheado — ele
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan189_simulacro.py -q`
 
-**Criterio binario:** los 5 tests pasan (KPI-2 y KPI-3 completos).
+**Criterio binario:** los 6 tests pasan (KPI-2 y KPI-3 completos).
 
 **Flag:** la de F0. **Runtimes:** idéntico. **Trabajo del operador:** ninguno.
 
@@ -391,22 +460,28 @@ export function stepRows(plan: { steps: Array<{name: string; command: string; re
     tags: [s.read_only ? 'solo lectura' : '', s.housekeeping ? 'housekeeping' : ''].filter(Boolean),
   }));
 }
+// [ADICIÓN ARQUITECTO 1] — texto plano para "Copiar comandos" (una línea por step, sin tags)
+export function commandsClipboardText(plan: { steps: Array<{command: string}> } | null): string {
+  if (!plan) return '';
+  return plan.steps.map((s) => s.command).join('\n');
+}
 ```
 
 2. `DeploymentsSection.tsx`:
-   - Al cargar el overview (fetch existente), disparar EN PARALELO un
-     `POST /api/devops/deployments/rollback/preview` con `{app_id, target}` por cada card visible
-     (`Promise.all`; los datos son lecturas locales, responden en ms) y guardar
-     `readinessMap[appId + '|' + target]`. Si CUALQUIER request falla o da 404 (flag OFF) →
-     `readinessMap` queda sin esa key y la card se ve EXACTAMENTE como hoy (degradación silenciosa;
-     además, ante el PRIMER 404 no reintentar en la sesión).
-   - Render del badge con `readinessBadge(...)` junto al estado existente de la card (clases del
-     CSS module; **gotcha ratchet:** cero `style={{}}`).
-   - Botón `"Simular rollback…"` SOLO si `ready`: re-llama al preview con
+   - **C3 — UN solo request:** tras cargar el overview (fetch existente), armar
+     `pairs = [{app_id, target}]` con todas las cards visibles y hacer UN
+     `POST /api/devops/deployments/rollback/preview` con `{pairs}`; guardar el `readiness_map`
+     recibido tal cual (keys `"appId|target"`). Si el request falla o da 404 (flag OFF) → sin
+     badge, cards EXACTAMENTE como hoy, y NO reintentar en la sesión (degradación silenciosa).
+   - Render del badge con `readinessBadge(...)` junto al estado existente de la card (clases
+     `.badgeOk`/`.badgeOff` del CSS module de la sección; **gotcha ratchet:** cero `style={{}}`).
+   - Botón `"Simular rollback…"` SOLO si `ready`: llama al preview en modo single con
      `to_version = readiness.to_version` y muestra un panel/modal read-only: banda superior
      "Simulacro — nada se ejecutó ni se va a ejecutar", lista de `stepRows` (nombre + `<code>` con
-     el comando + tags), y botón único "Cerrar". El botón REAL de rollback existente NO se toca ni
-     se mueve.
+     el comando + tags), botón **"Copiar comandos"** ([ADICIÓN 1]:
+     `navigator.clipboard.writeText(commandsClipboardText(plan))` envuelto en try/catch; si falla,
+     mensaje inline "no se pudo copiar" — sin romper nada), y botón "Cerrar". El botón REAL de
+     rollback existente NO se toca ni se mueve.
 
 **Tests PRIMERO** — `rollbackReadiness.test.ts` (vitest, **sin @testing-library** — gap conocido;
 espejar `RemediationCard.test.tsx`):
@@ -414,11 +489,12 @@ espejar `RemediationCard.test.tsx`):
 - ready → tone `ok`, texto con la versión; protected → title con "protegido".
 - no-ready → tone `off`, title junta los motivos traducidos (y deja crudo un reason desconocido).
 - `stepRows` — mapea tags según read_only/housekeeping; `null` → `[]`.
+- `commandsClipboardText` — 2 steps → 2 líneas unidas por `\n`; `null` → `''` (ADICIÓN 1).
 
 **Comando:** `npx vitest run src/components/devops/rollbackReadiness.test.ts`
 (cwd = `Stacky Agents\frontend`; por archivo).
 
-**Criterio binario:** los 4 tests pasan Y `npx tsc --noEmit` sin errores nuevos (KPI-4).
+**Criterio binario:** los 5 tests pasan Y `npx tsc --noEmit` sin errores nuevos (KPI-4).
 
 **Flag:** la de F0 (404 → sin badge, cero diferencia visual). **Runtimes:** UI pura.
 **Trabajo del operador:** ninguno.

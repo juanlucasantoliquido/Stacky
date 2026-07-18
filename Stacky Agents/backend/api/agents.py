@@ -1118,6 +1118,12 @@ def run_incident_dev():
     project_name = (payload.get("project") or "").strip() or None
     vscode_agent_filename: str | None = payload.get("vscode_agent_filename") or None
 
+    # Plan 177 F3 — consentimiento del checkbox "Abrir PR" (default premarcado en
+    # la UI; el backend igual respeta lo que llegue). Sólo aplica si el flag está ON.
+    open_pr = bool(payload.get("open_pr")) and bool(
+        getattr(config, "STACKY_INCIDENT_DEV_PR_ENABLED", False)
+    )
+
     # Plan 42 F3 / Plan 53 F2 — passthrough IDÉNTICO a run_incident.
     from services import llm_router as _llm_router
 
@@ -1147,6 +1153,25 @@ def run_incident_dev():
     ]
 
     user = current_user()
+
+    # Plan 177 F3 — snapshot BASELINE del repo del proyecto ANTES de lanzar el
+    # agente, para que el post-hook F4 aísle exactamente lo que ESTE run tocó.
+    # Best-effort: nunca bloquea el run. Sin repo git real del proyecto → no hay
+    # auto-PR (corta de raíz el fallback cwd al repo de Stacky).
+    _pr_baseline = None
+    _pr_repo_root = None
+    if open_pr:
+        try:
+            from services import incident_dev_pr, project_context
+            _ctx = project_context.resolve_project_context(project_name)
+            _ws = _ctx.workspace_root if _ctx else None
+            _pr_repo_root = incident_dev_pr.resolve_repo_root(_ws)
+            if _pr_repo_root:
+                _pr_baseline = incident_dev_pr.snapshot_worktree(_pr_repo_root)
+        except Exception:  # noqa: BLE001 — el auto-PR es best-effort, nunca 500
+            logger.info("run_incident_dev: no se pudo snapshotear baseline para auto-PR", exc_info=True)
+            _pr_repo_root = None
+            _pr_baseline = None
 
     try:
         execution_id = agent_runner.run_agent(
@@ -1180,6 +1205,20 @@ def run_incident_dev():
         "run_incident_dev: execution_id=%s runtime=%s ticket_id=%s",
         execution_id, runtime_raw, ticket_id,
     )
+
+    # Plan 177 F3 — registrar el intent del PR keyeado por execution_id (el
+    # post-hook F4 lo lee al completar el run). Store en disco, NO en
+    # metadata_json (evita clobber con el runner, G9).
+    if open_pr and _pr_repo_root and _pr_baseline is not None:
+        try:
+            from services import incident_dev_pr
+            incident_dev_pr.record_intent(execution_id, {
+                "open_pr": True,
+                "repo_root": _pr_repo_root,
+                "baseline": _pr_baseline,
+            })
+        except Exception:  # noqa: BLE001 — best-effort; sin intent, no se abre PR
+            logger.info("run_incident_dev: no se pudo registrar intent de auto-PR exec=%s", execution_id, exc_info=True)
 
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
 

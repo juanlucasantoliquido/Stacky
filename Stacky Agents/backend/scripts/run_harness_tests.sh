@@ -524,6 +524,8 @@ HARNESS_TEST_FILES=(
   # — Plan 186 · Lint determinista de pipelines (PL001-014 + explain-plan + fixes) —
   tests/test_plan186_lint_flag.py
   tests/test_plan186_lint_estructura.py
+  tests/test_plan186_lint_variables.py
+  tests/test_plan186_lint_catalogo.py
 )
 
 pass=0

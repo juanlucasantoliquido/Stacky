@@ -10,6 +10,9 @@ from dataclasses import dataclass, asdict, replace
 
 import yaml  # PyYAML — ya es dependencia (services/pipeline_renderers.py la importa)
 
+# Plan 195 §6/C1 — masking CANÓNICO común (prefijo + >=8). NO redefinir TOKEN_VALUE_PREFIXES.
+from services.secret_masking import mask_token_values  # módulo PURO (sin red/disco/config)
+
 ENGINE_VERSION = "186.1"
 
 SEV_ERROR = "error"
@@ -445,6 +448,238 @@ def _rule_pl006(ctx: LintContext):
                     "PL006", SEV_INFO,
                     f"Clave '{ks}' no reconocida en la raíz (su valor no es un job).",
                     line=_find_line(ctx, f"{ks}:"), node=None))
+    return findings
+
+
+# ── Reglas de variables y secretos PL010..PL014 (walk C4) ───────────────────────
+
+_ADO_REF_RE = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_.]*)\)")
+_GITLAB_REF_RE = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
+_ADO_EXEC_KEYS = ("script", "bash", "powershell", "pwsh")
+_GITLAB_SCRIPT_KEYS = ("script", "before_script", "after_script")
+
+_ADO_WL_PREFIXES = ("Build.", "System.", "Agent.", "Pipeline.", "Resources.",
+                    "BUILD_", "SYSTEM_", "AGENT_", "PIPELINE_", "TF_")
+_GITLAB_WL_PREFIXES = ("CI_", "GITLAB_")
+_GITLAB_WL_EXACT = {"HOME", "PATH", "USER", "PWD"}
+
+_SECRET_SUFFIXES = ("_TOKEN", "_PAT", "_PASSWORD", "_SECRET", "_KEY", "_APIKEY")
+
+
+def _looks_secret(name: str) -> bool:
+    return str(name).upper().endswith(_SECRET_SUFFIXES)
+
+
+def _is_whitelisted(ref: str, provider: str) -> bool:
+    if provider == "ado":
+        return any(ref.startswith(p) for p in _ADO_WL_PREFIXES)
+    return ref in _GITLAB_WL_EXACT or any(ref.startswith(p) for p in _GITLAB_WL_PREFIXES)
+
+
+def _find_ref_line(ctx: LintContext, ref: str) -> int | None:
+    if ctx.provider == "ado":
+        return _find_line(ctx, f"$({ref})")
+    return _find_line(ctx, f"${{{ref}}}") or _find_line(ctx, f"${ref}")
+
+
+def _collect_refs(ctx: LintContext):
+    """Walk C4 sobre el árbol parseado. Devuelve (refs:set, exec_strings:list[str]).
+    NUNCA regex sobre el YAML crudo (los comentarios no generan refs)."""
+    refs: set = set()
+    exec_strings: list = []
+    if ctx.provider == "ado":
+        _walk_ado(ctx.data, refs, exec_strings)
+    else:
+        _walk_gitlab(ctx.data, refs, exec_strings)
+    return refs, exec_strings
+
+
+def _walk_ado(node, refs: set, exec_strings: list):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in _ADO_EXEC_KEYS and isinstance(v, str):
+                refs.update(_ADO_REF_RE.findall(v))
+                exec_strings.append(v)
+            elif k == "env" and isinstance(v, dict):
+                for ev in v.values():
+                    if isinstance(ev, str):
+                        refs.update(_ADO_REF_RE.findall(ev))
+            _walk_ado(v, refs, exec_strings)
+    elif isinstance(node, list):
+        for item in node:
+            _walk_ado(item, refs, exec_strings)
+
+
+def _walk_gitlab(node, refs: set, exec_strings: list):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in _GITLAB_SCRIPT_KEYS:
+                items = v if isinstance(v, list) else ([v] if isinstance(v, str) else [])
+                for it in items:
+                    if isinstance(it, str):
+                        refs.update(_GITLAB_REF_RE.findall(it))
+                        exec_strings.append(it)
+            elif k == "variables" and isinstance(v, dict):
+                for vv in v.values():
+                    if isinstance(vv, str):
+                        refs.update(_GITLAB_REF_RE.findall(vv))
+            _walk_gitlab(v, refs, exec_strings)
+    elif isinstance(node, list):
+        for item in node:
+            _walk_gitlab(item, refs, exec_strings)
+
+
+def _declared(ctx: LintContext):
+    """Devuelve (declared:set, root_names:set, entries:list[(name, value)])."""
+    if ctx.provider == "ado":
+        return _ado_declared(ctx.data)
+    return _gitlab_declared(ctx.data)
+
+
+def _collect_var_block(varblock, entries: list, root_names: set, is_root: bool):
+    if isinstance(varblock, dict):
+        for n, val in varblock.items():
+            entries.append((str(n), val))
+            if is_root:
+                root_names.add(str(n))
+    elif isinstance(varblock, list):
+        for it in varblock:
+            if isinstance(it, dict) and "name" in it:
+                entries.append((str(it["name"]), it.get("value")))
+                if is_root:
+                    root_names.add(str(it["name"]))
+
+
+def _ado_declared(data):
+    entries: list = []
+    root_names: set = set()
+    if isinstance(data, dict):
+        _collect_var_block(data.get("variables"), entries, root_names, True)
+        for s in _ado_stage_items(data):
+            _collect_var_block(s.get("variables"), entries, root_names, False)
+            for j in _ado_job_items(s):
+                _collect_var_block(j.get("variables"), entries, root_names, False)
+        for j in _ado_job_items(data):  # jobs top-level (sin stages)
+            _collect_var_block(j.get("variables"), entries, root_names, False)
+    return {n for n, _ in entries}, root_names, entries
+
+
+def _gitlab_declared(data):
+    entries: list = []
+    root_names: set = set()
+    if isinstance(data, dict):
+        rv = data.get("variables")
+        if isinstance(rv, dict):
+            for n, val in rv.items():
+                entries.append((str(n), val))
+                root_names.add(str(n))
+        for _name, jd in _gitlab_jobs(data).items():
+            jv = jd.get("variables")
+            if isinstance(jv, dict):
+                for n, val in jv.items():
+                    entries.append((str(n), val))
+    return {n for n, _ in entries}, root_names, entries
+
+
+@_rule("PL010", SEV_WARNING, ("ado", "gitlab"),
+       repro=("ado", "stages:\n- stage: A\n  jobs:\n  - job: J\n"
+                     "    steps:\n    - script: echo $(FANTASMA)\n"))
+def _rule_pl010(ctx: LintContext):
+    findings = []
+    refs, _ = _collect_refs(ctx)
+    declared, _root, _entries = _declared(ctx)
+    known = set(ctx.known_variables or [])
+    for ref in sorted(refs):
+        if _is_whitelisted(ref, ctx.provider) or ref in declared or ref in known:
+            continue
+        findings.append(LintFinding(
+            "PL010", SEV_WARNING,
+            f"La variable '{ref}' se usa pero no está declarada (ni en la caja fuerte).",
+            line=_find_ref_line(ctx, ref), node=f"var:{ref}"))
+    return findings
+
+
+@_rule("PL011", SEV_INFO, ("ado", "gitlab"),
+       repro=("ado", "variables:\n  UNUSED: hola\n"
+                     "stages:\n- stage: A\n  jobs:\n  - job: J\n"
+                     "    steps:\n    - script: echo hi\n"))
+def _rule_pl011(ctx: LintContext):
+    findings = []
+    refs, _ = _collect_refs(ctx)
+    _declared_set, root_names, _entries = _declared(ctx)
+    for name in sorted(root_names):
+        if name not in refs:
+            findings.append(LintFinding(
+                "PL011", SEV_INFO,
+                f"La variable '{name}' se declara en la raíz pero nunca se usa.",
+                line=_find_line(ctx, f"{name}:"), node=f"var:{name}"))
+    return findings
+
+
+@_rule("PL012", SEV_WARNING, ("ado", "gitlab"),
+       repro=("ado", "variables:\n  DEPLOY_TOKEN: " + ("x" * 16) + "\n"
+                     "stages:\n- stage: A\n  jobs:\n  - job: J\n"
+                     "    steps:\n    - script: echo hi\n"))
+def _rule_pl012(ctx: LintContext):
+    findings = []
+    _declared_set, _root, entries = _declared(ctx)
+    for name, val in entries:
+        if not isinstance(val, str):
+            continue
+        # (b) ADICIÓN 1 — prefijo de token conocido, criterio CANÓNICO secret_masking (prefijo + >=8)
+        if mask_token_values(val) != val:
+            findings.append(LintFinding(
+                "PL012", SEV_WARNING,
+                f"La variable '{name}' parece contener un token/secreto hardcodeado "
+                f"(prefijo conocido). Movelo a la caja fuerte de variables.",
+                line=_find_line(ctx, f"{name}:"), node=f"var:{name}"))
+            continue
+        # (a) nombre parece secreto + valor con >=12 chars alfanuméricos
+        if _looks_secret(name) and sum(1 for c in val if c.isalnum()) >= 12:
+            findings.append(LintFinding(
+                "PL012", SEV_WARNING,
+                f"La variable '{name}' parece contener un secreto en texto plano. "
+                f"Movelo a la caja fuerte de variables.",
+                line=_find_line(ctx, f"{name}:"), node=f"var:{name}"))
+    return findings
+
+
+@_rule("PL013", SEV_WARNING, ("ado", "gitlab"),
+       repro=("ado", "stages:\n- stage: A\n  jobs:\n  - job: J\n"
+                     "    steps:\n    - script: deploy --key $(DEPLOY_TOKEN)\n"))
+def _rule_pl013(ctx: LintContext):
+    findings = []
+    if ctx.known_variables is None:
+        return findings  # degradación explícita: la UI no mandó la caja fuerte
+    known = set(ctx.known_variables)
+    refs, _ = _collect_refs(ctx)
+    for ref in sorted(refs):
+        if _looks_secret(ref) and ref not in known:
+            findings.append(LintFinding(
+                "PL013", SEV_WARNING,
+                f"El secreto '{ref}' se usa pero no está en la caja fuerte de variables (Plan 94).",
+                line=_find_ref_line(ctx, ref), node=f"var:{ref}"))
+    return findings
+
+
+@_rule("PL014", SEV_WARNING, ("ado", "gitlab"),
+       repro=("ado", "stages:\n- stage: A\n  jobs:\n  - job: J\n"
+                     "    steps:\n    - script: echo $(API_KEY)\n"))
+def _rule_pl014(ctx: LintContext):
+    findings = []
+    _refs, exec_strings = _collect_refs(ctx)
+    ref_re = _ADO_REF_RE if ctx.provider == "ado" else _GITLAB_REF_RE
+    seen: set = set()
+    for s in exec_strings:
+        if "echo" not in s:
+            continue
+        for ref in ref_re.findall(s):
+            if _looks_secret(ref) and ref not in seen:
+                seen.add(ref)
+                findings.append(LintFinding(
+                    "PL014", SEV_WARNING,
+                    f"Se hace 'echo' de la variable secreta '{ref}': puede filtrarse en los logs.",
+                    line=_find_ref_line(ctx, ref), node=f"var:{ref}"))
     return findings
 
 

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { LocalDiagnostics, type LocalDiagnosticCheck } from "../api/endpoints";
 import HarnessHealthCard from "../components/HarnessHealthCard";
+import PublishLedgerPanel from "../components/PublishLedgerPanel";
 import OperationalHealthCard from "../components/OperationalHealthCard";
 import CodeIntegrityCard from "../components/CodeIntegrityCard";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
@@ -202,6 +203,9 @@ export default function DiagnosticsPage() {
 
       {/* H8 — KPIs de valor agregado del arnés */}
       <HarnessHealthCard />
+
+      {/* Plan 153 — Ledger de publicaciones ADO: desbloqueo humano 1-click */}
+      <PublishLedgerPanel />
 
       {/* Plan 46 F3 — Panel de Salud Operativa (triage pasivo) */}
       <OperationalHealthCard onOpenExecution={setDetailId} />

@@ -287,6 +287,16 @@ def create_app() -> Flask:
     init_db()
     install_console_log_handler()
 
+    # Plan 153 — migracion one-shot de markers legacy al publish_ledger (idempotente, sin red).
+    if os.getenv("STACKY_TEST_MODE", "").strip() not in ("1", "true"):
+        try:
+            from services.publish_ledger import migrate_legacy_markers
+            _mig = migrate_legacy_markers()
+            if _mig.get("migrated_pending") or _mig.get("migrated_posted"):
+                logging.getLogger("stacky.publish_ledger").info("migracion markers legacy: %s", _mig)
+        except Exception:  # noqa: BLE001 — la migracion jamas impide arrancar
+            logging.getLogger("stacky.publish_ledger").warning("migracion markers legacy fallo", exc_info=True)
+
     # ── Bootstrap canonical Stacky/agents ───────────────────────────────────
     # Stacky/agents es la fuente versionada. El bootstrap solo refresca
     # manifest.json para que el resto del backend lea siempre desde el

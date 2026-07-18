@@ -1,0 +1,97 @@
+/* PublishLedgerPanel.module.css — Plan 153. Solo tokens de theme.css (cero hex). */
+
+.card {
+  background: var(--bg-panel);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-2);
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: var(--border-width) solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.table td {
+  padding: 6px 8px;
+  border-bottom: var(--border-width) solid var(--border-muted);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.idCell {
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.detailCell {
+  word-break: break-word;
+}
+
+.actionsHead {
+  text-align: right;
+}
+
+.actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.btn {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 4px 10px;
+  margin-left: 6px;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--bg-elev);
+  color: var(--text-primary);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-solid);
+}
+
+.btnDanger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}

@@ -400,6 +400,7 @@ export const Tickets = {
       reused_ids: number[];
       error: string | null;
       skipped: boolean;
+      warnings?: string[];
     }>("/api/tickets/epic-children", body),
 };
 
@@ -2674,6 +2675,39 @@ export interface OperationalHealthReport {
 export const OperationalHealth = {
   get: (): Promise<OperationalHealthReport> =>
     api.get<OperationalHealthReport>("/api/diag/operational-health"),
+};
+
+// ── Plan 153 — Ledger de publicaciones ADO + desbloqueo humano 1-click ────────
+
+export interface PublishLedgerItem {
+  id: number;
+  execution_id: number;
+  status: "pending" | "posted" | "failed";
+  created_at: string;
+  updated_at: string;
+  ado_ids: number[] | null;
+  error: string | null;
+  source: string;
+}
+
+export interface PublishLedgerSnapshot {
+  enabled: boolean;
+  pending_stale: PublishLedgerItem[];
+  failed: PublishLedgerItem[];
+  counts: Record<string, number>;
+}
+
+export const PublishLedger = {
+  list: (): Promise<PublishLedgerSnapshot> =>
+    api.get<PublishLedgerSnapshot>("/api/publish-ledger"),
+  republish: (executionId: number): Promise<{ result: unknown; ledger: PublishLedgerItem | null }> =>
+    api.post<{ result: unknown; ledger: PublishLedgerItem | null }>(
+      `/api/publish-ledger/${executionId}/republish`, {},
+    ),
+  discard: (executionId: number): Promise<{ ledger: PublishLedgerItem | null }> =>
+    api.post<{ ledger: PublishLedgerItem | null }>(
+      `/api/publish-ledger/${executionId}/discard`, {},
+    ),
 };
 
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────

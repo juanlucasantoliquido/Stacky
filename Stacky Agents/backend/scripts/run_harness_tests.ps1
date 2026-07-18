@@ -457,6 +457,11 @@ $HarnessTestFiles = @(
   "tests/test_flags_env_read_meta.py"
   "tests/test_plan154_network_guard.py"
   "tests/test_output_watcher.py"
+  # Plan 153 - Ledger publicacion
+  "tests/test_publish_ledger.py"
+  "tests/test_publish_idempotent_guard.py"
+  "tests/test_epic_children_type_mapping.py"
+  "tests/test_autopublish_rev_from_response.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

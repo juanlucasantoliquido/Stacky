@@ -45,6 +45,7 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
     created_ids: number[];
     reused_ids: number[];
     error: string | null;
+    warnings: string[];
   } | null>(null);
 
   useEffect(() => {
@@ -95,10 +96,11 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
         created_ids: res.created_ids,
         reused_ids: res.reused_ids,
         error: res.error ?? null,
+        warnings: res.warnings ?? [],
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setCreateResult({ created_ids: [], reused_ids: [], error: msg });
+      setCreateResult({ created_ids: [], reused_ids: [], error: msg, warnings: [] });
     } finally {
       setCreating(false);
     }
@@ -138,6 +140,13 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
           {createResult.error
             ? `Error: ${createResult.error}`
             : `Creados: ${createResult.created_ids.length} | Ya existían: ${createResult.reused_ids.length}`}
+          {createResult.warnings.length > 0 && (
+            <div>
+              {createResult.warnings.map((w, wi) => (
+                <div key={wi}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

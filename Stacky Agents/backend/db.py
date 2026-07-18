@@ -56,6 +56,7 @@ def init_db() -> None:
     from services.ado_pipeline_inference import PipelineInferenceCache  # noqa: F401
     from services.ado_publisher import AgentHtmlPublish  # noqa: F401
     from services.ado_write_outbox import AdoWriteOperation  # noqa: F401  (Fase 2 — outbox ADO)
+    from services.publish_ledger import PublishLedgerEntry  # noqa: F401  (Plan 153 — ledger publicacion)
     from services.ticket_status import TicketStatusEvent  # noqa: F401  (ticket state tracking)
     from services.pm.models import (  # noqa: F401  (PM Intelligence Suite v2 — Fase 1 + 2)
         PmSprintSnapshot,

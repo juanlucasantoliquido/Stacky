@@ -72,28 +72,24 @@ def test_check_publish_guard_with_pending_marker():
 
 
 def test_attempt_publish_idempotent_replay_detected():
-    """Cuando marker existente detectado → no re-postea (retorno temprano)."""
+    """Cuando el ledger reporta replay → no re-postea (retorno temprano). Plan 153."""
     from services.agent_completion_internal import _attempt_publish
 
-    # Con marker detectado, _attempt_publish retorna antes de llegar al POST.
+    # Con replay del ledger, _attempt_publish retorna antes de llegar al POST.
     # No es necesario parchear publish_from_execution.
     with patch("config.config") as mock_cfg:
         mock_cfg.STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED = True
-        with patch("services.agent_completion_internal._r13_check_publish_guard", return_value=True):
+        with patch("services.publish_ledger.try_acquire", return_value="replay_pending"):
             result = _attempt_publish(execution_id=55, triggered_by="retry")
 
     assert result.get("event") == "publish.idempotent_replay"
 
 
 def test_attempt_publish_writes_intent_before_post():
-    """Sin marker: escribe intencion ANTES del POST."""
+    """Adquiere el lock del ledger y sella posted tras el POST ok. Plan 153."""
     from services.agent_completion_internal import _attempt_publish
 
     intent_written = []
-
-    def fake_write_intent(eid):
-        intent_written.append(eid)
-        return True
 
     mock_pr = MagicMock()
     mock_pr.ok = True
@@ -107,8 +103,11 @@ def test_attempt_publish_writes_intent_before_post():
     # publish_from_execution se importa lazily desde services.ado_publisher.
     with patch("config.config") as mock_cfg:
         mock_cfg.STACKY_PUBLISH_IDEMPOTENT_GUARD_ENABLED = True
-        with patch("services.agent_completion_internal._r13_check_publish_guard", return_value=False):
-            with patch("services.agent_completion_internal._r13_write_publish_intent", fake_write_intent):
+        with patch("services.publish_ledger.try_acquire", return_value="acquired"):
+            with patch(
+                "services.publish_ledger.mark_posted",
+                side_effect=lambda eid, *a, **k: intent_written.append(eid) or True,
+            ):
                 with patch("services.ado_publisher.publish_from_execution", return_value=mock_pr):
                     result = _attempt_publish(execution_id=10, triggered_by="test")
 

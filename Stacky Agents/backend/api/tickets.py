@@ -6386,6 +6386,7 @@ class _PublishedEpic(NamedTuple):
     ado_id: int
     title: str
     url: str
+    rev: int | None = None   # Plan 153 F4 — rev que ya trae la respuesta del POST de creación
 
 
 def _persist_epic_ticket(ado_id: int, title: str, description_html: str, url: str, project_name: str | None) -> None:
@@ -6464,7 +6465,8 @@ def _publish_epic_to_ado(
     _persist_epic_ticket(ado_id, wi_title, clean_html, wi_url, project_name)
     _epic_brief_save(ado_id, brief, project_name)
     logger.info("epic publish: Epic creada ado_id=%s title=%r project=%s", ado_id, wi_title, project_name)
-    return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url)
+    _rev = wi.get("rev")  # Plan 153 F4 — la respuesta del POST ya trae el rev
+    return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url, rev=int(_rev) if _rev else None)
 
 
 # ── Plan 55 F0 — Preview ejecutable de payload (función pura) ─────────────────
@@ -6785,13 +6787,17 @@ def autopublish_epic_from_run(
     _baseline_rev: int | None = None
     if _learning_enabled:
         _published_html = clean_html
-        try:
-            _rev_client = _ado_client_for_ticket(project_name=project_name)
-            _wi_rev = _rev_client.get_work_item(published.ado_id, fields=["System.Rev"])
-            _rev_val = int((_wi_rev.get("fields") or {}).get("System.Rev", 0))
-            _baseline_rev = _rev_val if _rev_val > 0 else None
-        except Exception as _exc_rev:  # noqa: BLE001
-            logger.warning("autopublish_epic_from_run: no se pudo obtener System.Rev: %s", _exc_rev)
+        if published.rev is not None:
+            # Plan 153 F4 — la respuesta del POST de creación ya trajo el rev: sin GET extra.
+            _baseline_rev = published.rev
+        else:
+            try:
+                _rev_client = _ado_client_for_ticket(project_name=project_name)
+                _wi_rev = _rev_client.get_work_item(published.ado_id, fields=["System.Rev"])
+                _rev_val = int((_wi_rev.get("fields") or {}).get("System.Rev", 0))
+                _baseline_rev = _rev_val if _rev_val > 0 else None
+            except Exception as _exc_rev:  # noqa: BLE001
+                logger.warning("autopublish_epic_from_run: no se pudo obtener System.Rev: %s", _exc_rev)
 
     return _AutopublishResult(
         ado_id=published.ado_id,
@@ -6920,7 +6926,8 @@ def _publish_issue_to_ado(
     logger.info(
         "issue publish: Issue creado ado_id=%s title=%r project=%s", ado_id, wi_title, project_name
     )
-    return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url)
+    _rev = wi.get("rev")  # Plan 153 F4 — la respuesta del POST ya trae el rev
+    return _PublishedEpic(ado_id=ado_id, title=wi_title, url=wi_url, rev=int(_rev) if _rev else None)
 
 
 def _post_phase_comment(client, ado_id: int, phase: str, html_content: str) -> None:
@@ -7941,6 +7948,44 @@ class _ChildrenPublishResult(NamedTuple):
     reused_ids: list = []     # type: ignore[assignment]  # ids ya existentes (idempotencia)
     error: str | None = None
     skipped: bool = False     # flag OFF o plan sin hijos
+    warnings: list = []       # type: ignore[assignment]  # Plan 153 — avisos visibles (ej. tipo mapeado)
+
+
+# ── Plan 153 F3 · resolución de tipo de work item para los hijos de la épica ──
+_WIT_TYPES_CACHE: dict[str, tuple[float, list[str]]] = {}
+_WIT_TYPES_TTL_SECONDS = 600
+_FEATURE_FALLBACK_ORDER = ["User Story", "Issue", "Product Backlog Item", "Requirement"]
+
+
+def _resolve_feature_type(client, project_name: str | None) -> tuple[str, str | None]:
+    """(tipo_a_usar, warning|None). Ante CUALQUIER fallo de descubrimiento
+    devuelve ("Feature", None) == comportamiento actual, sin romper nada."""
+    import time as _time
+    cache_key = project_name or "__default__"
+    now = _time.time()
+    cached = _WIT_TYPES_CACHE.get(cache_key)
+    if cached is not None and (now - cached[0]) < _WIT_TYPES_TTL_SECONDS:
+        types = cached[1]
+    else:
+        try:
+            types = client.fetch_work_item_type_names()
+            _WIT_TYPES_CACHE[cache_key] = (now, types)
+        except Exception:  # noqa: BLE001 — descubrimiento es best-effort
+            return ("Feature", None)
+    if "Feature" in types:
+        return ("Feature", None)
+    for candidate in _FEATURE_FALLBACK_ORDER:
+        if candidate in types:
+            return (
+                candidate,
+                f"el template ADO del proyecto no define 'Feature'; "
+                f"los hijos de la epica se crean como '{candidate}'",
+            )
+    return (
+        "Feature",
+        "el template ADO no define 'Feature' ni un tipo alternativo conocido; "
+        "la creacion de hijos puede fallar (VS402323)",
+    )
 
 
 def publish_epic_children(
@@ -7963,6 +8008,18 @@ def publish_epic_children(
     if not children_plan.ok or not children_plan.features:
         return _ChildrenPublishResult(skipped=True)
 
+    # Plan 153 F3 — resolver el tipo de work item para los hijos (Feature -> tipo
+    # disponible si el template no define Feature). Best-effort: ante cualquier
+    # fallo cae a "Feature" (comportamiento actual, sin romper trackers no-ADO).
+    child_feature_type = "Feature"
+    type_warning: str | None = None
+    try:
+        _type_client = ado if ado is not None else build_ado_client(project_name)
+        child_feature_type, type_warning = _resolve_feature_type(_type_client, project_name)
+    except Exception:  # noqa: BLE001 — tracker no-ADO o sin config => comportamiento actual
+        pass
+    _warns = [type_warning] if type_warning else []
+
     # Plan 70 F8 — branch provider para publish_epic_children (GAP-E)
     _provider = _provider_for_ticket(project_name=project_name)
     if _provider is not None:
@@ -7978,7 +8035,7 @@ def publish_epic_children(
                 else:
                     res = _provider.create_item(
                         _tracker_item_from_kwargs(
-                            work_item_type="Feature",
+                            work_item_type=child_feature_type,
                             fields={
                                 "System.Title": feature.title,
                                 "System.Description": feature.html + f_marker,
@@ -8015,11 +8072,12 @@ def publish_epic_children(
                             created_ids=created,
                             reused_ids=reused,
                             error=f"task_under_feature_rejected: {str(exc)[:120]}",
+                            warnings=_warns,
                         )
-            return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None)
+            return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None, warnings=_warns)
         except Exception as exc:  # noqa: BLE001
             logger.warning("publish_epic_children (provider) falló: %s", str(exc)[:200], exc_info=True)
-            return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=str(exc)[:200])
+            return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=str(exc)[:200], warnings=_warns)
 
     # Fallback: ADO path (flag OFF o provider no disponible)
     if ado is None:
@@ -8035,7 +8093,7 @@ def publish_epic_children(
                 reused.append(feature_id)
             else:
                 res = ado.create_work_item(
-                    work_item_type="Feature",
+                    work_item_type=child_feature_type,
                     fields={
                         "System.Title": feature.title,
                         "System.Description": feature.html + f_marker,
@@ -8069,11 +8127,12 @@ def publish_epic_children(
                         created_ids=created,
                         reused_ids=reused,
                         error=f"task_under_feature_rejected: {str(exc)[:120]}",
+                        warnings=_warns,
                     )
-        return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None)
+        return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=None, warnings=_warns)
     except Exception as exc:  # noqa: BLE001
         logger.warning("publish_epic_children falló: %s", str(exc)[:200], exc_info=True)
-        return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=str(exc)[:200])
+        return _ChildrenPublishResult(created_ids=created, reused_ids=reused, error=str(exc)[:200], warnings=_warns)
 
 
 # ── F4 · Endpoint POST /api/tickets/epic-children (creación tras aprobación) ─
@@ -8124,10 +8183,14 @@ def create_epic_children():
         project_name=project_name,
     )
 
+    # Plan 153 F3 — pérdida parcial VISIBLE: 207 (2xx, no rompe api.post) + warnings.
+    warnings = list(getattr(result, "warnings", []) or [])
+    status_code = 200 if result.error is None else 207
     return jsonify({
         "enabled": True,
         "created_ids": result.created_ids,
         "reused_ids": result.reused_ids,
         "error": result.error,
         "skipped": result.skipped,
-    }), 200
+        "warnings": warnings,
+    }), status_code

@@ -269,6 +269,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EVOLUTION_CYCLE_ENABLED",               # Plan 167 — ciclo MAPE on-demand
         "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED",# Plan 167 — human-on-the-loop lecciones (OFF)
         "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET",          # Plan 167 — presupuesto tokens/ciclo
+        "STACKY_EVAL_HARNESS_ENABLED",     # Plan 168 — arnés de fitness (golden tasks)
+        "STACKY_EVAL_JUDGE_ENABLED",       # Plan 168 — juez LLM local con rubricas
+        "STACKY_EVAL_RUN_TOKEN_BUDGET",    # Plan 168 — presupuesto tokens por corrida
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -3343,6 +3346,30 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Tope de tokens estimados que una corrida del ciclo puede mandar al modelo local (default 20000, definido en config). Si las señales exceden el tope, se truncan y el ciclo lo deja registrado.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
         # SIN default= (C1): int nunca va a _CURATED_DEFAULTS_ON (G4). Default EFECTIVO 20000 en config.py.
+    ),
+    # ── Plan 168 — Arnés de fitness (serie auto-mejora recursiva 2/4) ──
+    FlagSpec(
+        key="STACKY_EVAL_HARNESS_ENABLED",
+        type="bool", default=True,
+        label="Arnés de fitness de agentes",
+        description="Golden tasks por agente con jerarquía de señal (deterministas > ejecución > juez LLM), scorecards con tendencia y fitness before/after de las propuestas del Centro de Evolución.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVAL_JUDGE_ENABLED",
+        type="bool", default=True,
+        label="Juez LLM local de evals",
+        description="Evalúa artefactos con el modelo local y rubricas versionadas, emitiendo score y crítica textual. Sin endpoint local configurado, el arnés corre igual solo con señales deterministas.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVAL_RUN_TOKEN_BUDGET",
+        type="int",
+        label="Presupuesto de tokens por corrida de evals",
+        description="Tope de tokens estimados que una corrida puede mandar al juez local (default efectivo: 30000, definido en config.py). Al agotarse, los casos con juez restantes quedan como omitidos y la corrida lo registra.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+        # C10: SIN default= — default_is_known es type-agnostic (harness_flags.py:3397) y
+        # los ints no se curan (G4); el default efectivo 30000 vive en config.py.
     ),
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente ──
     FlagSpec(

@@ -61,6 +61,7 @@ from .global_search import bp as global_search_bp  # Plan 129 — paleta: búsqu
 from .incidents import bp as incidents_bp  # Plan 131 — resolutor de incidencias multimodal
 from .publish_ledger import bp as publish_ledger_bp  # Plan 153 — ledger de publicaciones ADO + desbloqueo humano
 from .evolution import bp as evolution_bp  # Plan 167 — Centro de Evolución
+from .evolution_fitness import bp as evolution_fitness_bp  # Plan 168 — arnés de fitness
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -124,6 +125,7 @@ api_bp.register_blueprint(global_search_bp)  # Plan 129 — url_prefix="/search"
 api_bp.register_blueprint(incidents_bp)  # Plan 131 — url_prefix="/incidents" → /api/incidents/...
 api_bp.register_blueprint(publish_ledger_bp)  # Plan 153 — url_prefix="/publish-ledger" → /api/publish-ledger/...
 api_bp.register_blueprint(evolution_bp)  # Plan 167 — url_prefix="/evolution" → /api/evolution/...
+api_bp.register_blueprint(evolution_fitness_bp)  # Plan 168 — /api/evolution/fitness/...
 
 
 @api_bp.get("/health")

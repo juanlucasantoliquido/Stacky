@@ -2,7 +2,7 @@
 // estilos inline en este archivo). CERO pollers (G9): carga on-mount + botón
 // Refrescar + refresh tras cada acción exitosa. Deep-link ?proposal= (G10).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Evolution } from "../api/endpoints";
+import { Evolution, EvolutionFitness } from "../api/endpoints";
 import {
   Button,
   Card,
@@ -38,6 +38,8 @@ import {
   flagDeepLink,
   fitnessDisplay,
 } from "../evolution/model";
+import FitnessSection from "../evolution/FitnessSection";
+import { canEvaluateProposal } from "../evolution/fitnessModel";
 import styles from "./EvolutionCenterPage.module.css";
 
 interface LedgerEvent {
@@ -156,6 +158,21 @@ export default function EvolutionCenterPage() {
       }
     } finally {
       setCycleRunning(false);
+    }
+  };
+
+  const evaluateFitness = async (p: ProposalDto) => {
+    const res = await EvolutionFitness.proposalFitnessRun(p.id, "both", true);
+    if (res.ok) {
+      setToast({ variant: "success", body: "Fitness before/after evaluado (sin aplicar nada)." });
+      await load();
+    } else {
+      const err = (res.data as { error?: string; message?: string }) || {};
+      if (err.error === "fitness_not_applicable") {
+        setToast({ variant: "warning", body: "Esta propuesta no es evaluable por fitness." });
+      } else {
+        setToast({ variant: "error", body: err.message || `No se pudo evaluar (${res.status}).` });
+      }
     }
   };
 
@@ -423,6 +440,7 @@ export default function EvolutionCenterPage() {
                       onToggle={() => setExpandedId((id) => (id === p.id ? null : p.id))}
                       onAction={doAction}
                       forceRollback={forceRollbackId === p.id}
+                      onEvaluateFitness={evaluateFitness}
                     />
                   ))}
                 </tbody>
@@ -460,6 +478,9 @@ export default function EvolutionCenterPage() {
               </table>
             </div>
           ) : null}
+
+          {/* Plan 168 — sección Fitness (no renderiza con la flag del arnés OFF) */}
+          <FitnessSection />
         </>
       )}
     </div>
@@ -467,13 +488,14 @@ export default function EvolutionCenterPage() {
 }
 
 function ProposalRow({
-  p, expanded, onToggle, onAction, forceRollback,
+  p, expanded, onToggle, onAction, forceRollback, onEvaluateFitness,
 }: {
   p: ProposalDto;
   expanded: boolean;
   onToggle: () => void;
   onAction: (p: ProposalDto, action: string, force?: boolean) => void;
   forceRollback: boolean;
+  onEvaluateFitness: (p: ProposalDto) => void;
 }) {
   const actions = availableActions(p);
   return (
@@ -522,6 +544,13 @@ function ProposalRow({
               {p.evidence.length > 0 ? <p><strong>Evidencia:</strong> {p.evidence.join(" · ")}</p> : null}
               {p.proposed_content ? (
                 <pre className={styles.pre}>{p.proposed_content}</pre>
+              ) : null}
+              {canEvaluateProposal(p.artifact_type, p.status) ? (
+                <div className={styles.actions}>
+                  <Button size="sm" variant="secondary" onClick={() => onEvaluateFitness(p)}>
+                    Evaluar fitness (before/after)
+                  </Button>
+                </div>
               ) : null}
               {p.notes.length > 0 ? (
                 <div className={styles.notes}>

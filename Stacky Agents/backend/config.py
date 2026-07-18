@@ -1381,4 +1381,22 @@ class Config:
         "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET", "20000"
     ) or "20000")
 
+    # ── Plan 168 — Arnés de fitness (serie auto-mejora recursiva 2/4) ──
+    # Golden tasks + jerarquía de señal + juez LLM local. Default ON: solo
+    # corre on-demand y sin endpoint local degrada a deterministas puros.
+    STACKY_EVAL_HARNESS_ENABLED: bool = os.getenv(
+        "STACKY_EVAL_HARNESS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Juez LLM local (rubricas versionadas). Sin LOCAL_LLM_ENDPOINT el arnés
+    # corre igual solo con niveles deterministas y lo declara en el run.
+    STACKY_EVAL_JUDGE_ENABLED: bool = os.getenv(
+        "STACKY_EVAL_JUDGE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Presupuesto de tokens ESTIMADOS por corrida de evals (entrada+salida del juez).
+    STACKY_EVAL_RUN_TOKEN_BUDGET: int = int(os.getenv(
+        "STACKY_EVAL_RUN_TOKEN_BUDGET", "30000"
+    ) or "30000")
+
 config = Config()

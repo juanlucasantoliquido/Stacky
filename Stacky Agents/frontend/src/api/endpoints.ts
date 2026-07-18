@@ -2763,6 +2763,72 @@ export const Evolution = {
   cycles: (limit = 20) => fetch(`/api/evolution/cycles?limit=${limit}`).then((r) => r.json()),
 };
 
+// Plan 168 — Arnés de fitness (espejo del namespace Evolution del 167).
+export const EvolutionFitness = {
+  health: () => fetch("/api/evolution/fitness/health").then((r) => r.json()),
+  cases: (q: { aspect_key?: string; enabled?: string } = {}) => {
+    const p = new URLSearchParams(
+      Object.entries(q).filter(([, v]) => !!v) as [string, string][],
+    );
+    const qs = p.toString();
+    return fetch(`/api/evolution/fitness/cases${qs ? `?${qs}` : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+  createCase: (body: unknown) =>
+    fetch("/api/evolution/fitness/cases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  patchCase: (id: string, body: unknown) =>
+    fetch(`/api/evolution/fitness/cases/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  fromIncident: (incidentId: string) =>
+    fetch("/api/evolution/fitness/cases/from-incident", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_id: incidentId }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  fromExecution: (executionId: number) =>
+    fetch("/api/evolution/fitness/cases/from-execution", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ execution_id: executionId }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  run: (aspectKey: string, useJudge: boolean) =>
+    fetch("/api/evolution/fitness/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aspect_key: aspectKey, use_judge: useJudge }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  runs: (aspectKey?: string, limit = 20) => {
+    const p = new URLSearchParams();
+    if (aspectKey) p.set("aspect_key", aspectKey);
+    p.set("limit", String(limit));
+    return fetch(`/api/evolution/fitness/runs?${p.toString()}`).then((r) => r.json());
+  },
+  scorecard: () => fetch("/api/evolution/fitness/scorecard").then((r) => r.json()),
+  rubrics: () => fetch("/api/evolution/fitness/rubrics").then((r) => r.json()),
+  proposalFitnessRun: (proposalId: string, which: string, useJudge: boolean) =>
+    fetch(`/api/evolution/proposals/${proposalId}/fitness/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ which, use_judge: useJudge }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  judgeSelfcheck: () =>
+    fetch("/api/evolution/fitness/judge/selfcheck", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  judgeSelfcheckLast: () =>
+    fetch("/api/evolution/fitness/judge/selfcheck").then((r) => r.json()),
+};
+
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────
 export const CodeIntegrity = {
   get: () =>

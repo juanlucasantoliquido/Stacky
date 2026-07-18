@@ -1439,6 +1439,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: el ciclo manda menos contexto; si las señales exceden el tope, se recortan y queda anotado en el registro del ciclo.",
         example="Con el tope en 20000, si las señales de un ciclo pesan más, se truncan y el resumen del ciclo te avisa que hubo recorte.",
     ),
+    # ── Plan 168 — Arnés de fitness (golden tasks + jerarquía de señal + juez local) ──
+    "STACKY_EVAL_HARNESS_ENABLED": PlainHelp(
+        what="Un arnés que le pone una nota objetiva (de 0 a 1) a los prompts y las lecciones de Stacky, combinando chequeos automáticos con la opinión de un modelo local.",
+        on_effect="Si la activás: aparece la sección 'Fitness de agentes' en el Centro de Evolución con las notas por agente, la tendencia y el botón para medir el antes/después de cada propuesta.",
+        off_effect="Si la apagás: la sección desaparece y las mediciones de fitness responden 404. El resto del Centro de Evolución sigue igual.",
+        example="Antes de aprobar un cambio de prompt, medís su fitness y ves si mejora o empeora respecto del prompt vigente, con número en mano.",
+    ),
+    "STACKY_EVAL_JUDGE_ENABLED": PlainHelp(
+        what="Deja que un modelo local le ponga nota y una crítica escrita a un artefacto (prompt o lección), guiándose por una rúbrica versionada y auditable.",
+        on_effect="Si la activás: las mediciones suman la nota del juez local además de los chequeos automáticos. Si no hay modelo local configurado, las corridas siguen funcionando solo con los chequeos automáticos y lo dejan anotado.",
+        off_effect="Si la apagás: las mediciones usan solo los chequeos automáticos (sin la opinión del modelo), y nunca se llama al modelo local.",
+        example="El juez lee un prompt y devuelve 0.6 con la crítica 'no define el formato de salida esperado', que después sirve para mejorarlo.",
+    ),
+    "STACKY_EVAL_RUN_TOKEN_BUDGET": PlainHelp(
+        what="El tope de tokens estimados que una sola corrida de medición puede mandarle al modelo local que hace de juez.",
+        on_effect="Si subís el número: la corrida puede juzgar más casos con el modelo local antes de frenar, pero puede tardar más.",
+        off_effect="Si lo bajás: la corrida juzga menos casos con el modelo; al llegar al tope, los casos con juez que faltan quedan como omitidos y la corrida lo registra.",
+        example="Con el tope en 30000, si una corrida ya gastó esa estimación, los casos con juez que restan quedan marcados 'omitidos por presupuesto'.",
+    ),
 }
 
 

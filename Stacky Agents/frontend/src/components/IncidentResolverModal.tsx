@@ -24,6 +24,8 @@ import {
   type QueueItem,
 } from "../incidents/incidentQueue";
 import type { AgentRuntime } from "../types";
+import { useModelCatalog } from "../hooks/useModelCatalog";
+import { EMERGENCY_MODEL_CATALOG } from "../services/modelCatalogFallback";
 import styles from "./IncidentResolverModal.module.css";
 
 const QUEUE_POLL_INTERVAL_MS = 3000; // Plan 166 F3/C8 — coherente con el latido único (plan 156)
@@ -46,15 +48,9 @@ type Step = "intake" | "running" | "preview" | "publishing" | "done" | "error";
 const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
-const CLAUDE_MODELS: { value: string; label: string }[] = [
-  { value: "claude-sonnet-5", label: "Sonnet 5 (recomendado)" },
-  { value: "claude-opus-4-8", label: "Opus 4.8 (mayor calidad, más lento)" },
-  { value: "claude-haiku-4-5", label: "Haiku 4.5 (más rápido)" },
-  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (fallback del CLI)" },
-];
-
+// Plan 159 — la lista de modelos/efforts viene del catálogo único
+// (useModelCatalog); ya no se declara acá. EffortLevel se conserva como tipo.
 type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
-const CLAUDE_EFFORTS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
 
 interface IncidentResolverModalProps {
   onClose: () => void;
@@ -77,8 +73,26 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
   const [preview, setPreview] = useState<IncidentPreviewDTO | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [selectedModel, setSelectedModel] = useState("claude-sonnet-5");
+  // Plan 159 — modelos/efforts del catálogo único; arranca desde el fallback
+  // embebido (síncrono) y se sincroniza cuando el fetch resuelve.
+  const { catalog } = useModelCatalog();
+  const claudeModels = catalog.claude_code_cli?.models ?? [];
+  const claudeEfforts = catalog.claude_code_cli?.efforts ?? [];
+  const claudeDefaultModel = catalog.claude_code_cli?.default_model ?? null;
+
+  const [selectedModel, setSelectedModel] = useState(
+    EMERGENCY_MODEL_CATALOG.claude_code_cli.default_model ?? "claude-sonnet-5"
+  );
   const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
+
+  useEffect(() => {
+    // Primer render nunca sin valor; al resolver el catálogo, si el modelo
+    // seleccionado no está en la lista real, se adopta el default del catálogo.
+    if (!claudeDefaultModel) return;
+    const known = claudeModels.some((m) => m.id === selectedModel);
+    if (!known) setSelectedModel(claudeDefaultModel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claudeDefaultModel]);
 
   const [overrideEpicId, setOverrideEpicId] = useState("");
   const [publishWithoutEpic, setPublishWithoutEpic] = useState(false);
@@ -386,16 +400,16 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
                 <label className={styles.label}>
                   Modelo
                   <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
-                    {CLAUDE_MODELS.map((m) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
+                    {claudeModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
                     ))}
                   </select>
                 </label>
                 <label className={styles.label}>
                   Esfuerzo
                   <select value={selectedEffort} onChange={(e) => setSelectedEffort(e.target.value as EffortLevel)}>
-                    {CLAUDE_EFFORTS.map((eff) => (
-                      <option key={eff} value={eff}>{eff}</option>
+                    {claudeEfforts.map((eff) => (
+                      <option key={eff.id} value={eff.id}>{eff.label}</option>
                     ))}
                   </select>
                 </label>

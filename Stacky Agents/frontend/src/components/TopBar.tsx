@@ -10,6 +10,7 @@ import StreakBadge from "./StreakBadge";
 import CostCapIndicator from "./CostCapIndicator";
 import HelpLauncher from "./HelpLauncher";
 import NotificationBell from "./NotificationBell"; // Plan 152
+import { versionChipLabel, buildTooltip, driftMessage, type BuildIdentity } from "./buildIdentity"; // Plan 163 F2
 import styles from "./TopBar.module.css";
 
 interface TopBarProps {
@@ -41,7 +42,7 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
   const [activeProjectName, setActiveProjectName] = useState<string>("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
-  const [version, setVersion] = useState<string | null>(null);
+  const [build, setBuild] = useState<BuildIdentity>({ version: null, sourceCommit: null, builtAt: null, drift: false });
 
   const activeProject = projects.find((p) => p.name === activeProjectName) ?? null;
 
@@ -105,7 +106,12 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
 
   useEffect(() => {
     Health.get()
-      .then((res) => { if (res.version) setVersion(res.version); })
+      .then((res) => setBuild({
+        version: res.version ?? null,
+        sourceCommit: res.source_commit ?? null,
+        builtAt: res.built_at ?? null,
+        drift: res.build_drift === true,
+      }))
       .catch(() => { /* ignorar: no crítico */ });
   }, []);
 
@@ -216,9 +222,12 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
           {notificationsEnabled && <NotificationBell onNavigate={onActivityNavigate} />}
           <CostCapIndicator projectName={activeProjectName || null} />
           <StreakBadge />
-          <span className={styles.version} title={version ? `Versión ${version}` : "dev@local"}>{version ? `v${version}` : "dev@local"}</span>
+          <span className={styles.version} title={buildTooltip(build)}>{versionChipLabel(build)}</span>
         </div>
       </div>
+      {build.drift && (
+        <div className={styles.driftBanner} role="alert">{driftMessage(build)}</div>
+      )}
       {isRunning && <div className={styles.progressBar} role="progressbar" aria-label="Ejecución en progreso" />}
       {newProjectOpen && (
         <NewProjectModal

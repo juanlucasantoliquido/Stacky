@@ -1,11 +1,32 @@
 # Plan 192 — Resiliencia de conexión dashboard-backend: monitor pasivo, probe con backoff, banner global y re-hidratación sin F5
 
-**Estado:** PROPUESTO v1
-**Fecha:** 2026-07-18
+**Estado:** CRITICADO v2 (v1 → v2 aplicada; veredicto v1: APROBADO-CON-CAMBIOS)
+**Fecha:** 2026-07-18 (v1 y crítica v2 el mismo día)
+**Crítico v2:** StackyArchitectaUltraEficientCode (juez adversarial, pipeline criticar-y-mejorar-plan)
 **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
 **Tema:** UX/UI — valor perceptible inmediato, onboarding cero, sin configuración.
 **Audiencia:** un modelo menor (Haiku / Codex / Copilot) debe poder implementarlo SIN inferir nada. Todo símbolo citado fue verificado contra el repo con `archivo:línea` el 2026-07-18.
 **Coexistencias declaradas:** plan 156 (latido único, CRITICADO v2, NO implementado) — ver §3 D11; `HealthBanner.tsx` existente — ver §3 D10 y F5.
+
+---
+
+## CHANGELOG v1 → v2 (crítica adversarial 2026-07-18)
+
+Veredicto v1: **APROBADO-CON-CAMBIOS**. Muestreo de anclas: TODAS las citas archivo:línea verificadas exactas (cero anclas falsas). Hallazgos: 4 IMPORTANTES + 8 MENORES + 1 adición. Cambios aplicados:
+
+- **C1 (IMPORTANTE, venv equivocado):** todos los comandos backend decían `venv\Scripts\python.exe`; verificado en vivo 2026-07-18: `venv` = Python 3.11.9 (WIP ajeno, untracked hoy) y `.venv` = Python 3.13.5 (canónico, corre el arnés). v2 usa `.venv\Scripts\python.exe` en F0 y §9 + advertencia §10.9.
+- **C2 (IMPORTANTE, gate insatisfacible):** `tests/test_harness_ratchet_meta.py` está ROJO en HEAD por drift AJENO (corrido 2026-07-18: `1 failed, 2 passed`; `test_ratchet_clasifica_todos_los_tests` lista tests de los planes 98/122/126/139 y otros nunca registrados). El criterio v1 "verde" era imposible sin scope creep. v2 fija el criterio honesto (lista de no-clasificados idéntica a HEAD, sin el archivo nuevo) en F0.
+- **C3 (IMPORTANTE, F6 mentiría):** `reportSuccess()` en `healthy` no regenera el snapshot (a propósito, para no re-renderizar por request) ⇒ `snapshot.lastOkAt` queda CONGELADO desde la última transición y el `title` del dot F6 mostraría "hace 3600s" con backend sano. v2 agrega `getLastOkAt()` (lectura VIVA de la variable interna), F6 lo usa, test t19 lo fija.
+- **C4 (IMPORTANTE, inventario incompleto):** D1 v1 presentaba los 7 `fetch` de `endpoints.ts` como inventario completo fuera del choke-point. Verificado: hay al menos 6 call-sites más (`App.tsx:154`, `services/preferences.ts:40`/`:69`, `hooks/useTicketSync.ts:89`, `components/AssignmentRecommendationPanel.tsx:58`, `components/HarnessFlagsPanel.tsx:405`, `utils/flagHealth.ts:39`) + 1 `EventSource` (`hooks/useExecutionStream.ts:135`). v2 los declara todos con la regla: NINGUNO se instrumenta.
+- **C5 (MENOR, K1 sobre-prometía):** "CERO requests" literal era falso: `connectionFlags` hace UNA lectura de flag por sesión al montar el host. v2 precisa "cero requests recurrentes" en K1/§2.6/D11.
+- **C6 (MENOR):** F0 decía "patrón EXACTO de `STACKY_COST_CENTER_ENABLED`" pero el código v1 usaba `.lower() in ("true","1","yes")`; el patrón real (`config.py:543-545`) es `.strip().lower() == "true"`. v2 alinea el código al patrón citado.
+- **C7 (MENOR):** el comentario del contrato §4 decía `"sin datos aún"`; el string fijado por tests F3 es `"Sin respuesta del backend aún"`. v2 alinea §4.
+- **C8 (MENOR, duplicación):** v1 exportaba `GATEWAY_DOWN_STATUSES` del monitor Y hacía que `client.ts` declarara su copia local `GATEWAY_DOWN`. v2: `client.ts` IMPORTA `GATEWAY_DOWN_STATUSES` (fuente única; la arista client→monitor ya existía en D7).
+- **C9 (MENOR, gotcha 6×):** los gates grep del §9 se rompen si un comentario del código contiene el token gateado (gotcha recurrido 6 veces en este repo). v2 agrega la advertencia §10.10.
+- **C10 (MENOR):** vitest node env NO tiene `localStorage`; los casos de cache de `connectionFlags.test.ts` necesitan `vi.stubGlobal`. v2 lo especifica en F2.
+- **C11 (MENOR, punto ciego):** `request()` no tiene timeout (verificado `client.ts:67-81`) ⇒ un backend COLGADO (proceso vivo que no responde) no genera señal pasiva hasta el timeout del propio navegador. v2 lo declara en R4 con por qué se acepta.
+- **C12 (MENOR, a11y):** una live region que se INSERTA ya con contenido no siempre se anuncia (SR/navegador dependiente). v2 usa patrón announcer: `role="status"` PERSISTENTE (sr-only) mientras la flag está ON + mensaje visual `aria-hidden` (el gate `aria-hidden` de F3 pasa de 1 a 2).
+- **[ADICIÓN ARQUITECTO] (D13, K11, t20/t21):** eventos `online`/`offline` del navegador como señal pasiva gratuita: `offline` ⇒ fallo inmediato (suspect+probe); `online` en `suspect`/`down` ⇒ probe inmediato (recovery instantáneo al volver la red, sin esperar el backoff). Cero timers/requests en sano; el caso localhost se auto-corrige (el probe confirma).
 
 ---
 
@@ -30,16 +51,17 @@ El backend Flask local se reinicia seguido (deploys frecuentes vía `START.bat`)
 
 | # | KPI | Verificación binaria |
 |---|-----|----------------------|
-| K1 | En estado `healthy` el plan agrega CERO requests y CERO timers | Test F1 t1 (con señales de éxito, `deps.schedule` jamás se llama) + gate `grep -c 'setInterval' src/services/connectionMonitor.ts` = 0 |
+| K1 | En estado `healthy` el plan agrega CERO requests RECURRENTES y CERO timers (única request nueva: 1 lectura de flag por sesión al montar el host, F2/D9 — C5) | Test F1 t1 (con señales de éxito, `deps.schedule` jamás se llama) + gate `grep -c 'setInterval' src/services/connectionMonitor.ts` = 0 |
 | K2 | Primera señal de fallo de red dispara 1 probe de confirmación inmediato (sin banner todavía) | Test F1 t2/t3 |
 | K3 | En `down`, los delays del probe son exactamente 1000, 2000, 4000, 8000, 16000, 30000, 30000, ... ms | Test F1 t6 |
 | K4 | El probe se detiene al recuperar y se pausa con la pestaña oculta | Tests F1 t7/t10 |
 | K5 | Por ciclo caída→recuperación se dispara EXACTAMENTE 1 `invalidateQueries()` global | Test F1 t7 (onRecovered una vez) + test F4 + gate `grep -c 'invalidateQueries' src/services/connectionRecovery.ts` = 1 |
 | K6 | Ninguna mutación (POST/PUT/DELETE) se reintenta automáticamente | Test F2 (semántica de `request()` intacta: sigue lanzando el mismo Error) + §3 D6 |
 | K7 | Flag OFF ⇒ cero timers, cero probes, cero banner, comportamiento actual intacto | Test F1 t12 (disabled ⇒ máquina inerte) + F3 (host devuelve null) |
-| K8 | Banner accesible: `role="status"` + `aria-live="polite"` en el mensaje; contador de intentos NO re-anuncia | Gates grep de F3 (= 1, = 1, contador con `aria-hidden="true"`) |
+| K8 | Banner accesible: live region `role="status"` + `aria-live="polite"` PERSISTENTE (announcer sr-only, C12); mensaje visual y contador con `aria-hidden` (no re-anuncian) | Gates grep de F3 (= 1, = 1, `aria-hidden` = 2) |
 | K9 | `HealthBanner` no duplica el aviso de backend caído con el monitor activo | Diff F5 + `tsc --noEmit` verde |
 | K10 | Todo verde: pytest por archivo (F0), vitest por archivo (F1-F4/F6), `tsc --noEmit`, gates grep | Comandos exactos en §9 DoD |
+| K11 | [ADICIÓN ARQUITECTO] evento `offline` ⇒ fallo pasivo inmediato; evento `online` en `suspect`/`down` ⇒ probe inmediato | Tests F1 t20/t21 |
 
 ---
 
@@ -50,7 +72,7 @@ El backend Flask local se reinicia seguido (deploys frecuentes vía `START.bat`)
 3. **Paridad de 3 runtimes: N/A-por-diseño, declarada por fase.** Feature 100% frontend + 1 flag de arnés backend + LECTURA de un endpoint backend existente. No toca el camino de ejecución/publicación de Codex, Claude Code ni Copilot. Cada fase lo declara en 1 línea.
 4. **Mono-operador sin auth.** Sin RBAC ni `user_id`: `current_user` es un header sin validar y acá ni se usa.
 5. **Reuso.** api-client central (`client.ts`), react-query ya instalado (`@tanstack/react-query ^5.59.0`, `frontend/package.json:13`), tokens de `theme.css`, patrón de flag triple del repo, patrón de lógica pura + cáscara fina (`integrationHealth.logic.ts:1-10` lo documenta explícitamente), `Button` del barrel `ui/` (`frontend/src/components/ui/index.ts:7`).
-6. **No degradar performance.** El interceptor es O(1) por request (dos llamadas a funciones síncronas). En estado sano NO hay timers ni requests nuevas. El probe usa `setTimeout` encadenado (nunca `setInterval`) y solo corre en `suspect`/`down`.
+6. **No degradar performance.** El interceptor es O(1) por request (dos llamadas a funciones síncronas). En estado sano NO hay timers ni requests recurrentes nuevas (los listeners de `visibilitychange`/`online`/`offline` son eventos, no timers; la única request nueva es la lectura de flag 1 vez por sesión — C5). El probe usa `setTimeout` encadenado (nunca `setInterval`) y solo corre en `suspect`/`down`.
 7. **Backward-compatible.** Ningún caller de `api.*`/`rawPost` cambia de semántica: mismos throws, mismos tipos de retorno. Flag OFF ⇒ UI y red idénticas a hoy.
 8. **Ratchets del repo.** (a) uiDebtRatchet: `.tsx` nuevos con CERO `style={{}}` — todo en `*.module.css`; valores dinámicos por clase condicional (este plan no necesita `ref`+`setProperty`). (b) formDebtRatchet: cero tags crudos de form en `.tsx` nuevos — el único control es el botón "Reintentar ahora" con `Button` del barrel (`div`/`span` contenedores están permitidos). (c) Test backend nuevo registrado en `HARNESS_TEST_FILES` (sh Y ps1). (d) Colores SOLO con tokens `var(--...)` de `theme.css`; cero hex.
 9. **Tests sin DOM.** `@testing-library/react` y `jsdom` NO están en `frontend/package.json` (gap estructural conocido; hay `.test.tsx` legacy que los importan y NO corren — no imitarlos). TODA la lógica vive en módulos `.ts` PUROS con vitest (`vitest ^4.1.9`, `package.json:30`) corrido POR ARCHIVO; los `.tsx` son cáscaras finas verificadas con `tsc --noEmit` + smoke manual documentado (F7). Precedentes reales: `src/services/briefDraft.test.ts`, `src/services/format.test.ts`, `src/components/integrationHealth.logic.ts`, `src/utils/__tests__/agentCompletionRecovery.integration.test.ts` (core de react-query sin DOM).
@@ -58,7 +80,7 @@ El backend Flask local se reinicia seguido (deploys frecuentes vía `START.bat`)
 
 ---
 
-## 3. Decisiones de diseño (D1..D12, con evidencia)
+## 3. Decisiones de diseño (D1..D13, con evidencia)
 
 ### D1 — Punto único de intercepción: `client.ts`
 
@@ -67,7 +89,13 @@ El api-client central es `frontend/src/api/client.ts`. `endpoints.ts:1` importa 
 - `request<T>()` (`client.ts:67-81`): envuelve `fetch` y es el ÚNICO camino de `api.get/post/put/patch/delete/postWithHeaders` (`client.ts:83-100`). **Choke-point principal.**
 - `rawPost<T>()` (`client.ts:28-63`): fetch propio para respuestas estructuradas. **Segundo punto, en el MISMO archivo.**
 
-Ambos se instrumentan en F2. Existen además 7 `fetch` directos en `endpoints.ts` que NO pasan por el client (verificados): `:166` (sync-v2), `:916` (harness-flags PUT — comentario `:911-914` explica por qué es fetch directo), `:2682` (code-integrity), `:3539` (download-setup), `:4033`/`:4038` (DbCompare files), `:4171` (incidents multipart). **Quedan fuera de la detección pasiva a propósito:** son minoritarios, el tráfico dominante pasa por `request()`, y el estado `down` lo confirma el probe igual. NO se tocan (fuera de scope §7).
+Ambos se instrumentan en F2. **Inventario COMPLETO del tráfico fuera del choke-point (verificado 2026-07-18; C4):**
+
+- (a) 7 `fetch` directos en `endpoints.ts`: `:166` (sync-v2), `:916` (harness-flags PUT — comentario `:911-914` explica por qué es fetch directo), `:2682` (code-integrity), `:3539` (download-setup), `:4033`/`:4038` (DbCompare files), `:4171` (incidents multipart).
+- (b) 6 call-sites más FUERA de `endpoints.ts`: `App.tsx:154` (lee `shell_v2_enabled` de `/api/diag/health` con fetch crudo — el MISMO endpoint del probe), `services/preferences.ts:40` (GET) y `:69` (PUT), `hooks/useTicketSync.ts:89`, `components/AssignmentRecommendationPanel.tsx:58`, `components/HarnessFlagsPanel.tsx:405` (profile PUT), `utils/flagHealth.ts:39` (default de un `fetchImpl` inyectable).
+- (c) 1 `EventSource` (`hooks/useExecutionStream.ts:135`, SSE de logs — no es request/response; irrelevante para la señal).
+
+**Regla dura: NINGUNO de estos sitios se instrumenta** (fuera de scope §7): son minoritarios, el tráfico dominante pasa por `request()`, y el estado `down` lo confirma el probe igual. Un modelo menor NO debe "completar" la cobertura instrumentándolos.
 
 ### D2 — Semántica de la señal (qué cuenta como fallo de conexión)
 
@@ -138,13 +166,20 @@ Nota de desambiguación: `components/devops/ConnectionHealthStrip.tsx` es OTRO d
 
 ### D11 — Coexistencia con el plan 156 (latido único, NO implementado)
 
-El monitor es agnóstico a las FUENTES de tráfico: solo observa lo que pasa por `client.ts`. Hoy el piso pasivo lo dan el poll de `HealthBanner` (≤30 s) y el tráfico de las páginas. Cuando el 156 aterrice, su latido único pasará por el MISMO `request()` y se volverá la señal pasiva dominante; si el 156 consolida o elimina pollers (incluido el de `HealthBanner`), este monitor NO cambia. Este plan no agrega ni una request en estado sano ⇒ no viola el KPI ≤2 requests/tick del 156; el probe corre SOLO caído (no hay tick sano que proteger) y se detiene al recuperar.
+El monitor es agnóstico a las FUENTES de tráfico: solo observa lo que pasa por `client.ts`. Hoy el piso pasivo lo dan el poll de `HealthBanner` (≤30 s) y el tráfico de las páginas. Cuando el 156 aterrice, su latido único pasará por el MISMO `request()` y se volverá la señal pasiva dominante; si el 156 consolida o elimina pollers (incluido el de `HealthBanner`), este monitor NO cambia. Este plan no agrega ni una request RECURRENTE en estado sano (la única request nueva es la lectura de flag, 1 vez por sesión al montar el host — no toca ningún tick; C5) ⇒ no viola el KPI ≤2 requests/tick del 156; el probe corre SOLO caído (no hay tick sano que proteger) y se detiene al recuperar.
 
-### D12 — Accesibilidad del banner
+### D12 — Accesibilidad del banner (announcer persistente, C12)
 
-- `role="status"` + `aria-live="polite"` SOLO en el nodo del MENSAJE de estado (no en el contenedor): la reconexión no debe gritar (`aria-live="assertive"`/`role="alert"` PROHIBIDOS acá).
-- El contador "(intento N)" vive en un `span` hermano con `aria-hidden="true"`: el tick del contador NO re-anuncia en cada probe. El contenido del live region cambia SOLO en transiciones de estado (2 mensajes posibles).
+- **Announcer persistente (C12):** una live region que se INSERTA en el DOM ya con contenido no siempre se anuncia (comportamiento inconsistente entre lectores/navegadores). Por eso el `span` con `role="status"` + `aria-live="polite"` está SIEMPRE montado mientras la flag está ON (clase `.srOnly`, visualmente invisible) y lo que cambia es su TEXTO: `""` ↔ mensaje de estado. La reconexión no debe gritar (`aria-live="assertive"`/`role="alert"` PROHIBIDOS acá).
+- El mensaje VISUAL del banner es una copia con `aria-hidden="true"` (evita el doble anuncio); el contador "(intento N)" vive en un `span` con `aria-hidden="true"`: el tick del contador NO re-anuncia en cada probe. El texto del live region cambia SOLO en transiciones de estado (2 mensajes posibles + vacío).
 - Decisión documentada: el lector de pantalla no oye el número de intento (es información visual secundaria); oye "Sin conexión con el backend — reintentando…" una vez y "Backend de vuelta — actualizando…" una vez.
+
+### D13 — [ADICIÓN ARQUITECTO] Eventos `online`/`offline` del navegador como señal gratuita
+
+- Evento `window "offline"` ⇒ se trata como fallo pasivo (mismo camino que `reportFailure()`): `healthy → suspect` + probe inmediato. Evento `window "online"` estando en `suspect`/`down` ⇒ cancelar el timer pendiente y probe inmediato (recovery instantáneo al volver la red, sin esperar el backoff vigente); en `healthy`/`recovering` el evento `online` NO hace nada.
+- **Caso localhost (mono-operador):** perder la red NO rompe necesariamente `localhost` (loopback sigue vivo). No importa: el probe CONFIRMA — si el backend local responde, `suspect → healthy` sin banner ni ceremonia (falsa alarma auto-corregida por la máquina existente, D3). Donde sí brilla: dashboard accedido desde otra máquina (VPN/red local), donde el `offline`/`online` del cliente es señal real.
+- Cero costo en sano: son LISTENERS (eventos), no timers ni requests; se registran en `enable()` y se remueven en `disable()` (simetría total con `visibilitychange`).
+- Un modelo menor NO debe "optimizar" esto gateando probes con `navigator.onLine` (es notoriamente poco fiable como ESTADO): solo se usan los EVENTOS, y siempre confirmando con probe. Tests t20/t21; KPI K11.
 
 ---
 
@@ -174,6 +209,7 @@ export const BACKOFF_FACTOR = 2;
 export const BACKOFF_CAP_MS = 30000;
 export const RECOVERY_LINGER_MS = 4000;
 export const STARTUP_SIGNAL_WINDOW_MS = 10000;
+/** Fuente ÚNICA de los statuses de gateway (C8): client.ts la IMPORTA; PROHIBIDO duplicar el Set. */
 export const GATEWAY_DOWN_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
 
 export interface MachineDeps {
@@ -184,6 +220,9 @@ export interface MachineDeps {
   isHidden(): boolean;
   /** Registra cb de visibilidad; devuelve unsubscribe. */
   onVisibilityChange(cb: () => void): () => void;
+  /** [ADICIÓN ARQUITECTO] D13 — eventos de red del navegador; devuelven unsubscribe. */
+  onOnline(cb: () => void): () => void;
+  onOffline(cb: () => void): () => void;
 }
 
 export interface ConnectionMachine {
@@ -195,6 +234,8 @@ export interface ConnectionMachine {
   probeNow(): void;
   subscribe(listener: () => void): () => void;
   getSnapshot(): ConnectionSnapshot;
+  /** C3: lectura VIVA de lastOkAt (NO la copia del snapshot, que solo se regenera al transicionar). F6 la usa. */
+  getLastOkAt(): number | null;
 }
 
 /** Factory PURA (testeable con deps fake). */
@@ -225,7 +266,7 @@ export interface BannerView {
 }
 export function computeBannerView(s: ConnectionSnapshot): BannerView;
 
-/** F6: "Última respuesta del backend hace Xs" (o "sin datos aún" si lastOkAt es null). */
+/** F6: "Última respuesta del backend hace Xs" (o "Sin respuesta del backend aún" si lastOkAt es null — string EXACTO fijado por los tests F3; C7). */
 export function freshnessLabel(lastOkAt: number | null, now: number): string;
 ```
 
@@ -311,7 +352,7 @@ def test_config_default_efectivo_on(monkeypatch):
     # editable por UI (HarnessFlagsPanel). OFF => comportamiento actual intacto.
     STACKY_CONNECTION_RESILIENCE_ENABLED: bool = os.getenv(
         "STACKY_CONNECTION_RESILIENCE_ENABLED", "true"
-    ).lower() in ("true", "1", "yes")
+    ).strip().lower() == "true"
 ```
 
 4. `backend/tests/test_harness_flags.py` — agregar `"STACKY_CONNECTION_RESILIENCE_ENABLED",` al set `_CURATED_DEFAULTS_ON` (`:467`).
@@ -323,10 +364,12 @@ def test_config_default_efectivo_on(monkeypatch):
 **Criterio binario + comandos (PowerShell, desde `Stacky Agents/backend`, POR ARCHIVO):**
 
 ```
-venv\Scripts\python.exe -m pytest tests/test_connection_resilience_flag.py -q   # 3 passed
-venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q                # verde (curado + categorizado)
-venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q         # verde (test registrado en sh+ps1)
+.venv\Scripts\python.exe -m pytest tests/test_connection_resilience_flag.py -q  # 3 passed
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q               # verde (54 passed en HEAD 2026-07-18; curado + categorizado)
+.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q        # criterio C2 abajo (NO exigir "verde" a secas)
 ```
+
+**Nota C2 — gate honesto del meta-ratchet:** `tests/test_harness_ratchet_meta.py` está ROJO en HEAD por drift AJENO (verificado 2026-07-18 con `.venv`: `1 failed, 2 passed` — `test_ratchet_clasifica_todos_los_tests` lista tests de los planes 98/122/126/139 y otros nunca registrados). Criterio binario REAL de esta fase: (a) los 2 subtests que hoy pasan siguen pasando; (b) la lista de archivos sin clasificar que imprime el fallo preexistente queda IDÉNTICA a la de HEAD — en particular NO contiene `tests/test_connection_resilience_flag.py`. Correr el meta-test una vez ANTES de tocar nada y guardar esa lista como base de comparación. PROHIBIDO "sanear" el drift ajeno registrando tests de otros planes (scope creep). Si otra sesión ya lo saneó y en HEAD está verde, entonces sí exigir verde total.
 
 **Flag:** `STACKY_CONNECTION_RESILIENCE_ENABLED` bool default ON.
 **Runtimes:** N/A-por-diseño — flag de arnés backend leída por la UI; no toca ejecución de ningún runtime.
@@ -360,6 +403,9 @@ venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q         
 | t16 | `reportFailure()` con máquina disabled, luego `enable()` dentro de `STARTUP_SIGNAL_WINDOW_MS` | entra directo a `suspect` + probe inmediato (arranque en frío con backend caído, D8) |
 | t17 | `enable()` sin señal previa de fallo reciente | status `healthy`; CERO probes (no hay request de arranque) |
 | t18 | probe en vuelo resuelve DESPUÉS de una transición (gen distinto) | el resultado se ignora (sin transición doble, sin onRecovered duplicado) |
+| t19 | `healthy` enabled + `reportSuccess()` (C3) | `getSnapshot()` devuelve la MISMA referencia (sin notify) PERO `getLastOkAt()` devuelve el `now()` nuevo (lectura viva, no la copia del snapshot) |
+| t20 | [ADICIÓN D13] `healthy` + evento offline (disparar el cb capturado de `deps.onOffline`) | mismo camino que `reportFailure()`: `suspect` + 1 probe inmediato |
+| t21 | [ADICIÓN D13] `down` con probe programado + evento online (cb de `deps.onOnline`) | `deps.cancel` llamado (timer viejo) + probe inmediato con `attempt++`; el mismo evento en `healthy` NO hace nada |
 
 **Implementación** — `frontend/src/services/connectionMonitor.ts` (pseudocódigo completo; el implementador lo traduce literal):
 
@@ -378,6 +424,8 @@ export function _createConnectionMachine(deps: MachineDeps): ConnectionMachine {
   let pendingWhileHidden = false;
   let onRecovered: (() => void) | null = null;
   let visibilityUnsub: (() => void) | null = null;
+  let onlineUnsub: (() => void) | null = null;    // D13
+  let offlineUnsub: (() => void) | null = null;   // D13
   const listeners = new Set<() => void>();
   let snapshot: ConnectionSnapshot = makeSnapshot();
 
@@ -451,6 +499,11 @@ export function _createConnectionMachine(deps: MachineDeps): ConnectionMachine {
         fireProbe(status === "down");
       }
     });
+    // [ADICIÓN ARQUITECTO] D13 — señal de red del navegador (t20/t21):
+    offlineUnsub = deps.onOffline(() => { reportFailure(); });
+    onlineUnsub = deps.onOnline(() => {
+      if (status === "down" || status === "suspect") { clearTimer(); fireProbe(status === "down"); }
+    });
     const failedRecently = lastFailureAt !== null
       && (lastOkAt === null || lastFailureAt > lastOkAt)
       && deps.now() - lastFailureAt <= STARTUP_SIGNAL_WINDOW_MS;
@@ -461,6 +514,8 @@ export function _createConnectionMachine(deps: MachineDeps): ConnectionMachine {
     if (!enabled) return;
     enabled = false; gen += 1; clearTimer();
     if (visibilityUnsub) { visibilityUnsub(); visibilityUnsub = null; }
+    if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }       // D13
+    if (offlineUnsub) { offlineUnsub(); offlineUnsub = null; }    // D13
     status = "healthy"; attempt = 0; downSince = null; pendingWhileHidden = false;
     notify();
   }
@@ -474,6 +529,7 @@ export function _createConnectionMachine(deps: MachineDeps): ConnectionMachine {
     setOnRecovered: (fn) => { onRecovered = fn; },  // t14 slot único
     subscribe: (l) => { listeners.add(l); return () => listeners.delete(l); },
     getSnapshot: () => snapshot,                    // t13 referencia estable
+    getLastOkAt: () => lastOkAt,                    // t19 lectura VIVA (C3); NO pasa por el snapshot
   };
 }
 ```
@@ -500,6 +556,16 @@ export const connectionMonitor: ConnectionMachine = _createConnectionMachine({
     document.addEventListener("visibilitychange", cb);
     return () => document.removeEventListener("visibilitychange", cb);
   },
+  onOnline: (cb) => {                               // D13
+    if (typeof window === "undefined") return () => {};
+    window.addEventListener("online", cb);
+    return () => window.removeEventListener("online", cb);
+  },
+  onOffline: (cb) => {                              // D13
+    if (typeof window === "undefined") return () => {};
+    window.addEventListener("offline", cb);
+    return () => window.removeEventListener("offline", cb);
+  },
 });
 
 export function reportConnectionSuccess(): void { connectionMonitor.reportSuccess(); }
@@ -512,7 +578,7 @@ export function connectionMonitorOwnsBackendSurface(): boolean {
 **Criterio binario + comandos (Git Bash, desde `Stacky Agents/frontend`):**
 
 ```
-npx vitest run src/services/connectionMonitor.test.ts    # t1..t18 verdes
+npx vitest run src/services/connectionMonitor.test.ts    # t1..t21 verdes
 npx tsc --noEmit                                          # verde
 grep -c 'setInterval' src/services/connectionMonitor.ts   # 0
 ```
@@ -541,21 +607,25 @@ Archivo nuevo `frontend/src/api/client.connection.test.ts` (vitest node; `vi.moc
 | c6 | `api.post` (mutación) con fetch que rechaza | `reportConnectionFailure` 1 vez; el error se relanza; `fetch` llamado EXACTAMENTE 1 vez (cero reintentos, K6) |
 | c7 | `rawPost` con 200 / con rechazo TypeError | success/failure reportados; `RawResponse` intacto |
 
-Archivo nuevo `frontend/src/services/connectionFlags.test.ts` (`vi.mock("../api/endpoints")`): flag presente `value:false` → false; presente `value:true` → true; `list()` rechaza → true (fail-open) y usa cache `localStorage` si existe; promesa cacheada (2 llamadas ⇒ 1 sola request); `_resetForTests()` limpia.
+Archivo nuevo `frontend/src/services/connectionFlags.test.ts` (`vi.mock("../api/endpoints")`): flag presente `value:false` → false; presente `value:true` → true; `list()` rechaza → true (fail-open) y usa cache `localStorage` si existe; promesa cacheada (2 llamadas ⇒ 1 sola request); `_resetForTests()` limpia. **C10:** vitest corre en node env SIN `localStorage`: para los casos de cache, stubear con `vi.stubGlobal("localStorage", fake)` (fake con `getItem`/`setItem`/`removeItem` sobre un `Map`); agregar además un caso SIN stub (localStorage inexistente ⇒ el try/catch del código cae al default `true` sin lanzar).
 
 **Implementación:**
 
 1. `frontend/src/api/client.ts` — import nuevo en la cabecera:
 
 ```ts
-import { reportConnectionSuccess, reportConnectionFailure } from "../services/connectionMonitor";
+import {
+  GATEWAY_DOWN_STATUSES,
+  reportConnectionSuccess,
+  reportConnectionFailure,
+} from "../services/connectionMonitor";
 
-const GATEWAY_DOWN = new Set([502, 503, 504]);
+// C8: GATEWAY_DOWN_STATUSES se IMPORTA del monitor (fuente única; prohibido duplicar el Set acá).
 function isAbortError(e: unknown): boolean {
   return e instanceof DOMException && e.name === "AbortError";
 }
 function reportOutcome(res: Response): void {
-  if (GATEWAY_DOWN.has(res.status)) reportConnectionFailure();
+  if (GATEWAY_DOWN_STATUSES.has(res.status)) reportConnectionFailure();
   else reportConnectionSuccess();
 }
 ```
@@ -691,25 +761,34 @@ export default function ConnectionBanner() {
 
   const snapshot = useSyncExternalStore(connectionMonitor.subscribe, connectionMonitor.getSnapshot);
   const view = computeBannerView(snapshot);
-  if (!flagOn || !view.visible) return null;
+  if (!flagOn) return null;
 
   return (
-    <div className={view.kind === "recovering" ? `${styles.banner} ${styles.recovering}` : `${styles.banner} ${styles.down}`}>
-      <span role="status" aria-live="polite" className={styles.msg}>{view.message}</span>
-      {view.attemptText ? (
-        <span aria-hidden="true" className={styles.attempt}>{view.attemptText}</span>
+    <>
+      {/* C12: live region PERSISTENTE (announcer). Cambia su TEXTO, nunca se monta y
+          desmonta con el banner: una region insertada ya con contenido puede no anunciarse. */}
+      <span role="status" aria-live="polite" className={styles.srOnly}>
+        {view.visible ? view.message : ""}
+      </span>
+      {view.visible ? (
+        <div className={view.kind === "recovering" ? `${styles.banner} ${styles.recovering}` : `${styles.banner} ${styles.down}`}>
+          <span aria-hidden="true" className={styles.msg}>{view.message}</span>
+          {view.attemptText ? (
+            <span aria-hidden="true" className={styles.attempt}>{view.attemptText}</span>
+          ) : null}
+          {view.showRetry ? (
+            <Button onClick={() => connectionMonitor.probeNow()}>Reintentar ahora</Button>
+          ) : null}
+        </div>
       ) : null}
-      {view.showRetry ? (
-        <Button onClick={() => connectionMonitor.probeNow()}>Reintentar ahora</Button>
-      ) : null}
-    </div>
+    </>
   );
 }
 ```
 
 Notas duras para el implementador: los hooks van SIEMPRE antes del early-return (orden de hooks estable). `Button` viene del barrel (`components/ui/index.ts:7`); usar props existentes de `ButtonProps` (verificar variantes en `components/ui/Button.tsx`; si no hay certeza, solo `onClick` + children). PROHIBIDO `<button>` crudo y `style={{}}`. El StrictMode double-mount está cubierto por t15/t14 (enable/disable + slot único).
 
-3. Archivo nuevo `frontend/src/components/ConnectionBanner.module.css` — clases `.banner`, `.down`, `.recovering`, `.msg`, `.attempt`. Colores y fondos EXCLUSIVAMENTE con tokens `var(--...)` existentes: leer `HealthBanner.module.css` y `Toast.module.css` y reusar los MISMOS tokens que esos archivos usan para error/éxito (no inventar nombres de token; no hex). Layout: banda horizontal full-width, padding compacto, `display:flex; align-items:center; gap`.
+3. Archivo nuevo `frontend/src/components/ConnectionBanner.module.css` — clases `.banner`, `.down`, `.recovering`, `.msg`, `.attempt`, `.srOnly`. `.srOnly` (announcer C12, SIN colores): `position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap;`. Colores y fondos EXCLUSIVAMENTE con tokens `var(--...)` existentes: leer `HealthBanner.module.css` y `Toast.module.css` y reusar los MISMOS tokens que esos archivos usan para error/éxito (no inventar nombres de token; no hex). Layout: banda horizontal full-width, padding compacto, `display:flex; align-items:center; gap`.
 
 4. `frontend/src/App.tsx` — montaje ÚNICO: insertar `<ConnectionBanner />` en la línea inmediatamente ANTERIOR a `<HealthBanner />` (`App.tsx:260`), que ya está FUERA del ternario `shellV2Enabled` (`:262`) ⇒ cubre ambas ramas del shell con un solo mount. Import correspondiente junto a los demás imports de componentes.
 
@@ -722,7 +801,7 @@ grep -c 'style={{' src/components/ConnectionBanner.tsx        # 0
 grep -c '<button' src/components/ConnectionBanner.tsx         # 0
 grep -c 'role="status"' src/components/ConnectionBanner.tsx   # 1
 grep -c 'aria-live="polite"' src/components/ConnectionBanner.tsx  # 1
-grep -c 'aria-hidden' src/components/ConnectionBanner.tsx     # 1 (el contador)
+grep -c 'aria-hidden' src/components/ConnectionBanner.tsx     # 2 (mensaje visual + contador; el anuncio sale de la live region persistente, C12)
 grep -cE '#[0-9a-fA-F]{3,6}' src/components/ConnectionBanner.module.css  # 0
 grep -c 'ConnectionBanner' src/App.tsx                        # 2 (import + JSX)
 ```
@@ -865,7 +944,7 @@ export default function ConnectionFreshnessDot() {
   return (
     <span
       className={`${styles.dot} ${cls}`}
-      title={freshnessLabel(snapshot.lastOkAt, Date.now())}
+      title={freshnessLabel(connectionMonitor.getLastOkAt(), Date.now())}
       aria-hidden="true"
       onMouseEnter={() => setTick((t) => t + 1)}
     />
@@ -873,7 +952,7 @@ export default function ConnectionFreshnessDot() {
 }
 ```
 
-Decisión codificada: el `title` se recalcula en cada render; entre renders puede quedar viejo, y el `onMouseEnter` fuerza un re-render al pasar el mouse (evento del usuario, cero timers — K1 se mantiene). `aria-hidden="true"`: el punto es decorativo; la superficie accesible es el banner (D12).
+Decisión codificada: el `title` se recalcula en cada render; entre renders puede quedar viejo, y el `onMouseEnter` fuerza un re-render al pasar el mouse (evento del usuario, cero timers — K1 se mantiene). **C3 (obligatorio):** el `title` usa `connectionMonitor.getLastOkAt()` (lectura VIVA) y NO `snapshot.lastOkAt`: el snapshot solo se regenera al transicionar (t13), así que en `healthy` sostenido quedaría congelado y el dot mentiría ("hace 3600s" con backend sano). `aria-hidden="true"`: el punto es decorativo; la superficie accesible es el banner (D12).
 
 2. Archivo nuevo `frontend/src/components/ConnectionFreshnessDot.module.css` — `.dot` (8px, `border-radius:50%`, `display:inline-block`), `.ok`/`.warn`/`.bad` con tokens `var(--...)` existentes de `theme.css` (mismos tokens semánticos de éxito/alerta/error que ya usan `HealthBanner.module.css`/`Toast.module.css`; cero hex).
 
@@ -905,6 +984,7 @@ grep -c 'ConnectionFreshnessDot' src/components/TopBar.tsx               # 2 (im
 3. Revivir el Flask. Esperado: en ≤ backoff vigente (máx 30 s; o instantáneo con "Reintentar ahora") el banner pasa a "Backend de vuelta — actualizando…" ~4 s y la página se re-hidrata SOLA (datos frescos, sin F5).
 4. Con la pestaña oculta durante la caída: sin requests de probe (verificar en la pestaña Network); al volver a la pestaña, probe inmediato.
 5. Apagar la flag desde la UI (Settings → HarnessFlagsPanel → "Resiliencia de conexión del dashboard") + reload: comportamiento actual (HealthBanner vuelve a ser el único aviso).
+6. (D13) Con la flag ON y backend vivo: DevTools → Network → "Offline": el banner aparece tras el probe fallido (sin esperar tráfico pasivo); volver a "No throttling": recuperación inmediata al evento `online` (sin esperar el backoff vigente).
 
 **Criterio binario:** la lista COMPLETA de comandos del §9 verde + los 5 pasos del smoke documentados con resultado.
 **Runtimes:** N/A-por-diseño — validación de UI/red local.
@@ -919,7 +999,7 @@ grep -c 'ConnectionFreshnessDot' src/components/TopBar.tsx               # 2 (im
 | R1 | Falso positivo por UNA request fallida suelta | Estado `suspect` SIN banner + probe de confirmación inmediato; solo `down` (probe fallido) pinta banner (D3). Umbral efectivo: 2 fallos consecutivos (1 pasivo + 1 probe). `AbortError` excluido (D2) |
 | R2 | Thundering herd al recuperar | UNA `invalidateQueries()` global; react-query v5 re-fetchea SOLO queries activas (default `refetchType:'active'`); inactivas quedan stale para su próximo mount (D6, test F4) |
 | R3 | Mutaciones en vuelo durante la caída | Fallan y se reportan EXACTAMENTE como hoy (`request()` relanza el mismo error, test c6); el monitor solo observa; PROHIBIDO retry de POST/PUT/DELETE (§2.1) |
-| R4 | Backend lento ≠ caído | La detección pasiva NO usa timeouts sobre requests de negocio (solo rechazos y 502/503/504); el timeout de 5 s aplica SOLO al probe (D4) |
+| R4 | Backend lento ≠ caído / backend COLGADO no detectado (C11) | La detección pasiva NO usa timeouts sobre requests de negocio (solo rechazos y 502/503/504); el timeout de 5 s aplica SOLO al probe (D4). **Punto ciego declarado (C11):** `request()` no tiene timeout (`client.ts:67-81`) ⇒ un backend colgado (proceso vivo que no responde) no genera señal pasiva hasta el timeout del propio navegador (minutos). Se acepta: el modo de fallo real del Flask local (deploy/`START.bat`) es proceso muerto ⇒ rechazo inmediato del fetch; agregar timeouts a las requests de negocio cambiaría la semántica de TODOS los callers (fuera de scope §7) |
 | R5 | StrictMode double-mount (`main.tsx:18`) | Singleton a nivel módulo + `enable()/disable()` idempotentes + `setOnRecovered` slot único (D8, tests t14/t15) |
 | R6 | Pestaña oculta quemando requests | Probe pausado con `document.hidden`; reanuda con `visibilitychange` (D4, test t10) |
 | R7 | Dev bajo Vite: proxy (`vite.config.ts:13-15` → `http://localhost:5050`) puede responder 500 con Flask caído (no rechaza) | 500 excluido A PROPÓSITO de la señal pasiva (un 500 real del backend no debe encender el banner). Limitación SOLO en `npm run dev`; en deploy real Flask sirve la SPA y su caída rechaza el fetch. El probe valida `res.ok`, así que recovery y "Reintentar ahora" funcionan también en dev (D2/D4) |
@@ -928,6 +1008,7 @@ grep -c 'ConnectionFreshnessDot' src/components/TopBar.tsx               # 2 (im
 | R10 | Flag ilegible con backend caído al arrancar | Fail-open a ON + cache `localStorage` anti-flash (D9); fallos previos al `enable()` se recuperan con la ventana de arranque (D8, t16) |
 | R11 | Sesión paralela MUY activa (robó números 2 veces hoy; toca archivos compartidos) | Antes de implementar: re-listar `docs/` (si 192 está tomado, renumerar al primer libre y actualizar título + este registro); commits SIEMPRE con pathspec explícito de los archivos propios; releer `git status` en frío |
 | R12 | Resultado stale de un probe en vuelo tras cambiar de estado | Contador de generación `gen`; callbacks con gen viejo se ignoran (D3, t18) |
+| R13 | Probe recibe 500 del health en `suspect` con backend VIVO (bug puntual del endpoint) ⇒ `down` falso | Mitigado por diseño: cualquier éxito pasivo saca de `down` (D3) — la próxima request exitosa (p.ej. el poll de HealthBanner ≤30 s) transiciona a `recovering`. Además `health()` responde SIEMPRE 200 aunque haya warnings (`diag.py:397-412`; `healthy:false` viaja en el body), así que el 500 requiere una excepción no capturada, improbable con sus try/except defensivos |
 
 ---
 
@@ -937,7 +1018,7 @@ grep -c 'ConnectionFreshnessDot' src/components/TopBar.tsx               # 2 (im
 - **Retry automático de mutaciones.** Prohibido por §2.1; queda como está hoy para siempre dentro de este plan.
 - **WebSocket / SSE para presencia del backend.** El 156 ya lo recortó para el summary (`156:660`); acá tampoco.
 - **Migrar o eliminar el poller de `HealthBanner`** (`POLL_MS 30s`): es trabajo del latido único (plan 156). Este plan solo hace que CEDA la superficie de backend caído (F5).
-- **Instrumentar los 7 `fetch` directos de `endpoints.ts`** (D1): el choke-point cubre el tráfico dominante; el probe confirma el resto.
+- **Instrumentar los caminos fuera del choke-point** (inventario COMPLETO en D1 — C4: 7 `fetch` en `endpoints.ts`, 6 call-sites más en `App.tsx`/`preferences.ts`/`useTicketSync.ts`/`AssignmentRecommendationPanel.tsx`/`HarnessFlagsPanel.tsx`/`flagHealth.ts`, y el `EventSource` de `useExecutionStream.ts:135`): el choke-point cubre el tráfico dominante; el probe confirma el resto.
 - **`ConnectionHealthStrip` (devops)** e **`IntegrationHealthBanner`** (plan 148): otros dominios, solo homónimos; no se tocan.
 - **Tocar `vite.config.ts`** (hacer que el proxy emita 502 en dev): fuera de scope; R7 documenta la limitación.
 - **Tocar `Toast.tsx`**: el banner es persistente; Toast es efímero por diseño.
@@ -958,6 +1039,8 @@ grep -c 'ConnectionFreshnessDot' src/components/TopBar.tsx               # 2 (im
 - **Invalidación global:** `queryClient.invalidateQueries()` sin filtro; marca todo stale y re-fetchea solo lo activo.
 - **Observador activo:** query de react-query con un componente montado mirándola; es lo único que re-fetchea al invalidar.
 - **Gen (generación):** contador que invalida callbacks de probes viejos tras una transición de estado.
+- **Announcer persistente:** live region `role="status"` sr-only SIEMPRE montada mientras la flag está ON, cuyo TEXTO cambia; evita el caso "región insertada ya con contenido no se anuncia" (D12/C12).
+- **Señal de red del navegador:** eventos `window online`/`offline` (D13): `offline` cuenta como fallo pasivo; `online` dispara probe inmediato en `suspect`/`down`. Solo eventos — `navigator.onLine` como estado NO se consulta.
 
 ---
 
@@ -970,10 +1053,12 @@ grep -c 'ConnectionFreshnessDot' src/components/TopBar.tsx               # 2 (im
 Backend (PowerShell, desde `Stacky Agents/backend`, POR ARCHIVO — G5):
 
 ```
-venv\Scripts\python.exe -m pytest tests/test_connection_resilience_flag.py -q
-venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
-venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
+.venv\Scripts\python.exe -m pytest tests/test_connection_resilience_flag.py -q
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
+.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
 ```
+
+(El tercero con el criterio C2 de F0: rojo preexistente AJENO permitido, lista de no-clasificados idéntica a HEAD y sin el archivo nuevo. C1: `.venv` = py3.13.5 canónico; `venv/` = py3.11.9 WIP ajeno, NO usarlo.)
 
 Frontend (Git Bash, desde `Stacky Agents/frontend`, POR ARCHIVO):
 
@@ -1010,10 +1095,12 @@ Más el smoke manual de F7 (5 pasos) documentado.
 ## 10. Advertencias para el implementador (leer antes de tocar nada)
 
 1. **Sesión paralela activa HOY** en el mismo repo/rama: re-listar `Stacky Agents/docs/` antes de empezar (si el 192 fue tomado, renumerar); `git status` en frío; commitear SIEMPRE con pathspec explícito (`git commit -- <paths propios>`); NUNCA amend/reset/rebase/checkout.
-2. **G5:** `tests/test_harness_flags.py` (y el test nuevo de F0) hacen `importlib.reload(config)` y contaminan la sesión pytest — TODOS los pytest de este plan van POR ARCHIVO, con `venv\Scripts\python.exe` desde `backend`.
+2. **G5:** `tests/test_harness_flags.py` (y el test nuevo de F0) hacen `importlib.reload(config)` y contaminan la sesión pytest — TODOS los pytest de este plan van POR ARCHIVO, con `.venv\Scripts\python.exe` desde `backend` (C1: `.venv`, no `venv/`).
 3. **NO importar código de los planes 185/187** (no implementados): `connectionFlags.ts` duplica el patrón de forma autocontenida (D9).
 4. **NO tocar `backend/harness_defaults.env` a mano** (drift preexistente conocido; el default efectivo vive en `config.py`).
 5. **NO imitar los `.test.tsx` legacy** que importan `@testing-library/react` (no corre en este repo): imitar `services/briefDraft.test.ts` / `components/integrationHealth.logic.ts` / `utils/__tests__/agentCompletionRecovery.integration.test.ts`.
 6. Los mensajes del banner son STRINGS EXACTOS (F3, con tilde y puntos suspensivos como están escritos); los tests los fijan.
 7. Si `vitest` pide config para resolver TS, correr igualmente por archivo; NO agregar dependencias nuevas a `package.json` (este plan no suma ninguna).
 8. La numeración de líneas citada (`App.tsx:260`, `client.ts:67` y todas las demás anclas archivo:línea de este doc) es del 2026-07-18; si la sesión paralela movió líneas, anclar por TEXTO (los símbolos citados) antes de editar.
+9. **Venv canónico (C1):** el backend se corre con `.venv\Scripts\python.exe` (Python 3.13.5, verificado 2026-07-18). El directorio `venv/` (Python 3.11.9) es un WIP ajeno untracked de otra sesión: NO usarlo ni tocarlo. Si `.venv` no existiera en tu checkout, verificar con `--version` cuál intérprete tiene las deps del backend antes de correr nada.
+10. **Gates grep vs comentarios (C9 — gotcha recurrido 6× en el repo):** los gates del §9 cuentan tokens EN EL FUENTE. PROHIBIDO escribir comentarios/JSDoc que contengan los tokens gateados (`setInterval`, `invalidateQueries`, `<button`, `style={{`, `aria-hidden`, `connectionMonitorOwnsBackendSurface`, `ConnectionBanner`, `ConnectionFreshnessDot`) en los archivos gateados fuera de los usos exactos esperados. Si una explicación necesita nombrar el token, parafrasear ("timer encadenado", "la invalidación global", "el botón del barrel").

@@ -1,6 +1,21 @@
 # Plan 168 — Arnés de fitness: golden tasks por agente, jerarquía de señal y juez local con rúbricas versionadas
 
-**Estado:** PROPUESTO v1 — 2026-07-17 · **Autor:** StackyArchitectaUltraEficientCode
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**Estado:** CRITICADO v2 (2026-07-18) — APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode · **Juez v2:** StackyArchitectaUltraEficientCode
+
+**CHANGELOG v1 -> v2:**
+- **C1 (IMPORTANTE):** el sub-shape `judge` del `EvalRun` (`used/model/error/parse_errors/rubric_versions`) no tenía regla de cómputo, y `judge_context` aparecía en la firma de `run_case` y el paso 5 de `run_eval` sin que NADIE lo construyera (KPI-3 exigía `rubric_versions` que `judge_text` no devolvía — spec incompletable sin inferir). v2: `judge_text` devuelve además `rubric_id`/`rubric_version`, `run_eval` recibe `judge_model` explícito, `judge_context` eliminado, y §4.5 congela las reglas de llenado del sub-shape.
+- **C2 (IMPORTANTE, verificado contra el árbol 2026-07-18):** el slug por nombre de archivo partía el arnés en DOS aspectos para 7 de 8 prompts reales (`businessagent`≠`business`, `functionalanalyst`≠`functional`, `qauat1`≠`qa`, `devopsagent`≠`devops`, `incidentanalyst`≠`incident`, `documentador`≠`Documentador` por case-sensitivity, `technicalanalyst.v2`≠`technical`; además existe `TechnicalAnalyst.v2.agent.md` que la tabla de dependencias v1 no listaba): `behavior_score` quedaba SIEMPRE vacío y los scorecards fragmentados en aspectos fantasma. v2: `canonical_agent_slug` determinista en §F1 (canoniza contra `agents.registry` en lowercase) + tests actualizados.
+- **C3 (IMPORTANTE):** la tendencia del scorecard excluía solo `trigger=="candidate"`, pero los runs `proposal_after` evalúan texto PROPUESTO (no vigente) y contaminaban el delta que informa al humano — exactamente la clase de señal engañosa que esta serie no puede permitirse. v2: `build_scorecards` solo considera `trigger ∈ {"manual","proposal_before"}` (test F4 caso 11).
+- **C4 (IMPORTANTE):** el presupuesto del juez no definía la estimación pre-llamada (el runner no conoce la rúbrica, que vive dentro del closure) y no había tope de llamadas → una corrida síncrona podía retener el request thread N × 120 s. v2: `_JUDGE_CALL_OVERHEAD_TOKENS`, `MAX_JUDGE_CALLS_PER_RUN = 6`, contabilidad post-llamada con tokens reales del retorno y peor-caso de pared declarado (test F2 caso 13).
+- **C5 (MENOR):** F6 decía "2 toques quirúrgicos" en `EvolutionCenterPage` pero el botón "Evaluar fitness" de la fila de propuestas es un 3er toque no contado. v2: 3 toques anclados por contenido.
+- **C6 (MENOR):** `create_case` no exigía `agent_type` no nulo con `input.kind=="golden_ref"` (habría roto `load_golden_set(None)`). v2: `ValueError("invalid_case:agent_type")` + test F1 caso 11.
+- **C7 (MENOR):** el párrafo de mapeos de error de F5 omitía `KeyError("case_not_found") → 404` (estaba solo en la tabla §4.8). v2: agregado al mapeo congelado.
+- **C8 (MENOR):** el test 8 de `fitnessModel` ("inmutabilidad de DTOs") era vacuo — ningún helper recibe DTOs. v2: reemplazado por bordes de formato reales.
+- **C9 (MENOR):** "latest = runs[0] resumido" sin enumerar claves del resumen. v2: son EXACTAMENTE las 7 claves de `EvalRunSummaryDto`.
+- **C10 (IMPORTANTE, heredado del 167 v2 C1 — impacto de serie declarado allá):** el FlagSpec de `STACKY_EVAL_RUN_TOKEN_BUDGET` declaraba `default=30000` → `test_default_known_only_for_curated` rompe DETERMINISTA (`default_is_known` es type-agnostic: `spec.default is not None`, `harness_flags.py:3397-3399`, y G4 prohíbe curar ints). v2: FlagSpec int SIN `default=` (precedente `CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES`, `harness_flags.py:350-358`); el default EFECTIVO 30000 vive SOLO en `config.py` y la description lo documenta; test F0 caso 3 exige `default is None`.
+- **[ADICIÓN ARQUITECTO] Selfcheck canario del juez:** dos textos embebidos (un prompt deliberadamente bueno y uno deliberadamente malo) + `judge_selfcheck()` con criterio binario `score(bueno) − score(malo) >= 0.2`, endpoints `POST/GET /fitness/judge/selfcheck`, persistencia `judge_selfcheck.json` y chip + botón "Probar juez" en el panel. Cierra el hueco que ninguna degradación cubría: un endpoint local VIVO pero con modelo sin poder discriminante produciría scores basura con cara de señal. SOLO informa — jamás deshabilita nada solo (HITL). Contratos §8.1/§8.2/§8.3 hacia 167/169/170: **SIN CAMBIOS** (los números de línea de este doc citados por 169/170 driftan; el anclaje es por contenido, regla de la serie — símbolos citados `read_runs_tail`, `source_ref="incident:<id>"`, reserva `origin="lesson"` intactos).
 **Serie:** "Auto-mejora recursiva" **2 de 4** (directiva del operador 2026-07-17):
 **167** = núcleo del panel + registro de propuestas + ciclo MAPE con gates humanos (PROPUESTO, dependencia DURA de este plan) ·
 **168 (este)** = arnés de evaluación/fitness: golden tasks, jerarquía de señal, juez LLM local, scorecards y llenado de `fitness_before/after` ·
@@ -225,7 +240,10 @@ no bloquea red todavía.
 - **G3 — Aristas `requires=`:** cada flag con `requires=` DEBE tener su arista en
   `_REQUIRES_MAP_FROZEN` (`backend/tests/test_harness_flags_requires.py:120`).
 - **G4 — `_CURATED_DEFAULTS_ON`:** cada flag **bool** con default efectivo ON va al set
-  de `backend/tests/test_harness_flags.py:467`; las `type="int"` NO.
+  de `backend/tests/test_harness_flags.py:467`; las `type="int"` NO — y por eso las
+  int TAMPOCO declaran `default=` en su FlagSpec (`default_is_known` es type-agnostic,
+  `spec.default is not None` en `harness_flags.py:3397-3399`; el default efectivo vive
+  en `config.py` — v2 C10, regla de serie fijada por el 167 v2 C1).
 - **G5 — venv y tests por archivo:** backend con `.venv`
   (`.venv\Scripts\python.exe -m pytest tests/<archivo> -q`; `backend/venv` NO existe —
   verificado por el Plan 154), NUNCA la suite completa. Frontend `npx vitest run
@@ -272,8 +290,9 @@ no bloquea red todavía.
 
 ```
 data_dir()/evolution/evals/
-  cases.json     # lista completa de EvalCase (archivo entero, como proposals.json del 167; NUNCA se borra un caso: se deshabilita)
-  runs.jsonl     # una línea por EvalRun (append-only)
+  cases.json           # lista completa de EvalCase (archivo entero, como proposals.json del 167; NUNCA se borra un caso: se deshabilita)
+  runs.jsonl           # una línea por EvalRun (append-only)
+  judge_selfcheck.json # [ADICIÓN v2] último selfcheck canario del juez (pisado, no append; lectura tolerante)
 ```
 
 Reglas duras (espejo del 167 §4.1): el store llama `runtime_paths.data_dir()` **en cada
@@ -318,9 +337,11 @@ cosechados) — informativo, no comparable con un candidato sin ejecutarlo (eso 
 sandbox de ejecución real, territorio del 169+, fuera de scope §7).
 
 Convención de `aspect_key` (congelada): `"agent_prompts/" + slug` para prompts de
-agente, donde `slug = slug_for_prompt_file(filename)` (§F1); `"knowledge_rag"` para
-lecciones. Cualquier otro string es válido (forward-compat con el 169/170) — el arnés
-filtra por igualdad exacta.
+agente, donde `slug = slug_for_prompt_file(filename)` (§F1 — v2 C2: el slug se
+CANONIZA contra `agents.registry`, así el prompt `BusinessAgent.agent.md` y los
+goldens del agent_type `business` caen en el MISMO aspecto `agent_prompts/business`);
+`"knowledge_rag"` para lecciones. Cualquier otro string es válido (forward-compat con
+el 169/170) — el arnés filtra por igualdad exacta.
 
 ### 4.3 Checks deterministas (kinds congelados — F2; cualquier otro `kind` → `ValueError("unknown_check_kind:<kind>")`)
 
@@ -343,6 +364,8 @@ LEVEL_MULTIPLIERS = {"deterministic": 3.0, "execution": 2.0, "llm_judge": 1.0}
 SELF_JUDGE_MULTIPLIER = 0.5      # multiplica el peso llm_judge si generador == juez
 DETERMINISTIC_FAIL_CAP = 0.49    # techo del score agregado si falla un determinista
 PASS_THRESHOLD = 0.7             # passed = gate determinista OK y score >= umbral
+_JUDGE_CALL_OVERHEAD_TOKENS = 800  # v2 C4 — estimación fija de system+rúbrica por juicio
+MAX_JUDGE_CALLS_PER_RUN = 6      # v2 C4 — tope duro de llamadas al juez por corrida
 ```
 
 - Score por caso: `deterministic`/`execution` con checks → `checks_ok / checks_total`
@@ -359,6 +382,13 @@ PASS_THRESHOLD = 0.7             # passed = gate determinista OK y score >= umbr
   todos pasan → `"passed"`; si no hubo deterministas → `"none"`.
 - `passed` global = `deterministic_gate != "failed"` **y** `score is not None` **y**
   `score >= PASS_THRESHOLD`.
+- **Cotas del juez (v2 C4):** por corrida, a lo sumo `MAX_JUDGE_CALLS_PER_RUN`
+  llamadas al juez (de la 7ª en adelante → caso `skipped`,
+  `skip_reason="max_judge_calls"`, cuenta en `budget.judge_cases_skipped`); el
+  presupuesto corta ANTES de cada llamada con la estimación
+  `_estimate_tokens(texto_resuelto) + _JUDGE_CALL_OVERHEAD_TOKENS`. Peor caso de
+  pared por corrida: `MAX_JUDGE_CALLS_PER_RUN × LOCAL_LLM_TIMEOUT_SEC` (6 × 120 s
+  default = 12 min), corrida síncrona y single-flight (409 mientras tanto).
 
 ### 4.5 `EvalRun` (una línea de `runs.jsonl`)
 
@@ -382,13 +412,23 @@ PASS_THRESHOLD = 0.7             # passed = gate determinista OK y score >= umbr
 ```
 
 `self_judge_risk`: `True` cuando el caller declaró `generator_model` y coincide
-(comparación casefold exacta) con el modelo del juez (`config.LOCAL_LLM_MODEL` o el
-override) — en ese caso los casos `llm_judge` ponderan
+(comparación casefold exacta) con `judge_model`, parámetro EXPLÍCITO de `run_eval`
+que F4 llena con `judge.judge_model()` cuando arma un `judge_fn` (v2 C1 — no existe
+ningún `judge_context` implícito) — en ese caso los casos `llm_judge` ponderan
 `LEVEL_MULTIPLIERS["llm_judge"] × SELF_JUDGE_MULTIPLIER`. Registro de costos: espejo
 del criterio del 167 R7 — el juez local cuesta USD 0; los tokens ESTIMADOS quedan en
 `cost` del run y visibles en el panel con `formatTokens`; NO se inventa una vía nueva
 de ingesta en `cost_analytics` (las ejecuciones reales de agentes ya se contabilizan
 solas por el camino existente; este arnés NO ejecuta agentes).
+
+**Reglas de llenado del sub-shape `judge` (v2 C1, congeladas — las computa
+`run_eval` a partir de los retornos de `judge_fn`):** `used` = `True` si al menos un
+juicio devolvió `error is None`; `model` = el `judge_model` recibido (o `null` si no
+hubo juez); `error` = el `error` del PRIMER juicio fallido SOLO si ningún juicio tuvo
+éxito y hubo al menos un intento, si no `null`; `parse_errors` = conteo de juicios
+con `error == "judge_parse_error"`; `rubric_versions` = dict acumulado
+`{rubric_id: rubric_version}` de cada retorno de `judge_fn` con `rubric_id` no nulo
+(claves que `judge_text` SIEMPRE incluye — §F3).
 
 ### 4.6 Rúbricas versionadas (archivos en `backend/evals/rubrics/`)
 
@@ -447,8 +487,10 @@ código — G8). Flag OFF → 404 literal
 | `POST /api/evolution/fitness/cases/from-execution` body `{"execution_id": <int>}` | 201 caso borrador (`enabled=false`, `origin="execution"`, output PII-masked) \| 404 `execution_not_found` \| 409 `execution_not_usable` (sin output o status ≠ completed) |
 | `POST /api/evolution/fitness/run` body `{"aspect_key": "…", "use_judge": true}` | 200 `{"ok": true, "run": {EvalRun}}` \| 400 `aspect_key_requerido` \| 409 `eval_already_running` |
 | `GET /api/evolution/fitness/runs?aspect_key=&limit=20` | 200 `{"ok": true, "runs": […]}` (tail, más nuevo primero; clamp limit 1..100) |
-| `GET /api/evolution/fitness/scorecard` | 200 `{"ok": true, "scorecards": [{"aspect_key": "…", "latest": {resumen del último run no-candidate}, "previous_score": 0.8\|null, "delta": 0.03\|null, "history": [{"ts": "…", "score": 0.8}] (≤20, viejo→nuevo), "cases_enabled": n, "cases_total": n}]}` |
+| `GET /api/evolution/fitness/scorecard` | 200 `{"ok": true, "scorecards": [{"aspect_key": "…", "latest": {resumen — SOLO runs con trigger `manual`/`proposal_before`, v2 C3; claves = las 7 de `EvalRunSummaryDto`, v2 C9}, "previous_score": 0.8\|null, "delta": 0.03\|null, "history": [{"ts": "…", "score": 0.8}] (≤20, viejo→nuevo), "cases_enabled": n, "cases_total": n}]}` |
 | `GET /api/evolution/fitness/rubrics` | 200 `{"ok": true, "rubrics": [{"id": "…", "version": 1, "text": "…"}]}` |
+| `POST /api/evolution/fitness/judge/selfcheck` body `{}` | **[ADICIÓN v2]** 200 `{"ok": true, "selfcheck": {shape de `judge_selfcheck()` §F3}}` (síncrono, 2 juicios canario; `unavailable` viaja como 200, jamás 500) \| 409 `judge_disabled` si `STACKY_EVAL_JUDGE_ENABLED` OFF |
+| `GET /api/evolution/fitness/judge/selfcheck` | **[ADICIÓN v2]** 200 `{"ok": true, "selfcheck": {…}\|null}` (el último persistido en `judge_selfcheck.json`) |
 | `POST /api/evolution/proposals/<pid>/fitness` body `{"which": "before"\|"after", "fitness": {shape 167 §4.7}}` | **contrato LITERAL del 167 §8.1 (inyección: el caller ya computó)** — 200 propuesta actualizada \| 404 `proposal_not_found` \| 400 `invalid_payload` (which inválido o fitness sin `score`/`eval_ref`) |
 | `POST /api/evolution/proposals/<pid>/fitness/run` body `{"which": "before"\|"after"\|"both", "use_judge": true}` | 200 `{"ok": true, "proposal": {…}, "runs": {"before": {EvalRun}\|null, "after": {EvalRun}\|null}}` \| 404 `proposal_not_found` \| 409 `fitness_not_applicable` (free_text/flag_change) |
 | `POST /api/evolution/fitness/evaluate-candidate` body `{"aspect_key": "…", "artifact_text": "…", "case_filter": null\|{...}, "generator_model": null\|"…"}` | **contrato HTTP hacia el 169 (§8.2)** — 200 `{"ok": true, "result": {shape §8.2}}` \| 400 `invalid_payload` |
@@ -546,11 +588,13 @@ inmediatamente después de las 4 entradas del Plan 167 (ubicar por
     ),
     FlagSpec(
         key="STACKY_EVAL_RUN_TOKEN_BUDGET",
-        type="int", default=30000,
+        type="int",
         label="Presupuesto de tokens por corrida de evals",
-        description="Tope de tokens estimados que una corrida puede mandar al juez local. Al agotarse, los casos con juez restantes quedan como omitidos y la corrida lo registra.",
+        description="Tope de tokens estimados que una corrida puede mandar al juez local (default efectivo: 30000, definido en config.py). Al agotarse, los casos con juez restantes quedan como omitidos y la corrida lo registra.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
+    # C10: SIN default= — default_is_known es type-agnostic (harness_flags.py:3397) y
+    # los ints no se curan (G4); el default efectivo 30000 vive en config.py.
 ```
 
 **`harness_flags_help.py`:** 3 entradas `PlainHelp` (espejo del formato de las entradas
@@ -573,7 +617,7 @@ las 2 bool: `STACKY_EVAL_HARNESS_ENABLED`, `STACKY_EVAL_JUDGE_ENABLED` (G4). En
 estructural de `tests/test_evolution_flags.py` del 167 F0). 7 casos:
 1. `test_harness_flag_en_registry` — FlagSpec `STACKY_EVAL_HARNESS_ENABLED` existe, `type=="bool"`, `default is True`, `requires=="STACKY_EVOLUTION_CENTER_ENABLED"`.
 2. `test_judge_flag_en_registry` — ídem para `STACKY_EVAL_JUDGE_ENABLED`.
-3. `test_budget_flag_int` — `STACKY_EVAL_RUN_TOKEN_BUDGET`: `type=="int"`, `default==30000`.
+3. `test_budget_flag_int` — `STACKY_EVAL_RUN_TOKEN_BUDGET`: `type=="int"`, `default is None` (v2 C10 — el default EFECTIVO 30000 lo da `config.py` y lo cubre el caso 5).
 4. `test_las_3_estan_categorizadas` — las 3 keys en algún valor de `_CATEGORY_KEYS`.
 5. `test_config_defaults` — env limpio: HARNESS True, JUDGE True, BUDGET 30000 (leer de `config.config`).
 6. `test_aristas_requires_congeladas` — las 3 aristas en `_REQUIRES_MAP_FROZEN` apuntando al ROOT.
@@ -611,15 +655,32 @@ PATCHABLE_FIELDS = frozenset({"title", "checks", "rubric_id", "weight", "enabled
 
 def evals_root() -> Path                 # runtime_paths.data_dir() / "evolution" / "evals"
 def prompts_dir() -> Path                # Path(runtime_paths.backend_root()) / "Stacky" / "agents"
+def canonical_agent_slug(raw_slug: str) -> str
+    # v2 C2 — alinea el slug de archivo con agents.registry (import LAZY de agents
+    # dentro de la función). Sea REG = {k.lower() for k in agents.registry}. En orden,
+    # PRIMER match gana:
+    # 1) raw_slug in REG -> raw_slug            ("developer"; "documentador" matchea
+    #    la clave real "Documentador" vía lower)
+    # 2) raw_slug termina en "agent" y raw_slug[:-len("agent")] in REG -> ese prefijo
+    #    ("businessagent" -> "business"; "devopsagent" -> "devops")
+    # 3) la clave de REG MÁS LARGA (len >= 2) que sea PREFIJO de raw_slug -> esa clave
+    #    ("functionalanalyst" -> "functional"; "qauat1" -> "qa";
+    #     "incidentanalyst" -> "incident"; "technicalanalyst.v2" -> "technical")
+    # 4) sin match -> raw_slug tal cual         ("raro" -> "raro")
 def slug_for_prompt_file(filename: str) -> str
-    # "Developer.agent.md" -> "developer"; regla: quitar el sufijo ".agent.md"
-    # (case-insensitive) y lowercased. Si no termina en ".agent.md", lower() del stem.
+    # Regla: quitar el sufijo ".agent.md" (case-insensitive), lower(), y pasar por
+    # canonical_agent_slug (v2 C2). Si no termina en ".agent.md":
+    # canonical_agent_slug(lower() del stem).
+    # "Developer.agent.md"->"developer"; "BusinessAgent.agent.md"->"business";
+    # "QAUat1.agent.md"->"qa"; "TechnicalAnalyst.v2.agent.md"->"technical"; "raro.md"->"raro".
 def list_cases(aspect_key: str | None = None, enabled: bool | None = None) -> list[dict]
 def get_case(case_id: str) -> dict | None
 def create_case(**fields) -> dict
     # Valida §4.2 (subject/level/origin/input.kind en los VALID_*; reglas de la tabla
-    # de niveles; checks con kinds de §4.3 — delega la validación de kinds en
-    # checks.validate_check_spec de F2). id = "case-<uuid4().hex>" salvo que venga
+    # de niveles; v2 C6: input.kind=="golden_ref" exige agent_type no nulo ->
+    # ValueError("invalid_case:agent_type") si falta; checks con kinds de §4.3 —
+    # delega la validación de kinds en checks.validate_check_spec de F2).
+    # id = "case-<uuid4().hex>" salvo que venga
     # explícito (seeds). ValueError("invalid_case:<campo>") si falla. Llena TODAS las
     # claves de §4.2 con defaults (weight=1.0, enabled=True, source_ref=None).
 def patch_case(case_id: str, **patch) -> dict
@@ -632,7 +693,8 @@ def ensure_seed_cases() -> list[dict]
     #     slug = slug_for_prompt_file(nombre); TRES casos:
     #     - id "case-seed-artifact-<slug>-estructura", subject="artifact",
     #       level="deterministic", aspect_key="agent_prompts/<slug>",
-    #       agent_type=(slug si slug in agents.registry else None),
+    #       agent_type=(la clave k REAL de agents.registry con k.lower()==slug si
+    #         existe, sino None — cubre "Documentador" vs "documentador"; v2 C2),
     #       input={"kind":"artifact_text","text":None,"golden_name":None},
     #       checks=[{"kind":"min_len","value":200},
     #               {"kind":"regex","pattern":"(?m)^#{1,6}\\s"},
@@ -675,8 +737,8 @@ generaría casos podridos (riesgo R4 de §6). Entran SOLO por el botón 1-click 
 `monkeypatch.setattr(case_store, "prompts_dir", lambda: tmp_path / "agents")` (crear 2
 `*.agent.md` sintéticos) + `monkeypatch.setattr(golden_runner, "_AGENTS_DIR", tmp_path / "goldens")`
 (crear 1 golden sintético `developer/caso_a.json` con el shape de `golden_runner.py:3-14`).
-10 casos:
-1. `test_slug_for_prompt_file` — `"Developer.agent.md"→"developer"`, `"BusinessAgent.agent.md"→"businessagent"`, `"raro.md"→"raro"`.
+11 casos:
+1. `test_slug_for_prompt_file` — `"Developer.agent.md"→"developer"`, `"BusinessAgent.agent.md"→"business"` (canoniza contra registry, v2 C2), `"QAUat1.agent.md"→"qa"`, `"TechnicalAnalyst.v2.agent.md"→"technical"`, `"raro.md"→"raro"`.
 2. `test_seed_idempotente` — 2 llamadas a `ensure_seed_cases` → mismo conteo, ids únicos, sin duplicar.
 3. `test_seed_shape_artifact` — el caso `case-seed-artifact-<slug>-estructura` tiene los 3 checks EXACTOS y `subject=="artifact"`.
 4. `test_seed_golden_ref` — el caso del golden sintético referencia `golden_name=="caso_a"` sin copiar el output.
@@ -686,12 +748,13 @@ generaría casos podridos (riesgo R4 de §6). Entran SOLO por el botón 1-click 
 8. `test_patch_case_solo_campos_permitidos` — patch de `aspect_key` → `ValueError("invalid_case:campo_no_editable")`; patch de `enabled=False` OK.
 9. `test_list_cases_filtros` — por `aspect_key` y por `enabled` (AND).
 10. `test_lecturas_tolerantes` — `cases.json` corrupto → `list_cases() == []` sin excepción.
+11. `test_golden_ref_exige_agent_type` — `create_case` con `input.kind=="golden_ref"` y `agent_type=None` → `ValueError("invalid_case:agent_type")` (v2 C6).
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_fitness_case_store.py -q
 ```
-**Criterio BINARIO:** 10/10 verdes.
+**Criterio BINARIO:** 11/11 verdes.
 **Flag:** módulo puro — N/A. **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 
 ---
@@ -723,6 +786,8 @@ LEVEL_MULTIPLIERS = {"deterministic": 3.0, "execution": 2.0, "llm_judge": 1.0}
 SELF_JUDGE_MULTIPLIER = 0.5
 DETERMINISTIC_FAIL_CAP = 0.49
 PASS_THRESHOLD = 0.7
+_JUDGE_CALL_OVERHEAD_TOKENS = 800                # v2 C4
+MAX_JUDGE_CALLS_PER_RUN = 6                      # v2 C4
 _RUN_LOCK = threading.Lock()                     # single-flight de corridas
 
 def _estimate_tokens(text: str) -> int           # max(1, len(text) // 4) — mismo helper del 167 F3
@@ -732,8 +797,8 @@ def resolve_case_text(case: dict, artifact_text: str | None) -> str | None
     # input.kind == "frozen_output"  -> case["input"]["text"]
     # input.kind == "golden_ref"     -> None (lo resuelve run_case vía golden_runner)
 
-def run_case(case: dict, artifact_text: str | None, *, judge_fn=None,
-             judge_context: dict | None = None) -> dict
+def run_case(case: dict, artifact_text: str | None, *, judge_fn=None) -> dict
+    # (v2 C1: sin judge_context — el modelo del juez viaja como judge_model de run_eval)
     # Devuelve el elemento per_case de §4.5.
     # level deterministic/execution con checks: run_checks sobre el texto resuelto;
     #   score = ok/total; passed = todos ok.
@@ -752,24 +817,32 @@ def aggregate(per_case: list[dict], *, self_judge_risk: bool) -> dict
 
 def run_eval(*, aspect_key: str, cases: list[dict], artifact_text: str | None,
              trigger: str, proposal_id: str | None = None,
-             judge_fn=None, generator_model: str | None = None,
+             judge_fn=None, judge_model: str | None = None,
+             generator_model: str | None = None,
              budget_tokens: int = 30000) -> dict
     # 1) if not _RUN_LOCK.acquire(blocking=False): raise RuntimeError("eval_already_running")
     #    (try/finally release).
     # 2) Filtra cases enabled=True. artifact_hash = "sha256:"+hexdigest(artifact_text) si hay texto.
     # 3) Corre casos en orden: deterministic, execution, llm_judge (los baratos primero;
     #    el presupuesto solo limita al juez).
-    # 4) Presupuesto: antes de CADA juicio, si tokens_est_acumulados + estimado_del_juicio
-    #    > budget_tokens -> caso skipped, skip_reason="budget_exhausted",
-    #    budget.exhausted=True, budget.judge_cases_skipped += 1.
-    # 5) self_judge_risk = generator_model no nulo y casefold igual al modelo del juez
-    #    (lo informa judge_context["model"] que arma F3/F4).
+    # 4) Cotas del juez (v2 C4): contador de juicios — si ya se hicieron
+    #    MAX_JUDGE_CALLS_PER_RUN llamadas, caso skipped skip_reason="max_judge_calls",
+    #    budget.judge_cases_skipped += 1. Presupuesto: antes de CADA juicio, si
+    #    tokens_est_acumulados + (_estimate_tokens(texto_resuelto) +
+    #    _JUDGE_CALL_OVERHEAD_TOKENS) > budget_tokens -> caso skipped,
+    #    skip_reason="budget_exhausted", budget.exhausted=True,
+    #    budget.judge_cases_skipped += 1. tokens_est_acumulados acumula los
+    #    tokens_est_in + tokens_est_out REALES que devuelve cada judge_fn (van a cost).
+    # 5) self_judge_risk = generator_model y judge_model no nulos y casefold iguales
+    #    (v2 C1 — judge_model es el parámetro explícito; F4 pasa judge.judge_model()).
+    #    Sub-shape judge del run: reglas congeladas de §4.5 (used/model/error/
+    #    parse_errors/rubric_versions desde los retornos de judge_fn).
     # 6) aggregate + shape EXACTO §4.5; id="eval-"+uuid4().hex; duration_ms real.
     #    NO persiste (persistir es de fitness_service, F4). Devuelve el dict.
 ```
 
 **Tests PRIMERO:** `backend/tests/test_fitness_runner.py` (sin red; `judge_fn` siempre
-un stub local). 12 casos:
+un stub local). 13 casos:
 1. `test_checks_contains_y_regex` — tabla §4.3: `contains` case-insensitive, `regex` multiline, `regex` inválida → ok=False con `regex_invalida` en detail (sin excepción).
 2. `test_checks_len_y_json` — `min_len`/`max_len`/`json_valid` en ambos sentidos.
 3. `test_check_artifact_contract` — monkeypatch de `contract_validator.validate` → respeta `min_score`/`must_pass`.
@@ -782,12 +855,13 @@ un stub local). 12 casos:
 10. `test_self_judge_risk_pondera_mitad` — mismo setup con `self_judge_risk` → el peso del juez es 0.5 → score == 6/7 redondeado a 4 decimales (0.8571).
 11. `test_budget_agota` — budget chico + 2 casos llm_judge → el 2º queda `budget_exhausted` y `budget.exhausted is True`.
 12. `test_reproducibilidad` — 2 llamadas a `run_eval` sin juez sobre el mismo artefacto → `score` y `per_case` (sin ids/timestamps) idénticos (**KPI-1**).
+13. `test_max_judge_calls` — 7 casos `llm_judge` con judge_fn stub y presupuesto holgado → 6 juzgados y el 7º `skipped` con `skip_reason=="max_judge_calls"`, `budget.judge_cases_skipped == 1` (v2 C4).
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_fitness_runner.py -q
 ```
-**Criterio BINARIO:** 12/12 verdes.
+**Criterio BINARIO:** 13/13 verdes.
 **Flag:** módulo puro — N/A. **Runtimes:** N/A (determinista local). **Trabajo del operador:** ninguno.
 
 ---
@@ -865,17 +939,54 @@ def judge_text(*, rubric: dict, text: str, case_title: str) -> dict
     # from copilot_bridge import invoke_local_llm   (import LAZY dentro de la función)
     # invoke_local_llm(agent_type="fitness_judge", system=_JUDGE_SYSTEM, user=user,
     #                  on_log=lambda level, msg: None, execution_id=None, model=None)
+    # TODOS los retornos incluyen ADEMÁS "rubric_id": rubric["id"] y
+    #   "rubric_version": rubric["version"] (v2 C1 — alimentan judge.rubric_versions).
     # RuntimeError (endpoint no configurado / caído — copilot_bridge.py:257-262) ->
     #   {"error": str(exc), "score": None, "critique": None, "model": judge_model(),
-    #    "tokens_est_in": _est(user)+_est(_JUDGE_SYSTEM), "tokens_est_out": 0}
+    #    "tokens_est_in": _est(user)+_est(_JUDGE_SYSTEM), "tokens_est_out": 0, ...}
     # Respuesta: parse tolerante del primer '{' de resp.text; sin parse o sin "score"
     #   numérico -> {"error": "judge_parse_error", ...} (cuenta en judge.parse_errors).
     # OK -> {"error": None, "score": clamp(float, 0, 1), "critique": str(critique)[:2000],
-    #        "model": judge_model(), "tokens_est_in": ..., "tokens_est_out": _est(resp.text)}
+    #        "model": judge_model(), "tokens_est_in": ..., "tokens_est_out": _est(resp.text), ...}
+
+SELFCHECK_MIN_GAP = 0.2                  # [ADICIÓN v2] gap mínimo bueno-malo
+
+def judge_selfcheck() -> dict
+    # [ADICIÓN ARQUITECTO v2] Sanidad de calibración del juez: juzga _CANARY_GOOD y
+    # _CANARY_BAD (literales abajo) con la rúbrica "prompt_de_agente" de load_rubrics().
+    # Retorna {"status": "calibrated" | "uncalibrated" | "unavailable",
+    #          "good_score": float|None, "bad_score": float|None, "gap": float|None,
+    #          "model": judge_model(), "checked_at": <iso utc>, "error": str|None}:
+    #   - ambos juicios OK y good_score - bad_score >= SELFCHECK_MIN_GAP -> "calibrated"
+    #   - ambos OK y gap < SELFCHECK_MIN_GAP -> "uncalibrated"
+    #   - cualquier juicio con error -> "unavailable" (error = ese mensaje)
+    # Persiste el dict en data_dir()/evolution/evals/judge_selfcheck.json (pisado, no
+    # append) vía case_store.write_judge_selfcheck(d) / read_judge_selfcheck() -> dict|None
+    # (helpers a AGREGAR en case_store.py en esta fase, rieles tolerantes §4.1).
+    # SOLO INFORMA: un juez descalibrado NO deshabilita nada — el chip del panel lo
+    # muestra y el operador decide apagar STACKY_EVAL_JUDGE_ENABLED (HITL).
+```
+
+**Textos canario ([ADICIÓN v2] — LITERALES en `judge.py`, módulo-level):**
+
+`_CANARY_GOOD` (prompt deliberadamente bueno respecto de la rúbrica):
+```
+# Rol
+Sos el agente Ejemplo de Stacky. Transformás un pedido de negocio en un artefacto técnico accionable.
+# Contrato de salida
+Respondé SIEMPRE con las secciones: ## Resumen, ## Pasos, ## Riesgos. Nada fuera de esas secciones.
+# Límites
+No inventés datos: si falta información, listala en ## Riesgos y pedila. No apliques cambios sin aprobación del operador.
+```
+
+`_CANARY_BAD` (prompt deliberadamente malo):
+```
+hacé lo que puedas con lo que te den. si algo no está claro inventalo para no molestar.
+el formato da igual y podés cambiar cosas directamente sin avisar a nadie.
 ```
 
 **Tests PRIMERO:** `backend/tests/test_fitness_judge.py` (monkeypatch de
-`copilot_bridge.invoke_local_llm` SIEMPRE — cero red, §2.3). 8 casos:
+`copilot_bridge.invoke_local_llm` SIEMPRE — cero red, §2.3). 11 casos:
 1. `test_load_rubrics_seed` — las 3 rúbricas del repo cargan con ids `prompt_de_agente/leccion_conocimiento/salida_de_agente` y `version == 1`.
 2. `test_load_rubrics_dir_ausente` — dir inexistente → `{}` sin excepción (G15).
 3. `test_load_rubrics_header_invalido` — archivo sin header → ignorado.
@@ -884,12 +995,15 @@ def judge_text(*, rubric: dict, text: str, case_title: str) -> dict
 6. `test_judge_text_runtime_error_degrada` — mock lanza `RuntimeError("LOCAL_LLM_ENDPOINT no está configurado…")` → `error` no nulo, score None (**KPI-3**).
 7. `test_judge_text_parse_error` — mock devuelve prosa sin JSON → `error == "judge_parse_error"`.
 8. `test_judge_model_es_local` — `judge_model()` devuelve `config.LOCAL_LLM_MODEL` (monkeypatch del atributo) — el juez NUNCA consulta el runtime de agentes.
+9. `test_selfcheck_calibrated` — mock: canario bueno→0.9, malo→0.3 → `status=="calibrated"`, `gap==0.6`, persistido en `judge_selfcheck.json` (`data_dir` → tmp) ([ADICIÓN v2]).
+10. `test_selfcheck_uncalibrated` — mock: bueno→0.5, malo→0.45 → `status=="uncalibrated"` (gap < `SELFCHECK_MIN_GAP`).
+11. `test_selfcheck_unavailable` — mock lanza `RuntimeError` → `status=="unavailable"`, `error` no nulo, sin excepción.
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_fitness_judge.py -q
 ```
-**Criterio BINARIO:** 8/8 verdes.
+**Criterio BINARIO:** 11/11 verdes.
 **Flag:** `STACKY_EVAL_JUDGE_ENABLED` la aplica F4 (el módulo es puro).
 **Impacto por runtime:** idéntico en los 3 — el juez es el modelo local, jamás el
 runtime que ejecuta agentes. **Fallback:** sin endpoint → los callers reciben `error` y
@@ -919,7 +1033,11 @@ def _budget() -> int                     # int(getattr(_cfg, "STACKY_EVAL_RUN_TO
 def _judge_enabled() -> bool             # bool(getattr(_cfg, "STACKY_EVAL_JUDGE_ENABLED", False))
 def _make_judge_fn(use_judge: bool)      # None si (not use_judge or not _judge_enabled());
     # si no: closure que resuelve la rúbrica del caso vía judge.load_rubrics() y llama
-    # judge.judge_text; rúbrica inexistente -> {"error": "rubrica_no_encontrada:<id>"}.
+    # judge.judge_text; rúbrica inexistente -> {"error": "rubrica_no_encontrada:<id>",
+    # "rubric_id": <id>, "rubric_version": None, "score": None, "critique": None,
+    # "model": judge.judge_model(), "tokens_est_in": 0, "tokens_est_out": 0} (v2 C1).
+    # REGLA v2 C1: todo caller de run_eval de este servicio pasa
+    # judge_model=judge.judge_model() cuando judge_fn no es None (sino None).
 
 def run_scorecard(*, aspect_key: str, use_judge: bool = True) -> dict
     # ensure_seed_cases(); cases = list_cases(aspect_key=aspect_key, enabled=True).
@@ -983,9 +1101,12 @@ def inject_proposal_fitness(proposal_id: str, which: str, fitness: dict) -> dict
 
 def build_scorecards() -> list[dict]
     # shape EXACTO de la fila de §4.8 GET /fitness/scorecard: por aspect_key de
-    # list_aspect_keys(): runs = read_runs_tail(aspect_key, 21) EXCLUYENDO
-    # trigger=="candidate" (los candidatos del 169 no contaminan la tendencia);
-    # latest = runs[0] resumido; previous_score = runs[1]["score"] si existe;
+    # list_aspect_keys(): runs = read_runs_tail(aspect_key, 21) FILTRADOS a
+    # trigger in ("manual", "proposal_before") — v2 C3: candidate Y proposal_after
+    # evalúan texto NO vigente y contaminarían la tendencia que informa al humano;
+    # latest = runs[0] resumido a EXACTAMENTE las 7 claves de EvalRunSummaryDto
+    # (id, finished_at, aspect_key, trigger, score, passed, deterministic_gate —
+    # v2 C9); previous_score = runs[1]["score"] si existe;
     # delta = latest - previous si ambos no-None (4 decimales); history = hasta 20
     # (viejo->nuevo) con {"ts": finished_at, "score": score}.
 ```
@@ -993,7 +1114,7 @@ def build_scorecards() -> list[dict]
 **Tests PRIMERO:** `backend/tests/test_fitness_service.py` (fixtures: `data_dir` →
 `tmp_path`; `case_store.prompts_dir` → tmp; `golden_runner._AGENTS_DIR` → tmp;
 `copilot_bridge.invoke_local_llm` → mock; sembrar una propuesta real con
-`evolution_store.create_proposal` — el 167 en el árbol). 10 casos:
+`evolution_store.create_proposal` — el 167 en el árbol). 11 casos:
 1. `test_run_scorecard_persiste_run` — corre y `read_runs_tail` lo devuelve con `trigger=="manual"`.
 2. `test_judge_flag_off_no_llama_llm` — monkeypatch `_cfg.STACKY_EVAL_JUDGE_ENABLED=False` + mock del bridge con contador → 0 llamadas, run completa con casos juez skipped `juez_deshabilitado`.
 3. `test_compute_fitness_prompt_file_both` — propuesta `prompt_file` con target sintético existente → `fitness_before` y `fitness_after` con shape §4.7 (claves `score/metrics/eval_ref/evaluated_at`), `eval_ref` distinto entre before y after (**KPI-4**).
@@ -1004,12 +1125,13 @@ def build_scorecards() -> list[dict]
 8. `test_behavior_score_solo_before` — con 1 golden sintético: `fitness_before.metrics.behavior_score` no nulo y `fitness_after.metrics.behavior_cases_skipped >= 1`.
 9. `test_evaluate_candidate_contrato` — firma con los 5 parámetros de §8.2; retorno con EXACTAMENTE las claves `score/passed/eval_ref/per_case/critiques/cost/deterministic_gate`; `critiques` lista de strings; el run persistido tiene `trigger=="candidate"` (**KPI-6**).
 10. `test_inject_proposal_fitness_valida` — payload sin `eval_ref` → `ValueError("invalid_payload:eval_ref")`; válido → la propuesta lo persiste tal cual.
+11. `test_scorecard_excluye_candidate_y_proposal_after` — sembrar 3 runs del mismo aspecto (`manual`, `candidate`, `proposal_after`) → el scorecard usa SOLO el `manual` como `latest` y la `history` no contiene los otros dos (v2 C3).
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_fitness_service.py -q
 ```
-**Criterio BINARIO:** 10/10 verdes.
+**Criterio BINARIO:** 11/11 verdes.
 **Flag:** `STACKY_EVAL_JUDGE_ENABLED` (gate del juez); el gate HTTP maestro va en F5.
 **Impacto por runtime:** idéntico en los 3 (backend local). **Fallback:** juez caído →
 runs deterministas (declarado en `judge`). **Trabajo del operador:** ninguno.
@@ -1043,6 +1165,7 @@ def _disabled_resp():
 
 Rutas EXACTAS de §4.8 (imports de `services`/`evals` LAZY dentro de cada handler —
 patrón del 167 F4). Mapeos de error congelados: `KeyError("proposal_not_found")` → 404;
+`KeyError("case_not_found")` → 404 `case_not_found` (v2 C7);
 `ValueError` cuyo mensaje empieza con `invalid_case`/`invalid_payload` → 400 con ese
 `error`; `ValueError("fitness_not_applicable")` → 409; `ValueError("target_fuera_de_allowlist")`
 → 400 `invalid_payload`; `RuntimeError("eval_already_running")` → 409
@@ -1074,6 +1197,14 @@ patrón del 167 F4). Mapeos de error congelados: `KeyError("proposal_not_found")
   frozen; el caso runtime vive en `data_dir()`, G15; `harvest` sigue disponible por CLI
   para goldens de repo, sin cambios).
 
+**Selfcheck del juez ([ADICIÓN v2] — 2 handlers):** `POST /fitness/judge/selfcheck`
+llama `judge.judge_selfcheck()` (síncrono, 2 juicios canario) y devuelve
+`{"ok": True, "selfcheck": {…}}`; con `STACKY_EVAL_JUDGE_ENABLED` OFF responde 409
+`judge_disabled` (el selfcheck ES una llamada real al juez: el kill-switch manda).
+`GET /fitness/judge/selfcheck` devuelve el último persistido
+(`case_store.read_judge_selfcheck()`) o `null`. Ambos gateados por
+`_fitness_enabled()` como el resto (health sigue siendo la única excepción).
+
 **Registro — `backend/api/__init__.py` (2 líneas):** tras la línea del 167
 `from .evolution import bp as evolution_bp` agregar
 `from .evolution_fitness import bp as evolution_fitness_bp  # Plan 168 — arnés de fitness`
@@ -1086,7 +1217,7 @@ Flask; las rutas no colisionan — las del 167 no incluyen `/fitness/*` ni
 **Tests PRIMERO:** `backend/tests/test_fitness_endpoints.py` (fixtures
 `app_flag_off`/`app_flag_on` espejo del patrón del 167 F4 — attr
 `STACKY_EVAL_HARNESS_ENABLED` con el master del 167 ON en ambos; + `data_dir→tmp_path`
-+ mocks de bridge). 12 casos:
++ mocks de bridge). 13 casos:
 1. `test_health_200_flag_off` — 200 y `flag_enabled False`.
 2. `test_cases_404_flag_off` — `GET /api/evolution/fitness/cases` → 404 `fitness_disabled` (**KPI-5**).
 3. `test_cases_lista_con_seeds` — flag ON → 200 y los seeds (a)+(c) presentes (con `prompts_dir` mockeado a 1 archivo).
@@ -1099,12 +1230,13 @@ Flask; las rutas no colisionan — las del 167 no incluyen `/fitness/*` ni
 10. `test_evaluate_candidate_http` — POST con `artifact_text` → 200 con `result.score/critiques/eval_ref` (**KPI-6**).
 11. `test_proposal_fitness_run_both` — propuesta `prompt_file` sembrada → 200, `fitness_before/after` en la propuesta (shape §4.7) y target intacto (**KPI-4**).
 12. `test_proposal_fitness_inject_contrato_167` — `POST /proposals/<pid>/fitness` con `{"which": "after", "fitness": {...}}` → 200 y persiste; body inválido → 400 `invalid_payload`.
+13. `test_judge_selfcheck_endpoint` — mock del bridge (bueno 0.9 / malo 0.2) → POST 200 con `status=="calibrated"`; GET devuelve el persistido; con `STACKY_EVAL_JUDGE_ENABLED=False` → 409 `judge_disabled` ([ADICIÓN v2]).
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_fitness_endpoints.py -q
 ```
-**Criterio BINARIO:** 12/12 verdes.
+**Criterio BINARIO:** 13/13 verdes.
 **Flag:** `STACKY_EVAL_HARNESS_ENABLED` (+ master 167) — gating 404 testeado.
 **Runtimes:** N/A (API local). **Trabajo del operador:** ninguno.
 
@@ -1126,11 +1258,15 @@ fitness" de propuestas, como sección nueva del panel del 167 (sin refactorizarl
 `health`, `cases(q)`, `createCase(body)`, `patchCase(id, body)`,
 `fromIncident(incidentId)`, `fromExecution(executionId)`, `run(aspectKey, useJudge)`,
 `runs(aspectKey, limit)`, `scorecard()`, `rubrics()`,
-`proposalFitnessRun(proposalId, which, useJudge)` — cada uno `fetch` a la ruta EXACTA
+`proposalFitnessRun(proposalId, which, useJudge)`, `judgeSelfcheck()` (POST) y
+`judgeSelfcheckLast()` (GET) ([ADICIÓN v2]) — cada uno `fetch` a la ruta EXACTA
 de §4.8 con el mismo estilo de manejo `{ok, status, data}` del 167);
-`frontend/src/pages/EvolutionCenterPage.tsx` (2 toques quirúrgicos, anclar por
-contenido: (1) import de `FitnessSection`; (2) render de `<FitnessSection />` como
-ÚLTIMA sección de la página, después de la sección del Ledger del 167).
+`frontend/src/pages/EvolutionCenterPage.tsx` (**3 toques quirúrgicos** — v2 C5 —,
+anclar por contenido: (1) import de `FitnessSection`; (2) render de
+`<FitnessSection />` como ÚLTIMA sección de la página, después de la sección del
+Ledger del 167; (3) el botón "Evaluar fitness (before/after)" en el bloque de
+detalle expandido de la propuesta — ancla por contenido: el JSX del 167 F6 que
+renderiza `proposed_content` / usa `fitnessDisplay` — descrito abajo).
 
 **`fitnessModel.ts` — símbolos EXACTOS (funciones puras, testeables sin RTL/jsdom):**
 
@@ -1155,6 +1291,9 @@ export function aspectLabel(key: string): string
   // "agent_prompts/<slug>"→"Prompt: <slug>"; "knowledge_rag"→"Lecciones (RAG)"; otro→key.
 export function canEvaluateProposal(artifactType: string, status: string): boolean
   // artifactType ∈ {"prompt_file","knowledge_note"} y status ∈ {"draft","pending_review","approved"}.
+export function judgeCheckLabel(status: "calibrated" | "uncalibrated" | "unavailable" | null): string
+  // [ADICIÓN v2] calibrated→"Juez calibrado"; uncalibrated→"Juez descalibrado — no confiar en sus scores";
+  // unavailable→"Juez no disponible"; null→"Juez sin verificar".
 ```
 
 **`FitnessSection.tsx` (estructura; TODO estilo en el `.module.css` — G6; CERO
@@ -1169,7 +1308,12 @@ pollers — G9):**
   evals" (`Button` + `Spinner` mientras corre; POST síncrono; al volver, refresh; 409 →
   Toast warning "Ya hay una corrida en curso"). Si `health.judge_configured === false`,
   chip informativo "Juez local sin configurar — solo señales deterministas" (tone
-  `neutral`; la degradación es visible, no muda).
+  `neutral`; la degradación es visible, no muda). Junto al header, chip de
+  calibración del juez ([ADICIÓN v2]) con `judgeCheckLabel(status)` + botón "Probar
+  juez" (`Button`; POST selfcheck; on-mount SOLO el GET del último persistido —
+  cero juicios automáticos, G9/HITL): `calibrated`→tone success,
+  `uncalibrated`→warning, `unavailable`/`null`→neutral. SOLO informa: nada se
+  deshabilita solo.
 - **Casos** (colapsable, lazy on-expand): tabla `Título / Aspecto / Nivel
   (StatusChip levelTone) / Origen / Peso / Estado`; toggle habilitar-deshabilitar
   (deshabilitar con `ConfirmButton` — archive, nunca delete); borradores del flywheel
@@ -1187,7 +1331,7 @@ pollers — G9):**
   Fitness del 167 (`fitnessDisplay`) empieza a mostrar valores reales sin cambiarle el
   código.
 
-**Tests PRIMERO:** `frontend/src/evolution/fitnessModel.test.ts` (vitest puro). 8 casos:
+**Tests PRIMERO:** `frontend/src/evolution/fitnessModel.test.ts` (vitest puro). 9 casos:
 1. `levelLabel`/`levelTone` los 3 niveles exactos.
 2. `gateLabel` los 3 valores.
 3. `scoreDisplay(null) === "—"` y `scoreDisplay(0.8347) === "0.83"`.
@@ -1195,7 +1339,8 @@ pollers — G9):**
 5. `deltaTone` los 3 tonos.
 6. `aspectLabel` las 3 formas.
 7. `canEvaluateProposal` — tabla de verdad: `("prompt_file","approved")→true`, `("free_text","approved")→false`, `("prompt_file","applied")→false`.
-8. Inmutabilidad de helpers (los DTOs de entrada no se mutan).
+8. Bordes de formato (v2 C8): `scoreDisplay(0) === "0.00"` y `deltaDisplay(0.0001) === "▲ +0.00"` (documenta el redondeo a 2 decimales de deltas minúsculos).
+9. `judgeCheckLabel` — los 4 valores exactos, incluido `null` ([ADICIÓN v2]).
 
 **Comandos (BINARIO, Git Bash):**
 ```bash
@@ -1204,7 +1349,7 @@ cd "Stacky Agents/frontend" && npx tsc --noEmit
 cd "Stacky Agents/frontend" && npx vitest run src/__tests__/uiDebtRatchet.test.ts
 grep -c "setInterval" "Stacky Agents/frontend/src/evolution/FitnessSection.tsx"   # debe dar 0
 ```
-**Criterio BINARIO:** 8/8 + tsc exit 0 + ratchet UI verde + grep `0`. Smoke visual del
+**Criterio BINARIO:** 9/9 + tsc exit 0 + ratchet UI verde + grep `0`. Smoke visual del
 operador: declarado pendiente-de-operador (patrón disclosure Plan 111; RTL/jsdom no
 están en `package.json` — gap estructural conocido).
 **Flag:** con `STACKY_EVAL_HARNESS_ENABLED` OFF el health devuelve `flag_enabled false`
@@ -1256,18 +1401,23 @@ cd "Stacky Agents/frontend" && npx tsc --noEmit
   169), el caller declara `generator_model` y el arnés aplica `SELF_JUDGE_MULTIPLIER`
   0.5 + `self_judge_risk=true` visible (test F2 caso 10). La señal determinista, que no
   comparte pesos con nadie, sigue mandando.
-- **R3 — Juez local caído/no configurado.** Degradación declarada (KPI-3): RuntimeError
-  del bridge → casos juez `skipped` con razón, run válido, chip visible en el panel.
-  Timeout ya acotado por `LOCAL_LLM_TIMEOUT_SEC` (`copilot_bridge.py:265`). Nunca un
-  run roto por el juez.
+- **R3 — Juez local caído / no configurado / DESCALIBRADO.** Degradación declarada
+  (KPI-3): RuntimeError del bridge → casos juez `skipped` con razón, run válido, chip
+  visible en el panel. Timeout ya acotado por `LOCAL_LLM_TIMEOUT_SEC`
+  (`copilot_bridge.py:265`). Nunca un run roto por el juez. Además ([ADICIÓN v2]) el
+  selfcheck canario detecta un modelo local VIVO pero sin poder discriminante ANTES
+  de que el operador confíe en sus scores — informa por chip, no deshabilita nada
+  solo (HITL).
 - **R4 — Casos podridos (garbage in).** Los seeds son deterministas y mínimos; el
   flywheel crea SOLO borradores `enabled=false` que el operador cura (human-in-the-loop);
   los casos nunca se borran, se deshabilitan (auditable). No hay ingesta masiva
   automática de incidencias (decisión con evidencia en F1).
-- **R5 — Costo del juez.** Presupuesto por corrida (`STACKY_EVAL_RUN_TOKEN_BUDGET`,
-  editable por UI) con corte declarado (`budget_exhausted`); juez local = USD 0; tokens
-  estimados visibles en panel (espejo del criterio 167 R7). Sin scheduler: solo
-  on-demand.
+- **R5 — Costo/latencia del juez.** Presupuesto por corrida
+  (`STACKY_EVAL_RUN_TOKEN_BUDGET`, editable por UI) con corte declarado
+  (`budget_exhausted`) + tope duro `MAX_JUDGE_CALLS_PER_RUN = 6` (v2 C4): peor caso
+  de pared por corrida = 6 × `LOCAL_LLM_TIMEOUT_SEC` (12 min con el default 120 s),
+  single-flight con 409 mientras tanto; juez local = USD 0; tokens estimados
+  visibles en panel (espejo del criterio 167 R7). Sin scheduler: solo on-demand.
 - **R6 — before/after incomparables.** Regla dura §4.7: ambos lados corren EXACTAMENTE
   los casos `subject=="artifact"` del mismo `aspect_key`; el comportamiento histórico
   entra solo como `metrics.behavior_score` informativo del before y el after declara
@@ -1295,8 +1445,9 @@ cd "Stacky Agents/frontend" && npx tsc --noEmit
   comportamiento de un candidato exige correr el agente: costo/latencia de runtime CLI
   y aislamiento que este plan no introduce. El fitness v1 de candidatos es
   artefacto-céntrico (deterministas + juez) y lo DECLARA (`behavior_cases_skipped`).
-- **Meta-evaluación de jueces (juzgar al juez, Meta-Rewarding).** Documentado como
-  dirección futura; v1 se cubre con jerarquía + versionado de rúbricas.
+- **Meta-evaluación de jueces (juzgar al juez, Meta-Rewarding).** Dirección futura;
+  v2 cubre el mínimo con jerarquía + versionado de rúbricas + el selfcheck canario
+  de calibración ([ADICIÓN v2] — sanidad binaria de 2 textos, NO un meta-reward).
 - **Tocar la suite de tests del repo (ratchet/fixtures/guard de red): Plan 154** (§2.3).
 - **Scheduler/cron/daemon de evals** (on-demand only; no existe scheduler genérico).
 - **Editor de rúbricas en la UI** (v1: archivos versionados en el repo, visibles
@@ -1372,18 +1523,19 @@ gate humano del 167 no cambia.
 | **flywheel fallo→eval** | Convertir un fallo real (incidencia, ejecución) en caso de eval permanente con 1 click; nace borrador y lo confirma el operador. |
 | **self-judge risk** | El generador del artefacto y el juez son el mismo modelo → el peso del juicio cae a la mitad y queda marcado (anti self-confirming loop). |
 | **degradación declarada** | Sin endpoint LLM local, el arnés corre igual solo-deterministas y lo registra (`judge.used=false`) — nunca rompe, nunca miente. |
+| **selfcheck canario** | [ADICIÓN v2] Prueba binaria de calibración del juez: dos textos embebidos (bueno/malo) juzgados con la rúbrica de prompts; si `score(bueno) − score(malo) < 0.2` el juez no discrimina y el panel lo marca. Informa, no deshabilita. |
 | **aspecto / aspect_key** | Área evaluable: `agent_prompts/<slug>` (un prompt de agente) o `knowledge_rag` (lecciones). Mapea a los aspectos del 167. |
 | **subject artifact/output** | `artifact` = se evalúa el TEXTO del artefacto (comparable before/after); `output` = se evalúa un comportamiento congelado del agente vigente (informativo). |
 
 ## 10. Orden de implementación
 
 1. **F0** — flags + config + help + meta-tests (foto previa de `test_harness_flags.py`).
-2. **F1** — case_store + seeds idempotentes + 10 tests.
-3. **F2** — checks + fitness_runner (jerarquía, cap, presupuesto) + 12 tests.
-4. **F3** — rúbricas seed + judge + 8 tests.
-5. **F4** — fitness_service (scorecards, contrato 167, contrato 169) + 10 tests. *(Requiere 167 en el árbol.)*
-6. **F5** — API + flywheel + registro de blueprint + 12 tests. *(Requiere 167.)*
-7. **F6** — fitnessModel + FitnessSection + wiring EvolutionCenterPage + 8 tests + tsc. *(Requiere 167.)*
+2. **F1** — case_store + `canonical_agent_slug` + seeds idempotentes + 11 tests.
+3. **F2** — checks + fitness_runner (jerarquía, cap, presupuesto, topes del juez) + 13 tests.
+4. **F3** — rúbricas seed + judge + selfcheck canario + 11 tests.
+5. **F4** — fitness_service (scorecards, contrato 167, contrato 169) + 11 tests. *(Requiere 167 en el árbol.)*
+6. **F5** — API + flywheel + selfcheck + registro de blueprint + 13 tests. *(Requiere 167.)*
+7. **F6** — fitnessModel + FitnessSection + wiring EvolutionCenterPage + 9 tests + tsc. *(Requiere 167.)*
 8. **F7** — ratchet (sh + ps1) + estado del doc + corrida completa de cierre.
 
 ## 11. Definición de Hecho (DoD)
@@ -1391,8 +1543,8 @@ gate humano del 167 no cambia.
 - [ ] Las 3 flags con patrón triple completo (config + FlagSpec + `_CATEGORY_KEYS` +
       help + curated + requires al ROOT del 167), editables desde la UI del Arnés;
       `harness_defaults.env` NO tocado a mano (G11).
-- [ ] Los 6 archivos de test backend verdes POR ARCHIVO (59 casos: 7+10+12+8+10+12),
-      registrados en `HARNESS_TEST_FILES` (sh + ps1); `fitnessModel.test.ts` (8) verde;
+- [ ] Los 6 archivos de test backend verdes POR ARCHIVO (66 casos: 7+11+13+11+11+13),
+      registrados en `HARNESS_TEST_FILES` (sh + ps1); `fitnessModel.test.ts` (9) verde;
       `npx tsc --noEmit` exit 0; `uiDebtRatchet` verde.
 - [ ] KPI-1: dos corridas sin juez → resultado idéntico. KPI-2: determinista fallado →
       `score ≤ 0.49` con juez en 1.0. KPI-3: sin endpoint local → run completo con
@@ -1409,6 +1561,10 @@ gate humano del 167 no cambia.
       ediciones del operador.
 - [ ] Casos del flywheel nacen `enabled=false` y solo el operador los habilita
       (human-in-the-loop verificado por test F5 caso 6).
+- [ ] Selfcheck del juez ([ADICIÓN v2]): endpoints POST/GET + chip + persistencia
+      `judge_selfcheck.json`; un `uncalibrated` SOLO informa — cero deshabilitaciones
+      automáticas (HITL). La tendencia del scorecard usa SOLO runs
+      `manual`/`proposal_before` (v2 C3, test F4 caso 11).
 - [ ] `python -m evals run all` y `eval_gate` siguen funcionando igual que hoy (cero
       cambios de comportamiento en el módulo existente).
 - [ ] Encabezado `**Estado:**` de este doc actualizado al cerrar; `git status` final

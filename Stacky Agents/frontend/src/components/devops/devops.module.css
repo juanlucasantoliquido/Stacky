@@ -303,3 +303,49 @@
   padding: 0 4px;
 }
 .simActions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ── Plan 191 · Bitácora de corridas CI (historial con estado vivo) ───────── */
+.ciRunsSection { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.ciRunsHeading { margin: 0 0 8px 0; font-size: 0.9rem; color: var(--text-muted); }
+.ciRunsList { display: flex; flex-direction: column; gap: 6px; }
+.ciRunRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.8rem;
+}
+.ciRunLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  color: var(--text);
+}
+.ciRunChip {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.ciRunActions { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
+.ciRunOpen { color: var(--accent-hot); text-decoration: none; font-size: 0.75rem; }
+.ciRunOpen:hover { text-decoration: underline; }
+.ciRunRetrigger {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.ciRunRetrigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.ciRunsEmpty { font-size: 0.8rem; color: var(--text-faint); padding: 4px 0; }

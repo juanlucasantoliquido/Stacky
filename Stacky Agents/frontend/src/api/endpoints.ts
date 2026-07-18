@@ -3257,7 +3257,27 @@ export const CIPipeline = {
     api.get<CIMonitorResponse>(
       `/api/ci/${encodeURIComponent(project)}/pipeline/${encodeURIComponent(pipelineId)}`
     ),
+
+  /** Plan 191 — bitácora local de corridas disparadas (read-only). 404 si flag OFF. */
+  runs: (project: string, limit = 20): Promise<{ runs: CiRunEntry[] }> =>
+    api.get<{ runs: CiRunEntry[] }>(
+      `/api/ci/runs?project=${encodeURIComponent(project)}&limit=${limit}`
+    ),
 };
+
+/** Plan 191 — entry de la bitácora de corridas CI (contrato ENTRY_FIELDS del backend). */
+export interface CiRunEntry {
+  project: string;
+  tracker_type: string;
+  ref: string;
+  sha: string | null;
+  pipeline_id: string;
+  web_url: string | null;
+  triggered_at: string;
+  source: string;
+  last_status?: string | null;
+  finished_at?: string | null;
+}
 
 // ── Plan 74 F7 — Migrador ADO → GitLab ──────────────────────────────────────
 

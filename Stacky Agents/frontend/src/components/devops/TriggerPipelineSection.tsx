@@ -7,6 +7,14 @@ import { CIPipeline, type CIPreviewResponse, type CITriggerResponse, type CIMoni
 import { FlagGateBanner } from './FlagGateBanner';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { PipelineDoctorPanel } from './PipelineDoctorPanel';
+import {
+  pollTargets,
+  retriggerPayload,
+  runLabel,
+  effectiveStatus,
+  POLL_INTERVAL_MS,
+  type CiRun,
+} from './ciRunsLedger';
 import styles from './devops.module.css';
 
 export interface TriggerPipelineSectionProps {
@@ -24,6 +32,48 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
   const [monitorStatus, setMonitorStatus] = useState<CIMonitorResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Plan 191 — bitácora de corridas CI (historial con estado vivo + re-disparo HITL).
+  const [runs, setRuns] = useState<CiRun[]>([]);
+  const [statusById, setStatusById] = useState<Record<string, string | undefined>>({});
+  const [ledgerAvailable, setLedgerAvailable] = useState(true);
+
+  const loadRuns = React.useCallback(async () => {
+    try {
+      const data = await CIPipeline.runs(project, 20);
+      setRuns(data.runs as CiRun[]);
+    } catch {
+      // 404 (flag OFF) u otro error → sección idéntica a hoy; no reintentar en la sesión.
+      setLedgerAvailable(false);
+    }
+  }, [project]);
+
+  React.useEffect(() => {
+    void loadRuns();
+  }, [loadRuns]);
+
+  // Poll de estado acotado (KPI-4): solo los ids no-finales, cap 5, cada 10 s; se
+  // detiene cuando todos terminaron. Reusa el monitor existente /pipeline/<id>.
+  React.useEffect(() => {
+    if (!ledgerAvailable) return;
+    const targets = pollTargets(runs, statusById);
+    if (targets.length === 0) return;
+    const interval = setInterval(() => {
+      targets.forEach((id) => {
+        CIPipeline.monitor(project, id)
+          .then((s) => setStatusById((prev) => ({ ...prev, [id]: s.status })))
+          .catch(() => { /* best-effort: un poll fallido no rompe la UI */ });
+      });
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [runs, statusById, ledgerAvailable, project]);
+
+  // Re-disparar: PRECARGA el ref en el formulario; el operador confirma con "Disparar"
+  // (flujo HITL existente). NUNCA dispara por sí solo (sin confirm automático).
+  const handleRetrigger = (run: CiRun) => {
+    setRef(retriggerPayload(run).ref);
+    setError(null);
+  };
 
   // C14 - FlagGateBanner si trigger_enabled=false (esto no debería pasar porque el padre ya chequea)
   if (!ctx.health.trigger_enabled) {
@@ -68,6 +118,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
         setPipelineId(result.pipeline_id);
         setPolling(true);
       }
+      void loadRuns(); // Plan 191 — refrescar la bitácora tras el disparo
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al disparar');
     } finally {
@@ -172,6 +223,46 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
       {error && (
         <div className={styles.alertError} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
           {error}
+        </div>
+      )}
+
+      {/* Plan 191 — Bitácora de corridas CI (historial con estado vivo + re-disparo HITL) */}
+      {ledgerAvailable && (
+        <div className={styles.ciRunsSection}>
+          <h4 className={styles.ciRunsHeading}>Historial de corridas</h4>
+          {runs.length === 0 ? (
+            <div className={styles.ciRunsEmpty}>Sin corridas registradas todavía.</div>
+          ) : (
+            <div className={styles.ciRunsList}>
+              {runs.map((run) => (
+                <div key={`${run.pipeline_id}-${run.triggered_at}`} className={styles.ciRunRow}>
+                  <span className={styles.ciRunLabel} title={runLabel(run)}>{runLabel(run)}</span>
+                  <span className={styles.ciRunChip}>{effectiveStatus(run, statusById)}</span>
+                  <span className={styles.ciRunActions}>
+                    {run.web_url && (
+                      <a
+                        className={styles.ciRunOpen}
+                        href={run.web_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        abrir
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.ciRunRetrigger}
+                      onClick={() => handleRetrigger(run)}
+                      disabled={loading}
+                      title="Precarga el ref; confirmá con Disparar (HITL)"
+                    >
+                      Re-disparar…
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

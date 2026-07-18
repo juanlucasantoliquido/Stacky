@@ -715,8 +715,10 @@ def create_app() -> Flask:
     # (agnóstico de runtime: corre en ticket_status.on_execution_end para
     # cualquier runtime). No hubo registro previo de register_post_hook en
     # create_app; este es el primero.
-    from services import ticket_status, incident_autopublish
+    from services import ticket_status, incident_autopublish, incident_dev_autocommit
     incident_autopublish.register(ticket_status.register_post_hook)
+    # Plan 177 F4 — auto-PR del Dev Resolutor (commit+PR de lo que tocó el agente).
+    incident_dev_autocommit.register(ticket_status.register_post_hook)
 
     return app
 

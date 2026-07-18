@@ -128,6 +128,24 @@ def trigger_pipeline_route(project: str):
     # si el provider retorna un sha más preciso (del commit real), usarlo como fallback.
     recorded_sha = body.get("sha", "") or result.get("sha", "")
     _record_trigger(provider.name, ref_value, recorded_sha, result["id"])
+
+    # Plan 191 — bitácora durable (best-effort: JAMÁS rompe el trigger)
+    if getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+        try:
+            from services.ci_run_ledger import append_run
+            append_run({
+                "project": project,
+                "tracker_type": provider.name,
+                "ref": ref_value,
+                "sha": recorded_sha,
+                "pipeline_id": result["id"],
+                "web_url": result.get("web_url"),
+                "source": "stacky",
+            })
+        except Exception:  # noqa: BLE001 — el ledger nunca es camino crítico
+            from services.stacky_logger import logger as stacky_logger
+            stacky_logger.info("ci_run_ledger", "append_failed", pipeline_id=str(result.get("id")))
+
     return jsonify(result)
 
 
@@ -184,6 +202,21 @@ def monitor_pipeline_route(project: str, pipeline_id: str):
     try:
         provider = get_ci_provider(project)
         result = provider.monitor_pipeline(pipeline_id)
+
+        # Plan 191 — persistir desenlace (best-effort; JAMÁS rompe el monitor)
+        if getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+            try:
+                status = str((result or {}).get("status") or "").lower()
+                if status in ("success", "failed", "canceled", "skipped"):
+                    from datetime import datetime, timezone
+                    from services.ci_run_ledger import update_run_status
+                    update_run_status(
+                        str(pipeline_id), status,
+                        datetime.now(timezone.utc).isoformat(),
+                    )
+            except Exception:  # noqa: BLE001 — el monitor nunca se degrada por el ledger
+                pass
+
         return jsonify({**result, "tracker_type": provider.name, "source": "ci"})
     except TrackerApiError as exc:
         return jsonify({"error": str(exc), "kind": exc.kind}), exc.status

@@ -679,9 +679,22 @@ def create_app() -> Flask:
             ".map": "application/json",
         }
 
+        # index.html es el UNICO archivo del bundle Vite sin hash de contenido
+        # en el nombre (los JS/CSS bajo /assets/ si lo tienen, p.ej.
+        # index-C5JGyli1.js). send_from_directory por default solo agrega
+        # ETag/Last-Modified condicionales, sin Cache-Control: eso permite que
+        # el navegador sirva una copia vieja de index.html desde cache
+        # heuristica, que a su vez referencia bundles hasheados que YA NO
+        # EXISTEN en el deploy nuevo (root cause del sintoma "corri
+        # PrepararPublicacion.bat pero sigo viendo la UI vieja"). Forzamos
+        # no-store para que cada carga pida index.html fresco.
+        def _no_store(response):
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
         @app.get("/")
         def _serve_spa_index():
-            return send_from_directory(dist_path, "index.html")
+            return _no_store(send_from_directory(dist_path, "index.html"))
 
         @app.get("/<path:asset_path>")
         def _serve_spa_asset(asset_path: str):
@@ -696,7 +709,7 @@ def create_app() -> Flask:
                     response.headers["Content-Type"] = forced
                 return response
 
-            return send_from_directory(dist_path, "index.html")
+            return _no_store(send_from_directory(dist_path, "index.html"))
 
     # Plan 166 F3 — registra el post-hook de auto-publicación de incidencias
     # (agnóstico de runtime: corre en ticket_status.on_execution_end para

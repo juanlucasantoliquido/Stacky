@@ -458,6 +458,8 @@ HARNESS_TEST_FILES=(
   tests/test_incident_vision.py
   tests/test_incident_autopublish.py
   tests/test_incident_dev_agent.py
+  # — Fix deploy: index.html sin cache-control servia UI vieja tras rebuild —
+  tests/test_spa_index_no_cache.py
 )
 
 pass=0

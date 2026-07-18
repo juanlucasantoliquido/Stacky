@@ -15,6 +15,9 @@ import { DiffList } from "./DiffList";
 import { ObjectDrilldown } from "./ObjectDrilldown";
 import { RunsTimeline } from "./RunsTimeline";
 import { DataParitySection } from "./DataParitySection";
+import { EnvSetupWizard } from "./EnvSetupWizard";
+import { MigrationPanel } from "./MigrationPanel";
+import { shouldShowEmptyCta, shouldNudgeAddMore } from "./envPlacementLogic";
 import styles from "./dbcompare.module.css";
 
 type ViewState = "wizard" | "progress" | "results";
@@ -37,6 +40,9 @@ export function DbComparePage() {
   const [selectedItem, setSelectedItem] = useState<DiffItem | null>(null);
   const [sourceSnapshot, setSourceSnapshot] = useState<DbSnapshot | null>(null);
   const [targetSnapshot, setTargetSnapshot] = useState<DbSnapshot | null>(null);
+  // Plan 157 F5/F6 — wizard de alta en contexto + remount de la lista tras crear.
+  const [showWizard, setShowWizard] = useState(false);
+  const [envRefreshToken, setEnvRefreshToken] = useState(0);
 
   useEffect(() => {
     DbCompare.health()
@@ -111,6 +117,18 @@ export function DbComparePage() {
   const toggleAction = (a: DiffAction) =>
     setFilters((f) => ({ ...f, actions: f.actions.includes(a) ? f.actions.filter((x) => x !== a) : [...f.actions, a] }));
 
+  // Plan 157 — flags de UX (default ON en backend; con las 3 en false la página
+  // queda idéntica a main).
+  const configInPlace = health?.config_in_place_enabled ?? false;
+  const webconfigImport = health?.webconfig_import_enabled ?? false;
+  const migrationPanel = health?.migration_panel_enabled ?? false;
+
+  const handleEnvCreated = () => {
+    reloadEnvironments();
+    setEnvRefreshToken((t) => t + 1); // fuerza remount de EnvironmentsPanel (estado propio)
+    setShowWizard(false);
+  };
+
   const missingDrivers = health ? Object.entries(health.drivers).filter(([, info]) => !info.available) : [];
   const diff = activeRun?.diff ?? null;
   const filteredItems = diff ? filterDiffItems(diff.items, filters) : [];
@@ -136,6 +154,36 @@ export function DbComparePage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Plan 157 F5 — gestión de ambientes ELEVADA al tope, con CTA de estado vacío
+          y wizard guiado. Gateada por config_in_place_enabled: con OFF, la página
+          queda como en main (EnvironmentsPanel al fondo). */}
+      {configInPlace && (
+        <section className={styles.environmentsPanel}>
+          <h2>Bases de datos configuradas</h2>
+          {shouldShowEmptyCta(environments, configInPlace) && !showWizard && (
+            <button className={styles.emptyCta} onClick={() => setShowWizard(true)}>
+              ➕ Agregar una base de datos para empezar
+            </button>
+          )}
+          {shouldNudgeAddMore(environments) && (
+            <p className={styles.nudge}>
+              Necesitás al menos 2 ambientes para comparar — agregá otro.
+            </p>
+          )}
+          {environments.length > 0 && !showWizard && (
+            <button onClick={() => setShowWizard(true)}>➕ Agregar base de datos</button>
+          )}
+          {showWizard && (
+            <EnvSetupWizard
+              webconfigImportEnabled={webconfigImport}
+              onCreated={handleEnvCreated}
+              onCancel={() => setShowWizard(false)}
+            />
+          )}
+          <EnvironmentsPanel key={envRefreshToken} keyringAvailable={health?.keyring_available ?? true} />
+        </section>
       )}
 
       <DbCompareSettingsSection />
@@ -197,30 +245,38 @@ export function DbComparePage() {
         />
       )}
 
-      <EnvironmentsPanel keyringAvailable={health?.keyring_available ?? true} />
+      {/* Plan 157 F5 — con config_in_place OFF, la gestión de ambientes queda al
+          fondo como en main. */}
+      {!configInPlace && <EnvironmentsPanel keyringAvailable={health?.keyring_available ?? true} />}
 
-      <section className={styles.scriptsSection}>
-        <h2>Scripts de paridad (Plan 125)</h2>
-        <p className={styles.subtitle}>
-          Pegá el ID de una corrida ya terminada (<code>done</code>) para generar y ver sus
-          scripts de paridad + backups pareados 1:1. El listado visual de corridas (Plan 124)
-          todavía no está montado acá; por ahora se busca por ID.
-        </p>
-        <div className={styles.runIdRow}>
-          <input
-            value={runIdInput}
-            onChange={(e) => setRunIdInput(e.target.value)}
-            placeholder="run_20260714T120000Z_DEV_vs_TEST"
-          />
-          <button
-            onClick={() => setActiveRunId(runIdInput.trim() || null)}
-            disabled={!runIdInput.trim()}
-          >
-            Ver scripts
-          </button>
-        </div>
-        {activeRunId && <ScriptsPanel key={activeRunId} runId={activeRunId} />}
-      </section>
+      {/* Plan 157 F6 — Panel de Migración persistente (flag ON) vs. bloque legacy de
+          "pegá el run_id" (flag OFF, backward-compatible con main). */}
+      {migrationPanel ? (
+        <MigrationPanel runs={runs} />
+      ) : (
+        <section className={styles.scriptsSection}>
+          <h2>Scripts de paridad (Plan 125)</h2>
+          <p className={styles.subtitle}>
+            Pegá el ID de una corrida ya terminada (<code>done</code>) para generar y ver sus
+            scripts de paridad + backups pareados 1:1. El listado visual de corridas (Plan 124)
+            todavía no está montado acá; por ahora se busca por ID.
+          </p>
+          <div className={styles.runIdRow}>
+            <input
+              value={runIdInput}
+              onChange={(e) => setRunIdInput(e.target.value)}
+              placeholder="run_20260714T120000Z_DEV_vs_TEST"
+            />
+            <button
+              onClick={() => setActiveRunId(runIdInput.trim() || null)}
+              disabled={!runIdInput.trim()}
+            >
+              Ver scripts
+            </button>
+          </div>
+          {activeRunId && <ScriptsPanel key={activeRunId} runId={activeRunId} />}
+        </section>
+      )}
     </div>
   );
 }

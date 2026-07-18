@@ -325,6 +325,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
         "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",    # Plan 126
         "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
+        "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",   # Plan 157
+        "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",  # Plan 157
+        "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",   # Plan 157
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3202,6 +3205,30 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=100,
         max_value=200000,
+    ),
+    # ── Plan 157 — Comparador de BD: configuración en contexto, import web.config
+    # (agente local determinista) y Panel de Migración siempre visible. 3 flags de
+    # UX bajo el master 122, default ON (curadas en _CURATED_DEFAULTS_ON). ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",
+        type="bool", default=True, requires="STACKY_DB_COMPARE_ENABLED",
+        label="Configurar ambientes desde el propio Comparador",
+        description="Muestra el alta/edición guiada de ambientes de BD dentro del Comparador (arriba de todo), no en una pantalla aparte.",
+        group="comparador_bd",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",
+        type="bool", default=True, requires="STACKY_DB_COMPARE_ENABLED",
+        label="Autodetectar conexión desde web.config",
+        description="Permite elegir un archivo web.config/XMLConfig y autodetectar las connection strings para precargar el ambiente. El parseo es local; la contraseña se enmascara y se guarda en el Administrador de credenciales de Windows.",
+        group="comparador_bd",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",
+        type="bool", default=True, requires="STACKY_DB_COMPARE_ENABLED",
+        label="Panel de Migración de BD siempre visible",
+        description="Muestra un panel persistente de scripts de paridad + backups por corrida, sin pegar el run_id a mano.",
+        group="comparador_bd",
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
     # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de

@@ -132,6 +132,18 @@ class Config:
         os.getenv("STACKY_DB_COMPARE_DATA_MAX_ROWS", "5000")
     )
 
+    # ── Plan 157 — Comparador de BD: config en contexto, import web.config, panel migración ──
+    # 3 flags de UX bajo el master 122 (default ON, togglables por UI de flags).
+    STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

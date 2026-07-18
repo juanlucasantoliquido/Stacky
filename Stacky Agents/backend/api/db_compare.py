@@ -7,10 +7,16 @@ POST .../password (write-only), JAMÁS sale en respuestas ni logs.
 """
 from __future__ import annotations
 
+import json as _json
+import logging
+import os as _os
+
 import config as _config
+import runtime_paths as _rt
 from flask import Blueprint, current_app, jsonify, request
 
 from services import (
+    dbcompare_config_import,
     dbcompare_data,
     dbcompare_engine,
     dbcompare_registry,
@@ -19,7 +25,10 @@ from services import (
     dbcompare_snapshot,
 )
 from services import dbcompare_sqlnames as _sqlnames
+from services import egress_policies as _egress_policies
 from services.db_query import validate_select_only as _validate_select_only
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 
@@ -27,6 +36,16 @@ bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 def _require_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
         return jsonify({"ok": False, "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED)."}), 403
+    return None
+
+
+def _require_webconfig_import_enabled():
+    """[Plan 157 F2] Gate del import local desde web.config/datasource (hija del master)."""
+    if not getattr(_config.config, "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED", False):
+        return jsonify({
+            "ok": False,
+            "error": "Import de web.config deshabilitado (STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED).",
+        }), 403
     return None
 
 
@@ -57,6 +76,11 @@ def health_route():
         # [FIX C5, Plan 126] la UI (F5) lee este campo para mostrar/ocultar el
         # botón "Comparar datos…" sin tener que llamar a un endpoint aparte.
         "data_diff_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", False)),
+        # [Plan 157] flags de UX leídas por el frontend para gatear wizard/import/panel.
+        # Additivo y backward-compatible: con las 3 OFF el frontend queda como main.
+        "config_in_place_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED", False)),
+        "webconfig_import_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED", False)),
+        "migration_panel_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED", False)),
         "keyring_available": dbcompare_registry.keyring_available(),
         "drivers": dbcompare_engine.driver_status(),
     })
@@ -157,6 +181,179 @@ def take_snapshot_route(alias):
     except (ValueError, dbcompare_engine.DbCompareEngineError) as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     return jsonify(snapshot)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Plan 157 F2/F3 — Import local de web.config/datasource (agente local determinista)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_ALLOWED_IMPORT_EXT = (".config", ".xml")
+_MAX_IMPORT_BYTES = 1_000_000
+_MAX_IMPORT_CHARS = 1_000_000
+
+
+def _import_allowlist_roots() -> list[str]:
+    """Raíces permitidas para el modo `path` (C2 v2). Prefijos de realpath normcase."""
+    roots: list[str] = []
+    for fn in (_rt.app_root, _rt.projects_dir, _rt.data_dir):
+        try:
+            roots.append(_os.path.normcase(_os.path.realpath(str(fn()))))
+        except Exception:  # noqa: BLE001 — raíz no resoluble: se omite del allowlist
+            continue
+    return roots
+
+
+def _path_under_allowlist(rp: str) -> bool:
+    ncrp = _os.path.normcase(rp)
+    for root in _import_allowlist_roots():
+        if ncrp == root or ncrp.startswith(root + _os.sep):
+            return True
+    return False
+
+
+def _read_import_source(body: dict):
+    """Devuelve (raw, None) o (None, (response, status)). Modo `content` preferido
+    (FileReader del browser); modo `path` restringido por allowlist (C2 v2)."""
+    content = body.get("content")
+    if isinstance(content, str) and content != "":
+        if len(content) > _MAX_IMPORT_CHARS:
+            return None, (jsonify({"ok": False, "error": "content demasiado grande."}), 413)
+        return content, None
+
+    path = body.get("path")
+    if not isinstance(path, str) or not path.strip():
+        return None, (jsonify({"ok": False, "error": "falta 'content' o 'path'."}), 400)
+
+    rp = _os.path.realpath(path)
+    if not _path_under_allowlist(rp):
+        return None, (jsonify({"ok": False, "error": "path_fuera_de_allowlist"}), 403)
+    if not _os.path.exists(rp):
+        return None, (jsonify({"ok": False, "error": "el archivo no existe."}), 404)
+    if _os.path.isdir(rp):
+        return None, (jsonify({"ok": False, "error": "la ruta es un directorio."}), 400)
+    try:
+        size = _os.path.getsize(rp)
+    except OSError:
+        return None, (jsonify({"ok": False, "error": "no se pudo leer el archivo."}), 400)
+    if size > _MAX_IMPORT_BYTES:
+        return None, (jsonify({"ok": False, "error": "archivo demasiado grande (>1MB)."}), 413)
+    if _os.path.splitext(rp)[1].lower() not in _ALLOWED_IMPORT_EXT:
+        return None, (jsonify({"ok": False, "error": "extensión no permitida (solo .config/.xml)."}), 415)
+    try:
+        with open(rp, "r", encoding="utf-8", errors="replace") as fh:
+            raw = fh.read()
+    except OSError:
+        return None, (jsonify({"ok": False, "error": "no se pudo leer el archivo."}), 400)
+    return raw, None
+
+
+def _build_previews(conns) -> list[dict]:
+    """Previews SEGUROS (sin password, sin masked_raw) + index. Punto monkeypatchable
+    para el test del self-check (F3): si un bug dejara colar un secreto acá, el
+    self-check fail-closed corta la respuesta con 500."""
+    return [
+        {**dbcompare_config_import.preview_dict(pc), "index": i}
+        for i, (pc, _pw) in enumerate(conns)
+    ]
+
+
+def _egress_selfcheck(payload: dict):
+    """[ADICIÓN ARQUITECTO Plan 157] Gate ejecutable fail-closed: serializa el body y
+    lo pasa por el detector de egreso; si aparece la clase `secrets`, ABORTA con 500
+    (preferimos romper a filtrar) y loguea alerta SIN el valor."""
+    blob = _json.dumps(payload, ensure_ascii=False, default=str)
+    if "secrets" in _egress_policies.detect_classes(blob):
+        logger.error("import-config: self-check de egreso BLOQUEO una respuesta con posible secreto")
+        return jsonify({"ok": False, "error": "egress_selfcheck_bloqueo"}), 500
+    return None
+
+
+@bp.post("/environments/import-config")
+def import_config_route():
+    gate = _require_enabled()
+    if gate:
+        return gate
+    gate = _require_webconfig_import_enabled()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    raw, err = _read_import_source(body)
+    if err is not None:
+        return err
+    parece_xml = raw.lstrip().startswith("<")  # C4 v2: dispatch literal, sin heurística
+    if parece_xml:
+        conns = dbcompare_config_import.parse_webconfig(raw)
+    else:
+        conns = [dbcompare_config_import.parse_connection_string(raw)]
+    import_id = dbcompare_config_import.stash_parsed(conns)
+    previews = _build_previews(conns)
+    logger.info("import-config: %d conexiones detectadas", len(previews))  # solo el conteo
+    result = {"ok": True, "import_id": import_id, "connections": previews}
+    blocked = _egress_selfcheck(result)
+    if blocked is not None:
+        return blocked
+    return jsonify(result)
+
+
+@bp.post("/environments/import-config/confirm")
+def confirm_import_route():
+    gate = _require_enabled()
+    if gate:
+        return gate
+    gate = _require_webconfig_import_enabled()
+    if gate:
+        return gate
+    body = request.get_json(silent=True) or {}
+    import_id = body.get("import_id")
+    index = body.get("index")
+    alias = (body.get("alias") or "").strip()
+    overrides = body.get("overrides") if isinstance(body.get("overrides"), dict) else {}
+    if not isinstance(import_id, str) or not isinstance(index, int):
+        return jsonify({"ok": False, "error": "import_id/index inválidos."}), 400
+
+    pc, pw = dbcompare_config_import.pop_parsed(import_id, index)
+    if pc is None:
+        return jsonify({"ok": False, "error": "import_id/index no encontrado o ya consumido."}), 404
+
+    def _pick(key, fallback):
+        v = overrides.get(key)
+        return v if v is not None else fallback
+
+    engine = (str(_pick("engine", pc.engine) or "").strip() or "sqlserver")
+    host = _pick("host", pc.host)
+    port = _pick("port", pc.port)
+    database = _pick("database", pc.database)
+    username = _pick("username", pc.username)
+
+    try:
+        env = dbcompare_registry.upsert_environment(
+            alias=alias,
+            engine=engine,
+            host=str(host or "").strip(),
+            port=port,
+            database=str(database or "").strip(),
+            username=str(username or "").strip(),
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    password_warning = None
+    if pw:
+        if dbcompare_registry.keyring_available():
+            dbcompare_registry.set_password(alias, pw)
+        else:
+            password_warning = (
+                "keyring no disponible: el ambiente se creó pero la contraseña no se "
+                "guardó; seteala manualmente desde el panel de ambientes."
+            )
+
+    result = {"ok": True, "alias": env.get("alias", alias)}
+    if password_warning:
+        result["password_warning"] = password_warning
+    blocked = _egress_selfcheck(result)
+    if blocked is not None:
+        return blocked
+    return jsonify(result)
 
 
 @bp.get("/environments/<alias>/snapshots")

@@ -677,6 +677,12 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 152 — Centro de notificaciones / actividad (bool default ON;
     # superficie informativa aditiva, ninguna de las 4 excepciones duras aplica) ──
     "STACKY_NOTIFICATION_CENTER_ENABLED",
+    # ── Plan 157 — Comparador de BD UX (3 bool default ON bajo el master 122).
+    # WEBCONFIG_IMPORT default ON es válido porque se implementa la allowlist de
+    # raíces (C2/F2) + el self-check de egreso fail-closed (ADICIÓN v2/F3). ──
+    "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",
+    "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",
+    "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",
     # ── Plan 139 — Shell v2 (sidebar) PROMOVIDA a default ON (operador
     # 2026-07-18): deja de ser la excepción OFF; es la presentación de fábrica. ──
     "STACKY_UI_SHELL_V2_ENABLED",

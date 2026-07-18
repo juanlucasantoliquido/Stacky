@@ -25,6 +25,18 @@
         }
       })();
     </script>
+    <script>
+      /* Plan 150 — anti-FOUC de densidad: setea data-density antes del primer paint.
+         Independiente y order-agnostic respecto del snippet de tema (141). */
+      (function () {
+        try {
+          var d = localStorage.getItem("stacky.ui.density");
+          document.documentElement.setAttribute("data-density", d === "compacto" ? "compacto" : "comodo");
+        } catch (e) {
+          document.documentElement.setAttribute("data-density", "comodo");
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/stacky-pixel.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

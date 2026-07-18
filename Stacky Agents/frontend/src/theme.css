@@ -234,6 +234,22 @@
   --color-scheme: light;
 }
 
+/* ─── Plan 150 — Densidad compacta ────────────────────────────────
+   Re-apunta SOLO la escala de spacing del plan 138. Dormido salvo que
+   <html data-density="compacto">. En comodo (base/ausente) el render es
+   byte-idéntico. No toca ningún otro token. */
+:root[data-density="compacto"] {
+  --space-1: 2px;
+  --space-2: 3px;
+  --space-3: 4px;
+  --space-4: 6px;
+  --space-5: 8px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 24px;
+  --space-9: 32px;
+}
+
 /* ─── Reset ───────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
@@ -253,6 +269,13 @@ html, body, #root {
      el esquema oscuro, evitando el bug "blanco sobre blanco" en las <option>. */
   color-scheme: var(--color-scheme);
 }
+
+/* Plan 150 — settle de densidad: SOLO opacity (composite/paint, §143 §4.4).
+   El reflow por re-apuntar --space-* es instantáneo; este fundido corto lo enmascara.
+   La transición vive permanente en #root (barata; opacity solo cambia al togglear).
+   141 F5 (prefers-reduced-motion: reduce) la anula ⇒ cambio instantáneo. */
+#root { transition: var(--transition-opacity); }
+html[data-density-animating] #root { opacity: 0.72; }
 
 /* ─── Controls ────────────────────────────────────────────────── */
 button {

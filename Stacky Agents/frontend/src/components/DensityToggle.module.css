@@ -1,0 +1,23 @@
+/* Plan 150 F3 — estilos del toggle de densidad.
+   Byte-copy de las clases equivalentes de AppearanceSettings.module.css (141 F4)
+   para coherencia visual en el mismo panel. 0 inline styles: ratchet-neutral nato. */
+.group { display: flex; flex-direction: column; gap: var(--space-3); max-width: 480px; }
+.option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-standard),
+              background var(--duration-fast) var(--ease-standard);
+}
+.option:hover { border-color: var(--text-faint); }
+.option.active { border-color: var(--accent); background: var(--bg-elev); }
+.radio { grid-row: 1 / span 2; margin: 0; }
+.optLabel { color: var(--text-primary); font-weight: var(--weight-semibold); font-size: var(--text-md); }
+.optHint { grid-column: 2; color: var(--text-muted); font-size: var(--text-xs); }

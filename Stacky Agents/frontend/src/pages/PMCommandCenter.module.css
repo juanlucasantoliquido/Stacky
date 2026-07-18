@@ -11,7 +11,7 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-6);
   padding: 14px 20px 10px;
   border-bottom: 1px solid #1e1e2e;
   flex-wrap: wrap;
@@ -33,7 +33,7 @@
 .headerActions {
   margin-left: auto;
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   align-items: center;
 }
 
@@ -56,7 +56,7 @@
   color: #94a3b8;
   border: 1px solid #2a2a3a;
   border-radius: 6px;
-  padding: 6px 12px;
+  padding: var(--space-3) var(--space-5);
   font-size: 12px;
   cursor: pointer;
 }
@@ -95,7 +95,7 @@
   letter-spacing: 0.08em;
   color: #94a3b8;
   font-weight: 600;
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-4);
 }
 
 /* ── Sprint Health ── */
@@ -103,13 +103,13 @@
   background: #16161e;
   border: 1px solid #1e1e2e;
   border-radius: 8px;
-  padding: 16px;
+  padding: var(--space-6);
 }
 
 .sprintTop {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--space-5);
   margin-bottom: 14px;
   flex-wrap: wrap;
 }
@@ -129,7 +129,7 @@
 .healthPill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 11px;
@@ -183,17 +183,17 @@
 .dqList {
   list-style: none;
   padding: 0;
-  margin: 6px 0 0;
+  margin: var(--space-3) 0 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 .dqItem {
   font-size: 11px;
   color: #fde68a;
   background: rgba(234, 179, 8, 0.08);
   border-left: 2px solid rgba(234, 179, 8, 0.5);
-  padding: 4px 8px;
+  padding: var(--space-2) var(--space-4);
   border-radius: 0 4px 4px 0;
 }
 
@@ -208,7 +208,7 @@
 .riskList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .riskItem {
@@ -219,7 +219,7 @@
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .riskItem.severityHIGH { border-left-color: #ef4444; }
 .riskItem.severityMEDIUM { border-left-color: #eab308; }
@@ -230,7 +230,7 @@
 .riskHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 
@@ -256,7 +256,7 @@
   font-size: 10px;
   background: #2a2a3a;
   color: #cbd5e1;
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-3);
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -271,7 +271,7 @@
 
 .riskMeta {
   display: flex;
-  gap: 12px;
+  gap: var(--space-5);
   font-size: 10px;
   color: #64748b;
   flex-wrap: wrap;
@@ -312,7 +312,7 @@
 /* ── Filters ── */
 .filterBar {
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   margin-bottom: 10px;
   align-items: center;
   flex-wrap: wrap;
@@ -328,7 +328,7 @@
   color: #e2e8f0;
   border: 1px solid #2a2a3a;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: var(--space-2) var(--space-4);
   font-size: 11px;
   cursor: pointer;
 }
@@ -338,7 +338,7 @@
   color: #94a3b8;
   background: #1e1e2e;
   border: 1px solid #2a2a3a;
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-3);
   border-radius: 3px;
 }
 
@@ -376,7 +376,7 @@
   color: #e2e8f0;
   border: 1px solid #2a2a3a;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: var(--space-2) var(--space-4);
   font-size: 11px;
   cursor: pointer;
 }
@@ -384,7 +384,7 @@
 .aiTotalsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 8px;
+  gap: var(--space-4);
   margin-bottom: 12px;
 }
 
@@ -427,7 +427,7 @@
   letter-spacing: 0.08em;
   color: #94a3b8;
   font-weight: 700;
-  margin: 8px 0 4px;
+  margin: var(--space-4) 0 var(--space-2);
 }
 
 .aiBreakdownTable {
@@ -439,7 +439,7 @@
   text-align: left;
   font-weight: 600;
   color: #64748b;
-  padding: 4px 6px;
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid #25253a;
   font-size: 10px;
   text-transform: uppercase;
@@ -517,7 +517,7 @@
 .modelSelectorBar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   margin-bottom: 12px;
   padding: 8px 10px;
   background: rgba(99, 102, 241, 0.06);
@@ -544,7 +544,7 @@
   font-size: 11px;
   color: #c084fc;
   background: rgba(192, 132, 252, 0.1);
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-4);
   border-radius: 3px;
   font-family: "JetBrains Mono", "Courier New", monospace;
 }
@@ -571,13 +571,13 @@
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 
 .gateCardHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .gateName {
@@ -589,7 +589,7 @@
 .gateStatus {
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-4);
   border-radius: 999px;
   letter-spacing: 0.04em;
 }
@@ -601,13 +601,13 @@
   font-size: 10px;
   color: #94a3b8;
   display: flex;
-  gap: 12px;
+  gap: var(--space-5);
   flex-wrap: wrap;
 }
 
 .gateActions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   flex-wrap: wrap;
   margin-top: 4px;
 }
@@ -653,7 +653,7 @@
 .recList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-4);
 }
 
 .recItem {
@@ -664,7 +664,7 @@
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .recItem.priorityP0 { border-left-color: #ef4444; }
 .recItem.priorityP1 { border-left-color: #eab308; }
@@ -674,14 +674,14 @@
 .recHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 
 .priorityBadge {
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-4);
   border-radius: 4px;
   letter-spacing: 0.04em;
 }
@@ -693,7 +693,7 @@
   font-size: 10px;
   background: #2a2a3a;
   color: #cbd5e1;
-  padding: 2px 6px;
+  padding: var(--space-1) var(--space-3);
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -715,7 +715,7 @@
 
 .recMeta {
   display: flex;
-  gap: 12px;
+  gap: var(--space-5);
   font-size: 10px;
   color: #64748b;
   flex-wrap: wrap;
@@ -725,7 +725,7 @@
 .recConfidence {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   color: #86efac;
 }
 
@@ -739,7 +739,7 @@
 
 .commentsToolbar {
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: 10px;
@@ -766,7 +766,7 @@
 .commentsList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
   max-height: 360px;
   overflow-y: auto;
 }
@@ -776,11 +776,11 @@
   border: 1px solid #25253a;
   border-left: 3px solid #475569;
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: var(--space-4) var(--space-5);
   font-size: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 .commentItem.sentimentPositive { border-left-color: #22c55e; }
 .commentItem.sentimentNegative { border-left-color: #ef4444; }
@@ -790,7 +790,7 @@
 
 .commentHeader {
   display: flex;
-  gap: 8px;
+  gap: var(--space-4);
   align-items: center;
   flex-wrap: wrap;
   font-size: 10px;

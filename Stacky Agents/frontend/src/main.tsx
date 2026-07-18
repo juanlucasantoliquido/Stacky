@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
 import { initThemeController } from "./services/themeController";
+import { initDensity } from "./services/densityController";
 import "./theme.css";
 
 const queryClient = new QueryClient({
@@ -13,6 +14,8 @@ const queryClient = new QueryClient({
 // Plan 141: aplica el tema (idempotente respecto del anti-FOUC de index.html) e
 // instala el listener del SO para el modo "system". Antes de montar React.
 initThemeController();
+// Plan 150: aplica la densidad (idempotente respecto del anti-FOUC de index.html).
+initDensity();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

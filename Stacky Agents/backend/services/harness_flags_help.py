@@ -1408,6 +1408,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el botón desaparece; las incidencias se siguen resolviendo a mano como siempre.",
         example="Publicás una incidencia, apretás 'Resolver con agente', y en minutos tenés un comentario con la causa real y los archivos que cambió.",
     ),
+    "STACKY_NOTIFICATION_CENTER_ENABLED": PlainHelp(
+        what="Agrega una campana en la barra de arriba que junta en un solo lugar lo que fue pasando: qué agentes terminaron, errores de la pantalla y avisos de costo.",
+        on_effect="Si la activás: aparece la campana con un contador de novedades sin leer y un panel que muestra el historial reciente; podés tocar 'Ver' para ir a la pantalla del run. Solo informa, nunca hace acciones por vos.",
+        off_effect="Si la apagás: la campana desaparece y la barra de arriba queda igual que hoy.",
+        example="Dejás corriendo unos agentes, salís a hacer otra cosa, y al volver la campana te muestra cuáles terminaron y si alguno necesita tu revisión, sin tener que buscar en cada pantalla.",
+    ),
 }
 
 

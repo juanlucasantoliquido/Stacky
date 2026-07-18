@@ -1,4 +1,5 @@
 import React, { type ReactNode } from "react";
+import { publishActivity } from "../services/activityCenter"; // Plan 152 F6a
 import styles from "./PageErrorBoundary.module.css";
 
 /**
@@ -29,6 +30,16 @@ export default class PageErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // eslint-disable-next-line no-console
     console.error("[PageErrorBoundary] render error:", error, info);
+    // Plan 152 F6a — deja rastro consultable del error en el Centro de Actividad,
+    // aunque el boundary/toast se hayan ido. Sin nav (no sabe la superficie destino).
+    publishActivity({
+      key: `error:${Date.now()}`,
+      kind: "error",
+      severity: "error",
+      title: "Error en la UI",
+      body: String(error?.message || error),
+      ts: Date.now(),
+    });
   }
 
   componentDidUpdate(prevProps: Props): void {

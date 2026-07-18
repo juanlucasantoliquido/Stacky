@@ -672,6 +672,9 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",
     "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
     "STACKY_INCIDENT_DEV_PR_ENABLED",
+    # ── Plan 152 — Centro de notificaciones / actividad (bool default ON;
+    # superficie informativa aditiva, ninguna de las 4 excepciones duras aplica) ──
+    "STACKY_NOTIFICATION_CENTER_ENABLED",
 }
 
 

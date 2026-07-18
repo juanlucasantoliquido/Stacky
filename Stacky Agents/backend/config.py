@@ -991,6 +991,14 @@ class Config:
         "STACKY_INCIDENT_DEV_PR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 152 — Centro de notificaciones / actividad. Default ON: superficie
+    # informativa aditiva (campana + feed en la barra superior) sin autonomía ni
+    # escritura. OFF oculta la campana y apaga la captura (interfaz idéntica a hoy).
+    # El frontend fail-open a ON si el flag no aparece en la respuesta del endpoint.
+    STACKY_NOTIFICATION_CENTER_ENABLED: bool = os.getenv(
+        "STACKY_NOTIFICATION_CENTER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 77 — Postea análisis funcional/técnico/implementación de un Issue como
     # comentarios idempotentes en el mismo WI (sin tickets hijos). Default OFF.
     STACKY_ISSUE_PHASE_COMMENTS_ENABLED: bool = os.getenv(

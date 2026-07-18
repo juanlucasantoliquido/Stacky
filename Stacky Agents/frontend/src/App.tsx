@@ -34,6 +34,8 @@ import { safeStorage, migrateLegacy, shouldAutoShow } from "./services/onboardin
 import { useOnboardingStore } from "./store/onboardingStore";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
+import { useRunActivityCapture } from "./hooks/useRunActivityCapture"; // Plan 152
+import { HarnessFlags } from "./api/endpoints"; // Plan 152 — lectura del flag del centro de actividad
 import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
 import { reviewBadgeLabel } from "./services/reviewInbox";
 import AppSidebar from "./components/shell/AppSidebar";
@@ -104,7 +106,13 @@ export default function App() {
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
+  // Plan 152 — Centro de Actividad: flag default ON (fail-open). Se lee del
+  // registro canónico de flags vía el endpoint existente; OFF ⇒ campana oculta
+  // + captura apagada (C2). No usa probeFlagHealth (135): ese es para health.
+  const [notifEnabled, setNotifEnabled] = useState(true);
+
   useGlobalExecutionNotifier();
+  useRunActivityCapture(notifEnabled); // Plan 152 F2 — reusa la query compartida (0 requests nuevos)
   const reviewCount = useReviewInboxCount();
   const reviewBadge = reviewBadgeLabel(reviewCount);
 
@@ -170,6 +178,24 @@ export default function App() {
     const onPopState = () => setTab(tabFromPath(window.location.pathname));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Plan 152 F3 — valor efectivo del flag del Centro de Actividad. FAIL-OPEN:
+  // default ON aunque el flag no esté en la respuesta o falle la red (UI aditiva).
+  useEffect(() => {
+    let alive = true;
+    HarnessFlags.list()
+      .then((r) => {
+        if (!alive) return;
+        const f = r.flags.find((x) => x.key === "STACKY_NOTIFICATION_CENTER_ENABLED");
+        setNotifEnabled(f ? f.value === true : true);
+      })
+      .catch(() => {
+        if (alive) setNotifEnabled(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // Plan 151 F5 — migrar la key vieja del prototipo y auto-mostrar el tour SOLO
@@ -270,7 +296,12 @@ export default function App() {
   return (
     <div className={styles.appRoot}>
       <DemoModeBanner />
-      <TopBar onGoToTeam={() => selectTab("team")} shellV2={shellV2Enabled} />
+      <TopBar
+        onGoToTeam={() => selectTab("team")}
+        shellV2={shellV2Enabled}
+        notificationsEnabled={notifEnabled}
+        onActivityNavigate={(nav) => selectTab(nav.tab as Tab)}
+      />
       <HealthBanner />
 
       {shellV2Enabled ? (

@@ -1,0 +1,28 @@
+/* Plan 152 F4 — Campana de notificaciones. 0 estilos inline (KPI-7);
+   todos los valores salen de tokens de theme.css. */
+
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-1);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: var(--text-on-solid);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}

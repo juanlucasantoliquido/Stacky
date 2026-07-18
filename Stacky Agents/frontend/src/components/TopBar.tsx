@@ -9,14 +9,17 @@ import EditProjectModal from "./EditProjectModal";
 import StreakBadge from "./StreakBadge";
 import CostCapIndicator from "./CostCapIndicator";
 import HelpLauncher from "./HelpLauncher";
+import NotificationBell from "./NotificationBell"; // Plan 152
 import styles from "./TopBar.module.css";
 
 interface TopBarProps {
   onGoToTeam?: () => void;
   shellV2?: boolean;   // Plan 139 — aplica el re-estilo v2 (aditivo)
+  notificationsEnabled?: boolean;   // Plan 152 — muestra la campana del Centro de Actividad
+  onActivityNavigate?: (nav: { tab: string; executionId?: number }) => void;   // Plan 152
 }
 
-export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
+export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onActivityNavigate }: TopBarProps) {
   // Plan 134 F4: fuente VIVA — la misma query compartida del panel global
   // (services/activeRuns.ts). El campo de workbench que este badge leía antes
   // estaba muerto: solo lo seteaba useAgentRun (consumidor huérfano
@@ -210,6 +213,7 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
                 : `${activeRunsCount} agentes trabajando…`}
             </span>
           )}
+          {notificationsEnabled && <NotificationBell onNavigate={onActivityNavigate} />}
           <CostCapIndicator projectName={activeProjectName || null} />
           <StreakBadge />
           <span className={styles.version} title={version ? `Versión ${version}` : "dev@local"}>{version ? `v${version}` : "dev@local"}</span>

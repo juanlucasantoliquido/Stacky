@@ -317,6 +317,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",    # Plan 166 F3 — creación directa/lote
         "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
         "STACKY_INCIDENT_DEV_PR_ENABLED",          # Plan 177 — auto-PR del Dev Resolutor
+        "STACKY_NOTIFICATION_CENTER_ENABLED",      # Plan 152 — centro de actividad (campana + feed, default ON)
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -3371,6 +3372,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Abrir PR al resolver incidencias",
         description="Tras resolver una Issue con el agente dev, abre automáticamente un Pull Request con el fix y los tests (podés desmarcar el checkbox al resolver). Requiere el Agente Dev Resolutor.",
         group="global", requires="STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
+    ),
+    # Plan 152 — Centro de Actividad: campana en la barra superior con un feed
+    # de lo que pasó (fines de run, errores de la interfaz, umbrales de costo).
+    # Default ON: es una superficie informativa aditiva, sin autonomía ni
+    # escritura. OFF oculta la campana y apaga la captura (interfaz idéntica a hoy).
+    FlagSpec(
+        key="STACKY_NOTIFICATION_CENTER_ENABLED",
+        type="bool", default=True,
+        label="Centro de notificaciones y actividad",
+        description="Muestra una campana en la barra superior con un contador de novedades sin leer y un feed desplegable que reúne fines de ejecución, errores de la interfaz y avisos de costo. Solo informa y navega; nunca ejecuta acciones. Con OFF la barra queda igual que hoy.",
+        group="global", env_only=False,
     ),
 )
 

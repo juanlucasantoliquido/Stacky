@@ -82,6 +82,7 @@ PASO 2 — RED-TEAM (atacá el plan con ESTE checklist, sin piedad):
   "default seguro" genérico). Marcá también flags sin default declarado.
 - [ ] Orden de fases y dependencias: ¿alguna fase depende de algo que se hace después? ¿Hay scope creep (cosas fuera del objetivo del plan)?
 - [ ] Casos borde y riesgos no contemplados: zombie/timeout, JSON inválido, mismatch ordinal vs id, runs pegados en "running", BD read-only, etc. (usá tu conocimiento del ecosistema Stacky).
+- [ ] Huella de regresión (planes tipo-fix): si el plan MATA una clase de error, ¿registra su huella en `Stacky Agents/docs/sistema/error_fingerprints.json` (id, patrón, plan/commit, fecha, guard_test)? Es convención, no bloqueante: marcá su ausencia como MENOR.
 Para CADA hallazgo, producí: ID (C1, C2, ...), SEVERIDAD (BLOQUEANTE / IMPORTANTE / MENOR), QUÉ está mal, POR QUÉ importa, FIX concreto. Rankeá la lista por severidad (BLOQUEANTE primero).
 
 PASO 3 — VEREDICTO DE JUEZ (binario, con criterios):

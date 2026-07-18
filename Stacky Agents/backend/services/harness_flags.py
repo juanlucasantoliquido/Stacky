@@ -325,6 +325,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
         "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",    # Plan 126
         "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
+        "STACKY_DB_COMPARE_DEMO_ENABLED",         # Plan 183 — sandbox de demostración
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3202,6 +3203,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=100,
         max_value=200000,
+    ),
+    # ── Plan 183 — Comparador de BD: sandbox de demostración (par sqlite RS-like) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DEMO_ENABLED",
+        type="bool",
+        default=True,  # default ON: nada corre solo (seed/delete son por click), sqlite es stdlib, jamás toca una BD real (curada en _CURATED_DEFAULTS_ON).
+        label="Comparador BD: sandbox de demostración",
+        description=(
+            "Par de ambientes sqlite de ejemplo (test-demo-dev/test-demo-test, prefijo "
+            "reservado al sandbox) con drift RS-like, sembrado y quitado con un click. "
+            "Nada corre solo; jamás toca una BD real. OFF = endpoints 403 y cero UI "
+            "(los ambientes ya sembrados persisten como ambientes normales)."
+        ),
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
     # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de

@@ -132,6 +132,13 @@ class Config:
         os.getenv("STACKY_DB_COMPARE_DATA_MAX_ROWS", "5000")
     )
 
+    # ── Plan 183 — Comparador de BD: sandbox de demostración (par sqlite RS-like) ──
+    # Default ON: seed/delete son por click (nada corre solo), sqlite es stdlib y
+    # jamás toca una BD real; curada en _CURATED_DEFAULTS_ON (test_harness_flags).
+    STACKY_DB_COMPARE_DEMO_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_DEMO_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

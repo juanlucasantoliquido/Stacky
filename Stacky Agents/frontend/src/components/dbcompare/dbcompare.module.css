@@ -673,3 +673,56 @@
 .runCardActive {
   border-color: var(--dbc-info);
 }
+
+/* Plan 183 — panel del sandbox de demostración */
+.demoCta,
+.demoSecondary,
+.demoBanner,
+.demoBroken {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-radius: var(--card-radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.demoCta {
+  background: color-mix(in srgb, var(--dbc-info) 10%, var(--bg-panel));
+  border: 1px solid var(--dbc-info);
+}
+
+.demoSecondary {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-muted);
+}
+
+.demoBanner {
+  background: color-mix(in srgb, var(--dbc-added) 10%, var(--bg-panel));
+  border: 1px solid var(--dbc-added);
+}
+
+.demoBroken {
+  background: color-mix(in srgb, var(--dbc-warn) 12%, var(--bg-panel));
+  border: 1px solid var(--dbc-warn);
+}
+
+.demoSubtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.demoActions {
+  display: flex;
+  gap: 8px;
+}
+
+.demoError {
+  flex-basis: 100%;
+  color: var(--dbc-danger);
+  font-size: 0.85rem;
+}

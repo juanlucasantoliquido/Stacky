@@ -609,6 +609,8 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",
     "STACKY_DB_COMPARE_ENABLED",
     "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",
+    "STACKY_DB_COMPARE_DEMO_ENABLED",  # Plan 183 — sandbox de demostración
+
     "INTENT_PREFLIGHT_ENABLED",
     "INTENT_PREFLIGHT_AUTO_APPROVE",  # min_conf queda en su default 0.8
     "STACKY_TRACE_PROMPT_TEXT_ENABLED",  # nota: persiste texto crudo de prompts en traza local

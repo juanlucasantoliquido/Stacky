@@ -36,7 +36,8 @@ export function selectableTargets(
         reason: `Motor distinto (el origen es ${source.engine}).`,
       };
     }
-    if (!e.has_password) {
+    if (!e.has_password && e.engine !== "sqlite") {
+      // Plan 183 §3.2 — sqlite (carril test-*) no exige contraseña en la UI.
       return { alias: e.alias, enabled: false, reason: "Este ambiente no tiene contraseña configurada." };
     }
     return { alias: e.alias, enabled: true, reason: "" };
@@ -58,10 +59,10 @@ export function canLaunch(source: DbEnvironment | null, target: DbEnvironment | 
   if (source.engine !== target.engine) {
     return { ok: false, reason: "Origen y destino deben ser del mismo motor." };
   }
-  if (!source.has_password) {
+  if (!source.has_password && source.engine !== "sqlite") {
     return { ok: false, reason: "El ambiente de origen no tiene contraseña configurada." };
   }
-  if (!target.has_password) {
+  if (!target.has_password && target.engine !== "sqlite") {
     return { ok: false, reason: "El ambiente de destino no tiene contraseña configurada." };
   }
   return { ok: true, reason: "" };

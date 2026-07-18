@@ -5,6 +5,7 @@ import { EMPTY_FILTERS, filterDiffItems, type DiffFilters } from "./filterLogic"
 import { buildSnapshotCounts } from "./snapshotCounts";
 import { EnvironmentsPanel } from "./EnvironmentsPanel";
 import { DbCompareSettingsSection } from "./DbCompareSettingsSection";
+import { DemoSandboxPanel } from "./DemoSandboxPanel";
 import { ScriptsPanel } from "./ScriptsPanel";
 import { CompareWizard } from "./CompareWizard";
 import { RunProgress } from "./RunProgress";
@@ -137,6 +138,8 @@ export function DbComparePage() {
           ))}
         </div>
       )}
+
+      <DemoSandboxPanel environments={environments} onChanged={() => { reloadEnvironments(); reloadRuns(); }} />
 
       <DbCompareSettingsSection />
 

@@ -467,6 +467,11 @@ $HarnessTestFiles = @(
   # — Plan 156 · Latido unico —
   "tests/test_executions_summary.py"
   "tests/test_access_log_suppress_pollers.py"
+  # — Plan 183 · Sandbox demo comparador BD —
+  "tests/test_plan183_demo_seed.py"
+  "tests/test_plan183_demo_lifecycle.py"
+  "tests/test_plan183_demo_api.py"
+  "tests/test_plan183_demo_e2e.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -4269,3 +4269,21 @@ export const Incidents = {
   }) =>
     api.post<{ execution_id: number; status: string }>("/api/agents/run-incident-dev", payload),
 };
+
+// Plan 183 — Sandbox de demostración del comparador (par sqlite RS-like, 1 click).
+export const DbCompareDemo = {
+  seed: () =>
+    api.post<{ ok: boolean; aliases: string[]; paths: string[] }>(
+      "/api/db-compare/demo/seed",
+      {},
+    ),
+  status: () =>
+    api.get<{
+      ok: boolean;
+      status: { registered: boolean; files_present: boolean; aliases: string[]; run_count: number };
+    }>("/api/db-compare/demo/status"),
+  remove: () =>
+    api.delete<{ ok: boolean; removed_aliases: string[]; files_removed: boolean; error: string | null }>(
+      "/api/db-compare/demo",
+    ),
+};

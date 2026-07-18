@@ -139,6 +139,12 @@ class Config:
         "STACKY_DB_COMPARE_DEMO_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 179 — Fidelidad Snapshot v2 (mejora invisible del motor) ────────
+    # Default ON: read-only, sin prerequisitos; captura type_detail por columna.
+    STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

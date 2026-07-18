@@ -326,6 +326,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",    # Plan 126
         "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
         "STACKY_DB_COMPARE_DEMO_ENABLED",         # Plan 183 — sandbox de demostración
+        "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (tipos exactos)
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3216,6 +3217,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Nada corre solo; jamás toca una BD real. OFF = endpoints 403 y cero UI "
             "(los ambientes ya sembrados persisten como ambientes normales)."
         ),
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 179 — Fidelidad Snapshot v2 (tipos exactos + defaults normalizados) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",
+        type="bool",
+        default=True,  # ON: mejora invisible read-only del motor; los snapshots nuevos capturan type_detail. OFF: captura byte-idéntica a v1. El diff es pasivo por versión (usa v2 sii ambos snapshots lo traen).
+        label="Comparador BD: snapshot v2 (fidelidad de tipos)",
+        description="Captura estructurada por columna (precision, scale, length, collation, identity, computed cuando el dialecto los reporta) y diff quirúrgico con defaults normalizados. OFF = snapshots v1 idénticos a antes.",
         group="global",
         requires="STACKY_DB_COMPARE_ENABLED",
     ),

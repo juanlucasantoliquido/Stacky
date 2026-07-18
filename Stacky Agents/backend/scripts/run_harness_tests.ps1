@@ -472,6 +472,9 @@ $HarnessTestFiles = @(
   "tests/test_plan183_demo_lifecycle.py"
   "tests/test_plan183_demo_api.py"
   "tests/test_plan183_demo_e2e.py"
+  # — Plan 179 · Fidelidad snapshot v2 (tipos exactos + diff quirúrgico) —
+  "tests/test_plan179_snapshot_v2.py"
+  "tests/test_plan179_diff_v2.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

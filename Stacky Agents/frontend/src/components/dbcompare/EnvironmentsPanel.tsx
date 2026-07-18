@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DbCompare } from "../../api/endpoints";
 import type { DbEnvironment, TestConnectionResult } from "./dbcompareTypes";
 import { validateEnvironmentForm, defaultPortFor, type EnvironmentFormValues } from "./envForm";
+import { useConfirm } from "../ui";
 import styles from "./dbcompare.module.css";
 
 const EMPTY_FORM: EnvironmentFormValues = {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function EnvironmentsPanel({ keyringAvailable }: Props) {
+  const askConfirm = useConfirm();
   const [environments, setEnvironments] = useState<DbEnvironment[]>([]);
   const [form, setForm] = useState<EnvironmentFormValues>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -55,7 +57,7 @@ export function EnvironmentsPanel({ keyringAvailable }: Props) {
   };
 
   const handleDelete = async (alias: string) => {
-    if (!window.confirm(`¿Eliminar el ambiente '${alias}'? Esto borra también su password guardada.`)) return;
+    if (!(await askConfirm({ title: 'Eliminar ambiente', message: `¿Eliminar el ambiente '${alias}'? Esto borra también su password guardada.`, tone: 'danger', confirmLabel: 'Eliminar' }))) return;
     await DbCompare.deleteEnvironment(alias);
     reload();
   };

@@ -62,9 +62,16 @@ function computeCurrent(): Baseline {
       const n = countMatches(content, INLINE_STYLE_RE);
       if (n > 0) inlineStyleByFile[rel] = n;
     }
-    // Plan 156 F6 — diálogos nativos en .ts/.tsx (excluye __tests__ para no
-    // auto-contarse: el propio archivo del ratchet contiene el regex).
-    if ((rel.endsWith(".ts") || rel.endsWith(".tsx")) && !rel.includes("__tests__/")) {
+    // Plan 156 F6 — diálogos nativos en .ts/.tsx. Excluye __tests__ para no
+    // auto-contarse (el propio archivo del ratchet contiene el regex) Y también
+    // *.test.* (plan 164 C5): src/incidents/incidentModel.test.ts:172 tiene un
+    // fixture que matchea el regex FUERA de __tests__/; sin esta exclusión el
+    // "0 por archivo" de la primitiva Dialog (plan 164 F2) sería inalcanzable.
+    if (
+      (rel.endsWith(".ts") || rel.endsWith(".tsx")) &&
+      !rel.includes("__tests__/") &&
+      !rel.includes(".test.")
+    ) {
       const n = countMatches(content, NATIVE_DIALOG_RE);
       if (n > 0) nativeDialogByFile[rel] = n;
     }
@@ -94,11 +101,15 @@ function assertNoIncrease(current: Baseline, baseline: Baseline): string[] {
       // Robusto a baseline viejo que aún no tiene la dimensión nueva (F6).
       const allowedBase = (baseline[kind] ?? {})[file] ?? 0;
       // Chrome/primitivas del sistema de diseño: SIEMPRE 0 (invariante mecánico).
-      // Cubre ui/ (plan 138) y shell/ (plan 139). NO aplica a diálogos nativos:
-      // es deuda heredada distribuida (only-decrease desde su baseline en frío).
+      // Cubre ui/ (plan 138) y shell/ (plan 139) para hex/inline.
+      // Plan 164 A1: nativeDialogByFile también es forcedZero (para TODO archivo)
+      // tras la migración de F2 a la primitiva Dialog: el 0 es ABSOLUTO — ni un
+      // UI_DEBT_REGEN futuro puede resubirlo. Cualquier reintroducción de un
+      // diálogo nativo del navegador rompe este test.
       const forcedZero =
-        kind !== "nativeDialogByFile" &&
-        (file.startsWith("components/ui/") || file.startsWith("components/shell/"));
+        kind === "nativeDialogByFile" ||
+        file.startsWith("components/ui/") ||
+        file.startsWith("components/shell/");
       const allowed = forcedZero ? 0 : allowedBase;
       if (count > allowed) {
         const hint =

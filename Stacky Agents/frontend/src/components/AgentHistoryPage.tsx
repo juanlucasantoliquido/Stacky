@@ -6,6 +6,8 @@ import { Agents, Executions, Tickets, Projects, type TicketAttachment, type Agen
 import type { AgentExecution } from "../types";
 import { useWorkbench } from "../store/workbench";
 import PixelAvatar from "./PixelAvatar";
+import Toast, { type ToastState } from "./Toast";
+import { useConfirm } from "./ui";
 import styles from "./AgentHistoryPage.module.css";
 
 /*
@@ -246,6 +248,8 @@ function FilesTab({ ticketId, prefixAgentMap = {} }: FilesTabProps) {
   const [detail, setDetail] = useState<{ att: TicketAttachment; mode: "view" | "edit" } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -262,18 +266,18 @@ function FilesTab({ ticketId, prefixAgentMap = {} }: FilesTabProps) {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = useCallback(async (att: TicketAttachment) => {
-    if (!confirm(`Eliminar "${att.name}"?`)) return;
+    if (!(await askConfirm({ title: "Eliminar fichero", message: `Eliminar "${att.name}"?`, tone: "danger", confirmLabel: "Eliminar" }))) return;
     setDeleting(att.id);
     try {
       await Tickets.deleteAttachments(ticketId, [{ id: att.id, url: att.url, name: att.name }]);
       setAttachments((prev) => prev.filter((a) => a.id !== att.id));
       if (detail?.att.id === att.id) setDetail(null);
     } catch (e) {
-      alert(String(e));
+      setActionToast({ variant: "error", body: String(e) });
     } finally {
       setDeleting(null);
     }
-  }, [ticketId, detail]);
+  }, [ticketId, detail, askConfirm]);
 
   const handleDownload = useCallback(async (att: TicketAttachment) => {
     setDownloadingId(att.id);
@@ -282,10 +286,10 @@ function FilesTab({ ticketId, prefixAgentMap = {} }: FilesTabProps) {
       if (r.ok && r.content != null) {
         triggerDownload(att.name, r.content);
       } else {
-        alert(r.error ?? "No se pudo descargar");
+        setActionToast({ variant: "error", body: r.error ?? "No se pudo descargar" });
       }
     } catch (e) {
-      alert(String(e));
+      setActionToast({ variant: "error", body: String(e) });
     } finally {
       setDownloadingId(null);
     }
@@ -313,6 +317,7 @@ function FilesTab({ ticketId, prefixAgentMap = {} }: FilesTabProps) {
   }
 
   return (
+    <>
     <div className={styles.fileList}>
       {attachments.map((att) => {
         const agentLabel = agentForFile(att.name, prefixAgentMap);
@@ -363,6 +368,8 @@ function FilesTab({ ticketId, prefixAgentMap = {} }: FilesTabProps) {
         );
       })}
     </div>
+    {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
+    </>
   );
 }
 
@@ -380,6 +387,8 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
 
   useEffect(() => {
     setLoading(true);
@@ -403,7 +412,7 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
     });
 
   const handleDeleteNote = useCallback(async (ex: AgentExecution) => {
-    if (!confirm(`Eliminar esta ejecucion (#${ex.id})?`)) return;
+    if (!(await askConfirm({ title: "Eliminar ejecución", message: `Eliminar esta ejecucion (#${ex.id})?`, tone: "danger", confirmLabel: "Eliminar" }))) return;
     setDeleting(ex.id);
     try {
       await Executions.deleteOne(ex.id);
@@ -411,17 +420,18 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
       setExecutions(remaining);
       if (remaining.length === 0) onAllDeleted?.();
     } catch (e) {
-      alert(String(e));
+      setActionToast({ variant: "error", body: String(e) });
     } finally {
       setDeleting(null);
     }
-  }, [executions, onAllDeleted]);
+  }, [executions, onAllDeleted, askConfirm]);
 
   if (loading) return <div className={styles.loading}>Cargando notas...</div>;
   if (error) return <div className={styles.error}>{error}</div>;
   if (!executions.length) return <div className={styles.empty}>No hay ejecuciones registradas para este ticket.</div>;
 
   return (
+    <>
     <div className={styles.notesList}>
       {executions.map((ex) => {
         const isExpanded = expanded.has(ex.id);
@@ -471,6 +481,8 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
         );
       })}
     </div>
+    {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
+    </>
   );
 }
 
@@ -486,6 +498,8 @@ export default function AgentHistoryPage({
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
   const [tab, setTab] = useState<"notes" | "files">("notes");
   const [workflow, setWorkflow] = useState<{ allowed_states: string[]; transition_state: string } | null>(null);
   const [forcing, setForcing] = useState(false);
@@ -600,7 +614,7 @@ export default function AgentHistoryPage({
 
   async function handleDeleteTicket(t: AgentHistoryEntry, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm(`Eliminar TODO el historial del ticket #${t.ado_id} "${t.title}"?\n\nSe borraran ${t.executions_count} ejecucion(es). Esta accion no se puede deshacer.`)) return;
+    if (!(await askConfirm({ title: "Eliminar historial", message: `Eliminar TODO el historial del ticket #${t.ado_id} "${t.title}"?\n\nSe borraran ${t.executions_count} ejecucion(es). Esta accion no se puede deshacer.`, tone: "danger", confirmLabel: "Eliminar todo" }))) return;
     setDeletingTicketId(t.ticket_id);
     try {
       await Executions.deleteByTicket(t.ticket_id, filename);
@@ -610,13 +624,14 @@ export default function AgentHistoryPage({
         setSelectedId(remaining.length > 0 ? remaining[0].ticket_id : null);
       }
     } catch (err: unknown) {
-      alert(String(err instanceof Error ? err.message : err));
+      setActionToast({ variant: "error", body: String(err instanceof Error ? err.message : err) });
     } finally {
       setDeletingTicketId(null);
     }
   }
 
   return (
+    <>
     <div className={styles.page}>
       {/* Header */}
       <div className={styles.header}>
@@ -773,5 +788,7 @@ export default function AgentHistoryPage({
         </main>
       </div>
     </div>
+    {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
+    </>
   );
 }

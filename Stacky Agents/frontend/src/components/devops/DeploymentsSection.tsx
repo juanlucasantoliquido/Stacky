@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DevOpsDeployments, DevOps, type DeployApp, type DeployOverviewApp } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import { useTextPrompt } from '../ui';
 import { useWorkbench } from '../../store/workbench';
 import {
   buildTargetCards, rollbackChoices, confirmRequirement, waveOrder, formatDora,
@@ -48,6 +49,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
   const [selectedAppId, setSelectedAppId] = useState<string | null>(
     () => localStorage.getItem(STORAGE_SELECTED_APP),
   );
+  const askText = useTextPrompt();
   const [showNewApp, setShowNewApp] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [planResult, setPlanResult] = useState<Awaited<ReturnType<typeof DevOpsDeployments.plan>> | null>(null);
@@ -133,8 +135,21 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
     if (!app || !rollbackTarget) return;
     const cfg = cards.find((c) => c.key === rollbackTarget);
     const req = confirmRequirement({ protected: cfg?.protected }, app.id);
-    const confirmText = req.kind === 'text' ? window.prompt(`Escribí "${app.id}" para confirmar el rollback`) ?? '' : undefined;
-    if (req.kind === 'text' && confirmText !== app.id) return;
+    let confirmText: string | undefined = undefined;
+    if (req.kind === 'text') {
+      // Entrada de marca con type-to-confirm: el botón sólo se habilita si el
+      // texto coincide EXACTO con app.id (preserva 1:1 la guarda del rollback).
+      const typed = await askText({
+        title: 'Confirmar rollback',
+        message: `Escribí "${app.id}" para confirmar el rollback`,
+        label: 'Confirmación',
+        requiredText: app.id,
+        tone: 'danger',
+        confirmLabel: 'Confirmar rollback',
+      });
+      if (typed !== app.id) return;
+      confirmText = typed;
+    }
     setBusy(true);
     setActionError(null);
     try {

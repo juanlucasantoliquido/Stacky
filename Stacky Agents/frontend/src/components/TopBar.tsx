@@ -11,6 +11,8 @@ import CostCapIndicator from "./CostCapIndicator";
 import HelpLauncher from "./HelpLauncher";
 import NotificationBell from "./NotificationBell"; // Plan 152
 import { versionChipLabel, buildTooltip, driftMessage, type BuildIdentity } from "./buildIdentity"; // Plan 163 F2
+import Toast, { type ToastState } from "./Toast";
+import { useConfirm } from "./ui";
 import styles from "./TopBar.module.css";
 
 interface TopBarProps {
@@ -40,6 +42,8 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectName, setActiveProjectName] = useState<string>("");
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
   const [build, setBuild] = useState<BuildIdentity>({ version: null, sourceCommit: null, builtAt: null, drift: false });
@@ -140,12 +144,12 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
   }
 
   async function handleDeleteProject(name: string) {
-    if (!window.confirm(`¿Eliminar el proyecto "${name}"? Esta acción no se puede deshacer.`)) return;
+    if (!(await askConfirm({ title: "Eliminar proyecto", message: `¿Eliminar el proyecto "${name}"? Esta acción no se puede deshacer.`, tone: "danger", confirmLabel: "Eliminar" }))) return;
     try {
       await Projects.remove(name);
       await loadProjects();
     } catch (e: any) {
-      window.alert(`Error al eliminar: ${e?.message || e}`);
+      setActionToast({ variant: "error", body: `Error al eliminar: ${e?.message || e}` });
     }
   }
 
@@ -243,6 +247,7 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
           onDelete={() => { setEditProjectOpen(false); handleDeleteProject(activeProject.name); }}
         />
       )}
+      {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
     </header>
   );
 }

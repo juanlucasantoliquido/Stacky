@@ -10,6 +10,8 @@ import { SyncStatusBar } from "../components/SyncStatusBar";
 import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
+import Toast, { type ToastState } from "../components/Toast";
+import { useConfirm } from "../components/ui";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
@@ -261,6 +263,8 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
   const [launchError, setLaunchError] = useState<string | null>(null);
   // B6: cancelación del run en curso desde el board.
   const [isCancelling, setIsCancelling] = useState(false);
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
 
   // Regla de negocio #7/#8 (preservada dentro de resolveSuggestedAgent): Tasks y
   // Épicas nunca proponen Negocio — ya tienen análisis previo / botón Funcional.
@@ -337,7 +341,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
   // no hay nada concreto que cancelar y el botón no se muestra.
   const handleCancelRun = useCallback(async () => {
     if (!runningExecution) return;
-    if (!window.confirm("¿Cancelar el run en curso?")) return;
+    if (!(await askConfirm({ title: "Cancelar run", message: "¿Cancelar el run en curso?", tone: "danger", confirmLabel: "Cancelar run", cancelLabel: "Volver" }))) return;
     setIsCancelling(true);
     try {
       await Executions.cancel(runningExecution.id);
@@ -346,8 +350,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
       // error real para el operador; refrescamos y seguimos.
       const msg = error instanceof Error ? error.message : String(error);
       if (!msg.startsWith("409")) {
-        // eslint-disable-next-line no-alert
-        window.alert(`No se pudo cancelar el run: ${msg}`);
+        setActionToast({ variant: "error", body: `No se pudo cancelar el run: ${msg}` });
       }
     } finally {
       setIsCancelling(false);
@@ -360,7 +363,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
         qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
       ]);
     }
-  }, [activeProjectName, qc, runningExecution]);
+  }, [activeProjectName, qc, runningExecution, askConfirm]);
 
   // Plan 166 F5 — "Resolver con agente": lanza el Dev Resolutor sobre esta
   // Issue. Modelo puro de disponibilidad en incidents/devResolverModel.ts
@@ -633,6 +636,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
           onClose={() => setRunModal(null)}
         />
       )}
+      {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
     </>
   );
 }

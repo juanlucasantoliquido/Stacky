@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { Tickets } from "../api/endpoints";
+import { useConfirm } from "./ui";
 
 interface ChildNode {
   work_item_type: string;
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Props) {
+  const askConfirm = useConfirm();
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,9 +81,11 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
   }
 
   const handleCreate = async () => {
-    if (!window.confirm(
-      `¿Crear ${preview.total_children} hijos en ADO (${preview.features.length} Feature(s) + Tasks)?\nEsta acción es idempotente: reintentar no duplica.`
-    )) return;
+    if (!(await askConfirm({
+      title: "Crear hijos en ADO",
+      message: `¿Crear ${preview.total_children} hijos en ADO (${preview.features.length} Feature(s) + Tasks)?\nEsta acción es idempotente: reintentar no duplica.`,
+      confirmLabel: "Crear",
+    }))) return;
 
     setCreating(true);
     setCreateResult(null);

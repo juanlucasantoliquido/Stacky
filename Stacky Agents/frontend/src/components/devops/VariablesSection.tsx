@@ -15,6 +15,7 @@ import { useWorkbench } from '../../store/workbench';
 import { DevOpsVariables, type CIVariableSummary } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { looksSecret, validateVariableKey, canBeMasked } from '../../devops/variablesModel';
+import { useConfirm } from '../ui';
 import styles from './devops.module.css';
 
 export interface VariablesSectionProps {
@@ -55,6 +56,7 @@ export const VariablesSection: React.FC<VariablesSectionProps> = ({ ctx }) => {
     retry: false,
   });
 
+  const askConfirm = useConfirm();
   const [key, setKey] = useState('');
   const [value, setValue] = useState('');
   const [secret, setSecret] = useState(true);
@@ -76,7 +78,7 @@ export const VariablesSection: React.FC<VariablesSectionProps> = ({ ctx }) => {
 
   const handleCreate = async () => {
     if (!canSubmit) return;
-    if (!window.confirm(`¿Guardar la variable '${key}' en el tracker?`)) return;
+    if (!(await askConfirm({ title: 'Guardar variable', message: `¿Guardar la variable '${key}' en el tracker?`, confirmLabel: 'Guardar' }))) return;
     try {
       setActionError(null);
       const result = await DevOpsVariables.create({ project: activeProject, key, value, secret, confirm: true });
@@ -91,7 +93,7 @@ export const VariablesSection: React.FC<VariablesSectionProps> = ({ ctx }) => {
   };
 
   const handleDelete = async (k: string) => {
-    if (!window.confirm(`¿Borrar la variable '${k}' del tracker?`)) return;
+    if (!(await askConfirm({ title: 'Borrar variable', message: `¿Borrar la variable '${k}' del tracker?`, tone: 'danger', confirmLabel: 'Borrar' }))) return;
     try {
       setActionError(null);
       await DevOpsVariables.remove(activeProject, k);

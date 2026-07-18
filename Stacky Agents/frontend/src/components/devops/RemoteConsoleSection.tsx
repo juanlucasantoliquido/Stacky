@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DevOpsRemoteConsole, type RemoteConsoleConversation } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import { useConfirm } from '../ui';
 import styles from './devops.module.css';
 
 export interface RemoteConsoleSectionProps {
@@ -17,6 +18,7 @@ export interface RemoteConsoleSectionProps {
 
 export const RemoteConsoleSection: React.FC<RemoteConsoleSectionProps> = ({ ctx }) => {
   const queryClient = useQueryClient();
+  const askConfirm = useConfirm();
   const [activeTab, setActiveTab] = useState<'conversation' | 'audit'>('conversation');
   // Fix reactividad (bug operador 2026-07-09): derivar SIEMPRE del contexto en
   // cada render. Antes era un useState que congelaba el alias en el montaje y su
@@ -208,9 +210,9 @@ export const RemoteConsoleSection: React.FC<RemoteConsoleSectionProps> = ({ ctx 
                 Modo: <strong>{conv.write_enabled ? 'ESCRITURA' : 'SOLO LECTURA'}</strong>
               </span>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!conv.write_enabled) {
-                    if (confirm('¿Habilitar modo ESCRITURA? Podrás modificar el servidor.')) {
+                    if (await askConfirm({ title: 'Activar escritura', message: '¿Habilitar modo ESCRITURA? Podrás modificar el servidor.', tone: 'danger', confirmLabel: 'Activar escritura' })) {
                       writeModeMutation.mutate(true);
                     }
                   } else {

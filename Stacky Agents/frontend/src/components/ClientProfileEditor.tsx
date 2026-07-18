@@ -15,6 +15,7 @@ import {
   type ClientProfileStateWarning,
 } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
+import { useConfirm } from "./ui";
 import styles from "./ClientProfileEditor.module.css";
 
 // ── Helpers de acceso inmutable (round-trip seguro) ──────────────────────────
@@ -459,6 +460,7 @@ export default function ClientProfileEditor() {
   // baseProfile = fuente de verdad (objeto completo). advancedJson != null → vista JSON.
   const [baseProfile, setBaseProfile] = useState<ClientProfile>({} as ClientProfile);
   const [advancedJson, setAdvancedJson] = useState<string | null>(null);
+  const askConfirm = useConfirm();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -631,9 +633,13 @@ export default function ClientProfileEditor() {
 
   const onClear = async () => {
     if (
-      !confirm(
-        "¿Eliminar el client_profile guardado? El agente seguirá recibiendo los defaults del tracker (marcados como 'sin configurar'), pero perderás los valores que ajustaste."
-      )
+      !(await askConfirm({
+        title: "Eliminar client_profile",
+        message:
+          "¿Eliminar el client_profile guardado? El agente seguirá recibiendo los defaults del tracker (marcados como 'sin configurar'), pero perderás los valores que ajustaste.",
+        tone: "danger",
+        confirmLabel: "Eliminar",
+      }))
     ) {
       return;
     }

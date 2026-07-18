@@ -4,6 +4,7 @@ import { Move, Terminal, X } from "lucide-react";
 import { Executions } from "../api/endpoints";
 import useLocalStorageState from "../hooks/useLocalStorageState";
 import { useActiveRunsGlobal } from "../hooks/useActiveRunsGlobal";
+import { useConfirm } from "./ui";
 import { formatLoadErrorMessage } from "../utils/loadError";
 import { useWorkbench } from "../store/workbench";
 import styles from "./ActiveRunsPanel.module.css";
@@ -29,6 +30,7 @@ function nextCorner(current: Corner): Corner {
 }
 
 export default function ActiveRunsPanel() {
+  const askConfirm = useConfirm();
   const qc = useQueryClient();
 
   // Abrir la consola en vivo de un run reusa el mecanismo único y ya existente
@@ -145,12 +147,16 @@ export default function ActiveRunsPanel() {
                 className={styles.cancelBtn}
                 disabled={cancelling}
                 title="Cancelar esta ejecución (detiene la sesión del agente)"
-                onClick={() => {
+                onClick={async () => {
                   if (cancelling) return;
                   if (
-                    window.confirm(
-                      `¿Cancelar la ejecución #${e.id}? ${e.project ? `[${e.project}] ` : ""}${e.ticket_title ?? `ticket ${e.ticket_id}`} · ${e.agent_type}. Se detendrá la sesión del agente.`
-                    )
+                    await askConfirm({
+                      title: "Cancelar ejecución",
+                      message: `¿Cancelar la ejecución #${e.id}? ${e.project ? `[${e.project}] ` : ""}${e.ticket_title ?? `ticket ${e.ticket_id}`} · ${e.agent_type}. Se detendrá la sesión del agente.`,
+                      tone: "danger",
+                      confirmLabel: "Cancelar ejecución",
+                      cancelLabel: "Volver",
+                    })
                   ) {
                     cancelMutation.mutate(e.id);
                   }

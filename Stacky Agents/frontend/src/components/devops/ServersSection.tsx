@@ -18,6 +18,7 @@ import styles from './devops.module.css';
 import t from './ServersTable.module.css'; // Plan 119 — tabla v2
 import shell from '../../pages/DevOpsPage.module.css'; // Plan 119 — .link real (F0)
 import { mapTestResultToState } from './serversTable';
+import { useConfirm } from '../ui';
 
 export interface ServersSectionProps {
   ctx: DevOpsSectionContext;
@@ -41,6 +42,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
     retry: false,
   });
 
+  const askConfirm = useConfirm();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingAlias, setEditingAlias] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
   };
 
   const handleRemovePassword = async (server: ServerSummary) => {
-    if (!window.confirm(`¿Quitar la contraseña guardada de '${server.alias}'?`)) return;
+    if (!(await askConfirm({ title: 'Quitar contraseña', message: `¿Quitar la contraseña guardada de '${server.alias}'?`, tone: 'danger', confirmLabel: 'Quitar' }))) return;
     try {
       setActionError(null);
       await DevOpsServers.update(server.alias, {
@@ -122,7 +124,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
   };
 
   const handleDelete = async (alias: string) => {
-    if (!window.confirm(`¿Eliminar el servidor '${alias}' y su credencial guardada?`)) return;
+    if (!(await askConfirm({ title: 'Eliminar servidor', message: `¿Eliminar el servidor '${alias}' y su credencial guardada?`, tone: 'danger', confirmLabel: 'Eliminar' }))) return;
     try {
       setActionError(null);
       await DevOpsServers.remove(alias);

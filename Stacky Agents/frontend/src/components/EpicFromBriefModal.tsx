@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Agents, ClaudeCli, Executions, Tickets, type ClaudeSessionStatus, type IntentBriefDTO } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
+import { useConfirm } from "./ui";
 import {
   isCliRuntime,
   openConsoleIfCliRuntime,
@@ -91,6 +92,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
 
+  const askConfirm = useConfirm();
   const [step, setStep] = useState<Step>("brief");
   // Plan 136 F2 — re-hidratar el borrador de la sesión (clave por proyecto).
   const [brief, setBrief] = useState<string>(() =>
@@ -394,7 +396,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   // Plan 42 F6 — Cancelar ejecución en curso.
   async function handleStop() {
     if (!runningExecutionId || isCancelling) return;
-    if (!window.confirm("¿Cancelar la generación en curso?")) return;
+    if (!(await askConfirm({ title: "Cancelar generación", message: "¿Cancelar la generación en curso?", tone: "danger", confirmLabel: "Cancelar generación", cancelLabel: "Volver" }))) return;
     setIsCancelling(true);
     try {
       await Executions.cancel(runningExecutionId);

@@ -1,4 +1,4 @@
-# Plan 187 — DevOps: del fallo a la incidencia — evidencia determinista y modal prellenado (HITL)
+# Plan 188 — DevOps: del fallo a la incidencia — evidencia determinista y modal prellenado (HITL)
 
 - **Versión:** v1 (PROPUESTO)
 - **Fecha:** 2026-07-18
@@ -103,7 +103,7 @@ pipeline CI, doctor 96) en v2.
 - EDITAR `Stacky Agents/backend/api/devops_deployments.py`
 - EDITAR `Stacky Agents/backend/tests/test_harness_flags_requires.py`
 - EDITAR `Stacky Agents/backend/scripts/run_harness_tests.sh`
-- CREAR `Stacky Agents/backend/tests/test_plan187_evidence_flag.py`
+- CREAR `Stacky Agents/backend/tests/test_plan188_evidence_flag.py`
 
 **Cambios exactos:**
 
@@ -127,13 +127,13 @@ FlagSpec(
 ```
 
 2. `harness_flags.py` — agregar `"STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED"` a `_CURATED_DEFAULTS_ON`
-   (bloque DEVOPS ~:200-216, comentario `# Plan 187 — evidencia de fallos de despliegue`).
+   (bloque DEVOPS ~:200-216, comentario `# Plan 188 — evidencia de fallos de despliegue`).
    **Gotcha:** bool default ON fuera de esa lista rompe `test_default_known_only_for_curated`.
 
 3. CREAR `services/devops_evidence.py`:
 
 ```python
-"""services/devops_evidence.py — Plan 187. Evidencia determinista de fallos de deploy.
+"""services/devops_evidence.py — Plan 188. Evidencia determinista de fallos de deploy.
 
 PURO respecto de la red: lee SOLO el ledger local vía services.deploy_store.
 NUNCA importa requests/remote_exec/ci_variables. Sin LLM.
@@ -143,7 +143,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 
-SCHEMA_VERSION = "187.1"
+SCHEMA_VERSION = "188.1"
 
 MAX_SUMMARY_CHARS = 120
 MAX_MODAL_TEXT_CHARS = 18_000      # margen bajo MAX_TEXT_LEN=20_000 (incident_store.py:26)
@@ -181,7 +181,7 @@ def build_deploy_failure_evidence(
 ```python
 @bp.post("/evidence")
 def evidence_route():
-    """Run fallido → paquete de evidencia (solo-lectura local). Plan 187."""
+    """Run fallido → paquete de evidencia (solo-lectura local). Plan 188."""
     _guard_master()  # flag del Centro (patrón :37-39)
     if not bool(getattr(_config.config, "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED", False)):
         abort(404)
@@ -202,10 +202,10 @@ def evidence_route():
 5. Edge `STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED → STACKY_DEVOPS_PANEL_ENABLED` en
    `tests/test_harness_flags_requires.py` (misma estructura que las aristas DEVOPS existentes).
 
-6. `test_plan187_evidence_flag.py` a `HARNESS_TEST_FILES` en `scripts/run_harness_tests.sh`
+6. `test_plan188_evidence_flag.py` a `HARNESS_TEST_FILES` en `scripts/run_harness_tests.sh`
    (**gotcha:** si falta, `test_harness_ratchet_meta.py` rojo).
 
-**Tests PRIMERO** — `tests/test_plan187_evidence_flag.py`:
+**Tests PRIMERO** — `tests/test_plan188_evidence_flag.py`:
 - `test_flag_declarada_bool_default_on` — FlagSpec existe, `type=="bool"`, `default is True`,
   `requires=="STACKY_DEVOPS_PANEL_ENABLED"`.
 - `test_flag_en_curated_defaults_on`.
@@ -215,7 +215,7 @@ def evidence_route():
 - `test_endpoint_404_run_inexistente` — ids válidos en forma pero run inexistente → 404
   `run_not_found` (con ledger vacío monkeypatcheado: `deploy_store.read_ledger` → `[]`).
 
-**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan187_evidence_flag.py -q`
+**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan188_evidence_flag.py -q`
 (cwd = `Stacky Agents\backend`; SIEMPRE por archivo).
 
 **Criterio binario:** los 6 tests pasan Y `test_harness_ratchet_meta.py` sigue verde.
@@ -236,7 +236,7 @@ local pura; la acción con efecto — crear incidencia — sigue en el modal HIT
 
 **Archivos:**
 - EDITAR `Stacky Agents/backend/services/devops_evidence.py`
-- CREAR `Stacky Agents/backend/tests/test_plan187_evidence_builder.py`
+- CREAR `Stacky Agents/backend/tests/test_plan188_evidence_builder.py`
 - EDITAR `Stacky Agents/backend/scripts/run_harness_tests.sh` (registrar el test)
 
 **Diseño interno (exacto):**
@@ -284,7 +284,7 @@ def _tail(text: str, n: int = TAIL_LINES) -> str:
    `"\n\n[Evidencia completa en evidencia.md adjunta]"` si se cortó.
 10. Return `EvidenceBundle(summary, modal_text, markdown, json_payload)`.
 
-**Tests PRIMERO** — `tests/test_plan187_evidence_builder.py` (fixture: entry golden INLINE con 3
+**Tests PRIMERO** — `tests/test_plan188_evidence_builder.py` (fixture: entry golden INLINE con 3
 steps — el 2.º fallido con 200 líneas de stdout —, smoke `{"kind":"http","ok":False,...}`, y cfg del
 target con `DEPLOY_TOKEN` y `DB_PASSWORD`; `deploy_store` monkeypatcheado en memoria):
 - `test_none_si_run_inexistente`.
@@ -301,7 +301,7 @@ target con `DEPLOY_TOKEN` y `DB_PASSWORD`; `deploy_store` monkeypatcheado en mem
   smoke y el markdown lo dice ("Falló el smoke").
 - `test_secciones_markdown_exactas` — las 5 secciones `##` aparecen en orden.
 
-**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan187_evidence_builder.py -q`
+**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan188_evidence_builder.py -q`
 
 **Criterio binario:** los 8 tests pasan (KPI-1, KPI-2, KPI-3 completos).
 
@@ -318,7 +318,7 @@ target con `DEPLOY_TOKEN` y `DB_PASSWORD`; `deploy_store` monkeypatcheado en mem
 **Archivos:**
 - EDITAR `Stacky Agents/backend/api/devops_deployments.py` (la ruta de F0 ya llama al builder; en
   esta fase solo se congela el contrato con tests de integración)
-- CREAR `Stacky Agents/backend/tests/test_plan187_evidence_endpoint.py`
+- CREAR `Stacky Agents/backend/tests/test_plan188_evidence_endpoint.py`
 - EDITAR `Stacky Agents/backend/scripts/run_harness_tests.sh` (registrar el test)
 
 **Contrato de respuesta (EXACTO, congelado):**
@@ -329,21 +329,21 @@ target con `DEPLOY_TOKEN` y `DB_PASSWORD`; `deploy_store` monkeypatcheado en mem
     "summary": "Despliegue fallido: MiApp → PF-TEST (failed_smoke, v1.4.2)",
     "modal_text": "…(≤18000 chars)…",
     "markdown": "…(≤100000 chars)…",
-    "json_payload": { "schema_version": "187.1", "kind": "deploy_failure", "...": "..." }
+    "json_payload": { "schema_version": "188.1", "kind": "deploy_failure", "...": "..." }
   }
 }
 ```
 
-**Tests PRIMERO** — `tests/test_plan187_evidence_endpoint.py` (Flask test client, patrón
+**Tests PRIMERO** — `tests/test_plan188_evidence_endpoint.py` (Flask test client, patrón
 `tests/test_plan87_devops_endpoints.py`; `deploy_store` monkeypatcheado con el fixture golden de F1):
 - `test_200_shape_completo` — keys exactas `{summary, modal_text, markdown, json_payload}` y
-  `json_payload.schema_version == "187.1"`.
+  `json_payload.schema_version == "188.1"`.
 - `test_404_run_not_found_con_ledger_real_vacio`.
 - `test_400_faltan_campos` — cada uno de los 3 campos ausente → 400.
 - `test_logger_llamado` — monkeypatch de `stacky_logger.info` → llamado con evento
   `evidence_built` y `run_id` correcto.
 
-**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan187_evidence_endpoint.py -q`
+**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan188_evidence_endpoint.py -q`
 
 **Criterio binario:** los 4 tests pasan.
 
@@ -381,8 +381,8 @@ export function resolveModalInit(
 ```typescript
 interface IncidentResolverModalProps {
   onClose: () => void;
-  initialText?: string;   // Plan 187 — prellenado opcional (default: vacío, igual que hoy)
-  initialFiles?: File[];  // Plan 187 — adjuntos opcionales
+  initialText?: string;   // Plan 188 — prellenado opcional (default: vacío, igual que hoy)
+  initialFiles?: File[];  // Plan 188 — adjuntos opcionales
 }
 ```
 
@@ -531,8 +531,8 @@ verdes).
 
 ## 9. Definición de Hecho (DoD) global
 
-- [ ] Los 5 archivos de test (`test_plan187_evidence_flag.py`, `test_plan187_evidence_builder.py`,
-      `test_plan187_evidence_endpoint.py`, `incidentModalInit.test.ts`, `deployEvidence.test.ts`)
+- [ ] Los 5 archivos de test (`test_plan188_evidence_flag.py`, `test_plan188_evidence_builder.py`,
+      `test_plan188_evidence_endpoint.py`, `incidentModalInit.test.ts`, `deployEvidence.test.ts`)
       pasan POR ARCHIVO con el intérprete correcto (`venv\Scripts\python.exe -m pytest …` /
       `npx vitest run …`).
 - [ ] `test_harness_ratchet_meta.py`, `test_harness_flags_requires.py` y

@@ -1313,8 +1313,12 @@ class Config:
     # imponerle al operador mono-usuario un cambio de paradigma de navegación
     # visible en cada pantalla sin que lo haya elegido él mismo.
     # Con OFF la interfaz es byte-idéntica a la actual.
+    # PROMOVIDA a default ON (operador 2026-07-18): el shell v2 (navegación
+    # lateral agrupada) es ahora la presentación de fábrica; el operador puede
+    # volver al topnav clásico apagando la flag por UI. Curada en
+    # _CURATED_DEFAULTS_ON (test_harness_flags) y espejada en la FlagSpec.
     STACKY_UI_SHELL_V2_ENABLED: bool = os.getenv(
-        "STACKY_UI_SHELL_V2_ENABLED", "false"
+        "STACKY_UI_SHELL_V2_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 148 — Degradación explícita de integraciones no configuradas. Default ON

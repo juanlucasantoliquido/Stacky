@@ -675,6 +675,9 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 152 — Centro de notificaciones / actividad (bool default ON;
     # superficie informativa aditiva, ninguna de las 4 excepciones duras aplica) ──
     "STACKY_NOTIFICATION_CENTER_ENABLED",
+    # ── Plan 139 — Shell v2 (sidebar) PROMOVIDA a default ON (operador
+    # 2026-07-18): deja de ser la excepción OFF; es la presentación de fábrica. ──
+    "STACKY_UI_SHELL_V2_ENABLED",
 }
 
 

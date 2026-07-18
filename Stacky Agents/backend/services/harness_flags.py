@@ -3176,9 +3176,10 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         max_value=200000,
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
-    # Default OFF (decisión de criterio, ver comentario largo en config.py):
-    # reemplaza el chrome de navegación completo; mismo patrón sin objeciones
-    # del plan 119 (STACKY_DEVOPS_UI_V2_ENABLED, también default OFF).
+    # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de
+    # fábrica. Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated
+    # exige la pertenencia al set); el default efectivo True vive también en
+    # config.py. El operador puede volver al topnav apagando la flag por UI.
     FlagSpec(
         key="STACKY_UI_SHELL_V2_ENABLED",
         type="bool",
@@ -3186,11 +3187,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 139 — Reemplaza la fila de pestañas superior por una barra lateral "
             "agrupada por temas (Trabajo, Observabilidad, Conocimiento, Plataforma, "
-            "Configuración) con iconografía y una barra superior renovada. Default OFF: "
-            "con OFF la interfaz es idéntica a la actual. Solo cambia la presentación; "
-            "mismas pantallas y misma navegación."
+            "Configuración) con iconografía y una barra superior renovada. Default ON: "
+            "es la presentación de fábrica. Apagala para volver al topnav clásico. Solo "
+            "cambia la presentación; mismas pantallas y misma navegación."
         ),
         group="global",
+        default=True,  # promovida a default ON (operador 2026-07-18, curada en _CURATED_DEFAULTS_ON)
     ),
     # ── Plan 121 — Centinela local de egreso ──────────────────────────────────
     FlagSpec(

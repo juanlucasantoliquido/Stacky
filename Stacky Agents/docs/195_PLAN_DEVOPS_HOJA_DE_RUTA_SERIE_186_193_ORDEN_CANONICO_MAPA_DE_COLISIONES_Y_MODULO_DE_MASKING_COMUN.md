@@ -1,9 +1,33 @@
 # Plan 195 — DevOps: hoja de ruta de la serie 186-193 — orden canónico, mapa de colisiones y módulo de masking común
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps — capstone de coordinación (precedente en la casa: plan 184, hoja de ruta DB Compare)
+
+## Changelog v1 → v2 (crítica C1..C5 + adición)
+
+- **C1 (IMPORTANTE, spec-drift):** el criterio de masking del módulo común (§6) queda declarado
+  CANÓNICO (prefijo + ≥8 chars de `[A-Za-z0-9_./+-]`); donde un plan hermano diga otra cosa en
+  letra (p.ej. 186 PL012b "valor ≥12 chars"), al adoptar el módulo ADOPTA este criterio — y se
+  verificó que los casos de test NOMBRADOS de 186/188/193 pasan igual con él (`"ghp_"+"x"*20` y
+  `"glpat-"+"x"*12` matchean ambos criterios).
+- **C2 (IMPORTANTE, agujero del gate):** §7.4 pasa de `grep test_plan` a `grep "test_"` — sin eso,
+  duplicados de tests sin prefijo `test_plan` (como el propio `test_secret_masking.py` de esta
+  hoja) escapaban al chequeo.
+- **C4 (IMPORTANTE, pisada al venv ajeno):** Gate 0 NUNCA recrea el venv in-place — `venv/` está
+  untracked y la sesión paralela puede estar usándolo AHORA (ella lo dejó en py3.11). v2: primero
+  determinar el intérprete ESPERADO (leer `deployment/build_release.ps1` → `Resolve-Python` /
+  requirements); si difiere del actual, crear un venv SEPARADO (`venv313/`) para la serie y
+  anotarlo en §8; la consolidación/borrado del viejo se decide CON el operador (única pausa HITL
+  de la ruta).
+- **C3 (MENOR):** convención de commits del registro §8: `docs(plan-195): registro <item>` — solo
+  se edita la tabla §8, nada más del doc.
+- **C5 (MENOR):** documentado: si un plan se implementa ignorando la regla de adopción del módulo,
+  KPI-2 falla AL FINAL — ese fallo es la señal deseada, no un bug de la ruta.
+- **[ADICIÓN ARQUITECTO]:** los gates backend dejan de ser recetas manuales:
+  `scripts/check_serie_gates.sh` (contenido exacto en §7bis) corre compileall + greps de
+  duplicados en 1 comando; §7 pasa a "correr el script + tsc + test del plan".
 
 ---
 
@@ -81,10 +105,15 @@ costó una sesión entera de auditoría.
 ## 4. Gate 0 — saneo de entorno (ANTES de implementar cualquier plan)
 
 1. `cd "Stacky Agents\backend"` y `venv\Scripts\python.exe --version`.
-   - Si NO es py3.13: recrear el venv con el intérprete del repo
-     (`py -3.13 -m venv venv` + `venv\Scripts\python.exe -m pip install -r requirements.txt` — si
-     `requirements.txt` no existe, instalar los paquetes que importan los tests del primer plan y
-     ANOTAR el faltante acá).
+   - Determinar el intérprete ESPERADO leyendo `deployment/build_release.ps1` (función
+     `Resolve-Python`) y/o requirements — NO asumir py3.13 de memoria (C4).
+   - Si el venv actual difiere del esperado: **PROHIBIDO recrearlo in-place** — `venv/` está
+     untracked y la sesión paralela puede estar usándolo en este momento. Crear un venv SEPARADO:
+     `py -3.13 -m venv venv313` + `venv313\Scripts\python.exe -m pip install -r requirements.txt`
+     (si `requirements.txt` no existe, instalar lo que importen los tests del primer plan y ANOTAR
+     el faltante en §8). TODA la serie usa entonces `venv313\Scripts\python.exe` en los comandos, y
+     la consolidación/borrado del venv viejo se decide CON el operador al cierre (única pausa HITL
+     de esta ruta).
 2. `venv\Scripts\python.exe -m pytest tests\test_harness_ratchet_meta.py -q` — registrar el
    resultado EN ESTE DOC (sección 8):
    - VERDE → los DoD de la serie usan "sigue verde".
@@ -187,12 +216,39 @@ Ejecutar los 5, en orden; cualquier fallo se arregla ANTES de arrancar el siguie
 2. `npx tsc --noEmit` (cwd frontend) → sin errores nuevos vs. lo anotado en Gate 0.
 3. Duplicados de flags: `grep -o "STACKY_[A-Z_]*_ENABLED" "Stacky Agents/backend/services/harness_flags.py" | sort | uniq -d`
    → salida VACÍA (una key duplicada = pisada silenciosa).
-4. Duplicados de registro: `sort "Stacky Agents/backend/scripts/run_harness_tests.sh" | uniq -d | grep test_plan` → VACÍA.
+4. Duplicados de registro: `sort "Stacky Agents/backend/scripts/run_harness_tests.sh" | uniq -d | grep "test_"` → VACÍA (C2: `test_`, NO `test_plan` — atrapa también `test_secret_masking.py`).
 5. El archivo de tests del plan recién mergeado corre verde POR ARCHIVO (gotcha reload de config).
+
+### 7bis. [ADICIÓN ARQUITECTO] Script ejecutable de los gates backend
+
+CREAR `Stacky Agents/backend/scripts/check_serie_gates.sh` (lo crea quien ejecuta el Gate 0; se
+corre con Git Bash, igual que `run_harness_tests.sh`):
+
+```bash
+#!/usr/bin/env bash
+# Plan 195 — gates §7.1/7.3/7.4 en un comando. Exit 0 = todo limpio.
+set -u
+fail=0
+python -m compileall .. -q || { echo "GATE1 compileall FALLO"; fail=1; }
+dups_flags=$(grep -o "STACKY_[A-Z_]*_ENABLED" ../services/harness_flags.py | sort | uniq -d)
+[ -n "$dups_flags" ] && { echo "GATE3 flags duplicadas: $dups_flags"; fail=1; }
+dups_tests=$(sort ./run_harness_tests.sh | uniq -d | grep "test_")
+[ -n "$dups_tests" ] && { echo "GATE4 registros duplicados: $dups_tests"; fail=1; }
+[ $fail -eq 0 ] && echo "GATES BACKEND OK"
+exit $fail
+```
+
+Con el script, §7 queda: (a) `bash scripts/check_serie_gates.sh` (gates 1/3/4), (b) `npx tsc
+--noEmit` (gate 2, frontend), (c) test del plan por archivo (gate 5). Sin flag: es tooling de
+desarrollo, no producto (no toca runtime ni UI).
 
 ---
 
 ## 8. Registro de ejecución (lo completa quien implementa — vive en este doc)
+
+**Convención (C3):** cada actualización de esta tabla se commitea como
+`docs(plan-195): registro <item>` tocando SOLO esta tabla. **Criterio canónico de masking (C1):**
+el de §6 (prefijo + ≥8 chars del set); los planes hermanos lo adoptan al importar el módulo.
 
 | Ítem | Resultado | Fecha |
 |------|-----------|-------|

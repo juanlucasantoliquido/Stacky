@@ -592,6 +592,22 @@
   cursor: not-allowed;
 }
 
+/* Plan 177 — checkbox "Abrir PR" (premarcado) junto al botón Resolver. */
+.openPrCheckbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-warning-solid);
+  cursor: pointer;
+  user-select: none;
+}
+.openPrCheckbox input {
+  cursor: pointer;
+}
+
 /* B6 — Botón cancelar run (rojo, junto a Finish work) */
 .cancelRunBtn {
   display: inline-flex;

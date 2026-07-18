@@ -4223,6 +4223,7 @@ export const Incidents = {
     project?: string | null;
     model?: string | null;
     effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    open_pr?: boolean; // Plan 177 — checkbox "Abrir PR" del board
   }) =>
     api.post<{ execution_id: number; status: string }>("/api/agents/run-incident-dev", payload),
 };

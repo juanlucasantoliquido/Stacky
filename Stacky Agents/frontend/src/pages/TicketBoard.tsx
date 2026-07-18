@@ -32,6 +32,7 @@ import {
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 import { canResolveWithAgent } from "../incidents/devResolverModel";
+import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
@@ -244,9 +245,11 @@ interface TicketCardProps {
   /** Plan 166 F5 — dev_resolver_enabled del mismo Incidents.status() que ya
    * consume el board (:715). */
   devResolverEnabled?: boolean;
+  /** Plan 177 — dev_pr_enabled del mismo Incidents.status(); muestra el checkbox "Abrir PR". */
+  devPrEnabled?: boolean;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent, devResolverEnabled }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent, devResolverEnabled, devPrEnabled }: TicketCardProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -370,6 +373,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     enabled: Boolean(devResolverEnabled),
     closedStates: CLOSED_STATES,
   });
+  // Plan 177 — checkbox "Abrir PR" (premarcado); solo visible si dev_pr_enabled.
+  const [openPr, setOpenPr] = useState(DEFAULT_OPEN_PR);
+  const showOpenPr = shouldShowOpenPrCheckbox({ canResolve: canResolveIncident, devPrEnabled: Boolean(devPrEnabled) });
 
   const handleResolveWithAgent = useCallback(async () => {
     setIsResolvingIncident(true);
@@ -382,6 +388,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
         ticket_id: ticket.id,
         runtime: agentRuntime,
         project: activeProjectName,
+        open_pr: showOpenPr ? openPr : false, // Plan 177 — solo si el checkbox está visible
       });
       openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
       await Promise.all([
@@ -394,7 +401,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     } finally {
       setIsResolvingIncident(false);
     }
-  }, [activeProjectName, agentRuntime, qc, setCodexConsoleExecution, ticket.id]);
+  }, [activeProjectName, agentRuntime, qc, setCodexConsoleExecution, ticket.id, openPr, showOpenPr]);
 
   return (
     <>
@@ -543,6 +550,22 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                   {isResolvingIncident ? "⏳ Lanzando…" : "🔧 Resolver con agente"}
                 </button>
               )}
+              {/* Plan 177 — checkbox "Abrir PR" (premarcado), solo si dev_pr_enabled. */}
+              {showOpenPr && (
+                <label
+                  className={styles.openPrCheckbox}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Al terminar, abrir un Pull Request con el fix y los tests"
+                >
+                  <input
+                    type="checkbox"
+                    checked={openPr}
+                    onChange={(e) => setOpenPr(e.target.checked)}
+                    disabled={isResolvingIncident}
+                  />
+                  Abrir PR
+                </label>
+              )}
             </div>
 
             {pipelineQ.data && (
@@ -625,9 +648,11 @@ interface EpicGroupProps {
   flowConfigMap: Map<string, string>;
   /** Plan 166 F5 — propagado desde TicketBoard raíz */
   devResolverEnabled?: boolean;
+  /** Plan 177 — dev_pr_enabled del mismo Incidents.status(); muestra el checkbox "Abrir PR". */
+  devPrEnabled?: boolean;
 }
 
-function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap, devResolverEnabled }: EpicGroupProps) {
+function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap, devResolverEnabled, devPrEnabled }: EpicGroupProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -740,7 +765,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
                 memoryBadge={memoryBadges[String(child.id)] ?? null}
                 flowConfigMap={flowConfigMap}
                 indent
-                devResolverEnabled={devResolverEnabled}
+                devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
               />
             ))
           )}
@@ -767,15 +792,19 @@ export default function TicketBoard() {
   // Plan 166 F5 — mismo consumo de Incidents.status() de arriba, extendido
   // con dev_resolver_enabled para el botón "Resolver con agente" del board.
   const [devResolverEnabled, setDevResolverEnabled] = useState(false);
+  // Plan 177 — mismo Incidents.status(), campo dev_pr_enabled para el checkbox "Abrir PR".
+  const [devPrEnabled, setDevPrEnabled] = useState(false);
   useEffect(() => {
     void (async () => {
       try {
         const s = await Incidents.status();
         setIncidentsEnabled(s.enabled);
         setDevResolverEnabled(Boolean(s.dev_resolver_enabled));
+        setDevPrEnabled(Boolean(s.dev_pr_enabled));
       } catch {
         setIncidentsEnabled(false);
         setDevResolverEnabled(false);
+        setDevPrEnabled(false);
       }
     })();
   }, []);
@@ -1144,7 +1173,7 @@ export default function TicketBoard() {
                   vsCodeAgents={vsCodeAgents ?? []}
                   memoryBadges={memoryBadges}
                   flowConfigMap={flowConfigMap}
-                  devResolverEnabled={devResolverEnabled}
+                  devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
                 />
               ))}
               {filteredOrphans.length > 0 && (
@@ -1162,7 +1191,7 @@ export default function TicketBoard() {
                         vsCodeAgents={vsCodeAgents ?? []}
                         memoryBadge={memoryBadges[String(t.id)] ?? null}
                         flowConfigMap={flowConfigMap}
-                        devResolverEnabled={devResolverEnabled}
+                        devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
                       />
                     ))}
                   </div>

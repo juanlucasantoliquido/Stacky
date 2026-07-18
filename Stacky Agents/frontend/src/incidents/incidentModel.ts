@@ -11,6 +11,8 @@ export interface IncidentStatusDTO {
   auto_publish_enabled?: boolean;
   /** Plan 166 F5 — con true, el board muestra "Resolver con agente" en las Issues. */
   dev_resolver_enabled?: boolean;
+  /** Plan 177 — con true, el board muestra el checkbox "Abrir PR" junto al botón. */
+  dev_pr_enabled?: boolean;
 }
 
 export interface IncidentFileDTO {

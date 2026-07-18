@@ -1,9 +1,25 @@
 # Plan 198 — DevOps: bitácora de applies de ambientes — historial durable y drift de layout por fingerprint
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (cierra la tríada de efectos remotos con registro: deploys 120 ✓, CI 191 ✓, applies de ambientes ← este; se SUMA a la ruta 195)
+
+## Changelog v1 → v2 (crítica C1..C4 + adición)
+
+- **C1 (IMPORTANTE, narrativa fáctica):** `layout_fingerprint` se computa sobre el CATÁLOGO
+  (definición del layout), NO sobre el disco — la v1 vendía "¿alguien tocó las carpetas después de
+  mí?", que este fingerprint NO detecta. v2 corrige objetivo, badge y glosario: el drift es
+  **"la DEFINICIÓN del layout cambió desde el último apply"** (señal de replanificar/re-aplicar);
+  para "¿el disco está al día?" ya existe el `/plan` existente (mira disco vía `to_create`).
+- **C2 (MENOR):** decisión documentada — el endpoint de consulta NO valida
+  `_validate_remote_target`: lee el ledger LOCAL y solo FILTRA por alias; no opera remoto.
+- **C3 (MENOR):** limitación declarada — si `apply_environment_remote` LANZA una excepción (no
+  devuelve dict), propaga como hoy y ese intento NO se registra (v1 del ledger).
+- **C4 (MENOR):** `MAX_ROWS` 300 → **500** — una sola receta de ledger en la casa (calca el 191).
+- **[ADICIÓN ARQUITECTO]:** el entry registra `ignored_count` = cantidad de paths pedidos que el
+  server-side descartó por no estar en el layout (`ignored_not_in_layout`, devops.py:311) —
+  auditoría fiel de *pedido vs aprobado*, no solo de lo aprobado.
 
 ---
 
@@ -18,8 +34,9 @@ tendrán con el 191). Este plan la agrega con la MISMA receta ya criticada y con
 (JSONL + lock + allowlist + retención + hook best-effort que JAMÁS rompe la ruta) y suma una
 capacidad NUEVA que solo este dominio permite: como cada apply registra el `fingerprint` del layout
 aplicado (que la ruta YA calcula, `layout_fingerprint` :291), el historial puede responder
-**"¿el layout cambió desde mi último apply?"** comparando fingerprints — drift de estructura de
-carpetas detectado con una igualdad de strings, sin tocar el disco remoto.
+**"¿la DEFINICIÓN del layout cambió desde mi último apply?"** comparando fingerprints — una
+igualdad de strings, sin red (C1: el fingerprint es del CATÁLOGO, no del disco; para saber si el
+disco está al día, el botón Replanificar dispara el `/plan` existente, que SÍ mira disco).
 
 **KPI / impacto esperado (binarios, verificados por tests):**
 
@@ -126,10 +143,11 @@ FlagSpec(
    `tests/test_harness_flags_requires.py`.
 
 3. CREAR `services/env_apply_ledger.py` — RECETA CONGELADA del 191 F0 con estos parámetros:
-   - Archivo: `data_dir()/env_applies.jsonl`. `MAX_ROWS = 300`. `_LOCK = threading.Lock()`.
+   - Archivo: `data_dir()/env_applies.jsonl`. `MAX_ROWS = 500` (C4). `_LOCK = threading.Lock()`.
    - `ENTRY_FIELDS = ("root", "server_alias", "paths", "paths_truncated", "fingerprint",
-     "sandbox_active", "result_ok", "created_count", "applied_at", "source")` — ALLOWLIST: claves
-     fuera de la lista se DESCARTAN (jamás un secreto por accidente).
+     "sandbox_active", "result_ok", "created_count", "ignored_count", "applied_at", "source")` —
+     ALLOWLIST: claves fuera de la lista se DESCARTAN (jamás un secreto por accidente).
+     `ignored_count` = ADICIÓN (pedido vs aprobado). `MAX_ROWS = 500` (C4 — calca el 191).
    - `append_apply(entry: dict) -> None`: normaliza `paths` a lista de str CAP 200 items
      (`paths_truncated=True` si se cortó); `applied_at` default `datetime.now(timezone.utc)
      .isoformat()`; `source="stacky"`; retención en el mismo write (tmp + `Path.replace`).
@@ -231,6 +249,7 @@ def _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active,
             "sandbox_active": bool(sandbox_active),
             "result_ok": bool(result.get("ok", True)) if isinstance(result, dict) else False,
             "created_count": len(result.get("created", []) or []) if isinstance(result, dict) else 0,
+            "ignored_count": len(result.get("ignored_not_in_layout", []) or []) if isinstance(result, dict) else 0,  # ADICIÓN (:311)
         })
     except Exception:
         from services.stacky_logger import logger as stacky_logger
@@ -251,6 +270,8 @@ def _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active,
 - `test_kpi1_apply_remoto_ok_persiste` — `server_alias` seteado.
 - `test_kpi1_apply_remoto_fallido_persiste` — remoto devuelve `{"ok": False, ...}` → entry con
   `result_ok False` Y la respuesta HTTP mantiene su status de error original.
+- `test_ignored_count_registrado` (ADICIÓN) — result con `ignored_not_in_layout: ["x","y"]` →
+  entry con `ignored_count == 2`.
 - `test_kpi1_append_roto_no_rompe_apply` — `append_apply` → raise → respuesta IDÉNTICA byte a
   byte a la del caso sin excepción.
 - `test_validaciones_hitl_no_registran` — sin `confirm` → 400 y 0 entries.
@@ -259,7 +280,7 @@ def _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active,
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan198_env_hook.py -q`
 
-**Criterio binario:** los 6 tests pasan (KPI-1 completo).
+**Criterio binario:** los 7 tests pasan (KPI-1 completo + ADICIÓN).
 
 **Flag:** la de F0 (+ environments). **Runtimes:** idéntico. **Trabajo del operador:** ninguno.
 
@@ -293,8 +314,8 @@ export function applyRow(a: EnvApply): string {
 export function driftBadge(drift: boolean | null): { tone: 'ok'|'warn'|'none'; text: string } {
   if (drift === null) return { tone: 'none', text: '' };
   return drift
-    ? { tone: 'warn', text: 'El layout cambió desde el último apply' }
-    : { tone: 'ok', text: 'Layout igual al último apply' };
+    ? { tone: 'warn', text: 'La definición del layout cambió desde el último apply — replanificá' }
+    : { tone: 'ok', text: 'Definición del layout igual al último apply' };
 }
 ```
 
@@ -348,8 +369,9 @@ renombrar una carpeta del catálogo → el badge pasa a "layout cambió".
   local o en un servidor registrado; HITL triple (confirm + fingerprint + sandbox_ack).
 - **`layout_fingerprint`:** hash estable del (root + rel_paths) que el apply exige para evitar
   aplicar un plan viejo (`plan_stale` 409, devops.py:291-293). Este plan lo REUSA para drift.
-- **Drift de layout:** `last_applied_fingerprint != current_fingerprint` — el catálogo/estructura
-  cambió después del último apply.
+- **Drift de layout (C1):** `last_applied_fingerprint != current_fingerprint` — la DEFINICIÓN del
+  layout (catálogo) cambió después del último apply. NO detecta cambios hechos a mano en el disco:
+  para eso está el `/plan` existente (compara contra disco vía `to_create`).
 - **Receta de ledger (191):** JSONL + lock + ALLOWLIST + tmp+replace + MAX_ROWS + sort explícito +
   tolerancia a corruptas — congelada en el doc del 191 F0.
 - **Ruta 195:** hoja de ruta de la serie DevOps; este plan se registra en ella al implementarse.

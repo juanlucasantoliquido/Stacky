@@ -1,6 +1,47 @@
 # Plan 177 — Auto-PR del Dev Resolutor de Incidencias: checkbox "Abrir PR", commit + Pull Request automáticos con los tests incluidos
 
-**Estado:** PROPUESTO (v1) — 2026-07-18 · pendiente de `criticar-y-mejorar-plan` e `implementar-plan-stacky`.
+**Estado:** CRITICADO (v2) — APROBADO-CON-CAMBIOS — 2026-07-18 · juez adversarial aplicado
+(0 bloqueantes, hallazgos IMPORTANTES resueltos). Pendiente de `implementar-plan-stacky`.
+
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+Las 5 anclas load-bearing del v1 fueron **verificadas contra el código** (2026-07-18): el bug
+`_base_project_url` (F1), la firma del post-hook (`ticket_status.py:231/307/325`), el patrón espejo
+`incident_autopublish.py`, `run_incident_dev` (`api/agents.py:1079` — pasa la **PK local** del
+`Ticket` real, no un pool sentinel) y `metadata_json`/`metadata_dict` (`models.py:219/260-265`). Las
+firmas del proveedor MR también: `commit_file(path, content, branch, message)`,
+`create_merge_request(source_branch, target_branch, title, description)`,
+`resolve_project_context(project_name=None, *, ticket=None)`. Sobre esa base, el juez corrigió:
+
+**CHANGELOG v1 -> v2:**
+- **C1 (IMPORTANTE, resuelto):** F4 anclaba `_default_branch_for` a `devops_production.py:37` — ese
+  archivo **NO existe** en `services/`; el real es `api/devops_production.py:37`
+  (`_default_branch(provider, project)`, chequea `provider.name == "azure_devops"`). Un modelo menor
+  buscaba en `services/` y adivinaba. v2 pinea el archivo correcto, aclara que `mrp` ES el tracker
+  provider (tiene `.name`), y fija import lazy + fallback duro `"main"`.
+- **C2 (IMPORTANTE, resuelto):** `_comment_issue_safe` apuntaba a `ado_client.py:766/796`
+  (ADO-específico → **rompe la paridad GitLab** del comentario). Verificado que existe la ruta
+  AGNÓSTICA: `ado_provider.py:92` y `gitlab_provider.py:295` definen la MISMA firma
+  `post_comment(item_id, body_html)`. v2 usa `get_tracker_provider(project).post_comment(...)`.
+- **C3 (IMPORTANTE, resuelto):** `_project_name_for_ticket` devolvía `ctx.name` — **atributo
+  inexistente**. Verificado: `ProjectContext` expone `stacky_project_name` y `workspace_root`, NO
+  `.name` (`project_context.py:46-51`). v2 pinea `stacky_project_name`.
+- **C4 (IMPORTANTE, resuelto):** el post-hook recibe `ticket_id` = **PK local** del `Ticket`; para
+  comentar en el tracker se necesita `ticket.ado_id` y para el proveedor MR el `stacky_project_name`.
+  v1 pasaba la PK local a `_comment_issue_safe`/`get_repo_writer`. v2 carga el `Ticket` **una sola
+  vez** (`_ticket_ado_id_and_project`) y propaga `(ado_id, project)` por todo el hook.
+- **C5 (IMPORTANTE, resuelto vía [ADICIÓN ARQUITECTO]):** el commit REST va contra la default branch
+  **remota** del repo del tracker; si `workspace_root` es un repo git real pero su `origin` es OTRO
+  repo/proyecto, se commiteaba al repo equivocado (hueco que el guard `cwd_fallback` de F3 NO cubre).
+  v2 agrega la **guardia de mapeo working-tree↔tracker** + anotación del `origin` en el PR.
+- **C6 (MENOR, resuelto):** la clasificación "NO excepción dura" no contrastaba con el Plan 166 F3
+  (auto-publish, que SÍ fue excepción dura). v2 argumenta la asimetría de forma trazable.
+- **C7 (MENOR, resuelto):** `_read_text_or_none` reusaba `MAX_FILE_BYTES` (10 MB) como cap de texto
+  — enorme para un commit REST. v2 usa `_MAX_TEXT_BYTES = 1_000_000` propio del auto-PR.
+- **[ADICIÓN ARQUITECTO]:** guardia de mapeo working-tree↔repo del tracker (`remote_origin_url` +
+  `_worktree_maps_to_wrong_repo`), best-effort NO bloqueante salvo mismatch inequívoco, con el
+  `origin` anotado en la descripción del PR y el intent para la revisión humana. Cierra C5, agnóstica
+  de runtime, cero trabajo del operador, backward-compatible.
 
 **Origen:** directiva explícita del operador (2026-07-18): *"quiero que al momento de resolver una
 incidencia haya un checkbox para que haga Pull request y commit automáticamente y que incluya los
@@ -90,11 +131,18 @@ flags nuevos en OFF.
 - **Cero trabajo extra al operador:** el checkbox viene **premarcado** (directiva del operador); un
   click resuelve **y** abre PR. Apagable por UI (flag `STACKY_INCIDENT_DEV_PR_ENABLED`) y
   desmarcable por resolución.
-- **Human-in-the-loop intacto:** el PR es una **propuesta** que el operador revisa y mergea; el
-  auto-PR **NO** mergea, **NO** cierra ni transiciona la Issue, **NO** aprueba. No es una excepción
-  dura (no bypasea revisión humana: abrir un PR ≠ mergear). El contrato del Plan 166 "el agente
-  NUNCA publica" se mantiene: quien abre el PR es el **backend post-run**, no el agente, y sólo con
-  el consentimiento explícito del checkbox.
+- **Human-in-the-loop intacto (NO es excepción dura — argumentado, C6):** el PR es una **propuesta**
+  que el operador revisa y mergea; el auto-PR **NO** mergea, **NO** cierra ni transiciona la Issue,
+  **NO** aprueba. Abrir un PR **≠** bypasear la revisión humana: el PR **ES** el artefacto de
+  revisión, y el merge (la única acción que impacta) queda 100% humano. **Contraste explícito con el
+  Plan 166 F3** (auto-publish), que SÍ se clasificó **EXCEPCIÓN DURA #1**: aquel crea el artefacto de
+  tracker (la Issue) **sin gate por-ítem**, publicando sin revisión previa; éste abre una propuesta
+  **revisable** gated por un checkbox **por-run, visible y consentido** ("Abrir PR", premarcado por
+  directiva del operador 2026-07-18), y sin merge. Por eso 177 **no** dispara ninguna de las 4
+  excepciones duras, aunque el mecanismo (post-hook del backend) sea el mismo que el de 166 F3. El
+  contrato del Plan 166 "el agente NUNCA publica ni transiciona" se mantiene: quien abre el PR es el
+  **backend post-run** (no el agente), sólo con el consentimiento explícito del checkbox, y sin tocar
+  el estado de la Issue.
 - **Mono-operador sin auth real:** nada de RBAC/multiusuario.
 - **Sin superficie de credencial nueva:** commit + PR van por el **proveedor MR** sobre el **PAT del
   proyecto** ya configurado (`ado_client._resolve_auth_header`), **sin** `git push` local. No se
@@ -300,6 +348,13 @@ def resolve_repo_root(workspace_root: str | None) -> str | None
     # pre_run_git.py:248 (credential.helper= vacío, GIT_TERMINAL_PROMPT=0,
     # CREATE_NO_WINDOW en Windows, timeout).
 
+def remote_origin_url(repo_root: str) -> str | None
+    # `git -C <repo_root> remote get-url origin` → URL del remoto 'origin' o None
+    # (rc!=0 / sin origin / repo_root vacío). Reusa el mismo patrón _run_git
+    # (credential.helper= vacío, GIT_TERMINAL_PROMPT=0, CREATE_NO_WINDOW en Windows,
+    # timeout). [ADICIÓN ARQUITECTO] — insumo de la guardia de mapeo working-tree ↔
+    # repo del tracker (F4) y de la anotación del origin en el PR.
+
 def snapshot_worktree(repo_root: str) -> dict
     # {"head": <sha o "">, "entries": {rel_posix_path: sha1_hex_del_contenido}}
     # para TODOS los archivos dirty+untracked. Método:
@@ -363,6 +418,9 @@ temporal real con `git init` + `git config user.email/name`, patrón de otros te
    el toplevel; workspace_root vacío/no-git → None.
 7. `test_intent_store_roundtrip_and_mark_idempotent`: `record_intent` + `get_intent` roundtrip;
    `mark_intent(pr_url=...)` dos veces no rompe y persiste el último merge.
+8. `test_remote_origin_url_reads_origin` ([ADICIÓN ARQUITECTO]): repo git temporal con
+   `git remote add origin https://example.test/org/repo.git` → `remote_origin_url` devuelve esa URL;
+   repo sin `origin` → None; `repo_root` vacío/no-git → None.
 Registrar en `HARNESS_TEST_FILES` (G2).
 
 **Comando (Git Bash):**
@@ -370,7 +428,7 @@ Registrar en `HARNESS_TEST_FILES` (G2).
 cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest tests/test_incident_dev_diff.py -q
 ```
 
-**Criterio BINARIO:** 7 casos verdes.
+**Criterio BINARIO:** 8 casos verdes.
 
 **Impacto por runtime:** ninguno (todo local, read-only del working tree). **Trabajo del operador:**
 ninguno.
@@ -494,6 +552,8 @@ logger = logging.getLogger("stacky.services.incident_dev_autocommit")
 
 _BRANCH_PREFIX = "stacky/incidencia-"          # + {ticket_id}-exec-{execution_id}
 _MAX_FILES = 60                                 # cap de archivos por PR (ver Riesgos)
+_MAX_TEXT_BYTES = 1_000_000                     # C7 — cap de texto por archivo del auto-PR
+                                                # (NO el de 10 MB del intake); binarios/enormes se omiten
 
 def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, agent_type, error=None, **_):
     from config import config as _cfg
@@ -508,6 +568,11 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
     if intent.get("status") in ("opened", "blocked_empty", "error", "skipped"):
         return  # idempotente: ya se procesó este execution_id
 
+    # C4 — el post-hook recibe la PK LOCAL del Ticket (verificado api/agents.py:1096-1101
+    # + run_agent(ticket_id=...)). Para comentar en el tracker hace falta ado_id; para
+    # el proveedor MR, el stacky_project_name. Se cargan UNA sola vez.
+    ado_id, project = _ticket_ado_id_and_project(ticket_id)   # (int|None, str|None)
+
     repo_root = intent.get("repo_root")
     baseline = intent.get("baseline") or {}
     try:
@@ -518,18 +583,29 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
         if not changed:
             # ⚠️ BLOQUEADO o diff vacío → NO se abre PR (K3).
             incident_dev_pr.mark_intent(execution_id, status="blocked_empty")
-            _comment_issue_safe(ticket_id, "🔧 El Dev Resolutor no dejó cambios de código, así que no se abrió ningún PR.")
+            _comment_issue_safe(ado_id, project, "🔧 El Dev Resolutor no dejó cambios de código, así que no se abrió ningún PR.")
             return
         if len(changed) > _MAX_FILES:
             incident_dev_pr.mark_intent(execution_id, status="skipped",
                                         error=f"demasiados archivos ({len(changed)} > {_MAX_FILES})")
-            _comment_issue_safe(ticket_id, f"🔧 El fix tocó {len(changed)} archivos (> {_MAX_FILES}); no se abrió PR automático. Revisá el working tree.")
+            _comment_issue_safe(ado_id, project, f"🔧 El fix tocó {len(changed)} archivos (> {_MAX_FILES}); no se abrió PR automático. Revisá el working tree.")
             return
 
-        project = _project_name_for_ticket(ticket_id)     # resolve_project_context(ticket=...).name o None
+        # [ADICIÓN ARQUITECTO] Guardia de mapeo working-tree ↔ repo del tracker (C5).
+        # Evita commitear el delta al repo EQUIVOCADO cuando workspace_root es un repo
+        # git real pero su 'origin' apunta a OTRO repo/proyecto (hueco que el guard
+        # cwd_fallback de F3 NO cubre). Best-effort NO bloqueante salvo mismatch
+        # inequívoco. Siempre anota el origin para la revisión humana.
+        origin = incident_dev_pr.remote_origin_url(repo_root)
+        if _worktree_maps_to_wrong_repo(origin, project):
+            incident_dev_pr.mark_intent(execution_id, status="skipped",
+                                        error=f"origin del working tree ({origin}) no mapea al repo del tracker")
+            _comment_issue_safe(ado_id, project, f"🔧 El working tree apunta a otro remoto ({origin}); no se abrió PR automático para no commitear en el repo equivocado. Revisá manualmente.")
+            return
+
         classify = incident_dev_pr.classify_changed_files(changed)
         branch = f"{_BRANCH_PREFIX}{ticket_id}-exec-{execution_id}"
-        title, description = _build_pr_body(ticket_id, classify, deleted)
+        title, description = _build_pr_body(ado_id, classify, deleted, origin)
 
         from services.repo_writer import get_repo_writer
         from services.merge_request_provider import get_merge_request_provider
@@ -538,33 +614,33 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
 
         committed = []
         skipped_binary = []
-        commit_msg = f"fix(incidencia #{ticket_id}): resolución del Dev Resolutor + tests"
+        commit_msg = f"fix(incidencia #{ado_id if ado_id is not None else ticket_id}): resolución del Dev Resolutor + tests"
         for rel in changed:
-            content = _read_text_or_none(repo_root, rel)   # None si binario/no-utf8/ilegible
+            content = _read_text_or_none(repo_root, rel)   # None si binario/no-utf8/ilegible/>_MAX_TEXT_BYTES
             if content is None:
                 skipped_binary.append(rel)
                 continue
-            writer.commit_file(rel, content, branch, commit_msg)   # crea la rama en el 1er call
+            writer.commit_file(rel, content, branch, commit_msg)   # (path, content, branch, message) — crea la rama en el 1er call
             committed.append(rel)
 
         if not committed:
             incident_dev_pr.mark_intent(execution_id, status="skipped",
                                         error="todos los archivos eran binarios/ilegibles")
-            _comment_issue_safe(ticket_id, "🔧 Los cambios eran binarios; el PR automático (sólo texto) no aplica.")
+            _comment_issue_safe(ado_id, project, "🔧 Los cambios eran binarios; el PR automático (sólo texto) no aplica.")
             return
 
-        target = _default_branch_for(mrp, project)          # espejo de devops_production.py:37
+        target = _default_branch_for(mrp, project)          # api/devops_production.py:37, fallback "main"
         pr = mrp.create_merge_request(source_branch=branch, target_branch=target,
                                       title=title, description=description)
         pr_url = pr.get("web_url") or ""
         incident_dev_pr.mark_intent(execution_id, status="opened", pr_id=pr.get("id"),
-                                    pr_url=pr_url, branch=branch, files_committed=committed)
-        _comment_issue_safe(ticket_id, f"🚀 PR abierto automáticamente con el fix y los tests: {pr_url}")
+                                    pr_url=pr_url, branch=branch, files_committed=committed, origin=origin)
+        _comment_issue_safe(ado_id, project, f"🚀 PR abierto automáticamente con el fix y los tests: {pr_url}")
     except Exception as exc:  # noqa: BLE001 — K3/Plan 135: el fallo NUNCA queda mudo
         logger.warning("auto-PR incidencia exec=%s falló: %s", execution_id, exc, exc_info=True)
         try:
             incident_dev_pr.mark_intent(execution_id, status="error", error=str(exc))
-            _comment_issue_safe(ticket_id, f"⚠️ No se pudo abrir el PR automático: {exc}")
+            _comment_issue_safe(ado_id, project, f"⚠️ No se pudo abrir el PR automático: {exc}")
         except Exception:  # noqa: BLE001 — best-effort final
             pass
 
@@ -573,27 +649,50 @@ def register(register_post_hook):
 ```
 
 **Helpers privados (mismo archivo, contrato literal):**
-- `_read_text_or_none(repo_root, rel_posix) -> str | None`: lee bytes de `repo_root/rel`; intenta
-  `decode("utf-8")`; si falla o hay `\x00` → None (binario). Cap de tamaño por archivo (reusar
-  `incident_store.MAX_FILE_BYTES`) → si excede, None + warning.
-- `_project_name_for_ticket(ticket_id) -> str | None`: carga el `Ticket` (`session_scope`), resuelve
-  el proyecto con `project_context.resolve_project_context(ticket=ticket)` y devuelve
-  `ctx.name`/`stacky_project_name` o None (deja que el proveedor use el proyecto activo).
-- `_default_branch_for(mrp, project) -> str`: espejo de `devops_production.py::_default_branch`
-  (`:37`) — usa el default branch del repo del proveedor; fallback `"main"`.
-- `_build_pr_body(ticket_id, classify, deleted) -> tuple[str, str]`: **title** =
-  `f"[Incidencia #{ticket_id}] Fix automático del Dev Resolutor"`; **description** en HTML/Markdown
+- `_ticket_ado_id_and_project(ticket_id) -> tuple[int | None, str | None]` (C3/C4): carga el `Ticket`
+  por PK **una vez** (`from db import session_scope; from models import Ticket; with session_scope()
+  as s: t = s.get(Ticket, ticket_id)`); devuelve `(t.ado_id, ctx.stacky_project_name)` donde
+  `ctx = project_context.resolve_project_context(ticket=t)`; si `ctx` es None → `(ado_id, None)` (el
+  proveedor usa el proyecto activo). Best-effort: ante cualquier excepción → `(None, None)`. **Ojo:**
+  `ProjectContext` expone `stacky_project_name` y `workspace_root`, **NO** `.name` (verificado
+  `project_context.py:46-51`).
+- `_read_text_or_none(repo_root, rel_posix) -> str | None`: lee bytes de `repo_root/rel`; si hay
+  `\x00` o el `decode("utf-8")` falla → None (binario); si el tamaño excede `_MAX_TEXT_BYTES`
+  (`1_000_000`, C7 — cap **propio** del auto-PR, NO el de 10 MB del intake) → None + warning.
+- `_default_branch_for(mrp, project) -> str` (C1): **reusa** `api/devops_production.py::_default_branch`
+  (`api/devops_production.py:37`, verificado — **NO** existe `services/devops_production.py`). Firma
+  real `_default_branch(provider, project)`: chequea `provider.name == "azure_devops"` y delega en
+  `ado_pipeline_definitions._default_branch`; si no, hace el GET de GitLab. `mrp` (de
+  `get_merge_request_provider`) **ES** el tracker provider (mismo objeto que `get_repo_writer`,
+  `merge_request_provider.py:82-85`), así que tiene `.name`. Implementación literal:
+  `try:` → `from api.devops_production import _default_branch` (import **lazy** dentro de la función,
+  evita el cruce de capas a nivel de módulo) → `return _default_branch(mrp, project) or "main"`;
+  `except Exception:` → `return "main"` (fallback DURO).
+- `_worktree_maps_to_wrong_repo(origin, project) -> bool` ([ADICIÓN ARQUITECTO], C5): devuelve `True`
+  **sólo** cuando se puede afirmar **inequívocamente** que el `origin` del working tree apunta a un
+  repo distinto del repo del tracker del proyecto (cero falsos positivos por diseño). Método: si
+  `origin` es vacío/None → `False` (no se puede afirmar → proceder, degradación = v1). Intentar
+  obtener la URL base del proveedor **sin red** (`get_tracker_provider(project)._client._base_proj`
+  para ADO; base URL para GitLab); parsear `host` de AMBOS con `urllib.parse.urlparse` (para remotos
+  `git@host:org/repo` de SSH, extraer el host tras `@` y antes de `:`). Si AMBOS host parsean limpio y
+  **difieren** → `True`; ante CUALQUIER duda (SSH sin host claro, provider no resoluble, parseo
+  incierto) → `False`. **Nunca degrada por debajo de v1.**
+- `_build_pr_body(ado_id, classify, deleted, origin) -> tuple[str, str]`: **title** =
+  `f"[Incidencia #{ado_id}] Fix automático del Dev Resolutor"`; **description** en HTML/Markdown
   simple con secciones: "Resuelto por el **Dev Resolutor de Incidencias** (Stacky)", "**Cambios de
-  código**" (lista `classify['code']`), "**Tests incluidos**" (lista `classify['tests']` — K2), y si
-  `deleted`: "**Archivos eliminados (no reflejados por la API REST, revisar manual)**". Enlace a la
-  Issue por id.
-- `_comment_issue_safe(ticket_id, body) -> None`: comenta en la Issue con el link del PR,
-  best-effort (try/except mudo interno). Usar el camino de comentario de work item ya existente
-  (`AdoClient` comments, `ado_client.py:766`/`796`, o el helper de comentario que use el resto del
-  backend para work items); si no hay proveedor de comentarios, sólo loguear. **Nunca** transiciona
-  ni cierra.
+  código**" (lista `classify['code']`), "**Tests incluidos**" (lista `classify['tests']` — K2),
+  "**Origen del working tree:** `{origin}`" (trazabilidad para la revisión — [ADICIÓN ARQUITECTO]), y
+  si `deleted`: "**Archivos eliminados (no reflejados por la API REST, revisar manual)**". Enlace a la
+  Issue por `ado_id`.
+- `_comment_issue_safe(ado_id, project, body) -> None` (C2/C4): comenta en la Issue del tracker,
+  best-effort (try/except mudo interno). **Ruta AGNÓSTICA de runtime** (verificado: `ado_provider.py:92`
+  y `gitlab_provider.py:295` definen la MISMA firma `post_comment(item_id, body_html)`):
+  `if ado_id is None:` → sólo loguear y `return`; si no → `from services.tracker_provider import
+  get_tracker_provider; get_tracker_provider(project).post_comment(str(ado_id), body)`. **PROHIBIDO**
+  usar `ado_client.post_comment` (ADO-específico → rompe paridad GitLab) o pasar la PK local. **Nunca**
+  transiciona ni cierra.
 
-**Registro en `app.py`** (junto a `incident_autopublish.register(...)`, `:715-719`, verificado):
+**Registro en `app.py`** (junto a `incident_autopublish.register(...)`, `:718-719`, verificado):
 ```python
     from services import ticket_status, incident_autopublish, incident_dev_autocommit
     incident_autopublish.register(ticket_status.register_post_hook)
@@ -601,9 +700,12 @@ def register(register_post_hook):
 ```
 
 **Tests (TDD):** archivo nuevo `backend/tests/test_incident_dev_autocommit.py`. Mockear el proveedor
-MR (`get_repo_writer`/`get_merge_request_provider` → fakes que registran llamadas), `incident_dev_pr`
-(`get_intent`/`snapshot_worktree`/`compute_changed_files`/`classify_changed_files`/`mark_intent`) y
-`_comment_issue_safe`. Espejar helpers de `test_incident_autopublish.py`. Casos:
+MR (`get_repo_writer`/`get_merge_request_provider` → fakes que registran llamadas), el comentario
+agnóstico (`services.tracker_provider.get_tracker_provider` → fake con `post_comment(item_id,
+body_html)` que registra llamadas), `_ticket_ado_id_and_project` (→ `(ado_id, project)` fijos),
+`incident_dev_pr`
+(`get_intent`/`snapshot_worktree`/`compute_changed_files`/`classify_changed_files`/`mark_intent`/`remote_origin_url`).
+Espejar helpers de `test_incident_autopublish.py`. Casos:
 1. `test_opens_pr_with_code_and_tests`: intent `open_pr`, `completed`, delta con
    `["src/fix.py","backend/tests/test_fix.py"]` → `commit_file` llamado 2 veces (misma `branch`),
    `create_merge_request` llamado 1 vez; `mark_intent(status="opened", pr_url=...)`; la `description`
@@ -619,6 +721,13 @@ MR (`get_repo_writer`/`get_merge_request_provider` → fakes que registran llama
    y `_comment_issue_safe` llamado con el mensaje de error; **no** relanza (no rompe el runner).
 9. `test_binary_files_skipped`: `_read_text_or_none` → None para el único archivo → `create_merge_request`
    **no** llamado; `mark_intent(status="skipped")`.
+10. `test_comment_uses_tracker_ado_id_not_local_pk` (C2/C4): el hook recibe `ticket_id=5` (PK local) y
+    `_ticket_ado_id_and_project` → `(12345, "proj")`; el `post_comment` del provider agnóstico se llama
+    con `item_id="12345"` (str del ado_id), **NO** con `"5"`.
+11. `test_skip_when_worktree_maps_to_wrong_repo` ([ADICIÓN ARQUITECTO], C5): `remote_origin_url` → un
+    remoto de otro host/organización que el del provider mockeado (`_worktree_maps_to_wrong_repo` →
+    True) → `create_merge_request` **no** llamado; `mark_intent(status="skipped")` con el error de
+    mismatch; comentario en la Issue. Caso simétrico: mismo host → sí abre PR (cubierto por el caso 1).
 Registrar en `HARNESS_TEST_FILES` (G2).
 
 **Comando (Git Bash):**
@@ -626,7 +735,7 @@ Registrar en `HARNESS_TEST_FILES` (G2).
 cd "Stacky Agents/backend" && .venv/Scripts/python -m pytest tests/test_incident_dev_autocommit.py tests/test_incident_autopublish.py -q
 ```
 
-**Criterio BINARIO:** 9 casos nuevos verdes + `test_incident_autopublish.py` sigue verde.
+**Criterio BINARIO:** 11 casos nuevos verdes + `test_incident_autopublish.py` sigue verde.
 
 **Impacto por runtime:** el post-hook se dispara desde `on_execution_end` para **cualquier** runtime
 (CLI + `manifest_watcher`) → paridad Codex/Claude/Copilot. **Fallback:** flag OFF o sin intent →
@@ -787,6 +896,7 @@ cd "Stacky Agents/frontend" && npx vitest run src/incidents/incidentDevPrModel.t
 | R6 | Carrera baseline↔intent: el agente completa antes de que se escriba el intent. | Ventana de microsegundos (F3: `record_intent` inmediatamente tras `run_agent`); un fix real tarda segundos-minutos. Si aun así no hay intent al completar, el post-hook simplemente no abre PR (degradación segura, sin error). |
 | R7 | Doble disparo de `on_execution_end` (rescue/cancel) reabre el PR. | Idempotencia por `execution_id`: el intent store guarda `status`; el hook corta si ya es `opened`/`blocked_empty`/`error`/`skipped`. Rama determinista `stacky/incidencia-{ticket}-exec-{exec}`. |
 | R8 | El agente commiteó en el repo de **Stacky** en vez del proyecto (workspace_root vacío → fallback). | F3 exige un **repo git real del proyecto** vía `resolve_repo_root` (rev-parse); si no lo hay, no se registra intent → no hay auto-PR. Corta el fallback `cwd_fallback` de raíz. |
+| R11 | El working tree es un repo git real pero su `origin` apunta a **OTRO repo/proyecto** que el del tracker (hueco que R8 NO cubre). | **[ADICIÓN ARQUITECTO] C5:** la guardia `_worktree_maps_to_wrong_repo` compara host/organización del `origin` vs la base del proveedor; ante mismatch inequívoco → `status="skipped"` + comentario (no abre PR). Ante duda → procede (no degrada v1). El `origin` se anota en la descripción del PR y el intent para la revisión humana. |
 | R9 | Merge con la sesión paralela sobre `api/agents.py`/`TicketBoard.tsx`/`ado_provider.py`. | Cambios **aditivos** (funciones, ramas y campos nuevos); `git status` en frío antes de commitear; el fix de F1 es un reemplazo de 2 líneas puntuales. |
 | R10 | El proyecto activo no tiene proveedor MR (tracker no-ADO/no-GitLab, o sin PAT). | `get_repo_writer`/`get_merge_request_provider` lanzan excepción tipada; el hook la captura → `status="error"` + comentario "no se pudo abrir el PR" (no mudo). Sin PR, la resolución del agente queda igual en el working tree para commit manual. |
 
@@ -845,8 +955,13 @@ cd "Stacky Agents/frontend" && npx vitest run src/incidents/incidentDevPrModel.t
       real (`test_incident_dev_agent.py`, casos nuevos + los 6 del Plan 166 verdes).
 - [ ] Al terminar un run `incident_dev` `completed` con intent, se commitean código **+ tests** a una
       rama y se abre **un** PR cuya descripción lista los tests; diff vacío/BLOQUEADO → no-op; errores
-      no mudos; idempotente (`test_incident_dev_autocommit.py` 9/9; `test_incident_autopublish.py`
+      no mudos; idempotente (`test_incident_dev_autocommit.py` 11/11; `test_incident_autopublish.py`
       sigue verde).
+- [ ] El comentario en la Issue usa `ticket.ado_id` (no la PK local) por la ruta agnóstica
+      `get_tracker_provider(project).post_comment(...)` — paridad ADO/GitLab (caso 10).
+- [ ] [ADICIÓN ARQUITECTO] La guardia de mapeo working-tree↔tracker evita commitear al repo
+      equivocado (mismatch inequívoco de `origin` → `status="skipped"` + comentario), y el `origin`
+      queda anotado en la descripción del PR y en el intent (caso 11).
 - [ ] El board muestra el checkbox "Abrir PR" premarcado en las Issues (sólo con `dev_pr_enabled`) y
       manda `open_pr` a `run-incident-dev` (`incidentDevPrModel.test.ts` 4/4; `tsc --noEmit` limpio).
 - [ ] Todos los `test_*.py` nuevos registrados en `HARNESS_TEST_FILES` (ambos scripts).
@@ -859,5 +974,6 @@ cd "Stacky Agents/frontend" && npx vitest run src/incidents/incidentDevPrModel.t
 
 ---
 
-_Plan 177 v1 — Stacky Agents. Propuesto 2026-07-18 por directiva del operador. Pendiente de
-`criticar-y-mejorar-plan` (juez adversarial) e `implementar-plan-stacky`._
+_Plan 177 v2 — Stacky Agents. Propuesto 2026-07-18 por directiva del operador; criticado por el juez
+adversarial 2026-07-18 (5 anclas load-bearing verificadas contra el código; C1-C7 + [ADICIÓN
+ARQUITECTO] aplicados). APROBADO-CON-CAMBIOS. Pendiente de `implementar-plan-stacky`._

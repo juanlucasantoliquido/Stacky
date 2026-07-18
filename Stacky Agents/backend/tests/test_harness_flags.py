@@ -611,6 +611,7 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",
     "STACKY_DB_COMPARE_DEMO_ENABLED",  # Plan 183 — sandbox de demostración
     "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (default ON, mejora invisible read-only)
+    "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",  # Plan 182 — scripts de datos v2 (MERGE idempotente, default ON, mejora invisible del artefacto)
 
     "INTENT_PREFLIGHT_ENABLED",
     "INTENT_PREFLIGHT_AUTO_APPROVE",  # min_conf queda en su default 0.8

@@ -556,6 +556,17 @@ def collect_resguardos(
 
 _BYTES_TRUNCATED_COMMENT = "-- BYTES TRUNCADOS: completar a mano"
 
+# Plan 182 — advertencias que se anteponen a las piezas de datos SOLO con merge
+# on (con off, byte-idéntico a v1). §4.6 (truncamiento) precede a §4.7 (re-ejec).
+_DATA_TRUNCATION_WARNING = (
+    "-- ATENCION: el diff de datos fue TRUNCADO por el cap de filas; este script "
+    "cubre SOLO las filas comparadas."
+)
+_DATA_REEXEC_NOTICE = (
+    "-- Re-ejecutable: SI (DML idempotente). Los scripts de 01_backups/ son de UNA "
+    "sola pasada: re-ejecutarlos falla adrede para proteger el punto de restauracion."
+)
+
 
 def _guard_conds(pk_cols: list[str], row: dict, column_types: dict, dialect: str) -> str:
     return " AND ".join(
@@ -565,7 +576,155 @@ def _guard_conds(pk_cols: list[str], row: dict, column_types: dict, dialect: str
     )
 
 
-def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str) -> list["ScriptPiece"]:
+# ---------------------------------------------------------------------------
+# Plan 182 F1 — emisores puros del MERGE/upsert set-based por dialecto y del
+# guard anti-no-op NULL-safe del UPDATE. Reciben SOLO datos ya extraídos del
+# DataDiff (sin config, sin disco). Ver docs/182_PLAN_*.md §4.
+# ---------------------------------------------------------------------------
+
+
+def _casted_first_row_value(norm: str | None, col_type: str, dialect: str) -> str:
+    """En la PRIMERA fila del USING, un valor NULL se emite como
+    CAST(NULL AS <col_type>) (fix C2): T-SQL no puede inferir el tipo de una
+    columna toda-NULL y Oracle da ORA-01790 con NULL en el primer branch del
+    UNION ALL. Filas siguientes emiten NULL pelado."""
+    if norm is None:
+        return f"CAST(NULL AS {col_type})"
+    return sqlvalues.sql_literal_from_normalized(norm, col_type, dialect)
+
+
+def _merge_statement_sqlserver(q: str, columns: list[str], pk_cols: list[str], rows: list[dict], column_types: dict) -> str:
+    non_pk = [c for c in columns if c not in pk_cols]
+
+    def qi(c: str) -> str:
+        return sqlnames.quote_ident(c, "sqlserver")
+
+    value_lines = []
+    for i, row in enumerate(rows):
+        vals = []
+        for c in columns:
+            ct = column_types.get(c, "")
+            if i == 0:
+                vals.append(_casted_first_row_value(row.get(c), ct, "sqlserver"))
+            else:
+                vals.append(sqlvalues.sql_literal_from_normalized(row.get(c), ct, "sqlserver"))
+        value_lines.append("  (" + ", ".join(vals) + ")")
+
+    on_clause = " AND ".join(f"T.{qi(c)} = S.{qi(c)}" for c in pk_cols)
+    lines = [
+        f"MERGE INTO {q} AS T",
+        "USING (VALUES",
+        ",\n".join(value_lines),
+        f") AS S ({', '.join(qi(c) for c in columns)})",
+        f"ON ({on_clause})",
+    ]
+    if non_pk:
+        sel_s = ", ".join(f"S.{qi(c)}" for c in non_pk)
+        sel_t = ", ".join(f"T.{qi(c)}" for c in non_pk)
+        set_clause = ", ".join(f"T.{qi(c)} = S.{qi(c)}" for c in non_pk)
+        lines.append(f"WHEN MATCHED AND EXISTS (SELECT {sel_s} EXCEPT SELECT {sel_t})")
+        lines.append(f"  THEN UPDATE SET {set_clause}")
+    lines.append("WHEN NOT MATCHED BY TARGET")
+    lines.append(
+        f"  THEN INSERT ({', '.join(qi(c) for c in columns)}) "
+        f"VALUES ({', '.join(f'S.{qi(c)}' for c in columns)});"
+    )
+    return "\n".join(lines)
+
+
+def _merge_statement_oracle(q: str, columns: list[str], pk_cols: list[str], rows: list[dict], column_types: dict) -> str:
+    non_pk = [c for c in columns if c not in pk_cols]
+
+    def qi(c: str) -> str:
+        return sqlnames.quote_ident(c, "oracle")
+
+    select_lines = []
+    for i, row in enumerate(rows):
+        parts = []
+        for c in columns:
+            ct = column_types.get(c, "")
+            if i == 0:
+                parts.append(f"{_casted_first_row_value(row.get(c), ct, 'oracle')} AS {qi(c)}")
+            else:
+                parts.append(sqlvalues.sql_literal_from_normalized(row.get(c), ct, "oracle"))
+        select_lines.append("  SELECT " + ", ".join(parts) + " FROM dual")
+
+    on_clause = " AND ".join(f"T.{qi(c)} = S.{qi(c)}" for c in pk_cols)
+    lines = [
+        f"MERGE INTO {q} T",
+        "USING (",
+        "\n  UNION ALL\n".join(select_lines),
+        ") S",
+        f"ON ({on_clause})",
+    ]
+    if non_pk:
+        set_clause = ", ".join(f"T.{qi(c)} = S.{qi(c)}" for c in non_pk)
+        guard = " OR ".join(f"DECODE(T.{qi(c)}, S.{qi(c)}, 1, 0) = 0" for c in non_pk)
+        lines.append(f"WHEN MATCHED THEN UPDATE SET {set_clause}")
+        lines.append(f"  WHERE {guard}")
+    lines.append(
+        f"WHEN NOT MATCHED THEN INSERT ({', '.join(qi(c) for c in columns)}) "
+        f"VALUES ({', '.join(f'S.{qi(c)}' for c in columns)});"
+    )
+    return "\n".join(lines)
+
+
+def _merge_lines_sqlite(q: str, name: str, columns: list[str], pk_cols: list[str], rows: list[dict], column_types: dict) -> list[str]:
+    """Un statement COMPLETO por fila, en UNA sola línea física (§4.3, límite C3:
+    valores con `\\n` romperían la regla — sqlite es carril de TEST)."""
+    non_pk = [c for c in columns if c not in pk_cols]
+
+    def qi(c: str) -> str:
+        return sqlnames.quote_ident(c, "sqlite")
+
+    name_q = sqlnames.quote_ident(name, "sqlite")
+    cols_list = ", ".join(qi(c) for c in columns)
+    conflict = ", ".join(qi(c) for c in pk_cols)
+    out: list[str] = []
+    for row in rows:
+        vals = ", ".join(
+            sqlvalues.sql_literal_from_normalized(row.get(c), column_types.get(c, ""), "sqlite") for c in columns
+        )
+        head = f"INSERT INTO {q} ({cols_list}) VALUES ({vals}) ON CONFLICT({conflict}) "
+        if non_pk:
+            set_clause = ", ".join(f"{qi(c)} = excluded.{qi(c)}" for c in non_pk)
+            where_clause = " OR ".join(f"{name_q}.{qi(c)} IS NOT excluded.{qi(c)}" for c in non_pk)
+            out.append(f"{head}DO UPDATE SET {set_clause} WHERE {where_clause};")
+        else:
+            out.append(f"{head}DO NOTHING;")
+    return out
+
+
+def _update_guard(dialect: str, cells: dict, column_types: dict) -> str:
+    """Guard anti-no-op NULL-safe del UPDATE (§4.4): 'la fila difiere del target'.
+    Usa los MISMOS literales del SET (cell['target']) — cero datos nuevos.
+    Multi-columna: OR entre los 'difiere por columna' (update si ALGUNA difiere)."""
+    pairs = [
+        (col, sqlvalues.sql_literal_from_normalized(cell["target"], column_types.get(col, ""), dialect))
+        for col, cell in cells.items()
+    ]
+    if dialect == "sqlserver":
+        sel_lits = ", ".join(lit for _, lit in pairs)
+        sel_cols = ", ".join(sqlnames.quote_ident(col, "sqlserver") for col, _ in pairs)
+        return f"EXISTS (SELECT {sel_lits} EXCEPT SELECT {sel_cols})"
+    if dialect == "oracle":
+        conds = [f"DECODE({sqlnames.quote_ident(col, 'oracle')}, {lit}, 1, 0) = 0" for col, lit in pairs]
+        return conds[0] if len(conds) == 1 else "(" + " OR ".join(conds) + ")"
+    if dialect == "sqlite":
+        conds = [f"{sqlnames.quote_ident(col, 'sqlite')} IS NOT {lit}" for col, lit in pairs]
+        return conds[0] if len(conds) == 1 else "(" + " OR ".join(conds) + ")"
+    raise DbCompareRunError(f"dialecto desconocido: {dialect!r}")
+
+
+def emit_data_scripts(
+    data_diff: dict, dialect: str, ts: str, target_alias: str, *, data_merge_mode: bool = False
+) -> list["ScriptPiece"]:
+    """Plan 126 F3 + Plan 182 F1. Con `data_merge_mode=False` (default) el
+    resultado es BYTE-idéntico a v1 (data_insert/update/delete). Con
+    `data_merge_mode=True`: `only_source` se emite como una pieza `data_merge`
+    (upsert set-based por dialecto, §4.1/4.2/4.3), el UPDATE gana el guard
+    anti-no-op NULL-safe (§4.4), el DELETE queda INTACTO, y todas las piezas
+    anteponen las advertencias §4.6 (si truncado) y §4.7 (re-ejecutable)."""
     schema = data_diff["schema"]
     name = data_diff["table"]
     pk_cols = data_diff["pk_cols"]
@@ -580,11 +739,49 @@ def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str)
     def _sort_key_changed(row: dict) -> tuple:
         return tuple(str(row["pk"].get(c)) for c in pk_cols)
 
+    # Prefijos §4.6/§4.7 — SOLO con merge on. Con off, `prefix_lines` es vacío y
+    # `_with_prefix` deja el SQL byte-idéntico a v1 (KPI-1).
+    prefix_lines: list[str] = []
+    if data_merge_mode:
+        if data_diff.get("truncated"):
+            prefix_lines.append(_DATA_TRUNCATION_WARNING)
+        prefix_lines.append(_DATA_REEXEC_NOTICE)
+
+    def _with_prefix(body_lines: list[str]) -> str:
+        return "\n".join(prefix_lines + body_lines)
+
     pieces: list[ScriptPiece] = []
 
-    # -- INSERT (idempotente, con guarda NOT EXISTS por fila) --------------
     only_source = sorted(data_diff.get("only_source") or [], key=_sort_key_row)
-    if only_source:
+
+    # -- MERGE (upsert set-based por tabla, §4.1/4.2/4.3) — reemplaza al INSERT --
+    if only_source and data_merge_mode:
+        body_lines: list[str] = []
+        valid_rows: list[dict] = []
+        for row in only_source:
+            try:
+                for c in columns:
+                    sqlvalues.sql_literal_from_normalized(row.get(c), column_types.get(c, ""), dialect)
+            except sqlvalues.SqlLiteralError:
+                body_lines.append(f"{_BYTES_TRUNCATED_COMMENT} -- fila PK={_sort_key_row(row)}")
+                continue
+            valid_rows.append(row)
+        if valid_rows:
+            if dialect == "sqlserver":
+                body_lines.append(_merge_statement_sqlserver(q, columns, pk_cols, valid_rows, column_types))
+            elif dialect == "oracle":
+                body_lines.append(_merge_statement_oracle(q, columns, pk_cols, valid_rows, column_types))
+            elif dialect == "sqlite":
+                body_lines.extend(_merge_lines_sqlite(q, name, columns, pk_cols, valid_rows, column_types))
+            else:
+                raise DbCompareRunError(f"dialecto desconocido: {dialect!r}")
+        pieces.append({
+            "action": "data_merge", "object_type": "table", "schema": schema, "name": name,
+            "sql": _with_prefix(body_lines), "destructive": False, "modifies_table": True,
+        })  # type: ignore[typeddict-item]
+
+    # -- INSERT v1 (idempotente, con guarda NOT EXISTS por fila) --------------
+    elif only_source:
         lines = []
         for row in only_source:
             try:
@@ -616,10 +813,10 @@ def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str)
                 raise DbCompareRunError(f"dialecto desconocido: {dialect!r}")
         pieces.append({
             "action": "data_insert", "object_type": "table", "schema": schema, "name": name,
-            "sql": "\n".join(lines), "destructive": False, "modifies_table": True,
+            "sql": _with_prefix(lines), "destructive": False, "modifies_table": True,
         })  # type: ignore[typeddict-item]
 
-    # -- UPDATE (por PK; ya idempotente por naturaleza) ---------------------
+    # -- UPDATE (por PK; con merge on gana el guard anti-no-op §4.4) -----------
     changed = sorted(data_diff.get("changed") or [], key=_sort_key_changed)
     if changed:
         lines = []
@@ -635,10 +832,14 @@ def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str)
                 lines.append(f"{_BYTES_TRUNCATED_COMMENT} -- fila PK={pk}")
                 continue
             guard = _guard_conds(pk_cols, pk, column_types, dialect)
-            lines.append(f"UPDATE {q} SET {', '.join(set_parts)} WHERE {guard};")
+            if data_merge_mode:
+                diff_guard = _update_guard(dialect, row["cells"], column_types)
+                lines.append(f"UPDATE {q} SET {', '.join(set_parts)} WHERE {guard} AND {diff_guard};")
+            else:
+                lines.append(f"UPDATE {q} SET {', '.join(set_parts)} WHERE {guard};")
         pieces.append({
             "action": "data_update", "object_type": "table", "schema": schema, "name": name,
-            "sql": "\n".join(lines), "destructive": True, "modifies_table": True,
+            "sql": _with_prefix(lines), "destructive": True, "modifies_table": True,
         })  # type: ignore[typeddict-item]
 
     # -- DELETE (por PK; ya idempotente por naturaleza; va a 09_destructivo/) --
@@ -647,7 +848,7 @@ def emit_data_scripts(data_diff: dict, dialect: str, ts: str, target_alias: str)
         lines = [f"DELETE FROM {q} WHERE {_guard_conds(pk_cols, row, column_types, dialect)};" for row in only_target]
         pieces.append({
             "action": "data_delete", "object_type": "table", "schema": schema, "name": name,
-            "sql": "\n".join(lines), "destructive": True, "modifies_table": True,
+            "sql": _with_prefix(lines), "destructive": True, "modifies_table": True,
         })  # type: ignore[typeddict-item]
 
     return pieces
@@ -670,8 +871,22 @@ MANIFEST_VERSION = 1
 # kinds que emit_resguardo() efectivamente sabe resguardar (_DATA_BACKUP_KINDS |
 # _RECONSTRUCTIBLE_KINDS) — asi el invariante nunca puede violarse por construccion
 # y las piezas aditivas quedan con backup_file/rollback_file=null tal como pide el plan.
-_DATA_DML_KINDS = {"data_insert", "data_update", "data_delete"}  # Plan 126 F3
+_DATA_DML_KINDS = {"data_insert", "data_update", "data_delete", "data_merge"}  # Plan 126 F3 + Plan 182 (data_merge)
 _REQUIRES_RESGUARDO_KINDS = _DATA_BACKUP_KINDS | _RECONSTRUCTIBLE_KINDS | _DATA_DML_KINDS
+
+
+def _assert_pairing_invariant(entries: list[dict]) -> None:
+    """Invariante REGLA DE ORO (Plan 125 KPI-1 / Plan 126 KPI-3, extendido a
+    `data_merge` por Plan 182 KPI-6): toda entry cuyo `action` está en
+    `_REQUIRES_RESGUARDO_KINDS` DEBE tener `backup_file` o `rollback_file`. La
+    lógica es la de main (`:896-902`); se aísla en una función para poder
+    ejercerla con una entry fabricada (KPI-6) sin cambiar su semántica."""
+    for e in entries:
+        if e["action"] in _REQUIRES_RESGUARDO_KINDS and not (e["backup_file"] or e["rollback_file"]):
+            raise DbCompareRunError(
+                f"invariante de pareo violada (Plan 125 KPI-1 / Plan 126 KPI-3): {e['schema']}.{e['name']} "
+                f"({e['action']}) requiere backup_file o rollback_file y no tiene ninguno"
+            )
 
 
 def _bundle_dir(run_id: str) -> Path:
@@ -731,6 +946,7 @@ def generate_parity_bundle_from_diff(
     dialect: str,
     ts: str | None = None,
     data_diff: dict | None = None,
+    data_merge_mode: bool = False,
 ) -> dict:
     """Version PURA (sin depender de services.dbcompare_runs, Plan 123 F2 —
     ver NOTA C1 en doc 125 v2 F3) de la materializacion del bundle: recibe el
@@ -850,7 +1066,7 @@ def generate_parity_bundle_from_diff(
             table_result = data_diff["tables"][table_key]
             if "error" in table_result:
                 continue  # tabla con error en el diff de datos: no emite scripts
-            table_pieces = emit_data_scripts(table_result, dialect, ts, target_alias)
+            table_pieces = emit_data_scripts(table_result, dialect, ts, target_alias, data_merge_mode=data_merge_mode)
             if not table_pieces:
                 continue
             schema = table_result["schema"]
@@ -893,13 +1109,9 @@ def generate_parity_bundle_from_diff(
                     }
                 )
 
-    # Invariante KPI-1/KPI-3: se valida ANTES de escribir nada a disco (FIX C4).
-    for e in entries:
-        if e["action"] in _REQUIRES_RESGUARDO_KINDS and not (e["backup_file"] or e["rollback_file"]):
-            raise DbCompareRunError(
-                f"invariante de pareo violada (Plan 125 KPI-1 / Plan 126 KPI-3): {e['schema']}.{e['name']} "
-                f"({e['action']}) requiere backup_file o rollback_file y no tiene ninguno"
-            )
+    # Invariante KPI-1/KPI-3 (+Plan 182 KPI-6): se valida ANTES de escribir nada
+    # a disco (FIX C4). Misma lógica de main, aislada en _assert_pairing_invariant.
+    _assert_pairing_invariant(entries)
 
     manifest = {
         "version": MANIFEST_VERSION,
@@ -975,7 +1187,13 @@ def generate_parity_bundle(run_id: str) -> dict:
             f"(source={run.get('source_snapshot_id')!r}, target={run.get('target_snapshot_id')!r})"
         )
 
+    # Plan 182: la flag se lee EXCLUSIVAMENTE acá (único camino de la API real).
+    import config as _config
+
+    merge_on = bool(getattr(_config.config, "STACKY_DB_COMPARE_DATA_MERGE_ENABLED", False))
+
     return generate_parity_bundle_from_diff(
         run["diff"], run_id, source_snapshot, target_snapshot, run["engine"],
         data_diff=run.get("data_diff"),
+        data_merge_mode=merge_on,
     )

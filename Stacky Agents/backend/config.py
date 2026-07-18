@@ -145,6 +145,13 @@ class Config:
         "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 182 — Scripts de datos v2 (MERGE idempotente por dialecto) ──────
+    # Default ON: mejora invisible del artefacto generado; nada corre solo, el
+    # bundle sale byte-idéntico a v1 con la flag OFF. Curada en _CURATED_DEFAULTS_ON.
+    STACKY_DB_COMPARE_DATA_MERGE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_DATA_MERGE_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

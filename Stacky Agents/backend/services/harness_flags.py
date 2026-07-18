@@ -327,6 +327,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
         "STACKY_DB_COMPARE_DEMO_ENABLED",         # Plan 183 — sandbox de demostración
         "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (tipos exactos)
+        "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",   # Plan 182 — scripts de datos v2 (MERGE idempotente)
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3227,6 +3228,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         default=True,  # ON: mejora invisible read-only del motor; los snapshots nuevos capturan type_detail. OFF: captura byte-idéntica a v1. El diff es pasivo por versión (usa v2 sii ambos snapshots lo traen).
         label="Comparador BD: snapshot v2 (fidelidad de tipos)",
         description="Captura estructurada por columna (precision, scale, length, collation, identity, computed cuando el dialecto los reporta) y diff quirúrgico con defaults normalizados. OFF = snapshots v1 idénticos a antes.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 182 — Scripts de datos v2: MERGE idempotente por dialecto ────────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DATA_MERGE_ENABLED",
+        type="bool",
+        default=True,  # ON: mejora invisible del ARTEFACTO generado (upsert set-based idempotente); nada se ejecuta solo, el operador sigue revisando/ejecutando. OFF = bundle byte-idéntico a v1 (data_insert). Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: scripts de datos v2 (MERGE idempotente)",
+        description="Emite un MERGE/upsert set-based por tabla para filas faltantes + UPDATE con guard anti-no-op NULL-safe; DELETE por PK intacto. Re-ejecutar las piezas DML es seguro y convergente. OFF = scripts v1 (INSERT idempotente por fila).",
         group="global",
         requires="STACKY_DB_COMPARE_ENABLED",
     ),

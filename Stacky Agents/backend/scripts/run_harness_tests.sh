@@ -523,6 +523,10 @@ HARNESS_TEST_FILES=(
   # — Plan 179 · Fidelidad snapshot v2 (tipos exactos + diff quirúrgico) —
   tests/test_plan179_snapshot_v2.py
   tests/test_plan179_diff_v2.py
+  # — Plan 182 · Scripts de datos v2 (MERGE idempotente por dialecto) —
+  tests/test_plan182_data_merge_emitters.py
+  tests/test_plan182_data_merge_bundle.py
+  tests/test_plan182_data_merge_e2e_sqlite.py
 )
 
 pass=0

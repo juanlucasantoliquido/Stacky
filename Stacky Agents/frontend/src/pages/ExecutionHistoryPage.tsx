@@ -18,6 +18,12 @@ import { formatRelativeTime } from "../utils/formatRelativeTime";
 import { formatDuration, formatCostUsd } from "../services/format";
 import { useWorkbench } from "../store/workbench";
 import { readQueryParam } from "../utils/queryParams";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { parseRoute, serializeRoute } from "../services/routes";
+import {
+  historyFiltersFromQuery, historyFiltersToQuery,
+  omitKeys, HISTORY_FILTER_QUERY_KEYS, resolveMountFilters,
+} from "../services/routeFilters";
 import styles from "./ExecutionHistoryPage.module.css";
 
 // ---------------------------------------------------------------------------
@@ -51,7 +57,8 @@ const STATUSES = ["", "completed", "error", "needs_review", "running", "cancelle
 // ---------------------------------------------------------------------------
 
 export default function ExecutionHistoryPage() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // Plan 165 F2 — los filtros sobreviven F5 y el cambio de tab vía localStorage.
+  const [filters, setFilters] = useLocalStorageState<Filters>("stacky.ui.history.filters", DEFAULT_FILTERS);
   const [detailId, setDetailId] = useState<number | null>(null);
   const activeProject = useWorkbench((s) => s.activeProject);
 
@@ -63,6 +70,33 @@ export default function ExecutionHistoryPage() {
     if (!Number.isFinite(id)) return;
     setDetailId(id);
   }, []);
+
+  // Plan 165 F2 — montaje: precedencia URL > persistido > defaults, merge
+  // anti-drift (C5) y offset 0 (§3.7). Si la URL trae >=1 filtro, esa vista se
+  // reproduce EXACTA (lo persistido se ignora entero — C2).
+  useEffect(() => {
+    const { query } = parseRoute(window.location.pathname, window.location.search);
+    const fromUrl = historyFiltersFromQuery(query);
+    setFilters((persisted) => ({
+      ...resolveMountFilters(DEFAULT_FILTERS, persisted, fromUrl),
+      offset: 0,
+    }));
+  }, []);  // SOLO al montar
+
+  // Plan 165 F2 — reflejo de filtros en el querystring (replaceState: no ensucia
+  // el historial ni serializa offset). parseRoute/serializeRoute preservan exec
+  // y toda query ajena vía ...current.
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    const next = serializeRoute({
+      ...current,
+      query: { ...omitKeys(current.query, HISTORY_FILTER_QUERY_KEYS), ...historyFiltersToQuery(filters) },
+    });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) {
+      window.history.replaceState({}, "", next);
+    }
+  }, [filters]);
 
   const historyQ = useQuery({
     queryKey: ["execution-history", filters, activeProject?.name],

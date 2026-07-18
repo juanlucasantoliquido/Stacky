@@ -33,7 +33,7 @@ from services.heartbeat_monitor import (
 )
 from services.manifest_watcher import MANIFEST_FILENAME, default_runs_dir
 from services.ticket_status import EXECUTION_TIMEOUT_MINUTES, PRE_RUN_TIMEOUT_SECONDS, TicketStatusEvent
-from services.app_version import get_app_version
+from services.app_version import get_app_version, get_source_commit, get_built_at, get_repo_head, get_build_drift
 
 logger = logging.getLogger("stacky.api.diag")
 
@@ -398,6 +398,10 @@ def health():
         "ok": True,
         "healthy": not warnings,
         "version": get_app_version(),
+        "source_commit": get_source_commit(),   # Plan 163 F1 — identidad de build
+        "built_at": get_built_at(),              # Plan 163 F1
+        "repo_head": get_repo_head(),            # Plan 163 F1 — solo dev (None en deploy)
+        "build_drift": get_build_drift(),        # Plan 163 F1 — solo dev
         "repo_root": str(repo_root_path) if repo_root_path else None,
         "repo_root_error": repo_root_err,
         "outputs_dir": str(outputs_path) if outputs_path else None,

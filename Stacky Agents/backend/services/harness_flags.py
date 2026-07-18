@@ -125,6 +125,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "CODEX_CLI_CONTRACT_GATE_ENABLED", "CODEX_CLI_AUTOCORRECT_ENABLED",
         "CODEX_CLI_AUTOCORRECT_MAX_RETRIES", "CODEX_CLI_MODEL_DENYLIST",
         "CODEX_CLI_RESUME_ENABLED", "CODEX_CLI_RESUME_PROJECTS",
+        "STACKY_MODEL_CATALOG_ENABLED",  # Plan 159 — catálogo unificado modelos/efforts
     ),
     "contexto_memoria": (
         "STACKY_CONTEXT_BUDGET_ENABLED", "STACKY_CONTEXT_BUDGET_PROJECTS",
@@ -1080,6 +1081,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Proyectos — criterios de aceptación",
         description="Allowlist CSV de proyectos. Vacío = todos.",
         group="global",
+    ),
+    FlagSpec(
+        key="STACKY_MODEL_CATALOG_ENABLED",
+        type="bool",
+        label="Catálogo unificado de modelos/efforts",
+        description=(
+            "Plan 159 — fuente única backend de modelos/efforts disponibles por "
+            "runtime (Claude Code CLI, Codex CLI, GitHub Copilot), consumida por "
+            "los 3 selectores del frontend. OFF = cada selector usa su fallback "
+            "estático embebido (comportamiento pre-159)."
+        ),
+        group="global",
+        default=True,  # Grupo B — sin costo de tokens, solo UI; promovida ON de alta.
     ),
     FlagSpec(
         key="STACKY_ADAPTIVE_EFFORT_ENABLED",

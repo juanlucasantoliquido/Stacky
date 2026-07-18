@@ -1311,6 +1311,15 @@ class Config:
         "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 191 — Bitácora durable de corridas CI ────────────────────────────
+    # Registra localmente cada pipeline disparado desde Stacky (ref, id, resultado)
+    # y expone GET /api/ci/runs con estado vivo y re-disparo HITL. Solo metadata
+    # local; sin secretos. Default ON (espejo del default=True de la FlagSpec
+    # homónima; curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_CI_RUN_LEDGER_ENABLED: bool = os.getenv(
+        "STACKY_CI_RUN_LEDGER_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

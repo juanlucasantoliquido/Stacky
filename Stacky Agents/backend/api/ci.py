@@ -191,3 +191,26 @@ def monitor_pipeline_route(project: str, pipeline_id: str):
         return jsonify({"error": str(exc)}), 501
     finally:
         _ACTIVE_POLLS[pipeline_id] = max(0, _ACTIVE_POLLS.get(pipeline_id, 1) - 1)
+
+
+# ---------------------------------------------------------------------------
+# GET /runs — bitácora local de corridas disparadas (Plan 191, read-only)
+# ---------------------------------------------------------------------------
+
+@bp.get("/runs")
+def list_ci_runs_route():
+    """Bitácora local de corridas disparadas. Plan 191. Read-only.
+
+    Ruta final GET /api/ci/runs — 1 segmento, no colisiona con /<project>/trigger
+    (POST 2 seg), /<project>/trigger-preview (GET 2 seg) ni /<project>/pipeline/<id>
+    (GET 3 seg).
+    """
+    if not getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+        abort(404)
+    project = request.args.get("project") or None
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except ValueError:
+        return jsonify({"error": "limit inválido"}), 400
+    from services.ci_run_ledger import list_runs
+    return jsonify({"runs": list_runs(project=project, limit=limit)})

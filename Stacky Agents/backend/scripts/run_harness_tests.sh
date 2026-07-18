@@ -536,6 +536,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan189_readiness_flag.py
   tests/test_plan189_readiness_compute.py
   tests/test_plan189_simulacro.py
+  # — Plan 191 · Bitácora durable de corridas CI —
+  tests/test_plan191_ci_ledger_flag.py
 )
 
 pass=0

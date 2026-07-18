@@ -186,6 +186,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
         "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
+        "STACKY_CI_RUN_LEDGER_ENABLED",      # Plan 191 — bitácora durable de corridas CI
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
     ),
     "migrador_ado_gitlab": (
@@ -2951,6 +2952,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # R4 profundidad-1 (master del panel 87)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 191 — Bitácora durable de corridas CI ──────────────────────────
+    FlagSpec(
+        key="STACKY_CI_RUN_LEDGER_ENABLED",
+        type="bool",
+        label="Bitácora de corridas CI",
+        description=(
+            "Plan 191 — Registra localmente cada pipeline disparado desde Stacky "
+            "(ref, id, resultado) y muestra el historial con estado vivo y "
+            "re-disparo con confirmación. Solo metadata local; sin secretos. "
+            "Con OFF el endpoint /api/ci/runs devuelve 404 y la sección de "
+            "disparo queda idéntica a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_PIPELINE_TRIGGER_ENABLED",  # sin triggers no hay contenido (depth-1)
         # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),

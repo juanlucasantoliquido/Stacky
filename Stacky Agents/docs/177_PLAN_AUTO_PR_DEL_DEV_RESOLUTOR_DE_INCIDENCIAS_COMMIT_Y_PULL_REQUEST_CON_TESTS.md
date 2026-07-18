@@ -1,7 +1,21 @@
 # Plan 177 — Auto-PR del Dev Resolutor de Incidencias: checkbox "Abrir PR", commit + Pull Request automáticos con los tests incluidos
 
-**Estado:** CRITICADO (v2) — APROBADO-CON-CAMBIOS — 2026-07-18 · juez adversarial aplicado
-(0 bloqueantes, hallazgos IMPORTANTES resueltos). Pendiente de `implementar-plan-stacky`.
+**Estado:** IMPLEMENTADO (F0-F6) — 2026-07-18 · construido por `implementar-plan-stacky` sobre la
+v2 CRITICADO/APROBADO-CON-CAMBIOS (0 bloqueantes). Commits: F0+F1 `8b272d6c`, F2+F3 `b5f3ebeb`,
+F4 `8dd66ab3`, F5 `2bf27bc6`, F6 `dc5a0a50` (sin push).
+
+### Resultado de implementación (2026-07-18)
+- **116 tests verdes por archivo/grupo (G5)**: flags 63; ADO commit_file 16 (F1); diff+intent 8 (F2);
+  endpoint incident_dev 10 (F3, incl. 4 nuevos); post-hook auto-PR 11 + autopublish 8 (F4); frontend
+  modelo puro 4 (F5) + `tsc --noEmit` limpio. Suite incidencias+parity agregada: 53 verdes.
+- **CAVEAT del comando agregado de F6:** correr `test_harness_flags.py` JUNTO con los tests que leen
+  `config` rompe 2 tests flag-off — causa raíz PREEXISTENTE: `test_harness_flags.py` hace
+  `importlib.reload(config)` (`:366-382`), reemplazando el singleton; `api/agents.py` mantiene la
+  referencia vieja y lee defaults stale. Afecta IDÉNTICO al `test_run_incident_dev_404_when_flag_off`
+  del **Plan 166** (no es regresión del 177). Verificación correcta = por archivo (G5). Ver memoria
+  `gotcha-config-reload-harness-flags-contamina`.
+- **Smoke E2E NO ejecutado** (mismo criterio de riesgo del Plan 166): abriría un PR real en el
+  repo/tracker del operador. Queda para que el operador lo dispare cuando quiera (checkbox premarcado).
 
 ## Versión: v1 -> v2 (crítica adversarial aplicada)
 

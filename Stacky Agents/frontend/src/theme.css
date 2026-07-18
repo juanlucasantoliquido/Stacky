@@ -39,6 +39,11 @@
   --radius:    6px;
   --radius-sm: 4px;
 
+  /* Plan 164 — z-index de la primitiva Dialog canónica. Por encima de la paleta
+     de comandos (9500), OnboardingTour (9600) y todos los drawers. Invariante al
+     tema. Si se agrega un overlay más alto, actualizar acá (fuente única). */
+  --z-dialog: 9700;
+
   /* ─── Team / Employee Card tokens ──────── */
   --card-radius:  10px;
   --card-shadow:  0 2px 12px rgba(0,0,0,0.35);

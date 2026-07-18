@@ -32,3 +32,16 @@ export { default as Textarea, textareaPartKeys } from "./Textarea";
 export type { TextareaProps } from "./Textarea";
 export { default as Checkbox, checkboxPartKeys } from "./Checkbox";
 export type { CheckboxProps } from "./Checkbox";
+
+// Plan 164 — primitiva Dialog canónica + derivados de marca + hooks
+// promise-based (aditivo; las 13 primitivas de arriba no se tocan).
+export { default as Dialog } from "./Dialog";
+export type { DialogProps } from "./Dialog";
+export { default as ConfirmDialog } from "./ConfirmDialog";
+export type { ConfirmDialogProps } from "./ConfirmDialog";
+export { default as AlertDialog } from "./AlertDialog";
+export type { AlertDialogProps } from "./AlertDialog";
+export { default as PromptDialog } from "./PromptDialog";
+export type { PromptDialogProps } from "./PromptDialog";
+export { default as DialogHost, useConfirm, useAlert, useTextPrompt } from "./DialogHost";
+export type { ConfirmOpts, AlertOpts, TextPromptOpts } from "./DialogHost";

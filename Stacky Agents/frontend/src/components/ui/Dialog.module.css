@@ -1,0 +1,136 @@
+/*
+ * Plan 164 F1 — Estilos de la primitiva Dialog canónica.
+ * Archivo bajo components/ui/: alcance CERO de hex y style inline (uiDebtRatchet
+ * forcedZero). SÓLO var(--token) de theme.css y colores rgba()/rgb(); JAMÁS hex.
+ * A3: transición breve de entrada + prefers-reduced-motion que la desactiva.
+ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  z-index: var(--z-dialog, 9700);
+  backdrop-filter: blur(3px);
+  animation: dialogOverlayIn 0.15s ease;
+}
+
+.panel {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 2 * var(--space-6));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dialogPanelIn 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sm {
+  max-width: 380px;
+}
+.md {
+  max-width: 480px;
+}
+.lg {
+  max-width: 680px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.closeBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-elev);
+}
+
+.body {
+  padding: var(--space-6);
+  overflow-y: auto;
+  color: var(--text-primary);
+}
+
+.message {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+}
+
+.promptField {
+  margin-top: var(--space-5);
+}
+
+@keyframes dialogOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialogPanelIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* A3 — respeta la preferencia de movimiento reducido: sin animaciones. */
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .panel {
+    animation: none;
+  }
+}
+
+/* C6b — scroll-lock del fondo mientras haya un diálogo abierto (contador a nivel
+   módulo en Dialog.tsx agrega/quita esta clase en <body>). */
+:global(body.dialogScrollLock) {
+  overflow: hidden;
+}

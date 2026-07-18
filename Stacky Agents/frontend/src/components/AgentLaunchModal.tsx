@@ -15,7 +15,7 @@ import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import PixelAvatar from "./PixelAvatar";
 import LoadErrorState from "./LoadErrorState";
 import { formatLoadErrorMessage } from "../utils/loadError";
-import { shouldCloseOnBackdrop } from "../services/uiGuards";
+import { Dialog } from "./ui";
 import styles from "./AgentLaunchModal.module.css";
 
 interface TicketComment { author: string; date: string; text: string; }
@@ -280,18 +280,17 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
     }
   }
 
-  // close on backdrop click
-  function handleBackdrop(e: React.MouseEvent) {
-    if (e.target !== e.currentTarget) return;
-    const dirty = selected != null || message.trim().length > 0;
-    if (shouldCloseOnBackdrop({ dirty, busy: loading })) onClose();
-  }
-
   const displayName = agent.name ?? agent.filename.replace(/\.agent\.md$/i, "");
 
   return (
-    <div className={styles.backdrop} onClick={handleBackdrop}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Asignar ticket">
+    <Dialog
+      open
+      bare
+      panelClassName={styles.modal}
+      onClose={onClose}
+      closeGuard={{ dirty: selected != null || message.trim().length > 0, busy: loading }}
+      ariaLabel="Asignar ticket"
+    >
         {/* Header */}
         <div className={styles.header}>
           <PixelAvatar value={avatarValue} size="sm" name={displayName} />
@@ -442,7 +441,6 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
               : "▶ Lanzar ejecución"}
           </button>
         </div>
-      </div>
 
       {showClaudeConfig && (
         <ClaudeCliConfigModal
@@ -452,6 +450,6 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
           }}
         />
       )}
-    </div>
+    </Dialog>
   );
 }

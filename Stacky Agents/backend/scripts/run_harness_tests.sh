@@ -515,6 +515,12 @@ HARNESS_TEST_FILES=(
   # — Plan 156 · Latido unico —
   tests/test_executions_summary.py
   tests/test_access_log_suppress_pollers.py
+  # — Plan 167 · Centro de Evolucion —
+  tests/test_evolution_flags.py
+  tests/test_evolution_store.py
+  tests/test_evolution_apply.py
+  tests/test_evolution_cycle.py
+  tests/test_evolution_endpoints.py
 )
 
 pass=0

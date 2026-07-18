@@ -2718,6 +2718,51 @@ export const PublishLedger = {
     ),
 };
 
+// ── Plan 167 — Centro de Evolución ────────────────────────────────────────────
+export const Evolution = {
+  health: () => fetch("/api/evolution/health").then((r) => r.json()),
+  overview: () =>
+    fetch("/api/evolution/overview").then((r) => {
+      if (!r.ok) throw new Error(`evolution overview ${r.status}`);
+      return r.json();
+    }),
+  proposals: (q: { status?: string; aspect_id?: string; origin?: string } = {}) => {
+    const p = new URLSearchParams(
+      Object.entries(q).filter(([, v]) => !!v) as [string, string][],
+    );
+    const qs = p.toString();
+    return fetch(`/api/evolution/proposals${qs ? `?${qs}` : ""}`).then((r) => {
+      if (!r.ok) throw new Error(`evolution proposals ${r.status}`);
+      return r.json();
+    });
+  },
+  proposal: (id: string) =>
+    fetch(`/api/evolution/proposals/${id}`).then((r) => {
+      if (!r.ok) throw new Error(`evolution proposal ${r.status}`);
+      return r.json();
+    }),
+  createProposal: (body: unknown) =>
+    fetch("/api/evolution/proposals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  transition: (id: string, action: string, note?: string, force?: boolean) =>
+    fetch(`/api/evolution/proposals/${id}/transition`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, note: note ?? null, force: force ?? false }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  runCycle: (useLlm: boolean) =>
+    fetch("/api/evolution/cycle/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aspects: null, use_llm: useLlm }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  ledger: (limit = 50) => fetch(`/api/evolution/ledger?limit=${limit}`).then((r) => r.json()),
+  cycles: (limit = 20) => fetch(`/api/evolution/cycles?limit=${limit}`).then((r) => r.json()),
+};
+
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────
 export const CodeIntegrity = {
   get: () =>

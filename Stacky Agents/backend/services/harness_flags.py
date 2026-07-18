@@ -265,6 +265,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
         "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
+        "STACKY_EVOLUTION_CENTER_ENABLED",              # Plan 167 — Centro de Evolución (panel)
+        "STACKY_EVOLUTION_CYCLE_ENABLED",               # Plan 167 — ciclo MAPE on-demand
+        "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED",# Plan 167 — human-on-the-loop lecciones (OFF)
+        "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET",          # Plan 167 — presupuesto tokens/ciclo
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -3307,6 +3311,38 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         # SIN default= (queda None: opt-in, no curada en _CURATED_DEFAULTS_ON).
         # SIN requires= (no tiene master). SIN env_only= (queda UI-editable).
+    ),
+    # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
+    FlagSpec(
+        key="STACKY_EVOLUTION_CENTER_ENABLED",
+        type="bool", default=True,
+        label="Centro de Evolución",
+        description="Panel de auto-mejora de Stacky: aspectos mejorables, propuestas con aprobación humana, ciclo MAPE on-demand, ledger auditable y rollback 1-click.",
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_CYCLE_ENABLED",
+        type="bool", default=True,
+        label="Ciclo MAPE on-demand",
+        description="Habilita el botón 'Correr ciclo': lee la telemetría existente (costos, ejecuciones, incidencias, tablero de planes) y emite borradores de propuesta. Nunca aplica nada solo.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED",
+        type="bool",
+        label="Auto-aplicar lecciones de conocimiento (human-on-the-loop)",
+        description="SOLO lecciones de conocimiento reversibles: el ciclo las aplica solo y vos auditás/revertís después. Apagada por defecto porque saltea la revisión previa.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+        # SIN default= (C1): default_is_known() no distingue por type; un default
+        # explícito rompería test_default_known_only_for_curated. Default EFECTIVO OFF en config.py.
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET",
+        type="int",
+        label="Presupuesto de tokens por ciclo",
+        description="Tope de tokens estimados que una corrida del ciclo puede mandar al modelo local (default 20000, definido en config). Si las señales exceden el tope, se truncan y el ciclo lo deja registrado.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+        # SIN default= (C1): int nunca va a _CURATED_DEFAULTS_ON (G4). Default EFECTIVO 20000 en config.py.
     ),
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente ──
     FlagSpec(

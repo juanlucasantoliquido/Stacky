@@ -16,6 +16,7 @@ import { DevOpsPage } from "./pages/DevOpsPage"; // Plan 87
 import { DbComparePage } from "./components/dbcompare/DbComparePage"; // Plan 122
 import CostCenterPage from "./pages/CostCenterPage"; // Plan 142
 import PlansBoardPage from "./pages/PlansBoardPage"; // Plan 128
+import EvolutionCenterPage from "./pages/EvolutionCenterPage"; // Plan 167
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
 import CommandPalette from "./components/CommandPalette";
@@ -44,7 +45,7 @@ import {
 } from "./components/shell/shellNav";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
+type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes" | "evolution";
 
 const TAB_PATHS: Record<Tab, string> = {
   team: "/",
@@ -63,6 +64,7 @@ const TAB_PATHS: Record<Tab, string> = {
   dbcompare: "/dbcompare", // Plan 122 [FIX C3]
   costcenter: "/costcenter", // Plan 142
   planes: "/planes",
+  evolution: "/evolution", // Plan 167
 };
 
 function tabFromPath(pathname: string): Tab {
@@ -103,6 +105,8 @@ export default function App() {
   };
   // Plan 128: tab Planes visible solo si el flag está ON en el backend
   const [planesEnabled, setPlanesEnabled] = useState(false);
+  // Plan 167: tab Evolución visible solo si el flag está ON en el backend
+  const [evolutionEnabled, setEvolutionEnabled] = useState(false);
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
@@ -155,6 +159,9 @@ export default function App() {
     });
     void probeFlagHealth("/api/plans-board/health").then((v) => {
       if (alive) setPlanesEnabled((prev) => nextEnabledState(prev, v));
+    });
+    void probeFlagHealth("/api/evolution/health").then((v) => {
+      if (alive) setEvolutionEnabled((prev) => nextEnabledState(prev, v));
     });
     void probeFlagHealth("/api/search/health").then((v) => {
       if (alive) setDeepSearchEnabled((prev) => nextEnabledState(prev, v));
@@ -251,7 +258,8 @@ export default function App() {
     else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");
     else if (tab === "costcenter" && !costCenterEnabled) selectTab("team");
     else if (tab === "planes" && !planesEnabled) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled]);
+    else if (tab === "evolution" && !evolutionEnabled) selectTab("team");
+  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled, evolutionEnabled]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
@@ -259,6 +267,7 @@ export default function App() {
       docs: !!sections.docs, memory: !!sections.memory,
     },
     migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled,
+    evolutionEnabled,
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -290,6 +299,7 @@ export default function App() {
       {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
       {tab === "costcenter"  && costCenterEnabled && <CostCenterPage />} {/* Plan 142 */}
       {tab === "planes"      && planesEnabled && <PlansBoardPage />} {/* Plan 128 */}
+      {tab === "evolution"   && evolutionEnabled && <EvolutionCenterPage />} {/* Plan 167 */}
     </>
   );
 
@@ -442,6 +452,14 @@ export default function App() {
                 onClick={() => selectTab("planes")}
               >
                 🧭 Planes
+              </button>
+            )}
+            {evolutionEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "evolution" ? styles.active : ""}`}
+                onClick={() => selectTab("evolution")}
+              >
+                🧬 Evolución
               </button>
             )}
           </nav>

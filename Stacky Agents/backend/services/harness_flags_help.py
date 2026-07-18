@@ -1414,6 +1414,31 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la campana desaparece y la barra de arriba queda igual que hoy.",
         example="Dejás corriendo unos agentes, salís a hacer otra cosa, y al volver la campana te muestra cuáles terminaron y si alguno necesita tu revisión, sin tener que buscar en cada pantalla.",
     ),
+    # ── Plan 167 — Centro de Evolución ──────────────────────────────────────
+    "STACKY_EVOLUTION_CENTER_ENABLED": PlainHelp(
+        what="Un panel donde Stacky registra sus propias oportunidades de mejora (prompts, flags, conocimiento, código) como propuestas que vos aprobás o rechazás, con historial y opción de deshacer.",
+        on_effect="Si la activás: aparece el tab 'Evolución' con los aspectos mejorables, las propuestas, el ciclo de análisis y el registro de auditoría. Nunca cambia nada sin tu aprobación.",
+        off_effect="Si la apagás: el tab desaparece y /api/evolution responde 404. Todo lo demás sigue exactamente igual.",
+        example="Stacky detecta que un agente falla seguido, deja una propuesta 'revisar su prompt', y vos decidís con un click si la aplicás o la descartás.",
+    ),
+    "STACKY_EVOLUTION_CYCLE_ENABLED": PlainHelp(
+        what="Habilita el botón 'Correr ciclo' que revisa la telemetría que ya tenés (costos, errores de agentes, incidencias, tablero de planes) y arma borradores de propuestas de mejora.",
+        on_effect="Si la activás: podés correr el ciclo cuando quieras; deja solo borradores para tu revisión y no aplica nada. Sin modelo local configurado, funciona igual con reglas fijas y a costo cero.",
+        off_effect="Si la apagás: el botón no corre el ciclo; las propuestas se crean solo a mano.",
+        example="Apretás 'Correr ciclo' y Stacky te deja un borrador: 'el modelo X explica el 70% del gasto — evaluá uno más barato para tareas mecánicas'.",
+    ),
+    "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED": PlainHelp(
+        what="Deja que el ciclo aplique solo las lecciones de conocimiento (notas reversibles), sin pedirte aprobación previa.",
+        on_effect="Si la activás: saltea la revisión previa: el ciclo aplica la lección solo y te queda el botón Revertir para deshacerla. Solo afecta lecciones de conocimiento, nunca prompts, flags ni código.",
+        off_effect="Si la apagás: cada lección espera tu aprobación antes de guardarse, igual que el resto de las propuestas.",
+        example="El ciclo detecta un patrón de bloqueo repetido y, con esto activado, guarda la lección al toque; si no te sirve, la revertís con un click.",
+    ),
+    "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET": PlainHelp(
+        what="El tope de tokens estimados que una corrida del ciclo puede mandarle al modelo local para redactar mejor las propuestas.",
+        on_effect="Si subís el número: el ciclo puede mandar más contexto al modelo local (propuestas mejor redactadas), pero puede tardar un poco más.",
+        off_effect="Si lo bajás: el ciclo manda menos contexto; si las señales exceden el tope, se recortan y queda anotado en el registro del ciclo.",
+        example="Con el tope en 20000, si las señales de un ciclo pesan más, se truncan y el resumen del ciclo te avisa que hubo recorte.",
+    ),
 }
 
 

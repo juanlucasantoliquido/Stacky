@@ -1357,4 +1357,28 @@ class Config:
         "STACKY_PLANS_BOARD_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
+    # Panel de aspectos/propuestas/ciclo MAPE con gates humanos. Default ON:
+    # solo agrega superficie de lectura + acciones on-click del operador.
+    STACKY_EVOLUTION_CENTER_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_CENTER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Ciclo MAPE on-demand (botón "Correr ciclo"). Sin LLM local configurado
+    # corre en modo determinista puro (reglas R-A1..R-A4), costo cero.
+    STACKY_EVOLUTION_CYCLE_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_CYCLE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # human-on-the-loop SOLO para lecciones de conocimiento (reversibles).
+    # EXCEPCIÓN DURA #1 (bypass de revisión humana) → default OFF a conciencia.
+    STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Presupuesto de tokens ESTIMADOS por corrida del ciclo (entrada al LLM local).
+    STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET: int = int(os.getenv(
+        "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET", "20000"
+    ) or "20000")
+
 config = Config()

@@ -680,6 +680,10 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 139 — Shell v2 (sidebar) PROMOVIDA a default ON (operador
     # 2026-07-18): deja de ser la excepción OFF; es la presentación de fábrica. ──
     "STACKY_UI_SHELL_V2_ENABLED",
+    # ── Plan 167 — Centro de Evolución (SOLO las 2 bool default ON; la int
+    # STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET y la OFF AUTO_APPLY NO van acá — G4/C1) ──
+    "STACKY_EVOLUTION_CENTER_ENABLED",
+    "STACKY_EVOLUTION_CYCLE_ENABLED",
 }
 
 

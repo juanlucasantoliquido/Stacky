@@ -221,6 +221,43 @@ def _startup_sync(logger) -> None:
                 logger.exception("sync ADO error inesperado en arranque")
 
 
+def _plan158_maybe_backfill_claude_model(logger) -> None:
+    """Plan 158 F6 — corre backfill_claude_model_key() una sola vez (marker file).
+
+    Corre SÍNCRONO dentro de create_app(), acotado a _BACKFILL_MAX_ROWS=20000
+    filas (segundos, no minutos). Deliberadamente NO usa thread daemon: gotcha
+    conocido de crashes nativos daemon-threads vs SQLAlchemy teardown (Plan 146).
+    Nunca rompe el arranque: cualquier excepción se loguea y se sigue. Con la
+    flag OFF, no hace nada. Bajo pytest (STACKY_TEST_MODE — v2/C4, patrón
+    idéntico al gate del daemon Plan 146 en app.py:524-530) tampoco hace nada:
+    los tests que invocan create_app() no deben escanear la DB ni escribir
+    marker files.
+    """
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
+        return
+    if not getattr(config, "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED", True):
+        return
+    try:
+        # v2 (C4): app.py NO importa datetime a nivel módulo (grep verificado,
+        # 0 hits) — import local determinista, NO agregar import top-level.
+        from datetime import datetime as _dt
+
+        from runtime_paths import data_dir
+        marker = data_dir() / "plan158_claude_model_backfill.done"
+        if marker.exists():
+            return
+        from services.cost_analytics import backfill_claude_model_key
+        result = backfill_claude_model_key()
+        logger.info(
+            "plan158 backfill claude_code_model->model: scanned=%d updated=%d",
+            result["scanned"], result["updated"],
+        )
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(_dt.utcnow().isoformat(), encoding="utf-8")
+    except Exception:
+        logger.exception("plan158 backfill falló (no crítico, se reintenta en el próximo arranque)")
+
+
 def _log_completion_preflight(logger) -> None:
     """Loguea (y advierte) sobre la salud del cierre automático al arrancar.
 
@@ -464,6 +501,7 @@ def create_app() -> Flask:
         _startup_purge_only(logger)
     else:
         _startup_sync(logger)
+        _plan158_maybe_backfill_claude_model(logger)
 
     # ── U2.1 — Hook de avance de pipeline por finalización de ejecución ─────
     try:

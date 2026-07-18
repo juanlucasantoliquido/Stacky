@@ -1,6 +1,6 @@
 # Plan 158 — Centro de Costos: fix de telemetría real en Claude Code CLI (paridad con Codex)
 
-**Estado:** CRITICADO v2 (v1 RECHAZADO por C1 bloqueante — corregido en esta versión; listo para implementar)
+**Estado:** IMPLEMENTADO F0-F7 (2026-07-18) — TDD verde por archivo; ratchet registrado. Antes: CRITICADO v2 (v1 RECHAZADO por C1 bloqueante, corregido).
 
 > **Versión: v1 -> v2** — crítica adversarial 2026-07-17 (StackyArchitectaUltraEficientCode, juez).
 >

@@ -552,6 +552,19 @@ class Config:
         "STACKY_COST_CODEBURN_IMPORT_PATH", ""
     ).strip()
 
+    # ── Plan 158 — Fix telemetría de costo claude_code_cli (paridad con codex) ──
+    # Kill-switch: default ON (bug fix de observabilidad, ninguna de las 4
+    # excepciones duras aplica). OFF revierte al comportamiento previo exacto.
+    STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED: bool = os.getenv(
+        "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED", "true"
+    ).strip().lower() == "true"
+    # Backfill idempotente y aditivo de metadata["model"] en filas históricas
+    # de claude_code_cli (copia desde claude_code_model). Default ON: sólo
+    # copia una clave ya presente, nunca inventa datos (§6 fuera de scope).
+    STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED: bool = os.getenv(
+        "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
     # OFF por defecto: con OFF enrich_blocks es byte-idéntico al plan 64.
     STACKY_PROCESS_DISCIPLINE_ENABLED: bool = os.getenv(

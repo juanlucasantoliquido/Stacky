@@ -535,3 +535,51 @@ def load_external_codeburn() -> dict | None:
         return None
 
     return {"source": "external_jsonl", "total_usd": round(total_usd, 6), "records": records}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Plan 158 F4 — backfill idempotente y aditivo: copia metadata["claude_code_model"]
+# -> metadata["model"] en filas históricas de claude_code_cli que no tienen
+# "model". NUNCA inventa datos: si claude_code_model tampoco existe, no hace
+# nada con esa fila (queda "unknown" legítimamente, ver plan158 §6).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_BACKFILL_MAX_ROWS = 20000  # mismo cap duro de seguridad que _MAX_ROWS (mono-operador)
+
+
+def backfill_claude_model_key() -> dict:
+    """Copia claude_code_model -> model en filas claude_code_cli sin "model".
+
+    PURO en su lógica de decisión (sólo copia una clave existente), pero SÍ
+    toca DB (lectura + escritura acotada por _BACKFILL_MAX_ROWS). Idempotente:
+    correrlo N veces produce el mismo resultado final; en la segunda corrida
+    "updated" es 0 para las filas ya arregladas.
+
+    Devuelve {"scanned": N, "updated": M}.
+    """
+    from db import session_scope
+    from models import AgentExecution
+
+    scanned = 0
+    updated = 0
+    with session_scope() as session:
+        rows = (
+            session.query(AgentExecution)
+            .order_by(AgentExecution.id.desc())
+            .limit(_BACKFILL_MAX_ROWS)
+            .all()
+        )
+        for row in rows:
+            scanned += 1
+            md = row.metadata_dict
+            if md.get("runtime") != "claude_code_cli":
+                continue
+            if md.get("model") is not None:
+                continue
+            claude_model = md.get("claude_code_model")
+            if not claude_model:
+                continue
+            md["model"] = claude_model
+            row.metadata_dict = md
+            updated += 1
+    return {"scanned": scanned, "updated": updated}

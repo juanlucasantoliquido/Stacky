@@ -630,6 +630,8 @@ _CURATED_DEFAULTS_ON = {
     # STACKY_COST_CODEBURN_IMPORT_ENABLED (F7) NO entra acá: excepción dura #3
     # (prerequisito externo no garantizado), default OFF a propósito.
     "STACKY_COST_CENTER_ENABLED",
+    "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
+    "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
     # Plan 144 F2 — preflight de confianza de workspace (claude): kill-switch
     # default ON (detecta+falla temprano, no reduce seguridad).
     "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
@@ -963,3 +965,18 @@ def test_cost_center_flag_registered_default_on():
     assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" not in _CURATED_DEFAULTS_ON
     assert categorize("STACKY_COST_CODEBURN_IMPORT_ENABLED") == "observabilidad_notif"
     assert categorize("STACKY_COST_CODEBURN_IMPORT_PATH") == "observabilidad_notif"
+
+
+def test_plan158_claude_cli_telemetry_flags_registered_default_on():
+    """Plan 158 — las 2 flags de telemetría claude_code_cli: registradas, categorizadas, default ON."""
+    from services.harness_flags import FLAG_REGISTRY, categorize
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for key in (
+        "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",
+        "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",
+    ):
+        assert key in by_key
+        assert by_key[key].default is True
+        assert categorize(key) == "observabilidad_notif"
+        assert key in _CURATED_DEFAULTS_ON

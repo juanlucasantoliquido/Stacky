@@ -261,6 +261,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
+        "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
+        "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
         "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
     ),
@@ -1644,6 +1646,32 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 158 — Fix telemetría de costo claude_code_cli ─────────────────────
+    FlagSpec(
+        key="STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",
+        type="bool",
+        default=True,
+        label="Centro de Costos: telemetría real claude_code_cli",
+        description=(
+            "Plan 158 — Persiste harness_telemetry + metadata['model'] canónico "
+            "en ejecuciones claude_code_cli (paridad con codex_cli). Kill-switch: "
+            "OFF revierte al comportamiento previo exacto (sin cambios de datos)."
+        ),
+        group="observabilidad_notif",
+    ),
+    FlagSpec(
+        key="STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",
+        type="bool",
+        default=True,
+        label="Centro de Costos: backfill de modelo histórico (claude_code_cli)",
+        description=(
+            "Plan 158 — Al arrancar, copia una sola vez metadata['claude_code_model'] "
+            "-> metadata['model'] en ejecuciones históricas de claude_code_cli que ya "
+            "tienen la clave vieja pero no la canónica. Idempotente, aditivo, nunca "
+            "inventa costo."
+        ),
+        group="observabilidad_notif",
     ),
     FlagSpec(
         key="STACKY_UNBLOCKER_COMPLETED_CAP",

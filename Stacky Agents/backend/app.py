@@ -327,6 +327,9 @@ def create_app() -> Flask:
     from services.lifecycle_log import install_shutdown_hook
     install_shutdown_hook()   # Plan 163 F3 — firmar el shutdown en system_logs
 
+    from services.error_fingerprints import run_boot_scan
+    run_boot_scan()   # Plan 163 F5 — memoria inmunologica activa al arranque (AVISA, no actua)
+
     # Plan 153 — migracion one-shot de markers legacy al publish_ledger (idempotente, sin red).
     if os.getenv("STACKY_TEST_MODE", "").strip() not in ("1", "true"):
         try:

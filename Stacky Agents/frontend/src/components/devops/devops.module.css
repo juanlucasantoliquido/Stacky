@@ -248,3 +248,7 @@
 @keyframes skeletonPulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 .remediationActions button:focus-visible,
 [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Plan 186 F5 — highlight de línea en el preview YAML (C7). Solo var(), cero hex. */
+.yamlLine { white-space: pre; }
+.lineHighlight { white-space: pre; background: var(--accent); color: var(--bg-base); }

@@ -2,7 +2,7 @@
  * PipelineYamlPreview (Plan 87 F5)
  * Preview vivo de YAML ADO y GitLab con FlagGateBanner (C14) y auto-refresh (C17)
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PipelineGenerator } from '../../api/endpoints';
 import { FlagGateBanner } from './FlagGateBanner';
 import { toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
@@ -13,9 +13,37 @@ export interface PipelineYamlPreviewProps {
   spec: PipelineSpecDraft;
   ctx: DevOpsSectionContext;
   localErrors: string[];
+  /** Plan 186 F5/C7 — línea 1-based a resaltar. undefined = render actual intacto. */
+  highlightLine?: number;
 }
 
-export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, ctx, localErrors }) => {
+export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, ctx, localErrors, highlightLine }) => {
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+
+  // C7 — cuando highlightLine está definido, render por líneas para resaltar una;
+  // undefined ⇒ render EXACTAMENTE igual que hoy (string único dentro del <pre>).
+  const renderYaml = (text: string): React.ReactNode => {
+    if (highlightLine === undefined) return text;
+    return text.split('\n').map((ln, i) => {
+      const isHi = i === highlightLine - 1;
+      return (
+        <div
+          key={i}
+          ref={isHi ? highlightRef : undefined}
+          className={isHi ? styles.lineHighlight : styles.yamlLine}
+        >
+          {ln.length ? ln : ' '}
+        </div>
+      );
+    });
+  };
+
+  useEffect(() => {
+    if (highlightLine !== undefined && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ block: 'center' });
+    }
+  }, [highlightLine]);
+
   const [preview, setPreview] = useState<{ ado: string; gitlab: string } | null>(null);
   const [previewErrors, setPreviewErrors] = useState<Array<{ field: string; message: string }>>([]);
   const [loading, setLoading] = useState(false);
@@ -110,13 +138,13 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Azure DevOps</h4>
             <pre className={styles.yamlPre}>
-              {preview.ado}
+              {renderYaml(preview.ado)}
             </pre>
           </div>
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>GitLab CI</h4>
             <pre className={styles.yamlPre}>
-              {preview.gitlab}
+              {renderYaml(preview.gitlab)}
             </pre>
           </div>
         </div>

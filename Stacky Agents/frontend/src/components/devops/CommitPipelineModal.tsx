@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { PipelineGenerator } from '../../api/endpoints';
 import { toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
+import { commitLintSummary, type LintReport } from './pipelineLint';
 import styles from './devops.module.css';
 
 export interface CommitPipelineModalProps {
@@ -19,6 +20,11 @@ export interface CommitPipelineModalProps {
    * este prop llega `false`/`undefined` ⇒ el modal queda IDÉNTICO a hoy.
    */
   adoCommitSupported?: boolean;
+  /**
+   * Plan 186 F6 — último LintReport del panel. Informativo: NUNCA deshabilita el
+   * commit (HITL). undefined ⇒ el modal queda IDÉNTICO a hoy (retrocompatible).
+   */
+  lintReport?: LintReport;
 }
 
 export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({
@@ -27,7 +33,9 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({
   onSuccess,
   onClose,
   adoCommitSupported = false,
+  lintReport,
 }) => {
+  const lintSummary = commitLintSummary(lintReport);
   const [target, setTarget] = useState<'gitlab' | 'ado'>('gitlab');
   const [branch, setBranch] = useState('');
   const [confirmChecked, setConfirmChecked] = useState(false);
@@ -109,6 +117,21 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({
               />
             </div>
 
+            {/* Plan 186 F6 — resumen del lint (informativo, NUNCA bloquea) */}
+            {lintSummary.tone !== 'none' && (
+              <div
+                className={
+                  lintSummary.tone === 'error'
+                    ? styles.alertError
+                    : lintSummary.tone === 'warn'
+                      ? styles.alertWarning
+                      : styles.alertSuccess
+                }
+              >
+                {lintSummary.text}
+              </div>
+            )}
+
             <div className={styles.panelMuted} style={{ marginBottom: '16px', padding: '12px', borderRadius: '3px' }}>
               <label style={{ display: 'flex', alignItems: 'start', gap: '8px', cursor: loading ? 'not-allowed' : 'pointer' }}>
                 <input
@@ -140,7 +163,7 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({
                 disabled={!confirmChecked || loading}
                 className={styles.btnSuccess}
               >
-                {loading ? 'Commiteando...' : 'Commit'}
+                {loading ? 'Commiteando...' : lintSummary.confirmLabel ?? 'Commit'}
               </button>
             </div>
           </>

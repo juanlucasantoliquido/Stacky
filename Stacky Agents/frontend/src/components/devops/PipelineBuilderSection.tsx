@@ -46,6 +46,8 @@ import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { BlockTree } from './BlockTree';
 import { BlockProperties } from './BlockProperties';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
+import { PipelineLintPanel } from './PipelineLintPanel';
+import { type LintReport } from './pipelineLint';
 import { CommitPipelineModal } from './CommitPipelineModal';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
 import { ProductionFlow } from './ProductionFlow';
@@ -82,6 +84,9 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const [importSource, setImportSource] = useState<'ado' | 'gitlab'>('gitlab');
   const [showCommitModal, setShowCommitModal] = useState(false);
   const [lastCommitBranch, setLastCommitBranch] = useState<string>('');
+  // Plan 186 F5/F6 — último LintReport (para el modal de commit) + línea a resaltar
+  const [lintReport, setLintReport] = useState<LintReport | undefined>(undefined);
+  const [lintHighlight, setLintHighlight] = useState<number | undefined>(undefined);
   // Errores (C16)
   const [actionError, setActionError] = useState<string | null>(null);
   // Debounce para auto-refresh preview (C17)
@@ -697,7 +702,14 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
         )}
 
         <div style={{ marginTop: '16px' }}>
-          <PipelineYamlPreview spec={spec} ctx={ctx} localErrors={localErrors} />
+          <PipelineYamlPreview spec={spec} ctx={ctx} localErrors={localErrors} highlightLine={lintHighlight} />
+          {/* Plan 186 F5 — panel de lint (se auto-oculta con la flag OFF/404) */}
+          <PipelineLintPanel
+            spec={spec}
+            project={activeProject ?? ''}
+            onHighlightLine={setLintHighlight}
+            onReport={setLintReport}
+          />
         </div>
 
         {/* Plan 93 — preflight "¿Va a funcionar?" (solo-lectura, informativo) */}
@@ -801,6 +813,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
           onSuccess={handleCommitSuccess}
           onClose={() => setShowCommitModal(false)}
           adoCommitSupported={ctx.health.ado_commit_supported === true}
+          lintReport={lintReport}
         />
       )}
 

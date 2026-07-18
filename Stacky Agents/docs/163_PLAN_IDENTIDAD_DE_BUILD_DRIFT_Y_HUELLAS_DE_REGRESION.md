@@ -1,6 +1,22 @@
 ﻿# Plan 163 — Identidad de build, drift proceso-vs-repo y huellas de regresión
 
-> **Estado:** PROPUESTO v1 (2026-07-16) · **Autor:** StackyArchitectaUltraEficientCode
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**CHANGELOG v1 -> v2 (2026-07-18, juez StackyArchitectaUltraEficientCode):**
+- **C1 (BLOQUEANTE, resuelto):** la muestra `self_test.matches` de la huella `ansi_in_file_log` contenía el **byte de control ESC crudo (U+001B) embebido en este doc**. Copiado literal al `.json`, `json.loads` (strict, default de Python) lo RECHAZA ("Invalid control character", RFC 8259 exige escapar controles) → KPI-5 rojo; y si un editor perdía el byte invisible, `test_self_test_coherente` caía (la muestra sin ESC no matchea `\x1b\[`). El catálogo sembrado rompía su propio gate por construcción. FIX: la muestra ahora usa el escape JSON **`\u001b`** (decodifica a ESC real al parsear); nueva regla dura en §9 (prohibido todo byte de control crudo en el catálogo) + caso `test_sin_control_chars_crudos` en el schema-test de F4.
+- **C2 (IMPORTANTE, resuelto):** `install_shutdown_hook()` se instalaba también bajo pytest (create_app corre en decenas de tests) → atexit + reemplazo de SIGINT/SIGTERM en el proceso pytest y fila `shutdown` espuria al final de cada corrida. FIX: gate con `STACKY_TEST_MODE` (la MISMA llave única que `app.py:530` ya consume y que el plan hermano del arnés veraz congela como único mecanismo de detección de pytest); los tests llaman `log_shutdown()` directo; test nuevo `test_install_es_noop_en_test_mode`.
+- **C3 (IMPORTANTE, resuelto):** falso verde estructural de la huella `pipeline_status_404` ante regresión PARCIAL: `local_file_logging.py:68` suprime el access-log de ese path **por path, no por status** → si un cambio rompe SOLO el shim pero conserva la supresión, el 404 jamás llega al log y el smoke no lo ve. FIX de honestidad: `note` en la entrada del catálogo + R6 ampliado — el smoke cubre la regresión TOTAL (binario/código pre-145, el caso motivador de los 6.346); la parcial la cubre su `guard_test` pytest.
+- **C4 (IMPORTANTE, resuelto):** el smoke de F5 no tenía dueño concreto ("el pipeline lo invoca" no nombraba a nadie) → la promesa "falla el smoke" no se materializaba sola. FIX: F5 declara los **3 brazos de detección** con dueño explícito, y el brazo automático es la **[ADICIÓN ARQUITECTO] boot-scan**: al arrancar, el backend escanea el tail del log más reciente y registra hits en `system_logs` (aviso, nunca acción) — vigilancia viva en dev Y deploy sin trabajo del operador.
+- **C5 (IMPORTANTE, resuelto):** la tabla §2.5 decía "Rol en 156" (numeración vieja del debate) — colisión de identidad con el plan hermano REAL 156 (latido único). FIX: "Rol en 163".
+- **C6 (MENOR, resuelto):** ubicación del banner de drift ambigua ("después del `<header>` **o** dentro de `styles.actions`"). FIX: ubicación única anclada por texto (inmediatamente antes de `{isRunning && <div className={styles.progressBar}`).
+- **C7 (MENOR, resuelto):** la tabla de impacto prometía detección de drift "inmediata"; el fetch de health es único al montar (correcto: NO se agrega polling — el latido único del plan hermano es contrato congelado). FIX: claim honesto ("al primer render tras el cambio") + nota anti-polling explícita en F2.
+- **C8 (MENOR, resuelto):** `Select-String -ErrorAction SilentlyContinue` podía tragar un regex inválido para .NET → falso verde silencioso justo donde vive el riesgo R8. FIX: try/catch que **lanza** con el id del patrón ofensor.
+- **C9 (MENOR, resuelto):** `get_repo_head()` hacía I/O de disco (`_read_manifest()`) en cada request antes del TTL, violando el principio 3 del propio plan. FIX: presencia del manifest cacheada a nivel módulo (`_MANIFEST_PRESENT`); el fixture de reset pasa de 5 a 6 cachés.
+- **C10 (MENOR, resuelto):** el formato de registro en `run_harness_tests.ps1` iba sin coma final; el array real usa `  "tests/test_x.py",` (verificado `:15`) y es el formato que el plan del arnés veraz congela. FIX: formato alineado en F1/§9.
+- **C11 (MENOR, resuelto):** el fallback de F2 decía "el chip cae a `dev@local` sin hash" — impreciso: `dev@local` sólo si TAMPOCO hay `version`. FIX: redacción precisa.
+- **C12 (MENOR, resuelto):** la entrada `ado_workitem_type_vs402323` quedará stale cuando el plan del ledger la mate. FIX: `note` de handoff en la entrada (al implementarse el ledger: `status`→`resolved` + `killed_commit`).
+
+> **Estado:** CRITICADO v2 (2026-07-18) — v1 RECHAZADO (C1 bloqueante); v2 aplica los 12 fixes y queda lista para implementar · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (crítica adversarial)
 > **Origen:** debate adversarial 2026-07-16 con auditoría empírica de los logs del deploy (07-14/07-16). El gap viene verificado del debate; toda la evidencia archivo:línea de este doc fue **re-verificada contra el worktree el 2026-07-16** y se corrigió el drift encontrado (ver §2 y el bloque "DRIFT CORREGIDO"). Los números de línea son referencia de ese día — **toda edición se ancla por TEXTO normativo citado, no por número de línea**.
 > **Orden en el roadmap:** **cuarto**, después del plan del ledger de publicación transaccional, el del arnés veraz y el del latido único. Esfuerzo **S** (≈80% del sustrato ya existe): entra en cualquier hueco. Es **independiente** de los tres: ninguno lo bloquea ni él a ellos. Su catálogo de huellas (F4) es el **sustrato** que un futuro plan diferido de "análisis local de logs con clustering" consumiría.
 > **Runtimes:** este plan es **identidad del BACKEND + un catálogo de datos + un chip de UI de observación**. Es **100% agnóstico del runtime de agentes** (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ninguna fase toca el camino de ejecución de agentes ni el de publicación. La identidad de build es del proceso Flask, la misma para los 3 runtimes. La paridad de runtimes es automática por vacuidad. Se declara igual por fase.
@@ -18,9 +34,9 @@
 - **KPI-1 — Identidad de build backend verde:** `.venv\Scripts\python.exe -m pytest tests/test_app_version_build_identity.py -q` → exit 0 (incluye el caso deploy con `release-manifest.json` de fixture y el caso dev con git; `source_commit` y `built_at` presentes en AMBOS modos).
 - **KPI-2 — `/api/diag/health` expone identidad:** cubierto por `test_app_version_build_identity.py` (test que arma la app y hace `GET /api/diag/health` verificando que el body trae `source_commit`, `built_at`, `repo_head` y `build_drift`).
 - **KPI-3 — Helpers puros del chip verdes:** `npx vitest run src/components/__tests__/buildIdentity.test.ts` → exit 0 (short-hash, formato de `built_at`, etiqueta del chip, y `driftBanner` visible sólo cuando `build_drift === true`).
-- **KPI-4 — Evento de shutdown verde:** `.venv\Scripts\python.exe -m pytest tests/test_lifecycle_shutdown_log.py -q` → exit 0 (disparar el handler escribe **exactamente 1** fila `system_logs` con `source="app_lifecycle"`, `action="shutdown"` y el motivo en `context_json`).
-- **KPI-5 — Schema del catálogo verde:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_catalog.py -q` → exit 0 (JSON válido, sin ids duplicados, cada `log_pattern` compila como regex de Python, campos obligatorios presentes por entrada).
-- **KPI-6 — Scanner de huellas verde:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_scan.py -q` → exit 0 (una muestra "sucia" con una huella `resolved` matchea su id; un log "limpio" no matchea nada; el grep NEGATIVO se comporta binario).
+- **KPI-4 — Evento de shutdown verde:** `.venv\Scripts\python.exe -m pytest tests/test_lifecycle_shutdown_log.py -q` → exit 0 (disparar el handler escribe **exactamente 1** fila `system_logs` con `source="app_lifecycle"`, `action="shutdown"` y el motivo en `context_json`; e `install_shutdown_hook()` es **no-op bajo `STACKY_TEST_MODE`** — C2).
+- **KPI-5 — Schema del catálogo verde:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_catalog.py -q` → exit 0 (JSON válido, sin ids duplicados, cada `log_pattern` compila como regex de Python, campos obligatorios presentes por entrada, y **cero bytes de control crudos** en el archivo — C1).
+- **KPI-6 — Scanner de huellas verde:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_scan.py -q` → exit 0 (una muestra "sucia" con una huella `resolved` matchea su id; un log "limpio" no matchea nada; el grep NEGATIVO se comporta binario; e incluye los casos del **boot-scan** de F5 — hits escriben `system_logs`, log limpio no escribe nada).
 - **KPI-7 — Tipos frontend verdes:** `npx tsc --noEmit` → exit 0.
 - **KPI-8 — Tests backend registrados en el arnés:** `grep -c "test_app_version_build_identity.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`; lo mismo para `test_lifecycle_shutdown_log.py`, `test_error_fingerprints_catalog.py` y `test_error_fingerprints_scan.py`.
 
@@ -28,8 +44,8 @@
 
 | Métrica | Hoy | Con el plan |
 |---|---|---|
-| Tiempo de detección de drift proceso-vs-repo | horas / auditoría manual de logs | **inmediato** (chip + banner en el TopBar, sólo en dev) |
-| Regresiones de clases de error ya resueltas | se descubren por arqueología de logs (o nunca) | detectadas por el smoke de huellas sobre los logs frescos del deploy |
+| Tiempo de detección de drift proceso-vs-repo | horas / auditoría manual de logs | **al primer render tras el cambio** (chip + banner en el TopBar al montar/recargar, sólo en dev; SIN polling nuevo — el latido único del plan hermano es contrato congelado, ver F2/C7) |
+| Regresiones de clases de error ya resueltas | se descubren por arqueología de logs (o nunca) | detectadas por el **boot-scan automático al arrancar** (registra en `system_logs`) y por el smoke de huellas sobre los logs frescos del deploy |
 | Trazabilidad del ciclo de vida del proceso | ninguna al apagar (corte abrupto sin rastro) | fila de `shutdown` firmada en `system_logs` con motivo |
 | ¿El proceso sabe qué commit corre? | no | sí: `source_commit` + `built_at` en `/api/diag/health` y en el chip |
 
@@ -76,7 +92,7 @@ Las clases de error ya resueltas hoy **no tienen ninguna guarda de regresión so
 
 ### 2.5 Infra existente que se REUSA (leída, no supuesta)
 
-| Símbolo | Archivo:línea (2026-07-16) | Rol en 156 |
+| Símbolo | Archivo:línea (2026-07-16) | Rol en 163 |
 |---|---|---|
 | `get_app_version` + `_CACHED_VERSION` | `backend/services/app_version.py:19,34` | F1 agrega `get_source_commit`/`get_built_at`/`get_repo_head` con el MISMO patrón de caché de módulo. |
 | `health()` + `"version"` | `backend/api/diag.py:311,400` | F1 agrega `source_commit`/`built_at`/`repo_head`/`build_drift` al MISMO dict de retorno. |
@@ -163,6 +179,18 @@ _CACHED_BUILT_AT: str | None = None
 _BUILT_AT_RESOLVED = False
 _REPO_HEAD_CACHE: tuple[float, str | None] | None = None   # (timestamp, value)
 _REPO_HEAD_TTL_SECONDS = 10.0
+_MANIFEST_PRESENT: bool | None = None   # C9: presencia del manifest cacheada (cero I/O por request)
+
+
+def _manifest_present() -> bool:
+    """True si existe release-manifest.json. Cacheado a nivel modulo (C9)."""
+    global _MANIFEST_PRESENT
+    if _MANIFEST_PRESENT is None:
+        try:
+            _MANIFEST_PRESENT = _release_manifest_path().exists()
+        except Exception:  # noqa: BLE001
+            _MANIFEST_PRESENT = False
+    return _MANIFEST_PRESENT
 
 
 def _release_manifest_path() -> Path:
@@ -235,8 +263,8 @@ def get_built_at() -> str | None:
 def get_repo_head() -> str | None:
     """HEAD vivo del repo (solo dev), con TTL corto. En deploy (frozen o con manifest) => None."""
     from runtime_paths import is_frozen
-    if is_frozen() or _read_manifest() is not None:
-        return None  # deploy: no hay drift posible (identidad inmutable)
+    if is_frozen() or _manifest_present():
+        return None  # deploy: no hay drift posible (identidad inmutable); cero I/O por request (C9)
     global _REPO_HEAD_CACHE
     now = time.monotonic()
     if _REPO_HEAD_CACHE is not None and (now - _REPO_HEAD_CACHE[0]) < _REPO_HEAD_TTL_SECONDS:
@@ -254,7 +282,7 @@ def get_build_drift() -> bool:
 ```
 
 - **Caso borde:** en dev sin git instalado, `_git_short_head()` devuelve `None` → `source_commit=None`, `repo_head=None`, `build_drift=False` (no rompe nada). En deploy sin manifest (build viejo), `source_commit` cae a git (que tampoco está) → `None`. Todos los caminos degradan a `None`, nunca lanzan.
-- **`_read_manifest()` se llama en `get_repo_head`** por request potencialmente: es un `Path.exists()` + `read_text` chico y sólo en dev; si preocupa, cachear el "¿hay manifest?" a nivel módulo. Aceptable como está (dev-only, archivo minúsculo).
+- **C9 aplicado:** `get_repo_head` NO toca disco por request: la presencia del manifest está cacheada en `_MANIFEST_PRESENT` (una sola vez por proceso). La única I/O periódica es `git rev-parse` cada ≥10 s (TTL), sólo en dev sin manifest. Coherente con el principio 3 ("no leer por request").
 
 **Paso 2 — `diag.py`.** En el dict de retorno de `health()` (ancla de texto: la línea `"version": get_app_version(),`, `:400`), agregar inmediatamente debajo:
 
@@ -274,13 +302,13 @@ Ampliar el import existente `from services.app_version import get_app_version` (
 |---|---|
 | `test_deploy_lee_manifest` | Con `monkeypatch` de `app_version._release_manifest_path` a un JSON de fixture `{"source_commit":"abc1234","generated_at":"2026-07-14 18:00:00"}` (y reseteo de las cachés `_SOURCE_COMMIT_RESOLVED=False`/`_BUILT_AT_RESOLVED=False`), `get_source_commit()=="abc1234"` y `get_built_at()=="2026-07-14 18:00:00"`. |
 | `test_dev_usa_git` | Sin manifest (monkeypatch `_read_manifest`→`None`) y con `_git_short_head` monkeypatcheado a `"deadbee"`, `get_source_commit()=="deadbee"`. |
-| `test_drift_true_cuando_head_difiere` | monkeypatch `is_frozen`→`False`, `_read_manifest`→`None`, `get_source_commit`→`"aaa1111"`, `_git_short_head`→`"bbb2222"` (reset del TTL `_REPO_HEAD_CACHE=None`) → `get_build_drift() is True`. |
+| `test_drift_true_cuando_head_difiere` | monkeypatch `is_frozen`→`False`, `_manifest_present`→`False`, `get_source_commit`→`"aaa1111"`, `_git_short_head`→`"bbb2222"` (reset del TTL `_REPO_HEAD_CACHE=None`) → `get_build_drift() is True`. |
 | `test_drift_false_en_deploy` | monkeypatch `is_frozen`→`True` → `get_repo_head() is None` y `get_build_drift() is False` (no hay drift en deploy). |
 | `test_health_expone_campos` | Armar la app (`create_app()`), `client.get("/api/diag/health")` → 200 y el body tiene las claves `source_commit`, `built_at`, `repo_head`, `build_drift`. |
 
-(Nota para el implementador: como las cachés son de módulo, cada test que las use debe **resetearlas** al inicio, p. ej. `app_version._SOURCE_COMMIT_RESOLVED = False`. Documentarlo con un `pytest.fixture(autouse=True)` que resetee las 5 cachés.)
+(Nota para el implementador: como las cachés son de módulo, cada test que las use debe **resetearlas** al inicio, p. ej. `app_version._SOURCE_COMMIT_RESOLVED = False`. Documentarlo con un `pytest.fixture(autouse=True)` que resetee las **6** cachés: `_CACHED_SOURCE_COMMIT`, `_SOURCE_COMMIT_RESOLVED`, `_CACHED_BUILT_AT`, `_BUILT_AT_RESOLVED`, `_REPO_HEAD_CACHE` y `_MANIFEST_PRESENT` — C9.)
 
-**Paso 4 — Registrar** `tests/test_app_version_build_identity.py` en `run_harness_tests.sh` (`  tests/test_app_version_build_identity.py`) Y `.ps1` (`  "tests/test_app_version_build_identity.py"`), en un bloque nuevo (sh: `  # — Plan 163 · Identidad de build y huellas —`; ps1: `  # Plan 163 - Identidad de build y huellas`).
+**Paso 4 — Registrar** `tests/test_app_version_build_identity.py` en `run_harness_tests.sh` (línea `  tests/test_app_version_build_identity.py` dentro del array `HARNESS_TEST_FILES`) Y `.ps1` (línea `  "tests/test_app_version_build_identity.py",` — **con coma final**, mismo formato que el array real `$HarnessTestFiles`, verificado `:15` — C10), en un bloque nuevo (sh: `  # — Plan 163 · Identidad de build y huellas —`; ps1: `  # Plan 163 - Identidad de build y huellas`).
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_app_version_build_identity.py -q` → exit 0; `grep -c "test_app_version_build_identity.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`.
 
@@ -371,13 +399,15 @@ useEffect(() => {
 <span className={styles.version} title={buildTooltip(build)}>{versionChipLabel(build)}</span>
 ```
 
-- Justo después del `<header>` de apertura o dentro de `styles.actions`, agregar el banner de drift (sólo dev; en deploy `build.drift` es siempre `false`):
+- **Ubicación ÚNICA del banner (C6):** insertarlo **inmediatamente ANTES** de la línea existente `{isRunning && <div className={styles.progressBar}` (ancla de texto, hoy `:216`), como hijo directo del `<header>`, ocupando el ancho completo (sólo dev; en deploy `build.drift` es siempre `false`):
 
 ```tsx
 {build.drift && (
   <div className={styles.driftBanner} role="alert">{driftMessage(build)}</div>
 )}
 ```
+
+- **Nota anti-polling (C7, coherencia con el plan hermano del latido único — contrato congelado):** el fetch de `Health.get()` sigue siendo **UNO al montar** (el `useEffect` con `[]` existente). PROHIBIDO convertirlo en polling/interval: el drift se re-evalúa al próximo mount/recarga, y eso es suficiente y honesto. Extensión futura natural (fuera de scope acá): cuando el latido único esté implementado, su summary puede transportar `build_drift` y el banner volverse vivo sin requests extra.
 
 - Importar de `./buildIdentity`: `import { versionChipLabel, buildTooltip, driftMessage, type BuildIdentity } from "./buildIdentity";`.
 
@@ -397,7 +427,7 @@ useEffect(() => {
 
 **Criterio de aceptación BINARIO:** `npx vitest run src/components/__tests__/buildIdentity.test.ts` → exit 0; `npx tsc --noEmit` → exit 0. **Verificación manual (documentada, sin operador):** en dev, arrancar el backend, hacer un commit nuevo en el repo, esperar >10 s (TTL), recargar la UI → aparece el banner de drift; reiniciar el backend → el banner desaparece.
 
-**Flag:** ninguna. **Runtimes:** UI compartida; el chip muestra la identidad del backend, igual para los 3 runtimes. **Fallback:** si `/api/diag/health` no trae los campos (backend viejo), `build` queda con `null`/`false` y el chip cae a `dev@local` sin hash (backward-compatible). **Trabajo del operador: ninguno.**
+**Flag:** ninguna. **Runtimes:** UI compartida; el chip muestra la identidad del backend, igual para los 3 runtimes. **Fallback (C11, preciso):** si `/api/diag/health` no trae los campos nuevos (backend viejo), los campos quedan `null`/`false` → el chip muestra `v<version>` **sin hash** si `version` vino, y `dev@local` sólo si tampoco hay `version`; el banner jamás aparece (backward-compatible). **Trabajo del operador: ninguno.**
 
 ---
 
@@ -457,9 +487,20 @@ def log_shutdown(reason: str) -> None:
         logger.debug("lifecycle_log: no se pudo registrar shutdown: %s", exc)
 
 
+def _in_test_mode() -> bool:
+    """C2: misma llave unica de pytest que app.py:530 y el plan del arnes veraz."""
+    return os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+
+
 def install_shutdown_hook() -> None:
-    """Registra atexit (siempre) + SIGTERM/SIGINT (best-effort). Idempotente."""
+    """Registra atexit (siempre) + SIGTERM/SIGINT (best-effort). Idempotente.
+
+    C2: NO-OP bajo STACKY_TEST_MODE — pytest no debe quedar con atexit ni con
+    los handlers de senal reemplazados, ni escribir filas shutdown espurias.
+    Los tests ejercitan log_shutdown() directo."""
     global _INSTALLED
+    if _in_test_mode():
+        return
     if _INSTALLED:
         return
     _INSTALLED = True
@@ -499,7 +540,8 @@ def install_shutdown_hook() -> None:
 |---|---|
 | `test_log_shutdown_escribe_fila` | Reset `lifecycle_log._LOGGED = False`; `log_shutdown("test")`; query `SystemLog` filtrando `source=="app_lifecycle"`, `action=="shutdown"` → **exactamente 1** fila; `json.loads(row.context_json)["reason"]=="test"` y `["pid"]==os.getpid()`. |
 | `test_log_shutdown_idempotente` | Reset `_LOGGED=False`; llamar `log_shutdown("a")` y luego `log_shutdown("b")` → sigue habiendo **1** sola fila con `reason=="a"` (la segunda es no-op). |
-| `test_install_idempotente` | `install_shutdown_hook()` dos veces no lanza y deja `_INSTALLED is True` (no cuenta handlers, sólo que no rompe). |
+| `test_install_es_noop_en_test_mode` | **(C2)** Con `STACKY_TEST_MODE=1` (ya lo setea `tests/conftest.py`) y reset `_INSTALLED=False`: `install_shutdown_hook()` retorna sin efectos — `_INSTALLED` sigue `False` y `atexit.register` (monkeypatcheado a un spy) **no** fue llamado. |
+| `test_install_idempotente` | **(C2)** monkeypatch `lifecycle_log._in_test_mode`→`False` + `atexit.register`→spy + `signal.signal`→spy (para NO instalar hooks reales en el proceso pytest); reset `_INSTALLED=False`; `install_shutdown_hook()` dos veces → el spy de atexit fue llamado **exactamente 1** vez y `_INSTALLED is True`. |
 | `test_log_shutdown_no_lanza_sin_db` | Con `session_scope` monkeypatcheado para lanzar, `log_shutdown("x")` **no** propaga la excepción (nunca bloquea el apagado). |
 
 **Paso 4 — Registrar** `tests/test_lifecycle_shutdown_log.py` en el bloque Plan 163 de `run_harness_tests.sh` y `.ps1`.
@@ -539,6 +581,7 @@ def install_shutdown_hook() -> None:
       "date_resolved": "2026-07-16",
       "guard_test": "tests/test_plan145_pipeline_status_shim.py",
       "evidence": "backend/api/__init__.py:130-144; backend/services/local_file_logging.py:68",
+      "note": "C3 — honestidad del gate: la supresion del access-log (local_file_logging.py:68) filtra este path POR PATH, no por status. Esta huella detecta la regresion TOTAL (proceso corriendo codigo pre-145, el caso de los 6.346 404). Una regresion PARCIAL (shim roto con supresion viva) es invisible en el log: la cubre el guard_test pytest, no el smoke.",
       "self_test": {
         "matches": ["127.0.0.1 - - [14/Jul/2026 18:00:00] \"GET /api/v1/pipeline/status HTTP/1.1\" 404 -"],
         "clean":   ["127.0.0.1 - - [16/Jul/2026 10:00:00] \"GET /api/v1/pipeline/status HTTP/1.1\" 200 -"]
@@ -557,7 +600,7 @@ def install_shutdown_hook() -> None:
       "guard_test": "tests/test_plan145_ansi_strip.py",
       "evidence": "backend/services/local_file_logging.py:42,49,52",
       "self_test": {
-        "matches": ["2026-07-14 18:00:00 INFO [32mverde[0m arranque"],
+        "matches": ["2026-07-14 18:00:00 INFO \u001b[32mverde\u001b[0m arranque"],
         "clean":   ["2026-07-16 10:00:00 INFO verde arranque"]
       }
     },
@@ -573,6 +616,7 @@ def install_shutdown_hook() -> None:
       "date_resolved": null,
       "guard_test": "tests/test_create_child_task_endpoint.py",
       "evidence": "backend/tests/test_create_child_task_endpoint.py:186-189",
+      "note": "C12 — handoff: cuando el plan del ledger de publicacion transaccional se implemente (mata VS402323 con mapeo de tipos), actualizar esta entrada: status->resolved, killed_commit y date_resolved reales.",
       "self_test": {
         "matches": ["ERROR ado_publisher VS402323: Work item type Feature does not exist in project X"],
         "clean":   ["INFO ado_publisher created work item type Task"]
@@ -681,6 +725,7 @@ def install_shutdown_hook() -> None:
 | `test_status_enum` | Cada `status` ∈ `{"resolved","open","by_design"}`. |
 | `test_patrones_compilan` | `re.compile(fp["log_pattern"])` no lanza para todas las entradas. |
 | `test_self_test_coherente` | Para cada entrada: cada muestra de `self_test.matches` matchea `log_pattern`, y cada `self_test.clean` **no** matchea. |
+| `test_sin_control_chars_crudos` | **(C1)** El archivo leído como **bytes** no contiene ningún byte de control crudo 0x00–0x1F fuera de `\n`, `\r`, `\t` (en particular, ningún ESC 0x1B: las muestras ANSI van con el escape JSON de U+001B, que `json.loads` decodifica a ESC real). Protege el catálogo de editores/copy-paste que pierden o inyectan bytes invisibles. |
 | `test_ruta_canonica` | El archivo está en `docs/sistema/error_fingerprints.json` y su extensión es `.json` (no `.md`). |
 
 (Localizar el catálogo desde el test: `backend_root().parent / "docs" / "sistema" / "error_fingerprints.json"`.)
@@ -699,12 +744,21 @@ def install_shutdown_hook() -> None:
 
 ---
 
-### F5 — Scanner de huellas + smoke NEGATIVO sobre los logs frescos del deploy
+### F5 — Scanner de huellas + boot-scan automático + smoke NEGATIVO sobre los logs frescos del deploy
 
-**Objetivo (1 frase):** un scanner Python (fuente única de la lógica de grep, sustrato del futuro plan de análisis de logs) + un smoke de PowerShell que FALLA si una clase de error `resolved`+`log_guarded` reaparece en un log fresco. **Valor:** un deploy que reintroduce el 404 de pipeline/status o el ANSI en logs **falla el smoke** en vez de correr todo el día en silencio.
+**Objetivo (1 frase):** un scanner Python (fuente única de la lógica de grep, sustrato del futuro plan de análisis de logs), un **boot-scan automático** que al arrancar el backend escanea el tail del log más reciente y REGISTRA los hits en `system_logs`, y un smoke de PowerShell que FALLA si una clase de error `resolved`+`log_guarded` reaparece en un log fresco. **Valor:** un deploy que reintroduce el 404 de pipeline/status o el ANSI en logs queda **detectado automáticamente en el siguiente arranque** y **falla el smoke** cuando se lo corre — en vez de correr todo el día en silencio.
+
+**Los 3 brazos de detección y su dueño (C4 — nadie queda sin invocador):**
+
+| Brazo | Quién lo corre | Cuándo | Qué hace al detectar |
+|---|---|---|---|
+| **Boot-scan** (`run_boot_scan`) — **[ADICIÓN ARQUITECTO]** | el PROPIO backend, automático | en cada `create_app()` real (no bajo `STACKY_TEST_MODE`); pleno en dev, no-op degradado en deploy frozen (catálogo no bundleado — ver "Cobertura honesta") | escribe fila `system_logs` `WARNING` `source="fingerprint_scan"` + `logger.warning` — **AVISA, no actúa** |
+| Smoke PS (`smoke_fingerprints.ps1`) | orquestador/agente tras un deploy, on-demand desde el repo | post-deploy / a pedido | `exit 1` con detalle de huellas |
+| Guard-tests pytest (`guard_test` por entrada) | el arnés (`run_harness_tests`) | cada corrida del arnés | test rojo clásico |
 
 **Archivos:**
-- NUEVO `backend/services/error_fingerprints.py` (loader + `scan_text`)
+- NUEVO `backend/services/error_fingerprints.py` (loader + `scan_text` + `run_boot_scan`)
+- MODIFICADO `backend/app.py` (wiring del boot-scan en `create_app()`, 2 líneas)
 - NUEVO `deployment/smoke_fingerprints.ps1` (smoke NEGATIVO, PS 5.1)
 - NUEVO `backend/tests/test_error_fingerprints_scan.py`
 - MODIFICADO `backend/scripts/run_harness_tests.sh` y `.ps1` (registrar el test)
@@ -748,6 +802,71 @@ def scan_text(text: str, fingerprints: list[dict] | None = None) -> list[str]:
     return hits
 ```
 
+**Paso 1b — [ADICIÓN ARQUITECTO] Boot-scan automático (`run_boot_scan`), en el MISMO `error_fingerprints.py`.** Cierra C4: el chequeo de huellas deja de depender de que alguien corra el smoke — el propio backend se auto-examina al arrancar, en dev Y en deploy, con costo acotado y sin sacar al humano del lazo (sólo REGISTRA y avisa; jamás actúa). Es la memoria inmunológica **activa**: el caso motivador (deploy corrió todo el día con 6.346 404) queda detectado y firmado en `system_logs` en el siguiente arranque.
+
+```python
+import os
+
+_BOOT_SCAN_TAIL_BYTES = 5_000_000  # tail acotado: logs enormes no degradan el arranque
+
+
+def _latest_log_file() -> Path | None:
+    """El stacky-*.log mas reciente en logs_dir(), o None si no hay."""
+    try:
+        from services.local_file_logging import logs_dir
+        candidates = sorted(logs_dir().glob("stacky-*.log"), key=lambda p: p.stat().st_mtime)
+        return candidates[-1] if candidates else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def run_boot_scan() -> list[str]:
+    """Escanea el TAIL del log mas reciente al arrancar. AVISA, no actua.
+
+    - No-op bajo STACKY_TEST_MODE (los tests lo llaman directo con fixtures).
+    - Nunca lanza: cualquier fallo degrada a [] con logger.debug.
+    - Si hay hits: UNA fila system_logs WARNING source="fingerprint_scan"
+      action="regression_detected" + logger.warning. Log limpio: no escribe nada.
+    """
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
+        return []
+    try:
+        target = _latest_log_file()
+        if target is None:
+            return []
+        size = target.stat().st_size
+        with target.open("rb") as fh:
+            if size > _BOOT_SCAN_TAIL_BYTES:
+                fh.seek(size - _BOOT_SCAN_TAIL_BYTES)
+            text = fh.read().decode("utf-8", errors="replace")
+        hits = scan_text(text)
+        if hits:
+            import json as _json
+            import logging
+            from db import session_scope
+            from models import SystemLog
+            logging.getLogger("stacky.services.error_fingerprints").warning(
+                "boot-scan: huellas de regresion detectadas en %s: %s", target.name, hits
+            )
+            with session_scope() as session:
+                session.add(SystemLog(
+                    level="WARNING", source="fingerprint_scan", action="regression_detected",
+                    context_json=_json.dumps({"hits": hits, "log": target.name}),
+                ))
+        return hits
+    except Exception:  # noqa: BLE001 — el boot-scan jamas rompe el arranque
+        return []
+```
+
+**Wiring en `app.py`:** en `create_app()`, inmediatamente después de la línea existente `install_console_log_handler()` (ancla de texto; la DB ya está inicializada — `init_db()` corre en la línea anterior, verificado `:243-244`), agregar:
+
+```python
+    from services.error_fingerprints import run_boot_scan
+    run_boot_scan()   # Plan 163 F5 — memoria inmunologica activa al arranque (AVISA, no actua)
+```
+
+- **Perf:** una sola pasada al boot, tail acotado a 5 MB, 2 regex hoy → milisegundos; cero costo por request. **Human-in-the-loop:** sólo registra/avisa; el operador decide (ningún reinicio, ningún bloqueo de arranque). **Runtimes:** agnóstico (proceso backend). **Deploy frozen:** `logs_dir()` resuelve al `data/logs` del deploy → funciona igual sin `.git` ni repo. **Fallback:** sin logs previos o cualquier excepción → `[]` silencioso.
+
 **Paso 2 — `deployment/smoke_fingerprints.ps1` (PS 5.1; sin `&&`, sin ternarios, sin here-strings indentados):**
 
 ```powershell
@@ -776,7 +895,13 @@ $guarded = $catalog.fingerprints | Where-Object { $_.status -eq "resolved" -and 
 
 $found = @()
 foreach ($fp in $guarded) {
-    $hit = Select-String -Path $LogPath -Pattern $fp.log_pattern -List -ErrorAction SilentlyContinue
+    # C8: SIN -ErrorAction SilentlyContinue — un regex invalido para .NET debe
+    # REVENTAR con el id del patron ofensor, jamas degradar a falso verde.
+    try {
+        $hit = Select-String -Path $LogPath -Pattern $fp.log_pattern -List
+    } catch {
+        throw ("Patron invalido para .NET en la huella '{0}': {1}" -f $fp.id, $_.Exception.Message)
+    }
     if ($null -ne $hit) {
         $found += $fp
         Write-Host ("[REGRESION] {0} ({1}) — matada por {2}" -f $fp.id, $fp.title, $fp.killed_by) -ForegroundColor Red
@@ -792,7 +917,8 @@ Write-Host ("Smoke de huellas OK: ninguna clase resuelta reaparecio en {0}" -f $
 exit 0
 ```
 
-- **Por qué repo-side y no bundle:** el smoke corre desde el repo (donde vive `docs/sistema/`), leyendo `-LogPath` (que apunta al log fresco del deploy: `<app_root>/data/logs/stacky-<fecha>.log`). Así **NO** hay que tocar `build_release.ps1` para bundlear el catálogo (respeta "no tocar el build"). El pipeline (que corre desde el repo tras un deploy) lo invoca.
+- **Por qué repo-side y no bundle:** el smoke corre desde el repo (donde vive `docs/sistema/`), leyendo `-LogPath` (que apunta al log fresco del deploy: `<app_root>/data/logs/stacky-<fecha>.log`). Así **NO** hay que tocar `build_release.ps1` para bundlear el catálogo (respeta "no tocar el build"). **Dueño (C4):** es el brazo **on-demand** de la tabla de F5 — lo invoca el orquestador/agente tras un deploy o al auditar un log.
+- **Cobertura honesta del boot-scan por entorno:** en **dev** es pleno (el catálogo vive en el repo → el caso motivador, "el server DEV corrió todo el día código pre-fixes", queda cubierto al 100% de forma automática). En **deploy frozen** el catálogo NO está bundleado (decisión "no tocar el build") → `catalog_path()` no existe y `run_boot_scan` degrada a `[]` silencioso; ahí la detección la dan el smoke PS (on-demand) y los guard-tests del arnés. Bundlear el catálogo al release (1 línea en el build) queda como extensión futura explícitamente FUERA de este plan.
 - **Nota sobre el smoke fresco del release** (`release_assets/smoke_test.ps1`): arranca el exe con **DB y data dir frescos** (`data\smoke`) — su log fresco no reproduce el tráfico histórico. Por eso el smoke de huellas apunta preferentemente al **log real del deploy** vía `-LogPath`, no al log del smoke fresco. Ese smoke fresco NO se modifica (se lo deja intacto).
 
 **Paso 3 — Test** `backend/tests/test_error_fingerprints_scan.py`:
@@ -804,12 +930,16 @@ exit 0
 | `test_scan_ansi` | `scan_text` sobre un texto con un ESC ANSI real (`"\x1b[32mx\x1b[0m"`) → contiene `"ansi_in_file_log"`. |
 | `test_solo_guardadas` | `guarded_fingerprints()` devuelve sólo entradas `resolved` + `log_guarded`; NO incluye `ado_workitem_type_vs402323` (open) ni `pm_no_snapshot_404` (by_design). |
 | `test_scan_multiple` | `scan_text` sobre un texto que concatena las muestras "match" de TODAS las guardadas → devuelve todos sus ids (grep NEGATIVO detecta cada regresión). |
+| `test_boot_scan_escribe_warning` | **(ADICIÓN)** `monkeypatch.setenv("STACKY_TEST_MODE","0")` (el conftest lo pone en "1"); monkeypatch `_latest_log_file`→archivo tmp con la muestra sucia de `pipeline_status_404`; DB in-memory con `init_db()` → `run_boot_scan()` devuelve `["pipeline_status_404"]` y existe **exactamente 1** fila `SystemLog` con `source=="fingerprint_scan"`, `action=="regression_detected"` y los hits en `context_json`. |
+| `test_boot_scan_limpio_no_escribe` | **(ADICIÓN)** ídem anterior pero log tmp limpio → `[]` y **0** filas `fingerprint_scan`. |
+| `test_boot_scan_noop_en_test_mode` | **(ADICIÓN)** con `STACKY_TEST_MODE=1` (default de la suite) y `_latest_log_file` monkeypatcheado a un spy → `run_boot_scan()` retorna `[]` y el spy **no** fue llamado (no toca disco bajo pytest salvo opt-in explícito del test). |
+| `test_boot_scan_sin_logs` | **(ADICIÓN)** `STACKY_TEST_MODE="0"` + `_latest_log_file`→`None` → `[]` sin lanzar. |
 
 **Paso 4 — Registrar** `tests/test_error_fingerprints_scan.py` en el bloque Plan 163 de `run_harness_tests.sh` y `.ps1`.
 
 **Criterio de aceptación BINARIO:** `.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_scan.py -q` → exit 0; `grep -c "test_error_fingerprints_scan.py" scripts/run_harness_tests.sh` → `1` e ídem `.ps1` → `1`. **Verificación manual (documentada):** crear un log de fixture con la línea `"GET /api/v1/pipeline/status HTTP/1.1" 404 -` → `pwsh -File deployment/smoke_fingerprints.ps1 -LogPath <fixture>` → exit 1; un log limpio → exit 0.
 
-**Flag:** ninguna. **Runtimes:** scanner + smoke sobre logs del backend; agnóstico del runtime de agentes. **Fallback:** si el catálogo o el log faltan, el smoke lanza con mensaje claro (no falso verde). **Trabajo del operador: ninguno** (el pipeline invoca el smoke).
+**Flag:** ninguna. **Runtimes:** scanner + boot-scan + smoke sobre logs del backend; agnóstico del runtime de agentes. **Fallback:** el smoke lanza con mensaje claro si el catálogo o el log faltan (no falso verde); el boot-scan degrada a `[]` sin romper jamás el arranque. **Trabajo del operador: ninguno** (boot-scan automático; el smoke lo invoca el orquestador/agente on-demand — C4).
 
 ---
 
@@ -819,7 +949,7 @@ exit 0
 2. **F2** — ampliar el tipo de `Health.get` + helpers puros `buildIdentity.ts` + chip/banner en TopBar + CSS + test. Corre después de F1 (consume los campos nuevos).
 3. **F3** — `lifecycle_log.py` + wiring en `create_app()` + test + registro. Independiente de F1/F2.
 4. **F4** — catálogo `docs/sistema/error_fingerprints.json` + schema-test + ítem en la skill + registro.
-5. **F5** — `services/error_fingerprints.py` + `deployment/smoke_fingerprints.ps1` + scan-test + registro. Corre después de F4 (consume el catálogo).
+5. **F5** — `services/error_fingerprints.py` (scanner + boot-scan) + wiring del boot-scan en `create_app()` + `deployment/smoke_fingerprints.ps1` + scan-test (incluye casos boot-scan) + registro. Corre después de F4 (consume el catálogo).
 
 Correr `npx tsc --noEmit` al terminar F2. Cada test SIEMPRE por archivo con el venv real del checkout principal.
 
@@ -831,13 +961,15 @@ Correr `npx tsc --noEmit` al terminar F2. Cada test SIEMPRE por archivo con el v
 |---|---|---|
 | R1 | Un `kill -9` / corte de energía no dispara el evento de shutdown. | **Aceptado y documentado** (principio 7): es física, no un bug. F3 captura apagados gráciles (atexit/SIGTERM/SIGINT). La ausencia de un `shutdown` seguido de un `startup` nuevo es, de hecho, la evidencia del corte abrupto (justo el caso L8). |
 | R2 | En Windows, `signal.SIGTERM` es limitado y `taskkill /F` no lo dispara. | El handler es **best-effort** dentro de un `try/except (ValueError, OSError)`; atexit cubre el apagado normal y `SystemExit`. No se promete cobertura total; se promete no romper. |
-| R3 | Llamar git en `get_repo_head` degrada performance si es por request. | TTL de 10 s (`_REPO_HEAD_TTL_SECONDS`): una ráfaga de requests comparte una sola llamada. `source_commit`/`built_at` se cachean a nivel módulo (una sola vez). En deploy, `get_repo_head` retorna `None` sin tocar git (frozen o manifest presente). |
+| R3 | Llamar git en `get_repo_head` degrada performance si es por request. | TTL de 10 s (`_REPO_HEAD_TTL_SECONDS`): una ráfaga de requests comparte una sola llamada. `source_commit`/`built_at` se cachean a nivel módulo (una sola vez) y la **presencia del manifest también** (`_MANIFEST_PRESENT`, C9) → cero I/O de disco por request. En deploy, `get_repo_head` retorna `None` sin tocar git (frozen o manifest presente). |
 | R4 | El manifest no tiene `built_at` y alguien "arregla" el build para agregarlo. | Este plan LEE `generated_at` (drift corregido en §2.2). **NO** se toca `build_release.ps1`. Documentado en glosario y fuera de scope. |
 | R5 | El catálogo `.md` contaminaría el DocTree del `doc_indexer`. | Es **`.json`** bajo `docs/sistema/`; `doc_indexer` sólo escanea `*.md` (`:270`). `test_error_fingerprints_catalog.py::test_ruta_canonica` lo fija. |
-| R6 | El smoke de huellas da falso verde porque el log fresco del release no tiene tráfico. | El smoke apunta al **log real del deploy** vía `-LogPath` (`data/logs/stacky-*.log`), no al log del smoke fresco. El scan-test (pytest) es el gate binario determinista; el smoke PS es el brazo de deploy. |
+| R6 | El smoke de huellas da falso verde porque el log fresco del release no tiene tráfico. | El smoke apunta al **log real del deploy** vía `-LogPath` (`data/logs/stacky-*.log`), no al log del smoke fresco. El scan-test (pytest) es el gate binario determinista; el smoke PS es el brazo de deploy. **C3:** además, la huella `pipeline_status_404` sólo es visible en el log ante regresión TOTAL (código pre-145): la supresión del access-log filtra por path, no por status → la regresión PARCIAL (shim roto, supresión viva) la cubre su `guard_test` pytest, no el log. Documentado en la `note` de la entrada. |
 | R7 | Los `self_test.matches` del catálogo o los tests contienen los patrones y podrían auto-matchearse. | El smoke grepa **`-LogPath`** (logs), nunca el repo ni este plan ni el catálogo. Los patrones en el catálogo/tests son su función, no un log. Ver §9. |
 | R8 | Divergencia entre el regex de Python (`re`) y el de .NET (`Select-String`). | Los patrones se mantienen en un subconjunto común (clases de caracteres, cuantificadores, `\S`, `\d`, `\x1b`). `test_patrones_compilan` valida Python; la verificación manual de F5 valida .NET. Sin construcciones exclusivas de un motor. |
-| R9 | Reset de cachés de módulo entre tests deja estado sucio. | Un `pytest.fixture(autouse=True)` en `test_app_version_build_identity.py` resetea las 5 cachés antes de cada test (documentado en F1 Paso 3). |
+| R9 | Reset de cachés de módulo entre tests deja estado sucio. | Un `pytest.fixture(autouse=True)` en `test_app_version_build_identity.py` resetea las **6** cachés antes de cada test (documentado en F1 Paso 3; incluye `_MANIFEST_PRESENT` — C9). |
+| R10 | El boot-scan sobre un log enorme demora el arranque o lo rompe. | Tail acotado (`_BOOT_SCAN_TAIL_BYTES` = 5 MB), lectura binaria con `errors="replace"`, try/except total que degrada a `[]`: el arranque JAMÁS se bloquea ni falla por el scan. Bajo `STACKY_TEST_MODE` es no-op (C2-simétrico). |
+| R11 | Bytes de control crudos (p. ej. ESC) se cuelan en el catálogo por copy-paste y rompen `json.loads` o inertizan un self_test. | Las muestras ANSI usan el escape JSON de U+001B (nunca el byte crudo — C1); `test_sin_control_chars_crudos` escanea el archivo como bytes y fija la regla para siempre. |
 
 ---
 
@@ -857,12 +989,14 @@ Correr `npx tsc --noEmit` al terminar F2. Cada test SIEMPRE por archivo con el v
 ## 9. Advertencias para el implementador (leer antes de tocar nada)
 
 - **El catálogo DEBE ser `.json`, jamás `.md`.** `doc_indexer` escanea `docs/**/*.md`; un `.md` contaminaría el corpus RAG. `test_ruta_canonica` lo fija.
+- **PROHIBIDO todo byte de control crudo en el catálogo (C1).** La muestra ANSI del `self_test` se escribe con el **escape JSON de U+001B** (seis caracteres: barra invertida, `u`, `0`, `0`, `1`, `b`) — `json.loads` lo decodifica al ESC real y el regex matchea. Un ESC crudo (byte 0x1B) hace que `json.loads` strict LANCE ("Invalid control character", RFC 8259); y si un editor pierde el byte invisible, el self_test queda inerte. `test_sin_control_chars_crudos` lo fija. Al copiar el JSON de este doc, verificar: `python -c "import json,pathlib; json.loads(pathlib.Path('docs/sistema/error_fingerprints.json').read_text(encoding='utf-8'))"` desde `Stacky Agents/` → sin error.
+- **`install_shutdown_hook()` y `run_boot_scan()` son NO-OP bajo `STACKY_TEST_MODE` (C2).** Es la única llave de detección de pytest de la casa (`tests/conftest.py:11` la setea; `app.py:530` ya la consume; el plan hermano del arnés veraz la congela como mecanismo único). Los tests ejercitan `log_shutdown()`/`run_boot_scan()` directo, con la env var monkeypatcheada donde haga falta.
 - **PowerShell 5.1 en `smoke_fingerprints.ps1`:** sin `&&` encadenado, sin ternarios, sin null-coalescing, sin here-strings `@'...'@` indentados. Usar `if/else`, `Select-String`, `ConvertFrom-Json`. El cierre de un here-string (si se usara) va en columna 0.
 - **Cachear git a nivel módulo, JAMÁS por request** (perf): `source_commit`/`built_at` una sola vez; `repo_head` con TTL de 10 s (única concesión, justificada porque el drift es un blanco móvil; ver R3). En deploy, `get_repo_head` ni siquiera llama git.
 - **`built_at` sale de `generated_at`** del manifest (el manifest NO tiene `built_at`). NO agregar campos al build.
 - **RTL/jsdom NO están en `frontend/package.json`.** Prohibido `render()`/`renderHook`. El test del chip es de **lógica pura** (`buildIdentity.ts`) + `tsc --noEmit`. El banner de drift se verifica por smoke manual.
 - **`.tsx` y el uiDebtRatchet:** el TopBar ya existe; NO introducir `style={{}}` inline nuevos (usar clases de `TopBar.module.css` con tokens de `theme.css`). El plan hermano del latido único puede haber sumado un ratchet de diálogos nativos: **no** agregar `confirm/alert/prompt` nuevos en el TopBar.
-- **Tests backend nuevos van registrados** en `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` **Y** su `.ps1`, o el meta-test ratchet cae. Formato: sh `  tests/<archivo>.py` bajo `# — Plan 163 · ... —`; ps1 `  "tests/<archivo>.py"` bajo `# Plan 163 - ...`.
+- **Tests backend nuevos van registrados** en `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` **Y** su `.ps1`, o el meta-test ratchet cae. Formato (C10, verificado contra los arrays reales): sh `  tests/<archivo>.py` bajo `# — Plan 163 · ... —`; ps1 `  "tests/<archivo>.py",` — **con coma final** — bajo `# Plan 163 - ...` (mismo formato que `run_harness_tests.ps1:15`).
 - **Gotcha comentario-choca-con-gate (recurrido 6+ veces):** este plan **no** introduce ningún grep-gate sobre código/prosa (el smoke grepa **logs**). Aun así, no escribir en comentarios de código literales de log que un futuro gate pudiera cazar; los patrones viven sólo en el catálogo `.json` y en los `self_test`.
 - **venv backend real:** `backend\.venv\Scripts\python.exe` (py3.13). El `.venv` del worktree `C:/wt/uxlog` puede no existir → correr los tests en el checkout principal `N:\GIT\RS\STACKY\Stacky`.
 - **Escribir a SQLAlchemy en atexit** es seguro **sólo desde el main thread** (patrón de `stacky_logger._flush_on_exit`). `log_shutdown` abre su propio `session_scope` síncrono; NO delegar a un thread daemon (gotcha crash nativo daemon vs teardown).
@@ -875,9 +1009,10 @@ Correr `npx tsc --noEmit` al terminar F2. Cada test SIEMPRE por archivo con el v
 - [ ] KPI-1..KPI-8 en verde con los comandos exactos de §1, cada test corrido por archivo con el venv real y su salida pegada en el resumen.
 - [ ] `GET /api/diag/health` expone `source_commit`, `built_at`, `repo_head` y `build_drift`; en deploy `repo_head`/`build_drift` son `null`/`false`; en dev reflejan el estado real.
 - [ ] El chip del TopBar muestra `v<version> · <short-hash>` con tooltip de `built_at`; el banner de drift aparece SÓLO en dev cuando el proceso corre código anterior al repo, y AVISA sin reiniciar.
-- [ ] Un apagado grácil del backend deja UNA fila `system_logs` con `source="app_lifecycle"`, `action="shutdown"` y el motivo en `context_json`.
-- [ ] `docs/sistema/error_fingerprints.json` existe (`.json`), con las 8 clases ancladas, schema-test verde; la skill `criticar-y-mejorar-plan` tiene el ítem de convención.
+- [ ] Un apagado grácil del backend deja UNA fila `system_logs` con `source="app_lifecycle"`, `action="shutdown"` y el motivo en `context_json`; e `install_shutdown_hook()` es no-op bajo `STACKY_TEST_MODE` (C2, test verde).
+- [ ] `docs/sistema/error_fingerprints.json` existe (`.json`), con las 8 clases ancladas, **sin ningún byte de control crudo** (C1, test verde), con las `note` de C3/C12; schema-test verde; la skill `criticar-y-mejorar-plan` tiene el ítem de convención.
 - [ ] `services/error_fingerprints.py::scan_text` detecta las huellas `resolved`+`log_guarded` y NO las `open`/`by_design`; `smoke_fingerprints.ps1` falla (exit 1) ante una regresión y pasa (exit 0) con log limpio (demostrado con fixture).
+- [ ] **[ADICIÓN ARQUITECTO]** `run_boot_scan()` cableado en `create_app()` tras `install_console_log_handler()`: con log sucio de fixture escribe UNA fila `system_logs` `source="fingerprint_scan"`; con log limpio no escribe nada; no-op bajo `STACKY_TEST_MODE`; jamás rompe el arranque (4 tests verdes en `test_error_fingerprints_scan.py`).
 - [ ] `npx tsc --noEmit` verde; los 4 tests backend nuevos registrados en `run_harness_tests.sh` Y `.ps1`.
 - [ ] Sin flags nuevas, sin config nueva, backward-compatible: campos opcionales, chip/banner automáticos, catálogo poblado, smoke invocado por el pipeline. "Trabajo del operador: ninguno" se cumple.
 - [ ] Pre-flight `git status` por archivo caliente hecho; sin WIP ajeno arrastrado; el implementador NO commiteó.

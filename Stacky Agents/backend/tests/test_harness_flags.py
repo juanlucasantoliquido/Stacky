@@ -686,6 +686,7 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",
     "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
     "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
+    "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
 }
 
 

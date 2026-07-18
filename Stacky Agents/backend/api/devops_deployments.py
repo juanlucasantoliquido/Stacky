@@ -269,6 +269,58 @@ def rollback_route():
     return jsonify(result), status_code
 
 
+# ── /rollback/preview (Plan 189 — read-only, SIN gate de ejecución) ──────────
+
+@bp.post("/rollback/preview")
+def rollback_preview_route():
+    """Semáforo de reversibilidad + simulacro read-only. NO exige _execute_on():
+    acá NO se ejecuta nada (solo lecturas locales del ledger + builder puro).
+
+    Modos: single {app_id, target[, to_version]} | batch {pairs: [{app_id, target}, ...]}
+    (C3 — la UI resuelve todas las cards en 1 request). Plan 189."""
+    _guard_master()  # master del Centro (patrón :37-39)
+    if not bool(getattr(_config.config, "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED", False)):
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    from services.rollback_readiness import compute_rollback_readiness, simulate_rollback_plan
+    from services.stacky_logger import logger as stacky_logger
+
+    # C1 — timeout INLINE (la helper _smoke_timeout_s vive en deploy_executor.py:262-264 y
+    # este blueprint NO la tiene; NO importar deploy_executor):
+    smoke_timeout_s = int(getattr(_config.config, "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", 30))
+
+    pairs = body.get("pairs")
+    if isinstance(pairs, list):                      # ── modo BATCH (C3)
+        if len(pairs) > 100:
+            return jsonify({"error": "max 100 pares"}), 400
+        out: dict = {}
+        for p in pairs:
+            a, t = (p or {}).get("app_id"), (p or {}).get("target")
+            if not a or not t:
+                continue                             # pares malformados se omiten, no rompen el batch
+            r = compute_rollback_readiness(a, t)
+            if r is not None:
+                out[f"{a}|{t}"] = r
+        stacky_logger.info("rollback_readiness", "preview_built", batch=True, count=len(out))
+        return jsonify({"readiness_map": out})
+
+    app_id, target = body.get("app_id"), body.get("target")  # ── modo SINGLE
+    if not app_id or not target:
+        return jsonify({"error": "app_id y target son obligatorios"}), 400
+    readiness = compute_rollback_readiness(app_id, target)
+    if readiness is None:
+        return jsonify({"error": "app_not_found"}), 404
+    plan = None
+    to_version = body.get("to_version")
+    if to_version:
+        plan = simulate_rollback_plan(app_id, target, str(to_version), smoke_timeout_s)
+        if plan is None:
+            return jsonify({"error": "version_not_retained"}), 404
+    stacky_logger.info("rollback_readiness", "preview_built",
+                       app_id=app_id, target=target, batch=False)  # [ADICIÓN ARQUITECTO 2]
+    return jsonify({"readiness": readiness, "plan": plan})
+
+
 # ── runs / history ───────────────────────────────────────────────────────────
 
 @bp.get("/runs/<run_id>")

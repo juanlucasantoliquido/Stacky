@@ -1302,6 +1302,15 @@ class Config:
         "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 189 — Semáforo de rollback y simulacro read-only ─────────────────
+    # Por app×target: ¿hay rollback disponible (y a qué versión)? + simulacro que
+    # muestra los pasos EXACTOS del rollback sin ejecutar nada. Solo lecturas
+    # locales del ledger, sin red, sin IA. Default ON (espejo del default=True de
+    # la FlagSpec homónima; curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

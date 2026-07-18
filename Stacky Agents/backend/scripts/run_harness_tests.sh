@@ -532,6 +532,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan188_evidence_flag.py
   tests/test_plan188_evidence_builder.py
   tests/test_plan188_evidence_endpoint.py
+  # — Plan 189 · Semáforo de rollback y simulacro read-only —
+  tests/test_plan189_readiness_flag.py
+  tests/test_plan189_readiness_compute.py
+  tests/test_plan189_simulacro.py
 )
 
 pass=0

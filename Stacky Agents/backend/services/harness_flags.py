@@ -229,6 +229,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",  # Plan 190 — equipaje DevOps en export/import
         "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
         "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
+        "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2932,6 +2933,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # vive dentro del panel 87 (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 189 — Semáforo de rollback y simulacro read-only ────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",
+        type="bool",
+        label="Semáforo de rollback y simulacro",
+        description=(
+            "Plan 189 — Muestra por app y destino si hay rollback disponible (y a "
+            "qué versión) y permite SIMULAR los pasos exactos del rollback SIN "
+            "ejecutar nada. Solo lecturas locales del ledger; el rollback real y "
+            "sus confirmaciones quedan intactos. Con OFF el endpoint devuelve 404 "
+            "y las cards quedan idénticas a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # R4 profundidad-1 (master del panel 87)
         # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),

@@ -376,6 +376,28 @@ if ($GitHubCopilotAgentsRepo) {
     Write-Warn "-GitHubCopilotAgentsRepo está obsoleto y se ignora. La fuente de agentes es backend\Stacky\agents."
 }
 
+# Limpieza TOTAL previa: el release DEBE construirse desde cero. Borra todo
+# artefacto viejo (frontend\dist, salida PyInstaller, carpeta/zip/instalador de
+# release previos) ANTES de compilar, de forma idempotente, para que ninguna
+# version vieja pueda sobrevivir y filtrarse al paquete. Es defensivo y se
+# solapa a proposito con las limpiezas puntuales de mas abajo.
+Write-Step "Limpieza total previa (build garantizado desde cero)"
+$staleTargets = @(
+    $releaseDir,
+    $zipPath,
+    $installerPath,
+    (Join-Path $frontendDir "dist"),
+    (Join-Path $buildRoot "pyinstaller-dist"),
+    (Join-Path $buildRoot "pyinstaller-work"),
+    (Join-Path $buildRoot "pyinstaller-spec")
+)
+foreach ($stale in $staleTargets) {
+    if ($stale -and (Test-Path -LiteralPath $stale)) {
+        Remove-Item -LiteralPath $stale -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Write-OK "Artefactos previos eliminados (frontend\dist, pyinstaller-*, release/zip/instalador)"
+
 Require-Command -Command "npm" -Hint "Instala Node.js 18+ para compilar el frontend."
 $script:Python = Resolve-Python
 
@@ -696,6 +718,49 @@ $manifest = [ordered]@{
 Write-Utf8NoBom -Path (Join-Path $releaseDir "release-manifest.json") -Value ($manifest | ConvertTo-Json -Depth 5)
 Write-OK "Metadata generada"
 
+# Verificacion DURA anti-version-vieja: si algo no coincide, ABORTAMOS (no se
+# publica un release stale). Dos chequeos:
+#   1) El release refleja el HEAD actual (source_commit no vacio y == HEAD).
+#   2) index.html no apunta a ningun bundle inexistente (build congelado).
+Write-Step "Verificacion dura anti-version-vieja"
+
+$headNow = ""
+try { $headNow = (git -C $appRoot rev-parse --short HEAD).Trim() } catch { $headNow = "" }
+if (-not $gitSha) {
+    throw "El release quedo sin source_commit (git no disponible al generar la metadata). No se puede garantizar que el paquete sea fresco. Abortando."
+}
+if ($headNow -and ($gitSha -ne $headNow)) {
+    throw "source_commit del release ($gitSha) != HEAD actual ($headNow). El release no refleja el codigo actual. Abortando."
+}
+
+$releaseIndex = Join-Path $releaseFrontendDir "dist\index.html"
+if (-not (Test-Path -LiteralPath $releaseIndex)) {
+    throw "El release no contiene frontend\dist\index.html. Abortando."
+}
+$indexHtml = Get-Content -LiteralPath $releaseIndex -Raw
+$assetMatches = [regex]::Matches($indexHtml, '(?:src|href)\s*=\s*["'']([^"'']+)["'']')
+$assetRefs = @()
+foreach ($match in $assetMatches) {
+    $ref = $match.Groups[1].Value
+    if ($ref -match 'assets/') { $assetRefs += $ref }
+}
+if ($assetRefs.Count -eq 0) {
+    throw "index.html del release no referencia ningun bundle en assets/. Build sospechoso. Abortando."
+}
+$distRoot = Join-Path $releaseFrontendDir "dist"
+$missingRefs = @()
+foreach ($ref in $assetRefs) {
+    $clean = (($ref -split '\?')[0] -split '#')[0]
+    $relPath = ($clean.TrimStart('/')) -replace '/', '\'
+    $candidate = Join-Path $distRoot $relPath
+    if (-not (Test-Path -LiteralPath $candidate)) { $missingRefs += $ref }
+}
+if ($missingRefs.Count -gt 0) {
+    $missingList = $missingRefs -join ", "
+    throw "index.html referencia bundles que NO existen en el release (build congelado / version vieja): $missingList. Abortando."
+}
+Write-OK "Release fresco verificado: source_commit=$gitSha (== HEAD), index.html apunta solo a bundles existentes"
+
 Write-Step "Validando limpieza del payload"
 Assert-CleanReleasePayload -Root $releaseDir
 Write-OK "Payload sin documentacion interna"
@@ -771,6 +836,7 @@ if ((Test-Path $installerPath) -and (-not $SkipInstaller)) {
 
 Write-Host ""
 Write-Host "Release generado correctamente." -ForegroundColor Green
+Write-Host ("Version: {0}  Commit: {1}  Fecha: {2}" -f $Version, $gitSha, $manifest.generated_at) -ForegroundColor Green
 Write-Host "Carpeta: $releaseDir" -ForegroundColor Green
 if (-not $SkipZip) {
     Write-Host "ZIP    : $zipPath" -ForegroundColor Green

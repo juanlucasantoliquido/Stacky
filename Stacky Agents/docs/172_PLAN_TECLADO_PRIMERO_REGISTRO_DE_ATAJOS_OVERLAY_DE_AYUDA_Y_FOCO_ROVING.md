@@ -1,8 +1,19 @@
 # Plan 172 — Teclado primero: registro central de atajos, overlay de ayuda "?" y foco roving
 
-Serie UX Cockpit del Operador (172-175) — plan 1/4 — v1 PROPUESTO — 2026-07-18
+Serie UX Cockpit del Operador (172-175) — plan 1/4 — **v2 CRITICADO** — 2026-07-18
 
-> **Estado:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode
+> **Estado:** CRITICADO v1 → v2 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (adversarial)
+>
+> ### Changelog v1 → v2 (veredicto: APROBADO-CON-CAMBIOS)
+> - **C1 (IMPORTANTE):** F4 regla 1 usaba comillas SIMPLES alrededor de `'[data-roving-item="${next}"]'` → `${next}` NO se interpola en JS: el roving jamás movería el foco (tsc verde, tests puros verdes, solo lo cazaría el smoke). Corregido a backticks. Regla de literalidad para modelos menores restaurada.
+> - **C2 (IMPORTANTE) [ADICIÓN ARQUITECTO]:** los 3 defs CORE vivían inline en `App.tsx` (F2) mientras el test de colisiones de F1 usaba una copia a mano ("CORE de F2 como specs estáticos") → `detectCollisions` NUNCA corría sobre el set real y un atajo colisionante futuro escapaba al CI (irónico en un plan cuya tesis es "una sola fuente de verdad": introducía una 2.ª copia oculta). Se exporta `CORE_SHORTCUT_DEFS` (sin handler) desde `shortcuts.ts`, consumida por App.tsx (adjunta handlers por id) Y por el test; + guardia de colisiones dev-only en runtime.
+> - **C3 (IMPORTANTE):** el overlay `?` (F3, rama sin 164) roba el foco al montar pero NUNCA lo restaura al cerrar → un operador que estaba roving el historial, abre `?` y cierra con Escape, PIERDE su fila activa. Se agrega captura/restauración de `document.activeElement`.
+> - **C4 (MENOR):** overlay con `role="dialog" aria-modal` pero sin `aria-labelledby` al `<h2>`. Se asocia por id (ambas ramas).
+> - **C5 (MENOR):** drift de números de línea en la evidencia citada (keydown real en `App.tsx:210-235` no `:173-200`; fetch health `:148`; selector `[tabindex]:focus-visible` en `theme.css:362-365` no `:334-337`; `shell_v2_enabled` en `diag.py:415`). Los HECHOS se verificaron TODOS verdaderos en frío; se corrigen las refs más citadas. Ediciones siguen ancladas por TEXTO.
+> - **C6 (MENOR):** `Ctrl+/` (nav.toggle-board, `allowInDialog:true`) dispara bajo un `Dialog` 164 abierto, cambiando el tab detrás del modal. Es paridad con HEAD (hoy no hay guard de diálogo), NO regresión; se deja nota para reconsiderar cuando 164 aterrice.
+> - **C7 (MENOR):** plan tipo-fix (mata la clase "overlay que miente" + el bug matcher `?`/Shift); se registra huella en `error_fingerprints.json` (DoD).
+>
+> **Estado v1 original:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode
 > **Serie:** hermanos 173 (vistas guardadas), 174 (rendimiento percibido), 175 (peek y acciones rápidas). Cada tema pertenece a UN solo plan: este plan NO define vistas guardadas (173), NI virtualización/prefetch (174), NI menú contextual/hover-cards (175). 175 CONSUME los atajos que este plan registra.
 > **Runtimes:** feature 100% del dashboard (frontend + un campo aditivo en un endpoint de health del backend). **Agnóstica del runtime de agentes** (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ninguna fase toca el camino de ejecución, publicación ni prompts. Paridad de los 3 runtimes automática por vacuidad — se declara igual fase por fase.
 > **Flag:** `STACKY_UI_SHORTCUTS_ENABLED`, **default ON**, configurable desde la UI de Settings (panel de flags del arnés, plan 82/86). OFF = comportamiento de HOY, byte-compatible (los 3 atajos preexistentes siguen; lo nuevo se apaga).
@@ -13,7 +24,7 @@ Serie UX Cockpit del Operador (172-175) — plan 1/4 — v1 PROPUESTO — 2026-0
 
 ## 1. Objetivo + KPI / impacto esperado
 
-**Objetivo (1 párrafo):** hoy Stacky tiene TRES fuentes de verdad divergentes sobre sus atajos de teclado: (a) el handler ad-hoc de `App.tsx:173-200` que implementa los 3 atajos REALES (Ctrl+K paleta, `?` cheatsheet, Ctrl+/ alternar nav); (b) la lista hardcodeada `DEFAULT_SHORTCUTS` (`frontend/src/hooks/useKeyboardShortcuts.ts:48-57`) que la cheatsheet muestra al operador y que **miente**: 5 de sus 8 entradas (Ctrl+R, Ctrl+Shift+R, Enter, Shift+Enter, Esc global) no están implementadas en ningún lado; y (c) el hook `useKeyboardShortcuts` (`useKeyboardShortcuts.ts:26-46`) con **cero consumidores** (verificado por grep: solo la cheatsheet importa la constante, nadie usa el hook) y un bug latente en su matcher (`matches()` en `:10-24` chequea `wantShift` ANTES del caso especial `?`, así que `?` —que ES Shift+/ en casi todos los layouts— jamás matchearía). Este plan funde las tres en UNA: un **registro central tipado** de atajos en un módulo puro (`services/shortcuts.ts`), un **hook de suscripción** para componentes, el **overlay de ayuda `?` AUTOGENERADO del registro** (imposible que vuelva a mentir), **foco roving** (j/k/flechas + Enter + Escape) en el historial de ejecuciones y en la bandeja de revisión, y **hints de atajos** en tooltips y en la paleta del plan 129. El binding Ctrl+K existente migra AL registro sin cambiar un byte de comportamiento.
+**Objetivo (1 párrafo):** hoy Stacky tiene TRES fuentes de verdad divergentes sobre sus atajos de teclado: (a) el handler ad-hoc de `App.tsx:210-235 (v2: era :173-200; drift confirmado en frío — anclar por el texto `const onKeyDown` + `isPaletteShortcut`)` que implementa los 3 atajos REALES (Ctrl+K paleta, `?` cheatsheet, Ctrl+/ alternar nav); (b) la lista hardcodeada `DEFAULT_SHORTCUTS` (`frontend/src/hooks/useKeyboardShortcuts.ts:48-57`) que la cheatsheet muestra al operador y que **miente**: 5 de sus 8 entradas (Ctrl+R, Ctrl+Shift+R, Enter, Shift+Enter, Esc global) no están implementadas en ningún lado; y (c) el hook `useKeyboardShortcuts` (`useKeyboardShortcuts.ts:26-46`) con **cero consumidores** (verificado por grep: solo la cheatsheet importa la constante, nadie usa el hook) y un bug latente en su matcher (`matches()` en `:10-24` chequea `wantShift` ANTES del caso especial `?`, así que `?` —que ES Shift+/ en casi todos los layouts— jamás matchearía). Este plan funde las tres en UNA: un **registro central tipado** de atajos en un módulo puro (`services/shortcuts.ts`), un **hook de suscripción** para componentes, el **overlay de ayuda `?` AUTOGENERADO del registro** (imposible que vuelva a mentir), **foco roving** (j/k/flechas + Enter + Escape) en el historial de ejecuciones y en la bandeja de revisión, y **hints de atajos** en tooltips y en la paleta del plan 129. El binding Ctrl+K existente migra AL registro sin cambiar un byte de comportamiento.
 
 **KPIs binarios (comandos exactos). Frontend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend` (POSIX: `cd "Stacky Agents/frontend"`); backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend`. vitest y pytest SIEMPRE por archivo (contaminación cross-file conocida en ambos):**
 
@@ -24,7 +35,8 @@ Serie UX Cockpit del Operador (172-175) — plan 1/4 — v1 PROPUESTO — 2026-0
 - **KPI-5 — Overlay autogenerado, no hardcodeado:** `grep -c "groupForOverlay" src/components/ShortcutsCheatsheet.tsx` → `≥1`.
 - **KPI-6 — Tipos verdes:** `npx tsc --noEmit` → exit 0.
 - **KPI-7 — Flag backend completa y testeada:** `venv/Scripts/python.exe -m pytest tests/test_plan172_shortcuts_flag.py -q` → verde; y `grep -c "test_plan172_shortcuts_flag" scripts/run_harness_tests.sh` → `1` (registrado en `HARNESS_TEST_FILES`).
-- **KPI-8 — Cero requests nuevos:** la flag se lee del `fetch("/api/diag/health")` que `App.tsx:154-161` YA hace (campo aditivo). Verificable: `grep -c 'fetch("/api/diag/health")' src/App.tsx` → `1` (sigue habiendo UNO).
+- **KPI-8 — Cero requests nuevos:** la flag se lee del `fetch("/api/diag/health")` que `App.tsx:148` YA hace (campo aditivo). Verificable: `grep -c 'fetch("/api/diag/health")' src/App.tsx` → `1` (sigue habiendo UNO).
+- **KPI-9 (C2) — Fuente única de los core, sin copia oculta:** `grep -c "CORE_SHORTCUT_DEFS" src/services/shortcuts.ts` → `≥1` (declarada) y `grep -c "CORE_SHORTCUT_DEFS" src/App.tsx` → `≥1` (importada, no re-declarada); y `grep -c 'combo: "Ctrl+K"' src/App.tsx` → `0` (los combos core NO se re-tipean inline). El test `test_collisions_zero_en_estaticos` corre sobre el array real.
 
 **Nota de scripting (aplica a TODOS los KPIs y gates con `grep`):** el criterio se evalúa por la SALIDA impresa (el conteo o los hits), NUNCA por el exit code. Con 0 matches, `grep -c` imprime `0` pero retorna exit code 1; un script de DoD automatizado debe comparar el número impreso contra el esperado (`0`, `1`, `2`, `≥1`), no usar `grep && ...`.
 
@@ -46,7 +58,7 @@ Serie UX Cockpit del Operador (172-175) — plan 1/4 — v1 PROPUESTO — 2026-0
 
 ### 2.1 Tres fuentes de verdad divergentes (el gap central)
 
-1. **El handler real y ad-hoc:** `frontend/src/App.tsx:173-200` — un `useEffect` con `window.addEventListener("keydown", ...)` que implementa: Ctrl+K → `setPaletteOpen(v => !v)` (`:183-185`, funciona TAMBIÉN con foco en inputs), `?` → `setCheatsheetOpen(v => !v)` (`:186-188`, SOLO fuera de editables: guard `!editable && ev.key === "?" && !ev.ctrlKey && !ev.metaKey` en `:181`), y Ctrl+/ → `selectTab(toggleNavTab(tabRef.current))` (`:189-196`, con el espejo `tabRef` del plan 136 F7, `:74-75`, y la prohibición explícita de `pushState` dentro del updater por StrictMode).
+1. **El handler real y ad-hoc:** `frontend/src/App.tsx:210-235 (v2: era :173-200; drift confirmado en frío — anclar por el texto `const onKeyDown` + `isPaletteShortcut`)` — un `useEffect` con `window.addEventListener("keydown", ...)` que implementa: Ctrl+K → `setPaletteOpen(v => !v)` (`:183-185`, funciona TAMBIÉN con foco en inputs), `?` → `setCheatsheetOpen(v => !v)` (`:186-188`, SOLO fuera de editables: guard `!editable && ev.key === "?" && !ev.ctrlKey && !ev.metaKey` en `:181`), y Ctrl+/ → `selectTab(toggleNavTab(tabRef.current))` (`:189-196`, con el espejo `tabRef` del plan 136 F7, `:74-75`, y la prohibición explícita de `pushState` dentro del updater por StrictMode).
 2. **La lista que miente:** `frontend/src/hooks/useKeyboardShortcuts.ts:48-57` — `DEFAULT_SHORTCUTS` declara 8 atajos; solo `Ctrl+K`, `?` y `Ctrl+/` existen. `Ctrl+R "Re-ejecutar último agente"`, `Ctrl+Shift+R`, `Enter "Correr agente seleccionado"`, `Shift+Enter` y `Esc "Cerrar modal/drawer"` (global) **no tienen implementación en ninguna parte del árbol** (grep de consumidores del hook: 0). El overlay `ShortcutsCheatsheet.tsx:18-21` renderiza esa lista tal cual → **le miente al operador**.
 3. **El hook muerto con bug:** `useKeyboardShortcuts()` (`useKeyboardShortcuts.ts:26-46`) no lo llama nadie. Su `matches()` (`:10-24`) además tiene el bug de orden: para el combo `"?"`, `wantShift=false` se compara contra `ev.shiftKey=true` en `:18` y devuelve `false` ANTES de llegar al caso especial de `:22`. El plan 164 §2.1 ya lo inventarió como uno de los 5 archivos que manejan Escape sin ser modal.
 
@@ -64,7 +76,7 @@ Serie UX Cockpit del Operador (172-175) — plan 1/4 — v1 PROPUESTO — 2026-0
 | **Bandeja de revisión** | `frontend/src/pages/ReviewInboxPage.tsx:103-116` — `sortedRows.map((row) => <tr key={row.id}>` con botón "Ver detalle" → `setDetailExecutionId(row.id)` (`:111`) | botón "Ver detalle" | j/k/↑↓ + Enter = `setDetailExecutionId(sortedRows[i].id)`, Escape = `setDetailExecutionId(null)` |
 | **Tablero de tickets (RECORTABLE)** | `frontend/src/pages/TicketBoard.tsx:249` `function TicketCard`, header expandible `styles.cardHeader` con `onClick={() => setExpanded(x => !x)}` (`:422`), renders en `:735` y `:1158` | click en el header expande/colapsa | j/k entre tarjetas, Enter = expandir/colapsar (F5, recortable: archivo caliente, lo toca el 164 F4) |
 
-**Bonus verificado que abarata todo:** `frontend/src/theme.css:334-337` ya aplica `box-shadow: var(--focus-ring)` a `:focus-visible` de **cualquier elemento con `[tabindex]`** (contrato del plan 138, re-apuntado por tema en 141 F2). Una `<tr tabIndex={0}>` gana el anillo de foco **gratis, en claro y oscuro, sin una línea de CSS nueva**.
+**Bonus verificado que abarata todo:** `frontend/src/theme.css:362-365 (selector `:where(…,[tabindex],…):focus-visible` con `box-shadow: var(--focus-ring)`; verificado en frío 2026-07-18)` ya aplica `box-shadow: var(--focus-ring)` a `:focus-visible` de **cualquier elemento con `[tabindex]`** (contrato del plan 138, re-apuntado por tema en 141 F2). Una `<tr tabIndex={0}>` gana el anillo de foco **gratis, en claro y oscuro, sin una línea de CSS nueva**.
 
 ### 2.4 Sustrato existente que se reusa (no se reinventa)
 
@@ -77,7 +89,7 @@ Serie UX Cockpit del Operador (172-175) — plan 1/4 — v1 PROPUESTO — 2026-0
 | Mecanismo de flags frontend | plan 139 §"Mecanismo EXACTO de lectura de la flag por el frontend" (`docs/139_...md:133-152`): campo ADITIVO en `GET /api/diag/health` (`backend/api/diag.py:410-411` ya expone `local_llm_enabled` y `shell_v2_enabled` con `getattr(_config.config, ...)`), leído en el effect de montaje de `App.tsx:154-161` | F0 agrega `ui_shortcuts_enabled` al MISMO dict y lo lee del MISMO fetch. Cero requests nuevos. |
 | Panel de flags en Settings | `frontend/src/components/HarnessFlagsPanel.tsx` (montado desde `SettingsPage.tsx`; planes 82/86) | La flag nueva aparece AUTOMÁTICAMENTE en Settings al estar en `FLAG_REGISTRY` + categorizada. Regla dura del pipeline cumplida sin código nuevo. |
 | Template de test de flag | `backend/tests/test_plan139_shell_flag.py` (completo) | F0 lo calca cambiando OFF→ON y `shell_v2`→`ui_shortcuts`. |
-| Anillo de foco | `frontend/src/theme.css:334-337` | F4/F5: foco visible gratis en filas con `tabindex`. |
+| Anillo de foco | `frontend/src/theme.css:362-365 (selector `:where(…,[tabindex],…):focus-visible` con `box-shadow: var(--focus-ring)`; verificado en frío 2026-07-18)` | F4/F5: foco visible gratis en filas con `tabindex`. |
 
 ### 2.5 Relación con el launcher de ayuda del plan 151 (decisión con evidencia)
 
@@ -95,6 +107,7 @@ El plan 151 (CRITICADO v2, **aún no implementado**) define `HelpLauncher.tsx`: 
 - **Si 164 NO está** (caso base): el overlay conserva su patrón actual de backdrop (`ShortcutsCheatsheet.tsx:24-31`) y F3 le agrega cierre por Escape con un `onKeyDown` local en el contenedor (mejora puntual, sin focus-trap — ese es territorio del 164).
 - **Si 164 YA está** al momento de implementar: F3 envuelve el contenido en `<Dialog>` en vez del backdrop manual (misma media hora de trabajo, y el overlay gana focus-trap gratis).
 - El registro suprime atajos nuevos cuando hay un `role="dialog"` abierto (§5 F1, `allowInDialog`), así que cuando 164 migre los 15 modales, los atajos de página no van a dispararse detrás de un modal. Los 3 atajos core preservan su comportamiento actual (hoy funcionan con modales abiertos — paridad exacta).
+- **C6 (v2) — nota a reconsiderar cuando 164 aterrice:** `nav.toggle-board` (Ctrl+/) tiene `allowInDialog:true`, así que dispara aun con un `Dialog` de confirmación abierto, cambiando el tab DETRÁS del modal. Esto es **paridad exacta con HEAD** (hoy el listener no tiene guard de diálogo), NO una regresión, por eso se conserva. Pero al integrar 164 conviene evaluar si un cambio de contexto bajo un diálogo destructivo debería inhibirse (bajar `allowInDialog` a `false` SOLO para `nav.toggle-board`); decisión diferida al plan que implemente la migración de modales, no se toca en 172.
 
 ---
 
@@ -126,7 +139,7 @@ El plan 151 (CRITICADO v2, **aún no implementado**) define `HelpLauncher.tsx`: 
 | **atajo core** | Los 3 atajos preexistentes al plan (Ctrl+K, `?`, Ctrl+/). Están EXENTOS del gate de la flag: con la flag OFF siguen funcionando, porque apagarlos sería una regresión contra HEAD. |
 | **display-only** | Entrada del registro sin handler global: existe solo para que el overlay la muestre (p.ej. "j/k navega la lista" — el handler real vive en el contenedor de la lista, no en `window`). |
 | **overlay autogenerado** | El overlay `?` construye sus secciones LEYENDO el registro al abrirse. No existe ninguna lista estática paralela. |
-| **foco roving (roving tabindex)** | Patrón W3C para listas: UN solo ítem tiene `tabIndex=0` (el activo), el resto `-1`. Tab entra a la lista por el activo; j/k/flechas mueven el activo y el foco DOM; Enter lo abre. El anillo de foco lo pinta `theme.css:334-337` gratis. |
+| **foco roving (roving tabindex)** | Patrón W3C para listas: UN solo ítem tiene `tabIndex=0` (el activo), el resto `-1`. Tab entra a la lista por el activo; j/k/flechas mueven el activo y el foco DOM; Enter lo abre. El anillo de foco lo pinta `theme.css:362-365 (selector `:where(…,[tabindex],…):focus-visible` con `box-shadow: var(--focus-ring)`; verificado en frío 2026-07-18)` gratis. |
 | **clamp** | Al navegar con j/k, el índice se detiene en los extremos (no da la vuelta). Decisión fija de este plan para no desorientar en tablas largas. |
 | **paleta (plan 129)** | `CommandPalette.tsx`, se abre con Ctrl+K, busca tickets/agentes/packs/proyectos/navegación; flag `STACKY_PALETTE_DEEP_SEARCH_ENABLED` para búsqueda profunda. |
 | **HITL** | Human-in-the-loop: el operador decide; ninguna acción con efecto se ejecuta sin su confirmación explícita. |
@@ -258,6 +271,21 @@ export function withShortcutHint(base: string, hint: string, enabled: boolean): 
 // ── Entradas display-only (el handler vive en el contenedor de cada lista, F4) ──
 export const LIST_NAV_DISPLAY_DEFS: ShortcutDef[]; // j/k/↑↓, Home/End, Enter, Escape — category "listas", displayOnly: true
 
+// ── [ADICIÓN ARQUITECTO C2] Defs CORE como fuente única, SIN handler ──
+// Los 3 atajos preexistentes se declaran UNA vez acá (id/combo/scope/category/
+// description/core/allowInDialog). App.tsx (F2) mapea sobre este array y ADJUNTA
+// el handler por id (ver CORE_HANDLERS en F2). El test de colisiones importa ESTE
+// array, nunca una copia a mano: extiende la tesis "una sola fuente de verdad" a
+// los core y cierra el punto ciego de CI (un atajo colisionante futuro rompe el test).
+export type CoreShortcutSpec = Omit<ShortcutDef, "handler">;
+export const CORE_SHORTCUT_DEFS: CoreShortcutSpec[]; // ["palette.toggle","help.shortcuts","nav.toggle-board"]
+
+// ── [ADICIÓN ARQUITECTO C2] Guardia de colisiones en runtime (dev-only) ──
+// Llamar UNA vez tras registrar todo (F2). En import.meta.env.DEV, si
+// detectCollisions(getAll()) no es vacío ⇒ console.warn con los grupos. Cero costo
+// en prod, cero acción del operador; delata regresiones que el grep no ve.
+export function assertNoRuntimeCollisions(): void;
+
 // ── Registro (estado de módulo, API mínima) ──
 export const shortcutRegistry: {
   register(def: ShortcutDef): void;      // reemplaza por id (idempotente ⇒ StrictMode-safe)
@@ -302,7 +330,8 @@ export function isUiShortcutsEnabled(): boolean;
 | `test_resolve_dialog_open` | con `dialogOpen:true`, def sin `allowInDialog` no resuelve; con `allowInDialog:true` sí. |
 | `test_resolve_editable` | con `editable:true`, `"?"` no resuelve; `"Ctrl+K"` sí (paridad App.tsx). |
 | `test_scope_priority` | dos defs con el mismo combo, scopes `page` y `global` → gana `page`. |
-| `test_collisions_zero_en_estaticos` | `detectCollisions([...CORE de F2 como specs estáticos, ...LIST_NAV_DISPLAY_DEFS])` → `[]`. |
+| `test_collisions_zero_en_estaticos` | **C2:** `detectCollisions([...CORE_SHORTCUT_DEFS, ...LIST_NAV_DISPLAY_DEFS])` → `[]` (importa el array REAL, no una copia; un core colisionante futuro rompe este test). |
+| `test_core_defs_shape` | **C2:** `CORE_SHORTCUT_DEFS` tiene exactamente los 3 ids `palette.toggle`/`help.shortcuts`/`nav.toggle-board`, todos con `core:true` y `allowInDialog:true`, y NINGUNO trae `handler` (el handler lo adjunta App.tsx). |
 | `test_registry_replace_by_id` | `register(a); register({...a, description:"x"})` → `getAll().length === 1` (StrictMode-safe). |
 | `test_visible_off_solo_core` | `visibleShortcuts` con false filtra los no-core. |
 | `test_group_for_overlay` | agrupa en orden global→navegacion→listas y dedup por id. |
@@ -318,7 +347,7 @@ export function isUiShortcutsEnabled(): boolean;
 
 ### F2 — Hooks de suscripción + migración del keydown de `App.tsx` al registro (paridad byte-compatible)
 
-**Objetivo (1 frase):** crear `useShortcut` y `useGlobalShortcutListener`, migrar los 3 atajos reales de `App.tsx:173-200` al registro sin cambiar comportamiento, y leer la flag del health SIN requests nuevos. **Valor:** una sola puerta de entrada de teclado; el ad-hoc muere.
+**Objetivo (1 frase):** crear `useShortcut` y `useGlobalShortcutListener`, migrar los 3 atajos reales de `App.tsx:210-235 (v2: era :173-200; drift confirmado en frío — anclar por el texto `const onKeyDown` + `isPaletteShortcut`)` al registro sin cambiar comportamiento, y leer la flag del health SIN requests nuevos. **Valor:** una sola puerta de entrada de teclado; el ad-hoc muere.
 
 **Archivos EXACTOS:**
 - NUEVO `Stacky Agents/frontend/src/hooks/useShortcut.ts`
@@ -376,28 +405,36 @@ export function useGlobalShortcutListener(): void {
 **Migración en `App.tsx` (anclas por texto):**
 
 1. BORRAR el `useEffect` completo que empieza con `const onKeyDown = (ev: KeyboardEvent) => {` y contiene `isPaletteShortcut` (hoy `:173-200`). **Conservar intactos** `tabRef` (`:74-75`) y el comentario del plan 136 F7.
-2. AGREGAR (junto a `useGlobalExecutionNotifier()`, `:105`):
+2. AGREGAR (junto a `useGlobalExecutionNotifier()`, ancla el call de ese hook). **C2 (v2): los defs CORE NO se re-declaran acá** — se importan de `CORE_SHORTCUT_DEFS` (fuente única, F1) y App.tsx SOLO adjunta el handler por id vía el mapa local `CORE_HANDLERS`. Así el test de colisiones y el runtime consumen el MISMO array:
 
 ```tsx
-useGlobalShortcutListener();
-useShortcut({ id: "palette.toggle", combo: "Ctrl+K", scope: "global", category: "global",
-  description: "Abrir/cerrar la paleta de comandos", core: true, allowInDialog: true,
-  handler: () => setPaletteOpen((v) => !v) });
-useShortcut({ id: "help.shortcuts", combo: "?", scope: "global", category: "global",
-  description: "Mostrar/ocultar esta ayuda de atajos", core: true, allowInDialog: true,
-  handler: () => setCheatsheetOpen((v) => !v) });
-useShortcut({ id: "nav.toggle-board", combo: "Ctrl+/", scope: "global", category: "navegacion",
-  description: "Alternar Mi Equipo ↔ Tickets", core: true, allowInDialog: true,
+import { CORE_SHORTCUT_DEFS, assertNoRuntimeCollisions } from "./services/shortcuts";
+
+// Mapa id → handler (los combos/scope/description viven en CORE_SHORTCUT_DEFS, F1).
+const CORE_HANDLERS: Record<string, () => void> = {
+  "palette.toggle": () => setPaletteOpen((v) => !v),
+  "help.shortcuts": () => setCheatsheetOpen((v) => !v),
   // Plan 136 F7 — usar el tab ACTUAL (tabRef) y reusar selectTab (pushState con guard).
   // PROHIBIDO pushState dentro del updater de setTab (StrictMode lo invoca dos veces).
-  handler: () => selectTab(toggleNavTab(tabRef.current)) });
+  "nav.toggle-board": () => selectTab(toggleNavTab(tabRef.current)),
+};
+
+useGlobalShortcutListener();
+CORE_SHORTCUT_DEFS.forEach((spec) =>
+  // useShortcut es un hook: el orden y la cantidad de CORE_SHORTCUT_DEFS es ESTÁTICO
+  // (3 entradas constantes en módulo), así que el forEach cumple las reglas de hooks.
+  useShortcut({ ...spec, handler: CORE_HANDLERS[spec.id] }),
+);
+useEffect(() => { assertNoRuntimeCollisions(); }, []); // dev-only warn (C2)
 ```
+
+> **Nota de reglas-de-hooks (para el modelo menor):** `CORE_SHORTCUT_DEFS` es una constante de módulo de longitud fija (3). Iterarla con `.forEach` para llamar `useShortcut` es seguro porque el número de hooks NO varía entre renders. NO derivar este array de props/estado ni filtrarlo condicionalmente.
 
 3. EXTENDER el `.then` del fetch de health existente (ancla: `d: { shell_v2_enabled?: boolean }` en `:156`): tipo pasa a `{ shell_v2_enabled?: boolean; ui_shortcuts_enabled?: boolean }` y se agrega `setUiShortcutsEnabled(d.ui_shortcuts_enabled !== false);` dentro del mismo `.then`. En el `.catch` NO se toca la flag (queda el default ON del módulo — una falla de red no debe degradar UX con default ON; simetría inversa al 139, cuyo default es OFF).
 
 **Tabla de paridad OBLIGATORIA (verificar una por una en smoke §9):**
 
-| Comportamiento HOY (`App.tsx:173-200`) | Tras F2 |
+| Comportamiento HOY (`App.tsx:210-235 (v2: era :173-200; drift confirmado en frío — anclar por el texto `const onKeyDown` + `isPaletteShortcut`)`) | Tras F2 |
 |---|---|
 | Ctrl+K toggle paleta, TAMBIÉN con foco en input | idéntico (`comboAllowedInEditable("Ctrl+K")` = true; `allowInDialog` = true cubre paleta abierta) |
 | `?` toggle cheatsheet SOLO fuera de editables, sin Ctrl/Meta | idéntico (supresión de tecla suelta + `eventMatchesCombo` exige sin Ctrl) |
@@ -437,14 +474,31 @@ export default function ShortcutsCheatsheet({ open, onClose }: Props) {
     enabled,
   );
   const groups = groupForOverlay(defs);
-  // render: mismo markup de secciones/tabla/kbd que hoy (:32-66), iterando groups
+  // render: mismo markup de secciones/tabla/kbd que hoy, iterando groups.
+  // C4 (v2): asociar el diálogo a su título → <h2 id="shortcuts-overlay-title">…</h2>
+  //          y en el contenedor role="dialog" agregar aria-labelledby="shortcuts-overlay-title".
   // en el <div className={styles.backdrop}> agregar:
   //   onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } }}
   //   tabIndex={-1} y ref con focus() al montar (para que Escape funcione sin click previo)
 }
 ```
 
-- Mantener `role="dialog"`, `aria-modal`, backdrop-click y el botón × tal cual (`:24-38`).
+**C3 (v2) — restauración de foco (rama SIN 164), OBLIGATORIA:** el overlay roba el foco al montar (para que Escape ande sin click). DEBE devolverlo al cerrar, o el operador que estaba roving el historial pierde su fila activa. Patrón EXACTO en el componente:
+
+```tsx
+const restoreRef = useRef<HTMLElement | null>(null);
+const backdropRef = useRef<HTMLDivElement | null>(null);
+useEffect(() => {
+  if (!open) return;
+  restoreRef.current = document.activeElement as HTMLElement | null; // guardar quién tenía foco
+  backdropRef.current?.focus();
+  return () => { restoreRef.current?.focus?.(); }; // restaurar al cerrar/desmontar
+}, [open]);
+```
+
+(Si 164 YA está y se usa `<Dialog>`, NO agregar esto: `Dialog` del 164 ya restaura el foco al cerrar — verificado contra su contrato F1. Solo aplica en la rama manual.)
+
+- Mantener `role="dialog"`, `aria-modal`, backdrop-click y el botón × tal cual; **C4:** sumar `aria-labelledby` al título.
 - **Dependencia blanda con 164 (decisión en frío al implementar):** si `frontend/src/components/ui/Dialog.tsx` YA existe (164 implementado), envolver el contenido en `<Dialog open onClose={onClose} ariaLabel="Atajos de teclado">` en vez del backdrop manual y NO agregar el `onKeyDown` local (el Dialog ya trae Escape + focus-trap). Si NO existe, aplicar el patrón de arriba. Verificación: `ls src/components/ui/Dialog.tsx`.
 - El `comboLabel` se parte por `+` para renderizar los `<kbd>` como hoy (`:51-56`).
 
@@ -512,10 +566,10 @@ export function useRovingFocus(opts: UseRovingFocusOpts): {
 ```
 
 Reglas de implementación del hook (sin ambigüedad):
-1. `onKeyDown` del contenedor: si `!isUiShortcutsEnabled()` → return (flag OFF = inerte). Si `!(ev.target as HTMLElement)?.hasAttribute("data-roving-item")` → return (**crítico**: teclas sobre botones/links DENTRO de una fila no se secuestran; Enter sobre el botón "Ver detalle" de `ReviewInboxPage:111` sigue clickeando el botón). Calcular `rovingActionForKey(ev.key, ev.ctrlKey || ev.metaKey || ev.altKey)`; si null → return; `ev.preventDefault()`; `open` → `opts.onOpen(activeIndex)`; `escape` → `opts.onEscape?.()`; direccionales → `nextRovingIndex` + `setActiveIndex` + enfocar `containerRef.current?.querySelector('[data-roving-item="${next}"]') as HTMLElement | null`, con `?.focus()`.
+1. `onKeyDown` del contenedor: si `!isUiShortcutsEnabled()` → return (flag OFF = inerte). Si `!(ev.target as HTMLElement)?.hasAttribute("data-roving-item")` → return (**crítico**: teclas sobre botones/links DENTRO de una fila no se secuestran; Enter sobre el botón "Ver detalle" de `ReviewInboxPage:111` sigue clickeando el botón). Calcular `rovingActionForKey(ev.key, ev.ctrlKey || ev.metaKey || ev.altKey)`; si null → return; `ev.preventDefault()`; `open` → `opts.onOpen(activeIndex)`; `escape` → `opts.onEscape?.()`; direccionales → `nextRovingIndex` + `setActiveIndex` + enfocar el nodo del índice destino. **C1 (v2) — LITERAL, sin ambigüedad: usar BACKTICKS, NO comillas simples** (con comillas simples `${next}` NO se interpola y el foco jamás se movería): `` containerRef.current?.querySelector(`[data-roving-item="${next}"]`) as HTMLElement | null ``, con `?.focus()`. El nodo destino ya tiene `data-roving-item` estático, así que la query funciona aunque el re-render por `setActiveIndex` aún no haya corrido (`.focus()` sobre `tabindex=-1` es válido programáticamente).
 2. `rowProps(index)`: `tabIndex: index === Math.max(0, clampRovingIndex(activeIndex, itemCount)) ? 0 : -1` (si no hay activo aún, la fila 0 lleva `tabIndex=0` para que Tab entre a la lista); `data-roving-item: String(index)`; `onFocus: () => setActiveIndex(index)` (click del mouse sincroniza el roving — mouse y teclado nunca divergen).
 3. `useEffect` con `[opts.itemCount]`: `setActiveIndex((i) => clampRovingIndex(i, opts.itemCount))`.
-4. Foco visible: NADA que hacer — `theme.css:334-337` pinta `:focus-visible` en `[tabindex]`. PROHIBIDO agregar CSS nuevo o `style={{}}`.
+4. Foco visible: NADA que hacer — `theme.css:362-365 (selector `:where(…,[tabindex],…):focus-visible` con `box-shadow: var(--focus-ring)`; verificado en frío 2026-07-18)` pinta `:focus-visible` en `[tabindex]`. PROHIBIDO agregar CSS nuevo o `style={{}}`.
 
 **Aplicación EXACTA — `ExecutionHistoryPage.tsx`:**
 1. `const roving = useRovingFocus({ itemCount: items.length, onOpen: (i) => { const it = items[i]; if (it) setDetailId(it.id); }, onEscape: () => setDetailId(null) });`
@@ -649,6 +703,7 @@ Dependencias: F1→F2→F3 estricta; F4 depende de F1-F2 (usa flag y supresión)
 3. Ctrl+/ alterna Mi Equipo ↔ Tickets (dos veces = vuelve).
 4. Con un modal cualquiera abierto, Ctrl+K sigue funcionando (paridad).
 5. El overlay muestra SOLO atajos que existen (ninguna mención a "Re-ejecutar último agente"); Escape lo cierra; en claro y oscuro se ve bien.
+5b. **(C3) Restauración de foco:** en Historial, Tab entra a la tabla y j/k mueve el anillo a una fila; abrir `?`; cerrar con Escape ⇒ el foco vuelve a la MISMA fila activa (no al `<body>`). Un lector de pantalla anuncia el diálogo por su título "Atajos de teclado" (C4, `aria-labelledby`).
 6. Historial: Tab entra a la tabla, j/k/↑↓ mueven el anillo de foco, Enter abre el drawer de la fila activa, Escape lo cierra.
 7. Revisión: j/k + Enter abre detalle; con el foco en el botón "Descartar" de una fila, Enter clickea el botón y NO abre el detalle (regla R5).
 8. Con la paleta abierta, j/k escriben en el input de búsqueda (no navegan listas de atrás).
@@ -665,4 +720,7 @@ Dependencias: F1→F2→F3 estricta; F4 depende de F1-F2 (usa flag y supresión)
 - [ ] Flag visible y toggleable en Settings (regla dura: config por UI, no solo env).
 - [ ] Cero `style={{}}` nuevos, cero `.tsx` nuevos, cero requests HTTP nuevos, cero cambios en `harness_defaults.env` a mano.
 - [ ] Ningún atajo dispara acciones con efecto (revisión de diff contra la lista de handlers: toggles de UI y aperturas de detalle únicamente).
+- [ ] **C2:** `CORE_SHORTCUT_DEFS` es la única declaración de los core (App.tsx los importa, no los re-declara); `test_collisions_zero_en_estaticos` + `test_core_defs_shape` verdes; `assertNoRuntimeCollisions()` cableado (dev-only).
+- [ ] **C3:** el overlay restaura el foco al cerrar (rama sin 164) — smoke: roving en historial → `?` → Escape → el foco vuelve a la fila que estaba activa.
+- [ ] **C7 (huella de regresión, convención plan 163):** registrar en `Stacky Agents/docs/sistema/error_fingerprints.json` la huella `overlay-atajos-miente` (patrón: lista estática de atajos divergente de la implementación real; guard_test = KPI-4 grep + `test_group_for_overlay`) y `matcher-shift-question-bug` (patrón: `matches()` chequea `wantShift` antes del caso `?`; guard_test = `test_match_question_shift_fix`). Con id/patrón/plan-commit/fecha.
 - [ ] Resumen de implementación: qué se recortó (¿F5?), drift encontrado vs este doc, y estado de los hermanos 173-175 citados.

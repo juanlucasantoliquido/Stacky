@@ -1,12 +1,30 @@
 # Plan 174 — Rendimiento percibido: virtualización de listas largas, prefetch on-hover y navegación instantánea
 
-**Serie UX Cockpit del Operador (172-175) — plan 3/4 — v1 PROPUESTO — 2026-07-18**
+**Serie UX Cockpit del Operador (172-175) — plan 3/4 — v2 CRITICADO (APROBADO-CON-CAMBIOS) — 2026-07-18**
 
-> **Estado:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
+> **Estado:** CRITICADO v2 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode (perfil normal) · **Juez:** StackyArchitectaUltraEficientCode (perfil normal, Opus 4.8)
+
+## Changelog v1 → v2 (crítica adversarial aplicada)
+
+Veredicto del juez: **APROBADO-CON-CAMBIOS** (2 BLOQUEANTES + 3 IMPORTANTES + 2 MENORES corregidos). Cambios:
+
+- **C1 (BLOQUEANTE) — F4 sin gate de flag.** El v1 (§F4 final) dejaba `placeholderData`/`gcTime`/`data-stale` SIN branch de flag, con "el kill-switch real es revert del commit". Contradecía la DoD (§9: "con ambas flags OFF… System Logs se comportan como HOY") y viola la regla dura "toda fase que agregue comportamiento tiene gate de flag configurable por UI, no git-revert". **Fix:** F4 se gatea con una **3ra flag nueva `STACKY_UI_INSTANT_NAV_ENABLED`** (bool, default ON, `env_only=False`, editable en Settings) vía ternario en cada `useQuery` afectada (no duplica el `useQuery`; es 1 expresión). Ver F0 (alta triple) y F4.
+- **C2 (BLOQUEANTE) — premisa de plan 156 obsoleta.** El v1 afirmaba en §2.1/§2.4/§F2 que 156 "aún no implementado", que `LogsPanel` mapea todo en `:27` (`stream.lines.map`) y autoscrollea en `:13-15`. **Evidencia real 2026-07-18:** `LogsPanel.tsx` YA tiene Plan 156 F3 — `RENDER_CAP = 2000` (`:9`), render `stream.lines.slice(-RENDER_CAP).map(...)` (`:34`), banner `dropped` (`:31-33`), autoscroll en `:17-19`. F2 se reescribió contra el código REAL y reconcilia con `RENDER_CAP` + banner `dropped`.
+- **C3 (IMPORTANTE) — `useVirtualList.enabled` ambiguo + call sites inconsistentes.** LogsPanel pasaba el flag crudo y DiffList `shouldVirtualize(...)`; el contrato no fijaba si el hook aplica el umbral 200. **Fix:** contrato pinneado — el hook recibe el **flag crudo** y aplica `shouldVirtualize(total, enabled)` internamente vía el helper puro `deriveIsVirtualized` (testeado); ambos call sites pasan el flag crudo.
+- **C4 (IMPORTANTE) — line-cites obsoletos.** Sesión paralela editó los archivos; las citas `archivo:línea` de §1/§2/§F0/§F4 estaban corridas (ExecutionHistoryPage `historyQ` en `:115` no `:67-80`; SystemLogsPage `staleTime` en `:181` no `:153`; harness_flags FlagSpec shell v2 en `:3239` no `:3180-3192`). **Fix:** citas marcadas como orientativas y **anclaje 100% por texto** reforzado; además F4 aclara que SystemLogsPage tiene DOS queries (`:178` staleTime 10_000 y `:186` staleTime 30_000) y sólo la de la tabla paginada recibe `placeholderData`.
+- **C5 (IMPORTANTE) — prefetch on-focus amplificado por el foco roving del 172.** `getPrefetchProps` esparce `onFocus`; con el j/k del plan 172 cada paso de foco dispararía un prefetch. **Fix:** R10 + nota en F3: el debounce ≥150 ms + dedup + cap 1 lo absorben; se documenta que la traversal pura NO debe emitir (el foco que "pasa de largo" cancela en `onBlur` antes del deadline) y que 172 comparte el MISMO scheduler (cap global de 1 en vuelo).
+- **C6 (MENOR) — a11y del log virtualizado.** R11: `LogsPanel` virtualizado declara `role="log"` en el contenedor; se acepta como trade-off explícito que `aria-live` sólo anuncia la ventana montada (el texto completo vive en disco backend), mismo criterio que R1/R2.
+- **C7 (MENOR) — request de flags duplicada.** `useUiPerfFlags` hacía `fetch("/api/diag/health")` propio, duplicando el health que `App.tsx` ya pide al montar. **Fix + [ADICIÓN ARQUITECTO]:** hook único `useHealthFlags` compartido (misma `queryKey ["ui-perf-flags"]`, `staleTime: Infinity`) reutilizado por App y por los consumidores; chequeo `r.ok` antes de `r.json()`; 0 requests extra sobre el presupuesto del plan 156.
+
+**[ADICIÓN ARQUITECTO]:** (1) 3ra flag `STACKY_UI_INSTANT_NAV_ENABLED` que le da a "navegación instantánea" su propio kill-switch **en la UI de Settings** (no git-revert), cerrando C1 con la regla dura; (2) el `data-stale` respeta `prefers-reduced-motion` (sin transición si el SO lo pide) — cero trabajo del operador, default ON, accesible.
+
+---
+
+> **Estado histórico v1:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
 > **Hermanos de serie:** 172 (teclado primero: atajos + foco roving), 173 (vistas guardadas: presets + preferencias de tabla), 175 (peek + acciones rápidas). Este plan NO define atajos (172), NO define presets ni columnas persistentes (173), NO define hover-cards ni menú contextual (175). Las dependencias con hermanos son **blandas**: si el hermano no está implementado, la feature degrada explícitamente (se detalla ítem por ítem), nunca rompe.
 > **Dependencias blandas fuera de serie:** plan 156 (latido único — presupuesto de red KPI ≤2 requests/tick en idle: este plan lo RESPETA como techo duro aunque 156 no esté implementado aún), plan 164 (diálogo canónico — N/A acá: este plan no tiene ninguna acción con efecto), plan 165 (contrato de URL — la navegación instantánea complementa sus deep-links; sin 165 funciona igual sobre la history API actual).
-> **Runtimes:** las features de este plan son 100% del dashboard (frontend React + 2 campos de lectura aditivos en un endpoint backend existente). Son **agnósticas del runtime de agentes** (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ninguna fase toca el camino de ejecución, publicación ni telemetría de agentes. La paridad de los 3 runtimes es automática por vacuidad — igual se declara fase por fase.
-> **Flags nuevas:** `STACKY_UI_VIRTUALIZATION_ENABLED` y `STACKY_UI_PREFETCH_ENABLED`, ambas **default ON**, editables desde la UI de Settings (FlagSpec `env_only=False`), con kill-switch instantáneo (OFF = comportamiento actual byte-idéntico).
+> **Runtimes:** las features de este plan son 100% del dashboard (frontend React + 3 campos de lectura aditivos en un endpoint backend existente). Son **agnósticas del runtime de agentes** (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ninguna fase toca el camino de ejecución, publicación ni telemetría de agentes. La paridad de los 3 runtimes es automática por vacuidad — igual se declara fase por fase.
+> **Flags nuevas (3, alta triple en F0):** `STACKY_UI_VIRTUALIZATION_ENABLED` (gatea F2), `STACKY_UI_PREFETCH_ENABLED` (gatea F3) y `STACKY_UI_INSTANT_NAV_ENABLED` (gatea F4 — agregada en v2 por C1), las tres **default ON**, editables desde la UI de Settings (FlagSpec `env_only=False`), con kill-switch instantáneo (OFF = comportamiento actual byte-idéntico). **Regla dura cumplida en las 3 fases con comportamiento nuevo:** cada fase que cambia comportamiento (F2, F3, F4) tiene su gate de flag configurable por UI; ninguna depende de "git revert".
 > **Human-in-the-loop:** N/A por diseño — este plan solo hace GETs de lectura y cambia CÓMO se pinta lo que ya se pinta. Cero acciones destructivas, cero publicaciones, cero decisiones quitadas al operador. Ninguna de las 4 excepciones duras al "default ON" aplica (§3.2 lo argumenta textualmente).
 > **Trabajo del operador: ninguno** (en todas las fases; se repite fase por fase porque es regla de la serie).
 
@@ -19,14 +37,14 @@
 
 ## 1. Objetivo + KPI / impacto esperado
 
-**Objetivo (1 párrafo):** que la UI de Stacky se sienta instantánea sin pedir un byte de más: (a) las listas largas reales (stream de logs de ejecución y lista de diferencias del Comparador de BD) dejan de renderizar un nodo DOM por elemento y pasan a una **ventana virtualizada hand-rolled** (~≤60 nodos aunque haya 5.000 filas), extraída del precedente propio del repo (DiffList del plan 124) y sin agregar dependencias; (b) al **apuntar** con el mouse o el foco a una fila de ejecución, el detalle se **prefetchea** con react-query (debounce ≥150 ms, máximo 1 en vuelo, cancelación al salir), así el drawer abre ya pintado; (c) **paginar y filtrar deja de parpadear** (`placeholderData: keepPreviousData`) y **volver atrás pinta desde cache** y revalida en background (staleTime/gcTime afinados por tipo de query). Todo detrás de 2 flags default ON, con presupuesto de red y de DOM **binarios y testeados**, sin violar el techo del plan 156 (≤2 requests/tick en idle: el prefetch solo dispara con interacción humana; en idle suma exactamente 0).
+**Objetivo (1 párrafo):** que la UI de Stacky se sienta instantánea sin pedir un byte de más: (a) las listas largas reales (stream de logs de ejecución y lista de diferencias del Comparador de BD) dejan de renderizar un nodo DOM por elemento y pasan a una **ventana virtualizada hand-rolled** (~≤60 nodos aunque haya 5.000 filas), extraída del precedente propio del repo (DiffList del plan 124) y sin agregar dependencias; (b) al **apuntar** con el mouse o el foco a una fila de ejecución, el detalle se **prefetchea** con react-query (debounce ≥150 ms, máximo 1 en vuelo, cancelación al salir), así el drawer abre ya pintado; (c) **paginar y filtrar deja de parpadear** (`placeholderData: keepPreviousData`) y **volver atrás pinta desde cache** y revalida en background (staleTime/gcTime afinados por tipo de query). Todo detrás de **3 flags default ON** (una por fase con comportamiento nuevo: F2/F3/F4 — la 3ra agregada en v2 por C1), editables por UI, con presupuesto de red y de DOM **binarios y testeados**, sin violar el techo del plan 156 (≤2 requests/tick en idle: el prefetch solo dispara con interacción humana; en idle suma exactamente 0; leer las flags reutiliza el health que App ya pide, 0 requests extra).
 
 **KPIs binarios (comandos exactos; backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend` — en disco existen HOY `venv\Scripts\python.exe` y `.venv\Scripts\python.exe` (verificado 2026-07-18); usar `venv\Scripts\python.exe` y, solo si no existiera, `.venv\Scripts\python.exe`. Frontend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend`):**
 
 - **KPI-1 — Presupuesto de DOM:** `npx vitest run src/utils/__tests__/virtualWindow.test.ts` → exit 0. Incluye el caso binario: lista de **5.000 filas** (rowHeight 22 px, viewport 600 px, overscan 10) → `rendered ≤ 60` nodos y la suma `padTopPx + rendered*rowHeightPx + padBottomPx === total*rowHeightPx`.
 - **KPI-2 — Presupuesto de red del prefetch:** `npx vitest run src/services/__tests__/prefetchPolicy.test.ts` → exit 0. Incluye: **0** llamadas sin interacción; debounce **≥150 ms**; **≤1** prefetch en vuelo (el excedente se DESCARTA, no se encola); `leave()` antes del deadline ⇒ **0** llamadas.
 - **KPI-3 — Adopción real (fs+regex, precedente plan 140):** `npx vitest run src/__tests__/plan174Adoption.test.ts` → exit 0 (LogsPanel y DiffList usan `useVirtualList`; ExecutionHistoryPage y SystemLogsPage usan `placeholderData: keepPreviousData`; ExecutionHistoryPage y ReviewInboxPage usan `getPrefetchProps`).
-- **KPI-4 — Flags backend verdes:** `venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q` → exit 0 (default ON, curadas, categorizadas, PLAIN_HELP, campos en `/api/diag/health`).
+- **KPI-4 — Flags backend verdes:** `venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q` → exit 0 (**las 3 flags** `STACKY_UI_VIRTUALIZATION_ENABLED` / `STACKY_UI_PREFETCH_ENABLED` / `STACKY_UI_INSTANT_NAV_ENABLED`: default ON, curadas, categorizadas, PLAIN_HELP, y sus 3 campos `ui_virtualization_enabled` / `ui_prefetch_enabled` / `ui_instant_nav_enabled` en `/api/diag/health`).
 - **KPI-5 — Tipos verdes:** `npx tsc --noEmit` → exit 0.
 - **KPI-6 — Ratchets:** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` → exit 0 (cero `style={{` nuevos) **y** `grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.sh` → `1` **y** `grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.ps1` → `1`.
 - **KPI-7 — Sin regresión de flags:** `venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` y `venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q` → exit 0.
@@ -35,7 +53,7 @@
 
 | Métrica | Hoy | Con el plan |
 |---|---|---|
-| Nodos DOM de una ejecución con 5.000 líneas de log (LogsPanel) | 5.000 (`LogsPanel.tsx:27` mapea todo) | ≤ 60 |
+| Nodos DOM de una ejecución con 5.000 líneas de log (LogsPanel) | ≤2.000 hoy (`LogsPanel.tsx:34` `slice(-RENDER_CAP)`, cap 156 F3) — pero la cola descarta visualmente el resto | ≤ 60, con scroll a TODO el buffer retenido por 156 |
 | Nodos DOM de un diff de BD con 3.000 objetos (DiffList) | crece de a 100 con clicks manuales "Mostrar 100 más" (`DiffList.tsx:36-38`) | ≤ 60, con scroll continuo y sin clicks |
 | Apertura del drawer de detalle tras hover ≥150 ms sobre la fila | spinner siempre (2 queries en frío, `ExecutionDetailDrawer.tsx:36-46`) | pintado instantáneo desde cache (detalle prefetcheado) |
 | Cambiar de página en Historial / System Logs | flash de skeleton/"Loading logs…" y tabla vacía | la tabla anterior queda visible atenuada hasta que llega la nueva |
@@ -47,7 +65,7 @@
 
 ### 2.1 Listas largas sin ventana de render
 
-- `frontend/src/components/LogsPanel.tsx:27` — `{stream.lines.map((l, i) => ...)}` renderiza **todas** las líneas del stream, sin ventana. El stream de `useExecutionStream` acumula sin cota (`useExecutionStream.ts:36` lista `lines`, `:39` Set `seenKeys`; documentado en plan 156 §2.3). El plan 156 (CRITICADO v2, **aún no implementado**) acota la memoria a ≤5.000 líneas con un ring-buffer — pero aun con 156 aterrizado, **5.000 líneas = 5.000 nodos DOM**. La virtualización es el complemento de render que 156 declaró explícitamente fuera de su alcance ("La cota se implementa sin libs nuevas", 156 §2.3; su F3 acota memoria, no DOM).
+- `frontend/src/components/LogsPanel.tsx` (evidencia REAL 2026-07-18, ~45 líneas) — **Plan 156 F3 YA está implementado acá** (corrección C2 sobre el v1, que lo daba por no implementado): `RENDER_CAP = 2000` (`:9`), render `stream.lines.slice(-RENDER_CAP).map((l, i) => ...)` (`:34`), banner `dropped` de líneas descartadas (`:31-33`) y autoscroll incondicional en `useEffect` sobre `stream.lines.length` (`:17-19`, `ref.current.scrollTop = ref.current.scrollHeight`). O sea: el DOM del log **ya está acotado a ≤2.000 nodos**, no 5.000. Aun así 2.000 nodos monoespaciados con re-render en cada línea nueva siguen degradando el frame-rate en ejecuciones largas; la virtualización baja ese piso a ~60 nodos **y** elimina el `slice(-RENDER_CAP)` que hoy **descarta visualmente** las primeras líneas (con virtualización el operador puede scrollear a TODO el buffer retenido por 156, no sólo la cola). La virtualización es el complemento de render que 156 declaró fuera de su alcance ("La cota se implementa sin libs nuevas", 156 §2.3; su F3 acota memoria y cola de render, no da ventana de scroll completo).
 - `frontend/src/components/dbcompare/DiffList.tsx:12-16` — el único precedente de mitigación del repo: paginación incremental en cliente de a `PAGE_SIZE = 100` (`:5`), con botón "Mostrar 100 más" (`:37`) y el comentario normativo *"sin librerías de virtualización, per guardrail §3.1"* (plan 124). Dos problemas: el DOM **crece monótonamente** a medida que el operador clickea (3.000 objetos = 3.000 nodos si los quiere ver todos) y el patrón está **encerrado en un componente** en vez de ser un hook reutilizable.
 - `frontend/src/pages/TicketBoard.tsx:1139,1157` — el board renderiza épicas con hijos anidados (`epic.children.map`, `:734`). Se **descarta como target de virtualización** en este plan: estructura jerárquica con alturas variables y volumen moderado (decenas de épicas, no miles de filas planas). Queda citado en §7 Fuera de scope.
 - `frontend/package.json` — **no hay ninguna librería de virtualización** (grep `react-window|react-virtual|virtua` → 0 hits). Decisión §3.4: se mantiene hand-rolled.
@@ -66,7 +84,7 @@
 
 ### 2.4 Presupuesto de red ya legislado que este plan debe respetar
 
-- Plan 156 §1 (tabla de impacto): KPI **≤2 requests por tick en idle** (1 por scope de summary). Este plan NO puede sumar requests periódicas: todo tráfico nuevo es (a) disparado por interacción humana explícita (hover/focus con debounce), o (b) 1 única lectura de flags por sesión (staleTime `Infinity`, §F1).
+- Plan 156 §1 (tabla de impacto): KPI **≤2 requests por tick en idle** (1 por scope de summary). Plan 156 F3 ya está parcialmente aterrizado (ver §2.1: el `RENDER_CAP` de `LogsPanel` vive en el árbol). Este plan NO puede sumar requests periódicas: todo tráfico nuevo es (a) disparado por interacción humana explícita (hover/focus con debounce), o (b) **cero** requests nuevas para leer flags — reutiliza el `GET /api/diag/health` que `App.tsx` ya dispara al montar, vía el hook compartido `useHealthFlags` (`staleTime: Infinity`, §F1; [ADICIÓN ARQUITECTO] C7), sin duplicarlo.
 
 ---
 
@@ -74,7 +92,7 @@
 
 ### 3.1 Los rieles duros de la serie
 
-1. **3 runtimes con paridad.** Todo ítem es dashboard puro (frontend + 2 campos aditivos de lectura en `/api/diag/health`). Nada toca `agent_runner`, publicación, ni telemetría por runtime ⇒ paridad Codex CLI / Claude Code CLI / GitHub Copilot Pro por vacuidad. Se declara igual en cada fase.
+1. **3 runtimes con paridad.** Todo ítem es dashboard puro (frontend + 3 campos aditivos de lectura en `/api/diag/health`). Nada toca `agent_runner`, publicación, ni telemetría por runtime ⇒ paridad Codex CLI / Claude Code CLI / GitHub Copilot Pro por vacuidad. Se declara igual en cada fase.
 2. **Cero trabajo extra para el operador.** Todo invisible/automático, flags **default ON**, sin pasos manuales nuevos, sin config nueva obligatoria, backward-compatible (OFF = byte-idéntico a hoy).
 3. **Human-in-the-loop innegociable.** Este plan no ejecuta ninguna acción con efecto (ni destructiva ni de publicación): solo GETs y render. El diálogo canónico (164) no participa porque no hay nada que confirmar. Si durante la implementación apareciera una acción con efecto (no debería), pasa por 164 — se deja escrito para que el implementador no improvise.
 4. **Mono-operador sin auth real.** Nada de RBAC ni multiusuario; los campos nuevos de `/api/diag/health` son de lectura y no validan `current_user` (no hay qué validar: sustrato sin login, header sin validar).
@@ -112,9 +130,9 @@ Se **extrae y generaliza el patrón propio** (precedente `DiffList.tsx:12-13`, g
 
 ---
 
-### F0 — Flags backend: alta doble con default ON + campos en `/api/diag/health`
+### F0 — Flags backend: alta TRIPLE con default ON + campos en `/api/diag/health`
 
-**Objetivo (1 frase):** dar de alta `STACKY_UI_VIRTUALIZATION_ENABLED` y `STACKY_UI_PREFETCH_ENABLED` (bool, default ON, editables por UI de Settings) y exponerlas al frontend por el mecanismo canónico del plan 139, para que todo lo demás del plan tenga kill-switch desde el día cero.
+**Objetivo (1 frase):** dar de alta `STACKY_UI_VIRTUALIZATION_ENABLED` (F2), `STACKY_UI_PREFETCH_ENABLED` (F3) y `STACKY_UI_INSTANT_NAV_ENABLED` (F4 — agregada en v2 por C1) (bool, default ON, editables por UI de Settings) y exponerlas al frontend por el mecanismo canónico del plan 139, para que las 3 fases con comportamiento nuevo tengan kill-switch por UI desde el día cero.
 **Valor:** kill-switch instantáneo por flag + cumplimiento de la regla dura "configurable desde la UI".
 
 **Archivos a editar (exactos):**
@@ -129,12 +147,13 @@ Se **extrae y generaliza el patrón propio** (precedente `DiffList.tsx:12-13`, g
 
 **Tests PRIMERO (TDD).** Crear `tests/test_plan174_ui_perf_flags.py` con el patrón exacto de `tests/test_plan131_incident_flag.py` (fixtures `app_flag_on`/`app_flag_off` con `create_app()` + `TESTING=True` + mutación de `cfg.config` con restore; NUNCA `create_app()` fuera de pytest). Casos, con estos nombres exactos:
 
-- `test_virtualization_flag_default_on` — `monkeypatch.delenv("STACKY_UI_VIRTUALIZATION_ENABLED", raising=False)`; `importlib.reload(config)`; assert `config.config.STACKY_UI_VIRTUALIZATION_ENABLED is True`; reload final para restaurar.
+- `test_virtualization_flag_default_on` — `monkeypatch.delenv("STACKY_UI_VIRTUALIZATION_ENABLED", raising=False)`; `importlib.reload(config)`; assert `config.config.STACKY_UI_VIRTUALIZATION_ENABLED is True`; reload final para restaurar. **Gotcha (memoria de la serie):** `importlib.reload(config)` en un test contamina los tests flag-off de la MISMA corrida ⇒ este archivo corre SIEMPRE por sí solo (`pytest tests/test_plan174_ui_perf_flags.py`), nunca dentro de la suite.
 - `test_prefetch_flag_default_on` — ídem para `STACKY_UI_PREFETCH_ENABLED`.
-- `test_flagspecs_registered_and_categorized` — para cada una de las 2 keys: existe `FlagSpec` en `FLAG_REGISTRY` con `type == "bool"`, `default is True`, `env_only is False`, y la key está en `_CATEGORY_KEYS["interfaz_ui"]`.
-- `test_plain_help_entries` — `PLAIN_HELP` tiene entrada para ambas keys con `what/on_effect/off_effect/example` no vacíos (respetar denylist de jerga de `tests/test_harness_flags_help.py`).
-- `test_health_exposes_ui_perf_fields` — con fixture `app` (patrón `app_flag_on` sin tocar flags), `client.get("/api/diag/health")` → 200 y el JSON contiene `"ui_virtualization_enabled"` y `"ui_prefetch_enabled"` como bool.
-- `test_health_fields_follow_config` — fixture que setea `cfg.config.STACKY_UI_PREFETCH_ENABLED = False` (con restore) → el campo `ui_prefetch_enabled` del health es `False`.
+- `test_instant_nav_flag_default_on` — ídem para `STACKY_UI_INSTANT_NAV_ENABLED` (agregada en v2, C1).
+- `test_flagspecs_registered_and_categorized` — para cada una de las **3** keys: existe `FlagSpec` en `FLAG_REGISTRY` con `type == "bool"`, `default is True`, `env_only is False`, y la key está en `_CATEGORY_KEYS["interfaz_ui"]`.
+- `test_plain_help_entries` — `PLAIN_HELP` tiene entrada para las 3 keys con `what/on_effect/off_effect/example` no vacíos (respetar denylist de jerga de `tests/test_harness_flags_help.py`).
+- `test_health_exposes_ui_perf_fields` — con fixture `app` (patrón `app_flag_on` sin tocar flags), `client.get("/api/diag/health")` → 200 y el JSON contiene `"ui_virtualization_enabled"`, `"ui_prefetch_enabled"` y `"ui_instant_nav_enabled"` como bool.
+- `test_health_fields_follow_config` — fixture que setea `cfg.config.STACKY_UI_INSTANT_NAV_ENABLED = False` (con restore) → el campo `ui_instant_nav_enabled` del health es `False`.
 
 Correr y verlos FALLAR por la razón correcta (flags inexistentes):
 ```
@@ -156,9 +175,13 @@ STACKY_UI_VIRTUALIZATION_ENABLED: bool = os.getenv(
 STACKY_UI_PREFETCH_ENABLED: bool = os.getenv(
     "STACKY_UI_PREFETCH_ENABLED", "true"
 ).strip().lower() == "true"
+
+STACKY_UI_INSTANT_NAV_ENABLED: bool = os.getenv(  # Plan 174 v2 (C1) — gatea F4
+    "STACKY_UI_INSTANT_NAV_ENABLED", "true"
+).strip().lower() == "true"
 ```
 
-(b) `harness_flags.py` — dos ediciones: (b1) en `_CATEGORY_KEYS["interfaz_ui"]` (`:325-327`) agregar las 2 keys con comentario `# Plan 174 — ...`; (b2) en `FLAG_REGISTRY`, junto a la `FlagSpec` de `STACKY_UI_SHELL_V2_ENABLED` (`:3180-3192`), agregar 2 `FlagSpec` con `default=True` (patrón `default=True` explícito de `CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED`, `:337`):
+(b) `harness_flags.py` — dos ediciones (citas de línea ORIENTATIVAS; anclar por TEXTO, la sesión paralela mueve los números — evidencia 2026-07-18: `_CATEGORY_KEYS["interfaz_ui"]` empieza en `:332` con la key `STACKY_UI_SHELL_V2_ENABLED` en `:333`; la `FlagSpec` de shell v2 está en `:3239`, no en `:3180-3192`): (b1) en la tupla `_CATEGORY_KEYS["interfaz_ui"]` (ancla de texto: la línea `"STACKY_UI_SHELL_V2_ENABLED",  # Plan 139`) agregar las **3** keys con comentario `# Plan 174 — ...`; (b2) en `FLAG_REGISTRY`, junto a la `FlagSpec` cuyo `key="STACKY_UI_SHELL_V2_ENABLED"`, agregar **3** `FlagSpec` con `default=True` (patrón `default=True` explícito, p.ej. `CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED`):
 ```python
 FlagSpec(
     key="STACKY_UI_VIRTUALIZATION_ENABLED",
@@ -181,22 +204,35 @@ FlagSpec(
     description=(
         "Plan 174 — Al posar el mouse o el foco sobre una fila de ejecución, "
         "el detalle se precarga (máximo 1 pedido a la vez) para que el panel "
-        "abra al instante; paginar y volver atrás pinta desde memoria y "
-        "revalida en segundo plano. Con OFF, comportamiento actual."
+        "abra al instante. Con OFF, comportamiento actual."
+    ),
+    group="global",
+),
+FlagSpec(
+    key="STACKY_UI_INSTANT_NAV_ENABLED",
+    type="bool",
+    default=True,
+    label="Navegación instantánea sin parpadeo",
+    description=(
+        "Plan 174 — Paginar, filtrar y volver a una pantalla mantiene la "
+        "información anterior visible (atenuada) hasta que llega la nueva, en "
+        "vez de mostrar una pantalla vacía. Solo cambia el pintado; mismos "
+        "datos y mismos pedidos. Con OFF, comportamiento actual."
     ),
     group="global",
 ),
 ```
 - **Anti-gotcha (recurrido 6 veces en la serie):** la prosa de comentarios NO debe colisionar con greps-gate de otros planes; no escribir literales de diálogos nativos ni `style={{` en comentarios.
 
-(c) `harness_flags_help.py` — 2 entradas `PlainHelp` en `PLAIN_HELP` (formato on/off del archivo, sin jerga de la denylist).
+(c) `harness_flags_help.py` — **3** entradas `PlainHelp` en `PLAIN_HELP` (formato on/off del archivo, sin jerga de la denylist).
 
-(d) `tests/test_harness_flags.py` — agregar las 2 keys al set `_CURATED_DEFAULTS_ON` (`:467`). Es la vía canónica para default ON (si no: rompe `test_default_known_only_for_curated`).
+(d) `tests/test_harness_flags.py` — agregar las **3** keys al set `_CURATED_DEFAULTS_ON` (ancla de texto, no línea; evidencia v1 lo daba en `:467`). Es la vía canónica para default ON (si no: rompe `test_default_known_only_for_curated`).
 
-(e) `api/diag.py` — en el dict de retorno de `health()`, inmediatamente después de la línea de `shell_v2_enabled` (`diag.py:411`), agregar:
+(e) `api/diag.py` — en el dict de retorno de `health()`, inmediatamente después de la línea de `shell_v2_enabled` (ancla de texto `"shell_v2_enabled": ... # Plan 139`, hoy en `diag.py:415`), agregar:
 ```python
 "ui_virtualization_enabled": bool(getattr(_config.config, "STACKY_UI_VIRTUALIZATION_ENABLED", True)),  # Plan 174
 "ui_prefetch_enabled": bool(getattr(_config.config, "STACKY_UI_PREFETCH_ENABLED", True)),  # Plan 174
+"ui_instant_nav_enabled": bool(getattr(_config.config, "STACKY_UI_INSTANT_NAV_ENABLED", True)),  # Plan 174 v2
 ```
 (fallback `True` = coherente con default ON; aditivo puro, ningún consumidor existente se rompe).
 
@@ -210,7 +246,7 @@ venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q     → ex
 grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.sh      → 1
 grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.ps1     → 1
 ```
-**Flag que protege la fase:** las 2 flags SON la fase; default ON.
+**Flag que protege la fase:** las 3 flags SON la fase; default ON.
 **Runtimes / fallback:** backend de lectura pura; idéntico para los 3 runtimes (no toca ejecución). Fallback: si el health falla, el frontend asume ON (fail-open coherente con default ON, §F1).
 **Trabajo del operador: ninguno.**
 
@@ -277,7 +313,15 @@ export function computeVirtualWindow(input: VirtualWindowInput): VirtualWindow {
 export function shouldVirtualize(total: number, flagEnabled: boolean): boolean {
   return flagEnabled && total >= VIRTUALIZATION_THRESHOLD;
 }
+
+// C3 — alias explícito que consume el hook: la decisión de virtualizar SIEMPRE
+// pasa por el umbral. NO existe un modo "flag crudo sin umbral".
+export function deriveIsVirtualized(total: number, flagEnabled: boolean): boolean {
+  return shouldVirtualize(total, flagEnabled);
+}
 ```
+
+**Contrato de `enabled` (pinneado en v2, C3):** `enabled` es SIEMPRE el **flag crudo** (`flags.virtualization`), nunca `shouldVirtualize(...)` pre-computado. El hook aplica el umbral internamente vía `deriveIsVirtualized(total, enabled)`. Regla dura para el implementador: **ambos** call sites (LogsPanel y DiffList) pasan `enabled: flags.virtualization` — NO `shouldVirtualize(...)` — para que el umbral 200 se aplique en un solo lugar y no se duplique ni se saltee (evita virtualizar listas <200 y romper R1/Ctrl+F). El test 8 cubre `shouldVirtualize`/`deriveIsVirtualized` en puro; el hook queda como wiring fino sin lógica de umbral propia.
 
 **`useVirtualList.ts` (hook fino; contrato exacto):**
 ```ts
@@ -287,12 +331,12 @@ import { computeVirtualWindow, shouldVirtualize, type VirtualWindow } from "../u
 export interface UseVirtualListOptions {
   total: number;
   rowHeightPx: number;
-  enabled: boolean;             // pasar shouldVirtualize(total, flag) o el flag directo
+  enabled: boolean;             // C3: SIEMPRE el flag CRUDO (flags.virtualization). El hook aplica el umbral 200 vía deriveIsVirtualized(total, enabled).
   overscan?: number;
   pinnedIndex?: number | null;  // plan 172 (blanda): sin 172 nadie lo pasa y no cambia nada
 }
 export interface UseVirtualListResult extends VirtualWindow {
-  isVirtualized: boolean;                       // false ⇒ render directo, sin listeners
+  isVirtualized: boolean;                       // = deriveIsVirtualized(total, enabled). false ⇒ render directo, sin listeners
   containerRef: React.RefObject<HTMLDivElement>;// va al contenedor scrolleable
   onScroll: () => void;                         // va al onScroll del contenedor
   scrollToIndex: (i: number) => void;           // containerRef.scrollTop = i * rowHeightPx
@@ -300,25 +344,30 @@ export interface UseVirtualListResult extends VirtualWindow {
 ```
 Semántica: estado interno `scrollTopPx` actualizado en `onScroll` leyendo `containerRef.current.scrollTop` (throttle vía `requestAnimationFrame`: 1 recomputo por frame como máximo); `viewportHeightPx` leído de `containerRef.current.clientHeight` en el mismo callback (fallback 600 si el ref aún no montó). Con `isVirtualized === false` devuelve `{start:0, end:total, padTopPx:0, padBottomPx:0}` y `onScroll` es no-op. **Sin ResizeObserver ni efectos de layout** — mantenerlo mínimo; el recomputo en scroll cubre el caso real.
 
-**`useUiPerfFlags.ts` (lectura de flags, 1 request por sesión):**
+**`useUiPerfFlags.ts` (lectura de flags, CERO requests extra — reutiliza el health que App ya pide; C7 + [ADICIÓN ARQUITECTO]):**
 ```ts
 import { useQuery } from "@tanstack/react-query";
 
-export interface UiPerfFlags { virtualization: boolean; prefetch: boolean; }
-const DEFAULTS: UiPerfFlags = { virtualization: true, prefetch: true }; // fail-open = default ON
+export interface UiPerfFlags { virtualization: boolean; prefetch: boolean; instantNav: boolean; }
+const DEFAULTS: UiPerfFlags = { virtualization: true, prefetch: true, instantNav: true }; // fail-open = default ON
 
+// C7 — MISMA queryKey y config que el (único) fetch de health de App.tsx: react-query
+// deduplica por key, así que este hook NO agrega una request; lee de la cache compartida.
+// staleTime Infinity ⇒ 0 requests por tick: presupuesto del plan 156 intacto.
 export function useUiPerfFlags(): UiPerfFlags {
   const q = useQuery({
     queryKey: ["ui-perf-flags"],
     queryFn: async (): Promise<UiPerfFlags> => {
       const r = await fetch("/api/diag/health");
+      if (!r.ok) return DEFAULTS;            // C7: chequear r.ok antes de .json() (fail-open a ON)
       const d = await r.json();
       return {
         virtualization: d.ui_virtualization_enabled !== false,
         prefetch: d.ui_prefetch_enabled !== false,
+        instantNav: d.ui_instant_nav_enabled !== false,
       };
     },
-    staleTime: Infinity,   // 1 request por sesión: NO suma al presupuesto por tick del plan 156
+    staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,
     retry: 0,
@@ -327,7 +376,7 @@ export function useUiPerfFlags(): UiPerfFlags {
   return q.data ?? DEFAULTS;
 }
 ```
-Mecanismo idéntico al del plan 139 (§3.3): campo aditivo de `/api/diag/health`; toggle desde Settings requiere recargar la página, igual que shell v2 (`App.tsx:152-153`, comentario "recargar la página para ver el efecto").
+Mecanismo idéntico al del plan 139 (§3.3): campo aditivo de `/api/diag/health`; toggle desde Settings requiere recargar la página, igual que shell v2 (`App.tsx` ancla de texto "recargar la página para ver el efecto"). **Reuso (C7):** si `App.tsx` hoy pide health con OTRA `queryKey`, el implementador unifica ambas bajo `["ui-perf-flags"]` (o el hook llama a la key existente) para garantizar 1 sola request de health por sesión; se anota el desvío en el commit. Nunca 2 fetches de health.
 
 **Criterio de aceptación (binario):** `npx vitest run src/utils/__tests__/virtualWindow.test.ts` → exit 0 **y** `npx tsc --noEmit` → exit 0.
 **Flag:** `STACKY_UI_VIRTUALIZATION_ENABLED` (motor) / `STACKY_UI_PREFETCH_ENABLED` (hook de flags la lee también) — default ON.
@@ -362,17 +411,19 @@ export function isPinnedToBottom(scrollTopPx: number, viewportHeightPx: number, 
 Casos: exactamente al fondo → true; a 39 px del fondo → true; a 41 px → false; contenido más chico que viewport → true; valores 0 → true.
 Comando: `npx vitest run src/utils/__tests__/stickToBottom.test.ts` (falla primero por módulo inexistente).
 
-**Implementación — LogsPanel (`LogsPanel.tsx`, hoy 38 líneas):**
-1. `const flags = useUiPerfFlags();` y `const virt = useVirtualList({ total: stream.lines.length, rowHeightPx: LOG_ROW_HEIGHT_PX, enabled: flags.virtualization });` con `const LOG_ROW_HEIGHT_PX = 20;` (constante del archivo).
-2. CSS: en `LogsPanel.module.css` agregar `.virtualLine { height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`. Cuando `virt.isVirtualized`, cada fila lleva `className={`${styles.line} ${styles.virtualLine} ${styles[l.level]}`}` (altura fija = requisito del motor). Cuando NO (flag OFF o <200 líneas), el render es EXACTAMENTE el actual (`:27-34`), wrap incluido.
-3. Render virtualizado: reemplazar `stream.lines.map(...)` por
-   `stream.lines.slice(virt.start, virt.end).map((l, i) => ... key={virt.start + i} ...)` entre dos spacers `<div ref={padTopRef} />` / `<div ref={padBottomRef} />` cuyas alturas se setean por **ref + effect imperativo** (`padTopRef.current.style.height = `${virt.padTopPx}px``) — **prohibido `style={{}}`** (ratchet plan 138).
-4. Contenedor: `<div className={styles.body} ref={virt.containerRef} onScroll={virt.onScroll}>` (el `ref` actual `:11` pasa a ser `virt.containerRef`; unificar).
-5. Autoscroll (reemplaza `:13-15`): en el mismo `useEffect` dependiente de `stream.lines.length`, si `isPinnedToBottom(el.scrollTop, el.clientHeight, el.scrollHeight)` era true ANTES de agregar líneas ⇒ `virt.scrollToIndex(stream.lines.length - 1)`; si el operador scrolleó arriba, NO se lo arrastra al fondo (mejora deliberada y documentada; hoy `:13-15` arrastra siempre).
+**Implementación — LogsPanel (`LogsPanel.tsx`, hoy ~45 líneas; C2: escrito contra el código REAL que YA tiene Plan 156 F3).** Estado real de anclas (evidencia 2026-07-18, verificar por texto): `const RENDER_CAP = 2000;` (`:9`); `const ref = useRef<HTMLDivElement>(null);` (`:15`); autoscroll `useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [stream.lines.length]);` (`:17-19`); contenedor `<div className={styles.body} ref={ref}>` (`:27`); banner `dropped` (`:31-33`); render `stream.lines.slice(-RENDER_CAP).map((l, i) => ...)` con spans `styles.ts`/`styles.msg` (`:34-41`).
+
+1. `const flags = useUiPerfFlags();` y `const virt = useVirtualList({ total: stream.lines.length, rowHeightPx: LOG_ROW_HEIGHT_PX, enabled: flags.virtualization });` con `const LOG_ROW_HEIGHT_PX = 20;` (constante del archivo). **`enabled` = flag CRUDO** (C3), no `shouldVirtualize(...)`.
+2. **Reconciliar con `RENDER_CAP` (156):** hoy el render es `stream.lines.slice(-RENDER_CAP).map(...)` (cola de 2.000). Con `virt.isVirtualized === true`, la ventana YA acota el DOM a ~60 ⇒ **se virtualiza sobre `stream.lines` COMPLETO** (`stream.lines.slice(virt.start, virt.end)`), eliminando el `slice(-RENDER_CAP)` (el operador recupera el scroll a todo el buffer que 156 retiene). Con `virt.isVirtualized === false` (flag OFF o <200 líneas), el render queda **byte-idéntico al actual**, incluido el `slice(-RENDER_CAP)` y el banner `dropped`. El banner `dropped` (`:31-33`) se conserva en AMBOS caminos.
+3. CSS: en `LogsPanel.module.css` agregar `.virtualLine { height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`. Cuando `virt.isVirtualized`, cada fila lleva `className={`${styles.line} ${styles.virtualLine} ${styles[l.level]}`}` (altura fija = requisito del motor; se preserva la estructura de spans `styles.ts`/`styles.msg` del código real). Cuando NO, el render es EXACTAMENTE el actual, wrap incluido.
+4. Render virtualizado: `stream.lines.slice(virt.start, virt.end).map((l, i) => ... key={virt.start + i} ...)` entre dos spacers `<div ref={padTopRef} />` / `<div ref={padBottomRef} />` cuyas alturas se setean por **ref + effect imperativo** (`padTopRef.current.style.height = `${virt.padTopPx}px``) — **prohibido `style={{}}`** (ratchet plan 138).
+5. Contenedor: el `ref` actual `:27` (`ref`) pasa a ser `virt.containerRef` y se agrega `onScroll={virt.onScroll}` SOLO en el camino virtualizado (unificar; en camino no-virtualizado el `ref` sigue siendo el de autoscroll).
+6. Autoscroll (reemplaza el `useEffect` de `:17-19`): en el mismo `useEffect` dependiente de `stream.lines.length`, si `isPinnedToBottom(el.scrollTop, el.clientHeight, el.scrollHeight)` era true ANTES de agregar líneas ⇒ `virt.scrollToIndex(stream.lines.length - 1)` (o, camino no-virtualizado, `el.scrollTop = el.scrollHeight` como hoy); si el operador scrolleó arriba, NO se lo arrastra al fondo (mejora deliberada; hoy `:17-19` arrastra SIEMPRE — R3 lo documenta). El `useEffect` actual arrastra incondicional: la nueva semántica es un cambio de comportamiento **sólo bajo flag ON**.
+7. **a11y (C6/R11):** el contenedor scrolleable lleva `role="log"`; se acepta que con virtualización `aria-live` sólo cubre la ventana montada (trade-off explícito, mismo criterio que R1/R2; el texto completo vive en el archivo de log backend).
 
 **Implementación — DiffList (`DiffList.tsx`, hoy 43 líneas):**
 1. Mantener `PAGE_SIZE`/`visibleCount`/botón "Mostrar 100 más" SOLO para el camino flag OFF (byte-idéntico a hoy).
-2. Camino flag ON (`shouldVirtualize(items.length, flags.virtualization)`): render de `items.slice(virt.start, virt.end)` con spacers imperativos (mismo patrón que LogsPanel), `rowHeightPx = DIFF_ROW_HEIGHT_PX = 32` + clase CSS `.diffRowVirtual { height: 32px; overflow: hidden; }` agregada a `dbcompare.module.css` y aplicada junto a `styles.diffRow`. El botón "Mostrar 100 más" NO se renderiza en este camino (la lista completa es scrolleable).
+2. Camino virtualizado — decidido por `const virt = useVirtualList({ total: items.length, rowHeightPx: DIFF_ROW_HEIGHT_PX, enabled: flags.virtualization });` y ramificando por `virt.isVirtualized` (**C3: pasar el flag CRUDO `flags.virtualization`, NO `shouldVirtualize(...)`**; el umbral 200 lo aplica el hook). Cuando `virt.isVirtualized`: render de `items.slice(virt.start, virt.end)` con spacers imperativos (mismo patrón que LogsPanel), `DIFF_ROW_HEIGHT_PX = 32` + clase CSS `.diffRowVirtual { height: 32px; overflow: hidden; }` agregada a `dbcompare.module.css` y aplicada junto a `styles.diffRow`. El botón "Mostrar 100 más" NO se renderiza en este camino (la lista completa es scrolleable).
 3. El contenedor scrolleable es el propio `styles.diffList` (agregar `overflow-y: auto` + `max-height` si no los tiene — verificar en `dbcompare.module.css`; si el scroll hoy lo maneja un ancestro, el implementador mueve `containerRef` a ESE ancestro y lo anota en el commit).
 4. Nota: `DiffList.tsx:26` ya tiene un `style={{ background }}` (baseline del ratchet) — NO tocarlo, NO agregar otros.
 
@@ -476,6 +527,8 @@ export function usePrefetchExecutionDetail() {
 ```
 **Alcance deliberado:** se prefetchea SOLO `execution-detail` (la query que pinta el cuerpo del drawer). `execution-output-files` (`ExecutionDetailDrawer.tsx:42-44`) queda lazy al abrir: mantener 1 GET por hover es parte del presupuesto.
 
+**Interacción con el foco roving del plan 172 (C5 / R10):** `getPrefetchProps` esparce `onFocus`/`onBlur`, así que cuando 172 aterrice, cada paso de foco por teclado (j/k) entra y sale de filas. Esto **NO** genera trabajo extra ni ráfaga de requests: (a) el `onBlur` de la fila que el foco abandona llama `leave(key)` y **cancela** el prefetch pendiente ANTES del deadline de 150 ms si el operador sigue moviéndose (traversal pura ⇒ 0 requests); (b) sólo si el foco se DETIENE ≥150 ms en una fila se dispara 1 prefetch; (c) el cap `PREFETCH_MAX_CONCURRENT = 1` + dedup por key en vuelo son globales, y **el plan 172 DEBE reusar este mismo `createPrefetchScheduler`** (no crear el suyo) para compartir el cap. Resultado: navegar 20 filas con j/k rápido = 0 requests; pararse en una = 1. El presupuesto del plan 156 (0 en idle) queda intacto porque el foco es interacción humana explícita, no un tick.
+
 **Wiring (2 páginas):**
 - `ExecutionHistoryPage.tsx`: localizar el elemento de fila clickeable con `grep -n "setDetailId" src/pages/ExecutionHistoryPage.tsx` (el que hace `onClick={() => setDetailId(item.id)}` en el cuerpo de la tabla) y esparcirle `{...getPrefetchProps(item.id)}`.
 - `ReviewInboxPage.tsx`: ídem con `grep -n "setDetailExecutionId"` (drawer en `:125`).
@@ -532,28 +585,37 @@ export function tuningFor(kind: QueryTuningKind): { staleTime: number; gcTime: n
 }
 ```
 
-**Edición — `ExecutionHistoryPage.tsx` (query `:67-80`):**
+**Gate de flag (C1 — CORREGIDO en v2):** F4 CAMBIA comportamiento visible (placeholder atenuado en vez de tabla vacía) ⇒ DEBE tener gate de flag configurable por UI, NO "git revert". Se gatea con la flag nueva **`STACKY_UI_INSTANT_NAV_ENABLED`** (F0). El gate es un **ternario en la opción `placeholderData`** — NO duplica el `useQuery` (era la objeción falsa del v1): con la flag OFF, `placeholderData` queda `undefined` ⇒ comportamiento **byte-idéntico** a hoy (flash de vacío incluido). Patrón exacto:
 ```ts
 import { keepPreviousData } from "@tanstack/react-query";
 import { tuningFor } from "../services/queryTuning";
-// en historyQ:
-placeholderData: keepPreviousData,
+import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
+// en el cuerpo del componente:
+const { instantNav } = useUiPerfFlags();
+// en historyQ (ancla de texto: la queryFn de historyQ; hoy en :115, staleTime literal 30_000 en :127):
+placeholderData: instantNav ? keepPreviousData : undefined,   // C1: gate de flag
 ...tuningFor("history"),        // reemplaza el staleTime: 30_000 literal
 ```
-y feedback visual del dato provisorio SIN inline style: el contenedor de la tabla lleva `data-stale={historyQ.isPlaceholderData || undefined}` y en `ExecutionHistoryPage.module.css` se agrega `[data-stale] { opacity: 0.6; transition: opacity 120ms ease; }` (patrón de microinteracción, plan 143). El contador de resultados (`:104`) durante placeholder muestra los datos previos — correcto, porque son los que se están viendo.
+Feedback visual del dato provisorio SIN inline style: el contenedor de la tabla lleva `data-stale={(instantNav && historyQ.isPlaceholderData) || undefined}` y en `ExecutionHistoryPage.module.css` se agrega:
+```css
+[data-stale] { opacity: 0.6; }
+@media (prefers-reduced-motion: no-preference) { [data-stale] { transition: opacity 120ms ease; } }
+```
+([ADICIÓN ARQUITECTO]: la transición respeta `prefers-reduced-motion`; patrón de microinteracción, plan 143). El contador de resultados (ancla de texto `${items.length} resultado…`, hoy en `:152`) durante placeholder muestra los datos previos — correcto, son los que se ven.
 
-**Edición — `SystemLogsPage.tsx` (query `:150-155`):** ídem — `placeholderData: keepPreviousData` + `...tuningFor("systemLogs")` (reemplaza el `staleTime: 10_000` literal; el `refetchInterval: 30_000` existente NO se toca) + `data-stale` en `styles.tableWrap` con la misma regla CSS en `SystemLogsPage.module.css`. Con esto, "Loading logs…" (`:293-294`) queda SOLO para la primera carga (`isLoading` es false con placeholder presente — semántica react-query v5).
+**Edición — `SystemLogsPage.tsx`:** ídem con el MISMO gate `instantNav ? keepPreviousData : undefined`. **OJO (C4): SystemLogsPage tiene DOS `useQuery`** (evidencia 2026-07-18: `staleTime: 10_000` en `:181` = la query de LOGS paginada; `staleTime: 30_000` en `:188` = query secundaria/summary). El `placeholderData` + `...tuningFor("systemLogs")` van SOLO en la query de logs paginada (la de `staleTime: 10_000`, `:181`); la secundaria NO se toca. El `refetchInterval` existente NO se toca. `data-stale` en el contenedor de la tabla + misma regla CSS. Con esto, "Loading logs…" (ancla de texto, hoy `:322`) queda SOLO para la primera carga (`isLoading` es false con placeholder presente — semántica react-query v5).
 
-**Edición — `ExecutionDetailDrawer.tsx` (opcional-recomendada, 1 línea):** agregar `...tuningFor("executionDetail")` a `execQ` (`:36-40`) para que reabrir el mismo detalle dentro de los 30 s pinte desde cache (coherente con F3). Si el archivo tiene WIP ajeno ⇒ se omite y se anota (dependencia de F3: el prefetch ya setea `staleTime` equivalente vía `prefetchQuery`).
+**Edición — `ExecutionDetailDrawer.tsx` (opcional-recomendada, 1 línea, bajo el mismo gate):** agregar `...tuningFor("executionDetail")` a `execQ` (ancla de texto la query `["execution-detail", ...]`) para que reabrir el mismo detalle dentro de los 30 s pinte desde cache (coherente con F3). Si el archivo tiene WIP ajeno ⇒ se omite y se anota.
 
-**Gate de flag:** `placeholderData`/`gcTime` son tuning de cache local sin efecto de red adicional; quedan bajo `STACKY_UI_PREFETCH_ENABLED` conceptualmente pero SIN branch condicional en el código (un branch por flag acá duplicaría cada `useQuery`; el kill-switch real es revert del commit de F4, y así se documenta). El criterio: flag OFF apaga lo que gasta red (F3); F4 no gasta red.
+**Sobre `gcTime`/`tuningFor` sin gate:** `gcTime` (retención en cache) NO cambia comportamiento observable con flag OFF (sólo retiene datos más tiempo; sin `placeholderData` no se pintan) y NO gasta red ⇒ puede quedar sin branch. Lo que SÍ cambia lo visible (`placeholderData` + `data-stale`) está gateado. Así, con `STACKY_UI_INSTANT_NAV_ENABLED=OFF` + recarga, las 2 páginas se comportan **como HOY** (cumple la DoD §9, que el v1 contradecía).
 
 **Criterio de aceptación (binario):**
 ```
 npx vitest run src/services/__tests__/queryTuning.test.ts → exit 0
 npx tsc --noEmit                                          → exit 0
 ```
-**Runtimes / fallback:** cache local del dashboard; paridad por vacuidad. Fallback: sin cache retenida (primera visita) el comportamiento es el actual.
+**Flag:** `STACKY_UI_INSTANT_NAV_ENABLED` default ON (C1); OFF ⇒ `placeholderData` queda `undefined` y `data-stale` nunca se activa ⇒ Historial y System Logs byte-idénticos a hoy.
+**Runtimes / fallback:** cache local del dashboard; paridad por vacuidad. Fallback: sin cache retenida (primera visita) el comportamiento es el actual; health caído ⇒ `instantNav` fail-open a ON.
 **Trabajo del operador: ninguno.**
 
 ---
@@ -568,11 +630,12 @@ npx tsc --noEmit                                          → exit 0
 **Test (es la fase):** lee los archivos fuente con `fs.readFileSync` (patrón exacto de los tests de adopción del plan 140 y del `uiDebtRatchet`) y asserta:
 1. `src/components/LogsPanel.tsx` contiene `useVirtualList(` y NO contiene `stream.lines.map(` **fuera** del camino no-virtualizado (assert simple: contiene `virt.start` y `virt.end`).
 2. `src/components/dbcompare/DiffList.tsx` contiene `useVirtualList(` y conserva `PAGE_SIZE` (camino flag OFF intacto).
-3. `src/pages/ExecutionHistoryPage.tsx` contiene `placeholderData: keepPreviousData` y `getPrefetchProps(`.
-4. `src/pages/SystemLogsPage.tsx` contiene `placeholderData: keepPreviousData`.
+3. `src/pages/ExecutionHistoryPage.tsx` contiene `keepPreviousData` **y** `instantNav` (C1: gate presente) **y** `getPrefetchProps(`.
+4. `src/pages/SystemLogsPage.tsx` contiene `keepPreviousData` **y** `instantNav`.
 5. `src/pages/ReviewInboxPage.tsx` contiene `getPrefetchProps(`.
-6. `src/hooks/useVirtualList.ts` contiene `requestAnimationFrame` (throttle presente).
+6. `src/hooks/useVirtualList.ts` contiene `requestAnimationFrame` (throttle presente) **y** `deriveIsVirtualized` (C3: el umbral se aplica en el hook, no en los call sites).
 7. Anti-regresión de presupuesto: `src/services/prefetchPolicy.ts` contiene `PREFETCH_MAX_CONCURRENT = 1` y `PREFETCH_HOVER_DELAY_MS = 150` (los valores son parte del contrato con 156 y 175; cambiarlos exige tocar este test a conciencia).
+8. Gate de C1 verificado en backend: el test de adopción NO cubre backend; el gate de las 3 flags lo cubre `test_plan174_ui_perf_flags.py` (KPI-4).
 
 **Anti-gotcha (6 recurrencias históricas):** los patrones que busca este test NO deben aparecer en comentarios de los archivos objetivo más allá del código real; y este test NO debe matchearse a sí mismo (excluir `src/__tests__/` del escaneo).
 
@@ -610,6 +673,9 @@ venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
 | R7 | **Sesión paralela viva en el repo** (WIP ajeno confirmado creciente). | Pre-flight `git status -- <ruta>` antes de CADA archivo en CADA fase; STOP ante WIP ajeno; anclas por texto, no por línea; commits con pathspec explícito. |
 | R8 | **Drift de `gcTime` infla memoria del navegador.** | `gcTime` 10 min solo en 3 tipos de query paginadas/detalle (datos chicos, JSON de decenas de KB); el default global de `main.tsx:10` NO se toca; test de queryTuning fija `gcTime > staleTime` y valores exactos. |
 | R9 | **El toggle de flag no surte efecto en caliente.** | Igual que shell v2 (plan 139): efecto al recargar la página; la descripción de la FlagSpec y el PLAIN_HELP lo dicen. Es el precedente aceptado del repo. |
+| R10 | **Foco roving del 172 dispara ráfaga de prefetch** (cada j/k entra/sale de filas). | `onBlur` ⇒ `leave()` cancela antes del deadline 150 ms ⇒ traversal pura = 0 requests; sólo detenerse ≥150 ms dispara 1; cap global `PREFETCH_MAX_CONCURRENT=1` compartido (172 reusa `createPrefetchScheduler`, no crea el suyo). Test KPI-2 caso 3 (leave antes del deadline ⇒ 0). C5. |
+| R11 | **Log virtualizado rompe lectores de pantalla / `aria-live`** (sólo ~60 nodos montados). | Contenedor `role="log"`; se acepta como trade-off explícito (mismo criterio que R1/R2) que `aria-live` anuncia sólo la ventana montada; el texto completo vive en el archivo de log backend. Bajo el umbral 200 o flag OFF, DOM completo y a11y intacta. C6. |
+| R12 | **F4 sin gate dejaba comportamiento nuevo activo con "todas las flags OFF"** (contradecía la DoD). | RESUELTO en v2 (C1): `STACKY_UI_INSTANT_NAV_ENABLED` gatea `placeholderData`+`data-stale` por ternario; OFF ⇒ byte-idéntico a hoy. Kill-switch en Settings, no git-revert. |
 
 ---
 
@@ -640,7 +706,7 @@ venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
 
 ## 8. Orden de implementación
 
-1. **F0** — flags backend + health + registro en `HARNESS_TEST_FILES` (sh y ps1).
+1. **F0** — **3 flags** backend + 3 campos en health + registro en `HARNESS_TEST_FILES` (sh y ps1).
 2. **F1** — `virtualWindow.ts` (test primero) + `useVirtualList` + `useUiPerfFlags`.
 3. **F2** — LogsPanel + DiffList virtualizados (test `stickToBottom` primero; pre-flight git por archivo).
 4. **F3** — `prefetchPolicy.ts` (test primero) + hook + wiring en Historial y Review Inbox.
@@ -650,8 +716,8 @@ venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
 ## 9. Definición de Hecho (DoD) global
 
 - [ ] KPI-1..KPI-7 de §1: todos exit 0, con output real pegado (cero falsos verdes; la verificación final la corre y la LEE el agente principal).
-- [ ] Ambas flags visibles y toggleables en la UI de Settings (panel de flags), con ayuda en lenguaje llano.
-- [ ] Con ambas flags OFF (toggle + recarga): LogsPanel, DiffList, Historial, System Logs y Review Inbox se comportan como HOY (smoke visual).
+- [ ] **Las 3 flags** (`STACKY_UI_VIRTUALIZATION_ENABLED`, `STACKY_UI_PREFETCH_ENABLED`, `STACKY_UI_INSTANT_NAV_ENABLED`) visibles y toggleables en la UI de Settings (panel de flags), con ayuda en lenguaje llano.
+- [ ] Con **las 3 flags OFF** (toggle + recarga): LogsPanel, DiffList, Historial, System Logs y Review Inbox se comportan como HOY, byte-idéntico (smoke visual) — incluye que Historial/System Logs vuelven a mostrar el flash de vacío al paginar (prueba de que F4 quedó realmente gateada, C1).
 - [ ] Smoke manual (deploy o dev): (1) ejecución con >1.000 líneas de log → scroll fluido y ≤~60 filas en el inspector DOM; (2) diff de BD con >200 objetos → scroll continuo sin botón "Mostrar 100 más"; (3) hover 1 s sobre una fila del historial → abrir → drawer pintado sin spinner; (4) paginar historial y logs → la tabla no desaparece, se atenúa; (5) ir a otra pantalla y volver → pinta al instante y revalida en background (ver request en Network, no spinner).
 - [ ] En idle absoluto (sin mouse/teclado, pestaña visible) el panel Network no muestra NINGUNA request nueva atribuible a este plan.
 - [ ] `git status` final sin archivos ajenos tocados; commits con pathspec explícito.

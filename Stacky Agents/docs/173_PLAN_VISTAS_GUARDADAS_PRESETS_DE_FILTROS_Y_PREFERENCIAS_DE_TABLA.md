@@ -1,8 +1,19 @@
 # Plan 173 — Vistas guardadas: presets nombrados de filtros y preferencias de tabla persistentes
 
-Serie UX Cockpit del Operador (172-175) — plan 2/4 — v1 PROPUESTO — 2026-07-18
+Serie UX Cockpit del Operador (172-175) — plan 2/4 — **v2 CRITICADO** — 2026-07-18
 
-> **Estado:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode · pendiente de crítica adversarial (`criticar-y-mejorar-plan`).
+> **Estado:** CRITICADO v2 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode · crítica adversarial aplicada (`criticar-y-mejorar-plan`). APROBADO-CON-CAMBIOS.
+>
+> ### Changelog v1 → v2 (crítica adversarial)
+> - **C1 (IMPORTANTE, correctness):** F5 — el `disabled` de «Siguiente» ahora se guarda con el MISMO predicado que el label (`total != null && filters.runtime === ""`). Antes usaba solo `total != null`: con filtro `runtime` activo el backend devuelve el `COUNT` SQL (pre-filtro-runtime, porque `runtime` se filtra post-paginación en Python, `executions.py:420-422`) y la nav basada en `total` quedaba desalineada respecto de `items.length`. Con runtime activo se cae SIEMPRE a la regla legacy `items.length < limit`.
+> - **[ADICIÓN ARQUITECTO] C1b:** la decisión de paginación se extrae a una función PURA `historyPaginationView(...)` en `tablePrefs.ts`, testeada (K5, casos nuevos) en vez de vivir suelta en el JSX verificada solo por smoke. Cierra C1 con cobertura binaria, respetando el principio #12 (lógica pura sin DOM).
+> - **C2 (IMPORTANTE, orden/ambigüedad):** F6 — se elimina la conclusión rígida «Hoy NO matchea ⇒ el paso se implementa» (contradecía el orden canónico de la serie, donde el 165 aterriza ANTES del 173). La auto-aplicación de `lastApplied` ahora se gatea por una condición **verificable en runtime e independiente del 165**: solo dispara si los filtros al montar son iguales al DEFAULT de la pantalla (si algo — el 165 o una URL — ya los restauró, 173 NO pisa). El grep de `useLocalStorageState` queda como guía secundaria, no como autoridad.
+> - **C3 (MENOR, gotcha):** F1/F2 — se explicita que `saveUiPref`/`hydrateUiPref` usan `fetch` CRUDO, nunca el wrapper `api.*` de `client.ts` (que LANZA en non-2xx, gotcha documentado del repo); el fire-and-forget depende de `.catch(() => {})` sobre `fetch`.
+> - **C4 (MENOR, coherencia):** §2.1 — se aclara que el 165 §8 delegó el backlog de `total` en «el plan del arnés veraz» (154); verificado que **154 quedó implementado SIN tocar `executions.py`** (sigue `return jsonify(items)` pelado, `:450`), por lo que el backlog sigue abierto y 173 lo retoma legítimamente (no es duplicación).
+> - **C5 (MENOR, UX):** F2 — `useSavedViewsEnabled()` documenta el flash de montaje con flag OFF (render optimista `true` → health resuelve) como aceptable (flag default ON) y ofrece la semilla síncrona opcional.
+> - **C6 (MENOR, wording):** R9 — corregido: el store hace read-modify-write del ARCHIVO completo `preferences.json` (patrón de la casa, `preferences.py:49-51`), no «por clave»; último-escribe-gana a nivel archivo; mono-operador ⇒ aceptado sin locking.
+>
+> **v1 original:** PROPUESTO (2026-07-18). Pendiente de crítica adversarial.
 > **Serie:** 172 Teclado primero · **173 Vistas guardadas (este plan)** · 174 Rendimiento percibido · 175 Peek y acciones rápidas. Cada tema pertenece a UN solo plan: acá NO hay atajos de teclado (172), NO hay virtualización ni prefetch (174), NO hay hover-cards ni menú contextual (175).
 > **Toda la evidencia archivo:línea de este doc fue verificada en frío contra el checkout real `N:\GIT\RS\STACKY\Stacky\Stacky Agents` el 2026-07-18.** Los números de línea son referencia de ese día; **toda edición se ancla por TEXTO/símbolo citado, no por número de línea** (hay una sesión paralela conocida commiteando en este mismo árbol).
 
@@ -16,7 +27,7 @@ Serie UX Cockpit del Operador (172-175) — plan 2/4 — v1 PROPUESTO — 2026-0
 | K2 | Backlog 165: `sort`/`dir`/`include_total` en `/api/executions/history`, backward-compatible | mismo cwd → `venv/Scripts/python.exe -m pytest tests/test_executions_history_sort_total.py -q` | exit 0 |
 | K3 | La flag quedó curada (`_CURATED_DEFAULTS_ON`) y categorizada (`_CATEGORY_KEYS`) | mismo cwd → `venv/Scripts/python.exe -m pytest tests/test_harness_flags.py -q` | exit 0 |
 | K4 | Lógica pura de presets (CRUD, sanitización, vista activa) | `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"` → `npx vitest run src/services/__tests__/savedViews.test.ts` | exit 0 |
-| K5 | Lógica pura de preferencias de tabla (visibilidad, sort, anchos) | mismo cwd → `npx vitest run src/services/__tests__/tablePrefs.test.ts` | exit 0 |
+| K5 | Lógica pura de preferencias de tabla (visibilidad, sort, anchos) **+ decisión de paginación `historyPaginationView` (C1b)** | mismo cwd → `npx vitest run src/services/__tests__/tablePrefs.test.ts` | exit 0 |
 | K6 | Tipos verdes en todo el frontend | mismo cwd → `npx tsc --noEmit` | exit 0 |
 | K7 | Los 2 tests backend nuevos quedaron registrados en el ratchet de cobertura | desde la RAÍZ del repo → `grep -c "test_ui_preferences.py\|test_executions_history_sort_total.py" "Stacky Agents/backend/scripts/run_harness_tests.sh"` | `2` |
 
@@ -44,6 +55,8 @@ El plan 165 (`docs/165_PLAN_CONTRATO_DE_URL_DEEP_LINKS_Y_ESTADO_PERSISTENTE.md`,
 - **Wrinkle preexistente que condiciona el diseño:** el filtro `runtime` se aplica **en Python DESPUÉS de la paginación** (`:350-352`, porque `runtime` vive en `metadata_json`, no en una columna). Cualquier `total` por `COUNT` no puede descontar ese filtro. La fase F5 lo codifica como limitación documentada en vez de fingir precisión.
 
 ⇒ **Conclusión verificada:** retomar sort/total **requiere cambio backend**; se especifica como fase (F5), aditiva y backward-compatible.
+
+> **Coherencia con el destino original del backlog (C4).** El 165 §8 no solo declaró el `total` fuera de su alcance: sugirió que «viaja gratis cuando el plan del arnés veraz toque `backend/api/executions.py`». Ese plan es el **154** (arnés veraz), hoy IMPLEMENTADO. **Verificación en frío 2026-07-18:** `executions_history` sigue devolviendo la lista pelada (`return jsonify(items)`, `executions.py:450`) — 154 NO tocó ese retorno. Por lo tanto el backlog sigue ABIERTO y 173 lo retoma sin duplicar trabajo de 154. Esta nota existe para que la crítica/supervisión no lo confunda con una toma de alcance ajeno.
 
 ### 2.2 El patrón de store de preferencias YA EXISTE — se extiende, no se inventa
 
@@ -337,9 +350,32 @@ export function useSavedViewsEnabled(): boolean;
 //   fetch("/api/diag/health") y setea enabled = (body.saved_views_enabled !== false).
 //   Regla binaria: solo `false` explícito apaga; backend viejo sin el campo o fetch fallido ⇒ true
 //   (la flag es default ON; un backend viejo tampoco serviría el store y el fallback localStorage cubre).
+//   C5 — con flag OFF hay un flash de montaje (render optimista true → health resuelve → false → return null).
+//   Aceptado: la flag es default ON, OFF es excepcional. Optimización opcional (no obligatoria): si la app ya
+//   hidrata /api/diag/health al arrancar y lo cachea, sembrar el useState desde ese caché síncrono elimina el flash.
 ```
 
-**Paso 4 — Tests (TDD: escribirlos ANTES que los módulos).** `savedViews.test.ts`: `valida_nombre_vacio_largo_duplicado_cap` (los 4 mensajes exactos), `upsert_alta_y_reemplazo_sin_duplicar`, `rename_actualiza_lastApplied`, `delete_limpia_lastApplied`, `apply_inexistente_null`, `apply_setea_lastApplied_y_normaliza`, `computeActiveView_deep_equal_normalizado` (orden de claves y vacíos no afectan), `sanitize_descarta_basura` (null, array, entradas sin name, filters con números ⇒ descartadas, cap 20), `ticketboard_codec_roundtrip` (bool→"1"/""→bool; defaults al faltar claves). `tablePrefs.test.ts`: `visible_null_todas_visibles`, `toggle_nunca_cero_columnas`, `cycle_solo_sorteables_null_asc_desc_null`, `width_clamp_40_800`, `sanitize_ids_desconocidos_y_sort_invalido`, `sortToQuery_mapea_sortKey` (`inicio`→`{sort:"started_at"}`), `history_columns_10_syslog_11` (fija los catálogos: 10 y 11 ids, en el orden citado).
+> **C3 — regla dura de I/O (gotcha del repo).** `saveUiPref` y `hydrateUiPref` usan **`fetch` CRUDO**, NUNCA el wrapper `api.get/api.post` de `frontend/src/services/client.ts`: ese wrapper **LANZA una excepción en toda respuesta non-2xx** (404 con flag OFF, 400/413 de validación), lo que rompería el fire-and-forget y el fallback silencioso. El patrón correcto es el de `preferences.ts:61-74` (`fetch(...).catch(() => {})`) y el de `initPreferences` (`fetch` + chequeo `res.ok` explícito). Un modelo menor que alcance `api.post` por reflejo introduce un bug: prohibido.
+
+**Paso 2b — [ADICIÓN ARQUITECTO] `historyPaginationView` (pura, en `tablePrefs.ts`) — cierra C1 con test, no con smoke:**
+
+```ts
+// La ÚNICA fuente de verdad de la paginación de Historial. El JSX de F5 solo la invoca.
+export interface PaginationView { label: string; canNext: boolean }
+export function historyPaginationView(args: {
+  offset: number; count: number; limit: number;
+  total: number | null; runtimeActive: boolean;   // runtimeActive = filters.runtime !== ""
+}): PaginationView;
+//   Regla binaria (idéntica para label y canNext — ESTE es el fix de C1):
+//   usarTotal = args.total != null && !args.runtimeActive
+//   label   = usarTotal ? `${offset+1}–${offset+count} de ${total}` : `${offset+1}–${offset+count}`
+//   canNext = usarTotal ? (offset + count < total) : (count >= limit)
+//   Con runtime activo el `total` del backend es el COUNT SQL PRE-filtro-runtime (runtime se filtra
+//   post-paginación en Python, executions.py:420-422) ⇒ NO es comparable con `count`; se ignora y se
+//   cae a la regla legacy `count >= limit`. Sin este guardado, «Siguiente» quedaría mal habilitada.
+```
+
+**Paso 4 — Tests (TDD: escribirlos ANTES que los módulos).** `savedViews.test.ts`: `valida_nombre_vacio_largo_duplicado_cap` (los 4 mensajes exactos), `upsert_alta_y_reemplazo_sin_duplicar`, `rename_actualiza_lastApplied`, `delete_limpia_lastApplied`, `apply_inexistente_null`, `apply_setea_lastApplied_y_normaliza`, `computeActiveView_deep_equal_normalizado` (orden de claves y vacíos no afectan), `sanitize_descarta_basura` (null, array, entradas sin name, filters con números ⇒ descartadas, cap 20), `ticketboard_codec_roundtrip` (bool→"1"/""→bool; defaults al faltar claves). `tablePrefs.test.ts`: `visible_null_todas_visibles`, `toggle_nunca_cero_columnas`, `cycle_solo_sorteables_null_asc_desc_null`, `width_clamp_40_800`, `sanitize_ids_desconocidos_y_sort_invalido`, `sortToQuery_mapea_sortKey` (`inicio`→`{sort:"started_at"}`), `history_columns_10_syslog_11` (fija los catálogos: 10 y 11 ids, en el orden citado), **`paginationView_sin_runtime_usa_total` (total=42, runtimeActive=false → label «X–Y de 42», canNext por `offset+count<total`), `paginationView_con_runtime_ignora_total` (total=42, runtimeActive=true → label sin «de N», canNext por `count>=limit` — el fix de C1), `paginationView_backend_viejo_total_null` (total=null → regla legacy en ambos)**.
 
 **Criterio de aceptación BINARIO:** `npx vitest run src/services/__tests__/savedViews.test.ts` → exit 0 (K4); `npx vitest run src/services/__tests__/tablePrefs.test.ts` → exit 0 (K5); `npx tsc --noEmit` → exit 0.
 
@@ -476,7 +512,7 @@ historyPage: (q: { /* mismos params de history */ sort?: string; dir?: "asc" | "
 },
 ```
 
-En `ExecutionHistoryPage.tsx`: (a) la query pasa a `Executions.historyPage({ ...actuales, ...sortToQuery(tablePrefs, HISTORY_COLUMNS) })` con `queryKey: ["execution-history", filters, tablePrefs.sort, activeProject?.name]`; (b) los `<th>` de las 3 columnas con `sortKey` (Inicio/Agente/Estado) se vuelven clickeables: `onClick={() => { const next = cycleSort(tablePrefs, id, HISTORY_COLUMNS); setTablePrefs(next); saveUiPref("table.history", next); }}` con indicador `▲/▼` textual dentro del th (clase del module.css, sin inline style) y `aria-sort` correspondiente; th sin `sortKey` no reciben handler; (c) la línea de paginación (`:244-246`) pasa a: `total != null && filters.runtime === "" ? `${offset + 1}–${offset + items.length} de ${total}` : `${offset + 1}–${offset + items.length}`` y «Siguiente» se deshabilita con `total != null ? offset + items.length >= total : items.length < filters.limit` (regla vieja como fallback). Sin `Intl`, sin formateadores nuevos (es un entero con `String()` — el ratchet anti-Intl del 161 no se activa). Gate: con flag OFF no hay sort UI (F4 ya no renderiza prefs) y la página usa la regla de paginación vieja.
+En `ExecutionHistoryPage.tsx`: (a) la query pasa a `Executions.historyPage({ ...actuales, ...sortToQuery(tablePrefs, HISTORY_COLUMNS) })` con `queryKey: ["execution-history", filters, tablePrefs.sort, activeProject?.name]`; (b) los `<th>` de las 3 columnas con `sortKey` (Inicio/Agente/Estado) se vuelven clickeables: `onClick={() => { const next = cycleSort(tablePrefs, id, HISTORY_COLUMNS); setTablePrefs(next); saveUiPref("table.history", next); }}` con indicador `▲/▼` textual dentro del th (clase del module.css, sin inline style) y `aria-sort` correspondiente; th sin `sortKey` no reciben handler; (c) la línea de paginación (`:244-246`) y el `disabled` de «Siguiente» se derivan AMBOS de una sola llamada a la función pura de C1b: `const pv = historyPaginationView({ offset: filters.offset, count: items.length, limit: filters.limit, total, runtimeActive: filters.runtime !== "" });` → el texto usa `pv.label` y «Siguiente» usa `disabled={!pv.canNext}`. **Fix C1:** el guardado `runtime === ""` aplica a la navegación Y al label por igual (antes el `disabled` miraba solo `total != null`, lo que con filtro runtime activo comparaba `items.length` post-filtro contra un `total` SQL pre-filtro y habilitaba «Siguiente» de más). Sin `Intl`, sin formateadores nuevos (es un entero con `String()` — el ratchet anti-Intl del 161 no se activa). Gate: con flag OFF no hay sort UI (F4 ya no renderiza prefs) y la página usa la regla de paginación vieja.
 
 **Criterio de aceptación BINARIO:** K2 exit 0 + `npx tsc --noEmit` exit 0 + smoke: click en «Inicio» cicla ▲/▼/nada y la tabla se reordena; con backend viejo simulado (devolver array) la página no rompe y muestra «X–Y».
 
@@ -492,8 +528,8 @@ En `ExecutionHistoryPage.tsx`: (a) la query pasa a `Executions.historyPage({ ...
 
 **Reglas de precedencia al montar (binarias, en este orden):**
 1. **Si la URL trae ≥1 clave de filtro de la pantalla** (solo posible con el 165 implementado, su F2/C2): la URL manda; NO se aplica `lastApplied`. Detección concreta sin depender de `routes.ts`: `new URLSearchParams(window.location.search)` contiene alguna de las claves de filtro de la pantalla (las 4 de Historial / las 8 de Logs).
-2. **Si los filtros de la página ya persisten solos** (el 165 F2 migró el `useState` a `useLocalStorageState`): NO auto-aplicar `lastApplied` (los filtros crudos ya sobreviven; re-aplicar sería redundante y pisaría un ajuste manual posterior al último preset). **Instrucción condicional verificable para el implementador:** si al momento de implementar `grep -n "useLocalStorageState" frontend/src/pages/ExecutionHistoryPage.tsx` matchea la línea de `filters`, omitir el paso de auto-aplicación en esa página y conservar SOLO el resaltado (punto 4). Hoy (2026-07-18) NO matchea (`useState`, `:54`) ⇒ el paso se implementa.
-3. **Si no aplica 1 ni 2 y `lastApplied` existe** en `views.<screenId>`: `useEffect` de montaje (una sola vez, con `useRef` guard) hace `const r = applyView(state, state.lastApplied); if (r) onApplyDeLaPantalla(r.filters);`. En TicketBoard este paso NO existe: sus 4 campos ya persisten por `useLocalStorageState` (`:759-784`) — regla 2 aplica hoy; TicketBoard solo recibe el resaltado.
+2. **Guardado en runtime, independiente del 165 (fix C2).** La auto-aplicación de `lastApplied` dispara **SOLO si los filtros al montar son iguales al DEFAULT de la pantalla** — es decir, si NADA (ni el 165 vía `useLocalStorageState`, ni una URL, ni un ajuste persistido) los restauró ya. Condición concreta: `deepEqual(normalizeFilters(currentFilters), normalizeFilters(DEFAULT_FILTERS_DE_LA_PANTALLA))`. Si difieren ⇒ algo los restauró ⇒ 173 NO pisa (conserva SOLO el resaltado, punto 4). Este guardado es verificable en runtime y **no depende de si el 165 está o no implementado**, ni del orden de aterrizaje de la serie (el orden canónico pone al 165 ANTES del 173, así que en la práctica los filtros persistidos ya estarán y 173 cederá solo). El `grep -n "useLocalStorageState" …ExecutionHistoryPage.tsx` es guía secundaria para el implementador, **NO** la autoridad: la autoridad es la comparación con el DEFAULT en el `useEffect` de montaje. (Se elimina la conclusión rígida «hoy se implementa» de v1, que contradecía el orden de la serie.)
+3. **Si aplica el guardado de la regla 2 y `lastApplied` existe** en `views.<screenId>`: `useEffect` de montaje (una sola vez, con `useRef` guard) hace `const r = applyView(state, state.lastApplied); if (r) onApplyDeLaPantalla(r.filters);`. En TicketBoard este paso NO existe: sus 4 campos ya persisten por `useLocalStorageState` (`:759-784`) ⇒ nunca están en DEFAULT tras la primera vez; TicketBoard solo recibe el resaltado.
 4. **Resaltado:** `computeActiveView(state, currentFilters)` (K4) marca la opción del `Select` de la barra (prefijo ⭐ y opción seleccionada). Se recalcula en cada render — si el operador toca un filtro a mano y ya no coincide, el resaltado desaparece (feedback honesto de "estás fuera del preset").
 
 **Tests:** la lógica (`applyView`, `computeActiveView`, codec) ya está fijada en K4; las reglas 1-3 son wiring de montaje verificado por smoke manual documentado: aplicar «errores 7d» en Historial → ir a Tickets → volver a Historial → los filtros del preset están puestos y la vista resaltada; editar un filtro a mano → el resaltado desaparece; (con 165 implementado) pegar una URL con `?status=completed` → la URL gana y no se aplica el preset.
@@ -516,7 +552,7 @@ En `ExecutionHistoryPage.tsx`: (a) la query pasa a `Executions.historyPage({ ...
 | R6 | Cambiar la respuesta de `/api/executions/history` rompe consumidores existentes. | Envelope SOLO con `include_total=1` (opt-in); sin el param la respuesta es byte-compatible (`test_sin_include_total_lista_pelada`); `Executions.history` de `endpoints.ts` NO se toca — se agrega `historyPage`. |
 | R7 | `total` engañoso con filtro `runtime` (post-filtrado en Python, `:350-352` preexistente). | Regla binaria F5: la UI muestra total SOLO con `filters.runtime === ""`; limitación documentada en el docstring del endpoint. |
 | R8 | Shape-drift del store (presets viejos con forma nueva) rompe páginas al montar. | TODO lo que entra del backend/localStorage pasa por `sanitizeSavedViews`/`sanitizeTablePrefs` (tolerantes a cualquier `unknown`, testeadas en K4/K5) — mismo remedio que el 165 C5. |
-| R9 | Escrituras concurrentes al JSON del store (dos pestañas). | Mono-operador, último-escribe-gana por clave (claves separadas por pantalla/tabla minimizan pisadas); mismo trade-off ya aceptado por `preferences.json` para avatares/pins. Sin locking nuevo. |
+| R9 | Escrituras concurrentes al JSON del store (dos pestañas, o PUT legacy `/api/preferences` vs PUT `/ui/<key>`). | **Precisión C6:** cada PUT hace read-modify-write del ARCHIVO COMPLETO `preferences.json` (`_read()`→mutar→`_write()`), igual que el PUT legacy (`preferences.py:49-51`) ⇒ el «último-escribe-gana» es **a nivel archivo**, no por clave (una escritura de avatar concurrente con una de vista podría perderse). Mono-operador ⇒ ventana ínfima y trade-off idéntico al ya aceptado por `preferences.json` para avatares/pins; sin locking nuevo. Las claves separadas por pantalla reducen pisadas *entre vistas*, no la atomicidad del archivo. |
 | R10 | Backend viejo + frontend nuevo (o viceversa) tras un deploy parcial. | Ambos sentidos degradan: frontend tolera array legacy (`total null`) y campo de health ausente (`!== false` ⇒ ON con fallback localStorage); backend ignora que nadie le mande `sort`/`include_total`. |
 | R11 | El popover de columnas sin focus-trap se percibe inconsistente cuando aterrice el 164. | Se declara: el focus-trap canónico es del 164; cuando exista, migrar el popover es un one-liner de adopción registrado en §6 como backlog del 164, no de este plan. |
 

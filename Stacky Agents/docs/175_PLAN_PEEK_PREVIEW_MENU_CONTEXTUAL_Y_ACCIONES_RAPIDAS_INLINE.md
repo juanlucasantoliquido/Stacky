@@ -1,6 +1,33 @@
 # Plan 175 — Peek de entidades, menú contextual unificado y acciones rápidas inline
 
-Serie UX Cockpit del Operador (172-175) — plan 4/4 — v1 PROPUESTO — 2026-07-18
+Serie UX Cockpit del Operador (172-175) — plan 4/4 — **v2 CRITICADO (APROBADO-CON-CAMBIOS)** — 2026-07-18
+
+> ### Changelog v1 → v2 (crítica adversarial, evidencia verificada en frío 2026-07-18)
+> - **C1 (IMPORTANTE):** `routes.ts` **YA existe** en `frontend/src/services/routes.ts` (plan 165
+>   IMPLEMENTADO, no "NO existe" como afirmaba v1). El grep de v1 miró la ruta equivocada
+>   (`frontend/src/routes.ts`, top-level). Corregida la evidencia de §2.5 y §4. `peekLinks.ts`
+>   ahora **DELEGA en `serializeRoute`** (reuso, no reinvención) y usa la clave **canónica `?exec=`**
+>   — no el alias legacy `?execution=`. La dependencia con 165 pasa de "blanda futura" a
+>   **satisfecha hoy**.
+> - **C2 (IMPORTANTE):** colisión con el plan **194** (copyService/copyFormats + ratchet `writeText`),
+>   hermano de la serie no declarado en v1. `clipboard.ts` **delega en `copyService` cuando existe**
+>   y solo cae al wrapper local si 194 aún no está mergeado — así no reinventa ni viola el ratchet
+>   `writeText`. Nueva fila 194 en §4.
+> - **C3 (IMPORTANTE) + [ADICIÓN ARQUITECTO]:** el camino de teclado de v1 quedaba **inerte sin el
+>   172** (filas no enfocables). Ahora 175 pone su propio `tabIndex={0}` (gated por flag) en las
+>   filas/cards cableadas ⇒ menú y peek accesibles por teclado **standalone**; el 172 los promueve
+>   a foco roving cuando aterrice. Cierra la exigencia "100% accesible por teclado".
+> - **C4 (MENOR):** limpiada la prosa de razonamiento a medias del gating de F4 (quedaba
+>   `"se usa STACKY_UI_PEEK_ENABLED… NO: decisión…"`, ambigua para un modelo menor).
+> - **C5 (MENOR):** los cuerpos de `buildExecutionPeek`/`buildTicketPeek`/`menuKeydown`/`armTransition`
+>   estaban como comentarios-prosa; se dejan **fijados por los tests** (nota explícita) y con la
+>   lista de campos literal.
+> - **C6 (MENOR):** corregida la afirmación falsa "shell v2 es opt-in" — su default efectivo en
+>   `config.py` es `"true"` (ON), igual que estas flags.
+> - **C7 (MENOR):** F0 agrega las 2 entradas en `harness_flags_help.py` (`PLAIN_HELP`), paridad con
+>   el patrón del plan 139 (texto de ayuda para el operador en Settings).
+> - **C8 (MENOR):** las queryKeys `["execution-detail"/"ticket-detail", id]` se declaran "propuestas
+>   a congelar con 174" — el implementador debe verificar contra el 174 antes de fijarlas.
 
 > **Autor:** StackyArchitectaUltraEficientCode · **Cierra la serie** Cockpit del Operador.
 > **Hermanos:** 172 (teclado primero: registro de atajos + overlay "?" + foco roving), 173 (vistas
@@ -88,10 +115,15 @@ confirmación de marca cuando tienen efecto.
    (`:1272-1273`), `Executions.byId` (`:1267`), `Tickets.byId` (`endpoints.ts:143`), link ADO por
    ticket (`TicketBoard.tsx:585-588` usa `ticket.ado_url`; helper `adoUrl` en
    `frontend/src/utils/trackerUrls.ts:10-11`). Hoy llegar a cada una exige superficies distintas.
-5. **El deep-link de ejecución ya tiene receptor real:** `ExecutionHistoryPage.tsx:58-65` lee
-   `?execution=<id>` vía `readQueryParam` y abre el drawer (plan 129). "Copiar link" puede
-   construir HOY `/history?execution=<id>` sin esperar al plan 165 (`routes.ts` **NO existe aún**
-   — grep `routes` en `frontend/src/**/*.ts` → 0 archivos, verificado 2026-07-18).
+5. **El deep-link de ejecución tiene builder + receptor canónicos YA implementados (plan 165):**
+   `frontend/src/services/routes.ts` **existe** (plan 165 IMPLEMENTADO F1-F3). `serializeRoute({tab:"history", exec:<id>})`
+   produce la clave **canónica `?exec=<id>`** (`routes.ts:95`); `ExecutionHistoryPage` la recibe vía
+   la prop `exec` parseada por `parseRoute` (`ExecutionHistoryPage.tsx:58-76`), que **reemplazó** al
+   receptor viejo `?execution=` (comentado como "roto" en `:67`). `parseRoute` acepta `execution`
+   SOLO como **alias legacy** (`EXEC_KEYS = ["exec","execution"]`, `routes.ts:27`). Por eso
+   "Copiar link" **DELEGA en `serializeRoute`** (reuso, clave canónica `?exec=`) en vez de construir
+   un literal con el alias legacy. (Corrección **C1**: v1 afirmaba que `routes.ts` "no existía" por
+   grepear `frontend/src/routes.ts` top-level en vez de `frontend/src/services/routes.ts`.)
 6. **La infraestructura de tipos por entidad ya existe:** `CommandKind` en
    `frontend/src/components/commandPaletteData.ts:10-19` (incluye `"execution"` y `"ticket"`).
    Este plan lo REUSA vía `Extract<>` en vez de inventar otro enum.
@@ -138,7 +170,9 @@ uniforme cargado.
    mano). Primitivas: `IconButton`, `Spinner`, `StatusChip` del barrel `components/ui` (planes
    138/140). Motion: tokens `--duration-*`/presets del plan 143 en los CSS modules. Cache:
    react-query ya montado (`@tanstack/react-query ^5.59.0`, `frontend/package.json:13`;
-   `QueryClientProvider` en `main.tsx`). Deep-link: receptor existente del plan 129.
+   `QueryClientProvider` en `main.tsx`). Deep-link: **builder canónico `serializeRoute` del plan 165
+ya implementado** (`services/routes.ts`), no construir URLs a mano. Copiado: **`copyService` del
+plan 194** cuando esté mergeado (C2), nunca `navigator.clipboard.writeText` crudo nuevo.
 6. **Lógica pura, no `render()`.** `@testing-library/react` y `jsdom` NO están en
    `frontend/package.json` (gap estructural conocido). TODA la lógica de este plan (parser de
    flags, registro de acciones, reducer del peek, clamp/teclado/armado del menú, builders de
@@ -170,9 +204,10 @@ uniforme cargado.
 |---|---|---|---|
 | **172 Teclado primero** | Combos `Shift+F10` / tecla `ContextMenu` para abrir el menú desde el teclado; tecla `p` para fijar el peek; filas enfocables (foco roving). | 175 deja cableado el handler `onKeyDown` EN la fila/card (§5 F3 paso 4). 172 aporta: (a) filas enfocables (roving) y (b) el alta de los combos en su registro central + overlay "?". | Sin 172 las filas no son enfocables ⇒ el menú por teclado y el peek por tecla quedan **inactivos** (el handler existe pero nunca recibe foco). El menú por mouse y el peek por hover funcionan al 100%. Nada rompe. |
 | **173 Vistas guardadas** | Nada. | Sin interacción: 173 persiste filtros/columnas; 175 no toca ni lee esas preferencias. | N/A. |
-| **174 Rendimiento percibido** | Cache/prefetch de react-query para el enriquecimiento del peek. | **queryKeys compartidas (congeladas acá): `["execution-detail", id]` → `Executions.byId(id)` y `["ticket-detail", id]` → `Tickets.byId(id)`.** 174 debe poblarlas con su prefetch on-hover; 175 las lee con `queryClient.getQueryData(...)`. | Sin 174 el cache está frío ⇒ el peek muestra los campos de la fila (que NO requieren fetch) al instante, y el bloque de enriquecimiento hace `queryClient.fetchQuery(...)` on-demand mostrando `<Spinner size="sm">` — explícito y acotado a ese bloque. |
+| **174 Rendimiento percibido** | Cache/prefetch de react-query para el enriquecimiento del peek. | **queryKeys compartidas (propuestas: `["execution-detail", id]` → `Executions.byId(id)` y `["ticket-detail", id]` → `Tickets.byId(id)`). C8: el implementador VERIFICA contra el 174 antes de fijarlas — si 174 ya congeló otras claves, 175 adopta las del 174 (174 es el dueño del cache).** 174 debe poblarlas con su prefetch on-hover; 175 las lee con `queryClient.getQueryData(...)`. | Sin 174 el cache está frío ⇒ el peek muestra los campos de la fila (que NO requieren fetch) al instante, y el bloque de enriquecimiento hace `queryClient.fetchQuery(...)` on-demand mostrando `<Spinner size="sm">` — explícito y acotado a ese bloque. |
 | **164 Diálogo canónico** | `useConfirm()` promise-based para las acciones con efecto. | Punto ÚNICO de migración: `frontend/src/services/confirmGateway.ts` (§5 F1 paso 3). Cuando 164 aterrice, se cambia SOLO la implementación de ese módulo a `useConfirm()` (contrato del 164 §F0: `(opts) => Promise<boolean>` con `tone: "danger"`). | Sin 164 (estado actual: PROPUESTO, `components/ui/Dialog.tsx` no existe), `confirmGateway` v1 = confirmación de dos pasos DENTRO del menú (máquina `armTransition`, §5 F3): primer clic arma el ítem ("¿Borrar? Clic de nuevo"), segundo clic ejecuta; Escape/cerrar desarma. HITL intacto, cero diálogos nativos. |
-| **165 Contrato de URL** | Builder canónico de deep-links (`routes.ts`). | `frontend/src/services/peekLinks.ts` es el único módulo que arma URLs; cuando `frontend/src/routes.ts` exista (165), `peekLinks` delega en él (cambio de 1 archivo). | Sin 165 (estado actual: `routes.ts` NO existe), `peekLinks` construye el literal `/history?execution=<id>`, cuyo receptor REAL ya existe y funciona (`ExecutionHistoryPage.tsx:58-65`, plan 129). |
+| **165 Contrato de URL — YA SATISFECHA (C1)** | Builder canónico de deep-links (`serializeRoute` de `frontend/src/services/routes.ts`, ya implementado). | `frontend/src/services/peekLinks.ts` es el único módulo que arma URLs y **delega HOY** en `serializeRoute({tab:"history", exec:id})` → clave canónica `?exec=<id>` (`routes.ts:95`). | N/A — 165 está implementado. (Contingencia sólo si `routes.ts` fuera removido: fallback al literal `/history?exec=<id>` con la clave canónica, que `parseRoute` recibe; nunca el alias legacy `?execution=`.) |
+| **194 Portapapeles universal — COLISIÓN (C2)** | `copyService` (copiado con feedback + formatos) del plan 194. | `frontend/src/services/clipboard.ts` **delega en `copyService` si está presente**; toda copia de 175 pasa por ahí para no reinventar ni violar el ratchet `writeText` que introduce 194. | Sin 194 mergeado (estado actual: `copyService.ts` vive en la rama `impl/ux`, no en este árbol), `clipboard.ts` usa un wrapper local `navigator.clipboard.writeText` con fallback `execCommand`. Cuando 194 aterrice, se reemplaza SOLO el cuerpo de `clipboard.ts` por `copyService`. |
 
 ---
 
@@ -207,7 +242,11 @@ feature sin trabajo del operador; el resto del plan se cablea detrás de estas f
 - MODIFICADO `backend/config.py` — 2 atributos con default efectivo `"true"` (el default EFECTIVO
   vive en config.py; el de FlagSpec es hint de UI — gotcha conocido).
 - MODIFICADO `backend/api/diag.py` — 2 campos aditivos en el dict de retorno de `health()`, junto
-  a `"shell_v2_enabled"` (`diag.py:410-411`, mismo patrón `getattr`).
+  a `"shell_v2_enabled"` (`diag.py:415`, mismo patrón `getattr`).
+- MODIFICADO `backend/services/harness_flags_help.py` — 2 entradas `PlainHelp` en `PLAIN_HELP` (C7),
+  ancla por TEXTO `"STACKY_UI_SHELL_V2_ENABLED"` (`harness_flags_help.py:1330`). Da el texto de
+  ayuda que ve el operador en Settings; paridad con el patrón del plan 139
+  (`test_plan139_shell_flag.py:32` verifica que su flag esté en `PLAIN_HELP`).
 - MODIFICADO `backend/tests/test_harness_flags.py` — agregar las 2 keys al set
   `_CURATED_DEFAULTS_ON` (definido en `test_harness_flags.py:467`). Sin esto,
   `test_default_known_only_for_curated` (`:749`) rompe: es el gate, no se gamea.
@@ -309,8 +348,10 @@ Y en `_CATEGORY_KEYS`, la tupla `"interfaz_ui"` (ancla: comentario
     ),
 ```
 
-**Paso 3 — `config.py`** (ancla: bloque de `STACKY_UI_SHELL_V2_ENABLED`, `config.py:1300-1302`;
-mismo patrón pero con default `"true"` — a diferencia del shell v2 que es opt-in):
+**Paso 3 — `config.py`** (ancla por TEXTO: bloque de `STACKY_UI_SHELL_V2_ENABLED`, hoy en
+`config.py:1345-1346`; mismo patrón `os.getenv(..., "true").strip().lower() == "true"`. Nota C6:
+el shell v2 también tiene default efectivo `"true"` en config.py — su comentario "opt-in" está
+desactualizado; estas 2 flags nuevas siguen el mismo default ON):
 
 ```python
     # Plan 175 — Cockpit del operador: peek + menu contextual (default ON; con OFF
@@ -411,7 +452,7 @@ quede sin confirmación.
 
 | Test | Qué afirma |
 |---|---|
-| `executionDeepLink arma el literal del receptor real` | `executionDeepLink(42, "http://localhost:5173")` → `"http://localhost:5173/history?execution=42"` (receptor: `ExecutionHistoryPage.tsx:58-65`). |
+| `executionDeepLink delega en serializeRoute (clave canónica ?exec=)` | `executionDeepLink(42, "http://localhost:5173")` → `"http://localhost:5173/history?exec=42"` (clave canónica de `serializeRoute`, `routes.ts:95`; NO el alias legacy `?execution=`). |
 | `ticketExternalLink prefiere ado_url del backend` | con `{ado_url:"https://x/wi/9", ado_id:9}` → `"https://x/wi/9"`. |
 | `ticketExternalLink fallback a adoUrl por ado_id` | con `{ado_id: 9}` (sin ado_url) → el string que devuelve `adoUrl("9")` de `utils/trackerUrls.ts`. |
 | `ticketExternalLink sin datos` | con `{ado_id: 0}` → `null`. |
@@ -419,13 +460,17 @@ quede sin confirmación.
 **Paso 2 — `peekLinks.ts`:**
 
 ```ts
-// Plan 175 F1 — deep-links puros. DEPENDENCIA BLANDA plan 165: cuando exista
-// frontend/src/routes.ts (contrato de URL), este modulo delega en su builder
-// canonico; hoy construye el literal que el receptor del plan 129 ya parsea.
+// Plan 175 F1 — deep-links puros. C1: el plan 165 YA está implementado
+// (frontend/src/services/routes.ts). Este modulo DELEGA en su builder canonico
+// serializeRoute (clave canonica ?exec=), NO reinventa ni usa el alias legacy
+// ?execution=. Reuso, no reinvencion (guardarrail §3.5).
 import { adoUrl } from "../utils/trackerUrls";
+import { serializeRoute } from "./routes";
 
 export function executionDeepLink(id: number, origin: string): string {
-  return `${origin}/history?execution=${id}`;
+  // serializeRoute -> "/history?exec=<id>" (routes.ts:95). OJO: RouteState.query
+  // es OBLIGATORIO (routes.ts:19-24) — pasar `query: {}` o tsc rompe.
+  return `${origin}${serializeRoute({ tab: "history", exec: id, query: {} })}`;
 }
 
 export function ticketExternalLink(t: { ado_url?: string; ado_id: number }): string | null {
@@ -453,9 +498,19 @@ export interface ConfirmRequest {
 export type ConfirmFn = (req: ConfirmRequest) => Promise<boolean>;
 ```
 
-**Paso 4 — `clipboard.ts`:**
+**Paso 4 — `clipboard.ts` (C2 — colisión con plan 194):** este módulo es el ÚNICO punto de copiado
+de 175. **Regla dura:** si el plan 194 ya está mergeado (existe `frontend/src/services/copyService.ts`),
+`copyText` debe **delegar en `copyService`** — NO reimplementar el copiado ni llamar
+`navigator.clipboard.writeText` directo (el plan 194 introduce un **ratchet `writeText`** que
+prohíbe nuevas llamadas crudas; una llamada directa nueva rompería ese trinquete). En el estado
+actual de este árbol `copyService.ts` NO existe (vive en la rama `impl/ux`), así que el wrapper
+local de abajo es el fallback declarado; cuando 194 aterrice se reemplaza SOLO el cuerpo por
+`return copyService.copy(text)`. Pre-flight del implementador: `ls frontend/src/services/copyService.ts`
+— si existe, delegar; si no, usar el wrapper local:
 
 ```ts
+// FALLBACK LOCAL (solo si copyService del plan 194 aun no esta mergeado).
+// Cuando 194 aterrice: reemplazar el cuerpo por `return copyService.copy(text)`.
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch { /* sigue */ }
   try {
@@ -485,6 +540,7 @@ import type { CommandKind } from "../components/commandPaletteData";
 import type { ExecutionHistoryItem } from "../api/endpoints";
 import type { Ticket } from "../types";
 import { executionDeepLink, ticketExternalLink } from "./peekLinks";
+import { serializeRoute } from "./routes";  // C1: builder canonico de URL (plan 165)
 import type { ConfirmFn } from "./confirmGateway";
 
 /** Reusa el vocabulario de la paleta (plan 129) en vez de inventar otro enum. */
@@ -521,7 +577,7 @@ export function quickActions(actions: EntityAction[]): EntityAction[] {
 export function actionsForExecution(item: ExecutionHistoryItem, origin: string): EntityAction[] {
   const out: EntityAction[] = [
     { id: "exec-open", label: "Abrir detalle", icon: "👁", effect: "safe", quick: true,
-      run: async (ctx) => { if (ctx.openDetail) ctx.openDetail(item.id); else ctx.navigate(`/history?execution=${item.id}`); } },
+      run: async (ctx) => { if (ctx.openDetail) ctx.openDetail(item.id); else ctx.navigate(serializeRoute({ tab: "history", exec: item.id, query: {} })); } },  // C1: clave canonica ?exec= (query:{} obligatorio)
     { id: "exec-copy-link", label: "Copiar link", icon: "🔗", effect: "safe", quick: true,
       run: async (ctx) => { const ok = await ctx.copyText(executionDeepLink(item.id, window.location.origin)); ctx.onDone?.("exec-copy-link", ok); } },
     { id: "exec-copy-id", label: `Copiar id #${item.id}`, icon: "🆔", effect: "safe", quick: false,
@@ -812,7 +868,9 @@ export function armTransition(s: ArmState, e: ArmEvent): { state: ArmState; fire
 // openFromKeyboard: usa el.getBoundingClientRect() → {x: rect.left + 8, y: rect.bottom - 4, openedByKeyboard: true}.
 ```
 
-**Paso 5 — wiring (gated por flag):** `const { contextMenu } = useUiFlags();`
+**Paso 5 — wiring (gated por flag):** `const { contextMenu } = useUiFlags();` En ambas superficies,
+además de `onContextMenu`/`onKeyDown`, agregar `tabIndex={contextMenu ? 0 : undefined}` en la
+`<tr>`/card ([ADICIÓN ARQUITECTO] C3: enfocabilidad standalone, sin esperar al 172).
 - `ExecutionHistoryPage.tsx`, en el `<tr>` (ancla `styles.row`):
   `onContextMenu={contextMenu ? (e) => openFromMouse(e, actionsForExecution(item, window.location.origin), ctx) : undefined}` y
   `onKeyDown={contextMenu ? (e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); openFromKeyboard(e.currentTarget, ...); } } : undefined}`.
@@ -824,10 +882,27 @@ export function armTransition(s: ArmState, e: ArmEvent): { state: ArmState; fire
   `actionsForTicket(ticket)`.
 - Flag OFF ⇒ `onContextMenu` es `undefined` ⇒ **menú nativo del navegador, como hoy** (binario).
 
+**[ADICIÓN ARQUITECTO] — Accesibilidad por teclado STANDALONE (C3).** v1 dejaba el camino de
+teclado **inerte sin el 172** (filas no enfocables ⇒ `onKeyDown` nunca recibía foco), lo que
+incumple el requisito "menú 100% accesible por teclado". Fix: **175 pone su propio `tabIndex={0}`**
+en la `<tr>`/card cableada, **gated por `STACKY_UI_CONTEXT_MENU_ENABLED`** (`tabIndex={contextMenu ? 0 : undefined}`),
+más `role` y `aria-label` mínimos. Así, con la flag ON:
+- El operador tabula hasta la fila y abre el menú con `Shift+F10` / tecla `ContextMenu` **sin
+  esperar al 172** (menú navegable por flechas, cierre con Escape sin robar foco — ya en F3 Paso 3).
+- La tecla `p` para fijar el peek (F2) también funciona, porque la fila ya es enfocable.
+- Las acciones rápidas inline quedan alcanzables vía `:focus-within` (F4).
+Esto **no colisiona con el 172**: cuando 172 aterrice, promueve estas filas de `tabIndex={0}`
+estático a **foco roving** (`tabIndex` gestionado por el roving group) y agrega j/k — un cambio de
+1 línea por página, sin tocar los handlers de 175. Contrato congelado acá: 175 aporta enfocabilidad
+básica; 172 aporta roving + alta de combos en el registro central + overlay "?". Con la flag OFF no
+se agrega `tabIndex` (byte-idéntico a hoy). **Sin trabajo del operador; HITL intacto; los 3 runtimes
+no se tocan.**
+
 **Dependencia blanda 172 (declarada):** los combos `Shift+F10`/`ContextMenu` quedan cableados EN
-la fila; sin 172 las filas no son enfocables y el camino de teclado queda inerte (el de mouse
-funciona igual). Cuando 172 aterrice, además debe dar de alta ambos combos en su registro central
-de atajos para que aparezcan en el overlay "?" (obligación del 172, citada acá como contrato).
+la fila; con el `tabIndex={0}` propio de 175 (adición de arriba) el camino de teclado funciona
+standalone. Cuando 172 aterrice, además debe dar de alta ambos combos en su registro central
+de atajos para que aparezcan en el overlay "?" (obligación del 172, citada acá como contrato) y
+promover el `tabIndex` a foco roving.
 
 **Criterio de aceptación BINARIO:** KPI-5 verde; `npx tsc --noEmit` exit 0;
 `grep -c "style={{" src/components/contextmenu/ContextMenu.tsx` → `0`; grep del contador de
@@ -868,10 +943,9 @@ que una acción con efecto aparezca inline.
   y `.row:hover .rowActions, .row:focus-within .rowActions { opacity: 1; }` — tokens del 143/138,
   sin hex ni ms literales. `:focus-within` deja las acciones alcanzables por teclado cuando el 172
   haga las filas enfocables (dependencia blanda declarada).
-- Gate por flag: la columna entera se renderiza solo si `peek || contextMenu` es irrelevante — se
-  usa `STACKY_UI_PEEK_ENABLED`... **NO**: decisión explícita para evitar ambigüedad: las acciones
-  rápidas inline quedan detrás de `STACKY_UI_CONTEXT_MENU_ENABLED` (misma familia "acciones");
-  con OFF no se agrega ni columna ni handlers (tabla byte-idéntica a hoy).
+- Gate por flag (decisión ÚNICA, sin ambigüedad — C4): las acciones rápidas inline van detrás de
+  **`STACKY_UI_CONTEXT_MENU_ENABLED`** (misma familia "acciones"; NO se usa la flag del peek). Con
+  la flag OFF no se agrega ni la columna ni los handlers (tabla byte-idéntica a hoy).
 
 **Paso 2 — Tickets:** dentro de `styles.cardActions` (`TicketBoard.tsx:437`), prepend de los
 IconButtons de `quickActions(actionsForTicket(ticket))` con el mismo patrón de feedback ✓. Los
@@ -916,9 +990,13 @@ checklist de smoke manual que valida el comportamiento DOM que los tests puros n
    - Historial: clic-derecho en fila ⇒ menú Stacky (no el del navegador); flechas navegan;
      "Borrar ejecución…" ⇒ primer clic arma ("¿Borrar? Clic de nuevo"), Escape desarma y cierra,
      nada se borró; segundo clic ⇒ borra y la tabla se refresca.
-   - Historial: hover fila ⇒ iconos 🔗/👁 aparecen; 🔗 ⇒ icono ✓ 1.2 s; pegar en un editor ⇒
-     `http://<host>/history?execution=<id>`; abrir esa URL en otra pestaña ⇒ el drawer se abre
-     (receptor plan 129).
+   - Historial (teclado standalone, C3, SIN 172): `Tab` hasta una fila (foco visible por el
+     `tabIndex={0}` de 175) ⇒ `Shift+F10`/tecla `ContextMenu` abre el menú ⇒ flechas + Enter
+     ejecutan ⇒ Escape cierra y **el foco vuelve a la fila** (no se pierde ni salta al body).
+   - Historial (copiar link, C1): pegar en un editor ⇒ `http://<host>/history?exec=<id>` (clave
+     canónica `exec`, NO `execution`); abrir esa URL ⇒ el drawer se abre (receptor `parseRoute`).
+   - Historial: hover fila ⇒ iconos 🔗/👁 aparecen; 🔗 ⇒ icono ✓ 1.2 s (feedback de copiado del
+     link canónico `?exec=`, ver bullet anterior).
    - Tickets: ídem peek en card, menú con "Abrir en ADO"/"Copiar link ADO", quick actions en
      `cardActions`.
    - Settings: apagar `STACKY_UI_CONTEXT_MENU_ENABLED` desde el panel de flags, recargar ⇒
@@ -944,7 +1022,7 @@ NO corrido).
 | R3 | **Perder el menú nativo del navegador** donde el operador lo quiere (copiar texto seleccionado, inspeccionar). | El `onContextMenu` se cablea SOLO en filas/cards (no global); flag OFF lo restaura al 100%; dentro de inputs/textarea no hay filas, así que el nativo sigue intacto donde más se usa. |
 | R4 | **Acción destructiva a un clic de distancia** (menú acerca el peligro). | Invariante testeado "quick ⇒ safe" (doble cerrojo función + test); acciones con efecto SOLO en el menú y SIEMPRE tras confirmación (armado v1 / diálogo canónico v2); tono `danger` visual; Escape desarma. |
 | R5 | **Ratchets del repo** (inline-style, anti-Intl, registro de tests, gate anti-nativos del 164). | Posicionamiento imperativo por ref (KPI-7); todo formato vía `services/format.ts` (tests lo fijan); alta en `HARNESS_TEST_FILES` (KPI-10); naming `askConfirm` y prosa perifrástica (§3.7). |
-| R6 | **Deep-link se rompa cuando el 165 cambie el contrato de URL.** | El link se construye en UN solo módulo (`peekLinks.ts`) contra el receptor HOY REAL (`ExecutionHistoryPage.tsx:58-65`); la migración a `routes.ts` es un cambio de 1 archivo con su test. |
+| R6 | **Deep-link se rompa si cambia el contrato de URL.** | El link se construye en UN solo módulo (`peekLinks.ts`) **delegando en `serializeRoute` del plan 165 ya implementado** (`services/routes.ts`, clave canónica `?exec=`); si 165 evoluciona el contrato, `peekLinks` lo hereda automáticamente. Test `peekLinks.test.ts` fija el resultado esperado. |
 | R7 | **fetchQuery on-demand del enriquecimiento suma requests** si 174 no está. | Solo se dispara con el peek YA abierto (≥400 ms de intención), `staleTime: 30_000`, y es UN endpoint de lectura existente (`Tickets.byId`); el camino feliz (fields de la fila) no fetchea nunca. |
 | R8 | **`stopPropagation` del Escape del menú/peek interfiera con paleta/drawers.** | El listener global se agrega SOLO mientras el menú/peek está abierto y se remueve al cerrar (cleanup); tests puros fijan las transiciones; smoke manual del punto 3 de F5 lo verifica con la paleta abierta. |
 
@@ -981,7 +1059,7 @@ NO corrido).
 | **dependencia blanda** | El plan compila y funciona sin el otro plan; si el otro existe, la feature mejora sola vía un contrato congelado (queryKey, módulo gateway); si no, degrada de forma declarada. |
 | **HITL (human-in-the-loop)** | El operador confirma toda acción con efecto. Innegociable: este plan jamás ejecuta algo destructivo o de publicación sin confirmación explícita. |
 | **queryKey / cache react-query** | Clave del cache de datos del cliente. Si el plan 174 pre-carga `["ticket-detail", id]`, el peek la lee gratis; si no, la puebla on-demand. |
-| **deep-link** | URL que abre directamente una vista/entidad (p. ej. `/history?execution=42` abre el drawer de esa ejecución — receptor del plan 129). |
+| **deep-link** | URL que abre directamente una vista/entidad (p. ej. `/history?exec=42` — clave canónica de `serializeRoute` del plan 165 — abre el drawer de esa ejecución vía `parseRoute`). |
 | **ratchet / trinquete** | Test que congela un contador de deuda y falla si sube (inline-style, formateo fuera de format.ts, tests sin registrar). Solo puede bajar. |
 | **flag curada** | Flag con default ON declarado: exige `default=True` en su `FlagSpec`, alta en `_CURATED_DEFAULTS_ON` (tests) y default efectivo `"true"` en `config.py`. Las tres patas o el arnés rompe. |
 | **foco roving** | Patrón de teclado (plan 172) donde las filas de una tabla son enfocables y j/k/flechas mueven el foco. Este plan lo consume, no lo define. |

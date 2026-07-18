@@ -1,6 +1,6 @@
 # Plan 167 — Centro de Evolución: núcleo del panel de auto-mejora, registro de loops de mejora y ciclo MAPE con gates humanos
 
-**Estado:** PROPUESTO v1 — 2026-07-17 · **Autor:** StackyArchitectaUltraEficientCode
+**Estado:** CRITICADO v2 (2026-07-18) — v1 RECHAZADO (1 bloqueante C1 + 5 importantes); v2 aplica todos los fixes → APTO PARA IMPLEMENTAR · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** crítica adversarial 2026-07-18
 **Serie:** "Auto-mejora recursiva" **1 de 4** (directiva del operador 2026-07-17):
 **167 (este)** = núcleo del panel + registro de propuestas + ciclo MAPE con gates humanos ·
 **168** = arnés de evaluación/fitness (golden tasks + jueces) ·
@@ -9,6 +9,62 @@
 Este documento implementa SOLO el 167 y deja los **contratos** hacia 168/169/170 en §8
 (campos placeholder, endpoint de inyección, destino del flywheel). PROHIBIDO implementar
 acá nada de los otros tres planes.
+
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**CHANGELOG v1 -> v2 (veredicto v1: RECHAZADO — 1 bloqueante, 5 importantes, 4 menores, 2 adiciones):**
+
+- **C1 (BLOQUEANTE, F0):** el FlagSpec de `STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET` declaraba
+  `default=20000` → `test_default_known_only_for_curated` rompe DETERMINISTA:
+  `default_is_known` es type-agnostic (`spec.default is not None`,
+  `harness_flags.py:3397-3399`) y G4 prohíbe curar ints. Fix: FlagSpec int SIN `default=`
+  (precedente real `CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES`, `harness_flags.py:350-358`:
+  el default efectivo vive en `config.py` y la description lo documenta); test F0 caso 4
+  ahora exige `default is None`. **IMPACTO SERIE: 168/169/170 (v1) copian este patrón —
+  sus FlagSpec `type="int"` (y toda no-bool-ON) tampoco deben declarar `default=`.**
+- **C2 (IMPORTANTE, F1):** `update_proposal_fields(**patch)` aceptaba cualquier clave
+  existente (p.ej. `status`, `applied_at`) = bypass in-process de la máquina de estados
+  sin ledger. Fix: allowlist dura `_PATCHABLE_FIELDS` + test caso 13. Compatible con el
+  168 (persiste `fitness_before/after` por esta vía — están en la allowlist).
+- **C3 (IMPORTANTE, F2):** apply/rollback sin lock end-to-end → dos POST concurrentes
+  (doble click / dos pestañas) duplicaban el side-effect y el 2º snapshot pisaba al 1º
+  (rollback restauraría el contenido YA aplicado: KPI-3 roto bajo carrera). Fix:
+  `_APPLY_LOCK` + re-chequeo de status dentro del lock + test caso 11.
+- **C4 (IMPORTANTE, F3):** `_ERROR_STATUSES = ("error",)` omitía `"failed"`
+  (`agent_runner.py:117`) → R-A1 subcontaba fallos reales. Fix: `("error", "failed")` +
+  fixture mixto en el caso 3.
+- **C5 (IMPORTANTE, F3):** corridas MAPE sucesivas re-emitían el mismo draft mientras la
+  condición persistiera → spam de duplicados en la bandeja (= trabajo extra del operador,
+  propuestas stale sin política). Fix: dedup por `(aspect_id, evidence[0])` contra
+  propuestas abiertas + clave `skipped_duplicate_rules` en §4.9 + caso 12.
+- **C6 (IMPORTANTE, F2/§4.3/§4.8):** drift de artefacto sin detección (el archivo cambia
+  entre propuesta y apply, o entre apply y rollback — sesión paralela u otra propuesta).
+  Fix: clave `base_hash` (sha256 opcional) en §4.3 + chequeo en apply → 409
+  `target_drifted`; rollback compara el hash actual vs `proposed_content` y exige
+  `{"force": true}` para pisar ediciones posteriores; casos 12-13 de F2. §8.2 recomienda
+  al 169 enviar `base_hash`.
+- **C7 (MENOR, F2):** `maybe_auto_apply` tragaba excepciones sin rastro → ahora deja
+  evento `apply_failed` best-effort en el ledger.
+- **C8 (MENOR, F3):** el truncado por presupuesto partía el JSON sin marcador → sufijo
+  literal `[TRUNCADO_POR_PRESUPUESTO]`.
+- **C9 (MENOR, DoD):** el grep "run_cycle sin callers" filtraba con `grep -v evolution`
+  (excluía cualquier path que contenga "evolution") → pathspec afinado.
+- **C10 (MENOR, §8.2):** el 169 v1 inyecta por llamada de servicio in-process
+  (`evolution_store.create_proposal`), no por HTTP → §8.2 declara AMBAS vías válidas
+  (misma validación).
+- **[ADICIÓN ARQUITECTO] A1 — Kill-switch env-only `STACKY_EVOLUTION_HARD_DISABLE`:**
+  freno de emergencia FUERA del alcance de cualquier propuesta o flag del registry (una
+  propuesta `flag_change` puede sugerir tocar las flags del propio Centro; el kill-switch
+  no es alcanzable desde la app). Helper único `evolution_store.evolution_hard_disabled()`;
+  con env truthy: endpoints (salvo `health`, que reporta `hard_disabled`) → 404,
+  `run_cycle` y `apply_proposal`/`maybe_auto_apply` rechazan. Permitido por el riel de la
+  casa (kill-switches internos pueden ser env-only). **CONTRATO NUEVO §8.0: 168/169/170
+  componen su `_enabled()` con este helper (1 línea c/u).**
+- **[ADICIÓN ARQUITECTO] A2 — Espejo de auditoría en logs del sistema:** `append_ledger`
+  emite además UNA línea INFO por `logging.getLogger("stacky.evolution")` → cada gate
+  humano queda visible en la página de logs (Plan 145) sin infra nueva (caso 14 de F1).
+- Conteos actualizados: tests backend **59 casos (8+14+14+12+11)**; frontend sin cambio
+  de conteo (los DTO nuevos son type-only, los verifica `tsc`).
 
 > Este documento está redactado para que un **MODELO MENOR** (Haiku, Codex CLI o
 > GitHub Copilot Pro) lo implemente **SIN inferir nada**. Los nombres de símbolos,
@@ -88,8 +144,9 @@ detrás de flag default OFF; `closed_loop` **PROHIBIDO para siempre** en Stacky.
   transición queda en `ledger.jsonl` (test de conteo de eventos). Comando:
   `.venv\Scripts\python.exe -m pytest tests/test_evolution_store.py -q` → exit 0.
 - **KPI-2 — Ciclo MAPE acotado:** `run_cycle` sobre fixtures dispara las reglas
-  deterministas esperadas, crea SOLO borradores (`status=="draft"`), no aplica nada, y
-  respeta el presupuesto de tokens. Comando:
+  deterministas esperadas, crea SOLO borradores (`status=="draft"`), no aplica nada,
+  respeta el presupuesto de tokens y NO duplica borradores abiertos en corridas
+  sucesivas (C5). Comando:
   `.venv\Scripts\python.exe -m pytest tests/test_evolution_cycle.py -q` → exit 0.
 - **KPI-3 — Reversibilidad:** para `prompt_file`, `apply`→`rollback` deja el archivo
   **byte-idéntico** al original; para `knowledge_note`, `rollback` elimina exactamente la
@@ -190,7 +247,10 @@ decisión concreta de este plan):**
    human-on-the-loop, default **OFF** citando la EXCEPCIÓN DURA #1 — misma clase que el
    precedente aceptado *épica-desde-brief*. TODO configurable desde la UI (el registry de
    flags es dinámico: aparecen solos en el panel del Arnés); **nada env-only** para el
-   operador.
+   operador. Única pieza env-only: el kill-switch interno `STACKY_EVOLUTION_HARD_DISABLE`
+   (A1, §8.0) — NO es config del operador sino freno de emergencia fuera del alcance de
+   cualquier propuesta, amparado por el riel de la casa "kill-switches internos pueden
+   ser env-only".
 4. **3 runtimes con paridad:** el feature es backend Flask + frontend React, idéntico
    bajo Codex CLI, Claude Code CLI y GitHub Copilot Pro. El ÚNICO punto con LLM es el
    enriquecimiento del Analyze, que usa el **modelo local** (`invoke_local_llm`,
@@ -318,6 +378,7 @@ lanza `ValueError("loop_mode_invalido")` (test F1 caso 11).
   "artifact_type": "free_text | knowledge_note | prompt_file | flag_change",
   "target_ref": null,
   "proposed_content": null,
+  "base_hash": null,
   "evidence": ["…"],
   "status": "draft | pending_review | approved | applied | rejected | rolled_back",
   "fitness_before": null,
@@ -340,6 +401,16 @@ Semántica de `artifact_type` + `target_ref` + `proposed_content`:
 | `prompt_file` | nombre de archivo `*.agent.md` DENTRO de `backend/Stacky/agents/` (ej. `"Developer.agent.md"`) | contenido COMPLETO propuesto del archivo (obligatorio) | SÍ → escribe el archivo con snapshot previo |
 | `flag_change` | key EXACTA de una flag del arnés (ej. `"LOCAL_LLM_MODEL"`) | valor propuesto como string | **NO automático en el 167**: la UI muestra el deep-link `/settings?flag=<target_ref>` (receptor `?flag=` preexistente, Plan 165 §2.4) y el operador la cambia en el panel oficial del Arnés. `apply` sobre `flag_change` → 409 `artifact_not_appliable`. |
 
+**`base_hash` (C6, anti-drift; SOLO significativo para `prompt_file`):** sha256 hex del
+contenido del artefacto sobre el que se redactó la propuesta (`null` si el proponente no
+lo conoce o el archivo no existía — entonces se usa el literal `"absent"`). Lo llena el
+proponente (el 169 DEBE enviarlo — §8.2; el formulario manual y el MAPE lo dejan `null`).
+En `apply` de `prompt_file`: si `base_hash` no es `null` y difiere del sha256 del
+contenido ACTUAL del target (o de `"absent"` si hoy no existe) → el apply falla SIN
+escribir con `RuntimeError("target_drifted")` → API 409 `target_drifted` (el artefacto
+cambió entre la propuesta y el apply; el operador re-genera o re-confirma). `null` = sin
+chequeo (backward-compatible).
+
 ### 4.4 Máquina de estados (tabla congelada de acciones)
 
 | action | estados origen válidos | estado destino | side-effect |
@@ -352,6 +423,14 @@ Semántica de `artifact_type` + `target_ref` + `proposed_content`:
 
 Cualquier otra combinación → excepción `InvalidTransition` (la API la mapea a 409
 `{"ok": false, "error": "invalid_transition", "message": "<action> no es válida desde <status>"}`).
+
+**`force` (C6):** el body de `transition` acepta `"force": bool` (default `false`). NO
+agrega estados ni transiciones: solo relaja el chequeo anti-drift del `rollback` de
+`prompt_file` (si el archivo fue editado DESPUÉS del apply, `rollback` sin `force` → 409
+`target_drifted`; con `force: true` restaura el snapshot igual, pisando la edición — el
+operador lo decide con confirmación explícita). `force` NO relaja el chequeo de
+`base_hash` en `apply` (ahí siempre corresponde re-generar la propuesta) ni ninguna otra
+validación de la máquina de estados.
 
 ### 4.5 Evento del ledger (`ledger.jsonl`, una línea JSON por evento)
 
@@ -417,18 +496,24 @@ heurísticas: si `fitness_before` no es `null` sin que exista el 168, es un bug.
 
 | Método y ruta | Flag OFF | Flag ON |
 |---|---|---|
-| `GET /api/evolution/health` | **200** `{"ok": true, "flag_enabled": false}` (patrón `api/metrics.py:569-573`) | 200 `{"ok": true, "flag_enabled": true}` |
+| `GET /api/evolution/health` | **200** `{"ok": true, "flag_enabled": false, "hard_disabled": false}` (patrón `api/metrics.py:569-573`) | 200 `{"ok": true, "flag_enabled": true, "hard_disabled": false}` |
 | `GET /api/evolution/overview` | 404 `evolution_disabled` | 200 `{"ok": true, "aspects": […], "counts": {"draft": n, "pending_review": n, "approved": n, "applied": n, "rejected": n, "rolled_back": n}, "last_cycle": {…}\|null}` |
 | `GET /api/evolution/proposals?status=&aspect_id=&origin=` | 404 | 200 `{"ok": true, "proposals": […]}` (orden `updated_at` DESC) |
 | `GET /api/evolution/proposals/<id>` | 404 | 200 `{"ok": true, "proposal": {…}}` \| 404 `proposal_not_found` |
 | `POST /api/evolution/proposals` | 404 | 201 `{"ok": true, "proposal": {…}}` \| 400 `invalid_payload` (aspect inexistente, origin/artifact inválido, `initial_status` ∉ {`draft`,`pending_review`}) |
-| `POST /api/evolution/proposals/<id>/transition` body `{"action": "…", "note": "…"}` | 404 | 200 `{"ok": true, "proposal": {…}}` \| 409 `invalid_transition` \| 409 `artifact_not_appliable` \| 502 `apply_failed` (side-effect falló; la propuesta sigue `approved`) |
+| `POST /api/evolution/proposals/<id>/transition` body `{"action": "…", "note": "…", "force": false}` | 404 | 200 `{"ok": true, "proposal": {…}}` \| 409 `invalid_transition` \| 409 `artifact_not_appliable` \| 409 `target_drifted` (C6: `base_hash` no coincide en `apply`, o el archivo cambió post-apply en `rollback` sin `force`) \| 502 `apply_failed` (side-effect falló; la propuesta sigue `approved`) |
 | `POST /api/evolution/cycle/run` body `{"aspects": null\|[…], "use_llm": true}` | 404 | 200 `{"ok": true, "cycle": {…}}` \| 409 `cycle_already_running` |
 | `GET /api/evolution/cycles?limit=20` | 404 | 200 `{"ok": true, "cycles": […]}` (tail, más nuevo primero) |
 | `GET /api/evolution/ledger?limit=50` | 404 | 200 `{"ok": true, "events": […]}` (tail, más nuevo primero) |
 
 El shape 404 OFF es literal:
 `{"ok": false, "error": "evolution_disabled", "message": "El Centro de Evolución está deshabilitado (STACKY_EVOLUTION_CENTER_ENABLED)."}`.
+
+**Kill-switch (A1):** si la env var `STACKY_EVOLUTION_HARD_DISABLE` es truthy
+(`"1"/"true"/"yes"`, case-insensitive), `_enabled()` devuelve `False` sin importar las
+flags → TODO (salvo `health`) responde el mismo 404 `evolution_disabled`; `health`
+responde 200 con `"hard_disabled": true` (diagnóstico). No aparece en el registry del
+Arnés: es un freno interno de emergencia, no config del operador (§3.3).
 
 ### 4.9 `EvolutionCycleRun` (una línea de `cycles.jsonl`)
 
@@ -438,6 +523,7 @@ El shape 404 OFF es literal:
  "aspects": ["agent_prompts", "config_flags_models", "knowledge_rag", "stacky_codebase"],
  "signals": {…}, "signals_truncated": false,
  "rules_fired": ["R-A1"], "proposal_ids": ["prop-…"],
+ "skipped_duplicate_rules": [],
  "llm_used": false, "llm_error": null,
  "tokens_est_in": 0, "tokens_est_out": 0}
 ```
@@ -550,16 +636,21 @@ del hermano del Plan 166). Literales:
     ),
     FlagSpec(
         key="STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET",
-        type="int", default=20000,
+        type="int",
         label="Presupuesto de tokens por ciclo",
-        description="Tope de tokens estimados que una corrida del ciclo puede mandar al modelo local. Si las señales exceden el tope, se truncan y el ciclo lo deja registrado.",
+        description="Tope de tokens estimados que una corrida del ciclo puede mandar al modelo local (default 20000, definido en config). Si las señales exceden el tope, se truncan y el ciclo lo deja registrado.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
 ```
 
-NOTA: `STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED` va SIN `default=` explícito (el
-default efectivo OFF lo da `config.py`; poner `default=False` explícito o `default=True`
-sin curar rompe `test_default_known_only_for_curated` — gotcha del Plan 63).
+NOTA (C1 — regla general): SOLO las 2 bool default ON llevan `default=True` explícito
+(y van curadas). `STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED` **y también**
+`STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET` van SIN `default=` explícito: `default_is_known`
+es type-agnostic (`spec.default is not None`, `harness_flags.py:3397-3399`) y
+`test_default_known_only_for_curated` exige igualdad de conjuntos con
+`_CURATED_DEFAULTS_ON` (donde los int NO entran — G4). El default EFECTIVO (OFF / 20000)
+lo da `config.py`; precedente real de int sin default: `CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES`
+(`harness_flags.py:350-358`, con el default documentado en la description).
 
 **`harness_flags_help.py`:** agregar 4 entradas `PlainHelp` (espejo del formato de la
 entrada del Plan 166 en `:1376`, ubicar por el texto "Al publicar una incidencia como
@@ -584,7 +675,8 @@ SOLO las 2 bool default ON: `STACKY_EVOLUTION_CENTER_ENABLED`,
 1. `test_center_flag_en_registry` — existe FlagSpec `STACKY_EVOLUTION_CENTER_ENABLED`, `type=="bool"`, `default is True`.
 2. `test_cycle_flag_requires_center` — spec de CYCLE tiene `requires=="STACKY_EVOLUTION_CENTER_ENABLED"`.
 3. `test_auto_apply_default_off` — spec de AUTO_APPLY: `default is None` Y con env limpio `config.STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED is False`.
-4. `test_budget_flag_int` — spec de TOKEN_BUDGET: `type=="int"`, `default==20000`.
+4. `test_budget_flag_int` — spec de TOKEN_BUDGET: `type=="int"` y `default is None`
+   (C1: el default efectivo 20000 lo da `config.py` — lo cubre el caso 6).
 5. `test_las_4_estan_categorizadas` — las 4 keys están en algún valor de `_CATEGORY_KEYS` (importar de `services.harness_flags`).
 6. `test_config_defaults` — env limpio: CENTER True, CYCLE True, BUDGET 20000.
 7. `test_aristas_requires_congeladas` — las 3 aristas están en `_REQUIRES_MAP_FROZEN` con el ROOT como destino.
@@ -615,6 +707,8 @@ del survey hecho datos.
 ```python
 import runtime_paths                      # data_dir() en CADA llamada (testabilidad)
 _EVOLUTION_LOCK = threading.Lock()
+_PATCHABLE_FIELDS = frozenset({"title", "rationale", "snapshot_info",
+                               "fitness_before", "fitness_after"})  # C2: allowlist dura
 VALID_LOOP_MODES = frozenset({"human_in_the_loop", "human_on_the_loop"})
 VALID_STATUSES = ("draft", "pending_review", "approved", "applied", "rejected", "rolled_back")
 VALID_ORIGINS = ("manual", "agent", "optimizer", "mape")
@@ -630,6 +724,10 @@ TRANSITIONS: dict[str, dict] = {
 
 class InvalidTransition(ValueError): ...
 
+def evolution_hard_disabled() -> bool
+    # A1 — kill-switch env-only: os.getenv("STACKY_EVOLUTION_HARD_DISABLE", "")
+    #      .strip().lower() in ("1", "true", "yes"). Leer el env EN CADA llamada
+    #      (testabilidad con monkeypatch.setenv). NO va al registry del Arnés.
 def evolution_root() -> Path            # runtime_paths.data_dir() / "evolution"
 def ensure_seed_aspects() -> list[dict] # idempotente: crea los 4 seeds si faltan; NO pisa existentes
 def list_aspects() -> list[dict]
@@ -637,7 +735,7 @@ def get_aspect(aspect_id: str) -> dict | None
 def create_proposal(*, aspect_id, title, rationale, origin, artifact_type,
                     target_ref=None, proposed_content=None, evidence=None,
                     initial_status="pending_review", cycle_id=None,
-                    parent_proposal_id=None, actor="operator") -> dict
+                    parent_proposal_id=None, base_hash=None, actor="operator") -> dict
     # Valida: aspecto existe; origin/artifact en los VALID_*; initial_status ∈
     # ("draft","pending_review"); knowledge_note/prompt_file exigen proposed_content
     # no vacío; prompt_file exige target_ref no vacío. ValueError("invalid_payload:<campo>")
@@ -651,9 +749,15 @@ def transition(proposal_id: str, action: str, *, actor: str, note=None) -> dict
     # updated_at, notes (si note), applied_at/rolled_back_at cuando corresponde.
     # Append ledger {"event":"transition", ...}. Devuelve el dict actualizado.
 def update_proposal_fields(proposal_id: str, **patch) -> dict
-    # Patch superficial de claves EXISTENTES (para snapshot_info, title/rationale
-    # del enriquecimiento LLM). Claves desconocidas → ValueError.
+    # C2: patch superficial SOLO de claves en _PATCHABLE_FIELDS (snapshot_info,
+    # title/rationale del enriquecimiento LLM, fitness_* que llenará el 168).
+    # Cualquier otra clave — exista o no en el shape (status, applied_at, id, …) →
+    # ValueError("campo_no_patcheable:<clave>"). El status SOLO muta vía transition()
+    # (la máquina de estados es el único camino; sin esto KPI-1 sería prosa).
 def append_ledger(event: dict) -> None
+    # A2: además de la línea en ledger.jsonl, emite UNA línea INFO por
+    # logging.getLogger("stacky.evolution") con json compacto del evento
+    # (auditoría visible en la página de logs del Plan 145; best-effort, jamás rompe).
 def read_ledger_tail(limit: int = 50) -> list[dict]     # más nuevo primero
 def append_cycle(record: dict) -> None
 def read_cycles_tail(limit: int = 20) -> list[dict]     # más nuevo primero
@@ -678,7 +782,7 @@ aspecto solo lo enlaza en modo lectura.
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_evolution_store.py`. Fixture común:
 `monkeypatch.setattr(runtime_paths, "data_dir", lambda: tmp_path)` (funciona porque el
-store llama `runtime_paths.data_dir()` en cada operación). 12 casos:
+store llama `runtime_paths.data_dir()` en cada operación). 14 casos:
 1. `test_seed_aspects_idempotente` — 2 llamadas → 4 aspectos, ids exactos, sin duplicar.
 2. `test_create_proposal_shape_completo` — todas las claves de §4.3 presentes; `fitness_before is None`, `parent_proposal_id is None`.
 3. `test_create_valida_aspect_inexistente` — `ValueError` con `"invalid_payload"` en el mensaje.
@@ -691,12 +795,14 @@ store llama `runtime_paths.data_dir()` en cada operación). 12 casos:
 10. `test_ledger_y_cycles_tail_orden` — tail devuelve más nuevo primero y respeta `limit`.
 11. `test_loop_mode_closed_loop_rechazado` — intentar escribir un aspecto con `loop_mode="closed_loop"` → `ValueError("loop_mode_invalido")`.
 12. `test_lecturas_tolerantes` — `proposals.json` corrupto → `list_proposals() == []` sin excepción.
+13. `test_update_fields_campo_protegido` (C2) — `update_proposal_fields(pid, status="applied")` → `ValueError` con `"campo_no_patcheable"`; el status NO cambió y el ledger NO tiene evento nuevo. `update_proposal_fields(pid, fitness_before={...})` sí funciona (contrato 168).
+14. `test_ledger_espejo_en_logs` (A2) — con `caplog` a nivel INFO en el logger `stacky.evolution`: `append_ledger` de 1 evento deja ≥1 record con el `proposal_id` en el mensaje.
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_evolution_store.py -q
 ```
-**Criterio BINARIO:** 12/12 verdes.
+**Criterio BINARIO:** 14/14 verdes.
 **Flag:** módulo puro (nadie lo importa aún) — N/A. **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 
 ---
@@ -715,37 +821,55 @@ vive en UN módulo con allowlist dura.
 
 ```python
 _HOTL_ALLOWED_ASPECTS = frozenset({"knowledge_rag"})
+_APPLY_LOCK = threading.Lock()   # C3: serializa apply/rollback end-to-end
 
 def agents_prompts_dir() -> Path
     # Path(runtime_paths.backend_root()) / "Stacky" / "agents"
     # (dir verificado en disco con los .agent.md del runtime)
 
 def apply_proposal(proposal_id: str, *, actor: str = "operator") -> dict
+    # 0) A1: if store.evolution_hard_disabled(): raise RuntimeError("evolution_hard_disabled").
+    #    C3: TODO el cuerpo bajo `with _APPLY_LOCK:` (blocking; las ops son cortas y
+    #    locales — el lock del store es OTRO lock, se toma y suelta dentro de cada op,
+    #    no hay deadlock). El re-chequeo del status DENTRO del lock elimina la carrera
+    #    doble-click/dos-pestañas (sin él, el 2º apply duplicaba el side-effect y su
+    #    snapshot pisaba al 1º → rollback restauraba el contenido YA aplicado).
     # 1) p = store.get_proposal(...); si None → KeyError("proposal_not_found").
     # 2) Si p["status"] != "approved" → store re-lanzará InvalidTransition en el paso 5;
     #    validarlo acá primero y lanzar InvalidTransition directamente (mensaje claro).
     # 3) Si p["artifact_type"] not in store.APPLIABLE_ARTIFACT_TYPES →
     #    ValueError("artifact_not_appliable").
+    # 3b) C6 anti-drift (solo prompt_file con base_hash no nulo): actual =
+    #    sha256 hex del contenido ACTUAL del target, o el literal "absent" si no
+    #    existe; si p["base_hash"] != actual → RuntimeError("target_drifted") SIN
+    #    escribir nada (la API lo mapea a 409 target_drifted).
     # 4) side-effect según artifact_type (abajo). Si falla →
     #    store.append_ledger({"event": "apply_failed", ...}) y re-raise
     #    RuntimeError("apply_failed: <detalle>") — la propuesta QUEDA en approved.
     # 5) store.update_proposal_fields(pid, snapshot_info=...) y
     #    store.transition(pid, "apply", actor=actor).
 
-def rollback_proposal(proposal_id: str, *, actor: str = "operator") -> dict
-    # Simétrico: exige status "applied"; deshace según snapshot_info;
-    # store.transition(pid, "rollback", actor=actor).
+def rollback_proposal(proposal_id: str, *, actor: str = "operator", force: bool = False) -> dict
+    # Simétrico y también bajo _APPLY_LOCK (C3) + guard A1: exige status "applied";
+    # C6: para prompt_file, si sha256(contenido ACTUAL) != sha256(p["proposed_content"])
+    # (el archivo fue editado DESPUÉS del apply) y force es False →
+    # RuntimeError("target_drifted") sin tocar nada; con force=True restaura igual.
+    # Deshace según snapshot_info; store.transition(pid, "rollback", actor=actor).
 
 def maybe_auto_apply(proposal: dict) -> bool
     # human-on-the-loop. Devuelve False (sin efecto) salvo que TODO se cumpla:
-    #   getattr(_cfg, "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED", False) es True
+    #   store.evolution_hard_disabled() es False (A1 — el kill-switch gana SIEMPRE)
+    #   y getattr(_cfg, "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED", False) es True
     #   y proposal["aspect_id"] in _HOTL_ALLOWED_ASPECTS
     #   y proposal["artifact_type"] == "knowledge_note"
     #   y proposal["status"] == "draft"
     # Si aplica: encadena transition submit→approve con actor="auto_hotl" y
     # apply_proposal(actor="auto_hotl") — CADA transición queda en el ledger
     # (auditoría completa del bypass) + un evento {"event": "auto_apply"}.
-    # Cualquier excepción → False (best-effort; el draft queda para revisión manual).
+    # Cualquier excepción → False, PERO (C7) antes deja rastro best-effort:
+    # store.append_ledger({"event": "apply_failed", "actor": "auto_hotl",
+    # "proposal_id": ..., "note": str(exc)}) dentro de su propio try/except
+    # (el draft queda para revisión manual; nada muere en silencio).
 ```
 
 **Side-effects por `artifact_type` (contrato §4.3):**
@@ -769,7 +893,7 @@ def maybe_auto_apply(proposal: dict) -> bool
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_evolution_apply.py` (mismo fixture
 `data_dir→tmp_path`; para `prompt_file` monkeypatchear también
-`evolution_apply.agents_prompts_dir` a un `tmp_path / "agents"`). 10 casos:
+`evolution_apply.agents_prompts_dir` a un `tmp_path / "agents"`). 14 casos:
 1. `test_apply_knowledge_note_appendea_leccion` — tras apply, `lessons.jsonl` tiene 1 línea con `lesson_id` correcto y la propuesta queda `applied` con `applied_at` no nulo.
 2. `test_rollback_knowledge_note_remueve_leccion` — roundtrip → `lessons.jsonl` sin esa lección; status `rolled_back`.
 3. `test_apply_prompt_file_snapshot_y_escritura` — archivo previo con contenido A, propuesta con contenido B → archivo == B y snapshot == A.
@@ -780,12 +904,16 @@ def maybe_auto_apply(proposal: dict) -> bool
 8. `test_apply_desde_estado_no_aprobado` — `InvalidTransition`.
 9. `test_auto_apply_flag_off_noop` — con el flag OFF (default), `maybe_auto_apply` → False y el draft sigue `draft`.
 10. `test_auto_apply_on_solo_knowledge` — flag ON (monkeypatch de `_cfg`): un draft `knowledge_note` de `knowledge_rag` termina `applied` con actor `auto_hotl` en el ledger; un draft `prompt_file` NO se toca.
+11. `test_doble_apply_secuencial_no_duplica` (C3) — apply dos veces la misma propuesta `knowledge_note`: la 2ª lanza `InvalidTransition` y `lessons.jsonl` tiene EXACTAMENTE 1 línea (el side-effect no se duplicó); verificar además que `evolution_apply._APPLY_LOCK` existe y es `threading.Lock`.
+12. `test_apply_base_hash_drift` (C6) — propuesta `prompt_file` con `base_hash` del contenido A; el archivo se edita a A' ANTES del apply → `RuntimeError` con `"target_drifted"`, el archivo sigue A' (no se escribió) y la propuesta sigue `approved`. Con `base_hash=None` el mismo apply pasa (backward-compat).
+13. `test_rollback_drift_requiere_force` (C6) — apply OK escribe B; se edita el archivo a B' a mano; `rollback_proposal` sin force → `RuntimeError("target_drifted")` y el archivo sigue B'; con `force=True` → restaura el snapshot A byte-idéntico y status `rolled_back`.
+14. `test_hard_disable_bloquea_apply_y_hotl` (A1) — `monkeypatch.setenv("STACKY_EVOLUTION_HARD_DISABLE", "true")`: `apply_proposal` lanza `RuntimeError("evolution_hard_disabled")` y `maybe_auto_apply` (con el flag HOTL ON) devuelve `False` sin efectos.
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_evolution_apply.py -q
 ```
-**Criterio BINARIO:** 10/10 verdes.
+**Criterio BINARIO:** 14/14 verdes.
 **Flag:** `STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED` (OFF — EXCEPCIÓN DURA #1
 citada en F0) gobierna SOLO `maybe_auto_apply`; apply/rollback manuales quedan bajo el
 master (gateados por la API en F4).
@@ -810,7 +938,7 @@ costo acotado y sin autonomía.
 ```python
 _CYCLE_LOCK = threading.Lock()           # single-flight
 _WINDOW_DAYS = 14
-_ERROR_STATUSES = ("error",)
+_ERROR_STATUSES = ("error", "failed")    # C4: agent_runner marca AMBOS (p.ej. agent_runner.py:117 "failed", :289 "error")
 _INCIDENT_TERMINAL = ("publicada", "error")
 _ANALYZE_SYSTEM = (
     "Sos el redactor del Centro de Evolución de Stacky. Recibís señales de telemetría "
@@ -834,8 +962,9 @@ def enrich_with_llm(draft_specs: list[dict], signals: dict) -> tuple[list[dict],
     # "signals_truncated": bool}.
     # 1) budget = int(getattr(_cfg, "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET", 20000)).
     # 2) user = json.dumps({"signals": signals, "drafts": [...]}, ensure_ascii=False);
-    #    si _estimate_tokens(user) > budget → truncar user a budget*4 chars y
-    #    signals_truncated=True.
+    #    si _estimate_tokens(user) > budget → truncar user a budget*4 chars, agregarle
+    #    el sufijo literal "[TRUNCADO_POR_PRESUPUESTO]" (C8: el JSON queda partido a
+    #    propósito y el marcador se lo dice al modelo) y signals_truncated=True.
     # 3) from copilot_bridge import invoke_local_llm; llamarla con
     #    agent_type="evolution_analyze", system=_ANALYZE_SYSTEM, user=user,
     #    on_log=lambda level, msg: None, execution_id=None, model=None.
@@ -846,16 +975,23 @@ def enrich_with_llm(draft_specs: list[dict], signals: dict) -> tuple[list[dict],
     # 5) tokens_est_out = _estimate_tokens(resp.text) cuando hubo respuesta.
 
 def run_cycle(*, aspects: list[str] | None = None, use_llm: bool = True) -> dict
+    # 0) A1: if store.evolution_hard_disabled(): raise RuntimeError("evolution_hard_disabled").
     # 1) if not _CYCLE_LOCK.acquire(blocking=False): raise RuntimeError("cycle_already_running")
     #    (try/finally release).
     # 2) store.ensure_seed_aspects(); filtrar draft_specs por `aspects` si vino.
     # 3) signals = collect_signals(); specs = analyze(signals);
     #    (specs, info) = enrich_with_llm(specs, signals) SOLO si use_llm.
-    # 4) por cada spec → store.create_proposal(..., origin="mape",
+    # 4) C5 dedup ANTES de crear: abiertas = store.list_proposals() con
+    #    status in ("draft", "pending_review"); si ya existe una abierta con el MISMO
+    #    aspect_id y el MISMO evidence[0] (rule_id) que el spec → NO crear, agregar el
+    #    rule_id a skipped_duplicate_rules (el ciclo no spamea la bandeja mientras la
+    #    condición persista; al cerrarse la propuesta, la regla puede volver a emitir).
+    #    Por cada spec NO duplicado → store.create_proposal(..., origin="mape",
     #    initial_status="draft", cycle_id=cid, actor="mape").
     # 5) por cada propuesta creada → evolution_apply.maybe_auto_apply(p)
     #    (no-op salvo flag HOTL ON — ver F2).
-    # 6) record §4.9 → store.append_cycle(record) + ledger {"event": "cycle", ...};
+    # 6) record §4.9 (incluye skipped_duplicate_rules) → store.append_cycle(record) +
+    #    ledger {"event": "cycle", ...};
     #    devolver record. Cualquier excepción → record con status="error" y re-raise NO:
     #    se persiste el record de error y se devuelve (el endpoint lo muestra).
 ```
@@ -882,10 +1018,10 @@ Detalle del Monitor (fuentes EXACTAS, cada una en su `try/except` que deja
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_evolution_cycle.py` (fixture
 `data_dir→tmp_path`; monkeypatch de `ca.load_records`, `incident_store.list_incidents`,
 `plans_board.get_board_cached` con fixtures sintéticos; monkeypatch de
-`copilot_bridge.invoke_local_llm` donde aplique). 11 casos:
+`copilot_bridge.invoke_local_llm` donde aplique). 12 casos:
 1. `test_collect_signals_shape` — con mocks devuelve EXACTAMENTE las claves de §4.6.
 2. `test_fuente_caida_no_tumba` — `list_incidents` lanza → `signals["incidents"]["error"]` presente y el resto completo.
-3. `test_ra1_error_rate` — fixture con 6 runs de `developer`, 3 con status `"error"` → draft `agent_prompts` con `evidence[0]=="R-A1"`.
+3. `test_ra1_error_rate` — fixture con 6 runs de `developer`, 2 con status `"error"` y 1 con `"failed"` (C4: ambos cuentan) → draft `agent_prompts` con `evidence[0]=="R-A1"`.
 4. `test_ra2_concentracion_costo` — 70% del USD en un modelo, total ≥ 1.0 → draft `config_flags_models` con `"R-A2"`.
 5. `test_ra3_incidencias_stale` — 3 incidencias no terminales de hace 3 días → draft `knowledge_note` con `proposed_content` no vacío y `"R-A3"`.
 6. `test_ra4_drift_planes` — 2 cards con `doc_drift=True` → draft `stacky_codebase` con `"R-A4"`.
@@ -894,12 +1030,13 @@ Detalle del Monitor (fuentes EXACTAS, cada una en su `try/except` que deja
 9. `test_llm_reescribe_solo_titulo_rationale` — mock devuelve JSON válido → title/rationale cambian; aspect/artifact/evidence NO.
 10. `test_presupuesto_trunca` — señales gigantes + budget chico (monkeypatch `_cfg`) → `signals_truncated True` y el `user` enviado al mock mide ≤ budget*4 chars.
 11. `test_single_flight` — con el lock tomado, `run_cycle` lanza `RuntimeError("cycle_already_running")`.
+12. `test_ciclo_dedup_no_duplica_drafts` (C5) — dos `run_cycle` seguidos con las MISMAS señales que disparan R-A1: la 1ª corrida crea 1 draft; la 2ª crea 0, su record tiene `skipped_duplicate_rules == ["R-A1"]` y `list_proposals()` sigue con 1 propuesta.
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_evolution_cycle.py -q
 ```
-**Criterio BINARIO:** 11/11 verdes.
+**Criterio BINARIO:** 12/12 verdes.
 **Flag:** `STACKY_EVOLUTION_CYCLE_ENABLED` (la API la gatea en F4; el módulo en sí es puro).
 **Impacto por runtime:** Claude Code CLI / Codex CLI / GitHub Copilot Pro — **idéntico**:
 el ciclo corre en el backend, sin tocar el runtime de agentes. **Fallback:** sin
@@ -925,6 +1062,9 @@ from config import config as _cfg                       # G1
 bp = Blueprint("evolution", __name__, url_prefix="/evolution")
 
 def _enabled() -> bool:
+    from services import evolution_store as _st          # lazy (patrón del archivo)
+    if _st.evolution_hard_disabled():                    # A1: el kill-switch gana SIEMPRE
+        return False
     return bool(getattr(_cfg, "STACKY_EVOLUTION_CENTER_ENABLED", False))
 
 def _cycle_enabled() -> bool:
@@ -936,15 +1076,20 @@ def _disabled_resp():
 ```
 
 Rutas (imports de `services` LAZY dentro de cada handler — patrón del Plan 128,
-`api/plans_board.py`): `GET /health` (siempre 200, `{"ok": True, "flag_enabled": _enabled()}`),
+`api/plans_board.py`): `GET /health` (siempre 200,
+`{"ok": True, "flag_enabled": _enabled(), "hard_disabled": evolution_store.evolution_hard_disabled()}`),
 `GET /overview` (llama `ensure_seed_aspects()`, arma `counts` por status sobre
 `list_proposals()` y `last_cycle` = primer elemento de `read_cycles_tail(1)` o `None`),
 `GET /proposals` (query params `status/aspect_id/origin` pasados tal cual al store),
 `GET /proposals/<pid>`, `POST /proposals` (mapea `ValueError` con `"invalid_payload"` →
 400; `origin` del body, default `"manual"`; `actor="operator"` salvo
-`origin=="optimizer"` → `actor="optimizer"`), `POST /proposals/<pid>/transition`
+`origin=="optimizer"` → `actor="optimizer"`; acepta `base_hash` opcional del body — C6),
+`POST /proposals/<pid>/transition`
 (mapea `InvalidTransition` → 409 `invalid_transition`; `ValueError("artifact_not_appliable")`
-→ 409 `artifact_not_appliable`; `RuntimeError("apply_failed…")` → 502 `apply_failed`;
+→ 409 `artifact_not_appliable`; `RuntimeError` cuyo mensaje empieza con `"target_drifted"`
+→ 409 `target_drifted` (C6); cualquier otro `RuntimeError("apply_failed…")` → 502
+`apply_failed`; el bool `force` del body (default `false`) se pasa SOLO a
+`rollback_proposal(force=...)`;
 acciones `apply`/`rollback` van vía `evolution_apply`, el resto vía `store.transition`
 con `actor="operator"`), `POST /cycle/run` (gate extra `_cycle_enabled()` → si el master
 ON pero CYCLE OFF → 404 con `error="evolution_cycle_disabled"`;
@@ -964,7 +1109,7 @@ api_bp.register_blueprint(evolution_bp)  # Plan 167 — url_prefix="/evolution" 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_evolution_endpoints.py` (fixtures
 `app_flag_off`/`app_flag_on` espejo del patrón real
 `tests/test_plan87_devops_endpoints.py:6-29` cambiando el attr a
-`STACKY_EVOLUTION_CENTER_ENABLED`; + fixture `data_dir→tmp_path`). 10 casos:
+`STACKY_EVOLUTION_CENTER_ENABLED`; + fixture `data_dir→tmp_path`). 11 casos:
 1. `test_health_200_flag_off` — 200 y `flag_enabled False`.
 2. `test_overview_404_flag_off` — 404 `evolution_disabled`.
 3. `test_overview_200_con_seeds` — flag ON → 200 con 4 aspects y `counts` con las 6 claves de status.
@@ -975,12 +1120,13 @@ api_bp.register_blueprint(evolution_bp)  # Plan 167 — url_prefix="/evolution" 
 8. `test_transition_invalida_409` — approve sobre `draft` → 409 `invalid_transition`.
 9. `test_cycle_run_gate_y_shape` — con CYCLE OFF → 404 `evolution_cycle_disabled`; con ON (mocks del Monitor como en F3) → 200 con las claves de §4.9.
 10. `test_rutas_sin_doble_prefijo` — el url_map contiene `/api/evolution/overview` y NO `/api/api/evolution/overview` (centinela, patrón `test_plan74_routes_registered.py`).
+11. `test_hard_disable_env_gana` (A1) — con flag master ON y `monkeypatch.setenv("STACKY_EVOLUTION_HARD_DISABLE", "1")`: `GET /overview` → 404 `evolution_disabled` y `GET /health` → 200 con `hard_disabled true`.
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_evolution_endpoints.py -q
 ```
-**Criterio BINARIO:** 10/10 verdes.
+**Criterio BINARIO:** 11/11 verdes.
 **Flag:** `STACKY_EVOLUTION_CENTER_ENABLED` (gating 404 verificado por tests).
 **Runtimes:** N/A (API local). **Trabajo del operador:** ninguno.
 
@@ -1003,7 +1149,7 @@ export const Evolution = {
   proposals: (q: { status?: string; aspect_id?: string; origin?: string } = {}) => { const p = new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][]); const qs = p.toString(); return fetch(`/api/evolution/proposals${qs ? `?${qs}` : ""}`).then((r) => { if (!r.ok) throw new Error(`evolution proposals ${r.status}`); return r.json(); }); },
   proposal: (id: string) => fetch(`/api/evolution/proposals/${id}`).then((r) => { if (!r.ok) throw new Error(`evolution proposal ${r.status}`); return r.json(); }),
   createProposal: (body: unknown) => fetch("/api/evolution/proposals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
-  transition: (id: string, action: string, note?: string) => fetch(`/api/evolution/proposals/${id}/transition`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, note: note ?? null }) }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  transition: (id: string, action: string, note?: string, force?: boolean) => fetch(`/api/evolution/proposals/${id}/transition`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, note: note ?? null, force: force ?? false }) }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
   runCycle: (useLlm: boolean) => fetch("/api/evolution/cycle/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aspects: null, use_llm: useLlm }) }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
   ledger: (limit = 50) => fetch(`/api/evolution/ledger?limit=${limit}`).then((r) => r.json()),
   cycles: (limit = 20) => fetch(`/api/evolution/cycles?limit=${limit}`).then((r) => r.json()),
@@ -1019,8 +1165,8 @@ export type ArtifactType = "free_text" | "knowledge_note" | "prompt_file" | "fla
 export type LoopMode = "human_in_the_loop" | "human_on_the_loop";
 export interface AspectDto { id: string; name: string; description: string; target_kind: string; loop_mode: LoopMode; links: { label: string; href: string }[]; created_at: string; }
 export interface FitnessDto { score: number | null; metrics: Record<string, unknown>; eval_ref: string | null; evaluated_at: string; }
-export interface ProposalDto { id: string; aspect_id: string; title: string; rationale: string; origin: ProposalOrigin; artifact_type: ArtifactType; target_ref: string | null; proposed_content: string | null; evidence: string[]; status: ProposalStatus; fitness_before: FitnessDto | null; fitness_after: FitnessDto | null; parent_proposal_id: string | null; cycle_id: string | null; snapshot_info: Record<string, unknown> | null; notes: { ts: string; actor: string; text: string }[]; created_at: string; updated_at: string; applied_at: string | null; rolled_back_at: string | null; }
-export interface CycleDto { id: string; started_at: string; finished_at: string; status: string; error: string | null; rules_fired: string[]; proposal_ids: string[]; llm_used: boolean; llm_error: string | null; tokens_est_in: number; tokens_est_out: number; signals_truncated: boolean; }
+export interface ProposalDto { id: string; aspect_id: string; title: string; rationale: string; origin: ProposalOrigin; artifact_type: ArtifactType; target_ref: string | null; proposed_content: string | null; base_hash: string | null; evidence: string[]; status: ProposalStatus; fitness_before: FitnessDto | null; fitness_after: FitnessDto | null; parent_proposal_id: string | null; cycle_id: string | null; snapshot_info: Record<string, unknown> | null; notes: { ts: string; actor: string; text: string }[]; created_at: string; updated_at: string; applied_at: string | null; rolled_back_at: string | null; }
+export interface CycleDto { id: string; started_at: string; finished_at: string; status: string; error: string | null; rules_fired: string[]; skipped_duplicate_rules: string[]; proposal_ids: string[]; llm_used: boolean; llm_error: string | null; tokens_est_in: number; tokens_est_out: number; signals_truncated: boolean; }
 
 // tono del StatusChip (valores REALES del barrel: components/ui/StatusChip.tsx:4)
 export function statusTone(s: ProposalStatus): "success" | "warning" | "danger" | "info" | "neutral"
@@ -1134,7 +1280,11 @@ gateadas, botón de ciclo y ledger.
   `Button` del barrel; las de `confirm: true` con `ConfirmButton`
   (`components/ConfirmButton.tsx:23`) — NUNCA diálogos nativos del navegador).
   Para `flag_change` aprobadas: en lugar de "Aplicar", link "Cambiar en el Arnés" con
-  `flagDeepLink(target_ref)`. Fila expandible (click) → detalle: rationale, evidence
+  `flagDeepLink(target_ref)`.
+  **Manejo de 409 `target_drifted` (C6):** si viene de `apply` → Toast `warning`
+  "El artefacto cambió desde que se creó la propuesta — regenerala"; si viene de
+  `rollback` → Toast `warning` con un segundo `ConfirmButton` "Forzar revert (pisa la
+  edición manual)" que reintenta `Evolution.transition(id, "rollback", note, true)`. Fila expandible (click) → detalle: rationale, evidence
   completa, `proposed_content` en `<pre>` con scroll, notes, snapshot_info.
 - **Empty state:** `EmptyState` (`components/EmptyState.tsx`, Plan 140) cuando no hay
   propuestas tras filtrar: título "Sin propuestas todavía", hint "Corré un ciclo MAPE o
@@ -1257,6 +1407,17 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 - **R9 — Un ciclo colgado deja el lock tomado.** El lock se libera en `finally` y el
   ciclo es síncrono dentro del request; el peor caso es el timeout del LLM local ya
   acotado (R7). El 409 `cycle_already_running` es informativo, no un deadlock.
+- **R10 — Drift y carreras sobre el mismo artefacto (sesión paralela, dos pestañas, otra
+  propuesta aplicada).** Mitigación v2: `base_hash` chequeado en apply (409
+  `target_drifted`, C6), rollback que detecta edición posterior y exige `force` explícito
+  (C6), `_APPLY_LOCK` end-to-end con re-chequeo de status (C3). El snapshot SIEMPRE se
+  toma del contenido real previo al write, así el rollback nunca pierde datos aunque el
+  operador fuerce.
+- **R11 — El sistema propone tocar sus propias flags de gobernanza.** Una propuesta
+  `flag_change` puede apuntar a `STACKY_EVOLUTION_*` (p.ej. sugerir prender el
+  auto-apply). Eso es aceptable porque `flag_change` JAMÁS se aplica solo (§4.3) — pero
+  el freno de última instancia es A1: `STACKY_EVOLUTION_HARD_DISABLE` vive FUERA del
+  registry y de la app; ninguna propuesta ni flag puede alcanzarlo.
 
 ## 7. Fuera de scope (explícito)
 
@@ -1278,6 +1439,13 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 
 ## 8. Contratos hacia 168 / 169 / 170 (congelados acá, implementados allá)
 
+### 8.0 → Los TRES planes (A1 — kill-switch compuesto, contrato NUEVO en v2)
+- `services/evolution_store.evolution_hard_disabled()` es el único lector del env
+  `STACKY_EVOLUTION_HARD_DISABLE`. Los planes 168, 169 y 170 DEBEN componer su gate de
+  habilitación con este helper (1 línea en su `_enabled()`/equivalente), de modo que el
+  kill-switch apague la SERIE COMPLETA de un solo golpe. Sus health endpoints pueden
+  exponer `hard_disabled` igual que el del 167.
+
 ### 8.1 → Plan 168 (arnés de evaluación / fitness)
 - **Campo:** `fitness_before` / `fitness_after` de cada propuesta, shape §4.7. El 167 los
   persiste `null` y los muestra "—".
@@ -1291,9 +1459,16 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
   de jueces LLM.
 
 ### 8.2 → Plan 169 (optimizador evolutivo)
-- **Inyección:** `POST /api/evolution/proposals` con `origin="optimizer"`,
-  `parent_proposal_id` para lineage y `evidence` con las trazas leídas (estilo GEPA:
-  reflexión sobre trazas completas, no reward escalar).
+- **Inyección (C10 — DOS vías equivalentes, misma validación):** por HTTP
+  `POST /api/evolution/proposals`, o por llamada de servicio in-process
+  `evolution_store.create_proposal(...)` (lo que el 169 v1 ya especifica) — ambas con
+  `origin="optimizer"`, `parent_proposal_id` para lineage y `evidence` con las trazas
+  leídas (estilo GEPA: reflexión sobre trazas completas, no reward escalar). Toda la
+  validación vive en `create_proposal`, así que las dos vías son el mismo contrato.
+- **`base_hash` (C6, recomendación fuerte):** el optimizador DEBE enviar
+  `base_hash = sha256 hex del texto del artefacto que mutó` en cada propuesta
+  `prompt_file`, para que el apply detecte drift del artefacto entre la corrida y la
+  aprobación. Con `null` sigue funcionando (sin chequeo).
 - **Archive:** `list_proposals()` sin filtro ES el archive (nunca se borra — R2); el
   buffer Pareto/selección vive en el 169, no acá.
 - **Gate:** las propuestas del optimizador entran `pending_review` — el operador sigue
@@ -1323,6 +1498,8 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 | **ledger de evolución** | `ledger.jsonl` append-only: cada creación/transición/aplicación queda registrada con actor y timestamp. La auditoría del loop. |
 | **ciclo (EvolutionCycleRun)** | Una corrida on-demand del MAPE, persistida en `cycles.jsonl` con señales, reglas disparadas, tokens estimados y propuestas emitidas. |
 | **flag del arnés / patrón triple** | Toggle declarado en `harness_flags.py` (FlagSpec) + leído desde `config.py` + editable desde el panel del Arnés en la UI (registry dinámico). |
+| **kill-switch (A1)** | Env var interna `STACKY_EVOLUTION_HARD_DISABLE`: si es `1/true/yes`, TODO el Centro de Evolución (endpoints, ciclo, apply, auto-apply) queda apagado sin importar las flags. NO aparece en la UI: es un freno de emergencia fuera del alcance del propio sistema. |
+| **base_hash (C6)** | sha256 del contenido del artefacto sobre el que se redactó una propuesta `prompt_file`. Si al aplicar el contenido actual ya no coincide, el apply se niega (409 `target_drifted`): el operador aprueba diffs reales, no diffs viejos. |
 | **3 runtimes** | Codex CLI, Claude Code CLI y GitHub Copilot Pro — los motores que ejecutan agentes de Stacky. Este plan es backend+panel: idéntico en los 3; el único LLM que usa es el modelo LOCAL (Ollama/LM Studio), opcional. |
 | **data dir** | `runtime_paths.data_dir()` — carpeta de datos del runtime (en deploy, `DeployStackyAgents\data`). Todo lo que este plan persiste vive ahí, no en el repo. |
 | **ratchet** | Tests-trinquete del repo: contadores que solo pueden bajar (deuda UI) y listas que solo pueden crecer (registro de suites). Los tests nuevos DEBEN registrarse. |
@@ -1331,10 +1508,10 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 ## 10. Orden de implementación
 
 1. **F0** — flags + config + help + meta-tests (foto previa de `test_harness_flags.py`).
-2. **F1** — store puro + 12 tests.
-3. **F2** — apply/rollback/auto-apply + 10 tests.
-4. **F3** — ciclo MAPE + 11 tests.
-5. **F4** — API + registro + 10 tests.
+2. **F1** — store puro + 14 tests.
+3. **F2** — apply/rollback/auto-apply + 14 tests.
+4. **F3** — ciclo MAPE + 12 tests.
+5. **F4** — API + registro + 11 tests.
 6. **F5** — modelo TS + namespace endpoints + 10 tests.
 7. **F6** — página + wiring App.tsx/shellNav/tests de shell + tsc + ratchet UI.
 8. **F7** — ratchet de tests + estado del doc + corrida completa de cierre.
@@ -1345,7 +1522,7 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
       + help + curated + requires), editables desde la UI del Arnés; `harness_defaults.env`
       NO tocado a mano (G12).
 - [ ] Los 5 archivos de test backend verdes POR ARCHIVO con los comandos exactos de §5
-      (53 casos: 8+12+10+11+10 + los meta de flags), registrados en `HARNESS_TEST_FILES`
+      (59 casos: 8+14+14+12+11 + los meta de flags), registrados en `HARNESS_TEST_FILES`
       (sh + ps1).
 - [ ] `model.test.ts` (10 casos) y `shellNav.test.ts` (actualizado a 17 tabs) verdes;
       `npx tsc --noEmit` exit 0; `uiDebtRatchet` verde (cero inline-style nuevo).
@@ -1357,11 +1534,16 @@ antes/después). **Runtimes:** N/A. **Trabajo del operador:** ninguno.
       y se muestran "—" (KPI-5 — contratos 168/169 vivos).
 - [ ] `closed_loop` rechazado por el store (test F1 caso 11); `maybe_auto_apply` inerte
       con el flag OFF (default) y auditado en el ledger cuando ON.
+- [ ] Kill-switch A1 verificado: con `STACKY_EVOLUTION_HARD_DISABLE=1`, endpoints → 404,
+      `health.hard_disabled == true`, `apply_proposal`/`run_cycle` rechazan y
+      `maybe_auto_apply` devuelve False (tests F2 caso 14 y F4 caso 11).
+- [ ] `update_proposal_fields` limitado a `_PATCHABLE_FIELDS` (C2, test F1 caso 13): el
+      status SOLO muta por `transition()`.
 - [ ] Cero pollers nuevos en el frontend (G9): ni `setInterval` ni `refetchInterval` en
       los archivos nuevos (verificable:
       `grep -c "setInterval" "Stacky Agents/frontend/src/pages/EvolutionCenterPage.tsx"` → `0`).
-- [ ] El ciclo NO corre en startup ni en background: `run_cycle` solo tiene un caller en
-      `api/evolution.py` (verificable:
-      `grep -rn "run_cycle" "Stacky Agents/backend" --include=*.py | grep -v tests | grep -v evolution` → 0 matches fuera de los módulos del plan).
+- [ ] El ciclo NO corre en startup ni en background: `run_cycle` solo tiene callers en
+      `api/evolution.py` y en su propio módulo (verificable con pathspec fino — C9:
+      `grep -rn "run_cycle" "Stacky Agents/backend" --include=*.py | grep -v "/tests/" | grep -v "services/evolution_cycle.py" | grep -v "api/evolution.py"` → 0 matches).
 - [ ] Encabezado `**Estado:**` de este doc actualizado al cerrar; `git status` final con
       WIP ajeno intacto (G13).

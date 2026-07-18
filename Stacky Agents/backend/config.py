@@ -983,6 +983,14 @@ class Config:
         "STACKY_INCIDENT_DEV_RESOLVER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 177 — Auto-PR del Dev Resolutor de Incidencias. Default ON: sólo
+    # dispara el commit+PR cuando el operador dejó el checkbox "Abrir PR"
+    # marcado en la resolución (opt-out por-run). Kill-switch por UI: OFF oculta
+    # el checkbox y no abre ningún PR (byte-idéntico a hoy).
+    STACKY_INCIDENT_DEV_PR_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_DEV_PR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 77 — Postea análisis funcional/técnico/implementación de un Issue como
     # comentarios idempotentes en el mismo WI (sin tickets hijos). Default OFF.
     STACKY_ISSUE_PHASE_COMMENTS_ENABLED: bool = os.getenv(

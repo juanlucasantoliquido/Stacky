@@ -316,6 +316,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INCIDENT_VISION_MODEL",            # Plan 166 F2 — modelo de visión
         "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",    # Plan 166 F3 — creación directa/lote
         "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
+        "STACKY_INCIDENT_DEV_PR_ENABLED",          # Plan 177 — auto-PR del Dev Resolutor
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -3363,6 +3364,13 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Agente Dev Resolutor de Incidencias",
         description="Habilita el botón 'Resolver con agente' en las Issues para que un agente dev analice el repo y proponga el fix.",
         group="global",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_DEV_PR_ENABLED",
+        type="bool", default=True,
+        label="Abrir PR al resolver incidencias",
+        description="Tras resolver una Issue con el agente dev, abre automáticamente un Pull Request con el fix y los tests (podés desmarcar el checkbox al resolver). Requiere el Agente Dev Resolutor.",
+        group="global", requires="STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
     ),
 )
 

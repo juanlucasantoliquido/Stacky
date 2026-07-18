@@ -25,6 +25,9 @@ def incidents_status():
         # Plan 166 F5 — el board usa este campo para mostrar/ocultar el botón
         # "Resolver con agente" en las Issues.
         "dev_resolver_enabled": bool(getattr(_cfg, "STACKY_INCIDENT_DEV_RESOLVER_ENABLED", False)),
+        # Plan 177 — el board usa este campo para mostrar/ocultar el checkbox
+        # "Abrir PR" junto al botón "Resolver con agente".
+        "dev_pr_enabled": bool(getattr(_cfg, "STACKY_INCIDENT_DEV_PR_ENABLED", False)),
     })
 
 

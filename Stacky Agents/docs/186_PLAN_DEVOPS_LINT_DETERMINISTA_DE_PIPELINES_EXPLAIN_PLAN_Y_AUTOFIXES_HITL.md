@@ -1,9 +1,41 @@
 # Plan 186 — DevOps: lint determinista de pipelines, explain-plan y autofixes HITL
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (continúa 87/88/93/96/97/99/102/103/104/116 sin duplicarlos)
+
+## Changelog v1 → v2 (crítica C1..C9 + adiciones)
+
+- **C1 (IMPORTANTE, falsos positivos PL005):** un job ADO `- deployment:` (usa `strategy:`, no `steps:`)
+  y un job GitLab con `run:` o `extends:` ya NO se marcan como "sin pasos ejecutables". Regla reescrita
+  con el conjunto EXACTO de claves ejecutables por provider + 2 tests negativos nuevos.
+- **C2 (IMPORTANTE, semántica ADO):** "dependsOn ausente ⇒ depende del anterior" aplica SOLO a stages;
+  los jobs dentro de un stage son PARALELOS por default (cero aristas implícitas). Afecta PL003/PL004 y
+  explain-plan; test nuevo `test_kpi4_jobs_ado_paralelos_sin_dependson`.
+- **C3 (IMPORTANTE, autofix PL002 renombraba la ocurrencia equivocada):** `_find_line` devuelve la
+  primera coincidencia; para un duplicado eso renombraba la definición ORIGINAL y rompía los
+  `dependsOn` que apuntan a ella. v2 introduce `_find_line_nth` y refuerza KPI-5: un fix NO puede
+  aumentar `counts["error"]` ni introducir códigos nuevos.
+- **C4 (IMPORTANTE, extracción de refs):** PL010 ya no dice "todo el texto de steps": se especifica el
+  walk recursivo EXACTO sobre el árbol parseado (claves ejecutables + `env:`/`variables:`), nunca regex
+  sobre el YAML crudo (los comentarios no generan refs).
+- **C5 (IMPORTANTE, PL002 GitLab):** pre-scan por regex con límites DECLARADOS (claves quoteadas y
+  templates `.ocultos` fuera de alcance v1, documentado) + test de no-crash con clave quoteada.
+- **C6 (IMPORTANTE, race UI):** `PipelineLintPanel` lleva contador de secuencia de requests y descarta
+  respuestas viejas (solo pinta la última).
+- **C7 (IMPORTANTE, highlight):** instrucción concreta y retrocompatible para `PipelineYamlPreview`:
+  render por líneas SOLO cuando `highlightLine` está definido; `undefined` = render actual intacto.
+- **C8 (MENOR):** esqueleto F0 sin import `field` muerto; test 400 para `source` inválido agregado.
+- **C9 (MENOR):** cota documentada del payload: los `fix.new_yaml` se omiten si el YAML fuente
+  supera 200 KB (`findings[].fix = null` + `fixes_omitted: true` en el report).
+- **[ADICIÓN ARQUITECTO 1]:** PL012 ampliado con detección determinista de PREFIJOS de tokens conocidos
+  en VALORES (`ghp_`, `github_pat_`, `glpat-`, `xoxb-`, `xoxp-`, `AKIA`, `eyJhbGciOi`) — cubre el caso
+  "nombre inocente, valor secreto" que la v1 no veía.
+- **[ADICIÓN ARQUITECTO 2]:** selftest del catálogo de reglas (`test_plan186_lint_catalogo.py`): cada
+  regla registrada declara un repro mínimo embebido que la dispara; el meta-test itera `_RULES` y falla
+  si una regla queda sin repro, con código duplicado, severidad inválida o mensaje vacío. Canario
+  anti-drift para cuando el catálogo crezca.
 
 ---
 
@@ -26,10 +58,10 @@ depender de ningún runtime LLM.
 | KPI | Métrica | Criterio binario |
 |-----|---------|------------------|
 | KPI-1 | Detección | Los 12 YAML rotos del corpus del plan (6 ADO + 6 GitLab) producen ≥1 finding `error` cada uno, con el código esperado |
-| KPI-2 | Cero falsos positivos | Los YAML producidos por `to_ado_yaml`/`to_gitlab_yaml` sobre los specs del corpus de `test_plan73_round_trip.py` lintean con `counts["error"] == 0` |
+| KPI-2 | Cero falsos positivos | Los YAML producidos por `to_ado_yaml`/`to_gitlab_yaml` sobre los specs del corpus de `test_plan73_round_trip.py` lintean con `counts["error"] == 0`; ADO `- deployment:` y GitLab `run:`/`extends:` NO disparan PL005 |
 | KPI-3 | Velocidad + pureza | Lint del corpus completo < 500 ms total, con `socket` bloqueado por monkeypatch (cero red) |
-| KPI-4 | Explain-plan correcto | El caso diamante A→(B,C)→D devuelve fases `[["A"],["B","C"],["D"]]` exactas |
-| KPI-5 | Autofix seguro | Cada autofix aplicado produce YAML que (a) parsea y (b) re-lintea sin ese código en esa línea |
+| KPI-4 | Explain-plan correcto | El caso diamante de stages A→(B,C)→D devuelve fases `[["A"],["B","C"],["D"]]` exactas; 2 jobs ADO sin `dependsOn` dentro de un stage quedan en la MISMA fase (paralelos) |
+| KPI-5 | Autofix seguro (reforzado C3) | Cada autofix aplicado produce YAML que (a) parsea, (b) re-lintea sin ese código en esa línea, (c) NO aumenta `counts["error"]` total y (d) NO introduce códigos que no estaban |
 
 **Ganancia robusta:** cada corrida CI fallida por un error detectable estáticamente cuesta 2-10 minutos de
 espera + un ciclo de atención del operador. El lint elimina esa clase entera de fallos antes de publicar.
@@ -60,9 +92,10 @@ Evidencia del estado actual (verificada en el repo):
 
 **Gap:** entre "el spec tiene los campos" (73) y "la conexión funciona" (93) falta la capa que TODA
 plataforma CI seria tiene y Stacky no: análisis estático profundo del pipeline con catálogo de reglas,
-explain-plan y fixes. Los planes 177-184 de la serie paralela atacan incidencias y DB Compare; ninguno
-toca esto. Es el eslabón DevOps de mayor valor por esfuerzo que queda libre: puro backend+UI, cero
-dependencias nuevas (PyYAML ya se usa en `services/pipeline_renderers.py`), cero credenciales, cero LLM.
+explain-plan y fixes. Los planes 177-185 de la serie paralela atacan incidencias, drift de ambientes y
+DB Compare; ninguno toca esto. Es el eslabón DevOps de mayor valor por esfuerzo que queda libre: puro
+backend+UI, cero dependencias nuevas (PyYAML ya se usa en `services/pipeline_renderers.py`), cero
+credenciales, cero LLM.
 
 ---
 
@@ -130,7 +163,8 @@ FlagSpec(
    **Gotcha:** una FlagSpec bool default ON fuera de `_CURATED_DEFAULTS_ON` rompe
    `test_default_known_only_for_curated`.
 
-3. CREAR `services/pipeline_lint.py` con este esqueleto EXACTO (las reglas llegan en F1-F2):
+3. CREAR `services/pipeline_lint.py` con este esqueleto EXACTO (las reglas llegan en F1-F2; C8: sin
+   import `field`):
 
 ```python
 """services/pipeline_lint.py — Plan 186. Lint determinista de pipelines ADO/GitLab.
@@ -140,13 +174,16 @@ PURO: sin red, sin disco, sin config. Recibe texto y devuelve LintReport.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 
 ENGINE_VERSION = "186.1"
 
 SEV_ERROR = "error"
 SEV_WARNING = "warning"
 SEV_INFO = "info"
+
+# C9 — por encima de este tamaño de YAML no se adjuntan new_yaml de fixes (payload acotado)
+MAX_YAML_BYTES_FOR_FIXES = 200_000
 
 
 @dataclass(frozen=True)
@@ -172,6 +209,7 @@ class LintReport:
     counts: dict                    # {"error": n, "warning": n, "info": n}
     engine_version: str
     duration_ms: float
+    fixes_omitted: bool = False     # C9 — True si el YAML superó MAX_YAML_BYTES_FOR_FIXES
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -230,7 +268,8 @@ def pipeline_lint_validate_route():
 - `test_endpoint_200_reporte_vacio_flag_on` — con flag ON (monkeypatch del atributo en
   `_config.config`), body `{"source":"ado","yaml":"stages: []\n"}` → 200 con
   `{"ok": true, "findings": [], "engine_version": "186.1", ...}`.
-- `test_endpoint_400_payload_invalido` — sin `source` o sin `yaml` → 400.
+- `test_endpoint_400_payload_invalido` — sin `source`, sin `yaml`, Y `source:"github"` (inválido, C8)
+  → 400 en los 3 casos.
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan186_lint_flag.py -q`
 (cwd = `Stacky Agents\backend`; SIEMPRE por archivo, nunca la suite entera).
@@ -272,11 +311,14 @@ class LintContext:
     data: object                      # yaml.safe_load(text) — dict | list | None
     known_variables: list[str] | None # nombres caja fuerte (F2); None = no disponible
 
-_RULES: list = []   # [(code, severity, providers, fn)]
+_RULES: list = []   # [(code, severity, providers, fn, repro)]
 
-def _rule(code: str, severity: str, providers: tuple[str, ...] = ("ado", "gitlab")):
+def _rule(code: str, severity: str, providers: tuple[str, ...] = ("ado", "gitlab"),
+          repro: tuple[str, str] | None = None):
+    """repro: (provider, yaml_minimo_que_dispara_la_regla) — OBLIGATORIO para toda regla
+    (ADICIÓN ARQUITECTO 2: el selftest del catálogo lo verifica)."""
     def deco(fn):
-        _RULES.append((code, severity, providers, fn))
+        _RULES.append((code, severity, providers, fn, repro))
         return fn
     return deco
 
@@ -286,49 +328,76 @@ def _find_line(ctx: LintContext, needle: str) -> int | None:
         if needle in ln:
             return i
     return None
+
+def _find_line_nth(ctx: LintContext, needle: str, nth: int) -> int | None:
+    """C3 — n-ésima línea (1-based, nth>=1) que contiene needle. None si hay menos de nth."""
+    count = 0
+    for i, ln in enumerate(ctx.lines, start=1):
+        if needle in ln:
+            count += 1
+            if count == nth:
+                return i
+    return None
 ```
 
 `lint_yaml` pasa a: (1) intentar `yaml.safe_load`; si `yaml.YAMLError` → finding único **PL001** con
 `line = e.problem_mark.line + 1` si existe `problem_mark`, si no `None`, y retorna (no corre más
 reglas). (2) construir `LintContext`. (3) iterar `_RULES` filtrando por provider; cada `fn(ctx)`
 devuelve `list[LintFinding]`; concatenar, ordenar por `(line or 10**9, code)`, armar counts y report.
+(4) C9: si `len(yaml_text.encode()) > MAX_YAML_BYTES_FOR_FIXES`, reemplazar cada finding por su copia
+con `fix=None` y marcar `fixes_omitted=True`.
 Toda regla va envuelta en `try/except Exception` → si una regla explota, se emite
 `LintFinding(code="PL000", severity=SEV_INFO, message=f"regla {code} falló: {exc}")` y el lint NUNCA
 tira 500 (robustez: un YAML raro no puede romper el editor).
 
-**Catálogo v1 de reglas estructurales (mensajes es-AR exactos como guía, línea via `_find_line`):**
+**Modelo de nodos por provider (C1/C2 — EXACTO, el implementador NO infiere):**
+
+- **ADO:** un stage = item de la lista `stages:` con clave `stage`. Un job = item de `jobs:` con clave
+  `job` **o** `deployment` (los deployment jobs ejecutan vía `strategy:`, NO tienen `steps` directos).
+  El "nombre" del nodo es el valor de esa clave.
+  - Grafo de STAGES: `dependsOn` (str o list). **Ausente ⇒ depende del stage DECLARADO ANTERIOR**
+    (semántica real de ADO). `dependsOn: []` ⇒ raíz (paralelo desde el inicio).
+  - Grafo de JOBS (dentro de un stage): `dependsOn` entre jobs. **Ausente ⇒ SIN aristas (los jobs son
+    PARALELOS por default en ADO)**. NUNCA agregar arista implícita job→job anterior (C2).
+- **GitLab:** un job = clave top-level cuyo valor es `dict`, que NO empieza con `.` (templates ocultos)
+  y NO está en las reservadas de PL006. Fases base = orden de `stages:`; `needs` agrega aristas.
+
+**Catálogo v1 de reglas estructurales (mensajes es-AR, línea via `_find_line`):**
 
 | Código | Sev | Provider | Detecta | Cómo (determinista) |
 |--------|-----|----------|---------|---------------------|
 | PL001 | error | ambos | YAML no parsea | `yaml.YAMLError` de `safe_load` |
-| PL002 | error | ambos | nombre duplicado de stage/job | ADO: recorrer `data["stages"]` lista → `stage` keys repetidas; jobs ídem dentro de cada stage. GitLab: `safe_load` ya colapsa keys duplicadas de jobs → detectar duplicados con un pre-scan regex por línea: claves top-level `^([A-Za-z_][\w .-]*):` repetidas (excluyendo las RESERVADAS de PL006) |
-| PL003 | error | ambos | dependencia a nodo inexistente | ADO: `dependsOn` (str o list) de cada stage/job no está en el conjunto de nombres. GitLab: `needs` (list de str o dicts con `job`) apunta a job inexistente |
-| PL004 | error | ambos | ciclo de dependencias | DFS con pila de recursión sobre el grafo de PL003; reportar el ciclo como "A → B → A" |
-| PL005 | error | ambos | job sin pasos ejecutables | ADO: job sin `steps` o `steps` vacía (y sin `template`). GitLab: job (clave top-level no reservada cuyo valor es dict) sin `script`/`trigger`/`extends` |
+| PL002 | error | ambos | nombre duplicado de stage/job | ADO: nombres repetidos en la lista de stages, o de jobs dentro del MISMO stage (claves `stage`/`job`/`deployment`). GitLab: `safe_load` colapsa keys duplicadas → pre-scan por línea con regex `^([A-Za-z_][\w .-]*):` sobre claves top-level NO reservadas; **límites v1 (C5, documentados):** claves quoteadas (`"x y":`) y templates `.ocultos` NO se analizan (fuera de alcance; no deben crashear ni reportar) |
+| PL003 | error | ambos | dependencia a nodo inexistente | ADO: `dependsOn` (str o list) de stage/job apunta a nombre que no existe EN SU MISMO nivel (stages entre sí; jobs dentro de su stage). GitLab: `needs` (list de str o dicts con clave `job`) apunta a job inexistente |
+| PL004 | error | ambos | ciclo de dependencias | DFS con pila de recursión sobre el grafo de PL003 (con la semántica de C2); reportar el ciclo como "A → B → A" |
+| PL005 | error | ambos | job sin pasos ejecutables | ADO: item con clave `job` sin NINGUNA de `{steps (lista no vacía), template}`. Los items con clave `deployment` NO se evalúan (ejecutan vía `strategy`, C1). GitLab: job sin NINGUNA de `{script, run, trigger, extends}` (C1) |
 | PL006 | info | ambos | clave desconocida en la raíz | ADO permitidas: `{trigger, pr, pool, variables, stages, jobs, steps, resources, parameters, name, schedules, extends, pipelines}`. GitLab reservadas: `{stages, variables, include, workflow, default, image, services, before_script, after_script, cache, pages}` — cualquier otra clave top-level cuyo valor NO sea dict (los dict son jobs) |
 
 Notas duras para el implementador:
-- GitLab: un "job" = clave top-level cuyo valor es `dict` y cuyo nombre no empieza con `.`
-  (templates ocultos) ni está en las reservadas de PL006.
 - ADO: si `data` no es dict o no tiene ni `stages` ni `jobs` ni `steps`, emitir PL006 info
   "estructura mínima no reconocida" y saltear PL002-PL005 (sin crashear).
-- `dependsOn` ausente en ADO = secuencial (depende del stage anterior declarado): para PL003/PL004
-  modelarlo así EXPLÍCITAMENTE.
+- Cada regla se registra con su `repro` mínimo (ADICIÓN ARQUITECTO 2); ejemplo:
+  `@_rule("PL002", SEV_ERROR, repro=("ado", "stages:\n- stage: A\n- stage: A\n"))`.
 
 **Tests PRIMERO** — `tests/test_plan186_lint_estructura.py` (corpus INLINE en el test, strings
 triple-quoted; 6 ADO rotos + 6 GitLab rotos + 2 válidos):
 - `test_pl001_yaml_invalido_ado` / `..._gitlab` — YAML con tab ilegal → PL001 error con línea.
 - `test_pl002_stage_duplicado_ado` / `test_pl002_job_duplicado_gitlab`.
+- `test_pl002_gitlab_clave_quoteada_no_crashea` — YAML con `"mi job":` duplicado → cero excepciones,
+  cero PL002 (límite documentado C5).
 - `test_pl003_dependson_roto_ado` / `test_pl003_needs_roto_gitlab`.
-- `test_pl004_ciclo_ado` (A dependsOn B, B dependsOn A) / `test_pl004_ciclo_gitlab` (needs cruzados).
+- `test_pl004_ciclo_ado` (stages A dependsOn B, B dependsOn A) / `test_pl004_ciclo_gitlab` (needs
+  cruzados).
 - `test_pl005_job_sin_steps_ado` / `test_pl005_job_sin_script_gitlab`.
+- `test_pl005_no_flaggea_deployment_ado` — `- deployment: X` con `strategy:` → CERO PL005 (C1).
+- `test_pl005_no_flaggea_run_ni_extends_gitlab` — jobs con `run:` y con `extends:` → CERO PL005 (C1).
 - `test_pl006_clave_desconocida_ambos`.
 - `test_valido_ado_cero_errores` / `test_valido_gitlab_cero_errores` — `counts["error"] == 0`.
 - `test_kpi2_round_trip_sin_falsos_positivos` — importar los specs del corpus de
   `tests/test_plan73_round_trip.py` (o reconstruir 2 specs mínimos con `dict_to_spec`), renderizar con
   `to_ado_yaml`/`to_gitlab_yaml` y assert `counts["error"] == 0` en ambos.
 - `test_kpi3_rapido_y_sin_red` — monkeypatch `socket.socket` → `raise AssertionError("red prohibida")`;
-  lintear los 14 YAML del corpus en loop; assert duración total < 0.5 s.
+  lintear los YAML del corpus en loop; assert duración total < 0.5 s.
 - `test_regla_que_explota_no_tira_500` — monkeypatchear una regla para que lance; `lint_yaml` devuelve
   PL000 info y no propaga.
 
@@ -344,7 +413,7 @@ triple-quoted; 6 ADO rotos + 6 GitLab rotos + 2 válidos):
 
 ---
 
-### F2 — Reglas de variables y secretos PL010..PL014
+### F2 — Reglas de variables y secretos PL010..PL014 + selftest del catálogo
 
 **Objetivo:** detectar variables sin declarar, muertas y secretos expuestos antes de publicar.
 **Valor:** evita la 2.ª causa de pipeline roto (typo de variable) y fugas de secretos en texto plano.
@@ -352,28 +421,38 @@ triple-quoted; 6 ADO rotos + 6 GitLab rotos + 2 válidos):
 **Archivos:**
 - EDITAR `Stacky Agents/backend/services/pipeline_lint.py`
 - CREAR `Stacky Agents/backend/tests/test_plan186_lint_variables.py`
-- EDITAR `Stacky Agents/backend/scripts/run_harness_tests.sh` (registrar el test)
+- CREAR `Stacky Agents/backend/tests/test_plan186_lint_catalogo.py` (ADICIÓN ARQUITECTO 2)
+- EDITAR `Stacky Agents/backend/scripts/run_harness_tests.sh` (registrar AMBOS tests)
 
-**Extracción de referencias (exacta):**
-- ADO: regex `\$\(([A-Za-z_][A-Za-z0-9_.]*)\)` sobre TODO el texto de steps (`script`, `bash`,
-  `powershell`, `pwsh`, valores de `env:`).
-- GitLab: regex `\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?` sobre `script`, `before_script`, `after_script`
-  (listas de str) y valores de `variables:` de cada job.
-- Declaradas: ADO `variables:` (dict o lista de `{name, value}`) a nivel raíz/stage/job; GitLab
-  `variables:` raíz y por job.
-- Whitelist predefinidas (NUNCA reportar): ADO — prefijos `Build.`, `System.`, `Agent.`, `Pipeline.`,
-  `Resources.`, y mayúsculas `BUILD_`, `SYSTEM_`, `AGENT_`, `PIPELINE_`, `TF_`; GitLab — prefijos
-  `CI_`, `GITLAB_`, más `HOME`, `PATH`, `USER`, `PWD`.
-- Sufijos "parece secreto": `_TOKEN`, `_PAT`, `_PASSWORD`, `_SECRET`, `_KEY`, `_APIKEY`
-  (case-insensitive).
+**Extracción de referencias (C4 — walk EXACTO sobre el árbol parseado, NUNCA regex sobre el texto
+crudo; los comentarios no generan refs):**
+
+Recorrer `ctx.data` recursivamente y recolectar SOLO los valores string de:
+- ADO: claves `script`, `bash`, `powershell`, `pwsh` (valor str) y TODOS los valores de dicts `env:`;
+  regex de ref sobre esos strings: `\$\(([A-Za-z_][A-Za-z0-9_.]*)\)`.
+- GitLab: items str de las listas `script`, `before_script`, `after_script` (a nivel job y raíz/default)
+  y valores str de `variables:` de cada job; regex: `\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`.
+
+Declaradas: ADO `variables:` (dict o lista de `{name, value}`) a nivel raíz/stage/job; GitLab
+`variables:` raíz y por job.
+
+Whitelist predefinidas (NUNCA reportar): ADO — prefijos `Build.`, `System.`, `Agent.`, `Pipeline.`,
+`Resources.`, y mayúsculas `BUILD_`, `SYSTEM_`, `AGENT_`, `PIPELINE_`, `TF_`; GitLab — prefijos
+`CI_`, `GITLAB_`, más `HOME`, `PATH`, `USER`, `PWD`.
+
+Sufijos "parece secreto": `_TOKEN`, `_PAT`, `_PASSWORD`, `_SECRET`, `_KEY`, `_APIKEY`
+(case-insensitive).
+
+[ADICIÓN ARQUITECTO 1] Prefijos de token conocidos (case-sensitive, sobre VALORES literales):
+`TOKEN_VALUE_PREFIXES = ("ghp_", "github_pat_", "glpat-", "xoxb-", "xoxp-", "AKIA", "eyJhbGciOi")`.
 
 | Código | Sev | Detecta | Regla exacta |
 |--------|-----|---------|--------------|
 | PL010 | warning | variable referenciada sin declarar | ref ∉ declaradas ∪ whitelist ∪ (known_variables or []) |
 | PL011 | info | variable declarada nunca usada | declarada ∉ refs (solo variables de raíz; las de job pueden usarlas scripts externos → no reportar) |
-| PL012 | warning | posible secreto hardcodeado | valor literal de una `variables:` cuyo NOMBRE matchea sufijos secreto Y cuyo valor tiene ≥12 chars alfanuméricos. **Gotcha push-protection:** en los TESTS construir el literal partido (`"ghp_" + "x"*20`), nunca un token realista entero |
+| PL012 | warning | posible secreto hardcodeado | (a) valor literal de una `variables:` cuyo NOMBRE matchea sufijos secreto Y valor con ≥12 chars alfanuméricos; **(b) [ADICIÓN ARQUITECTO 1] CUALQUIER valor literal de `variables:` que empiece con un prefijo de `TOKEN_VALUE_PREFIXES` y tenga ≥12 chars** (cubre nombre inocente + valor secreto). **Gotcha push-protection:** en los TESTS construir los literales partidos (`"ghp_" + "x"*20`), nunca un token realista entero |
 | PL013 | warning | secreto usado que NO está en la caja fuerte 94 | ref con sufijo secreto ∧ `known_variables is not None` ∧ ref ∉ known_variables. Si `known_variables is None` (UI no los mandó / caja fuerte no configurada) la regla SE OMITE en silencio (degradación explícita) |
-| PL014 | warning | `echo` de un nombre secreto | línea de script que matchea `echo` seguido (misma línea) de una ref con sufijo secreto |
+| PL014 | warning | `echo` de un nombre secreto | valor str de clave ejecutable (mismo walk de C4) cuya línea contiene `echo` y una ref con sufijo secreto |
 
 **Origen de `known_variables` (capa endpoint/UI, el servicio sigue puro):** la UI llama
 `GET /api/devops/variables?project=` (endpoint EXISTENTE de la caja fuerte, `api/devops_variables.py:46`,
@@ -384,14 +463,26 @@ PL013 no corre. PROHIBIDO que `pipeline_lint.py` importe `ci_variables` o toque 
 **Tests PRIMERO** — `tests/test_plan186_lint_variables.py`:
 - `test_pl010_ref_sin_declarar_ado` / `..._gitlab`; `test_pl010_respeta_whitelist_ci_predefinidas`;
   `test_pl010_respeta_known_variables`.
+- `test_pl010_comentario_no_genera_ref` — `# usa $(FANTASMA)` en comentario → CERO PL010 (C4).
 - `test_pl011_declarada_sin_uso_info`.
-- `test_pl012_secreto_hardcodeado` (literal partido) / `test_pl012_valor_corto_no_reporta`.
+- `test_pl012_secreto_por_nombre` (literal partido) / `test_pl012_valor_corto_no_reporta`.
+- `test_pl012_secreto_por_prefijo_de_valor` — `MI_VAR: "ghp_" + "x"*20` → PL012 (ADICIÓN 1).
 - `test_pl013_secreto_fuera_de_caja_fuerte` / `test_pl013_omitida_si_known_variables_none`.
 - `test_pl014_echo_de_secreto`.
 
-**Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan186_lint_variables.py -q`
+**Tests PRIMERO** — `tests/test_plan186_lint_catalogo.py` (ADICIÓN ARQUITECTO 2, selftest del
+catálogo):
+- `test_todo_codigo_unico` — no hay dos reglas con el mismo code.
+- `test_severidades_validas` — toda severidad ∈ {error, warning, info}.
+- `test_toda_regla_tiene_repro` — toda entrada de `_RULES` tiene `repro != None` (salvo PL000).
+- `test_todo_repro_dispara_su_regla` — para cada `(code, _, _, _, (provider, yaml_min))`:
+  `lint_yaml(yaml_min, provider)` contiene ≥1 finding con ese `code`. (Canario anti-drift: una regla
+  nueva sin repro que la dispare = test rojo.)
 
-**Criterio binario:** todos los tests del archivo pasan.
+**Comandos:** `venv\Scripts\python.exe -m pytest tests\test_plan186_lint_variables.py -q` y
+`venv\Scripts\python.exe -m pytest tests\test_plan186_lint_catalogo.py -q`
+
+**Criterio binario:** todos los tests de AMBOS archivos pasan.
 
 **Flag:** la misma. **Runtimes:** idéntico en los 3. **Trabajo del operador:** ninguno.
 
@@ -409,12 +500,11 @@ PL013 no corre. PROHIBIDO que `pipeline_lint.py` importe `ci_variables` o toque 
 
 **Regla de oro de los fixes:** **cirugía de líneas sobre `ctx.lines`** (insertar/reemplazar/borrar
 líneas puntuales y `"\n".join(...)`), NUNCA `yaml.safe_dump` (re-dump destruye formato y comentarios
-del operador). Cada fix se construye solo si la línea objetivo se localizó (`_find_line` ≠ None); si
-no, `fix=None`.
+del operador). Cada fix se construye solo si la línea objetivo se localizó; si no, `fix=None`.
 
 | Código | Fix determinista |
 |--------|------------------|
-| PL002 | Renombrar la SEGUNDA ocurrencia agregando sufijo `-2` (reemplazo en su línea exacta) |
+| PL002 | Renombrar la SEGUNDA ocurrencia agregando sufijo `-2`. **C3: localizar con `_find_line_nth(ctx, needle, 2)`** (la 1.ª ocurrencia — la definición original que otros nodos referencian — NO se toca) |
 | PL003 | Quitar la referencia rota de `dependsOn`/`needs` (si la lista queda vacía, borrar la clave completa de esa línea) |
 | PL005 | Insertar debajo de la línea del job, con la indentación del bloque: ADO `steps:` + `- script: echo "TODO reemplazar"`; GitLab `script:` + `- echo "TODO reemplazar"` |
 
@@ -422,11 +512,17 @@ PL001/PL004/PL006/PL010-PL014: `fix=None` en v1 (decisión explícita: fixes de 
 automatizan).
 
 **Tests PRIMERO** — `tests/test_plan186_lint_fixes.py`:
-- Por cada fix (PL002 ADO, PL002 GitLab, PL003 ADO, PL003 GitLab, PL005 ADO, PL005 GitLab):
-  `fix.new_yaml` (a) parsea con `yaml.safe_load`, (b) re-lint NO contiene ese código en esa línea
-  (KPI-5), (c) el resto del texto quedó idéntico salvo las líneas tocadas (comparar
-  `difflib.unified_diff` → ≤ 3 líneas cambiadas).
-- `test_fix_none_si_linea_no_localizada` — YAML donde `_find_line` falla → `fix is None`, sin crash.
+- Por cada fix (PL002 ADO, PL002 GitLab, PL003 ADO, PL003 GitLab, PL005 ADO, PL005 GitLab), KPI-5
+  reforzado (C3): `fix.new_yaml` (a) parsea con `yaml.safe_load`, (b) re-lint NO contiene ese código en
+  esa línea, **(c) `counts["error"]` del re-lint es MENOR que el del original, (d) el re-lint NO
+  contiene códigos que el original no tenía**, (e) el resto del texto quedó idéntico salvo las líneas
+  tocadas (comparar `difflib.unified_diff` → ≤ 3 líneas cambiadas).
+- `test_fix_pl002_renombra_la_segunda_no_la_primera` — YAML ADO con `A` duplicado y un tercer stage con
+  `dependsOn: A` → tras el fix, ese `dependsOn` sigue resolviendo (cero PL003 nuevos) (C3).
+- `test_fix_none_si_linea_no_localizada` — YAML donde la línea no se localiza → `fix is None`, sin
+  crash.
+- `test_fixes_omitidos_yaml_gigante` — YAML > 200 KB (generado por código en el test) → todos los
+  `fix is None` y `fixes_omitted is True` (C9).
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan186_lint_fixes.py -q`
 
@@ -457,7 +553,7 @@ class PlanNode:
     name: str
     steps: tuple[str, ...]       # display names de los pasos (script truncado a 80 chars)
     resolved_vars: dict          # solo resolución LITERAL (var → valor si el valor no referencia otra var)
-    warnings: tuple[str, ...]    # p.ej. "depende de un nodo con findings de error"
+    warnings: tuple[str, ...]    # p.ej. "condicional: puede no ejecutarse"
     estimated_seconds: float | None  # SIEMPRE None en v1 (campo reservado, documentado; sin histórico NO se inventa)
 
 @dataclass(frozen=True)
@@ -469,10 +565,11 @@ class ExecutionPlan:
 def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
 ```
 
-- ADO: nodos = stages (o jobs si no hay stages); aristas = `dependsOn` (ausente ⇒ depende del stage
-  anterior declarado, igual que PL003). GitLab: fases base = orden de `stages:`; `needs` adelanta un
-  job a la fase mínima posible (nivel topológico por needs cuando existen).
-- Fases = niveles topológicos (Kahn). Ciclo → `ok=False`, `phases=()` (el lint ya lo reporta PL004).
+- Grafo con la MISMA semántica de F1/C2: ADO stages secuenciales-por-default (`dependsOn` explícito
+  manda; `[]` = raíz), **jobs ADO paralelos por default (cero aristas implícitas)**, items
+  `deployment` son jobs válidos; GitLab fases base = orden de `stages:`, `needs` adelanta jobs.
+- Fases = niveles topológicos (Kahn), orden alfabético DENTRO de cada fase (determinismo del output).
+  Ciclo → `ok=False`, `phases=()` (el lint ya lo reporta PL004).
 - `resolved_vars`: SOLO variables cuyo valor es literal (sin `$`); lo demás se muestra como
   `"<dinámica>"`. Sin evaluación de shell, sin condiciones: si un nodo tiene `condition:`/`rules:` se
   agrega warning `"condicional: puede no ejecutarse"`.
@@ -480,8 +577,11 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
   `@bp.post("/pipeline-lint/explain")` → `{"plan": asdict(ExecutionPlan)}`; 400 si payload inválido.
 
 **Tests PRIMERO** — `tests/test_plan186_explain_plan.py`:
-- `test_kpi4_diamante_ado` — A; B dependsOn A; C dependsOn A; D dependsOn [B,C] → fases
+- `test_kpi4_diamante_stages_ado` — A; B dependsOn A; C dependsOn A; D dependsOn [B,C] → fases
   `[["A"],["B","C"],["D"]]` (nombres exactos, orden alfabético dentro de la fase).
+- `test_kpi4_jobs_ado_paralelos_sin_dependson` — stage con jobs J1, J2 sin dependsOn → AMBOS en la
+  misma fase (C2).
+- `test_deployment_job_aparece_en_plan` — `- deployment: X` figura como PlanNode kind="job" (C1).
 - `test_gitlab_stages_y_needs` — 3 stages, un job con `needs` del stage 1 queda en fase 2.
 - `test_ciclo_ok_false` — ciclo → `ok is False`, `phases == ()`.
 - `test_vars_literales_resueltas` — literal → valor; compuesta → `"<dinámica>"`.
@@ -516,11 +616,14 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
    - `buildDiffLines(oldYaml, newYaml) -> {added: number[], removed: number[], rows: DiffRow[]}`
      (diff lineal simple LCS por líneas; `DiffRow = {kind: 'same'|'add'|'del', text: string}`).
    - `debounceKey(yaml, source) -> string` (hash simple djb2 para evitar requests repetidos).
+   - `commitLintSummary(report | undefined)` (F6; definido acá para testear puro).
 2. `PipelineLintPanel` recibe props `{yaml: string, source: 'ado'|'gitlab', knownVariables?: string[],
    onHighlightLine: (n: number|undefined) => void, onApplyFix: (newYaml: string) => void}`:
    - `useEffect` con debounce 500 ms sobre `yaml`: `POST /api/devops/pipeline-lint/validate`; si la
-     respuesta es 404 (flag OFF) el panel se auto-oculta (render `null`) — patrón FlagGateBanner NO
-     necesario acá porque el creador ya está gateado por el panel 87.
+     respuesta es 404 (flag OFF) el panel se auto-oculta (render `null`).
+   - **C6 (anti-race):** mantener `const seqRef = useRef(0)`; cada request incrementa y captura
+     `const seq = ++seqRef.current`; al resolver, si `seq !== seqRef.current` → DESCARTAR la respuesta
+     (solo la última pinta). Sin esto, dos validates in-flight pueden pintar findings viejos.
    - Render: 3 chips con conteos (`error` rojo, `warning` ámbar, `info` gris — tokens del
      `DevOpsPage.module.css`; **gotcha ratchet:** CERO `style={{}}` inline en .tsx nuevo, todo por
      CSS module), lista de findings `[PLxxx] mensaje — línea N`, click → `onHighlightLine(line)`.
@@ -534,6 +637,13 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
    `PipelineYamlPreview`, pasando el YAML activo y la fuente seleccionada; `knownVariables` se
    obtiene con un `fetch` único a `/api/devops/variables?project=` (si !ok → undefined). Un solo
    punto de integración; si la flag está OFF el panel devuelve null y el builder queda idéntico.
+4. **C7 — `highlightLine` en `PipelineYamlPreview.tsx` (instrucción concreta y retrocompatible):**
+   ANTES de editar, leer el componente. Si renderiza el YAML como string único (p.ej. dentro de un
+   `<pre>`), aplicar esta técnica: cuando `highlightLine === undefined`, render EXACTAMENTE igual que
+   hoy (cero cambio); cuando está definido, `yaml.split('\n')` y renderizar `<div>` por línea (misma
+   fuente monoespaciada vía CSS module), agregando a la línea `highlightLine - 1` la clase
+   `.lineHighlight` (fondo con el token de acento del module) y `ref` con
+   `scrollIntoView({block:'center'})` en un `useEffect` que depende de `highlightLine`.
 
 **Tests PRIMERO** — `pipelineLint.test.ts` (vitest, **sin @testing-library** — no está en
 `package.json` (gap conocido); espejar el estilo de `RemediationCard.test.tsx`: solo funciones puras):
@@ -569,8 +679,9 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
   igual, pero es probable que el pipeline falle." y el botón de confirmar cambia su texto a
   "Publicar igual (N errores)". **El botón NUNCA se deshabilita** (HITL manda; guardarraíl §3.3).
 - Si solo warnings → banda ámbar "N advertencias del lint". Si ok → línea verde "Lint OK (PLxxx v186.1)".
-- Helper puro exportado `commitLintSummary(report | undefined) -> {tone: 'ok'|'warn'|'error'|'none',
-  text: string, confirmLabel: string | null}` en `pipelineLint.ts` — el modal solo lo renderiza.
+- Helper puro `commitLintSummary(report | undefined) -> {tone: 'ok'|'warn'|'error'|'none',
+  text: string, confirmLabel: string | null}` YA exportado desde `pipelineLint.ts` (F5) — el modal
+  solo lo renderiza.
 
 **Tests PRIMERO** — `commitLintSummary.test.ts` (vitest, funciones puras):
 - undefined → `tone:'none'`, `confirmLabel:null` (modal intacto).
@@ -590,12 +701,13 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
 
 | Riesgo | Mitigación |
 |--------|------------|
-| Falsos positivos que erosionen confianza | KPI-2 como gate binario (round-trip renderers → 0 errores); severidades conservadoras (PL006/PL011 = info; variables = warning, nunca error); PL013 se omite sin datos |
-| Catálogo de claves ADO/GitLab incompleto | PL006 es `info` (no asusta); catálogo en constantes módulo-nivel fáciles de ampliar; regla envuelta en try/except (PL000) |
-| Fix rompe un YAML exótico | KPI-5: todo fix re-parsea y re-lintea en tests; cirugía de líneas ≤3 líneas; el operador SIEMPRE ve el diff antes de aplicar |
+| Falsos positivos que erosionen confianza | KPI-2 como gate binario (round-trip renderers → 0 errores + casos deployment/run/extends); severidades conservadoras (PL006/PL011 = info; variables = warning, nunca error); PL013 se omite sin datos |
+| Catálogo de claves ADO/GitLab incompleto | PL006 es `info` (no asusta); catálogo en constantes módulo-nivel; regla envuelta en try/except (PL000); selftest del catálogo exige repro por regla (ADICIÓN 2) |
+| Fix rompe un YAML exótico | KPI-5 reforzado (C3): re-parsea, re-lintea, no aumenta errores NI introduce códigos nuevos; cirugía ≤3 líneas; diff SIEMPRE visible antes de aplicar |
 | Parsers del plan 73 cubren un subset | El lint NO depende de `parse_*_yaml` para las reglas (trabaja sobre `yaml.safe_load` crudo); los parsers solo se reusan donde ya se usaban (parse-yaml editor) |
-| Sesión paralela toca `api/devops.py` (serie 177-184 activa) | Cambios ADITIVOS al final de secciones (endpoint nuevo tras `parse_yaml_route`); tras merge correr `python -m compileall` + grep del duplicado silencioso (gotcha conocido) |
+| Sesión paralela toca `api/devops.py` (serie 177-185 activa) | Cambios ADITIVOS al final de secciones (endpoint nuevo tras `parse_yaml_route`); tras merge correr `python -m compileall` + grep del duplicado silencioso (gotcha conocido) |
 | Regex de secretos (PL012) dispara push-protection de GitHub en los tests | Literales SIEMPRE partidos en tests (`"ghp_" + "x"*20`) — gotcha documentado |
+| Respuestas stale pintan findings viejos (UI) | C6: contador de secuencia; solo la última respuesta pinta |
 | `test_*.py` nuevo no registrado | Cada fase que crea un test EDITA `run_harness_tests.sh` en el mismo commit; `test_harness_ratchet_meta.py` lo verifica |
 
 ## 6. Fuera de scope (explícito)
@@ -604,6 +716,9 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
 - Estimación de duraciones con histórico del monitor 103 (`estimated_seconds` queda reservado en el
   shape, SIEMPRE None en v1).
 - Resolución de `include:`/`template:` remotos (v1: si aparecen, PL006-info "include no resuelto").
+- `needs` hacia stages posteriores en GitLab (validación semántica fina de GitLab): v1 solo chequea
+  existencia; la validación de dirección queda para v2.
+- Claves quoteadas y templates `.ocultos` en el pre-scan PL002 GitLab (límite C5 documentado).
 - Wiring del lint como tool del agente DevOps (90/108) — el endpoint queda documentado y disponible.
 - Lint de pipelines internos de Stacky (`api/pipelines.py` es el orquestador interno, otro dominio).
 - Bloqueo del commit por errores (contradice HITL; solo informativo).
@@ -611,6 +726,8 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
 ## 7. Glosario (para modelos menores)
 
 - **ADO:** Azure DevOps. **GitLab CI:** su equivalente en GitLab (`.gitlab-ci.yml`).
+- **Deployment job (ADO):** item `- deployment: X` en `jobs:`; ejecuta vía `strategy:`, no tiene
+  `steps:` directos — NO es un job roto.
 - **PipelineSpec:** modelo declarativo interno de Stacky (`services/pipeline_spec.py:55`).
 - **Renderers/parsers 73:** `to_ado_yaml`/`to_gitlab_yaml` y `parse_ado_yaml`/`parse_gitlab_yaml` en
   `services/pipeline_renderers.py` (ida y vuelta YAML↔spec).
@@ -625,15 +742,17 @@ def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan: ...
   olvidarlo pone rojo `test_harness_ratchet_meta.py`.
 - **Ratchet UI:** guardia que impide `style={{}}` inline en `.tsx` nuevos — usar CSS modules.
 - **Cirugía de líneas:** editar el YAML tocando líneas puntuales, nunca re-serializar todo.
+- **Repro (catálogo):** YAML mínimo registrado junto a cada regla que la dispara; el selftest lo
+  verifica (ADICIÓN 2).
 
 ## 8. Orden de implementación
 
 1. F0 — flag + esqueleto + endpoint validate + tests de wiring (vertical slice completo).
-2. F1 — motor de reglas + PL001..PL006 + corpus + KPI-2/KPI-3.
-3. F2 — PL010..PL014 (variables/secretos) + known_variables por body.
-4. F3 — autofixes PL002/PL003/PL005 + KPI-5.
-5. F4 — explain_plan + endpoint explain + KPI-4.
-6. F5 — PipelineLintPanel + helpers puros + integración builder + highlight.
+2. F1 — motor de reglas + PL001..PL006 (semántica C1/C2) + corpus + KPI-2/KPI-3.
+3. F2 — PL010..PL014 (variables/secretos, walk C4) + selftest del catálogo (ADICIÓN 2).
+4. F3 — autofixes PL002/PL003/PL005 (`_find_line_nth`, C3) + KPI-5 reforzado.
+5. F4 — explain_plan (semántica C2) + endpoint explain + KPI-4.
+6. F5 — PipelineLintPanel (anti-race C6) + helpers puros + integración builder + highlight (C7).
 7. F6 — resumen en CommitPipelineModal.
 
 Cada fase se commitea sola, con sus tests verdes ANTES de pasar a la siguiente (TDD estricto, cero
@@ -641,14 +760,14 @@ falsos verdes: si un test no corre, se reporta rojo, no se lo salta).
 
 ## 9. Definición de Hecho (DoD) global
 
-- [ ] Los 6 archivos de test del plan (`test_plan186_lint_flag.py`, `test_plan186_lint_estructura.py`,
-      `test_plan186_lint_variables.py`, `test_plan186_lint_fixes.py`, `test_plan186_explain_plan.py`,
-      `pipelineLint.test.ts` + `commitLintSummary.test.ts`) pasan corriendo POR ARCHIVO con el
-      intérprete/venv correcto (`venv\Scripts\python.exe -m pytest tests\<archivo> -q` /
-      `npx vitest run <archivo>`).
+- [ ] Los 8 archivos de test del plan (`test_plan186_lint_flag.py`, `test_plan186_lint_estructura.py`,
+      `test_plan186_lint_variables.py`, `test_plan186_lint_catalogo.py`, `test_plan186_lint_fixes.py`,
+      `test_plan186_explain_plan.py`, `pipelineLint.test.ts`, `commitLintSummary.test.ts`) pasan
+      corriendo POR ARCHIVO con el intérprete/venv correcto
+      (`venv\Scripts\python.exe -m pytest tests\<archivo> -q` / `npx vitest run <archivo>`).
 - [ ] `test_harness_ratchet_meta.py`, `test_harness_flags_requires.py` y
       `test_default_known_only_for_curated` (en `test_harness_flags.py`) siguen verdes.
-- [ ] KPI-1..KPI-5 verificados por los tests nombrados (binarios).
+- [ ] KPI-1..KPI-5 verificados por los tests nombrados (binarios, con los refuerzos C1/C2/C3).
 - [ ] `npx tsc --noEmit` sin errores nuevos; `python -m compileall backend` limpio.
 - [ ] Flag `STACKY_DEVOPS_PIPELINE_LINT_ENABLED` visible y toggleable desde la UI de flags (grupo
       global, requires panel 87), default ON.

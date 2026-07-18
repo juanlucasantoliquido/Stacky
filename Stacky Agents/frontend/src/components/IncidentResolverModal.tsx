@@ -24,6 +24,7 @@ import {
   type QueueItem,
 } from "../incidents/incidentQueue";
 import type { AgentRuntime } from "../types";
+import { resolveModalInit } from "./incidentModalInit";
 import styles from "./IncidentResolverModal.module.css";
 
 const QUEUE_POLL_INTERVAL_MS = 3000; // Plan 166 F3/C8 — coherente con el latido único (plan 156)
@@ -58,9 +59,12 @@ const CLAUDE_EFFORTS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
 
 interface IncidentResolverModalProps {
   onClose: () => void;
+  initialText?: string;   // Plan 188 — prellenado opcional (default: vacío, igual que hoy)
+  initialFiles?: File[];  // Plan 188 — adjuntos opcionales (default: sin adjuntos)
 }
 
-export default function IncidentResolverModal({ onClose }: IncidentResolverModalProps) {
+export default function IncidentResolverModal({ onClose, initialText, initialFiles }: IncidentResolverModalProps) {
+  const init = resolveModalInit(initialText, initialFiles);
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
@@ -68,8 +72,8 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
 
   const [status, setStatus] = useState<IncidentStatusDTO | null>(null);
   const [step, setStep] = useState<Step>("intake");
-  const [text, setText] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [text, setText] = useState(init.text);
+  const [files, setFiles] = useState<File[]>(init.files);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const [incidentId, setIncidentId] = useState<string | null>(null);

@@ -482,6 +482,7 @@ $HarnessTestFiles = @(
   "tests/test_plan186_explain_plan.py"
   # — Plan 188 · Del fallo de despliegue a la incidencia (evidencia + modal) —
   "tests/test_plan188_evidence_flag.py"
+  "tests/test_plan188_evidence_builder.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

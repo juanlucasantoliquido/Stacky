@@ -1,9 +1,30 @@
 # Plan 193 — DevOps: triage de fallos CI — jobs fallidos y log inline enmascarado (read-only)
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (expone el puerto de logs del plan 96; hermano de 191 bitácora CI)
+
+## Changelog v1 → v2 (crítica C1..C5 + adición)
+
+- **C1 (IMPORTANTE):** empty-state especificado — `failed-jobs` puede devolver `[]` aunque el
+  pipeline esté fallido (fallo a nivel pipeline/config): la UI renderiza EXACTAMENTE "No se
+  encontraron jobs fallidos (puede ser un error de configuración del pipeline — abrilo en el
+  tracker)" y nunca queda muda.
+- **C2 (IMPORTANTE, DoD realista):** el juez del plan 192 (sesión paralela) verificó EN VIVO que
+  `test_harness_ratchet_meta.py` está ROJO PREEXISTENTE y que el venv del repo quedó en py3.11
+  ajeno. El criterio pasa de "sigue verde" a **NO-EMPEORAR**: el meta-test no debe fallar POR los
+  archivos de este plan (si ya estaba rojo, el mensaje de fallo no debe mencionar `plan193`);
+  verificar el intérprete real ANTES (`venv\Scripts\python.exe --version`).
+- **C3 (MENOR):** semántica documentada y CONGELADA: `chars_total` = largo del texto ORIGINAL
+  (pre-mask); `truncated` se computa sobre el texto ENMASCARADO. Es intencional — no "corregir".
+- **C4 (MENOR):** tras la descarga del Blob, llamar `URL.revokeObjectURL(url)` (sin fuga de
+  memoria en sesiones largas).
+- **C5 (MENOR):** la respuesta de `/log` incluye `provider` (consistencia con `/failed-jobs`).
+- **[ADICIÓN ARQUITECTO]:** `errorLineHints(log)` — helper PURO que devuelve los índices (1-based,
+  cap 200) de líneas que matchean `\b(error|failed|exception|fatal)\b` case-insensitive; la UI
+  muestra el chip "N líneas con error" y auto-scrollea a la primera. Triage aún más rápido, cero
+  backend.
 
 ---
 
@@ -140,7 +161,8 @@ def tail_and_mask(text: str, max_chars: int = MAX_LOG_CHARS) -> dict:
     """ORDEN OBLIGATORIO (KPI-2): (1) mask sobre el texto COMPLETO — así un token que quedaría
     partido justo en el borde del tail no escapa; (2) tail de los últimos max_chars.
     Devuelve {"log": str, "truncated": bool, "chars_total": int} donde chars_total es el
-    largo del texto ORIGINAL (pre-mask, pre-tail)."""
+    largo del texto ORIGINAL (pre-mask, pre-tail). C3 — semántica CONGELADA e intencional:
+    chars_total pre-mask, truncated post-mask; NO "corregir" esta asimetría."""
     total = len(text)
     masked = _TOKEN_RE.sub(MASK_PLACEHOLDER, text)
     truncated = len(masked) > max_chars
@@ -177,7 +199,9 @@ def ci_job_log_route(project: str, job_id: str):
     from services.ci_log_view import tail_and_mask
     provider = get_ci_logs_provider(project)   # mismo mapeo de errores que arriba
     text = provider.get_job_log(str(job_id))
-    return jsonify(tail_and_mask(text))
+    out = tail_and_mask(text)
+    out["provider"] = provider.name            # C5 — consistencia con /failed-jobs
+    return jsonify(out)
 ```
 
    Regla dura del mapeo (KPI-4): envolver las llamadas al provider con el MISMO try/except que ya
@@ -246,6 +270,18 @@ export function truncationNote(truncated: boolean, charsTotal: number): string |
 export function jobLabel(j: FailedJob): string {
   return `${j.stage} · ${j.name}`;
 }
+export const EMPTY_FAILED_JOBS_MSG =
+  'No se encontraron jobs fallidos (puede ser un error de configuración del pipeline — abrilo en el tracker)'; // C1
+// [ADICIÓN ARQUITECTO] — índices 1-based de líneas con pinta de error (cap 200)
+const ERROR_LINE_RE = /\b(error|failed|exception|fatal)\b/i;
+export function errorLineHints(log: string): number[] {
+  const out: number[] = [];
+  const lines = log.split('\n');
+  for (let i = 0; i < lines.length && out.length < 200; i++) {
+    if (ERROR_LINE_RE.test(lines[i])) out.push(i + 1);
+  }
+  return out;
+}
 ```
 
 2. `TriggerPipelineSection.tsx`:
@@ -254,22 +290,28 @@ export function jobLabel(j: FailedJob): string {
      botón `"Ver fallos…"`.
    - Click → `GET /api/ci/<project>/pipeline/<id>/failed-jobs`; 404 (flag OFF) → ocultar el botón
      el resto de la sesión; error → mensaje inline "no se pudieron listar los jobs" (sin romper la
-     sección). Lista: `jobLabel(j)` + link "abrir en el tracker" si `web_url`.
+     sección). Lista vacía (C1) → render de `EMPTY_FAILED_JOBS_MSG` (nunca panel mudo). Lista con
+     items: `jobLabel(j)` + link "abrir en el tracker" si `web_url`.
    - Click en un job → `GET /api/ci/<project>/job/<job_id>/log` → `<details open>` con `<pre>` del
      `log` (clase CSS module, max-height con scroll; **gotcha ratchet:** cero `style={{}}`), la
-     línea de `truncationNote(...)` si aplica, y botón "Descargar" →
-     `new Blob([log], {type: 'text/plain'})` + anchor con `download = logFileName(job_id)`.
+     línea de `truncationNote(...)` si aplica, chip `"N líneas con error"` cuando
+     `errorLineHints(log).length > 0` con auto-scroll a la primera (ADICIÓN), y botón "Descargar" →
+     `new Blob([log], {type: 'text/plain'})` + anchor con `download = logFileName(job_id)` y
+     `URL.revokeObjectURL(url)` tras el click (C4).
    - Cada log se fetchea SOLO al expandir (lazy; sin N+1).
 
 **Tests PRIMERO** — `ciFailureTriage.test.ts` (vitest, sin @testing-library — gap conocido):
 - `logFileName` — `ci-log-123.txt`.
 - `truncationNote` — null sin truncar; texto con separador de miles es-AR al truncar.
 - `jobLabel` — `stage · name` exacto.
+- `errorLineHints` (ADICIÓN) — detecta `ERROR`/`Failed`/`exception` case-insensitive con índices
+  1-based; cap 200 con log de 300 líneas-error; `[]` en log limpio.
+- `EMPTY_FAILED_JOBS_MSG` — el texto exacto existe exportado (C1; congelado por test).
 
 **Comando:** `npx vitest run src/components/devops/ciFailureTriage.test.ts`
 (cwd = `Stacky Agents\frontend`; por archivo).
 
-**Criterio binario:** los 3 tests pasan Y `npx tsc --noEmit` sin errores nuevos (KPI-5).
+**Criterio binario:** los 5 tests pasan Y `npx tsc --noEmit` sin errores nuevos (KPI-5).
 
 **Smoke manual (1 paso, opcional):** monitorear un pipeline fallido real → "Ver fallos…" → log
 inline con descarga.
@@ -324,9 +366,13 @@ verdes).
 ## 9. Definición de Hecho (DoD) global
 
 - [ ] Los 2 archivos de test (`test_plan193_ci_triage.py`, `ciFailureTriage.test.ts`) pasan POR
-      ARCHIVO con el intérprete correcto.
-- [ ] `test_harness_ratchet_meta.py`, `test_harness_flags_requires.py` y
-      `test_default_known_only_for_curated` siguen verdes.
+      ARCHIVO. **C2:** verificar el intérprete ANTES (`venv\Scripts\python.exe --version` — el juez
+      del plan 192 encontró un venv ajeno py3.11; si no es el esperado, recrearlo o usar el
+      intérprete correcto del repo y reportarlo).
+- [ ] `test_harness_flags_requires.py` y `test_default_known_only_for_curated` siguen verdes.
+      **C2 (criterio NO-EMPEORAR):** `test_harness_ratchet_meta.py` — si estaba VERDE, sigue verde;
+      si estaba ROJO PREEXISTENTE, su mensaje de fallo NO menciona archivos `plan193` (este plan no
+      lo empeora).
 - [ ] KPI-1..KPI-5 verificados por los tests nombrados.
 - [ ] `npx tsc --noEmit` sin errores nuevos; `python -m compileall backend` limpio.
 - [ ] Flag `STACKY_CI_FAILURE_TRIAGE_ENABLED` visible/toggleable en la UI de flags, default ON.

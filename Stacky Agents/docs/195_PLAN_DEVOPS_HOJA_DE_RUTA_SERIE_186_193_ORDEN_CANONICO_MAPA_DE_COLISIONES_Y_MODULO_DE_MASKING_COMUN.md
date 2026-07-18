@@ -256,7 +256,7 @@ el de §6 (prefijo + ≥8 chars del set); los planes hermanos lo adoptan al impo
 | Gate 0.2 — ratchet_meta (verde/rojo + causa) | VERDE — 4 passed en `.venv` py3.13.5 (baseline y tras registrar los 4 tests nuevos) | 2026-07-18 |
 | Gate 0.3 — tsc baseline | VERDE — `npx tsc --noEmit` exit 0 (limpio) | 2026-07-18 |
 | Plan 190 + gates §7 | IMPLEMENTADO F0-F3 (commit `453073cc`; módulo común en `07b7358b`) — 22 tests backend + 6 vitest verdes, tsc 0, compileall 0. §7bis: GATE3/GATE4 tienen ruido de baseline (GATE3 lista toda key referenciada 2+ veces; GATE4 marca el duplicado PREEXISTENTE de `test_harness_flags.py` en `run_harness_tests.sh` líneas 22/340) — ninguno introducido por 190/195 | 2026-07-18 |
-| Plan 186 + gates §7 | _pendiente_ | |
+| Plan 186 + gates §7 | IMPLEMENTADO F0-F6 (commits `0cf4c0c7` F0, `dc53e513` F1, `f2..` F2, F3/F4/F5-F6) — 59 tests backend (flag/estructura/variables/catalogo/fixes/explain) + 12 vitest puros verdes, tsc 0, compileall 0. **PL012(b) IMPORTA `services.secret_masking.mask_token_values` (criterio canónico prefijo+≥8, NO redefine `TOKEN_VALUE_PREFIXES`)** — KPI-2 intacto. §7bis: GATE1 compileall verde; GATE3/GATE4 solo ruido de baseline (GATE3 lista toda key por categoría+FlagSpec=2x, mi flag idéntica; GATE4 marca el dup PREEXISTENTE `test_harness_flags.py`) — nada introducido por 186. uiDebtRatchet rojo por deuda AJENA; mis archivos nuevos = 0 hex / 0 inline | 2026-07-18 |
 | Plan 188 + gates §7 | _pendiente_ | |
 | Plan 189 + gates §7 | _pendiente_ | |
 | Plan 191 + gates §7 | _pendiente_ | |

@@ -158,6 +158,22 @@ def parse_yaml_route():
     return jsonify({"spec": asdict(spec)})
 
 
+@bp.post("/pipeline-lint/validate")
+def pipeline_lint_validate_route():
+    """YAML → LintReport. PURO (el servicio no toca red); known_variables viene de la UI. Plan 186."""
+    if not getattr(_config.config, "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", False):
+        abort(404)  # guard per-request, patrón devops.py:147
+    body = request.get_json(silent=True) or {}
+    source = body.get("source")
+    yaml_str = body.get("yaml") or ""
+    if source not in ("ado", "gitlab") or not yaml_str.strip():
+        return jsonify({"error": "source ('ado'|'gitlab') y yaml son obligatorios"}), 400
+    kv = body.get("known_variables")
+    kv = [str(x) for x in kv] if isinstance(kv, list) else None
+    from services.pipeline_lint import lint_yaml
+    return jsonify(lint_yaml(yaml_str, source, known_variables=kv).to_dict())
+
+
 @bp.post("/publications/materialize")
 def materialize_publication_route():
     """Preset -> dict PipelineSpec. SOLO-LECTURA (no commitea, no dispara). Plan 88."""

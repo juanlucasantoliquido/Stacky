@@ -1284,6 +1284,15 @@ class Config:
         "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 186 — Lint determinista de pipelines ─────────────────────────────
+    # Valida el YAML del pipeline local y al instante (reglas PLxxx), explain-plan
+    # y autofixes HITL. Determinista, sin red, sin IA. Default ON (espejo del
+    # default=True de la FlagSpec homónima; curada en _CURATED_DEFAULTS_ON).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_PIPELINE_LINT_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

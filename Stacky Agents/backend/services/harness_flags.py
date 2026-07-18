@@ -227,6 +227,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PR_REVIEW_TIMEOUT_SEC",     # Plan 110 — timeout de la revisión Haiku
         "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 119 — rediseño minimalista del shell DevOps
         "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",  # Plan 190 — equipaje DevOps en export/import
+        "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2894,6 +2895,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         # SIN requires: la transferencia de config es GLOBAL, no vive dentro del
         # panel DevOps (secciones top-level como uiPreferences).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 186 — Lint determinista de pipelines ────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_PIPELINE_LINT_ENABLED",
+        type="bool",
+        label="Lint determinista de pipelines",
+        description=(
+            "Plan 186 — Valida el YAML del pipeline (ADO/GitLab) local y al instante "
+            "(reglas PLxxx), muestra el plan de ejecución estilo terraform-plan y "
+            "sugiere fixes con diff aplicables por click (HITL). Determinista, sin "
+            "red, sin IA. Con OFF el endpoint devuelve 404 y el panel queda idéntico "
+            "a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # vive dentro del panel 87 (depth-1)
         # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),

@@ -684,6 +684,7 @@ _CURATED_DEFAULTS_ON = {
     # NUNCA incluye secretos e importar NUNCA toca el keyring; ninguna de las 4
     # excepciones duras aplica). ──
     "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",
+    "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
 }
 
 

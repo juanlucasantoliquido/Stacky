@@ -473,6 +473,8 @@ $HarnessTestFiles = @(
   "tests/test_plan190_transfer_flag.py"
   "tests/test_plan190_transfer_devops_sections.py"
   "tests/test_plan190_transfer_compat.py"
+  # — Plan 186 · Lint determinista de pipelines (PL001-014 + explain-plan + fixes) —
+  "tests/test_plan186_lint_flag.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

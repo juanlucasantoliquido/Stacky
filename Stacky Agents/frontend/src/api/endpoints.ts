@@ -25,6 +25,7 @@ import type {
 import type { Manifest } from "../components/dbcompare/scriptsLogic";
 import type { DataCandidate } from "../components/dbcompare/dataDiffLogic";
 import type { MaskingPrefs } from "../components/dbcompare/maskingLogic";
+import type { RepoScriptIndex, RepoCoverage } from "../components/dbcompare/repoCoverageTypes"; // Plan 180 — puente diff→repo
 import type {
   RadarPayload,
   WatchEntry,
@@ -4327,5 +4328,22 @@ export const DbCompareWatch = {
   baselineDiff: (alias: string) =>
     api.get<{ ok: boolean; diff: NonNullable<CompareRun["diff"]> }>(
       `/api/db-compare/baseline-diff/${encodeURIComponent(alias)}`,
+    ),
+};
+
+// Plan 180 — Puente diff→repo (índice read-only de scripts SQL ticketeados).
+export const DbCompareRepo = {
+  getIndex: () =>
+    api.get<{ ok: boolean; index: RepoScriptIndex | null; workspace: string | null }>(
+      "/api/db-compare/repo-scripts",
+    ),
+  refresh: () =>
+    api.post<{ ok: boolean; index: RepoScriptIndex | null }>(
+      "/api/db-compare/repo-scripts/refresh",
+      {},
+    ),
+  runCoverage: (runId: string) =>
+    api.get<{ ok: boolean; coverage: RepoCoverage | null; workspace: string | null }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/repo-coverage`,
     ),
 };

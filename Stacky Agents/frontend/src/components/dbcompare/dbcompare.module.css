@@ -952,3 +952,126 @@
   font-size: 0.75rem;
   margin-left: auto;
 }
+
+/* Plan 180 — Puente diff→repo: panel de cobertura de scripts ticketeados.
+   Solo tokens de theme.css + escala --dbc-* existente (sin paleta nueva). */
+.repoCoverageSection {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius, var(--radius));
+}
+
+.repoCoverageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repoCoverageTitle {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.repoCoverageRescan {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.repoCoverageRescan:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.repoCoverageSummary {
+  margin: 8px 0 12px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.repoCoverageList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.repoCoverageRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+.repoCoverageObject {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.repoCoverageSeverity {
+  color: var(--text-faint);
+}
+
+.repoCoverageUncovered {
+  font-size: 0.78rem;
+  color: var(--dbc-unchanged);
+  font-style: italic;
+}
+
+.repoCoverageCandidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.repoCoverageCandidate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+
+.repoCoverageTicket {
+  color: var(--dbc-info);
+  font-weight: 600;
+}
+
+.repoCoveragePath {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.repoCoverageQualified {
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  color: var(--success);
+  border: 1px solid var(--success);
+  border-radius: var(--radius-sm);
+}
+
+.repoCoverageCopy {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}

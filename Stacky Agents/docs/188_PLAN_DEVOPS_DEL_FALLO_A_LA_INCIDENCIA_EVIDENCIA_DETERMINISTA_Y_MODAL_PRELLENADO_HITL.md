@@ -1,9 +1,32 @@
 # Plan 188 — DevOps: del fallo a la incidencia — evidencia determinista y modal prellenado (HITL)
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (compone el Centro de Despliegues 120 con el ciclo de incidencias 131/166)
+
+## Changelog v1 → v2 (crítica C1..C8 + adiciones)
+
+- **C1 (IMPORTANTE):** el esqueleto F0 ahora incluye `_lookup_run` REAL (el test de F0
+  `test_endpoint_404_run_inexistente` lo exige); F1 solo completa el armado del bundle.
+- **C2 (IMPORTANTE):** regla ÚNICA de lookup: espejar el acceso de la ruta existente
+  `/runs/<run_id>` (`devops_deployments.py:274`) — se eliminó el `limit=200` propio que podía dar
+  404 falso en ledgers largos.
+- **C3 (IMPORTANTE) + [ADICIÓN ARQUITECTO 1]:** masking determinista de VALORES con pinta de token
+  en las colas de stdout/stderr (`_mask_token_values`, prefijos del plan 186) — un
+  `echo $env:DEPLOY_TOKEN` en el ledger ya no puede llegar a ADO vía `auto_publish`.
+- **C4 (IMPORTANTE):** el modal se monta CONDICIONALMENTE con `key={run_id}` (remount por run;
+  `useState(init)` no se re-inicializa en un componente ya montado).
+- **C5 (IMPORTANTE):** rama explícita para `failed_step = None` en el markdown ("No se identificó
+  un paso fallido (estado del run: {status})") + test.
+- **C6 (MENOR):** `previous_runs` = excluir el run propio y LUEGO `[:5]`.
+- **C7 (MENOR):** target exacto del monkeypatch del logger: `services.stacky_logger.logger.info`
+  (el import de la ruta es intra-función).
+- **C8 (MENOR):** truncado de `modal_text` descuenta el largo del sufijo antes de concatenarlo; el
+  chequeo "sin imports de red" es ahora el test concreto `test_sin_imports_de_red`.
+- **[ADICIÓN ARQUITECTO 2]:** footer de trazabilidad al final del markdown:
+  `_Generado por Stacky · evidencia {SCHEMA_VERSION} · {generated_at}_` — permite auditar el origen
+  de un ticket en ADO mucho después.
 
 ---
 
@@ -25,7 +48,7 @@ Del fallo al ticket documentado: segundos en vez de minutos, con evidencia compl
 | KPI | Métrica | Criterio binario |
 |-----|---------|------------------|
 | KPI-1 | Determinismo + velocidad + pureza | La evidencia del run golden se construye < 100 ms, con `socket` bloqueado (cero red), y es byte-a-byte idéntica entre 2 corridas con `generated_at` fijo |
-| KPI-2 | Cero secretos | Fixture con claves `DEPLOY_TOKEN`/`DB_PASSWORD` en la config del target → NO aparecen ni en el markdown ni en el JSON (test) |
+| KPI-2 | Cero secretos | Fixture con claves `DEPLOY_TOKEN`/`DB_PASSWORD` en la config del target → NO aparecen ni en el markdown ni en el JSON; y un VALOR con prefijo de token en stdout queda enmascarado como `<posible-secreto-omitido>` (C3) |
 | KPI-3 | Caps respetados | `summary` ≤ 120 chars; texto para el modal ≤ 18.000 chars (margen bajo `MAX_TEXT_LEN` 20.000 de `incident_store.py:26`); markdown adjunto ≤ 100.000 chars; JSON ≤ 1 MB — los 4 verificados con un run gigante sintético |
 | KPI-4 | Retrocompatibilidad del modal | `IncidentResolverModal` sin las props nuevas se comporta EXACTAMENTE igual (props opcionales; `tsc --noEmit` verde y test puro del init) |
 
@@ -154,6 +177,12 @@ TAIL_LINES = 60                    # cola de stdout/stderr por paso
 # claves de config/entorno que JAMÁS entran a la evidencia (case-insensitive, por sufijo)
 SECRET_KEY_SUFFIXES = ("_token", "_pat", "_password", "_secret", "_key", "_apikey")
 
+# [ADICIÓN ARQUITECTO 1 / C3] — prefijos de VALORES con pinta de token (misma lista del plan 186);
+# se enmascaran dentro de stdout/stderr porque un `echo $env:X` deja el VALOR en el ledger y la
+# incidencia puede publicarse a ADO (auto_publish 166).
+TOKEN_VALUE_PREFIXES = ("ghp_", "github_pat_", "glpat-", "xoxb-", "xoxp-", "AKIA", "eyJhbGciOi")
+MASK_PLACEHOLDER = "<posible-secreto-omitido>"
+
 
 @dataclass(frozen=True)
 class EvidenceBundle:
@@ -166,13 +195,21 @@ class EvidenceBundle:
         return asdict(self)
 
 
+def _lookup_run(app_id: str, target: str, run_id: str) -> dict | None:
+    """C1/C2 — REGLA ÚNICA: leer devops_deployments.py:274-283 (ruta /runs/<run_id>) ANTES de
+    implementar y ESPEJAR exactamente ese acceso al ledger (mismas funciones de deploy_store,
+    misma semántica, SIN inventar un limit propio). Va COMPLETO en F0 porque el test de F0
+    `test_endpoint_404_run_inexistente` lo ejercita."""
+
+
 def build_deploy_failure_evidence(
     app_id: str,
     target: str,
     run_id: str,
     now: datetime | None = None,   # inyectable para tests deterministas (KPI-1)
 ) -> EvidenceBundle | None:
-    """None si el run no existe. F0: devuelve bundle mínimo con summary; F1 lo completa."""
+    """None si el run no existe (usa _lookup_run desde F0). En F0 devuelve un bundle mínimo
+    (summary + textos vacíos) para el run encontrado; F1 completa markdown/json/caps."""
     ...
 ```
 
@@ -242,10 +279,13 @@ local pura; la acción con efecto — crear incidencia — sigue en el modal HIT
 **Diseño interno (exacto):**
 
 ```python
-def _lookup_run(app_id: str, target: str, run_id: str) -> dict | None:
-    """Busca el entry por run_id en deploy_store.read_ledger(app_id, target, limit=200).
-    Mismo criterio de lookup que la ruta /runs/<run_id> (devops_deployments.py:274):
-    leer esa ruta ANTES de implementar y espejar el acceso."""
+# _lookup_run ya existe desde F0 (C1) — acá NO se redefine.
+
+def _mask_token_values(text: str) -> str:
+    """C3 / ADICIÓN 1 — reemplaza por MASK_PLACEHOLDER toda substring que empiece con un
+    prefijo de TOKEN_VALUE_PREFIXES seguida de >=8 chars [A-Za-z0-9_./+-]. Regex única
+    compilada a nivel módulo. Se aplica a CADA cola de stdout/stderr ANTES de entrar al
+    markdown y al json_payload."""
 
 def _strip_secrets(obj):
     """Copia profunda de dict/list/str; en dicts, TODA clave cuyo lower() termine en
@@ -263,8 +303,9 @@ def _tail(text: str, n: int = TAIL_LINES) -> str:
    `deploy_executor.py:235` vía `update_ledger_entry`); si ninguno y `entry["smoke"]` con
    `ok == False` → el "paso fallido" es el smoke.
 4. `last_ok = deploy_store.last_success_version(app_id, target)` (`deploy_store.py:186`).
-5. `previous = deploy_store.read_ledger(app_id, target, limit=6)` excluyendo el propio run → hasta 5
-   filas `{run_id, status, version, started_at}`.
+5. `previous` = `deploy_store.read_ledger(app_id, target, limit=6)`, EXCLUIR el run propio y LUEGO
+   `[:5]` (C6 — sin la exclusión previa podían quedar 6 filas) → filas
+   `{run_id, status, version, started_at}`.
 6. `summary` (≤120 chars, truncar con "…"):
    `f"Despliegue fallido: {app['name']} → {target} ({entry['status']}, v{entry.get('version','?')})"`.
 7. `json_payload` = `{"schema_version": SCHEMA_VERSION, "kind": "deploy_failure",
@@ -276,12 +317,20 @@ def _tail(text: str, n: int = TAIL_LINES) -> str:
    dominan el tamaño).
 8. `markdown` (es-AR, secciones EXACTAS en este orden; truncado global a MAX_MARKDOWN_CHARS):
    `# Fallo de despliegue — {app} → {target}` / `## Resumen` (tabla: estado, versión, inicio,
-   duración, última versión OK) / `## Paso fallido` (nombre + ```text con _tail(stdout) y
-   _tail(stderr)```) / `## Smoke` (kind, ok, detail — o "no llegó al smoke") / `## Historial
-   reciente` (tabla de `previous`) / `## Siguientes pasos sugeridos` (3 bullets fijos: revisar
-   Doctor de la sección; comparar drift del target; rollback disponible a v{last_ok} si existe).
-9. `modal_text` = `summary + "\n\n" + markdown` truncado a MAX_MODAL_TEXT_CHARS con sufijo
-   `"\n\n[Evidencia completa en evidencia.md adjunta]"` si se cortó.
+   duración, última versión OK) / `## Paso fallido` — si `failed_step` existe: nombre + bloque
+   ```text``` con `_mask_token_values(_tail(stdout))` y `_mask_token_values(_tail(stderr))`; si es
+   el smoke: "Falló el smoke" + detail; **si es `None` (C5): la línea exacta "No se identificó un
+   paso fallido (estado del run: {status})" — la sección SIEMPRE se renderiza, nunca KeyError** /
+   `## Smoke` (kind, ok, detail — o "no llegó al smoke") / `## Historial reciente` (tabla de
+   `previous`) / `## Siguientes pasos sugeridos` (3 bullets fijos: revisar Doctor de la sección;
+   comparar drift del target; rollback disponible a v{last_ok} si existe) / **footer [ADICIÓN
+   ARQUITECTO 2]: línea final `_Generado por Stacky · evidencia {SCHEMA_VERSION} ·
+   {generated_at}_`**. El mismo masking (C3) se aplica a los stdout/stderr que queden dentro de
+   `json_payload["run"]["steps"]`.
+9. `modal_text` (C8): `base = summary + "\n\n" + markdown`; si `len(base) > MAX_MODAL_TEXT_CHARS`,
+   `sufijo = "\n\n[Evidencia completa en evidencia.md adjunta]"` y
+   `modal_text = base[:MAX_MODAL_TEXT_CHARS - len(sufijo)] + sufijo` (el resultado FINAL nunca
+   supera MAX_MODAL_TEXT_CHARS); si no, `modal_text = base`.
 10. Return `EvidenceBundle(summary, modal_text, markdown, json_payload)`.
 
 **Tests PRIMERO** — `tests/test_plan188_evidence_builder.py` (fixture: entry golden INLINE con 3
@@ -299,11 +348,20 @@ target con `DEPLOY_TOKEN` y `DB_PASSWORD`; `deploy_store` monkeypatcheado en mem
   (summary ≤120, modal_text ≤18.000, markdown ≤100.000, JSON ≤1 MB tras el 2.º intento).
 - `test_fallo_por_smoke_sin_step_fallido` — steps todos ok + smoke ok=False → `failed_step` es el
   smoke y el markdown lo dice ("Falló el smoke").
+- `test_sin_paso_fallido_identificado` — steps todos ok y smoke ok → sección "Paso fallido" dice
+  "No se identificó un paso fallido" sin excepción (C5).
+- `test_mask_token_values_en_stdout` — stdout con `"ghp_" + "x"*20` (literal PARTIDO — gotcha
+  push-protection) → en markdown y json aparece `<posible-secreto-omitido>` y el valor NO (C3).
+- `test_footer_trazabilidad` — el markdown termina con la línea `_Generado por Stacky · evidencia
+  188.1 · {generated_at}_` (ADICIÓN 2).
+- `test_sin_imports_de_red` — el SOURCE de `services/devops_evidence.py` (leído con
+  `Path(...).read_text()`) no contiene `"import requests"` ni `"remote_exec"` ni `"ci_variables"`
+  (C8).
 - `test_secciones_markdown_exactas` — las 5 secciones `##` aparecen en orden.
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan188_evidence_builder.py -q`
 
-**Criterio binario:** los 8 tests pasan (KPI-1, KPI-2, KPI-3 completos).
+**Criterio binario:** los 12 tests pasan (KPI-1, KPI-2, KPI-3 completos).
 
 **Flag:** la de F0 (el servicio es puro y no conoce flags). **Runtimes:** idéntico.
 **Trabajo del operador:** ninguno.
@@ -340,8 +398,9 @@ target con `DEPLOY_TOKEN` y `DB_PASSWORD`; `deploy_store` monkeypatcheado en mem
   `json_payload.schema_version == "188.1"`.
 - `test_404_run_not_found_con_ledger_real_vacio`.
 - `test_400_faltan_campos` — cada uno de los 3 campos ausente → 400.
-- `test_logger_llamado` — monkeypatch de `stacky_logger.info` → llamado con evento
-  `evidence_built` y `run_id` correcto.
+- `test_logger_llamado` — monkeypatch del target EXACTO `services.stacky_logger.logger.info`
+  (C7 — el import de la ruta es intra-función, así que hay que patchear el módulo fuente, no el
+  namespace de `devops_deployments`) → llamado con evento `evidence_built` y `run_id` correcto.
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan188_evidence_endpoint.py -q`
 
@@ -450,8 +509,11 @@ export function evidenceToFiles(runId: string, markdown: string, jsonPayload: un
    - onClick: `POST /api/devops/deployments/evidence` con `{app_id, target, run_id}`;
      si `!res.ok` → toast/mensaje inline "No se pudo armar la evidencia" y NADA más (el flujo
      actual no se degrada). Si ok:
-     `setIncidentInit({ text: evidence.modal_text, files: evidenceToFiles(run_id, evidence.markdown, evidence.json_payload) })`
-     y render de `<IncidentResolverModal initialText={…} initialFiles={…} onClose={…}/>`
+     `setIncidentInit({ runId: run_id, text: evidence.modal_text, files: evidenceToFiles(run_id, evidence.markdown, evidence.json_payload) })`.
+   - **C4 — render del modal CONDICIONAL y con `key` (obligatorio):**
+     `{incidentInit && <IncidentResolverModal key={incidentInit.runId} initialText={incidentInit.text} initialFiles={incidentInit.files} onClose={() => setIncidentInit(null)} />}`
+     — el `key={runId}` fuerza REMOUNT al cambiar de run (con `useState(init)` un modal ya montado
+     NO se re-inicializa) y el condicional garantiza que cada apertura sea un mount fresco
      (import del componente EXISTENTE `frontend/src/components/IncidentResolverModal.tsx`).
    - HITL: el modal se abre en su paso de intake normal; el operador revisa, edita si quiere y
      recién ahí crea (y publica solo si su preferencia 166 ya lo hacía).
@@ -481,7 +543,7 @@ renderiza — la UI chequea el 404 del primer intento y lo oculta el resto de la
 
 | Riesgo | Mitigación |
 |--------|------------|
-| Evidencia filtra un secreto (peor caso) | `_strip_secrets` recursivo por sufijo + KPI-2 con fixture sembrado; los valores de steps son stdout de comandos PROPIOS del deploy (ya visibles en el ledger local); la evidencia NO agrega fuentes nuevas |
+| Evidencia filtra un secreto (peor caso: llega a ADO vía auto_publish 166) | Doble capa: `_strip_secrets` por CLAVE (sufijos) + `_mask_token_values` por VALOR (prefijos de token, C3) sobre todas las colas stdout/stderr; KPI-2 con fixtures sembrados en ambas capas |
 | `modal_text` supera el límite del intake | Cap 18.000 < `MAX_TEXT_LEN` 20.000 (`incident_store.py:26`) + test KPI-3 con run gigante |
 | Modal se rompe para usos actuales | Props opcionales + helper puro + KPI-4 (`tsc` + test de init); cero cambios en validaciones/flujo |
 | `File` no disponible en el entorno de test de vitest | Fallback documentado en F4 (assert de nombres; lectura solo si `typeof File !== 'undefined'`) |

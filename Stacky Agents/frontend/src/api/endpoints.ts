@@ -3263,7 +3263,42 @@ export const CIPipeline = {
     api.get<{ runs: CiRunEntry[] }>(
       `/api/ci/runs?project=${encodeURIComponent(project)}&limit=${limit}`
     ),
+
+  /** Plan 193 — jobs fallidos del pipeline (read-only). 404 si flag OFF. */
+  failedJobs: (project: string, pipelineId: string): Promise<FailedJobsResponse> =>
+    api.get<FailedJobsResponse>(
+      `/api/ci/${encodeURIComponent(project)}/pipeline/${encodeURIComponent(pipelineId)}/failed-jobs`
+    ),
+
+  /** Plan 193 — log de un job fallido (tail 200K + tokens enmascarados). 404 si flag OFF. */
+  jobLog: (project: string, jobId: string): Promise<JobLogResponse> =>
+    api.get<JobLogResponse>(
+      `/api/ci/${encodeURIComponent(project)}/job/${encodeURIComponent(jobId)}/log`
+    ),
 };
+
+/** Plan 193 — job fallido devuelto por el puerto CILogsProvider (96). */
+export interface FailedJobEntry {
+  job_id: string;
+  name: string;
+  stage: string;
+  web_url: string | null;
+}
+
+/** Plan 193 — respuesta de /failed-jobs. */
+export interface FailedJobsResponse {
+  jobs: FailedJobEntry[];
+  provider: string;
+}
+
+/** Plan 193 — respuesta de /log: tail acotado (200K) + masking de tokens. */
+export interface JobLogResponse {
+  log: string;
+  truncated: boolean;
+  /** Largo del texto ORIGINAL (pre-mask, pre-tail). C3 — semántica congelada. */
+  chars_total: number;
+  provider: string;
+}
 
 /** Plan 191 — entry de la bitácora de corridas CI (contrato ENTRY_FIELDS del backend). */
 export interface CiRunEntry {

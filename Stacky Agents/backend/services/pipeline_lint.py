@@ -213,6 +213,49 @@ def _find_cycle(edges: dict):
     return None
 
 
+# ── Autofixes deterministas (F3) — cirugía de líneas, NUNCA yaml.safe_dump ──────
+
+def _rebuild(ctx: LintContext, new_lines: list) -> str:
+    text = "\n".join(new_lines)
+    if ctx.text.endswith("\n"):
+        text += "\n"
+    return text
+
+
+def _fix_replace_on_line(ctx, line_no, old_sub, new_sub, description):
+    if line_no is None or not (0 < line_no <= len(ctx.lines)):
+        return None
+    old = ctx.lines[line_no - 1]
+    if old_sub not in old:
+        return None
+    new_lines = list(ctx.lines)
+    new_lines[line_no - 1] = old.replace(old_sub, new_sub, 1)
+    return LintFix(description=description, new_yaml=_rebuild(ctx, new_lines))
+
+
+def _fix_delete_line(ctx, line_no, description):
+    if line_no is None or not (0 < line_no <= len(ctx.lines)):
+        return None
+    new_lines = list(ctx.lines)
+    del new_lines[line_no - 1]
+    return LintFix(description=description, new_yaml=_rebuild(ctx, new_lines))
+
+
+def _fix_insert_after(ctx, line_no, insert_lines, description):
+    if line_no is None or not (0 < line_no <= len(ctx.lines)):
+        return None
+    new_lines = list(ctx.lines)
+    new_lines[line_no:line_no] = insert_lines
+    return LintFix(description=description, new_yaml=_rebuild(ctx, new_lines))
+
+
+def _key_indent(line: str) -> int:
+    """Indentación de las claves del bloque cuyo encabezado es `line`.
+    Para `  - job: X` (lista) → lead + 2; para `job:` (mapa) → lead + 2."""
+    lead = len(line) - len(line.lstrip(" "))
+    return lead + 2
+
+
 # ── Reglas estructurales PL002..PL006 (PL001 se maneja en lint_yaml) ────────────
 
 @_rule("PL002", SEV_ERROR, ("ado", "gitlab"),
@@ -229,21 +272,29 @@ def _pl002_ado(ctx: LintContext):
         return findings
     stages = _ado_stage_items(ctx.data)
     for name in _duplicates([s.get("stage") for s in stages]):
-        line = _find_line_nth(ctx, f"stage: {name}", 2) or _find_line(ctx, f"stage: {name}")
+        line2 = _find_line_nth(ctx, f"stage: {name}", 2)
+        fix = _fix_replace_on_line(
+            ctx, line2, f"stage: {name}", f"stage: {name}-2",
+            f"Renombrar el stage duplicado '{name}' a '{name}-2'.")
         findings.append(LintFinding(
             "PL002", SEV_ERROR,
             f"El stage '{name}' está definido más de una vez. Los nombres de stage deben ser únicos.",
-            line=line, node=f"stage:{name}"))
+            line=line2 or _find_line(ctx, f"stage: {name}"), node=f"stage:{name}", fix=fix))
     for grp in _ado_job_groups(ctx.data):
         for name in _duplicates([_ado_job_name(j) for j in grp]):
-            line = (_find_line_nth(ctx, f"job: {name}", 2)
-                    or _find_line_nth(ctx, f"deployment: {name}", 2)
-                    or _find_line(ctx, f"job: {name}"))
+            line2 = _find_line_nth(ctx, f"job: {name}", 2)
+            key = "job"
+            if line2 is None:
+                line2 = _find_line_nth(ctx, f"deployment: {name}", 2)
+                key = "deployment"
+            fix = _fix_replace_on_line(
+                ctx, line2, f"{key}: {name}", f"{key}: {name}-2",
+                f"Renombrar el job duplicado '{name}' a '{name}-2'.")
             findings.append(LintFinding(
                 "PL002", SEV_ERROR,
                 f"El job '{name}' está definido más de una vez dentro de su stage. "
                 f"Los nombres de job deben ser únicos.",
-                line=line, node=f"job:{name}"))
+                line=line2 or _find_line(ctx, f"job: {name}"), node=f"job:{name}", fix=fix))
     return findings
 
 
@@ -258,10 +309,13 @@ def _pl002_gitlab(ctx: LintContext):
         if name in _GITLAB_RESERVED:
             continue
         if len(lns) >= 2:
+            fix = _fix_replace_on_line(
+                ctx, lns[1], f"{name}:", f"{name}-2:",
+                f"Renombrar el job duplicado '{name}' a '{name}-2'.")
             findings.append(LintFinding(
                 "PL002", SEV_ERROR,
                 f"La clave top-level '{name}' está definida más de una vez (job duplicado).",
-                line=lns[1], node=f"job:{name}"))
+                line=lns[1], node=f"job:{name}", fix=fix))
     return findings
 
 
@@ -283,25 +337,37 @@ def _pl003_ado(ctx: LintContext):
         sname = s.get("stage")
         for dep in _as_name_list(s.get("dependsOn")):
             if dep not in stage_names:
-                line = _find_line(ctx, f"dependsOn: {dep}") or _find_line(ctx, f"stage: {sname}")
+                dep_line = _find_line(ctx, f"dependsOn: {dep}")
+                fix = _fix_pl003_ado(ctx, dep, dep_line)
                 findings.append(LintFinding(
                     "PL003", SEV_ERROR,
                     f"El stage '{sname}' depende de '{dep}', que no existe.",
-                    line=line, node=f"stage:{sname}"))
+                    line=dep_line or _find_line(ctx, f"stage: {sname}"),
+                    node=f"stage:{sname}", fix=fix))
     for grp in _ado_job_groups(ctx.data):
         jnames = {_ado_job_name(j) for j in grp}
         for j in grp:
             nm = _ado_job_name(j)
             for dep in _as_name_list(j.get("dependsOn")):
                 if dep not in jnames:
-                    line = (_find_line(ctx, f"dependsOn: {dep}")
-                            or _find_line(ctx, f"job: {nm}")
-                            or _find_line(ctx, f"deployment: {nm}"))
+                    dep_line = _find_line(ctx, f"dependsOn: {dep}")
+                    fix = _fix_pl003_ado(ctx, dep, dep_line)
                     findings.append(LintFinding(
                         "PL003", SEV_ERROR,
                         f"El job '{nm}' depende de '{dep}', que no existe en su stage.",
-                        line=line, node=f"job:{nm}"))
+                        line=dep_line or _find_line(ctx, f"job: {nm}"),
+                        node=f"job:{nm}", fix=fix))
     return findings
+
+
+def _fix_pl003_ado(ctx, dep, dep_line):
+    """Quitar la referencia rota de dependsOn (scalar → borrar la línea entera)."""
+    if dep_line is not None:
+        return _fix_delete_line(ctx, dep_line, f"Quitar la dependencia rota a '{dep}'.")
+    item_line = _find_line(ctx, f"- {dep}")
+    if item_line is not None:
+        return _fix_delete_line(ctx, item_line, f"Quitar la dependencia rota a '{dep}'.")
+    return None
 
 
 def _pl003_gitlab(ctx: LintContext):
@@ -311,11 +377,13 @@ def _pl003_gitlab(ctx: LintContext):
     for name, jd in jobs.items():
         for ref in _gitlab_needs_refs(jd.get("needs")):
             if ref not in jobset:
-                line = _find_line(ctx, f"- {ref}") or _find_line(ctx, f"{name}:")
+                ref_line = _find_line(ctx, f"- {ref}")
+                fix = (_fix_delete_line(ctx, ref_line, f"Quitar el 'needs' roto a '{ref}'.")
+                       if ref_line is not None else None)
                 findings.append(LintFinding(
                     "PL003", SEV_ERROR,
                     f"El job '{name}' necesita '{ref}' (needs), que no existe.",
-                    line=line, node=f"job:{name}"))
+                    line=ref_line or _find_line(ctx, f"{name}:"), node=f"job:{name}", fix=fix))
     return findings
 
 
@@ -389,19 +457,35 @@ def _rule_pl005(ctx: LintContext):
                     continue
                 if not _ado_job_has_steps(j):
                     nm = j.get("job")
+                    job_line = _find_line(ctx, f"job: {nm}")
+                    fix = None
+                    if job_line is not None:
+                        ind = " " * _key_indent(ctx.lines[job_line - 1])
+                        fix = _fix_insert_after(
+                            ctx, job_line,
+                            [ind + "steps:", ind + '- script: echo "TODO reemplazar"'],
+                            f"Agregar un paso mínimo al job '{nm}'.")
                     findings.append(LintFinding(
                         "PL005", SEV_ERROR,
                         f"El job '{nm}' no tiene pasos ejecutables (ni 'steps' ni 'template').",
-                        line=_find_line(ctx, f"job: {nm}"), node=f"job:{nm}"))
+                        line=job_line, node=f"job:{nm}", fix=fix))
     else:
         jobs = _gitlab_jobs(ctx.data)
         for name, jd in jobs.items():
             if not any(k in jd for k in ("script", "run", "trigger", "extends")):
+                job_line = _find_line(ctx, f"{name}:")
+                fix = None
+                if job_line is not None:
+                    ind = " " * _key_indent(ctx.lines[job_line - 1])
+                    fix = _fix_insert_after(
+                        ctx, job_line,
+                        [ind + "script:", ind + '- echo "TODO reemplazar"'],
+                        f"Agregar un script mínimo al job '{name}'.")
                 findings.append(LintFinding(
                     "PL005", SEV_ERROR,
                     f"El job '{name}' no tiene pasos ejecutables "
                     f"('script', 'run', 'trigger' o 'extends').",
-                    line=_find_line(ctx, f"{name}:"), node=f"job:{name}"))
+                    line=job_line, node=f"job:{name}", fix=fix))
     return findings
 
 

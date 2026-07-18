@@ -478,6 +478,7 @@ $HarnessTestFiles = @(
   "tests/test_plan186_lint_estructura.py"
   "tests/test_plan186_lint_variables.py"
   "tests/test_plan186_lint_catalogo.py"
+  "tests/test_plan186_lint_fixes.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

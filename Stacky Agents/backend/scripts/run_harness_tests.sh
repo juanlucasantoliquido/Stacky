@@ -526,6 +526,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan186_lint_estructura.py
   tests/test_plan186_lint_variables.py
   tests/test_plan186_lint_catalogo.py
+  tests/test_plan186_lint_fixes.py
 )
 
 pass=0

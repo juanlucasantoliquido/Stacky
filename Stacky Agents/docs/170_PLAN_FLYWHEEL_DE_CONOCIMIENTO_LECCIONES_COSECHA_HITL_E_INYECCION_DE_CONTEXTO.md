@@ -1,6 +1,56 @@
 # Plan 170 — Flywheel de conocimiento: lecciones estructuradas, cosecha human-in-the-loop e inyección al contexto de agentes
 
-**Estado:** PROPUESTO v1 — 2026-07-17 · **Autor:** StackyArchitectaUltraEficientCode
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**Estado:** CRITICADO v2 (2026-07-18) — APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (adversarial)
+
+**CHANGELOG v1 -> v2:**
+
+- **C1 (IMPORTANTE, PII total en la cosecha):** en v1 solo el output del run `incident_dev`
+  pasaba por `redact_irreversible`; el texto del intake y el doc de la incidencia entraban
+  al draft SIN máscara — y una lección aprobada se inyecta a TODOS los prompts futuros
+  (amplificador de fugas). v2: G15 ampliado — TODO insumo textual externo se enmascara
+  antes de entrar al draft, y el draft final (title+body, incluido el manual) se enmascara
+  otra vez antes de `create_proposal` (defensa en profundidad). Test nuevo F2 caso 11.
+- **C2 (IMPORTANTE, dedup de cosecha robusto):** en v1 `harvested_incident_ids` contaba
+  CUALQUIER propuesta de `knowledge_rag` con `"incident:<id>"` en `evidence`: (a) las
+  propuestas del MAPE del 167 (regla R-A3, también sobre incidencias) podían marcar
+  candidatas como "ya cosechadas" sin cosecha real; (b) una propuesta RECHAZADA dejaba la
+  incidencia bloqueada para siempre en el panel. v2: el set cuenta SOLO propuestas con
+  algún marker `harvest:*` en `evidence` Y `status != "rejected"` (§4.4). Los markers
+  `harvest:*` quedan declarados EXCLUSIVOS de este plan. Test nuevo F1 caso 13.
+- **C3 (IMPORTANTE, honestidad de contadores):** `record_injection` corre al armar el
+  bloque, pero el presupuesto F2.4 del 133 corre DESPUÉS y puede podar el bloque
+  (prioridad 79 podable): `usage_count` contaría lecciones que no llegaron al prompt.
+  v2: semántica LITERAL congelada — `usage_count` = "veces SELECCIONADA para inyección"
+  (§4.2), rótulo del panel "Seleccionada Nx" (F6) y nota en R6. Sin tocar el contrato 133.
+- **C4 (IMPORTANTE, drift de contratos vecinos):** los docs 167/168/169 son v1 y serán
+  reescritos a v2 por el pipeline; sus números de línea rotarán. v2: nueva G17 (citas a
+  docs hermanos anclan por §sección+símbolo) y pre-check global AMPLIADO con greps de los
+  símbolos consumidos en el CÓDIGO real (`update_proposal_fields`, `maybe_auto_apply`,
+  `VALID_ORIGINS`/`create_case`/`read_runs_tail`) — si falta alguno, DETENERSE y reportar
+  drift de contrato (§5).
+- **C5 (MENOR, lecciones contradictorias):** el header literal del bloque §4.5 ahora
+  incluye la regla de precedencia ("número más bajo gana; anotá el conflicto").
+- **C6 (MENOR, prosa):** §3.5 decía "lo vacía SOLO su rollback"; el rollback del 167
+  remueve SOLO la línea de la lección revertida (167 F2). Corregido.
+- **C7 (MENOR, comentario desactualizado):** F3 toque (a-bis): extender el comentario de
+  `_HIGH_PRIORITY_THRESHOLD` (`context_enrichment.py:249-250`) con `evolution-lessons(79)`.
+- **C8 (MENOR, ambigüedad):** el pseudocódigo del injector F3 tenía una elipsis en el
+  armado con cap; v2 trae el loop literal vía `build_lessons_block` (función pura nueva).
+- **C9 (MENOR, obsolescencia):** en v1 una lección muerta solo se sugería al exceder el
+  cap 200; con corpus chico vivía para siempre. v2: `retire_suggestions` agrega la razón
+  `"sin_uso_prolongado"` (`usage_count == 0` y edad > `_STALE_DAYS = 60` días) SIEMPRE
+  visible — sugerencia, jamás auto-retiro. Test nuevo F1 caso 14.
+- **[ADICIÓN ARQUITECTO] Vista previa de inyección (dry-run):** endpoint
+  `GET /knowledge/injection-preview` + panel colapsable en F6: el operador VE el bloque
+  §4.5 exacto que recibiría un agente (por agent_type/proyecto/query) SIN registrar uso.
+  Cierra el gap HITL del retorno: hoy el humano aprueba lecciones pero nunca ve cómo
+  quedan en el prompt. Reusa `build_lessons_block` (C8); test F5 caso 11.
+- **Contratos de la serie:** SIN cambios hacia 167/168/169. Única premisa nueva
+  explícita: los markers `harvest:*` de `evidence` son exclusivos del 170 (C2); los
+  planes hermanos no deben emitirlos (hoy ninguno los define — verificado en sus v1).
+- Conteos actualizados: tests backend 8+14+11+10+5+11 = **59** (antes 55); frontend 8.
 **Serie:** "Auto-mejora recursiva" **4 de 4 — CIERRA LA SERIE** (directiva del operador 2026-07-17):
 **167** = Centro de Evolución: propuestas + ciclo MAPE con gates humanos (PROPUESTO, dependencia DURA) ·
 **168** = arnés de fitness: golden tasks + juez local (PROPUESTO, dependencia DURA) ·
@@ -236,7 +286,8 @@ acumulación sin verificación, sin optimizador (169) le faltaría una fuente.
    prioridad 79 (podable bajo presión extrema, debajo de `stacky-memory` 80). Cero
    pollers nuevos en el panel (riel G9 del 167).
 5. **El contrato del 167 es INTOCABLE:** `lessons.jsonl` lo escribe SOLO
-   `evolution_apply` del 167 (apply de `knowledge_note`) y lo vacía SOLO su rollback.
+   `evolution_apply` del 167 (apply de `knowledge_note`) y la única remoción de líneas
+   es su rollback, que quita SOLO la línea de la lección revertida (167 F2, C6).
    Este plan agrega un SIDECAR (`lessons_meta.json`) para los campos nuevos y NUNCA
    escribe `lessons.jsonl` directamente (KPI-3). Retirar una lección = transición
    `rollback` de su propuesta (API del 167, reuso total, auditada en su ledger).
@@ -310,13 +361,28 @@ acumulación sin verificación, sin optimizador (169) le faltaría una fuente.
   nuevo debe matchear espuriamente los greps de criterio de este plan (gotcha
   recurrido 6×: el gate siempre gana; se reescribe la prosa). En particular: el
   módulo `knowledge_harvest.py` NO debe contener los literales `append_lesson` ni
-  `lessons.jsonl` ni siquiera en comentarios (KPI-3).
-- **G15 — PII:** todo output de ejecución que entre al draft pasa por
-  `redact_irreversible` ANTES de usarse (mismo riel que `evals/harvest.py:95`).
+  `lessons.jsonl` ni siquiera en comentarios (KPI-3); y `api/evolution_knowledge.py`
+  NO debe contener el literal del registrador de contadores (`record_` + `injection`)
+  ni siquiera en comentarios/docstrings (criterio F5 del preview dry-run).
+- **G15 — PII TOTAL (C1):** TODO insumo textual externo que entre al draft —
+  texto del intake de la incidencia, contenido del doc (`doc_path`) Y output de
+  ejecución — pasa por `services.pii_masker.redact_irreversible` ANTES de usarse
+  (mismo riel que `evals/harvest.py:95`). Además, defensa en profundidad: el draft
+  final (`title` y `body`, TAMBIÉN el de `harvest_manual` y el determinista del
+  optimizador) pasa por `redact_irreversible` inmediatamente ANTES de
+  `create_proposal`. Razón: una lección aprobada se inyecta a TODOS los prompts
+  futuros — un secreto que se cuele se amplifica en cada corrida.
 - **G16 — Deploy frozen tolerante:** `doc_path` de una incidencia puede no existir en
   disco (deploy congelado, o doc en el fallback `data_dir()/incident_docs`). TODA
   lectura de archivos es tolerante (ausente/ilegible → se omite esa parte del insumo,
   NUNCA excepción) — patrón `incident_docs.py:29-35`.
+- **G17 — Citas a docs hermanos (C4):** los docs 167/168/169 son v1 y el pipeline los
+  reescribirá a v2: sus números de línea (`doc 167:739`, `doc 168:1356`, `doc 169:803`,
+  etc.) son ORIENTATIVOS. Toda cita a un plan hermano ancla por §sección + símbolo con
+  nombre (`maybe_auto_apply`, `VALID_ORIGINS`, `read_lessons_tail`…), nunca por línea.
+  La verificación vinculante es el pre-check de símbolos EN CÓDIGO del §5: si un símbolo
+  consumido no existe en el archivo implementado, DETENERSE y reportar drift de contrato
+  (no "adaptarse" en silencio).
 
 ---
 
@@ -365,6 +431,11 @@ Reglas congeladas:
   `tags` NO participa del matching de runs (es organización/búsqueda del panel).
 - `source.kind` ∈ `("incident", "optimizer_lesson", "manual")`; `ref` es el id de la
   fuente o `null` para manual.
+- **Semántica de `usage_count` (C3, congelada):** cantidad de veces que la lección fue
+  **SELECCIONADA para inyección** por el injector F3. Con el presupuesto global F2.4 del
+  133 activo (OFF default), el bloque puede podarse DESPUÉS de contar: seleccionada ≠
+  garantizada en el prompt final. El panel la rotula "Seleccionada Nx" (F6) — nunca
+  "usada" ni "leída". Misma semántica para `last_injected_at`.
 - **Backward-compat:** una línea de `lessons.jsonl` SIN meta (aplicada antes de este
   plan) es válida: la vista compuesta le asigna defaults —
   `title` = primera línea de `text` (cap 80 chars), `scope` global, `usage_count` 0,
@@ -412,15 +483,34 @@ devuelve vacío → fallback determinista `created_at` DESC. Sin query → direc
 
 `origin` de la propuesta (VALID_ORIGINS del 167, sin tocar): `from-incident` →
 `"agent"` (la redactó un no-humano); `from-optimizer-lesson` → `"optimizer"`;
-`manual` → `"manual"`. El set de incidencias ya cosechadas se computa determinista:
-`{e.split(":",1)[1] for p in list_proposals(aspect_id="knowledge_rag") for e in p["evidence"] if e.startswith("incident:")}`.
+`manual` → `"manual"`.
+
+**Set de fuentes ya cosechadas (C2, determinista y robusto):** una propuesta cuenta
+como "cosecha" SOLO si (i) su `evidence` contiene AL MENOS un item con prefijo
+`"harvest:"` — los markers `harvest:*` son EXCLUSIVOS de este plan; ningún plan hermano
+los emite (el MAPE del 167 crea propuestas `knowledge_rag` por su regla R-A3 SIN esos
+markers, y así no contaminan este set) — y (ii) `p["status"] != "rejected"` (un draft
+rechazado LIBERA la fuente: el operador puede re-cosechar). Pseudocódigo congelado:
+
+```python
+harvested = {
+    e.split(":", 1)[1]
+    for p in evolution_store.list_proposals(aspect_id="knowledge_rag")
+    if p.get("status") != "rejected"
+    and any(str(x).startswith("harvest:") for x in (p.get("evidence") or []))
+    for e in (p.get("evidence") or [])
+    if isinstance(e, str) and e.startswith("incident:")
+}
+```
+
+(ídem para `optimizer_lesson:` en `harvested_optimizer_lesson_ids`).
 
 ### 4.5 Bloque de contexto `evolution-lessons` (el retorno del flywheel, F3)
 
 ```json
 {"kind": "text", "id": "evolution-lessons",
  "title": "Lecciones aprendidas (Stacky) — <n>",
- "content": "LECCIONES APRENDIDAS DE INCIDENCIAS RESUELTAS Y MEJORAS VERIFICADAS (aplicalas cuando toquen tu tarea; no las transcribas en el output):\n1. [<title>] <text>\n2. …",
+ "content": "LECCIONES APRENDIDAS DE INCIDENCIAS RESUELTAS Y MEJORAS VERIFICADAS (aplicalas cuando toquen tu tarea; no las transcribas en el output; si dos lecciones se contradicen, priorizá la de número más bajo y anotá el conflicto en tu resumen):\n1. [<title>] <text>\n2. …",
  "metadata": {"lesson_ids": ["prop-…"], "truncated": false}}
 ```
 
@@ -436,8 +526,13 @@ Reglas congeladas:
   bloque nunca sale vacío si hubo al menos 1 matcheada).
 - Sin lecciones matching / flag OFF / store vacío → **se devuelve la lista de entrada
   tal cual** (identidad — KPI-1).
+- **Armado = función PURA `build_lessons_block` (C8/ADICIÓN):** la selección+armado del
+  bloque vive en `knowledge_store.build_lessons_block(lessons, query, top_n, max_chars)
+  -> dict | None` (None si `lessons` vacío). El injector F3 la llama y DESPUÉS registra
+  contadores; el preview (§4.8) la llama y NO registra. Un solo armador, dos consumidores.
 - Contadores: tras armar el bloque, `knowledge_store.record_injection(lesson_ids)`
-  best-effort (excepción → warning en log, el run sigue).
+  best-effort (excepción → warning en log, el run sigue). Semántica C3 (§4.2):
+  "seleccionada", no "garantizada en el prompt" — el budget F2.4 del 133 corre después.
 
 ### 4.6 Gate compuesto y helper de flags (en código, G8)
 
@@ -508,6 +603,7 @@ Flag OFF → 404 literal
 | `POST /api/evolution/knowledge/harvest/manual` body `{"title": "…", "body": "…", "scope"?: {…}, "force": false}` | 201 ídem \| 400 `invalid_payload` (title/body vacíos o sobre límites) \| 409 `duplicate_suspect` |
 | `POST /api/evolution/knowledge/lessons/<lid>/to-eval-case` | 201 `{"ok": true, "case": {EvalCase 168 §4.2}}` \| 404 `lesson_not_found` \| 409 `lesson_not_active` \| 409 `case_already_exists` (ya hay caso con `source_ref=="lesson:<lid>"`) |
 | `GET /api/evolution/knowledge/overview` | 200 shape §4.10 |
+| `GET /api/evolution/knowledge/injection-preview?agent_type=<t>&project=<p>&query=<q>` | **[ADICIÓN ARQUITECTO]** 200 `{"ok": true, "block": {shape §4.5} \| null, "matched_count": <int>}` — dry-run EXACTO del injector F3 (mismos flags TOP_N/MAX_CHARS, mismo ranking) pero SIN `record_injection` y SIN exigir `STACKY_KNOWLEDGE_INJECTION_ENABLED` (el operador puede previsualizar con la inyección apagada); `block=null` si nada matchea. `query` opcional (simula título+descripción de un ticket) |
 
 **Retiro de lección:** SIN endpoint nuevo — la UI llama
 `POST /api/evolution/proposals/<lesson_id>/transition` con
@@ -547,7 +643,7 @@ decide — human-in-the-loop, no auto-rechazo).
  "fitness_knowledge": {"latest_score": null, "baseline_score": null,
                        "delta": null, "runs": 0},
  "retire_suggestions": [{"lesson_id": "…", "title": "…", "usage_count": 0,
-                          "created_at": "…", "reason": "lru_por_uso"}]}
+                          "created_at": "…", "reason": "lru_por_uso | sin_uso_prolongado"}]}
 ```
 
 Fuentes (cada una en su propio `try/except` tolerante — una fuente caída produce su
@@ -559,21 +655,39 @@ clave con valores vacíos/null, el overview SIEMPRE responde 200):
 `aspect_key=="knowledge_rag"` y `trigger != "candidate"` (símbolo citado por el 169
 doc:579): `latest_score` = run más nuevo, `baseline_score` = más viejo del tail,
 `delta` = diferencia redondeada a 4 decimales (correlación HONESTA: el panel la
-rotula "correlación, no causalidad" — §F6); `retire_suggestions` solo si
-`active > cap`: las `active - cap` lecciones activas con menor `(usage_count,
-created_at)` ascendente, `reason` literal `"lru_por_uso"` — **sugerencia, NUNCA
-auto-borrado**.
+rotula "correlación, no causalidad" — §F6); `retire_suggestions` (C9) = unión de DOS reglas, ambas **sugerencia, NUNCA
+auto-borrado**: (1) si `active > cap`: las `active - cap` activas con menor
+`(usage_count, created_at)` ascendente, `reason` literal `"lru_por_uso"`; (2) SIEMPRE
+(independiente del cap): activas con `usage_count == 0` y `created_at` anterior a hoy
+menos `_STALE_DAYS` (constante `_STALE_DAYS = 60` en `knowledge_store.py`), `reason`
+literal `"sin_uso_prolongado"`. Una lección que cae en ambas aparece UNA vez con
+`"lru_por_uso"` (precedencia regla 1); orden final: `(usage_count, created_at)` asc.
 
 ---
 
 ## 5. Fases
 
 Orden por dependencia: **F0 → F1 → F2 → F3 → F4 → F5 → F6 → F7**. Pre-check GLOBAL
-antes de F0 (ambos obligatorios):
+antes de F0, en DOS niveles (C4/G17):
+
+**(1) Existencia (ambos obligatorios):**
 `test -f "Stacky Agents/backend/services/evolution_store.py"` (Plan 167) y
 `test -f "Stacky Agents/backend/evals/case_store.py"` (Plan 168) — si falta
 cualquiera, DETENERSE y reportar "Plan 167/168 no implementado". El Plan 169 NO es
 pre-check (dependencia blanda: F2.b degrada declaradamente).
+
+**(2) Símbolos del contrato EN CÓDIGO (todos deben dar ≥ 1 match; si alguno da 0,
+DETENERSE y reportar "drift de contrato 167/168: <símbolo> ausente"):**
+
+```bash
+grep -c "def create_proposal" "Stacky Agents/backend/services/evolution_store.py"
+grep -c "def update_proposal_fields" "Stacky Agents/backend/services/evolution_store.py"
+grep -c "def list_proposals" "Stacky Agents/backend/services/evolution_store.py"
+grep -c "def maybe_auto_apply" "Stacky Agents/backend/services/evolution_apply.py"
+grep -c "VALID_ORIGINS" "Stacky Agents/backend/evals/case_store.py"
+grep -c "def create_case" "Stacky Agents/backend/evals/case_store.py"
+grep -c "def read_runs_tail" "Stacky Agents/backend/evals/case_store.py"
+```
 
 > **Comandos de test:** backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend`
 > con `.venv\Scripts\python.exe -m pytest tests/<archivo> -q` (Git Bash:
@@ -748,6 +862,7 @@ intacto byte a byte.
 import runtime_paths                      # data_dir() en CADA llamada (testabilidad)
 _KNOWLEDGE_LOCK = threading.Lock()
 _DEDUP_SIMILARITY_THRESHOLD = 0.55
+_STALE_DAYS = 60                          # C9: días sin uso para sugerir revisión
 VALID_SOURCE_KINDS = ("incident", "optimizer_lesson", "manual")
 
 def evolution_root() -> Path              # runtime_paths.data_dir() / "evolution"
@@ -778,25 +893,37 @@ def lesson_matches(scope: dict, *, agent_type, project_name) -> bool   # §4.3, 
 def rank_lessons(lessons: list[dict], query: str | None, top_n: int) -> list[dict]
     # §4.3: TF-IDF via rag_retriever si query no vacío; fallback created_at DESC.
     # Pura sobre la lista. Nunca lanza.
+def build_lessons_block(lessons: list[dict], *, query: str | None,
+                        top_n: int, max_chars: int) -> dict | None
+    # §4.5 (C8/ADICIÓN): PURA. rank_lessons(...) + header literal + entradas
+    # numeradas "N. [<title>] <text>" + cap duro (loop: corta en la primera que no
+    # entra → truncated=True; primera sola > cap → truncar con "…"). Devuelve el
+    # dict block §4.5 completo o None si lessons está vacío. NO toca contadores,
+    # NO lee flags (los límites llegan por parámetro). Único armador: lo consumen
+    # el injector F3 (que luego registra) y el preview §4.8 (que no registra).
 def record_injection(lesson_ids: list[str]) -> None
     # Bajo _KNOWLEDGE_LOCK: usage_count += 1 y last_injected_at = ahora para cada
     # id (id sin meta → la crea con defaults §4.2 antes de contar). Best-effort:
     # cualquier excepción se traga con log warning (NUNCA rompe un run).
 def find_similar(candidate_title: str, candidate_body: str) -> list[dict]   # §4.9
 def harvested_incident_ids() -> set[str]
-    # §4.4: recorre evolution_store.list_proposals(aspect_id="knowledge_rag") y
-    # junta los sufijos de evidence "incident:<id>". Tolerante → set().
+    # §4.4 (C2): recorre evolution_store.list_proposals(aspect_id="knowledge_rag")
+    # y junta los sufijos "incident:<id>" SOLO de propuestas con status != "rejected"
+    # Y con algún marker "harvest:*" en evidence (pseudocódigo congelado §4.4).
+    # Tolerante → set().
 def harvested_optimizer_lesson_ids() -> set[str]     # ídem con "optimizer_lesson:<id>"
 def retire_suggestions() -> list[dict]
-    # §4.10: si activas > STACKY_KNOWLEDGE_MAX_LESSONS (leer via config.config, G1):
-    # las (activas - cap) con menor (usage_count, created_at) asc. Sino [].
+    # §4.10 (C9): unión de (1) LRU si activas > STACKY_KNOWLEDGE_MAX_LESSONS (leer
+    # via config.config, G1): las (activas - cap) con menor (usage_count, created_at)
+    # asc, reason "lru_por_uso"; y (2) SIEMPRE: activas con usage_count == 0 y edad
+    # > _STALE_DAYS días, reason "sin_uso_prolongado". Dedup con precedencia (1).
 ```
 
 **Tests PRIMERO (TDD):** crear `backend/tests/test_knowledge_store.py`. Fixture
 común: `monkeypatch.setattr(runtime_paths, "data_dir", lambda: tmp_path)` +
 helper `_write_lesson_line(tmp_path, lesson_id, text, ...)` que appendea una línea
 válida a `tmp_path/"evolution"/"lessons.jsonl"` (simula el apply del 167 — los tests
-del store NO llaman a `evolution_apply`). 12 casos:
+del store NO llaman a `evolution_apply`). 14 casos:
 1. `test_lessons_jsonl_ausente_da_vacio` — sin archivos → `list_lessons() == []`.
 2. `test_vista_compuesta_con_meta` — 1 línea + `upsert_meta` → `list_lessons()[0]` trae `active is True`, title/scope de la meta y `text` de la línea.
 3. `test_linea_sin_meta_usa_defaults` — 1 línea sin meta → `title` = primera línea del text (cap 80), scope global, `usage_count == 0` (backward-compat §4.2).
@@ -808,13 +935,15 @@ del store NO llaman a `evolution_apply`). 12 casos:
 9. `test_record_injection_nunca_lanza` — monkeypatch `_meta_path` para que la escritura reviente → la llamada NO propaga excepción.
 10. `test_find_similar_titulo_exacto_y_tfidf` — título normalizado igual → score 1.0; cuerpo casi idéntico → score ≥ umbral; corpus vacío → [].
 11. `test_patch_meta_solo_title_scope` — patch de `title` ok; patch de `usage_count` → ValueError; id inexistente → KeyError.
-12. `test_retire_suggestions_lru` — cap monkeypatcheado a 2 con 4 activas de usos [5,0,1,0] → sugiere las 2 de menor (usage, created_at) con `reason=="lru_por_uso"`; con cap 10 → [].
+12. `test_retire_suggestions_lru` — cap monkeypatcheado a 2 con 4 activas de usos [5,0,1,0] → sugiere las 2 de menor (usage, created_at) con `reason=="lru_por_uso"`; con cap 10 y todas recientes/usadas → [].
+13. `test_harvested_ids_ignora_rechazadas_y_ajenas` (C2) — 3 propuestas `knowledge_rag` sembradas vía `evolution_store`: (a) evidence `["incident:inc-1", "harvest:llm_local"]` status `pending_review` → cuenta; (b) evidence `["incident:inc-2", "harvest:plantilla"]` status `rejected` → NO cuenta; (c) evidence `["incident:inc-3"]` SIN marker `harvest:*` (simula propuesta R-A3 del MAPE 167) → NO cuenta. `harvested_incident_ids() == {"inc-1"}`.
+14. `test_retire_suggestions_sin_uso_prolongado` (C9) — 1 activa con `usage_count == 0` y `created_at` 90 días atrás + 1 activa reciente usada, cap 10 → sugiere SOLO la primera con `reason=="sin_uso_prolongado"`; la misma lección bajo cap excedido aparece UNA vez con `"lru_por_uso"`.
 
 **Comando:**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_knowledge_store.py -q
 ```
-**Criterio BINARIO:** exit 0 (12/12). Además:
+**Criterio BINARIO:** exit 0 (14/14). Además:
 `grep -n "write_text\|open(" "Stacky Agents/backend/services/knowledge_store.py" | grep -i "lessons.jsonl"` → 0 matches
 (el store nunca escribe el jsonl del 167 — la única escritura es `_meta_path()`).
 **Flag:** ninguna (módulo puro; los gates viven en F3/F5). **Runtimes:** N/A.
@@ -836,10 +965,11 @@ trazabilidad §4.4), pasando por `maybe_auto_apply` del 167 como único camino H
 def harvest_from_incident(incident_id: str, *, force: bool = False) -> dict
     # 1) incident_store.get_incident(incident_id) → None → KeyError("incident_not_found").
     # 2) incident["status"] != "publicada" → ValueError("incident_not_harvestable:<status>").
-    # 3) Insumos (todos tolerantes, G16):
-    #    a) texto del intake: incident.get("text") or ""
-    #    b) doc de la incidencia: incident.get("doc_path") → Path.read_text tolerante,
-    #       cap _HARVEST_MAX_INPUT_CHARS // 2
+    # 3) Insumos (todos tolerantes, G16; TODOS pasan por
+    #    pii_masker.redact_irreversible ANTES de usarse — G15/C1):
+    #    a) texto del intake: redact_irreversible(incident.get("text") or "")
+    #    b) doc de la incidencia: incident.get("doc_path") → Path.read_text tolerante
+    #       → redact_irreversible(...), cap _HARVEST_MAX_INPUT_CHARS // 2
     #    c) run del dev: última AgentExecution con agent_type == "incident_dev",
     #       status == "completed", cuyo Ticket.ado_id coincide (como string) con
     #       incident.get("tracker_id") (query patrón context_enrichment.py:1130-1139;
@@ -847,6 +977,10 @@ def harvest_from_incident(incident_id: str, *, force: bool = False) -> dict
     #       root_cause via regex §4.7 → exec_id para evidence.
     # 4) Draft: _render_llm_draft(...) con invoke_local_llm; fallo → _deterministic_draft
     #    (§4.7). marker = "harvest:llm_local" | "harvest:plantilla".
+    # 4b) Defensa en profundidad (G15/C1): draft["title"] y draft["body"] pasan por
+    #     redact_irreversible ANTES de crear la propuesta (también en
+    #     harvest_from_optimizer_lesson y harvest_manual — helper común
+    #     _mask_draft(draft) -> dict).
     # 5) Dedup: find_similar(title, body) → no vacío y not force →
     #    DuplicateSuspect(similars) (excepción propia del módulo).
     # 6) proposal = evolution_store.create_proposal(
@@ -888,7 +1022,7 @@ class DuplicateSuspect(Exception):        # .similars: list[dict]
 **Tests PRIMERO (TDD):** crear `backend/tests/test_knowledge_harvest.py`. Fixtures:
 `data_dir` monkeypatcheado; incidencia sintética vía `incident_store.create_incident`
 + `incident_store.update_incident(id, status="publicada", tracker_id="777")`;
-`invoke_local_llm` SIEMPRE monkeypatcheado. 10 casos:
+`invoke_local_llm` SIEMPRE monkeypatcheado. 11 casos:
 1. `test_from_incident_crea_propuesta_pending` — mock LLM devuelve JSON válido → 201-shape: propuesta `knowledge_note`/`knowledge_rag`/`origin=="agent"`/`status=="pending_review"`, `proposed_content == body` del mock, evidence empieza `["incident:<id>", "harvest:llm_local"]`, meta creada con source incident.
 2. `test_from_incident_no_publicada_rechaza` — status `capturada` → ValueError `incident_not_harvestable`.
 3. `test_from_incident_inexistente` — KeyError `incident_not_found`.
@@ -899,12 +1033,13 @@ class DuplicateSuspect(Exception):        # .similars: list[dict]
 8. `test_from_optimizer_promocion` — monkeypatch `evolution_optimizer_store.read_lessons_tail` → lesson `mejoro` → propuesta `origin=="optimizer"`, evidence `["optimizer_lesson:<id>", "optimizer_run:<rid>", "harvest:promocion_determinista"]`, scope sugerido `agent_types==["developer"]` para aspect_key `agent_prompts/developer`.
 9. `test_from_optimizer_sin_169_degrada` — import de `evolution_optimizer_store` forzado a fallar → RuntimeError `optimizer_unavailable` (declarado, no crash).
 10. `test_manual_valida_limites` — title vacío → `invalid_payload:title`; body de 5000 chars → `invalid_payload:body`; válido → propuesta `origin=="manual"`.
+11. `test_pii_enmascarada_en_todos_los_insumos` (C1) — incidencia cuyo `text` contiene un literal tipo secreto (partir el string en el fixture — gotcha push-protection) y doc con otro; monkeypatch de `redact_irreversible` como spy que reemplaza por `"[MASKED]"` → el `user` prompt capturado del mock LLM NO contiene los literales y sí `"[MASKED]"`; y con el mock LLM devolviendo un body que contiene un tercer literal → `proposed_content` de la propuesta lo trae enmascarado (paso 4b).
 
 **Comando:**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_knowledge_harvest.py -q
 ```
-**Criterio BINARIO:** exit 0 (10/10). Además (KPI-3, G14):
+**Criterio BINARIO:** exit 0 (11/11). Además (KPI-3, G14):
 `grep -n "append_lesson\|lessons.jsonl" "Stacky Agents/backend/services/knowledge_harvest.py"` → 0 matches.
 **Flag:** gate en F5 (el service es puro). **Runtimes:** cosecha backend-agnóstica;
 LLM local con degradación declarada (los 3 por igual). **Trabajo del operador:** ninguno.
@@ -928,6 +1063,11 @@ entrada `"stacky-memory": 80,`:
 ```python
     "evolution-lessons": 79,     # Plan 170 — lecciones aprendidas (flywheel de conocimiento)
 ```
+
+**(a-bis, C7)** En el comentario de `_HIGH_PRIORITY_THRESHOLD`
+(`context_enrichment.py:249-250`, "cubre: ado-epic-structured(100), …"), agregar
+`evolution-lessons(79)` a la lista enumerada — el bloque nuevo queda ≥ 75 y es fuente
+de verdad para el dedup léxico I0.1; el comentario no debe quedar mentiroso.
 
 **(b) Nuevo injector + wiring.** Definir (ubicación: inmediatamente después de
 `_inject_rejection_lessons`, `:1005`):
@@ -958,16 +1098,16 @@ def _inject_evolution_lessons(
             return blocks
         top_n = max(1, min(10, int(getattr(_cfg, "STACKY_KNOWLEDGE_INJECT_TOP_N", 3))))
         max_chars = max(500, min(20000, int(getattr(_cfg, "STACKY_KNOWLEDGE_INJECT_MAX_CHARS", 4000))))
-        ranked = knowledge_store.rank_lessons(matched, query, top_n)
-        # Armado con cap §4.5 (header + entradas numeradas; truncated si corta).
-        …
-        block = {"kind": "text", "id": "evolution-lessons",
-                 "title": f"Lecciones aprendidas (Stacky) — {len(used)}",
-                 "content": content,
-                 "metadata": {"lesson_ids": [l["lesson_id"] for l in used],
-                              "truncated": truncated}}
-        knowledge_store.record_injection([l["lesson_id"] for l in used])
-        log("info", f"evolution-lessons inyectado (n={len(used)}, truncated={truncated})")
+        # C8: armado delegado a la función PURA de F1 (ranking + header + cap §4.5).
+        block = knowledge_store.build_lessons_block(
+            matched, query=query, top_n=top_n, max_chars=max_chars
+        )
+        if block is None:
+            return blocks
+        used_ids = block["metadata"]["lesson_ids"]
+        knowledge_store.record_injection(used_ids)   # semántica C3: "seleccionada"
+        log("info", f"evolution-lessons inyectado (n={len(used_ids)}, "
+                    f"truncated={block['metadata']['truncated']})")
         return list(blocks) + [block]
     except Exception as exc:  # noqa: BLE001 — best-effort, contrato del módulo
         log("warn", f"evolution-lessons no se pudo inyectar (continuando): {exc}")
@@ -1113,9 +1253,19 @@ lessons = `read_lessons_tail(limit=50)` filtrado `outcome=="mejoro"` + set de
 `harvested_optimizer_lesson_ids()`. Sin pollers: el panel lo pide on-mount y tras
 cada acción.
 
+`GET /knowledge/injection-preview` (**[ADICIÓN ARQUITECTO]**, detalle determinista):
+lee `agent_type`/`project`/`query` de la querystring (todos opcionales; ausentes →
+`None`), llama `knowledge_store.active_lessons_for(agent_type, project)` +
+`knowledge_store.build_lessons_block(...)` con los MISMOS clamps de flags del injector
+F3, y responde `{"ok": true, "block": <dict | null>, "matched_count": <len de
+matcheadas>}`. PROHIBIDO llamar `record_injection` acá (dry-run; el grep del DoD lo
+verifica). Requiere solo el gate compuesto §4.6 (NO exige
+`STACKY_KNOWLEDGE_INJECTION_ENABLED`: sirve para auditar ANTES de prender la
+inyección o después de apagarla).
+
 **Tests PRIMERO (TDD):** crear `backend/tests/test_knowledge_endpoints.py` (Flask
 test client, patrón de los tests de endpoints del 167/168; `data_dir`
-monkeypatcheado; `invoke_local_llm` mockeado). 10 casos:
+monkeypatcheado; `invoke_local_llm` mockeado). 11 casos:
 1. `test_health_siempre_200` — flag ON y OFF → 200 con `flag_enabled` correcto.
 2. `test_flag_off_404_literal` — `STACKY_KNOWLEDGE_FLYWHEEL_ENABLED=False` → `GET /api/evolution/knowledge/lessons` = 404 con `error=="knowledge_disabled"` (KPI-5).
 3. `test_lessons_lista_y_retiradas` — 2 activas + 1 retirada → sin query 2; `?include_retired=true` → 3.
@@ -1126,13 +1276,17 @@ monkeypatcheado; `invoke_local_llm` mockeado). 10 casos:
 8. `test_manual_endpoint` — 201; title vacío → 400 `invalid_payload`.
 9. `test_to_eval_case_endpoint` — 201 con caso borrador; segunda vez → 409 `case_already_exists`.
 10. `test_overview_shape_y_tolerancia` — shape §4.10 completo con datos sembrados; con `case_store` roto (monkeypatch que lanza) → 200 igual con `fitness_knowledge` en nulls (tolerancia por fuente).
+11. `test_injection_preview_no_cuenta_uso` (ADICIÓN) — 2 lecciones activas (una scope global, una `agent_types=["qa"]`): `GET /injection-preview?agent_type=developer` → 200 con `block.content` conteniendo SOLO la global, `matched_count == 1` y `usage_count` de TODAS las lecciones sigue en 0 tras la llamada; sin lecciones matching → `block is null`; con `STACKY_KNOWLEDGE_INJECTION_ENABLED=False` el preview RESPONDE igual (200).
 
 **Comando:**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_knowledge_endpoints.py -q
 ```
-**Criterio BINARIO:** exit 0 (10/10). **Flag:** `STACKY_KNOWLEDGE_FLYWHEEL_ENABLED`
-(gate §4.6). **Runtimes:** N/A (HTTP local). **Trabajo del operador:** ninguno.
+**Criterio BINARIO:** exit 0 (11/11). Además (ADICIÓN, dry-run puro):
+`grep -n "record_injection" "Stacky Agents/backend/api/evolution_knowledge.py"` → 0
+matches (el endpoint de preview no registra uso; los registros viven SOLO en el
+injector F3). **Flag:** `STACKY_KNOWLEDGE_FLYWHEEL_ENABLED` (gate §4.6). **Runtimes:**
+N/A (HTTP local). **Trabajo del operador:** ninguno.
 
 ---
 
@@ -1161,14 +1315,22 @@ Stacky, cuánto se usa y qué conviene retirar.
    `agents_with_lessons/agents_total`, casos de eval nacidos de incidencias, delta de
    fitness `knowledge_rag` con rótulo literal "correlación, no causalidad") +
    `Tabs` con 3 pestañas:
-   - **Lecciones**: lista (title, `StatusChip`, scope, `usage_count`,
+   - **Lecciones**: lista (title, `StatusChip`, scope, `usage_count` con rótulo
+     literal **"Seleccionada Nx"** (semántica C3 §4.2 — nunca "usada"),
      `formatDateTime(last_injected_at)`, origen con deep-link `?proposal=<lesson_id>`
      — riel G10 del 167); acciones por fila: "Retirar" (`ConfirmButton` →
      `Evolution.transition(lesson_id, "rollback", nota literal §4.8)` del namespace
      del 167), "Proteger con caso de eval" (POST to-eval-case; deshabilitado si
      `eval_case_id` ya existe), editor inline de scope (PATCH). Banner de
-     `retire_suggestions` cuando `over_cap` (`EmptyState` variant informativa +
-     lista sugerida — solo sugerencia).
+     `retire_suggestions` cuando la lista NO está vacía (C9: cubre `lru_por_uso` Y
+     `sin_uso_prolongado`; `EmptyState` variant informativa + lista sugerida con su
+     `reason` — solo sugerencia). **[ADICIÓN ARQUITECTO] Panel colapsable "Vista
+     previa de inyección"**: `Select` de `agent_type` (opciones del registry vía
+     overview `coverage.by_agent_type` + opción "—"), `Input` opcional de query, botón
+     "Previsualizar" → `GET /injection-preview` y render del `block.content` en un
+     `<pre>` estilado por `.module.css` (G6) + aviso "`matched_count` lecciones
+     matchean; esto es EXACTAMENTE lo que recibiría el agente" (o `EmptyState` si
+     `block` es null). Sin poller (G9): solo on-click.
    - **Cosechar**: candidatas de `harvest/candidates` — incidencias publicadas
      (badge `has_dev_run` "con resolución verificada") con botón "Extraer lección";
      mutation lessons `mejoro` con botón "Promover a lección"; `already_harvested`
@@ -1182,7 +1344,8 @@ Stacky, cuánto se usa y qué conviene retirar.
    éxito/error de cada acción. Refresh: on-mount + tras cada acción + botón
    "Refrescar" (G9: cero `setInterval`).
 3. EDITAR `frontend/src/api/endpoints.ts` — namespace nuevo `EvolutionKnowledge`
-   (espejo del estilo del namespace `Evolution` del 167 F5) con las 9 rutas §4.8.
+   (espejo del estilo del namespace `Evolution` del 167 F5) con las 10 rutas §4.8
+   (incluida `injectionPreview`).
 4. EDITAR `frontend/src/pages/EvolutionCenterPage.tsx` — montar `<KnowledgeSection />`
    gated por su health (`flag_enabled`), espejo EXACTO del wiring con que el 168 F6
    montó `FitnessSection` (ubicar por el literal `FitnessSection` y replicar el
@@ -1283,7 +1446,9 @@ Actualizar el encabezado `**Estado:**` de ESTE doc (riel
   criterio-grep verifica que el store solo escribe `lessons_meta.json`.
 - **R6 — `record_injection` en el camino caliente de runs.** Best-effort estricto
   (test F1 caso 9: la excepción no propaga); escritura chica (un dict JSON) bajo
-  lock; si el disco falla, el run sigue idéntico.
+  lock; si el disco falla, el run sigue idéntico. Semántica C3: cuenta "seleccionada
+  para inyección" — con el budget F2.4 del 133 ON el bloque puede podarse después;
+  el panel lo rotula así y nunca afirma "el agente la leyó".
 - **R7 — LLM local no disponible / lento / respuesta basura.** Degradación declarada
   a plantilla determinista (KPI-4) con marker en `evidence`; timeout ya gobernado por
   `LOCAL_LLM_TIMEOUT_SEC` (riel del bridge); insumo cap `_HARVEST_MAX_INPUT_CHARS`.
@@ -1368,13 +1533,15 @@ Actualizar el encabezado `**Estado:**` de ESTE doc (riel
 
 ## 10. Orden de implementación
 
-1. **Pre-check global** — 167 y 168 en el árbol (si no, DETENERSE y reportar).
+1. **Pre-check global** — 167 y 168 en el árbol + greps de símbolos del contrato
+   (§5, C4) — si algo falta, DETENERSE y reportar.
 2. **F0** — flags + config + help + meta-tests (foto previa de `test_harness_flags.py`).
-3. **F1** — knowledge_store (sidecar + vista + matching + dedup + LRU) + 12 tests.
-4. **F2** — knowledge_harvest (3 fuentes + degradación + gate 167) + 10 tests.
+3. **F1** — knowledge_store (sidecar + vista + matching + dedup + LRU + staleness +
+   `build_lessons_block`) + 14 tests.
+4. **F2** — knowledge_harvest (3 fuentes + degradación + PII total + gate 167) + 11 tests.
 5. **F3** — `_inject_evolution_lessons` + `_BLOCK_PRIORITY` + wiring `enrich_blocks` + 10 tests (+ regresión `test_context_enrichment.py`).
 6. **F4** — migración `origin="lesson"` (py + ts) + `lesson_to_eval_case` + 5 tests (+ regresión `test_fitness_runner.py`).
-7. **F5** — API + registro de blueprint + overview + 10 tests.
+7. **F5** — API + registro de blueprint + overview + preview dry-run + 11 tests.
 8. **F6** — knowledgeModel + KnowledgeSection + endpoints + wiring EvolutionCenterPage + 8 tests + tsc + ratchet UI.
 9. **F7** — ratchet (sh + ps1) + estado del doc + corrida completa de cierre.
 
@@ -1383,9 +1550,14 @@ Actualizar el encabezado `**Estado:**` de ESTE doc (riel
 - [ ] Las 5 flags con patrón triple completo (config + FlagSpec + `_CATEGORY_KEYS` +
       help + curated SOLO las 2 bool + requires al ROOT del 167), editables desde la
       UI del Arnés; `harness_defaults.env` NO tocado a mano (G12).
-- [ ] Los 6 archivos de test backend verdes POR ARCHIVO (55 casos: 8+12+10+10+5+10),
+- [ ] Los 6 archivos de test backend verdes POR ARCHIVO (59 casos: 8+14+11+10+5+11),
       registrados en `HARNESS_TEST_FILES` (sh + ps1); `knowledgeModel.test.ts` (8)
       verde; `npx tsc --noEmit` exit 0; `uiDebtRatchet` verde.
+- [ ] PII (C1): los 3 insumos del draft Y el draft final pasan por
+      `redact_irreversible` (test F2 caso 11 verde).
+- [ ] Preview dry-run (ADICIÓN): `grep -n "record_injection"
+      "Stacky Agents/backend/api/evolution_knowledge.py"` → 0 matches; test F5
+      caso 11 verde (el preview no altera contadores).
 - [ ] KPI-1: sin lecciones matching o flag OFF → lista de bloques `==` baseline
       (byte-idéntico). KPI-2: `len(content) <= MAX_CHARS` siempre, `truncated`
       declarado. KPI-3: la cosecha solo crea propuestas — grep de

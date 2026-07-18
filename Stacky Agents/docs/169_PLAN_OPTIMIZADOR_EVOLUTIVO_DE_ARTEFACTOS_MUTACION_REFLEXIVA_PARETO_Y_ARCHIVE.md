@@ -1,12 +1,82 @@
 # Plan 169 — Optimizador evolutivo de artefactos de texto: mutación reflexiva (GEPA), frente Pareto calidad×costo y archive con lineage
 
-**Estado:** PROPUESTO v1 — 2026-07-17 · **Autor:** StackyArchitectaUltraEficientCode
+**Estado:** CRITICADO v2 (2026-07-18) — APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (adversarial)
 **Serie:** "Auto-mejora recursiva" **3 de 4** (directiva del operador 2026-07-17):
 **167** = núcleo del panel + registro de propuestas + ciclo MAPE con gates humanos (PROPUESTO, dependencia DURA) ·
 **168** = arnés de fitness: golden tasks, jerarquía de señal, juez local (PROPUESTO, dependencia DURA — provee `evaluate_candidate`) ·
 **169 (este)** = optimizador evolutivo: generate→evaluate→select→archive sobre artefactos de texto ·
 **170** = flywheel de conocimiento (NO se diseña acá; sus enchufes quedan congelados en §8).
 Este documento implementa SOLO el 169. PROHIBIDO implementar acá nada del 170.
+
+## Versión: v1 -> v2 (crítica adversarial aplicada)
+
+**CHANGELOG v1 -> v2** (cada C# referenciado en el cuerpo donde aplica):
+
+- **C1 (IMPORTANTE — vara de medición):** v1 evaluaba el BASE con `generator_model=None`
+  (juez a peso 1×) y las variantes con el modelo del generador (juez a 0.5× por
+  `SELF_JUDGE_MULTIPLIER` del 168 en modo `local`, el default) → el margen comparaba
+  scores con ponderaciones DISTINTAS: mejoras legítimas suprimidas o propuestas
+  espurias. v2: el base se evalúa con el MISMO `generator_model` que las variantes
+  (§4.6, F3 paso 2, assert en test engine caso 4).
+- **C2 (IMPORTANTE — contradicción interna §4.5 vs §4.7):** `_MUTATOR_SYSTEM` v1 exigía
+  "Responde EXACTAMENTE ... y nada mas" (solo VARIANTE+LECCION) mientras §4.7 parseaba
+  un bloque `SUGERENCIA_FLAG` que el prompt nunca declaraba: feature muerta con
+  generador obediente. v2: el bloque queda DECLARADO opcional en el literal del prompt.
+- **C3 (IMPORTANTE — DoD con falso rojo permanente):** el grep "Sin autonomía" v1
+  buscaba `start_run`, símbolo que YA existe en `qa_browser_runner.py:31` (verificado
+  2026-07-18) → criterio "0 matches" incumplible. v2: el motor expone
+  `start_optimization_run` (nombre único en el backend) y el grep del DoD usa ese símbolo.
+- **C4 (IMPORTANTE — contrato §4.8 vs test F4 caso 7 en conflicto):** v1 congelaba la
+  respuesta del POST como "run con status running" y a la vez el test esperaba status
+  terminal (async mockeado síncrono). v2: el handler relee `store.get_run(...)` tras
+  lanzar y responde el estado REAL al momento de responder; contrato y test alineados.
+- **C5 (IMPORTANTE — drift del base):** v1 no trataba la edición del `.agent.md` target
+  (operador o sesión paralela) durante la corrida: la propuesta podía pisar trabajo
+  ajeno al aplicarse. v2: `base_hash` en el run + re-chequeo sha256 ANTES de emitir
+  (difiere → `no_improvement`, sin propuesta) + `base_hash` en `evidence` (§4.2, §4.6,
+  F3 paso 6, test engine caso 16).
+- **C6 (IMPORTANTE — reaper solo en prosa):** v1 declaraba `_STALE_RUN_HOURS` en R5 sin
+  contrato ni test (F1 especificaba `any_run_running()` sin reaper). v2: el reaper es
+  contrato de F1 (símbolo + semántica + test store caso 13).
+- **C7 (IMPORTANTE — variante gigante/vacía sin límite previo):** v1 evaluaba con el
+  juez del 168 (costo real) cualquier output del generador. v2: `_VARIANT_MAX_CHARS =
+  40000` y chequeo de vacío ANTES de `evaluate_candidate` (`invalid` sin gastar juez;
+  F3 paso d2, test engine caso 15).
+- **C8 (IMPORTANTE — test F2 runtime tocaba DB real):** `generate(mode="runtime")` llama
+  `_ensure_optimizer_ticket()` (sesión DB, espejo documenter) y las fixtures v1 no lo
+  mockeaban → crash/app-context en pytest (G14). v2: fixture obligatoria
+  `_ensure_optimizer_ticket → lambda: 4242` en los casos runtime.
+- **C9 (MENOR):** regla JSONL congelada: línea corrupta SE SALTEA (no vacía el archivo
+  — una línea rota jamás borra el lineage); test store caso 12 extendido.
+- **C10 (MENOR):** semántica EXACTA del tope de 60 `steps` (la 60ª es `"log truncado"`,
+  después no-op) + test store caso 14.
+- **C11 (MENOR):** default congelado del body del POST: `use_judge = bool(payload.get("use_judge", True))`.
+- **C12 (MENOR):** poda del frente con tercer desempate determinista (`variant_id`).
+- **C13 (MENOR):** `parent_proposal_id` se resuelve re-ordenando por `created_at` en el
+  MOTOR (no confiar en el orden `updated_at DESC` de `list_proposals` del 167).
+- **C14 (IMPORTANTE — F0 rompía el meta-test curado):** los 4 FlagSpec no-bool de v1
+  declaraban `default=` ("auto"/3/60000/2) pero `default_is_known` es TYPE-AGNOSTIC
+  (`spec.default is not None`, `harness_flags.py:3397-3399`) y
+  `test_default_known_only_for_curated` exige igualdad EXACTA con `_CURATED_DEFAULTS_ON`
+  → rojo garantizado al implementar. v2: no-bool SIN `default=` en el FlagSpec (el
+  efectivo vive en `config.py`; precedente literal "SIN default=" en
+  `harness_flags.py:3346-3351`); tests F0 casos 2-4 asertan `spec.default is None`.
+  Hallazgo alineado con el C1 del juez del 167 (2026-07-18): el precedente que v1
+  citaba del doc 168 era un error del 168, no una vía válida.
+- **[ADICIÓN ARQUITECTO] Reproducibilidad + observabilidad de corrida:** (a) `rng_seed`
+  opcional en el POST, persistido en el run — con seed la selección de padres es
+  reproducible (depurar fitness/selección deja de ser adivinanza; test engine caso 17);
+  NO se expone en la UI (parámetro de API para depuración/tests). (b) logs
+  estructurados `logging.getLogger("evolution_optimizer")` INFO al abrir y cerrar cada
+  corrida (run_id, status, base→winner, tokens) — rastro en los logs del sistema sin
+  vía nueva de telemetría.
+- **Sincronización de serie:** contratos consumidos verificados contra 167/168/170 v1
+  el 2026-07-18 (firma `create_proposal` con `target_ref/proposed_content/evidence` ✓,
+  shape fitness §4.7 del 167 ✓, `evaluate_candidate`/`inject_proposal_fitness`/
+  `list_cases(aspect_key=, enabled=)`/`read_runs_tail` del 168 ✓, y el 170 lee
+  `read_lessons_tail`/`read_archive`/`outcome=="mejoro"` que este plan provee ✓).
+  Nuevo pre-check operacional en §5 por si los jueces paralelos de 167/168 renombran
+  símbolos. Conteo de tests backend: 56 → **61** (8+14+10+17+12).
 
 > Este documento está redactado para que un **MODELO MENOR** (Haiku, Codex CLI o
 > GitHub Copilot Pro) lo implemente **SIN inferir nada**. Los nombres de símbolos,
@@ -236,10 +306,19 @@ flags compartidos), `api/__init__.py` (F4, registro de blueprint — 2 líneas),
   meta-test del Plan 49 se pone rojo.
 - **G3 — Aristas `requires=`:** cada flag con `requires=` DEBE tener su arista en
   `_REQUIRES_MAP_FROZEN` (`backend/tests/test_harness_flags_requires.py:120`).
-- **G4 — `_CURATED_DEFAULTS_ON`:** SOLO las flags **bool** con default efectivo ON van
-  al set de `backend/tests/test_harness_flags.py:467`; las `type="int"` y `type="str"`
-  NO (precedente: el 168 F0 declara `default=30000` en su int sin curarla, y
-  `LOCAL_LLM_MODEL` es `type="str"` con default sin curar — `harness_flags.py:2967`).
+- **G4 — `_CURATED_DEFAULTS_ON` + `default_is_known` type-agnostic (C14):** SOLO la
+  bool curada (`STACKY_EVOLUTION_OPTIMIZER_ENABLED`) lleva `default=True` en su
+  FlagSpec y entra al set de `backend/tests/test_harness_flags.py:467`. Las no-bool
+  van **SIN `default=` en el FlagSpec**: `default_is_known(spec)` es
+  `spec.default is not None` — TYPE-AGNOSTIC (`harness_flags.py:3397-3399`, verificado
+  2026-07-18) — y `test_default_known_only_for_curated` (`test_harness_flags.py:749`)
+  exige igualdad EXACTA con el set curado: cualquier `default=` explícito no curado
+  (int/str incluidos) lo rompe. El default EFECTIVO vive en `config.py` (precedente
+  literal "SIN default=" en `STACKY_INCIDENT_VISION_MODEL`,
+  `harness_flags.py:3346-3351`). OJO: el doc v1 del 168 asumía que sus int podían
+  declarar `default=` — el juez del 167 lo refutó (su C1, 2026-07-18); si al
+  implementar este plan el código del 168 exhibe defaults no-bool declarados, ese
+  drift es del 168: reportarlo, no copiarlo.
 - **G5 — venv y tests por archivo:** backend con `.venv`
   (`.venv\Scripts\python.exe -m pytest tests/<archivo> -q`), NUNCA la suite completa
   (contaminación cross-run conocida). Frontend `npx vitest run src/<archivo>`, por
@@ -302,8 +381,11 @@ data_dir()/evolution/optimizer/
 
 Reglas duras (espejo del 167 §4.1): el store llama `runtime_paths.data_dir()` **en cada
 operación** (sin cache de módulo — los tests lo monkeypatchean); lecturas tolerantes
-(ausente/corrupto → vacío); escrituras bajo `_OPTIMIZER_LOCK = threading.Lock()`;
-`mkdir(parents=True, exist_ok=True)`.
+(archivo ausente/corrupto → vacío); escrituras bajo `_OPTIMIZER_LOCK = threading.Lock()`;
+`mkdir(parents=True, exist_ok=True)`. **Regla JSONL (C9, congelada):** `archive.jsonl`
+y `lessons.jsonl` se leen LÍNEA A LÍNEA y una línea no parseable SE SALTEA (no vacía el
+archivo: una línea rota jamás borra el lineage visible); `runs.json` y `pareto.json`
+(JSON entero) sí caen a vacío si el archivo completo no parsea.
 
 ### 4.2 `OptimizationRun` (elemento de `runs.json`; todas las claves SIEMPRE presentes)
 
@@ -324,6 +406,8 @@ operación** (sin cache de módulo — los tests lo monkeypatchean); lecturas to
   "proposal_id": null,
   "parent_proposal_id": null,
   "margin_used": 0.02,
+  "rng_seed": null,
+  "base_hash": null,
   "budget": {"limit_tokens": 60000, "tokens_est_in": 0, "tokens_est_out": 0, "exhausted": false},
   "steps": [{"ts": "<iso utc>", "text": "…"}],
   "started_at": "<iso utc>", "finished_at": null
@@ -343,9 +427,14 @@ Semántica congelada de `status` (única máquina de estados del run):
 
 `base` y `winner` (cuando no son `null`) tienen el shape
 `{"variant_id": "var-…", "score": 0.81, "cost_proxy": 1234, "eval_ref": "eval-…"}`.
-`steps` es un log humano-legible append-only dentro del run (máx 60 entradas; al
-llegar al tope se deja de appendear y se agrega UNA entrada final con el texto
-`"log truncado"`) — es lo que el panel muestra como progreso.
+`steps` es un log humano-legible append-only dentro del run — es lo que el panel
+muestra como progreso. Tope EXACTO (C10): con `len(steps) <= 58` se appendea normal; el
+append que llevaría la lista a 60 entradas escribe EN SU LUGAR la entrada literal
+`"log truncado"` como 60ª; con `len(steps) >= 60` todo append posterior es no-op.
+`rng_seed` (ADICIÓN v2): entero opcional recibido en el POST (`null` si no vino) — con
+seed, el muestreo de padres es reproducible. `base_hash` (C5): `"sha256:<hex>"` del
+texto del target leído al inicio de la corrida (paso 1 del motor); es la referencia del
+re-chequeo de drift antes de emitir (§4.6).
 
 ### 4.3 `ArchiveEntry` (una línea de `archive.jsonl`) y `MutationLesson` (una línea de `lessons.jsonl`)
 
@@ -419,7 +508,8 @@ redondeado a 4 decimales. Solo se persiste lesson si el generador emitió el blo
   salvo `error`), el frente del `aspect_key` se recomputa con
   `frente_previo ∪ {base, variantes válidas de la corrida}` y se poda a
   `_PARETO_MAX = 8` puntos (si excede, se eliminan los de MENOR `score`; empate →
-  mayor `cost_proxy` primero).
+  mayor `cost_proxy` primero; doble empate exacto → se elimina primero el de
+  `variant_id` mayor en orden lexicográfico — poda determinista total, C12).
 - **Muestreo de padres:** la corrida siguiente inyecta al prompt de mutación hasta
   `_PARETO_PARENTS = 2` puntos del frente (excluyendo los que tengan el mismo
   `artifact_hash` que el base actual), elegidos con `rng.sample`; el motor recibe el
@@ -438,10 +528,15 @@ _MUTATOR_SYSTEM = (
     "lo que ya funciona (rol, contrato de salida, limites). PROHIBIDO: acortar el "
     "artefacto a menos de la mitad, cambiar el idioma, inventar herramientas o "
     "capacidades, eliminar rieles de seguridad o de supervision del operador. Responde "
-    "EXACTAMENTE con este formato y nada mas:\n"
+    "EXACTAMENTE con este formato:\n"
     "<<<VARIANTE>>>\n{artefacto completo}\n<<<FIN_VARIANTE>>>\n"
     "<<<LECCION>>>\n{1-3 lineas: que cambiaste y por que deberia mejorar el score}\n"
-    "<<<FIN_LECCION>>>"
+    "<<<FIN_LECCION>>>\n"
+    "Opcional: si detectas que conviene OTRO valor para una flag de modelo local, "
+    "agrega ademas este bloque (una sola vez):\n"
+    "<<<SUGERENCIA_FLAG>>>\n{\"flag\": \"...\", \"value\": \"...\", \"razon\": \"...\"}\n"
+    "<<<FIN_SUGERENCIA_FLAG>>>\n"
+    "Nada mas que esos bloques."
 )
 ```
 
@@ -475,7 +570,9 @@ str | None`, tolerante: sin marcador o desbalanceado → `None`):
 `<<<VARIANTE>>>`/`<<<FIN_VARIANTE>>>`, `<<<LECCION>>>`/`<<<FIN_LECCION>>>`,
 `<<<SUGERENCIA_FLAG>>>`/`<<<FIN_SUGERENCIA_FLAG>>>` (§4.7). Precedente del patrón de
 marcadores en el repo: bloques `<<<DOC …>>>…<<<END>>>` del Documentador
-(`doc_documenter.py:437-438`).
+(`doc_documenter.py:437-438`). (C2: en v1 el system prompt exigía "y nada mas" tras
+LECCION y a la vez el motor parseaba SUGERENCIA_FLAG — un generador obediente jamás lo
+habría emitido; v2 declara el bloque opcional en el propio literal del prompt.)
 
 ### 4.6 Targets elegibles v1 y selección/emisión (congelados)
 
@@ -499,12 +596,27 @@ marcadores en el repo: bloques `<<<DOC …>>>…<<<END>>>` del Documentador
 - **Selección:** candidatos = variantes de la corrida con `fitness` no nulo y `score`
   no nulo. Frente local = `pareto_front(candidatos)`. `winner` = primer elemento del
   frente (mejor `score`; empate → menor `cost_proxy`).
+- **Vara de medición idéntica (C1, congelado):** el BASE se evalúa con el MISMO
+  `generator_model` que usarán las variantes de la corrida
+  (`variant_generator.generator_model_for(mode, runtime)`), NUNCA con `None`. Razón:
+  en modo `local` (el default) el generador coincide con el juez del 168 y el
+  `SELF_JUDGE_MULTIPLIER` baja el peso del juez a 0.5× — si el base se evaluara con
+  `generator_model=None` (juez a 1×), el margen compararía scores con ponderaciones
+  DISTINTAS: mejoras legítimas suprimidas o propuestas espurias por artefacto de la
+  vara. Base y variantes SIEMPRE con la misma configuración de pesos.
 - **Margen mínimo:** `margen = max(0, int(getattr(_cfg,
   "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT", 2))) / 100.0`. Se emite propuesta sii
   `winner` existe **y** `winner.fitness["deterministic_gate"] != "failed"` **y**
-  `round(winner.score, 4) >= round(base.score + margen, 4)`. Caso borde congelado:
-  `base.score is None` (aspecto sin casos corridos) → NUNCA se emite
-  (`no_improvement`, step literal `"base sin score evaluable"`).
+  `round(winner.score, 4) >= round(base.score + margen, 4)` **y** el re-chequeo de
+  drift (abajo) pasa. Caso borde congelado: `base.score is None` (aspecto sin casos
+  corridos) → NUNCA se emite (`no_improvement`, step literal `"base sin score evaluable"`).
+- **Re-chequeo de drift del base (C5, congelado):** inmediatamente ANTES de emitir, el
+  motor RELEE el target del disco y compara su `sha256` contra `run["base_hash"]`; si
+  difiere (el operador u otra sesión editó el `.agent.md` durante la corrida) → NO se
+  emite, status `no_improvement`, step literal
+  `"base modificado durante la corrida: propuesta descartada"`. Toda propuesta emitida
+  lleva `f"base_hash={base_hash}"` en `evidence` (auditoría de integridad: contra qué
+  base exacto se midió la mejora).
 - **Emisión (contrato 167 §8.2, llamada de servicio en el mismo proceso):**
 
   ```python
@@ -534,7 +646,9 @@ marcadores en el repo: bloques `<<<DOC …>>>…<<<END>>>` del Documentador
   los muestra sin cambiar una línea).
 - **Regla `parent_proposal_id` (lineage entre corridas):** la propuesta MÁS RECIENTE
   (por `created_at`) de `evolution_store.list_proposals(origin="optimizer")` cuyo
-  `target_ref` coincide con el de esta corrida; si no hay ninguna, `null`.
+  `target_ref` coincide con el de esta corrida; si no hay ninguna, `null`. (C13: el
+  MOTOR re-ordena por `created_at` él mismo — `list_proposals` del 167 devuelve
+  `updated_at DESC`, que NO es el orden que esta regla necesita.)
 
 ### 4.7 Sugerencia de valor de flag (`config_flags_models`, modo SUGERENCIA — sin loop)
 
@@ -577,7 +691,7 @@ Flag OFF → 404 literal
 |---|---|
 | `GET /api/evolution/optimizer/health` | 200 `{"ok": true, "flag_enabled": <bool>, "generator_mode": "local\|runtime", "generator_ready": <bool>, "harness_enabled": <bool>}` — `generator_mode` = `resolve_generator_mode()` (§F2); `generator_ready`: modo `local` → `LOCAL_LLM_ENDPOINT` no vacío, modo `runtime` → `true`; `harness_enabled` = CENTER && `STACKY_EVAL_HARNESS_ENABLED`. Health responde 200 también con flag OFF. |
 | `GET /api/evolution/optimizer/targets` | 200 `{"ok": true, "targets": [{"target_ref": "Developer.agent.md", "aspect_key": "agent_prompts/developer", "cases_enabled": 3, "last_score": 0.81}]}` — glob tolerante de `case_store.prompts_dir()` menos `_TARGET_DENYLIST`, orden alfabético; `cases_enabled` = `len(case_store.list_cases(aspect_key=…, enabled=True))` filtrado `subject=="artifact"`; `last_score` = score del run más reciente con `trigger != "candidate"` de ese aspecto vía `case_store.read_runs_tail` (o `null`). |
-| `POST /api/evolution/optimizer/run` body `{"target_ref": "…", "runtime": null, "use_judge": true}` | **202** `{"ok": true, "run": {OptimizationRun con status "running"}}` \| 404 `target_not_found` (no está en el glob o está en denylist) \| 409 `optimizer_already_running` \| 409 `generator_unavailable` con message literal `"El generador local no está configurado (LOCAL_LLM_ENDPOINT). Configuralo en el Arnés o elegí el generador runtime."` \| 409 `fitness_harness_disabled` (si `harness_enabled` es false — sin el 168 no hay fitness) \| 400 `invalid_payload` (`runtime` fuera de `{null, "github_copilot", "claude_code_cli", "codex_cli"}`) |
+| `POST /api/evolution/optimizer/run` body `{"target_ref": "…", "runtime": null, "use_judge": true, "rng_seed": null}` — defaults congelados si faltan campos (C11): `use_judge = bool(payload.get("use_judge", True))`; `rng_seed = payload.get("rng_seed")` (`int` o `null`) | **202** `{"ok": true, "run": {…}}` — el handler responde `store.get_run(run["id"])` releído DESPUÉS de `start_optimization_run` (C4: el estado REAL al momento de responder — normalmente `running`; en tests con el async mockeado síncrono, terminal) \| 404 `target_not_found` (no está en el glob o está en denylist) \| 409 `optimizer_already_running` \| 409 `generator_unavailable` con message literal `"El generador local no está configurado (LOCAL_LLM_ENDPOINT). Configuralo en el Arnés o elegí el generador runtime."` \| 409 `fitness_harness_disabled` (si `harness_enabled` es false — sin el 168 no hay fitness) \| 400 `invalid_payload` (`runtime` fuera de `{null, "github_copilot", "claude_code_cli", "codex_cli"}`, o `rng_seed` presente y no entero) |
 | `POST /api/evolution/optimizer/runs/<rid>/cancel` | 200 `{"ok": true, "run": {…}, "note": "cancelación cooperativa: se aplica entre pasos; la invocación en curso termina sola"}` (setea `cancel_requested=true`) \| 404 `run_not_found` \| 409 `run_not_running` (ya terminal) |
 | `GET /api/evolution/optimizer/runs/<rid>` | 200 `{"ok": true, "run": {…}}` \| 404 `run_not_found` — la vista de corrida POLLEA este endpoint SOLO mientras `status=="running"` (§F5) |
 | `GET /api/evolution/optimizer/runs?limit=20` | 200 `{"ok": true, "runs": […]}` (más nuevo primero; clamp limit 1..100) |
@@ -594,6 +708,15 @@ F0 (los dos, obligatorios):
 `test -f "Stacky Agents/backend/services/evolution_store.py"` (Plan 167) y
 `test -f "Stacky Agents/backend/services/fitness_service.py"` (Plan 168) — si falta
 cualquiera, DETENERSE y reportar "Plan 167/168 no implementado".
+**Punto de sincronización de serie (v2):** los contratos consumidos fueron verificados
+contra los docs v1 de 167/168 el 2026-07-18, pero esos planes tienen jueces e
+implementaciones en curso. Como parte del pre-check, grep-ear EN EL CÓDIGO implementado
+estos símbolos EXACTOS: `create_proposal`, `list_proposals`,
+`evolution_apply._HOTL_ALLOWED_ASPECTS`, `fitness_service.evaluate_candidate`,
+`inject_proposal_fitness`, `case_store.prompts_dir`, `slug_for_prompt_file`,
+`list_cases`, `read_runs_tail`, `DETERMINISTIC_FAIL_CAP`, `SELF_JUDGE_MULTIPLIER`.
+Si alguno cambió de nombre o firma respecto de lo citado acá, DETENERSE y reportar el
+drift (NO adivinar el mapeo).
 
 > **Comandos de test:** backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend`
 > con `.venv\Scripts\python.exe -m pytest tests/<archivo> -q` (Git Bash:
@@ -628,7 +751,9 @@ panel del Arnés.
 | `STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT` | int | `2` | `STACKY_EVOLUTION_CENTER_ENABLED` | ninguna (margen mínimo en centésimas de score: 2 → 0.02) |
 
 (G8: las 5 aristas apuntan al ROOT del 167 `STACKY_EVOLUTION_CENTER_ENABLED`,
-profundidad 1. Los gates compuestos con OPTIMIZER/EVAL_HARNESS van EN CÓDIGO — §4.8.)
+profundidad 1. Los gates compuestos con OPTIMIZER/EVAL_HARNESS van EN CÓDIGO — §4.8.
+C14: la columna "Default" de la tabla es el default EFECTIVO de `config.py`; en el
+FlagSpec SOLO la bool curada declara `default=True` — ver G4.)
 
 **Diff ilustrativo — `config.py`** (insertar inmediatamente DESPUÉS del bloque del
 Plan 168 — ubicar por el literal `STACKY_EVAL_RUN_TOKEN_BUDGET`):
@@ -691,28 +816,28 @@ inmediatamente después de las 3 entradas del Plan 168 (ubicar por
     ),
     FlagSpec(
         key="STACKY_EVOLUTION_OPTIMIZER_GENERATOR",
-        type="str", default="auto",
+        type="str",  # SIN default= (C14: efectivo "auto" en config.py; gotcha :3397)
         label="Generador de variantes",
         description="Quién redacta las variantes: 'auto' usa el modelo local si está configurado y si no el runtime de agentes; 'local' exige modelo local; 'runtime' usa Codex/Claude/Copilot.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_EVOLUTION_OPTIMIZER_VARIANTS",
-        type="int", default=3,
+        type="int",  # SIN default= (C14: efectivo 3 en config.py)
         label="Variantes por corrida (K)",
         description="Cuántas variantes genera y evalúa una corrida de optimización. Más variantes = más señal y más tokens.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET",
-        type="int", default=60000,
+        type="int",  # SIN default= (C14: efectivo 60000 en config.py)
         label="Presupuesto de tokens por corrida del optimizador",
         description="Tope de tokens estimados que una corrida puede gastar generando variantes. Al agotarse, la corrida se detiene y lo registra.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT",
-        type="int", default=2,
+        type="int",  # SIN default= (C14: efectivo 2 en config.py)
         label="Margen mínimo de mejora (centésimas de score)",
         description="Cuánto debe superar la mejor variante al artefacto actual para que se emita una propuesta. 2 significa 0.02 puntos de score.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
@@ -740,9 +865,9 @@ En `_REQUIRES_MAP_FROZEN` (`test_harness_flags_requires.py:120`) las 5 aristas:
 **Tests PRIMERO (TDD):** crear `backend/tests/test_optimizer_flags.py` (espejo
 estructural de `tests/test_fitness_flags.py` del 168 F0). 8 casos:
 1. `test_master_flag_en_registry` — FlagSpec `STACKY_EVOLUTION_OPTIMIZER_ENABLED`: `type=="bool"`, `default is True`, `requires=="STACKY_EVOLUTION_CENTER_ENABLED"`.
-2. `test_generator_flag_str` — FlagSpec GENERATOR: `type=="str"`, `default=="auto"`.
-3. `test_variants_y_budget_int` — VARIANTS `type=="int"` `default==3`; TOKEN_BUDGET `type=="int"` `default==60000`.
-4. `test_margin_flag_int` — MIN_MARGIN_PCT `type=="int"`, `default==2`.
+2. `test_generator_flag_str` — FlagSpec GENERATOR: `type=="str"`, `spec.default is None` (C14 — el efectivo "auto" lo verifica el caso 6 vía `config.config`).
+3. `test_variants_y_budget_int` — VARIANTS `type=="int"` `spec.default is None`; TOKEN_BUDGET `type=="int"` `spec.default is None` (C14).
+4. `test_margin_flag_int` — MIN_MARGIN_PCT `type=="int"`, `spec.default is None` (C14).
 5. `test_las_5_estan_categorizadas` — las 5 keys en algún valor de `_CATEGORY_KEYS`.
 6. `test_config_defaults` — env limpio: ENABLED True, GENERATOR "auto", VARIANTS 3, BUDGET 60000, MARGIN 2 (leer de `config.config`).
 7. `test_aristas_requires_congeladas` — las 5 aristas en `_REQUIRES_MAP_FROZEN` apuntando al ROOT.
@@ -776,6 +901,7 @@ _OPTIMIZER_LOCK = threading.Lock()
 _ARCHIVE_TEXT_MAX_CHARS = 20000
 _PARETO_MAX = 8
 _PARETO_PARENTS = 2
+_STALE_RUN_HOURS = 2                       # C6: reaper de runs huérfanos (contrato, no prosa)
 VALID_RUN_STATUSES = ("running", "completed", "no_improvement",
                       "stopped_budget", "cancelled", "error")
 TERMINAL_RUN_STATUSES = frozenset({"completed", "no_improvement",
@@ -794,7 +920,12 @@ def update_run(run_id: str, **patch) -> dict
 def append_step(run_id: str, text: str) -> None     # respeta el tope de 60 (§4.2)
 def request_cancel(run_id: str) -> dict             # cancel_requested=True; KeyError si no existe;
                                                     # ValueError("run_not_running") si ya terminal
-def any_run_running() -> bool                       # existe run con status=="running"
+def any_run_running() -> bool
+    # C6 (reaper — semántica congelada): PRIMERO repara huérfanos: todo run "running"
+    # con started_at más viejo que _STALE_RUN_HOURS horas se cierra acá mismo
+    # (status="error", error="stale_run_reaped", finished_at=now, step
+    # "run huérfano cerrado por reaper"). DESPUÉS devuelve True sii queda algún
+    # run "running". (Un crash del backend nunca bloquea el optimizador para siempre.)
 def append_archive_entry(entry: dict) -> dict       # valida §4.3 (kind/verdict en VALID_*;
                                                     # trunca artifact_text > _ARCHIVE_TEXT_MAX_CHARS a None);
                                                     # id="var-"+uuid4().hex si no viene
@@ -811,7 +942,7 @@ def sample_parents(aspect_key: str, exclude_hash: str, rng) -> list[dict]
 ```
 
 **Tests PRIMERO:** `backend/tests/test_optimizer_store.py`. Fixture común:
-`monkeypatch.setattr(runtime_paths, "data_dir", lambda: tmp_path)`. 12 casos:
+`monkeypatch.setattr(runtime_paths, "data_dir", lambda: tmp_path)`. 14 casos:
 1. `test_create_run_shape_completo` — todas las claves de §4.2 presentes; `status=="running"`, `proposal_id is None`.
 2. `test_update_run_valida_claves` — patch de clave inexistente → `ValueError`; patch de `status="terminado"` (inválido) → `ValueError`.
 3. `test_request_cancel` — sobre running → `cancel_requested is True`; sobre run terminal → `ValueError("run_not_running")`.
@@ -823,13 +954,15 @@ def sample_parents(aspect_key: str, exclude_hash: str, rng) -> list[dict]
 9. `test_pareto_none_score_excluido` — punto con `score=None` nunca entra.
 10. `test_update_pareto_poda` — 10 puntos no dominados entre sí → quedan 8 (se caen los 2 de menor score).
 11. `test_sample_parents_deterministico` — con `random.Random(42)` el sample es reproducible y excluye el `exclude_hash`.
-12. `test_lecturas_tolerantes` — `runs.json` y `pareto.json` corruptos → `list_runs()==[]`, `get_pareto(...)==[]` sin excepción.
+12. `test_lecturas_tolerantes` — `runs.json` y `pareto.json` corruptos → `list_runs()==[]`, `get_pareto(...)==[]` sin excepción; `archive.jsonl` con 1 línea válida + 1 línea basura → `read_archive()` devuelve SOLO la válida (regla JSONL §4.1, C9 — la línea rota no vacía el archivo).
+13. `test_stale_run_reaper` — run "running" con `started_at` de hace 3 horas → `any_run_running()` devuelve `False` y ese run quedó `status=="error"`, `error=="stale_run_reaped"`, `finished_at` no nulo; un run "running" fresco → `True` y no se toca (C6).
+14. `test_append_step_cap_60` — 70 appends → `len(steps)==60`, la entrada 60 es exactamente `"log truncado"`, los appends posteriores fueron no-op (C10).
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_optimizer_store.py -q
 ```
-**Criterio BINARIO:** 12/12 verdes.
+**Criterio BINARIO:** 14/14 verdes.
 **Flag:** módulo puro — N/A. **Runtimes:** N/A. **Trabajo del operador:** ninguno.
 
 ---
@@ -969,7 +1102,10 @@ casos seed (inofensivo: es medición, no mutación).
 **Tests PRIMERO:** `backend/tests/test_optimizer_generator.py` (fixtures:
 `data_dir→tmp_path`; `monkeypatch.setattr(runtime_paths, "stacky_agents_dir", …)` a
 tmp; `copilot_bridge.invoke_local_llm` y `agent_runner.run_agent` SIEMPRE mockeados;
-`variant_generator._wait_and_read_output` mockeado en los casos runtime). 10 casos:
+`variant_generator._wait_and_read_output` **y** `variant_generator._ensure_optimizer_ticket`
+(→ `lambda: 4242`) mockeados en TODOS los casos runtime — C8: `_ensure_optimizer_ticket`
+abre sesión de DB real (espejo documenter :307-334) y ningún test de este plan toca la
+DB — G14). 10 casos:
 1. `test_extract_block` — con marcadores → contenido stripped; sin end marker → None; texto vacío → None.
 2. `test_resolve_generator_mode_auto` — con `LOCAL_LLM_ENDPOINT` (monkeypatch `_cfg`) → ("local", True); sin endpoint → ("runtime", True).
 3. `test_resolve_generator_mode_local_sin_endpoint` — flag "local" sin endpoint → ("local", False) (el caller decide 409 — KPI-5).
@@ -1018,6 +1154,8 @@ _MAX_CRITIQUES = 6
 _MAX_FAILED_CHECKS = 6
 _MAX_LESSONS = 10
 _PARENT_HEAD_LINES = 40
+_VARIANT_MAX_CHARS = 40000                 # C7: tope duro del tamaño de una variante
+_LOG = logging.getLogger("evolution_optimizer")  # ADICIÓN v2: observabilidad
 
 def _now_iso() -> str
 def _estimate_tokens(text: str) -> int     # max(1, len(text) // 4)
@@ -1041,7 +1179,10 @@ def build_mutation_prompt(*, base_text, base_score, base_cost, critiques,
 def collect_failed_checks(per_case: list[dict]) -> list[str]
     # Por cada caso con checks: por cada check ok=False ->
     # f"{case_title}: {kind} -> {detail}" (formato §4.5).
-def start_run(*, target_ref: str, runtime: str | None, use_judge: bool) -> dict
+def start_optimization_run(*, target_ref: str, runtime: str | None, use_judge: bool,
+                           rng_seed: int | None = None) -> dict
+    # (C3: nombre ÚNICO en el backend — "start_run" YA existe en qa_browser_runner.py:31
+    #  y rompía el grep del DoD "Sin autonomía".)
     # Validaciones SÍNCRONAS (antes del thread): target en list_targets() (si no ->
     # KeyError("target_not_found")); store.any_run_running() -> RuntimeError("optimizer_already_running");
     # (mode, ready) = variant_generator.resolve_generator_mode(); not ready ->
@@ -1049,9 +1190,11 @@ def start_run(*, target_ref: str, runtime: str | None, use_judge: bool) -> dict
     # (default de agent_runner.py:94) si mode=="runtime", validado contra VALID_RUNTIMES.
     # run = store.create_run(aspect_key=…, target_ref=…, generator={...},
     #                        use_judge=use_judge, variants_planned=_variants_planned(),
-    #                        margin_used=_margin(),
+    #                        margin_used=_margin(), rng_seed=rng_seed,
     #                        budget={"limit_tokens": _budget(), ...}).
-    # _start_run_async(run["id"], ...) y devuelve el run (status "running").
+    # rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
+    # (ADICIÓN v2: reproducibilidad); _start_run_async(run["id"], rng=rng, ...) y
+    # devuelve el run (el caller HTTP relee el store antes de responder — C4/§4.8).
 def _start_run_async(run_id: str, **kwargs) -> None
     # threading.Thread(target=_run_optimization_sync, args=(run_id,), kwargs=kwargs,
     #                  daemon=True).start()
@@ -1059,10 +1202,16 @@ def _start_run_async(run_id: str, **kwargs) -> None
     #  en tests SIEMPRE se monkeypatchea a llamada síncrona — G14).
 def _run_optimization_sync(run_id: str, *, rng=None) -> dict
     # EL LOOP (todo en try/except global -> status "error" + error=str(exc)):
+    # 0) _LOG.info("optimizer run %s start target=%s generator=%s", run_id,
+    #    target_ref, mode)  (ADICIÓN v2 — rastro en logs del sistema).
     # 1) run = store.get_run(run_id); target_text = read_target_text(target_ref);
-    #    base_cost = _estimate_tokens(target_text).
-    # 2) BASE: res = fitness_service.evaluate_candidate(aspect_key, target_text,
-    #        case_filter=None, generator_model=None, use_judge=use_judge)
+    #    base_cost = _estimate_tokens(target_text);
+    #    base_hash = "sha256:" + hashlib.sha256(target_text.encode("utf-8")).hexdigest();
+    #    store.update_run(run_id, base_hash=base_hash)  (C5).
+    # 2) BASE: gen_model = variant_generator.generator_model_for(mode, runtime)
+    #    (C1: la MISMA vara para base y variantes — JAMÁS None; ver §4.6)
+    #    res = fitness_service.evaluate_candidate(aspect_key, target_text,
+    #        case_filter=None, generator_model=gen_model, use_judge=use_judge)
     #    base_entry = store.append_archive_entry(kind="base", verdict="base",
     #        fitness={score,passed,deterministic_gate,eval_ref}, cost_proxy=base_cost,
     #        critique_summary=<join critiques>, artifact_text=target_text, ...)
@@ -1082,6 +1231,12 @@ def _run_optimization_sync(run_id: str, *, rng=None) -> dict
     #       sumar tokens_est_in/out del gen al budget del run.
     #       gen["error"] -> archive entry verdict="invalid" invalid_reason=gen["error"],
     #       step, continue.
+    #    d2) C7 — límites duros ANTES de evaluar (una variante basura no gasta juez):
+    #        not gen["text"].strip() -> invalid "variante_vacia", continue;
+    #        len(gen["text"]) > _VARIANT_MAX_CHARS -> invalid
+    #        "variante_demasiado_grande", continue.
+    #        (Nota de presupuesto declarada: el gate 4b es pre-check con tokens
+    #        ESTIMADOS; el overshoot real máximo es UNA generación — aceptado v1.)
     #    e) sha256(gen["text"]) == sha256(base) -> invalid "variante_identica", continue.
     #    f) fit = fitness_service.evaluate_candidate(aspect_key, gen["text"],
     #           case_filter=None,
@@ -1106,13 +1261,23 @@ def _run_optimization_sync(run_id: str, *, rng=None) -> dict
     #    computado AL CIERRE de la corrida, así que (g) se difiere: las entries de
     #    variantes se appendean TODAS JUNTAS en este paso 5, ya con su verdict final.
     #    (Los datos viven en memoria durante el loop; el run.steps da el progreso.)
-    # 6) EMITIR según §4.6 (margen + gate determinista):
-    #    sí -> create_proposal + inject_proposal_fitness before/after;
+    # 6) EMITIR según §4.6 (margen + gate determinista + re-chequeo de drift C5:
+    #    RELEER el target del disco; sha256 distinto de run["base_hash"] -> NO emitir,
+    #    "no_improvement" + step literal "base modificado durante la corrida:
+    #    propuesta descartada"):
+    #    sí -> create_proposal (evidence incluye f"base_hash={base_hash}") +
+    #          inject_proposal_fitness before/after;
     #          update_run(proposal_id=…, parent_proposal_id=…, winner=…, status="completed")
     #    no -> status = "stopped_budget" si budget.exhausted sino "no_improvement"
     #          (cancelled ya salió en 4a); winner=… si hubo.
     # 7) store.update_pareto(aspect_key, base + variantes válidas) — salvo status "error".
-    # 8) update_run(finished_at=_now_iso()). Devuelve el run final.
+    # 8) update_run(finished_at=_now_iso());
+    #    _LOG.info("optimizer run %s end status=%s base=%s winner=%s tokens=%s", …)
+    #    (ADICIÓN v2). Devuelve el run final.
+    # Semántica de crash declarada (v2): si el try/except global atrapa en medio del
+    # loop, las variantes en memoria (pending_entries) SE PIERDEN — el archive queda
+    # solo con el base y el run queda "error" con el rastro en steps. Consistente por
+    # construcción; no se re-appendea nada a medias.
 ```
 
 Aclaración NORMATIVA del paso 5 (para que el modelo menor no dude): durante el loop
@@ -1128,11 +1293,11 @@ archive queda estrictamente append-only sin updates. El progreso en vivo lo dan
 → mock con scores programables por texto; `variant_generator.generate` → mock que
 devuelve variantes sintéticas; SIN threads: llamar `_run_optimization_sync` directo —
 G14; el 167/168 reales en el árbol para `create_proposal`/`inject_proposal_fitness`).
-14 casos:
+17 casos:
 1. `test_list_targets_excluye_denylist` — con los 2 archivos → targets == solo `Developer.agent.md` (KPI-1 parcial).
 2. `test_build_mutation_prompt_reflexivo` — el prompt contiene el texto base, las 2 críticas del mock, el check fallado, la lección previa y el resumen del padre (**KPI-2**).
 3. `test_build_mutation_prompt_omite_secciones_vacias` — sin críticas/lecciones/padres → esos encabezados NO aparecen.
-4. `test_corrida_feliz_emite_propuesta` — base 0.60, variantes 0.55/0.70/0.65, margen 0.02 → propuesta emitida `origin=="optimizer"`, `initial_status=="pending_review"` real en `evolution_store`, `proposed_content` == texto de la 0.70, `fitness_before.score==0.6` y `fitness_after.score==0.7` en la propuesta (shape 167 §4.7), run `completed` (**KPI-1/KPI-3**).
+4. `test_corrida_feliz_emite_propuesta` — base 0.60, variantes 0.55/0.70/0.65, margen 0.02 → propuesta emitida `origin=="optimizer"`, `initial_status=="pending_review"` real en `evolution_store`, `proposed_content` == texto de la 0.70, `fitness_before.score==0.6` y `fitness_after.score==0.7` en la propuesta (shape 167 §4.7), run `completed`; ADEMÁS el mock de `evaluate_candidate` registró que el BASE se evaluó con el MISMO `generator_model` que las variantes — jamás `None` (C1), y el `evidence` de la propuesta contiene `base_hash=` (C5) (**KPI-1/KPI-3**).
 5. `test_margen_no_alcanzado_no_emite` — base 0.69, mejor variante 0.70, margen 0.02 → `no_improvement`, `evolution_store.list_proposals()` NO crece (**KPI-3**).
 6. `test_gate_determinista_bloquea` — mejor variante con `deterministic_gate=="failed"` → NO se emite aunque el score supere el margen.
 7. `test_seleccion_pareto_empate_score` — dos variantes score 0.8, costos 200 y 100 → winner la de costo 100.
@@ -1143,12 +1308,15 @@ G14; el 167/168 reales en el árbol para `create_proposal`/`inject_proposal_fitn
 12. `test_congelador_denylist_y_hotl` — `"EvolutionMutator.agent.md" in _TARGET_DENYLIST` **y** `evolution_apply._HOTL_ALLOWED_ASPECTS == frozenset({"knowledge_rag"})` (import real del 167 — el optimizador ni aparece) (**KPI-1**).
 13. `test_congelador_suggestable_flags` — `_SUGGESTABLE_FLAGS == frozenset({"LOCAL_LLM_MODEL"})` y ningún elemento empieza con `"STACKY_EVOLUTION"` ni `"STACKY_EVAL"` (§4.7).
 14. `test_parent_proposal_id_lineage` — segunda corrida sobre el mismo target que también emite → su propuesta tiene `parent_proposal_id` == id de la primera.
+15. `test_variante_gigante_o_vacia_no_evalua` — el mock de generate devuelve un texto de 50000 chars en la 1ª variante y `"   "` en la 2ª → ambas entries `invalid` (`invalid_reason` `"variante_demasiado_grande"` / `"variante_vacia"`) y `evaluate_candidate` NO fue llamado para ninguna de las dos (C7 — el juez no se gasta en basura).
+16. `test_base_drift_descarta_propuesta` — corrida que ganaría con margen, pero un hook en el mock de generate reescribe el archivo del target antes del cierre → `no_improvement`, `list_proposals()` NO crece, step `"base modificado durante la corrida: propuesta descartada"` (C5).
+17. `test_rng_seed_reproducible` — frente Pareto sembrado con 4 padres; dos corridas con `rng=random.Random(7)` → `sample_parents` eligió los MISMOS padres en el mismo orden en ambas (ADICIÓN v2: reproducibilidad).
 
 **Comando (Git Bash):**
 ```bash
 cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_optimizer_engine.py -q
 ```
-**Criterio BINARIO:** 14/14 verdes.
+**Criterio BINARIO:** 17/17 verdes.
 **Flag:** las 5 de F0 (el gate HTTP va en F4).
 **Impacto por runtime:** idéntico en los 3 (el motor es backend; el único punto
 runtime-dependiente es F2). **Fallback:** generador caído por variante → entry
@@ -1194,9 +1362,11 @@ Rutas EXACTAS de §4.8 (imports de `services` LAZY dentro de cada handler — pa
 `RuntimeError("optimizer_already_running")` → 409; `RuntimeError("generator_unavailable")`
 → 409 con el message literal de §4.8; `_harness_enabled()` False en el POST → 409
 `fitness_harness_disabled`; `ValueError("run_not_running")` → 409;
-`ValueError("invalid_payload…")` / runtime inválido → 400 `invalid_payload`. El POST
-`/optimizer/run` responde **202** con el run en estado `running` (el thread ya quedó
-lanzado por `start_run`).
+`ValueError("invalid_payload…")` / runtime inválido / `rng_seed` presente y no entero
+→ 400 `invalid_payload`. El POST `/optimizer/run` responde **202** con
+`store.get_run(run["id"])` releído DESPUÉS de `start_optimization_run` (C4: el estado
+REAL al momento de responder — normalmente `running`; en tests con el async mockeado
+síncrono, terminal — así contrato y test dicen lo mismo).
 
 **Registro — `backend/api/__init__.py` (2 líneas, espejo del 168 F5):** tras la línea
 del 168 `from .evolution_fitness import bp as evolution_fitness_bp` agregar
@@ -1219,7 +1389,7 @@ generator/fitness mockeados — G14). 12 casos:
 4. `test_run_target_inexistente_404` — POST con `target_ref="NoExiste.agent.md"` → 404 `target_not_found`.
 5. `test_run_generator_unavailable_409` — flag GENERATOR="local" sin endpoint (monkeypatch `_cfg`) → 409 `generator_unavailable` con el message literal (**KPI-5**).
 6. `test_run_harness_off_409` — `STACKY_EVAL_HARNESS_ENABLED` False → 409 `fitness_harness_disabled`.
-7. `test_run_feliz_202_y_get` — POST → 202 con `run.status` terminal (async mockeado síncrono) y `GET /runs/<rid>` lo devuelve.
+7. `test_run_feliz_202_y_get` — POST → 202; el body refleja el estado REAL del store al responder (con `_start_run_async` mockeado síncrono: terminal — contrato C4 de §4.8) y `GET /runs/<rid>` lo devuelve; un POST con `"rng_seed": "x"` (no entero) → 400 `invalid_payload`.
 8. `test_run_already_running_409` — sembrar un run `running` en el store → POST → 409 `optimizer_already_running`.
 9. `test_cancel` — run running → POST cancel → 200 y `cancel_requested True`; run terminal → 409 `run_not_running`; inexistente → 404.
 10. `test_runs_tail_y_archive` — corrida completada → `GET /runs` la lista; `GET /archive?run_id=` devuelve base+variantes.
@@ -1255,7 +1425,8 @@ bandeja NORMAL del 167 (cero UI nueva para aprobar).
 `health()`, `targets()`, `run(targetRef, runtime, useJudge)`, `cancel(runId)`,
 `getRun(runId)`, `runs(limit)`, `archive(q)`, `lessons(aspectKey, limit)`,
 `pareto(aspectKey)` — cada uno `fetch` a la ruta EXACTA de §4.8 con el estilo
-`{ok, status, data}` del 167 F5); `frontend/src/pages/EvolutionCenterPage.tsx`
+`{ok, status, data}` del 167 F5; `rng_seed` NO se expone en la UI ni en el namespace:
+es un parámetro del POST para depuración/tests — ADICIÓN v2); `frontend/src/pages/EvolutionCenterPage.tsx`
 (2 toques quirúrgicos, anclar por contenido: (1) import de `OptimizerSection`;
 (2) render de `<OptimizerSection />` como ÚLTIMA sección de la página,
 inmediatamente DESPUÉS de `<FitnessSection />` del 168).
@@ -1441,10 +1612,10 @@ de no-regresión del toque de F2.)
   de pollear a los 30 min aunque siga `running`) y cancelación cooperativa; el lock
   `any_run_running` impide corridas simultáneas. Peor caso residual: run huérfano en
   `running` tras un crash del backend → el POST siguiente devolvería
-  `optimizer_already_running`; mitigación congelada: `start_run` trata como NO-running
-  cualquier run `running` con `started_at` más viejo que 2 horas (constante
-  `_STALE_RUN_HOURS = 2`, chequeada en `any_run_running`) y lo cierra como `error`
-  con `error="stale_run_reaped"` (step incluido).
+  `optimizer_already_running`; mitigación congelada EN CONTRATO (C6): el reaper vive
+  en `any_run_running()` del store (F1, `_STALE_RUN_HOURS = 2`, test F1 caso 13) —
+  cierra como `error="stale_run_reaped"` todo run `running` más viejo que 2 horas
+  antes de responder si hay corrida activa.
 - **R6 — Threads + SQLAlchemy en pytest (gotcha real del repo).** Riel G14: ningún
   test lanza el thread; `_start_run_async` se monkeypatchea; el motor solo toca DB en
   modo `runtime` (vía `_wait_and_read_output`), que en tests siempre está mockeado.
@@ -1538,9 +1709,9 @@ de no-regresión del toque de F2.)
 
 1. **Pre-check global** — 167 y 168 en el árbol (si no, DETENERSE).
 2. **F0** — flags + config + help + meta-tests (foto previa de `test_harness_flags.py`).
-3. **F1** — store (runs/archive/lessons/pareto + `pareto_front`) + 12 tests.
+3. **F1** — store (runs/archive/lessons/pareto + `pareto_front` + reaper C6) + 14 tests.
 4. **F2** — agente mutador + registro + `-9` en `_ONE_SHOT_ADO_IDS` + `variant_generator` + 10 tests.
-5. **F3** — motor (`start_run`/`_run_optimization_sync` + emisión gateada) + 14 tests.
+5. **F3** — motor (`start_optimization_run`/`_run_optimization_sync` + emisión gateada) + 17 tests.
 6. **F4** — API + registro de blueprint + 12 tests.
 7. **F5** — `optimizerModel` + `OptimizerSection` + wiring `EvolutionCenterPage` + 8 tests + tsc.
 8. **F6** — ratchet (sh + ps1) + estado del doc + corrida completa de cierre.
@@ -1550,7 +1721,7 @@ de no-regresión del toque de F2.)
 - [ ] Las 5 flags con patrón triple completo (config + FlagSpec + `_CATEGORY_KEYS` +
       help + curated SOLO la bool + requires al ROOT del 167), editables desde la UI
       del Arnés; `harness_defaults.env` NO tocado a mano (G11).
-- [ ] Los 5 archivos de test backend verdes POR ARCHIVO (56 casos: 8+12+10+14+12),
+- [ ] Los 5 archivos de test backend verdes POR ARCHIVO (61 casos: 8+14+10+17+12),
       registrados en `HARNESS_TEST_FILES` (sh + ps1); `optimizerModel.test.ts` (8)
       verde; `npx tsc --noEmit` exit 0; `uiDebtRatchet` verde.
 - [ ] KPI-1: propuesta emitida real con `origin="optimizer"` + `pending_review`;
@@ -1564,9 +1735,15 @@ de no-regresión del toque de F2.)
 - [ ] El motor NUNCA aplica: `grep -n "evolution_apply" "Stacky Agents/backend/services/evolution_optimizer.py"`
       → 0 matches (el import está PROHIBIDO; la única emisión es `create_proposal` +
       `inject_proposal_fitness`).
-- [ ] Sin autonomía: `grep -rn "start_run\|_run_optimization_sync" "Stacky Agents/backend" --include=*.py | grep -v tests | grep -v evolution_optimizer`
-      → 0 matches fuera de `api/evolution_optimizer.py` (único caller: el POST del
-      operador).
+- [ ] Sin autonomía: `grep -rn "start_optimization_run\|_run_optimization_sync" "Stacky Agents/backend" --include=*.py | grep -v tests | grep -v evolution_optimizer`
+      → 0 matches (C3: el símbolo v1 `start_run` colisionaba con
+      `qa_browser_runner.py:31` — falso rojo permanente; el nombre v2 es único y el
+      único caller legítimo, `api/evolution_optimizer.py`, queda cubierto por el
+      filtro de nombre de archivo).
+- [ ] `base_hash` presente en el run y `base_hash=` en `evidence` de toda propuesta
+      emitida (C5); `rng_seed` aceptado por el POST, persistido en el run y NUNCA
+      expuesto como control en la UI (ADICIÓN v2); los dos `_LOG.info` de
+      apertura/cierre de corrida presentes en `_run_optimization_sync` (ADICIÓN v2).
 - [ ] Cero egress/subprocess en tests: `invoke_local_llm`, `run_agent` y
       `_wait_and_read_output` mockeados en TODO test que alcance sus caminos; ningún
       test lanza el thread real (G14).

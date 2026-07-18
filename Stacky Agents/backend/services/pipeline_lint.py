@@ -823,3 +823,217 @@ def lint_yaml(yaml_text: str, provider: str,
     findings.sort(key=lambda f: (f.line if f.line is not None else 10 ** 9, f.code))
     # (4) report (+ C9 fix-omission)
     return _build_report(findings, t0, yaml_text)
+
+
+# ── Explain-plan (F4) — simulación del orden de ejecución ───────────────────────
+
+@dataclass(frozen=True)
+class PlanNode:
+    kind: str                    # "stage" | "job"
+    name: str
+    steps: tuple                 # display names de los pasos (script truncado a 80)
+    resolved_vars: dict          # solo resolución LITERAL
+    warnings: tuple              # p.ej. "condicional: puede no ejecutarse"
+    estimated_seconds: float | None = None  # SIEMPRE None en v1 (campo reservado)
+
+
+@dataclass(frozen=True)
+class ExecutionPlan:
+    phases: tuple                # fases en orden; dentro de una fase, paralelo
+    provider: str
+    ok: bool                     # False si hay ciclo (PL004) → phases vacío
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _truncate(s: str, n: int = 80) -> str:
+    s = " ".join(str(s).split())
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def _var_pairs(varblock) -> list:
+    pairs = []
+    if isinstance(varblock, dict):
+        for k, v in varblock.items():
+            pairs.append((str(k), v))
+    elif isinstance(varblock, list):
+        for it in varblock:
+            if isinstance(it, dict) and "name" in it:
+                pairs.append((str(it["name"]), it.get("value")))
+    return pairs
+
+
+def _resolve_vars(pairs) -> dict:
+    out = {}
+    for name, val in pairs:
+        if isinstance(val, str) and "$" in val:
+            out[name] = "<dinámica>"
+        elif isinstance(val, (str, int, float, bool)):
+            out[name] = val
+        else:
+            out[name] = "<dinámica>"
+    return out
+
+
+def _step_display(st) -> str:
+    if not isinstance(st, dict):
+        return _truncate(str(st))
+    name = st.get("displayName")
+    if isinstance(name, str) and name.strip():
+        return name
+    script = (st.get("script") or st.get("bash") or st.get("powershell")
+              or st.get("pwsh") or "")
+    return _truncate(str(script))
+
+
+def _topo_phases(names: list, edges: dict):
+    """Niveles topológicos (Kahn); orden alfabético dentro de la fase. None si ciclo."""
+    remaining = list(names)
+    scheduled: set = set()
+    phases = []
+    while remaining:
+        ready = [n for n in remaining if edges.get(n, set()) <= scheduled]
+        if not ready:
+            return None  # ciclo
+        ready_sorted = sorted(ready)
+        phases.append(ready_sorted)
+        scheduled |= set(ready_sorted)
+        remaining = [n for n in remaining if n not in scheduled]
+    return phases
+
+
+def _ado_stage_node(s, root_vars) -> PlanNode:
+    steps = []
+    for j in _ado_job_items(s):
+        for st in (j.get("steps") or []):
+            steps.append(_step_display(st))
+    warnings = ("condicional: puede no ejecutarse",) if s.get("condition") else ()
+    return PlanNode(
+        kind="stage", name=s.get("stage"), steps=tuple(steps),
+        resolved_vars=_resolve_vars(list(root_vars) + _var_pairs(s.get("variables"))),
+        warnings=warnings, estimated_seconds=None)
+
+
+def _ado_job_node(j, root_vars) -> PlanNode:
+    steps = [_step_display(st) for st in (j.get("steps") or [])]
+    warnings = ("condicional: puede no ejecutarse",) if j.get("condition") else ()
+    return PlanNode(
+        kind="job", name=_ado_job_name(j), steps=tuple(steps),
+        resolved_vars=_resolve_vars(list(root_vars) + _var_pairs(j.get("variables"))),
+        warnings=warnings, estimated_seconds=None)
+
+
+def _gitlab_job_node(jd, name, root_vars) -> PlanNode:
+    script = jd.get("script")
+    items = script if isinstance(script, list) else ([script] if isinstance(script, str) else [])
+    steps = tuple(_truncate(str(it)) for it in items if isinstance(it, str))
+    warnings = ("condicional: puede no ejecutarse",) if jd.get("rules") else ()
+    return PlanNode(
+        kind="job", name=name, steps=steps,
+        resolved_vars=_resolve_vars(list(root_vars) + _var_pairs(jd.get("variables"))),
+        warnings=warnings, estimated_seconds=None)
+
+
+def _explain_ado(data) -> ExecutionPlan:
+    root_vars = _var_pairs(data.get("variables")) if isinstance(data, dict) else []
+    stages = _ado_stage_items(data)
+    if stages:
+        names = [s.get("stage") for s in stages]
+        nameset = set(names)
+        edges = {}
+        for i, s in enumerate(stages):
+            n = s.get("stage")
+            edges.setdefault(n, set())
+            dep = s.get("dependsOn")
+            if dep is None:  # secuencial por default (C2): depende del stage anterior
+                if i > 0:
+                    edges[n].add(names[i - 1])
+            else:
+                edges[n].update(d for d in _as_name_list(dep) if d in nameset)
+        phases_names = _topo_phases(names, edges)
+        if phases_names is None:
+            return ExecutionPlan(phases=(), provider="ado", ok=False)
+        by_name = {s.get("stage"): s for s in stages}
+        phases = tuple(
+            tuple(_ado_stage_node(by_name[nm], root_vars) for nm in phase)
+            for phase in phases_names)
+        return ExecutionPlan(phases=phases, provider="ado", ok=True)
+    # pipeline jobs-only: jobs PARALELOS por default (C2), aristas solo por dependsOn
+    jobs = _ado_job_items(data) if isinstance(data, dict) else []
+    if not jobs:
+        return ExecutionPlan(phases=(), provider="ado", ok=True)
+    names = [_ado_job_name(j) for j in jobs]
+    nameset = set(names)
+    edges = {}
+    for j in jobs:
+        n = _ado_job_name(j)
+        edges.setdefault(n, set())
+        edges[n].update(d for d in _as_name_list(j.get("dependsOn")) if d in nameset)
+    phases_names = _topo_phases(names, edges)
+    if phases_names is None:
+        return ExecutionPlan(phases=(), provider="ado", ok=False)
+    by_name = {_ado_job_name(j): j for j in jobs}
+    phases = tuple(
+        tuple(_ado_job_node(by_name[nm], root_vars) for nm in phase)
+        for phase in phases_names)
+    return ExecutionPlan(phases=phases, provider="ado", ok=True)
+
+
+def _explain_gitlab(data) -> ExecutionPlan:
+    if not isinstance(data, dict):
+        return ExecutionPlan(phases=(), provider="gitlab", ok=True)
+    stages_list = data.get("stages") if isinstance(data.get("stages"), list) else []
+    stage_index = {str(s): i for i, s in enumerate(stages_list)}
+    root_vars = _var_pairs(data.get("variables"))
+    jobs = _gitlab_jobs(data)
+    if not jobs:
+        return ExecutionPlan(phases=(), provider="gitlab", ok=True)
+    jobset = set(jobs.keys())
+    levels: dict = {}
+    visiting: set = set()
+
+    def level(name):
+        if name in levels:
+            return levels[name]
+        if name in visiting:
+            return None  # ciclo
+        visiting.add(name)
+        jd = jobs[name]
+        needs = [r for r in _gitlab_needs_refs(jd.get("needs")) if r in jobset]
+        if needs:
+            sub = []
+            for r in needs:
+                lv = level(r)
+                if lv is None:
+                    visiting.discard(name)
+                    return None
+                sub.append(lv)
+            result = max(sub) + 1
+        else:  # fase base = orden del stage
+            result = stage_index.get(str(jd.get("stage")), 0) + 1
+        visiting.discard(name)
+        levels[name] = result
+        return result
+
+    for name in jobs:
+        if level(name) is None:
+            return ExecutionPlan(phases=(), provider="gitlab", ok=False)
+    max_level = max(levels.values())
+    phases = []
+    for lv in range(1, max_level + 1):
+        names_at = sorted([n for n, l in levels.items() if l == lv])
+        if names_at:
+            phases.append(tuple(_gitlab_job_node(jobs[n], n, root_vars) for n in names_at))
+    return ExecutionPlan(phases=tuple(phases), provider="gitlab", ok=True)
+
+
+def explain_plan(yaml_text: str, provider: str) -> ExecutionPlan:
+    """Simula el orden de ejecución (fases topológicas, C2). Sin correr nada, sin red."""
+    try:
+        data = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return ExecutionPlan(phases=(), provider=provider, ok=False)
+    if provider == "ado":
+        return _explain_ado(data)
+    return _explain_gitlab(data)

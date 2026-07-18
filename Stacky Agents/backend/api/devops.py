@@ -174,6 +174,20 @@ def pipeline_lint_validate_route():
     return jsonify(lint_yaml(yaml_str, source, known_variables=kv).to_dict())
 
 
+@bp.post("/pipeline-lint/explain")
+def pipeline_lint_explain_route():
+    """YAML → ExecutionPlan (explain-plan estilo terraform-plan). PURO, sin red. Plan 186."""
+    if not getattr(_config.config, "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", False):
+        abort(404)  # guard per-request, patrón devops.py:147
+    body = request.get_json(silent=True) or {}
+    source = body.get("source")
+    yaml_str = body.get("yaml") or ""
+    if source not in ("ado", "gitlab") or not yaml_str.strip():
+        return jsonify({"error": "source ('ado'|'gitlab') y yaml son obligatorios"}), 400
+    from services.pipeline_lint import explain_plan
+    return jsonify({"plan": explain_plan(yaml_str, source).to_dict()})
+
+
 @bp.post("/publications/materialize")
 def materialize_publication_route():
     """Preset -> dict PipelineSpec. SOLO-LECTURA (no commitea, no dispara). Plan 88."""

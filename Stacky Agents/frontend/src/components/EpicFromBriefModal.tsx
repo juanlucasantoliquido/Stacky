@@ -18,41 +18,14 @@ import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import IntentPreflightModal from "./IntentPreflightModal";
 import { canGenerateEpic, shouldCloseOnBackdrop } from "../services/uiGuards";
 import { clearBriefDraft, readBriefDraft, writeBriefDraft } from "../services/briefDraft";
+import { useModelCatalog } from "../hooks/useModelCatalog";
 import type { AgentRuntime } from "../types";
 import styles from "./EpicFromBriefModal.module.css";
 
-// Plan 43 F3 — modelos para claude_code_cli. Opus 4.8 es de primera clase en brief→épica
-// (backend pasa allow_opus=True). Sonnet 5 es el default/primario (config.CLAUDE_CODE_CLI_MODEL);
-// sonnet-4-6 sigue siendo un modelo Claude válido — ahora el fallback del CLI ante fallo de
-// arranque del primario, y también seleccionable acá como opción explícita. Haiku 4.5 opcional.
-const CLAUDE_MODELS: { value: string; label: string }[] = [
-  { value: "claude-sonnet-5", label: "Sonnet 5 (recomendado)" },
-  { value: "claude-opus-4-8", label: "Opus 4.8 (mayor calidad, más lento, mayor costo)" },
-  { value: "claude-haiku-4-5", label: "Haiku 4.5 (más rápido, menor costo)" },
-  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (fallback del CLI)" },
-];
-
-// Plan 43 F3 — efforts oficiales de Claude CLI con matriz de soporte por modelo.
-// haiku → low/medium/high; sonnet → low/medium/high/max; opus → todos.
+// Plan 159 — modelos/efforts y la matriz de validez (effort_support) vienen del
+// catálogo único (useModelCatalog); ya no se declaran acá. EffortLevel se
+// conserva como tipo.
 type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
-
-const CLAUDE_EFFORTS: {
-  value: EffortLevel;
-  label: string;
-  supportedModels: string[]; // prefijos de modelo que soportan este effort
-}[] = [
-  { value: "low", label: "low — mínimo (respuestas rápidas)", supportedModels: ["claude-haiku", "claude-sonnet", "claude-opus"] },
-  { value: "medium", label: "medium — estándar", supportedModels: ["claude-haiku", "claude-sonnet", "claude-opus"] },
-  { value: "high", label: "high — alto (recomendado para épicas)", supportedModels: ["claude-haiku", "claude-sonnet", "claude-opus"] },
-  { value: "xhigh", label: "xhigh — muy alto (Opus 4.7+)", supportedModels: ["claude-opus"] },
-  { value: "max", label: "max — máximo (Opus 4.8 / Sonnet 4.6)", supportedModels: ["claude-sonnet", "claude-opus"] },
-];
-
-function isEffortValidForModel(effort: EffortLevel, modelId: string): boolean {
-  const entry = CLAUDE_EFFORTS.find((e) => e.value === effort);
-  if (!entry) return false;
-  return entry.supportedModels.some((prefix) => modelId.startsWith(prefix));
-}
 
 interface EpicFromBriefModalProps {
   onClose: () => void;
@@ -100,7 +73,13 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createdAdoId, setCreatedAdoId] = useState<number | null>(null);
 
-  // Plan 42 F3 — selector de modelo y esfuerzo.
+  // Plan 42 F3 — selector de modelo y esfuerzo. Plan 159 — la lista y la matriz
+  // de validez (effort_support) vienen del catálogo único.
+  const { catalog } = useModelCatalog();
+  const claudeModels = catalog.claude_code_cli?.models ?? [];
+  const claudeEfforts = catalog.claude_code_cli?.efforts ?? [];
+  const isEffortValidForModel = (effort: string, modelId: string): boolean =>
+    catalog.claude_code_cli?.effort_support?.[modelId]?.includes(effort) ?? true;
   const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5");
   const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
   // Plan 45 F3 — selector de tipo de work item (Epic | Issue).
@@ -509,8 +488,8 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
                   disabled={agentRuntime !== "claude_code_cli"}
                   title={agentRuntime !== "claude_code_cli" ? "El selector de modelo solo aplica a Claude Code CLI" : undefined}
                 >
-                  {CLAUDE_MODELS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                  {claudeModels.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
                   ))}
                 </select>
               </label>
@@ -522,10 +501,10 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
                   disabled={agentRuntime !== "claude_code_cli"}
                   title={agentRuntime !== "claude_code_cli" ? "El selector de esfuerzo solo aplica a Claude Code CLI" : undefined}
                 >
-                  {CLAUDE_EFFORTS.map((eff) => {
-                    const valid = isEffortValidForModel(eff.value, selectedModel);
+                  {claudeEfforts.map((eff) => {
+                    const valid = isEffortValidForModel(eff.id, selectedModel);
                     return (
-                      <option key={eff.value} value={eff.value} disabled={!valid}>
+                      <option key={eff.id} value={eff.id} disabled={!valid}>
                         {eff.label}{!valid ? " (no disponible para este modelo)" : ""}
                       </option>
                     );

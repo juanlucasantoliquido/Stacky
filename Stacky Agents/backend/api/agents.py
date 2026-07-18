@@ -1311,6 +1311,40 @@ def list_models_route():
     })
 
 
+@bp.get("/model-catalog")
+def model_catalog_route():
+    """Plan 159 v2 — catálogo unificado modelos/efforts por runtime CLI
+    (claude_code_cli, codex_cli, github_copilot). Fuente:
+    services/model_catalog.py (+ introspección cacheada de github_copilot).
+    Siempre 200; nunca deja el selector del frontend vacío."""
+    if not getattr(config, "STACKY_MODEL_CATALOG_ENABLED", True):
+        return jsonify({"ok": False, "reason": "catalog_disabled", "runtimes": {}})
+
+    from services.model_catalog import (
+        TTL_SEC,
+        get_copilot_models_cached,
+        load_model_catalog,
+    )
+
+    refresh = request.args.get("refresh", "").lower() in {"1", "true", "yes"}
+    catalog = load_model_catalog(force_refresh=refresh)
+    copilot = get_copilot_models_cached(force_refresh=refresh)
+
+    runtimes = {**catalog["runtimes"], "github_copilot": {
+        **catalog["runtimes"].get("github_copilot", {}),
+        "models": copilot["models"],
+        "error": copilot["error"],
+    }}
+
+    return jsonify({
+        "ok": True,
+        "cached_at": catalog["loaded_at"],  # C2/C8: real, sin time.time()
+        "ttl_sec": TTL_SEC,
+        "fallback_used": catalog["fallback_used"],
+        "runtimes": runtimes,
+    })
+
+
 @bp.get("/<agent_type>/schema")
 def schema(agent_type: str):
     """FA-19 — schema (legible) del contrato del agente."""

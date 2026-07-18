@@ -252,16 +252,16 @@ el de §6 (prefijo + ≥8 chars del set); los planes hermanos lo adoptan al impo
 
 | Ítem | Resultado | Fecha |
 |------|-----------|-------|
-| Gate 0.1 — versión de venv | _pendiente_ | |
-| Gate 0.2 — ratchet_meta (verde/rojo + causa) | _pendiente_ | |
-| Gate 0.3 — tsc baseline | _pendiente_ | |
-| Plan 190 + gates §7 | _pendiente_ | |
+| Gate 0.1 — versión de venv | VERDE — `.venv` del main-tree = Python 3.13.5 (intérprete canónico; el py3.11 ajeno NO se tocó). `scripts/check_serie_gates.sh` creado (§7bis literal) | 2026-07-18 |
+| Gate 0.2 — ratchet_meta (verde/rojo + causa) | VERDE — 4 passed en `.venv` py3.13.5 (baseline y tras registrar los 4 tests nuevos) | 2026-07-18 |
+| Gate 0.3 — tsc baseline | VERDE — `npx tsc --noEmit` exit 0 (limpio) | 2026-07-18 |
+| Plan 190 + gates §7 | IMPLEMENTADO F0-F3 (commit `453073cc`; módulo común en `07b7358b`) — 22 tests backend + 6 vitest verdes, tsc 0, compileall 0. §7bis: GATE3/GATE4 tienen ruido de baseline (GATE3 lista toda key referenciada 2+ veces; GATE4 marca el duplicado PREEXISTENTE de `test_harness_flags.py` en `run_harness_tests.sh` líneas 22/340) — ninguno introducido por 190/195 | 2026-07-18 |
 | Plan 186 + gates §7 | _pendiente_ | |
 | Plan 188 + gates §7 | _pendiente_ | |
 | Plan 189 + gates §7 | _pendiente_ | |
 | Plan 191 + gates §7 | _pendiente_ | |
 | Plan 193 + gates §7 | _pendiente_ | |
-| KPI-2 — grep TOKEN_VALUE_PREFIXES = solo secret_masking.py | _pendiente_ | |
+| KPI-2 — grep TOKEN_VALUE_PREFIXES = solo secret_masking.py | VERDE — `TOKEN_VALUE_PREFIXES` vive SOLO en `services/secret_masking.py`; el 190 lo IMPORTA (no redefine) | 2026-07-18 |
 | Desvíos del orden (si hubo) + motivo | _pendiente_ | |
 
 ## 9. Riesgos y mitigaciones

@@ -1320,6 +1320,15 @@ class Config:
         "STACKY_CI_RUN_LEDGER_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 193 — Triage de fallos CI (logs inline enmascarados, read-only) ──
+    # En un pipeline fallido, expone GET /api/ci/<project>/pipeline/<id>/failed-jobs
+    # y GET /api/ci/<project>/job/<id>/log (tail 200K + masking de tokens). Solo
+    # lectura, sin IA. Default ON (espejo del default=True de la FlagSpec homónima;
+    # curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_CI_FAILURE_TRIAGE_ENABLED: bool = os.getenv(
+        "STACKY_CI_FAILURE_TRIAGE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

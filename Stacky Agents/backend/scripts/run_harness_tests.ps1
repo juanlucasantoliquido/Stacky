@@ -491,6 +491,8 @@ $HarnessTestFiles = @(
   # — Plan 191 · Bitácora durable de corridas CI —
   "tests/test_plan191_ci_ledger_flag.py"
   "tests/test_plan191_ci_ledger_hook.py"
+  # — Plan 193 · Triage de fallos CI (logs inline enmascarados) —
+  "tests/test_plan193_ci_triage.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

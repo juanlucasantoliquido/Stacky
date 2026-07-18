@@ -187,6 +187,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
         "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
         "STACKY_CI_RUN_LEDGER_ENABLED",      # Plan 191 — bitácora durable de corridas CI
+        "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
     ),
     "migrador_ado_gitlab": (
@@ -2970,6 +2971,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_PIPELINE_TRIGGER_ENABLED",  # sin triggers no hay contenido (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 193 — Triage de fallos CI (logs inline enmascarados, read-only) ──
+    FlagSpec(
+        key="STACKY_CI_FAILURE_TRIAGE_ENABLED",
+        type="bool",
+        label="Triage de fallos CI (logs inline)",
+        description=(
+            "Plan 193 — En un pipeline fallido, lista los jobs fallidos y muestra el "
+            "log de cada uno dentro de Stacky (recortado a 200 KB y con tokens "
+            "enmascarados). Solo lectura; el Doctor IA sigue disponible como paso "
+            "siguiente. Con OFF los endpoints devuelven 404 y la sección de disparo "
+            "queda idéntica a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_PIPELINE_TRIGGER_ENABLED",  # la superficie vive en la sección de trigger/monitor (depth-1)
         # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),

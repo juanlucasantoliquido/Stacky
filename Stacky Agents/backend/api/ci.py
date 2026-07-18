@@ -247,3 +247,59 @@ def list_ci_runs_route():
         return jsonify({"error": "limit inválido"}), 400
     from services.ci_run_ledger import list_runs
     return jsonify({"runs": list_runs(project=project, limit=limit)})
+
+
+# ---------------------------------------------------------------------------
+# Plan 193 — Triage de fallos CI (read-only): jobs fallidos + log inline.
+# Expone el puerto 96 (CILogsProvider) por HTTP con cap y masking. Rutas ADITIVAS
+# DESPUÉS de /runs (191). El puerto y sus providers NO se tocan (KPI-3).
+# ---------------------------------------------------------------------------
+
+def _map_ci_logs_error(exc):
+    """Mapeo espejo del patrón de la casa (KPI-4): TrackerConfigError → 400,
+    TrackerApiError → su status (fallback 502). NUNCA un 500 crudo."""
+    from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    if isinstance(exc, TrackerConfigError):
+        return jsonify({"error": str(exc), "kind": "tracker_config"}), 400
+    if isinstance(exc, TrackerApiError):
+        return jsonify({"error": str(exc), "kind": exc.kind}), exc.status or 502
+    raise exc
+
+
+@bp.get("/<project>/pipeline/<pipeline_id>/failed-jobs")
+def ci_failed_jobs_route(project: str, pipeline_id: str):
+    """Jobs fallidos del pipeline (puerto 96, read-only). Plan 193.
+
+    Flag OFF → 404. Errores del tracker mapeados (KPI-4), nunca 500 crudo.
+    """
+    if not getattr(_config.config, "STACKY_CI_FAILURE_TRIAGE_ENABLED", False):
+        abort(404)
+    from services.ci_logs_provider import get_ci_logs_provider  # noqa: PLC0415
+    from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    try:
+        provider = get_ci_logs_provider(project)
+        jobs = provider.list_failed_jobs(str(pipeline_id))
+    except (TrackerConfigError, TrackerApiError) as exc:
+        return _map_ci_logs_error(exc)
+    return jsonify({"jobs": jobs, "provider": provider.name})
+
+
+@bp.get("/<project>/job/<job_id>/log")
+def ci_job_log_route(project: str, job_id: str):
+    """Log de un job, con tail 200K y masking (KPI-1/KPI-2). Plan 193.
+
+    Flag OFF → 404. Errores del tracker mapeados (KPI-4), nunca 500 crudo.
+    """
+    if not getattr(_config.config, "STACKY_CI_FAILURE_TRIAGE_ENABLED", False):
+        abort(404)
+    from services.ci_logs_provider import get_ci_logs_provider  # noqa: PLC0415
+    from services.ci_log_view import tail_and_mask  # noqa: PLC0415
+    from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    try:
+        provider = get_ci_logs_provider(project)
+        text = provider.get_job_log(str(job_id))
+    except (TrackerConfigError, TrackerApiError) as exc:
+        return _map_ci_logs_error(exc)
+    out = tail_and_mask(text)
+    out["provider"] = provider.name  # C5 — consistencia con /failed-jobs
+    return jsonify(out)

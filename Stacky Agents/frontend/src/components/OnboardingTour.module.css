@@ -1,85 +1,125 @@
-.overlay {
+/*
+ * Plan 151 F3 — Estilos del tour de bienvenida v2.
+ * Solo tokens de theme.css (motion 143, --focus-ring 141) + rgba (0 hex ⇒ no
+ * agrega deuda al ratchet 138). NO se escribe @media (prefers-reduced-motion):
+ * la regla global del 141 F5 neutraliza estas transiciones/animaciones.
+ */
+
+.root {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  z-index: 900;
-  cursor: pointer;
+  /* Sobre modales existentes (<= 9500), por debajo de toasts criticos (9999). */
+  z-index: 9600;
+  pointer-events: none;
 }
 
-.card {
+/* Captura de clicks para descartar el tour. Transparente cuando hay spotlight
+   (el propio spotlight oscurece), oscuro cuando la card esta centrada. */
+.backdrop {
   position: fixed;
-  z-index: 901;
-  background: var(--bg-panel);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  padding: 20px 24px;
-  max-width: 320px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: transparent;
+  pointer-events: auto;
+  transition: var(--transition-opacity);
+}
+.backdropDim {
+  background: rgba(0, 0, 0, 0.55);
 }
 
-/* positions */
-.right  { top: 50%; left: 290px; transform: translateY(-50%); }
-.bottom { top: 220px; left: 50%; transform: translateX(-50%); }
-.left   { top: 50%; right: 460px; transform: translateY(-50%); }
+/* Recorte iluminado sobre el ancla: un box-shadow enorme oscurece el resto.
+   No captura clicks (el backdrop maneja el dismiss). Posicion via custom props
+   seteadas imperativamente desde el componente (R5). */
+.spotlight {
+  position: fixed;
+  top: var(--r-top);
+  left: var(--r-left);
+  width: var(--r-w);
+  height: var(--r-h);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  transition: var(--transition-opacity), var(--transition-transform);
+}
+.spotlightHidden {
+  display: none;
+}
 
+/* Wrapper focusable propio del feature (C3: Card no acepta ref/tabIndex). */
+.cardWrap {
+  position: fixed;
+  width: min(440px, calc(100vw - 32px));
+  pointer-events: auto;
+  outline: none;
+  animation: onbFade var(--duration-base) var(--ease-out-expo);
+  transition: var(--transition-opacity), var(--transition-transform);
+}
+.cardWrap:focus-visible {
+  border-radius: 12px;
+  box-shadow: var(--focus-ring);
+}
+
+@keyframes onbFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Colocacion en zonas fijas de pantalla --- */
+.bottom {
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.top {
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.right {
+  top: 50%;
+  right: 5%;
+  transform: translateY(-50%);
+}
+.left {
+  top: 50%;
+  left: 5%;
+  transform: translateY(-50%);
+}
+/* Degradacion (4.3): sin ancla => card centrada. Resetea right/bottom. */
+.centered {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+}
+
+/* --- Contenido de la card --- */
 .title {
-  margin: 0 0 10px;
-  font-size: 14px;
+  margin: 0 0 8px;
+  font-size: 1.05rem;
   font-weight: 600;
-  color: var(--accent);
 }
-
 .body {
   margin: 0 0 16px;
-  font-size: 13px;
   line-height: 1.5;
-  color: var(--text-primary);
+  opacity: 0.9;
 }
-
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.count {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  white-space: nowrap;
+}
 .actions {
   display: flex;
-  justify-content: space-between;
   gap: 8px;
-}
-
-.skip {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  padding: 6px 14px;
-  font-size: 12px;
-}
-
-.next {
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 6px 16px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.next:hover {
-  background: var(--accent-hot);
-}
-
-.dots {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  margin-top: 14px;
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--border);
-  display: inline-block;
-}
-
-.dot.active {
-  background: var(--accent);
 }

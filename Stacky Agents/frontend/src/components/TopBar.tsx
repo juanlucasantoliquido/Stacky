@@ -8,6 +8,7 @@ import NewProjectModal from "./NewProjectModal";
 import EditProjectModal from "./EditProjectModal";
 import StreakBadge from "./StreakBadge";
 import CostCapIndicator from "./CostCapIndicator";
+import HelpLauncher from "./HelpLauncher";
 import styles from "./TopBar.module.css";
 
 interface TopBarProps {
@@ -199,7 +200,8 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
             +
           </button>
         </div>
-        <div className={styles.actions}>
+        <div className={styles.actions} data-tour="topbar-actions">
+          <HelpLauncher />
           {isRunning && (
             <span className={styles.runningBadge}>
               <span className={styles.badgeSpinner} aria-hidden="true" />

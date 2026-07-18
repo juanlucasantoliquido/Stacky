@@ -30,6 +30,8 @@ import { probeFlagHealth, nextEnabledState } from "./utils/flagHealth";
 import { toggleNavTab } from "./services/uiGuards";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
+import { safeStorage, migrateLegacy, shouldAutoShow } from "./services/onboarding";
+import { useOnboardingStore } from "./store/onboardingStore";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
 import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
@@ -170,6 +172,18 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // Plan 151 F5 — migrar la key vieja del prototipo y auto-mostrar el tour SOLO
+  // en first-run real. Este effect NO llama resetSeen (C2: nada en producción
+  // la llama). Al cerrar el tour, closeTour() marca `seen` y no vuelve a
+  // auto-aparecer.
+  useEffect(() => {
+    const s = safeStorage();
+    migrateLegacy(s);
+    if (shouldAutoShow(s)) {
+      useOnboardingStore.getState().setOpen(true);
+    }
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
       const target = ev.target as HTMLElement | null;
@@ -276,7 +290,7 @@ export default function App() {
       ) : (
         <>
           {/* Tabs de navegación principal */}
-          <nav className={styles.nav}>
+          <nav className={styles.nav} data-tour="nav">
             <button
               className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
               onClick={() => selectTab("team")}

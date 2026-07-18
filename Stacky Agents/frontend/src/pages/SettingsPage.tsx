@@ -24,7 +24,9 @@ import {
   setSoundEnabled,
 } from "../services/executionNotifier";
 import { readQueryParam } from "../utils/queryParams";
-import { Input, Select, Checkbox } from "../components/ui";
+import { Input, Select, Checkbox, Button } from "../components/ui";
+import { isAutoShowEnabled, setAutoShow, safeStorage } from "../services/onboarding";
+import { useOnboardingStore } from "../store/onboardingStore";
 import useOptimisticPending from "../hooks/useOptimisticPending";
 import styles from "./SettingsPage.module.css";
 
@@ -47,6 +49,13 @@ function SectionsVisibilityPanel() {
   const sections = useUiSectionsStore((s) => s.sections);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<OptionalSection | null>(null);
+  // Plan 151 F4 — preferencia de auto-show del tour (localStorage, default ON).
+  const [tourAutoShow, setTourAutoShow] = useState<boolean>(() => isAutoShowEnabled(safeStorage()));
+
+  const toggleTourAutoShow = (next: boolean) => {
+    setAutoShow(safeStorage(), next);
+    setTourAutoShow(next);
+  };
 
   const toggle = async (key: OptionalSection, next: boolean) => {
     setError(null);
@@ -100,6 +109,31 @@ function SectionsVisibilityPanel() {
           </div>
         );
       })}
+
+      <p className={styles.sectionsIntro}>Tour de bienvenida</p>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>
+          <span className={styles.rowTitle}>Mostrar el tour en el primer arranque</span>
+          <span className={styles.rowHint}>
+            El tour guiado se muestra una sola vez en un navegador nuevo. Desactivalo si no querés verlo.
+          </span>
+        </div>
+        <Checkbox
+          labelClassName={styles.toggle}
+          checked={tourAutoShow}
+          onChange={(e) => toggleTourAutoShow(e.target.checked)}
+          label={<span className={styles.toggleSlider} />}
+        />
+      </div>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>
+          <span className={styles.rowTitle}>Re-ver el tour ahora</span>
+          <span className={styles.rowHint}>Abrí el tour de bienvenida cuando quieras, sin esperar al primer arranque.</span>
+        </div>
+        <Button variant="secondary" onClick={() => useOnboardingStore.getState().requestOpenTour()}>
+          Re-ver tour ahora
+        </Button>
+      </div>
 
       {error && <div className={styles.errorText}>{error}</div>}
     </div>

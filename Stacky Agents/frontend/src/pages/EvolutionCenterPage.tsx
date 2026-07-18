@@ -40,6 +40,7 @@ import {
 } from "../evolution/model";
 import FitnessSection from "../evolution/FitnessSection";
 import OptimizerSection from "../evolution/OptimizerSection";
+import KnowledgeSection from "../evolution/KnowledgeSection";
 import { canEvaluateProposal } from "../evolution/fitnessModel";
 import styles from "./EvolutionCenterPage.module.css";
 
@@ -485,6 +486,9 @@ export default function EvolutionCenterPage() {
 
           {/* Plan 169 — sección Optimizador (no renderiza con la flag del optimizador OFF) */}
           <OptimizerSection />
+
+          {/* Plan 170 — sección Conocimiento (no renderiza con la flag del flywheel OFF) */}
+          <KnowledgeSection />
         </>
       )}
     </div>

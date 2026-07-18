@@ -277,6 +277,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EVOLUTION_OPTIMIZER_VARIANTS",        # Plan 169 — K variantes por corrida
         "STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET",    # Plan 169 — presupuesto tokens por corrida
         "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT",  # Plan 169 — margen minimo (centesimas)
+        "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED",    # Plan 170 — flywheel de conocimiento
+        "STACKY_KNOWLEDGE_INJECTION_ENABLED",   # Plan 170 — inyeccion de lecciones
+        "STACKY_KNOWLEDGE_INJECT_TOP_N",        # Plan 170 — top-N por corrida
+        "STACKY_KNOWLEDGE_INJECT_MAX_CHARS",    # Plan 170 — tope de caracteres
+        "STACKY_KNOWLEDGE_MAX_LESSONS",         # Plan 170 — cap sugerente del corpus
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -3410,6 +3415,42 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         type="int",  # SIN default= (C14: efectivo 2 en config.py)
         label="Margen mínimo de mejora (centésimas de score)",
         description="Cuánto debe superar la mejor variante al artefacto actual para que se emita una propuesta. 2 significa 0.02 puntos de score.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    # ── Plan 170 — Flywheel de conocimiento (serie auto-mejora recursiva 4/4) ──
+    FlagSpec(
+        key="STACKY_KNOWLEDGE_FLYWHEEL_ENABLED",
+        type="bool", default=True,
+        label="Flywheel de conocimiento",
+        description="Lecciones aprendidas de incidencias resueltas y mejoras verificadas: cosecha con tu aprobación, panel con uso e impacto, y retiro con un click.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_KNOWLEDGE_INJECTION_ENABLED",
+        type="bool", default=True,
+        label="Inyectar lecciones al contexto de agentes",
+        description="Agrega a cada corrida un bloque acotado con las lecciones activas que aplican al agente y al proyecto. Con tope duro de tamaño; apagalo si un prompt se comporta raro.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_KNOWLEDGE_INJECT_TOP_N",
+        type="int",  # SIN default= (C14: efectivo 3 en config.py)
+        label="Lecciones por corrida (top-N)",
+        description="Cuántas lecciones, ordenadas por relevancia al ticket, entran al contexto de una corrida. (default 3)",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_KNOWLEDGE_INJECT_MAX_CHARS",
+        type="int",  # SIN default= (C14: efectivo 4000 en config.py)
+        label="Tope de caracteres del bloque de lecciones",
+        description="Límite duro del tamaño del bloque de lecciones en el prompt. El prompt nunca crece sin control por conocimiento acumulado. (default 4000)",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_KNOWLEDGE_MAX_LESSONS",
+        type="int",  # SIN default= (C14: efectivo 200 en config.py)
+        label="Cap del corpus de lecciones",
+        description="Al superarlo, el panel sugiere retirar las lecciones menos usadas (LRU). Solo sugiere: retirar siempre es tu decisión. (default 200)",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente ──

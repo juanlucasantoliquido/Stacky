@@ -231,6 +231,11 @@ def enrich_blocks(
     blocks = _inject_rejection_lessons(
         blocks=blocks, project_name=project_name, agent_type=agent_type, log=log
     )
+    # Plan 170 — lecciones de conocimiento del flywheel (top-N, cap duro).
+    blocks = _inject_evolution_lessons(
+        blocks=blocks, project_name=project_name, agent_type=agent_type,
+        query=_rag_query, log=log,
+    )
     # I0.1 — dedup léxico entre bloques (antes del budget, OFF default).
     blocks = _dedup_blocks(blocks, project_name=project_name, log=log)
     # F2.4 + I2.1 — presupuesto de contexto con ranking y rerank (OFF default).
@@ -247,7 +252,8 @@ def enrich_blocks(
 
 # Prioridad >= este umbral: la fuente de verdad. Nunca se poda.
 _HIGH_PRIORITY_THRESHOLD = 75  # cubre: ado-epic-structured(100), client-profile(95),
-                                # stacky-memory(80), modal_user_input(78), operator_note(76)
+                                # stacky-memory(80), evolution-lessons(79),
+                                # modal_user_input(78), operator_note(76)
 
 
 def _normalize_line(line: str) -> str:
@@ -371,6 +377,7 @@ _BLOCK_PRIORITY: dict[str, int] = {
     "client-profile": 95,
     "rejection-lessons": 82,  # Plan 48 — restricción dura (rechazos previos del operador)
     "stacky-memory": 80,
+    "evolution-lessons": 79,     # Plan 170 — lecciones aprendidas (flywheel de conocimiento)
     "modal_user_input": 78,
     "process-catalog": 78,       # Plan 133 — el prompt lo declara lectura OBLIGATORIA
     "process-discipline": 77,    # Plan 133 — decisión REUSE vs CREATE, no podable
@@ -1002,6 +1009,47 @@ def _inject_rejection_lessons(
         return [block] + list(blocks)
     except Exception as exc:  # noqa: BLE001
         log("warn", f"rejection-lessons no se pudo inyectar (continuando): {exc}")
+        return blocks
+
+
+def _inject_evolution_lessons(
+    *, blocks: list[dict], project_name: str | None, agent_type: str,
+    query: str | None, log: LogFn,
+) -> list[dict]:
+    """Plan 170 — inyecta lecciones de conocimiento activas (top-N, cap duro).
+
+    Identidad estricta cuando: flags OFF, sin lecciones matching, o error.
+    """
+    from config import config as _cfg
+    if not getattr(_cfg, "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED", False):
+        return blocks
+    if not getattr(_cfg, "STACKY_KNOWLEDGE_INJECTION_ENABLED", False):
+        return blocks
+    if not getattr(_cfg, "STACKY_EVOLUTION_CENTER_ENABLED", False):
+        return blocks
+    existing_ids = {b.get("id") for b in (blocks or []) if isinstance(b, dict)}
+    if "evolution-lessons" in existing_ids:
+        return blocks
+    try:
+        from services import knowledge_store
+        matched = knowledge_store.active_lessons_for(agent_type, project_name)
+        if not matched:
+            return blocks
+        top_n = max(1, min(10, int(getattr(_cfg, "STACKY_KNOWLEDGE_INJECT_TOP_N", 3))))
+        max_chars = max(500, min(20000, int(getattr(_cfg, "STACKY_KNOWLEDGE_INJECT_MAX_CHARS", 4000))))
+        # C8: armado delegado a la función PURA de F1 (ranking + header + cap §4.5).
+        block = knowledge_store.build_lessons_block(
+            matched, query=query, top_n=top_n, max_chars=max_chars
+        )
+        if block is None:
+            return blocks
+        used_ids = block["metadata"]["lesson_ids"]
+        knowledge_store.record_injection(used_ids)   # semántica C3: "seleccionada"
+        log("info", f"evolution-lessons inyectado (n={len(used_ids)}, "
+                    f"truncated={block['metadata']['truncated']})")
+        return list(blocks) + [block]
+    except Exception as exc:  # noqa: BLE001 — best-effort, contrato del módulo
+        log("warn", f"evolution-lessons no se pudo inyectar (continuando): {exc}")
         return blocks
 
 

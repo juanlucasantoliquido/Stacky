@@ -63,6 +63,7 @@ from .publish_ledger import bp as publish_ledger_bp  # Plan 153 — ledger de pu
 from .evolution import bp as evolution_bp  # Plan 167 — Centro de Evolución
 from .evolution_fitness import bp as evolution_fitness_bp  # Plan 168 — arnés de fitness
 from .evolution_optimizer import bp as evolution_optimizer_bp  # Plan 169 — optimizador evolutivo
+from .evolution_knowledge import bp as evolution_knowledge_bp  # Plan 170 — flywheel de conocimiento
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -128,6 +129,7 @@ api_bp.register_blueprint(publish_ledger_bp)  # Plan 153 — url_prefix="/publis
 api_bp.register_blueprint(evolution_bp)  # Plan 167 — url_prefix="/evolution" → /api/evolution/...
 api_bp.register_blueprint(evolution_fitness_bp)  # Plan 168 — /api/evolution/fitness/...
 api_bp.register_blueprint(evolution_optimizer_bp)  # Plan 169 — /api/evolution/optimizer/...
+api_bp.register_blueprint(evolution_knowledge_bp)  # Plan 170 — /api/evolution/knowledge/...
 
 
 @api_bp.get("/health")

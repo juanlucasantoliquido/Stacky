@@ -534,6 +534,13 @@ HARNESS_TEST_FILES=(
   tests/test_optimizer_generator.py
   tests/test_optimizer_engine.py
   tests/test_optimizer_endpoints.py
+
+  tests/test_knowledge_flags.py
+  tests/test_knowledge_store.py
+  tests/test_knowledge_harvest.py
+  tests/test_knowledge_injection.py
+  tests/test_knowledge_eval_link.py
+  tests/test_knowledge_endpoints.py
 )
 
 pass=0

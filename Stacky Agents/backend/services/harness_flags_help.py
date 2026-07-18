@@ -1489,6 +1489,36 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: se te proponen también mejoras pequeñas, con el riesgo de que algunas sean ruido y no una mejora real.",
         example="Con el valor en 2, la mejor variante tiene que sacar al menos 0,02 puntos más de nota que la actual para que se emita una propuesta.",
     ),
+    "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED": PlainHelp(
+        what="Junta lecciones cortas de las incidencias que ya resolviste y de las mejoras verificadas, para que los agentes no repitan los mismos errores.",
+        on_effect="Si lo dejás activo: aparece el panel de Conocimiento, podés cosechar lecciones con un click y sos vos quien las aprueba.",
+        off_effect="Si lo apagás: no se ofrecen ni se guardan lecciones nuevas y el panel de Conocimiento desaparece.",
+        example="Resolviste una incidencia; con un click Stacky redacta la lección, vos la aprobás y queda guardada para las próximas corridas.",
+    ),
+    "STACKY_KNOWLEDGE_INJECTION_ENABLED": PlainHelp(
+        what="Suma a cada corrida un bloque corto con las lecciones activas que aplican a ese agente y a ese proyecto.",
+        on_effect="Si lo dejás activo: las corridas reciben las lecciones relevantes, con un tope de tamaño para no crecer de más.",
+        off_effect="Si lo apagás: las corridas vuelven a salir exactamente como antes de este plan.",
+        example="Un agente de desarrollo arranca una corrida y ve las lecciones más relevantes al ticket, sin que vos hagas nada.",
+    ),
+    "STACKY_KNOWLEDGE_INJECT_TOP_N": PlainHelp(
+        what="Cuántas lecciones, ordenadas por relevancia al ticket, entran a cada corrida.",
+        on_effect="Si subís el número: entran más lecciones por corrida, con más ayuda pero también más texto.",
+        off_effect="Si bajás el número: entran menos lecciones, con más foco y menos texto.",
+        example="Con el valor en 3, cada corrida recibe como mucho las 3 lecciones más relevantes al ticket.",
+    ),
+    "STACKY_KNOWLEDGE_INJECT_MAX_CHARS": PlainHelp(
+        what="Tamaño máximo, en caracteres, del bloque de lecciones que se suma a cada corrida.",
+        on_effect="Si subís el número: entra más texto de lecciones antes de recortar.",
+        off_effect="Si bajás el número: el bloque se recorta antes y ocupa menos.",
+        example="Con el valor en 4000, el bloque de lecciones nunca supera los 4000 caracteres; lo que no entra se recorta.",
+    ),
+    "STACKY_KNOWLEDGE_MAX_LESSONS": PlainHelp(
+        what="A partir de cuántas lecciones activas el panel te sugiere retirar las menos usadas. Nunca borra solo.",
+        on_effect="Si subís el número: se te sugiere limpiar el corpus más tarde, cuando hay más lecciones acumuladas.",
+        off_effect="Si bajás el número: se te sugiere revisar y retirar lecciones antes.",
+        example="Con el valor en 200, al pasar de 200 lecciones activas el panel te marca las más viejas y menos usadas para que decidas.",
+    ),
 }
 
 

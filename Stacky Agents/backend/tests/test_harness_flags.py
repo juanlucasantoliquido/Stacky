@@ -691,6 +691,10 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 169 — Optimizador evolutivo (SOLO la bool master; la str GENERATOR
     # y las 3 int NO van acá — G4/C14) ──
     "STACKY_EVOLUTION_OPTIMIZER_ENABLED",
+    # ── Plan 170 — Flywheel de conocimiento (SOLO las 2 bool default ON; las 3
+    # int TOP_N/MAX_CHARS/MAX_LESSONS NO van acá — G4/C14) ──
+    "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED",
+    "STACKY_KNOWLEDGE_INJECTION_ENABLED",
 }
 
 

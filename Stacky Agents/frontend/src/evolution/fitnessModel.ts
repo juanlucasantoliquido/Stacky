@@ -14,7 +14,7 @@ export interface EvalCaseDto {
   checks: Record<string, unknown>[];
   rubric_id: string | null;
   weight: number;
-  origin: "seed" | "incident" | "execution" | "manual";
+  origin: "seed" | "incident" | "execution" | "manual" | "lesson";  // Plan 170 F4
   enabled: boolean;
   source_ref: string | null;
   created_at: string;

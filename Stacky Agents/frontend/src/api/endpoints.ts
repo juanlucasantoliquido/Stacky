@@ -2881,6 +2881,63 @@ export const EvolutionOptimizer = {
     ),
 };
 
+// Plan 170 — Flywheel de conocimiento (espejo del namespace EvolutionOptimizer del 169).
+export const EvolutionKnowledge = {
+  health: () => fetch("/api/evolution/knowledge/health").then((r) => r.json()),
+  lessons: (includeRetired = false) =>
+    fetch(`/api/evolution/knowledge/lessons${includeRetired ? "?include_retired=true" : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  patchLesson: (lid: string, patch: { title?: string; scope?: unknown }) =>
+    fetch(`/api/evolution/knowledge/lessons/${lid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  candidates: () =>
+    fetch("/api/evolution/knowledge/harvest/candidates").then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  fromIncident: (incidentId: string, force = false) =>
+    fetch("/api/evolution/knowledge/harvest/from-incident", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_id: incidentId, force }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  fromOptimizerLesson: (lessonId: string, force = false) =>
+    fetch("/api/evolution/knowledge/harvest/from-optimizer-lesson", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson_id: lessonId, force }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  manual: (title: string, body: string, scope?: unknown, force = false) =>
+    fetch("/api/evolution/knowledge/harvest/manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, body, scope, force }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  toEvalCase: (lid: string) =>
+    fetch(`/api/evolution/knowledge/lessons/${lid}/to-eval-case`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  overview: () =>
+    fetch("/api/evolution/knowledge/overview").then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  injectionPreview: (q: { agent_type?: string; project?: string; query?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (q.agent_type) p.set("agent_type", q.agent_type);
+    if (q.project) p.set("project", q.project);
+    if (q.query) p.set("query", q.query);
+    const qs = p.toString();
+    return fetch(`/api/evolution/knowledge/injection-preview${qs ? `?${qs}` : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+};
+
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────
 export const CodeIntegrity = {
   get: () =>

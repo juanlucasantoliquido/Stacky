@@ -2,7 +2,7 @@
 
 ## Versión: v1 -> v2 (crítica adversarial aplicada)
 
-**Estado:** CRITICADO v2 (2026-07-18) — APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (adversarial)
+**Estado:** IMPLEMENTADO F0-F7 (2026-07-18) — cierra la serie RSI 167-170; branch `impl/rsi`. Tests verdes por archivo: 8 flags + 14 store + 11 harvest + 10 injection + 5 eval_link + 11 endpoints = 59 backend + 12 vitest (knowledgeModel), tsc exit 0. uiDebtRatchet rojo SOLO por deuda ajena preexistente (KnowledgeSection.tsx/module.css aportan 0). Desviaciones: las 3 FlagSpec int van SIN `default=` (C14, precedente 167/168/169) con el efectivo en config.py; el enlace lección↔caso de eval arma `evidence` ANTES de `create_proposal` (el 167 no expone `evidence` en `_PATCHABLE_FIELDS` — contrato intocable). · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** StackyArchitectaUltraEficientCode (adversarial)
 
 **CHANGELOG v1 -> v2:**
 

@@ -1430,4 +1430,32 @@ class Config:
         "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT", "2"
     ) or "2")
 
+    # -- Plan 170 -- Flywheel de conocimiento (serie auto-mejora recursiva 4/4) --
+    # Lecciones estructuradas: cosecha con aprobacion humana e inyeccion acotada
+    # al contexto de agentes. Default ON: la cosecha es on-click y la inyeccion
+    # es aditiva con tope duro de caracteres.
+    STACKY_KNOWLEDGE_FLYWHEEL_ENABLED: bool = os.getenv(
+        "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Kill-switch independiente de la inyeccion de lecciones al contexto.
+    STACKY_KNOWLEDGE_INJECTION_ENABLED: bool = os.getenv(
+        "STACKY_KNOWLEDGE_INJECTION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Cuantas lecciones (top por relevancia) entran por corrida (clamp 1..10 en codigo).
+    STACKY_KNOWLEDGE_INJECT_TOP_N: int = int(os.getenv(
+        "STACKY_KNOWLEDGE_INJECT_TOP_N", "3"
+    ) or "3")
+
+    # Tope duro de caracteres del bloque de lecciones (clamp 500..20000 en codigo).
+    STACKY_KNOWLEDGE_INJECT_MAX_CHARS: int = int(os.getenv(
+        "STACKY_KNOWLEDGE_INJECT_MAX_CHARS", "4000"
+    ) or "4000")
+
+    # Cap del corpus: al excederse, el panel sugiere retiros LRU (nunca borra).
+    STACKY_KNOWLEDGE_MAX_LESSONS: int = int(os.getenv(
+        "STACKY_KNOWLEDGE_MAX_LESSONS", "200"
+    ) or "200")
+
 config = Config()

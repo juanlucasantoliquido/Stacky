@@ -23,7 +23,7 @@ _EVALS_LOCK = threading.Lock()
 
 VALID_SUBJECTS = ("artifact", "output")
 VALID_LEVELS = ("deterministic", "execution", "llm_judge")
-VALID_ORIGINS = ("seed", "incident", "execution", "manual")
+VALID_ORIGINS = ("seed", "incident", "execution", "manual", "lesson")  # Plan 170 F4
 VALID_INPUT_KINDS = ("artifact_text", "golden_ref", "frozen_output")
 PATCHABLE_FIELDS = frozenset({"title", "checks", "rubric_id", "weight", "enabled", "input"})
 

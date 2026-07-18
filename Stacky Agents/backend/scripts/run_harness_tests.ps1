@@ -450,6 +450,11 @@ $HarnessTestFiles = @(
   "tests/test_plan126_dbcompare_data_flags.py"
   "tests/test_plan126_dbcompare_data_scripts.py"
   "tests/test_plan126_dbcompare_sqlvalues.py"
+  # Plan 157 - DB Compare UX (config in-place + import web.config + panel migracion)
+  "tests/test_plan157_dbcompare_ux_flags.py"
+  "tests/test_plan157_dbcompare_webconfig_parse.py"
+  "tests/test_plan157_dbcompare_import_api.py"
+  "tests/test_plan157_dbcompare_secret_guardrails.py"
   # Plan 139 - Shell v2 flag
   "tests/test_plan139_shell_flag.py"
   # Sueltos verdes aislados (reclasificados por Plan 154 F1)

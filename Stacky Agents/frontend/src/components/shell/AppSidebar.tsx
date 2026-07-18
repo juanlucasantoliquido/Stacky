@@ -25,7 +25,7 @@ export default function AppSidebar({
       className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
       aria-label="Navegación principal"
     >
-      <nav className={styles.groups}>
+      <nav className={styles.groups} data-tour="nav">
         {groups.map((g) => (
           <div key={g.id} className={styles.group}>
             <div className={styles.groupLabel}>{g.label}</div>

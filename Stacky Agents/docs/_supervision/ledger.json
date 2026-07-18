@@ -591,6 +591,209 @@
                                                 "F7-cierre":  "run_harness_tests.sh:169-174 + .ps1:162-167 (6 archivos ratchet) + harness_defaults.env regenerado (flag 108 ausente del snapshot = esperado, deploy vivo nunca la toco) + doc header IMPLEMENTADO (linea 3)"
                                             },
                               "notas":  "APROBADO 2026-07-09 (supervision solo plan 108 a pedido del operador). Fases reales F0,F1,F1b,F2,F3,F4,F5,F6,F7 (9), todas mapeadas y verdes: 46/46 tests propios. Los 2 rojos de no-regresion son PREEXISTENTES verificados independientemente: (1) test_f0_harness_defaults_contains_flag = drift harness_defaults 87-91 (flag STACKY_DEVOPS_AGENT_ENABLED ya ausente en el env committeado del commit pre-108 4e779d26; el generador lee del deploy vivo que nunca la activo); (2) test_f2_exec_write_requires_conversation_flag = sqlite 'database table is locked' en el toggle de escritura (Plan 105 F3), ruta NO tocada por el commit 37a80d7e (diff: solo create_conversation/conversation_message/list_conversations). Working tree con WIP ajeno (Plan 98) NO tocado ni commiteado. RECOMENDACION (no construida): arreglar el table-locked del toggle write de Plan 105 F3 en un plan futuro, y cerrar el drift operacional del deploy vivo (redeploy .env)."
+                          },
+                   "140":  {
+                              "plan":  "140",
+                              "ruta":  "Stacky Agents/docs/140_PLAN_ESTADOS_UNIVERSALES_SKELETONS_VACIOS_Y_JERARQUIA_VISUAL.md",
+                              "doc_sha256":  "DB6165A2F9389FFF0977B135C70F700672EFBF34312D2252901D1F9D388F5717",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "frontend vitest (9 archivos, por-archivo) -> 48 passed/0 failed: formatRelativeTime 12, runStatus 7, SkeletonList 4, EmptyState.presets 5, ExecutionHistoryPage.adoption 5, ReviewInboxPage.adoption 5, DocsPage.adoption 3, TeamScreen.adoption 4, TicketBoard.adoption 3",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (2 err en App.tsx:279/283, git blame 'Not Committed Yet 2026-07-18': WIP no-commiteado de sesion paralela deep-links); archivos del plan 140 type-clean (0 errores propios)",
+                                            "uiDebtRatchet.test.ts -> ROJO por deuda AJENA committeada (0 archivos del plan 140 en la lista de regresion)"
+                                        ],
+                              "evidencia":  {
+                                                "F0-F1-utils":  "frontend/src/utils/formatRelativeTime.ts + runStatus.ts (runStatusTone/runStatusLabel) puros",
+                                                "F2-skeleton":  "frontend/src/components/SkeletonList.tsx (clampRows) + SkeletonList.module.css (0 hex)",
+                                                "F3-emptystate":  "frontend/src/components/EmptyState.tsx VARIANT_PRESETS review/docs/no_project + emptyStatePreset()",
+                                                "F4-F8-adopcion":  "ExecutionHistoryPage:163 / ReviewInboxPage:86 / DocsPage:345 / TeamScreen / TicketBoard:1157 con guard C1 !isError; statusClass/fmtDate/timeAgo eliminadas"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Frontend-only sin flag (aditivo/reversible, plan seccion 8). Fases F0-F9 mapeadas + 48 tests propios verdes. Los 2 gates compartidos rojos son EXTERNOS con evidencia dura: (1) tsc: rojo transitorio (ya VERDE tras recheck) por WIP no-commiteado de otra sesion (App.tsx deep-links route.subtab/route.exec, blame 'Not Committed Yet'; los 2 unicos errores estan en lineas sin commitear); (2) uiDebtRatchet=deuda committeada de planes hermanos (EgressSentinelBlock/ExecutionErrorAnalysisBlock/IncidentResolverModal/DevOpsPage/PlansBoardPage/devops). Plan 140 ratchet-neutral y type-clean. Baseline NO regenerado (prohibido). RECOMENDACION no construida: tarea de cleanup para tokenizar deuda visual de hermanos."
+                          },
+                   "141":  {
+                              "plan":  "141",
+                              "ruta":  "Stacky Agents/docs/141_PLAN_TEMA_CLARO_OSCURO_SISTEMA_Y_ACCESIBILIDAD_VISUAL.md",
+                              "doc_sha256":  "99E28EBA892201B3EDA1BB1E83FA8C531DEAB74F0EE1E5468247FD1F256FA92F",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "frontend vitest (7 archivos, por-archivo) -> 32 passed/0 failed: theme 6, themeBootstrap 6, themeLightTokens 4, themeTokens 3 (asercion 138 invertida), themeContrast 4, AppearanceSettings 6, a11yCss 3",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (WIP no-commiteado App.tsx deep-links); archivos del plan 141 type-clean",
+                                            "uiDebtRatchet.test.ts -> ROJO por deuda AJENA committeada (0 archivos del plan 141 en la lista de regresion)"
+                                        ],
+                              "evidencia":  {
+                                                "F0-nucleo":  "frontend/src/services/theme.ts (THEME_STORAGE_KEY 'stacky.ui.theme', normalizeChoice, resolveTheme)",
+                                                "F1-controller":  "frontend/src/services/themeController.ts (initThemeController/setTheme) + main.tsx + index.html snippet anti-FOUC + colorScheme sincrono",
+                                                "F2-paleta":  "frontend/src/theme.css :root[data-theme=light] 53 tokens; themeTokens.test.ts asercion anti-data-theme INVERTIDA (retiro del 138)",
+                                                "F3-F5-a11y":  "themeContrast.test.ts (24 pares WCAG AA, 3 shortfalls dark pinneados) + AppearanceSettings.tsx (selector dark/light/system) + focus-visible/reduced-motion en theme.css"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Frontend-only sin flag; default 'dark' byte-identico; F4 es la superficie opt-in (Configuracion->Apariencia). Fases F0-F5 mapeadas + 32 tests propios verdes. tsc VERDE tras recheck (rojo transitorio era WIP ajeno no-commiteado, ya cerrado) (App.tsx deep-links, blame 'Not Committed Yet'); uiDebtRatchet rojo = deuda hermana committeada (ver notas plan 140). Plan 141 type-clean y ratchet-neutral. Baseline NO regenerado. Pendiente operador: smoke visual del tema en navegador (no bloqueante)."
+                          },
+                   "142":  {
+                              "plan":  "142",
+                              "ruta":  "Stacky Agents/docs/142_PLAN_CENTRO_DE_COSTOS_CODEBURN_KPIS_TOKENS_MULTIDIMENSIONAL.md",
+                              "doc_sha256":  "8445DEC9033268705223E84959F056701336668625A2ABED7B65F892BC3999BD",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend por-archivo -> 40 passed/0 failed: test_cost_analytics_extract 9, test_cost_analytics_aggregate 12, test_cost_center_api 10, test_cost_codeburn_import 5 (F7 opc), test_cost_reconciliation_audit 4 (F8 opc)",
+                                            "frontend vitest costCenter.logic.test.ts -> 12 passed/0 failed",
+                                            "test_harness_flags.py -> 55 passed (flag STACKY_COST_CENTER_ENABLED default ON registrada+categorizada)",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (WIP App.tsx deep-links); archivos del plan 142 (CostCenterPage/componentes/lib) type-clean"
+                                        ],
+                              "evidencia":  {
+                                                "F0-F1-motor":  "backend/services/cost_analytics.py extract_cost_row/CostRow + load_records/summarize/burn/breakdown/previous_period/legacy_cost_mirror",
+                                                "F2-endpoints":  "backend/api/metrics.py:622 /cost-summary, :655 /cost-burn, :674 /cost-breakdown, :692 /cost-reconciliation-audit (gate _cost_center_enabled)",
+                                                "F3-flag":  "harness_flags.py:1620 STACKY_COST_CENTER_ENABLED default=True + _CATEGORY_KEYS observabilidad_notif + config.py:555 + _CURATED_DEFAULTS_ON; F7 STACKY_COST_CODEBURN_IMPORT_* default OFF (excepcion #3)",
+                                                "F4-F6-ui":  "frontend/src/lib/costCenterTypes.ts + costCenter.logic.ts + api/endpoints.ts CostCenter + pages/CostCenterPage.tsx + components/costcenter/* (Card 138, tokens 141)"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Fases F0-F8 (F7/F8 opcionales, implementadas) mapeadas; 40 backend + 12 frontend-logic verdes; flag maestra default ON UI-editable (panel arnes). tsc VERDE tras recheck (rojo transitorio era WIP ajeno no-commiteado, ya cerrado) (App.tsx deep-links); los propios .tsx del centro de costos no producen ningun error tsc. Read-only (outerjoin no descarta huerfanas), Copilot nunca en billable, cero dato nuevo capturado."
+                          },
+                   "143":  {
+                              "plan":  "143",
+                              "ruta":  "Stacky Agents/docs/143_PLAN_SISTEMA_DE_MOVIMIENTO_MICROINTERACCIONES_Y_FEEDBACK_OPTIMISTA.md",
+                              "doc_sha256":  "EB7C2D91AC5C330AEE35065D3664BA2F9A8B3525293277FB9C7316DC4CAB1233",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "frontend vitest por-archivo -> motionTokens 2, motionA11yGuard 4, useOptimisticPending 2 = 8 passed/0 failed",
+                                            "motionDebtRatchet.test.ts -> ROJO por deuda de motion AJENA committeada (HarnessFlagsPanel 9>8, IncidentResolverModal, IntegrationHealthBanner(148), devops/ServersTable, DevOpsPage, PlansBoardPage, TicketBoard 22>21); 0 archivos del plan 143 en la lista",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (WIP App.tsx deep-links); archivos del plan 143 type-clean"
+                                        ],
+                              "evidencia":  {
+                                                "F0-tokens":  "frontend/src/theme.css:143-150 --duration-spin/--duration-pulse/--transition-colors/transform/opacity/elevation + motionTokens.test.ts",
+                                                "F1-F2-ratchet":  "Skeleton.module.css tokenizado + motionDebtRatchet.test.ts + motionDebtBaseline.json (ui/ y shell/ forzados 0)",
+                                                "F3-F5-migracion":  "TicketSelector/AgentRuntimeSelector/AgentSelector/AgentCard/FileSelectorModal .module.css migrados a var(--duration-*)/var(--ease-*) (todos bajaron; ninguno en la lista de regresion)",
+                                                "F6-microinteracciones":  "theme.css:377-405 .u-pending/.u-pressable/.u-fade-in + hooks/useOptimisticPending.ts (runWithPending) + motionA11yGuard.test.ts (1 bloque prefers-reduced-motion)"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Frontend-only sin flag (aditivo). Fases F0-F6 mapeadas + 8 tests propios verdes. motionDebtRatchet ROJO por deuda de motion committeada por planes HERMANOS que no mantuvieron el baseline congelado (7 archivos, NINGUNO del plan 143; sus 5 archivos objetivo bajaron a 0). tsc VERDE tras recheck (rojo transitorio era WIP ajeno no-commiteado, ya cerrado) (App.tsx deep-links). Plan 143 motion-ratchet-neutral y type-clean. Regenerar motionDebtBaseline prohibido por el plan. RECOMENDACION no construida: cleanup de deuda de motion ajena (tokenizar hermanos) o refresco sancionado del baseline en tarea dedicada."
+                          },
+                   "144":  {
+                              "plan":  "144",
+                              "ruta":  "Stacky Agents/docs/144_PLAN_EJECUCION_CONFIABLE_CLAUDE_CLI_TRUST_STALLS_ESTADOS.md",
+                              "doc_sha256":  "C5DFDBB96C12451A46280F3A6B1376A5C9EAF4102D85872B8F82E699A56A4893",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend por-archivo -> 29 passed/0 failed: test_plan144_parity 3, test_status_vocabulary_contract 6, test_ticket_status_robust_transition 4, test_claude_workspace_trust 8, test_claude_trust_preflight 4, test_claude_stall_signal 3, test_execution_metadata_serialization 1",
+                                            "test_harness_flags.py 55 passed + test_harness_flags_requires.py 9 passed (arista AUTOSET->PREFLIGHT en _REQUIRES_MAP_FROZEN)",
+                                            "frontend vitest stallReason.test.ts -> 4 passed/0 failed",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (WIP App.tsx deep-links); stallReason.ts/ExecutionDetailDrawer.tsx del plan type-clean"
+                                        ],
+                              "evidencia":  {
+                                                "F0-vocab":  "backend/services/status_vocabulary.py (TERMINAL_STATUSES/VALID_TICKET_STATUSES) importado por ticket_status.py + agent_completion.py",
+                                                "F1-transicion":  "backend/services/ticket_status.py:98 _coerce_terminal_status + :268 on_execution_end",
+                                                "F2-F3-trust":  "backend/services/claude_workspace_trust.py (read/set_workspace_trusted) + claude_code_cli_runner.py:2918 preflight; flags CLAUDE_CODE_CLI_TRUST_PREFLIGHT/AUTOSET_ENABLED (harness_flags.py:423, UI-editable)",
+                                                "F4-F5-stall":  "claude_code_cli_runner.py:1731 stall_meta 6 keys + codex_cli_runner.py:747 paridad + frontend/src/utils/stallReason.ts + ExecutionDetailDrawer.tsx"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Fases F0-F5 mapeadas; 29 backend propios + 4 frontend + harness 55/9 verdes. DESVIACION DOC-vs-CODIGO (documentada en codigo, no bloqueante): F3 CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED esta default=True en config.py:300 (el plan v2 lo especificaba default OFF por ser excepcion dura d). Comentario en config.py justifica 'promovida a default ON por decision del operador 2026-07-17 para perfiles no tecnicos'; es UI-revertible, requires PREFLIGHT (que sigue ON), y reversible (no destructiva). Consistente con test_harness_flags (AUTOSET en _CURATED_DEFAULTS_ON). RECOMENDACION: reconciliar el cuerpo del doc F3 (aun dice OFF) con la decision del operador. tsc VERDE tras recheck (rojo transitorio era WIP ajeno no-commiteado, ya cerrado) (App.tsx). Trust es no-op en Codex/Copilot (paridad documentada)."
+                          },
+                   "145":  {
+                              "plan":  "145",
+                              "ruta":  "Stacky Agents/docs/145_PLAN_HIGIENE_OBSERVABILIDAD_LOGS_404_ANSI_DEDUP_PYTEST.md",
+                              "doc_sha256":  "C2612D0D6C771659491697F980DB78192C3F415711A78B421E10C9DB19499017",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend por-archivo -> 22 passed/0 failed: test_plan145_log_throttle 6, test_plan145_ansi_strip 5, test_plan145_pytest_log_isolation 3, test_plan145_pipeline_status_shim 5, test_plan145_agents_dir_dedup 3"
+                                        ],
+                              "evidencia":  {
+                                                "F0-throttle":  "backend/services/log_throttle.py (log_state_change/log_throttled/warn_once/reset, __all__ congelado)",
+                                                "F1-ansi":  "backend/services/local_file_logging.py:45 _AnsiStrippingFormatter + console_log_handler.py:83 strip en sink SystemLog (C2)",
+                                                "F2-pytest-iso":  "backend/tests/conftest.py (setdefault STACKY_TEST_MODE + redirige logs a temp)",
+                                                "F3-F4-shim":  "api/__init__.py:132 pipeline_status_shim + _AccessLogNoiseFilter + config.py:37 agents_dir usa log_state_change"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Backend-only. Fases F0-F5 mapeadas + 22 tests propios verdes. Sin gate tsc/ratchet. 5 env-vars kill-switch default ON (env-only por diseno seccion 3.1, patron STACKY_DEMO_SEED_ENABLED); no requieren UI (kill-switches internos de logging). Sin flags de arnes nuevas. Sin regresiones propias."
+                          },
+                   "146":  {
+                              "plan":  "146",
+                              "ruta":  "Stacky Agents/docs/146_PLAN_FIXES_VERIFICADOS_IMPORT_LEDGER_FALLBACK_CONTRATOS.md",
+                              "doc_sha256":  "6680797CFC5EC9A7C8AA2266D89042F1A1A89B8EE032B31B50B7FB83A7567036",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend test_plan146_verified_fixes.py -> 19 passed/0 failed (F0 scaffold, F1 import AgentExecution+session_scope+metadata_dict, F2 ledger _connect/mkdir/_warn_sqlite_unavailable, F3 12 attrs Config Claude runner + fallback)"
+                                        ],
+                              "evidencia":  {
+                                                "F0-ratchet":  "tests/test_plan146_verified_fixes.py registrado en run_harness_tests.sh:108 + .ps1:101",
+                                                "F1-import":  "services/ado_edit_learning.py:259-260 import AgentExecution+session_scope + :277 metadata_dict (models.py:259 @property)",
+                                                "F2-ledger":  "services/ado_edit_ledger.py:32 _connect (mkdir parents) + :47 _warn_sqlite_unavailable (dedup por firma, 4 call-sites)",
+                                                "F3-config":  "config.py:252 CLAUDE_CODE_CLI_MODEL_FALLBACK + 12 attrs runner Claude"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Backend-only sin flags nuevas (seccion 3.1: fixes verificados, no opt-in). Fases F0-F4 mapeadas + 19 tests verdes. Sin gate tsc/ratchet. Pendiente de OPERADOR (fuera del codigo, reconocido por el propio plan): re-publicar deploy v1.0.77+ para que V1/V5/V4 lleguen al binario (DEV ya los tiene al reiniciar). No es deliverable de codigo."
+                          },
+                   "147":  {
+                              "plan":  "147",
+                              "ruta":  "Stacky Agents/docs/147_PLAN_RESOLUCION_ROBUSTA_RUTAS_PROYECTO_WATCHERS_UI.md",
+                              "doc_sha256":  "8FF518128C95723E5FD6FF712BF963E85C4F6B4E91B097B35FD429EB2790335D",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend por-archivo -> 18 passed/0 failed: test_runtime_paths 12, test_completion_preflight 2, test_watchers_health_check 3, test_diag_health_watchers 1",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (WIP App.tsx deep-links); HealthBanner.tsx del plan type-clean"
+                                        ],
+                              "evidencia":  {
+                                                "F0-F1-paths":  "backend/runtime_paths.py:118 _source_layout_repo_root + :138 repo_root reescrito + :18 _UNRESOLVED_REPO_ROOT sentinel",
+                                                "F2-preflight":  "backend/app.py:261 _log_completion_preflight (INFO sin proyecto, WARNING con proyecto+dir ausente)",
+                                                "F3-watchers":  "api/diag.py:379 watchers_active/watchers_inactive_reason + services/local_diagnostics.py:62 _check_watchers_active + HealthBanner.tsx:56 FIX_HINT watchers",
+                                                "F4-ratchet":  "run_harness_tests.sh:404-406 + .ps1:360-362 (3 archivos nuevos)"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Fases F0-F4 mapeadas + 18 tests propios verdes. Flag STACKY_WATCHERS_HEALTH_CHECK env-only default ON = kill-switch interno de diagnostico (patron STACKY_OPERATIONAL_HEALTH_ENABLED verificado real); no es ajuste de operador, correcto fuera de UI. tsc VERDE tras recheck (rojo transitorio era WIP ajeno no-commiteado, ya cerrado) (App.tsx deep-links). Regresion test_diag_endpoint/test_output_watcher = crash nativo PREEXISTENTE (no son tests propios del plan; ver gotcha teardown daemon threads)."
+                          },
+                   "148":  {
+                              "plan":  "148",
+                              "ruta":  "Stacky Agents/docs/148_PLAN_DEGRADACION_INTEGRACIONES_NO_CONFIGURADAS_ADO_JIRA_LLM.md",
+                              "doc_sha256":  "35654711694643FA0CA0809B1C483BD67B866DBCC2E5D07126CAA202E02D428B",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend por-archivo -> 36 passed/0 failed: test_ado_connection_data_api_version 2, test_integration_breaker 13, test_plan148_integration_degradation 1, test_plan148_ado_sync_breaker 6, test_plan148_jira_sync_breaker 4, test_plan148_graceful_degradation 6, test_plan148_integrations_api 4",
+                                            "frontend vitest integrationHealth.logic.test.ts -> 6 passed/0 failed"
+                                        ],
+                              "evidencia":  {
+                                                "F0-apiversion":  "backend/services/ado_client.py:37 _CONNECTION_DATA_API_VERSION 7.1-preview + :371",
+                                                "F1-breaker":  "backend/services/integration_breaker.py (should_skip/record_failure/record_success/classify_ado_error, backoff 15min-6h, persist data_dir/integration_breaker.json)",
+                                                "F2-F5-wiring":  "harness_flags.py:2058 STACKY_INTEGRATION_DEGRADATION_ENABLED default ON UI-editable + app.py:118 _startup_sync ADO/Jira + local_llm_analysis.py:645 200/available:false + tickets.py:5640 config.config (C1)",
+                                                "F6-api-ui":  "api/integrations.py GET /status + POST /<i>/reset + frontend IntegrationHealthBanner.tsx"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Fases F0-F6 mapeadas + 36 backend + 6 frontend-logic verdes. Flag maestra default ON UI-editable. Byte-identico con flag OFF (revert _startup_sync). Paridad 3 runtimes (sin cambios en runner/bridge). F3.1 (backoff sync-v2) marcado OPCIONAL por el plan, no bloqueante. Sin gate tsc requerido por el plan. NOTA cross-cutting: IntegrationHealthBanner.module.css aporta 1 unidad de deuda de motion al motionDebtRatchet del plan 143 (ver notas 143), no afecta a 148."
+                          },
+                   "149":  {
+                              "plan":  "149",
+                              "ruta":  "Stacky Agents/docs/149_PLAN_ROBUSTEZ_INTAKE_ARTEFACTOS_Y_EXCEPCIONES_TIPADAS_ENDPOINTS.md",
+                              "doc_sha256":  "71FEF366C52F8E2FBC25F6A654656E8CD30968E7CCA790583DC487DCCE6151D2",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "backend por-archivo -> 38 passed/0 failed: test_plan149_flags 4, test_plan149_typed_errors 15, test_plan149_intake_reason_codes 7, test_plan149_intake_quarantine_surface 10, test_plan149_prewrite_hook_message 2"
+                                        ],
+                              "evidencia":  {
+                                                "F0-F2-errores":  "backend/api/errors.py StackyApiError + 6 subclases + build_error_envelope + set_exec_id; app.py:700 @errorhandler(Exception); agents.py/devops_remote_console.py set_exec_id",
+                                                "F3-intake":  "services/artifact_intake.py:54 classify_json_failure (empty/truncated/malformed) + IntakeResult.reason_code",
+                                                "F4-F5-cuarentena":  "services/output_watcher.py:871 quarantine_snapshot + :880 clear_quarantine (clave = str(pt_file) C3) + tickets.py:3893 POST /reintake-pending-task + UnblockerPage.tsx",
+                                                "F6-F7":  "artifact_validator.py:153 classify_json_failure + api/diag.py:193 GET /intake-quarantine; flags TYPED_ERROR_ENVELOPE/INTAKE_QUARANTINE_SURFACE default ON UI-editable"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Fases F0-F7 mapeadas + 38 tests propios verdes (incluye F6 opcional). 2 flags patron triple default ON UI-editables (harness). Backward-compat byte-identico con flag OFF. Paridad 3 runtimes (capa HTTP + intake runtime-agnosticos). Cierra la serie 144-149. Frontend endpoints.ts/UnblockerPage sin vitest dedicado ni tsc exigido por el plan."
+                          },
+                   "150":  {
+                              "plan":  "150",
+                              "ruta":  "Stacky Agents/docs/150_PLAN_DENSIDAD_ADAPTATIVA_COMODO_COMPACTO_Y_RESPONSIVE.md",
+                              "doc_sha256":  "BEB1485995FC8D5EA74ED39CFA80D36935EAB6C43447E8407F8620A47772526C",
+                              "veredicto":  "APROBADO",
+                              "fecha":  "2026-07-18",
+                              "tests":  [
+                                            "frontend vitest por-archivo -> 25 passed/0 failed: densityTokens 5, density 4, densityBootstrap 7, densityToggle 4, ticketBoardDensity 3, pmCommandCenterDensity 2",
+                                            "npx tsc --noEmit -> VERDE exit 0 tras recheck; rojo transitorio era WIP de sesion paralela (WIP App.tsx deep-links); archivos del plan 150 type-clean",
+                                            "uiDebtRatchet.test.ts -> ROJO por deuda AJENA committeada (0 archivos del plan 150 en la lista de regresion)"
+                                        ],
+                              "evidencia":  {
+                                                "F0-escala":  "frontend/src/theme.css :root[data-density=compacto] 9 tokens (monotonia verificada)",
+                                                "F1-F2-nucleo":  "frontend/src/services/density.ts (DENSITY_STORAGE_KEY 'stacky.ui.density', normalizeDensity) + densityController.ts (initDensity) + index.html snippet anti-FOUC + main.tsx",
+                                                "F3-toggle":  "frontend/src/components/DensityToggle.tsx (0 style inline) + DensityToggle.module.css (byte-copy 141) montado en AppearanceSettings.tsx:48",
+                                                "F4-F5-migracion":  "TicketBoard.module.css (var(--space-*) + responsive @media 820px) + PMCommandCenter.module.css"
+                                            },
+                              "notas":  "APROBADO 2026-07-18. Frontend-only, config por localStorage (toggle Comodo/Compacto en Apariencia, UI). Default 'comodo' byte-identico. Fases F0-F5 mapeadas + 25 tests propios verdes. tsc VERDE tras recheck (rojo transitorio era WIP ajeno no-commiteado, ya cerrado) (App.tsx deep-links); uiDebtRatchet rojo = deuda hermana committeada (ver notas 140). Plan 150 ratchet-neutral (0 archivos propios en regresion) y type-clean. Baseline NO regenerado (prohibido)."
                           }
                }
 }

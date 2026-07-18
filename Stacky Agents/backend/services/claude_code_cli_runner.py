@@ -213,9 +213,10 @@ def start_claude_code_cli_run(
 #        Documentador se colgaba hasta el timeout (1800s).
 #   -8 = Incident Pool (Plan 131 C14, resolutor de incidencias): mismo patrón,
 #        el agente unificado corre en background sin consola conversacional.
+#   -9 = Optimizador evolutivo (Plan 169, variant_generator._OPTIMIZER_ADO_ID): mutador one-shot en background.
 # Las consolas multi-turno reales (-3 doctor, -4 DevOps, -5 remota, -6 PRs y
 # tickets positivos) NO van acá: siguen conversacionales.
-_ONE_SHOT_ADO_IDS = frozenset({-1, -7, -8})
+_ONE_SHOT_ADO_IDS = frozenset({-1, -7, -8, -9})
 
 
 def _is_one_shot(t_ado_id) -> bool:

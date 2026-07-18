@@ -1399,4 +1399,35 @@ class Config:
         "STACKY_EVAL_RUN_TOKEN_BUDGET", "30000"
     ) or "30000")
 
+    # ── Plan 169 — Optimizador evolutivo (serie auto-mejora recursiva 3/4) ──
+    # generate->evaluate->select->archive sobre prompts de agentes. Default ON:
+    # el flag solo habilita el boton "Optimizar"; correr es SIEMPRE un click
+    # explicito del operador y aplicar exige aprobacion (gates del Plan 167).
+    STACKY_EVOLUTION_OPTIMIZER_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Generador de variantes: auto = modelo local si hay endpoint, si no el
+    # runtime de agentes. Valores: auto | local | runtime.
+    STACKY_EVOLUTION_OPTIMIZER_GENERATOR: str = os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_GENERATOR", "auto"
+    ).strip().lower() or "auto"
+
+    # K variantes por corrida (clamp 1..6 en el motor).
+    STACKY_EVOLUTION_OPTIMIZER_VARIANTS: int = int(os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_VARIANTS", "3"
+    ) or "3")
+
+    # Presupuesto de tokens ESTIMADOS por corrida (generacion; las evaluaciones
+    # tienen su propio presupuesto del Plan 168).
+    STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET: int = int(os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET", "60000"
+    ) or "60000")
+
+    # Margen minimo de mejora para emitir propuesta, en centesimas de score
+    # (2 = el ganador debe superar al base por 0.02).
+    STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT: int = int(os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT", "2"
+    ) or "2")
+
 config = Config()

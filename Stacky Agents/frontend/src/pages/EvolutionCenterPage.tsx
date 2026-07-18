@@ -39,6 +39,7 @@ import {
   fitnessDisplay,
 } from "../evolution/model";
 import FitnessSection from "../evolution/FitnessSection";
+import OptimizerSection from "../evolution/OptimizerSection";
 import { canEvaluateProposal } from "../evolution/fitnessModel";
 import styles from "./EvolutionCenterPage.module.css";
 
@@ -481,6 +482,9 @@ export default function EvolutionCenterPage() {
 
           {/* Plan 168 — sección Fitness (no renderiza con la flag del arnés OFF) */}
           <FitnessSection />
+
+          {/* Plan 169 — sección Optimizador (no renderiza con la flag del optimizador OFF) */}
+          <OptimizerSection />
         </>
       )}
     </div>

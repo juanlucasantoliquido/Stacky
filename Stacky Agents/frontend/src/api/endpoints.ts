@@ -2829,6 +2829,58 @@ export const EvolutionFitness = {
     fetch("/api/evolution/fitness/judge/selfcheck").then((r) => r.json()),
 };
 
+// Plan 169 — Optimizador evolutivo (espejo del namespace EvolutionFitness del 168).
+// rng_seed NO se expone: es un parámetro del POST para depuración/tests (ADICIÓN v2).
+export const EvolutionOptimizer = {
+  health: () => fetch("/api/evolution/optimizer/health").then((r) => r.json()),
+  targets: () =>
+    fetch("/api/evolution/optimizer/targets").then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  run: (targetRef: string, runtime: string | null, useJudge: boolean) =>
+    fetch("/api/evolution/optimizer/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_ref: targetRef, runtime, use_judge: useJudge }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  cancel: (runId: string) =>
+    fetch(`/api/evolution/optimizer/runs/${runId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  getRun: (runId: string) =>
+    fetch(`/api/evolution/optimizer/runs/${runId}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  runs: (limit = 20) =>
+    fetch(`/api/evolution/optimizer/runs?limit=${limit}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  archive: (q: { run_id?: string; aspect_key?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.run_id) p.set("run_id", q.run_id);
+    if (q.aspect_key) p.set("aspect_key", q.aspect_key);
+    if (q.limit) p.set("limit", String(q.limit));
+    const qs = p.toString();
+    return fetch(`/api/evolution/optimizer/archive${qs ? `?${qs}` : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+  lessons: (aspectKey: string, limit = 20) => {
+    const p = new URLSearchParams();
+    if (aspectKey) p.set("aspect_key", aspectKey);
+    p.set("limit", String(limit));
+    return fetch(`/api/evolution/optimizer/lessons?${p.toString()}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+  pareto: (aspectKey: string) =>
+    fetch(`/api/evolution/optimizer/pareto?aspect_key=${encodeURIComponent(aspectKey)}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+};
+
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────
 export const CodeIntegrity = {
   get: () =>

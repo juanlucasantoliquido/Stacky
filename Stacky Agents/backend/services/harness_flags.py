@@ -272,6 +272,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EVAL_HARNESS_ENABLED",     # Plan 168 — arnés de fitness (golden tasks)
         "STACKY_EVAL_JUDGE_ENABLED",       # Plan 168 — juez LLM local con rubricas
         "STACKY_EVAL_RUN_TOKEN_BUDGET",    # Plan 168 — presupuesto tokens por corrida
+        "STACKY_EVOLUTION_OPTIMIZER_ENABLED",         # Plan 169 — optimizador evolutivo
+        "STACKY_EVOLUTION_OPTIMIZER_GENERATOR",       # Plan 169 — generador (auto/local/runtime)
+        "STACKY_EVOLUTION_OPTIMIZER_VARIANTS",        # Plan 169 — K variantes por corrida
+        "STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET",    # Plan 169 — presupuesto tokens por corrida
+        "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT",  # Plan 169 — margen minimo (centesimas)
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -3370,6 +3375,42 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
         # C10: SIN default= — default_is_known es type-agnostic (harness_flags.py:3397) y
         # los ints no se curan (G4); el default efectivo 30000 vive en config.py.
+    ),
+    # ── Plan 169 — Optimizador evolutivo (serie auto-mejora recursiva 3/4) ──
+    FlagSpec(
+        key="STACKY_EVOLUTION_OPTIMIZER_ENABLED",
+        type="bool", default=True,
+        label="Optimizador evolutivo de prompts",
+        description="Habilita el botón 'Optimizar' del Centro de Evolución: genera variantes de un prompt de agente con mutación reflexiva, las evalúa con el arnés de fitness y emite una propuesta que vos aprobás. Nunca aplica nada solo.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_OPTIMIZER_GENERATOR",
+        type="str",  # SIN default= (C14: efectivo "auto" en config.py; gotcha :3397)
+        label="Generador de variantes",
+        description="Quién redacta las variantes: 'auto' usa el modelo local si está configurado y si no el runtime de agentes; 'local' exige modelo local; 'runtime' usa Codex/Claude/Copilot.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_OPTIMIZER_VARIANTS",
+        type="int",  # SIN default= (C14: efectivo 3 en config.py)
+        label="Variantes por corrida (K)",
+        description="Cuántas variantes genera y evalúa una corrida de optimización. Más variantes = más señal y más tokens.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET",
+        type="int",  # SIN default= (C14: efectivo 60000 en config.py)
+        label="Presupuesto de tokens por corrida del optimizador",
+        description="Tope de tokens estimados que una corrida puede gastar generando variantes. Al agotarse, la corrida se detiene y lo registra.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT",
+        type="int",  # SIN default= (C14: efectivo 2 en config.py)
+        label="Margen mínimo de mejora (centésimas de score)",
+        description="Cuánto debe superar la mejor variante al artefacto actual para que se emita una propuesta. 2 significa 0.02 puntos de score.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente ──
     FlagSpec(

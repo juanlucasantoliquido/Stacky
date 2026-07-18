@@ -688,6 +688,9 @@ _CURATED_DEFAULTS_ON = {
     # STACKY_EVAL_RUN_TOKEN_BUDGET NO va acá — G4/C10) ──
     "STACKY_EVAL_HARNESS_ENABLED",
     "STACKY_EVAL_JUDGE_ENABLED",
+    # ── Plan 169 — Optimizador evolutivo (SOLO la bool master; la str GENERATOR
+    # y las 3 int NO van acá — G4/C14) ──
+    "STACKY_EVOLUTION_OPTIMIZER_ENABLED",
 }
 
 

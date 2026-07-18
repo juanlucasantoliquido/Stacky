@@ -480,6 +480,12 @@ $HarnessTestFiles = @(
   "tests/test_fitness_judge.py"
   "tests/test_fitness_service.py"
   "tests/test_fitness_endpoints.py"
+  # Plan 169 - Optimizador evolutivo
+  "tests/test_optimizer_flags.py"
+  "tests/test_optimizer_store.py"
+  "tests/test_optimizer_generator.py"
+  "tests/test_optimizer_engine.py"
+  "tests/test_optimizer_endpoints.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

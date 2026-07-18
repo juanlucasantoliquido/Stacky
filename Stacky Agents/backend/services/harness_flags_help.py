@@ -1458,6 +1458,37 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: la corrida juzga menos casos con el modelo; al llegar al tope, los casos con juez que faltan quedan como omitidos y la corrida lo registra.",
         example="Con el tope en 30000, si una corrida ya gastó esa estimación, los casos con juez que restan quedan marcados 'omitidos por presupuesto'.",
     ),
+    # ── Plan 169 — Optimizador evolutivo ──
+    "STACKY_EVOLUTION_OPTIMIZER_ENABLED": PlainHelp(
+        what="Un buscador automático de mejoras para las instrucciones de cada agente: genera variantes, les pone nota y te propone la mejor para que la apruebes vos.",
+        on_effect="Si la activás: aparece el botón 'Optimizar' en el Centro de Evolución; nada corre ni se aplica sin tu click y tu aprobación.",
+        off_effect="Si la apagás: el botón 'Optimizar' desaparece y esas mejoras dejan de ofrecerse. El resto del Centro de Evolución sigue igual.",
+        example="Elegís las instrucciones del agente Developer, tocás 'Optimizar', y el sistema te propone una versión mejorada que revisás antes de aplicar.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_GENERATOR": PlainHelp(
+        what="Quién redacta las variantes mejoradas: el modelo local (sin costo) o el motor de agentes (Codex, Claude o Copilot).",
+        on_effect="Si elegís 'local': redacta el modelo local y no cuesta dinero. Si elegís el motor de agentes: redactan Codex, Claude o Copilot y se registra el gasto.",
+        off_effect="Si lo dejás en 'auto': usa el modelo local cuando está configurado y, si no, el motor de agentes.",
+        example="En 'auto', si tenés un modelo local configurado, las variantes se redactan ahí sin costo; si no, las redacta el motor de agentes.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_VARIANTS": PlainHelp(
+        what="Cuántas variantes distintas genera y evalúa cada corrida de optimización antes de elegir la mejor.",
+        on_effect="Si subís el número: cada corrida prueba más variantes, así encuentra mejoras más seguido, pero tarda más y gasta más en el modelo.",
+        off_effect="Si lo bajás: cada corrida prueba menos variantes; es más rápida y barata, pero puede pasar por alto una mejora.",
+        example="Con el valor en 3, una corrida genera tres versiones alternativas, mide cada una y te propone la mejor si supera a la actual.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET": PlainHelp(
+        what="El tope de gasto en el modelo que una sola corrida de optimización puede consumir generando variantes.",
+        on_effect="Si subís el número: una corrida puede generar más variantes antes de frenar, pero puede gastar más en el modelo.",
+        off_effect="Si lo bajás: la corrida se detiene antes al llegar al tope y lo deja registrado, gastando menos.",
+        example="Con el tope puesto, cuando una corrida alcanza ese gasto estimado deja de generar variantes y anota que frenó por presupuesto.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT": PlainHelp(
+        what="Cuánto tiene que mejorar la mejor variante sobre la instrucción actual para que valga la pena proponerte el cambio.",
+        on_effect="Si subís el número: solo se te proponen mejoras claras y grandes, y se descartan las diferencias chicas que podrían ser ruido.",
+        off_effect="Si lo bajás: se te proponen también mejoras pequeñas, con el riesgo de que algunas sean ruido y no una mejora real.",
+        example="Con el valor en 2, la mejor variante tiene que sacar al menos 0,02 puntos más de nota que la actual para que se emita una propuesta.",
+    ),
 }
 
 

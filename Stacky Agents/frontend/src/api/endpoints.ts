@@ -10,6 +10,11 @@ import type {
 } from "../lib/costCenterTypes";
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
 import type { PreflightCheck } from "../devops/preflightModel";
+// Plan 189 — contrato del semáforo de rollback (type-only, sin ciclo runtime).
+import type {
+  Readiness as DeployRollbackReadiness,
+  SimulatedPlan as DeployRollbackPlan,
+} from "../components/devops/rollbackReadiness";
 import type { DoctorJob } from "../devops/doctorModel";
 import type { DocGraphResponse } from "../docs/docGraphModel";
 export type { DocGraphResponse };
@@ -3721,6 +3726,19 @@ export const DevOpsDeployments = {
     api.post<{ evidence: DeployEvidenceBundle }>(
       "/api/devops/deployments/evidence",
       { app_id: appId, target, run_id: runId },
+    ),
+  // Plan 189 — semáforo de rollback + simulacro read-only. NUNCA ejecuta nada.
+  // Batch (C3): 1 request resuelve todas las cards → readiness_map["appId|target"].
+  rollbackPreviewBatch: (pairs: Array<{ app_id: string; target: string }>) =>
+    api.post<{ readiness_map: Record<string, DeployRollbackReadiness> }>(
+      "/api/devops/deployments/rollback/preview",
+      { pairs },
+    ),
+  // Single con to_version → devuelve además el `plan` simulado (pasos exactos, sin ejecutar).
+  rollbackPreviewOne: (appId: string, target: string, toVersion?: string) =>
+    api.post<{ readiness: DeployRollbackReadiness; plan: DeployRollbackPlan | null }>(
+      "/api/devops/deployments/rollback/preview",
+      { app_id: appId, target, ...(toVersion ? { to_version: toVersion } : {}) },
     ),
 };
 

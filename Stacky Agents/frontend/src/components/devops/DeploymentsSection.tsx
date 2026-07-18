@@ -16,6 +16,7 @@ import {
   buildPendingPresetHandoff, showCreatePipelineCta, type TargetCard,
 } from './deploymentsModel';
 import { isFailedStatus, evidenceToFiles } from './deployEvidence';
+import { readinessBadge, stepRows, commandsClipboardText, type SimulatedPlan } from './rollbackReadiness';
 import IncidentResolverModal from '../IncidentResolverModal';
 import styles from './devops.module.css';
 
@@ -183,6 +184,45 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
     }
   };
 
+  // Plan 189 — semáforo de rollback: UN request batch por app (C3). Ante 404
+  // (flag OFF) o error, no reintenta y no muestra badges (degradación silenciosa).
+  const cardKeys = cards.map((c) => c.key);
+  const readinessQuery = useQuery({
+    queryKey: ['devops-rollback-readiness', app?.id, cardKeys.join(',')],
+    queryFn: () => DevOpsDeployments.rollbackPreviewBatch(cardKeys.map((k) => ({ app_id: app!.id, target: k }))),
+    enabled: !!app && cardKeys.length > 0,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const readinessMap = readinessQuery.data?.readiness_map ?? {};
+
+  const [simPlan, setSimPlan] = useState<{ target: string; plan: SimulatedPlan } | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  const openSimulation = async (target: string, toVersion: string) => {
+    if (!app) return;
+    setSimError(null);
+    setCopyMsg(null);
+    try {
+      const { plan } = await DevOpsDeployments.rollbackPreviewOne(app.id, target, toVersion);
+      if (plan) setSimPlan({ target, plan });
+      else setSimError('no se pudo simular el rollback');
+    } catch (e) {
+      setSimError(e instanceof Error ? e.message : 'error al simular el rollback');
+    }
+  };
+
+  const handleCopyCommands = async () => {
+    if (!simPlan) return;
+    try {
+      await navigator.clipboard.writeText(commandsClipboardText(simPlan.plan));
+      setCopyMsg('comandos copiados');
+    } catch {
+      setCopyMsg('no se pudo copiar');
+    }
+  };
+
   const doraChips = app ? formatDora(app.metrics) : [];
   const ctaVisible = showCreatePipelineCta(ctx.health);
 
@@ -266,9 +306,14 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
 
           {actionError && <div className={styles.alertError}>{actionError}</div>}
           {evidenceError && <div className={styles.alertError}>{evidenceError}</div>}
+          {simError && <div className={styles.alertError}>{simError}</div>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-            {cards.map((card) => (
+            {cards.map((card) => {
+              // Plan 189 — badge de reversibilidad (degrada a nada si no hay readiness).
+              const readiness = app ? readinessMap[`${app.id}|${card.key}`] : undefined;
+              const badge = readinessBadge(readiness);
+              return (
               <div key={card.key} className={styles.panelMuted}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <strong>{card.label}</strong>
@@ -278,6 +323,14 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                 <div className={styles.textMuted}>
                   {card.version ? `${card.version} (${card.deployedAgo})` : 'sin desplegar'}
                 </div>
+                {badge.tone !== 'none' && (
+                  <div
+                    className={badge.tone === 'ok' ? styles.rollbackBadgeOk : styles.rollbackBadgeOff}
+                    title={badge.title}
+                  >
+                    {badge.text}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                   <label>
                     <input
@@ -291,6 +344,11 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                   {card.canRollback && (
                     <button type="button" onClick={() => setRollbackTarget(card.key)}>Rollback</button>
                   )}
+                  {readiness?.ready && readiness.to_version && (
+                    <button type="button" onClick={() => void openSimulation(card.key, readiness.to_version as string)}>
+                      Simular rollback…
+                    </button>
+                  )}
                   {resolverEnabled && isFailedStatus(card.status) && (
                     <button type="button" onClick={() => void handleArmarIncidencia(card)}>
                       Armar incidencia…
@@ -298,7 +356,8 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {selectedTargets.length > 0 && (
@@ -381,6 +440,35 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
               initialFiles={incidentInit.files}
               onClose={() => setIncidentInit(null)}
             />
+          )}
+
+          {/* Plan 189 — modal del simulacro read-only. NO tiene botón de ejecutar:
+              solo muestra los pasos y permite copiarlos. Banda fija de seguridad. */}
+          {simPlan && (
+            <div className={styles.modalOverlay} role="dialog" aria-label="Simulacro de rollback">
+              <div className={styles.modalBodyWide}>
+                <div className={styles.simBanner}>
+                  Simulacro — nada se ejecutó ni se va a ejecutar
+                </div>
+                <h3>Simulacro de rollback — {simPlan.target} → {simPlan.plan.to_version}</h3>
+                <ol>
+                  {stepRows(simPlan.plan).map((row) => (
+                    <li key={row.name} className={styles.simStep}>
+                      <strong>{row.name}</strong>
+                      {row.command && <code className={styles.simCommand}>{row.command}</code>}
+                      {row.tags.map((t) => (
+                        <span key={t} className={styles.simTag}>{t}</span>
+                      ))}
+                    </li>
+                  ))}
+                </ol>
+                {copyMsg && <div className={styles.textMuted}>{copyMsg}</div>}
+                <div className={styles.simActions}>
+                  <button type="button" onClick={() => void handleCopyCommands()}>Copiar comandos</button>
+                  <button type="button" onClick={() => { setSimPlan(null); setCopyMsg(null); }}>Cerrar</button>
+                </div>
+              </div>
+            </div>
           )}
         </>
       )}

@@ -252,3 +252,54 @@
 /* Plan 186 F5 — highlight de línea en el preview YAML (C7). Solo var(), cero hex. */
 .yamlLine { white-space: pre; }
 .lineHighlight { white-space: pre; background: var(--accent); color: var(--bg-base); }
+
+/* Plan 189 — semáforo de rollback + simulacro. Solo var(), cero hex. */
+.rollbackBadgeOk {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+.rollbackBadgeOff {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+.simBanner {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.simStep { margin-bottom: 8px; }
+.simCommand {
+  display: block;
+  margin-top: 2px;
+  padding: 4px 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.simTag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.simActions { display: flex; gap: 8px; margin-top: 10px; }

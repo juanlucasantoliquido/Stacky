@@ -162,6 +162,19 @@ class Config:
         "STACKY_DB_COMPARE_MASKING_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 178 — Radar de ambientes (vigía de drift programado) ──────────
+    # Default ON: la matriz/baseline/tendencia solo leen datos locales; el vigía
+    # per-par nace OFF por par (excepción dura 3) y se enciende con 1 click.
+    STACKY_DB_COMPARE_RADAR_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_RADAR_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_WATCH_INTERVAL_MIN: int = int(
+        os.getenv("STACKY_DB_COMPARE_WATCH_INTERVAL_MIN", "60")
+    )
+    STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY: int = int(
+        os.getenv("STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY", "48")
+    )
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

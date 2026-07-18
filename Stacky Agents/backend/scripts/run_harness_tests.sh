@@ -532,6 +532,13 @@ HARNESS_TEST_FILES=(
   tests/test_plan181_prefs.py
   tests/test_plan181_response.py
   tests/test_plan181_api.py
+  # — Plan 178 · Radar de ambientes (vigía de drift + matriz + baseline) —
+  tests/test_plan178_flags.py
+  tests/test_plan178_watch_store.py
+  tests/test_plan178_sweep.py
+  tests/test_plan178_events.py
+  tests/test_plan178_baseline.py
+  tests/test_plan178_api.py
 )
 
 pass=0

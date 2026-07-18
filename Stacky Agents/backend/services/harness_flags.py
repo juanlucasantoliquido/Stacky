@@ -329,6 +329,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (tipos exactos)
         "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",   # Plan 182 — scripts de datos v2 (MERGE idempotente)
         "STACKY_DB_COMPARE_MASKING_ENABLED",      # Plan 181 — masking de secretos en el data-diff (presentación)
+        "STACKY_DB_COMPARE_RADAR_ENABLED",        # Plan 178 — radar de ambientes (matriz/baseline/tendencia/avisos)
+        "STACKY_DB_COMPARE_WATCH_INTERVAL_MIN",   # Plan 178 — intervalo del vigía de drift
+        "STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY",  # Plan 178 — presupuesto diario del vigía
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3251,6 +3254,44 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Enmascara por default los valores de columnas sensibles (password/token/connection string) en las respuestas de presentación del data-diff; el motor, el disco y los scripts DML del bundle quedan intactos. Revelar una columna es 1 click humano persistido. OFF = respuesta cruda byte-idéntica a v1.",
         group="global",
         requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 178 — Radar de ambientes (vigía de drift + matriz N×N + baseline) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_RADAR_ENABLED",
+        type="bool",
+        default=True,  # ON: matriz/baseline/tendencia/avisos solo LEEN datos locales; el vigía per-par nace OFF y se enciende con 1 click (aprobación humana explícita — excepción dura 3: credenciales/conectividad a BD del cliente no garantizadas). Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: radar de ambientes",
+        description="Radar continuo (plan 178): matriz N×N de drift por par, baseline pinneado, tendencia y avisos locales. El vigía programado por par se activa con un click en la UI. OFF = todo invisible y el loop de fondo en no-op.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_WATCH_INTERVAL_MIN",
+        type="int",
+        label="Comparador BD: intervalo del vigía (min)",
+        description="Cada cuántos minutos el vigía re-corre snapshot+diff de esquema de cada par vigilado. Default 60.",
+        group="global",
+        # NO default= acá: mismo gotcha que STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC
+        # (Plan 122) — default_is_known() trata cualquier spec.default no-None como
+        # "curado" y exige alta en _CURATED_DEFAULTS_ON, set reservado a promociones
+        # bool=True. El valor real "60" vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=5,
+        max_value=1440,
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY",
+        type="int",
+        label="Comparador BD: presupuesto del vigía (corridas/día)",
+        description="Cap duro de corridas lanzadas por el vigía por día calendario UTC, sumando todos los pares vigilados. Default 48.",
+        group="global",
+        # NO default= acá: mismo gotcha que arriba; el valor real "48" vive en config.py.
+        # max_value=100 y no más (fix C5): el conteo diario se computa desde los runs
+        # retenidos (_MAX_RUNS_KEPT=100, services/dbcompare_runs.py:32) — un presupuesto
+        # mayor a la retención sería incontable y por lo tanto una promesa falsa.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=1,
+        max_value=100,
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
     # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de

@@ -5,6 +5,7 @@ import { EMPTY_FILTERS, filterDiffItems, type DiffFilters } from "./filterLogic"
 import { buildSnapshotCounts } from "./snapshotCounts";
 import { EnvironmentsPanel } from "./EnvironmentsPanel";
 import { DbCompareSettingsSection } from "./DbCompareSettingsSection";
+import { EnvironmentRadar } from "./EnvironmentRadar";
 import { DemoSandboxPanel } from "./DemoSandboxPanel";
 import { ScriptsPanel } from "./ScriptsPanel";
 import { CompareWizard } from "./CompareWizard";
@@ -142,6 +143,13 @@ export function DbComparePage() {
       <DemoSandboxPanel environments={environments} onChanged={() => { reloadEnvironments(); reloadRuns(); }} />
 
       <DbCompareSettingsSection />
+
+      <EnvironmentRadar
+        environments={environments}
+        runs={runs}
+        onOpenRun={(runId: string) => { void handleSelectHistoricalRun({ run_id: runId } as CompareRun); }}
+        onChanged={reloadRuns}
+      />
 
       <RunsTimeline runs={runs} activeRunId={activeRun?.run_id ?? null} onSelectRun={handleSelectHistoricalRun} />
 

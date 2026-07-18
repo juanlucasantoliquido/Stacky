@@ -788,3 +788,167 @@
 .maskingHide {
   color: var(--dbc-unchanged);
 }
+
+/* ── Plan 178 — Radar de ambientes (matriz N×N + tendencia + eventos + baseline) ── */
+.radarSection {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+}
+
+.radarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.radarTitle {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.radarSubtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.radarHint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0;
+}
+
+.radarGridWrap {
+  overflow-x: auto;
+}
+
+.radarGrid {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.radarGrid th,
+.radarGrid td {
+  border: 1px solid var(--border-muted);
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+}
+
+.radarAxis {
+  color: var(--text-muted);
+  font-weight: 600;
+  background: var(--bg-elev);
+}
+
+.radarCell {
+  cursor: pointer;
+  min-width: 3.5rem;
+}
+
+.radarCellGray {
+  background: transparent;
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.radarCellGreen {
+  background: color-mix(in srgb, var(--dbc-unchanged) 20%, transparent);
+  color: var(--text-primary);
+}
+
+.radarCellAmber {
+  background: color-mix(in srgb, var(--dbc-warn) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.radarCellRed {
+  background: color-mix(in srgb, var(--dbc-danger) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.radarCellSelected {
+  outline: 2px solid var(--dbc-info);
+  outline-offset: -2px;
+}
+
+.radarWatchDot {
+  font-size: 0.7rem;
+}
+
+.radarDetail {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+}
+
+.radarSparkline {
+  display: block;
+  margin: 0.5rem 0;
+  stroke: var(--dbc-danger);
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.radarActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.unreadBadge {
+  display: inline-block;
+  min-width: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--dbc-danger);
+  color: white;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.baselinePin {
+  font-size: 0.72rem;
+  color: var(--dbc-info);
+}
+
+.baselineBroken {
+  font-size: 0.72rem;
+  color: var(--dbc-danger);
+}
+
+.eventsPanel {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border-muted);
+  padding-top: 0.5rem;
+}
+
+.eventRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.eventRowUnread {
+  font-weight: 600;
+}
+
+.eventKind {
+  font-size: 0.9rem;
+}
+
+.eventWhen {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-left: auto;
+}

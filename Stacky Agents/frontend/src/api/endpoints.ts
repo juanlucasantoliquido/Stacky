@@ -26,6 +26,12 @@ import type { Manifest } from "../components/dbcompare/scriptsLogic";
 import type { DataCandidate } from "../components/dbcompare/dataDiffLogic";
 import type { MaskingPrefs } from "../components/dbcompare/maskingLogic";
 import type {
+  RadarPayload,
+  WatchEntry,
+  DriftEvent,
+  BaselineEntry,
+} from "../components/dbcompare/radarTypes"; // Plan 178 — radar de ambientes
+import type {
   ActiveProjectResponse,
   AgentDefinition,
   AgentExecution,
@@ -4294,4 +4300,32 @@ export const DbCompareMasking = {
   getPrefs: () => api.get<{ ok: boolean; prefs: MaskingPrefs }>("/api/db-compare/masking/prefs"),
   putOverride: (body: { schema: string; table: string; column: string; state: "visible" | "masked" | "auto" }) =>
     api.post<{ ok: boolean; prefs: MaskingPrefs }>("/api/db-compare/masking/prefs", body),
+};
+
+// Plan 178 — Radar de ambientes (vigía de drift + matriz + baseline + eventos).
+export const DbCompareWatch = {
+  radar: () => api.get<RadarPayload>("/api/db-compare/radar"),
+  listWatches: () => api.get<{ ok: boolean; watches: WatchEntry[] }>("/api/db-compare/watches"),
+  upsertWatch: (body: { source_alias: string; target_alias: string; enabled: boolean }) =>
+    api.post<{ ok: boolean; watch: WatchEntry }>("/api/db-compare/watches", body),
+  deleteWatch: (watchId: string) =>
+    api.delete<{ ok: boolean }>(`/api/db-compare/watches/${encodeURIComponent(watchId)}`),
+  listEvents: (limit = 50) =>
+    api.get<{ ok: boolean; events: DriftEvent[]; unread_count: number }>(
+      `/api/db-compare/watch/events?limit=${limit}`,
+    ),
+  markEventsRead: (body: { event_ids?: string[]; all?: boolean }) =>
+    api.post<{ ok: boolean; changed: number }>("/api/db-compare/watch/events/mark-read", body),
+  listBaselines: () => api.get<{ ok: boolean; baselines: BaselineEntry[] }>("/api/db-compare/baselines"),
+  pinBaseline: (alias: string, snapshotId: string, note = "") =>
+    api.post<{ ok: boolean; baseline: BaselineEntry }>(
+      `/api/db-compare/environments/${encodeURIComponent(alias)}/baseline`,
+      { snapshot_id: snapshotId, note },
+    ),
+  unpinBaseline: (alias: string) =>
+    api.delete<{ ok: boolean }>(`/api/db-compare/environments/${encodeURIComponent(alias)}/baseline`),
+  baselineDiff: (alias: string) =>
+    api.get<{ ok: boolean; diff: NonNullable<CompareRun["diff"]> }>(
+      `/api/db-compare/baseline-diff/${encodeURIComponent(alias)}`,
+    ),
 };

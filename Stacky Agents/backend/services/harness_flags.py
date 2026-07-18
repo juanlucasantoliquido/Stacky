@@ -226,6 +226,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS",  # Plan 110 v2.1 — tope del diff del camino solo-local (velocidad, 0=sin límite)
         "STACKY_PR_REVIEW_TIMEOUT_SEC",     # Plan 110 — timeout de la revisión Haiku
         "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 119 — rediseño minimalista del shell DevOps
+        "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",  # Plan 190 — equipaje DevOps en export/import
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2874,6 +2875,26 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # ON por default por decisión explícita del operador (2026-07-09): idem
         # nota arriba (rompe el default-OFF original conscientemente; curada en
         # _CURATED_DEFAULTS_ON).
+        default=True,
+    ),
+    # ── Plan 190 — Equipaje portable DevOps en export/import de configuración ──
+    FlagSpec(
+        key="STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",
+        type="bool",
+        label="Equipaje DevOps en export/import",
+        description=(
+            "Plan 190 — Incluye servidores DevOps (sin contraseñas — quedan en el "
+            "keyring) y apps del Centro de Despliegues en el export/import de "
+            "configuración, con checklist de re-vinculación de credenciales al "
+            "importar. Default ON: exportar NUNCA incluye secretos e importar NUNCA "
+            "toca el keyring. Con OFF, el catálogo y el comportamiento quedan "
+            "EXACTOS a hoy."
+        ),
+        group="global",
+        env_only=False,
+        # SIN requires: la transferencia de config es GLOBAL, no vive dentro del
+        # panel DevOps (secciones top-level como uiPreferences).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────

@@ -36,6 +36,7 @@ from services.config_transfer import (
     ConfigTransferError,
     apply_all_projects_import,
     apply_import,
+    available_sections,
     build_all_projects_export,
     build_export,
     is_all_projects_bundle,
@@ -262,5 +263,8 @@ def transfer_events(project_name: str):
 
 @bp.get("/config/sections")
 def list_sections():
-    """Catálogo de secciones exportables (para la UI de export selectivo)."""
-    return jsonify({"ok": True, "sections": list(ALL_SECTIONS)})
+    """Catálogo de secciones exportables (para la UI de export selectivo).
+
+    Plan 190 — incluye las secciones devops (top-level) cuando la flag está ON.
+    """
+    return jsonify({"ok": True, "sections": list(available_sections("all"))})

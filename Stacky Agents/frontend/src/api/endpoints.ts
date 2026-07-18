@@ -1809,6 +1809,15 @@ export interface ConfigImportResult {
     changes?: ConfigChange[];
     secrets_required?: ConfigSecretRequired[];
   }>;
+  // Plan 190 — secciones DevOps: checklist de re-credencialización (merge/overwrite)
+  // o conteos (dry-run), y secciones omitidas (flag OFF o ruta per-proyecto).
+  devops?: {
+    credentials_pending?: string[];
+    credentials_never_set?: string[];
+    servers?: { add: number; update: number; remove_overwrite: number };
+    apps?: { add: number; update: number; remove_overwrite: number };
+  };
+  skipped_sections?: string[];
   validation?: ConfigValidation;
   error?: string;
 }

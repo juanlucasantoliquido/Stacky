@@ -1274,6 +1274,16 @@ class Config:
         os.getenv("STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", "30")
     )
 
+    # ── Plan 190 — Equipaje portable DevOps en export/import ───────────────────
+    # Incluye servidores DevOps (sin contraseñas — quedan en el keyring) y apps
+    # del Centro de Despliegues en el export/import de configuración. Default ON
+    # (espejo del default=True de la FlagSpec homónima; curada en
+    # _CURATED_DEFAULTS_ON). Exportar NUNCA incluye secretos; importar NUNCA toca
+    # el keyring. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED: bool = os.getenv(
+        "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

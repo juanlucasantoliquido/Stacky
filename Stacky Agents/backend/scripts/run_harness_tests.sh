@@ -515,6 +515,12 @@ HARNESS_TEST_FILES=(
   # — Plan 156 · Latido unico —
   tests/test_executions_summary.py
   tests/test_access_log_suppress_pollers.py
+  # — Plan 195 · Modulo de masking comun (serie DevOps 186-193) —
+  tests/test_secret_masking.py
+  # — Plan 190 · Equipaje portable DevOps (export/import servers+apps) —
+  tests/test_plan190_transfer_flag.py
+  tests/test_plan190_transfer_devops_sections.py
+  tests/test_plan190_transfer_compat.py
 )
 
 pass=0

@@ -680,6 +680,10 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 139 — Shell v2 (sidebar) PROMOVIDA a default ON (operador
     # 2026-07-18): deja de ser la excepción OFF; es la presentación de fábrica. ──
     "STACKY_UI_SHELL_V2_ENABLED",
+    # ── Plan 190 — Equipaje DevOps en export/import (bool default ON; exportar
+    # NUNCA incluye secretos e importar NUNCA toca el keyring; ninguna de las 4
+    # excepciones duras aplica). ──
+    "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",
 }
 
 

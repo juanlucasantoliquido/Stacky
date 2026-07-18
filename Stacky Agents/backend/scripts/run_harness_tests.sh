@@ -458,6 +458,10 @@ HARNESS_TEST_FILES=(
   tests/test_incident_vision.py
   tests/test_incident_autopublish.py
   tests/test_incident_dev_agent.py
+  # — Plan 177 — Auto-PR del Dev Resolutor de incidencias —
+  tests/test_plan177_ado_commit_web_url.py
+  tests/test_incident_dev_diff.py
+  tests/test_incident_dev_autocommit.py
   # — Fix deploy: index.html sin cache-control servia UI vieja tras rebuild —
   tests/test_spa_index_no_cache.py
 )

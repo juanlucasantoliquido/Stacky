@@ -412,6 +412,10 @@ $HarnessTestFiles = @(
   "tests/test_incident_vision.py"
   "tests/test_incident_autopublish.py"
   "tests/test_incident_dev_agent.py"
+  # Plan 177 - Auto-PR del Dev Resolutor de incidencias
+  "tests/test_plan177_ado_commit_web_url.py"
+  "tests/test_incident_dev_diff.py"
+  "tests/test_incident_dev_autocommit.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

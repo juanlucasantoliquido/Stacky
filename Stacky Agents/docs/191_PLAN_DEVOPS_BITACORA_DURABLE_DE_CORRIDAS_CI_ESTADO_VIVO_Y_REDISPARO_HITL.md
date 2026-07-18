@@ -1,9 +1,30 @@
 # Plan 191 — DevOps: bitácora durable de corridas CI, estado vivo y re-disparo HITL
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
 - **Fecha:** 2026-07-18
-- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky)
+- **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (extiende el trigger/monitor CI del plan 72; hermano de 186/188/189/190)
+
+## Changelog v1 → v2 (crítica C1..C5 + adición)
+
+- **C1 (MENOR, afirmación técnica falsa):** "Flask matchea la literal primero" NO es cómo rutea
+  Werkzeug. La razón correcta de que `GET /api/ci/runs` no colisione: los demás paths difieren en
+  método y cantidad de segmentos (`/<project>/trigger` = POST 2 seg; `/<project>/trigger-preview`
+  = GET 2 seg; `/<project>/pipeline/<id>` = GET 3 seg). El test de congelamiento queda.
+- **C2 (IMPORTANTE):** `list_runs` especificado sin ambigüedad: SORT explícito por `triggered_at`
+  descendente (ISO-8601 UTC ordena lexicográficamente) — nunca confiar en el orden del archivo — y
+  filtro de igualdad exacta `entry["project"] == project` cuando `project` viene.
+- **C3 (IMPORTANTE):** el hook del trigger NO usa nombres especulativos: pasa las MISMAS
+  EXPRESIONES que el call-site real de `_record_trigger` argumento por argumento; para `web_url`,
+  grep de la construcción de la respuesta de éxito de la ruta — si no existe URL, `None` literal.
+- **C4 (MENOR):** constante nombrada `POLL_INTERVAL_MS = 10_000` en el componente.
+- **C5 (MENOR):** caso de test para `limit` fuera de rango (0 y negativo → clamp del servicio a
+  [1, MAX_ROWS]).
+- **[ADICIÓN ARQUITECTO]:** persistencia del DESENLACE: cuando `monitor_pipeline_route` (:174)
+  devuelve un estado FINAL, un hook best-effort actualiza `last_status` + `finished_at` del entry
+  (`update_run_status` en el ledger). El historial responde durablemente "¿cómo terminó?" aunque
+  nadie haya estado mirando. +3 tests; la UI usa `last_status` como estado inicial antes del primer
+  poll.
 
 ---
 
@@ -31,6 +52,7 @@ cero costo cognitivo.
 | KPI-3 | Retención acotada | Tras 501 appends, el archivo contiene exactamente 500 entries y el más viejo fue rotado |
 | KPI-4 | Poll acotado | El helper de la UI elige como máximo 5 pipeline_ids para pollear (los más recientes no-finales); verificado puro en vitest |
 | KPI-5 | Re-disparo 100% HITL | El builder del payload de re-disparo NO incluye `confirm` (el confirm lo agrega el paso de confirmación existente del flujo trigger); verificado puro en vitest |
+| KPI-6 | Desenlace persistido (ADICIÓN) | Monitor con estado final → `last_status`/`finished_at` actualizados en el entry; estado no-final o id desconocido → entry intacto y monitor sin cambios de respuesta |
 
 **Ganancia robusta:** auditar "¿qué disparé y cómo terminó?" pasa de memoria humana a un registro
 durable con estado; repetir un disparo rutinario pasa de re-tipear ref/branch a 1 click + confirm.
@@ -161,7 +183,16 @@ def append_run(entry: dict) -> None:
 
 
 def list_runs(project: str | None = None, limit: int = 50) -> list[dict]:
-    """Últimas corridas, descendente por triggered_at. limit se acota a [1, MAX_ROWS]."""
+    """C2 — semántica EXACTA: (1) leer todas las líneas válidas; (2) si project no es None,
+    filtrar entry["project"] == project (igualdad exacta); (3) SORT por entry["triggered_at"]
+    DESCENDENTE (ISO-8601 UTC ordena lexicográficamente; nunca confiar en el orden del archivo);
+    (4) limit acotado a [1, MAX_ROWS] (0/negativo → 1; > MAX_ROWS → MAX_ROWS)."""
+
+
+def update_run_status(pipeline_id: str, status: str, finished_at: str | None = None) -> bool:
+    """[ADICIÓN ARQUITECTO] — setea last_status (+ finished_at si viene) del entry con ese
+    pipeline_id (el más reciente si hubiera duplicados). Reescritura atómica bajo _LOCK.
+    Devuelve False (no-op silencioso) si el id no está. Solo estos 2 campos son actualizables."""
 ```
 
    Detalles duros para el implementador:
@@ -169,7 +200,9 @@ def list_runs(project: str | None = None, limit: int = 50) -> list[dict]:
      contarlas), agregar la nueva, recortar a `MAX_ROWS` (las más nuevas), escribir a
      `ci_runs.jsonl.tmp` y `Path.replace` (atómico en el mismo volumen).
    - ALLOWLIST de campos exacta: `("project", "tracker_type", "ref", "sha", "pipeline_id",
-     "web_url", "triggered_at", "source")` — constante módulo-nivel `ENTRY_FIELDS`.
+     "web_url", "triggered_at", "source", "last_status", "finished_at")` — constante módulo-nivel
+     `ENTRY_FIELDS` (los últimos 2 los escribe SOLO `update_run_status`; `append_run` los inicializa
+     en `None`).
    - `triggered_at` default: `datetime.now(timezone.utc).isoformat()`.
    - Cero imports de `ci_provider`/`requests` (el ledger no conoce la red).
 
@@ -190,9 +223,11 @@ def list_ci_runs_route():
     return jsonify({"runs": list_runs(project=project, limit=limit)})
 ```
 
-   (NOTA de ruta: el blueprint ya cuelga de `/api/ci` — la ruta final es `GET /api/ci/runs`.
-   `"/runs"` no colisiona con `"/<project>/trigger"` porque Flask matchea la literal primero;
-   igualmente el test `test_runs_no_captura_como_project` lo congela.)
+   (NOTA de ruta, C1: el blueprint ya cuelga de `/api/ci` — la ruta final es `GET /api/ci/runs`.
+   No colisiona porque los demás paths difieren en MÉTODO y CANTIDAD DE SEGMENTOS:
+   `/<project>/trigger` = POST 2 seg, `/<project>/trigger-preview` = GET 2 seg,
+   `/<project>/pipeline/<id>` = GET 3 seg — `GET /runs` es 1 segmento. El test
+   `test_runs_no_captura_como_project` lo congela igual.)
 
 5. `test_plan191_ci_ledger_flag.py` a `HARNESS_TEST_FILES` en `scripts/run_harness_tests.sh`
    (**gotcha** meta-test).
@@ -203,7 +238,10 @@ def list_ci_runs_route():
 - `test_flag_en_curated_defaults_on`.
 - `test_endpoint_404_flag_off`.
 - `test_endpoint_200_vacio_flag_on` — sin archivo → `{"runs": []}`.
-- `test_kpi2_orden_y_limit` — 3 entries sembradas → desc por `triggered_at`; `limit=2` → 2.
+- `test_kpi2_orden_y_limit` — 3 entries sembradas EN DESORDEN de archivo → desc por
+  `triggered_at` (prueba que hay SORT, no orden de archivo, C2); `limit=2` → 2.
+- `test_limit_fuera_de_rango_clampa` (C5) — `limit=0` y `limit=-5` → 1 entry; `limit=99999` →
+  a lo sumo MAX_ROWS.
 - `test_kpi3_retencion_500` — 501 appends → `len == 500` y el primero sembrado ya no está.
 - `test_allowlist_descarta_extras` — `append_run({"pipeline_id": "1", "password": "x"})` → la
   línea guardada NO contiene `password`.
@@ -215,7 +253,7 @@ def list_ci_runs_route():
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan191_ci_ledger_flag.py -q`
 (cwd = `Stacky Agents\backend`; SIEMPRE por archivo — gotcha reload de config).
 
-**Criterio binario:** los 9 tests pasan Y `test_harness_ratchet_meta.py` verde.
+**Criterio binario:** los 10 tests pasan Y `test_harness_ratchet_meta.py` verde.
 
 **Flag:** `STACKY_CI_RUN_LEDGER_ENABLED` default **ON** (ninguna excepción dura: metadata local de
 acciones ya confirmadas por el operador).
@@ -263,11 +301,35 @@ acciones ya confirmadas por el operador).
             stacky_logger.info("ci_run_ledger", "append_failed", pipeline_id=str(pipeline_id))
 ```
 
-   Regla dura: los nombres de variables (`tracker_type`, `ref_value`, `sha`, `pipeline_id`, la URL)
-   se toman DEL CÓDIGO REAL leído, no de este pseudocódigo — si la ruta no tiene una URL del
-   provider, mandar `"web_url": None` (el contrato lo permite).
+   Regla dura (C3): los valores se pasan con las MISMAS EXPRESIONES que usa el call-site real de
+   `_record_trigger(...)` — argumento por argumento (si ahí dice `provider.name`, acá va
+   `provider.name`; NO inventar locales como `tracker_type` si no existen). Para `web_url`: grep
+   de la construcción de la respuesta de éxito de la ruta; si ningún campo URL existe →
+   `"web_url": None` literal.
 
-2. NINGÚN otro cambio en la ruta (guards, confirm, idempotencia `_RECENT_TRIGGERS` intactos).
+2. [ADICIÓN ARQUITECTO] Hook del DESENLACE en `monitor_pipeline_route` (:174): tras obtener
+   `result = provider.monitor_pipeline(pipeline_id)` (:186), agregar best-effort:
+
+```python
+    # Plan 191 — persistir desenlace (best-effort; JAMÁS rompe el monitor)
+    if getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+        try:
+            status = str((result or {}).get("status") or "").lower()
+            if status in ("success", "failed", "canceled", "skipped"):
+                from datetime import datetime, timezone
+                from services.ci_run_ledger import update_run_status
+                update_run_status(str(pipeline_id), status,
+                                  datetime.now(timezone.utc).isoformat())
+        except Exception:
+            pass  # el monitor nunca se degrada por el ledger
+```
+
+   (La clave exacta del estado en `result` se toma LEYENDO qué devuelve `monitor_pipeline` del
+   provider — si el shape usa otra clave, usar esa; el mapeo a los 4 estados finales es el del
+   glosario.)
+
+3. NINGÚN otro cambio en las rutas (guards, confirm, idempotencia `_RECENT_TRIGGERS`,
+   `_ACTIVE_POLLS` intactos).
 
 **Tests PRIMERO** — `tests/test_plan191_ci_ledger_hook.py` (Flask test client; provider
 monkeypatcheado para éxito — espejar el estilo de los tests EXISTENTES del plan 72: correr
@@ -279,10 +341,15 @@ monkeypatcheado para éxito — espejar el estilo de los tests EXISTENTES del pl
   la respuesta HTTP del trigger es IDÉNTICA (status y body) a la del caso sin excepción.
 - `test_trigger_fallido_no_persiste` — provider que falla → 0 entries.
 - `test_confirm_sigue_obligatorio` — sin `confirm` → 400 (guardia de no-regresión HITL).
+- `test_monitor_final_actualiza_ledger` (ADICIÓN) — entry sembrado + monitor devuelve estado final
+  → `last_status` y `finished_at` seteados.
+- `test_monitor_no_final_no_actualiza` (ADICIÓN) — estado "running" → entry intacto.
+- `test_monitor_id_desconocido_noop` (ADICIÓN) — pipeline_id sin entry → monitor responde igual,
+  sin excepción.
 
 **Comando:** `venv\Scripts\python.exe -m pytest tests\test_plan191_ci_ledger_hook.py -q`
 
-**Criterio binario:** los 5 tests pasan (KPI-1 completo).
+**Criterio binario:** los 8 tests pasan (KPI-1 y KPI-6 completos).
 
 **Flag:** la de F0 (y la del trigger 72, intacta). **Runtimes:** idéntico.
 **Trabajo del operador:** ninguno.
@@ -309,11 +376,17 @@ export interface CiRun {
   pipeline_id: string; web_url: string | null; triggered_at: string; source: string;
 }
 export const FINAL_STATUSES = ['success', 'failed', 'canceled', 'skipped'] as const;
+export const POLL_INTERVAL_MS = 10_000; // C4 — constante nombrada
 export function pollTargets(runs: CiRun[], statusById: Record<string, string | undefined>): string[] {
   // KPI-4: elegir los pipeline_id a pollear — los más recientes cuyo estado NO sea final,
   // máximo 5 (mismo espíritu que _ACTIVE_POLLS del backend, api/ci.py:36-37).
+  // ADICIÓN: el estado inicial de cada run es su last_status persistido (si existe) — así los
+  // runs ya terminados NO se pollean nunca al montar.
   return runs
-    .filter((r) => !FINAL_STATUSES.includes((statusById[r.pipeline_id] ?? '') as never))
+    .filter((r) => {
+      const s = statusById[r.pipeline_id] ?? (r as CiRun & { last_status?: string }).last_status ?? '';
+      return !FINAL_STATUSES.includes(s as never);
+    })
     .slice(0, 5)
     .map((r) => r.pipeline_id);
 }
@@ -342,13 +415,15 @@ export function runLabel(run: CiRun): string {
 
 **Tests PRIMERO** — `ciRunsLedger.test.ts` (vitest, sin @testing-library — gap conocido):
 - `pollTargets` — excluye estados finales, cap a 5, respeta orden (KPI-4).
+- `pollTargets_usa_last_status_persistido` (ADICIÓN) — run con `last_status: "success"` y sin
+  entrada en `statusById` → NO se pollea.
 - `retriggerPayload` — NO contiene la clave `confirm` (KPI-5: `'confirm' in payload === false`).
 - `runLabel` — formato exacto.
 
 **Comando:** `npx vitest run src/components/devops/ciRunsLedger.test.ts`
 (cwd = `Stacky Agents\frontend`; por archivo).
 
-**Criterio binario:** los 3 tests pasan Y `npx tsc --noEmit` sin errores nuevos.
+**Criterio binario:** los 4 tests pasan Y `npx tsc --noEmit` sin errores nuevos.
 
 **Smoke manual (1 paso, opcional):** disparar un pipeline de prueba → aparece en la lista con
 estado que se actualiza; "Re-disparar…" abre el diálogo de confirmación precargado.

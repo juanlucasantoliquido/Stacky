@@ -531,6 +531,7 @@ HARNESS_TEST_FILES=(
   # — Plan 188 · Del fallo de despliegue a la incidencia (evidencia + modal) —
   tests/test_plan188_evidence_flag.py
   tests/test_plan188_evidence_builder.py
+  tests/test_plan188_evidence_endpoint.py
 )
 
 pass=0

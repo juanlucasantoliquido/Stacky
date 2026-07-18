@@ -1,14 +1,26 @@
 # Plan 187 — Selección múltiple y acciones en lote: checkboxes por fila, rango con Shift, barra flotante contextual y resultado agregado
 
-> **Estado:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode · pendiente de crítica adversarial (`criticar-y-mejorar-plan`).
+> **Estado:** CRITICADO v2 (2026-07-18, v1 → v2 aplicada) · **Veredicto v1: APROBADO-CON-CAMBIOS** (0 bloqueantes, 5 importantes) · **Autor:** StackyArchitectaUltraEficientCode · juez: crítica adversarial inline en sesión principal (el subagente juez cayó por session-limit tras verificar OK las anclas de ReviewInboxPage).
 > **Serie UX/UI:** continúa 150/161/162/164/165/172-175/185 SIN duplicarlos. Deslindes explícitos: 173 = presets de filtros y preferencias de tabla (NO selección); 175 = peek + menú contextual + acciones POR FILA (NO lote); 172 = atajos/foco roving (NO selección); 185 = undo con gracia (COMPLEMENTO de este plan, integración diferida en §4.7).
 > **Toda la evidencia archivo:línea de este doc fue verificada en frío contra el checkout real `N:\GIT\RS\STACKY\Stacky\Stacky Agents` el 2026-07-18.** Los números de línea son referencia de ese día; **toda edición se ancla por TEXTO/símbolo citado, no por número de línea** (hay una sesión paralela conocida commiteando en este mismo árbol — hoy mismo creó los planes 176-184 y 186).
 
 ---
 
+## CHANGELOG v1 → v2 (crítica adversarial C1..C7)
+
+- **C1 (IMPORTANTE, resuelto):** la retención de fallidos usaba `sel.setSelection(retainOnly(sel.selection, …))` con snapshot STALE de la selección (cerrado al invocar el lote; el refetch de 30 s puede podar en el medio y el snapshot resucitaría ids ya podados, violando la invariante §3.6). Fix: el hook expone `retainFailed(ids)` con actualización FUNCIONAL (`setSelection((s) => retainOnly(s, ids))`) y `setSelection` crudo SALE del contrato público (F3/F4/F5).
+- **C2 (IMPORTANTE, resuelto):** «OFF ⇒ UI byte-idéntica» era falso durante el primer paint (el hook arranca optimista en `true` y corrige tras el fetch: con flag OFF la columna aparece ~100-300 ms y desaparece). Fix: cache de módulo `_last` (mounts posteriores de la sesión sin flash) + la garantía se re-redacta como «desde el primer resolve de la flag en la sesión» (§1, §3.2, §3.9) — staleness documentada, sin prometer lo imposible.
+- **C3 (IMPORTANTE, resuelto):** el worker de «Relanzar» duplicaba el payload de `Agents.run` inline (drift silencioso si el handler por fila cambia mañana). Fix: F4 paso 3a extrae `relaunchRow(row)` del handler existente y AMBOS caminos (botón por fila y lote) llaman LA MISMA función.
+- **C4 (IMPORTANTE, resuelto):** `copySelectedLinks` hardcodeaba la ruta `/history` al armar deep-links (link roto si la ruta/base difiere). Fix: construir con `new URL(window.location.href)` + `searchParams.set("execution", String(id))`.
+- **C5 (IMPORTANTE, resuelto) [ADICIÓN ARQUITECTO]:** faltaba freno de costo para lotes que DISPARAN ejecuciones: «¿Relanzar 200? Confirmar» lanzaría 200 runs con costo real tras un solo click. Fix: `BULK_EXECUTION_ACTION_MAX = 25` + helper puro `capExecutionBatch` (F2, con tests) aplicado SOLO a «Relanzar» (F4); las acciones locales (descartar/borrar/copiar) no llevan cap.
+- **C6 (MENOR, resuelto):** K3/K9 exigían `grep -c` == `1` EXACTO (frágil: un comentario que mencione el string lo rompe). Ahora `≥1`.
+- **C7 (MENOR, resuelto):** el gate del DoD contaba `confirm(` en TODO el diff (líneas de contexto incluidas ⇒ falso positivo posible). Ahora solo líneas AGREGADAS: `grep -cE '^\+.*(confirm|alert|prompt)\('` → `0`.
+
+---
+
 ## 1. Objetivo + KPIs binarios
 
-**Objetivo (1 párrafo):** hoy TODA acción del dashboard es 1×1: descartar 20 ejecuciones revisadas en la Bandeja de revisión son 20 clicks con 20 esperas (`ReviewInboxPage.tsx:115` — un botón «Descartar» por fila), y limpiar ejecuciones viejas del Historial exige abrir el drawer una por una (`ExecutionHistoryPage.tsx:187` — el click de fila solo abre detalle; no existe NINGÚN checkbox de selección en ninguna página). Este plan instala el patrón universal **selección múltiple + acciones en lote**, con onboarding NULO porque es el patrón que todo operador ya conoce de Gmail/Explorer: **(a)** una columna de checkboxes reales (primitiva `Checkbox` del plan 162) con click plano = toggle, **Shift+click = rango desde el ancla**, **Ctrl/Cmd+click = toggle**, y un checkbox de cabecera tri-estado «seleccionar todo lo visible»; **(b)** una **barra flotante contextual** («N seleccionadas · [acciones] · Deseleccionar») que aparece sola al haber selección y desaparece al no haberla; **(c)** ejecución del lote **reutilizando los endpoints por ítem ya existentes** (cero endpoints nuevos), secuencial, con progreso visible y **resultado agregado** (éxitos/fallos por ítem) en el `Toast` de la casa — los ítems fallidos QUEDAN seleccionados para reintentar; **(d)** **Escape deselecciona todo** (con guard de foco). Human-in-the-loop reforzado: toda acción de lote con efecto exige **confirmación armada de dos pasos** dentro de la barra (primer click arma «¿Descartar 12? Confirmar», segundo click ejecuta) — cero `confirm()` nativo nuevo (compatible con el ratchet del plan 185), cero autonomía. Pilotos: **Bandeja de revisión** (descartar/relanzar en lote) e **Historial de ejecuciones** (borrar/copiar links en lote). Todo detrás de la flag `STACKY_BULK_ACTIONS_ENABLED` (default ON); OFF ⇒ UI byte-idéntica a hoy.
+**Objetivo (1 párrafo):** hoy TODA acción del dashboard es 1×1: descartar 20 ejecuciones revisadas en la Bandeja de revisión son 20 clicks con 20 esperas (`ReviewInboxPage.tsx:115` — un botón «Descartar» por fila), y limpiar ejecuciones viejas del Historial exige abrir el drawer una por una (`ExecutionHistoryPage.tsx:187` — el click de fila solo abre detalle; no existe NINGÚN checkbox de selección en ninguna página). Este plan instala el patrón universal **selección múltiple + acciones en lote**, con onboarding NULO porque es el patrón que todo operador ya conoce de Gmail/Explorer: **(a)** una columna de checkboxes reales (primitiva `Checkbox` del plan 162) con click plano = toggle, **Shift+click = rango desde el ancla**, **Ctrl/Cmd+click = toggle**, y un checkbox de cabecera tri-estado «seleccionar todo lo visible»; **(b)** una **barra flotante contextual** («N seleccionadas · [acciones] · Deseleccionar») que aparece sola al haber selección y desaparece al no haberla; **(c)** ejecución del lote **reutilizando los endpoints por ítem ya existentes** (cero endpoints nuevos), secuencial, con progreso visible y **resultado agregado** (éxitos/fallos por ítem) en el `Toast` de la casa — los ítems fallidos QUEDAN seleccionados para reintentar; **(d)** **Escape deselecciona todo** (con guard de foco). Human-in-the-loop reforzado: toda acción de lote con efecto exige **confirmación armada de dos pasos** dentro de la barra (primer click arma «¿Descartar 12? Confirmar», segundo click ejecuta) — cero `confirm()` nativo nuevo (compatible con el ratchet del plan 185), cero autonomía. Pilotos: **Bandeja de revisión** (descartar/relanzar en lote) e **Historial de ejecuciones** (borrar/copiar links en lote). Todo detrás de la flag `STACKY_BULK_ACTIONS_ENABLED` (default ON); OFF ⇒ UI idéntica a hoy desde el primer resolve de la flag en la sesión (C2).
 
 **KPIs binarios (comandos exactos):**
 
@@ -16,13 +28,13 @@
 |---|---|---|---|
 | K1 | Flag registrada (bool, global, default ON) + curada + config default efectivo | PowerShell, `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"` → `venv\Scripts\python.exe -m pytest tests/test_bulk_actions_flag.py -q` | exit 0 |
 | K2 | El gate de flags del arnés sigue verde (curado `_CURATED_DEFAULTS_ON` + categorización) | mismo cwd → `venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` | exit 0 |
-| K3 | Test backend nuevo registrado en el ratchet de cobertura | Git Bash, `cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"` → `grep -c "test_bulk_actions_flag.py" scripts/run_harness_tests.sh` | `1` |
+| K3 | Test backend nuevo registrado en el ratchet de cobertura | Git Bash, `cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"` → `grep -c "test_bulk_actions_flag.py" scripts/run_harness_tests.sh` | `≥1` (C6) |
 | K4 | Modelo puro de selección (toggle, rango, ancla, selectAll, prune, tri-estado) | PowerShell o Git Bash, `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"` → `npx vitest run src/services/__tests__/selectionModel.test.ts` | exit 0 |
-| K5 | Modelo puro del lote (runner secuencial, guard doble-submit, resumen agregado, armado 2 pasos, guard Escape) | mismo cwd → `npx vitest run src/services/__tests__/bulkModel.test.ts` | exit 0 |
+| K5 | Modelo puro del lote (runner secuencial, guard doble-submit, resumen agregado, armado 2 pasos, guard Escape, cap de ejecución C5) | mismo cwd → `npx vitest run src/services/__tests__/bulkModel.test.ts` | exit 0 |
 | K6 | Parser puro de la flag (OFF ⇔ `value === false` literal; ausente/error ⇒ ON) | mismo cwd → `npx vitest run src/services/__tests__/bulkFlags.test.ts` | exit 0 |
 | K7 | Tipos verdes en todo el frontend | mismo cwd → `npx tsc --noEmit` | exit 0 |
 | K8 | uiDebtRatchet: el `.tsx` nuevo nace con CERO inline-style | Git Bash, `cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend"` → `grep -c "style={{" src/components/bulk/BulkActionsBar.tsx` | `0` |
-| K9 | Accesibilidad de la barra: `role="toolbar"` presente | mismo cwd Git Bash → `grep -c 'role="toolbar"' src/components/bulk/BulkActionsBar.tsx` | `1` |
+| K9 | Accesibilidad de la barra: `role="toolbar"` presente | mismo cwd Git Bash → `grep -c 'role="toolbar"' src/components/bulk/BulkActionsBar.tsx` | `≥1` (C6) |
 
 **KPIs de impacto (proyectados, verificables por observación manual):**
 
@@ -61,14 +73,14 @@
 ## 3. Principios y guardarraíles (NO negociables, codificados acá)
 
 1. **Human-in-the-loop innegociable.** El lote lo dispara SIEMPRE el operador (seleccionar es manual; no hay auto-selección ni acciones proactivas). Toda acción de lote **con efecto** (descartar, relanzar, borrar) exige confirmación explícita: **armado de dos pasos dentro de la barra** (primer click arma y cambia el label a «¿<Acción> N? Confirmar»; segundo click dentro de 5 s ejecuta; cambio de selección, Escape o timeout desarman). Si al momento de implementar el diálogo canónico del plan 164 ya existe (verificable: `grep -r "ConfirmDialog\|useConfirm" frontend/src/components/ui/index.ts` con ≥1 hit), puede usarse EN SU LUGAR; si no, el armado de dos pasos es la vía (misma degradación declarada que el plan 175 §F3). **PROHIBIDO agregar llamadas nuevas a la familia de diálogos nativos del navegador** — el plan 185 F5 congela un baseline (`confirmCallCount`) que este plan no puede hacer crecer, y el gate del 164 F2 caza ese identificador.
-2. **Cero trabajo extra para el operador.** Flag `STACKY_BULK_ACTIONS_ENABLED` default **ON**; la feature es invisible hasta que el operador toca un checkbox; no usarla deja todo como hoy. Sin pasos manuales nuevos, sin config nueva, sin migraciones. **Ninguna de las 4 excepciones duras aplica**, revisadas una por una: (1) *bypass de revisión humana* — NO: cada lote pasa por confirmación armada y las acciones son las MISMAS ya expuestas por ítem; (2) *destructiva/irreversible* — las acciones destructivas ya existen por ítem con la misma semántica; el lote agrega confirmación explícita donde hoy el botón por fila ejecuta directo (MÁS protección, no menos); (3) *prerequisito no garantizado* — solo endpoints y primitivas ya presentes en toda instalación; (4) *reduce seguridad* — OFF ⇒ byte-idéntico a hoy.
+2. **Cero trabajo extra para el operador.** Flag `STACKY_BULK_ACTIONS_ENABLED` default **ON**; la feature es invisible hasta que el operador toca un checkbox; no usarla deja todo como hoy. Sin pasos manuales nuevos, sin config nueva, sin migraciones. **Ninguna de las 4 excepciones duras aplica**, revisadas una por una: (1) *bypass de revisión humana* — NO: cada lote pasa por confirmación armada y las acciones son las MISMAS ya expuestas por ítem; (2) *destructiva/irreversible* — las acciones destructivas ya existen por ítem con la misma semántica; el lote agrega confirmación explícita donde hoy el botón por fila ejecuta directo (MÁS protección, no menos); (3) *prerequisito no garantizado* — solo endpoints y primitivas ya presentes en toda instalación; (4) *reduce seguridad* — OFF ⇒ idéntico a hoy desde el primer resolve de la flag en la sesión (C2: el primer paint de la primera carga puede mostrar la columna un instante; mounts posteriores usan el cache `_last`).
 3. **Paridad de 3 runtimes: N/A-por-diseño, declarada por fase.** Feature 100% frontend (+1 flag backend de arnés): no toca el camino de ejecución/publicación de ningún runtime. «Relanzar en lote» reusa `Agents.run` tal cual lo llama hoy el botón por fila (`ReviewInboxPage.tsx:54-59`) — el runtime lo decide la config vigente del sistema, igual que hoy. Cada fase lo declara con 1 línea.
 4. **Cero endpoints nuevos.** El lote es N llamadas cliente a los endpoints por ítem existentes, secuenciales. Si una acción de lote requiriera un endpoint bulk nuevo, queda FUERA DE SCOPE (§6) — explícitamente: no se crea `POST /api/executions/bulk-*` ni nada análogo.
 5. **Mono-operador sin auth.** Sin RBAC, sin `user_id`, sin permisos por acción: la visibilidad de una acción depende solo de haber selección (`current_user` es un header sin validar; no protege nada y no se usa acá).
 6. **Selección efímera y solo sobre lo cargado.** La selección vive en memoria de la página (ni URL, ni localStorage, ni backend), muere al desmontar, y SOLO puede contener ids presentes en la lista actualmente cargada: todo refetch/cambio de página/filtro la **poda** (`pruneToKnown`). «Seleccionar todo lo visible» = todas las filas HOY renderizadas (los `items`/`sortedRows` en memoria), NUNCA «todo lo que matchea el filtro en el servidor».
 7. **Ratchets del repo se respetan, no se gamean.** (a) uiDebtRatchet (plan 138): `.tsx` NUEVOS con presupuesto CERO de `style={{}}` — todo estilo en `*.module.css`; el único valor dinámico necesario (tri-estado `indeterminate`) es una PROPIEDAD del input, no un estilo, y se setea por ref+effect. (b) formDebtRatchet (plan 162): cero tags crudos `<input>/<select>/<label>/<button>` en `.tsx` nuevos — primitivas `Checkbox`/`Button` del barrel. (c) Test backend nuevo registrado en `HARNESS_TEST_FILES`. (d) Colores solo con tokens `var(--…)` de `theme.css` (referencia de tokens reales: `Toast.module.css`), nunca hex.
 8. **Tests sin DOM.** `@testing-library/react` y `jsdom` NO están en `frontend/package.json` (gap estructural conocido): TODA la lógica (selección, rango, ancla, runner, resumen, armado, guard de Escape, parser de flag) vive en módulos `.ts` PUROS con tests vitest POR ARCHIVO; los `.tsx` son cáscaras finas verificadas con `tsc --noEmit` + smoke manual documentado.
-9. **Backward-compatible.** Ningún handler existente cambia de semántica: el click de fila del Historial sigue abriendo el drawer (el checkbox hace `stopPropagation`); los botones por fila de la Bandeja siguen intactos. Flag OFF ⇒ ni columna de checkboxes ni barra (UI byte-idéntica).
+9. **Backward-compatible.** Ningún handler existente cambia de semántica: el click de fila del Historial sigue abriendo el drawer (el checkbox hace `stopPropagation`); los botones por fila de la Bandeja siguen intactos. Flag OFF ⇒ ni columna de checkboxes ni barra (UI idéntica desde el primer resolve; C2).
 10. **No degradar performance.** Estado de selección = un `Set` en memoria; cero polling nuevo; la flag se lee UNA vez por sesión (promesa cacheada a nivel módulo; toggle del operador aplica al próximo reload — misma staleness aceptada que el plan 185 C6); el lote es secuencial contra el Flask local (sin ráfagas paralelas que saturen el backend).
 11. **Sesión paralela viva en este árbol.** Pre-flight OBLIGATORIO por archivo antes de editar: `git status -- "<ruta>"`; si hay WIP ajeno en ese archivo ⇒ STOP y reportar al orquestador. `backend/harness_defaults.env` tiene WIP ajeno HOY: **PROHIBIDO tocarlo a mano** (se genera; si algún test de drift preexistente lo reclama, reportar el drift — es conocido — sin «arreglarlo»). El implementador NO commitea (lo hace el orquestador), staging quirúrgico por path explícito.
 
@@ -181,18 +193,21 @@ export function resolveBulkActionsEnabled(
 }
 
 let _cached: Promise<boolean> | null = null;
+let _last: boolean | null = null;   // C2: último valor resuelto en esta sesión (mounts posteriores sin flash)
 function fetchEnabledOnce(): Promise<boolean> {
   if (!_cached) {
     _cached = HarnessFlags.list()
-      .then((res) => resolveBulkActionsEnabled(res.flags))
-      .catch(() => true);
+      .then((res) => { const v = resolveBulkActionsEnabled(res.flags); _last = v; return v; })
+      .catch(() => { _last = true; return true; });
   }
   return _cached;
 }
 
-/** Hook de página: arranca optimista en true (default ON) y corrige si el backend dice false. */
+/** Hook de página: primer mount de la sesión arranca optimista en true (default ON) y
+ *  corrige si el backend dice false (C2: flash único aceptado y documentado);
+ *  mounts posteriores arrancan directo en el valor resuelto (_last) — sin flash. */
 export function useBulkActionsEnabled(): boolean {
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(() => _last ?? true);
   useEffect(() => {
     let alive = true;
     void fetchEnabledOnce().then((v) => { if (alive) setEnabled(v); });
@@ -318,6 +333,8 @@ export function retainOnly(s: SelectionState, ids: ItemId[]): SelectionState;
 // Plan 187 F2 — modelo puro del lote. Sin React, sin fetch, sin window.
 export const BULK_MAX_LISTED_FAILURES = 5;
 export const ARM_AUTO_DISARM_MS = 5000;
+/** [ADICIÓN ARQUITECTO] C5 — cap de lote SOLO para acciones que DISPARAN EJECUCIONES (costo real). */
+export const BULK_EXECUTION_ACTION_MAX = 25;
 
 export interface BulkItemFailure { id: number; error: string }
 export interface BulkResult { total: number; ok: number[]; failed: BulkItemFailure[] }
@@ -355,6 +372,16 @@ export function createBulkRunner(): BulkRunner;
  *  Ejemplo de params: doneSingular="ejecución descartada", donePlural="ejecuciones descartadas". */
 export function summarizeBulk(r: BulkResult, doneSingular: string, donePlural: string): BulkToast;
 
+/** [ADICIÓN ARQUITECTO] C5 — freno de costo para acciones de ejecución.
+ *  ids.length <= max ⇒ { ok: true }.
+ *  Si no ⇒ { ok: false, toast: { variant: "warning", title: "Lote demasiado grande",
+ *    body: `Máximo ${max} relanzamientos por lote (seleccionadas: ${ids.length}). Repetí en tandas.` } }.
+ *  Solo la página lo invoca para acciones que lanzan runs (F4 "relaunch");
+ *  las acciones locales (descartar/borrar/copiar) NO llevan cap. */
+export function capExecutionBatch(
+  ids: number[], max = BULK_EXECUTION_ACTION_MAX,
+): { ok: true } | { ok: false; toast: BulkToast };
+
 /** Armado de dos pasos: click sobre una acción destructiva.
  *  current === clicked ⇒ { armed: null, execute: true }   (segundo click: ejecutar)
  *  distinto            ⇒ { armed: clicked, execute: false } (primer click: armar) */
@@ -383,6 +410,8 @@ export function shouldClearSelectionOnEscape(
 | `runner_guard_doble_submit` | con el primer `run` aún pendiente (worker con promesa manual), el segundo `run` devuelve `null`; tras resolver el primero, un tercer `run` devuelve promesa (no null). |
 | `runner_dedup_ids` | `ids=[7,7,8]` → worker llamado 2 veces, `total===2`. |
 | `runner_ids_vacios` | `run([],…)` → resuelve `{total:0, ok:[], failed:[]}` sin invocar worker. |
+| `cap_dentro_del_limite` | `capExecutionBatch` con 25 ids → `{ ok: true }`; con 1 id → `{ ok: true }`. |
+| `cap_excedido_devuelve_toast` | 26 ids → `{ ok: false, toast }` con variant `"warning"` y body que contiene `"25"` y `"26"`; `max` custom (p. ej. 2) respeta el override. |
 | `summarize_todo_ok_singular_y_plural` | 1 ok → body `"1 ejecución descartada"`; 3 ok → `"3 ejecuciones descartadas"`, variant success. |
 | `summarize_parcial_lista_fallidos` | 2 ok + 2 failed (#4,#9) de 4 → variant warning, title `"Resultado parcial"`, body contiene `"2 de 4 ejecuciones descartadas"` y `"#4, #9"`. |
 | `summarize_mas_de_5_fallidos_trunca` | 7 failed → body lista 5 ids y termina la lista con `"…"`. |
@@ -448,7 +477,7 @@ export interface BulkActionsBarProps {
 import { useEffect, useMemo, useState } from "react";
 import {
   EMPTY_SELECTION, type SelectionState, clickSelect, clearSelection, headerState,
-  isSelected, pruneToKnown, selectedCount, selectedIdsInOrder, toggleAllVisible,
+  isSelected, pruneToKnown, retainOnly, selectedCount, selectedIdsInOrder, toggleAllVisible,
 } from "../../services/selectionModel";
 import { shouldClearSelectionOnEscape } from "../../services/bulkModel";
 
@@ -460,7 +489,9 @@ export interface UseRowSelectionOptions {
 
 export interface UseRowSelectionResult {
   selection: SelectionState;
-  setSelection: (s: SelectionState) => void;
+  /** C1 — retención post-lote: aplica retainOnly de forma FUNCIONAL (sin snapshot stale).
+   *  setSelection crudo NO se expone (footgun de closure stale eliminado del contrato). */
+  retainFailed: (failedIds: number[]) => void;
   count: number;
   header: "none" | "some" | "all";
   isRowSelected: (id: number) => boolean;
@@ -480,7 +511,8 @@ export interface UseRowSelectionResult {
 3. **Escape global:** `useEffect` activo SOLO cuando `enabled && count > 0 && !escapeDisabled`; registra `document.addEventListener("keydown", onKey)` donde `onKey` arma `active = document.activeElement` como `{ tagName, isContentEditable, type }` (cast a `HTMLInputElement` para `type`) y si `shouldClearSelectionOnEscape(ev, active)` ⇒ `setSelection(clearSelection())`. SIN `stopPropagation` (no interfiere con otros handlers de Escape; el caso drawer-abierto se cubre con `escapeDisabled`). Cleanup del listener.
 4. `onRowCheckboxClick(id, ev)`: `ev.stopPropagation();` (crítico en el Historial: la fila tiene `onClick` que abre el drawer, `ExecutionHistoryPage.tsx:187`); si `ev.shiftKey` ⇒ `window.getSelection()?.removeAllRanges();` (mata la selección de texto nativa del Shift+click); luego `setSelection((s) => clickSelect(s, id, visibleIds, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey }))`.
 5. `onToggleAll()`: `setSelection((s) => toggleAllVisible(s, visibleIds))`.
-6. Si `enabled === false`: devolver `count: 0`, `header: "none"` y handlers no-op (las páginas además NO renderizan la columna, ver F4/F5).
+6. `retainFailed(failedIds)`: `setSelection((s) => retainOnly(s, failedIds))` — SIEMPRE funcional (C1): opera sobre el estado FRESCO aunque el lote haya tardado y el polling haya podado en el medio.
+7. Si `enabled === false`: devolver `count: 0`, `header: "none"` y handlers no-op (las páginas además NO renderizan la columna, ver F4/F5).
 
 **Tests:** la lógica está fijada en F1/F2 (K4/K5). Esta fase se verifica con `npx tsc --noEmit` exit 0 + K8 + K9 (greps).
 
@@ -503,8 +535,7 @@ import { useRef } from "react";                    // sumar a los imports de rea
 import Toast, { type ToastState } from "../components/Toast";
 import { Checkbox } from "../components/ui";
 import { useBulkActionsEnabled } from "../services/bulkFlags";
-import { createBulkRunner, summarizeBulk, type BulkWorker } from "../services/bulkModel";
-import { retainOnly } from "../services/selectionModel";
+import { capExecutionBatch, createBulkRunner, summarizeBulk, type BulkWorker } from "../services/bulkModel";
 import BulkActionsBar, { type BulkAction } from "../components/bulk/BulkActionsBar";
 import { useRowSelection } from "../components/bulk/useRowSelection";
 
@@ -532,23 +563,24 @@ useEffect(() => {
 }, [bulkToast]);
 ```
 
+**Paso 3a (C3) — refactor mínimo previo, cero cambio de semántica:** extraer el CUERPO del handler por fila `relaunch` existente (`ReviewInboxPage.tsx:49-66`) a una función `async function relaunchRow(row): Promise<void>` dentro del componente (mismo payload de `Agents.run` que hoy, sin tocar una coma), y hacer que el botón por fila la llame. El lote llama LA MISMA función: si mañana cambia el payload del relanzamiento por fila, el lote hereda el cambio — cero drift entre caminos.
+
 **Paso 3 — el ejecutor del lote (función dentro del componente; EXACTA):**
 
 ```tsx
 async function runBulkAction(kind: "discard" | "relaunch") {
   const ids = sel.orderedSelectedIds;
+  if (kind === "relaunch") {
+    const cap = capExecutionBatch(ids);             // [ADICIÓN ARQUITECTO] C5: freno de costo
+    if (!cap.ok) { setBulkToast(cap.toast); return; }
+  }
   const worker: BulkWorker =
     kind === "discard"
       ? async (id) => { await Executions.discard(id); }
       : async (id) => {
           const row = rows.find((x) => x.id === id);
           if (!row) throw new Error("la fila ya no está en la bandeja");
-          await Agents.run({
-            agent_type: row.agent_type,
-            ticket_id: row.ticket_id,
-            context_blocks: [],
-            project: activeProjectName ?? undefined,
-          });
+          await relaunchRow(row);                    // C3: MISMA función que el botón por fila (paso 3a)
         };
   const p = runnerRef.current.run(ids, worker, (done, total) => setBulkProgress({ done, total }));
   if (!p) return;                                   // guard: ya hay un lote corriendo
@@ -560,7 +592,7 @@ async function runBulkAction(kind: "discard" | "relaunch") {
       ? summarizeBulk(result, "ejecución descartada", "ejecuciones descartadas")
       : summarizeBulk(result, "ejecución relanzada", "ejecuciones relanzadas"),
   );
-  sel.setSelection(retainOnly(sel.selection, result.failed.map((f) => f.id)));  // fallidos quedan seleccionados
+  sel.retainFailed(result.failed.map((f) => f.id)); // C1: retención FUNCIONAL, sin snapshot stale
   await qc.invalidateQueries({ queryKey: ["review-inbox", activeProjectName] });
   if (kind === "relaunch") {
     await qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
@@ -669,7 +701,7 @@ En el `<tbody>` (ancla: `<tr key={row.id}>`, `:104`), AGREGAR como PRIMER `<td>`
 **Paso 1 — mismos imports/estado que F4 Paso 1-2, con estas diferencias EXACTAS:**
 - `visibleIds = useMemo(() => items.map((i) => i.id), [items]);` (los `items` de `:82`).
 - `escapeDisabled: detailId !== null || bulkRunning` (el drawer usa `detailId`, `:55`).
-- La página no importa `Agents`; importa `Toast`, `Checkbox`, `BulkActionsBar`, `useRowSelection`, `useBulkActionsEnabled`, `createBulkRunner`, `summarizeBulk`, `retainOnly` igual que F4. Ya importa `useEffect`/`useState` (`:8`) y `Executions` (`:10`).
+- La página no importa `Agents`; importa `Toast`, `Checkbox`, `BulkActionsBar`, `useRowSelection`, `useBulkActionsEnabled`, `createBulkRunner`, `summarizeBulk` igual que F4 (sin `retainOnly` ni `capExecutionBatch`: la retención va por `sel.retainFailed` —C1— y acá ninguna acción dispara ejecuciones —C5 no aplica—). Ya importa `useEffect`/`useState` (`:8`) y `Executions` (`:10`).
 
 **Paso 2 — acciones:**
 
@@ -683,7 +715,7 @@ async function runBulkDelete() {
   const result = await p;
   setBulkProgress(null);
   setBulkToast(summarizeBulk(result, "ejecución borrada", "ejecuciones borradas"));
-  sel.setSelection(retainOnly(sel.selection, result.failed.map((f) => f.id)));
+  sel.retainFailed(result.failed.map((f) => f.id));                  // C1: retención funcional
   await qc.invalidateQueries({ queryKey: ["execution-history"] });   // match parcial de ["execution-history", filters, project] (:68)
 }
 
@@ -691,8 +723,14 @@ async function copySelectedLinks() {
   // Deep-link con receptor REAL ya implementado: ?execution=<id> abre el drawer
   // (ExecutionHistoryPage.tsx:58-65, plan 129). Si el plan 175 ya aterrizó su
   // services/clipboard.ts, usarlo en lugar de este try/catch local.
+  // C4: construir sobre la URL REAL de la página actual (ruta y base incluidas) —
+  // nunca hardcodear "/history": si la ruta cambiara, el link seguiría siendo válido.
   const text = sel.orderedSelectedIds
-    .map((id) => `${window.location.origin}/history?execution=${id}`)
+    .map((id) => {
+      const u = new URL(window.location.href);
+      u.searchParams.set("execution", String(id));
+      return u.toString();
+    })
     .join("\n");
   let ok = false;
   try { await navigator.clipboard.writeText(text); ok = true; } catch { ok = false; }
@@ -765,7 +803,7 @@ El plan 185 (CRITICADO v2, **no implementado** al 2026-07-18) introduce `schedul
 | R9 | **Acciones por fila durante un lote** (p. ej. descartar a mano un id que el lote está procesando) | El fallo del ítem duplicado se reporta como fallo por ítem (R4); documentado como límite aceptado — no se deshabilitan los botones por fila (cambiaría semántica existente, §3.9) |
 | R10 | **Sesión paralela** editando las mismas páginas (173/174/175 también tocan `ExecutionHistoryPage.tsx`) | Pre-flight `git status` por archivo (§3.11); anclas por TEXTO, no por línea; STOP y reporte si hay WIP ajeno |
 | R11 | **Checkbox primitiva sin forwardRef** (tri-estado de cabecera imposible por ref directa) | Wrapper `<span ref>` + `querySelector("input")` + propiedad `indeterminate` en effect (F4 paso 4) — sin tocar la primitiva del 162 |
-| R12 | **Relanzar en lote dispara N ejecuciones con costo real** | `destructive: true` ⇒ confirmación armada con el N visible en el label («¿Relanzar 12? Confirmar») + progreso visible + resultado agregado (F4) |
+| R12 | **Relanzar en lote dispara N ejecuciones con costo real** | `destructive: true` ⇒ confirmación armada con el N visible en el label («¿Relanzar 12? Confirmar») + progreso visible + resultado agregado (F4) + cap duro `BULK_EXECUTION_ACTION_MAX = 25` por lote SOLO para acciones de ejecución ([ADICIÓN ARQUITECTO] C5, F2/F4) |
 
 ---
 
@@ -813,9 +851,9 @@ El plan 185 (CRITICADO v2, **no implementado** al 2026-07-18) introduce `schedul
 - [ ] K1..K9 de §1 verdes con output pegado (comandos y shells exactos de la tabla).
 - [ ] Smokes manuales de F4 y F5 completados y anotados (incluye el smoke de flag OFF ⇒ UI idéntica).
 - [ ] `git status` final revisado: SOLO los archivos listados en F0-F5 tocados; `backend/harness_defaults.env` NO tocado a mano; sin `stash`/`reset`/`checkout` (repo compartido con sesión paralela).
-- [ ] Cero `confirm(`/`alert(`/`prompt(` nuevos en el diff (Git Bash desde `frontend`: `git diff -- src | grep -c "confirm("` → `0`).
+- [ ] Cero `confirm(`/`alert(`/`prompt(` nuevos en el diff — solo líneas AGREGADAS cuentan (C7; Git Bash desde `frontend`): `git diff -- src | grep -cE '^\+.*(confirm|alert|prompt)\('` → `0`.
 - [ ] Encabezado de estado de ESTE doc actualizado (PROPUESTO → IMPLEMENTADO con fecha) al cerrar.
 
 ---
 
-*Fin del plan 187. Siguiente paso del pipeline: `criticar-y-mejorar-plan` (crítica adversarial v1→v2) antes de implementar.*
+*Fin del plan 187 v2 (CRITICADO, veredicto v1: APROBADO-CON-CAMBIOS, C1..C7 aplicados). Siguiente paso del pipeline: `implementar-plan-stacky`.*

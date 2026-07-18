@@ -144,6 +144,14 @@ export interface AgentExecution {
   agent_filename?: string | null;
 }
 
+/** Plan 156 F1 — respuesta del latido unico GET /api/executions/summary. */
+export interface ExecutionsSummary {
+  scope: "project" | "all_projects";
+  running: AgentExecution[];
+  preparing: AgentExecution[];
+  queued: AgentExecution[];
+}
+
 // N1 — Contract Validator
 export interface ContractFailure {
   rule: string;

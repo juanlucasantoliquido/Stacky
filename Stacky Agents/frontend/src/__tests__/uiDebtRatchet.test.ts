@@ -20,10 +20,16 @@ const BASELINE_PATH = path.join(SRC, "__tests__", "uiDebtBaseline.json");
 
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
 const INLINE_STYLE_RE = /style=\{\{/g;
+// Plan 156 F6 — diálogos modales nativos del navegador. Definido
+// perifrásticamente para NO auto-cazarse (ver §9 del plan): exige `(` tras el
+// identificador y un lookbehind que descarta métodos ajenos `obj.metodo(`,
+// salvo el prefijo explícito window.
+const NATIVE_DIALOG_RE = /(?<![.\w])(?:window\.)?(?:confirm|alert|prompt)\s*\(/g;
 
 interface Baseline {
   hexByFile: Record<string, number>;
   inlineStyleByFile: Record<string, number>;
+  nativeDialogByFile: Record<string, number>;
 }
 
 export function countMatches(content: string, re: RegExp): number {
@@ -45,6 +51,7 @@ function computeCurrent(): Baseline {
   const files = listFiles(SRC);
   const hexByFile: Record<string, number> = {};
   const inlineStyleByFile: Record<string, number> = {};
+  const nativeDialogByFile: Record<string, number> = {};
   for (const rel of files) {
     const content = fs.readFileSync(path.join(SRC, rel), "utf-8");
     if (rel.endsWith(".module.css")) {
@@ -55,8 +62,18 @@ function computeCurrent(): Baseline {
       const n = countMatches(content, INLINE_STYLE_RE);
       if (n > 0) inlineStyleByFile[rel] = n;
     }
+    // Plan 156 F6 — diálogos nativos en .ts/.tsx (excluye __tests__ para no
+    // auto-contarse: el propio archivo del ratchet contiene el regex).
+    if ((rel.endsWith(".ts") || rel.endsWith(".tsx")) && !rel.includes("__tests__/")) {
+      const n = countMatches(content, NATIVE_DIALOG_RE);
+      if (n > 0) nativeDialogByFile[rel] = n;
+    }
   }
-  return { hexByFile: sortKeys(hexByFile), inlineStyleByFile: sortKeys(inlineStyleByFile) };
+  return {
+    hexByFile: sortKeys(hexByFile),
+    inlineStyleByFile: sortKeys(inlineStyleByFile),
+    nativeDialogByFile: sortKeys(nativeDialogByFile),
+  };
 }
 
 function sortKeys(obj: Record<string, number>): Record<string, number> {
@@ -74,23 +91,31 @@ function assertNoIncrease(current: Baseline, baseline: Baseline): string[] {
   const errors: string[] = [];
   const check = (kind: keyof Baseline) => {
     for (const [file, count] of Object.entries(current[kind])) {
-      const allowedBase = baseline[kind][file] ?? 0;
+      // Robusto a baseline viejo que aún no tiene la dimensión nueva (F6).
+      const allowedBase = (baseline[kind] ?? {})[file] ?? 0;
       // Chrome/primitivas del sistema de diseño: SIEMPRE 0 (invariante mecánico).
-      // Cubre ui/ (plan 138) y shell/ (plan 139).
+      // Cubre ui/ (plan 138) y shell/ (plan 139). NO aplica a diálogos nativos:
+      // es deuda heredada distribuida (only-decrease desde su baseline en frío).
       const forcedZero =
-        file.startsWith("components/ui/") || file.startsWith("components/shell/");
+        kind !== "nativeDialogByFile" &&
+        (file.startsWith("components/ui/") || file.startsWith("components/shell/"));
       const allowed = forcedZero ? 0 : allowedBase;
       if (count > allowed) {
+        const hint =
+          kind === "nativeDialogByFile"
+            ? `Usá ConfirmButton / el sistema de notificaciones en vez de los ` +
+              `diálogos modales nativos del navegador (plan 156 F6).`
+            : `Usa tokens de theme.css o clases de *.module.css en vez de hex/style inline.`;
         errors.push(
           `${kind} REGRESION en ${file}: ${count} > ${allowed} permitido. ` +
-            `La deuda visual solo puede bajar (plan 138). Usa tokens de theme.css ` +
-            `o clases de *.module.css en vez de hex/style inline.`,
+            `La deuda visual solo puede bajar (plan 138). ${hint}`,
         );
       }
     }
   };
   check("hexByFile");
   check("inlineStyleByFile");
+  check("nativeDialogByFile");
   return errors;
 }
 

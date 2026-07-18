@@ -3,10 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { Executions } from "../api/endpoints";
 import type { LogLine } from "../types";
+import { appendBounded, emptyRing, type RingState } from "./logRingBuffer";
 
 interface StreamState {
   lines: LogLine[];
   done: boolean;
+  /** Plan 156 F3 — cuántas líneas se descartaron por la cota del ring-buffer. */
+  dropped?: number;
   error?: string;
   telemetry?: {
     turns?: number | null;
@@ -35,26 +38,25 @@ const RECONNECT_MAX_MS = 30_000;
 export function useExecutionStream(executionId: number | null): StreamState {
   const [state, setState] = useState<StreamState>({ lines: [], done: false });
   const qc = useQueryClient();
-  // Set persistente entre reconexiones del MISMO executionId para dedup.
-  const seenKeys = useRef<Set<string>>(new Set());
+  // Plan 156 F3 — ring-buffer persistente entre reconexiones del MISMO
+  // executionId: acota `lines` a 5000 y mantiene el Set de dedup en la misma
+  // ventana (dedup window == ring window).
+  const ring = useRef<RingState>(emptyRing());
 
   useEffect(() => {
     if (executionId == null) {
-      seenKeys.current = new Set();
+      ring.current = emptyRing();
       setState({ lines: [], done: false });
       return;
     }
 
-    seenKeys.current = new Set();
+    ring.current = emptyRing();
     setState({ lines: [], done: false });
 
     let es: EventSource | null = null;
     let retryMs = RECONNECT_INITIAL_MS;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
-
-    const dedupKey = (data: LogLine): string =>
-      `${data.timestamp ?? ""}|${data.level ?? ""}|${data.message ?? ""}`;
 
     const onLog = (e: MessageEvent) => {
       let data: LogLine | null = null;
@@ -68,11 +70,13 @@ export function useExecutionStream(executionId: number | null): StreamState {
       }
       if (!data) return;
 
-      const key = dedupKey(data);
-      if (seenKeys.current.has(key)) return;
-      seenKeys.current.add(key);
-
-      setState((s) => ({ ...s, lines: [...s.lines, data!] }));
+      // Plan 156 F3 — append acotado + dedup en ventana. El `!==` evita el
+      // re-render cuando la línea era un duplicado dentro de la ventana.
+      const next = appendBounded(ring.current, data);
+      if (next !== ring.current) {
+        ring.current = next;
+        setState((s) => ({ ...s, lines: next.lines, dropped: next.dropped }));
+      }
     };
 
     const onCompleted = (_ev?: MessageEvent) => {

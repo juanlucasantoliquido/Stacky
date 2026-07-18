@@ -384,6 +384,8 @@ HARNESS_TEST_FILES=(
   tests/test_cost_center_api.py
   tests/test_cost_reconciliation_audit.py
   tests/test_cost_codeburn_import.py
+  # — Plan 158 — Centro de Costos: telemetria real claude_code_cli —
+  tests/test_plan158_claude_cli_cost_parity.py
   # — Plan 144 — Ejecucion confiable Claude CLI: trust, stalls, estados —
   tests/test_status_vocabulary_contract.py
   tests/test_ticket_status_robust_transition.py
@@ -510,6 +512,9 @@ HARNESS_TEST_FILES=(
   tests/test_publish_idempotent_guard.py
   tests/test_epic_children_type_mapping.py
   tests/test_autopublish_rev_from_response.py
+  # — Plan 156 · Latido unico —
+  tests/test_executions_summary.py
+  tests/test_access_log_suppress_pollers.py
 )
 
 pass=0

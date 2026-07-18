@@ -144,5 +144,24 @@
     "pages/TicketBoard.tsx": 15,
     "pages/UnblockerPage.tsx": 2,
     "pages/UserStatsPage.tsx": 24
+  },
+  "nativeDialogByFile": {
+    "components/ActiveRunsPanel.tsx": 1,
+    "components/AgentHistoryPage.tsx": 8,
+    "components/ClientProfileEditor.tsx": 1,
+    "components/EpicChildrenPanel.tsx": 1,
+    "components/EpicFromBriefModal.tsx": 1,
+    "components/TopBar.tsx": 2,
+    "components/dbcompare/EnvironmentsPanel.tsx": 1,
+    "components/devops/DeploymentsSection.tsx": 1,
+    "components/devops/PipelineBuilderSection.tsx": 5,
+    "components/devops/ProductionFlow.tsx": 2,
+    "components/devops/RemoteConsoleSection.tsx": 1,
+    "components/devops/ServersSection.tsx": 2,
+    "components/devops/VariablesSection.tsx": 2,
+    "hooks/useAgentRun.ts": 1,
+    "incidents/incidentModel.test.ts": 1,
+    "pages/FlowConfigPage.tsx": 1,
+    "pages/TicketBoard.tsx": 2
   }
 }

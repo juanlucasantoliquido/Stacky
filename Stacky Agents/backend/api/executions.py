@@ -86,6 +86,76 @@ def list_executions():
         return jsonify([r.to_dict(include_output=False, include_ticket_context=True) for r in rows])
 
 
+def _query_active_executions(session, *, project_ctx, status_values, limit):
+    """Plan 156 F1 — misma logica de filtro/orden que list_executions, aislada
+    para que /api/executions y /api/executions/summary NUNCA diverjan.
+
+    Helper NUEVO consumido UNICAMENTE por executions_summary (blast-radius
+    minimo, C1 v2): list_executions queda byte-identico. La garantia de que el
+    summary y /api/executions nunca divergen la sostiene el TEST de paridad
+    (test_summary_paridad_de_campos_running), no compartir codigo.
+    """
+    q = session.query(AgentExecution).options(joinedload(AgentExecution.ticket))
+    if project_ctx is not None:
+        q = q.join(Ticket, Ticket.id == AgentExecution.ticket_id).filter(
+            or_(
+                Ticket.stacky_project_name == project_ctx.stacky_project_name,
+                and_(
+                    Ticket.stacky_project_name.is_(None),
+                    Ticket.project == project_ctx.tracker_project,
+                ),
+            )
+        )
+    if status_values:
+        if len(status_values) == 1:
+            q = q.filter(AgentExecution.status == status_values[0])
+        else:
+            q = q.filter(AgentExecution.status.in_(status_values))
+    return q.order_by(AgentExecution.started_at.desc()).limit(limit).all()
+
+
+@bp.get("/summary")
+def executions_summary():
+    """Plan 156 F1 — latido unico: running/preparing/queued en UNA respuesta.
+
+    Shape: {"scope": "project"|"all_projects",
+            "running":[...], "preparing":[...], "queued":[...]}
+
+    Cada objeto es identico a /api/executions (to_dict include_output=False,
+    include_ticket_context=True). scope=all_projects => sin filtro de proyecto.
+
+    Campos que los callers consumen HOY (F0, verificado con grep del arbol):
+      - activeRuns.ts/mergeActiveRuns: id
+      - useRunningStatus.ts: ticket_id, y el objeto completo en runningByTicket
+      - ActiveRunsPanel.tsx: id, project, ticket_id, ticket_title, agent_type, status
+    Todos provienen de to_dict(include_ticket_context=True); la cobertura es
+    total y el test de paridad de F1 la garantiza.
+    """
+    scope = (request.args.get("scope") or "project").strip().lower()
+    all_projects = scope in ("all", "all_projects", "global")
+    project_name = (request.args.get("project") or "").strip() or None
+    limit = request.args.get("limit", default=50, type=int)
+
+    if all_projects:
+        project_ctx = None
+    else:
+        project_ctx = (
+            resolve_project_context(project_name=project_name)
+            if project_name else resolve_project_context()
+        )
+
+    out = {"scope": "all_projects" if all_projects else "project"}
+    with session_scope() as session:
+        for status in ("running", "preparing", "queued"):
+            rows = _query_active_executions(
+                session, project_ctx=project_ctx, status_values=[status], limit=limit,
+            )
+            out[status] = [
+                r.to_dict(include_output=False, include_ticket_context=True) for r in rows
+            ]
+    return jsonify(out)
+
+
 @bp.get("/<int:execution_id>")
 def get_execution(execution_id: int):
     with session_scope() as session:

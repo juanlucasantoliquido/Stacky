@@ -5,7 +5,7 @@ import { Tickets, Agents, FlowConfig, Executions, Memory, Incidents, type Stacky
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
-import { useTicketSync } from "../hooks/useTicketSync";
+import { useTicketSync, DEFAULT_INTERVAL_MS as TICKET_SYNC_INTERVAL_MS } from "../hooks/useTicketSync";
 import { SyncStatusBar } from "../components/SyncStatusBar";
 import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
 import TicketGraphView from "../components/TicketGraphView";
@@ -835,15 +835,15 @@ export default function TicketBoard() {
   // Hook centralizado de estado running (fuente dual: stacky_status + executions polling)
   const { runningByTicket, runningTicketIds, getRunningTickets } = useRunningStatus();
 
-  // P7: hook de auto-refresh con Page Visibility API y backoff
+  // P7: hook de auto-refresh con Page Visibility API y backoff.
+  // Plan 156 F4: el reloj "hace Xs"/stale vive ahora en SyncStatusBar (hoja);
+  // el hook ya no expone secondsSinceSync/isStale.
   const {
     lastSyncedAt,
-    secondsSinceSync,
     isSyncing: isSyncingV2,
     syncError: syncErrorV2,
     triggerSync,
-    isStale,
-  } = useTicketSync({ intervalMs: 45_000, syncOnMount: true });
+  } = useTicketSync({ intervalMs: TICKET_SYNC_INTERVAL_MS, syncOnMount: true });
 
   const { data: tickets, isLoading, isError: isTicketsError, error: ticketsError, refetch: refetchTickets } = useQuery<Ticket[]>({
     queryKey: ["tickets", activeProjectName],
@@ -1082,12 +1082,10 @@ export default function TicketBoard() {
       {/* P7: barra de estado de sincronizacion */}
       <SyncStatusBar
         lastSyncedAt={lastSyncedAt}
-        secondsSinceSync={secondsSinceSync}
         isSyncing={isSyncingV2}
         syncError={syncErrorV2}
         onSyncClick={triggerSync}
-        isStale={isStale}
-        intervalMs={45_000}
+        intervalMs={TICKET_SYNC_INTERVAL_MS}
       />
 
       {/* Banner global de tickets en ejecución */}

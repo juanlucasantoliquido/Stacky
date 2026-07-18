@@ -27,15 +27,17 @@ export interface UseTicketSyncOptions {
 
 export interface UseTicketSyncResult {
   lastSyncedAt: string | null;
-  secondsSinceSync: number | null;
   isSyncing: boolean;
   syncError: string | null;
   triggerSync: () => void;
-  isStale: boolean;
   consecutiveErrors: number;
 }
 
-const DEFAULT_INTERVAL_MS = 45_000;
+/** Plan 156 F4 (C5) — intervalo real del sync. El reloj de "hace Xs"/stale vive
+ *  ahora en la hoja SyncStatusBar; ésta es la constante de la que deriva el
+ *  umbral de stale (intervalMs*2). TicketBoard la usa para AMBOS (hook + hoja)
+ *  para que el umbral quede idéntico al de antes (no un mágico distinto). */
+export const DEFAULT_INTERVAL_MS = 45_000;
 const MAX_BACKOFF_MS = 5 * 60_000; // 5 minutos
 
 export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSyncResult {
@@ -52,7 +54,6 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
   const [showForegroundSync, setShowForegroundSync] = useState(false);
   const [statusReady, setStatusReady] = useState(false);
-  const [, setTick] = useState(0); // para forzar re-render del reloj
 
   // Refs para evitar closures obsoletas en los efectos
   const consecutiveErrorsRef = useRef(0);
@@ -61,17 +62,10 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
   const lastTriggerRef = useRef<"manual" | "auto_poll" | "startup">("auto_poll");
   intervalMsRef.current = intervalMs;
 
-  // Calculo de segundos desde el ultimo sync (con re-render cada segundo)
-  useEffect(() => {
-    const ticker = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(ticker);
-  }, []);
-
-  const secondsSinceSync: number | null = lastSyncedAt
-    ? Math.floor((Date.now() - new Date(lastSyncedAt).getTime()) / 1000)
-    : null;
-
-  const isStale = secondsSinceSync !== null && secondsSinceSync * 1000 > intervalMs * 2;
+  // Plan 156 F4 — el tic-tac de 1s (antes aquí, re-renderizaba TicketBoard
+  // entero 60×/min) se movió a la hoja SyncStatusBar. Este hook ya no calcula
+  // secondsSinceSync/isStale ni fuerza re-render por segundo; solo expone
+  // lastSyncedAt, del que la hoja deriva "hace Xs"/stale localmente.
 
   const shouldRefreshTicketQueries = (
     data: TicketSyncResult & { idempotent?: boolean }
@@ -233,11 +227,9 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
 
   return {
     lastSyncedAt,
-    secondsSinceSync,
     isSyncing: syncMutation.isPending && showForegroundSync,
     syncError,
     triggerSync,
-    isStale,
     consecutiveErrors,
   };
 }

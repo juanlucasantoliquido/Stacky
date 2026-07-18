@@ -17,9 +17,15 @@
  */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Tickets, Executions } from "../api/endpoints";
+import { Tickets } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
-import type { AgentExecution, Ticket } from "../types";
+import type { AgentExecution, ExecutionsSummary, Ticket } from "../types";
+import {
+  executionsSummaryQueryKey,
+  fetchExecutionsSummary,
+  selectRunningByTicket,
+  summaryRefetchInterval,
+} from "../services/executionsSummary";
 
 export interface RunningStatusResult {
   /** Set de ticket_ids que tienen stacky_status="running" en BD */
@@ -33,9 +39,6 @@ export interface RunningStatusResult {
   /** Lista de tickets activos (requiere pasar el listado de tickets) */
   getRunningTickets: (tickets: Ticket[]) => Ticket[];
 }
-
-/** Intervalo de polling para ejecuciones activas (ms) */
-const EXEC_POLL_INTERVAL = 5_000;
 
 /** Intervalo de refetch para la lista de tickets cuando hay actividad (ms) */
 const TICKETS_ACTIVE_POLL_INTERVAL = 8_000;
@@ -57,27 +60,24 @@ export function useRunningStatus(): RunningStatusResult {
     },
   });
 
-  // ── Fuente 2: polling de ejecuciones activas (metadata + fallback) ────────
-  const { data: activeExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-active", activeProjectName],
-    queryFn: () => Executions.list({ status: "running", project: activeProjectName }),
-    refetchInterval: EXEC_POLL_INTERVAL,
+  // ── Fuente 2: latido único de ejecuciones activas (metadata + fallback) ────
+  // Plan 156 F2: UNA sola query al summary (scope=project) reemplaza los 3
+  // polls previos (running/preparing/queued). La key incluye activeProjectName
+  // para invalidar al cambiar de proyecto; se pasa el mismo nombre al fetch para
+  // preservar EXACTO el filtro por proyecto del código anterior.
+  const { data: summary } = useQuery<ExecutionsSummary>({
+    queryKey: [...executionsSummaryQueryKey("project"), activeProjectName],
+    queryFn: () => fetchExecutionsSummary("project", activeProjectName),
+    // La forma (query)=>number recibe el último dato para aplicar el idle
+    // backoff (×2) cuando no hay runs activos, apilado con el de visibilidad.
+    refetchInterval: (query) => summaryRefetchInterval(document.visibilityState, query.state.data),
     staleTime: 0,
   });
 
-  const { data: preparingExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-preparing", activeProjectName],
-    queryFn: () => Executions.list({ status: "preparing", project: activeProjectName }),
-    refetchInterval: EXEC_POLL_INTERVAL,
-    staleTime: 0,
-  });
-
-  const { data: queuedExecs } = useQuery<AgentExecution[]>({
-    queryKey: ["executions-queued", activeProjectName],
-    queryFn: () => Executions.list({ status: "queued", project: activeProjectName }),
-    refetchInterval: EXEC_POLL_INTERVAL,
-    staleTime: 0,
-  });
+  const { ids: execTicketIds, byTicket } = useMemo(
+    () => (summary ? selectRunningByTicket(summary) : { ids: new Set<number>(), byTicket: new Map<number, AgentExecution>() }),
+    [summary],
+  );
 
   // ── Combinar ambas fuentes ─────────────────────────────────────────────────
   const runningTicketIds = useMemo<Set<number>>(() => {
@@ -88,19 +88,11 @@ export function useRunningStatus(): RunningStatusResult {
     }
     // Fuente 2: executions activas (fallback — captura el caso donde
     // stacky_status aún no llegó al cliente pero ya hay ejecución)
-    for (const e of [...(preparingExecs ?? []), ...(activeExecs ?? []), ...(queuedExecs ?? [])]) {
-      ids.add(e.ticket_id);
-    }
+    for (const id of execTicketIds) ids.add(id);
     return ids;
-  }, [tickets, preparingExecs, activeExecs, queuedExecs]);
+  }, [tickets, execTicketIds]);
 
-  const runningByTicket = useMemo<Map<number, AgentExecution>>(() => {
-    const map = new Map<number, AgentExecution>();
-    for (const e of [...(preparingExecs ?? []), ...(activeExecs ?? []), ...(queuedExecs ?? [])]) {
-      if (!map.has(e.ticket_id)) map.set(e.ticket_id, e);
-    }
-    return map;
-  }, [preparingExecs, activeExecs, queuedExecs]);
+  const runningByTicket = byTicket;
 
   const isTicketRunning = useMemo(
     () => (ticketId: number) => runningTicketIds.has(ticketId),

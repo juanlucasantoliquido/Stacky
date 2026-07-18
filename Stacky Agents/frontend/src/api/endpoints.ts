@@ -30,6 +30,7 @@ import type {
   AgentExecution,
   AgentType,
   AgentWorkflowConfig,
+  ExecutionsSummary,
   ContextBlock,
   InitProjectPayload,
   PackDefinition,
@@ -1264,6 +1265,13 @@ export const Executions = {
     if (q.days) params.set("days", String(q.days));
     const qs = params.toString();
     return api.get<AgentExecution[]>(`/api/executions${qs ? `?${qs}` : ""}`);
+  },
+  /** Plan 156 F1 — latido unico: running/preparing/queued en UNA respuesta. */
+  summary: (scope: "project" | "all_projects" = "project", project?: string | null) => {
+    const qs = new URLSearchParams();
+    qs.set("scope", scope);
+    if (project) qs.set("project", project);
+    return api.get<ExecutionsSummary>(`/api/executions/summary?${qs.toString()}`);
   },
   byId: (id: number) => api.get<AgentExecution>(`/api/executions/${id}`),
   approve: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/approve`),

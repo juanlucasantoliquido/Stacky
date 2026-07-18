@@ -30,6 +30,14 @@
   background: var(--mono-bg);
 }
 
+.dropped {
+  padding: 2px 0 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 .line {
   display: flex;
   gap: 10px;

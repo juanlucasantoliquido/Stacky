@@ -14,14 +14,13 @@
 
 import React from "react";
 import styles from "./SyncStatusBar.module.css";
+import { secondsSince, isStaleAt } from "./syncStatus";
 
 interface SyncStatusBarProps {
   lastSyncedAt: string | null;
-  secondsSinceSync: number | null;
   isSyncing: boolean;
   syncError: string | null;
   onSyncClick: () => void;
-  isStale: boolean;
   intervalMs?: number;
 }
 
@@ -32,16 +31,24 @@ function formatSeconds(sec: number): string {
   return s > 0 ? `${min}m ${s}s` : `${min}m`;
 }
 
-export function SyncStatusBar({
+function SyncStatusBarBase({
   lastSyncedAt,
-  secondsSinceSync,
   isSyncing,
   syncError,
   onSyncClick,
-  isStale,
   intervalMs = 45_000,
 }: SyncStatusBarProps): React.ReactElement {
   const agingThresholdSec = 60;
+
+  // Plan 156 F4 — el reloj de 1s vive ACÁ (en la hoja), no en useTicketSync.
+  // React.memo (abajo) evita que este tic-tac suba y re-renderice el board.
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const ticker = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
+  const secondsSinceSync = secondsSince(lastSyncedAt, now);
+  const isStale = isStaleAt(lastSyncedAt, intervalMs, now);
 
   if (isSyncing) {
     return (
@@ -117,4 +124,6 @@ export function SyncStatusBar({
   );
 }
 
+// Plan 156 F4 — memoizado: el tic-tac de 1s propio NO debe re-renderizar al padre.
+export const SyncStatusBar = React.memo(SyncStatusBarBase);
 export default SyncStatusBar;

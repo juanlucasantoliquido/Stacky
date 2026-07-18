@@ -174,6 +174,7 @@ _FROZEN_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "STACKY_ADO_EDIT_SWEEP_HOURS": (1, None),
     "STACKY_DB_COMPARE_WATCH_INTERVAL_MIN": (5, 1440),  # Plan 178
     "STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY": (1, 100),  # Plan 178
+    "STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES": (100, 50000),  # Plan 180
 }
 
 

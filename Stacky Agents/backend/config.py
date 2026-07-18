@@ -175,6 +175,21 @@ class Config:
         os.getenv("STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY", "48")
     )
 
+    # ── Plan 180 — Puente diff→repo (índice read-only de scripts ticketeados) ──
+    # Default ON: read-only sobre archivos LOCALES del workspace ya configurado;
+    # sin credenciales, sin red, sin acciones automáticas. Sin workspace o sin
+    # .sql => no-op inocuo. GLOBS/MAX_FILES: el default efectivo vive acá (gotcha
+    # Plan 63/81: el spec del registry no lleva default=).
+    STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS: str = os.getenv(
+        "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS", "trunk/BD/**/*.sql,**/BD/**/*.sql"
+    ).strip()
+    STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES: int = int(
+        os.getenv("STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES", "5000")
+    )
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

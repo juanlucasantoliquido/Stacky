@@ -491,6 +491,11 @@ $HarnessTestFiles = @(
   "tests/test_plan178_events.py"
   "tests/test_plan178_baseline.py"
   "tests/test_plan178_api.py"
+  # — Plan 180 · Puente diff→repo (índice read-only de scripts SQL ticketeados) —
+  "tests/test_plan180_extract.py"
+  "tests/test_plan180_scanner.py"
+  "tests/test_plan180_coverage.py"
+  "tests/test_plan180_api.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

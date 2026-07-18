@@ -332,6 +332,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_RADAR_ENABLED",        # Plan 178 — radar de ambientes (matriz/baseline/tendencia/avisos)
         "STACKY_DB_COMPARE_WATCH_INTERVAL_MIN",   # Plan 178 — intervalo del vigía de drift
         "STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY",  # Plan 178 — presupuesto diario del vigía
+        "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",  # Plan 180 — puente diff→repo (índice read-only de scripts ticketeados)
+        "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",    # Plan 180 — globs de scripts del repo (CSV)
+        "STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",  # Plan 180 — cap de archivos escaneados por refresh
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3292,6 +3295,38 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=1,
         max_value=100,
+    ),
+    # ── Plan 180 — Puente diff→repo: índice de scripts SQL ticketeados ────────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",
+        type="bool",
+        default=True,  # read-only sobre archivos LOCALES del workspace ya configurado; sin credenciales, sin red, sin acciones automáticas => ninguna excepción dura aplica. Sin workspace o sin .sql => no-op inocuo. Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: puente al repo (scripts ticketeados)",
+        description="Indexa (solo lectura) los scripts .sql ticketeados del workspace del proyecto activo y muestra qué ítems del diff ya tienen script candidato. Solo informa: nunca excluye, edita ni ejecuta nada.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",
+        type="csv",
+        label="Comparador BD: patrones de scripts del repo (CSV)",
+        description="Globs relativos al workspace_root del proyecto activo donde viven los .sql ticketeados. Default: trunk/BD/**/*.sql,**/BD/**/*.sql (convención del prior art). Patrones absolutos, con ':' o con '..' se ignoran (log).",
+        group="global",
+        # NO default= acá: mismo gotcha que STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC
+        # (Plan 122) — default_is_known() trata cualquier spec.default no-None como
+        # "curado" y ese set es reservado a bools True. El valor real vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",
+        type="int",
+        label="Comparador BD: máx. archivos escaneados por refresh",
+        description="Cap duro de archivos .sql procesados por escaneo del puente al repo; excedente = índice truncado REPORTADO. Default 5000.",
+        group="global",
+        # NO default= acá: mismo gotcha; el valor real "5000" vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=100,
+        max_value=50000,
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
     # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de

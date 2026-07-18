@@ -3716,7 +3716,21 @@ export const DevOpsDeployments = {
       "/api/devops/deployments/diagnose",
       { run_id: runId },
     ),
+  // Plan 188 — run fallido → paquete de evidencia (solo-lectura local, sin secretos).
+  evidence: (appId: string, target: string, runId: string) =>
+    api.post<{ evidence: DeployEvidenceBundle }>(
+      "/api/devops/deployments/evidence",
+      { app_id: appId, target, run_id: runId },
+    ),
 };
+
+/** Plan 188 — paquete de evidencia de un run fallido (contrato congelado F2). */
+export interface DeployEvidenceBundle {
+  summary: string;
+  modal_text: string;
+  markdown: string;
+  json_payload: { schema_version: string; kind: string; [k: string]: unknown };
+}
 
 // Plan 105 — Consola remota por servidor
 export interface RemoteConsoleConversation {

@@ -8,13 +8,15 @@
  */
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { DevOpsDeployments, DevOps, type DeployApp, type DeployOverviewApp } from '../../api/endpoints';
+import { DevOpsDeployments, DevOps, Incidents, type DeployApp, type DeployOverviewApp } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { useWorkbench } from '../../store/workbench';
 import {
   buildTargetCards, rollbackChoices, confirmRequirement, waveOrder, formatDora,
   buildPendingPresetHandoff, showCreatePipelineCta, type TargetCard,
 } from './deploymentsModel';
+import { isFailedStatus, evidenceToFiles } from './deployEvidence';
+import IncidentResolverModal from '../IncidentResolverModal';
 import styles from './devops.module.css';
 
 export interface DeploymentsSectionProps {
@@ -57,8 +59,41 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
   const [rollbackTarget, setRollbackTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Plan 188 — puente run fallido → incidencia. El botón "Armar incidencia…"
+  // sólo aparece si el resolutor (131/166) está habilitado; su estado se
+  // consulta una vez (si el endpoint da 404/error, el botón nunca se muestra).
+  const [incidentInit, setIncidentInit] = useState<{ runId: string; text: string; files: File[] } | null>(null);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const resolverStatusQuery = useQuery({
+    queryKey: ['incidents-status'],
+    queryFn: () => Incidents.status(),
+    retry: false,
+    staleTime: 60_000,
+  });
+  const resolverEnabled = resolverStatusQuery.data?.enabled === true;
+
   const apps: DeployOverviewApp[] = overviewQuery.data?.apps ?? [];
   const app = apps.find((a) => a.id === selectedAppId) ?? apps[0] ?? null;
+
+  const handleArmarIncidencia = async (card: TargetCard) => {
+    if (!app) return;
+    const runId = app.targets.find((t) => t.key === card.key)?.last?.run_id;
+    if (!runId) {
+      setEvidenceError('No hay un run reciente para este destino');
+      return;
+    }
+    setEvidenceError(null);
+    try {
+      const { evidence } = await DevOpsDeployments.evidence(app.id, card.key, runId);
+      setIncidentInit({
+        runId,
+        text: evidence.modal_text,
+        files: evidenceToFiles(runId, evidence.markdown, evidence.json_payload),
+      });
+    } catch {
+      setEvidenceError('No se pudo armar la evidencia');
+    }
+  };
 
   const selectApp = (id: string) => {
     setSelectedAppId(id);
@@ -230,6 +265,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
           </div>
 
           {actionError && <div className={styles.alertError}>{actionError}</div>}
+          {evidenceError && <div className={styles.alertError}>{evidenceError}</div>}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
             {cards.map((card) => (
@@ -254,6 +290,11 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                   </label>
                   {card.canRollback && (
                     <button type="button" onClick={() => setRollbackTarget(card.key)}>Rollback</button>
+                  )}
+                  {resolverEnabled && isFailedStatus(card.status) && (
+                    <button type="button" onClick={() => void handleArmarIncidencia(card)}>
+                      Armar incidencia…
+                    </button>
                   )}
                 </div>
               </div>
@@ -329,6 +370,17 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                 <button type="button" onClick={() => setRollbackTarget(null)}>Cerrar</button>
               </div>
             </div>
+          )}
+
+          {/* Plan 188 — C4: modal CONDICIONAL + key={runId} para forzar remount
+              por run (useState(init) no re-inicializa un modal ya montado). */}
+          {incidentInit && (
+            <IncidentResolverModal
+              key={incidentInit.runId}
+              initialText={incidentInit.text}
+              initialFiles={incidentInit.files}
+              onClose={() => setIncidentInit(null)}
+            />
           )}
         </>
       )}

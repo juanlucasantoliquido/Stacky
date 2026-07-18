@@ -726,3 +726,65 @@
   color: var(--dbc-danger);
   font-size: 0.85rem;
 }
+
+/* Plan 181 — barra de masking del data-diff (columnas protegidas + HITL revelar) */
+.maskingBar {
+  border: 1px solid var(--dbc-warn);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.maskingTitle {
+  font-weight: 600;
+  color: var(--dbc-warn);
+  margin: 0;
+}
+
+.maskingLegend {
+  flex-basis: 100%;
+  color: var(--dbc-unchanged);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.maskingTableRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.maskingTableName {
+  font-family: monospace;
+  color: var(--dbc-unchanged);
+}
+
+.maskingChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--dbc-unchanged);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.maskingReveal,
+.maskingHide {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--dbc-info);
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.maskingHide {
+  color: var(--dbc-unchanged);
+}

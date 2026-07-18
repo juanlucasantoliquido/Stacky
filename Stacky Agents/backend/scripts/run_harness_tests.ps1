@@ -479,6 +479,11 @@ $HarnessTestFiles = @(
   "tests/test_plan182_data_merge_emitters.py"
   "tests/test_plan182_data_merge_bundle.py"
   "tests/test_plan182_data_merge_e2e_sqlite.py"
+  # — Plan 181 · Masking determinista de secretos en el data-diff (presentación) —
+  "tests/test_plan181_masking_core.py"
+  "tests/test_plan181_prefs.py"
+  "tests/test_plan181_response.py"
+  "tests/test_plan181_api.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -22,6 +22,7 @@ import {
   type DataDiff,
 } from "./dataDiffLogic";
 import { isTerminal, nextPollDelayMs } from "./useCompareRun";
+import { DataMaskingBar } from "./DataMaskingBar";
 import styles from "./dbcompare.module.css";
 
 const MAX_TABLES = 20;
@@ -151,6 +152,12 @@ export function DataParitySection({ run, onRunUpdate }: Props) {
 
       {dataDiff && dataDiff.status === "running" && <p>{dataDiff.phase}</p>}
       {dataDiff && dataDiff.status === "error" && <div className={styles.errorBanner}>{dataDiff.error}</div>}
+      {dataDiff && dataDiff.status === "done" && (
+        <DataMaskingBar
+          tables={dataDiff.tables}
+          onChanged={() => DbCompare.getRun(run.run_id).then(onRunUpdate).catch(() => undefined)}
+        />
+      )}
       {dataDiff && dataDiff.status === "done" && <DataDiffTables tables={dataDiff.tables} />}
     </section>
   );

@@ -152,6 +152,16 @@ class Config:
         "STACKY_DB_COMPARE_DATA_MERGE_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 181 — Masking determinista de secretos/PII en el data-diff ──────
+    # Default ON: presentación protegida por default; revelar = 1 click persistido
+    # (HITL). No conecta/publica nada, no escribe fuera de data_dir(); ninguna de
+    # las 4 excepciones duras aplica. Curada en _CURATED_DEFAULTS_ON. OFF = respuesta
+    # del run byte-idéntica a main (KPI-2). La exclusión de data_diff de la LISTA de
+    # runs (perímetro) es incondicional, no depende de esta flag.
+    STACKY_DB_COMPARE_MASKING_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_MASKING_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

@@ -24,6 +24,7 @@ import type {
 } from "../components/dbcompare/dbcompareTypes";
 import type { Manifest } from "../components/dbcompare/scriptsLogic";
 import type { DataCandidate } from "../components/dbcompare/dataDiffLogic";
+import type { MaskingPrefs } from "../components/dbcompare/maskingLogic";
 import type {
   ActiveProjectResponse,
   AgentDefinition,
@@ -4286,4 +4287,11 @@ export const DbCompareDemo = {
     api.delete<{ ok: boolean; removed_aliases: string[]; files_removed: boolean; error: string | null }>(
       "/api/db-compare/demo",
     ),
+};
+
+// Plan 181 — Masking de secretos en el data-diff (prefs por columna).
+export const DbCompareMasking = {
+  getPrefs: () => api.get<{ ok: boolean; prefs: MaskingPrefs }>("/api/db-compare/masking/prefs"),
+  putOverride: (body: { schema: string; table: string; column: string; state: "visible" | "masked" | "auto" }) =>
+    api.post<{ ok: boolean; prefs: MaskingPrefs }>("/api/db-compare/masking/prefs", body),
 };

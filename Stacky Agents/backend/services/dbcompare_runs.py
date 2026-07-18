@@ -224,7 +224,7 @@ def list_runs(limit: int = 50) -> list[dict]:
             run = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        meta = {k: v for k, v in run.items() if k != "diff"}
+        meta = {k: v for k, v in run.items() if k not in ("diff", "data_diff")}  # Plan 181: la lista JAMÁS arrastra filas (los secretos crudos viajaban por acá) ni el peso del data-diff
         meta["stale"] = _is_stale(run)
         runs.append(meta)
     runs.sort(key=lambda r: r.get("started_at") or "", reverse=True)

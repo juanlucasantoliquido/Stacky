@@ -227,7 +227,8 @@ def get_run_route(run_id):
     run = dbcompare_runs.get_run(run_id)
     if run is None:
         return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
-    return jsonify(run)
+    from services import dbcompare_masking  # Plan 181 — masking de presentación del data-diff
+    return jsonify(dbcompare_masking.apply_to_run_response(run))
 
 
 @bp.get("/runs/<run_id>/export.md")

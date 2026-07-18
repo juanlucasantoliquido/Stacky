@@ -328,6 +328,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_DEMO_ENABLED",         # Plan 183 — sandbox de demostración
         "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (tipos exactos)
         "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",   # Plan 182 — scripts de datos v2 (MERGE idempotente)
+        "STACKY_DB_COMPARE_MASKING_ENABLED",      # Plan 181 — masking de secretos en el data-diff (presentación)
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3238,6 +3239,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         default=True,  # ON: mejora invisible del ARTEFACTO generado (upsert set-based idempotente); nada se ejecuta solo, el operador sigue revisando/ejecutando. OFF = bundle byte-idéntico a v1 (data_insert). Curada en _CURATED_DEFAULTS_ON.
         label="Comparador BD: scripts de datos v2 (MERGE idempotente)",
         description="Emite un MERGE/upsert set-based por tabla para filas faltantes + UPDATE con guard anti-no-op NULL-safe; DELETE por PK intacto. Re-ejecutar las piezas DML es seguro y convergente. OFF = scripts v1 (INSERT idempotente por fila).",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 181 — Masking determinista de secretos/PII en el data-diff ───────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_MASKING_ENABLED",
+        type="bool",
+        default=True,  # presentación protegida por default; revelar = 1 click persistido (HITL); ninguna excepción dura aplica. OFF = respuesta del run byte-idéntica a main. Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: masking de secretos en el data-diff",
+        description="Enmascara por default los valores de columnas sensibles (password/token/connection string) en las respuestas de presentación del data-diff; el motor, el disco y los scripts DML del bundle quedan intactos. Revelar una columna es 1 click humano persistido. OFF = respuesta cruda byte-idéntica a v1.",
         group="global",
         requires="STACKY_DB_COMPARE_ENABLED",
     ),

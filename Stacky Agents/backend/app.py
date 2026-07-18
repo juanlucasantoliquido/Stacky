@@ -324,6 +324,9 @@ def create_app() -> Flask:
     init_db()
     install_console_log_handler()
 
+    from services.lifecycle_log import install_shutdown_hook
+    install_shutdown_hook()   # Plan 163 F3 — firmar el shutdown en system_logs
+
     # Plan 153 — migracion one-shot de markers legacy al publish_ledger (idempotente, sin red).
     if os.getenv("STACKY_TEST_MODE", "").strip() not in ("1", "true"):
         try:

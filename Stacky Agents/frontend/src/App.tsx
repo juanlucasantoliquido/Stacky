@@ -42,37 +42,17 @@ import AppSidebar from "./components/shell/AppSidebar";
 import {
   computeVisibleTabs, parseCollapsed, SIDEBAR_COLLAPSED_KEY,
 } from "./components/shell/shellNav";
+// Plan 165 F3 — fuente única del contrato de rutas (type Tab/TAB_PATHS/parseo).
+import { parseRoute, serializeRoute, TAB_PATHS, type Tab, type RouteState } from "./services/routes";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
-
-const TAB_PATHS: Record<Tab, string> = {
-  team: "/",
-  tickets: "/tickets",
-  review: "/review",
-  unblocker: "/unblocker",
-  pm: "/pm",
-  logs: "/logs",
-  settings: "/settings",
-  docs: "/docs",
-  memory: "/memory",
-  diagnostics: "/diagnostics",
-  history: "/history",
-  migrador: "/migrador",
-  devops: "/devops",
-  dbcompare: "/dbcompare", // Plan 122 [FIX C3]
-  costcenter: "/costcenter", // Plan 142
-  planes: "/planes",
-};
-
-function tabFromPath(pathname: string): Tab {
-  const found = (Object.entries(TAB_PATHS) as [Tab, string][])
-    .find(([, path]) => path !== "/" && pathname.startsWith(path));
-  return found?.[0] ?? "team";
-}
-
 export default function App() {
-  const [tab, setTab] = useState<Tab>(() => tabFromPath(window.location.pathname));
+  // Plan 165 F3 (C1) — la ruta es ESTADO (no un ref congelado): popstate y la
+  // navegación in-app la actualizan, y las páginas reciben props VIVAS (exec/subTab).
+  const [route, setRoute] = useState<RouteState>(() =>
+    parseRoute(window.location.pathname, window.location.search),
+  );
+  const tab = route.tab;  // todo el JSX existente que lee `tab` sigue idéntico
   // Plan 136 F7 — espejo del tab para handlers registrados con deps [] (el
   // closure del keydown quedaba congelado en el valor de montaje).
   const tabRef = useRef(tab);
@@ -116,20 +96,24 @@ export default function App() {
   const reviewCount = useReviewInboxCount();
   const reviewBadge = reviewBadgeLabel(reviewCount);
 
-  const selectTab = (next: Tab) => {
-    setTab(next);
-    const path = TAB_PATHS[next];
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, "", path);
-    }
+  // Plan 165 F3 [A1] — navigateToRoute: LA API de navegación tipada del router
+  // casero. selectTab/navigateTo la reusan por dentro; es el punto de consumo del
+  // plan 152. El pushState queda FUERA de todo updater de setState (regla §3.4
+  // StrictMode: los updaters se invocan dos veces en dev → duplicarían historial).
+  const navigateToRoute = (next: RouteState) => {
+    const url = serializeRoute(next);
+    const current = window.location.pathname + window.location.search;
+    if (url !== current) window.history.pushState({}, "", url);
+    setRoute(next);
   };
 
-  const navigateTo = (path: string) => {
-    const targetTab = tabFromPath(path);
-    setTab(targetTab);
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, "", path);
-    }
+  // selectTab con query:{} LIMPIA el querystring al cambiar de tab (idéntico al
+  // pushState(TAB_PATHS[next]) anterior); los filtros persisten en localStorage (F2).
+  const selectTab = (next: Tab) => navigateToRoute({ tab: next, query: {} });
+
+  const navigateTo = (path: string) => {           // la paleta sigue pasando strings
+    const [pathname, search = ""] = path.split("?");
+    navigateToRoute(parseRoute(pathname, search ? `?${search}` : ""));
   };
 
   useEffect(() => {
@@ -174,11 +158,23 @@ export default function App() {
     };
   }, []);
 
+  // Plan 165 F3 (C1) — popstate re-deriva TODO el estado (tab+subtab+exec), no
+  // solo el tab: Atrás/Adelante mueven sub-tab y drawer con la página ya montada.
   useEffect(() => {
-    const onPopState = () => setTab(tabFromPath(window.location.pathname));
+    const onPopState = () =>
+      setRoute(parseRoute(window.location.pathname, window.location.search));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  // Plan 165 F3 (C5) — normalización backward-compat al montar: parseRoute ya
+  // llevó /?exec= a {tab:"history"}; acá reescribimos la barra a la forma canónica.
+  // replaceState (no pushState): no duplica historial ni dispara el double-push.
+  useEffect(() => {
+    const canonical = serializeRoute(route);
+    const current = window.location.pathname + window.location.search;
+    if (canonical !== current) window.history.replaceState({}, "", canonical);
+  }, []);  // SOLO al montar
 
   // Plan 152 F3 — valor efectivo del flag del Centro de Actividad. FAIL-OPEN:
   // default ON aunque el flag no esté en la respuesta o falle la red (UI aditiva).
@@ -280,11 +276,11 @@ export default function App() {
       {tab === "unblocker" && <UnblockerPage />}
       {tab === "pm"       && sections.pm   && <PMCommandCenter />}
       {tab === "logs"     && sections.logs && <SystemLogsPage />}
-      {tab === "settings" && <SettingsPage />}
+      {tab === "settings" && <SettingsPage subTab={route.subtab ?? null} />}
       {tab === "docs"     && sections.docs && <DocsPage />}
       {tab === "memory"   && sections.memory && <MemoryPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
-      {tab === "history"     && <ExecutionHistoryPage />}
+      {tab === "history"     && <ExecutionHistoryPage exec={route.exec ?? null} />}
       {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
       {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
       {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FlowConfigPage from "./FlowConfigPage";
 import ConfigTransferPanel from "../components/ConfigTransferPanel";
 import ClientProfileEditor from "../components/ClientProfileEditor";
@@ -24,13 +24,16 @@ import {
   setSoundEnabled,
 } from "../services/executionNotifier";
 import { readQueryParam } from "../utils/queryParams";
+import { parseRoute, serializeRoute } from "../services/routes";
+import { type SubTab, isValidSubTab } from "../services/settingsSubTabs";
 import { Input, Select, Checkbox, Button } from "../components/ui";
 import { isAutoShowEnabled, setAutoShow, safeStorage } from "../services/onboarding";
 import { useOnboardingStore } from "../store/onboardingStore";
 import useOptimisticPending from "../hooks/useOptimisticPending";
 import styles from "./SettingsPage.module.css";
 
-type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "notifications" | "harness" | "playground" | "appearance";
+// Plan 165 F3 — SubTab movido a services/settingsSubTabs.ts (módulo puro) para
+// que routes/tests lo consuman sin arrastrar el árbol JSX de esta página.
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
@@ -140,8 +143,12 @@ function SectionsVisibilityPanel() {
   );
 }
 
-export default function SettingsPage() {
-  const [sub, setSub] = useState<SubTab>("flow");
+export default function SettingsPage({ subTab }: { subTab?: string | null }) {
+  // Plan 165 F3 — sub-tab direccionable por path (/settings/<sub>): la prop VIVA
+  // subTab siembra el estado inicial y lo sincroniza en popstate / nav in-app.
+  const [sub, setSub] = useState<SubTab>(
+    isValidSubTab(subTab) ? subTab : "flow",
+  );
   // Plan 129 — deep-link receptor: ?flag=<key> abre el sub-tab Arnes y resalta esa fila.
   const [highlightFlagKey, setHighlightFlagKey] = useState<string | null>(null);
 
@@ -151,6 +158,30 @@ export default function SettingsPage() {
     setSub("harness");
     setHighlightFlagKey(raw);
   }, []);
+
+  // Plan 165 F3 (C1) — sincronización con la prop VIVA (patrón lastApplied):
+  // reacciona SOLO a cambios de subTab (popstate / navegación in-app), sin pisar
+  // la elección local del operador por click.
+  const lastAppliedSub = useRef(subTab);
+  useEffect(() => {
+    if (subTab !== lastAppliedSub.current) {
+      lastAppliedSub.current = subTab;
+      if (isValidSubTab(subTab)) setSub(subTab);
+    }
+  }, [subTab]);
+
+  // Plan 165 F3 [A2] — write-back: el sub-tab elegido por CLICK se refleja en el
+  // path (/settings/<sub>) vía replaceState con guard. "flow" (default) va SIN
+  // segmento (/settings), preservando las URLs de primer nivel de hoy. El receptor
+  // ?flag= (que fuerza "harness") sigue teniendo precedencia; el write-back
+  // reescribirá el path a /settings/harness — coherente (la URL dice lo que se ve).
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    if (current.tab !== "settings") return;          // guard: solo montada en /settings
+    const next = serializeRoute({ ...current, subtab: sub === "flow" ? undefined : sub });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) window.history.replaceState({}, "", next);
+  }, [sub]);
 
   return (
     <div className={styles.root}>

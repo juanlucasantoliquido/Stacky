@@ -1,13 +1,68 @@
 # Plan 196 — Gestor de Planes accionable: acciones HITL del pipeline (proponer / criticar / implementar / supervisar) con selector dinámico de modelo+effort
 
-**Estado:** PROPUESTO — v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky) · pendiente de `criticar-y-mejorar-plan`
+**Estado:** CRITICADO — v2 (2026-07-18) · Veredicto: APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky) · **Juez:** `criticar-y-mejorar-plan` (adversarial, 2026-07-18)
 
-- **Versión:** v1 (PROPUESTO)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 PROPUESTO 2026-07-18)
 - **Fecha:** 2026-07-18
 - **Base:** EXTIENDE el Tablero de Planes (Plan 128, IMPLEMENTADO y VIVO en `/planes`) — PROHIBIDO crear un tablero nuevo.
 - **Consume:** el contrato del Plan 159 (catálogo unificado modelos/efforts, CRITICADO v2 sin implementar) — relación exacta en §2.3 y fase F1.
 - **Ortogonal a:** Plan 167 (Centro de Evolución / RSI) — deslinde exacto en §2.4.
 - **Nota de numeración:** este doc nació como "194"; una sesión paralela tomó el 194 mientras se redactaba y luego TAMBIÉN el 195 en la ventana entre el `ls` en frío y el `Write` (doble colisión en la misma corrida — el hazard de numeración es real y continuo). Número final: 196, verificado libre inmediatamente después del rename.
+
+### CHANGELOG v1 → v2 (crítica adversarial, 2026-07-18 — anclas RE-verificadas contra código vivo)
+
+- **C1 (IMPORTANTE, resuelto):** `PlansPipeline.run` pasa de `api.post` a `rawPost`
+  (`client.ts:28-63`). Motivo verificado: el wrapper `api.*` **LANZA** en non-2xx
+  (`client.ts:76-78`), por lo que el branch de error del `launch()` v1 era código
+  muerto y los 409/404/502 tipados de §4.2 llegaban al operador como excepción cruda.
+  `rawPost` existe EXACTAMENTE para "manejar 409 sin catch" y ya está importado en
+  `endpoints.ts:1`. F4 y F5 reescritos.
+- **C2 (IMPORTANTE, resuelto):** fila `running` zombie tras restart del backend
+  (el watchdog de 1800 s muere con el proceso). Se documenta la red existente
+  (reaper `recover_stale_running_tickets`: startup `app.py:421-422` + daemon `:437`,
+  cierra executions > `EXECUTION_TIMEOUT_MINUTES=120` como `error`) y
+  `find_running_pipeline_execution` gana auto-defensa `_started_recently` (cap 120
+  min, helper puro testeable) — el pipeline NUNCA queda bloqueado para siempre
+  (§4.5, §6, F2 test 10).
+- **C3 (IMPORTANTE, resuelto):** F0 decía "asegurar `default=True`" — inferencia
+  prohibida: el FlagSpec vivo de `STACKY_PLANS_BOARD_ENABLED`
+  (`harness_flags.py:3298-3309`, la ancla v1 `:3267` ya driftó) NO tiene kwarg
+  `default=` y sus 2 líneas de comentario dicen lo contrario ("SIN default= …
+  no curada"). Ahora F0 da la edición LITERAL: insertar `default=True,` y reemplazar
+  el comentario por texto exacto (evita prosa contradictoria, clase G13).
+- **C4 (IMPORTANTE, resuelto):** prohibiciones git ampliadas en `_AGENT_TEMPLATE_MD` y
+  `system_prompt()` — la corrida COMMITEA docs y código en un repo con sesiones
+  paralelas: se suman `git commit --amend`, `git rebase`, `git push --force` y
+  `--no-verify` (gotcha de amend con sesiones paralelas registrado en la casa).
+  Test 8 endurecido.
+- **C5 (IMPORTANTE, resuelto):** la F1 constructiva ahora deja RASTRO: si construyó
+  F0-F3 del 159, actualiza la línea `**Estado:**` del doc 159 a IMPLEMENTADO PARCIAL
+  (F0-F3 por Plan 196) y la commitea por pathspec. Sin esto el tablero 128 mentiría
+  (seguiría sugiriendo "implementar" completo) y una corrida futura de
+  `implementar-plan-stacky 159` no sabría que solo faltan F4-F6.
+- **C6 (MENOR, resuelto):** `current_user` se importa de `api._helpers` (definición
+  real; `api/agents.py:21` solo lo re-importa — verificado: `def current_user` NO
+  existe en `api/agents.py`).
+- **C7 (MENOR, resuelto):** eliminado el hedge "(o del símbolo equivalente…)" del test
+  9 de F2: `plans_pipeline_context.py` importa `from runtime_paths import
+  stacky_agents_dir` (espejo `incident_context.py:11`, verificado) y el monkeypatch
+  target es `services.plans_pipeline_context.stacky_agents_dir`.
+- **C8 (MENOR, resuelto):** `_sanitize_idea` mapea a espacio los control chars
+  no-whitespace (ESC 0x1B, DEL 0x7F — gotcha byte ESC de la casa) ANTES de colapsar
+  whitespace; test 4 extendido.
+- **C9 (MENOR, resuelto):** la creación del pool ticket entra al MISMO try del
+  lanzamiento → con DB rota responde 502 `agent_launch_failed`, nunca 500 genérico
+  (el v1 violaba su propio patrón Plan 39 B1).
+- **C10 (MENOR, resuelto):** guard local anti doble-click en F5 (estado `launching`)
+  además del lock del backend (KPI-3), que sigue siendo la defensa dura.
+- **C11 (MENOR, resuelto):** aclarado en §4.1 que `ValueError("plan_number_requerido")`
+  es defensa del módulo puro — vía HTTP el chequeo 6 responde antes con 404.
+- **[ADICIÓN ARQUITECTO] Semáforo de working tree:** nueva función read-only
+  `working_tree_status()` (`git status --porcelain`, mismo patrón defensivo que
+  `recent_commits_for_doc`) viaja en la respuesta de §4.4; la UI muestra un chip
+  "WIP: N cambios sin commitear" junto a los botones. El operador confirma INFORMADO
+  del estado del repo antes de lanzar una corrida que commitea — HITL amplificado,
+  cero pollers, cero trabajo extra, solo informativo (no bloquea nada).
 
 > Este documento está redactado para que un **MODELO MENOR** (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente **SIN inferir nada**. Los nombres de símbolos, rutas, shapes
@@ -309,10 +364,16 @@ _ACTION_COMMANDS: dict[str, str] = {
 | `implementar` | `/implementar-plan-stacky <NN>` |
 | `supervisar` | `/supervisar-implementaciones-planes <NN>` |
 
-Saneado de `idea` (función `_sanitize_idea`): `" ".join(idea.split())` (colapsa TODO
-whitespace, incluidos saltos de línea — el prompt debe ser UNA línea para que el runtime
-lo parsee como slash-command) y cap a **500** caracteres. Resultado vacío → sin sufijo.
+Saneado de `idea` (función `_sanitize_idea`, orden EXACTO — C8): (1) todo control char
+no-whitespace se mapea a espacio — `ord(ch) < 32` salvo `\t`/`\n`/`\r`, más el DEL
+`0x7F` (gotcha byte ESC de la casa: un `0x1B` crudo rompe consumidores JSON-strict);
+(2) `" ".join(cleaned.split())` (colapsa TODO whitespace, incluidos saltos de línea —
+el prompt debe ser UNA línea para que el runtime lo parsee como slash-command);
+(3) cap a **500** caracteres. Resultado vacío → sin sufijo.
 `criticar/implementar/supervisar` sin `plan_number` → `ValueError("plan_number_requerido")`.
+**Nota (C11):** vía HTTP ese ValueError NUNCA se ve — el endpoint valida el número antes
+(chequeo 6 → 404 `plan_not_found`); el raise es defensa del módulo puro (no busques un
+400 para este caso).
 
 ### 4.2 Payload y respuestas de `POST /api/plans-board/actions/run`
 
@@ -349,7 +410,7 @@ Orden de validación CONGELADO (primer fallo corta):
 | 7 | la acción está permitida para el `estado` del plan (tabla §4.3) | 409 `{"ok": false, "error": "action_not_allowed_for_estado", "estado": "<estado>", "allowed": ["..."]}` |
 | 8 | no hay corrida viva (dentro del lock §4.5) | 409 `{"ok": false, "error": "pipeline_action_already_running", "execution_id": <int>}` |
 | 9 | lanzamiento OK | 202 `{"ok": true, "execution_id": <int>, "status": "running", "prompt_line": "<prompt exacto lanzado>"}` |
-| — | `run_agent` lanza excepción | 502 `{"ok": false, "error": "agent_launch_failed", "message": "<str(exc)>"}` (espejo de `api/agents.py:1036-1046`) |
+| — | el bloque pool-ticket + `run_agent` lanza excepción (C9: la creación del pool está DENTRO del try) | 502 `{"ok": false, "error": "agent_launch_failed", "message": "<str(exc)>"}` (espejo de `api/agents.py:1036-1046`; nunca 500 genérico) |
 
 ### 4.3 Tabla estado → acciones permitidas (única fuente, backend y frontend espejo)
 
@@ -381,6 +442,7 @@ Respuesta 200:
   "ok": true,
   "busy": false,
   "running_execution_id": null,
+  "working_tree": {"dirty": true, "changes": 12},
   "runs": [
     {
       "id": 123, "status": "completed",
@@ -398,8 +460,15 @@ Fuente: query `AgentExecution` (`models.py:207`) con
 serializando `started_at/completed_at` con `.isoformat()` (None → null) y extrayendo
 `action/plan_number/model/effort/prompt_line` de
 `metadata_dict["plans_pipeline"]` (dict que persiste el endpoint tras lanzar — espejo
-EXACTO del patrón `metadata_dict` de `api/agents.py:1062-1073`). `busy` =
-`running_execution_id is not None`.
+EXACTO del patrón `metadata_dict` de `api/agents.py:1062-1073`; la propiedad tiene
+SETTER, `models.py:263-265` verificado). `busy` = `running_execution_id is not None`.
+
+**[ADICIÓN ARQUITECTO] `working_tree`:** resultado de
+`plans_pipeline.working_tree_status()` (F2) — `{"dirty": bool, "changes": <int>}` o
+`null` si no hay repo/git o el subproceso falló. SOLO informativo (la UI muestra un
+chip de advertencia; NO bloquea ni deshabilita acciones): el operador confirma
+sabiendo si el working tree tiene WIP de sesiones paralelas antes de lanzar una
+corrida que commitea. Se calcula on-demand en cada GET (sin pollers, G9).
 
 ### 4.5 Serialización y pool
 
@@ -409,22 +478,44 @@ En `services/plans_pipeline.py`:
 _LAUNCH_LOCK = threading.Lock()          # serializa el chequeo-y-lanzamiento
 PLANS_PIPELINE_ADO_ID = -9               # sentinel del pool (G11; re-verificar libre)
 PLANS_PIPELINE_AGENT_TYPE = "plans_pipeline"
+_RUNNING_STALE_CAP_MINUTES = 120         # C2 — espejo del reaper (EXECUTION_TIMEOUT_MINUTES)
+
+def _started_recently(started_at, now=None) -> bool:
+    """C2 — False si una corrida 'running' es más vieja que el cap (fila zombie
+    tras un restart del backend). None (recién creada, sin timestamp) cuenta como
+    reciente. Puro y testeable sin DB (started_at es datetime.utcnow naive,
+    models.py:223)."""
+    if started_at is None:
+        return True
+    from datetime import datetime, timedelta
+    now = now or datetime.utcnow()
+    return (now - started_at) < timedelta(minutes=_RUNNING_STALE_CAP_MINUTES)
 
 def find_running_pipeline_execution() -> int | None:
-    """id de la corrida plans_pipeline en status 'running' más reciente, o None."""
+    """id de la corrida plans_pipeline 'running' más reciente y NO stale, o None.
+
+    C2 — las filas zombie (backend reiniciado con una corrida viva) NO bloquean
+    el pipeline: el reaper existente ya las cierra como 'error'
+    (recover_stale_running_tickets — startup app.py:421-422 con
+    STACKY_RECOVERY_ON_STARTUP + daemon app.py:437, timeout
+    EXECUTION_TIMEOUT_MINUTES=120); este cap de 120 min es la defensa propia por
+    si ese daemon está apagado."""
     from db import session_scope
     from models import AgentExecution
     with session_scope() as s:
-        row = (
+        rows = (
             s.query(AgentExecution)
             .filter(
                 AgentExecution.agent_type == PLANS_PIPELINE_AGENT_TYPE,
                 AgentExecution.status == "running",
             )
             .order_by(AgentExecution.id.desc())
-            .first()
+            .all()
         )
-        return row.id if row else None
+        for row in rows:
+            if _started_recently(row.started_at):
+                return row.id
+        return None
 ```
 
 El endpoint envuelve chequeo 8 + lanzamiento en `with plans_pipeline._LAUNCH_LOCK:`.
@@ -498,8 +589,15 @@ desde el panel de flags de la UI sin acción del operador.
     ).strip().lower() == "true"
    ```
 2. `Stacky Agents/backend/services/harness_flags.py` — (a) en el `FlagSpec` existente de
-   `STACKY_PLANS_BOARD_ENABLED` (ubicar por key literal, cerca de `:3267`): asegurar
-   `default=True`; (b) insertar inmediatamente después un `FlagSpec` nuevo:
+   `STACKY_PLANS_BOARD_ENABLED` (ubicar por key literal; hoy `:3298-3309`) — edición
+   LITERAL (C3, el FlagSpec vivo NO tiene kwarg `default=`): insertar la línea
+   `default=True,` inmediatamente después de la línea `group="global",`, y REEMPLAZAR
+   las 2 líneas de comentario existentes dentro del FlagSpec
+   (`# SIN default= (queda None: opt-in, no curada en _CURATED_DEFAULTS_ON).` y
+   `# SIN requires= (no tiene master). SIN env_only= (queda UI-editable).`) por esta
+   única línea de comentario:
+   `# Plan 196 F0 — default ON (curada en _CURATED_DEFAULTS_ON). Sigue sin requires= (es root) y sin env_only= (UI-editable).`
+   (b) insertar inmediatamente después un `FlagSpec` nuevo:
    ```python
     FlagSpec(
         key="STACKY_PLANS_PIPELINE_ACTIONS_ENABLED",
@@ -571,6 +669,18 @@ hardcodeo) resuelto por el contrato ya criticado, sin inventar nada nuevo.
    `deployment/build_release.ps1`). PROHIBIDO implementar F4-F6 del 159 en esta corrida.
 3. Si YA existe (159 implementado por otra corrida): NO reescribas nada; corré SOLO los
    comandos de aceptación de F0-F3 del doc 159 y verificá exit 0.
+4. **Rastro obligatorio (C5) — SOLO si el paso 2 CONSTRUYÓ (si fuiste por el paso 3,
+   NO toques el doc 159):** en
+   `Stacky Agents/docs/159_PLAN_CATALOGO_UNIFICADO_MODELOS_EFFORTS_DINAMICO.md`,
+   localizá la PRIMERA línea que empieza con `**Estado:**` y reemplazala ENTERA por:
+   `**Estado:** IMPLEMENTADO PARCIAL — F0-F3 ejecutadas por la F1 del Plan 196 (2026-07-18); F4-F6 (migración de los 3 modales) pendientes. Base: CRITICADO v2.`
+   Commit SOLO de ese doc por pathspec (G12):
+   `git add -- "Stacky Agents/docs/159_PLAN_CATALOGO_UNIFICADO_MODELOS_EFFORTS_DINAMICO.md"`
+   + commit descriptivo; SIN push. Motivo: el tablero 128 deriva el estado del
+   encabezado (`normalize_estado` tolera "IMPLEMENTADO PARCIAL" →
+   `IMPLEMENTADO_PARCIAL`, `plans_board.py:35-48`) — sin este rastro el board
+   mentiría (seguiría sugiriendo "implementar" completo) y una corrida futura de
+   `implementar-plan-stacky 159` no sabría que solo le faltan F4-F6.
 
 **Comandos de aceptación (los del doc 159, citados acá para el runner):**
 ```
@@ -579,7 +689,9 @@ hardcodeo) resuelto por el contrato ya criticado, sin inventar nada nuevo.
 .venv\Scripts\python.exe -m pytest tests/test_plan159_model_catalog_flag.py -q
 npx vitest run src/services/__tests__/modelCatalogFallback.test.ts
 ```
-**Criterio binario:** los 4 comandos exit 0.
+**Criterio binario:** los 4 comandos exit 0. Además, SOLO si el paso 2 construyó:
+`Select-String -Path "Stacky Agents\docs\159_PLAN_CATALOGO_UNIFICADO_MODELOS_EFFORTS_DINAMICO.md" -Pattern "IMPLEMENTADO PARCIAL"`
+≥ 1 línea (rastro C5).
 **Flag:** `STACKY_MODEL_CATALOG_ENABLED` (default ON, definida por el 159).
 **Impacto por runtime:** el catálogo expone los 3 runtimes (contrato 159); este plan
 solo consumirá `runtimes.claude_code_cli`.
@@ -616,6 +728,7 @@ corrida corra con cwd = raíz del repo de Stacky.
    PLANS_PIPELINE_AGENT_TYPE = "plans_pipeline"
    _IDEA_MAX_CHARS = 500
    _GIT_TIMEOUT_SEC = 5
+   _RUNNING_STALE_CAP_MINUTES = 120  # C2 — espejo del reaper (EXECUTION_TIMEOUT_MINUTES)
 
    _ACTION_COMMANDS: dict[str, str] = {
        "proponer": "/proponer-plan-stacky",
@@ -636,7 +749,12 @@ corrida corra con cwd = raíz del repo de Stacky.
    def _sanitize_idea(idea: str | None) -> str:
        if not idea:
            return ""
-       return " ".join(idea.split())[:_IDEA_MAX_CHARS].strip()
+       # C8 — control chars no-whitespace a espacio (gotcha byte ESC 0x1B de la casa).
+       cleaned = "".join(
+           " " if ((ord(ch) < 32 and ch not in "\t\n\r") or ord(ch) == 127) else ch
+           for ch in idea
+       )
+       return " ".join(cleaned.split())[:_IDEA_MAX_CHARS].strip()
 
 
    def build_action_prompt(action: str, plan_number_str: str | None, idea: str | None) -> str:
@@ -667,21 +785,35 @@ corrida corra con cwd = raíz del repo de Stacky.
        return root / ".claude" / "skills" / _ACTION_SKILL_DIRS[action] / "SKILL.md"
 
 
+   def _started_recently(started_at, now=None) -> bool:
+       """C2 — False si una corrida 'running' es más vieja que el cap (fila
+       zombie tras restart del backend). None cuenta como reciente."""
+       if started_at is None:
+           return True
+       from datetime import datetime, timedelta
+       now = now or datetime.utcnow()
+       return (now - started_at) < timedelta(minutes=_RUNNING_STALE_CAP_MINUTES)
+
+
    def find_running_pipeline_execution() -> int | None:
+       """id de la corrida running más reciente NO stale, o None (§4.5, C2)."""
        from db import session_scope
        from models import AgentExecution
 
        with session_scope() as s:
-           row = (
+           rows = (
                s.query(AgentExecution)
                .filter(
                    AgentExecution.agent_type == PLANS_PIPELINE_AGENT_TYPE,
                    AgentExecution.status == "running",
                )
                .order_by(AgentExecution.id.desc())
-               .first()
+               .all()
            )
-           return row.id if row else None
+           for row in rows:
+               if _started_recently(row.started_at):
+                   return row.id
+           return None
 
 
    def serialize_run(row) -> dict:
@@ -732,6 +864,33 @@ corrida corra con cwd = raíz del repo de Stacky.
                continue
            commits.append({"hash": parts[0], "date": parts[1], "subject": parts[2]})
        return commits
+
+
+   def working_tree_status() -> dict | None:
+       """[ADICIÓN ARQUITECTO] `git status --porcelain` read-only. None ante
+       CUALQUIER problema (sin repo, sin git, timeout). Solo informativo: la UI
+       muestra un chip de advertencia; nunca bloquea acciones."""
+       from services import plans_board
+
+       root = plans_board.repo_root()
+       if root is None:
+           return None
+       try:
+           result = subprocess.run(
+               ["git", "status", "--porcelain"],
+               cwd=str(root),
+               capture_output=True,
+               text=True,
+               encoding="utf-8",
+               errors="replace",
+               timeout=_GIT_TIMEOUT_SEC,
+           )
+       except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+           return None
+       if result.returncode != 0:
+           return None
+       changes = [ln for ln in result.stdout.splitlines() if ln.strip()]
+       return {"dirty": bool(changes), "changes": len(changes)}
    ```
 
 2. `Stacky Agents/backend/services/plans_pipeline_context.py` — espejo EXACTO de
@@ -740,6 +899,10 @@ corrida corra con cwd = raíz del repo de Stacky.
    `ensure_plans_pipeline_agent_file() -> Path` (misma lógica de 3 niveles: existe → no
    tocar; template del repo `backend/agents/PlansPipeline.agent.md` si existe; si no,
    `_AGENT_TEMPLATE_MD` embebido; `write_text(..., encoding="utf-8", newline="")`).
+   Import del dir EXACTO (C7, espejo de `incident_context.py:11`):
+   `from runtime_paths import stacky_agents_dir` — ese nombre importado en el módulo
+   es el que monkeypatchea el test 9
+   (`services.plans_pipeline_context.stacky_agents_dir`).
    `_AGENT_TEMPLATE_MD` LITERAL:
    ```markdown
    # PlansPipeline — Ejecutor del pipeline de planes de Stacky
@@ -753,8 +916,10 @@ corrida corra con cwd = raíz del repo de Stacky.
    Ejecutá EXACTAMENTE esa skill con ese argumento, siguiendo sus pasos al pie de la letra.
 
    ## Reglas duras
-   - PROHIBIDO `git push` (el push es siempre manual del operador).
-   - PROHIBIDO `git stash`, `git reset --hard` y cambiar de rama.
+   - PROHIBIDO `git push` (incluido `git push --force`): el push es siempre manual del operador.
+   - PROHIBIDO `git stash`, `git reset`, `git rebase`, `git commit --amend`,
+     `git checkout`/`git switch` (cambiar de rama) y el flag `--no-verify`:
+     hay sesiones paralelas commiteando en este repo; amend/rebase pisan commits ajenos.
    - Una corrida = una skill: no amplíes el alcance ni encadenes otras etapas.
    - Tu último mensaje es el resumen que la skill pide (ruta del artefacto + resumen corto).
 
@@ -785,8 +950,10 @@ corrida corra con cwd = raíz del repo de Stacky.
                "es UNA linea con una skill (/proponer-plan-stacky, "
                "/criticar-y-mejorar-plan, /implementar-plan-stacky o "
                "/supervisar-implementaciones-planes) y su argumento: ejecutala "
-               "exactamente, sin ampliar el alcance. PROHIBIDO git push, git stash, "
-               "git reset --hard o cambiar de rama: el push es siempre manual del operador."
+               "exactamente, sin ampliar el alcance. PROHIBIDO git push (y push "
+               "--force), git stash, git reset, git rebase, git commit --amend, "
+               "cambiar de rama y --no-verify: hay sesiones paralelas en este repo "
+               "y el push es siempre manual del operador."
            )
    ```
 
@@ -816,15 +983,16 @@ corrida corra con cwd = raíz del repo de Stacky.
    `-9 plans pipeline` al final de la enumeración existente.
 
 **Tests primero — NUEVO `Stacky Agents/backend/tests/test_plan196_pipeline_service.py`**
-(9 casos; sin Flask, sin red):
+(11 casos; sin Flask, sin red):
 1. `test_action_commands_frozen` — `_ACTION_COMMANDS` es EXACTAMENTE el dict de §4.1
    (comparación de igualdad completa).
 2. `test_build_prompt_criticar` — `build_action_prompt("criticar", "187", None) == "/criticar-y-mejorar-plan 187"`
    y no contiene `"\n"`.
 3. `test_build_prompt_proponer_sin_idea` — `== "/proponer-plan-stacky"`.
-4. `test_build_prompt_proponer_sanea_idea` — idea `"linea1\nlinea2\t  x" + "a" * 600`
+4. `test_build_prompt_proponer_sanea_idea` — idea `"linea1\nlinea2\t  x\x1b[31m " + "a" * 600`
    → resultado de UNA línea, arranca con `"/proponer-plan-stacky Tema: linea1 linea2 x"`,
-   largo total ≤ `len("/proponer-plan-stacky Tema: ") + 500`.
+   NO contiene `"\x1b"` (C8) ni `"\n"`, largo total ≤
+   `len("/proponer-plan-stacky Tema: ") + 500`.
 5. `test_build_prompt_requiere_numero` — `pytest.raises(ValueError)` para
    `build_action_prompt("implementar", None, None)`.
 6. `test_allowed_actions_table` — los 5 mapeos: `("PROPUESTO", None) → ("criticar",)`;
@@ -836,15 +1004,26 @@ corrida corra con cwd = raíz del repo de Stacky.
    `plans_pipeline.PLANS_PIPELINE_ADO_ID in _ONE_SHOT_ADO_IDS` y
    `plans_pipeline.PLANS_PIPELINE_ADO_ID == -9`.
 8. `test_agent_registered` — `import agents; a = agents.get("plans_pipeline")`;
-   `a is not None`, `a.name == "Plans Pipeline Runner"`, `"push" in a.system_prompt()`.
-9. `test_ensure_agent_file_writes_template` — monkeypatch de
-   `plans_pipeline_context.stacky_agents_dir` (o del símbolo equivalente que importe el
-   módulo, espejo del test del 131) a `tmp_path`; primera llamada crea
+   `a is not None`, `a.name == "Plans Pipeline Runner"`, y `sp = a.system_prompt()`
+   contiene las prohibiciones clave (C4): `"push" in sp`, `"--amend" in sp`
+   (vía `git commit --amend`) y `"--no-verify" in sp`.
+9. `test_ensure_agent_file_writes_template` —
+   `monkeypatch.setattr("services.plans_pipeline_context.stacky_agents_dir", lambda: tmp_path)`
+   (C7 — símbolo FIJO: el módulo lo importa de `runtime_paths`, espejo
+   `incident_context.py:11`); primera llamada crea
    `PlansPipeline.agent.md` con `"PROHIBIDO \`git push\`"` dentro; segunda llamada con el
    archivo editado a mano NO lo pisa.
+10. `test_started_recently_cap` (C2) — `_started_recently(None) is True`;
+    `_started_recently(datetime.utcnow() - timedelta(minutes=5)) is True`;
+    `_started_recently(datetime.utcnow() - timedelta(hours=3)) is False`.
+11. `test_working_tree_status` ([ADICIÓN ARQUITECTO]) — (a) monkeypatch
+    `services.plans_board.repo_root` → `lambda: None` ⇒ `working_tree_status() is None`;
+    (b) monkeypatch `plans_pipeline.subprocess.run` por un fake que devuelve
+    `returncode=0`, `stdout=" M a.py\n?? b.ts\n"` y `services.plans_board.repo_root`
+    → `lambda: tmp_path` ⇒ `working_tree_status() == {"dirty": True, "changes": 2}`.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan196_pipeline_service.py -q`
-**Criterio binario:** exit 0, `9 passed`.
+**Criterio binario:** exit 0, `11 passed`.
 **Flag:** ninguna nueva en esta fase (el gate vive en F3).
 **Impacto por runtime:** módulo puro; el override de workspace es claude-only por diseño.
 **Trabajo del operador: ninguno.**
@@ -963,7 +1142,7 @@ def plans_pipeline_run():
     effort_override = _clamp_effort_for_model(effort_override, model_override)
 
     import agent_runner
-    from api.agents import current_user
+    from api._helpers import current_user  # C6 — definición real (api/agents.py:21 solo la re-importa)
     from db import session_scope
     from models import AgentExecution, Ticket
     from services.plans_pipeline_context import ensure_plans_pipeline_agent_file
@@ -978,37 +1157,39 @@ def plans_pipeline_run():
                 "execution_id": running_id,
             }), 409
 
-        # pool ticket (patrón EXACTO api/agents.py:966-984, sentinel -9)
-        with session_scope() as session:
-            pool_ticket = (
-                session.query(Ticket)
-                .filter_by(ado_id=plans_pipeline.PLANS_PIPELINE_ADO_ID, project="default")
-                .first()
-            )
-            if pool_ticket is None:
-                pool_ticket = Ticket(
-                    ado_id=plans_pipeline.PLANS_PIPELINE_ADO_ID,
-                    external_id=plans_pipeline.PLANS_PIPELINE_ADO_ID,
-                    project="default",
-                    stacky_project_name="default",
-                    title="Plans Pipeline Pool Ticket",
-                    work_item_type="Task",
-                    ado_state="Active",
-                )
-                session.add(pool_ticket)
-                session.flush()
-            pool_ticket_id = pool_ticket.id
-
-        context_blocks = [{
-            "id": "plans-pipeline-command",
-            "kind": "raw-conversation",
-            "title": "Skill del pipeline a ejecutar",
-            "content": prompt_line,
-            "source": {"type": "plans_board_action", "action": action,
-                       "plan_number": plan_number},
-        }]
-
+        # C9 — pool ticket + lanzamiento bajo el MISMO try: con DB rota
+        # (read-only, lock) responde 502 agent_launch_failed, nunca 500 genérico.
         try:
+            # pool ticket (patrón EXACTO api/agents.py:966-984, sentinel -9)
+            with session_scope() as session:
+                pool_ticket = (
+                    session.query(Ticket)
+                    .filter_by(ado_id=plans_pipeline.PLANS_PIPELINE_ADO_ID, project="default")
+                    .first()
+                )
+                if pool_ticket is None:
+                    pool_ticket = Ticket(
+                        ado_id=plans_pipeline.PLANS_PIPELINE_ADO_ID,
+                        external_id=plans_pipeline.PLANS_PIPELINE_ADO_ID,
+                        project="default",
+                        stacky_project_name="default",
+                        title="Plans Pipeline Pool Ticket",
+                        work_item_type="Task",
+                        ado_state="Active",
+                    )
+                    session.add(pool_ticket)
+                    session.flush()
+                pool_ticket_id = pool_ticket.id
+
+            context_blocks = [{
+                "id": "plans-pipeline-command",
+                "kind": "raw-conversation",
+                "title": "Skill del pipeline a ejecutar",
+                "content": prompt_line,
+                "source": {"type": "plans_board_action", "action": action,
+                           "plan_number": plan_number},
+            }]
+
             execution_id = agent_runner.run_agent(
                 agent_type="plans_pipeline",
                 ticket_id=pool_ticket_id,
@@ -1080,6 +1261,7 @@ def plans_pipeline_runs():
         "ok": True,
         "busy": running_id is not None,
         "running_execution_id": running_id,
+        "working_tree": plans_pipeline.working_tree_status(),  # [ADICIÓN ARQUITECTO]
         "runs": runs,
     })
 
@@ -1138,8 +1320,11 @@ flag-ON, monkeypatch SIEMPRE sobre la INSTANCIA
 9. `test_runs_history_serialization` — sembrar en DB (fixture de sesión del patrón de
    `tests/test_plan131_run_incident.py`) un `Ticket` pool + un `AgentExecution` con
    `agent_type="plans_pipeline"`, `status="completed"` y
-   `metadata_json` conteniendo `{"plans_pipeline": {"action": "proponer", ...}}` →
-   GET runs → 200, `runs[0]["action"] == "proponer"`, `busy is False`.
+   `metadata_json` conteniendo `{"plans_pipeline": {"action": "proponer", ...}}`, más
+   monkeypatch `services.plans_pipeline.working_tree_status` →
+   `lambda: {"dirty": False, "changes": 0}` →
+   GET runs → 200, `runs[0]["action"] == "proponer"`, `busy is False`, y
+   `body["working_tree"] == {"dirty": False, "changes": 0}` ([ADICIÓN ARQUITECTO]).
 10. `test_commits_endpoint` — (a) plan inexistente → 404 `plan_not_found`;
     (b) monkeypatch `services.plans_pipeline.recent_commits_for_doc` → `lambda f: None`
     con un plan del board fixture → `git_available is False` y `commits == []`.
@@ -1251,16 +1436,23 @@ export interface PipelineRunDto {
   action: string | null; plan_number: number | null;
   model: string | null; effort: string | null; prompt_line: string | null;
 }
+export interface WorkingTreeDto { dirty: boolean; changes: number }
 export interface PipelineRunsResponse {
-  ok: boolean; busy: boolean; running_execution_id: number | null; runs: PipelineRunDto[];
+  ok: boolean; busy: boolean; running_execution_id: number | null;
+  working_tree?: WorkingTreeDto | null;  // [ADICIÓN ARQUITECTO] null = sin git
+  runs: PipelineRunDto[];
 }
 export interface RunPipelineActionResponse {
   ok: boolean; execution_id?: number; status?: string; prompt_line?: string;
   error?: string; message?: string; estado?: string; allowed?: string[];
 }
 export const PlansPipeline = {
+  // C1 — rawPost, NUNCA api.post: el wrapper api.* LANZA en non-2xx
+  // (client.ts:76-78) y los 409/404/502 tipados de §4.2 deben leerse del body.
+  // rawPost (client.ts:28-63) existe exactamente para "manejar 409 sin catch"
+  // y ya está importado en endpoints.ts línea 1.
   run: (payload: unknown) =>
-    api.post<RunPipelineActionResponse>("/api/plans-board/actions/run", payload),
+    rawPost<RunPipelineActionResponse>("/api/plans-board/actions/run", payload),
   runs: (limit = 20) =>
     api.get<PipelineRunsResponse>(`/api/plans-board/actions/runs?limit=${limit}`),
   commits: (number: number) =>
@@ -1304,7 +1496,8 @@ sin inline styles.
 **Archivos a EDITAR (2):** `Stacky Agents/frontend/src/pages/PlansBoardPage.tsx` y
 `Stacky Agents/frontend/src/pages/PlansBoardPage.module.css` (todas las clases nuevas
 van acá — G6; nombres: `.actionsPanel`, `.actionsRow`, `.actionsSelect`,
-`.actionsNote`, `.runsList`, `.runRow`, `.runStatus`, `.commitsList`, `.busyChip`).
+`.actionsNote`, `.runsList`, `.runRow`, `.runStatus`, `.commitsList`, `.busyChip`,
+`.wipChip`).
 
 **Cableado EXACTO (sin decisiones libres):**
 1. Imports nuevos: `ConfirmButton` (default export,
@@ -1315,7 +1508,9 @@ van acá — G6; nombres: `.actionsPanel`, `.actionsRow`, `.actionsSelect`,
    `const [actionEffort, setActionEffort] = useState("")`,
    `const [proposeIdea, setProposeIdea] = useState("")`,
    `const [lastLaunch, setLastLaunch] = useState<string | null>(null)` (mensaje de
-   resultado, éxito o error).
+   resultado, éxito o error) y `const [launching, setLaunching] = useState(false)`
+   (C10 — guard local anti doble-click mientras el POST está en vuelo; la defensa
+   dura sigue siendo el lock del backend, KPI-3).
 3. Datos: `const { catalog } = useModelCatalog();`
    `const claudeCat = catalog.claude_code_cli;` — al resolver el catálogo, si
    `actionModel === ""` inicializarlo con `claudeCat?.default_model ?? ""` y
@@ -1337,29 +1532,40 @@ van acá — G6; nombres: `.actionsPanel`, `.actionsRow`, `.actionsSelect`,
    - Texto fijo `Runtime: Claude Code CLI` con `title={RUNTIME_ACTION_NOTE}` (§3.2).
    - Input de texto opcional para la idea (`placeholder="Idea para el próximo plan (opcional)"`,
      `value={proposeIdea}`).
-   - `<ConfirmButton>` con label `ACTION_LABEL.proponer`, deshabilitado si `busy`,
+   - `<ConfirmButton>` con label `ACTION_LABEL.proponer`, deshabilitado si `busy || launching` (C10),
      `onConfirm` → `launch("proponer", null)`.
    - Si `busy`: chip `.busyChip` con el texto
      `Corrida #${runsQuery.data?.running_execution_id} en curso — el pipeline corre de a una`.
+   - [ADICIÓN ARQUITECTO] Si `runsQuery.data?.working_tree?.dirty === true`: chip
+     `.wipChip` con el texto literal
+     `WIP: ${runsQuery.data.working_tree.changes} cambios sin commitear en el repo — las corridas commitean por pathspec; revisá antes de confirmar`.
+     SOLO informativo: NO deshabilita ningún botón.
 6. UI por card (en el drawer de detalle existente, `selectedNumber !== null`): por cada
    `a` de `allowedActionsForCard(plan.estado, plan.ledger?.doc_drift ?? null)` un
-   `<ConfirmButton>` con `ACTION_LABEL[a]`, deshabilitado si `busy`, `onConfirm` →
+   `<ConfirmButton>` con `ACTION_LABEL[a]`, deshabilitado si `busy || launching` (C10), `onConfirm` →
    `launch(a, plan.number)`. Debajo, lista de commits del query de commits
    (`hash — date — subject` por fila; si `git_available === false`, el texto literal
    `Sin git disponible en esta instalación`).
 7. Función `launch(action, planNumber)`:
    ```typescript
+   // C1 — PlansPipeline.run devuelve RawResponse<RunPipelineActionResponse>
+   // (rawPost NO lanza en 4xx/5xx): el éxito se lee de r.data y el error de
+   // r.errorBody. C10 — guard local `launching`.
    const launch = (action: PipelineAction, planNumber: number | null) => {
+     if (launching) return;
+     setLaunching(true);
      void PlansPipeline.run(buildRunPayload(action, planNumber, proposeIdea, actionModel, actionEffort))
        .then((r) => {
-         if (r.ok && r.execution_id) {
-           setLastLaunch(`Corrida #${r.execution_id} lanzada: ${r.prompt_line ?? action}`);
+         if (r.ok && r.data?.ok && r.data.execution_id) {
+           setLastLaunch(`Corrida #${r.data.execution_id} lanzada: ${r.data.prompt_line ?? action}`);
          } else {
-           setLastLaunch(`No se lanzó: ${r.error ?? "error desconocido"}${r.message ? " — " + r.message : ""}`);
+           const err = (r.errorBody ?? {}) as Partial<RunPipelineActionResponse>;
+           setLastLaunch(`No se lanzó (${r.status}): ${err.error ?? "error desconocido"}${err.message ? " — " + err.message : ""}`);
          }
        })
        .catch((e) => setLastLaunch(`No se lanzó: ${String(e)}`))
        .finally(() => {
+         setLaunching(false);
          void queryClient.invalidateQueries({ queryKey: ["plans-pipeline-runs"] });
          void queryClient.invalidateQueries({ queryKey: ["plans-board-list"] });
        });
@@ -1438,6 +1644,14 @@ v2 en un commit local SIN push (verificar con `git log --oneline -1` y `git stat
   muestran gratis porque entra por `run_agent`.
 - **CLI colgado / sesión zombie** → el pool entra en `_ONE_SHOT_ADO_IDS` (G11), y rige
   el timeout existente de 1800 s del runner (gotcha ya resuelto en el repo).
+- **Backend reiniciado con una corrida `running` (fila zombie en DB) — C2** → triple
+  red, toda REUSADA: (1) el reaper existente `recover_stale_running_tickets` la cierra
+  como `error` (startup `app.py:421-422` con `STACKY_RECOVERY_ON_STARTUP` + daemon
+  `app.py:437`, timeout `EXECUTION_TIMEOUT_MINUTES=120`); (2)
+  `find_running_pipeline_execution` ignora filas `running` más viejas que 120 min
+  (`_started_recently`, §4.5) — el pipeline NUNCA queda bloqueado para siempre aunque
+  el reaper esté apagado; (3) la cancelación manual sigue disponible en la superficie
+  existente de ejecuciones.
 - **Auth del CLI limitada (OAuth = solo Haiku, gotcha registrado)** → el runner YA tiene
   fallback de modelo (`_spawn_claude_with_fallback`,
   `claude_code_cli_runner.py:904-919`); el run degrada de modelo, no muere. El
@@ -1465,6 +1679,10 @@ v2 en un commit local SIN push (verificar con `git log --oneline -1` y `git stat
 - Streaming en vivo del log de la corrida dentro del tablero (existe en las superficies
   de ejecución actuales; duplicarlo acá es deuda).
 - Cancelación de corridas desde el tablero (usa la superficie existente de ejecuciones).
+- Módulos comunes de la hoja de ruta UX (197): `flagGate`, `copyService` (194) y el
+  Dialog canónico (164) NO se tocan acá. `ConfirmButton` es la primitiva de
+  confirmación VIGENTE del repo; su eventual migración al Dialog canónico es alcance
+  del 164/197, no de este plan (sin colisión: este plan solo la consume).
 
 ## 8. Glosario, orden de implementación y Definición de Hecho
 
@@ -1518,3 +1736,6 @@ Dependencias: F3 necesita F0+F2; F5 necesita F1 (hook del catálogo) + F4; F6 to
    implementación (con su resultado si se corrió).
 8. El módulo `services/plans_board.py` quedó BYTE-IDÉNTICO (`git diff --stat` no lo
    lista) — guardarraíl §3.5.
+9. C1 verificable:
+   `Select-String -Path "Stacky Agents\frontend\src\api\endpoints.ts" -Pattern "rawPost<RunPipelineActionResponse>"`
+   → 1 línea (el POST de acciones NO usa `api.post`, que lanza en non-2xx).

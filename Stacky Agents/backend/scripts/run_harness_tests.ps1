@@ -467,6 +467,11 @@ $HarnessTestFiles = @(
   # — Plan 156 · Latido unico —
   "tests/test_executions_summary.py"
   "tests/test_access_log_suppress_pollers.py"
+  # Plan 163 - Identidad de build y huellas
+  "tests/test_app_version_build_identity.py"
+  "tests/test_lifecycle_shutdown_log.py"
+  "tests/test_error_fingerprints_catalog.py"
+  "tests/test_error_fingerprints_scan.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

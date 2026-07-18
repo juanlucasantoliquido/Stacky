@@ -2729,8 +2729,12 @@ export const CodeIntegrity = {
 
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
 export const Health = {
-  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }> =>
-    api.get<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }>("/api/diag/health"),
+  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean;
+                     source_commit?: string | null; built_at?: string | null;
+                     repo_head?: string | null; build_drift?: boolean }> =>
+    api.get<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean;
+              source_commit?: string | null; built_at?: string | null;
+              repo_head?: string | null; build_drift?: boolean }>("/api/diag/health"),
 };
 
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────

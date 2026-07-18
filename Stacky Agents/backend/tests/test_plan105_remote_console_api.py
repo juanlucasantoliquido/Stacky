@@ -5,6 +5,7 @@ Flask test client; run_remote/check_winrm/keyring mockeados.
 """
 from __future__ import annotations
 
+import json
 import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -137,7 +138,7 @@ class TestF2ExecRoute:
                 work_item_type="Task",
                 ado_state="Active",
                 external_id=None,  # Se sella después del commit (gotcha backfill db.py)
-                description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
+                description=json.dumps({"kind": "remote_console", "server_alias": "s1", "write_enabled": False}),
             )
             db_session.add(ticket)
             db_session.commit()
@@ -184,7 +185,7 @@ class TestF2ExecRoute:
                 work_item_type="Task",
                 ado_state="Active",
                 external_id=None,  # Se sella después del commit (gotcha backfill db.py)
-                description='{"kind":"remote_console","server_alias":"A","write_enabled":True}',
+                description=json.dumps({"kind": "remote_console", "server_alias": "A", "write_enabled": True}),
             )
             db_session.add(ticket)
             db_session.commit()
@@ -247,6 +248,22 @@ class TestF2Conversations:
         import config as _config
         from db import session_scope
         import json
+
+        # Plan 154 F3 — aislamiento: este test cuenta conversaciones GLOBALES por alias.
+        # Antes dependía de la purga incidental de _startup_sync (que el gate de test-mode
+        # del plan 154 F5.ii ahora saltea). Limpiar las conversaciones de consola previas
+        # lo vuelve determinista y honesto (no depende del orden de otros tests).
+        from api.devops_remote_console import _CONSOLE_ADO_ID
+        from models import AgentExecution
+        with session_scope() as db_session:
+            _prev = db_session.query(Ticket).filter(Ticket.ado_id == _CONSOLE_ADO_ID).all()
+            _prev_ids = [t.id for t in _prev]
+            if _prev_ids:
+                db_session.query(AgentExecution).filter(
+                    AgentExecution.ticket_id.in_(_prev_ids)
+                ).delete(synchronize_session=False)
+            for _t in _prev:
+                db_session.delete(_t)
 
         # Crear 2 conversaciones
         with session_scope() as db_session:
@@ -356,7 +373,7 @@ class TestF2Conversations:
                 work_item_type="Task",
                 ado_state="Active",
                 external_id=None,  # Se sella después del commit (gotcha backfill db.py)
-                description='{"kind":"remote_console","server_alias":"s1","write_enabled":False}',
+                description=json.dumps({"kind": "remote_console", "server_alias": "s1", "write_enabled": False}),
             )
             db_session.add(ticket)
             db_session.commit()

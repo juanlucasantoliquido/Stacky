@@ -1,0 +1,42 @@
+# Plan 154 F4 — allowlist congelada de lecturas legacy de flags REGISTRADAS
+# con os.getenv/os.environ.get + default local en backend/api y backend/services.
+# Formato: <ruta relativa a backend>:<FLAG>   # motivo
+# Regla: SOLO puede BAJAR. Migrar la ocurrencia a config.config y borrar su linea.
+api/agents.py:STACKY_EVAL_GATE_MODE  # legacy plan 154 F4 — pendiente migrar a config.config
+api/agents.py:STACKY_PROJECT_AUTOPROFILE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/diag.py:STACKY_OPERATIONAL_HEALTH_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/phase5.py:STACKY_SPECULATIVE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_ADO_EDIT_LEARNING_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_ARTIFACT_RESCUE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_CATALOG_GROUNDING_WARNINGS_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_EPIC_CATALOG_GATE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_EPIC_GATE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_EPIC_SANITIZE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_EPIC_SUMMARY_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_TASK_GATE_BLOCKING  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_TASK_GATE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+api/tickets.py:STACKY_UNBLOCKER_COMPLETED_CAP  # legacy plan 154 F4 — pendiente migrar a config.config
+services/ado_client.py:STACKY_COMMENT_FULL_SCAN_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/ado_edit_learning.py:STACKY_ADO_SERVICE_IDENTITY  # legacy plan 154 F4 — pendiente migrar a config.config
+services/ado_edit_learning.py:STACKY_NEGATIVE_GOLDEN_FROM_EDITS_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/claude_code_cli_runner.py:STACKY_CLI_EGRESS_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/cli_feature_flags.py:STACKY_MEMORY_INJECTION_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/cli_feature_flags.py:STACKY_MEMORY_INJECT_SCOPES  # legacy plan 154 F4 — pendiente migrar a config.config
+services/codex_cli_runner.py:STACKY_CLI_EGRESS_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/context_enrichment.py:STACKY_DB_READONLY_DIRECTIVE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/context_enrichment.py:STACKY_INJECT_PROCESS_CATALOG  # legacy plan 154 F4 — pendiente migrar a config.config
+services/context_enrichment.py:STACKY_PUSH_REJECTIONS_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/context_enrichment.py:STACKY_RAG_CATALOG_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/context_enrichment.py:STACKY_RAG_CATALOG_TOP_K  # legacy plan 154 F4 — pendiente migrar a config.config
+services/grounding.py:STACKY_OUTPUT_GROUNDING_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/llm_router.py:STACKY_DIFFICULTY_ROUTING_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/memory_store.py:STACKY_MEMORY_CAPS_JSON  # legacy plan 154 F4 — pendiente migrar a config.config
+services/memory_store.py:STACKY_MEMORY_DIRECTIVE_MAX_CHARS  # legacy plan 154 F4 — pendiente migrar a config.config
+services/memory_store.py:STACKY_RETRIEVAL_EXPANSION_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/output_watcher.py:STACKY_ARTIFACT_INTAKE_ENABLED  # legacy plan 154 F4 — codigo de intake INTOCABLE por plan 154 (§7)
+services/output_watcher.py:STACKY_PENDING_TASK_STRICT_VALIDATION_ENABLED  # legacy plan 154 F4 — codigo de intake INTOCABLE por plan 154 (§7)
+services/post_run_memory.py:STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/run_preflight.py:STACKY_RUN_PREFLIGHT_GATE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config
+services/speculative.py:STACKY_SPECULATIVE_ENABLED  # legacy plan 154 F4 — pendiente migrar a config.config

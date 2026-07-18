@@ -287,8 +287,8 @@ def executions_history():
     Gated por STACKY_EXECUTION_HISTORY_ENABLED. Si OFF → 404 feature_disabled.
     Soporta filtros: project, agent_type, runtime, status (csv), days, limit (max 500), offset.
     """
-    import os as _os
-    if _os.getenv("STACKY_EXECUTION_HISTORY_ENABLED", "false").lower() not in {"1", "true", "on"}:
+    from config import config as _cfg
+    if not getattr(_cfg, "STACKY_EXECUTION_HISTORY_ENABLED", True):
         return jsonify({"error": "feature_disabled", "feature": "STACKY_EXECUTION_HISTORY_ENABLED"}), 404
 
     agent_type = request.args.get("agent_type")

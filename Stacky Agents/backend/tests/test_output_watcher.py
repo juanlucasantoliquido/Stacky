@@ -144,13 +144,14 @@ def _write_comment_html(repo_root: Path, ado_id: int, content: str = "<p>anális
 def _write_pending_task(repo_root: Path, epic_ado_id: int, rf_id: str, *, mtime_offset: float = -60.0):
     """Crea outputs/epic-{id}/{rf}/pending-task.json. Por defecto mtime es 60s atrás."""
     import json as _json
+    from tests.intake_fixtures import make_intake_payload
     d = repo_root / "Agentes" / "outputs" / f"epic-{epic_ado_id}" / rf_id
     d.mkdir(parents=True, exist_ok=True)
     p = d / "pending-task.json"
-    p.write_text(_json.dumps({
-        "rf_id": rf_id, "title": "test", "status": "pending_manual_creation",
-        "generated_at": "2026-05-16T00:00:00Z",
-    }), encoding="utf-8")
+    p.write_text(
+        _json.dumps(make_intake_payload(rf_id=rf_id, epic_ado_id=epic_ado_id)),
+        encoding="utf-8",
+    )
     past = time.time() + mtime_offset
     os.utime(p, (past, past))
     return p
@@ -178,13 +179,17 @@ def _write_pending_task_alt(repo_root: Path, epic_ado_id: int, rf_id: str, *, mt
     NO usa la canónica `Agentes/outputs/epic-{id}/`.
     """
     import json as _json
+    from tests.intake_fixtures import make_intake_payload
     d = repo_root / "output" / "tickets" / f"epic-{epic_ado_id}" / rf_id
     d.mkdir(parents=True, exist_ok=True)
     p = d / "pending-task.json"
-    p.write_text(_json.dumps({
-        "rf_id": rf_id, "title": "test-alt", "status": "pending_manual_creation",
-        "generated_at": "2026-06-01T00:00:00Z",
-    }), encoding="utf-8")
+    p.write_text(
+        _json.dumps(make_intake_payload(
+            rf_id=rf_id, epic_ado_id=epic_ado_id,
+            title="test-alt", generated_at="2026-06-01T00:00:00Z",
+        )),
+        encoding="utf-8",
+    )
     past = time.time() + mtime_offset
     os.utime(p, (past, past))
     return p
@@ -556,10 +561,11 @@ def test_mode_a_invokes_create_child_task_endpoint(client, repo_root_dir, monkey
     monkeypatch.setattr(_req, "post", _fake_post)
 
     monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")  # plan 154 F5.iii opt-in
 
     ticket_id = _mk_ticket(40207, work_item_type="Epic")
     _mk_execution(ticket_id)
-    _write_pending_task(repo_root_dir, 40207, "RF-001")
+    pt1 = _write_pending_task(repo_root_dir, 40207, "RF-001")
     _write_pending_task(repo_root_dir, 40207, "RF-002")
 
     w = AdoOutputWatcher(stable_delay_a=0.0)
@@ -570,6 +576,15 @@ def test_mode_a_invokes_create_child_task_endpoint(client, repo_root_dir, monkey
     for call in calls:
         assert "/by-ado/40207/create-child-task" in call["url"]
         assert call["body"]["completion_source"] == "output_watcher_auto"
+        assert call["body"]["pending_task_path"]  # el POST referencia el artefacto en disco
+
+    # Plan 154 F2 — el artefacto en disco cumple el contrato canónico de 9 campos.
+    import json as _json
+    from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
+    on_disk = _json.loads(pt1.read_text(encoding="utf-8"))
+    assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
+    assert on_disk["epic_id"] == 40207
+    assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
 
 
 def test_mode_a_auto_creates_without_running_execution(client, repo_root_dir, monkeypatch):
@@ -595,11 +610,12 @@ def test_mode_a_auto_creates_without_running_execution(client, repo_root_dir, mo
     import requests as _req
     monkeypatch.setattr(_req, "post", _fake_post)
     monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")  # plan 154 F5.iii opt-in
 
     # Execution COMPLETED (no running) — antes esto bloqueaba el auto-create.
     ticket_id = _mk_ticket(40299, work_item_type="Epic", stacky_status="completed")
     _mk_execution(ticket_id, status="completed")
-    _write_pending_task(repo_root_dir, 40299, "RF-001")
+    pt = _write_pending_task(repo_root_dir, 40299, "RF-001")
 
     w = AdoOutputWatcher(stable_delay_a=0.0)
     r = w.scan_once()
@@ -607,8 +623,17 @@ def test_mode_a_auto_creates_without_running_execution(client, repo_root_dir, mo
     # Auto-create SÍ se intentó pese a no haber execution running.
     assert len(calls) == 1
     assert "/by-ado/40299/create-child-task" in calls[0]["url"]
+    assert calls[0]["body"]["pending_task_path"]  # el POST referencia el artefacto en disco
     # No hay run vivo que cerrar → no cuenta como close.
     assert r["mode_a_closes"] == 0
+
+    # Plan 154 F2 — el artefacto en disco cumple el contrato canónico de 9 campos.
+    import json as _json
+    from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
+    on_disk = _json.loads(pt.read_text(encoding="utf-8"))
+    assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
+    assert on_disk["epic_id"] == 40299
+    assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
 
 
 def test_mode_a_auto_corrects_human_ep_label_dir(client, repo_root_dir, monkeypatch):
@@ -631,10 +656,11 @@ def test_mode_a_auto_corrects_human_ep_label_dir(client, repo_root_dir, monkeypa
     import requests as _req
     monkeypatch.setattr(_req, "post", _fake_post)
     monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")  # plan 154 F5.iii opt-in
 
     ticket_id = _mk_ticket(40941, work_item_type="Epic", title="EP-26026 - Busqueda de Cliente")
     _mk_execution(ticket_id)
-    _write_pending_task(repo_root_dir, 26026, "RF-026")
+    pt = _write_pending_task(repo_root_dir, 26026, "RF-026")
 
     w = AdoOutputWatcher(stable_delay_a=0.0)
     result = w.scan_once()
@@ -643,7 +669,16 @@ def test_mode_a_auto_corrects_human_ep_label_dir(client, repo_root_dir, monkeypa
     assert "/by-ado/40941/create-child-task" in calls[0]["url"]
     assert calls[0]["body"]["source_epic_ado_id"] == 26026
     assert calls[0]["body"]["allow_epic_id_mismatch"] is True
+    assert calls[0]["body"]["pending_task_path"]  # el POST referencia el artefacto en disco
     assert result["mode_a_closes"] == 1
+
+    # Plan 154 F2 — el artefacto en disco cumple el contrato canónico de 9 campos.
+    import json as _json
+    from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
+    on_disk = _json.loads(pt.read_text(encoding="utf-8"))
+    assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
+    assert on_disk["epic_id"] == 26026  # el mismo valor que el test pasó al helper
+    assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
 
 
 def test_mode_a_invalid_pending_task_is_terminal_skip(client, repo_root_dir, monkeypatch):
@@ -659,11 +694,14 @@ def test_mode_a_invalid_pending_task_is_terminal_skip(client, repo_root_dir, mon
         raise AssertionError("no debe llamar al endpoint con JSON inválido")
 
     monkeypatch.setattr(_req, "post", _fake_post)
+    # plan 154 F5.iii opt-in: sin esto el gate cortaria antes de la cuarentena y el
+    # test pasaria por la razon equivocada (early-return, no rechazo del intake).
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")
 
     rf_dir = repo_root_dir / "Agentes" / "outputs" / "epic-40401" / "RF-BAD"
     rf_dir.mkdir(parents=True, exist_ok=True)
     pt = rf_dir / "pending-task.json"
-    pt.write_text("", encoding="utf-8")
+    pt.write_text("", encoding="utf-8")  # payload INVALIDO a proposito: NO usar la factory
 
     first = ow_mod._auto_create_pending_tasks(epic_ado_id=40401, pending_files=[pt])
     second = ow_mod._auto_create_pending_tasks(epic_ado_id=40401, pending_files=[pt])
@@ -697,6 +735,7 @@ def test_mode_a_terminal_4xx_is_quarantined_not_retried(client, repo_root_dir, m
         return _FakeResp()
 
     monkeypatch.setattr(_req, "post", _fake_post)
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")  # plan 154 F5.iii opt-in
     pt = _write_pending_task(repo_root_dir, 40402, "RF-PARENT404")
 
     first = ow_mod._auto_create_pending_tasks(
@@ -714,6 +753,15 @@ def test_mode_a_terminal_4xx_is_quarantined_not_retried(client, repo_root_dir, m
     assert second == {"created": 0, "skipped": 1, "errors": 0}
     assert len(calls) == 1
     assert calls[0]["body"]["project"] == "RSPACIFICO"
+    assert calls[0]["body"]["pending_task_path"]  # el POST referencia el artefacto en disco
+
+    # Plan 154 F2 — el artefacto en disco cumple el contrato canónico de 9 campos.
+    import json as _json
+    from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
+    on_disk = _json.loads(pt.read_text(encoding="utf-8"))
+    assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
+    assert on_disk["epic_id"] == 40402
+    assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
 
 
 def test_mode_a_transient_auto_create_error_is_not_cached(client, repo_root_dir, monkeypatch):
@@ -736,18 +784,28 @@ def test_mode_a_transient_auto_create_error_is_not_cached(client, repo_root_dir,
 
     monkeypatch.setattr(_req, "post", _fake_post)
     monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")  # plan 154 F5.iii opt-in
 
     ticket_id = _mk_ticket(40403, work_item_type="Epic")
     _mk_execution(ticket_id)
-    _write_pending_task(repo_root_dir, 40403, "RF-RETRY")
+    pt = _write_pending_task(repo_root_dir, 40403, "RF-RETRY")
 
     w = AdoOutputWatcher(stable_delay_a=0.0)
     w.scan_once()
     assert len(calls) == 1
     assert not w._seen_a
+    assert calls[0]["body"]["pending_task_path"]  # el POST referencia el artefacto en disco
 
     w.scan_once()
     assert len(calls) == 2
+
+    # Plan 154 F2 — el artefacto en disco cumple el contrato canónico de 9 campos.
+    import json as _json
+    from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
+    on_disk = _json.loads(pt.read_text(encoding="utf-8"))
+    assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
+    assert on_disk["epic_id"] == 40403
+    assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
 
 
 def test_mode_a_auto_creates_from_alt_base_when_canonical_missing(client, repo_root_dir, monkeypatch):
@@ -775,6 +833,7 @@ def test_mode_a_auto_creates_from_alt_base_when_canonical_missing(client, repo_r
     import requests as _req
     monkeypatch.setattr(_req, "post", _fake_post)
     monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+    monkeypatch.setenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "1")  # plan 154 F5.iii opt-in
 
     # El dir canónico NO debe existir: replica el caso RSSICREA real.
     shutil.rmtree(repo_root_dir / "Agentes", ignore_errors=True)
@@ -784,7 +843,7 @@ def test_mode_a_auto_creates_from_alt_base_when_canonical_missing(client, repo_r
     # directo) y el auto-create igual debe dispararse desde el scan de disco
     # (ocurre antes del gate de execution en _process_mode_a). No tocar la DB acá
     # también evita contaminar la in-memory compartida de otros tests.
-    _write_pending_task_alt(repo_root_dir, 40301, "RF-001")
+    pt = _write_pending_task_alt(repo_root_dir, 40301, "RF-001")
 
     w = AdoOutputWatcher(stable_delay_a=0.0)
     w.scan_once()
@@ -793,6 +852,15 @@ def test_mode_a_auto_creates_from_alt_base_when_canonical_missing(client, repo_r
     assert len(calls) == 1, f"esperaba 1 call al endpoint, hubo {len(calls)}"
     assert "/by-ado/40301/create-child-task" in calls[0]["url"]
     assert calls[0]["body"]["completion_source"] == "output_watcher_auto"
+    assert calls[0]["body"]["pending_task_path"]  # el POST referencia el artefacto en disco
+
+    # Plan 154 F2 — el artefacto en disco cumple el contrato canónico de 9 campos.
+    import json as _json
+    from api.tickets import _PENDING_TASK_REQUIRED_FIELDS
+    on_disk = _json.loads(pt.read_text(encoding="utf-8"))
+    assert _PENDING_TASK_REQUIRED_FIELDS <= set(on_disk.keys())
+    assert on_disk["epic_id"] == 40301
+    assert on_disk["parent_link_type"] == "System.LinkTypes.Hierarchy-Reverse"
 
 
 def test_mode_a_idempotent_does_not_double_close(client, repo_root_dir):

@@ -52,6 +52,50 @@ _NO_LOG_BODY_PATHS: frozenset[str] = frozenset({"/api/logs/frontend"})
 _SKIP_LOG_PATHS: frozenset[str] = frozenset({"/api/health"})
 
 
+def _is_test_mode() -> bool:
+    """Plan 154 F5.ii — señal única de pytest (tests/conftest.py la setea)."""
+    return os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+
+
+def _startup_purge_only(logger) -> None:
+    """Plan 154 F5.ii — variante SIN egress de la parte incidental de _startup_sync.
+
+    Bajo pytest no queremos el sync de red real (egress a la org ADO productiva),
+    pero SÍ la purga LOCAL de tickets ajenos al proyecto (borra filas en la DB;
+    cero red). Tests que comparten la DB in-memory dependían de esta limpieza que
+    _startup_sync hacía como efecto colateral antes del gate de test-mode. Solo lee
+    config/contexto local y borra filas; nunca abre un socket.
+    """
+    try:
+        active = get_active_project()
+        tracker: dict = {}
+        if active:
+            cfg = get_project_config(active) or {}
+            tracker = cfg.get("issue_tracker") or {}
+        active_ctx = None
+        if active:
+            try:
+                from services.project_context import resolve_project_context
+
+                active_ctx = resolve_project_context(project_name=active)
+            except Exception:
+                active_ctx = None
+        target_project = (
+            (active_ctx.tracker_project if active_ctx else None)
+            or tracker.get("project")
+            or config.ADO_PROJECT
+            or "Strategist_Pacifico"
+        ).strip()
+        purged = purge_non_project_tickets(target_project)
+        if purged:
+            logger.info(
+                "purgados %d tickets ajenos al proyecto %s (test-mode, sin egress)",
+                purged, target_project,
+            )
+    except Exception:
+        logger.debug("purga test-mode omitida", exc_info=True)
+
+
 def _startup_sync(logger) -> None:
     """
     Sincroniza los tickets del proyecto activo al arrancar.
@@ -401,7 +445,15 @@ def create_app() -> Flask:
     # funcionar: directorio vigilado inexistente (C1) o PAT ausente (C2).
     _log_completion_preflight(logger)
 
-    _startup_sync(logger)
+    if _is_test_mode():
+        # Plan 154 F5.ii — create_app() NO hace sync de red real (egress) bajo pytest,
+        # pero SÍ ejecuta la purga LOCAL de tickets ajenos que _startup_sync hace
+        # incidentalmente: varios tests comparten la DB in-memory y dependen de esa
+        # limpieza entre create_app(). Los llamadores DIRECTOS de _startup_sync
+        # (p.ej. tests de circuit-breaker) siguen ejercitando la función completa.
+        _startup_purge_only(logger)
+    else:
+        _startup_sync(logger)
 
     # ── U2.1 — Hook de avance de pipeline por finalización de ejecución ─────
     try:
@@ -527,7 +579,7 @@ def create_app() -> Flask:
     # test en varios archivos — acumula threads que corren contra engines ya
     # descartados de tests previos y producen un access violation nativo (visto
     # en test_plan105_remote_console_api.py tras Plan 146 F1).
-    _test_mode = os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+    _test_mode = _is_test_mode()
     _ado_edit_learning_on = (not _test_mode) and os.environ.get(
         "STACKY_ADO_EDIT_LEARNING_ENABLED", "true"
     ).strip().lower() in ("1", "true", "on", "yes")

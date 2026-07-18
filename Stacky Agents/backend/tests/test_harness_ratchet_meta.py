@@ -60,6 +60,22 @@ def test_allowlist_no_se_solapa_con_ratchet():
     )
 
 
+# Plan 154 F6 — ratchet de deuda: la allowlist SOLO baja. Recontar en frío al
+# implementar (tras F2 la referencia es 198 - 1 = 197) y actualizar la constante
+# HACIA ABAJO en el mismo commit cada vez que se triagea una entrada.
+_ALLOWLIST_MAX = 197  # valor EXACTO al día de implementación — recontar, no confiar
+
+
+def test_allowlist_grandfathered_solo_baja():
+    allow = _allowlist()
+    assert len(allow) <= _ALLOWLIST_MAX, (
+        f"La allowlist creció a {len(allow)} entradas (máximo congelado: "
+        f"{_ALLOWLIST_MAX}). La deuda de tests sin gate SOLO puede bajar: "
+        "triagear una entrada existente antes de (o en lugar de) agregar otra, "
+        "o registrar el test nuevo directamente en HARNESS_TEST_FILES."
+    )
+
+
 def test_ratchet_no_referencia_archivos_inexistentes():
     faltantes = sorted(f for f in _ratchet_files() if not (_BACKEND / f).exists())
     assert not faltantes, (

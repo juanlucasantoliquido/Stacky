@@ -76,8 +76,15 @@ def _active_workspace_root() -> Path | None:
         if active_file.exists():
             data = json.loads(active_file.read_text(encoding="utf-8"))
             active_name = (data.get("active") or "").strip() or None
+        # Sin marcador válido (vacío o apuntando a un proyecto que ya no existe,
+        # p.ej. renombrado/borrado): mismo fallback que project_manager.get_active_project()
+        # — primer proyecto con config.json real. Antes este chequeo sólo cubría el
+        # caso "vacío" y quedaba desalineado con project_manager, causando que un
+        # marcador huérfano bloqueara la resolución acá mientras el resto de la UI
+        # ya mostraba el fallback como proyecto activo.
+        if active_name and not (pdir / active_name / "config.json").exists():
+            active_name = None
         if not active_name and pdir.exists():
-            # Sin marcador explícito: primer proyecto con config.json.
             for d in sorted(pdir.iterdir()):
                 if (d / "config.json").exists():
                     active_name = d.name

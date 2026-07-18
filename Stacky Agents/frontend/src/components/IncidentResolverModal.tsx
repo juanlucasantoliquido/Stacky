@@ -47,9 +47,10 @@ const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 const CLAUDE_MODELS: { value: string; label: string }[] = [
-  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (recomendado)" },
+  { value: "claude-sonnet-5", label: "Sonnet 5 (recomendado)" },
   { value: "claude-opus-4-8", label: "Opus 4.8 (mayor calidad, más lento)" },
   { value: "claude-haiku-4-5", label: "Haiku 4.5 (más rápido)" },
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (fallback del CLI)" },
 ];
 
 type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
@@ -76,7 +77,7 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
   const [preview, setPreview] = useState<IncidentPreviewDTO | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-6");
+  const [selectedModel, setSelectedModel] = useState("claude-sonnet-5");
   const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
 
   const [overrideEpicId, setOverrideEpicId] = useState("");

@@ -126,20 +126,22 @@ def check(
         "STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true"
     ).lower() not in ("false", "0", "no", "off")
     if auto_create_on:
-        ado_pat = os.getenv("ADO_PAT", "").strip()
-        if not ado_pat:
-            # Intentar también desde config
-            try:
-                from config import config as _cfg2
-                ado_pat = (_cfg2.ADO_PAT or "").strip()
-            except Exception:  # noqa: BLE001
-                pass
-        if not ado_pat:
+        # La cadena completa de resolución del PAT (env ADO_PAT, config,
+        # Tools/PAT-ADO y auth del proyecto activo) vive en ado_client.
+        # Chequear solo env/config daba falsos negativos cuando el operador
+        # configuró el PAT por proyecto vía UI (auth/ado_auth.json).
+        try:
+            from services.ado_client import ado_pat_present
+            pat_ok = ado_pat_present()
+        except Exception:  # noqa: BLE001
+            pat_ok = bool(os.getenv("ADO_PAT", "").strip())
+        if not pat_ok:
             return PreflightResult(
                 ok=False,
                 failure_check="ado_pat_missing",
                 failure_detail=(
-                    "ADO_PAT no está configurado y el auto-create de tasks está "
+                    "No se encontró PAT de ADO (ni env ADO_PAT, ni Tools/PAT-ADO, "
+                    "ni auth del proyecto activo) y el auto-create de tasks está "
                     "habilitado (STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS=true)."
                 ),
             )
@@ -186,13 +188,19 @@ def _resolve_outputs_dir(ticket: Any, project: str | None) -> Path | None:
 
 
 def _resolve_repo_root(ticket: Any, project: str | None) -> Path | None:
-    """Intenta resolver el repo_path del proyecto."""
+    """Intenta resolver el repo_path del proyecto.
+
+    `repo_path`/`repo` son claves legacy que ningún flujo de configuración
+    actual escribe; el operador solo setea `workspace_root` (project_manager,
+    UI de proyectos). Sin este fallback, el gate bloqueaba con "repo_missing"
+    a CUALQUIER proyecto ya configurado que sólo tuviera `workspace_root`.
+    """
     try:
         proj = _ticket_project(ticket, project)
         if proj:
             from project_manager import get_project_config
             cfg = get_project_config(proj) or {}
-            repo = cfg.get("repo_path") or cfg.get("repo") or ""
+            repo = cfg.get("repo_path") or cfg.get("repo") or cfg.get("workspace_root") or ""
             if repo:
                 return Path(repo).expanduser()
     except Exception:  # noqa: BLE001

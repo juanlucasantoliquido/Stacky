@@ -228,6 +228,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 119 — rediseño minimalista del shell DevOps
         "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",  # Plan 190 — equipaje DevOps en export/import
         "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
+        "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2909,6 +2910,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "sugiere fixes con diff aplicables por click (HITL). Determinista, sin "
             "red, sin IA. Con OFF el endpoint devuelve 404 y el panel queda idéntico "
             "a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # vive dentro del panel 87 (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 188 — Del fallo de despliegue a la incidencia ───────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",
+        type="bool",
+        label="Evidencia de fallos de despliegue",
+        description=(
+            "Plan 188 — En un run fallido del Centro de Despliegues, arma el "
+            "paquete de evidencia (resumen + markdown + JSON, sin secretos) y "
+            "abre el modal de incidencias prellenado. Solo-lectura local; crear "
+            "la incidencia sigue siendo decisión del operador (HITL). Con OFF el "
+            "endpoint devuelve 404 y el panel queda idéntico a hoy."
         ),
         group="global",
         env_only=False,

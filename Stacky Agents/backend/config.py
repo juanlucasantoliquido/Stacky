@@ -1293,6 +1293,15 @@ class Config:
         "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 188 — Evidencia de fallos de despliegue ──────────────────────────
+    # En un run fallido, arma el paquete de evidencia (resumen + markdown + JSON
+    # sin secretos) y abre el modal de incidencias prellenado. Solo-lectura
+    # local, sin red, sin IA. Default ON (espejo del default=True de la FlagSpec
+    # homónima; curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

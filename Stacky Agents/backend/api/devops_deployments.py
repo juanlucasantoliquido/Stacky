@@ -291,6 +291,30 @@ def history_route():
     return jsonify({"runs": [_decorate_entry(r) for r in rows]})
 
 
+# ── evidence (Plan 188 — run fallido → paquete de evidencia, solo-lectura) ────
+
+@bp.post("/evidence")
+def evidence_route():
+    """Run fallido → paquete de evidencia determinista (resumen + markdown +
+    JSON sin secretos). Solo-lectura local; crear la incidencia sigue siendo
+    decisión del operador en el modal HITL. Plan 188."""
+    _guard_master()  # master del Centro (patrón :37-39)
+    if not bool(getattr(_config.config, "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED", False)):
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    app_id, target, run_id = body.get("app_id"), body.get("target"), body.get("run_id")
+    if not app_id or not target or not run_id:
+        return jsonify({"error": "app_id, target y run_id son obligatorios"}), 400
+    from services.devops_evidence import build_deploy_failure_evidence
+    bundle = build_deploy_failure_evidence(app_id, target, run_id)
+    if bundle is None:
+        return jsonify({"error": "run_not_found"}), 404
+    from services.stacky_logger import logger as stacky_logger
+    stacky_logger.info("devops_evidence", "evidence_built",
+                       app_id=app_id, target=target, run_id=run_id)
+    return jsonify({"evidence": bundle.to_dict()})
+
+
 # ── drift ────────────────────────────────────────────────────────────────────
 
 @bp.post("/drift")

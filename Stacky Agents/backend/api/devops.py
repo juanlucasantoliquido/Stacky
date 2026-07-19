@@ -298,6 +298,30 @@ def environment_plan_route():
     return jsonify(result)
 
 
+def _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active, result):
+    """Plan 198 — best-effort: JAMÁS rompe el apply. Registra 1 entry en el ledger
+    (local o remoto, exitoso o fallido). Con la flag OFF es no-op."""
+    if not getattr(_config.config, "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED", False):
+        return
+    try:
+        from services.env_apply_ledger import append_apply
+        is_dict = isinstance(result, dict)
+        append_apply({
+            "root": str(root),
+            "server_alias": server_alias,          # None = local
+            "paths": list(approved),
+            "fingerprint": fingerprint,
+            "sandbox_active": bool(sandbox_active),
+            # shape sin clave 'ok' (apply local/remoto exitoso) ⇒ True; {'ok': False} ⇒ False.
+            "result_ok": bool(result.get("ok", True)) if is_dict else False,
+            "created_count": len(result.get("created", []) or []) if is_dict else 0,
+            "ignored_count": len(result.get("ignored_not_in_layout", []) or []) if is_dict else 0,  # ADICIÓN (:341)
+        })
+    except Exception:  # noqa: BLE001 — best-effort: nunca propaga al apply
+        from services.stacky_logger import logger as stacky_logger
+        stacky_logger.info("env_apply_ledger", "append_failed", root=str(root))
+
+
 @bp.post("/environments/apply")
 def environment_apply_route():
     """Crea SOLO to_create. HITL: confirm=True + fingerprint del plan visto (ADICIÓN).
@@ -335,11 +359,15 @@ def environment_apply_route():
         safe_pairs, _unsafe_pairs = resolve_remote_layout(root, approved)
         result = apply_environment_remote(server_alias, root, safe_pairs, user=current_user())
         if result.get("ok") is False:
+            # Plan 198 — registrar el intento remoto fallido ANTES del early-return.
+            _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active, result)
             return jsonify(result), _map_remote_error_status(result.get("error"))
     else:
         result = apply_environment(root, approved)
     result["ignored_not_in_layout"] = sorted(set(requested) - set(rel_paths))  # C8: visible
     result["sandbox_active"] = sandbox_active  # Plan 107
+    # Plan 198 — camino exitoso (remoto o local): registrar tras fijar ignored_not_in_layout.
+    _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active, result)
     return jsonify(result)
 
 

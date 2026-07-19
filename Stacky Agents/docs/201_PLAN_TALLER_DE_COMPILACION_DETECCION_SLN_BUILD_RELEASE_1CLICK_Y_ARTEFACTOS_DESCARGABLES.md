@@ -1,8 +1,29 @@
 # Plan 201 — Taller de Compilación: detección de `.sln`, build en Release 1-click y artefactos descargables
 
-> Estado: PROPUESTO v1 (2026-07-18). Pipeline: proponer → **[este paso]** → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **CRITICADO v2 — APROBADO-CON-CAMBIOS** (2026-07-18). Pipeline: proponer → criticar (`criticar-y-mejorar-plan`) → **[este paso ✓]** → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8).
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
+
+---
+
+## 0. CHANGELOG v1 → v2 (2026-07-18)
+
+> Crítica adversarial (juez severo + arquitecto). **Todas las anclas file:línea de v1 fueron verificadas contra el código y son VERÍDICAS** (deploymentsModel `DeployApp`, deploy_store `upsert_app`/`append_ledger`, deploy_planner `_APP_ID_RE`/`validate_app`, harness_flags `FlagSpec`/`_CATEGORY_KEYS["devops"]`, test_harness_flags `_CURATED_DEFAULTS_ON:467`, config.py `STACKY_DEVOPS_SERVERS_ENABLED:1196`, devops.py `_health_payload` `*_enabled`, DevOpsPage `DEVOPS_SECTIONS:97`, pipeline_stack_detector `:19-55`, runtime_paths `_active_workspace_root:66`). El flag/section-id/health-key/url_prefix del 201 son NUEVOS (cero colisión con 199/200 ni con el código). Veredicto v2: **APROBADO-CON-CAMBIOS**.
+
+Correcciones aplicadas (por hallazgo):
+- **C1 (F5):** eliminada la línea basura `(staging_parent := staging).write ...   # (no-op)` que un modelo menor transcribiría como código → `AttributeError` (`Path.write` no existe) en la ruta de build exitoso. Ahora el `return "success"` va directo.
+- **C2 (F5/F8):** `artifact_dir_for(build_id, slug)` se INVOCABA en F8 pero NO estaba en la API pública de F5, y su destino era ambiguo. Ahora está **declarada y especificada** (devuelve la carpeta de bits reales `base_dir/slug`), con test.
+- **C3 (F1):** `_title_case` no estaba definida y el contrato de datos (`sln_name:"MiSolucion"` → `friendly_name:"Mi Solucion"`) exige separar camelCase. Se da el **body exacto** (frontera camelCase + separadores).
+- **C4 (F8):** `_friendly_for(slug)` se llamaba con solo `slug` pero necesita `workspace_root`. Ahora se especifica que resuelve `_active_workspace_root()` internamente (body dado).
+- **C5 (F5/F6):** el formato de `<ts>` nunca estaba definido y a resolución de segundos dos builds del mismo slug (doble-click) colisionaban. Se define `_ts()` con sufijo `uuid4().hex[:6]` (único garantizado).
+- **C6 (F5, [ADICIÓN ARQUITECTO 1]):** v1 no cubría **retención/limpieza de `data/build_artifacts`** → llenaba disco (viola G6). Se agrega `prune_old_builds()` con cap por workspace + test.
+- **C7 (F1/F5):** bodies one-liner para `_dedupe`, `_read_text_safe`, `_read_head_bytes`, `_first_group`, `_sln_path_for_slug` (elimina inferencia residual del modelo menor).
+- **C8 (F11):** se precisa el import real `from copilot_bridge import invoke_local_llm` (`copilot_bridge.py:241`); F11 sigue OPCIONAL y con try/except total (fallback = entrada sin cambios).
+- **C9 (F1):** el catálogo ahora expone `"truncated": bool` cuando el scan topa `_MAX_ENTRIES`, para que la UI avise (el KPI "100% de .sln" no se rompe en silencio).
+- **C10 (§4 #5):** nota: agregar la key a `_health_payload()` la expone TAMBIÉN en `/bootstrap` (dict compartido, `devops.py:32-36`); es intencional (paridad), no "arreglar".
+- **C11 (F1):** fixture `.sln` **literal** mínimo (antes en prosa) para que el modelo menor no invente el formato.
+- **[ADICIÓN ARQUITECTO 2] (F5):** `build.summary.json` por build (returncode, duración, toolchain, archivos de salida + tamaños, artifact_dir) → evidencia para la UI, reuso por F8, y sobrevive reinicio.
+- **[ADICIÓN ARQUITECTO 3] (F2):** auto-tildar determinísticamente las soluciones "desplegables" (con proyecto web/console/service) SOLO en el primer scan de un slug NUEVO (nunca re-tilda lo que el operador destildó) → baja clicks, reversible, HITL-safe.
 
 ---
 
@@ -63,6 +84,7 @@ Los 5 lugares (todos obligatorios; F0 los hace de una para de-riesgar):
 
 > **NO hand-editar** `Stacky Agents/backend/harness_defaults.env` (memoria: lo genera `Stacky Agents/deployment/export_harness_defaults.py`, prohibido a mano). El default ON efectivo ya lo da `config.py` (lugar #4); el `.env` horneado no es necesario para que la flag arranque ON en dev.
 > **NO** hay arista `requires=`, así que **NO** se toca `_REQUIRES_MAP_FROZEN` ni bounds-map (es `bool`, no `int`).
+> **C10 — Efecto colateral inocuo del lugar #5.** El dict al que se agrega la key es `_health_payload()` (`devops.py:28`), **compartido** por `/devops/health` y `/devops/bootstrap` (comentario `devops.py:32-36`). Por diseño, la key aparecerá también en `/bootstrap`, y `test_bootstrap_health_matches_health_endpoint` EXIGE esa paridad. Es **correcto**: agregá la key una sola vez en `_health_payload()` y NO intentes "arreglar" la aparición en `/bootstrap`.
 
 ---
 
@@ -86,10 +108,13 @@ FRONTEND (Stacky Agents/frontend/src/)
   components/devops/__tests__/BuildWorkshopSection.test.ts (F10) presencia de la sección + gate
 
 DATOS (data_dir() = Stacky Agents/backend/data/ en dev)
-  data/build_solutions.json          catálogo persistido + selección (F2)
-  data/build_artifacts/<slug>/<ts>/  staging del build por-sln (F5)
-  data/build_artifacts/unified/<ts>/ staging del build unificado (F6)
-  data/build_runs.jsonl              ledger append-only de builds (F6) — permite descargar tras reinicio
+  data/build_solutions.json               catálogo persistido + selección (F2)
+  data/build_artifacts/<slug>/<ts>/       staging del build por-sln (F5); <ts> único vía _ts() (C5)
+  data/build_artifacts/<slug>/<ts>/<slug>/  carpeta de bits reales (salida -o/OutDir); la registra artifact_dir_for (C2)
+  data/build_artifacts/unified/<ts>/      staging del build unificado (F6)
+  data/build_artifacts/<...>/build.summary.json  evidencia por build [ADICIÓN ARQUITECTO 2] (F5)
+  data/build_runs.jsonl                   ledger append-only de builds (F6) — permite descargar tras reinicio
+  # Retención: prune_old_builds() mantiene <= _MAX_RETAINED_BUILDS por <slug>/unified [ADICIÓN ARQUITECTO 1] (F5)
 ```
 
 **Contrato de datos del catálogo** (persistido en `data/build_solutions.json`, schema congelado por F2):
@@ -98,6 +123,7 @@ DATOS (data_dir() = Stacky Agents/backend/data/ en dev)
 {
   "<workspace_root_absoluto>": {
     "scanned_at": "2026-07-18T12:00:00Z",
+    "truncated": false,
     "solutions": [
       {
         "slug": "mi-solucion",
@@ -115,6 +141,8 @@ DATOS (data_dir() = Stacky Agents/backend/data/ en dev)
 ```
 - Clave de primer nivel = `workspace_root` absoluto → múltiples proyectos coexisten; re-scan **reemplaza** solo esa clave.
 - `tracked` (selección del operador) se **preserva** al re-escanear para los `slug` que sigan existiendo (merge por `slug`).
+- `truncated` (C9): `true` si el scan topó `_MAX_ENTRIES` (árbol gigante) y pudo omitir `.sln`; la UI muestra un aviso. Default `false`.
+- **[ADICIÓN ARQUITECTO 3]** `tracked` inicial de un `slug` **nuevo** (nunca visto) = `True` si la solución tiene al menos un proyecto `type ∈ {web, console, service}` (es "desplegable"); `False` si es solo `library`/`unknown`. Es un **default reversible** (el operador destilda con un click); NO dispara ningún build (compilar sigue siendo click + `confirm`). Ver F2.
 
 ---
 
@@ -188,10 +216,11 @@ export const BuildWorkshopSection: React.FC<{ ctx: DevOpsSectionContext }> = () 
 
 **API pública (nombres exactos):**
 ```python
-def scan_solutions(workspace_root: str | None) -> list[dict]
+def scan_solutions(workspace_root: str | None) -> list[dict]            # wrapper compat: == scan_solutions_ex(...)["solutions"]
+def scan_solutions_ex(workspace_root: str | None) -> dict               # {"solutions": list[dict], "truncated": bool} — F2 usa ESTE (C9)
 def slugify_solution(name: str) -> str
 ```
-- `scan_solutions(None)` o ruta inválida → `[]` (NUNCA lanza; espejo de `pipeline_stack_detector.detect_stack`, `pipeline_stack_detector.py:25-26,54-55`).
+- `scan_solutions(None)` o ruta inválida → `[]` (NUNCA lanza; espejo de `pipeline_stack_detector.detect_stack`, `pipeline_stack_detector.py:25-26,54-55`). `scan_solutions_ex(None)` → `{"solutions": [], "truncated": False}`.
 - Salida = lista de dicts `{"slug","sln_path","sln_name","friendly_name","projects":[...]}` ordenada por `sln_path` (determinismo). Cada proyecto: `{"name","csproj_path","type","target_framework"}`.
 
 **Constantes de módulo (deterministas, acotadas):**
@@ -206,14 +235,18 @@ _WORKER_SDK = "microsoft.net.sdk.worker"
 _WEB_GUID = "349c5851-65df-11da-9384-00065b846f21"  # ProjectTypeGuid web clásico
 ```
 
-**Pseudocódigo `scan_solutions`:**
+**Pseudocódigo `scan_solutions_ex` (C9: expone `truncated`; `scan_solutions` es el wrapper compat):**
 ```python
 def scan_solutions(workspace_root):
+    return scan_solutions_ex(workspace_root)["solutions"]   # compat: firma y salida de v1 sin cambios
+
+def scan_solutions_ex(workspace_root):
     if not workspace_root or not os.path.isdir(workspace_root):
-        return []
+        return {"solutions": [], "truncated": False}
     root = os.path.normpath(workspace_root)
     sln_paths = []
     scanned = 0
+    truncated = False
     for dirpath, dirnames, filenames in os.walk(root):
         depth = dirpath[len(root):].count(os.sep)
         if depth >= _MAX_DEPTH:
@@ -222,10 +255,11 @@ def scan_solutions(workspace_root):
         for fname in filenames:
             scanned += 1
             if scanned > _MAX_ENTRIES:
+                truncated = True
                 break
             if fname.lower().endswith(".sln"):
                 sln_paths.append(os.path.join(dirpath, fname))
-        if scanned > _MAX_ENTRIES:
+        if truncated:
             break
     out = []
     seen_slugs = set()
@@ -237,7 +271,7 @@ def scan_solutions(workspace_root):
             "slug": slug, "sln_path": sln, "sln_name": name,
             "friendly_name": _title_case(name), "projects": projects,
         })
-    return out
+    return {"solutions": out, "truncated": truncated}
 ```
 - `_parse_sln_projects(sln)`: lee el `.sln` (texto), aplica el regex de proyectos, resuelve rutas relativas contra el dir del `.sln`, filtra `.csproj`/`.vbproj`, e infiere tipo. Errores por archivo → se saltan (nunca propaga).
 
@@ -283,6 +317,43 @@ def _infer_project(csproj_path):
     return ("library", tfm)
 ```
 
+**Helpers privados — bodies EXACTOS (C3/C7; NO inferir):**
+```python
+def _dedupe(slug, seen):
+    # unicidad estable por orden: 'x', 'x-2', 'x-3'... Muta `seen` (agrega el elegido).
+    cand = slug
+    n = 2
+    while cand in seen:
+        cand = f"{slug}-{n}"
+        n += 1
+    seen.add(cand)
+    return cand
+
+def _title_case(name):
+    # 'MiSolucion' -> 'Mi Solucion'; 'mi_solucion.core' -> 'Mi Solucion Core'.
+    # 1) separa fronteras camelCase; 2) reemplaza separadores por espacio; 3) capitaliza cada palabra.
+    s = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', name or '')   # camelCase -> "camel Case"
+    s = re.sub(r'[._\-]+', ' ', s)                            # separadores -> espacio
+    words = [w for w in s.split() if w]
+    return ' '.join(w[:1].upper() + w[1:] for w in words) or (name or '')
+
+def _read_text_safe(path):
+    # texto completo, tolerante a encoding. Puede lanzar OSError (el caller la maneja).
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        return fh.read()
+
+def _read_head_bytes(path, n):
+    # primeros n bytes decodificados a str (para inferencia barata de tipo). Puede lanzar OSError.
+    with open(path, "rb") as fh:
+        return fh.read(n).decode("utf-8", errors="replace")
+
+def _first_group(pattern, text):
+    # primer grupo de captura o "" (text ya viene .lower() en _infer_project; NO re-bajar).
+    m = re.search(pattern, text)
+    return m.group(1).strip() if m else ""
+```
+> `_title_case` es la razón por la que el contrato de datos muestra `sln_name:"MiSolucion"` → `friendly_name:"Mi Solucion"` (C3): un `.title()` naive daría `"Misolucion"` (MAL). Usá el body de arriba tal cual.
+
 **`slugify_solution` (garantiza que el bridge del Plan 120 acepte el id):**
 ```python
 def slugify_solution(name):
@@ -305,7 +376,29 @@ def slugify_solution(name):
 - `test_duplicate_names_get_unique_slugs`
 - `test_ignores_bin_obj_and_depth_cap` (crear `.sln` bajo `bin/` y a profundidad > `_MAX_DEPTH`; NO deben aparecer)
 - `test_corrupt_sln_no_crash`
+- `test_title_case_splits_camelcase` (`_title_case("MiSolucion") == "Mi Solucion"`; `_title_case("core_api.web") == "Core Api Web"`) — cierra C3
+- `test_truncation_flag_via_scan_ex` (monkeypatch `solution_scanner._MAX_ENTRIES` a `1` → `scan_solutions_ex(ws)["truncated"] is True`) — cierra C9
 - Registrar en `HARNESS_TEST_FILES`. Correr: `& ".venv\Scripts\python.exe" -m pytest tests\test_plan201_solution_scanner.py -q`
+
+**Fixture `.sln` literal mínimo (C11 — el test lo escribe TAL CUAL; matchea `_SLN_PROJECT_RE`):**
+```text
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Web.App", "Web.App\Web.App.csproj", "{11111111-1111-1111-1111-111111111111}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tool.Cli", "Tool.Cli\Tool.Cli.csproj", "{22222222-2222-2222-2222-222222222222}"
+EndProject
+Global
+EndGlobal
+```
+Y los dos `.csproj` que el test escribe junto al `.sln` (rutas relativas resueltas contra el dir del `.sln`):
+```text
+Web.App\Web.App.csproj:
+<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>
+
+Tool.Cli\Tool.Cli.csproj:
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>
+```
+Esperado del scan: `Web.App` → `type:"web"`, `Tool.Cli` → `type:"console"`, ambos `target_framework:"net8.0"`; slugs `web-app`, `tool-cli`.
 
 **Criterio BINARIO:** el comando anterior → verde; `scan_solutions` no importa nada de LLM/red (`grep -n "import" "Stacky Agents/backend/services/solution_scanner.py"` NO contiene `requests`, `runtime`, `llm`, `copilot`).
 
@@ -327,33 +420,46 @@ def load_catalog(workspace_root: str) -> dict      # {"scanned_at","solutions":[
 def set_tracked(workspace_root: str, slug: str, tracked: bool) -> dict   # togglea y guarda; devuelve el bloque
 def tracked_solutions(workspace_root: str) -> list[dict]                 # subconjunto tracked=True
 ```
-- Usa `from runtime_paths import data_dir` (patrón `deploy_store.py:28-29`).
+- Usa `from runtime_paths import data_dir` (patrón `deploy_store.py:19`) y `from solution_scanner import scan_solutions_ex` (bare import; backend root está en `sys.path`). En tests, monkeypatchear **`solution_store.scan_solutions_ex`** (donde se USA), no el módulo scanner.
 - Escritura atómica idempotente idéntica a `deploy_store._save_apps` (`deploy_store.py:53-56`): `path.parent.mkdir(parents=True, exist_ok=True)` + `json.dumps(..., indent=2, ensure_ascii=False)`.
 - Un `threading.Lock` de módulo (patrón `deploy_store.py:24`).
-- **Merge de `tracked`:** al re-escanear, para cada `slug` nuevo, si existía con `tracked=True`, preservarlo; slugs desaparecidos se eliminan.
+- **Merge de `tracked` (preserva la decisión del operador + [ADICIÓN ARQUITECTO 3]):** al re-escanear, un `slug` **ya conocido** conserva EXACTA la decisión del operador (tildado O destildado — nunca se re-tilda algo que destildó); un `slug` **nuevo** (nunca visto) arranca `tracked=True` **sólo si es "desplegable"** (tiene al menos un proyecto `type ∈ {web, console, service}`), si no `False`. Slugs desaparecidos se eliminan. El bloque guarda además `truncated` (C9).
 - JSON corrupto/no-dict → degradar a `{}` con `logger.warning` (patrón `deploy_store.py:48-50`).
 
-**Pseudocódigo merge:**
+**Pseudocódigo merge (C9 + [ADICIÓN ARQUITECTO 3]):**
 ```python
+_DEPLOYABLE_TYPES = {"web", "console", "service"}   # [ADICIÓN ARQUITECTO 3]
+
+def _is_deployable(sol):
+    return any(p.get("type") in _DEPLOYABLE_TYPES for p in sol.get("projects", []))
+
 def rescan_and_save(workspace_root):
-    fresh = scan_solutions(workspace_root)           # F1
+    meta = scan_solutions_ex(workspace_root)         # F1 (C9: trae 'truncated')
+    fresh = meta["solutions"]
     with _LOCK:
         doc = _load_doc()                            # dict o {}
         prev = doc.get(workspace_root, {}).get("solutions", [])
-        prev_tracked = {s["slug"] for s in prev if s.get("tracked")}
+        prev_by_slug = {s["slug"]: s for s in prev}
         for s in fresh:
-            s["tracked"] = s["slug"] in prev_tracked
-        doc[workspace_root] = {"scanned_at": _utcnow_iso(), "solutions": fresh}
+            if s["slug"] in prev_by_slug:
+                s["tracked"] = bool(prev_by_slug[s["slug"]].get("tracked"))   # respeta la decisión previa
+            else:
+                s["tracked"] = _is_deployable(s)     # default reversible SOLO en slug nuevo (ADICIÓN 3)
+        doc[workspace_root] = {"scanned_at": _utcnow_iso(),
+                               "truncated": meta["truncated"], "solutions": fresh}
         _save_doc(doc)
         return doc[workspace_root]
 ```
 
-**Casos borde:** `workspace_root` vacío → `load_catalog` devuelve `{"scanned_at":None,"solutions":[]}`; `set_tracked` de un slug inexistente → no-op (no crash, devuelve bloque sin cambios); archivo inexistente → `{}`.
+**Casos borde:** `workspace_root` vacío → `load_catalog` devuelve `{"scanned_at":None,"truncated":False,"solutions":[]}`; `set_tracked` de un slug inexistente → no-op (no crash, devuelve bloque sin cambios); archivo inexistente → `{}`.
 
 **Tests (TDD) — `Stacky Agents/backend/tests/test_plan201_solution_store.py`:** (monkeypatch `store_path` a `tmp_path/"build_solutions.json"`, molde `test_plan120_store.py:37`)
 - `test_load_missing_returns_empty`
-- `test_rescan_persists_and_reload_matches` (monkeypatch `solution_scanner.scan_solutions` a un fake)
-- `test_tracked_survives_rescan`
+- `test_rescan_persists_and_reload_matches` (monkeypatch `solution_store.scan_solutions_ex` → `{"solutions":[...],"truncated":False}`)
+- `test_tracked_survives_rescan` (un slug que el operador tildó sigue tildado tras re-scan)
+- `test_new_deployable_slug_autotracked` (slug NUEVO con proyecto web/console/service → `tracked True`; slug nuevo solo-`library`/`unknown` → `tracked False`) — [ADICIÓN ARQUITECTO 3]
+- `test_untracked_known_slug_stays_untracked_on_rescan` (operador destilda un desplegable → re-scan NO lo re-tilda) — reversibilidad de ADICIÓN 3
+- `test_truncated_flag_persisted` (fake con `truncated=True` → el bloque guardado lo refleja) — C9
 - `test_set_tracked_toggles_and_persists`
 - `test_set_tracked_unknown_slug_is_noop`
 - `test_corrupt_json_degrades_to_empty`
@@ -463,12 +569,12 @@ def _guard():
 **Endpoints de esta fase (rutas finales `/api/devops/build/...`):**
 | Método | Ruta | Body/params | Respuesta |
 |--------|------|-------------|-----------|
-| `POST` | `/scan` | `{ "enrich": false }` (opcional; F11) | `{ "workspace_root", "catalog": {scanned_at, solutions[]}, "toolchain": {...} }` |
+| `POST` | `/scan` | `{ "enrich": false }` (opcional; F11) | `{ "workspace_root", "catalog": {scanned_at, truncated, solutions[]}, "toolchain": {...} }` |
 | `GET`  | `/catalog` | — | igual que `/scan` pero **sin** re-escanear (lee lo persistido) + `toolchain` fresco |
 | `POST` | `/track` | `{ "slug": str, "tracked": bool }` | `{ "catalog": {...} }` |
 | `GET`  | `/doctor` | — | `{ "toolchain": {...} }` (llama `build_toolchain.detect_toolchain()`) |
 
-**Resolución de workspace:** `from runtime_paths import _active_workspace_root`; `ws = _active_workspace_root()`; si `ws is None` → responder `200` con `{"workspace_root": None, "catalog": {"scanned_at": None, "solutions": []}, "toolchain": detect_toolchain()}` y un campo `"warning": "No hay proyecto activo con workspace_root."` (NUNCA 500). El scan usa `str(ws)`.
+**Resolución de workspace:** `from runtime_paths import _active_workspace_root`; `ws = _active_workspace_root()`; si `ws is None` → responder `200` con `{"workspace_root": None, "catalog": {"scanned_at": None, "truncated": False, "solutions": []}, "toolchain": detect_toolchain()}` y un campo `"warning": "No hay proyecto activo con workspace_root."` (NUNCA 500). El scan usa `str(ws)`.
 
 **Registro del blueprint (patrón `api/__init__.py:45-53` + `:107-115`):**
 - Import: `from .devops_build_workshop import bp as devops_build_workshop_bp  # Plan 201 — Taller de Compilación`
@@ -502,14 +608,17 @@ def _guard():
 def start_build(slugs: list[str], unified: bool, workspace_root: str) -> str   # devuelve build_id (uuid4 hex); lanza el thread
 def get_status(build_id: str) -> dict | None
 def cancel(build_id: str) -> bool
-def artifact_zip_path(build_id: str) -> Path | None    # resuelto desde el registro/ledger (F7 lo usa)
+def artifact_zip_path(build_id: str) -> Path | None    # zip descargable, resuelto desde registro/ledger (F7 lo usa)
+def artifact_dir_for(build_id: str, slug: str) -> Path | None   # C2: carpeta de BITS REALES a registrar como DeployApp (F8)
 ```
+- **`artifact_dir_for(build_id, slug)` (C2 — antes se llamaba en F8 sin estar declarada):** devuelve `Path(_BUILDS[build_id]["base_dir"]) / slug` si existe en memoria; tras reinicio, la resuelve desde `build.summary.json` (ADICIÓN 2) o `data/build_runs.jsonl`. Es la carpeta donde `_run_one` depositó la salida (`-o`/`OutDir`) → los bits reales, NO el `.zip` ni el `base_dir` padre. `None` si no se puede resolver.
 
 **Registro en memoria + ledger durable:**
 ```python
 _LOCK = threading.Lock()
-_BUILDS: dict[str, dict] = {}   # build_id -> {status, mode, slugs, artifact_dir, zip_path, log:[...], started_at, finished_at, error, _proc, _cancel}
+_BUILDS: dict[str, dict] = {}   # build_id -> {status, mode, slugs, base_dir, artifact_dir, zip_path, log:[...], started_at, finished_at, error, _proc, _cancel}
 ```
+- `base_dir` (str) se guarda en `_BUILDS[build_id]` al arrancar → lo usa `artifact_dir_for` (C2) y `prune_old_builds` (ADICIÓN 1).
 - `status` ∈ `{"running","success","failed","cancelled","toolchain_missing"}`.
 - Log vivo = lista de dicts `{"ts","level","message"}` (misma forma que `log_streamer.LogEvent.to_dict`, `log_streamer.py:31-43`), **empujada con lock**.
   - **DECISIÓN (evita FK huérfana):** NO se usa `log_streamer.close()` (`log_streamer.py:109-120`) porque persiste `ExecutionLog(execution_id=...)` contra la tabla `executions`; un build no es un `AgentExecution`, así que crearía FK inválida. Se usa un buffer propio, mismo **shape** que `log_streamer` (patrón reusado sin el acople a BD). El log completo se vuelca además a `<artifact_dir>/build.log`.
@@ -517,9 +626,10 @@ _BUILDS: dict[str, dict] = {}   # build_id -> {status, mode, slugs, artifact_dir
 
 **Constantes:**
 ```python
-_BUILD_TIMEOUT_SEC = 1800   # 30 min; la cancelación manual es la garantía primaria anti-cuelgue (G6)
+_BUILD_TIMEOUT_SEC = 1800       # 30 min; la cancelación manual es la garantía primaria anti-cuelgue (G6)
+_MAX_RETAINED_BUILDS = 10       # [ADICIÓN ARQUITECTO 1]: builds retenidos por <slug> (y por 'unified') antes de podar los más viejos
 ```
-(Se deja como constante y NO como flag `int` para no arrastrar la ceremonia de `_FROZEN_BOUNDS`/bounds-map; promover a flag UI es un follow-up.)
+(Ambas quedan como constantes y NO como flag `int` para no arrastrar la ceremonia de `_FROZEN_BOUNDS`/bounds-map; promover a flag UI es un follow-up.)
 
 **Comando de build (subprocess LIST args — NUNCA shell string; así espacios/acentos y backslashes finales son seguros, memoria rutas Windows):**
 - Toolchain `dotnet`:
@@ -560,14 +670,59 @@ def _run_one(build_id, slug, workspace_root, base_dir):
         _terminate_tree(proc); _push(build_id,"error","timeout"); return "failed"
     if proc.returncode != 0:
         return "failed"
-    (staging_parent := staging).write ...   # (no-op) — el artefacto queda en staging
-    return "success"
+    return "success"   # C1: el artefacto ya quedó en `staging` (= base_dir/slug); NO hay nada más que escribir acá
 ```
 - `_terminate_tree(proc)`: `proc.terminate()` y best-effort `subprocess.run(["taskkill","/PID",str(proc.pid),"/T","/F"], ...)` en Windows (matar hijos MSBuild). Nunca lanza.
-- `start_build` corre `_run_all` en un `threading.Thread(daemon=True)` y devuelve `build_id` de inmediato (no bloquea el request).
-- Al terminar TODOS los slugs: si todos `success` → `status="success"`, generar zip (F7 la lógica de zip vive acá): `zip_path = shutil.make_archive(str(base_dir), "zip", root_dir=str(base_dir))` → `<base_dir>.zip`; volcar `build.log`; escribir línea de ledger. Si alguno `failed` → `status="failed"` (los que compilaron quedan en staging).
+- `start_build` corre `_run_all` en un `threading.Thread(daemon=True)` y devuelve `build_id` de inmediato (no bloquea el request). Guarda `base_dir` (str) en `_BUILDS[build_id]` (lo usan C2 y ADICIÓN 1).
+- Al terminar TODOS los slugs: si todos `success` → `status="success"`, generar zip (la lógica de zip vive acá): `zip_path = shutil.make_archive(str(base_dir), "zip", root_dir=str(base_dir))` → `<base_dir>.zip` (queda como **hermano** de `base_dir`, por eso NO se auto-incluye); volcar `build.log`; **escribir `build.summary.json` (ADICIÓN 2)**; escribir línea de ledger; **llamar `prune_old_builds(Path(base_dir).parent)` (ADICIÓN 1)**. Si alguno `failed` → `status="failed"` (los que compilaron quedan en staging; igual se escribe el summary con el `returncode`).
 
-**Staging dirs:** por-sln = `data/build_artifacts/<slug>/<ts>/`; el `base_dir` del build por-sln es `data/build_artifacts/<slug>/<ts>/` (un solo slug) — para F5. (Unificado en F6.)
+**`_ts()` — timestamp de staging ÚNICO (C5; antes indefinido → colisión en doble-click):**
+```python
+def _ts():
+    # segundos + sufijo aleatorio corto → único aun con dos builds del mismo slug en el mismo segundo
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+```
+
+**Staging dirs (C5):** por-sln → `base_dir = data/build_artifacts/<slug>/<ts>/` (con `<ts> = _ts()`); dentro, `_run_one` compila a `base_dir/<slug>/` (los bits reales). Unificado (F6) → `base_dir = data/build_artifacts/unified/<ts>/` con un subdir por slug `base_dir/<slug>/`. En AMBOS casos la carpeta de bits de un slug es `base_dir/<slug>/` → eso devuelve `artifact_dir_for` (C2).
+
+**`build.summary.json` [ADICIÓN ARQUITECTO 2] — evidencia determinista por build** (se escribe en `base_dir/build.summary.json`):
+```python
+{
+  "build_id": "…", "mode": "single|unified", "status": "success|failed|cancelled|toolchain_missing",
+  "slugs": ["…"], "toolchain": {"builder": "msbuild|dotnet", "version": "…"},
+  "started_at": "…Z", "finished_at": "…Z", "duration_sec": 12.3,
+  "artifacts": [ {"slug":"…","dir":"<abs base_dir/slug>","files": 42, "bytes": 1234567} ],
+  "returncodes": {"<slug>": 0}, "base_dir": "<abs>", "zip_path": "<abs o null>"
+}
+```
+La UI (F10) lo muestra como evidencia; `artifact_dir_for` (C2) y F8 lo reusan tras reinicio del backend. Se escribe **siempre** al terminar (aun en `failed`), con `errors="replace"` y `json.dumps(..., ensure_ascii=False)`; si su escritura falla, se loguea y se sigue (nunca tumba el build).
+
+**`prune_old_builds(scope_dir)` [ADICIÓN ARQUITECTO 1] — retención (C6/G6, evita llenar disco):**
+```python
+def prune_old_builds(scope_dir):
+    # scope_dir = data/build_artifacts/<slug>  (o .../unified). Conserva los _MAX_RETAINED_BUILDS <ts>/ más nuevos
+    # (por mtime) y borra el resto + sus .zip hermanos. NUNCA lanza (best-effort, envuelto en try/except).
+    try:
+        subdirs = sorted((p for p in scope_dir.iterdir() if p.is_dir()),
+                         key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in subdirs[_MAX_RETAINED_BUILDS:]:
+            shutil.rmtree(old, ignore_errors=True)
+            zp = old.with_suffix(".zip")
+            if zp.exists():
+                zp.unlink(missing_ok=True)
+    except OSError:
+        pass
+```
+Se llama tras cada build. Retención por-`<slug>` (y por `unified`) → cota de disco acotada sin sacar HITL (el operador nunca pierde el build vigente ni los 10 más recientes).
+
+**`_sln_path_for_slug(slug, workspace_root)` (C7 — body exacto):**
+```python
+def _sln_path_for_slug(slug, workspace_root):
+    for s in solution_store.load_catalog(workspace_root).get("solutions", []):
+        if s.get("slug") == slug:
+            return s.get("sln_path")
+    return None
+```
 
 **Casos borde:** toolchain ausente → `status="toolchain_missing"`, sin crash; build falla (returncode≠0) → `status="failed"`, staging parcial conservado; timeout → terminate + failed; cancel a mitad → terminate + `cancelled`; ruta del `.sln` con espacios/acentos → funciona (lista de args); slug sin `.sln` en disco → línea de error, sigue.
 
@@ -578,9 +733,13 @@ def _run_one(build_id, slug, workspace_root, base_dir):
 - `test_cancel_terminates`
 - `test_build_args_use_list_and_release` (assert `-c Release`/`/p:Configuration=Release` en args; assert NO se usa `shell=True`)
 - `test_path_with_spaces_in_args` (sln bajo carpeta con espacio → arg intacto)
+- `test_successful_build_writes_summary_json` (tras success existe `base_dir/build.summary.json` con `status`, `duration_sec`, `artifacts[].bytes`) — [ADICIÓN ARQUITECTO 2]
+- `test_artifact_dir_for_returns_bits_dir` (`artifact_dir_for(build_id, slug)` == `base_dir/slug`, no el zip ni el padre) — C2
+- `test_prune_keeps_max_retained` (crear `_MAX_RETAINED_BUILDS + 3` dirs `<ts>/` bajo un `<slug>` → `prune_old_builds` deja exactamente `_MAX_RETAINED_BUILDS`, borra los más viejos y sus `.zip`) — [ADICIÓN ARQUITECTO 1]
+- `test_ts_is_unique` (`_ts() != _ts()` en la misma llamada de segundo) — C5
 - Registrar en `HARNESS_TEST_FILES`. Correr por archivo.
 
-**Criterio BINARIO:** comando verde; `grep -n "shell=True" "Stacky Agents/backend/services/solution_builder.py"` → **0 matches**; `grep -n "log_streamer" "Stacky Agents/backend/services/solution_builder.py"` → **0 matches** (buffer propio, no acople BD).
+**Criterio BINARIO:** comando verde; `grep -n "shell=True" "Stacky Agents/backend/services/solution_builder.py"` → **0 matches**; `grep -n "log_streamer" "Stacky Agents/backend/services/solution_builder.py"` → **0 matches** (buffer propio, no acople BD); `grep -n "build.summary.json\|def prune_old_builds\|def artifact_dir_for" "Stacky Agents/backend/services/solution_builder.py"` → **3+ matches** (ADICIONES 1/2 + C2).
 
 **Flag/Runtime:** F6 gatea; idéntico 3/3 (el build es MSBuild/dotnet, no LLM). **EXCEPCIÓN DURA #3** citada (rama `toolchain_missing`). **Operador:** opt-in (default ON; build requiere toolchain, degrada a doctor).
 
@@ -596,7 +755,7 @@ def _run_one(build_id, slug, workspace_root, base_dir):
 | Método | Ruta | Body | Respuesta | HITL |
 |--------|------|------|-----------|------|
 | `POST` | `/compile` | `{ "slugs":[...], "unified":bool, "confirm":true }` | `200 { "build_id" }` **o** `200 { "status":"toolchain_missing", "toolchain":{...} }` | `confirm:true` obligatorio → si falta, `400` |
-| `GET`  | `/status/<build_id>` | — | `{ status, mode, slugs, log:[...], artifact_ready:bool, error }` | — |
+| `GET`  | `/status/<build_id>` | — | `{ status, mode, slugs, log:[...], artifact_ready:bool, error, summary }` (`summary` = contenido de `build.summary.json` o `null` mientras corre; ADICIÓN 2) | — |
 | `POST` | `/cancel/<build_id>` | `{ "confirm":true }` | `{ "cancelled":bool }` | `confirm:true` |
 
 **Reglas:**
@@ -701,7 +860,19 @@ def register_deploy_app():
         return jsonify({"error": str(e)}), 400
     return jsonify({"app": app})
 ```
-- `deploy_store.upsert_app` (`deploy_store.py:70-83`) valida con `deploy_planner.validate_app` (`deploy_planner.py:30-50`): `id` debe matchear `_APP_ID_RE` (garantizado por `slugify_solution`), `artifact.kind` ∈ `{folder,zip}` (usamos `folder`), `artifact.path` absoluto (usamos `os.path.abspath`). **NO** escribir `deploy_apps.json` a mano — usar `upsert_app` (idempotente por `id`).
+- **`_friendly_for(slug)` (C4 — antes se llamaba con solo `slug` sin decir de dónde sale el workspace; body exacto):**
+  ```python
+  def _friendly_for(slug):
+      ws = _active_workspace_root()            # runtime_paths — resuelto internamente (C4)
+      if ws is None:
+          return slug
+      for s in solution_store.load_catalog(str(ws)).get("solutions", []):
+          if s.get("slug") == slug:
+              return s.get("friendly_name") or slug
+      return slug
+  ```
+- `artifact_dir = solution_builder.artifact_dir_for(build_id, slug)` (C2) devuelve la carpeta de BITS REALES (`base_dir/slug`); es la que se registra como `artifact.path` (`kind:'folder'`). NUNCA el `.zip` ni el `base_dir` padre.
+- `deploy_store.upsert_app` (`deploy_store.py:70-83`) valida con `deploy_planner.validate_app` (`deploy_planner.py:30-50`): `id` debe matchear `_APP_ID_RE` (`^[a-z0-9][a-z0-9_-]{0,63}$`, garantizado por `slugify_solution`), `artifact.kind` ∈ `{folder,zip}` (usamos `folder`), `artifact.path` absoluto (usamos `os.path.abspath`). **NO** escribir `deploy_apps.json` a mano — usar `upsert_app` (idempotente por `id`).
 
 **Casos borde:** build no `success` → `400`; artefacto inexistente → `400`; `id` colisiona con una app existente → `upsert_app` **actualiza** (idempotente, por diseño del Plan 120); `confirm` faltante → `400`.
 
@@ -730,9 +901,13 @@ def register_deploy_app():
 export interface SolutionProject { name: string; csproj_path: string; type: 'web'|'console'|'service'|'library'|'unknown'; target_framework: string }
 export interface SolutionEntry { slug: string; sln_path: string; sln_name: string; friendly_name: string; tracked: boolean; projects: SolutionProject[] }
 export interface Toolchain { available: boolean; builder: 'msbuild'|'dotnet'|null; version: string|null; remediation: { message: string; command: string; url: string } | null }
-export interface BuildStatus { status: 'running'|'success'|'failed'|'cancelled'|'toolchain_missing'; mode: 'single'|'unified'; slugs: string[]; log: { ts: string; level: string; message: string }[]; artifact_ready: boolean; error: string|null }
+export interface BuildArtifactInfo { slug: string; dir: string; files: number; bytes: number }
+export interface BuildSummary { duration_sec: number; toolchain: { builder: string|null; version: string|null }; artifacts: BuildArtifactInfo[] }
+export interface BuildStatus { status: 'running'|'success'|'failed'|'cancelled'|'toolchain_missing'; mode: 'single'|'unified'; slugs: string[]; log: { ts: string; level: string; message: string }[]; artifact_ready: boolean; error: string|null; summary?: BuildSummary | null }
+export interface Catalog { scanned_at: string|null; truncated: boolean; solutions: SolutionEntry[] }
 
 export function trackedSlugs(solutions: SolutionEntry[]): string[]
+export function formatBytes(bytes: number): string                                 // 1234567 → '1.2 MB' (evidencia de ADICIÓN 2)
 export function canCompile(toolchain: Toolchain, selectedCount: number): boolean   // available && selectedCount>=1
 export function compileMode(unified: boolean, selectedCount: number): 'single'|'unified'|'invalid'  // >1 && !unified => 'invalid'
 export function buildStatusLabel(status: BuildStatus['status']): string            // español, sin colisionar con STATUS_LABEL de deployments
@@ -741,7 +916,7 @@ export function projectTypeLabel(t: SolutionProject['type']): string            
 export function summarizeCatalog(solutions: SolutionEntry[]): { total: number; tracked: number; byType: Record<string, number> }
 ```
 
-**Casos borde:** `solutions` vacío → `summarizeCatalog` `{total:0,tracked:0,byType:{}}`; `compileMode(false, 2)` → `'invalid'`; `canCompile({available:false,...}, 5)` → `false`; `formatBuildDuration` con `endIso=null` → "en curso".
+**Casos borde:** `solutions` vacío → `summarizeCatalog` `{total:0,tracked:0,byType:{}}`; `compileMode(false, 2)` → `'invalid'`; `canCompile({available:false,...}, 5)` → `false`; `formatBuildDuration` con `endIso=null` → "en curso"; `formatBytes(0)` → `'0 B'`; `formatBytes(1536)` → `'1.5 KB'` (ADICIÓN 2).
 
 **Tests (TDD) — `buildWorkshopModel.test.ts`** (vitest, molde de los tests de `deploymentsModel`): un `it` por función cubriendo el caso normal + los borde de arriba. Correr: `npx vitest run src\components\devops\buildWorkshopModel.test.ts`.
 
@@ -776,13 +951,13 @@ export const DevOpsBuildWorkshop = {
 **Comportamiento UI (todo clicks):**
 1. Al montar: `useQuery(['build-catalog'], DevOpsBuildWorkshop.catalog)`; muestra `toolchain` (chip verde "MSBuild/.NET listo" o **panel doctor** rojo con `remediation.message`, botón **Copiar comando** y link `Descargar .NET SDK`).
    - **Copiar comando:** usar el **copyService del Plan 194** (memoria `plan-194-status` / ratchet `writeText`), NO `navigator.clipboard.writeText` directo.
-2. Botón **Escanear** → `DevOpsBuildWorkshop.scan()` → invalida `['build-catalog']`. Muestra `summarizeCatalog` (total / tildadas / por tipo).
+2. Botón **Escanear** → `DevOpsBuildWorkshop.scan()` → invalida `['build-catalog']`. Muestra `summarizeCatalog` (total / tildadas / por tipo). Si `catalog.truncated === true` (C9) → banner de aviso "Se alcanzó el tope de escaneo; puede faltar alguna solución — escaneá una subcarpeta más específica." Las soluciones **desplegables** vienen **pre-tildadas** (ADICIÓN 3): el operador solo destilda lo que no quiera (reversible; no dispara nada).
 3. Lista de soluciones: cada fila con **checkbox** (`tracked`) → `DevOpsBuildWorkshop.track(slug, next)`; muestra `friendly_name`, `sln_path`, chips de proyectos (`projectTypeLabel`).
 4. Barra de acción: toggle **Unificado**; botón **Compilar** habilitado por `canCompile(toolchain, trackedCount)` y `compileMode(...)!=='invalid'`.
    - **Compilar** abre confirmación HITL (reusar el diálogo canónico del Plan 164 `useConfirm`/`Dialog` si está disponible; si no, `window.confirm` es aceptable pero preferir la primitiva de marca). Al confirmar → `DevOpsBuildWorkshop.compile(trackedSlugs, unified)`.
    - Si la respuesta trae `status:'toolchain_missing'` → mostrar el doctor (no error).
 5. Con `build_id`: `useQuery(['build-status', buildId], () => DevOpsBuildWorkshop.status(buildId), { refetchInterval: 1500, enabled: !!buildId })`. Render del **log vivo** (lista de `log[]`), `buildStatusLabel(status)`, botón **Cancelar** (HITL) mientras `running`.
-6. Al `status==='success'` con `artifact_ready`: botón **Descargar** (`<a download>`) + botón **Usar como app de despliegue** (HITL confirm → `registerDeployApp`; al éxito, toast "Registrado en Despliegues" e invalidar `['devops-deployments-overview']` para que la sección Despliegues lo muestre).
+6. Al `status==='success'` con `artifact_ready`: mostrar la **evidencia** del `status.summary` (ADICIÓN 2): duración (`formatBuildDuration`/`duration_sec`), nº de archivos y tamaño total por artefacto (`formatBytes(bytes)`), toolchain usado. Botón **Descargar** (`<a download>`) + botón **Usar como app de despliegue** (HITL confirm → `registerDeployApp`; al éxito, toast "Registrado en Despliegues" e invalidar `['devops-deployments-overview']` para que la sección Despliegues lo muestre).
 
 **Ratchets a respetar (memoria):**
 - **Cero `style={{}}` inline** en el `.tsx` nuevo → usar clases de `./devops.module.css` (agregar las que falten allí). Memoria `gotcha-ratchet-nuevo-archivo-cero-inline-style`.
@@ -810,7 +985,7 @@ export const DevOpsBuildWorkshop = {
 def enrich_catalog(solutions: list[dict]) -> list[dict]   # devuelve solutions con friendly_name mejorado; NUNCA lanza; si LLM no disponible → devuelve la entrada TAL CUAL
 ```
 - Se invoca SOLO cuando `POST /scan` recibe `{"enrich": true}` (default `false`). Nunca corre en background (respeta la regla "flags que queman tokens ociosos": esto es on-demand, no un loop).
-- Reusa el helper local existente (`invoke_local_llm` / el bridge de runtime) detrás de un `try/except` total. Cualquier error/ausencia → return input sin cambios.
+- Reusa el helper local existente: `from copilot_bridge import invoke_local_llm` (`copilot_bridge.py:241`), detrás de un `try/except` **total** (incluido `ImportError`). Cualquier error/ausencia/timeout → `return` input sin cambios (C8). **F11 es OPCIONAL**: si el implementador tiene dudas, puede omitirla sin costo — el core (F1) ya produce `friendly_name` determinista y los 3 runtimes muestran lo mismo por default.
 - **Paridad 3 runtimes:** como el core (F1) ya produce `friendly_name` determinista, los 3 runtimes muestran lo mismo por default; el enriquecimiento es idéntico best-effort en los 3 y su ausencia no cambia el resultado funcional.
 
 **Casos borde:** LLM devuelve basura/timeout → se ignora, queda el determinista; `solutions` vacío → `[]`.
@@ -834,10 +1009,11 @@ def enrich_catalog(solutions: list[dict]) -> list[dict]   # devuelve solutions c
 | Builds largos que cuelgan | `_BUILD_TIMEOUT_SEC=1800` + **Cancelar** manual (HITL) + `taskkill /T /F` best-effort del árbol de procesos (F5/F6). |
 | Rutas Windows con espacios/acentos ("Stacky Agents" tiene espacio) | subprocess **siempre con lista de args**, jamás string de shell; `OutDir`/`-o` como argv element (el bug `OutDir="...\"` solo ocurre con shell string) (F5). Test con path con espacio. |
 | `.sln`/`.csproj` enorme o árbol gigante | Topes duros `_MAX_DEPTH=8`, `_MAX_ENTRIES=5000`, lectura de `.csproj` acotada a 64KB (F1). |
-| Colisión de nombres de artefacto | Subdir por `<slug>/<timestamp>`; slugs deduplicados de forma estable (F1/F5). |
+| Colisión de artefacto / doble-click mismo slug (C5) | Subdir por `<slug>/<ts>` con `<ts> = _ts()` (segundos + `uuid4().hex[:6]`, único garantizado); slugs deduplicados de forma estable (F1/F5). |
+| Disco lleno por acumulación de builds (C6/G6) | `prune_old_builds()` conserva los `_MAX_RETAINED_BUILDS` (10) más nuevos por `<slug>`/`unified` y borra el resto + sus `.zip` — **[ADICIÓN ARQUITECTO 1]** (F5). |
 | Path-traversal al servir zips | `artifact_zip_path` resuelto por clave (nunca por input) + `os.path.commonpath` contra `data/build_artifacts` (F7). |
 | FK huérfana si se reusa `log_streamer.close()` | Buffer de logs propio (mismo shape, sin persist a `ExecutionLog`) + volcado a `build.log` (F5). |
-| Backend reiniciado a mitad de build | Registro en memoria se pierde → `status` desconocido; el ledger `build_runs.jsonl` permite **descargar** artefactos ya terminados tras reinicio (F5/F6). Documentado. |
+| Backend reiniciado a mitad de build | Registro en memoria se pierde → build en curso queda `status` desconocido; el ledger `build_runs.jsonl` + `build.summary.json` **[ADICIÓN 2]** permiten **descargar** y **re-registrar** artefactos ya terminados tras reinicio (`artifact_dir_for`/`artifact_zip_path` los resuelven desde disco) (F5/F6/F8). Documentado. |
 | Operador compila algo no listado | `/compile` valida que los `slugs` sean `tracked` del catálogo actual (F6). |
 | Ratchets de UI (inline-style / deuda / writeText) | Cero `style={{}}`; baseline si aplica; copyService del 194 (F10). |
 | Meta-tests de flags rojos | Cableado en los 5 lugares de §4 + registro en `HARNESS_TEST_FILES` (F0). |
@@ -903,6 +1079,11 @@ Cada fase se mergea/valida sola (autocontenida). F1–F3 son independientes entr
 - [ ] El build produce `data/build_artifacts/<slug>/<ts>/` (o `unified/<ts>/`), un `build.log`, un `.zip`, y una línea en `data/build_runs.jsonl`.
 - [ ] `GET /artifact/<build_id>/download` entrega el zip con guard `commonpath`; rutas fuera del árbol → 400/404.
 - [ ] `POST /register-deploy-app` crea una `DeployApp` (`kind:'folder'`) vía `deploy_store.upsert_app` y aparece en la sección Despliegues.
+- [ ] **[ADICIÓN ARQUITECTO 1]** `prune_old_builds()` mantiene ≤ `_MAX_RETAINED_BUILDS` por `<slug>`/`unified` (borra viejos + `.zip`); `test_prune_keeps_max_retained` verde.
+- [ ] **[ADICIÓN ARQUITECTO 2]** cada build escribe `build.summary.json` (duración, toolchain, archivos+bytes); `/status` lo expone y la UI muestra la evidencia; `test_successful_build_writes_summary_json` verde.
+- [ ] **[ADICIÓN ARQUITECTO 3]** en el primer scan, las soluciones desplegables (web/console/service) quedan pre-tildadas; un slug destildado NO se re-tilda al re-scan; `test_new_deployable_slug_autotracked` + `test_untracked_known_slug_stays_untracked_on_rescan` verdes.
+- [ ] `catalog.truncated` (C9) se propaga a `/scan` y `/catalog`; la UI muestra el banner cuando aplica.
+- [ ] `artifact_dir_for(build_id, slug)` (C2) devuelve `base_dir/slug` (bits reales), no el zip ni el padre; `_title_case("MiSolucion") == "Mi Solucion"` (C3); `<ts>` único vía `_ts()` (C5).
 - [ ] Todos los `test_plan201_*.py` registrados en `HARNESS_TEST_FILES` y verdes **por archivo** con el venv del backend.
 - [ ] `buildWorkshopModel.test.ts` verde y `npx tsc --noEmit` sin errores nuevos.
 - [ ] Smoke manual: en una máquina **sin** toolchain, la sección muestra el doctor y `Compilar` NO crashea (no-op controlado).

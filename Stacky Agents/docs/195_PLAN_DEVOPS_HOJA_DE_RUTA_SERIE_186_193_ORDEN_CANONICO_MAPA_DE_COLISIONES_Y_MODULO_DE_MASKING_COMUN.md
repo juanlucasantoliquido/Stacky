@@ -135,6 +135,7 @@ costó una sesión entera de auditoría.
 | 4 | **189** rollback readiness | Segundo de la pareja C — SOBRE el árbol ya mergeado de 188 (misma sección UI, misma API) | C (deployments) |
 | 5 | **191** bitácora CI | Primero de la pareja `api/ci.py` + `TriggerPipelineSection.tsx` | D (ci) |
 | 6 | **193** triage de fallos CI | Segundo de la pareja D — sus rutas van DESPUÉS de `/runs` de 191 (su propio F0 ya contempla ambos órdenes); importa `secret_masking` | D (ci) |
+| 7 | **198** bitácora de applies de ambientes | Add-on de la serie (cierra la tríada de efectos remotos con registro): toca `api/devops.py` (helper + ruta nueva tras el apply) → grupo B, DESPUÉS del 186; NO usa `secret_masking` (solo rutas relativas del catálogo, ALLOWLIST estricta); reusa la receta de ledger del 191 (`services/ci_run_ledger.py`) en `services/env_apply_ledger.py` | B (devops.py) |
 
 **Paralelismo permitido:** A→B→(C)→(D) es la secuencia segura simple. Si se implementa en paralelo
 por worktrees: A y B pueden convivir; C y D pueden correr en paralelo ENTRE SÍ (archivos disjuntos)
@@ -260,7 +261,8 @@ el de §6 (prefijo + ≥8 chars del set); los planes hermanos lo adoptan al impo
 | Plan 188 + gates §7 | _pendiente_ | |
 | Plan 189 + gates §7 | _pendiente_ | |
 | Plan 191 + gates §7 | _pendiente_ | |
-| Plan 193 + gates §7 | _pendiente_ | |
+| Plan 193 + gates §7 | IMPLEMENTADO F0-F1 (commits `f3cdb35a` F0, `9a936390` F1) — 12 tests backend + 9 vitest verdes, tsc 0 | 2026-07-18 |
+| Plan 198 (add-on) + gates §7 | IMPLEMENTADO F0-F2 (commits `94ad53ef` F0, `aae97c00` F1, `2e8befcd` F2) — bitácora de applies de ambientes: `services/env_apply_ledger.py` (receta 191, otro dominio) + endpoint read-only `/environments/applies` con drift por fingerprint + hook best-effort en las 3 salidas del apply. 11 + 7 tests backend + 6 vitest verdes, tsc 0, GATE1 compileall verde. NO usa `secret_masking` (solo rutas relativas del catálogo; ALLOWLIST estricta `ENTRY_FIELDS`). §7bis: GATE3/GATE4 solo ruido de baseline (mi flag idéntica 2x categoría+FlagSpec; GATE4 el dup PREEXISTENTE `test_harness_flags.py`) — nada introducido por 198. `test_bounds_map_is_frozen` y `test_endpoint_plan_with_alias_gates` rojos por deuda AJENA preexistente (flags int foráneas / barrido default-ON de `REMOTE_TARGET`) | 2026-07-18 |
 | KPI-2 — grep TOKEN_VALUE_PREFIXES = solo secret_masking.py | VERDE — `TOKEN_VALUE_PREFIXES` vive SOLO en `services/secret_masking.py`; el 190 lo IMPORTA (no redefine) | 2026-07-18 |
 | Desvíos del orden (si hubo) + motivo | _pendiente_ | |
 

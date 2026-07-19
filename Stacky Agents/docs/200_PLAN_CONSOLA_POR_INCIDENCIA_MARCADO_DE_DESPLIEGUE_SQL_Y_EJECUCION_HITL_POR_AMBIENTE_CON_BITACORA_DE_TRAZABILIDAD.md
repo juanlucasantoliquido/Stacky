@@ -1,10 +1,45 @@
 # Plan 200 — Consola por incidencia + marcado de despliegue SQL + ejecucion HITL por ambiente + bitacora de trazabilidad
 
-- **Version:** v1 (PROPUESTO — pendiente de `criticar-y-mejorar-plan`)
+- **Version:** v2 (CRITICADO y ENDURECIDO por `criticar-y-mejorar-plan` — juez adversarial, 2026-07-18)
 - **Fecha:** 2026-07-18
 - **Autor:** StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8)
 - **Serie:** Incidencias + DB Compare (une el ciclo de incidencias 131/166/177 con el comparador de BD 122-128/178-184 y la receta de bitacora del 198)
 - **Runtimes:** Codex CLI, Claude Code CLI, GitHub Copilot Pro — paridad total (backend + UI puros; el unico punto sensible al runtime es el transcript, que degrada al log crudo — ver F2).
+
+## Changelog v1 -> v2 (crítica adversarial del juez)
+
+- **C1 (dry-run desbloqueado):** F5 reordena — `dry_run=True` retorna el plan ANTES del chequeo de
+  idempotencia (v1 lo bloqueaba con `already_executed`, contradiciendo KPI-3). El preview nunca muta y
+  SIEMPRE está disponible, incluso para un sha ya ejecutado (que es justo cuando el preview importa).
+- **C2 (ledger best-effort tras efecto irreversible):** F5 registra en el ledger en modo best-effort
+  DESPUÉS del commit real; si el `append_exec` falla (disco/IO) **jamás** propaga 500 (el efecto ya
+  ocurrió): retorna `ExecResult.ledger_write_failed=True` para que el operador NO re-ejecute a ciegas.
+  Calca la robustez best-effort del 198.
+- **C3 (ejecución POR REFERENCIA — HITL real del SQL exacto):** el fingerprint de v1 era ceremonial (el
+  front mandaba `sql` + `sha256(sql)` client-side = tautología, cero valor TOCTOU y desacople de R2/R4).
+  v2 ejecuta POR REFERENCIA al script que detectó R2: el front manda `script_ref{source, sha256, ...}`
+  (NO SQL crudo), el backend RE-LEE el script server-side (adjunto de incidencia / output de ticket),
+  verifica `sha(releído) == fingerprint == script_ref.sha256` (409 `script_stale` si cambió) y ejecuta
+  ESE texto. Calca el patrón server-side de `devops.py:271`. Nuevo endpoint read-only `GET /sql-script`.
+- **C4 (PL/SQL):** `split_statements: bool` (default True); en False ejecuta el texto como bloque único
+  (Oracle `BEGIN..END`). Checkbox en F7. Sin esto los clientes Oracle-pesados quedaban sin salida
+  (editar el SQL es fuera de scope).
+- **C5 (señal "R3 habilitado"):** F4/F7 leen `STACKY_SQL_EXEC_ENABLED` de `GET /api/harness-flags`
+  (existente) para el botón deshabilitado; se elimina el vago "status de BD dice off" sin endpoint.
+- **C6 (atomicidad DDL):** se acota la promesa de rollback — `engine.begin()` NO es atómico para DDL en
+  Oracle/MySQL (commit implícito); el dry-run marca `partial_effects_possible` cuando el script trae DDL.
+- **C7 (fatiga de alarmas):** el path solo-keywords de R2 exige CO-OCURRENCIA de intención-deploy Y
+  señal-SQL (tabla/procedure/migración/`.sql`), no `ambiente`/`entorno` sueltos.
+- **C8..C11 (menores):** KPI-4 alineado a retención 500 (no 300); `exec_allowed` se agrega a
+  `_PUBLIC_KEYS` (no sólo a `_public`), default False; se aclara que `STACKY_SQL_EXEC_LEDGER_ENABLED`
+  OFF sólo oculta la traza (el registro es intrínseco a R3); se registra huella de regresión.
+- **[ADICIÓN ARQUITECTO] Estado de despliegue por ambiente:** helper puro `deployStatus` /
+  `deployStatusByEnv` (F7) que computa de la traza R4, por (script, ambiente), el estado
+  `aplicado | fallo | no-registrado`, mostrado como chip junto a cada script en R2/F4 y en el panel
+  R3/F7. Read-only (flag R4 ON), determinista, 3 runtimes, cero trabajo del operador. Materializa el
+  "ver estado por ambiente" que R4 prometía sólo como texto suelto de idempotencia.
+
+---
 
 > **Nota de arranque para el modelo implementador (leer antes de tocar nada).** Este
 > documento cita simbolos y `archivo:linea` verificados el 2026-07-18 en la rama
@@ -47,8 +82,8 @@ del 198.
 |-----|------------------|
 | KPI-1 (R1) | Incidencia con ejecucion de analisis Y de dev-resolutor linkeadas -> `GET /api/incidents/<id>/console` devuelve AMBOS `execution_id` con su `kind`; con `STACKY_INCIDENT_CONSOLE_ENABLED` OFF -> 404. El front pinta el transcript reusando `GET /api/executions/<id>/logs` (sin endpoint de transcript nuevo). |
 | KPI-2 (R2) | `detect_for_incident` sobre una incidencia con adjunto `.sql` -> `requires=True`, lista exacta de scripts (`name`+`sha256`) y `suggested_environments == aliases registrados`; sin `.sql` ni keywords -> `requires=False`. `detect_for_ticket` con un `.sql` en `Output/tickets/<ado_id>/` -> `requires=True`. Determinista (misma entrada, misma salida). |
-| KPI-3 (R3) | `execute_script`: flag `STACKY_SQL_EXEC_ENABLED` OFF -> 404; ambiente sin `exec_allowed` -> 403; `dry_run=True` -> devuelve plan de statements y NO muta; ejecucion real contra sqlite sandbox con `confirm=True` + `fingerprint` correcto -> `rows_affected` + commit; `fingerprint` incorrecto -> 409; el password JAMAS aparece en `output`/`error` (assert sobre el string). |
-| KPI-4 (R4) | Tras 1 ejecucion real -> 1 entry en `sql_exec_ledger.jsonl` con cadena de hash valida; `find_executed(alias, sha)` la encuentra; re-ejecutar el mismo `sha` sin `force=True` -> bloqueo "ya ejecutado"; `verify_chain()` True; alterar 1 linea -> `verify_chain()` False; `list_execs` DESC por `executed_at`, filtra por `alias`/`ticket_ref`; 301 appends -> quedan 300. |
+| KPI-3 (R3) | `execute_script`: flag `STACKY_SQL_EXEC_ENABLED` OFF -> 404; ambiente sin `exec_allowed` -> 403; **`dry_run=True` devuelve el plan de statements y NO muta SIEMPRE (aun si el sha ya se ejecuto)**; ejecucion **por referencia** (el backend RE-LEE el script server-side; `sha(releido) != fingerprint` o `!= script_ref.sha256` -> 409 `script_stale`) contra sqlite sandbox con `confirm=True` -> `rows_affected` + commit; re-ejecucion real del mismo sha sin `force` -> 409 `already_executed`; el password JAMAS aparece en `output`/`error`/`ledger` (assert sobre el string). |
+| KPI-4 (R4) | Tras 1 ejecucion real -> 1 entry en `sql_exec_ledger.jsonl` con cadena de hash valida; `find_executed(alias, sha)` la encuentra; re-ejecutar el mismo `sha` sin `force=True` -> bloqueo "ya ejecutado"; `verify_chain()` True; alterar 1 linea -> `verify_chain()` False; `list_execs` DESC por `executed_at`, filtra por `alias`/`ticket_ref`; 501 appends -> quedan 500 (`MAX_ROWS`). |
 | KPI-5 (UI) | Helpers puros de R1/R2/R3/R4 testeados en vitest POR ARCHIVO + `npx tsc --noEmit` sin errores nuevos; ratchet UI sin `style={{}}` nuevos. |
 
 **Ganancia robusta:** el operador deja de tener incidencias "ciegas" (no sabe que respondio el agente),
@@ -148,6 +183,17 @@ dominio), 198 (applies de carpetas — se calca su receta de ledger, otro domini
    backend POR ARCHIVO con `.venv` py3.13; front vitest POR ARCHIVO sin `@testing-library`/`jsdom`
    (solo funciones puras); ratchet UI sin `style={{}}` nuevos; egress sentinel dispara ante
    `password=<4+ chars>` (`dbcompare_config_import.py:196`) -> ninguna salida puede contener eso.
+8. **Registro best-effort tras efecto irreversible (R3/R4).** El `append_exec` del ledger corre
+   DESPUES del commit; si falla (disco/IO) **NUNCA** propaga 500: el efecto ya ocurrio, se retorna
+   `ExecResult` con `ledger_write_failed=True` y aviso para que el operador NO re-ejecute a ciegas
+   (best-effort como el 198). La **atomicidad** de `engine.begin()` es real para DML y para DDL en
+   engines con DDL transaccional (SQLite/Postgres) pero **NO** en Oracle/MySQL (DDL auto-commitea):
+   el dry-run marca `partial_effects_possible` cuando detecta DDL, y el rollback/undo de lo ya
+   ejecutado esta fuera de scope (§6).
+9. **Ejecucion por referencia (R3).** El front NUNCA envia SQL crudo a ejecutar: envia una REFERENCIA
+   al script que detecto R2 (`script_ref{source, sha256, ...}`) y el backend re-lee el `.sql`
+   server-side. Beneficio triple: el `fingerprint` es del SQL exacto (HITL real), el sha ejecutado ==
+   el detectado por R2 == el registrado por R4, y no hay canal para SQL arbitrario del cliente.
 
 ---
 
@@ -447,9 +493,15 @@ scripts SQL y listar cuales + en que ambientes sugeridos.
 ```python
 from dataclasses import dataclass, field
 
-_DEPLOY_KEYWORDS = (  # deteccion de intencion en texto (case-insensitive, palabra completa)
-    r"desplegar", r"despliegue", r"deploy", r"ambiente", r"entorno",
-    r"producci[oó]n", r"\bQA\b", r"\bUAT\b", r"staging", r"script\s+SQL",
+# El path "solo keywords" (sin .sql) exige CO-OCURRENCIA de intencion-de-deploy Y senal-SQL,
+# para no disparar "posible" ante cualquier mencion de "ambiente" (fatiga de alarmas, C7).
+_DEPLOY_INTENT = (  # intencion de desplegar (case-insensitive)
+    r"desplegar", r"despliegue", r"deploy", r"aplicar\s+en", r"correr\s+en",
+    r"producci[oó]n", r"\bQA\b", r"\bUAT\b", r"staging",
+)
+_SQL_SIGNAL = (     # senal de que el cambio es SQL (case-insensitive)
+    r"\bscript\s+SQL\b", r"\.sql\b", r"\btabla\b", r"\bstored\s+procedure\b",
+    r"\bprocedure\b", r"\bmigraci[oó]n\b", r"\bDDL\b", r"\bDML\b", r"\bschema\b",
 )
 
 @dataclass
@@ -478,36 +530,58 @@ def detect_for_ticket(ticket, output_dir) -> DeployNeed:
 ```
 
 Reglas duras (nada difuso):
-- `.sql` presente -> `requires=True`, `confidence="alta"`. Solo keywords -> `requires=True`,
-  `confidence="posible"`. Ninguno -> `requires=False`, `confidence="no"`, listas vacias.
+- `.sql` presente -> `requires=True`, `confidence="alta"`. **Sin `.sql`**: `requires=True`,
+  `confidence="posible"` SOLO si co-ocurren `_DEPLOY_INTENT` Y `_SQL_SIGNAL` en el texto (C7). Ninguno
+  (o solo uno de los dos grupos) -> `requires=False`, `confidence="no"`, listas vacias.
 - `scripts[i].source` = `"incident_attachment"` o `"ticket_output"`.
 - `sha256` de incidencia sale del `files_meta` ya calculado (`incident_store.py:155`); el de ticket se
   computa leyendo el archivo (`hashlib.sha256`).
 - `suggested_environments` = TODOS los aliases registrados (el operador elige; el detector no adivina el
   ambiente correcto — eso seria inventar).
 
+**Helper de lectura server-side (reusado por R3/F5 — ejecucion por referencia, C3):**
+
+```python
+def read_script(ref: dict) -> dict | None:
+    """Re-lee un .sql server-side por REFERENCIA. ref = {source, sha256, name, incident_id?/ticket_ref?}.
+    source == "incident_attachment": busca en incident["files"] el file con sha256 == ref["sha256"],
+      lee data_dir()/incidents/<id>/<stored_name>. source == "ticket_output": lee output_dir/name.
+    Devuelve {"name","sha256","sql_text"} recomputando sha256 del contenido, o None si no existe."""
+    ...
+```
+
 **Endpoints (read-only, gated `STACKY_SQL_DEPLOY_DETECT_ENABLED`):**
 - `GET /api/incidents/<incident_id>/sql-deploy` -> `jsonify(asdict(detect_for_incident(incident)))`.
 - `GET /api/tickets/<ticket_id>/sql-deploy` -> resuelve el ticket + su `output_dir` con
   `_resolve_ticket_output_dir_ws1` (reusar; si no hay dir, pasar `None`) -> `detect_for_ticket`.
-- Ambos: flag OFF -> 404; entidad inexistente -> 404.
+- **`GET /api/incidents/<incident_id>/sql-script?sha=<sha256>`** (y **`GET /api/tickets/<ticket_id>/sql-script?sha=<sha256>&name=<file>`**):
+  arma el `ref` y devuelve `read_script(ref)` = `{name, sha256, sql_text}` leyendo el `.sql`
+  **server-side**. Es la **fuente de preview** que F7 muestra antes de confirmar, y la MISMA fuente que
+  R3 re-lee al ejecutar. `sql_text` se devuelve tal cual (es SQL del operador, no secreto); sha
+  inexistente -> 404.
+- Todos: flag OFF -> 404; entidad inexistente -> 404.
 
 **Tests PRIMERO — `tests\test_plan200_sql_deploy_detector.py`:**
 - `test_incidencia_con_sql_requires_alta` — incidencia con 1 adjunto `.sql` -> `requires True`,
   `confidence "alta"`, 1 script con su `sha256`.
-- `test_incidencia_solo_keywords_posible` — texto "hay que desplegar en produccion", sin `.sql` ->
-  `requires True`, `confidence "posible"`, `scripts == []`.
+- `test_incidencia_solo_keywords_posible` — texto "hay que desplegar el script SQL de la tabla en
+  produccion" (intencion + senal-SQL), sin `.sql` -> `requires True`, `confidence "posible"`,
+  `scripts == []`.
+- `test_keywords_sin_senal_sql_no_requiere` (C7) — texto "revisar el ambiente de produccion" (solo
+  intencion, sin senal-SQL) -> `requires False`.
 - `test_incidencia_sin_nada_no_requiere` — sin `.sql` ni keywords -> `requires False`.
 - `test_ticket_con_sql_en_output` — `.sql` en `output_dir` (tmp) -> `requires True`, `confidence "alta"`.
 - `test_suggested_envs_son_los_registrados` — monkeypatch `dbcompare_registry.list_environments` con 2
   aliases -> `suggested_environments` == esos 2.
 - `test_determinista` — misma entrada 2 veces -> salida identica.
 - `test_endpoint_404_flag_off` (incidencia) y `test_endpoint_404_flag_off_ticket`.
+- `test_read_script_devuelve_contenido` — `read_script` de una incidencia con `.sql` adjunto ->
+  `sql_text` == texto del archivo y `sha256` recomputado coincide; sha inexistente -> None (endpoint 404).
 - Registrar en `HARNESS_TEST_FILES`.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_plan200_sql_deploy_detector.py -q`
 
-**Criterio de aceptacion (binario):** los 8 tests pasan; el detector no importa red/LLM
+**Criterio de aceptacion (binario):** los 10 tests pasan; el detector no importa red/LLM
 (`grep -nE "requests|http|llm|invoke" backend/services/sql_deploy_detector.py` -> 0 matches).
 
 **Flag que protege:** `STACKY_SQL_DEPLOY_DETECT_ENABLED` (default ON) + master de incidencias/tickets.
@@ -554,8 +628,13 @@ export function scriptsSummary(need: DeployNeed): string { /* "a.sql, b.sql en Q
    lista los scripts (`name`) y los `suggested_environments`. 404 -> no renderiza nada. Clases del CSS
    module existente (**gotcha ratchet:** sin `style={{}}` nuevos).
    - **Puente a R3/F7:** cada script de la lista lleva el boton "Ejecutar en ambiente" que F7 conecta.
-     En F4, ese boton puede quedar deshabilitado con tooltip "Habilita STACKY_SQL_EXEC_ENABLED" si el
-     status dice que R3 esta OFF (leer `enabled` del status de BD — ver F7).
+     Para saber si R3 esta habilitado, F4/F7 leen `STACKY_SQL_EXEC_ENABLED` de **`GET /api/harness-flags`**
+     (endpoint EXISTENTE; C5) — si esta OFF, el boton queda deshabilitado con tooltip "Habilita
+     ejecucion SQL en Configuracion > Flags". No se inventa endpoint de status de BD.
+   - **[ADICIÓN ARQUITECTO] chip de estado por ambiente:** junto a cada script, F4 pinta un chip por
+     ambiente con `deployStatusByEnv` (helper puro de F7, importado): `aplicado` / `fallo` /
+     `no-registrado`, computado de la traza R4 (`GET /api/db-compare/sql-exec-ledger?ticket_ref=<...>`,
+     read-only, flag R4 ON). Asi el operador ve, SIN ejecutar, donde ya corrio cada script.
 
 **Tests PRIMERO — `sqlDeployBadge.test.ts`:**
 - `badge` — `requires false` -> `show false`; `confidence "alta"` -> warn con el conteo; `"posible"` ->
@@ -589,16 +668,21 @@ con dry-run, transaccion, allow-list y masking.
 
 **Cambios exactos:**
 
-1. `dbcompare_registry.py`: en `upsert_environment` (`:114`) y `_public` (`:74`) sumar el campo
-   `exec_allowed: bool` (default `False`). Helper `set_exec_allowed(alias: str, allowed: bool) -> bool`
-   y `exec_allowed(alias: str) -> bool`. **Registrar un ambiente para comparar (lectura) NO habilita
-   ejecucion (escritura):** son opt-ins separados.
+1. `dbcompare_registry.py`: persistir `exec_allowed: bool` (default `False`) en `upsert_environment`
+   (`:114`) y **exponerlo agregando la clave `"exec_allowed"` a `_PUBLIC_KEYS`** (que es de donde
+   `_public` (`:74`) arma su salida — NO alcanza con tocar el cuerpo de `_public`; si un env legacy no
+   la tiene, `_public` debe devolver `False` por default, como ya hace con `has_password`). Helpers
+   `set_exec_allowed(alias: str, allowed: bool) -> bool` y `exec_allowed(alias: str) -> bool`.
+   **Registrar un ambiente para comparar (lectura) NO habilita ejecucion (escritura):** son opt-ins
+   separados.
 
 2. `sql_exec_engine.py`:
 
 ```python
 from dataclasses import dataclass, field
 import hashlib, re, time
+
+_DDL_RE = re.compile(r"\b(CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE)\b", re.IGNORECASE)
 
 @dataclass
 class ExecResult:
@@ -609,6 +693,8 @@ class ExecResult:
     error: str | None
     duration_ms: int
     statements: list = field(default_factory=list)   # solo en dry_run: los statements detectados (sin ejecutar)
+    partial_effects_possible: bool = False           # dry_run: True si hay DDL (rollback no atomico en Oracle/MySQL, C6)
+    ledger_write_failed: bool = False                # real: True si el append best-effort al ledger fallo (C2)
 
 def script_fingerprint(sql_text: str) -> str:
     """sha256 del texto EXACTO del script — el HITL exige que coincida con lo que el operador vio."""
@@ -622,32 +708,37 @@ def _split_statements(sql_text: str) -> list[str]:
 def execute_script(*, alias: str, sql_text: str, dry_run: bool,
                    ticket_ref: str | None, incident_id: str | None,
                    confirm_fingerprint: str, executed_by: str,
-                   force: bool = False) -> ExecResult:
+                   split_statements: bool = True, force: bool = False) -> ExecResult:
+    """R3 — ejecuta un script YA RESUELTO server-side (la ruta lo re-lee por referencia, C3).
+    `confirm_fingerprint` = sha256 del texto que el operador confirmo; debe coincidir con `sql_text`."""
     from config import config as _cfg
     if not getattr(_cfg, "STACKY_SQL_EXEC_ENABLED", False):
         raise PermissionError("sql_exec_disabled")            # -> 404 en la ruta
     from services import dbcompare_registry
     if not dbcompare_registry.exec_allowed(alias):
         raise PermissionError("env_not_exec_allowed")          # -> 403 en la ruta
-    if confirm_fingerprint != script_fingerprint(sql_text):
-        raise ValueError("fingerprint_mismatch")               # -> 409 en la ruta
-    # idempotencia (R4): si ya se ejecuto este sha en este alias y no viene force -> bloquear
+    sha = script_fingerprint(sql_text)
+    if confirm_fingerprint != sha:
+        raise ValueError("fingerprint_mismatch")               # -> 409 en la ruta (defensa en profundidad)
+    statements = [sql_text] if not split_statements else _split_statements(sql_text)
+    # C1 — dry-run SIEMPRE disponible y NUNCA muta: retorna ANTES de la idempotencia.
+    if dry_run:
+        return ExecResult(ok=True, dry_run=True, statement_count=len(statements),
+                          rows_affected=None, error=None, duration_ms=0, statements=statements,
+                          partial_effects_possible=bool(_DDL_RE.search(sql_text)))
+    # idempotencia (R4): SOLO para ejecucion real. `find_executed` ya filtra a ok/no-dry-run.
     from services import sql_exec_ledger
-    prev = sql_exec_ledger.find_executed(alias, script_fingerprint(sql_text))
-    if prev is not None and prev.get("result_ok") and not prev.get("dry_run") and not force:
+    prev = sql_exec_ledger.find_executed(alias, sha)
+    if prev is not None and not force:
         raise RuntimeError("already_executed")                 # -> 409 con detalle en la ruta
     from services import dbcompare_engine
     cred = dbcompare_registry.get_credential(alias)             # para _scrub del password
     password = (cred or {}).get("password") or ""
-    statements = _split_statements(sql_text)
-    if dry_run:
-        return ExecResult(ok=True, dry_run=True, statement_count=len(statements),
-                          rows_affected=None, error=None, duration_ms=0, statements=statements)
     engine = dbcompare_engine.open_engine(alias)               # REUSO
     started = time.monotonic()
     total_rows = 0
     try:
-        with engine.begin() as conn:                           # transaccion: commit al salir OK, rollback si lanza
+        with engine.begin() as conn:                           # transaccion: commit al salir OK, rollback si lanza (DML/DDL transaccional)
             from sqlalchemy import text as _sql_text
             for stmt in statements:
                 res = conn.execute(_sql_text(stmt))
@@ -662,16 +753,19 @@ def execute_script(*, alias: str, sql_text: str, dry_run: bool,
                             rows_affected=None, error=msg[:1000], duration_ms=dur)
     finally:
         engine.dispose()
-    # R4: registrar SIEMPRE (ok o error) — no es best-effort, es parte del contrato
-    sql_exec_ledger.append_exec({
-        "alias": alias, "engine": (cred or {}).get("engine"),
-        "ticket_ref": ticket_ref, "incident_id": incident_id,
-        "script_sha256": script_fingerprint(sql_text),
-        "statement_count": len(statements), "dry_run": False,
-        "result_ok": result.ok, "rows_affected": result.rows_affected,
-        "error": result.error, "duration_ms": result.duration_ms,
-        "executed_by": executed_by,
-    })
+    # C2 — R4 best-effort: el efecto YA ocurrio; un fallo del ledger NUNCA tumba el request (no 500).
+    try:
+        sql_exec_ledger.append_exec({
+            "alias": alias, "engine": (cred or {}).get("engine"),
+            "ticket_ref": ticket_ref, "incident_id": incident_id,
+            "script_sha256": sha,
+            "statement_count": len(statements), "dry_run": False,
+            "result_ok": result.ok, "rows_affected": result.rows_affected,
+            "error": result.error, "duration_ms": result.duration_ms,
+            "executed_by": executed_by,
+        })
+    except Exception:                                          # noqa: BLE001
+        result.ledger_write_failed = True                      # el operador NO debe re-ejecutar a ciegas
     return result
 ```
 
@@ -688,16 +782,26 @@ def db_compare_execute_script(alias: str):
     body = request.get_json(silent=True) or {}
     if body.get("confirm") is not True:
         return jsonify({"error": "confirm=True requerido (HITL)"}), 400
-    sql_text = body.get("sql") or ""
+    ref = body.get("script_ref") or {}
     fp = body.get("fingerprint") or ""
-    if not sql_text or not fp:
-        return jsonify({"error": "sql y fingerprint son obligatorios"}), 400
+    if not ref or not fp:
+        return jsonify({"error": "script_ref y fingerprint son obligatorios"}), 400
+    # C3 — ejecucion POR REFERENCIA: re-leer el script server-side (NO se acepta SQL crudo del front).
+    from services import sql_deploy_detector
+    resolved = sql_deploy_detector.read_script(ref)   # {name, sha256, sql_text} | None
+    if resolved is None:
+        return jsonify({"error": "script_not_found", "kind": "script_not_found"}), 404
+    actual_sha = resolved["sha256"]
+    if actual_sha != fp or actual_sha != (ref.get("sha256") or ""):
+        return jsonify({"error": "el script cambio desde que se mostro; refrescar el preview",
+                        "kind": "script_stale"}), 409          # TOCTOU real (calca devops.py:271)
     from services import sql_exec_engine
     try:
         res = sql_exec_engine.execute_script(
-            alias=alias, sql_text=sql_text, dry_run=bool(body.get("dry_run", False)),
+            alias=alias, sql_text=resolved["sql_text"], dry_run=bool(body.get("dry_run", False)),
             ticket_ref=body.get("ticket_ref"), incident_id=body.get("incident_id"),
             confirm_fingerprint=fp, executed_by=current_user() or "operator",
+            split_statements=bool(body.get("split_statements", True)),
             force=bool(body.get("force", False)),
         )
     except PermissionError as exc:
@@ -718,35 +822,55 @@ def db_compare_execute_script(alias: str):
 - **allow-list doble:** el alias debe existir en el registro (`dbcompare_registry`) Y tener
   `exec_allowed=True`.
 - **flag OFF -> 404** (la feature no existe si el master esta OFF).
-- **HITL:** `confirm=True` + `fingerprint` que coincide con el sha del SQL exacto (evita ejecutar algo
-  distinto de lo que el operador vio; 409 si difiere).
-- **dry-run:** `dry_run=True` NO abre engine ni ejecuta; devuelve los statements detectados.
-- **transaccion:** `engine.begin()` commitea al salir OK y hace rollback ante excepcion.
-- **masking:** el `error` pasa por `_scrub(msg, password)`; el password JAMAS viaja en la respuesta;
-  el connection string nunca se loguea (open_engine ya lo maneja).
-- **idempotencia:** `find_executed` bloquea re-ejecucion del mismo sha en el mismo alias salvo `force`.
+- **ejecucion POR REFERENCIA (C3):** el front NO manda SQL crudo; manda `script_ref` y el backend
+  RE-LEE el `.sql` server-side (`read_script`). `sha(releido) != fingerprint` o `!= script_ref.sha256`
+  -> 409 `script_stale`. Asi el fingerprint es "del SQL exacto" de verdad (calca `devops.py:271`) y el
+  sha ejecutado == el que detecto R2 == el que registra R4.
+- **HITL:** `confirm=True` + `fingerprint` del script que el operador vio (409 si difiere del releido).
+- **dry-run SIEMPRE (C1):** `dry_run=True` NO abre engine ni ejecuta y retorna ANTES de la idempotencia
+  (se puede previsualizar aun un sha ya ejecutado); marca `partial_effects_possible` si hay DDL.
+- **transaccion:** `engine.begin()` commitea al salir OK y hace rollback ante excepcion **para DML y
+  DDL transaccional (SQLite/Postgres)**; en Oracle/MySQL el DDL auto-commitea (C6) — no hay atomicidad
+  para DDL ahi, y el undo esta fuera de scope.
+- **masking:** el `error` pasa por `_scrub(msg, password)`; el password JAMAS viaja en la respuesta ni
+  en el ledger; el connection string nunca se loguea (open_engine ya lo maneja).
+- **idempotencia:** `find_executed` bloquea re-ejecucion REAL del mismo sha en el mismo alias salvo
+  `force`; el registro es best-effort (C2) y si falla marca `ledger_write_failed` (no 500).
+- **PL/SQL (C4):** `split_statements=False` ejecuta el texto como bloque unico (Oracle `BEGIN..END`).
 
 **Tests PRIMERO — `tests\test_plan200_sql_exec_engine.py`** (usar sqlite: registrar un ambiente
-`engine="sqlite"` en `tmp_path` via `dbcompare_registry` con password dummy — recordar que
-`open_engine` exige credencial aun para sqlite, memoria plan 183; monkeypatch `data_dir`):
+`test-exec` `engine="sqlite"` en `tmp_path` via `dbcompare_registry` con password dummy — recordar que
+`open_engine` exige credencial aun para sqlite y el alias sqlite debe empezar con `test-`
+(`dbcompare_registry.py:82`); monkeypatch `data_dir`; marcar `set_exec_allowed("test-exec", True)`):
 - `test_flag_off_lanza_permission` — `STACKY_SQL_EXEC_ENABLED` OFF -> `PermissionError("sql_exec_disabled")`.
 - `test_env_no_exec_allowed_lanza` — alias sin `exec_allowed` -> `PermissionError("env_not_exec_allowed")`.
 - `test_fingerprint_mismatch` — `confirm_fingerprint` distinto del sha -> `ValueError`.
 - `test_dry_run_no_muta` — `dry_run=True` sobre `CREATE TABLE ...` -> `ExecResult.dry_run True`,
   `statement_count` correcto, y la tabla NO existe despues (query de verificacion).
+- `test_dry_run_previsualiza_aun_ya_ejecutado` (C1) — ejecutar real un sha, luego `dry_run=True` del
+  MISMO sha -> retorna el plan (NO lanza `already_executed`).
 - `test_ejecucion_real_crea_y_commitea` — `CREATE TABLE t(...); INSERT ...` con fingerprint correcto ->
   `ok True`, `rows_affected>=1`, la tabla existe y tiene la fila (nueva conexion).
 - `test_error_hace_rollback_y_scrub` — SQL invalido -> `ok False`, `error` sin el password
   (assert password NOT in error), y ningun efecto parcial persistido.
-- `test_idempotencia_bloquea_sin_force` — ejecutar el mismo sha 2 veces -> la 2da lanza
+- `test_idempotencia_bloquea_sin_force` — ejecutar el mismo sha 2 veces (real) -> la 2da lanza
   `RuntimeError("already_executed")`; con `force=True` -> corre.
+- `test_split_statements_false_bloque_unico` (C4) — con `split_statements=False`, un texto con `;`
+  interno se pasa como 1 solo statement (`statement_count == 1`).
+- `test_partial_effects_flag_con_ddl` (C6) — `dry_run=True` sobre DDL -> `partial_effects_possible True`;
+  sobre DML puro -> `False`.
+- `test_ledger_best_effort_no_tumba` (C2) — monkeypatch `sql_exec_ledger.append_exec` para que lance ->
+  la ejecucion real retorna `ok True` con `ledger_write_failed True` (NO propaga la excepcion).
 - `test_ledger_registra_ok_y_error` — tras ok y tras error hay 2 entries en el ledger.
+- `test_route_ejecucion_por_referencia_stale_409` (C3, Flask test client) — `POST .../execute-script`
+  con `script_ref` cuyo `.sql` server-side fue alterado (sha ya no coincide con `fingerprint`) -> 409
+  `script_stale`; con el sha correcto + `exec_allowed` -> ejecuta y aparece en el ledger.
 - Registrar en `HARNESS_TEST_FILES`.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_plan200_sql_exec_engine.py -q`
 
-**Criterio de aceptacion (binario):** los 8 tests pasan; `grep -n "password" ExecResult` no expone el
-password en el shape de respuesta (revision manual del `asdict`); `python -m compileall
+**Criterio de aceptacion (binario):** los 13 tests pasan; el `asdict(ExecResult)` no contiene ningun
+campo con el password ni el connection string (revision manual); `python -m compileall
 backend/services/sql_exec_engine.py` limpio.
 
 **Flag que protege:** `STACKY_SQL_EXEC_ENABLED` **default OFF** (EXCEPCION 2 destructiva/irreversible +
@@ -880,6 +1004,10 @@ def db_compare_sql_exec_ledger():
 backend/services/sql_exec_ledger.py` -> 0 matches (ledger PURO).
 
 **Flag que protege:** `STACKY_SQL_EXEC_LEDGER_ENABLED` (default ON) + master `STACKY_DB_COMPARE_ENABLED`.
+**Semantica del flag (C10):** OFF **solo oculta la VISTA/endpoint de traza**; el `append_exec` que hace
+R3 al ejecutar es **intrinseco** a la idempotencia y **sigue registrando** aunque este flag este OFF
+(no queres ejecutar sin dejar rastro para el chequeo de idempotencia). Documentarlo en el docstring del
+modulo para que el operador no crea que apagarlo detiene el registro.
 **Impacto por runtime:** identico (funcion pura). **Fallback:** flag OFF -> 404 en la traza; el
 `append_exec` de F5 solo corre cuando R3 ejecuta (R3 OFF por default -> ledger vacio, sin efecto).
 **Trabajo del operador:** ninguno (la traza aparece sola cuando haya ejecuciones).
@@ -908,6 +1036,7 @@ el ambiente elegido con confirmacion, y ver la traza por ambiente.
 
 ```typescript
 export interface EnvOption { alias: string; engine: string; exec_allowed: boolean; has_password: boolean; }
+export interface ScriptRef { source: "incident_attachment" | "ticket_output"; sha256: string; name: string; incident_id?: string; ticket_ref?: string; }
 export interface LedgerEntry {
   alias: string; ticket_ref: string | null; script_sha256: string; result_ok: boolean;
   rows_affected: number | null; dry_run: boolean; executed_at: string; executed_by: string; error: string | null;
@@ -918,41 +1047,61 @@ export function executableEnvs(envs: EnvOption[]): EnvOption[] { /* filter */ }
 export function idempotencyWarning(entries: LedgerEntry[], alias: string, sha: string): string { /* "" o "Ya ejecutado el <fecha>" */ }
 // Fila de traza legible.
 export function ledgerRow(e: LedgerEntry): string { /* "<fecha> · <alias> · OK/FALLO · N filas" */ }
+// [ADICIÓN ARQUITECTO] Estado de despliegue por (ambiente, script) computado de la traza R4. Puro/determinista.
+export type DeployState = "aplicado" | "fallo" | "no-registrado";
+// el mas reciente por executed_at para (alias, sha): ok&&!dry_run -> "aplicado (<fecha>)";
+// existe pero !ok -> "fallo (<fecha>)"; ninguno -> "no-registrado".
+export function deployStatus(entries: LedgerEntry[], alias: string, sha: string): { state: DeployState; detail: string } { /* ... */ }
+// Matriz alias -> estado para un sha (para el chip por ambiente junto al script en F4/F7).
+export function deployStatusByEnv(entries: LedgerEntry[], aliases: string[], sha: string): Record<string, DeployState> { /* ... */ }
+// Fingerprint del contenido mostrado (Web Crypto). Vector de prueba fijo en el test.
+export async function sha256Hex(text: string): Promise<string> { /* crypto.subtle.digest('SHA-256', ...) */ }
 ```
 
 2. `SqlExecPanel.tsx`:
-   - Recibe `scripts` (de F4/R2) y el `ticket_ref`/`incident_id`.
+   - Recibe `scripts` (de F4/R2, cada uno con `name`+`sha256`+`source`) y el `ticket_ref`/`incident_id`.
    - Dropdown de ambiente: `GET /api/db-compare/environments` (endpoint existente del comparador; si el
      nombre difiere, confirmar con grep en `api/db_compare.py`), filtrado con `executableEnvs`.
+   - **[ADICIÓN ARQUITECTO] chip de estado por ambiente:** junto a cada script, `deployStatusByEnv`
+     (`aplicado`/`fallo`/`no-registrado`) sobre `GET /api/db-compare/sql-exec-ledger?ticket_ref=<..>`.
+   - **Preview del SQL:** al elegir un script, `GET /api/incidents/<id>/sql-script?sha=<sha>` (o el de
+     ticket) para MOSTRAR el contenido; el front re-hashea con `sha256Hex` y avisa si no coincide con el
+     `sha256` del script (integridad de lo mostrado).
    - Boton "Ejecutar en ambiente ▼": abre un **modal de confirmacion** (reusar la primitiva `Dialog`
      del plan 164 — `grep -rn "useConfirm\|Dialog" frontend/src/components` para el import real) que
-     muestra: script, ambiente elegido, y el `idempotencyWarning` (consultando
-     `GET /api/db-compare/sql-exec-ledger?alias=<alias>`); ofrece "Dry-run" y "Ejecutar de verdad".
+     muestra: nombre+sha del script, contenido, ambiente elegido, `idempotencyWarning`, un check
+     **"Ejecutar como bloque unico (PL/SQL)"** (-> `split_statements:false`, C4), y ofrece "Dry-run" y
+     "Ejecutar de verdad". El dry-run muestra `statement_count` y, si `partial_effects_possible`, el
+     aviso "contiene DDL: sin rollback atomico en Oracle/MySQL".
    - Al confirmar: `POST /api/db-compare/environments/<alias>/execute-script` con
-     `{confirm:true, sql, fingerprint: sha256(sql), dry_run, ticket_ref, incident_id, force?}`.
-     - **El fingerprint se computa en el front sobre el MISMO texto que se envia** (usar la Web Crypto
-       API `crypto.subtle.digest('SHA-256', ...)`; helper async en `sqlExecPanelLogic.ts` con test que
-       verifica el hash de un texto conocido contra un valor esperado fijo).
+     `{confirm:true, script_ref:{source, sha256, incident_id?|ticket_ref?, name}, fingerprint:<sha256 del script>,
+     dry_run, split_statements, ticket_ref, incident_id, force?}` — **NO se envia SQL crudo** (ejecucion
+     por referencia, C3; el backend re-lee y valida server-side).
+     - 409 `script_stale` -> el script cambio: refrescar el preview y reintentar (no forzar).
      - 409 `already_executed` -> re-preguntar con "Ya se ejecuto; forzar" (setea `force:true`).
      - 409 `fingerprint_mismatch` -> refrescar el script y reintentar (no forzar).
+     - respuesta con `ledger_write_failed:true` -> aviso "ejecutado pero NO registrado: verifica antes
+       de re-ejecutar" (C2).
    - Traza por ambiente: `GET /api/db-compare/sql-exec-ledger?alias=<alias>` -> lista con `ledgerRow` +
      badge `chain_ok` (si `false`, aviso "bitacora alterada").
    - **api wrapper (gotcha):** usar `rawPost`/`rawGet` para poder leer el body de 4xx/409 (el wrapper
      `api.post` de `client.ts` LANZA en non-2xx — memoria `gotcha-frontend-api-wrapper-lanza-en-non-2xx`).
-   - Si `STACKY_SQL_EXEC_ENABLED` esta OFF (status de BD dice feature off / 404 del endpoint), el panel
-     muestra los scripts y la traza pero el boton "Ejecutar" queda deshabilitado con tooltip
-     "Habilita ejecucion SQL en Configuracion > Flags". (R4 read-only sigue visible.)
+   - **Estado "R3 habilitado" (C5):** leer `STACKY_SQL_EXEC_ENABLED` de `GET /api/harness-flags`
+     (existente). Si OFF: el panel muestra scripts + chips + traza (R4 read-only) pero el boton
+     "Ejecutar" queda deshabilitado con tooltip "Habilita ejecucion SQL en Configuracion > Flags".
    - Clases del CSS module `dbcompare.module.css` (**gotcha ratchet:** sin `style={{}}` nuevos).
 
 **Tests PRIMERO — `sqlExecPanelLogic.test.ts`:**
 - `executableEnvs` — filtra fuera los sin `exec_allowed` o sin `has_password`.
 - `idempotencyWarning` — hay entry ok/no-dry-run del mismo sha+alias -> texto; caso contrario -> "".
 - `ledgerRow` — formato exacto OK y FALLO.
+- `deployStatus` (ADICIÓN) — ok/no-dry-run -> `aplicado`; ultimo intento fallido -> `fallo`; sin
+  entradas -> `no-registrado`. `deployStatusByEnv` -> mapa alias->estado para varios ambientes.
 - `sha256Hex` (helper de fingerprint) — hash de "SELECT 1" == valor esperado fijo (vector de prueba).
 
 **Comando:** `npx vitest run src/components/dbcompare/sqlExecPanelLogic.test.ts`
 
-**Criterio de aceptacion (binario):** los 4 tests pasan Y `npx tsc --noEmit` sin errores nuevos.
+**Criterio de aceptacion (binario):** los 5 tests pasan Y `npx tsc --noEmit` sin errores nuevos.
 
 **Flag que protege:** `STACKY_SQL_EXEC_ENABLED` (boton deshabilitado si OFF) +
 `STACKY_SQL_EXEC_LEDGER_ENABLED` (traza) + master `STACKY_DB_COMPARE_ENABLED`.
@@ -966,9 +1115,9 @@ export function ledgerRow(e: LedgerEntry): string { /* "<fecha> · <alias> · OK
 
 | Riesgo | Severidad | Mitigacion |
 |--------|-----------|------------|
-| **Ejecucion SQL destructiva/irreversible contra la BD equivocada (R3)** | **CRITICA** | Flag master OFF por default (excepciones 2+3); allow-list doble (alias registrado + `exec_allowed` opt-in separado del registro de lectura); HITL con `confirm=True` + `fingerprint` del SQL exacto (409 si difiere); dry-run obligatoriamente disponible antes de ejecutar; transaccion (`engine.begin()`, rollback ante error); idempotencia que bloquea re-ejecucion sin `force`; ledger tamper-evident de todo intento. **Fuera de scope: rollback/undo de un script ya ejecutado (imposible en general).** |
+| **Ejecucion SQL destructiva/irreversible contra la BD equivocada (R3)** | **CRITICA** | Flag master OFF por default (excepciones 2+3); allow-list doble (alias registrado + `exec_allowed` opt-in separado del registro de lectura); **ejecucion por referencia**: el backend re-lee el script server-side y exige `sha == fingerprint == script_ref.sha256` (409 `script_stale`; C3), asi el HITL es del SQL exacto y no se acepta SQL crudo del front; dry-run SIEMPRE disponible antes de ejecutar (aun de un sha ya corrido; C1); transaccion (`engine.begin()`, rollback ante error para DML/DDL transaccional; en Oracle/MySQL el DDL auto-commitea, C6); idempotencia que bloquea re-ejecucion sin `force`; ledger tamper-evident best-effort de todo intento (si el append falla, `ledger_write_failed` en vez de 500; C2). **Fuera de scope: rollback/undo de un script ya ejecutado (imposible en general).** |
 | Password/connection string filtrado en salida o logs | Alta | `_scrub(msg, password)` en errores; el password nunca viaja en `ExecResult`; `open_engine` ya oculta el string; egress sentinel dispara ante `password=<4+>` (`dbcompare_config_import.py:196`) -> ninguna respuesta lo contiene. Test `test_error_hace_rollback_y_scrub`. |
-| Split de statements rompe PL/SQL con `BEGIN..END` | Media | `_split_statements` documenta la limitacion; para bloques anonimos el operador manda 1 statement; test cubre el split simple; NO se intenta un parser SQL completo (fuera de scope). |
+| Split de statements rompe PL/SQL con `BEGIN..END` | Media | `split_statements=False` (checkbox en F7, C4) pasa el texto como bloque unico -> Oracle `BEGIN..END` corre entero; `_split_statements` documenta su limitacion; test cubre split simple y bloque unico; NO se intenta un parser SQL completo (fuera de scope). |
 | Ledger corrupto/alterado da falsa confianza | Media | Cadena de hash + `verify_chain()`; la traza muestra `chain_ok`; ALLOWLIST evita claves inesperadas; tolerancia a lineas corruptas (se saltean, no tumban). |
 | Detector R2 marca falsos positivos/negativos | Baja | Determinista y explicable: `.sql` presente -> "alta"; solo keywords -> "posible" (aviso suave); el operador decide. Sin LLM. |
 | Dev-resolutor no linkea su ejecucion (R1) | Baja | F1 agrega `add_execution(kind="dev_resolver")` en su call-site; si no hay incidencia asociada, no-op; back-compat con `execution_id` legacy sintetizado en el endpoint. |
@@ -982,6 +1131,9 @@ export function ledgerRow(e: LedgerEntry): string { /* "<fecha> · <alias> · OK
 - Elegir automaticamente el ambiente correcto (el detector sugiere TODOS los registrados; el operador elige).
 - Orquestar despliegues multi-ambiente en cadena o con dependencias (una ejecucion = un script, un ambiente, un click).
 - Editar el SQL dentro de Stacky (se ejecuta lo que viene del adjunto/output; editar es otro flujo).
+- **SQL ad-hoc tipeado en el front:** R3 SOLO ejecuta scripts trackeados por R2 (adjunto de incidencia u
+  output de ticket), re-leidos server-side por referencia (C3) — no hay canal para SQL arbitrario del
+  cliente. Es intencional: todo lo ejecutado es un artefacto auditable con sha estable.
 - Consolidar un `jsonl_ledger.py` comun con 191/198 (refactor futuro anotado, no aca).
 - RBAC/multiusuario sobre quien puede ejecutar (mono-operador; `executed_by` es solo traza).
 - Streaming en vivo del transcript en el modal de incidencia (F2 usa snapshot; el stream existente
@@ -1049,8 +1201,13 @@ export function ledgerRow(e: LedgerEntry): string { /* "<fecha> · <alias> · OK
       en el ledger con cadena valida; re-ejecucion sin `force` bloqueada; password nunca en la respuesta.
 - [ ] Ningun modulo nuevo importa red/LLM salvo `sql_exec_engine` (que solo abre engine via
       `open_engine` para R3).
-- [ ] Cada `test_*.py` nuevo registrado en `HARNESS_TEST_FILES`; los 4 endpoints nuevos montados en sus
-      blueprints existentes.
+- [ ] R3 ejecuta POR REFERENCIA: `POST /execute-script` con un `script_ref` cuyo `.sql` server-side
+      cambio -> 409 `script_stale`; nunca se ejecuta SQL crudo del body (C3).
+- [ ] Huella de regresion registrada en `Stacky Agents/docs/sistema/error_fingerprints.json` para la
+      clase "re-ejecucion ciega de un script SQL ya aplicado" (C11), si el archivo existe.
+- [ ] Cada `test_*.py` nuevo registrado en `HARNESS_TEST_FILES`; todos los endpoints nuevos
+      (`/console`, `/sql-deploy` x2, `/sql-script` x2, `/execute-script`, `/exec-allowed`,
+      `/sql-exec-ledger`) montados en sus blueprints existentes.
 - [ ] Smoke E2E manual (opcional, 1 pasada): incidencia con adjunto `.sql` -> badge "Despliegue SQL
       requerido" -> pestana "Consola del agente" muestra el transcript -> (con R3 ON + ambiente sqlite
       sandbox `exec_allowed`) ejecutar el script -> aparece en la traza por ambiente con `chain_ok`.

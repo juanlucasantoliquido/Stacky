@@ -26,8 +26,14 @@ Serie UX Cockpit del Operador (172-175) — plan 4/4 — **v2 CRITICADO (APROBAD
 >   `config.py` es `"true"` (ON), igual que estas flags.
 > - **C7 (MENOR):** F0 agrega las 2 entradas en `harness_flags_help.py` (`PLAIN_HELP`), paridad con
 >   el patrón del plan 139 (texto de ayuda para el operador en Settings).
-> - **C8 (MENOR):** las queryKeys `["execution-detail"/"ticket-detail", id]` se declaran "propuestas
->   a congelar con 174" — el implementador debe verificar contra el 174 antes de fijarlas.
+> - **C8 (MENOR):** las queryKeys se resuelven así (R-1, pase de coherencia 2026-07-18, registrado en
+>   197 §6.12): `["execution-detail", id]` queda CONGELADA y compartida con 174 (dueño del cache, la
+>   puebla con su prefetch); `["ticket-detail", id]` es CONTRATO PROPIO de 175 porque 174 NO prefetchea
+>   tickets (su prefetch cubre solo ejecuciones).
+> - **v2 · coherencia de serie 2026-07-18 (R-1):** §4 (fila 174) y §5-F3 Paso 5 actualizados —
+>   `["ticket-detail", id]` deja de estar "diferida a 174" y pasa a contrato propio de 175; las
+>   queryKeys de EJECUCIÓN siguen congeladas con 174.
+> - **v2 · coherencia de serie 2026-07-18 (C-1):** §4 fila 164 corregida — 164 F1 YA implementado (commit 9a57c378, `ui/index.ts` exporta `Dialog`/`ConfirmDialog`/`useConfirm`); el camino REAL es `confirmGateway` sobre `useConfirm()`/`ConfirmDialog`, el armado en-dos-pasos in-menu queda SOLO como fallback histórico. (Corrige "164 PROPUESTO, Dialog.tsx no existe", hoy falso.)
 
 > **Autor:** StackyArchitectaUltraEficientCode · **Cierra la serie** Cockpit del Operador.
 > **Hermanos:** 172 (teclado primero: registro de atajos + overlay "?" + foco roving), 173 (vistas
@@ -204,8 +210,8 @@ plan 194** cuando esté mergeado (C2), nunca `navigator.clipboard.writeText` cru
 |---|---|---|---|
 | **172 Teclado primero** | Combos `Shift+F10` / tecla `ContextMenu` para abrir el menú desde el teclado; tecla `p` para fijar el peek; filas enfocables (foco roving). | 175 deja cableado el handler `onKeyDown` EN la fila/card (§5 F3 paso 4). 172 aporta: (a) filas enfocables (roving) y (b) el alta de los combos en su registro central + overlay "?". | Sin 172 las filas no son enfocables ⇒ el menú por teclado y el peek por tecla quedan **inactivos** (el handler existe pero nunca recibe foco). El menú por mouse y el peek por hover funcionan al 100%. Nada rompe. |
 | **173 Vistas guardadas** | Nada. | Sin interacción: 173 persiste filtros/columnas; 175 no toca ni lee esas preferencias. | N/A. |
-| **174 Rendimiento percibido** | Cache/prefetch de react-query para el enriquecimiento del peek. | **queryKeys compartidas (propuestas: `["execution-detail", id]` → `Executions.byId(id)` y `["ticket-detail", id]` → `Tickets.byId(id)`). C8: el implementador VERIFICA contra el 174 antes de fijarlas — si 174 ya congeló otras claves, 175 adopta las del 174 (174 es el dueño del cache).** 174 debe poblarlas con su prefetch on-hover; 175 las lee con `queryClient.getQueryData(...)`. | Sin 174 el cache está frío ⇒ el peek muestra los campos de la fila (que NO requieren fetch) al instante, y el bloque de enriquecimiento hace `queryClient.fetchQuery(...)` on-demand mostrando `<Spinner size="sm">` — explícito y acotado a ese bloque. |
-| **164 Diálogo canónico** | `useConfirm()` promise-based para las acciones con efecto. | Punto ÚNICO de migración: `frontend/src/services/confirmGateway.ts` (§5 F1 paso 3). Cuando 164 aterrice, se cambia SOLO la implementación de ese módulo a `useConfirm()` (contrato del 164 §F0: `(opts) => Promise<boolean>` con `tone: "danger"`). | Sin 164 (estado actual: PROPUESTO, `components/ui/Dialog.tsx` no existe), `confirmGateway` v1 = confirmación de dos pasos DENTRO del menú (máquina `armTransition`, §5 F3): primer clic arma el ítem ("¿Borrar? Clic de nuevo"), segundo clic ejecuta; Escape/cerrar desarma. HITL intacto, cero diálogos nativos. |
+| **174 Rendimiento percibido** | Cache/prefetch de react-query para el enriquecimiento del peek (174 prefetchea SOLO ejecuciones). | **DOS queryKeys con dueño distinto (R-1, registrado en 197 §6.12): (1) `["execution-detail", id]` → `Executions.byId(id)`: CONTRATO COMPARTIDO congelado con 174, que es el dueño del cache y la puebla con su prefetch on-hover (174 §F3); 175 la lee con `queryClient.getQueryData(...)`. (2) `["ticket-detail", id]` → `Tickets.byId(id)`: CONTRATO PROPIO de 175 — 174 NO prefetchea tickets (su prefetch cubre solo ejecuciones: History/ReviewInbox, 174 KPI-3), así que 175 es su único dueño y la puebla on-demand.** | Sin 174 el cache de ejecuciones está frío ⇒ el peek muestra los campos de la fila (sin fetch) al instante y el enriquecimiento hace `queryClient.fetchQuery(...)` on-demand con `<Spinner size="sm">`. Para tickets es SIEMPRE on-demand (nadie los prefetchea). |
+| **164 Diálogo canónico — YA SATISFECHA (C-1)** | `useConfirm()` promise-based para las acciones con efecto. | Punto ÚNICO de migración: `frontend/src/services/confirmGateway.ts` (§5 F1 paso 3). **164 F1 YA IMPLEMENTADO** (commit 9a57c378: `Dialog`/`ConfirmDialog`/`useConfirm` en `frontend/src/components/ui/index.ts`) ⇒ `confirmGateway` se implementa DIRECTAMENTE sobre `useConfirm()` (contrato del 164 §F0: `(opts) => Promise<boolean>` con `tone: "danger"`) — camino REAL. | Con 164 F1 presente, el camino real es el diálogo canónico (`useConfirm()`/`ConfirmDialog`). Fallback histórico (ya NO aplica — solo si `useConfirm` faltara): `confirmGateway` v1 = confirmación de dos pasos DENTRO del menú (máquina `armTransition`, §5 F3): primer clic arma el ítem ("¿Borrar? Clic de nuevo"), segundo clic ejecuta; Escape/cerrar desarma. HITL intacto, cero diálogos nativos. |
 | **165 Contrato de URL — YA SATISFECHA (C1)** | Builder canónico de deep-links (`serializeRoute` de `frontend/src/services/routes.ts`, ya implementado). | `frontend/src/services/peekLinks.ts` es el único módulo que arma URLs y **delega HOY** en `serializeRoute({tab:"history", exec:id})` → clave canónica `?exec=<id>` (`routes.ts:95`). | N/A — 165 está implementado. (Contingencia sólo si `routes.ts` fuera removido: fallback al literal `/history?exec=<id>` con la clave canónica, que `parseRoute` recibe; nunca el alias legacy `?execution=`.) |
 | **194 Portapapeles universal — COLISIÓN (C2)** | `copyService` (copiado con feedback + formatos) del plan 194. | `frontend/src/services/clipboard.ts` **delega en `copyService` si está presente**; toda copia de 175 pasa por ahí para no reinventar ni violar el ratchet `writeText` que introduce 194. | Sin 194 mergeado (estado actual: `copyService.ts` vive en la rama `impl/ux`, no en este árbol), `clipboard.ts` usa un wrapper local `navigator.clipboard.writeText` con fallback `execCommand`. Cuando 194 aterrice, se reemplaza SOLO el cuerpo de `clipboard.ts` por `copyService`. |
 
@@ -758,11 +764,11 @@ cerrar drawers/paleta de rebote) pero **jamás mueve el foco**. Devuelve
   `ExecutionHistoryPage.tsx:67-80`). En Tickets, `content = buildTicketPeek(ticket)` con el
   ticket de la card.
 - **Enriquecimiento (opcional, solo ticket):** ejecuciones del ticket vía
-  `queryClient.getQueryData(["ticket-detail", t.id])`; si `undefined` (cache frío = plan 174
-  ausente), `queryClient.fetchQuery({ queryKey: ["ticket-detail", t.id], queryFn: () => Tickets.byId(t.id), staleTime: 30_000 })`
+  `queryClient.getQueryData(["ticket-detail", t.id])`; si `undefined` (cache frío — 175 es el ÚNICO
+  que puebla `["ticket-detail", id]`; 174 no prefetchea tickets, R-1/197 §6.12), `queryClient.fetchQuery({ queryKey: ["ticket-detail", t.id], queryFn: () => Tickets.byId(t.id), staleTime: 30_000 })`
   con `loading=true` mientras tanto (**degradación explícita: fetch on-demand con spinner
   chico**). Al llegar, agregar field `Ejecuciones: formatInt(executions.length)` + último estado.
-- queryKeys CONGELADAS (§4): `["execution-detail", id]`, `["ticket-detail", id]`.
+- queryKeys CONGELADAS (§4): `["execution-detail", id]` (compartida con 174, su dueño) y `["ticket-detail", id]` (contrato PROPIO de 175 — 174 no prefetchea tickets; R-1 / 197 §6.12).
 
 **Paso 6 — wiring gated por flag:** en ambas páginas, `const { peek } = useUiFlags();` y los
 handlers de hover se pasan SOLO si `peek === true` (`{...(peek ? rowProps(...) : {})}`); con OFF

@@ -12,6 +12,7 @@ Serie UX Cockpit del Operador (172-175) — plan 1/4 — **v2 CRITICADO** — 20
 > - **C5 (MENOR):** drift de números de línea en la evidencia citada (keydown real en `App.tsx:210-235` no `:173-200`; fetch health `:148`; selector `[tabindex]:focus-visible` en `theme.css:362-365` no `:334-337`; `shell_v2_enabled` en `diag.py:415`). Los HECHOS se verificaron TODOS verdaderos en frío; se corrigen las refs más citadas. Ediciones siguen ancladas por TEXTO.
 > - **C6 (MENOR):** `Ctrl+/` (nav.toggle-board, `allowInDialog:true`) dispara bajo un `Dialog` 164 abierto, cambiando el tab detrás del modal. Es paridad con HEAD (hoy no hay guard de diálogo), NO regresión; se deja nota para reconsiderar cuando 164 aterrice.
 > - **C7 (MENOR):** plan tipo-fix (mata la clase "overlay que miente" + el bug matcher `?`/Shift); se registra huella en `error_fingerprints.json` (DoD).
+> - **v2 · coherencia de serie 2026-07-18 (C-1):** §2.6 actualizada — 164 F1 (primitiva `Dialog`) YA está mergeado (commit 9a57c378, `ui/index.ts`); el camino PRINCIPAL pasa a consumir `<Dialog>`, el backdrop manual queda solo como fallback histórico.
 >
 > **Estado v1 original:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode
 > **Serie:** hermanos 173 (vistas guardadas), 174 (rendimiento percibido), 175 (peek y acciones rápidas). Cada tema pertenece a UN solo plan: este plan NO define vistas guardadas (173), NI virtualización/prefetch (174), NI menú contextual/hover-cards (175). 175 CONSUME los atajos que este plan registra.
@@ -102,10 +103,10 @@ El plan 151 (CRITICADO v2, **aún no implementado**) define `HelpLauncher.tsx`: 
 
 ### 2.6 Relación con el diálogo canónico del plan 164 (dependencia blanda)
 
-164 (PROPUESTO, no implementado) creará la primitiva `Dialog` con focus-trap y Escape. Este plan NO la espera:
+164 **F1 YA IMPLEMENTADO** (commit 9a57c378): la primitiva `Dialog` con focus-trap y Escape existe en `frontend/src/components/ui/Dialog.tsx`, exportada desde `ui/index.ts`. Camino PRINCIPAL — F3 consume la API real; el patrón manual queda SOLO como fallback histórico:
 
-- **Si 164 NO está** (caso base): el overlay conserva su patrón actual de backdrop (`ShortcutsCheatsheet.tsx:24-31`) y F3 le agrega cierre por Escape con un `onKeyDown` local en el contenedor (mejora puntual, sin focus-trap — ese es territorio del 164).
-- **Si 164 YA está** al momento de implementar: F3 envuelve el contenido en `<Dialog>` en vez del backdrop manual (misma media hora de trabajo, y el overlay gana focus-trap gratis).
+- **Si 164 YA está** (caso real HOY — F1 mergeado): F3 envuelve el contenido en `<Dialog>` en vez del backdrop manual (misma media hora de trabajo, y el overlay gana focus-trap gratis).
+- **Si 164 NO estuviera** (fallback histórico — ya NO aplica): el overlay conservaría su patrón de backdrop (`ShortcutsCheatsheet.tsx:24-31`) y F3 le agregaría cierre por Escape con un `onKeyDown` local en el contenedor (mejora puntual, sin focus-trap — territorio del 164).
 - El registro suprime atajos nuevos cuando hay un `role="dialog"` abierto (§5 F1, `allowInDialog`), así que cuando 164 migre los 15 modales, los atajos de página no van a dispararse detrás de un modal. Los 3 atajos core preservan su comportamiento actual (hoy funcionan con modales abiertos — paridad exacta).
 - **C6 (v2) — nota a reconsiderar cuando 164 aterrice:** `nav.toggle-board` (Ctrl+/) tiene `allowInDialog:true`, así que dispara aun con un `Dialog` de confirmación abierto, cambiando el tab DETRÁS del modal. Esto es **paridad exacta con HEAD** (hoy el listener no tiene guard de diálogo), NO una regresión, por eso se conserva. Pero al integrar 164 conviene evaluar si un cambio de contexto bajo un diálogo destructivo debería inhibirse (bajar `allowInDialog` a `false` SOLO para `nav.toggle-board`); decisión diferida al plan que implemente la migración de modales, no se toca en 172.
 

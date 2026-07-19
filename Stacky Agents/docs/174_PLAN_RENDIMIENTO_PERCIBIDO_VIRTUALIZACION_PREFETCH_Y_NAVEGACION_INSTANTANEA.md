@@ -15,6 +15,7 @@ Veredicto del juez: **APROBADO-CON-CAMBIOS** (2 BLOQUEANTES + 3 IMPORTANTES + 2 
 - **C5 (IMPORTANTE) — prefetch on-focus amplificado por el foco roving del 172.** `getPrefetchProps` esparce `onFocus`; con el j/k del plan 172 cada paso de foco dispararía un prefetch. **Fix:** R10 + nota en F3: el debounce ≥150 ms + dedup + cap 1 lo absorben; se documenta que la traversal pura NO debe emitir (el foco que "pasa de largo" cancela en `onBlur` antes del deadline) y que 172 comparte el MISMO scheduler (cap global de 1 en vuelo).
 - **C6 (MENOR) — a11y del log virtualizado.** R11: `LogsPanel` virtualizado declara `role="log"` en el contenedor; se acepta como trade-off explícito que `aria-live` sólo anuncia la ventana montada (el texto completo vive en disco backend), mismo criterio que R1/R2.
 - **C7 (MENOR) — request de flags duplicada.** `useUiPerfFlags` hacía `fetch("/api/diag/health")` propio, duplicando el health que `App.tsx` ya pide al montar. **Fix + [ADICIÓN ARQUITECTO]:** hook único `useHealthFlags` compartido (misma `queryKey ["ui-perf-flags"]`, `staleTime: Infinity`) reutilizado por App y por los consumidores; chequeo `r.ok` antes de `r.json()`; 0 requests extra sobre el presupuesto del plan 156.
+- **v2 · coherencia de serie 2026-07-18 (C-3/C-1/C-2):** intérprete backend corregido al canónico `.venv\Scripts\python.exe` (py3.13.5) en KPI-4/KPI-7, §3.3 y todos los bloques de comando — `venv\Scripts\python.exe` (py3.11.9, WIP ajeno) queda marcado PROHIBIDO (197 §4.1); el preámbulo de dependencias ya no da a 165 por no-implementado (F1-F3 mergeadas); la flag se lee por `useHealthFlags`/`/api/diag/health`, no por `HarnessFlags.list` (197 §6.1 parte A).
 
 **[ADICIÓN ARQUITECTO]:** (1) 3ra flag `STACKY_UI_INSTANT_NAV_ENABLED` que le da a "navegación instantánea" su propio kill-switch **en la UI de Settings** (no git-revert), cerrando C1 con la regla dura; (2) el `data-stale` respeta `prefers-reduced-motion` (sin transición si el SO lo pide) — cero trabajo del operador, default ON, accesible.
 
@@ -22,7 +23,7 @@ Veredicto del juez: **APROBADO-CON-CAMBIOS** (2 BLOQUEANTES + 3 IMPORTANTES + 2 
 
 > **Estado histórico v1:** PROPUESTO v1 (2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode (perfil normal)
 > **Hermanos de serie:** 172 (teclado primero: atajos + foco roving), 173 (vistas guardadas: presets + preferencias de tabla), 175 (peek + acciones rápidas). Este plan NO define atajos (172), NO define presets ni columnas persistentes (173), NO define hover-cards ni menú contextual (175). Las dependencias con hermanos son **blandas**: si el hermano no está implementado, la feature degrada explícitamente (se detalla ítem por ítem), nunca rompe.
-> **Dependencias blandas fuera de serie:** plan 156 (latido único — presupuesto de red KPI ≤2 requests/tick en idle: este plan lo RESPETA como techo duro aunque 156 no esté implementado aún), plan 164 (diálogo canónico — N/A acá: este plan no tiene ninguna acción con efecto), plan 165 (contrato de URL — la navegación instantánea complementa sus deep-links; sin 165 funciona igual sobre la history API actual).
+> **Dependencias blandas fuera de serie:** plan 156 (latido único — presupuesto de red KPI ≤2 requests/tick en idle: este plan lo RESPETA como techo duro aunque 156 no esté implementado aún), plan 164 (diálogo canónico — N/A acá: este plan no tiene ninguna acción con efecto), plan 165 (contrato de URL — **YA IMPLEMENTADO F1-F3**, commits f49588eb→8619acfd: `routes.ts` existe y la navegación instantánea consume sus deep-links canónicos; camino histórico degradado — si faltara, funcionaría igual sobre la history API actual).
 > **Runtimes:** las features de este plan son 100% del dashboard (frontend React + 3 campos de lectura aditivos en un endpoint backend existente). Son **agnósticas del runtime de agentes** (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ninguna fase toca el camino de ejecución, publicación ni telemetría de agentes. La paridad de los 3 runtimes es automática por vacuidad — igual se declara fase por fase.
 > **Flags nuevas (3, alta triple en F0):** `STACKY_UI_VIRTUALIZATION_ENABLED` (gatea F2), `STACKY_UI_PREFETCH_ENABLED` (gatea F3) y `STACKY_UI_INSTANT_NAV_ENABLED` (gatea F4 — agregada en v2 por C1), las tres **default ON**, editables desde la UI de Settings (FlagSpec `env_only=False`), con kill-switch instantáneo (OFF = comportamiento actual byte-idéntico). **Regla dura cumplida en las 3 fases con comportamiento nuevo:** cada fase que cambia comportamiento (F2, F3, F4) tiene su gate de flag configurable por UI; ninguna depende de "git revert".
 > **Human-in-the-loop:** N/A por diseño — este plan solo hace GETs de lectura y cambia CÓMO se pinta lo que ya se pinta. Cero acciones destructivas, cero publicaciones, cero decisiones quitadas al operador. Ninguna de las 4 excepciones duras al "default ON" aplica (§3.2 lo argumenta textualmente).
@@ -39,15 +40,15 @@ Veredicto del juez: **APROBADO-CON-CAMBIOS** (2 BLOQUEANTES + 3 IMPORTANTES + 2 
 
 **Objetivo (1 párrafo):** que la UI de Stacky se sienta instantánea sin pedir un byte de más: (a) las listas largas reales (stream de logs de ejecución y lista de diferencias del Comparador de BD) dejan de renderizar un nodo DOM por elemento y pasan a una **ventana virtualizada hand-rolled** (~≤60 nodos aunque haya 5.000 filas), extraída del precedente propio del repo (DiffList del plan 124) y sin agregar dependencias; (b) al **apuntar** con el mouse o el foco a una fila de ejecución, el detalle se **prefetchea** con react-query (debounce ≥150 ms, máximo 1 en vuelo, cancelación al salir), así el drawer abre ya pintado; (c) **paginar y filtrar deja de parpadear** (`placeholderData: keepPreviousData`) y **volver atrás pinta desde cache** y revalida en background (staleTime/gcTime afinados por tipo de query). Todo detrás de **3 flags default ON** (una por fase con comportamiento nuevo: F2/F3/F4 — la 3ra agregada en v2 por C1), editables por UI, con presupuesto de red y de DOM **binarios y testeados**, sin violar el techo del plan 156 (≤2 requests/tick en idle: el prefetch solo dispara con interacción humana; en idle suma exactamente 0; leer las flags reutiliza el health que App ya pide, 0 requests extra).
 
-**KPIs binarios (comandos exactos; backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend` — en disco existen HOY `venv\Scripts\python.exe` y `.venv\Scripts\python.exe` (verificado 2026-07-18); usar `venv\Scripts\python.exe` y, solo si no existiera, `.venv\Scripts\python.exe`. Frontend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend`):**
+**KPIs binarios (comandos exactos; backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend` — intérprete backend CANÓNICO `.venv\Scripts\python.exe` (py3.13.5, verificado en disco 2026-07-18; ver 197 §4.1). **PROHIBIDO** `venv\Scripts\python.exe` (py3.11.9, WIP ajeno untracked de la sesión paralela: ni usarlo ni borrarlo ni recrearlo). Frontend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend`):**
 
 - **KPI-1 — Presupuesto de DOM:** `npx vitest run src/utils/__tests__/virtualWindow.test.ts` → exit 0. Incluye el caso binario: lista de **5.000 filas** (rowHeight 22 px, viewport 600 px, overscan 10) → `rendered ≤ 60` nodos y la suma `padTopPx + rendered*rowHeightPx + padBottomPx === total*rowHeightPx`.
 - **KPI-2 — Presupuesto de red del prefetch:** `npx vitest run src/services/__tests__/prefetchPolicy.test.ts` → exit 0. Incluye: **0** llamadas sin interacción; debounce **≥150 ms**; **≤1** prefetch en vuelo (el excedente se DESCARTA, no se encola); `leave()` antes del deadline ⇒ **0** llamadas.
 - **KPI-3 — Adopción real (fs+regex, precedente plan 140):** `npx vitest run src/__tests__/plan174Adoption.test.ts` → exit 0 (LogsPanel y DiffList usan `useVirtualList`; ExecutionHistoryPage y SystemLogsPage usan `placeholderData: keepPreviousData`; ExecutionHistoryPage y ReviewInboxPage usan `getPrefetchProps`).
-- **KPI-4 — Flags backend verdes:** `venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q` → exit 0 (**las 3 flags** `STACKY_UI_VIRTUALIZATION_ENABLED` / `STACKY_UI_PREFETCH_ENABLED` / `STACKY_UI_INSTANT_NAV_ENABLED`: default ON, curadas, categorizadas, PLAIN_HELP, y sus 3 campos `ui_virtualization_enabled` / `ui_prefetch_enabled` / `ui_instant_nav_enabled` en `/api/diag/health`).
+- **KPI-4 — Flags backend verdes:** `.venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q` → exit 0 (**las 3 flags** `STACKY_UI_VIRTUALIZATION_ENABLED` / `STACKY_UI_PREFETCH_ENABLED` / `STACKY_UI_INSTANT_NAV_ENABLED`: default ON, curadas, categorizadas, PLAIN_HELP, y sus 3 campos `ui_virtualization_enabled` / `ui_prefetch_enabled` / `ui_instant_nav_enabled` en `/api/diag/health`).
 - **KPI-5 — Tipos verdes:** `npx tsc --noEmit` → exit 0.
 - **KPI-6 — Ratchets:** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` → exit 0 (cero `style={{` nuevos) **y** `grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.sh` → `1` **y** `grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.ps1` → `1`.
-- **KPI-7 — Sin regresión de flags:** `venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` y `venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q` → exit 0.
+- **KPI-7 — Sin regresión de flags:** `.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` y `.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q` → exit 0.
 
 **KPIs de impacto (proyectados, verificables por smoke manual en §10 DoD):**
 
@@ -111,7 +112,7 @@ Veredicto del juez: **APROBADO-CON-CAMBIOS** (2 BLOQUEANTES + 3 IMPORTANTES + 2 
 - **Mecanismo EXACTO de lectura de flags por el frontend** (plan 139 §"Mecanismo EXACTO de lectura de la flag por el frontend", `docs/139_PLAN_APP_SHELL_V2_...md:133-152`): campo booleano **aditivo** en la respuesta de `GET /api/diag/health` (`backend/api/diag.py:311-312` `def health()`; campos existentes `local_llm_enabled` / `shell_v2_enabled` en `diag.py:410-411`, patrón `bool(getattr(_config.config, "FLAG", False))`), leído por el frontend al montar (precedente `App.tsx:152-161`). Este plan agrega 2 campos con ese patrón exacto y los consume vía un hook con react-query (§F1) en lugar de estado en `App.tsx`, para no tocar `App.tsx` (archivo caliente de la serie).
 - **Gotcha `config` vs `config.config`:** en los módulos backend la instancia de flags es `config.config` (el módulo es `config`); `getattr(config, FLAG)` devuelve siempre el default. En `diag.py` el patrón correcto ya está a la vista: `getattr(_config.config, ...)` (`diag.py:410`). Usar EXACTAMENTE ese.
 - **Tests backend nuevos** se registran en `HARNESS_TEST_FILES` (`backend/scripts/run_harness_tests.sh:20` **y** `backend/scripts/run_harness_tests.ps1` — ambos existen, verificado) o el meta-test del ratchet rompe.
-- **Comando backend:** `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"` + `venv\Scripts\python.exe -m pytest tests/test_X.py -q` — **por archivo, nunca la suite entera** (contaminación cross-file conocida).
+- **Comando backend:** `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"` + `.venv\Scripts\python.exe -m pytest tests/test_X.py -q` — **por archivo, nunca la suite entera** (contaminación cross-file conocida).
 - **Comando frontend:** `cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"` + `npx vitest run src/<ruta>/<archivo>.test.ts` — **por archivo** (vitest completo contamina cross-file).
 - **Ratchet de deuda UI (plan 138):** prohibido `style={{}}` en `.tsx` nuevos y prohibido aumentar el baseline en los existentes. Los spacers de la virtualización (altura dinámica en px) se setean por **ref + effect imperativo** (`el.style.height = ...` dentro de `useEffect`), patrón ya validado en el repo.
 - **jsdom/@testing-library NO existen** en `frontend/package.json` (gap estructural conocido): **todo test frontend de este plan es de lógica pura** (módulos `.ts` sin DOM), como `commandPaletteData.test.ts`, más tests de adopción fs+regex (precedente plan 140). Cero `render()`. El gate real de UI = `tsc --noEmit` + tests puros + smoke manual del DoD.
@@ -158,7 +159,7 @@ Se **extrae y generaliza el patrón propio** (precedente `DiffList.tsx:12-13`, g
 Correr y verlos FALLAR por la razón correcta (flags inexistentes):
 ```
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q
+.venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q
 ```
 
 **Implementación (cambio mínimo):**
@@ -240,9 +241,9 @@ FlagSpec(
 
 **Criterio de aceptación (binario):**
 ```
-venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q   → exit 0
-venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q          → exit 0
-venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q     → exit 0
+.venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q   → exit 0
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q          → exit 0
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q     → exit 0
 grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.sh      → 1
 grep -c "test_plan174_ui_perf_flags.py" scripts/run_harness_tests.ps1     → 1
 ```
@@ -651,9 +652,9 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q
-venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
-venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
+.venv\Scripts\python.exe -m pytest tests/test_plan174_ui_perf_flags.py -q
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
 ```
 **Runtimes / fallback:** N/A (fase de verificación).
 **Trabajo del operador: ninguno.**

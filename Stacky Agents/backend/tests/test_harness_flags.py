@@ -689,6 +689,7 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
     "STACKY_CI_RUN_LEDGER_ENABLED",  # Plan 191 — bitácora durable de corridas CI
     "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
+    "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
 }
 
 

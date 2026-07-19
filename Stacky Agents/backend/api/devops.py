@@ -343,6 +343,32 @@ def environment_apply_route():
     return jsonify(result)
 
 
+@bp.post("/environments/applies")
+def environment_applies_route():
+    """Historial de applies + drift de layout por fingerprint. Read-only. Plan 198.
+    POST porque necesita el contexto del body (mismo helper que /plan y /apply);
+    NO valida _validate_remote_target: lee el ledger LOCAL y solo FILTRA por alias (C2)."""
+    if not getattr(_config.config, "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", False):
+        abort(404)
+    if not getattr(_config.config, "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED", False):
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    ctx, err = _load_env_context(body)      # MISMO helper que /plan y /apply
+    if err:
+        return err
+    root, rel_paths, sandbox_active, server_alias = ctx
+    from services.env_apply_ledger import list_applies, last_fingerprint
+    current_fp = layout_fingerprint(root, rel_paths)      # mismo símbolo que el apply
+    last_fp = last_fingerprint(root, server_alias)
+    return jsonify({
+        "applies": list_applies(root=root, server_alias=server_alias, limit=20),
+        "current_fingerprint": current_fp,
+        "last_applied_fingerprint": last_fp,
+        "layout_drift": (None if last_fp is None else (last_fp != current_fp)),
+        "sandbox_active": sandbox_active,
+    })
+
+
 @bp.post("/preflight/check")
 def preflight_check_route():
     """Semáforo pre-vuelo. SOLO-LECTURA (no commitea, no dispara, no escribe)."""

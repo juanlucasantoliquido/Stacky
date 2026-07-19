@@ -232,6 +232,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
         "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
         "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
+        "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2989,6 +2990,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_PIPELINE_TRIGGER_ENABLED",  # la superficie vive en la sección de trigger/monitor (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 198 — Bitácora de applies de ambientes ──────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",
+        type="bool",
+        label="Bitácora de applies de ambientes",
+        description=(
+            "Plan 198 — Registra localmente cada apply de carpetas (local o remoto): "
+            "qué se creó, dónde, con qué fingerprint y resultado — y avisa si la "
+            "DEFINICIÓN del layout cambió desde el último apply. Solo metadata local; "
+            "sin contenido de archivos. Con OFF el endpoint /environments/applies "
+            "devuelve 404 y la sección de Ambientes queda idéntica a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # R4 profundidad-1 (master del panel 87)
         # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),

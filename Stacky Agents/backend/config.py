@@ -1329,6 +1329,17 @@ class Config:
         "STACKY_CI_FAILURE_TRIAGE_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 198 — Bitácora de applies de ambientes ───────────────────────────
+    # Registra localmente cada apply de carpetas (local o remoto) del layout del
+    # catálogo: qué se creó, dónde, con qué fingerprint y resultado; expone POST
+    # /api/devops/environments/applies (read-only) con drift de layout por
+    # fingerprint. Solo metadata local; sin contenido de archivos. Default ON
+    # (espejo del default=True de la FlagSpec homónima; curada en
+    # _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

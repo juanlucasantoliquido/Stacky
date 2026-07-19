@@ -38,6 +38,7 @@ import {
 } from '../../devops/environmentModel';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { resolveAgentServerBinding } from './agentServerBinding';
+import { applyRow, driftBadge, type EnvApply } from './envApplyLedger';
 import { FlagGateBanner } from './FlagGateBanner';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
 import { CommitPipelineModal } from './CommitPipelineModal';
@@ -81,6 +82,13 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
 
   // Plan 108 F6 — anclaje remoto: mismo helper puro que DevOpsAgentSection (F4).
   const binding = resolveAgentServerBinding(ctx.health, ctx.selectedServer);
+
+  // Plan 198 — historial de applies + drift de layout por fingerprint.
+  const [applies, setApplies] = useState<EnvApply[]>([]);
+  const [layoutDrift, setLayoutDrift] = useState<boolean | null>(null);
+  const [appliesError, setAppliesError] = useState<string | null>(null);
+  const [appliesHidden, setAppliesHidden] = useState(false); // 404 (flags OFF) → no renderizar
+  const [appliesLoaded, setAppliesLoaded] = useState(false);
 
   const [presets, setPresets] = useState<PublicationPreset[]>([]);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
@@ -210,6 +218,31 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
         setActionError(`No se pudo crear las carpetas: ${msg}`);
       }
     }
+  };
+
+  // Plan 198 — carga perezosa del historial al abrir el <details> (mismo body de
+  // contexto que el plan/apply). 404 ⇒ alguna flag OFF ⇒ ocultar el bloque entero.
+  const loadApplies = async () => {
+    if (!activeProject) return;
+    try {
+      setAppliesError(null);
+      const override = sandboxMode && sandboxRoot ? sandboxRoot : undefined;
+      const resp = await DevOps.environmentApplies(activeProject, override, binding.sendAlias ?? undefined);
+      setApplies(resp.applies);
+      setLayoutDrift(resp.layout_drift);
+      setAppliesLoaded(true);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.startsWith('404')) {
+        setAppliesHidden(true);
+      } else {
+        setAppliesError('No se pudo cargar el historial de applies.');
+      }
+    }
+  };
+
+  const onAppliesToggle = (ev: React.SyntheticEvent<HTMLDetailsElement>) => {
+    if (ev.currentTarget.open) void loadApplies();
   };
 
   const handleCreateTodoPreset = async () => {
@@ -444,6 +477,44 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
           </div>
         )}
       </div>
+
+      {/* Plan 198 — historial de applies + drift de layout por fingerprint */}
+      {!appliesHidden && (
+        <details className={styles.panel} onToggle={onAppliesToggle}>
+          <summary>Últimos applies</summary>
+          {appliesError && <div className={styles.alertError}>{appliesError}</div>}
+          {appliesLoaded && (
+            <>
+              {driftBadge(layoutDrift).text && (
+                <div
+                  className={
+                    driftBadge(layoutDrift).tone === 'warn' ? styles.alertWarning : styles.alertSuccess
+                  }
+                >
+                  {driftBadge(layoutDrift).text}
+                </div>
+              )}
+              {layoutDrift === true && (
+                <button className={styles.btnSuccess} onClick={() => void handleCalculatePlan()}>
+                  Replanificar
+                </button>
+              )}
+              {applies.length === 0 ? (
+                <div className={styles.textMuted}>Sin applies registrados todavía.</div>
+              ) : (
+                <ul>
+                  {applies.map((a, i) => (
+                    <li key={`${a.applied_at}-${i}`}>
+                      {applyRow(a)}
+                      {a.paths_truncated ? ' (lista recortada)' : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </details>
+      )}
 
       {/* Paso 2 — Publicación inicial (TODO) */}
       <div className={styles.panel}>

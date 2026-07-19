@@ -45,6 +45,29 @@ export interface EnvironmentApplyResponse {
   remote?: boolean; // Plan 108 F5 — las carpetas se crearon EN el servidor seleccionado
 }
 
+// Plan 198 — bitácora de applies de ambientes (historial durable + drift por fingerprint).
+export interface EnvApply {
+  root: string;
+  server_alias: string | null; // null = local
+  paths: string[];
+  paths_truncated?: boolean;
+  fingerprint: string;
+  sandbox_active: boolean;
+  result_ok: boolean;
+  created_count: number;
+  ignored_count?: number;
+  applied_at: string;
+  source: string;
+}
+
+export interface EnvAppliesResponse {
+  applies: EnvApply[];
+  current_fingerprint: string;
+  last_applied_fingerprint: string | null;
+  layout_drift: boolean | null; // null = sin applies previos
+  sandbox_active: boolean;
+}
+
 const _WINDOWS_RESERVED = new Set([
   "con", "prn", "aux", "nul",
   ...Array.from({ length: 9 }, (_, i) => `com${i + 1}`),

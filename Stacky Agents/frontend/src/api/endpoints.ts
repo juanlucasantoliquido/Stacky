@@ -8,7 +8,7 @@ import type {
   CostSummaryResponse,
   BreakdownDimension,
 } from "../lib/costCenterTypes";
-import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
+import type { EnvironmentPlanResponse, EnvironmentApplyResponse, EnvAppliesResponse } from "../devops/environmentModel";
 import type { PreflightCheck } from "../devops/preflightModel";
 // Plan 189 — contrato del semáforo de rollback (type-only, sin ciclo runtime).
 import type {
@@ -3530,6 +3530,18 @@ export const DevOps = {
       confirm,
       fingerprint,
       ...(rootOverride ? { root_override: rootOverride, sandbox_ack: sandboxAck === true } : {}),
+      ...(serverAlias ? { server_alias: serverAlias } : {}),
+    }),
+  /**
+   * POST /api/devops/environments/applies — Plan 198. Historial de applies +
+   * drift de layout por fingerprint. Read-only; mismo body de contexto que /plan
+   * (rootOverride + serverAlias opcionales). 404 si alguna flag (environments o
+   * el ledger) está OFF.
+   */
+  environmentApplies: (project: string, rootOverride?: string, serverAlias?: string) =>
+    api.post<EnvAppliesResponse>("/api/devops/environments/applies", {
+      project,
+      ...(rootOverride ? { root_override: rootOverride } : {}),
       ...(serverAlias ? { server_alias: serverAlias } : {}),
     }),
   /** GET /api/devops/detect-stack — Plan 97. Detección opt-in de stack por manifiestos, SOLO-LECTURA. */

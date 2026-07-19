@@ -1,9 +1,24 @@
 # Plan 202 — La Fragua Nocturna (1/6): Turno Mínimo Viable (TMV) — Orquestador, Planner de cola derivada, Ledger durable y Digest triado
 
-- **Estado:** PROPUESTO v1 — 2026-07-18 · Autor: StackyArchitectaUltraEficientCode
+- **Estado:** CRITICADO v2 (v1 RECHAZADO → corregido in place; ahora **APROBADO-CON-CAMBIOS**) — 2026-07-18 · Autor: StackyArchitectaUltraEficientCode
 - **Serie:** "La Fragua Nocturna" (6 piezas: F0..F4 de serie + 1 hoja de ruta). ESTE documento es la **Fase 0 de la serie = Turno Mínimo Viable (TMV)**. Sus fases internas de implementación se numeran **Etapa 1..7 (E1..E7)** para no colisionar con las fases de serie F0..F4.
 - **Nota de numeración:** la serie ocupa 202-207 (no 199-201): al redactar, 199 (cosecha telemetría), 200 (consola por incidencia) y 201 (taller de compilación) YA estaban tomados por planes ajenos. Verificado en frío listando `Stacky Agents/docs/` el 2026-07-18: el próximo `NN_` libre es 202.
 - **Precedentes de formato en la casa:** plan 184 (hoja de ruta DB Compare), plan 195 (hoja de ruta DevOps), plan 197 (hoja de ruta UX), plan 198 (ledger de applies) — mismo rigor de contratos congelados y gates binarios.
+
+## Changelog v1 → v2 (2026-07-18)
+
+Veredicto del juez adversarial: **v1 RECHAZADO** (3 defectos BLOQUEANTES) → **corregido in place a v2 = APROBADO-CON-CAMBIOS**. Todos los anclajes portantes fueron re-verificados contra el código real; los cambios:
+
+- **C1 (BLOQUEANTE)** `_docs_dir()` apuntaba a `app_root()/"docs"` = `Stacky Agents/backend/docs` (INEXISTENTE en dev; VERIFICADO `runtime_paths.py:30-33,36-45`: `app_root()==backend_root()` en dev) con un TODO "ajustar al helper real" ⇒ el planner escaneaba una carpeta vacía y TODA la Fragua era un no-op en producción mientras los tests (que monkeypatchean `_docs_dir`) pasaban verdes. Fijo: `backend_root().parent / "docs"` + guard de existencia + test de anclaje real.
+- **C4 (BLOQUEANTE)** 9 helpers referenciados pero NUNCA definidos (`_derive_package_candidates`, `_derive_drift_candidates`, `_extract_files/_tests/_phases/_gates`, `_match_gotchas`, `_doc_for`, `_parse_conflict_paths`, `_dedup_by_key`) ⇒ E2/E4/E6 no implementables sin inventar. Fijo: nueva **§E0** con regex/lógica EXACTA de cada uno.
+- **C6 (BLOQUEANTE)** `run_night` dejaba los critic sin dispatch en `pending` y `claim_next` los re-clamaba ⇒ **bucle infinito** al copiar el código verbatim (el guard vivía solo en una nota en prosa; el skip suma 0 tokens ⇒ el presupuesto nunca corta). Fijo: `claim_next(exclude_ids=…)` + set `seen` por corrida EN EL CÓDIGO.
+- **C2 (IMPORTANTE)** la detección de versión negaba `v2|CRITICADO` sobre TODO el texto ⇒ un v1 genuino que menciona "CRITICADO v2" en prosa (como ESTE plan) era falso-negativo y nunca se encolaba a critic. Fijo: evaluar sobre la STATUS LINE (`derive_candidates` y `_count_backlog`).
+- **C3 (IMPORTANTE)** `run_auditor` era un stub (pasos 1-4 en comentarios) y, aun implementado, corría pytest en el worktree `nightly/` (checkout de `main`), NO de la rama `impl/*` ⇒ auditaba el código equivocado y KPI-5 pasaba trivialmente (no-op ⇒ árbol intacto = falso verde). Fijo: auditor **GIT-ONLY real** (diffstat/test-files/fase→archivo por `git … base...branch`, sin checkout ni pytest); correr los tests de la rama pasa a F3.
+- **C5 (IMPORTANTE)** `_match_gotchas` matcheaba contra "el índice de memoria" que vive FUERA del repo (`~/.claude/.../memory`), es del operador y no existe en Codex/Copilot ni en instalación fresca ⇒ rompía portabilidad (EXCEPCIÓN DURA #3). Fijo: `_match_gotchas` escanea el PROPIO doc (in-repo, portable).
+- **C9 (IMPORTANTE)** precedentes citados (`STACKY_EVOLUTION_CENTER_ENABLED`, kill-switch del 167) viven SOLO en `impl/rsi` (sin mergear): no hay "reusa" en `main`. Fijo: precedente real `STACKY_DEVOPS_AGENT_ENABLED` (VERIFICADO `harness_flags.py:203`); kill-switch propio `STACKY_NIGHT_FOUNDRY_HARD_DISABLE` (independiente) + se sigue honrando el nombre del 167 (forward-compatible cuando RSI llegue a main).
+- **C10 (IMPORTANTE)** la FlagSpec int omitía `min_value/max_value` (que `test_bounds_map_is_frozen` deriva de la FlagSpec, VERIFICADO `test_harness_flags_bounds.py:181-186`) y el plan decía NO curar la int, pero `default_is_known == (default is not None)` (VERIFICADO `harness_flags.py:3476`) ⇒ la int con `default=40000` DEBE ir a `_CURATED_DEFAULTS_ON`. Fijo: `min_value/max_value` en la FlagSpec + `_FROZEN_BOUNDS` + AMBAS keys en `_CURATED_DEFAULTS_ON`.
+- **C7/C8 (MENORES)** `mergeability` trataba cualquier `rc!=0` como conflicto (rc>1 es error ⇒ ahora `unknown`); las citas a `deploy_store` sobre-afirmaban "atómico/retención/ALLOWLIST" (deploy_store NO los hace — VERIFICADO: `append_ledger` es append directo, sin `MAX_ROWS`: la Fragua EXTIENDE el patrón). Corregido.
+- **[ADICIÓN ARQUITECTO]** (1) pre-reserva de presupuesto para el carril critic (`CRITIC_EST_TOKENS`) — un solo critic ya no puede exceder el techo (R2 real, no soft). (2) kill-switch de un clic desde el panel: `POST/DELETE /api/night_foundry/stop` (HITL; solo detiene/reanuda, nunca arranca autonomía).
 
 ---
 
@@ -19,10 +34,10 @@
 | KPI-2 | Serialización dura: el orquestador procesa EXACTAMENTE 1 item por iteración; con 5 items en cola y kill tras el 2º, quedan 2 `done` + 3 `pending` (cero colisión) | `test_orquestador_serializa_uno_por_iteracion` |
 | KPI-3 | Corte por presupuesto: con `budget=1000` y 3 items que suman 1500 tokens, el 3º NO se procesa y el digest marca `budget_exhausted: true` | `test_corte_duro_por_presupuesto` |
 | KPI-4 | Resumibilidad: matar la corrida con 1 item `claimed` y re-correr ⇒ ese item se re-clama y termina; los `done` NO se re-ejecutan | `test_resume_por_hash_no_reejecuta_done` |
-| KPI-5 | AUDIT-ONLY duro: el worker auditor deja el árbol SIN cambios (`git status --porcelain` vacío tras auditar); si algo se modificó, el item se marca `failed` y el digest lo denuncia | `test_auditor_readonly_arbol_intacto` |
+| KPI-5 | AUDIT-ONLY duro: el worker auditor es GIT-ONLY (diffstat/test-files/fase→archivo; cero pytest/checkout) y deja el árbol SIN cambios (`git status --porcelain` idéntico antes/después); si algo se modificó, el item se marca `failed` y el digest lo denuncia | `test_auditor_readonly_arbol_intacto` |
 | KPI-6 | Anti-deuda-de-papel cableada: con backlog actual (>8 v2 sin implementar), el planner encola CERO items del carril proponedor | `test_gate_proposer_bloqueado_por_backlog` |
 | KPI-7 | Digest triado: mergeabilidad correcta (rama limpia → `mergeable: true`; rama con conflicto sembrado → `false` + `conflict_paths`); decisiones deduplicadas por `target` y rankeadas | `test_digest_mergeabilidad_y_dedup` |
-| KPI-8 | Kill-switches: con el archivo `STOP` presente O `STACKY_EVOLUTION_HARD_DISABLE=1`, la corrida no procesa NADA y sale limpio | `test_killswitches_detienen_todo` |
+| KPI-8 | Kill-switches: con el archivo `STOP` presente O `STACKY_NIGHT_FOUNDRY_HARD_DISABLE=1` O `STACKY_EVOLUTION_HARD_DISABLE=1`, la corrida no procesa NADA y sale limpio | `test_killswitches_detienen_todo` |
 | KPI-9 | Cero costo ocioso: con la flag ON pero sin `/loop` armado, ninguna ruta ni daemon consume tokens (todo es on-demand / lectura local) | Revisión de que ningún hook de arranque llama al orquestador (grep en `app.py`) |
 
 **Ganancia robusta.** El operador llega a la mañana con: N paquetes listos-para-el-día (mapa de archivos con anclas + tests a escribir + checklist + gotchas aplicables + gates), M ramas `impl/*` auditadas con su veredicto de mergeabilidad, y las críticas v2 que faltaban — todo inerte, todo revisable, cero autonomía sobre el merge.
@@ -38,7 +53,7 @@ Evidencia del estado actual (verificada en el repo el 2026-07-18):
 1. **El pipeline de planes existe pero es 100% operador-driven.** Los 4 skills viven en `.claude/skills/` (`proponer-plan-stacky`, `criticar-y-mejorar-plan`, `implementar-plan-stacky`, `supervisar-implementaciones-planes` — verificado por `ls`). Cada uno se dispara a mano. No hay ningún mecanismo que trabaje el backlog cuando el operador no está.
 2. **El backlog es masivo y crece.** `Stacky Agents/docs/` tiene planes hasta el 201; la memoria del proyecto lista decenas de "CRITICADO v2 … falta implementar" y "PROPUESTO v1 … falta criticar". Las hojas de ruta 184/195/197 existen justamente porque la serie de planes hermanos se acumuló más rápido de lo que se implementa.
 3. **Hay ramas `impl/*` sin consolidar.** `git branch` (2026-07-18) muestra `impl/dbcompare`, `impl/devops`, `impl/plan-159`, `impl/plan-163`, `impl/rsi`, `impl/ux` — trabajo real sin auditar ni mergear. El gotcha "worktree branch vs plan hermano" (memoria) ya mordió: docs marcados IMPLEMENTADO cuyo código vive en una rama sin mergear.
-4. **La infraestructura para hacerlo bien YA está madura:** ledgers JSONL con lock y retención son patrón de la casa (`services/deploy_store.py`: `from runtime_paths import data_dir`, `_LOCK = threading.Lock()`, `data_dir()/deploy_ledger.jsonl`, `append_ledger(entry)` — verificado `deploy_store.py:19,24,33,120`); el ledger de dev-tooling bajo el repo tiene precedente (`docs/_supervision/ledger.json`, keyed por hash del doc para no re-auditar salvo cambio — patrón que este plan REUSA para dedup/resumibilidad); `git merge-tree --write-tree` está disponible (git 2.50.1, probado read-only, devuelve tree hash sin tocar el árbol ni refs); `/loop` y `/schedule` son skills nativas de Claude Code (listadas en el harness).
+4. **La infraestructura para hacerlo bien YA está madura:** ledgers JSONL con lock son patrón de la casa (`services/deploy_store.py`: `from runtime_paths import data_dir`, `_LOCK = threading.Lock()`, `data_dir()/deploy_ledger.jsonl`, `append_ledger(entry)` — verificado `deploy_store.py:19,24,33,120`; **[C8 v2] `append_ledger` es append DIRECTO, sin tmp+replace ni `MAX_ROWS`: la Fragua EXTIENDE el patrón con escritura atómica tmp+replace, retención y ALLOWLIST**); el ledger de dev-tooling bajo el repo tiene precedente (`docs/_supervision/ledger.json`, keyed por hash del doc para no re-auditar salvo cambio — patrón que este plan REUSA para dedup/resumibilidad); `git merge-tree --write-tree` está disponible (git 2.50.1, probado read-only, devuelve tree hash sin tocar el árbol ni refs); `/loop` y `/schedule` son skills nativas de Claude Code (listadas en el harness).
 5. **La serie RSI (167-170) prepara el norte pero no está mergeada.** `evolution_store.py` NO existe en el working tree (verificado: ausente); la RSI vive en la rama `impl/rsi` [INF: rama confirmada por `git branch`, código no verificado en este working tree]. F4 de esta serie conecta con RSI 167-170 — por eso F4 es futuro y depende de que RSI se merge (§8).
 
 **Gap que cierra:** el pipeline de planes pasa de "el operador trabaja el backlog a mano, de día" a "la noche PROPONE y PREPARA papel revisable; el operador DISPONE a la mañana". Sin quitarle una sola decisión al operador.
@@ -52,7 +67,7 @@ Evidencia del estado actual (verificada en el repo el 2026-07-18):
 3. **La autonomía nocturna es opt-in POR CONSTRUCCIÓN.** No existe flag que haga correr la noche sola: el operador arma el `/loop`/`/schedule`. Si una fase FUTURA agrega un toggle in-app "armar autorun nocturno", ESE toggle nace default **OFF** citando **EXCEPCIÓN DURA #3 (prerequisito no garantizado en instalación default)** — `/loop` es nativo de Claude Code, no de Codex/Copilot — más el criterio de no-quema-ociosa. En el TMV NO hay ese toggle: se arma a mano.
 4. **3 runtimes — paridad honesta con matiz declarado.** El **núcleo determinista** (ledger, planner, gate anti-deuda, auditor, constructor-de-paquetes, reconciliador, digest, mergeabilidad) es **Python puro, idéntico en los 3 runtimes, cero LLM**. La **orquestación nocturna** (`/loop`, worktrees, dispatch de skills, notificación) y **el carril crítico** (invoca el skill LLM `criticar-y-mejorar-plan`) son **Claude-Code-nativos**: Claude Code es el **runtime primario** de la Fragua. **Fallback explícito Codex/Copilot:** el operador dispara los mismos skills a mano y corre los CLIs Python deterministas; el ledger y el digest son archivos que cualquier runtime lee/escribe. NO se vende paridad falsa: solo el papel de salida y el núcleo determinista son runtime-agnósticos; el bucle y la crítica LLM son primario-Claude con degradación manual documentada (§6 por etapa).
 5. **Mono-operador sin auth.** Ningún RBAC/rol. El header `current_user` no se valida ni se usa para gating.
-6. **No degradar.** Backward-compatible: la Fragua agrega servicios y una ruta read-only; no toca ningún camino existente. Todo hook es best-effort (try/except + `stacky_logger`). El presupuesto de tokens es corte DURO (no hay "correr un poco más"). Reusa: patrón ledger de `deploy_store`, contrato de inyección 133, kill-switch 167, flags del arnés, memoria colaborativa.
+6. **No degradar.** Backward-compatible: la Fragua agrega servicios y una ruta read-only; no toca ningún camino existente. Todo hook es best-effort (try/except + `stacky_logger`). El presupuesto de tokens es corte DURO (no hay "correr un poco más"). Reusa (todo VERIFICADO en `main`): patrón ledger de `deploy_store`, contrato de inyección 133, flags del arnés (`FlagSpec`/`_CURATED_DEFAULTS_ON`/`_REQUIRES_MAP_FROZEN`/`_FROZEN_BOUNDS`). **[C9 v2]** NO reusa símbolos de `impl/rsi` (sin mergear): el kill-switch env `STACKY_NIGHT_FOUNDRY_HARD_DISABLE` es PROPIO (además se honra el nombre `STACKY_EVOLUTION_HARD_DISABLE` del 167 como forward-compat, aunque hoy no tenga reader en `main`); los gotchas los extrae del PROPIO doc (no de la memoria del operador, que vive fuera del repo).
 7. **Gotchas de la casa (obligatorios):** flag default-ON en los 5 lugares (§E7); tests registrados en AMBOS runners (`run_harness_tests.sh` **y** `.ps1`) o el meta-test rompe; pytest **POR ARCHIVO** con `.venv\Scripts\python.exe` (py3.13.5) desde `Stacky Agents\backend` (NUNCA `venv\` = py3.11.9 ajeno); config es `_config.config` (instancia), no el módulo; datos bajo `docs/` deben ser `.jsonl/.json/.txt` nunca `.md` (por eso los datos van a `data_dir()`, fuera de `docs/`, §5); criterio NO-EMPEORAR para `ratchet_meta`.
 
 ---
@@ -156,6 +171,103 @@ DIGEST_SCHEMA = {
 
 > Convención transversal para TODAS las etapas: intérprete `.venv\Scripts\python.exe` (py3.13.5) desde `Stacky Agents\backend`; pytest **POR ARCHIVO**; cada test nuevo se registra en `backend/scripts/run_harness_tests.sh` **y** `backend/scripts/run_harness_tests.ps1` (gotcha meta-test). Cada etapa se commitea sola con sus tests verdes ANTES de la siguiente.
 
+### E0 — Helpers deterministas compartidos (especificación EXACTA — para no inferir) [C4/C5 v2]
+
+Todos los helpers que E2/E4/E5/E6 usaban y v1 dejaba como "descriptos arriba"/cajas negras quedan aquí con su regex/lógica EXACTA. Cero LLM, cero red, cero dependencia de nada fuera del repo. Un modelo menor los copia sin inventar. **Ubicación:** los de planes (`_doc_for`, `_derive_*`) van en `night_foundry_planner.py`; los de parseo de doc que usa `build_package` (`_extract_*`, `_match_gotchas`) van en `night_foundry_workers.py`; `_parse_conflict_paths`/`_dedup_by_key` en `night_foundry_digest.py`. Cada uno lleva su test en el `test_plan202_*` del módulo dueño.
+
+```python
+# — en night_foundry_planner.py —
+def _doc_for(nn: str) -> Path:
+    for p in _plan_docs():
+        if p.name.startswith(f"{nn}_"): return p
+    raise FileNotFoundError(f"no hay doc para plan {nn}")   # el orquestador lo captura ⇒ item failed
+
+def _extract_files(text: str) -> list[str]:
+    """Rutas entre backticks tipo `Stacky Agents/…/x.py` (dedup preservando orden)."""
+    seen, out = set(), []
+    for m in re.findall(r"`(Stacky Agents/[\w /.\-]+\.\w+)`", text):
+        if m not in seen: seen.add(m); out.append(m)
+    return out
+
+def _extract_tests(text: str) -> list[str]:
+    return sorted(set(re.findall(r"(test_[\w]+\.py)", text)))
+
+def _extract_phases(text: str) -> list[str]:
+    return re.findall(r"^#+\s*(E\d+|F\d+)\b[^\n]*", text, re.M)
+
+def _extract_gates(text: str) -> list[str]:
+    return [l.strip() for l in text.splitlines() if re.search(r"Criterio|gate|ratchet|KPI-\d", l)][:40]
+
+def _match_gotchas(text: str) -> list[str]:
+    """[C5 v2] IN-REPO y portable: escanea el PROPIO doc. NO lee la memoria de ~/.claude
+    (user-specific, fuera del repo, ausente en Codex/Copilot/instalación fresca)."""
+    keys = ("ratchet","HARNESS_TEST_FILES","_CURATED_DEFAULTS_ON","POR ARCHIVO",".venv","gotcha",
+            "_REQUIRES_MAP_FROZEN","_FROZEN_BOUNDS","doc_indexer",".md","config.config")
+    low = text.lower()
+    return sorted({k for k in keys if k.lower() in low})
+
+def _roadmap_docs() -> list[Path]:
+    return [p for p in _plan_docs() if re.match(r"(195|197|184)_", p.name)]
+
+def _derive_package_candidates() -> list[tuple[str,str,str]]:
+    """Primer plan NO-IMPLEMENTADO citado bajo un encabezado 'Orden de implementaci…' de cada hoja de ruta."""
+    out: list[tuple[str,str,str]] = []
+    for rd in _roadmap_docs():
+        try:
+            rtext = rd.read_text(encoding="utf-8", errors="replace")
+            block = ""
+            lines = rtext.splitlines()
+            for i, l in enumerate(lines):
+                if re.search(r"Orden de implementaci", l, re.I):
+                    block = "\n".join(lines[i:i+8]); break     # ventana del bloque de orden
+            for pos, nn in enumerate(re.findall(r"\b(\d{2,3})\b", block)):
+                doc = next((p for p in _plan_docs() if p.name.startswith(f"{nn}_")), None)
+                if doc is None: continue
+                st = _status_line(doc.read_text(encoding="utf-8", errors="replace"))
+                if re.search(r"IMPLEMENTADO|IMPL\b", st): continue
+                sig = hashlib.sha256(doc.read_bytes()).hexdigest()
+                out.append(("package", f"plan:{nn}", f"{sig}#{pos}")); break   # 1 por ruta
+        except Exception:
+            continue                                            # ruta que no parsea ⇒ log+skip, no rompe
+    return out
+
+def _derive_drift_candidates() -> list[tuple[str,str,str]]:
+    """Plan marcado IMPLEMENTADO cuyo(s) archivo(s) citados NO están en main ⇒ candidato reconciler."""
+    out: list[tuple[str,str,str]] = []
+    tip = _git(["rev-parse","HEAD"])
+    for doc in _plan_docs():
+        nn = re.match(r"(\d+)_", doc.name).group(1)
+        text = doc.read_text(encoding="utf-8", errors="replace"); st = _status_line(text)
+        if not re.search(r"IMPLEMENTADO|IMPL\b", st): continue
+        named = _extract_files(text)[:20]
+        missing = [f for f in named
+                   if subprocess.run(["git","cat-file","-e",f"main:{f}"], capture_output=True).returncode != 0]
+        if missing:
+            flags = ",".join("miss" if f in missing else "main" for f in named)   # firma estable, sin resolver paths FS
+            sig = hashlib.sha256(f"{st}|{tip}|{flags}".encode()).hexdigest()
+            out.append(("reconciler", f"plan:{nn}", sig))
+    return out
+
+# — en night_foundry_digest.py —
+def _parse_conflict_paths(stdout: str) -> list[str]:
+    a = set(re.findall(r"CONFLICT \([^)]*\):.*?\b(\S+\.\w+)\b", stdout))
+    b = set(re.findall(r"^\s*(?:both modified:|changed in both)\s+(\S+)$", stdout, re.M))
+    return sorted(a | b)                                        # si nada matchea ⇒ [] (veredicto sigue 'conflict')
+
+def _dedup_by_key(decisions: list[dict]) -> list[dict]:
+    """1 decisión por dedup_key, conservando la de MEJOR kind (menor _KIND_RANK)."""
+    best: dict[str, dict] = {}
+    for d in decisions:
+        k = d["dedup_key"]
+        if k not in best or _KIND_RANK.get(d["kind"],9) < _KIND_RANK.get(best[k]["kind"],9):
+            best[k] = d
+    return list(best.values())
+```
+
+**Tests (uno por helper, en el `test_plan202_*` del módulo dueño):** `test_extract_files_rutas_backtick`, `test_extract_tests_nombres`, `test_extract_phases_En_Fn`, `test_match_gotchas_in_repo_no_lee_memoria` (doc sin gotchas ⇒ []; con "ratchet" ⇒ contiene "ratchet"), `test_derive_package_primer_no_implementado`, `test_derive_drift_archivo_ausente_en_main`, `test_parse_conflict_paths`, `test_dedup_by_key_conserva_mejor_kind`, `test_doc_for_encuentra_por_prefijo`.
+
+---
+
 ### E1 — Ledger durable (`night_foundry_ledger.py`) + fingerprint
 
 **Objetivo (1 frase):** bitácora JSONL append-only, con lock, retención y hash de entrada — el sustrato de dedup y resumibilidad. **Valor:** sin esto no hay idempotencia ni "retomar la noche caída".
@@ -239,13 +351,17 @@ def upsert_item(lane: str, target: str, input_hash: str, *, night: str) -> dict:
             "attempts": 0, "night": night, "created_at": _now(), "updated_at": _now(), "error": None })
         rows.append(item); _write_all(rows); return item
 
-def claim_next() -> dict | None:
+def claim_next(exclude_ids: set[str] | None = None) -> dict | None:
     """Atómico: toma el primer pending (o claimed huérfano) por orden de carril (critic<auditor<
-    package<reconciler) y luego FIFO; lo pasa a claimed, incrementa attempts, persiste, lo devuelve."""
+    package<reconciler) y luego FIFO; lo pasa a claimed, incrementa attempts, persiste, lo devuelve.
+    [C6 v2] 'exclude_ids' = ids ya vistos/salteados en ESTA corrida (p.ej. critic sin dispatch, o
+    critic sin presupuesto): se excluyen del candidato para NO re-clamarlos en bucle. La exclusión es
+    SOLO de esta corrida (no se persiste): en la próxima noche esos pending vuelven a ser clamables."""
+    exclude_ids = exclude_ids or set()
     order = {"critic":0,"auditor":1,"package":2,"reconciler":3,"proposer":4}
     with _LOCK:
         rows = _read_all()
-        cands = [r for r in rows if r.get("state") in ("pending","claimed")]
+        cands = [r for r in rows if r.get("state") in ("pending","claimed") and r.get("id") not in exclude_ids]
         if not cands: return None
         cands.sort(key=lambda r: (order.get(r.get("lane"), 9), r.get("created_at","")))
         pick = cands[0]
@@ -318,9 +434,18 @@ from services import night_foundry_ledger as L
 MAX_V2_UNIMPLEMENTED = 8          # WIP kanban (§E3)
 
 def _docs_dir() -> Path:
-    return Path(runtime_paths.app_root()) / "docs"    # ajustar al helper real que apunta a Stacky Agents/docs
+    # [C1 v2] VERIFICADO runtime_paths.py:30-33,36-45 — en dev app_root()==backend_root()==Stacky Agents/backend,
+    # así que app_root()/"docs" apuntaría a Stacky Agents/backend/docs (INEXISTENTE). Los planes viven en
+    # Stacky Agents/docs. La Fragua es una herramienta de repo (opera ramas/planes del working tree): resolvemos
+    # SIEMPRE contra el árbol del repo = backend_root().parent/"docs".
+    return runtime_paths.backend_root().parent / "docs"
+
+def _docs_dir_ok() -> bool:
+    d = _docs_dir()
+    return d.exists() and d.is_dir()
 
 def _plan_docs() -> list[Path]:
+    if not _docs_dir_ok(): return []      # [C1 v2] docs dir ausente ⇒ [] (no crash), la noche no deriva nada
     return sorted(_docs_dir().glob("[0-9]*_PLAN_*.md"))
 
 def _status_line(text: str) -> str:
@@ -339,7 +464,9 @@ def derive_candidates() -> list[tuple[str, str, str]]:
         nn = re.match(r"(\d+)_", doc.name).group(1)
         raw = doc.read_bytes(); text = raw.decode("utf-8", "replace"); status = _status_line(text)
         doc_sig = hashlib.sha256(raw).hexdigest()
-        if re.search(r"PROPUESTO v1", status) and not re.search(r"v2|CRITICADO", text):
+        # [C2 v2] el negativo se evalúa sobre la STATUS LINE, no sobre todo el texto: un v1 genuino
+        # puede mencionar "CRITICADO v2" en su prosa (como ESTE plan 202) y sería falso-negativo.
+        if re.search(r"PROPUESTO v1", status) and not re.search(r"v2|CRITICADO", status):
             cands.append(("critic", f"plan:{nn}", doc_sig))
     for line in _git(["for-each-ref","--format=%(refname:short) %(objectname)","refs/heads/impl"]).splitlines():
         parts = line.split()
@@ -369,10 +496,11 @@ def plan_night(night: str) -> dict:
     return {"enqueued": enq, "gate": gate}
 ```
 
-(`_derive_package_candidates` y `_derive_drift_candidates` = helpers deterministas descriptos arriba; cada uno con su test.)
+(`_derive_package_candidates` y `_derive_drift_candidates`: **especificación EXACTA en §E0** — cada uno con su test.)
 
 **Tests PRIMERO — `tests/test_plan202_planner.py`** (fixture: un `tmp_path/docs/` con 2-3 planes sembrados de estados distintos + monkeypatch de `_docs_dir` y de `_git`):
-- `test_deriva_critic_de_v1_sin_criticar` — doc `PROPUESTO v1` sin v2 ⇒ candidato critic; doc con `v2` ⇒ NO.
+- `test_docs_dir_resuelve_a_carpeta_de_planes` ([C1] SIN monkeypatch: `_docs_dir()` existe y contiene `202_PLAN_*.md` — protege contra la regresión del path a `backend/docs`).
+- `test_deriva_critic_de_v1_sin_criticar` — doc `PROPUESTO v1` sin v2 ⇒ candidato critic; doc con `v2` en su STATUS LINE ⇒ NO; **[C2] doc v1 que MENCIONA "CRITICADO v2" en su PROSA ⇒ SIGUE siendo candidato critic** (regresión del falso-negativo).
 - `test_deriva_auditor_de_ramas_impl` — `_git` mockeado devuelve 2 ramas impl ⇒ 2 candidatos auditor con el tip sha correcto.
 - `test_deriva_reconciler_por_drift` — doc IMPLEMENTADO cuyo archivo no está en main ⇒ candidato reconciler.
 - `test_planner_idempotente_no_duplica` (KPI-1) — correr `plan_night` 2× sobre el mismo estado ⇒ la 2ª no agrega items nuevos (todos dedup).
@@ -395,9 +523,10 @@ def _count_backlog() -> dict:
     v1_uncriticized = v2_unimplemented = 0
     for doc in _plan_docs():
         text = doc.read_text(encoding="utf-8", errors="replace"); status = _status_line(text)
-        if re.search(r"PROPUESTO v1", status) and not re.search(r"v2|CRITICADO", text):
+        # [C2 v2] mismos criterios sobre la STATUS LINE (no sobre todo el texto).
+        if re.search(r"PROPUESTO v1", status) and not re.search(r"v2|CRITICADO", status):
             v1_uncriticized += 1
-        if re.search(r"CRITICADO v2|APROBADO-CON-CAMBIOS", text) and not re.search(r"IMPLEMENTADO|IMPL\b", status):
+        if re.search(r"CRITICADO v2|APROBADO-CON-CAMBIOS", status) and not re.search(r"IMPLEMENTADO|IMPL\b", status):
             v2_unimplemented += 1
     return {"v1_uncriticized": v1_uncriticized, "v2_unimplemented": v2_unimplemented}
 
@@ -455,19 +584,26 @@ def _nf_dir(sub: str) -> Path:
     d = Path(runtime_paths.data_dir()) / "night_foundry" / sub
     d.mkdir(parents=True, exist_ok=True); return d
 
-def run_auditor(branch: str) -> dict:
-    """AUDIT-ONLY DURO. Mapea fases a código (grep del doc que la rama implementa) y corre SOLO los
-    tests que el plan nombra, POR ARCHIVO, con el venv. JAMÁS implementa ni 'termina lo que falte'.
-    POST-CONDICIÓN verificable (KPI-5): 'git status --porcelain' debe quedar VACÍO; si no, el item
-    es 'failed' y el reporte lo denuncia (violación de read-only). Devuelve dict de reporte + costo 0."""
+def run_auditor(branch: str, base: str = "main") -> dict:
+    """AUDIT-ONLY DURO, determinista, GIT-ONLY (cero pytest, cero checkout, cero LLM).
+    [C3 v2] En F0 el auditor NO corre los tests de la rama: eso exige checkout de la rama en un
+    worktree propio y es del refutador F3 (correr pytest en el worktree 'nightly/' —checkout de main—
+    auditaría el código EQUIVOCADO). El auditor F0 produce un reporte read-only del delta rama-vs-base
+    leyendo objetos git ('git … base...branch' NO altera árbol/index/refs):
+      - diffstat:   'git diff --stat base...branch'
+      - test_files: 'git diff --name-only base...branch' filtrado a rutas de test (…/test_*.py)
+      - phase_map:  archivos .py cambiados (mapa fase→archivo determinista, sin ejecutar nada)
+    POST-CONDICIÓN (KPI-5): 'git status --porcelain' idéntico antes/después; si difiere ⇒ readonly_ok
+    False y el item se marca failed (denuncia de violación read-only). Devuelve dict + cost_tokens 0."""
     before = subprocess.run(["git","status","--porcelain"], capture_output=True, text=True).stdout
-    # 1) resolver el plan que la rama implementa (heurística: nombre de rama ↔ doc; o leer commits)
-    # 2) extraer de su doc los nombres de archivos de test (regex 'tests\\\\?[\\w/]*test_\\w+\\.py')
-    # 3) por cada test: subprocess .venv\Scripts\python.exe -m pytest <archivo> -q  (timeout, capturar)
-    # 4) mapear cada fase F0..Fn a archivo:símbolo por grep (sin modificar nada)
-    report = {"branch": branch, "tests": [], "phase_map": [], "readonly_ok": True}
+    rng = f"{base}...{branch}"
+    diffstat = subprocess.run(["git","diff","--stat",rng], capture_output=True, text=True, timeout=60).stdout
+    names = subprocess.run(["git","diff","--name-only",rng], capture_output=True, text=True, timeout=60).stdout.splitlines()
+    test_files = [n for n in names if re.search(r"(^|/)test_\w+\.py$", n)]
+    changed_py = [n for n in names if n.endswith(".py")]
     after = subprocess.run(["git","status","--porcelain"], capture_output=True, text=True).stdout
-    report["readonly_ok"] = (before == after)          # KPI-5: el árbol quedó intacto
+    report = {"branch": branch, "base": base, "diffstat": diffstat, "test_files": test_files,
+              "changed_py": changed_py, "phase_map": changed_py, "readonly_ok": (before == after)}
     out = _nf_dir("audits") / f"{branch.replace('/','-')}-{datetime.now(timezone.utc):%Y-%m-%d}.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"output_ref": f"audits/{out.name}", "cost_tokens": 0, "readonly_ok": report["readonly_ok"]}
@@ -477,8 +613,9 @@ def build_package(plan_nn: str, doc_path: Path) -> dict:
     - mapa de archivos a tocar con líneas ancla (parse de las secciones 'Archivos:' del plan)
     - lista de tests a escribir con qué asertan (parse de 'Tests PRIMERO')
     - checklist de fases F0..Fn (o E1..En)
-    - gotchas de memoria aplicables (match por keywords del doc contra el índice de memoria)
+    - gotchas aplicables extraídos del PROPIO doc ([C5 v2] `_match_gotchas` in-repo/portable; NO lee ~/.claude)
     - gates/ratchets a pasar (parse de 'Criterio' / 'gate' / 'ratchet' del doc)
+    Todos los `_extract_*`/`_match_gotchas`: especificación EXACTA en §E0.
     Escribe packages/<plan-NN>-<fecha>.json. NO escribe código de producto."""
     text = doc_path.read_text(encoding="utf-8", errors="replace")
     pkg = {"plan": plan_nn, "files_to_touch": _extract_files(text), "tests_to_write": _extract_tests(text),
@@ -504,6 +641,7 @@ def run_reconciler(plan_nn: str, doc_path: Path) -> dict:
 
 **Tests PRIMERO — `tests/test_plan202_workers.py`** (fixtures con docs sembrados; `subprocess` monkeypatcheado donde toque):
 - `test_auditor_readonly_arbol_intacto` (KPI-5) — `git status --porcelain` idéntico antes/después ⇒ `readonly_ok True`; simular una modificación ⇒ `readonly_ok False`.
+- `test_auditor_reporta_diffstat_y_test_files` ([C3] git mock: `git diff --name-only` devuelve un `test_*.py` ⇒ `report["test_files"]` no vacío; el auditor NO invoca pytest — assert que `subprocess` de pytest jamás se llamó).
 - `test_auditor_escribe_solo_en_audits` — el único archivo creado está bajo `audits/` (dominio disjunto).
 - `test_build_package_extrae_secciones` — doc sembrado con "Archivos:"/"Tests PRIMERO" ⇒ el paquete tiene `files_to_touch` y `tests_to_write` no vacíos; el archivo cae en `packages/`.
 - `test_build_package_matchea_gotchas` — doc que menciona "ratchet"/"HARNESS_TEST_FILES" ⇒ `gotchas` no vacío.
@@ -540,9 +678,15 @@ from services import night_foundry_workers as W
 def _stop_file() -> Path:
     return Path(runtime_paths.data_dir()) / "night_foundry" / "STOP"
 
+def _env_on(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1","true","yes","on")
+
 def should_stop(night: str, budget: int) -> tuple[bool, str]:
-    if os.getenv("STACKY_EVOLUTION_HARD_DISABLE","").strip().lower() in ("1","true","yes","on"):
-        return True, "hard_disable"                      # reusa el kill-switch env del plan 167
+    # [C9 v2] Dos kill-switches env: STACKY_NIGHT_FOUNDRY_HARD_DISABLE (PROPIO, independiente) y
+    # STACKY_EVOLUTION_HARD_DISABLE (mismo nombre que el 167; hoy SIN reader en main —forward-compatible:
+    # cuando RSI llegue a main, un solo botón detiene RSI Y la Fragua). Honramos ambos.
+    if _env_on("STACKY_NIGHT_FOUNDRY_HARD_DISABLE") or _env_on("STACKY_EVOLUTION_HARD_DISABLE"):
+        return True, "hard_disable"
     if _stop_file().exists():
         return True, "stop_file"
     if L.spent_tokens(night) >= budget:
@@ -563,23 +707,34 @@ def run_deterministic_item(item: dict) -> dict:
         return {"output_ref": None, "cost_tokens": 0, "reconciler": r}
     raise ValueError(f"carril no determinista: {lane}")
 
+CRITIC_EST_TOKENS = 6000   # [ADICIÓN ARQUITECTO v2] estimado de costo de UNA crítica LLM. Se PRE-RESERVA
+                           # contra el presupuesto ANTES de dispatchar: el costo real solo se conoce
+                           # post-hoc, así que sin pre-carga un solo critic podría exceder el techo (R2).
+
 def run_night(night: str | None = None, *, budget: int, dispatch_critic=None) -> dict:
     """Loop serializado. UN item por iteración. Antes de CADA item chequea should_stop.
     Idempotente/resumible: claim_next re-clama huérfanos; los done nunca se re-ejecutan.
     'dispatch_critic' (callable) lo inyecta el skill Claude-nativo para el carril LLM; si es None,
-    los items critic se dejan pending (fallback Codex/Copilot: el operador los corre a mano)."""
+    los items critic se dejan pending (fallback Codex/Copilot: el operador los corre a mano).
+    [C6 v2] 'seen' = ids salteados esta corrida (critic sin dispatch, o critic sin presupuesto): se
+    pasan a claim_next(exclude_ids=seen) para NO re-clamarlos ⇒ el loop TERMINA en vez de colgarse."""
     night = night or f"{datetime.now(timezone.utc):%Y-%m-%d}"
-    stopped = "queue_empty"
+    stopped = "queue_empty"; seen: set[str] = set()
     while True:
         stop, why = should_stop(night, budget)
         if stop: stopped = why; break
-        item = L.claim_next()
+        item = L.claim_next(exclude_ids=seen)
         if item is None: stopped = "queue_empty"; break
+        if item["lane"] == "critic":
+            # [C6 v2] fallback sin runtime Claude: dejar pending y NO re-clamar esta corrida (seen).
+            if dispatch_critic is None:
+                L.record_result(item["id"], "pending"); seen.add(item["id"]); continue
+            # [ADICIÓN ARQUITECTO v2] pre-reserva de presupuesto: si la estimación excede el techo, no
+            # dispatchar (dejar pending para la próxima noche), marcar seen y cortar por budget.
+            if L.spent_tokens(night) + CRITIC_EST_TOKENS > budget:
+                L.record_result(item["id"], "pending"); seen.add(item["id"]); stopped = "budget"; break
         try:
             if item["lane"] == "critic":
-                if dispatch_critic is None:
-                    # sin runtime Claude: no procesar, dejar pending y seguir con deterministas
-                    L.record_result(item["id"], "pending"); continue
                 res = dispatch_critic(item)              # invoca el skill criticar-y-mejorar-plan
             else:
                 res = run_deterministic_item(item)
@@ -589,14 +744,16 @@ def run_night(night: str | None = None, *, budget: int, dispatch_critic=None) ->
     return {"night": night, "stopped_reason": stopped, "spent_tokens": L.spent_tokens(night)}
 ```
 
-Nota sobre el fallback critic sin Claude: para NO caer en loop infinito reclamando el mismo pending, cuando `dispatch_critic is None` el loop debe SALTEAR los critic pending (llevar un set de ids ya vistos esta corrida) y cortar cuando solo quedan critic. Implementar ese guard explícito (test lo cubre).
+Nota [C6 v2 — RESUELTO EN EL CÓDIGO]: el guard anti-bucle YA está implementado (set `seen` + `claim_next(exclude_ids=seen)`): un critic sin `dispatch` (o sin presupuesto para su pre-reserva) se deja `pending`, se agrega a `seen` y no se re-clama esta corrida; el loop corta cuando solo quedan items ya vistos (`claim_next` devuelve `None`). Cubierto por `test_critic_sin_dispatch_no_bucle` y `test_critic_precarga_presupuesto_no_excede`.
 
 **Tests PRIMERO — `tests/test_plan202_orchestrator.py`** (ledger en `tmp_path`; workers monkeypatcheados para devolver `cost_tokens` fijos):
 - `test_orquestador_serializa_uno_por_iteracion` (KPI-2) — 5 items; `should_stop` fuerza corte tras 2 ⇒ 2 done + 3 pending.
 - `test_corte_duro_por_presupuesto` (KPI-3) — budget 1000; 3 items de 500 c/u ⇒ 2 done (1000), el 3º pending, `stopped_reason "budget"`.
 - `test_resume_por_hash_no_reejecuta_done` (KPI-4) — dejar 1 claimed + 1 done; re-`run_night` ⇒ el done no se toca, el claimed se termina.
 - `test_killswitches_detienen_todo` (KPI-8) — con `STOP` presente ⇒ 0 items procesados, `stopped_reason "stop_file"`; con env `STACKY_EVOLUTION_HARD_DISABLE=1` ⇒ `"hard_disable"`.
-- `test_critic_sin_dispatch_no_bucle` — items critic con `dispatch_critic=None` ⇒ quedan pending, el loop termina (guard anti-bucle).
+- `test_critic_sin_dispatch_no_bucle` — items critic con `dispatch_critic=None` ⇒ quedan pending, el loop termina (guard anti-bucle `seen`+`exclude_ids`; sin guard sería bucle infinito).
+- `test_critic_precarga_presupuesto_no_excede` (ADICIÓN v2) — con `budget=1000`, `CRITIC_EST_TOKENS=6000` y 1 critic + deterministas: el critic NO se dispatcha (queda pending, `stopped_reason "budget"`), los deterministas sí corren.
+- `test_hard_disable_propio_detiene` (C9) — con `STACKY_NIGHT_FOUNDRY_HARD_DISABLE=1` ⇒ 0 procesados, `stopped_reason "hard_disable"` (independiente del env del 167).
 - `test_item_que_lanza_queda_failed` — worker que lanza ⇒ item failed con `error`, la corrida sigue.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_plan202_orchestrator.py -q`.
@@ -615,7 +772,7 @@ Nota sobre el fallback critic sin Claude: para NO caer en loop infinito reclaman
 - CREAR `Stacky Agents/backend/tests/test_plan202_digest.py`
 - EDITAR ambos runners.
 
-**Mergeabilidad (read-only, verificada [V] con git 2.50.1):** `git merge-tree --write-tree <base> <branch>` — exit 0 + tree hash ⇒ `mergeable: true, verdict: "clean"`; exit != 0 ⇒ conflicto: parsear las secciones de conflicto para `conflict_paths`; si el comando falla por otra razón ⇒ `verdict: "unknown", mergeable: None`. NO toca working tree ni refs.
+**Mergeabilidad (read-only, verificada [V] con git 2.50.1):** `git merge-tree --write-tree <base> <branch>` — exit 0 + tree hash ⇒ `mergeable: true, verdict: "clean"`; **[C7 v2] exit 1 ⇒ conflicto** (parsear secciones de conflicto para `conflict_paths`); **exit >1 (o excepción/timeout) ⇒ error ⇒ `verdict: "unknown", mergeable: None`** (NO confundir un error —ref inexistente— con un conflicto). NO toca working tree ni refs (escribe objetos sueltos inalcanzables que GC recolecta; `git status` queda limpio).
 
 ```python
 """services/night_foundry_digest.py — Plan 202. Digest triado de la noche (contrato §5.2)."""
@@ -635,8 +792,9 @@ def mergeability(branch: str, base: str = "main") -> dict:
         return {"verdict": "unknown", "mergeable": None, "conflict_paths": []}
     if p.returncode == 0:
         return {"verdict": "clean", "mergeable": True, "conflict_paths": []}
-    paths = _parse_conflict_paths(p.stdout)          # de las líneas "CONFLICT" / "changed in both"
-    return {"verdict": "conflict", "mergeable": False, "conflict_paths": paths}
+    if p.returncode == 1:                            # [C7 v2] SOLO rc==1 es conflicto real
+        return {"verdict": "conflict", "mergeable": False, "conflict_paths": _parse_conflict_paths(p.stdout)}
+    return {"verdict": "unknown", "mergeable": None, "conflict_paths": []}  # rc>1 = error (ref inexistente, etc.)
 
 def build_digest(night: str, *, budget: int, stopped_reason: str) -> dict:
     items = L.list_items(night=night)
@@ -682,6 +840,7 @@ def build_digest(night: str, *, budget: int, stopped_reason: str) -> dict:
 - `test_ranking_por_kind` — merge antes que implement antes que review antes que reconcile; `rank` 1..N consecutivo.
 - `test_budget_exhausted_se_refleja` — `stopped_reason "budget"` ⇒ `budget_exhausted True`.
 - `test_digest_solo_incluye_done` — items pending/failed no generan decisión (failed cuenta en `counts.failed`).
+- `test_mergeability_rc_error_es_unknown` ([C7] `merge-tree` mock rc=128 ⇒ `verdict "unknown"`, `mergeable None`, NO `conflict`).
 - `test_parse_conflict_paths`.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_plan202_digest.py -q`.
@@ -708,14 +867,18 @@ FlagSpec(key="STACKY_NIGHT_FOUNDRY_ENABLED", type="bool", label="La Fragua Noctu
     description="Habilita la maquinaria de la Fragua Nocturna (planner, ledger, digest, panel y "
                 "botón manual 'correr un turno'). No corre nada solo: la corrida nocturna la arma "
                 "el operador con /loop. Solo produce papel revisable; nunca mergea ni implementa.",
-    group="global", default=True)   # master, sin requires (patrón STACKY_EVOLUTION_CENTER_ENABLED)
+    group="global", default=True)   # [C9 v2] master bool default ON sin requires — patrón REAL
+                                     # STACKY_DEVOPS_AGENT_ENABLED (VERIFICADO harness_flags.py:203).
+                                     # (El STACKY_EVOLUTION_CENTER_ENABLED del 167 NO está en main.)
 
 FlagSpec(key="STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET", type="int", label="Presupuesto de tokens por noche",
     description="Corte duro: la Fragua deja de tomar items nuevos cuando el gasto de la noche supera "
                 "este techo.", group="global", default=40000,
+    min_value=1000, max_value=500000,   # [C10 v2] OBLIGATORIO en la FlagSpec: test_bounds_map_is_frozen
+                                         # deriva 'actual' de FlagSpec.min_value/max_value (bounds.py:181-186).
     requires="STACKY_NIGHT_FOUNDRY_ENABLED")
 ```
-- Agregar ambas keys a `_CATEGORY_KEYS`; `STACKY_NIGHT_FOUNDRY_ENABLED` a `_CURATED_DEFAULTS_ON` (SOLO la bool — la int NO va ahí; gotcha `test_default_known_only_for_curated`); default efectivo en `config.py`; edge `STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET → STACKY_NIGHT_FOUNDRY_ENABLED` en `_REQUIRES_MAP_FROZEN`. Para la flag int: entrada en el mapa de bounds (`[1000, 500000]`) — gotcha `test_bounds_map_is_frozen` (agregá SOLO tu flag; la deuda ajena preexistente no se toca).
+- Agregar ambas keys a `_CATEGORY_KEYS`. **[C10 v2 — CORRECCIÓN CLAVE]** `default_is_known(spec) == (spec.default is not None)` (VERIFICADO `harness_flags.py:3476`): como AMBAS FlagSpec declaran `default` explícito, `test_default_known_only_for_curated` exige que AMBAS keys estén en `_CURATED_DEFAULTS_ON` (la bool Y la int — NO "solo la bool"; el gotcha "solo bools" describe el set histórico, no la regla del test). Default efectivo en `config.py` para ambas. Edge `STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET → STACKY_NIGHT_FOUNDRY_ENABLED` en `_REQUIRES_MAP_FROZEN` (`test_harness_flags_requires.py:120`). Para la int: `min_value=1000, max_value=500000` EN la FlagSpec (arriba) **y** la MISMA entrada en `_FROZEN_BOUNDS` (`test_harness_flags_bounds.py:149`) — `test_bounds_map_is_frozen` deriva `actual` de `FlagSpec.min_value/max_value` (líneas 181-186), deben coincidir; agregá SOLO tu flag (la deuda ajena preexistente no se toca).
 
 **2) API read-only `api/night_foundry.py`:**
 ```python
@@ -734,16 +897,29 @@ def run_one_turn():
     """Botón manual (on-demand, HITL explícito): corre UN item determinista y devuelve el resultado.
     NO arma autonomía. 404 con flag OFF."""
     if not getattr(_config.config, "STACKY_NIGHT_FOUNDRY_ENABLED", False): abort(404)
+
+@bp.post("/stop")   # [ADICIÓN ARQUITECTO v2] kill-switch de un clic desde el panel (HITL): crea el archivo STOP.
+def stop_on():
+    """Detiene la Fragua sin tocar env: crea data_dir()/night_foundry/STOP ⇒ la próxima iteración de
+    run_night corta con stopped_reason 'stop_file'. Solo DETIENE; jamás arranca autonomía. 404 con flag OFF."""
+    if not getattr(_config.config, "STACKY_NIGHT_FOUNDRY_ENABLED", False): abort(404)
+    # touch data_dir()/night_foundry/STOP  (mkdir parents + write_text(""))
+
+@bp.delete("/stop")  # [ADICIÓN ARQUITECTO v2] rehabilitar: borra STOP. Detener/reanudar, nunca arrancar.
+def stop_off():
+    if not getattr(_config.config, "STACKY_NIGHT_FOUNDRY_ENABLED", False): abort(404)
+    # borra data_dir()/night_foundry/STOP si existe (no-op si no)
 ```
 Registrar el blueprint en `backend/api/__init__.py` (zona de imports :61 y de registers :122 — anclar por contenido; blueprints van ahí, NO en `app.py`).
 
-**3) Skill `fragua-nocturna` (Claude-nativa, orquestación):** `SKILL.md` que documenta el turno: (1) crear worktree aislado `git worktree add ../_wt/nightly-<fecha> -b nightly/<fecha> main` (o EnterWorktree); (2) `should_stop`; (3) `plan_night(<fecha>)`; (4) loop `run_night(..., dispatch_critic=<invoca el skill criticar-y-mejorar-plan para el plan del item>)`; (5) `build_digest`; (6) notificar. **Kill-switches redundantes cableados:** archivo `data_dir()/night_foundry/STOP`, env `STACKY_EVOLUTION_HARD_DISABLE` (reusado del 167), `/loop` detenido / `TaskStop` / cerrar sesión, y (futuro F1) `CronDelete` del `/schedule`. El operador arma con `/loop` o `/schedule` a las 2am; en Codex/Copilot corre los CLIs Python y los skills a mano (fallback).
+**3) Skill `fragua-nocturna` (Claude-nativa, orquestación):** `SKILL.md` que documenta el turno: (1) crear worktree aislado `git worktree add ../_wt/nightly-<fecha> -b nightly/<fecha> main` (o EnterWorktree); (2) `should_stop`; (3) `plan_night(<fecha>)`; (4) loop `run_night(..., dispatch_critic=<invoca el skill criticar-y-mejorar-plan para el plan del item>)`; (5) `build_digest`; (6) notificar. **Kill-switches redundantes cableados:** archivo `data_dir()/night_foundry/STOP` (creable/borrable de un clic vía `POST/DELETE /api/night_foundry/stop` — ADICIÓN v2), env PROPIO `STACKY_NIGHT_FOUNDRY_HARD_DISABLE` y env `STACKY_EVOLUTION_HARD_DISABLE` (mismo nombre que el 167, forward-compat; [C9 v2] hoy sin reader en main), `/loop` detenido / `TaskStop` / cerrar sesión, y (futuro F1) `CronDelete` del `/schedule`. El operador arma con `/loop` o `/schedule` a las 2am; en Codex/Copilot corre los CLIs Python y los skills a mano (fallback).
 
 **Tests PRIMERO — `tests/test_plan202_api_flag.py`:**
 - `test_flag_maestra_bool_default_on` + `test_flag_en_curated_defaults_on`.
-- `test_flag_budget_int_default_y_bounds`.
+- `test_flag_budget_int_default_y_bounds` + `test_budget_int_en_curated_defaults_on` ([C10 v2] la int TAMBIÉN curada) + `test_budget_bounds_en_frozen_map`.
 - `test_edge_budget_requires_master`.
-- `test_endpoints_404_con_flag_off` (los 3) y `test_digest_latest_ok_con_flag_on`.
+- `test_endpoints_404_con_flag_off` (los 5: digest/ledger/run-one-turn/POST stop/DELETE stop) y `test_digest_latest_ok_con_flag_on`.
+- `test_stop_endpoint_crea_y_borra_stop` (ADICIÓN v2) — `POST /stop` crea el archivo STOP, `DELETE /stop` lo borra; solo detiene/reanuda (nunca arranca una corrida).
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests\test_plan202_api_flag.py -q` + `.venv\Scripts\python.exe -m pytest tests\test_harness_flags.py -q` + `... test_harness_flags_requires.py -q` (POR ARCHIVO).
 **Criterio (binario):** todos pasan; la flag aparece toggleable en el panel de flags del Arnés (default ON); `ratchet_meta` NO-EMPEORAR.
@@ -755,9 +931,9 @@ Registrar el blueprint en `backend/api/__init__.py` (zona de imports :61 y de re
 
 | # | Riesgo | Mitigación (cableada donde se pueda) |
 |---|--------|---------------------------------------|
-| R1 | **Falsos verdes en tests generados de noche.** | F0 **NO commitea tests al árbol de tests**. El constructor-de-paquetes (E4) los propone como TEXTO dentro del paquete `.json` (`tests_to_write`), no como archivos ejecutables. El auditor (E4) corre SOLO tests YA existentes que el plan nombra, read-only (KPI-5). Los "tests-rojos-como-spec" quedan para F3 (refutador) con gate. |
+| R1 | **Falsos verdes en tests generados de noche.** | F0 **NO commitea tests al árbol de tests**. El constructor-de-paquetes (E4) los propone como TEXTO dentro del paquete `.json` (`tests_to_write`), no como archivos ejecutables. [C3 v2] El auditor (E4) es GIT-ONLY read-only (diffstat/test-files/fase→archivo, KPI-5): NO ejecuta ningún test. Correr los tests de la rama/paquete (con checkout en worktree propio) y los "tests-rojos-como-spec" quedan para F3 (refutador) con gate. |
 | R2 | **Costo de tokens nocturno.** | Presupuesto techo duro `STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET` con corte antes de tomar item nuevo (KPI-3); 3 de 4 carriles son deterministas (cost_tokens 0); costo ocioso 0 (KPI-9); autonomía opt-in (nada corre sin `/loop` armado). |
-| R3 | **Complejidad del ledger.** | JSONL simple append-only con reescritura atómica (tmp+replace), ALLOWLIST y retención — calca `deploy_store.py` verificado. Nada de DB nueva. |
+| R3 | **Complejidad del ledger.** | JSONL simple append-only con reescritura atómica (tmp+replace), ALLOWLIST y retención — [C8 v2] **EXTIENDE** el patrón de `deploy_store.py` (lock + `data_dir()` + jsonl + tolerar JSON corrupto, verificado) agregando tmp+replace/retención/ALLOWLIST (que deploy_store NO trae). Nada de DB nueva. |
 | R4 | **Anti-deuda-de-papel (fabricar papel que nadie consume).** | Cableado como gate verificable (E3, KPI-6): proposer bloqueado por v1-sin-criticar / >8 v2-sin-implementar / ratio 1:3. En F0 el proposer está reservado ⇒ ratio 0:N (máximo des-atasque). |
 | R5 | **Paridad honesta (vender lo que no es).** | Runtime primario declarado (Claude Code) para la orquestación y el carril crítico; núcleo determinista (6 de 7 componentes) runtime-agnóstico; fallback manual explícito para Codex/Copilot; ledger/digest son archivos que cualquier runtime lee/escribe (§3.4, líneas de runtime por etapa). |
 | R6 | **Colisión estructural entre workers.** | Serialización dura (un item por iteración, KPI-2) + dominios de salida disjuntos por carril (E4) + worktree aislado `nightly/<fecha>`. El paralelismo real es F2 (204), no F0. |
@@ -772,7 +948,7 @@ Registrar el blueprint en `backend/api/__init__.py` (zona de imports :61 y de re
 
 - **F1 (203) robustez:** circuit breakers por carril, presupuestos en capas, reintentos con backoff, kill-switches ampliados. (El TMV trae MAX_ATTEMPTS y corte global; nada más.)
 - **F2 (204) multi-carril paralelo** en worktrees vía Workflow. (El TMV es SERIAL a propósito.)
-- **F3 (205) verificación adversarial:** el "refutador" que corre antes del digest; los tests-rojos-como-spec con gate.
+- **F3 (205) verificación adversarial:** el "refutador" que corre antes del digest; **corre los tests que la rama/paquete promete** (checkout de la rama en un worktree propio — lo que el auditor F0 NO hace, C3 v2) y los tests-rojos-como-spec con gate.
 - **F4 (206) evolutivo:** conexión con RSI 167-170 (GEPA muta prompts de los workers, fitness 168 puntúa, Pareto 169 retiene, flywheel 170 cosecha; adopción HITL en el Centro de Evolución 167). Depende de que `impl/rsi` esté mergeada.
 - **F5 (207) hoja de ruta** de la serie 202-206.
 - El **carril proposer** (generar planes nuevos de noche): reservado, gateado (E3), NO corre en F0.
@@ -787,12 +963,12 @@ Registrar el blueprint en `backend/api/__init__.py` (zona de imports :61 y de re
 - **TMV (Turno Mínimo Viable):** este plan (F0 de la serie); el sustrato mínimo completo de la Fragua.
 - **Work item:** una unidad de trabajo derivada (§5.1): carril + target + estado + hash de entrada.
 - **Carril (lane):** critic / auditor / package / reconciler (+ proposer reservado). Cada uno con dominio de salida disjunto.
-- **AUDIT-ONLY:** el auditor mapea fases a código y corre tests existentes; **JAMÁS implementa ni "termina lo que falte"** (límite duro que lo separa del skill `supervisar-implementaciones-planes`, que sí implementa). Verificado por post-condición `git status --porcelain` vacío (KPI-5).
+- **AUDIT-ONLY:** [C3 v2] el auditor es GIT-ONLY (diffstat + test-files + mapa fase→archivo vía `git … base...branch`); **NO ejecuta tests, NO hace checkout, JAMÁS implementa ni "termina lo que falte"** (límite duro que lo separa del skill `supervisar-implementaciones-planes`, que sí implementa; correr los tests es de F3). Verificado por post-condición `git status --porcelain` idéntico antes/después (KPI-5).
 - **Paquete listo-para-el-día:** `.json` con mapa de archivos+anclas, tests a escribir con qué asertan, checklist de fases, gotchas de memoria aplicables, gates/ratchets. Producido por el constructor (E4), determinista.
 - **Digest triado:** cola de decisiones rankeada y deduplicada (§5.2), NO un volcado de logs.
 - **Mergeabilidad:** veredicto read-only vía `git merge-tree --write-tree` (clean/conflict/unknown).
 - **Fingerprint de dedup/resumibilidad:** `input_hash` (§5.3) — dedup + retomar la noche caída.
-- **Kill-switches redundantes:** archivo `STOP`, env `STACKY_EVOLUTION_HARD_DISABLE` (167), `/loop` detenido / `TaskStop` / cerrar sesión, `CronDelete` (F1).
+- **Kill-switches redundantes:** archivo `STOP` (un clic: `POST/DELETE /api/night_foundry/stop`), env PROPIO `STACKY_NIGHT_FOUNDRY_HARD_DISABLE` + `STACKY_EVOLUTION_HARD_DISABLE` (forward-compat 167), `/loop` detenido / `TaskStop` / cerrar sesión, `CronDelete` (F1).
 - **Runtime primario:** Claude Code (orquestación + carril crítico LLM); fallback manual Codex/Copilot sobre los mismos archivos y skills.
 
 **Orden de implementación:** E1 (ledger) → E2 (planner) → E3 (gate) → E4 (workers) → E5 (orquestador) → E6 (digest) → E7 (flag+API+skill+kill-switches). Cada etapa se commitea sola con sus tests verdes ANTES de la siguiente.
@@ -806,5 +982,6 @@ Registrar el blueprint en `backend/api/__init__.py` (zona de imports :61 y de re
 - [ ] Datos SOLO en `data_dir()/night_foundry/` (`.jsonl`/`.json`, nunca `.md`); cero escritura fuera de los namespaces disjuntos por carril.
 - [ ] Skill `.claude/skills/fragua-nocturna/SKILL.md` creada, con el turno documentado y los kill-switches; ninguna autonomía sin `/loop` armado por el operador.
 - [ ] Ningún hook de arranque (`app.py`) invoca al orquestador (KPI-9: costo ocioso 0).
+- [ ] [v2] `_docs_dir()` resuelve a `Stacky Agents/docs` (test de anclaje C1); guard anti-bucle del orquestador (`seen`+`exclude_ids`) verificado (C6); los 9 helpers de §E0 con test (C4); auditor GIT-ONLY sin pytest (C3); detección de versión sobre la STATUS LINE (C2); ambas flags en `_CURATED_DEFAULTS_ON` y bounds en la FlagSpec + `_FROZEN_BOUNDS` (C10).
 - [ ] Contratos §5 (ledger, digest, fingerprint) congelados y citables por 203-207.
 - [ ] Encabezado de estado del doc actualizado al implementar (PROPUESTO v1 → IMPLEMENTADO / según pipeline).

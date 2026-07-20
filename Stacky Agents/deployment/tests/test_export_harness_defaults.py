@@ -98,3 +98,44 @@ def test_main_with_live_deploy_writes_filtered_snapshot(tmp_path: Path, monkeypa
     written = out.read_text(encoding="utf-8")
     assert "STACKY_CONTEXT_DEDUP_ENABLED=true" in written
     assert "ADO_PAT" not in written
+
+
+# ── Foto fiel del backend DEV (start_dashboard): el snapshot debe reflejar los
+#    overrides que el operador puso en backend/.env, incluidos los flags env_only,
+#    que antes se horneaban con su spec.default en vez del valor real. ───────────
+def test_registry_defaults_captures_env_only_operator_override(monkeypatch) -> None:
+    # env_only bool cuyo default declarado es True: si el operador lo APAGA en dev,
+    # la foto debe decir "false" (antes emitía el spec.default=True → drift).
+    monkeypatch.setenv("STACKY_MEMORY_INJECTION_ENABLED", "false")
+    # env_only csv SIN default declarado: si el operador lo configura, se hornea tal cual
+    # (antes se omitía siempre por no tener spec.default).
+    monkeypatch.setenv("STACKY_EVAL_GATE_MODE", "block")
+    defaults = ehd.registry_default_values()
+    assert defaults["STACKY_MEMORY_INJECTION_ENABLED"] == "false"
+    assert defaults["STACKY_EVAL_GATE_MODE"] == "block"
+
+
+def test_registry_defaults_never_bakes_secrets(monkeypatch) -> None:
+    # Aunque un secreto esté en el entorno, el snapshot solo itera FLAG_REGISTRY.
+    monkeypatch.setenv("ADO_PAT", "topsecret")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-xxx")
+    defaults = ehd.registry_default_values()
+    assert "ADO_PAT" not in defaults
+    assert "OPENAI_API_KEY" not in defaults
+
+
+def test_registry_defaults_env_only_falls_back_when_unset(monkeypatch) -> None:
+    # env_only bool sin override → default seguro declarado (spec.default).
+    monkeypatch.delenv("STACKY_MEMORY_INJECTION_ENABLED", raising=False)
+    # env_only csv sin default ni override → OMITIDO (call-site aplica su default válido).
+    monkeypatch.delenv("STACKY_EVAL_GATE_MODE", raising=False)
+    defaults = ehd.registry_default_values()
+    assert defaults["STACKY_MEMORY_INJECTION_ENABLED"] == "true"  # spec.default=True
+    assert "STACKY_EVAL_GATE_MODE" not in defaults
+
+
+def test_registry_defaults_is_idempotent(monkeypatch) -> None:
+    monkeypatch.setenv("STACKY_EVAL_GATE_MODE", "warn")
+    first = ehd.registry_default_values()
+    second = ehd.registry_default_values()
+    assert first == second

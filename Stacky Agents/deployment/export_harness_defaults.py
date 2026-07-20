@@ -21,6 +21,7 @@ Sin deploy vivo (o sin flags en él): se conserva el archivo versionado actual
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -40,35 +41,55 @@ def _bool_to_env(val: object) -> str:
 
 
 def registry_default_values() -> dict[str, str]:
-    """Defaults EFECTIVOS del arnés (código) como {key: valor .env}.
+    """Defaults EFECTIVOS del arnés como {key: valor .env}, FIEL al backend DEV.
 
-    Fuente de verdad = el estado real que aplica el backend con env limpio:
-    para las flags que son atributo de Config se lee `config.<KEY>` (así el
-    snapshot refleja EXEC_VERIFICATION_MODE=annotate, FAKE_GREEN_GUARD_HARD=false,
-    etc., no el type-zero declarado). Las env_only bool caen a su default seguro
-    (False). Las env_only no-bool SIN default declarado se OMITEN (su default real
-    vive en el call-site y el type-zero podría violar bounds). Semilla de MENOR
-    precedencia.
+    Fuente de verdad = el estado real que aplica el backend DEV de ESTE checkout
+    (el que el operador levanta con start_dashboard.bat): backend/.env + defaults
+    de código. Al importar `config` se dispara `load_dotenv(backend/.env)`, así que
+    tanto los atributos de Config como os.environ ya reflejan lo que el operador
+    tiene activado en dev.
+
+    - Flag que es atributo de Config (no env_only): se lee `config.<KEY>`, que ya
+      incorpora backend/.env (refleja EXEC_VERIFICATION_MODE=annotate,
+      FAKE_GREEN_GUARD_HARD=false, y cualquier override del operador), no el
+      type-zero declarado.
+    - Flag env_only: si el operador la definió explícitamente en backend/.env
+      (presente en os.environ tras el load_dotenv), se hornea ESE valor real — así
+      una env_only que el operador prendió/apagó en dev llega FIEL al deploy (antes
+      se horneaba siempre su spec.default, causando drift). Si NO está definida:
+      bool → default seguro declarado (spec.default o False); no-bool con default
+      declarado → ese default; no-bool SIN default → se OMITE (su default real vive
+      en el call-site y el type-zero podría violar bounds, p.ej. ADO_EDIT_SWEEP_HOURS
+      min=1).
+
+    Solo itera FLAG_REGISTRY, así que NUNCA hornea credenciales/secretos (no están
+    en el registry). Semilla de MENOR precedencia (un --deploy-root, si se pasa, la pisa).
     """
-    from config import config as _cfg  # noqa: PLC0415
+    from config import config as _cfg  # noqa: PLC0415 (dispara load_dotenv del backend dev)
 
     out: dict[str, str] = {}
     for spec in FLAG_REGISTRY:
         if not spec.env_only and hasattr(_cfg, spec.key):
-            # Fuente de verdad: el atributo efectivo de Config (default real).
+            # Fuente de verdad: el atributo efectivo de Config (refleja backend/.env).
             val = getattr(_cfg, spec.key)
             out[spec.key] = _bool_to_env(val) if spec.type == "bool" else str(val)
+            continue
+
+        # env_only (o, raro, atributo ausente): honrar el override EXPLÍCITO del dev.
+        raw = os.getenv(spec.key)
+        if raw is not None:
+            if spec.type == "bool":
+                out[spec.key] = _bool_to_env(str(raw).strip().lower() in ("1", "true", "yes", "on"))
+            else:
+                out[spec.key] = raw
         elif spec.type == "bool":
-            # env_only bool: type-zero = False es el default seguro y válido.
+            # env_only bool sin override: default seguro declarado (spec.default o False).
             out[spec.key] = _bool_to_env(spec.default)
         elif spec.default is not None:
             # env_only no-bool CON default declarado explícito.
             out[spec.key] = str(spec.default)
-        # else: env_only no-bool SIN default declarado (int/float/csv). El default
-        # REAL vive en el call-site (os.getenv(key, ...)) y el type-zero podría
-        # violar sus bounds (p.ej. ADO_EDIT_SWEEP_HOURS min=1). Se OMITE del
-        # snapshot: el frozen no hornea un valor inventado y el call-site aplica
-        # su propio default válido.
+        # else: env_only no-bool SIN default ni override → OMITIR (call-site aplica
+        # su propio default válido; evita hornear un type-zero que viole bounds).
     return out
 
 _HEADER = (

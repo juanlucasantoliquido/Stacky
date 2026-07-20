@@ -401,28 +401,12 @@ Write-OK "Artefactos previos eliminados (frontend\dist, pyinstaller-*, release/z
 Require-Command -Command "npm" -Hint "Instala Node.js 18+ para compilar el frontend."
 $script:Python = Resolve-Python
 
-# Snapshot del arnés vivo → harness_defaults.env (versionado). Se hornea más abajo
-# en backend\.env. Corre ANTES del backup del deploy en Prepare-Publication, así que
-# $DeployRoot todavía apunta al deploy con la config actual del operador. Si no hay
-# deploy vivo (build standalone / otra máquina) se conserva el harness_defaults.env
-# versionado existente.
-if ($DeployRoot -and (Test-Path $DeployRoot)) {
-    Write-Step "Sincronizando harness_defaults.env con el arnes vivo del deploy"
-    if (Test-Path $exportHarnessScript) {
-        Invoke-BuildPython -PythonArgs @(
-            $exportHarnessScript,
-            "--deploy-root", $DeployRoot,
-            "--out", $harnessDefaultsFile
-        )
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "No se pudo refrescar harness_defaults.env; se usara el versionado existente."
-        } else {
-            Write-OK "harness_defaults.env sincronizado con el arnes vivo"
-        }
-    } else {
-        Write-Warn "export_harness_defaults.py no encontrado; se usara harness_defaults.env versionado."
-    }
-}
+# NOTA: el snapshot de harness_defaults.env se hace mas abajo, DESPUES de crear el
+# venv de PyInstaller (que tiene python-dotenv). Se siembra desde la config EFECTIVA
+# del backend DEV de este checkout (start_dashboard.bat: backend\.env + defaults de
+# codigo), NO del deploy anterior. Motivo: el operador espera que el deploy sea una
+# foto fiel de lo que corre en dev; fotografiar --deploy-root reflejaba el deploy
+# previo y dejaba drift. -DeployRoot se sigue usando para backup/target del deploy.
 
 Write-Step "Compilando frontend"
 Push-Location $frontendDir
@@ -528,6 +512,24 @@ if (-not (Test-Path $venvPython)) {
 & $venvPython -m pip install --upgrade pip
 & $venvPython -m pip install -r (Join-Path $backendDir "requirements.txt") pyinstaller
 Write-OK "Entorno PyInstaller listo"
+
+# Snapshot del arnes -> harness_defaults.env (versionado), FIEL a la config
+# EFECTIVA del backend DEV de este checkout (el que el operador levanta con
+# start_dashboard.bat: backend\.env + defaults de codigo). Se siembra desde la
+# config viva del dev (--seed-registry-defaults) con el venv de build (tiene
+# python-dotenv). Reemplaza el snapshot viejo que fotografiaba el deploy anterior
+# (--deploy-root). El snapshot filtra a FLAG_REGISTRY: nunca hornea credenciales.
+if (Test-Path $exportHarnessScript) {
+    Write-Step "Snapshot del arnes: harness_defaults.env = config efectiva del dev (start_dashboard)"
+    & $venvPython $exportHarnessScript "--seed-registry-defaults" "--out" $harnessDefaultsFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "No se pudo refrescar harness_defaults.env desde el dev; se usara el versionado existente."
+    } else {
+        Write-OK "harness_defaults.env sincronizado con la config efectiva del dev"
+    }
+} else {
+    Write-Warn "export_harness_defaults.py no encontrado; se usara harness_defaults.env versionado."
+}
 
 Write-Step "Congelando backend con PyInstaller"
 $pyDist = Join-Path $buildRoot "pyinstaller-dist"

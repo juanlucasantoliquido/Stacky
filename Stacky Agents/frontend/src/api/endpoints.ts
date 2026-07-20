@@ -2718,6 +2718,226 @@ export const PublishLedger = {
     ),
 };
 
+// ── Plan 167 — Centro de Evolución ────────────────────────────────────────────
+export const Evolution = {
+  health: () => fetch("/api/evolution/health").then((r) => r.json()),
+  overview: () =>
+    fetch("/api/evolution/overview").then((r) => {
+      if (!r.ok) throw new Error(`evolution overview ${r.status}`);
+      return r.json();
+    }),
+  proposals: (q: { status?: string; aspect_id?: string; origin?: string } = {}) => {
+    const p = new URLSearchParams(
+      Object.entries(q).filter(([, v]) => !!v) as [string, string][],
+    );
+    const qs = p.toString();
+    return fetch(`/api/evolution/proposals${qs ? `?${qs}` : ""}`).then((r) => {
+      if (!r.ok) throw new Error(`evolution proposals ${r.status}`);
+      return r.json();
+    });
+  },
+  proposal: (id: string) =>
+    fetch(`/api/evolution/proposals/${id}`).then((r) => {
+      if (!r.ok) throw new Error(`evolution proposal ${r.status}`);
+      return r.json();
+    }),
+  createProposal: (body: unknown) =>
+    fetch("/api/evolution/proposals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  transition: (id: string, action: string, note?: string, force?: boolean) =>
+    fetch(`/api/evolution/proposals/${id}/transition`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, note: note ?? null, force: force ?? false }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  runCycle: (useLlm: boolean) =>
+    fetch("/api/evolution/cycle/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aspects: null, use_llm: useLlm }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  ledger: (limit = 50) => fetch(`/api/evolution/ledger?limit=${limit}`).then((r) => r.json()),
+  cycles: (limit = 20) => fetch(`/api/evolution/cycles?limit=${limit}`).then((r) => r.json()),
+};
+
+// Plan 168 — Arnés de fitness (espejo del namespace Evolution del 167).
+export const EvolutionFitness = {
+  health: () => fetch("/api/evolution/fitness/health").then((r) => r.json()),
+  cases: (q: { aspect_key?: string; enabled?: string } = {}) => {
+    const p = new URLSearchParams(
+      Object.entries(q).filter(([, v]) => !!v) as [string, string][],
+    );
+    const qs = p.toString();
+    return fetch(`/api/evolution/fitness/cases${qs ? `?${qs}` : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+  createCase: (body: unknown) =>
+    fetch("/api/evolution/fitness/cases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  patchCase: (id: string, body: unknown) =>
+    fetch(`/api/evolution/fitness/cases/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  fromIncident: (incidentId: string) =>
+    fetch("/api/evolution/fitness/cases/from-incident", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_id: incidentId }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  fromExecution: (executionId: number) =>
+    fetch("/api/evolution/fitness/cases/from-execution", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ execution_id: executionId }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  run: (aspectKey: string, useJudge: boolean) =>
+    fetch("/api/evolution/fitness/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aspect_key: aspectKey, use_judge: useJudge }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  runs: (aspectKey?: string, limit = 20) => {
+    const p = new URLSearchParams();
+    if (aspectKey) p.set("aspect_key", aspectKey);
+    p.set("limit", String(limit));
+    return fetch(`/api/evolution/fitness/runs?${p.toString()}`).then((r) => r.json());
+  },
+  scorecard: () => fetch("/api/evolution/fitness/scorecard").then((r) => r.json()),
+  rubrics: () => fetch("/api/evolution/fitness/rubrics").then((r) => r.json()),
+  proposalFitnessRun: (proposalId: string, which: string, useJudge: boolean) =>
+    fetch(`/api/evolution/proposals/${proposalId}/fitness/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ which, use_judge: useJudge }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  judgeSelfcheck: () =>
+    fetch("/api/evolution/fitness/judge/selfcheck", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  judgeSelfcheckLast: () =>
+    fetch("/api/evolution/fitness/judge/selfcheck").then((r) => r.json()),
+};
+
+// Plan 169 — Optimizador evolutivo (espejo del namespace EvolutionFitness del 168).
+// rng_seed NO se expone: es un parámetro del POST para depuración/tests (ADICIÓN v2).
+export const EvolutionOptimizer = {
+  health: () => fetch("/api/evolution/optimizer/health").then((r) => r.json()),
+  targets: () =>
+    fetch("/api/evolution/optimizer/targets").then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  run: (targetRef: string, runtime: string | null, useJudge: boolean) =>
+    fetch("/api/evolution/optimizer/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_ref: targetRef, runtime, use_judge: useJudge }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  cancel: (runId: string) =>
+    fetch(`/api/evolution/optimizer/runs/${runId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  getRun: (runId: string) =>
+    fetch(`/api/evolution/optimizer/runs/${runId}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  runs: (limit = 20) =>
+    fetch(`/api/evolution/optimizer/runs?limit=${limit}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  archive: (q: { run_id?: string; aspect_key?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.run_id) p.set("run_id", q.run_id);
+    if (q.aspect_key) p.set("aspect_key", q.aspect_key);
+    if (q.limit) p.set("limit", String(q.limit));
+    const qs = p.toString();
+    return fetch(`/api/evolution/optimizer/archive${qs ? `?${qs}` : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+  lessons: (aspectKey: string, limit = 20) => {
+    const p = new URLSearchParams();
+    if (aspectKey) p.set("aspect_key", aspectKey);
+    p.set("limit", String(limit));
+    return fetch(`/api/evolution/optimizer/lessons?${p.toString()}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+  pareto: (aspectKey: string) =>
+    fetch(`/api/evolution/optimizer/pareto?aspect_key=${encodeURIComponent(aspectKey)}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+};
+
+// Plan 170 — Flywheel de conocimiento (espejo del namespace EvolutionOptimizer del 169).
+export const EvolutionKnowledge = {
+  health: () => fetch("/api/evolution/knowledge/health").then((r) => r.json()),
+  lessons: (includeRetired = false) =>
+    fetch(`/api/evolution/knowledge/lessons${includeRetired ? "?include_retired=true" : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  patchLesson: (lid: string, patch: { title?: string; scope?: unknown }) =>
+    fetch(`/api/evolution/knowledge/lessons/${lid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  candidates: () =>
+    fetch("/api/evolution/knowledge/harvest/candidates").then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  fromIncident: (incidentId: string, force = false) =>
+    fetch("/api/evolution/knowledge/harvest/from-incident", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_id: incidentId, force }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  fromOptimizerLesson: (lessonId: string, force = false) =>
+    fetch("/api/evolution/knowledge/harvest/from-optimizer-lesson", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lesson_id: lessonId, force }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  manual: (title: string, body: string, scope?: unknown, force = false) =>
+    fetch("/api/evolution/knowledge/harvest/manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, body, scope, force }),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  toEvalCase: (lid: string) =>
+    fetch(`/api/evolution/knowledge/lessons/${lid}/to-eval-case`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json().then((d) => ({ ok: r.ok, status: r.status, data: d }))),
+  overview: () =>
+    fetch("/api/evolution/knowledge/overview").then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
+  injectionPreview: (q: { agent_type?: string; project?: string; query?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (q.agent_type) p.set("agent_type", q.agent_type);
+    if (q.project) p.set("project", q.project);
+    if (q.query) p.set("query", q.query);
+    const qs = p.toString();
+    return fetch(`/api/evolution/knowledge/injection-preview${qs ? `?${qs}` : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    );
+  },
+};
+
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────
 export const CodeIntegrity = {
   get: () =>

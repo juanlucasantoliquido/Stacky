@@ -2,7 +2,7 @@
 
 ## Versión: v1 -> v2 (crítica adversarial aplicada)
 
-**Estado:** CRITICADO v2 (2026-07-18) — APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode · **Juez v2:** StackyArchitectaUltraEficientCode
+**Estado:** IMPLEMENTADO F0-F7 (2026-07-18) — 66 tests backend + 9 frontend verdes por archivo, tsc exit 0; uiDebtRatchet rojo SOLO por deuda ajena preexistente (los 3 archivos nuevos del plan aportan 0 inline-style / 0 hex). · **Autor:** StackyArchitectaUltraEficientCode · **Juez v2:** StackyArchitectaUltraEficientCode
 
 **CHANGELOG v1 -> v2:**
 - **C1 (IMPORTANTE):** el sub-shape `judge` del `EvalRun` (`used/model/error/parse_errors/rubric_versions`) no tenía regla de cómputo, y `judge_context` aparecía en la firma de `run_case` y el paso 5 de `run_eval` sin que NADIE lo construyera (KPI-3 exigía `rubric_versions` que `judge_text` no devolvía — spec incompletable sin inferir). v2: `judge_text` devuelve además `rubric_id`/`rubric_version`, `run_eval` recibe `judge_model` explícito, `judge_context` eliminado, y §4.5 congela las reglas de llenado del sub-shape.

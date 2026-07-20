@@ -1,6 +1,6 @@
 # Plan 167 — Centro de Evolución: núcleo del panel de auto-mejora, registro de loops de mejora y ciclo MAPE con gates humanos
 
-**Estado:** CRITICADO v2 (2026-07-18) — v1 RECHAZADO (1 bloqueante C1 + 5 importantes); v2 aplica todos los fixes → APTO PARA IMPLEMENTAR · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** crítica adversarial 2026-07-18
+**Estado:** IMPLEMENTADO — 2026-07-18 (F0..F7; 59 casos backend + 10 model.ts, verdes por archivo; tsc 0; uiDebtRatchet rojo SOLO por deuda ajena preexistente, los 2 archivos nuevos del plan aportan 0). v2 CRITICADO — v1 RECHAZADO (1 bloqueante C1 + 5 importantes); v2 aplicó todos los fixes · **Autor:** StackyArchitectaUltraEficientCode · **Juez:** crítica adversarial 2026-07-18
 **Serie:** "Auto-mejora recursiva" **1 de 4** (directiva del operador 2026-07-17):
 **167 (este)** = núcleo del panel + registro de propuestas + ciclo MAPE con gates humanos ·
 **168** = arnés de evaluación/fitness (golden tasks + jueces) ·

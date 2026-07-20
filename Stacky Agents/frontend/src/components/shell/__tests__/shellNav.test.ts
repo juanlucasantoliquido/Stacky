@@ -11,11 +11,11 @@ import {
 const ALL_TABS = [
   "team", "tickets", "review", "unblocker", "pm", "logs", "settings",
   "docs", "memory", "diagnostics", "history", "migrador", "devops", "dbcompare",
-  "costcenter", "planes",
+  "costcenter", "planes", "evolution",
 ] as const;
 
 describe("shellNav — modelo de navegación", () => {
-  it("TAB_META cubre exactamente los 16 tabs", () => {
+  it("TAB_META cubre exactamente los 17 tabs", () => {
     expect(Object.keys(TAB_META).sort()).toEqual([...ALL_TABS].sort());
   });
 
@@ -42,7 +42,7 @@ describe("shellNav — modelo de navegación", () => {
     const v = computeVisibleTabs({
       sections: { team: false, pm: false, logs: false, docs: false, memory: false },
       migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
-      costCenterEnabled: false, planesEnabled: false,
+      costCenterEnabled: false, planesEnabled: false, evolutionEnabled: false,
     });
     expect([...v].sort()).toEqual(
       ["diagnostics", "history", "review", "settings", "tickets", "unblocker"].sort(),
@@ -64,7 +64,7 @@ describe("shellNav — modelo de navegación", () => {
     const v = computeVisibleTabs({
       sections: { team: true, pm: true, logs: true, docs: true, memory: true },
       migradorEnabled: true, devopsEnabled: true, dbCompareEnabled: true,
-      costCenterEnabled: true, planesEnabled: true,
+      costCenterEnabled: true, planesEnabled: true, evolutionEnabled: true,
     });
     expect([...v].sort()).toEqual([...ALL_TABS].sort());
   });
@@ -73,7 +73,7 @@ describe("shellNav — modelo de navegación", () => {
     const v = computeVisibleTabs({
       sections: { team: false, pm: false, logs: false, docs: false, memory: false },
       migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
-      costCenterEnabled: false, planesEnabled: false,
+      costCenterEnabled: false, planesEnabled: false, evolutionEnabled: false,
     });
     const groups = orderedVisibleGroups(v);
     // conocimiento (docs/memory) y plataforma (devops/migrador/dbcompare) quedan vacíos

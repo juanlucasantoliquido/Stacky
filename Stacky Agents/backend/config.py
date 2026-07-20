@@ -1369,4 +1369,105 @@ class Config:
         "STACKY_PLANS_BOARD_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
+    # Panel de aspectos/propuestas/ciclo MAPE con gates humanos. Default ON:
+    # solo agrega superficie de lectura + acciones on-click del operador.
+    STACKY_EVOLUTION_CENTER_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_CENTER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Ciclo MAPE on-demand (botón "Correr ciclo"). Sin LLM local configurado
+    # corre en modo determinista puro (reglas R-A1..R-A4), costo cero.
+    STACKY_EVOLUTION_CYCLE_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_CYCLE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # human-on-the-loop SOLO para lecciones de conocimiento (reversibles).
+    # EXCEPCIÓN DURA #1 (bypass de revisión humana) → default OFF a conciencia.
+    STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Presupuesto de tokens ESTIMADOS por corrida del ciclo (entrada al LLM local).
+    STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET: int = int(os.getenv(
+        "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET", "20000"
+    ) or "20000")
+
+    # ── Plan 168 — Arnés de fitness (serie auto-mejora recursiva 2/4) ──
+    # Golden tasks + jerarquía de señal + juez LLM local. Default ON: solo
+    # corre on-demand y sin endpoint local degrada a deterministas puros.
+    STACKY_EVAL_HARNESS_ENABLED: bool = os.getenv(
+        "STACKY_EVAL_HARNESS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Juez LLM local (rubricas versionadas). Sin LOCAL_LLM_ENDPOINT el arnés
+    # corre igual solo con niveles deterministas y lo declara en el run.
+    STACKY_EVAL_JUDGE_ENABLED: bool = os.getenv(
+        "STACKY_EVAL_JUDGE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Presupuesto de tokens ESTIMADOS por corrida de evals (entrada+salida del juez).
+    STACKY_EVAL_RUN_TOKEN_BUDGET: int = int(os.getenv(
+        "STACKY_EVAL_RUN_TOKEN_BUDGET", "30000"
+    ) or "30000")
+
+    # ── Plan 169 — Optimizador evolutivo (serie auto-mejora recursiva 3/4) ──
+    # generate->evaluate->select->archive sobre prompts de agentes. Default ON:
+    # el flag solo habilita el boton "Optimizar"; correr es SIEMPRE un click
+    # explicito del operador y aplicar exige aprobacion (gates del Plan 167).
+    STACKY_EVOLUTION_OPTIMIZER_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Generador de variantes: auto = modelo local si hay endpoint, si no el
+    # runtime de agentes. Valores: auto | local | runtime.
+    STACKY_EVOLUTION_OPTIMIZER_GENERATOR: str = os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_GENERATOR", "auto"
+    ).strip().lower() or "auto"
+
+    # K variantes por corrida (clamp 1..6 en el motor).
+    STACKY_EVOLUTION_OPTIMIZER_VARIANTS: int = int(os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_VARIANTS", "3"
+    ) or "3")
+
+    # Presupuesto de tokens ESTIMADOS por corrida (generacion; las evaluaciones
+    # tienen su propio presupuesto del Plan 168).
+    STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET: int = int(os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET", "60000"
+    ) or "60000")
+
+    # Margen minimo de mejora para emitir propuesta, en centesimas de score
+    # (2 = el ganador debe superar al base por 0.02).
+    STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT: int = int(os.getenv(
+        "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT", "2"
+    ) or "2")
+
+    # -- Plan 170 -- Flywheel de conocimiento (serie auto-mejora recursiva 4/4) --
+    # Lecciones estructuradas: cosecha con aprobacion humana e inyeccion acotada
+    # al contexto de agentes. Default ON: la cosecha es on-click y la inyeccion
+    # es aditiva con tope duro de caracteres.
+    STACKY_KNOWLEDGE_FLYWHEEL_ENABLED: bool = os.getenv(
+        "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Kill-switch independiente de la inyeccion de lecciones al contexto.
+    STACKY_KNOWLEDGE_INJECTION_ENABLED: bool = os.getenv(
+        "STACKY_KNOWLEDGE_INJECTION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Cuantas lecciones (top por relevancia) entran por corrida (clamp 1..10 en codigo).
+    STACKY_KNOWLEDGE_INJECT_TOP_N: int = int(os.getenv(
+        "STACKY_KNOWLEDGE_INJECT_TOP_N", "3"
+    ) or "3")
+
+    # Tope duro de caracteres del bloque de lecciones (clamp 500..20000 en codigo).
+    STACKY_KNOWLEDGE_INJECT_MAX_CHARS: int = int(os.getenv(
+        "STACKY_KNOWLEDGE_INJECT_MAX_CHARS", "4000"
+    ) or "4000")
+
+    # Cap del corpus: al excederse, el panel sugiere retiros LRU (nunca borra).
+    STACKY_KNOWLEDGE_MAX_LESSONS: int = int(os.getenv(
+        "STACKY_KNOWLEDGE_MAX_LESSONS", "200"
+    ) or "200")
+
 config = Config()

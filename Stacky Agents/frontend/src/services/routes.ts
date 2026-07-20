@@ -5,7 +5,7 @@
 export type Tab =
   | "team" | "tickets" | "review" | "unblocker" | "pm" | "logs"
   | "settings" | "docs" | "memory" | "diagnostics" | "history"
-  | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
+  | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes" | "evolution";
 
 // MOVIDO desde App.tsx (fuente única). App.tsx pasará a importarlo (F3).
 // La vista índice (raíz "/") es TICKETS: al abrir la app se aterriza en el
@@ -16,7 +16,7 @@ export const TAB_PATHS: Record<Tab, string> = {
   pm: "/pm", logs: "/logs", settings: "/settings", docs: "/docs",
   memory: "/memory", diagnostics: "/diagnostics", history: "/history",
   migrador: "/migrador", devops: "/devops", dbcompare: "/dbcompare",
-  costcenter: "/costcenter", planes: "/planes",
+  costcenter: "/costcenter", planes: "/planes", evolution: "/evolution", // Plan 167
 };
 
 export interface RouteState {

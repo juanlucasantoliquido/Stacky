@@ -525,6 +525,32 @@ HARNESS_TEST_FILES=(
   tests/test_lifecycle_shutdown_log.py
   tests/test_error_fingerprints_catalog.py
   tests/test_error_fingerprints_scan.py
+  # — Plan 167 · Centro de Evolucion —
+  tests/test_evolution_flags.py
+  tests/test_evolution_store.py
+  tests/test_evolution_apply.py
+  tests/test_evolution_cycle.py
+  tests/test_evolution_endpoints.py
+  # — Plan 168 · Arnes de fitness —
+  tests/test_fitness_flags.py
+  tests/test_fitness_case_store.py
+  tests/test_fitness_runner.py
+  tests/test_fitness_judge.py
+  tests/test_fitness_service.py
+  tests/test_fitness_endpoints.py
+  # — Plan 169 · Optimizador evolutivo —
+  tests/test_optimizer_flags.py
+  tests/test_optimizer_store.py
+  tests/test_optimizer_generator.py
+  tests/test_optimizer_engine.py
+  tests/test_optimizer_endpoints.py
+  # — Plan 170 · Flywheel de conocimiento —
+  tests/test_knowledge_flags.py
+  tests/test_knowledge_store.py
+  tests/test_knowledge_harvest.py
+  tests/test_knowledge_injection.py
+  tests/test_knowledge_eval_link.py
+  tests/test_knowledge_endpoints.py
 )
 
 pass=0

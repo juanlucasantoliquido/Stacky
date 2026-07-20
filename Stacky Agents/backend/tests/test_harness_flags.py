@@ -686,6 +686,21 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 139 — Shell v2 (sidebar) PROMOVIDA a default ON (operador
     # 2026-07-18): deja de ser la excepción OFF; es la presentación de fábrica. ──
     "STACKY_UI_SHELL_V2_ENABLED",
+    # ── Plan 167 — Centro de Evolución (SOLO las 2 bool default ON; la int
+    # STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET y la OFF AUTO_APPLY NO van acá — G4/C1) ──
+    "STACKY_EVOLUTION_CENTER_ENABLED",
+    "STACKY_EVOLUTION_CYCLE_ENABLED",
+    # ── Plan 168 — Arnés de fitness (SOLO las 2 bool default ON; la int
+    # STACKY_EVAL_RUN_TOKEN_BUDGET NO va acá — G4/C10) ──
+    "STACKY_EVAL_HARNESS_ENABLED",
+    "STACKY_EVAL_JUDGE_ENABLED",
+    # ── Plan 169 — Optimizador evolutivo (SOLO la bool master; la str GENERATOR
+    # y las 3 int NO van acá — G4/C14) ──
+    "STACKY_EVOLUTION_OPTIMIZER_ENABLED",
+    # ── Plan 170 — Flywheel de conocimiento (SOLO las 2 bool default ON; las 3
+    # int TOP_N/MAX_CHARS/MAX_LESSONS NO van acá — G4/C14) ──
+    "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED",
+    "STACKY_KNOWLEDGE_INJECTION_ENABLED",
 }
 
 

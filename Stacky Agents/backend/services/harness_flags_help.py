@@ -1414,6 +1414,111 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la campana desaparece y la barra de arriba queda igual que hoy.",
         example="Dejás corriendo unos agentes, salís a hacer otra cosa, y al volver la campana te muestra cuáles terminaron y si alguno necesita tu revisión, sin tener que buscar en cada pantalla.",
     ),
+    # ── Plan 167 — Centro de Evolución ──────────────────────────────────────
+    "STACKY_EVOLUTION_CENTER_ENABLED": PlainHelp(
+        what="Un panel donde Stacky registra sus propias oportunidades de mejora (prompts, flags, conocimiento, código) como propuestas que vos aprobás o rechazás, con historial y opción de deshacer.",
+        on_effect="Si la activás: aparece el tab 'Evolución' con los aspectos mejorables, las propuestas, el ciclo de análisis y el registro de auditoría. Nunca cambia nada sin tu aprobación.",
+        off_effect="Si la apagás: el tab desaparece y /api/evolution responde 404. Todo lo demás sigue exactamente igual.",
+        example="Stacky detecta que un agente falla seguido, deja una propuesta 'revisar su prompt', y vos decidís con un click si la aplicás o la descartás.",
+    ),
+    "STACKY_EVOLUTION_CYCLE_ENABLED": PlainHelp(
+        what="Habilita el botón 'Correr ciclo' que revisa la telemetría que ya tenés (costos, errores de agentes, incidencias, tablero de planes) y arma borradores de propuestas de mejora.",
+        on_effect="Si la activás: podés correr el ciclo cuando quieras; deja solo borradores para tu revisión y no aplica nada. Sin modelo local configurado, funciona igual con reglas fijas y a costo cero.",
+        off_effect="Si la apagás: el botón no corre el ciclo; las propuestas se crean solo a mano.",
+        example="Apretás 'Correr ciclo' y Stacky te deja un borrador: 'el modelo X explica el 70% del gasto — evaluá uno más barato para tareas mecánicas'.",
+    ),
+    "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED": PlainHelp(
+        what="Deja que el ciclo aplique solo las lecciones de conocimiento (notas reversibles), sin pedirte aprobación previa.",
+        on_effect="Si la activás: saltea la revisión previa: el ciclo aplica la lección solo y te queda el botón Revertir para deshacerla. Solo afecta lecciones de conocimiento, nunca prompts, flags ni código.",
+        off_effect="Si la apagás: cada lección espera tu aprobación antes de guardarse, igual que el resto de las propuestas.",
+        example="El ciclo detecta un patrón de bloqueo repetido y, con esto activado, guarda la lección al toque; si no te sirve, la revertís con un click.",
+    ),
+    "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET": PlainHelp(
+        what="El tope de tokens estimados que una corrida del ciclo puede mandarle al modelo local para redactar mejor las propuestas.",
+        on_effect="Si subís el número: el ciclo puede mandar más contexto al modelo local (propuestas mejor redactadas), pero puede tardar un poco más.",
+        off_effect="Si lo bajás: el ciclo manda menos contexto; si las señales exceden el tope, se recortan y queda anotado en el registro del ciclo.",
+        example="Con el tope en 20000, si las señales de un ciclo pesan más, se truncan y el resumen del ciclo te avisa que hubo recorte.",
+    ),
+    # ── Plan 168 — Arnés de fitness (golden tasks + jerarquía de señal + juez local) ──
+    "STACKY_EVAL_HARNESS_ENABLED": PlainHelp(
+        what="Un arnés que le pone una nota objetiva (de 0 a 1) a los prompts y las lecciones de Stacky, combinando chequeos automáticos con la opinión de un modelo local.",
+        on_effect="Si la activás: aparece la sección 'Fitness de agentes' en el Centro de Evolución con las notas por agente, la tendencia y el botón para medir el antes/después de cada propuesta.",
+        off_effect="Si la apagás: la sección desaparece y las mediciones de fitness responden 404. El resto del Centro de Evolución sigue igual.",
+        example="Antes de aprobar un cambio de prompt, medís su fitness y ves si mejora o empeora respecto del prompt vigente, con número en mano.",
+    ),
+    "STACKY_EVAL_JUDGE_ENABLED": PlainHelp(
+        what="Deja que un modelo local le ponga nota y una crítica escrita a un artefacto (prompt o lección), guiándose por una rúbrica versionada y auditable.",
+        on_effect="Si la activás: las mediciones suman la nota del juez local además de los chequeos automáticos. Si no hay modelo local configurado, las corridas siguen funcionando solo con los chequeos automáticos y lo dejan anotado.",
+        off_effect="Si la apagás: las mediciones usan solo los chequeos automáticos (sin la opinión del modelo), y nunca se llama al modelo local.",
+        example="El juez lee un prompt y devuelve 0.6 con la crítica 'no define el formato de salida esperado', que después sirve para mejorarlo.",
+    ),
+    "STACKY_EVAL_RUN_TOKEN_BUDGET": PlainHelp(
+        what="El tope de tokens estimados que una sola corrida de medición puede mandarle al modelo local que hace de juez.",
+        on_effect="Si subís el número: la corrida puede juzgar más casos con el modelo local antes de frenar, pero puede tardar más.",
+        off_effect="Si lo bajás: la corrida juzga menos casos con el modelo; al llegar al tope, los casos con juez que faltan quedan como omitidos y la corrida lo registra.",
+        example="Con el tope en 30000, si una corrida ya gastó esa estimación, los casos con juez que restan quedan marcados 'omitidos por presupuesto'.",
+    ),
+    # ── Plan 169 — Optimizador evolutivo ──
+    "STACKY_EVOLUTION_OPTIMIZER_ENABLED": PlainHelp(
+        what="Un buscador automático de mejoras para las instrucciones de cada agente: genera variantes, les pone nota y te propone la mejor para que la apruebes vos.",
+        on_effect="Si la activás: aparece el botón 'Optimizar' en el Centro de Evolución; nada corre ni se aplica sin tu click y tu aprobación.",
+        off_effect="Si la apagás: el botón 'Optimizar' desaparece y esas mejoras dejan de ofrecerse. El resto del Centro de Evolución sigue igual.",
+        example="Elegís las instrucciones del agente Developer, tocás 'Optimizar', y el sistema te propone una versión mejorada que revisás antes de aplicar.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_GENERATOR": PlainHelp(
+        what="Quién redacta las variantes mejoradas: el modelo local (sin costo) o el motor de agentes (Codex, Claude o Copilot).",
+        on_effect="Si elegís 'local': redacta el modelo local y no cuesta dinero. Si elegís el motor de agentes: redactan Codex, Claude o Copilot y se registra el gasto.",
+        off_effect="Si lo dejás en 'auto': usa el modelo local cuando está configurado y, si no, el motor de agentes.",
+        example="En 'auto', si tenés un modelo local configurado, las variantes se redactan ahí sin costo; si no, las redacta el motor de agentes.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_VARIANTS": PlainHelp(
+        what="Cuántas variantes distintas genera y evalúa cada corrida de optimización antes de elegir la mejor.",
+        on_effect="Si subís el número: cada corrida prueba más variantes, así encuentra mejoras más seguido, pero tarda más y gasta más en el modelo.",
+        off_effect="Si lo bajás: cada corrida prueba menos variantes; es más rápida y barata, pero puede pasar por alto una mejora.",
+        example="Con el valor en 3, una corrida genera tres versiones alternativas, mide cada una y te propone la mejor si supera a la actual.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_TOKEN_BUDGET": PlainHelp(
+        what="El tope de gasto en el modelo que una sola corrida de optimización puede consumir generando variantes.",
+        on_effect="Si subís el número: una corrida puede generar más variantes antes de frenar, pero puede gastar más en el modelo.",
+        off_effect="Si lo bajás: la corrida se detiene antes al llegar al tope y lo deja registrado, gastando menos.",
+        example="Con el tope puesto, cuando una corrida alcanza ese gasto estimado deja de generar variantes y anota que frenó por presupuesto.",
+    ),
+    "STACKY_EVOLUTION_OPTIMIZER_MIN_MARGIN_PCT": PlainHelp(
+        what="Cuánto tiene que mejorar la mejor variante sobre la instrucción actual para que valga la pena proponerte el cambio.",
+        on_effect="Si subís el número: solo se te proponen mejoras claras y grandes, y se descartan las diferencias chicas que podrían ser ruido.",
+        off_effect="Si lo bajás: se te proponen también mejoras pequeñas, con el riesgo de que algunas sean ruido y no una mejora real.",
+        example="Con el valor en 2, la mejor variante tiene que sacar al menos 0,02 puntos más de nota que la actual para que se emita una propuesta.",
+    ),
+    "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED": PlainHelp(
+        what="Junta lecciones cortas de las incidencias que ya resolviste y de las mejoras verificadas, para que los agentes no repitan los mismos errores.",
+        on_effect="Si lo dejás activo: aparece el panel de Conocimiento, podés cosechar lecciones con un click y sos vos quien las aprueba.",
+        off_effect="Si lo apagás: no se ofrecen ni se guardan lecciones nuevas y el panel de Conocimiento desaparece.",
+        example="Resolviste una incidencia; con un click Stacky redacta la lección, vos la aprobás y queda guardada para las próximas corridas.",
+    ),
+    "STACKY_KNOWLEDGE_INJECTION_ENABLED": PlainHelp(
+        what="Suma a cada corrida un bloque corto con las lecciones activas que aplican a ese agente y a ese proyecto.",
+        on_effect="Si lo dejás activo: las corridas reciben las lecciones relevantes, con un tope de tamaño para no crecer de más.",
+        off_effect="Si lo apagás: las corridas vuelven a salir exactamente como antes de este plan.",
+        example="Un agente de desarrollo arranca una corrida y ve las lecciones más relevantes al ticket, sin que vos hagas nada.",
+    ),
+    "STACKY_KNOWLEDGE_INJECT_TOP_N": PlainHelp(
+        what="Cuántas lecciones, ordenadas por relevancia al ticket, entran a cada corrida.",
+        on_effect="Si subís el número: entran más lecciones por corrida, con más ayuda pero también más texto.",
+        off_effect="Si bajás el número: entran menos lecciones, con más foco y menos texto.",
+        example="Con el valor en 3, cada corrida recibe como mucho las 3 lecciones más relevantes al ticket.",
+    ),
+    "STACKY_KNOWLEDGE_INJECT_MAX_CHARS": PlainHelp(
+        what="Tamaño máximo, en caracteres, del bloque de lecciones que se suma a cada corrida.",
+        on_effect="Si subís el número: entra más texto de lecciones antes de recortar.",
+        off_effect="Si bajás el número: el bloque se recorta antes y ocupa menos.",
+        example="Con el valor en 4000, el bloque de lecciones nunca supera los 4000 caracteres; lo que no entra se recorta.",
+    ),
+    "STACKY_KNOWLEDGE_MAX_LESSONS": PlainHelp(
+        what="A partir de cuántas lecciones activas el panel te sugiere retirar las menos usadas. Nunca borra solo.",
+        on_effect="Si subís el número: se te sugiere limpiar el corpus más tarde, cuando hay más lecciones acumuladas.",
+        off_effect="Si bajás el número: se te sugiere revisar y retirar lecciones antes.",
+        example="Con el valor en 200, al pasar de 200 lecciones activas el panel te marca las más viejas y menos usadas para que decidas.",
+    ),
 }
 
 

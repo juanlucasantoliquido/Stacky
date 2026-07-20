@@ -554,7 +554,11 @@ def _attempt_state_change(
 
 
 def _r13_check_publish_guard(execution_id: int) -> bool | None:
-    """R1.3 — Comprueba si ya existe marker de intencion de publicacion.
+    """R1.3 (legacy) — Comprueba si ya existe marker de intencion de publicacion.
+
+    LEGACY (Plan 153): _attempt_publish ya NO llama a esta funcion (migro al
+    ledger transaccional). Se conserva por sus tests de unidad y porque documenta
+    el formato del marker legacy que migrate_legacy_markers lee.
 
     Retorna True si se detecto un marker existente (idempotent_replay).
     Retorna False si no existe marker.
@@ -578,9 +582,10 @@ def _r13_check_publish_guard(execution_id: int) -> bool | None:
 
 
 def _r13_write_publish_intent(execution_id: int) -> bool:
-    """R1.3 — Escribe marker de intencion antes del POST (best-effort).
+    """R1.3 (legacy) — Escribe marker de intencion antes del POST (best-effort).
 
-    Retorna True si el write fue exitoso.
+    LEGACY (Plan 153): reemplazada por el ledger transaccional; se conserva por
+    sus tests de unidad. Retorna True si el write fue exitoso.
     """
     try:
         from db import session_scope
@@ -627,26 +632,40 @@ def _attempt_publish(*, execution_id: int, triggered_by: str) -> dict:
     except Exception:  # noqa: BLE001
         _r13_enabled = False
 
+    # Plan 153 — guardia de idempotencia por ledger transaccional (reemplaza el marker legacy).
+    _ledger = None
+    _ledger_acquired = False
     if _r13_enabled:
-        existing = _r13_check_publish_guard(execution_id)
-        if existing is True:
-            # Marker detectado → reintento sin re-postear.
-            logger.info("[exec=%s] R1.3 idempotent_replay: marker existente, no re-posea", execution_id)
+        try:
+            from services import publish_ledger as _ledger
+            _acquire = _ledger.try_acquire(execution_id)
+        except Exception:  # noqa: BLE001 — ledger no disponible => proceder sin guardia
+            _ledger = None
+            _acquire = None
+        if _acquire is not None and _acquire != "acquired":
+            logger.info(
+                "[exec=%s] idempotent_replay via ledger (%s): no se re-postea",
+                execution_id, _acquire,
+            )
             return {
                 "ok": False,
                 "status": "idempotent_replay",
-                "reason": "publish_intent marker existente (reintento sin re-POST)",
+                "reason": f"publish_ledger {_acquire} (reintento sin re-POST; desbloqueo humano en Diagnostico)",
                 "execution_id": execution_id,
                 "event": "publish.idempotent_replay",
+                "ledger": _acquire,
             }
-        if existing is False:
-            # No hay marker: escribir intencion antes del POST.
-            _r13_write_publish_intent(execution_id)
+        _ledger_acquired = _acquire == "acquired"
 
     try:
         pr = publish_from_execution(execution_id, triggered_by=triggered_by)
     except Exception as exc:  # noqa: BLE001
         logger.exception("[exec=%s] publish_from_execution lanzo excepcion", execution_id)
+        if _ledger_acquired and _ledger is not None:
+            try:
+                _ledger.mark_failed(execution_id, str(exc))
+            except Exception:  # noqa: BLE001
+                pass
         return {
             "ok": False,
             "reason": str(exc),
@@ -655,6 +674,11 @@ def _attempt_publish(*, execution_id: int, triggered_by: str) -> dict:
         }
 
     if pr.ok:
+        if _ledger_acquired and _ledger is not None:
+            try:
+                _ledger.mark_posted(execution_id, pr.ado_id, pr.record_id)
+            except Exception:  # noqa: BLE001
+                pass
         return {
             "ok": True,
             "status": pr.status,
@@ -665,6 +689,14 @@ def _attempt_publish(*, execution_id: int, triggered_by: str) -> dict:
             "record_id": pr.record_id,
             "event": "publish.succeeded",
         }
+    if _ledger_acquired and _ledger is not None:
+        try:
+            if pr.status == "skipped":
+                _ledger.release(execution_id)
+            else:
+                _ledger.mark_failed(execution_id, pr.reason or pr.status)
+        except Exception:  # noqa: BLE001
+            pass
     return {
         "ok": False,
         "status": pr.status,

@@ -147,14 +147,18 @@ if "%FRONTEND_NEEDS_BUILD%"=="1" (
 )
 
 :: ── Lanzar backend en ventana separada ─────────────────────
-netstat -ano -p tcp 2>nul | findstr ":5050" | findstr "LISTENING" >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Iniciando backend  (http://localhost:5050^) ...
-    start "Stacky Agents — Backend" cmd /k "title Stacky Agents Backend && cd /d ""%~dp0backend"" && set PYTHONIOENCODING=utf-8 && set PYTHONUNBUFFERED=1 && .venv\Scripts\python.exe -u app.py"
-    timeout /t 2 /nobreak >nul
-) else (
-    echo [OK]  Backend ya esta corriendo en http://localhost:5050
+:: Si el puerto ya esta ocupado puede ser el backend del DEPLOY (START.bat) u
+:: otra sesion dev vieja, sirviendo un frontend\dist distinto al de este repo.
+:: Reusarlo sin avisar mostraria una UI que no es la de este workbench. Por eso
+:: SIEMPRE liberamos el puerto y arrancamos el backend dev de ESTE checkout.
+for /f "tokens=5" %%A in ('netstat -ano -p tcp 2^>nul ^| findstr ":5050" ^| findstr "LISTENING"') do (
+    echo [INFO] Liberando puerto 5050 ^(PID %%A ya escuchando^)...
+    taskkill /PID %%A /F >nul 2>&1
 )
+
+echo [INFO] Iniciando backend  (http://localhost:5050^) ...
+start "Stacky Agents — Backend" cmd /k "title Stacky Agents Backend && cd /d ""%~dp0backend"" && set PYTHONIOENCODING=utf-8 && set PYTHONUNBUFFERED=1 && .venv\Scripts\python.exe -u app.py"
+timeout /t 2 /nobreak >nul
 
 :: ── Abrir en el browser default ──────────────────────────────
 echo [INFO] Abriendo http://localhost:5050 en el navegador...

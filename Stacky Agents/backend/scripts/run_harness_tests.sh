@@ -384,6 +384,8 @@ HARNESS_TEST_FILES=(
   tests/test_cost_center_api.py
   tests/test_cost_reconciliation_audit.py
   tests/test_cost_codeburn_import.py
+  # — Plan 158 — Centro de Costos: telemetria real claude_code_cli —
+  tests/test_plan158_claude_cli_cost_parity.py
   # — Plan 144 — Ejecucion confiable Claude CLI: trust, stalls, estados —
   tests/test_status_vocabulary_contract.py
   tests/test_ticket_status_robust_transition.py
@@ -453,6 +455,76 @@ HARNESS_TEST_FILES=(
   tests/test_run_directive_block.py
   tests/test_agent_contract.py
   tests/test_block_priorities_contract.py
+  # — Plan 166 — Ciclo completo de incidencias —
+  tests/test_persist_incident_ticket.py
+  tests/test_incident_vision.py
+  tests/test_incident_autopublish.py
+  tests/test_incident_dev_agent.py
+  # — Plan 177 — Auto-PR del Dev Resolutor de incidencias —
+  tests/test_plan177_ado_commit_web_url.py
+  tests/test_incident_dev_diff.py
+  tests/test_incident_dev_autocommit.py
+  # — Fix deploy: index.html sin cache-control servia UI vieja tras rebuild —
+  tests/test_spa_index_no_cache.py
+  # ===== Plan 154 F1 · reclasificacion de tests sin gatear (verdes aislados) =====
+  # — Plan 98 · Bootstrap DevOps + profile keys —
+  tests/test_plan98_bootstrap_endpoint.py
+  tests/test_plan98_bootstrap_flag.py
+  tests/test_plan98_profile_key_patch.py
+  tests/test_plan98_profile_key_validators.py
+  # — Plan 122 · Comparador BD nucleo —
+  tests/test_plan122_dbcompare_api.py
+  tests/test_plan122_dbcompare_engine.py
+  tests/test_plan122_dbcompare_flags.py
+  tests/test_plan122_dbcompare_registry.py
+  tests/test_plan122_dbcompare_snapshot.py
+  # — Plan 123 · Comparador BD diff/runs —
+  tests/test_plan123_dbcompare_api.py
+  tests/test_plan123_dbcompare_diff.py
+  tests/test_plan123_dbcompare_export.py
+  tests/test_plan123_dbcompare_runs.py
+  # — Plan 125 · Comparador BD scripts/emitters —
+  tests/test_plan125_dbcompare_bundle.py
+  tests/test_plan125_dbcompare_emitters_oracle.py
+  tests/test_plan125_dbcompare_emitters_sqlserver.py
+  tests/test_plan125_dbcompare_flatten.py
+  tests/test_plan125_dbcompare_preflight.py
+  tests/test_plan125_dbcompare_scripts_api.py
+  tests/test_plan125_dbcompare_sqlnames.py
+  tests/test_plan125_dbcompare_toposort.py
+  # — Plan 126 · Comparador BD data diff —
+  tests/test_plan126_dbcompare_data_api.py
+  tests/test_plan126_dbcompare_data_diff.py
+  tests/test_plan126_dbcompare_data_flags.py
+  tests/test_plan126_dbcompare_data_scripts.py
+  tests/test_plan126_dbcompare_sqlvalues.py
+  # — Plan 157 · DB Compare UX (config in-place + import web.config + panel migracion) —
+  tests/test_plan157_dbcompare_ux_flags.py
+  tests/test_plan157_dbcompare_webconfig_parse.py
+  tests/test_plan157_dbcompare_import_api.py
+  tests/test_plan157_dbcompare_secret_guardrails.py
+  # — Plan 139 · Shell v2 flag —
+  tests/test_plan139_shell_flag.py
+  # — Sueltos verdes aislados (reclasificados por Plan 154 F1) —
+  tests/test_ado_client_stacky_name_resolution.py
+  tests/test_local_llm_model_fallback_and_ticket_insight.py
+  # — Plan 154 · Arnés veraz —
+  tests/test_flags_env_read_meta.py
+  tests/test_plan154_network_guard.py
+  tests/test_output_watcher.py
+  # — Plan 153 · Ledger publicacion —
+  tests/test_publish_ledger.py
+  tests/test_publish_idempotent_guard.py
+  tests/test_epic_children_type_mapping.py
+  tests/test_autopublish_rev_from_response.py
+  # — Plan 156 · Latido unico —
+  tests/test_executions_summary.py
+  tests/test_access_log_suppress_pollers.py
+  # — Plan 163 · Identidad de build y huellas —
+  tests/test_app_version_build_identity.py
+  tests/test_lifecycle_shutdown_log.py
+  tests/test_error_fingerprints_catalog.py
+  tests/test_error_fingerprints_scan.py
 )
 
 pass=0

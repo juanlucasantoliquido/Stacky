@@ -981,6 +981,13 @@ def _auto_create_pending_tasks(
     if os.getenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true").lower() == "false":
         return {"created": 0, "skipped": len(pending_files), "errors": 0}
 
+    # Plan 154 F5.iii — bajo pytest, el self-POST real (127.0.0.1:{port}) puede
+    # pegarle a un backend dev VIVO. Solo corre si el test opta explicitamente.
+    _tm = os.getenv("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+    if _tm and os.getenv("STACKY_TEST_ALLOW_WATCHER_SELF_POST", "").strip().lower() not in ("1", "true", "yes"):
+        logger.info("output_watcher mode_a: auto-create omitido (STACKY_TEST_MODE sin opt-in)")
+        return {"created": 0, "skipped": len(pending_files), "errors": 0}
+
     try:
         from config import config as _config
         port = _config.PORT

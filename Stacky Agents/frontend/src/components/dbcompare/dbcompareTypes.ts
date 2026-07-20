@@ -60,6 +60,12 @@ export interface DbCompareHealth {
   // Plan 126 F4 [FIX C5] — la UI lee este campo para mostrar/ocultar el
   // botón "Comparar datos…" sin llamar a un endpoint aparte.
   data_diff_enabled: boolean;
+  // Plan 157 — flags de UX (default ON). El frontend gatea wizard/import/panel con
+  // estos campos; con los 3 en false la UI queda idéntica a main. Opcionales por
+  // compatibilidad con un backend anterior que no los emita.
+  config_in_place_enabled?: boolean;
+  webconfig_import_enabled?: boolean;
+  migration_panel_enabled?: boolean;
   keyring_available: boolean;
   drivers: DriverStatus;
 }

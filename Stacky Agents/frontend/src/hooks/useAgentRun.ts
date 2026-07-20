@@ -3,9 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Agents } from "../api/endpoints";
 import { openConsoleIfCliRuntime, parseBusinessPreflightError } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
+import { useAlert } from "../components/ui";
 import type { AgentType, ContextBlock } from "../types";
 
 export function useAgentRun() {
+  const showAlert = useAlert();
   const qc = useQueryClient();
   const {
     setRunningExecution,
@@ -57,7 +59,7 @@ export function useAgentRun() {
       // suficiente, no hay mecanismo de toast en frontend/src/hooks/).
       const message = parseBusinessPreflightError(err);
       if (message) {
-        window.alert(message);
+        void showAlert({ message });
       }
     },
   });

@@ -1,10 +1,23 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SystemLogs, type SystemLogEntry } from "../api/endpoints";
 import { formatDate, formatTime, formatDuration, formatInt } from "../services/format";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { parseRoute, serializeRoute } from "../services/routes";
+import {
+  sysLogFiltersFromQuery, sysLogFiltersToQuery,
+  omitKeys, SYSLOG_FILTER_QUERY_KEYS, resolveMountFilters,
+} from "../services/routeFilters";
 import styles from "./SystemLogsPage.module.css";
 
 const PAGE_SIZE = 100;
+
+// Plan 165 F2 — defaults de los 8 filtros extraídos a una const (usados por el
+// hook, el efecto de montaje anti-drift y clearFilters, sin duplicar el literal).
+const SYSLOG_DEFAULTS = {
+  level: "", source: "", action: "", q: "",
+  execution_id: "", ticket_id: "", from: "", to: "",
+};
 
 const LEVEL_OPTIONS = ["", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const;
 
@@ -121,18 +134,33 @@ function DetailModal({ log, onClose }: DetailModalProps) {
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function SystemLogsPage() {
-  const [filters, setFilters] = useState({
-    level: "",
-    source: "",
-    action: "",
-    q: "",
-    execution_id: "",
-    ticket_id: "",
-    from: "",
-    to: "",
-  });
+  // Plan 165 F2 — los 8 filtros sobreviven F5 y el cambio de tab vía localStorage.
+  const [filters, setFilters] = useLocalStorageState("stacky.ui.syslogs.filters", SYSLOG_DEFAULTS);
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<SystemLogEntry | null>(null);
+
+  // Plan 165 F2 — montaje: precedencia URL > persistido > defaults, merge
+  // anti-drift (C5) y offset 0 (§3.7). offset ya vive aparte (no se persiste).
+  useEffect(() => {
+    const { query } = parseRoute(window.location.pathname, window.location.search);
+    const fromUrl = sysLogFiltersFromQuery(query);
+    setFilters((persisted) => resolveMountFilters(SYSLOG_DEFAULTS, persisted, fromUrl));
+    setOffset(0);
+  }, []);  // SOLO al montar
+
+  // Plan 165 F2 — reflejo de los 8 filtros en el querystring (replaceState: no
+  // ensucia el historial). parseRoute/serializeRoute preservan la query ajena.
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    const next = serializeRoute({
+      ...current,
+      query: { ...omitKeys(current.query, SYSLOG_FILTER_QUERY_KEYS), ...sysLogFiltersToQuery(filters) },
+    });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) {
+      window.history.replaceState({}, "", next);
+    }
+  }, [filters]);
 
   const queryParams = {
     level: filters.level || undefined,
@@ -167,7 +195,7 @@ export default function SystemLogsPage() {
   }, []);
 
   const clearFilters = () => {
-    setFilters({ level: "", source: "", action: "", q: "", execution_id: "", ticket_id: "", from: "", to: "" });
+    setFilters(SYSLOG_DEFAULTS);
     setOffset(0);
   };
 

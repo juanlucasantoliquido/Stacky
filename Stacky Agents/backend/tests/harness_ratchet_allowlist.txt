@@ -139,7 +139,6 @@ tests/test_operational_health_endpoint.py  # pendiente-de-triage
 tests/test_orphan_reaper.py  # pendiente-de-triage
 tests/test_output_contract_spec.py  # pendiente-de-triage
 tests/test_output_grounding.py  # pendiente-de-triage
-tests/test_output_watcher.py  # pendiente-de-triage
 tests/test_p7_sync_endpoints.py  # pendiente-de-triage
 tests/test_parallel_injectors.py  # pendiente-de-triage
 tests/test_pending_task_validation.py  # pendiente-de-triage
@@ -159,7 +158,6 @@ tests/test_process_catalog_suggestions.py  # pendiente-de-triage
 tests/test_process_dictionary_block.py  # pendiente-de-triage
 tests/test_project_autoprofile.py  # pendiente-de-triage
 tests/test_projects_tracker_states.py  # pendiente-de-triage
-tests/test_publish_idempotent_guard.py  # pendiente-de-triage
 tests/test_publish_issue.py  # pendiente-de-triage
 tests/test_qa_browser_plan.py  # pendiente-de-triage
 tests/test_qa_uat_endpoint.py  # pendiente-de-triage

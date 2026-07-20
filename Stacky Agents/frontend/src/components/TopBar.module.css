@@ -217,3 +217,15 @@
 .barV2 .version {
   font-size: var(--text-xs);
 }
+
+/* Plan 163 F2 — banner de drift proceso-vs-repo (solo dev; AVISA, no actua) */
+.driftBanner {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 16px;
+  background: var(--warn);
+  color: var(--text-on-warn);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: center;
+}

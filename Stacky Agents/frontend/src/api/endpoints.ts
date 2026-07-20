@@ -30,6 +30,7 @@ import type {
   AgentExecution,
   AgentType,
   AgentWorkflowConfig,
+  ExecutionsSummary,
   ContextBlock,
   InitProjectPayload,
   PackDefinition,
@@ -400,6 +401,7 @@ export const Tickets = {
       reused_ids: number[];
       error: string | null;
       skipped: boolean;
+      warnings?: string[];
     }>("/api/tickets/epic-children", body),
 };
 
@@ -1263,6 +1265,13 @@ export const Executions = {
     if (q.days) params.set("days", String(q.days));
     const qs = params.toString();
     return api.get<AgentExecution[]>(`/api/executions${qs ? `?${qs}` : ""}`);
+  },
+  /** Plan 156 F1 — latido unico: running/preparing/queued en UNA respuesta. */
+  summary: (scope: "project" | "all_projects" = "project", project?: string | null) => {
+    const qs = new URLSearchParams();
+    qs.set("scope", scope);
+    if (project) qs.set("project", project);
+    return api.get<ExecutionsSummary>(`/api/executions/summary?${qs.toString()}`);
   },
   byId: (id: number) => api.get<AgentExecution>(`/api/executions/${id}`),
   approve: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/approve`),
@@ -2676,6 +2685,39 @@ export const OperationalHealth = {
     api.get<OperationalHealthReport>("/api/diag/operational-health"),
 };
 
+// ── Plan 153 — Ledger de publicaciones ADO + desbloqueo humano 1-click ────────
+
+export interface PublishLedgerItem {
+  id: number;
+  execution_id: number;
+  status: "pending" | "posted" | "failed";
+  created_at: string;
+  updated_at: string;
+  ado_ids: number[] | null;
+  error: string | null;
+  source: string;
+}
+
+export interface PublishLedgerSnapshot {
+  enabled: boolean;
+  pending_stale: PublishLedgerItem[];
+  failed: PublishLedgerItem[];
+  counts: Record<string, number>;
+}
+
+export const PublishLedger = {
+  list: (): Promise<PublishLedgerSnapshot> =>
+    api.get<PublishLedgerSnapshot>("/api/publish-ledger"),
+  republish: (executionId: number): Promise<{ result: unknown; ledger: PublishLedgerItem | null }> =>
+    api.post<{ result: unknown; ledger: PublishLedgerItem | null }>(
+      `/api/publish-ledger/${executionId}/republish`, {},
+    ),
+  discard: (executionId: number): Promise<{ ledger: PublishLedgerItem | null }> =>
+    api.post<{ ledger: PublishLedgerItem | null }>(
+      `/api/publish-ledger/${executionId}/discard`, {},
+    ),
+};
+
 // ── Plan 130 — Verificador de integridad de código ────────────────────────────
 export const CodeIntegrity = {
   get: () =>
@@ -2687,8 +2729,12 @@ export const CodeIntegrity = {
 
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
 export const Health = {
-  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }> =>
-    api.get<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean }>("/api/diag/health"),
+  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean;
+                     source_commit?: string | null; built_at?: string | null;
+                     repo_head?: string | null; build_drift?: boolean }> =>
+    api.get<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean;
+              source_commit?: string | null; built_at?: string | null;
+              repo_head?: string | null; build_drift?: boolean }>("/api/diag/health"),
 };
 
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────
@@ -4156,10 +4202,17 @@ export const Incidents = {
   status: () => api.get<IncidentStatusDTO>("/api/incidents/status"),
 
   /** multipart/form-data — el cliente `api.post` fija Content-Type: application/json
-   * y no sirve para subir archivos; se usa fetch directo (client.ts:85-86, apiBase). */
-  create: async (text: string, files: File[]): Promise<{ ok: boolean; incident: IncidentDTO }> => {
+   * y no sirve para subir archivos; se usa fetch directo (client.ts:85-86, apiBase).
+   * `autoPublish` (Plan 166 F3): true = el post-hook publica la Issue sin
+   * confirmación al terminar el análisis (modo lote, sin diálogos). */
+  create: async (
+    text: string,
+    files: File[],
+    autoPublish = false
+  ): Promise<{ ok: boolean; incident: IncidentDTO }> => {
     const formData = new FormData();
     formData.append("text", text);
+    formData.append("auto_publish", String(autoPublish));
     for (const f of files) formData.append("files", f);
     const res = await fetch(`${apiBase}/api/incidents`, {
       method: "POST",
@@ -4208,4 +4261,15 @@ export const Incidents = {
       doc_path: string | null;
       warnings: string[];
     }>("/api/tickets/incidents/publish", payload),
+
+  /** Plan 166 F5 — lanza el Dev Resolutor sobre una Issue de incidencia. */
+  runDevResolver: (payload: {
+    ticket_id: number;
+    runtime?: import("../types").AgentRuntime;
+    project?: string | null;
+    model?: string | null;
+    effort?: "low" | "medium" | "high" | "xhigh" | "max";
+    open_pr?: boolean; // Plan 177 — checkbox "Abrir PR" del board
+  }) =>
+    api.post<{ execution_id: number; status: string }>("/api/agents/run-incident-dev", payload),
 };

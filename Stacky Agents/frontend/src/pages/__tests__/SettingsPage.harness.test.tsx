@@ -59,17 +59,17 @@ vi.mock("../../api/endpoints", () => ({
   },
 }));
 
-// SettingsPage usa uiSectionsStore; stub mínimo
+// SettingsPage usa uiSectionsStore; stub mínimo ("team" es opcional y default oculto)
 vi.mock("../../store/uiSectionsStore", () => ({
   useUiSectionsStore: () => ({
-    sections: { pm: false, logs: false, docs: false, memory: false },
+    sections: { team: false, pm: false, logs: false, docs: false, memory: false },
   }),
 }));
 
 vi.mock("../../services/uiSections", () => ({
   setSectionVisible: vi.fn(async () => {}),
-  LOCKED_SECTIONS: ["team", "tickets", "settings"],
-  OPTIONAL_SECTIONS: ["pm", "logs", "docs", "memory"],
+  LOCKED_SECTIONS: ["tickets", "settings"],
+  OPTIONAL_SECTIONS: ["team", "pm", "logs", "docs", "memory"],
 }));
 
 // FlowConfigPage y otros sub-panels pesados → stub liviano

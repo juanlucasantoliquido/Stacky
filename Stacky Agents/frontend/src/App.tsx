@@ -30,45 +30,29 @@ import { probeFlagHealth, nextEnabledState } from "./utils/flagHealth";
 import { toggleNavTab } from "./services/uiGuards";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
+import { safeStorage, migrateLegacy, shouldAutoShow } from "./services/onboarding";
+import { useOnboardingStore } from "./store/onboardingStore";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
+import { useRunActivityCapture } from "./hooks/useRunActivityCapture"; // Plan 152
+import { HarnessFlags } from "./api/endpoints"; // Plan 152 — lectura del flag del centro de actividad
 import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
 import { reviewBadgeLabel } from "./services/reviewInbox";
 import AppSidebar from "./components/shell/AppSidebar";
 import {
   computeVisibleTabs, parseCollapsed, SIDEBAR_COLLAPSED_KEY,
 } from "./components/shell/shellNav";
+// Plan 165 F3 — fuente única del contrato de rutas (type Tab/TAB_PATHS/parseo).
+import { parseRoute, serializeRoute, TAB_PATHS, type Tab, type RouteState } from "./services/routes";
 import styles from "./App.module.css";
 
-type Tab = "team" | "tickets" | "review" | "unblocker" | "pm" | "logs" | "settings" | "docs" | "memory" | "diagnostics" | "history" | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
-
-const TAB_PATHS: Record<Tab, string> = {
-  team: "/",
-  tickets: "/tickets",
-  review: "/review",
-  unblocker: "/unblocker",
-  pm: "/pm",
-  logs: "/logs",
-  settings: "/settings",
-  docs: "/docs",
-  memory: "/memory",
-  diagnostics: "/diagnostics",
-  history: "/history",
-  migrador: "/migrador",
-  devops: "/devops",
-  dbcompare: "/dbcompare", // Plan 122 [FIX C3]
-  costcenter: "/costcenter", // Plan 142
-  planes: "/planes",
-};
-
-function tabFromPath(pathname: string): Tab {
-  const found = (Object.entries(TAB_PATHS) as [Tab, string][])
-    .find(([, path]) => path !== "/" && pathname.startsWith(path));
-  return found?.[0] ?? "team";
-}
-
 export default function App() {
-  const [tab, setTab] = useState<Tab>(() => tabFromPath(window.location.pathname));
+  // Plan 165 F3 (C1) — la ruta es ESTADO (no un ref congelado): popstate y la
+  // navegación in-app la actualizan, y las páginas reciben props VIVAS (exec/subTab).
+  const [route, setRoute] = useState<RouteState>(() =>
+    parseRoute(window.location.pathname, window.location.search),
+  );
+  const tab = route.tab;  // todo el JSX existente que lee `tab` sigue idéntico
   // Plan 136 F7 — espejo del tab para handlers registrados con deps [] (el
   // closure del keydown quedaba congelado en el valor de montaje).
   const tabRef = useRef(tab);
@@ -102,24 +86,34 @@ export default function App() {
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
+  // Plan 152 — Centro de Actividad: flag default ON (fail-open). Se lee del
+  // registro canónico de flags vía el endpoint existente; OFF ⇒ campana oculta
+  // + captura apagada (C2). No usa probeFlagHealth (135): ese es para health.
+  const [notifEnabled, setNotifEnabled] = useState(true);
+
   useGlobalExecutionNotifier();
+  useRunActivityCapture(notifEnabled); // Plan 152 F2 — reusa la query compartida (0 requests nuevos)
   const reviewCount = useReviewInboxCount();
   const reviewBadge = reviewBadgeLabel(reviewCount);
 
-  const selectTab = (next: Tab) => {
-    setTab(next);
-    const path = TAB_PATHS[next];
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, "", path);
-    }
+  // Plan 165 F3 [A1] — navigateToRoute: LA API de navegación tipada del router
+  // casero. selectTab/navigateTo la reusan por dentro; es el punto de consumo del
+  // plan 152. El pushState queda FUERA de todo updater de setState (regla §3.4
+  // StrictMode: los updaters se invocan dos veces en dev → duplicarían historial).
+  const navigateToRoute = (next: RouteState) => {
+    const url = serializeRoute(next);
+    const current = window.location.pathname + window.location.search;
+    if (url !== current) window.history.pushState({}, "", url);
+    setRoute(next);
   };
 
-  const navigateTo = (path: string) => {
-    const targetTab = tabFromPath(path);
-    setTab(targetTab);
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, "", path);
-    }
+  // selectTab con query:{} LIMPIA el querystring al cambiar de tab (idéntico al
+  // pushState(TAB_PATHS[next]) anterior); los filtros persisten en localStorage (F2).
+  const selectTab = (next: Tab) => navigateToRoute({ tab: next, query: {} });
+
+  const navigateTo = (path: string) => {           // la paleta sigue pasando strings
+    const [pathname, search = ""] = path.split("?");
+    navigateToRoute(parseRoute(pathname, search ? `?${search}` : ""));
   };
 
   useEffect(() => {
@@ -164,10 +158,52 @@ export default function App() {
     };
   }, []);
 
+  // Plan 165 F3 (C1) — popstate re-deriva TODO el estado (tab+subtab+exec), no
+  // solo el tab: Atrás/Adelante mueven sub-tab y drawer con la página ya montada.
   useEffect(() => {
-    const onPopState = () => setTab(tabFromPath(window.location.pathname));
+    const onPopState = () =>
+      setRoute(parseRoute(window.location.pathname, window.location.search));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Plan 165 F3 (C5) — normalización backward-compat al montar: parseRoute ya
+  // llevó /?exec= a {tab:"history"}; acá reescribimos la barra a la forma canónica.
+  // replaceState (no pushState): no duplica historial ni dispara el double-push.
+  useEffect(() => {
+    const canonical = serializeRoute(route);
+    const current = window.location.pathname + window.location.search;
+    if (canonical !== current) window.history.replaceState({}, "", canonical);
+  }, []);  // SOLO al montar
+
+  // Plan 152 F3 — valor efectivo del flag del Centro de Actividad. FAIL-OPEN:
+  // default ON aunque el flag no esté en la respuesta o falle la red (UI aditiva).
+  useEffect(() => {
+    let alive = true;
+    HarnessFlags.list()
+      .then((r) => {
+        if (!alive) return;
+        const f = r.flags.find((x) => x.key === "STACKY_NOTIFICATION_CENTER_ENABLED");
+        setNotifEnabled(f ? f.value === true : true);
+      })
+      .catch(() => {
+        if (alive) setNotifEnabled(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Plan 151 F5 — migrar la key vieja del prototipo y auto-mostrar el tour SOLO
+  // en first-run real. Este effect NO llama resetSeen (C2: nada en producción
+  // la llama). Al cerrar el tour, closeTour() marca `seen` y no vuelve a
+  // auto-aparecer.
+  useEffect(() => {
+    const s = safeStorage();
+    migrateLegacy(s);
+    if (shouldAutoShow(s)) {
+      useOnboardingStore.getState().setOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -200,22 +236,25 @@ export default function App() {
   }, []);
 
   // Si el usuario tenía seleccionado un tab opcional que acaba de ocultarse,
-  // fallback a "team" para no quedar en blanco.
+  // fallback a "tickets" (la vista índice) para no quedar en blanco. Incluye
+  // "team" (Mi Equipo), que ahora es ocultable y default oculto: si el deep-link
+  // "/team" apunta a un equipo oculto, rebota a tickets.
   useEffect(() => {
-    if (tab === "pm" && !sections.pm) selectTab("team");
-    else if (tab === "logs" && !sections.logs) selectTab("team");
-    else if (tab === "docs" && !sections.docs) selectTab("team");
-    else if (tab === "memory" && !sections.memory) selectTab("team");
-    else if (tab === "migrador" && !migradorEnabled) selectTab("team");
-    else if (tab === "devops" && !devopsEnabled) selectTab("team");
-    else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");
-    else if (tab === "costcenter" && !costCenterEnabled) selectTab("team");
-    else if (tab === "planes" && !planesEnabled) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled]);
+    if (tab === "team" && !sections.team) selectTab("tickets");
+    else if (tab === "pm" && !sections.pm) selectTab("tickets");
+    else if (tab === "logs" && !sections.logs) selectTab("tickets");
+    else if (tab === "docs" && !sections.docs) selectTab("tickets");
+    else if (tab === "memory" && !sections.memory) selectTab("tickets");
+    else if (tab === "migrador" && !migradorEnabled) selectTab("tickets");
+    else if (tab === "devops" && !devopsEnabled) selectTab("tickets");
+    else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("tickets");
+    else if (tab === "costcenter" && !costCenterEnabled) selectTab("tickets");
+    else if (tab === "planes" && !planesEnabled) selectTab("tickets");
+  }, [tab, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
-      pm: !!sections.pm, logs: !!sections.logs,
+      team: !!sections.team, pm: !!sections.pm, logs: !!sections.logs,
       docs: !!sections.docs, memory: !!sections.memory,
     },
     migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled,
@@ -234,17 +273,17 @@ export default function App() {
   // remount extra, mismo timing de montaje/desmontaje.
   const pages = (
     <>
-      {tab === "team"     && <TeamScreen />}
+      {tab === "team"     && sections.team && <TeamScreen />}
       {tab === "tickets"  && <TicketBoard />}
       {tab === "review"   && <ReviewInboxPage />}
       {tab === "unblocker" && <UnblockerPage />}
       {tab === "pm"       && sections.pm   && <PMCommandCenter />}
       {tab === "logs"     && sections.logs && <SystemLogsPage />}
-      {tab === "settings" && <SettingsPage />}
+      {tab === "settings" && <SettingsPage subTab={route.subtab ?? null} />}
       {tab === "docs"     && sections.docs && <DocsPage />}
       {tab === "memory"   && sections.memory && <MemoryPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
-      {tab === "history"     && <ExecutionHistoryPage />}
+      {tab === "history"     && <ExecutionHistoryPage exec={route.exec ?? null} />}
       {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
       {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
       {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
@@ -256,7 +295,12 @@ export default function App() {
   return (
     <div className={styles.appRoot}>
       <DemoModeBanner />
-      <TopBar onGoToTeam={() => selectTab("team")} shellV2={shellV2Enabled} />
+      <TopBar
+        onGoToTeam={sections.team ? () => selectTab("team") : undefined}
+        shellV2={shellV2Enabled}
+        notificationsEnabled={notifEnabled}
+        onActivityNavigate={(nav) => selectTab(nav.tab as Tab)}
+      />
       <HealthBanner />
 
       {shellV2Enabled ? (
@@ -276,13 +320,15 @@ export default function App() {
       ) : (
         <>
           {/* Tabs de navegación principal */}
-          <nav className={styles.nav}>
-            <button
-              className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
-              onClick={() => selectTab("team")}
-            >
-              ⚡ Mi Equipo
-            </button>
+          <nav className={styles.nav} data-tour="nav">
+            {sections.team && (
+              <button
+                className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
+                onClick={() => selectTab("team")}
+              >
+                ⚡ Mi Equipo
+              </button>
+            )}
             <button
               className={`${styles.navTab} ${tab === "tickets" ? styles.active : ""}`}
               onClick={() => selectTab("tickets")}

@@ -66,3 +66,7 @@ engram/
 # Backups de node_modules dejados por reinstalaciones (Install-Dependencies.ps1)
 node_modules.stale-*/
 
+# Entornos virtuales de Python (machine-specific, nunca versionar)
+venv/
+.venv/
+

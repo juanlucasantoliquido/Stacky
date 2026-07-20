@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "description": "Catalogo de huellas de clases de error ya conocidas de Stacky Agents. status=resolved => el smoke de huellas alarma si el patron REAPARECE en un log fresco (regresion). status=open/by_design => documentada, NO guardada.",
+  "fingerprints": [
+    {
+      "id": "pipeline_status_404",
+      "title": "404 masivo de /api/v1/pipeline/status",
+      "class": "http-404-poller",
+      "status": "resolved",
+      "log_pattern": "\"GET /api/v1/pipeline/status[^\"]*\" 404",
+      "log_guarded": true,
+      "killed_by": "plan 145 (higiene/observabilidad de logs)",
+      "killed_commit": "f00f161f",
+      "date_resolved": "2026-07-16",
+      "guard_test": "tests/test_plan145_pipeline_status_shim.py",
+      "evidence": "backend/api/__init__.py:130-144; backend/services/local_file_logging.py:68",
+      "note": "C3 — honestidad del gate: la supresion del access-log (local_file_logging.py:68) filtra este path POR PATH, no por status. Esta huella detecta la regresion TOTAL (proceso corriendo codigo pre-145, el caso de los 6.346 404). Una regresion PARCIAL (shim roto con supresion viva) es invisible en el log: la cubre el guard_test pytest, no el smoke.",
+      "self_test": {
+        "matches": [
+          "127.0.0.1 - - [14/Jul/2026 18:00:00] \"GET /api/v1/pipeline/status HTTP/1.1\" 404 -"
+        ],
+        "clean": [
+          "127.0.0.1 - - [16/Jul/2026 10:00:00] \"GET /api/v1/pipeline/status HTTP/1.1\" 200 -"
+        ]
+      }
+    },
+    {
+      "id": "ansi_in_file_log",
+      "title": "Secuencias ANSI en el log de archivo",
+      "class": "log-formatting",
+      "status": "resolved",
+      "log_pattern": "\\x1b\\[[0-9;]*m",
+      "log_guarded": true,
+      "killed_by": "plan 145 (higiene/observabilidad de logs)",
+      "killed_commit": "f00f161f",
+      "date_resolved": "2026-07-16",
+      "guard_test": "tests/test_plan145_ansi_strip.py",
+      "evidence": "backend/services/local_file_logging.py:42,49,52",
+      "self_test": {
+        "matches": [
+          "2026-07-14 18:00:00 INFO \u001b[32mverde\u001b[0m arranque"
+        ],
+        "clean": [
+          "2026-07-16 10:00:00 INFO verde arranque"
+        ]
+      }
+    },
+    {
+      "id": "ado_workitem_type_vs402323",
+      "title": "Tipo de work-item ADO inexistente (VS402323)",
+      "class": "ado-publish",
+      "status": "open",
+      "log_pattern": "VS402323: Work item type \\S+ does not exist",
+      "log_guarded": false,
+      "killed_by": "pendiente — plan del ledger de publicacion transaccional (aun no implementado)",
+      "killed_commit": null,
+      "date_resolved": null,
+      "guard_test": "tests/test_create_child_task_endpoint.py",
+      "evidence": "backend/tests/test_create_child_task_endpoint.py:186-189",
+      "note": "C12 — handoff: cuando el plan del ledger de publicacion transaccional se implemente (mata VS402323 con mapeo de tipos), actualizar esta entrada: status->resolved, killed_commit y date_resolved reales.",
+      "self_test": {
+        "matches": [
+          "ERROR ado_publisher VS402323: Work item type Feature does not exist in project X"
+        ],
+        "clean": [
+          "INFO ado_publisher created work item type Task"
+        ]
+      }
+    },
+    {
+      "id": "muted_500_untyped",
+      "title": "500 mudo / excepcion no atrapada",
+      "class": "error-envelope",
+      "status": "resolved",
+      "log_pattern": "Traceback \\(most recent call last\\)",
+      "log_guarded": false,
+      "killed_by": "plan 149 (excepciones tipadas) + plan 135 (cero errores mudos)",
+      "killed_commit": "5d091726",
+      "date_resolved": "2026-07-16",
+      "guard_test": "tests/test_plan149_typed_errors.py",
+      "evidence": "backend/api/errors.py:53-55; backend/app.py:595-634",
+      "self_test": {
+        "matches": [
+          "Traceback (most recent call last):"
+        ],
+        "clean": [
+          "ERROR api typed 500 [type=internal exec_id=42]"
+        ]
+      }
+    },
+    {
+      "id": "integration_silent_degradation",
+      "title": "Integracion no configurada degradaba silenciosa",
+      "class": "integration",
+      "status": "resolved",
+      "log_pattern": "\"error_type\"\\s*:\\s*\"integration_unavailable\"",
+      "log_guarded": false,
+      "killed_by": "plan 148 (degradacion de integraciones)",
+      "killed_commit": "af938ffe",
+      "date_resolved": "2026-07-16",
+      "guard_test": "tests/test_plan148_integration_degradation.py",
+      "evidence": "backend/api/errors.py:48-50; backend/app.py:142",
+      "self_test": {
+        "matches": [
+          "{\"error_type\": \"integration_unavailable\", \"integration\": \"ado\"}"
+        ],
+        "clean": [
+          "{\"ok\": true}"
+        ]
+      }
+    },
+    {
+      "id": "epic_task_phantom_success",
+      "title": "Exito fantasma: task de epica marcada creada pero inexistente en ADO",
+      "class": "publish-integrity",
+      "status": "resolved",
+      "log_pattern": "task_not_found_in_ado",
+      "log_guarded": false,
+      "killed_by": "G1.1 / plan 135 (cero errores mudos)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-15",
+      "guard_test": "tests/test_harness_health_integrity.py",
+      "evidence": "backend/api/tickets.py:4931,4939,4943; backend/services/harness_health.py:714-730",
+      "self_test": {
+        "matches": [
+          "WARN tickets quarantine reason=task_not_found_in_ado exec_id=7"
+        ],
+        "clean": [
+          "INFO tickets task created ok"
+        ]
+      }
+    },
+    {
+      "id": "claude_cli_zombie_stall",
+      "title": "Claude CLI colgado/zombie",
+      "class": "runtime-liveness",
+      "status": "resolved",
+      "log_pattern": "stall watchdog: \\d+s sin eventos del stream",
+      "log_guarded": false,
+      "killed_by": "plan 144 (trust/estados Claude CLI) + plan 37 (cap de sesion)",
+      "killed_commit": "da6d3609",
+      "date_resolved": "2026-07-16",
+      "guard_test": "tests/test_claude_stall_signal.py",
+      "evidence": "backend/services/claude_code_cli_runner.py:1348-1349,1309; backend/config.py:251",
+      "self_test": {
+        "matches": [
+          "WARN claude R1.1 stall watchdog: 120s sin eventos del stream — terminando"
+        ],
+        "clean": [
+          "INFO claude stream event received"
+        ]
+      }
+    },
+    {
+      "id": "pm_no_snapshot_404",
+      "title": "PM sin snapshot (404 esperado)",
+      "class": "expected-empty-state",
+      "status": "by_design",
+      "log_pattern": "\"error\"\\s*:\\s*\"NO_SNAPSHOT\"",
+      "log_guarded": false,
+      "killed_by": "no aplica — 404 by-design (estado vacio esperado)",
+      "killed_commit": null,
+      "date_resolved": null,
+      "guard_test": "tests/test_pm_endpoints.py",
+      "evidence": "backend/api/pm.py:303-308; frontend/src/pages/PMCommandCenter.tsx:866-868",
+      "self_test": {
+        "matches": [
+          "{\"error\": \"NO_SNAPSHOT\"}"
+        ],
+        "clean": [
+          "{\"snapshots\": []}"
+        ]
+      }
+    }
+  ]
+}

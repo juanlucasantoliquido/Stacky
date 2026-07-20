@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FlowConfig, Projects } from "../api/endpoints";
 import type { FlowConfigRule } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
+import { useConfirm } from "../components/ui";
 import styles from "./FlowConfigPage.module.css";
 
 const VALID_AGENT_TYPES = ["business", "functional", "technical", "developer", "qa"] as const;
@@ -149,6 +150,7 @@ interface RuleRowProps {
 }
 
 function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: RuleRowProps) {
+  const askConfirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [editAdoState, setEditAdoState] = useState(rule.ado_state);
   const [editAgentType, setEditAgentType] = useState<ValidAgentType>(
@@ -290,8 +292,8 @@ function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: Ru
         </button>
         <button
           className={`${styles.btnIcon} ${styles.btnIconDanger}`}
-          onClick={() => {
-            if (window.confirm(`Eliminar regla "${rule.ado_state} → ${rule.agent_type}"?`)) {
+          onClick={async () => {
+            if (await askConfirm({ title: "Eliminar regla", message: `Eliminar regla "${rule.ado_state} → ${rule.agent_type}"?`, tone: "danger", confirmLabel: "Eliminar" })) {
               deleteMutation.mutate();
             }
           }}

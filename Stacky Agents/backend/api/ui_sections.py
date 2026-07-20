@@ -7,10 +7,11 @@ principal del frontend.
 Rutas:
     GET /api/ui-sections              — devuelve el estado actual
     PUT /api/ui-sections/<section>    — actualiza visibilidad de una sección
-                                         opcional (pm / logs / docs)
+                                         opcional (team / pm / logs / docs / memory)
 
-Las secciones obligatorias (team, tickets, settings) no se pueden togglear:
-cualquier intento devuelve 400.
+Las secciones obligatorias (tickets, settings) no se pueden togglear:
+cualquier intento devuelve 400. "team" (Mi Equipo) SÍ es ocultable y su default
+es oculta.
 """
 from __future__ import annotations
 

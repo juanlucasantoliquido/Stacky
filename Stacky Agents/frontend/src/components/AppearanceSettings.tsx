@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { readStoredChoice, setTheme } from "../services/themeController";
 import type { ThemeChoice } from "../services/theme";
+import DensityToggle from "./DensityToggle";
 import styles from "./AppearanceSettings.module.css";
 
 export const THEME_OPTIONS: Array<{ value: ThemeChoice; label: string; hint: string }> = [
@@ -41,6 +42,10 @@ export default function AppearanceSettings() {
           </label>
         ))}
       </div>
+      <p className={styles.intro}>
+        Densidad de la interfaz. "Compacto" muestra más información por pantalla.
+      </p>
+      <DensityToggle />
     </div>
   );
 }

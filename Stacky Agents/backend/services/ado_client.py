@@ -413,6 +413,21 @@ class AdoClient:
                     states.append(name)
         return states
 
+    def fetch_work_item_type_names(self) -> list[str]:
+        """Nombres de los work item types definidos por el proceso del proyecto.
+        Ej.: template Agile -> ["Epic", "Feature", "User Story", "Task", ...];
+        template Basic -> ["Epic", "Issue", "Task"]. Propaga AdoApiError."""
+        url = (
+            f"{self._base_proj}/_apis/wit/workitemtypes"
+            f"?api-version={_API_VERSION}"
+        )
+        data = self._request("GET", url)
+        return [
+            (wit.get("name") or "").strip()
+            for wit in (data.get("value") or [])
+            if (wit.get("name") or "").strip()
+        ]
+
     def fetch_comments(self, ado_id: int, top: int = 20) -> list[dict]:
         """Devuelve los últimos `top` comentarios de un work item.
 

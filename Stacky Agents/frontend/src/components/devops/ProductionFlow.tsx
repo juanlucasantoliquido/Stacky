@@ -15,6 +15,7 @@ import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { FlagGateBanner } from './FlagGateBanner';
 import { TriggerPipelineSection } from './TriggerPipelineSection';
 import { mergeButtonEnabled, pipelineStatusLabel, shouldContinuePolling } from '../../devops/productionModel';
+import { useConfirm } from '../ui';
 import styles from './devops.module.css';
 
 export interface ProductionFlowProps {
@@ -42,6 +43,7 @@ function parseProductionError(e: unknown): { kind: string | null; message: strin
 }
 
 export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, sourceBranch }) => {
+  const askConfirm = useConfirm();
   const [mr, setMr] = useState<MrInfo | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, so
   useEffect(() => stopPolling, []);
 
   const handleCreateMr = async () => {
-    if (!window.confirm('¿Crear el Merge Request / Pull Request hacia la rama principal?')) return;
+    if (!(await askConfirm({ title: 'Crear MR/PR', message: '¿Crear el Merge Request / Pull Request hacia la rama principal?', confirmLabel: 'Crear' }))) return;
     setCreating(true);
     setError(null);
     setNeedsAdoDefinition(false);
@@ -112,7 +114,7 @@ export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, so
   };
 
   const handleEnsureDefinition = async () => {
-    if (!window.confirm('¿Crear la pipeline definition en ADO?')) return;
+    if (!(await askConfirm({ title: 'Crear pipeline definition', message: '¿Crear la pipeline definition en ADO?', confirmLabel: 'Crear' }))) return;
     setError(null);
     try {
       await DevOpsProduction.ensureAdoDefinition(project);

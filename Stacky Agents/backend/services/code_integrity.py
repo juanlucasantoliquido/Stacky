@@ -13,7 +13,7 @@ import ast
 from pathlib import Path
 from time import perf_counter
 
-_EXCLUDED_DIRS = {".venv", "__pycache__", "node_modules", ".git", ".pytest_cache", "data", "outputs"}
+_EXCLUDED_DIRS = {".venv", "venv", "env", ".env", "__pycache__", "node_modules", ".git", ".pytest_cache", "data", "outputs"}
 _PY_SUFFIX = ".py"
 _EXEMPT_EXCEPTIONS = {"ImportError", "ModuleNotFoundError", "Exception"}
 

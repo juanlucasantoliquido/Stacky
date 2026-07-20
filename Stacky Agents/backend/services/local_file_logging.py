@@ -65,7 +65,17 @@ def _test_logs_dir() -> Path:
     return Path(tempfile.gettempdir()) / "stacky-test-logs"
 
 
-_DEFAULT_SUPPRESSED_PATHS = ("/api/v1/pipeline/status",)
+_DEFAULT_SUPPRESSED_PATHS = (
+    "/api/v1/pipeline/status",
+    # Plan 156 F5 — pollers 200 de no-op que dominaban el access-log del deploy.
+    # NO se agrega "/api/executions" desnudo: filter() hace `p in message`, y
+    # eso sobre-suprimiría /api/executions/history y /api/executions/<id>. Solo
+    # el endpoint nuevo (unico poller de executions que queda tras F2).
+    "/api/diag/local",
+    "/api/cost-cap",
+    "/api/streak",
+    "/api/executions/summary",
+)
 
 
 def _access_log_suppress_enabled() -> bool:

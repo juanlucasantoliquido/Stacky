@@ -144,5 +144,6 @@
     "pages/TicketBoard.tsx": 15,
     "pages/UnblockerPage.tsx": 2,
     "pages/UserStatsPage.tsx": 24
-  }
+  },
+  "nativeDialogByFile": {}
 }

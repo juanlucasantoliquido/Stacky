@@ -43,13 +43,18 @@ for /f "usebackq delims=" %%N in (`npm config get prefix 2^>nul`) do (
     if exist "%%N" set "PATH=%%N;%PATH%"
 )
 
-netstat -ano -p tcp 2>nul | findstr ":%STACKY_PORT%" | findstr "LISTENING" >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Iniciando Stacky Agents...
-    start "Stacky Agents" cmd /k "title Stacky Agents && cd /d ""%~dp0"" && set STACKY_APP_ROOT=%~dp0 && set STACKY_DATA_DIR=%~dp0data && set STACKY_PROJECTS_DIR=%~dp0projects && set STACKY_FRONTEND_DIST=%~dp0frontend\dist && set PYTHONIOENCODING=utf-8 && set PYTHONUNBUFFERED=1 && backend\stacky-backend.exe"
-) else (
-    echo [OK] Stacky Agents ya esta corriendo en el puerto %STACKY_PORT%.
+:: Si algo ya esta escuchando en el puerto, puede ser un backend VIEJO que quedo
+:: colgado de un deploy anterior (no fue matado por Prepare-Publication porque
+:: corria desde otra ruta, o el cmd nunca se cerro). Reusarlo serviria assets
+:: viejos aunque el disco ya tenga el release fresco. Por eso SIEMPRE lo matamos
+:: y arrancamos el backend de ESTE release, nunca lo dejamos "como esta".
+for /f "tokens=5" %%A in ('netstat -ano -p tcp 2^>nul ^| findstr ":%STACKY_PORT%" ^| findstr "LISTENING"') do (
+    echo [INFO] Liberando puerto %STACKY_PORT% ^(PID %%A ya escuchando^)...
+    taskkill /PID %%A /F >nul 2>&1
 )
+
+echo [INFO] Iniciando Stacky Agents...
+start "Stacky Agents" cmd /k "title Stacky Agents && cd /d ""%~dp0"" && set STACKY_APP_ROOT=%~dp0 && set STACKY_DATA_DIR=%~dp0data && set STACKY_PROJECTS_DIR=%~dp0projects && set STACKY_FRONTEND_DIST=%~dp0frontend\dist && set PYTHONIOENCODING=utf-8 && set PYTHONUNBUFFERED=1 && backend\stacky-backend.exe"
 
 timeout /t 3 /nobreak >nul
 start "" "http://localhost:%STACKY_PORT%"

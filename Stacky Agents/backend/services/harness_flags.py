@@ -261,6 +261,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
+        "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
+        "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
         "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
     ),
@@ -310,11 +312,22 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_ENABLED",            # Plan 122 — comparador de BD entre ambientes (master, default OFF)
         "STACKY_CODE_INTEGRITY_ENABLED",        # Plan 130 — gate determinista sintaxis+imports (card Diagnóstico)
         "STACKY_INCIDENT_RESOLVER_ENABLED",     # Plan 131 — botón "Resolver incidencia" (default ON, promovida 08df035b)
+        "STACKY_INCIDENT_TICKET_PERSIST_ENABLED",  # Plan 166 F1 — espejo local de la Issue
+        "STACKY_INCIDENT_VISION_OCR_ENABLED",      # Plan 166 F2 — OCR de capturas
+        "STACKY_INCIDENT_VISION_ENDPOINT",         # Plan 166 F2 — endpoint de visión
+        "STACKY_INCIDENT_VISION_MODEL",            # Plan 166 F2 — modelo de visión
+        "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",    # Plan 166 F3 — creación directa/lote
+        "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
+        "STACKY_INCIDENT_DEV_PR_ENABLED",          # Plan 177 — auto-PR del Dev Resolutor
+        "STACKY_NOTIFICATION_CENTER_ENABLED",      # Plan 152 — centro de actividad (campana + feed, default ON)
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
         "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",    # Plan 126
         "STACKY_DB_COMPARE_DATA_MAX_ROWS",        # Plan 126
+        "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",   # Plan 157
+        "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",  # Plan 157
+        "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",   # Plan 157
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -417,9 +430,9 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED",
         type="bool",
-        # SIN default= → default_is_known False → NO va en _CURATED_DEFAULTS_ON (default OFF via config.py).
+        default=True,  # promovida a default ON (operador 2026-07-17: runs deben ser autosuficientes para perfiles no técnicos; curada en _CURATED_DEFAULTS_ON).
         label="Auto-confiar workspace (claude)",
-        description="OPT-IN. Si el workspace no está confiado, escribe hasTrustDialogAccepted=true en ~/.claude.json (setting de seguridad). OFF por defecto.",
+        description="Si el workspace no está confiado, escribe hasTrustDialogAccepted=true en ~/.claude.json automáticamente. Apagalo si preferís aceptar el diálogo de trust a mano.",
         group="claude_code_cli",
         requires="CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
     ),
@@ -1636,6 +1649,32 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 158 — Fix telemetría de costo claude_code_cli ─────────────────────
+    FlagSpec(
+        key="STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",
+        type="bool",
+        default=True,
+        label="Centro de Costos: telemetría real claude_code_cli",
+        description=(
+            "Plan 158 — Persiste harness_telemetry + metadata['model'] canónico "
+            "en ejecuciones claude_code_cli (paridad con codex_cli). Kill-switch: "
+            "OFF revierte al comportamiento previo exacto (sin cambios de datos)."
+        ),
+        group="observabilidad_notif",
+    ),
+    FlagSpec(
+        key="STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",
+        type="bool",
+        default=True,
+        label="Centro de Costos: backfill de modelo histórico (claude_code_cli)",
+        description=(
+            "Plan 158 — Al arrancar, copia una sola vez metadata['claude_code_model'] "
+            "-> metadata['model'] en ejecuciones históricas de claude_code_cli que ya "
+            "tienen la clave vieja pero no la canónica. Idempotente, aditivo, nunca "
+            "inventa costo."
+        ),
+        group="observabilidad_notif",
     ),
     FlagSpec(
         key="STACKY_UNBLOCKER_COMPLETED_CAP",
@@ -3167,10 +3206,35 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         min_value=100,
         max_value=200000,
     ),
+    # ── Plan 157 — Comparador de BD: configuración en contexto, import web.config
+    # (agente local determinista) y Panel de Migración siempre visible. 3 flags de
+    # UX bajo el master 122, default ON (curadas en _CURATED_DEFAULTS_ON). ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",
+        type="bool", default=True, requires="STACKY_DB_COMPARE_ENABLED",
+        label="Configurar ambientes desde el propio Comparador",
+        description="Muestra el alta/edición guiada de ambientes de BD dentro del Comparador (arriba de todo), no en una pantalla aparte.",
+        group="comparador_bd",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",
+        type="bool", default=True, requires="STACKY_DB_COMPARE_ENABLED",
+        label="Autodetectar conexión desde web.config",
+        description="Permite elegir un archivo web.config/XMLConfig y autodetectar las connection strings para precargar el ambiente. El parseo es local; la contraseña se enmascara y se guarda en el Administrador de credenciales de Windows.",
+        group="comparador_bd",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",
+        type="bool", default=True, requires="STACKY_DB_COMPARE_ENABLED",
+        label="Panel de Migración de BD siempre visible",
+        description="Muestra un panel persistente de scripts de paridad + backups por corrida, sin pegar el run_id a mano.",
+        group="comparador_bd",
+    ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
-    # Default OFF (decisión de criterio, ver comentario largo en config.py):
-    # reemplaza el chrome de navegación completo; mismo patrón sin objeciones
-    # del plan 119 (STACKY_DEVOPS_UI_V2_ENABLED, también default OFF).
+    # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de
+    # fábrica. Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated
+    # exige la pertenencia al set); el default efectivo True vive también en
+    # config.py. El operador puede volver al topnav apagando la flag por UI.
     FlagSpec(
         key="STACKY_UI_SHELL_V2_ENABLED",
         type="bool",
@@ -3178,11 +3242,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 139 — Reemplaza la fila de pestañas superior por una barra lateral "
             "agrupada por temas (Trabajo, Observabilidad, Conocimiento, Plataforma, "
-            "Configuración) con iconografía y una barra superior renovada. Default OFF: "
-            "con OFF la interfaz es idéntica a la actual. Solo cambia la presentación; "
-            "mismas pantallas y misma navegación."
+            "Configuración) con iconografía y una barra superior renovada. Default ON: "
+            "es la presentación de fábrica. Apagala para volver al topnav clásico. Solo "
+            "cambia la presentación; mismas pantallas y misma navegación."
         ),
         group="global",
+        default=True,  # promovida a default ON (operador 2026-07-18, curada en _CURATED_DEFAULTS_ON)
     ),
     # ── Plan 121 — Centinela local de egreso ──────────────────────────────────
     FlagSpec(
@@ -3308,6 +3373,73 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         default=True,
         env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_TICKET_PERSIST_ENABLED",
+        type="bool", default=True,
+        label="Persistir Issue de incidencia en Tickets",
+        description="Al publicar una incidencia, crea el ticket local de la Issue al instante (no esperás al sync de ADO).",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_VISION_OCR_ENABLED",
+        type="bool", default=True,
+        label="Procesar capturas (OCR/visión)",
+        description="Extrae el texto de las capturas adjuntas y lo suma al desglose. Si no hay modelo de visión configurado, degrada a marcar la captura como pendiente.",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_VISION_ENDPOINT", type="str",
+        label="Endpoint de visión (OpenAI-compatible)",
+        description="URL COMPLETA de chat-completions del endpoint de visión (ej. http://localhost:11434/v1/chat/completions). Mismo contrato que el endpoint del modelo local del Arnés. Vacío = usar ese endpoint local.",
+        # requires apunta al ROOT (STACKY_INCIDENT_RESOLVER_ENABLED), NO a
+        # STACKY_INCIDENT_VISION_OCR_ENABLED: ese último ya tiene su propio
+        # requires, y R4 (harness_flags.py::validate_requires_graph) prohíbe
+        # cadenas de profundidad >1. Mismo patrón que STACKY_CODEBASE_MEMORY_MCP_PROJECTS.
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        # SIN default= (verificado: default_is_known() no distingue por type; un
+        # default explícito acá también rompería test_default_known_only_for_curated,
+        # mismo motivo documentado en LOCAL_LLM_ENDPOINT). El default EFECTIVO vive en config.py.
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_VISION_MODEL", type="str",
+        label="Modelo de visión",
+        description="Nombre del modelo de visión (ej. llama3.2-vision, llava). Vacío = usar el modelo local del Arnés.",
+        # Mismo motivo que STACKY_INCIDENT_VISION_ENDPOINT (R4 profundidad 1).
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+        # SIN default= (mismo motivo que STACKY_INCIDENT_VISION_ENDPOINT).
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",
+        type="bool", default=True,
+        label="Crear incidencias directo (sin confirmar)",
+        description="Publica la Issue apenas el análisis termina, sin pedir confirmación, y permite cargar varias seguidas. Apagalo para volver al paso de revisión manual.",
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
+        type="bool", default=True,
+        label="Agente Dev Resolutor de Incidencias",
+        description="Habilita el botón 'Resolver con agente' en las Issues para que un agente dev analice el repo y proponga el fix.",
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_DEV_PR_ENABLED",
+        type="bool", default=True,
+        label="Abrir PR al resolver incidencias",
+        description="Tras resolver una Issue con el agente dev, abre automáticamente un Pull Request con el fix y los tests (podés desmarcar el checkbox al resolver). Requiere el Agente Dev Resolutor.",
+        group="global", requires="STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
+    ),
+    # Plan 152 — Centro de Actividad: campana en la barra superior con un feed
+    # de lo que pasó (fines de run, errores de la interfaz, umbrales de costo).
+    # Default ON: es una superficie informativa aditiva, sin autonomía ni
+    # escritura. OFF oculta la campana y apaga la captura (interfaz idéntica a hoy).
+    FlagSpec(
+        key="STACKY_NOTIFICATION_CENTER_ENABLED",
+        type="bool", default=True,
+        label="Centro de notificaciones y actividad",
+        description="Muestra una campana en la barra superior con un contador de novedades sin leer y un feed desplegable que reúne fines de ejecución, errores de la interfaz y avisos de costo. Solo informa y navega; nunca ejecuta acciones. Con OFF la barra queda igual que hoy.",
+        group="global", env_only=False,
     ),
 )
 

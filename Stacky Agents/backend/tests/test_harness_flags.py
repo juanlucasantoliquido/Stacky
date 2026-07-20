@@ -630,10 +630,16 @@ _CURATED_DEFAULTS_ON = {
     # STACKY_COST_CODEBURN_IMPORT_ENABLED (F7) NO entra acá: excepción dura #3
     # (prerequisito externo no garantizado), default OFF a propósito.
     "STACKY_COST_CENTER_ENABLED",
+    "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
+    "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
     # Plan 144 F2 — preflight de confianza de workspace (claude): kill-switch
-    # default ON (detecta+falla temprano, no reduce seguridad). AUTOSET (F3)
-    # NO entra acá: excepción dura #4 (reduce seguridad por default), OFF a propósito.
+    # default ON (detecta+falla temprano, no reduce seguridad).
     "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",
+    # Plan 144 F3 — auto-set de trust: promovida a default ON por directiva
+    # explícita del operador (2026-07-17): los runs los consumen perfiles no
+    # técnicos y deben ser autosuficientes; la excepción #4 queda levantada
+    # por decisión del operador, con kill-switch en UI.
+    "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED",
     # Plan 148 — Degradación explícita de integraciones no configuradas: kill-switch
     # default ON (breaker + 200-en-vez-de-502; OFF revierte byte-a-byte).
     "STACKY_INTEGRATION_DEGRADATION_ENABLED",
@@ -661,6 +667,25 @@ _CURATED_DEFAULTS_ON = {
     # opt-in": botón invocado a mano en Tickets, sin autopublicación ni costo
     # automático; publish siempre con preview+confirmación humana) ──
     "STACKY_INCIDENT_RESOLVER_ENABLED",
+    # ── Plan 166 — Ciclo completo de incidencias (4 bool default ON; las 2
+    # type="str" NO van acá, no son bool) ──
+    "STACKY_INCIDENT_TICKET_PERSIST_ENABLED",
+    "STACKY_INCIDENT_VISION_OCR_ENABLED",
+    "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",
+    "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",
+    "STACKY_INCIDENT_DEV_PR_ENABLED",
+    # ── Plan 152 — Centro de notificaciones / actividad (bool default ON;
+    # superficie informativa aditiva, ninguna de las 4 excepciones duras aplica) ──
+    "STACKY_NOTIFICATION_CENTER_ENABLED",
+    # ── Plan 157 — Comparador de BD UX (3 bool default ON bajo el master 122).
+    # WEBCONFIG_IMPORT default ON es válido porque se implementa la allowlist de
+    # raíces (C2/F2) + el self-check de egreso fail-closed (ADICIÓN v2/F3). ──
+    "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",
+    "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",
+    "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",
+    # ── Plan 139 — Shell v2 (sidebar) PROMOVIDA a default ON (operador
+    # 2026-07-18): deja de ser la excepción OFF; es la presentación de fábrica. ──
+    "STACKY_UI_SHELL_V2_ENABLED",
 }
 
 
@@ -946,3 +971,18 @@ def test_cost_center_flag_registered_default_on():
     assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" not in _CURATED_DEFAULTS_ON
     assert categorize("STACKY_COST_CODEBURN_IMPORT_ENABLED") == "observabilidad_notif"
     assert categorize("STACKY_COST_CODEBURN_IMPORT_PATH") == "observabilidad_notif"
+
+
+def test_plan158_claude_cli_telemetry_flags_registered_default_on():
+    """Plan 158 — las 2 flags de telemetría claude_code_cli: registradas, categorizadas, default ON."""
+    from services.harness_flags import FLAG_REGISTRY, categorize
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    for key in (
+        "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",
+        "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",
+    ):
+        assert key in by_key
+        assert by_key[key].default is True
+        assert categorize(key) == "observabilidad_notif"
+        assert key in _CURATED_DEFAULTS_ON

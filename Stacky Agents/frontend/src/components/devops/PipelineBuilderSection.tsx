@@ -43,6 +43,7 @@ import { PIPELINE_RECIPES, buildRecipeSteps } from '../../devops/pipelineRecipes
 import { splitSpecVariables } from '../../devops/variablesModel';
 import { DevOps, DevOpsVariables, LocalLlmApi } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
+import { useConfirm, useTextPrompt } from '../ui';
 import { BlockTree } from './BlockTree';
 import { BlockProperties } from './BlockProperties';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
@@ -63,6 +64,8 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const activeProject = activeProjectObj?.name ?? '';
 
   // Estado principal del spec en edición
+  const askConfirm = useConfirm();
+  const askText = useTextPrompt();
   const [spec, setSpec] = useState<PipelineSpecDraft>(emptySpec());
   // Última versión guardada/cargada (para badge "cambios sin guardar", C15)
   const [loadedSnapshot, setLoadedSnapshot] = useState<PipelineSpecDraft>(emptySpec());
@@ -204,7 +207,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const handleSaveDraft = async () => {
     if (!selectedDraftName) {
       // Guardar como nuevo
-      const name = prompt('Nombre del borrador:');
+      const name = await askText({ title: 'Guardar borrador', message: 'Nombre del borrador:', label: 'Nombre', confirmLabel: 'Guardar' });
       if (!name) return;
       const newDrafts = [
         ...drafts,
@@ -236,7 +239,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const handleDeleteDraft = async () => {
     if (!selectedDraftName) return;
     // C15 - confirm antes de eliminar
-    if (!window.confirm(`¿Eliminar el borrador '${selectedDraftName}'?`)) return;
+    if (!(await askConfirm({ title: 'Eliminar borrador', message: `¿Eliminar el borrador '${selectedDraftName}'?`, tone: 'danger', confirmLabel: 'Eliminar' }))) return;
     const newDrafts = drafts.filter(d => d.name !== selectedDraftName);
     await saveDraft(newDrafts);
     setSelectedDraftName('');
@@ -253,7 +256,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   // Plan 94 F4 — confirma: crea la variable en el tracker y la saca del spec local
   const handleConfirmMoveToSecureVariable = async () => {
     if (!moveVarModal || !activeProject) return;
-    if (!window.confirm(`¿Crear '${moveVarModal.key}' como variable segura en el tracker?`)) return;
+    if (!(await askConfirm({ title: 'Crear variable segura', message: `¿Crear '${moveVarModal.key}' como variable segura en el tracker?`, confirmLabel: 'Crear' }))) return;
     try {
       setMoveVarError(null);
       await DevOpsVariables.create({
@@ -280,7 +283,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const handleImportYaml = async () => {
     if (!importYaml.trim()) return;
     // C15 - confirm si hay trabajo en edición
-    if (!specsEqual(spec, emptySpec()) && !window.confirm('Vas a reemplazar el pipeline en edición. ¿Continuar?')) {
+    if (!specsEqual(spec, emptySpec()) && !(await askConfirm({ title: 'Reemplazar pipeline', message: 'Vas a reemplazar el pipeline en edición. ¿Continuar?', confirmLabel: 'Continuar' }))) {
       return;
     }
     try {
@@ -333,7 +336,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
       if (detected) {
         const preset = PIPELINE_PRESETS.find((p) => p.id === detected);
         if (preset) {
-          if (!isEmpty && !window.confirm('Vas a reemplazar el pipeline en edición con el preset detectado. ¿Continuar?')) {
+          if (!isEmpty && !(await askConfirm({ title: 'Reemplazar pipeline', message: 'Vas a reemplazar el pipeline en edición con el preset detectado. ¿Continuar?', confirmLabel: 'Continuar' }))) {
             return;
           }
           setSpec(preset.build());

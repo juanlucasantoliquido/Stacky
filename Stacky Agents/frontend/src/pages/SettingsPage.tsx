@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FlowConfigPage from "./FlowConfigPage";
 import ConfigTransferPanel from "../components/ConfigTransferPanel";
 import ClientProfileEditor from "../components/ClientProfileEditor";
@@ -24,13 +24,19 @@ import {
   setSoundEnabled,
 } from "../services/executionNotifier";
 import { readQueryParam } from "../utils/queryParams";
-import { Input, Select, Checkbox } from "../components/ui";
+import { parseRoute, serializeRoute } from "../services/routes";
+import { type SubTab, isValidSubTab } from "../services/settingsSubTabs";
+import { Input, Select, Checkbox, Button } from "../components/ui";
+import { isAutoShowEnabled, setAutoShow, safeStorage } from "../services/onboarding";
+import { useOnboardingStore } from "../store/onboardingStore";
 import useOptimisticPending from "../hooks/useOptimisticPending";
 import styles from "./SettingsPage.module.css";
 
-type SubTab = "flow" | "sections" | "client-profile" | "transfer" | "webhooks" | "notifications" | "harness" | "playground" | "appearance";
+// Plan 165 F3 — SubTab movido a services/settingsSubTabs.ts (módulo puro) para
+// que routes/tests lo consuman sin arrastrar el árbol JSX de esta página.
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
+  team: { title: "⚡ Mi Equipo",   hint: "Pantalla del equipo de agentes. Oculta por defecto — activala si la usás." },
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
   logs: { title: "🔍 System Logs", hint: "Vista cruda de logs estructurados del backend." },
   docs: { title: "📄 Docs",        hint: "Navegador de documentación indexada del proyecto." },
@@ -38,8 +44,7 @@ const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> 
 };
 
 const LOCKED_LABELS: Record<typeof LOCKED_SECTIONS[number], { title: string; hint: string }> = {
-  team:     { title: "⚡ Mi Equipo",      hint: "Pantalla principal de operación." },
-  tickets:  { title: "📋 Tickets ADO",    hint: "Tablero de tickets sincronizados con Azure DevOps." },
+  tickets:  { title: "📋 Tickets ADO",    hint: "Vista índice de la app — no puede ocultarse." },
   settings: { title: "⚙️ Configuración", hint: "Esta misma pantalla — no puede ocultarse." },
 };
 
@@ -47,6 +52,13 @@ function SectionsVisibilityPanel() {
   const sections = useUiSectionsStore((s) => s.sections);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<OptionalSection | null>(null);
+  // Plan 151 F4 — preferencia de auto-show del tour (localStorage, default ON).
+  const [tourAutoShow, setTourAutoShow] = useState<boolean>(() => isAutoShowEnabled(safeStorage()));
+
+  const toggleTourAutoShow = (next: boolean) => {
+    setAutoShow(safeStorage(), next);
+    setTourAutoShow(next);
+  };
 
   const toggle = async (key: OptionalSection, next: boolean) => {
     setError(null);
@@ -101,13 +113,42 @@ function SectionsVisibilityPanel() {
         );
       })}
 
+      <p className={styles.sectionsIntro}>Tour de bienvenida</p>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>
+          <span className={styles.rowTitle}>Mostrar el tour en el primer arranque</span>
+          <span className={styles.rowHint}>
+            El tour guiado se muestra una sola vez en un navegador nuevo. Desactivalo si no querés verlo.
+          </span>
+        </div>
+        <Checkbox
+          labelClassName={styles.toggle}
+          checked={tourAutoShow}
+          onChange={(e) => toggleTourAutoShow(e.target.checked)}
+          label={<span className={styles.toggleSlider} />}
+        />
+      </div>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>
+          <span className={styles.rowTitle}>Re-ver el tour ahora</span>
+          <span className={styles.rowHint}>Abrí el tour de bienvenida cuando quieras, sin esperar al primer arranque.</span>
+        </div>
+        <Button variant="secondary" onClick={() => useOnboardingStore.getState().requestOpenTour()}>
+          Re-ver tour ahora
+        </Button>
+      </div>
+
       {error && <div className={styles.errorText}>{error}</div>}
     </div>
   );
 }
 
-export default function SettingsPage() {
-  const [sub, setSub] = useState<SubTab>("flow");
+export default function SettingsPage({ subTab }: { subTab?: string | null }) {
+  // Plan 165 F3 — sub-tab direccionable por path (/settings/<sub>): la prop VIVA
+  // subTab siembra el estado inicial y lo sincroniza en popstate / nav in-app.
+  const [sub, setSub] = useState<SubTab>(
+    isValidSubTab(subTab) ? subTab : "flow",
+  );
   // Plan 129 — deep-link receptor: ?flag=<key> abre el sub-tab Arnes y resalta esa fila.
   const [highlightFlagKey, setHighlightFlagKey] = useState<string | null>(null);
 
@@ -117,6 +158,30 @@ export default function SettingsPage() {
     setSub("harness");
     setHighlightFlagKey(raw);
   }, []);
+
+  // Plan 165 F3 (C1) — sincronización con la prop VIVA (patrón lastApplied):
+  // reacciona SOLO a cambios de subTab (popstate / navegación in-app), sin pisar
+  // la elección local del operador por click.
+  const lastAppliedSub = useRef(subTab);
+  useEffect(() => {
+    if (subTab !== lastAppliedSub.current) {
+      lastAppliedSub.current = subTab;
+      if (isValidSubTab(subTab)) setSub(subTab);
+    }
+  }, [subTab]);
+
+  // Plan 165 F3 [A2] — write-back: el sub-tab elegido por CLICK se refleja en el
+  // path (/settings/<sub>) vía replaceState con guard. "flow" (default) va SIN
+  // segmento (/settings), preservando las URLs de primer nivel de hoy. El receptor
+  // ?flag= (que fuerza "harness") sigue teniendo precedencia; el write-back
+  // reescribirá el path a /settings/harness — coherente (la URL dice lo que se ve).
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    if (current.tab !== "settings") return;          // guard: solo montada en /settings
+    const next = serializeRoute({ ...current, subtab: sub === "flow" ? undefined : sub });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) window.history.replaceState({}, "", next);
+  }, [sub]);
 
   return (
     <div className={styles.root}>

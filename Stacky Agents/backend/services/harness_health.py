@@ -471,21 +471,10 @@ def _compute_reliability_kpis(window_days: int) -> dict:
     except Exception:  # noqa: BLE001
         result["stalled_count"] = "--"
 
-    # R2.1 — publish_intent (persist failures aproximados: markers sin resultado ok).
+    # R2.1 — persist failures EXACTOS desde publish_ledger (Plan 153; antes: scan de markers).
     try:
-        with session_scope() as session:
-            rows = (
-                session.query(AgentExecution.metadata_json)
-                .filter(AgentExecution.started_at >= since)
-                .all()
-            )
-            import json as _json
-            persist_fails = sum(
-                1 for (md_raw,) in rows
-                if md_raw and '"publish_intent"' in md_raw
-                and _json.loads(md_raw).get("publish_intent", {}).get("marker") == "pending"
-            )
-            result["persist_failure_count"] = persist_fails
+        from services.publish_ledger import count_persist_failures
+        result["persist_failure_count"] = count_persist_failures(since)
     except Exception:  # noqa: BLE001
         result["persist_failure_count"] = "--"
 

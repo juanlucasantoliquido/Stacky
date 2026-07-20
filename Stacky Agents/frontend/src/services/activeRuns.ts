@@ -27,11 +27,13 @@ export function mergeActiveRuns(
   return [...byId.values()].sort((a, b) => b.id - a.id);
 }
 
+/**
+ * Plan 156 F2 — Deriva los runs activos globales del latido unico (una sola
+ * request a /api/executions/summary?scope=all_projects, antes eran 3 a
+ * /api/executions). Reusa mergeActiveRuns. El poller central real vive en
+ * useActiveRunsGlobal (queryKey compartida = executionsSummaryQueryKey).
+ */
 export async function fetchActiveRuns(): Promise<AgentExecution[]> {
-  const [running, preparing, queued] = await Promise.all([
-    Executions.list({ status: "running", all_projects: true }),
-    Executions.list({ status: "preparing", all_projects: true }),
-    Executions.list({ status: "queued", all_projects: true }),
-  ]);
-  return mergeActiveRuns(running, preparing, queued);
+  const s = await Executions.summary("all_projects");
+  return mergeActiveRuns(s.running, s.preparing, s.queued);
 }

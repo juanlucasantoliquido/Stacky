@@ -2,12 +2,42 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+
+def test_release_index_references_resolve() -> None:
+    """Anti-version-vieja: todo bundle referenciado por index.html DEBE existir
+    en el dist empaquetado. Es el sintoma clasico del deploy congelado:
+    index.html apunta a assets/index-<hash>.js que ya no existe en el release,
+    y el operador ve la UI vieja / rota. Puramente sobre disco (no arranca el
+    exe), asi que corre rapido dentro del gate de build_release.ps1."""
+    release_root_raw = os.environ.get("STACKY_RELEASE_ROOT")
+    assert release_root_raw, "STACKY_RELEASE_ROOT must point to the packaged release folder"
+
+    dist = Path(release_root_raw).resolve() / "frontend" / "dist"
+    index = dist / "index.html"
+    assert index.exists(), f"missing built frontend: {index}"
+
+    html = index.read_text(encoding="utf-8", errors="replace")
+    refs = re.findall(r"""(?:src|href)\s*=\s*["']([^"']+)["']""", html)
+    asset_refs = [r for r in refs if "assets/" in r]
+    assert asset_refs, f"index.html no referencia ningun bundle assets/: {index}"
+
+    missing = []
+    for ref in asset_refs:
+        rel = ref.split("?", 1)[0].split("#", 1)[0].lstrip("/")
+        if not (dist / rel).exists():
+            missing.append(ref)
+    assert not missing, (
+        "index.html referencia bundles que NO existen en el release "
+        f"(build congelado / version vieja): {missing}"
+    )
 
 
 def _free_port() -> int:

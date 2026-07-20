@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { Tickets, type TicketAttachment } from "../api/endpoints";
 import ConfirmButton from "./ConfirmButton";
-import { shouldCloseOnBackdrop } from "../services/uiGuards";
+import { Dialog } from "./ui";
 import styles from "./FileManagerModal.module.css";
 
 interface Props {
@@ -96,13 +96,14 @@ export default function FileManagerModal({ ticketId, ticketLabel, onClose }: Pro
   const allSelected = !!attachments && attachments.length > 0 && selected.size === attachments.length;
 
   return (
-    <div
-      className={styles.backdrop}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty: selected.size > 0, busy: deleting })) onClose();
-      }}
+    <Dialog
+      open
+      bare
+      panelClassName={styles.modal}
+      onClose={onClose}
+      closeGuard={{ dirty: selected.size > 0, busy: deleting }}
+      ariaLabel="Adjuntos del ticket"
     >
-      <div className={styles.modal}>
         <div className={styles.header}>
           <span className={styles.title}>
             Adjuntos del ticket{" "}
@@ -173,7 +174,6 @@ export default function FileManagerModal({ ticketId, ticketLabel, onClose }: Pro
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -7,7 +7,7 @@
 
 /** Mapa type → color hex. Insensible a mayúsculas al llamar getWorkItemTypeColor(). */
 const WORK_ITEM_TYPE_COLORS: Record<string, string> = {
-  issue:   "#F59E0B", // ámbar — Issue (plan 77)
+  issue:   "#FF3B5C", // rojo/carmesí vívido — Issue/Incidencia (S/L parecido a epic, hue desplazado 10° hacia magenta y 100% saturación para distinguirse de bug #EF4444 a simple vista)
   epic:    "#8B5CF6", // violeta — Epic
   task:    "#3B82F6", // azul — Task / User Story
   bug:     "#EF4444", // rojo — Bug

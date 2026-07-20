@@ -1509,6 +1509,17 @@ def _run_in_background(
             metadata["claude_telemetry"] = {
                 k: v for k, v in stream_telemetry.items() if k != "session_id"
             }
+        # Plan 158 — paridad de telemetría de costo con codex_cli (kill-switch).
+        # Se llama SIEMPRE (incluso con stream_telemetry vacío) para que
+        # metadata["model"] quede seteado aunque el proceso haya sido matado
+        # antes de un evento result (Defecto A es independiente del stall).
+        if config.STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED:
+            _finalize_cost_telemetry(
+                execution_id=execution_id,
+                metadata=metadata,
+                stream_telemetry=stream_telemetry,
+                routed_model=routed_model,
+            )
         # F1.3 — trazabilidad del loop de autocorrección.
         if autocorrect is not None:
             metadata["autocorrect"] = autocorrect.summary()
@@ -2625,6 +2636,45 @@ def _capture_result_telemetry(telemetry: dict, event: dict) -> None:
     for key in ("total_cost_usd", "num_turns", "is_error"):
         if event.get(key) is not None:
             telemetry[key] = event[key]
+
+
+def _finalize_cost_telemetry(
+    execution_id: int,
+    metadata: dict,
+    stream_telemetry: dict,
+    routed_model: str | None,
+) -> None:
+    """Plan 158 F1 — expone metadata["model"] (clave canónica que lee
+    cost_analytics.extract_cost_row) y persiste harness_telemetry canónico,
+    con paridad exacta con codex_cli_runner.py:808-817.
+
+    Defecto A (plan 158 §2.3): el modelo resuelto sólo vivía en
+    metadata["claude_code_model"], nunca en metadata["model"]. Este método
+    setea AMBAS claves — "claude_code_model" no se borra (retro-compat).
+
+    Defecto B (plan 158 §2.3): claude_code_cli_runner nunca llamaba
+    harness.telemetry.persist(), a diferencia de codex_cli_runner. Sin esa
+    llamada, metadata["harness_telemetry"] nunca existe para este runtime y
+    el fallback de estimación de costo (_maybe_estimate_cost) nunca corre.
+
+    Nunca lanza: cualquier fallo de persist() se loguea como warning (no
+    crítico), igual que el try/except de codex_cli_runner.py:816-817.
+    """
+    resolved_model = routed_model or metadata.get("claude_code_model")
+    metadata["model"] = resolved_model
+    if not stream_telemetry:
+        return
+    try:
+        from harness.telemetry import from_claude_stream, persist as _persist_telemetry
+
+        _stream_for_telemetry = dict(stream_telemetry)
+        _stream_for_telemetry.setdefault("model", resolved_model)
+        _t = from_claude_stream(_stream_for_telemetry)
+        _persist_telemetry(execution_id, _t)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            f"[exec={execution_id}] harness_telemetry claude: persist falló (no crítico): {exc}"
+        )
 
 
 def _parse_claude_code_line(

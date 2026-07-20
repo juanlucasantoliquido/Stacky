@@ -210,7 +210,7 @@ class AdoTrackerProvider:
                     decoded = base64.b64decode(existing_content).decode("utf-8")
                     if decoded == content:
                         # Contenido idéntico ⇒ unchanged sin pushear
-                        web_url = f"{client._base_project_url}/_git/{repo_id}?path=/{path.lstrip('/')}&version=GB{branch}"
+                        web_url = f"{client._base_proj}/_git/{repo_id}?path=/{path.lstrip('/')}&version=GB{branch}"
                         return {
                             "sha": old_object_id,
                             "branch": branch,
@@ -245,7 +245,7 @@ class AdoTrackerProvider:
         try:
             push_response = client._request("POST", push_url, body=push_body)
             commit_sha = push_response.get("commits", [{}])[0].get("commitId")
-            web_url = f"{client._base_project_url}/_git/{repo_id}?path=/{path.lstrip('/')}&version=GB{branch}"
+            web_url = f"{client._base_proj}/_git/{repo_id}?path=/{path.lstrip('/')}&version=GB{branch}"
             return {
                 "sha": commit_sha,
                 "branch": branch,

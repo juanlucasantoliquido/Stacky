@@ -5,11 +5,13 @@ import { Tickets, Agents, FlowConfig, Executions, Memory, Incidents, type Stacky
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
-import { useTicketSync } from "../hooks/useTicketSync";
+import { useTicketSync, DEFAULT_INTERVAL_MS as TICKET_SYNC_INTERVAL_MS } from "../hooks/useTicketSync";
 import { SyncStatusBar } from "../components/SyncStatusBar";
 import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
+import Toast, { type ToastState } from "../components/Toast";
+import { useConfirm } from "../components/ui";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
@@ -31,6 +33,8 @@ import {
   runtimeRequiresVsCodeAgent,
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
+import { canResolveWithAgent } from "../incidents/devResolverModel";
+import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
@@ -240,9 +244,14 @@ interface TicketCardProps {
   /** Feature #4 — mapa determinístico ado_state → agent_type cargado una vez en TicketBoard raíz */
   flowConfigMap: Map<string, string>;
   indent?: boolean;
+  /** Plan 166 F5 — dev_resolver_enabled del mismo Incidents.status() que ya
+   * consume el board (:715). */
+  devResolverEnabled?: boolean;
+  /** Plan 177 — dev_pr_enabled del mismo Incidents.status(); muestra el checkbox "Abrir PR". */
+  devPrEnabled?: boolean;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent, devResolverEnabled, devPrEnabled }: TicketCardProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -254,6 +263,8 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
   const [launchError, setLaunchError] = useState<string | null>(null);
   // B6: cancelación del run en curso desde el board.
   const [isCancelling, setIsCancelling] = useState(false);
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
 
   // Regla de negocio #7/#8 (preservada dentro de resolveSuggestedAgent): Tasks y
   // Épicas nunca proponen Negocio — ya tienen análisis previo / botón Funcional.
@@ -330,7 +341,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
   // no hay nada concreto que cancelar y el botón no se muestra.
   const handleCancelRun = useCallback(async () => {
     if (!runningExecution) return;
-    if (!window.confirm("¿Cancelar el run en curso?")) return;
+    if (!(await askConfirm({ title: "Cancelar run", message: "¿Cancelar el run en curso?", tone: "danger", confirmLabel: "Cancelar run", cancelLabel: "Volver" }))) return;
     setIsCancelling(true);
     try {
       await Executions.cancel(runningExecution.id);
@@ -339,8 +350,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
       // error real para el operador; refrescamos y seguimos.
       const msg = error instanceof Error ? error.message : String(error);
       if (!msg.startsWith("409")) {
-        // eslint-disable-next-line no-alert
-        window.alert(`No se pudo cancelar el run: ${msg}`);
+        setActionToast({ variant: "error", body: `No se pudo cancelar el run: ${msg}` });
       }
     } finally {
       setIsCancelling(false);
@@ -353,7 +363,48 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
         qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
       ]);
     }
-  }, [activeProjectName, qc, runningExecution]);
+  }, [activeProjectName, qc, runningExecution, askConfirm]);
+
+  // Plan 166 F5 — "Resolver con agente": lanza el Dev Resolutor sobre esta
+  // Issue. Modelo puro de disponibilidad en incidents/devResolverModel.ts
+  // (RTL/jsdom no soporta tests de render de este componente — gap conocido).
+  const [isResolvingIncident, setIsResolvingIncident] = useState(false);
+  const canResolveIncident = canResolveWithAgent({
+    workItemType: ticket.work_item_type,
+    adoState: ticket.ado_state,
+    isRunning,
+    enabled: Boolean(devResolverEnabled),
+    closedStates: CLOSED_STATES,
+  });
+  // Plan 177 — checkbox "Abrir PR" (premarcado); solo visible si dev_pr_enabled.
+  const [openPr, setOpenPr] = useState(DEFAULT_OPEN_PR);
+  const showOpenPr = shouldShowOpenPrCheckbox({ canResolve: canResolveIncident, devPrEnabled: Boolean(devPrEnabled) });
+
+  const handleResolveWithAgent = useCallback(async () => {
+    setIsResolvingIncident(true);
+    setLaunchError(null);
+    try {
+      // Sin selector de modelo/effort por-run en el board (mismo patrón que
+      // handleRunConfirm arriba, que tampoco pasa model_override): el
+      // backend usa su default/selector adaptativo.
+      const result = await Incidents.runDevResolver({
+        ticket_id: ticket.id,
+        runtime: agentRuntime,
+        project: activeProjectName,
+        open_pr: showOpenPr ? openPr : false, // Plan 177 — solo si el checkbox está visible
+      });
+      openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
+        qc.invalidateQueries({ queryKey: ["executions"] }),
+      ]);
+    } catch (error) {
+      setLaunchError(humanizeAgentLaunchError(error));
+    } finally {
+      setIsResolvingIncident(false);
+    }
+  }, [activeProjectName, agentRuntime, qc, setCodexConsoleExecution, ticket.id, openPr, showOpenPr]);
 
   return (
     <>
@@ -491,6 +542,33 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
               >
                 ⚙ Run Custom
               </button>
+              {/* Plan 166 F5 — Dev Resolutor de Incidencias, solo en Issues/Bugs. */}
+              {canResolveIncident && (
+                <button
+                  className={styles.resolveBtn}
+                  onClick={(e) => { e.stopPropagation(); void handleResolveWithAgent(); }}
+                  disabled={isResolvingIncident}
+                  title="Resolver esta incidencia con un agente dev"
+                >
+                  {isResolvingIncident ? "⏳ Lanzando…" : "🔧 Resolver con agente"}
+                </button>
+              )}
+              {/* Plan 177 — checkbox "Abrir PR" (premarcado), solo si dev_pr_enabled. */}
+              {showOpenPr && (
+                <label
+                  className={styles.openPrCheckbox}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Al terminar, abrir un Pull Request con el fix y los tests"
+                >
+                  <input
+                    type="checkbox"
+                    checked={openPr}
+                    onChange={(e) => setOpenPr(e.target.checked)}
+                    disabled={isResolvingIncident}
+                  />
+                  Abrir PR
+                </label>
+              )}
             </div>
 
             {pipelineQ.data && (
@@ -558,6 +636,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
           onClose={() => setRunModal(null)}
         />
       )}
+      {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
     </>
   );
 }
@@ -571,9 +650,13 @@ interface EpicGroupProps {
   memoryBadges: Record<string, StackyMemoryTicketBadge>;
   /** Feature #4 — propagado desde TicketBoard raíz */
   flowConfigMap: Map<string, string>;
+  /** Plan 166 F5 — propagado desde TicketBoard raíz */
+  devResolverEnabled?: boolean;
+  /** Plan 177 — dev_pr_enabled del mismo Incidents.status(); muestra el checkbox "Abrir PR". */
+  devPrEnabled?: boolean;
 }
 
-function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap }: EpicGroupProps) {
+function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap, devResolverEnabled, devPrEnabled }: EpicGroupProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -686,6 +769,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
                 memoryBadge={memoryBadges[String(child.id)] ?? null}
                 flowConfigMap={flowConfigMap}
                 indent
+                devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
               />
             ))
           )}
@@ -709,13 +793,22 @@ export default function TicketBoard() {
   // Plan 131 — Modal resolutor de incidencias (botón invisible con flag OFF)
   const [incidentModalOpen, setIncidentModalOpen] = useState(false);
   const [incidentsEnabled, setIncidentsEnabled] = useState(false);
+  // Plan 166 F5 — mismo consumo de Incidents.status() de arriba, extendido
+  // con dev_resolver_enabled para el botón "Resolver con agente" del board.
+  const [devResolverEnabled, setDevResolverEnabled] = useState(false);
+  // Plan 177 — mismo Incidents.status(), campo dev_pr_enabled para el checkbox "Abrir PR".
+  const [devPrEnabled, setDevPrEnabled] = useState(false);
   useEffect(() => {
     void (async () => {
       try {
         const s = await Incidents.status();
         setIncidentsEnabled(s.enabled);
+        setDevResolverEnabled(Boolean(s.dev_resolver_enabled));
+        setDevPrEnabled(Boolean(s.dev_pr_enabled));
       } catch {
         setIncidentsEnabled(false);
+        setDevResolverEnabled(false);
+        setDevPrEnabled(false);
       }
     })();
   }, []);
@@ -746,15 +839,15 @@ export default function TicketBoard() {
   // Hook centralizado de estado running (fuente dual: stacky_status + executions polling)
   const { runningByTicket, runningTicketIds, getRunningTickets } = useRunningStatus();
 
-  // P7: hook de auto-refresh con Page Visibility API y backoff
+  // P7: hook de auto-refresh con Page Visibility API y backoff.
+  // Plan 156 F4: el reloj "hace Xs"/stale vive ahora en SyncStatusBar (hoja);
+  // el hook ya no expone secondsSinceSync/isStale.
   const {
     lastSyncedAt,
-    secondsSinceSync,
     isSyncing: isSyncingV2,
     syncError: syncErrorV2,
     triggerSync,
-    isStale,
-  } = useTicketSync({ intervalMs: 45_000, syncOnMount: true });
+  } = useTicketSync({ intervalMs: TICKET_SYNC_INTERVAL_MS, syncOnMount: true });
 
   const { data: tickets, isLoading, isError: isTicketsError, error: ticketsError, refetch: refetchTickets } = useQuery<Ticket[]>({
     queryKey: ["tickets", activeProjectName],
@@ -993,12 +1086,10 @@ export default function TicketBoard() {
       {/* P7: barra de estado de sincronizacion */}
       <SyncStatusBar
         lastSyncedAt={lastSyncedAt}
-        secondsSinceSync={secondsSinceSync}
         isSyncing={isSyncingV2}
         syncError={syncErrorV2}
         onSyncClick={triggerSync}
-        isStale={isStale}
-        intervalMs={45_000}
+        intervalMs={TICKET_SYNC_INTERVAL_MS}
       />
 
       {/* Banner global de tickets en ejecución */}
@@ -1084,6 +1175,7 @@ export default function TicketBoard() {
                   vsCodeAgents={vsCodeAgents ?? []}
                   memoryBadges={memoryBadges}
                   flowConfigMap={flowConfigMap}
+                  devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
                 />
               ))}
               {filteredOrphans.length > 0 && (
@@ -1101,6 +1193,7 @@ export default function TicketBoard() {
                         vsCodeAgents={vsCodeAgents ?? []}
                         memoryBadge={memoryBadges[String(t.id)] ?? null}
                         flowConfigMap={flowConfigMap}
+                        devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
                       />
                     ))}
                   </div>

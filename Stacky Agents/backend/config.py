@@ -132,6 +132,18 @@ class Config:
         os.getenv("STACKY_DB_COMPARE_DATA_MAX_ROWS", "5000")
     )
 
+    # ── Plan 157 — Comparador de BD: config en contexto, import web.config, panel migración ──
+    # 3 flags de UX bajo el master 122 (default ON, togglables por UI de flags).
+    STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",
@@ -280,12 +292,12 @@ class Config:
     CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED = os.getenv(
         "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
-    # Plan 144 F3 — auto-set opt-in de hasTrustDialogAccepted. Default OFF:
-    # excepción dura (d) "reduce seguridad por default" (escribe un setting de
-    # seguridad de ~/.claude.json). Activable solo por decisión explícita del
-    # operador desde la UI (panel de flags del arnés).
+    # Plan 144 F3 — auto-set de hasTrustDialogAccepted. Default ON por decisión
+    # explícita del operador (2026-07-17): la función la consumen perfiles no
+    # técnicos y debe ser autosuficiente — sin diálogos manuales de trust.
+    # Kill-switch: OFF desde la UI o env si se quiere volver al opt-in.
     CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED = os.getenv(
-        "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED", "false"
+        "CLAUDE_CODE_CLI_TRUST_AUTOSET_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     # Cap de mensajes correctivos por run (plan: máx 1-2).
     CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES = int(
@@ -551,6 +563,19 @@ class Config:
     STACKY_COST_CODEBURN_IMPORT_PATH: str = os.getenv(
         "STACKY_COST_CODEBURN_IMPORT_PATH", ""
     ).strip()
+
+    # ── Plan 158 — Fix telemetría de costo claude_code_cli (paridad con codex) ──
+    # Kill-switch: default ON (bug fix de observabilidad, ninguna de las 4
+    # excepciones duras aplica). OFF revierte al comportamiento previo exacto.
+    STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED: bool = os.getenv(
+        "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED", "true"
+    ).strip().lower() == "true"
+    # Backfill idempotente y aditivo de metadata["model"] en filas históricas
+    # de claude_code_cli (copia desde claude_code_model). Default ON: sólo
+    # copia una clave ya presente, nunca inventa datos (§6 fuera de scope).
+    STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED: bool = os.getenv(
+        "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED", "true"
+    ).strip().lower() == "true"
 
     # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
     # OFF por defecto: con OFF enrich_blocks es byte-idéntico al plan 64.
@@ -951,6 +976,54 @@ class Config:
         "STACKY_INCIDENT_RESOLVER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 166 F1 — persistir Ticket local al publicar Issue de incidencia
+    # (espejo de _persist_epic_ticket). Default ON: sólo crea un espejo local
+    # idempotente; OFF revierte a "aparece recién tras sync de ADO".
+    STACKY_INCIDENT_TICKET_PERSIST_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_TICKET_PERSIST_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 166 F2 — OCR/visión de capturas → texto inline en el manifiesto.
+    # Default ON con degradación EXACTA al comportamiento de hoy si no hay
+    # endpoint/modelo de visión (marca [PENDIENTE] + adjunto ADO): por eso ON
+    # es seguro y no dispara excepción dura.
+    STACKY_INCIDENT_VISION_OCR_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_VISION_OCR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_INCIDENT_VISION_ENDPOINT: str = os.getenv("STACKY_INCIDENT_VISION_ENDPOINT", "")
+    STACKY_INCIDENT_VISION_MODEL: str = os.getenv("STACKY_INCIDENT_VISION_MODEL", "")
+
+    # Plan 166 F3 — auto-publicación de la Issue de incidencia SIN confirmación
+    # humana, en lote. EXCEPCIÓN DURA #1 (bypass de revisión humana), aceptada
+    # por directiva explícita del operador 2026-07-17 (precedente:
+    # épica-desde-brief). Kill-switch por UI: OFF restaura el gate preview+confirm.
+    STACKY_INCIDENT_AUTO_PUBLISH_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 166 F4/F5 — Agente Dev Resolutor de Incidencias (toma una Issue y la
+    # resuelve en el repo). Default ON: sólo se lanza cuando el operador hace
+    # click en "Resolver con agente" (sin autonomía proactiva).
+    STACKY_INCIDENT_DEV_RESOLVER_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_DEV_RESOLVER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 177 — Auto-PR del Dev Resolutor de Incidencias. Default ON: sólo
+    # dispara el commit+PR cuando el operador dejó el checkbox "Abrir PR"
+    # marcado en la resolución (opt-out por-run). Kill-switch por UI: OFF oculta
+    # el checkbox y no abre ningún PR (byte-idéntico a hoy).
+    STACKY_INCIDENT_DEV_PR_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_DEV_PR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 152 — Centro de notificaciones / actividad. Default ON: superficie
+    # informativa aditiva (campana + feed en la barra superior) sin autonomía ni
+    # escritura. OFF oculta la campana y apaga la captura (interfaz idéntica a hoy).
+    # El frontend fail-open a ON si el flag no aparece en la respuesta del endpoint.
+    STACKY_NOTIFICATION_CENTER_ENABLED: bool = os.getenv(
+        "STACKY_NOTIFICATION_CENTER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 77 — Postea análisis funcional/técnico/implementación de un Issue como
     # comentarios idempotentes en el mismo WI (sin tickets hijos). Default OFF.
     STACKY_ISSUE_PHASE_COMMENTS_ENABLED: bool = os.getenv(
@@ -1265,8 +1338,12 @@ class Config:
     # imponerle al operador mono-usuario un cambio de paradigma de navegación
     # visible en cada pantalla sin que lo haya elegido él mismo.
     # Con OFF la interfaz es byte-idéntica a la actual.
+    # PROMOVIDA a default ON (operador 2026-07-18): el shell v2 (navegación
+    # lateral agrupada) es ahora la presentación de fábrica; el operador puede
+    # volver al topnav clásico apagando la flag por UI. Curada en
+    # _CURATED_DEFAULTS_ON (test_harness_flags) y espejada en la FlagSpec.
     STACKY_UI_SHELL_V2_ENABLED: bool = os.getenv(
-        "STACKY_UI_SHELL_V2_ENABLED", "false"
+        "STACKY_UI_SHELL_V2_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 148 — Degradación explícita de integraciones no configuradas. Default ON

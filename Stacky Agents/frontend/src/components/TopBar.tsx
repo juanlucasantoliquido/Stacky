@@ -8,14 +8,21 @@ import NewProjectModal from "./NewProjectModal";
 import EditProjectModal from "./EditProjectModal";
 import StreakBadge from "./StreakBadge";
 import CostCapIndicator from "./CostCapIndicator";
+import HelpLauncher from "./HelpLauncher";
+import NotificationBell from "./NotificationBell"; // Plan 152
+import { versionChipLabel, buildTooltip, driftMessage, type BuildIdentity } from "./buildIdentity"; // Plan 163 F2
+import Toast, { type ToastState } from "./Toast";
+import { useConfirm } from "./ui";
 import styles from "./TopBar.module.css";
 
 interface TopBarProps {
   onGoToTeam?: () => void;
   shellV2?: boolean;   // Plan 139 — aplica el re-estilo v2 (aditivo)
+  notificationsEnabled?: boolean;   // Plan 152 — muestra la campana del Centro de Actividad
+  onActivityNavigate?: (nav: { tab: string; executionId?: number }) => void;   // Plan 152
 }
 
-export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
+export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onActivityNavigate }: TopBarProps) {
   // Plan 134 F4: fuente VIVA — la misma query compartida del panel global
   // (services/activeRuns.ts). El campo de workbench que este badge leía antes
   // estaba muerto: solo lo seteaba useAgentRun (consumidor huérfano
@@ -35,9 +42,11 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectName, setActiveProjectName] = useState<string>("");
+  const [actionToast, setActionToast] = useState<ToastState | null>(null);
+  const askConfirm = useConfirm();
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
-  const [version, setVersion] = useState<string | null>(null);
+  const [build, setBuild] = useState<BuildIdentity>({ version: null, sourceCommit: null, builtAt: null, drift: false });
 
   const activeProject = projects.find((p) => p.name === activeProjectName) ?? null;
 
@@ -101,7 +110,12 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
 
   useEffect(() => {
     Health.get()
-      .then((res) => { if (res.version) setVersion(res.version); })
+      .then((res) => setBuild({
+        version: res.version ?? null,
+        sourceCommit: res.source_commit ?? null,
+        builtAt: res.built_at ?? null,
+        drift: res.build_drift === true,
+      }))
       .catch(() => { /* ignorar: no crítico */ });
   }, []);
 
@@ -130,12 +144,12 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
   }
 
   async function handleDeleteProject(name: string) {
-    if (!window.confirm(`¿Eliminar el proyecto "${name}"? Esta acción no se puede deshacer.`)) return;
+    if (!(await askConfirm({ title: "Eliminar proyecto", message: `¿Eliminar el proyecto "${name}"? Esta acción no se puede deshacer.`, tone: "danger", confirmLabel: "Eliminar" }))) return;
     try {
       await Projects.remove(name);
       await loadProjects();
     } catch (e: any) {
-      window.alert(`Error al eliminar: ${e?.message || e}`);
+      setActionToast({ variant: "error", body: `Error al eliminar: ${e?.message || e}` });
     }
   }
 
@@ -199,7 +213,8 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
             +
           </button>
         </div>
-        <div className={styles.actions}>
+        <div className={styles.actions} data-tour="topbar-actions">
+          <HelpLauncher />
           {isRunning && (
             <span className={styles.runningBadge}>
               <span className={styles.badgeSpinner} aria-hidden="true" />
@@ -208,11 +223,15 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
                 : `${activeRunsCount} agentes trabajando…`}
             </span>
           )}
+          {notificationsEnabled && <NotificationBell onNavigate={onActivityNavigate} />}
           <CostCapIndicator projectName={activeProjectName || null} />
           <StreakBadge />
-          <span className={styles.version} title={version ? `Versión ${version}` : "dev@local"}>{version ? `v${version}` : "dev@local"}</span>
+          <span className={styles.version} title={buildTooltip(build)}>{versionChipLabel(build)}</span>
         </div>
       </div>
+      {build.drift && (
+        <div className={styles.driftBanner} role="alert">{driftMessage(build)}</div>
+      )}
       {isRunning && <div className={styles.progressBar} role="progressbar" aria-label="Ejecución en progreso" />}
       {newProjectOpen && (
         <NewProjectModal
@@ -228,6 +247,7 @@ export default function TopBar({ onGoToTeam, shellV2 }: TopBarProps) {
           onDelete={() => { setEditProjectOpen(false); handleDeleteProject(activeProject.name); }}
         />
       )}
+      {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
     </header>
   );
 }

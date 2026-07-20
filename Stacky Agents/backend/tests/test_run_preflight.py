@@ -119,6 +119,7 @@ class TestPreflightPatMissing:
             patch("services.run_preflight._resolve_outputs_dir", return_value=writable),
             patch("services.run_preflight._is_writable", return_value=True),
             patch("services.run_preflight._resolve_repo_root", return_value=None),
+            patch("services.ado_client.ado_pat_present", return_value=False),
         ):
             from services.run_preflight import check
             result = check(
@@ -128,6 +129,32 @@ class TestPreflightPatMissing:
             )
         assert result.ok is False
         assert result.failure_check == "ado_pat_missing"
+
+    def test_pat_via_project_auth_ok(self, tmp_path, preflight_enabled, monkeypatch):
+        """PAT ausente en env pero resoluble vía proyecto activo → no bloquea.
+
+        Regresión: el gate solo miraba env/config y bloqueaba con ado_pat_missing
+        aunque el operador tuviera el PAT configurado por proyecto vía UI.
+        """
+        writable = tmp_path / "outputs"
+        writable.mkdir()
+        monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+        monkeypatch.setenv("ADO_PAT", "")
+        with (
+            patch("services.run_preflight._resolve_outputs_dir", return_value=writable),
+            patch("services.run_preflight._is_writable", return_value=True),
+            patch("services.run_preflight._resolve_repo_root", return_value=None),
+            patch("services.ado_client.ado_pat_present", return_value=True),
+            patch("services.run_preflight._binary_resolvable", return_value=True),
+        ):
+            from services.run_preflight import check
+            result = check(
+                ticket=_make_ticket(),
+                runtime="github_copilot",
+                project=None,
+            )
+        assert result.ok is True
+        assert result.failure_check is None
 
     def test_pat_missing_auto_create_off_ok(self, tmp_path, preflight_enabled, monkeypatch):
         """PAT ausente + auto-create OFF → no bloquea."""

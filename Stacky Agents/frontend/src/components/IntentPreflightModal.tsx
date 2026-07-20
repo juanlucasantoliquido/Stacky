@@ -17,7 +17,7 @@
 
 import React, { useState } from "react";
 import type { IntentBriefDTO } from "../api/endpoints";
-import { shouldCloseOnBackdrop } from "../services/uiGuards";
+import { Dialog } from "./ui";
 import styles from "./IntentPreflightModal.module.css";
 
 interface IntentPreflightModalProps {
@@ -55,10 +55,14 @@ export default function IntentPreflightModal({
   }
 
   return (
-    <div className={styles.backdrop} onClick={(e) => {
-      if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty: corrections.trim().length > 0, busy: busy === true })) onCancel();
-    }}>
-      <div className={styles.modal} role="dialog" aria-modal="true">
+    <Dialog
+      open
+      bare
+      panelClassName={styles.modal}
+      onClose={onCancel}
+      closeGuard={{ dirty: corrections.trim().length > 0, busy: busy === true }}
+      ariaLabel="Confirmación de intención"
+    >
         <header className={styles.header}>
           <h2 className={styles.title}>Esto es lo que entendí. ¿Arranco así?</h2>
           <div className={`${styles.confidenceBadge} ${confidenceBadgeClass(intent.confidence)}`}>
@@ -177,7 +181,6 @@ export default function IntentPreflightModal({
             Corregir y arrancar
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }

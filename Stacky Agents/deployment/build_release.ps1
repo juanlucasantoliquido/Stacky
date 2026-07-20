@@ -376,31 +376,37 @@ if ($GitHubCopilotAgentsRepo) {
     Write-Warn "-GitHubCopilotAgentsRepo está obsoleto y se ignora. La fuente de agentes es backend\Stacky\agents."
 }
 
+# Limpieza TOTAL previa: el release DEBE construirse desde cero. Borra todo
+# artefacto viejo (frontend\dist, salida PyInstaller, carpeta/zip/instalador de
+# release previos) ANTES de compilar, de forma idempotente, para que ninguna
+# version vieja pueda sobrevivir y filtrarse al paquete. Es defensivo y se
+# solapa a proposito con las limpiezas puntuales de mas abajo.
+Write-Step "Limpieza total previa (build garantizado desde cero)"
+$staleTargets = @(
+    $releaseDir,
+    $zipPath,
+    $installerPath,
+    (Join-Path $frontendDir "dist"),
+    (Join-Path $buildRoot "pyinstaller-dist"),
+    (Join-Path $buildRoot "pyinstaller-work"),
+    (Join-Path $buildRoot "pyinstaller-spec")
+)
+foreach ($stale in $staleTargets) {
+    if ($stale -and (Test-Path -LiteralPath $stale)) {
+        Remove-Item -LiteralPath $stale -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Write-OK "Artefactos previos eliminados (frontend\dist, pyinstaller-*, release/zip/instalador)"
+
 Require-Command -Command "npm" -Hint "Instala Node.js 18+ para compilar el frontend."
 $script:Python = Resolve-Python
 
-# Snapshot del arnés vivo → harness_defaults.env (versionado). Se hornea más abajo
-# en backend\.env. Corre ANTES del backup del deploy en Prepare-Publication, así que
-# $DeployRoot todavía apunta al deploy con la config actual del operador. Si no hay
-# deploy vivo (build standalone / otra máquina) se conserva el harness_defaults.env
-# versionado existente.
-if ($DeployRoot -and (Test-Path $DeployRoot)) {
-    Write-Step "Sincronizando harness_defaults.env con el arnes vivo del deploy"
-    if (Test-Path $exportHarnessScript) {
-        Invoke-BuildPython -PythonArgs @(
-            $exportHarnessScript,
-            "--deploy-root", $DeployRoot,
-            "--out", $harnessDefaultsFile
-        )
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "No se pudo refrescar harness_defaults.env; se usara el versionado existente."
-        } else {
-            Write-OK "harness_defaults.env sincronizado con el arnes vivo"
-        }
-    } else {
-        Write-Warn "export_harness_defaults.py no encontrado; se usara harness_defaults.env versionado."
-    }
-}
+# NOTA: el snapshot de harness_defaults.env se hace mas abajo, DESPUES de crear el
+# venv de PyInstaller (que tiene python-dotenv). Se siembra desde la config EFECTIVA
+# del backend DEV de este checkout (start_dashboard.bat: backend\.env + defaults de
+# codigo), NO del deploy anterior. Motivo: el operador espera que el deploy sea una
+# foto fiel de lo que corre en dev; fotografiar --deploy-root reflejaba el deploy
+# previo y dejaba drift. -DeployRoot se sigue usando para backup/target del deploy.
 
 Write-Step "Compilando frontend"
 Push-Location $frontendDir
@@ -506,6 +512,24 @@ if (-not (Test-Path $venvPython)) {
 & $venvPython -m pip install --upgrade pip
 & $venvPython -m pip install -r (Join-Path $backendDir "requirements.txt") pyinstaller
 Write-OK "Entorno PyInstaller listo"
+
+# Snapshot del arnes -> harness_defaults.env (versionado), FIEL a la config
+# EFECTIVA del backend DEV de este checkout (el que el operador levanta con
+# start_dashboard.bat: backend\.env + defaults de codigo). Se siembra desde la
+# config viva del dev (--seed-registry-defaults) con el venv de build (tiene
+# python-dotenv). Reemplaza el snapshot viejo que fotografiaba el deploy anterior
+# (--deploy-root). El snapshot filtra a FLAG_REGISTRY: nunca hornea credenciales.
+if (Test-Path $exportHarnessScript) {
+    Write-Step "Snapshot del arnes: harness_defaults.env = config efectiva del dev (start_dashboard)"
+    & $venvPython $exportHarnessScript "--seed-registry-defaults" "--out" $harnessDefaultsFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "No se pudo refrescar harness_defaults.env desde el dev; se usara el versionado existente."
+    } else {
+        Write-OK "harness_defaults.env sincronizado con la config efectiva del dev"
+    }
+} else {
+    Write-Warn "export_harness_defaults.py no encontrado; se usara harness_defaults.env versionado."
+}
 
 Write-Step "Congelando backend con PyInstaller"
 $pyDist = Join-Path $buildRoot "pyinstaller-dist"
@@ -696,6 +720,49 @@ $manifest = [ordered]@{
 Write-Utf8NoBom -Path (Join-Path $releaseDir "release-manifest.json") -Value ($manifest | ConvertTo-Json -Depth 5)
 Write-OK "Metadata generada"
 
+# Verificacion DURA anti-version-vieja: si algo no coincide, ABORTAMOS (no se
+# publica un release stale). Dos chequeos:
+#   1) El release refleja el HEAD actual (source_commit no vacio y == HEAD).
+#   2) index.html no apunta a ningun bundle inexistente (build congelado).
+Write-Step "Verificacion dura anti-version-vieja"
+
+$headNow = ""
+try { $headNow = (git -C $appRoot rev-parse --short HEAD).Trim() } catch { $headNow = "" }
+if (-not $gitSha) {
+    throw "El release quedo sin source_commit (git no disponible al generar la metadata). No se puede garantizar que el paquete sea fresco. Abortando."
+}
+if ($headNow -and ($gitSha -ne $headNow)) {
+    throw "source_commit del release ($gitSha) != HEAD actual ($headNow). El release no refleja el codigo actual. Abortando."
+}
+
+$releaseIndex = Join-Path $releaseFrontendDir "dist\index.html"
+if (-not (Test-Path -LiteralPath $releaseIndex)) {
+    throw "El release no contiene frontend\dist\index.html. Abortando."
+}
+$indexHtml = Get-Content -LiteralPath $releaseIndex -Raw
+$assetMatches = [regex]::Matches($indexHtml, '(?:src|href)\s*=\s*["'']([^"'']+)["'']')
+$assetRefs = @()
+foreach ($match in $assetMatches) {
+    $ref = $match.Groups[1].Value
+    if ($ref -match 'assets/') { $assetRefs += $ref }
+}
+if ($assetRefs.Count -eq 0) {
+    throw "index.html del release no referencia ningun bundle en assets/. Build sospechoso. Abortando."
+}
+$distRoot = Join-Path $releaseFrontendDir "dist"
+$missingRefs = @()
+foreach ($ref in $assetRefs) {
+    $clean = (($ref -split '\?')[0] -split '#')[0]
+    $relPath = ($clean.TrimStart('/')) -replace '/', '\'
+    $candidate = Join-Path $distRoot $relPath
+    if (-not (Test-Path -LiteralPath $candidate)) { $missingRefs += $ref }
+}
+if ($missingRefs.Count -gt 0) {
+    $missingList = $missingRefs -join ", "
+    throw "index.html referencia bundles que NO existen en el release (build congelado / version vieja): $missingList. Abortando."
+}
+Write-OK "Release fresco verificado: source_commit=$gitSha (== HEAD), index.html apunta solo a bundles existentes"
+
 Write-Step "Validando limpieza del payload"
 Assert-CleanReleasePayload -Root $releaseDir
 Write-OK "Payload sin documentacion interna"
@@ -771,6 +838,7 @@ if ((Test-Path $installerPath) -and (-not $SkipInstaller)) {
 
 Write-Host ""
 Write-Host "Release generado correctamente." -ForegroundColor Green
+Write-Host ("Version: {0}  Commit: {1}  Fecha: {2}" -f $Version, $gitSha, $manifest.generated_at) -ForegroundColor Green
 Write-Host "Carpeta: $releaseDir" -ForegroundColor Green
 if (-not $SkipZip) {
     Write-Host "ZIP    : $zipPath" -ForegroundColor Green

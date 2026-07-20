@@ -4,6 +4,7 @@ import LoadErrorState from "./LoadErrorState";
 import type { RemoteGroup } from "./commandPaletteData";
 import { NAV_COMMANDS, fuzzyScore, mergeDeepResults } from "./commandPaletteData";
 import type { Command } from "./commandPaletteData";
+import { useOnboardingStore } from "../store/onboardingStore";
 import styles from "./CommandPalette.module.css";
 
 interface Props {
@@ -91,6 +92,14 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
         run: () => onNavigate(nc.path),
       })),
     );
+    // Plan 151 F4b: segundo punto de entrada al tour desde la paleta (reuso 129).
+    commands.push({
+      id: "nav-help-tour",
+      kind: "nav" as const,
+      icon: "❓",
+      label: "Ver tour de bienvenida",
+      run: () => useOnboardingStore.getState().requestOpenTour(),
+    });
     for (const t of tickets) {
       commands.push({
         id: `ticket-${t.id}`,

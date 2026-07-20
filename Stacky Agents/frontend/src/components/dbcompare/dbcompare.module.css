@@ -673,3 +673,83 @@
 .runCardActive {
   border-color: var(--dbc-info);
 }
+
+/* ── Plan 157 — Wizard de ambientes, banner de credenciales y Panel de Migración.
+   Sólo tokens var(); CERO hex nuevos (ratchet uiDebt, DoD serie 124/138). ── */
+.credentialBanner {
+  background: var(--bg-elev);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  margin: 0.6rem 0;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.wizardModes {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.wizardTextarea {
+  width: 100%;
+  min-height: 4rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.connectionOption {
+  display: block;
+  padding: 0.3rem 0;
+  color: var(--text-muted);
+}
+
+.wizardActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.emptyCta {
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.nudge {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.migrationPanel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem;
+  margin-top: 1rem;
+}
+
+.migrationRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border-muted);
+  flex-wrap: wrap;
+}
+
+.migrationRowActions {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}

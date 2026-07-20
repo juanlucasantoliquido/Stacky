@@ -52,6 +52,50 @@ _NO_LOG_BODY_PATHS: frozenset[str] = frozenset({"/api/logs/frontend"})
 _SKIP_LOG_PATHS: frozenset[str] = frozenset({"/api/health"})
 
 
+def _is_test_mode() -> bool:
+    """Plan 154 F5.ii — señal única de pytest (tests/conftest.py la setea)."""
+    return os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+
+
+def _startup_purge_only(logger) -> None:
+    """Plan 154 F5.ii — variante SIN egress de la parte incidental de _startup_sync.
+
+    Bajo pytest no queremos el sync de red real (egress a la org ADO productiva),
+    pero SÍ la purga LOCAL de tickets ajenos al proyecto (borra filas en la DB;
+    cero red). Tests que comparten la DB in-memory dependían de esta limpieza que
+    _startup_sync hacía como efecto colateral antes del gate de test-mode. Solo lee
+    config/contexto local y borra filas; nunca abre un socket.
+    """
+    try:
+        active = get_active_project()
+        tracker: dict = {}
+        if active:
+            cfg = get_project_config(active) or {}
+            tracker = cfg.get("issue_tracker") or {}
+        active_ctx = None
+        if active:
+            try:
+                from services.project_context import resolve_project_context
+
+                active_ctx = resolve_project_context(project_name=active)
+            except Exception:
+                active_ctx = None
+        target_project = (
+            (active_ctx.tracker_project if active_ctx else None)
+            or tracker.get("project")
+            or config.ADO_PROJECT
+            or "Strategist_Pacifico"
+        ).strip()
+        purged = purge_non_project_tickets(target_project)
+        if purged:
+            logger.info(
+                "purgados %d tickets ajenos al proyecto %s (test-mode, sin egress)",
+                purged, target_project,
+            )
+    except Exception:
+        logger.debug("purga test-mode omitida", exc_info=True)
+
+
 def _startup_sync(logger) -> None:
     """
     Sincroniza los tickets del proyecto activo al arrancar.
@@ -177,6 +221,43 @@ def _startup_sync(logger) -> None:
                 logger.exception("sync ADO error inesperado en arranque")
 
 
+def _plan158_maybe_backfill_claude_model(logger) -> None:
+    """Plan 158 F6 — corre backfill_claude_model_key() una sola vez (marker file).
+
+    Corre SÍNCRONO dentro de create_app(), acotado a _BACKFILL_MAX_ROWS=20000
+    filas (segundos, no minutos). Deliberadamente NO usa thread daemon: gotcha
+    conocido de crashes nativos daemon-threads vs SQLAlchemy teardown (Plan 146).
+    Nunca rompe el arranque: cualquier excepción se loguea y se sigue. Con la
+    flag OFF, no hace nada. Bajo pytest (STACKY_TEST_MODE — v2/C4, patrón
+    idéntico al gate del daemon Plan 146 en app.py:524-530) tampoco hace nada:
+    los tests que invocan create_app() no deben escanear la DB ni escribir
+    marker files.
+    """
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
+        return
+    if not getattr(config, "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED", True):
+        return
+    try:
+        # v2 (C4): app.py NO importa datetime a nivel módulo (grep verificado,
+        # 0 hits) — import local determinista, NO agregar import top-level.
+        from datetime import datetime as _dt
+
+        from runtime_paths import data_dir
+        marker = data_dir() / "plan158_claude_model_backfill.done"
+        if marker.exists():
+            return
+        from services.cost_analytics import backfill_claude_model_key
+        result = backfill_claude_model_key()
+        logger.info(
+            "plan158 backfill claude_code_model->model: scanned=%d updated=%d",
+            result["scanned"], result["updated"],
+        )
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(_dt.utcnow().isoformat(), encoding="utf-8")
+    except Exception:
+        logger.exception("plan158 backfill falló (no crítico, se reintenta en el próximo arranque)")
+
+
 def _log_completion_preflight(logger) -> None:
     """Loguea (y advierte) sobre la salud del cierre automático al arrancar.
 
@@ -242,6 +323,22 @@ def create_app() -> Flask:
 
     init_db()
     install_console_log_handler()
+
+    from services.lifecycle_log import install_shutdown_hook
+    install_shutdown_hook()   # Plan 163 F3 — firmar el shutdown en system_logs
+
+    from services.error_fingerprints import run_boot_scan
+    run_boot_scan()   # Plan 163 F5 — memoria inmunologica activa al arranque (AVISA, no actua)
+
+    # Plan 153 — migracion one-shot de markers legacy al publish_ledger (idempotente, sin red).
+    if os.getenv("STACKY_TEST_MODE", "").strip() not in ("1", "true"):
+        try:
+            from services.publish_ledger import migrate_legacy_markers
+            _mig = migrate_legacy_markers()
+            if _mig.get("migrated_pending") or _mig.get("migrated_posted"):
+                logging.getLogger("stacky.publish_ledger").info("migracion markers legacy: %s", _mig)
+        except Exception:  # noqa: BLE001 — la migracion jamas impide arrancar
+            logging.getLogger("stacky.publish_ledger").warning("migracion markers legacy fallo", exc_info=True)
 
     # ── Bootstrap canonical Stacky/agents ───────────────────────────────────
     # Stacky/agents es la fuente versionada. El bootstrap solo refresca
@@ -401,7 +498,16 @@ def create_app() -> Flask:
     # funcionar: directorio vigilado inexistente (C1) o PAT ausente (C2).
     _log_completion_preflight(logger)
 
-    _startup_sync(logger)
+    if _is_test_mode():
+        # Plan 154 F5.ii — create_app() NO hace sync de red real (egress) bajo pytest,
+        # pero SÍ ejecuta la purga LOCAL de tickets ajenos que _startup_sync hace
+        # incidentalmente: varios tests comparten la DB in-memory y dependen de esa
+        # limpieza entre create_app(). Los llamadores DIRECTOS de _startup_sync
+        # (p.ej. tests de circuit-breaker) siguen ejercitando la función completa.
+        _startup_purge_only(logger)
+    else:
+        _startup_sync(logger)
+        _plan158_maybe_backfill_claude_model(logger)
 
     # ── U2.1 — Hook de avance de pipeline por finalización de ejecución ─────
     try:
@@ -527,7 +633,7 @@ def create_app() -> Flask:
     # test en varios archivos — acumula threads que corren contra engines ya
     # descartados de tests previos y producen un access violation nativo (visto
     # en test_plan105_remote_console_api.py tras Plan 146 F1).
-    _test_mode = os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes")
+    _test_mode = _is_test_mode()
     _ado_edit_learning_on = (not _test_mode) and os.environ.get(
         "STACKY_ADO_EDIT_LEARNING_ENABLED", "true"
     ).strip().lower() in ("1", "true", "on", "yes")
@@ -679,9 +785,22 @@ def create_app() -> Flask:
             ".map": "application/json",
         }
 
+        # index.html es el UNICO archivo del bundle Vite sin hash de contenido
+        # en el nombre (los JS/CSS bajo /assets/ si lo tienen, p.ej.
+        # index-C5JGyli1.js). send_from_directory por default solo agrega
+        # ETag/Last-Modified condicionales, sin Cache-Control: eso permite que
+        # el navegador sirva una copia vieja de index.html desde cache
+        # heuristica, que a su vez referencia bundles hasheados que YA NO
+        # EXISTEN en el deploy nuevo (root cause del sintoma "corri
+        # PrepararPublicacion.bat pero sigo viendo la UI vieja"). Forzamos
+        # no-store para que cada carga pida index.html fresco.
+        def _no_store(response):
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
         @app.get("/")
         def _serve_spa_index():
-            return send_from_directory(dist_path, "index.html")
+            return _no_store(send_from_directory(dist_path, "index.html"))
 
         @app.get("/<path:asset_path>")
         def _serve_spa_asset(asset_path: str):
@@ -696,7 +815,16 @@ def create_app() -> Flask:
                     response.headers["Content-Type"] = forced
                 return response
 
-            return send_from_directory(dist_path, "index.html")
+            return _no_store(send_from_directory(dist_path, "index.html"))
+
+    # Plan 166 F3 — registra el post-hook de auto-publicación de incidencias
+    # (agnóstico de runtime: corre en ticket_status.on_execution_end para
+    # cualquier runtime). No hubo registro previo de register_post_hook en
+    # create_app; este es el primero.
+    from services import ticket_status, incident_autopublish, incident_dev_autocommit
+    incident_autopublish.register(ticket_status.register_post_hook)
+    # Plan 177 F4 — auto-PR del Dev Resolutor (commit+PR de lo que tocó el agente).
+    incident_dev_autocommit.register(ticket_status.register_post_hook)
 
     return app
 

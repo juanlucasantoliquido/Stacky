@@ -9,6 +9,7 @@ Archivo en disco (``data/ui_sections.json``)::
       "version": "1.0",
       "updated_at": "<iso>",
       "sections": {
+      "team":   { "visible": false },
       "pm":     { "visible": true },
       "logs":   { "visible": true },
       "docs":   { "visible": true },
@@ -17,10 +18,12 @@ Archivo en disco (``data/ui_sections.json``)::
     }
 
 Reglas:
-- Solo se persisten secciones **opcionales** (``pm``, ``logs``, ``docs``,
-  ``memory``).
-- Las secciones ``team``, ``tickets`` y ``settings`` son obligatorias y nunca
-  aparecen en el JSON ni pueden togglearse desde la UI.
+- Solo se persisten secciones **opcionales** (``team``, ``pm``, ``logs``,
+  ``docs``, ``memory``).
+- ``team`` (Mi Equipo) es opcional y su default es **oculta** (``visible:
+  false``): la vista índice de la app es Tickets, no el equipo.
+- Las secciones ``tickets`` y ``settings`` son obligatorias y nunca aparecen en
+  el JSON ni pueden togglearse desde la UI.
 - Defensa en profundidad: si alguien edita el JSON a mano e incluye claves
   fuera de ``OPTIONAL_SECTIONS``, son ignoradas al leer.
 """
@@ -35,7 +38,17 @@ from typing import Any
 _log = logging.getLogger("stacky_agents.ui_sections_store")
 
 # Única fuente de verdad de qué secciones se pueden ocultar.
-OPTIONAL_SECTIONS: frozenset[str] = frozenset({"pm", "logs", "docs", "memory"})
+OPTIONAL_SECTIONS: frozenset[str] = frozenset({"team", "pm", "logs", "docs", "memory"})
+
+# Default de visibilidad por sección opcional. La mayoría arranca visible; "team"
+# (Mi Equipo) arranca OCULTA porque la vista índice de la app es Tickets.
+_SECTION_DEFAULTS: dict[str, bool] = {
+    "team": False,
+    "pm": True,
+    "logs": True,
+    "docs": True,
+    "memory": True,
+}
 
 _CONFIG_FILE = Path("data/ui_sections.json")
 
@@ -76,7 +89,8 @@ def _write(data: dict) -> None:
 def get_sections() -> dict[str, dict[str, Any]]:
     """
     Devuelve el estado de visibilidad de todas las secciones opcionales,
-    rellenando defaults (``visible: True``) cuando falten en el archivo.
+    rellenando el default por sección (``_SECTION_DEFAULTS``) cuando falten en el
+    archivo. Casi todas defaultean a ``visible: True``; ``team`` a ``False``.
 
     Solo emite claves dentro de ``OPTIONAL_SECTIONS`` — claves espurias en el
     JSON son ignoradas.
@@ -86,8 +100,9 @@ def get_sections() -> dict[str, dict[str, Any]]:
         raw = {}
     result: dict[str, dict[str, Any]] = {}
     for key in OPTIONAL_SECTIONS:
+        default = _SECTION_DEFAULTS.get(key, True)
         entry = raw.get(key) if isinstance(raw.get(key), dict) else None
-        visible = entry.get("visible", True) if entry else True
+        visible = entry.get("visible", default) if entry else default
         result[key] = {"visible": bool(visible)}
     return result
 

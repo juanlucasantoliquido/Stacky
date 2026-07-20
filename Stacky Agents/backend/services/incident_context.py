@@ -199,6 +199,16 @@ def build_attachments_manifest(incident: dict) -> str:
             if leftover > 0:
                 lines.append(f"[TRUNCADO: quedaron {leftover} bytes sin mostrar]")
 
+    # Plan 166 F2 — texto extraído por visión/OCR de las capturas (best-effort,
+    # ver services/incident_vision.py::enrich_incident_with_ocr).
+    image_files = [f for f in files if f.get("kind") == "image" and f.get("ocr_text")]
+    if image_files:
+        lines.append("")
+        lines.append("--- Texto extraído de las capturas (visión) ---")
+        for f in image_files:
+            lines.append(f"### {f['stored_name']} (texto extraído de la captura)")
+            lines.append(str(f["ocr_text"])[:_INLINE_MAX_PER_FILE])
+
     return "<attachments-manifest>\n" + "\n".join(lines) + "\n</attachments-manifest>"
 
 

@@ -5,7 +5,7 @@
  * paginación y acceso al drawer de detalle (Plan 38 C2).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Executions, type ExecutionHistoryItem } from "../api/endpoints";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
@@ -17,7 +17,12 @@ import { runStatusTone, runStatusLabel } from "../utils/runStatus";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import { formatDuration, formatCostUsd } from "../services/format";
 import { useWorkbench } from "../store/workbench";
-import { readQueryParam } from "../utils/queryParams";
+import { useLocalStorageState } from "../hooks/useLocalStorageState";
+import { parseRoute, serializeRoute } from "../services/routes";
+import {
+  historyFiltersFromQuery, historyFiltersToQuery,
+  omitKeys, HISTORY_FILTER_QUERY_KEYS, resolveMountFilters,
+} from "../services/routeFilters";
 import styles from "./ExecutionHistoryPage.module.css";
 
 // ---------------------------------------------------------------------------
@@ -50,19 +55,62 @@ const STATUSES = ["", "completed", "error", "needs_review", "running", "cancelle
 // Componente principal
 // ---------------------------------------------------------------------------
 
-export default function ExecutionHistoryPage() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [detailId, setDetailId] = useState<number | null>(null);
+export default function ExecutionHistoryPage({ exec }: { exec?: number | null }) {
+  // Plan 165 F2 — los filtros sobreviven F5 y el cambio de tab vía localStorage.
+  const [filters, setFilters] = useLocalStorageState<Filters>("stacky.ui.history.filters", DEFAULT_FILTERS);
+  // Plan 165 F3 — el drawer arranca abierto si la ruta trae exec (deep-link / Slack).
+  const [detailId, setDetailId] = useState<number | null>(exec ?? null);
   const activeProject = useWorkbench((s) => s.activeProject);
 
-  // Plan 129 — deep-link receptor: ?execution=<id> abre el drawer al montar.
+  // Plan 165 F3 (C1) — sincronización con la prop VIVA exec (patrón lastApplied):
+  // reacciona SOLO a cambios de exec (popstate / nav in-app / link de Slack).
+  // Reemplaza al receptor ?execution= roto: routes.ts (vía App) ya parseó
+  // exec/execution y lo pasa como prop. Sin el patrón lastApplied, cerrar el
+  // drawer con route.exec aún seteado lo re-abriría (loop prop->estado).
+  const lastAppliedExec = useRef(exec);
   useEffect(() => {
-    const raw = readQueryParam("execution");
-    if (!raw) return;
-    const id = Number(raw);
-    if (!Number.isFinite(id)) return;
-    setDetailId(id);
-  }, []);
+    if (exec !== lastAppliedExec.current) {
+      lastAppliedExec.current = exec;
+      setDetailId(exec ?? null);
+    }
+  }, [exec]);
+
+  // Plan 165 F3 [A2] — write-back: abrir el drawer por CLICK escribe ?exec=<id>;
+  // cerrarlo lo quita. replaceState con guard (sin entradas de historial).
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    if (current.tab !== "history") return;           // guard: solo montada en /history
+    const next = serializeRoute({ ...current, exec: detailId ?? undefined });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) window.history.replaceState({}, "", next);
+  }, [detailId]);
+
+  // Plan 165 F2 — montaje: precedencia URL > persistido > defaults, merge
+  // anti-drift (C5) y offset 0 (§3.7). Si la URL trae >=1 filtro, esa vista se
+  // reproduce EXACTA (lo persistido se ignora entero — C2).
+  useEffect(() => {
+    const { query } = parseRoute(window.location.pathname, window.location.search);
+    const fromUrl = historyFiltersFromQuery(query);
+    setFilters((persisted) => ({
+      ...resolveMountFilters(DEFAULT_FILTERS, persisted, fromUrl),
+      offset: 0,
+    }));
+  }, []);  // SOLO al montar
+
+  // Plan 165 F2 — reflejo de filtros en el querystring (replaceState: no ensucia
+  // el historial ni serializa offset). parseRoute/serializeRoute preservan exec
+  // y toda query ajena vía ...current.
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    const next = serializeRoute({
+      ...current,
+      query: { ...omitKeys(current.query, HISTORY_FILTER_QUERY_KEYS), ...historyFiltersToQuery(filters) },
+    });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) {
+      window.history.replaceState({}, "", next);
+    }
+  }, [filters]);
 
   const historyQ = useQuery({
     queryKey: ["execution-history", filters, activeProject?.name],

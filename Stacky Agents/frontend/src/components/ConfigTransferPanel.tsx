@@ -5,6 +5,7 @@ import {
   type ConfigBundle,
   type ConfigImportResult,
 } from "../api/endpoints";
+import { credentialsChecklist, skippedNote } from "./transferDevops";
 import { useWorkbench } from "../store/workbench";
 
 type ImportMode = "merge" | "overwrite";
@@ -42,6 +43,17 @@ const btnGhost: React.CSSProperties = {
   background: "transparent",
   border: "1px solid #334155",
 };
+// Plan 190 — checklist de re-credencialización (estilos como consts a nivel de
+// módulo; se referencian con una sola llave para no sumar deuda inline al ratchet).
+const pendingBox: React.CSSProperties = {
+  ...box,
+  borderColor: "#f59e0b",
+  color: "#fcd34d",
+  marginTop: 14,
+};
+const pendingTitle: React.CSSProperties = { fontWeight: 600, marginBottom: 4 };
+const pendingList: React.CSSProperties = { margin: "6px 0 0 18px" };
+const infoLine: React.CSSProperties = { color: "#94a3b8", fontSize: 12, marginTop: 6 };
 
 function isAllProjectsBundle(bundle: ConfigBundle | null): boolean {
   if (!bundle) return false;
@@ -58,6 +70,7 @@ export default function ConfigTransferPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingBundle, setPendingBundle] = useState<ConfigBundle | null>(null);
   const [dryRun, setDryRun] = useState<ConfigImportResult | null>(null);
+  const [importResult, setImportResult] = useState<ConfigImportResult | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("merge");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +130,7 @@ export default function ConfigTransferPanel() {
       setError(null);
       setNotice(null);
       setDryRun(null);
+      setImportResult(null);
       try {
         const text = await file.text();
         const bundle = JSON.parse(text) as ConfigBundle;
@@ -165,6 +179,7 @@ export default function ConfigTransferPanel() {
           ? "Sin cambios: la configuración ya estaba aplicada (idempotente)."
           : `Importación aplicada (${importMode}): ${n} cambio(s) en ${projectCount} proyecto(s).`
       );
+      setImportResult(result);  // Plan 190 — persistir para el checklist de re-credencialización
       reset();
       if (projectName) qc.invalidateQueries({ queryKey: ["config-transfer-events", projectName] });
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -179,6 +194,14 @@ export default function ConfigTransferPanel() {
   const changes = dryRun?.changes ?? [];
   const secretsRequired = dryRun?.secrets_required ?? [];
   const canApply = !!dryRun?.ok && !!pendingBundle;
+  // Plan 190 — checklist de re-credencialización DevOps (post-import).
+  const devopsChecklist = credentialsChecklist(importResult ?? undefined);
+  const devopsSkipped = skippedNote(importResult ?? undefined);
+  const showDevopsChecklist =
+    !!importResult &&
+    (devopsChecklist.pending.length > 0 ||
+      devopsChecklist.neverSet.length > 0 ||
+      devopsSkipped !== null);
 
   return (
     <div>
@@ -188,6 +211,31 @@ export default function ConfigTransferPanel() {
       {error && (
         <div style={{ ...box, borderColor: "#b91c1c", color: "#fca5a5" }} role="alert">
           {error}
+        </div>
+      )}
+
+      {/* Plan 190 — checklist de re-credencialización DevOps tras importar */}
+      {showDevopsChecklist && (
+        <div style={box}>
+          {devopsChecklist.pending.length > 0 && (
+            <div style={pendingBox}>
+              <div style={pendingTitle}>
+                Re-vinculá las contraseñas de estos servidores en DevOps → Servidores:
+              </div>
+              <ul style={pendingList}>
+                {devopsChecklist.pending.map((alias) => (
+                  <li key={alias}>{alias}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {devopsChecklist.neverSet.length > 0 && (
+            <div style={infoLine}>
+              Sin contraseña configurada (igual que en el origen):{" "}
+              {devopsChecklist.neverSet.join(", ")}
+            </div>
+          )}
+          {devopsSkipped && <div style={infoLine}>{devopsSkipped}</div>}
         </div>
       )}
 

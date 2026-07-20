@@ -187,6 +187,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TICKETS_PROVIDER_ENABLED",   # Plan 70 — consumers por puerto TrackerProvider
         "STACKY_PIPELINE_PROVIDER_ENABLED",  # Plan 71 — sub-puerto CIProvider
         "STACKY_PIPELINE_TRIGGER_ENABLED",   # Plan 72 — trigger y monitoreo CI (HITL)
+        "STACKY_CI_RUN_LEDGER_ENABLED",      # Plan 191 — bitácora durable de corridas CI
+        "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
     ),
     "migrador_ado_gitlab": (
@@ -227,6 +229,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS",  # Plan 110 v2.1 — tope del diff del camino solo-local (velocidad, 0=sin límite)
         "STACKY_PR_REVIEW_TIMEOUT_SEC",     # Plan 110 — timeout de la revisión Haiku
         "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 119 — rediseño minimalista del shell DevOps
+        "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",  # Plan 190 — equipaje DevOps en export/import
+        "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
+        "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
+        "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
+        "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -2922,6 +2929,134 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # ON por default por decisión explícita del operador (2026-07-09): idem
         # nota arriba (rompe el default-OFF original conscientemente; curada en
         # _CURATED_DEFAULTS_ON).
+        default=True,
+    ),
+    # ── Plan 190 — Equipaje portable DevOps en export/import de configuración ──
+    FlagSpec(
+        key="STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",
+        type="bool",
+        label="Equipaje DevOps en export/import",
+        description=(
+            "Plan 190 — Incluye servidores DevOps (sin contraseñas — quedan en el "
+            "keyring) y apps del Centro de Despliegues en el export/import de "
+            "configuración, con checklist de re-vinculación de credenciales al "
+            "importar. Default ON: exportar NUNCA incluye secretos e importar NUNCA "
+            "toca el keyring. Con OFF, el catálogo y el comportamiento quedan "
+            "EXACTOS a hoy."
+        ),
+        group="global",
+        env_only=False,
+        # SIN requires: la transferencia de config es GLOBAL, no vive dentro del
+        # panel DevOps (secciones top-level como uiPreferences).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 186 — Lint determinista de pipelines ────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_PIPELINE_LINT_ENABLED",
+        type="bool",
+        label="Lint determinista de pipelines",
+        description=(
+            "Plan 186 — Valida el YAML del pipeline (ADO/GitLab) local y al instante "
+            "(reglas PLxxx), muestra el plan de ejecución estilo terraform-plan y "
+            "sugiere fixes con diff aplicables por click (HITL). Determinista, sin "
+            "red, sin IA. Con OFF el endpoint devuelve 404 y el panel queda idéntico "
+            "a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # vive dentro del panel 87 (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 188 — Del fallo de despliegue a la incidencia ───────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",
+        type="bool",
+        label="Evidencia de fallos de despliegue",
+        description=(
+            "Plan 188 — En un run fallido del Centro de Despliegues, arma el "
+            "paquete de evidencia (resumen + markdown + JSON, sin secretos) y "
+            "abre el modal de incidencias prellenado. Solo-lectura local; crear "
+            "la incidencia sigue siendo decisión del operador (HITL). Con OFF el "
+            "endpoint devuelve 404 y el panel queda idéntico a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # vive dentro del panel 87 (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 189 — Semáforo de rollback y simulacro read-only ────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",
+        type="bool",
+        label="Semáforo de rollback y simulacro",
+        description=(
+            "Plan 189 — Muestra por app y destino si hay rollback disponible (y a "
+            "qué versión) y permite SIMULAR los pasos exactos del rollback SIN "
+            "ejecutar nada. Solo lecturas locales del ledger; el rollback real y "
+            "sus confirmaciones quedan intactos. Con OFF el endpoint devuelve 404 "
+            "y las cards quedan idénticas a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # R4 profundidad-1 (master del panel 87)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 191 — Bitácora durable de corridas CI ──────────────────────────
+    FlagSpec(
+        key="STACKY_CI_RUN_LEDGER_ENABLED",
+        type="bool",
+        label="Bitácora de corridas CI",
+        description=(
+            "Plan 191 — Registra localmente cada pipeline disparado desde Stacky "
+            "(ref, id, resultado) y muestra el historial con estado vivo y "
+            "re-disparo con confirmación. Solo metadata local; sin secretos. "
+            "Con OFF el endpoint /api/ci/runs devuelve 404 y la sección de "
+            "disparo queda idéntica a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_PIPELINE_TRIGGER_ENABLED",  # sin triggers no hay contenido (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 193 — Triage de fallos CI (logs inline enmascarados, read-only) ──
+    FlagSpec(
+        key="STACKY_CI_FAILURE_TRIAGE_ENABLED",
+        type="bool",
+        label="Triage de fallos CI (logs inline)",
+        description=(
+            "Plan 193 — En un pipeline fallido, lista los jobs fallidos y muestra el "
+            "log de cada uno dentro de Stacky (recortado a 200 KB y con tokens "
+            "enmascarados). Solo lectura; el Doctor IA sigue disponible como paso "
+            "siguiente. Con OFF los endpoints devuelven 404 y la sección de disparo "
+            "queda idéntica a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_PIPELINE_TRIGGER_ENABLED",  # la superficie vive en la sección de trigger/monitor (depth-1)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    # ── Plan 198 — Bitácora de applies de ambientes ──────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",
+        type="bool",
+        label="Bitácora de applies de ambientes",
+        description=(
+            "Plan 198 — Registra localmente cada apply de carpetas (local o remoto): "
+            "qué se creó, dónde, con qué fingerprint y resultado — y avisa si la "
+            "DEFINICIÓN del layout cambió desde el último apply. Solo metadata local; "
+            "sin contenido de archivos. Con OFF el endpoint /environments/applies "
+            "devuelve 404 y la sección de Ambientes queda idéntica a hoy."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # R4 profundidad-1 (master del panel 87)
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
     ),
     # ── Plan 74 — Migrador ADO→GitLab ────────────────────────────────────────

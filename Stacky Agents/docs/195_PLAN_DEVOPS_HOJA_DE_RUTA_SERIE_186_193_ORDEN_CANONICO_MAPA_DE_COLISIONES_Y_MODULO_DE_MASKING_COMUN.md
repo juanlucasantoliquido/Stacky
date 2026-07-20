@@ -135,6 +135,7 @@ costó una sesión entera de auditoría.
 | 4 | **189** rollback readiness | Segundo de la pareja C — SOBRE el árbol ya mergeado de 188 (misma sección UI, misma API) | C (deployments) |
 | 5 | **191** bitácora CI | Primero de la pareja `api/ci.py` + `TriggerPipelineSection.tsx` | D (ci) |
 | 6 | **193** triage de fallos CI | Segundo de la pareja D — sus rutas van DESPUÉS de `/runs` de 191 (su propio F0 ya contempla ambos órdenes); importa `secret_masking` | D (ci) |
+| 7 | **198** bitácora de applies de ambientes | Add-on de la serie (cierra la tríada de efectos remotos con registro): toca `api/devops.py` (helper + ruta nueva tras el apply) → grupo B, DESPUÉS del 186; NO usa `secret_masking` (solo rutas relativas del catálogo, ALLOWLIST estricta); reusa la receta de ledger del 191 (`services/ci_run_ledger.py`) en `services/env_apply_ledger.py` | B (devops.py) |
 
 **Paralelismo permitido:** A→B→(C)→(D) es la secuencia segura simple. Si se implementa en paralelo
 por worktrees: A y B pueden convivir; C y D pueden correr en paralelo ENTRE SÍ (archivos disjuntos)
@@ -252,16 +253,17 @@ el de §6 (prefijo + ≥8 chars del set); los planes hermanos lo adoptan al impo
 
 | Ítem | Resultado | Fecha |
 |------|-----------|-------|
-| Gate 0.1 — versión de venv | _pendiente_ | |
-| Gate 0.2 — ratchet_meta (verde/rojo + causa) | _pendiente_ | |
-| Gate 0.3 — tsc baseline | _pendiente_ | |
-| Plan 190 + gates §7 | _pendiente_ | |
-| Plan 186 + gates §7 | _pendiente_ | |
+| Gate 0.1 — versión de venv | VERDE — `.venv` del main-tree = Python 3.13.5 (intérprete canónico; el py3.11 ajeno NO se tocó). `scripts/check_serie_gates.sh` creado (§7bis literal) | 2026-07-18 |
+| Gate 0.2 — ratchet_meta (verde/rojo + causa) | VERDE — 4 passed en `.venv` py3.13.5 (baseline y tras registrar los 4 tests nuevos) | 2026-07-18 |
+| Gate 0.3 — tsc baseline | VERDE — `npx tsc --noEmit` exit 0 (limpio) | 2026-07-18 |
+| Plan 190 + gates §7 | IMPLEMENTADO F0-F3 (commit `453073cc`; módulo común en `07b7358b`) — 22 tests backend + 6 vitest verdes, tsc 0, compileall 0. §7bis: GATE3/GATE4 tienen ruido de baseline (GATE3 lista toda key referenciada 2+ veces; GATE4 marca el duplicado PREEXISTENTE de `test_harness_flags.py` en `run_harness_tests.sh` líneas 22/340) — ninguno introducido por 190/195 | 2026-07-18 |
+| Plan 186 + gates §7 | IMPLEMENTADO F0-F6 (commits `0cf4c0c7` F0, `dc53e513` F1, `f2..` F2, F3/F4/F5-F6) — 59 tests backend (flag/estructura/variables/catalogo/fixes/explain) + 12 vitest puros verdes, tsc 0, compileall 0. **PL012(b) IMPORTA `services.secret_masking.mask_token_values` (criterio canónico prefijo+≥8, NO redefine `TOKEN_VALUE_PREFIXES`)** — KPI-2 intacto. §7bis: GATE1 compileall verde; GATE3/GATE4 solo ruido de baseline (GATE3 lista toda key por categoría+FlagSpec=2x, mi flag idéntica; GATE4 marca el dup PREEXISTENTE `test_harness_flags.py`) — nada introducido por 186. uiDebtRatchet rojo por deuda AJENA; mis archivos nuevos = 0 hex / 0 inline | 2026-07-18 |
 | Plan 188 + gates §7 | _pendiente_ | |
 | Plan 189 + gates §7 | _pendiente_ | |
 | Plan 191 + gates §7 | _pendiente_ | |
-| Plan 193 + gates §7 | _pendiente_ | |
-| KPI-2 — grep TOKEN_VALUE_PREFIXES = solo secret_masking.py | _pendiente_ | |
+| Plan 193 + gates §7 | IMPLEMENTADO F0-F1 (commits `f3cdb35a` F0, `9a936390` F1) — 12 tests backend + 9 vitest verdes, tsc 0 | 2026-07-18 |
+| Plan 198 (add-on) + gates §7 | IMPLEMENTADO F0-F2 (commits `94ad53ef` F0, `aae97c00` F1, `2e8befcd` F2) — bitácora de applies de ambientes: `services/env_apply_ledger.py` (receta 191, otro dominio) + endpoint read-only `/environments/applies` con drift por fingerprint + hook best-effort en las 3 salidas del apply. 11 + 7 tests backend + 6 vitest verdes, tsc 0, GATE1 compileall verde. NO usa `secret_masking` (solo rutas relativas del catálogo; ALLOWLIST estricta `ENTRY_FIELDS`). §7bis: GATE3/GATE4 solo ruido de baseline (mi flag idéntica 2x categoría+FlagSpec; GATE4 el dup PREEXISTENTE `test_harness_flags.py`) — nada introducido por 198. `test_bounds_map_is_frozen` y `test_endpoint_plan_with_alias_gates` rojos por deuda AJENA preexistente (flags int foráneas / barrido default-ON de `REMOTE_TARGET`) | 2026-07-18 |
+| KPI-2 — grep TOKEN_VALUE_PREFIXES = solo secret_masking.py | VERDE — `TOKEN_VALUE_PREFIXES` vive SOLO en `services/secret_masking.py`; el 190 lo IMPORTA (no redefine) | 2026-07-18 |
 | Desvíos del orden (si hubo) + motivo | _pendiente_ | |
 
 ## 9. Riesgos y mitigaciones

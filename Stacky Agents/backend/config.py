@@ -1364,6 +1364,72 @@ class Config:
         os.getenv("STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC", "30")
     )
 
+    # ── Plan 190 — Equipaje portable DevOps en export/import ───────────────────
+    # Incluye servidores DevOps (sin contraseñas — quedan en el keyring) y apps
+    # del Centro de Despliegues en el export/import de configuración. Default ON
+    # (espejo del default=True de la FlagSpec homónima; curada en
+    # _CURATED_DEFAULTS_ON). Exportar NUNCA incluye secretos; importar NUNCA toca
+    # el keyring. Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED: bool = os.getenv(
+        "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 186 — Lint determinista de pipelines ─────────────────────────────
+    # Valida el YAML del pipeline local y al instante (reglas PLxxx), explain-plan
+    # y autofixes HITL. Determinista, sin red, sin IA. Default ON (espejo del
+    # default=True de la FlagSpec homónima; curada en _CURATED_DEFAULTS_ON).
+    # Editable por UI (HarnessFlagsPanel, categoría "DevOps").
+    STACKY_DEVOPS_PIPELINE_LINT_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 188 — Evidencia de fallos de despliegue ──────────────────────────
+    # En un run fallido, arma el paquete de evidencia (resumen + markdown + JSON
+    # sin secretos) y abre el modal de incidencias prellenado. Solo-lectura
+    # local, sin red, sin IA. Default ON (espejo del default=True de la FlagSpec
+    # homónima; curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 189 — Semáforo de rollback y simulacro read-only ─────────────────
+    # Por app×target: ¿hay rollback disponible (y a qué versión)? + simulacro que
+    # muestra los pasos EXACTOS del rollback sin ejecutar nada. Solo lecturas
+    # locales del ledger, sin red, sin IA. Default ON (espejo del default=True de
+    # la FlagSpec homónima; curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 191 — Bitácora durable de corridas CI ────────────────────────────
+    # Registra localmente cada pipeline disparado desde Stacky (ref, id, resultado)
+    # y expone GET /api/ci/runs con estado vivo y re-disparo HITL. Solo metadata
+    # local; sin secretos. Default ON (espejo del default=True de la FlagSpec
+    # homónima; curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_CI_RUN_LEDGER_ENABLED: bool = os.getenv(
+        "STACKY_CI_RUN_LEDGER_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 193 — Triage de fallos CI (logs inline enmascarados, read-only) ──
+    # En un pipeline fallido, expone GET /api/ci/<project>/pipeline/<id>/failed-jobs
+    # y GET /api/ci/<project>/job/<id>/log (tail 200K + masking de tokens). Solo
+    # lectura, sin IA. Default ON (espejo del default=True de la FlagSpec homónima;
+    # curada en _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_CI_FAILURE_TRIAGE_ENABLED: bool = os.getenv(
+        "STACKY_CI_FAILURE_TRIAGE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 198 — Bitácora de applies de ambientes ───────────────────────────
+    # Registra localmente cada apply de carpetas (local o remoto) del layout del
+    # catálogo: qué se creó, dónde, con qué fingerprint y resultado; expone POST
+    # /api/devops/environments/applies (read-only) con drift de layout por
+    # fingerprint. Solo metadata local; sin contenido de archivos. Default ON
+    # (espejo del default=True de la FlagSpec homónima; curada en
+    # _CURATED_DEFAULTS_ON). Editable por UI.
+    STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 74 — Migrador ADO→GitLab seguro e idempotente. Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Migrador ADO → GitLab").
     STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED: bool = os.getenv(

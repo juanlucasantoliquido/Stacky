@@ -1,6 +1,6 @@
 # Plan 198 — DevOps: bitácora de applies de ambientes — historial durable y drift de layout por fingerprint
 
-- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada)
+- **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 → v2 aplicada) — **IMPLEMENTADO F0-F2 2026-07-18** (commits `94ad53ef` F0, `aae97c00` F1, `2e8befcd` F2, branch `impl/devops`; 11+7 tests backend + 6 vitest verdes, tsc 0, GATE1 compileall verde). Cierra la serie DevOps 190/186/188/189/191/193/198. Falta smoke E2E (apply real → aparece en historial; renombrar carpeta del catálogo → badge "layout cambió").
 - **Fecha:** 2026-07-18
 - **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky → criticar-y-mejorar-plan)
 - **Serie:** DevOps (cierra la tríada de efectos remotos con registro: deploys 120 ✓, CI 191 ✓, applies de ambientes ← este; se SUMA a la ruta 195)

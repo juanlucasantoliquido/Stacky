@@ -248,3 +248,181 @@
 @keyframes skeletonPulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.9; } }
 .remediationActions button:focus-visible,
 [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Plan 186 F5 — highlight de línea en el preview YAML (C7). Solo var(), cero hex. */
+.yamlLine { white-space: pre; }
+.lineHighlight { white-space: pre; background: var(--accent); color: var(--bg-base); }
+
+/* Plan 189 — semáforo de rollback + simulacro. Solo var(), cero hex. */
+.rollbackBadgeOk {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+.rollbackBadgeOff {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+.simBanner {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.simStep { margin-bottom: 8px; }
+.simCommand {
+  display: block;
+  margin-top: 2px;
+  padding: 4px 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.simTag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.simActions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ── Plan 191 · Bitácora de corridas CI (historial con estado vivo) ───────── */
+.ciRunsSection { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.ciRunsHeading { margin: 0 0 8px 0; font-size: 0.9rem; color: var(--text-muted); }
+.ciRunsList { display: flex; flex-direction: column; gap: 6px; }
+.ciRunRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.8rem;
+}
+.ciRunLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  color: var(--text);
+}
+.ciRunChip {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.ciRunActions { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
+.ciRunOpen { color: var(--accent-hot); text-decoration: none; font-size: 0.75rem; }
+.ciRunOpen:hover { text-decoration: underline; }
+.ciRunRetrigger {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.ciRunRetrigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.ciRunsEmpty { font-size: 0.8rem; color: var(--text-faint); padding: 4px 0; }
+
+/* ── Plan 193 · Triage de fallos CI (jobs fallidos + log inline enmascarado) ── */
+.ciTriageSection { margin-top: 12px; }
+.ciTriageErr { margin-top: 8px; }
+.ciTriageBtn {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  background: transparent;
+  color: var(--accent-hot);
+  border: 1px solid var(--accent-hot);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.ciTriageBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ciTriageEmpty { font-size: 0.8rem; color: var(--text-faint); padding: 6px 0; }
+.ciTriageList { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ciTriageJob {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-elev);
+  padding: 4px 8px;
+}
+.ciTriageJobSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  list-style: none;
+}
+.ciTriageJobLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  color: var(--text);
+}
+.ciTriageLogWrap { margin-top: 8px; }
+.ciTriageLogBar { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+.ciTriageErrChip {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-hot);
+  color: var(--accent-hot);
+  background: transparent;
+  cursor: pointer;
+}
+.ciTriageDownload {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.ciTriageMuted { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+.ciTriageLog {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--bg-code, var(--bg-elev));
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}

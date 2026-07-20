@@ -158,6 +158,36 @@ def parse_yaml_route():
     return jsonify({"spec": asdict(spec)})
 
 
+@bp.post("/pipeline-lint/validate")
+def pipeline_lint_validate_route():
+    """YAML → LintReport. PURO (el servicio no toca red); known_variables viene de la UI. Plan 186."""
+    if not getattr(_config.config, "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", False):
+        abort(404)  # guard per-request, patrón devops.py:147
+    body = request.get_json(silent=True) or {}
+    source = body.get("source")
+    yaml_str = body.get("yaml") or ""
+    if source not in ("ado", "gitlab") or not yaml_str.strip():
+        return jsonify({"error": "source ('ado'|'gitlab') y yaml son obligatorios"}), 400
+    kv = body.get("known_variables")
+    kv = [str(x) for x in kv] if isinstance(kv, list) else None
+    from services.pipeline_lint import lint_yaml
+    return jsonify(lint_yaml(yaml_str, source, known_variables=kv).to_dict())
+
+
+@bp.post("/pipeline-lint/explain")
+def pipeline_lint_explain_route():
+    """YAML → ExecutionPlan (explain-plan estilo terraform-plan). PURO, sin red. Plan 186."""
+    if not getattr(_config.config, "STACKY_DEVOPS_PIPELINE_LINT_ENABLED", False):
+        abort(404)  # guard per-request, patrón devops.py:147
+    body = request.get_json(silent=True) or {}
+    source = body.get("source")
+    yaml_str = body.get("yaml") or ""
+    if source not in ("ado", "gitlab") or not yaml_str.strip():
+        return jsonify({"error": "source ('ado'|'gitlab') y yaml son obligatorios"}), 400
+    from services.pipeline_lint import explain_plan
+    return jsonify({"plan": explain_plan(yaml_str, source).to_dict()})
+
+
 @bp.post("/publications/materialize")
 def materialize_publication_route():
     """Preset -> dict PipelineSpec. SOLO-LECTURA (no commitea, no dispara). Plan 88."""
@@ -268,6 +298,30 @@ def environment_plan_route():
     return jsonify(result)
 
 
+def _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active, result):
+    """Plan 198 — best-effort: JAMÁS rompe el apply. Registra 1 entry en el ledger
+    (local o remoto, exitoso o fallido). Con la flag OFF es no-op."""
+    if not getattr(_config.config, "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED", False):
+        return
+    try:
+        from services.env_apply_ledger import append_apply
+        is_dict = isinstance(result, dict)
+        append_apply({
+            "root": str(root),
+            "server_alias": server_alias,          # None = local
+            "paths": list(approved),
+            "fingerprint": fingerprint,
+            "sandbox_active": bool(sandbox_active),
+            # shape sin clave 'ok' (apply local/remoto exitoso) ⇒ True; {'ok': False} ⇒ False.
+            "result_ok": bool(result.get("ok", True)) if is_dict else False,
+            "created_count": len(result.get("created", []) or []) if is_dict else 0,
+            "ignored_count": len(result.get("ignored_not_in_layout", []) or []) if is_dict else 0,  # ADICIÓN (:341)
+        })
+    except Exception:  # noqa: BLE001 — best-effort: nunca propaga al apply
+        from services.stacky_logger import logger as stacky_logger
+        stacky_logger.info("env_apply_ledger", "append_failed", root=str(root))
+
+
 @bp.post("/environments/apply")
 def environment_apply_route():
     """Crea SOLO to_create. HITL: confirm=True + fingerprint del plan visto (ADICIÓN).
@@ -305,12 +359,42 @@ def environment_apply_route():
         safe_pairs, _unsafe_pairs = resolve_remote_layout(root, approved)
         result = apply_environment_remote(server_alias, root, safe_pairs, user=current_user())
         if result.get("ok") is False:
+            # Plan 198 — registrar el intento remoto fallido ANTES del early-return.
+            _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active, result)
             return jsonify(result), _map_remote_error_status(result.get("error"))
     else:
         result = apply_environment(root, approved)
     result["ignored_not_in_layout"] = sorted(set(requested) - set(rel_paths))  # C8: visible
     result["sandbox_active"] = sandbox_active  # Plan 107
+    # Plan 198 — camino exitoso (remoto o local): registrar tras fijar ignored_not_in_layout.
+    _record_env_apply(root, server_alias, approved, fingerprint, sandbox_active, result)
     return jsonify(result)
+
+
+@bp.post("/environments/applies")
+def environment_applies_route():
+    """Historial de applies + drift de layout por fingerprint. Read-only. Plan 198.
+    POST porque necesita el contexto del body (mismo helper que /plan y /apply);
+    NO valida _validate_remote_target: lee el ledger LOCAL y solo FILTRA por alias (C2)."""
+    if not getattr(_config.config, "STACKY_DEVOPS_ENVIRONMENTS_ENABLED", False):
+        abort(404)
+    if not getattr(_config.config, "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED", False):
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    ctx, err = _load_env_context(body)      # MISMO helper que /plan y /apply
+    if err:
+        return err
+    root, rel_paths, sandbox_active, server_alias = ctx
+    from services.env_apply_ledger import list_applies, last_fingerprint
+    current_fp = layout_fingerprint(root, rel_paths)      # mismo símbolo que el apply
+    last_fp = last_fingerprint(root, server_alias)
+    return jsonify({
+        "applies": list_applies(root=root, server_alias=server_alias, limit=20),
+        "current_fingerprint": current_fp,
+        "last_applied_fingerprint": last_fp,
+        "layout_drift": (None if last_fp is None else (last_fp != current_fp)),
+        "sandbox_active": sandbox_active,
+    })
 
 
 @bp.post("/preflight/check")

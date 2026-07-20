@@ -64,6 +64,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from runtime_paths import data_dir, projects_dir
+from services.secret_masking import mask_token_values, strip_secret_keys
 
 # ── Constantes de schema ──────────────────────────────────────────────────────
 
@@ -89,6 +90,34 @@ _SECRET_KEYS: frozenset[str] = frozenset(
 )
 
 _EVENTS_FILENAME = "config_transfer_events.jsonl"
+
+
+# ── Plan 190 — Secciones DevOps (aditivas, opcionales; schemaVersion sigue en 1) ─
+
+# Las secciones devops son GLOBALES (stores en data_dir) → viven en el TOP LEVEL
+# del bundle all-projects (como uiPreferences), NUNCA dentro de un proyecto.
+DEVOPS_SECTIONS: tuple[str, ...] = ("devopsServers", "devopsApps")
+
+
+def _devops_transfer_enabled() -> bool:
+    from config import config as _cfg  # import intra-función (evita ciclos en startup)
+    return bool(getattr(_cfg, "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED", False))
+
+
+def available_sections(scope: str = "all") -> tuple[str, ...]:
+    """Catálogo efectivo de secciones exportables.
+
+    Las secciones devops solo existen en scope "all" (bundle all-projects,
+    top-level como uiPreferences) y solo con la flag ON. scope "project"
+    (rutas per-proyecto) devuelve SIEMPRE ALL_SECTIONS sin devops.
+    """
+    if scope == "all" and _devops_transfer_enabled():
+        return ALL_SECTIONS + DEVOPS_SECTIONS
+    return ALL_SECTIONS
+
+
+def _devops_sections_in_bundle(bundle: dict) -> list[str]:
+    return [s for s in DEVOPS_SECTIONS if isinstance(bundle, dict) and s in bundle]
 
 
 # ── Versión de la app ─────────────────────────────────────────────────────────
@@ -298,45 +327,77 @@ def build_export(name: str, sections: list[str] | None = None) -> dict:
     return bundle
 
 
+def _export_devops_servers() -> dict:
+    """Campos públicos del registro 91 + has_password (booleano local). CERO keyring
+    reads para VALORES; has_password ya lo expone list_servers. `notes` sale con
+    masking de prefijos de token (módulo común secret_masking). credentials_manifest =
+    aliases que TENÍAN password al exportar (lista de aliases, JAMÁS el secreto)."""
+    from services import server_registry
+
+    servers = server_registry.list_servers()  # ya viene SIN password y CON has_password
+    for s in servers:
+        s["notes"] = mask_token_values(s.get("notes") or "")
+    manifest = [s["alias"] for s in servers if s.get("has_password")]
+    return {"servers": servers, "credentials_manifest": manifest}
+
+
+def _export_devops_apps() -> dict:
+    """Apps del Centro 120 con scrub de claves secretas en targets (módulo común)."""
+    from services import deploy_store
+
+    apps = deploy_store.list_apps()
+    return {"apps": strip_secret_keys(apps)}
+
+
 def build_all_projects_export(sections: list[str] | None = None) -> dict:
     """Construye un bundle portable con todos los proyectos configurados.
 
     El archivo resultante permite levantar Stacky Agents desde cero: crea los
     proyectos que falten y aplica settings, integraciones, workflows, agentes
     fijados y perfiles de cliente. Los secretos siguen viajando sólo como
-    referencias.
+    referencias. Plan 190: si la flag está ON, incluye también las secciones
+    devops (servidores sin contraseñas + apps de despliegue) como top-level.
     """
     from project_manager import get_active_project, get_all_projects
 
-    requested = list(sections) if sections else list(ALL_SECTIONS)
-    unknown = [s for s in requested if s not in ALL_SECTIONS]
+    catalog = available_sections("all")
+    requested = list(sections) if sections else list(catalog)
+    unknown = [s for s in requested if s not in catalog]
     if unknown:
         raise ConfigTransferError(f"Secciones desconocidas: {unknown}")
 
-    project_sections = [s for s in requested if s != "uiPreferences"]
-    projects: list[dict] = []
-    for cfg in get_all_projects():
-        name = str(cfg.get("name") or "").strip()
-        if not name:
-            continue
-        projects.append(build_export(name, sections=project_sections))
+    # Secciones de proyecto (per-proyecto). uiPreferences y las devops son top-level.
+    project_sections = [s for s in requested if s in ALL_SECTIONS and s != "uiPreferences"]
+    bundle: dict[str, Any] = {}
 
-    bundle: dict[str, Any] = {
-        "projects": projects,
-    }
+    if project_sections:
+        projects: list[dict] = []
+        for cfg in get_all_projects():
+            name = str(cfg.get("name") or "").strip()
+            if not name:
+                continue
+            projects.append(build_export(name, sections=project_sections))
+        bundle["projects"] = projects
+
     if "uiPreferences" in requested:
         bundle["uiPreferences"] = _load_ui_preferences()
+    # Plan 190 — secciones devops (solo con flag ON; available_sections ya la respeta).
+    if "devopsServers" in requested and _devops_transfer_enabled():
+        bundle["devopsServers"] = _export_devops_servers()
+    if "devopsApps" in requested and _devops_transfer_enabled():
+        bundle["devopsApps"] = _export_devops_apps()
 
-    top_sections = ["projects"]
-    if "uiPreferences" in bundle:
-        top_sections.append("uiPreferences")
+    top_sections = [
+        s for s in ("projects", "uiPreferences", "devopsServers", "devopsApps")
+        if s in bundle
+    ]
 
     bundle["meta"] = {
         "schemaVersion": CURRENT_SCHEMA_VERSION,
         "appVersion": _app_version(),
         "scope": "allProjects",
         "activeProject": get_active_project(),
-        "projectCount": len(projects),
+        "projectCount": len(bundle.get("projects") or []),
         "exportedAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "sections": top_sections,
     }
@@ -631,17 +692,24 @@ def apply_import(name: str, bundle: dict, *, mode: str) -> dict:
     overwrite = (mode == "overwrite")
     diff = compute_diff(name, bundle, overwrite=overwrite)
 
+    # Plan 190 (C2) — las secciones devops son GLOBALES: la ruta per-proyecto NUNCA
+    # las aplica; si el bundle las trae, se informan como saltadas.
+    devops_skipped = _devops_sections_in_bundle(bundle)
+
     if mode == "dry-run":
-        return {
+        out = {
             "ok": True,
             "mode": mode,
             "applied": False,
             "changes": diff["changes"],
             "secrets_required": diff["secrets_required"],
         }
+        if devops_skipped:
+            out["skipped_sections"] = devops_skipped
+        return out
 
     if not diff["changes"]:
-        return {
+        out = {
             "ok": True,
             "mode": mode,
             "applied": True,
@@ -649,6 +717,9 @@ def apply_import(name: str, bundle: dict, *, mode: str) -> dict:
             "secrets_required": diff["secrets_required"],
             "idempotent": True,
         }
+        if devops_skipped:
+            out["skipped_sections"] = devops_skipped
+        return out
 
     # Importante: persistimos escribiendo config.json directamente, SIN pasar por
     # los validadores de existencia de project_manager.initialize_project
@@ -726,7 +797,7 @@ def apply_import(name: str, bundle: dict, *, mode: str) -> dict:
     if "uiPreferences" in bundle:
         _apply_ui_preferences(bundle["uiPreferences"] or {}, overwrite=overwrite)
 
-    return {
+    out = {
         "ok": True,
         "mode": mode,
         "applied": True,
@@ -734,11 +805,99 @@ def apply_import(name: str, bundle: dict, *, mode: str) -> dict:
         "secrets_required": diff["secrets_required"],
         "idempotent": False,
     }
+    if devops_skipped:
+        out["skipped_sections"] = devops_skipped
+    return out
 
 
 def is_all_projects_bundle(bundle: dict) -> bool:
     meta = bundle.get("meta") if isinstance(bundle.get("meta"), dict) else {}
     return meta.get("scope") == "allProjects" or isinstance(bundle.get("projects"), list)
+
+
+# ── Plan 190 — Import de secciones DevOps (globales, top-level) ────────────────
+
+def _import_devops_servers(section: dict, *, mode: str) -> dict:
+    """Aplica la sección devopsServers. merge/overwrite upsertean SIN tocar el
+    keyring (upsert_server no lo toca); overwrite además borra los aliases locales
+    AUSENTES del bundle (C1: JAMÁS un alias presente — eso destruiría su password).
+    Los campos derivados (has_password/last_connected_at) NO se aplican."""
+    from services import server_registry
+
+    incoming = [s for s in (section.get("servers") or []) if isinstance(s, dict)]
+    manifest = section.get("credentials_manifest") or []
+    incoming_set = {s.get("alias") for s in incoming if s.get("alias")}
+    local_aliases = {s.get("alias") for s in server_registry.list_servers()}
+    counts = {
+        "add": len([a for a in incoming_set if a not in local_aliases]),
+        "update": len([a for a in incoming_set if a in local_aliases]),
+        "remove_overwrite": len([a for a in local_aliases if a and a not in incoming_set]),
+    }
+    pending: list[str] = []
+    never_set: list[str] = []
+    if mode != "dry-run":
+        for s in incoming:
+            alias = s.get("alias")
+            if not alias:
+                continue
+            server_registry.upsert_server(
+                alias=alias,
+                host=s.get("host") or "",
+                domain=s.get("domain") or "",
+                username=s.get("username") or "",
+                notes=s.get("notes") or "",
+            )
+        if mode == "overwrite":
+            for alias in list(local_aliases):
+                if alias and alias not in incoming_set:
+                    server_registry.delete_server(alias)  # semántica 91 (borra credencial)
+        # credentials_pending/never_set: EN IMPORT TIME contra el keyring local real.
+        for alias in sorted(a for a in incoming_set if a):
+            if not server_registry.has_password(alias):
+                (pending if alias in manifest else never_set).append(alias)
+    return {"counts": counts, "credentials_pending": pending, "credentials_never_set": never_set}
+
+
+def _import_devops_apps(section: dict, *, mode: str) -> dict:
+    """Aplica la sección devopsApps. merge upsertea; overwrite además borra las apps
+    locales ausentes del bundle."""
+    from services import deploy_store
+
+    incoming = [a for a in (section.get("apps") or []) if isinstance(a, dict)]
+    incoming_ids = {a.get("id") for a in incoming if a.get("id")}
+    local_ids = {a.get("id") for a in deploy_store.list_apps()}
+    counts = {
+        "add": len([i for i in incoming_ids if i not in local_ids]),
+        "update": len([i for i in incoming_ids if i in local_ids]),
+        "remove_overwrite": len([i for i in local_ids if i and i not in incoming_ids]),
+    }
+    if mode != "dry-run":
+        for a in incoming:
+            if not a.get("id"):
+                continue
+            deploy_store.upsert_app(a)
+        if mode == "overwrite":
+            for app_id in list(local_ids):
+                if app_id and app_id not in incoming_ids:
+                    deploy_store.delete_app(app_id)
+    return {"counts": counts}
+
+
+def _apply_devops_sections(bundle: dict, *, mode: str) -> dict:
+    """Aplica ambas secciones devops presentes en el bundle. Devuelve conteos +
+    checklist de re-credencialización (aliases sin password local)."""
+    servers_rep = {"counts": {"add": 0, "update": 0, "remove_overwrite": 0},
+                   "credentials_pending": [], "credentials_never_set": []}
+    apps_rep = {"counts": {"add": 0, "update": 0, "remove_overwrite": 0}}
+    if isinstance(bundle.get("devopsServers"), dict):
+        servers_rep = _import_devops_servers(bundle["devopsServers"], mode=mode)
+    if isinstance(bundle.get("devopsApps"), dict):
+        apps_rep = _import_devops_apps(bundle["devopsApps"], mode=mode)
+    return {
+        "counts": {"servers": servers_rep["counts"], "apps": apps_rep["counts"]},
+        "credentials_pending": servers_rep["credentials_pending"],
+        "credentials_never_set": servers_rep["credentials_never_set"],
+    }
 
 
 def apply_all_projects_import(bundle: dict, *, mode: str) -> dict:
@@ -805,8 +964,25 @@ def apply_all_projects_import(bundle: dict, *, mode: str) -> dict:
 
             set_active_project(str(active).upper())
 
-    idempotent = mode != "dry-run" and not all_changes
-    return {
+    # Plan 190 — secciones DevOps (top-level, globales). Flag OFF → se saltean.
+    devops_present = _devops_sections_in_bundle(bundle)
+    skipped_sections: list[str] = []
+    devops_report: dict | None = None
+    devops_structural_change = False
+    if devops_present:
+        if not _devops_transfer_enabled():
+            skipped_sections = list(devops_present)
+        else:
+            devops_report = _apply_devops_sections(bundle, mode=mode)
+            sc = devops_report["counts"]["servers"]
+            ac = devops_report["counts"]["apps"]
+            devops_structural_change = bool(
+                sc["add"] or ac["add"]
+                or (mode == "overwrite" and (sc["remove_overwrite"] or ac["remove_overwrite"]))
+            )
+
+    idempotent = mode != "dry-run" and not all_changes and not devops_structural_change
+    result = {
         "ok": True,
         "mode": mode,
         "applied": mode != "dry-run",
@@ -815,6 +991,30 @@ def apply_all_projects_import(bundle: dict, *, mode: str) -> dict:
         "projects": project_results,
         "idempotent": idempotent,
     }
+    if skipped_sections:
+        result["skipped_sections"] = skipped_sections
+        record_event(
+            action="import-all", project="*", result="skipped-devops",
+            mode=mode, sections=skipped_sections,
+        )
+    if devops_report is not None:
+        if mode == "dry-run":
+            result["devops"] = devops_report["counts"]
+        else:
+            result["devops"] = {
+                "credentials_pending": devops_report["credentials_pending"],
+                "credentials_never_set": devops_report["credentials_never_set"],
+            }
+            record_event(
+                action="import-all", project="*", result="applied-devops", mode=mode,
+                detail={
+                    "servers": devops_report["counts"]["servers"],
+                    "apps": devops_report["counts"]["apps"],
+                    "credentials_pending": devops_report["credentials_pending"],
+                    "credentials_never_set": devops_report["credentials_never_set"],
+                },
+            )
+    return result
 
 
 def _apply_ui_preferences(incoming: dict, *, overwrite: bool) -> None:
@@ -891,6 +1091,8 @@ def list_events(project: str | None = None, limit: int = 100) -> list[dict]:
 
 __all__ = [
     "ALL_SECTIONS",
+    "DEVOPS_SECTIONS",
+    "available_sections",
     "CURRENT_SCHEMA_VERSION",
     "ConfigTransferError",
     "ValidationResult",

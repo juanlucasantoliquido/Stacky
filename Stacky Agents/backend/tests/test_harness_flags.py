@@ -723,6 +723,16 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 192 — Resiliencia de conexión: bool default ON; solo observa y
     # re-fetchea lecturas, ninguna de las 4 excepciones duras aplica. ──
     "STACKY_CONNECTION_RESILIENCE_ENABLED",
+    # ── Plan 190 — Equipaje DevOps en export/import (bool default ON; exportar
+    # NUNCA incluye secretos e importar NUNCA toca el keyring; ninguna de las 4
+    # excepciones duras aplica). ──
+    "STACKY_CONFIG_TRANSFER_DEVOPS_ENABLED",
+    "STACKY_DEVOPS_PIPELINE_LINT_ENABLED",  # Plan 186 — lint determinista de pipelines
+    "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
+    "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
+    "STACKY_CI_RUN_LEDGER_ENABLED",  # Plan 191 — bitácora durable de corridas CI
+    "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
+    "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
 }
 
 

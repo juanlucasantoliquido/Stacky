@@ -589,6 +589,35 @@ HARNESS_TEST_FILES=(
   tests/test_bulk_actions_flag.py
   # — Plan 192 · Resiliencia de conexión —
   tests/test_connection_resilience_flag.py
+  # — Plan 195 · Modulo de masking comun (serie DevOps 186-193) —
+  tests/test_secret_masking.py
+  # — Plan 190 · Equipaje portable DevOps (export/import servers+apps) —
+  tests/test_plan190_transfer_flag.py
+  tests/test_plan190_transfer_devops_sections.py
+  tests/test_plan190_transfer_compat.py
+  # — Plan 186 · Lint determinista de pipelines (PL001-014 + explain-plan + fixes) —
+  tests/test_plan186_lint_flag.py
+  tests/test_plan186_lint_estructura.py
+  tests/test_plan186_lint_variables.py
+  tests/test_plan186_lint_catalogo.py
+  tests/test_plan186_lint_fixes.py
+  tests/test_plan186_explain_plan.py
+  # — Plan 188 · Del fallo de despliegue a la incidencia (evidencia + modal) —
+  tests/test_plan188_evidence_flag.py
+  tests/test_plan188_evidence_builder.py
+  tests/test_plan188_evidence_endpoint.py
+  # — Plan 189 · Semáforo de rollback y simulacro read-only —
+  tests/test_plan189_readiness_flag.py
+  tests/test_plan189_readiness_compute.py
+  tests/test_plan189_simulacro.py
+  # — Plan 191 · Bitácora durable de corridas CI —
+  tests/test_plan191_ci_ledger_flag.py
+  tests/test_plan191_ci_ledger_hook.py
+  # — Plan 193 · Triage de fallos CI (logs inline enmascarados) —
+  tests/test_plan193_ci_triage.py
+  # — Plan 198 · Bitácora de applies de ambientes (ledger + drift + hook) —
+  tests/test_plan198_env_ledger.py
+  tests/test_plan198_env_hook.py
 )
 
 pass=0

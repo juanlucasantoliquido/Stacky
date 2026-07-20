@@ -128,6 +128,24 @@ def trigger_pipeline_route(project: str):
     # si el provider retorna un sha más preciso (del commit real), usarlo como fallback.
     recorded_sha = body.get("sha", "") or result.get("sha", "")
     _record_trigger(provider.name, ref_value, recorded_sha, result["id"])
+
+    # Plan 191 — bitácora durable (best-effort: JAMÁS rompe el trigger)
+    if getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+        try:
+            from services.ci_run_ledger import append_run
+            append_run({
+                "project": project,
+                "tracker_type": provider.name,
+                "ref": ref_value,
+                "sha": recorded_sha,
+                "pipeline_id": result["id"],
+                "web_url": result.get("web_url"),
+                "source": "stacky",
+            })
+        except Exception:  # noqa: BLE001 — el ledger nunca es camino crítico
+            from services.stacky_logger import logger as stacky_logger
+            stacky_logger.info("ci_run_ledger", "append_failed", pipeline_id=str(result.get("id")))
+
     return jsonify(result)
 
 
@@ -184,6 +202,21 @@ def monitor_pipeline_route(project: str, pipeline_id: str):
     try:
         provider = get_ci_provider(project)
         result = provider.monitor_pipeline(pipeline_id)
+
+        # Plan 191 — persistir desenlace (best-effort; JAMÁS rompe el monitor)
+        if getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+            try:
+                status = str((result or {}).get("status") or "").lower()
+                if status in ("success", "failed", "canceled", "skipped"):
+                    from datetime import datetime, timezone
+                    from services.ci_run_ledger import update_run_status
+                    update_run_status(
+                        str(pipeline_id), status,
+                        datetime.now(timezone.utc).isoformat(),
+                    )
+            except Exception:  # noqa: BLE001 — el monitor nunca se degrada por el ledger
+                pass
+
         return jsonify({**result, "tracker_type": provider.name, "source": "ci"})
     except TrackerApiError as exc:
         return jsonify({"error": str(exc), "kind": exc.kind}), exc.status
@@ -191,3 +224,82 @@ def monitor_pipeline_route(project: str, pipeline_id: str):
         return jsonify({"error": str(exc)}), 501
     finally:
         _ACTIVE_POLLS[pipeline_id] = max(0, _ACTIVE_POLLS.get(pipeline_id, 1) - 1)
+
+
+# ---------------------------------------------------------------------------
+# GET /runs — bitácora local de corridas disparadas (Plan 191, read-only)
+# ---------------------------------------------------------------------------
+
+@bp.get("/runs")
+def list_ci_runs_route():
+    """Bitácora local de corridas disparadas. Plan 191. Read-only.
+
+    Ruta final GET /api/ci/runs — 1 segmento, no colisiona con /<project>/trigger
+    (POST 2 seg), /<project>/trigger-preview (GET 2 seg) ni /<project>/pipeline/<id>
+    (GET 3 seg).
+    """
+    if not getattr(_config.config, "STACKY_CI_RUN_LEDGER_ENABLED", False):
+        abort(404)
+    project = request.args.get("project") or None
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except ValueError:
+        return jsonify({"error": "limit inválido"}), 400
+    from services.ci_run_ledger import list_runs
+    return jsonify({"runs": list_runs(project=project, limit=limit)})
+
+
+# ---------------------------------------------------------------------------
+# Plan 193 — Triage de fallos CI (read-only): jobs fallidos + log inline.
+# Expone el puerto 96 (CILogsProvider) por HTTP con cap y masking. Rutas ADITIVAS
+# DESPUÉS de /runs (191). El puerto y sus providers NO se tocan (KPI-3).
+# ---------------------------------------------------------------------------
+
+def _map_ci_logs_error(exc):
+    """Mapeo espejo del patrón de la casa (KPI-4): TrackerConfigError → 400,
+    TrackerApiError → su status (fallback 502). NUNCA un 500 crudo."""
+    from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    if isinstance(exc, TrackerConfigError):
+        return jsonify({"error": str(exc), "kind": "tracker_config"}), 400
+    if isinstance(exc, TrackerApiError):
+        return jsonify({"error": str(exc), "kind": exc.kind}), exc.status or 502
+    raise exc
+
+
+@bp.get("/<project>/pipeline/<pipeline_id>/failed-jobs")
+def ci_failed_jobs_route(project: str, pipeline_id: str):
+    """Jobs fallidos del pipeline (puerto 96, read-only). Plan 193.
+
+    Flag OFF → 404. Errores del tracker mapeados (KPI-4), nunca 500 crudo.
+    """
+    if not getattr(_config.config, "STACKY_CI_FAILURE_TRIAGE_ENABLED", False):
+        abort(404)
+    from services.ci_logs_provider import get_ci_logs_provider  # noqa: PLC0415
+    from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    try:
+        provider = get_ci_logs_provider(project)
+        jobs = provider.list_failed_jobs(str(pipeline_id))
+    except (TrackerConfigError, TrackerApiError) as exc:
+        return _map_ci_logs_error(exc)
+    return jsonify({"jobs": jobs, "provider": provider.name})
+
+
+@bp.get("/<project>/job/<job_id>/log")
+def ci_job_log_route(project: str, job_id: str):
+    """Log de un job, con tail 200K y masking (KPI-1/KPI-2). Plan 193.
+
+    Flag OFF → 404. Errores del tracker mapeados (KPI-4), nunca 500 crudo.
+    """
+    if not getattr(_config.config, "STACKY_CI_FAILURE_TRIAGE_ENABLED", False):
+        abort(404)
+    from services.ci_logs_provider import get_ci_logs_provider  # noqa: PLC0415
+    from services.ci_log_view import tail_and_mask  # noqa: PLC0415
+    from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    try:
+        provider = get_ci_logs_provider(project)
+        text = provider.get_job_log(str(job_id))
+    except (TrackerConfigError, TrackerApiError) as exc:
+        return _map_ci_logs_error(exc)
+    out = tail_and_mask(text)
+    out["provider"] = provider.name  # C5 — consistencia con /failed-jobs
+    return jsonify(out)

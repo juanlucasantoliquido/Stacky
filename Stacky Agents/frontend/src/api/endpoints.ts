@@ -8,8 +8,13 @@ import type {
   CostSummaryResponse,
   BreakdownDimension,
 } from "../lib/costCenterTypes";
-import type { EnvironmentPlanResponse, EnvironmentApplyResponse } from "../devops/environmentModel";
+import type { EnvironmentPlanResponse, EnvironmentApplyResponse, EnvAppliesResponse } from "../devops/environmentModel";
 import type { PreflightCheck } from "../devops/preflightModel";
+// Plan 189 — contrato del semáforo de rollback (type-only, sin ciclo runtime).
+import type {
+  Readiness as DeployRollbackReadiness,
+  SimulatedPlan as DeployRollbackPlan,
+} from "../components/devops/rollbackReadiness";
 import type { DoctorJob } from "../devops/doctorModel";
 import type { DocGraphResponse } from "../docs/docGraphModel";
 export type { DocGraphResponse };
@@ -1842,6 +1847,15 @@ export interface ConfigImportResult {
     changes?: ConfigChange[];
     secrets_required?: ConfigSecretRequired[];
   }>;
+  // Plan 190 — secciones DevOps: checklist de re-credencialización (merge/overwrite)
+  // o conteos (dry-run), y secciones omitidas (flag OFF o ruta per-proyecto).
+  devops?: {
+    credentials_pending?: string[];
+    credentials_never_set?: string[];
+    servers?: { add: number; update: number; remove_overwrite: number };
+    apps?: { add: number; update: number; remove_overwrite: number };
+  };
+  skipped_sections?: string[];
   validation?: ConfigValidation;
   error?: string;
 }
@@ -3500,7 +3514,62 @@ export const CIPipeline = {
     api.get<CIMonitorResponse>(
       `/api/ci/${encodeURIComponent(project)}/pipeline/${encodeURIComponent(pipelineId)}`
     ),
+
+  /** Plan 191 — bitácora local de corridas disparadas (read-only). 404 si flag OFF. */
+  runs: (project: string, limit = 20): Promise<{ runs: CiRunEntry[] }> =>
+    api.get<{ runs: CiRunEntry[] }>(
+      `/api/ci/runs?project=${encodeURIComponent(project)}&limit=${limit}`
+    ),
+
+  /** Plan 193 — jobs fallidos del pipeline (read-only). 404 si flag OFF. */
+  failedJobs: (project: string, pipelineId: string): Promise<FailedJobsResponse> =>
+    api.get<FailedJobsResponse>(
+      `/api/ci/${encodeURIComponent(project)}/pipeline/${encodeURIComponent(pipelineId)}/failed-jobs`
+    ),
+
+  /** Plan 193 — log de un job fallido (tail 200K + tokens enmascarados). 404 si flag OFF. */
+  jobLog: (project: string, jobId: string): Promise<JobLogResponse> =>
+    api.get<JobLogResponse>(
+      `/api/ci/${encodeURIComponent(project)}/job/${encodeURIComponent(jobId)}/log`
+    ),
 };
+
+/** Plan 193 — job fallido devuelto por el puerto CILogsProvider (96). */
+export interface FailedJobEntry {
+  job_id: string;
+  name: string;
+  stage: string;
+  web_url: string | null;
+}
+
+/** Plan 193 — respuesta de /failed-jobs. */
+export interface FailedJobsResponse {
+  jobs: FailedJobEntry[];
+  provider: string;
+}
+
+/** Plan 193 — respuesta de /log: tail acotado (200K) + masking de tokens. */
+export interface JobLogResponse {
+  log: string;
+  truncated: boolean;
+  /** Largo del texto ORIGINAL (pre-mask, pre-tail). C3 — semántica congelada. */
+  chars_total: number;
+  provider: string;
+}
+
+/** Plan 191 — entry de la bitácora de corridas CI (contrato ENTRY_FIELDS del backend). */
+export interface CiRunEntry {
+  project: string;
+  tracker_type: string;
+  ref: string;
+  sha: string | null;
+  pipeline_id: string;
+  web_url: string | null;
+  triggered_at: string;
+  source: string;
+  last_status?: string | null;
+  finished_at?: string | null;
+}
 
 // ── Plan 74 F7 — Migrador ADO → GitLab ──────────────────────────────────────
 
@@ -3718,6 +3787,18 @@ export const DevOps = {
       confirm,
       fingerprint,
       ...(rootOverride ? { root_override: rootOverride, sandbox_ack: sandboxAck === true } : {}),
+      ...(serverAlias ? { server_alias: serverAlias } : {}),
+    }),
+  /**
+   * POST /api/devops/environments/applies — Plan 198. Historial de applies +
+   * drift de layout por fingerprint. Read-only; mismo body de contexto que /plan
+   * (rootOverride + serverAlias opcionales). 404 si alguna flag (environments o
+   * el ledger) está OFF.
+   */
+  environmentApplies: (project: string, rootOverride?: string, serverAlias?: string) =>
+    api.post<EnvAppliesResponse>("/api/devops/environments/applies", {
+      project,
+      ...(rootOverride ? { root_override: rootOverride } : {}),
       ...(serverAlias ? { server_alias: serverAlias } : {}),
     }),
   /** GET /api/devops/detect-stack — Plan 97. Detección opt-in de stack por manifiestos, SOLO-LECTURA. */
@@ -3964,7 +4045,34 @@ export const DevOpsDeployments = {
       "/api/devops/deployments/diagnose",
       { run_id: runId },
     ),
+  // Plan 188 — run fallido → paquete de evidencia (solo-lectura local, sin secretos).
+  evidence: (appId: string, target: string, runId: string) =>
+    api.post<{ evidence: DeployEvidenceBundle }>(
+      "/api/devops/deployments/evidence",
+      { app_id: appId, target, run_id: runId },
+    ),
+  // Plan 189 — semáforo de rollback + simulacro read-only. NUNCA ejecuta nada.
+  // Batch (C3): 1 request resuelve todas las cards → readiness_map["appId|target"].
+  rollbackPreviewBatch: (pairs: Array<{ app_id: string; target: string }>) =>
+    api.post<{ readiness_map: Record<string, DeployRollbackReadiness> }>(
+      "/api/devops/deployments/rollback/preview",
+      { pairs },
+    ),
+  // Single con to_version → devuelve además el `plan` simulado (pasos exactos, sin ejecutar).
+  rollbackPreviewOne: (appId: string, target: string, toVersion?: string) =>
+    api.post<{ readiness: DeployRollbackReadiness; plan: DeployRollbackPlan | null }>(
+      "/api/devops/deployments/rollback/preview",
+      { app_id: appId, target, ...(toVersion ? { to_version: toVersion } : {}) },
+    ),
 };
+
+/** Plan 188 — paquete de evidencia de un run fallido (contrato congelado F2). */
+export interface DeployEvidenceBundle {
+  summary: string;
+  modal_text: string;
+  markdown: string;
+  json_payload: { schema_version: string; kind: string; [k: string]: unknown };
+}
 
 // Plan 105 — Consola remota por servidor
 export interface RemoteConsoleConversation {

@@ -1,7 +1,9 @@
 import { create } from "zustand";
 
-export const OPTIONAL_SECTIONS = ["pm", "logs", "docs", "memory"] as const;
-export const LOCKED_SECTIONS = ["team", "tickets", "settings"] as const;
+// "team" (Mi Equipo) es opcional y ocultable; su default es OCULTA (ver
+// `defaults` abajo) porque la vista índice de la app es Tickets.
+export const OPTIONAL_SECTIONS = ["team", "pm", "logs", "docs", "memory"] as const;
+export const LOCKED_SECTIONS = ["tickets", "settings"] as const;
 
 export type OptionalSection = typeof OPTIONAL_SECTIONS[number];
 export type LockedSection = typeof LOCKED_SECTIONS[number];
@@ -16,6 +18,7 @@ interface UiSectionsState {
 }
 
 const defaults: VisibilityMap = {
+  team: false, // Mi Equipo arranca oculta — la vista índice es Tickets.
   pm: true,
   logs: true,
   docs: true,

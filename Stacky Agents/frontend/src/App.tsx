@@ -236,22 +236,25 @@ export default function App() {
   }, []);
 
   // Si el usuario tenía seleccionado un tab opcional que acaba de ocultarse,
-  // fallback a "team" para no quedar en blanco.
+  // fallback a "tickets" (la vista índice) para no quedar en blanco. Incluye
+  // "team" (Mi Equipo), que ahora es ocultable y default oculto: si el deep-link
+  // "/team" apunta a un equipo oculto, rebota a tickets.
   useEffect(() => {
-    if (tab === "pm" && !sections.pm) selectTab("team");
-    else if (tab === "logs" && !sections.logs) selectTab("team");
-    else if (tab === "docs" && !sections.docs) selectTab("team");
-    else if (tab === "memory" && !sections.memory) selectTab("team");
-    else if (tab === "migrador" && !migradorEnabled) selectTab("team");
-    else if (tab === "devops" && !devopsEnabled) selectTab("team");
-    else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("team");
-    else if (tab === "costcenter" && !costCenterEnabled) selectTab("team");
-    else if (tab === "planes" && !planesEnabled) selectTab("team");
-  }, [tab, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled]);
+    if (tab === "team" && !sections.team) selectTab("tickets");
+    else if (tab === "pm" && !sections.pm) selectTab("tickets");
+    else if (tab === "logs" && !sections.logs) selectTab("tickets");
+    else if (tab === "docs" && !sections.docs) selectTab("tickets");
+    else if (tab === "memory" && !sections.memory) selectTab("tickets");
+    else if (tab === "migrador" && !migradorEnabled) selectTab("tickets");
+    else if (tab === "devops" && !devopsEnabled) selectTab("tickets");
+    else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("tickets");
+    else if (tab === "costcenter" && !costCenterEnabled) selectTab("tickets");
+    else if (tab === "planes" && !planesEnabled) selectTab("tickets");
+  }, [tab, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
-      pm: !!sections.pm, logs: !!sections.logs,
+      team: !!sections.team, pm: !!sections.pm, logs: !!sections.logs,
       docs: !!sections.docs, memory: !!sections.memory,
     },
     migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled,
@@ -270,7 +273,7 @@ export default function App() {
   // remount extra, mismo timing de montaje/desmontaje.
   const pages = (
     <>
-      {tab === "team"     && <TeamScreen />}
+      {tab === "team"     && sections.team && <TeamScreen />}
       {tab === "tickets"  && <TicketBoard />}
       {tab === "review"   && <ReviewInboxPage />}
       {tab === "unblocker" && <UnblockerPage />}
@@ -293,7 +296,7 @@ export default function App() {
     <div className={styles.appRoot}>
       <DemoModeBanner />
       <TopBar
-        onGoToTeam={() => selectTab("team")}
+        onGoToTeam={sections.team ? () => selectTab("team") : undefined}
         shellV2={shellV2Enabled}
         notificationsEnabled={notifEnabled}
         onActivityNavigate={(nav) => selectTab(nav.tab as Tab)}
@@ -318,12 +321,14 @@ export default function App() {
         <>
           {/* Tabs de navegación principal */}
           <nav className={styles.nav} data-tour="nav">
-            <button
-              className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
-              onClick={() => selectTab("team")}
-            >
-              ⚡ Mi Equipo
-            </button>
+            {sections.team && (
+              <button
+                className={`${styles.navTab} ${tab === "team" ? styles.active : ""}`}
+                onClick={() => selectTab("team")}
+              >
+                ⚡ Mi Equipo
+              </button>
+            )}
             <button
               className={`${styles.navTab} ${tab === "tickets" ? styles.active : ""}`}
               onClick={() => selectTab("tickets")}

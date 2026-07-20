@@ -57,8 +57,8 @@ interface NavCommandSpec {
 
 /** Una entrada por cada uno de los 13 tabs de App.tsx:30 (TAB_PATHS, App.tsx:32-46). */
 export const NAV_COMMANDS: NavCommandSpec[] = [
-  { id: "nav-team", path: "/", label: "Ir a Mi Equipo", icon: "⚡" },
-  { id: "nav-tickets", path: "/tickets", label: "Ir a Tickets ADO", icon: "📋" },
+  { id: "nav-tickets", path: "/", label: "Ir a Tickets ADO", icon: "📋" },
+  { id: "nav-team", path: "/team", label: "Ir a Mi Equipo", icon: "⚡" },
   { id: "nav-review", path: "/review", label: "Ir a Revisión", icon: "🧭" },
   { id: "nav-unblocker", path: "/unblocker", label: "Ir a Desatascador", icon: "🧹" },
   { id: "nav-pm", path: "/pm", label: "Ir a PM", icon: "📊" },

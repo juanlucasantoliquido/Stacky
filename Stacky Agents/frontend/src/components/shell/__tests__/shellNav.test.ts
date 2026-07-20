@@ -38,20 +38,31 @@ describe("shellNav — modelo de navegación", () => {
     }
   });
 
-  it("computeVisibleTabs: los 7 base siempre visibles", () => {
+  it("computeVisibleTabs: los 6 base siempre visibles (team NO, es ocultable)", () => {
     const v = computeVisibleTabs({
-      sections: { pm: false, logs: false, docs: false, memory: false },
+      sections: { team: false, pm: false, logs: false, docs: false, memory: false },
       migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
       costCenterEnabled: false, planesEnabled: false,
     });
     expect([...v].sort()).toEqual(
-      ["diagnostics", "history", "review", "settings", "team", "tickets", "unblocker"].sort(),
+      ["diagnostics", "history", "review", "settings", "tickets", "unblocker"].sort(),
     );
+    // team NO aparece si su sección está oculta.
+    expect(v.has("team")).toBe(false);
+  });
+
+  it("computeVisibleTabs: team aparece solo si su sección está visible", () => {
+    const v = computeVisibleTabs({
+      sections: { team: true, pm: false, logs: false, docs: false, memory: false },
+      migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
+      costCenterEnabled: false, planesEnabled: false,
+    });
+    expect(v.has("team")).toBe(true);
   });
 
   it("computeVisibleTabs: opcionales aparecen solo con su gate", () => {
     const v = computeVisibleTabs({
-      sections: { pm: true, logs: true, docs: true, memory: true },
+      sections: { team: true, pm: true, logs: true, docs: true, memory: true },
       migradorEnabled: true, devopsEnabled: true, dbCompareEnabled: true,
       costCenterEnabled: true, planesEnabled: true,
     });
@@ -60,7 +71,7 @@ describe("shellNav — modelo de navegación", () => {
 
   it("orderedVisibleGroups oculta grupos vacíos y filtra tabs ocultos", () => {
     const v = computeVisibleTabs({
-      sections: { pm: false, logs: false, docs: false, memory: false },
+      sections: { team: false, pm: false, logs: false, docs: false, memory: false },
       migradorEnabled: false, devopsEnabled: false, dbCompareEnabled: false,
       costCenterEnabled: false, planesEnabled: false,
     });
@@ -69,6 +80,9 @@ describe("shellNav — modelo de navegación", () => {
     expect(groups.map((g) => g.id)).toEqual(["trabajo", "observabilidad", "configuracion"]);
     const obs = groups.find((g) => g.id === "observabilidad")!;
     expect(obs.tabs.slice().sort()).toEqual(["diagnostics", "history"]);
+    // "trabajo" ya no incluye team (oculto): solo tickets/review/unblocker.
+    const trabajo = groups.find((g) => g.id === "trabajo")!;
+    expect(trabajo.tabs.slice().sort()).toEqual(["review", "tickets", "unblocker"]);
   });
 
   it("parseCollapsed y clave de persistencia", () => {

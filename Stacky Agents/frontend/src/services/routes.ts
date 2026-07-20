@@ -8,8 +8,11 @@ export type Tab =
   | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes";
 
 // MOVIDO desde App.tsx (fuente única). App.tsx pasará a importarlo (F3).
+// La vista índice (raíz "/") es TICKETS: al abrir la app se aterriza en el
+// tablero de tickets. "team" (Mi Equipo) tiene su propio path "/team" y es una
+// vista ocultable (default oculta, ver uiSectionsStore).
 export const TAB_PATHS: Record<Tab, string> = {
-  team: "/", tickets: "/tickets", review: "/review", unblocker: "/unblocker",
+  tickets: "/", team: "/team", review: "/review", unblocker: "/unblocker",
   pm: "/pm", logs: "/logs", settings: "/settings", docs: "/docs",
   memory: "/memory", diagnostics: "/diagnostics", history: "/history",
   migrador: "/migrador", devops: "/devops", dbcompare: "/dbcompare",
@@ -26,7 +29,7 @@ export interface RouteState {
 // Clave canónica primero; alias legacy segundo (Plan de paleta emitía "execution").
 const EXEC_KEYS = ["exec", "execution"] as const;
 
-/** (interno) matchea el 1er segmento contra un tab conocido (nunca "team"/raíz). */
+/** (interno) matchea el 1er segmento contra un tab conocido (nunca "tickets"/raíz). */
 function matchKnownTab(segments: string[]): Tab | undefined {
   if (segments.length === 0) return undefined;
   const first = "/" + segments[0];
@@ -35,9 +38,9 @@ function matchKnownTab(segments: string[]): Tab | undefined {
   return match?.[0];
 }
 
-/** tab desde el primer segmento del path. Vacío o desconocido => "team". */
+/** tab desde el primer segmento del path. Vacío o desconocido => "tickets" (índice). */
 export function tabFromSegments(segments: string[]): Tab {
-  return matchKnownTab(segments) ?? "team";
+  return matchKnownTab(segments) ?? "tickets";
 }
 
 /** Parsea pathname + search a RouteState (normalizado). No toca window.
@@ -47,11 +50,11 @@ export function parseRoute(pathname: string, search: string): RouteState {
   const segments = pathname.split("/").filter(Boolean); // filter(Boolean) descarta
                                                          // "" de doble-slash, raíz y trailing slash
   const known = matchKnownTab(segments);
-  const tab = known ?? "team";
+  const tab = known ?? "tickets";
   // C4: subtab SOLO si el 1er segmento es un tab CONOCIDO. Con tab desconocido
   // ("/nonexistent/foo") o raíz, subtab queda undefined — si no, el round-trip
   // serializaría "/foo" y el re-parse perdería el subtab (rompe la idempotencia §4).
-  // Corolario: "team" (raíz "/") JAMÁS lleva subtab.
+  // Corolario: "tickets" (raíz "/") JAMÁS lleva subtab.
   const subtab = known && segments.length >= 2 ? segments[1] : undefined;
 
   const sp = new URLSearchParams(search);
@@ -84,7 +87,7 @@ function normalizeInitial(s: RouteState): RouteState {
 /** Serializa RouteState a una URL canónica (path + "?" + querystring ordenado). */
 export function serializeRoute(s: RouteState): string {
   const base = TAB_PATHS[s.tab];                          // "/", "/history", "/settings", ...
-  // C4: "team" (base "/") JAMÁS lleva subtab — "/x" colisionaría con el espacio de
+  // C4: "tickets" (base "/") JAMÁS lleva subtab — "/x" colisionaría con el espacio de
   // tabs desconocidos y el round-trip no sería idempotente. Se descarta defensivo.
   const path = s.subtab && base !== "/"
     ? `${base}/${s.subtab}`                               // "/settings/appearance"

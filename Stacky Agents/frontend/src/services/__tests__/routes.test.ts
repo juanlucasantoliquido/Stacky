@@ -14,7 +14,10 @@ describe("parseRoute (Plan 165 F1)", () => {
     expect(parseRoute("/history", "")).toEqual({
       tab: "history", subtab: undefined, exec: undefined, query: {},
     });
-    expect(parseRoute("/", "").tab).toBe("team");
+    // La raíz "/" es la vista índice: TICKETS (antes era "team").
+    expect(parseRoute("/", "").tab).toBe("tickets");
+    // "team" (Mi Equipo) ahora tiene su propio path.
+    expect(parseRoute("/team", "").tab).toBe("team");
   });
 
   it("parse_subtab", () => {
@@ -73,7 +76,7 @@ describe("parseRoute (Plan 165 F1)", () => {
 
   it("parse_tab_desconocido_sin_subtab", () => {
     const r = parseRoute("/nonexistent/foo", "");
-    expect(r.tab).toBe("team");
+    expect(r.tab).toBe("tickets");
     expect(r.subtab).toBeUndefined();
     expect(serializeRoute(r)).toBe("/");
     // idempotencia §4: re-parsear la forma canónica devuelve el mismo estado
@@ -98,7 +101,7 @@ describe("serializeRoute (Plan 165 F1)", () => {
 
 describe("round-trip (Plan 165 F1)", () => {
   it("roundtrip_identidad_canonica", () => {
-    for (const url of ["/history", "/settings/appearance", "/history?exec=9", "/tickets"]) {
+    for (const url of ["/history", "/settings/appearance", "/history?exec=9", "/team"]) {
       expect(serializeRoute(parseRoute(...split(url)))).toBe(url);
     }
   });
@@ -111,9 +114,11 @@ describe("round-trip (Plan 165 F1)", () => {
     }
   });
 
-  it("tabFromSegments_raiz_y_desconocido_team", () => {
-    expect(tabFromSegments([])).toBe("team");
-    expect(tabFromSegments(["nope"])).toBe("team");
+  it("tabFromSegments_raiz_y_desconocido_tickets", () => {
+    // Raíz y desconocido resuelven a la vista índice: TICKETS.
+    expect(tabFromSegments([])).toBe("tickets");
+    expect(tabFromSegments(["nope"])).toBe("tickets");
     expect(tabFromSegments(["history"])).toBe("history");
+    expect(tabFromSegments(["team"])).toBe("team");
   });
 });

@@ -46,7 +46,7 @@ export const SHELL_NAV_GROUPS: ShellNavGroup[] = [
 ];
 
 export interface VisibilityInput {
-  sections: { pm: boolean; logs: boolean; docs: boolean; memory: boolean };
+  sections: { team: boolean; pm: boolean; logs: boolean; docs: boolean; memory: boolean };
   migradorEnabled: boolean;
   devopsEnabled: boolean;
   dbCompareEnabled: boolean;
@@ -55,12 +55,14 @@ export interface VisibilityInput {
 }
 
 // Tabs SIEMPRE visibles (espejo del render actual de App.tsx: no dependen de gate).
+// "team" (Mi Equipo) NO está acá: es ocultable y default oculto (ver sections.team).
 const ALWAYS_VISIBLE: ReadonlyArray<ShellTab> = [
-  "team", "tickets", "review", "unblocker", "settings", "diagnostics", "history",
+  "tickets", "review", "unblocker", "settings", "diagnostics", "history",
 ];
 
 export function computeVisibleTabs(input: VisibilityInput): Set<ShellTab> {
   const v = new Set<ShellTab>(ALWAYS_VISIBLE);
+  if (input.sections.team) v.add("team");
   if (input.sections.pm) v.add("pm");
   if (input.sections.logs) v.add("logs");
   if (input.sections.docs) v.add("docs");

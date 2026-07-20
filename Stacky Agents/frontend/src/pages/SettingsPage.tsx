@@ -36,6 +36,7 @@ import styles from "./SettingsPage.module.css";
 // que routes/tests lo consuman sin arrastrar el árbol JSX de esta página.
 
 const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> = {
+  team: { title: "⚡ Mi Equipo",   hint: "Pantalla del equipo de agentes. Oculta por defecto — activala si la usás." },
   pm:   { title: "📊 PM",          hint: "Tablero de Project Management y métricas de sprint." },
   logs: { title: "🔍 System Logs", hint: "Vista cruda de logs estructurados del backend." },
   docs: { title: "📄 Docs",        hint: "Navegador de documentación indexada del proyecto." },
@@ -43,8 +44,7 @@ const OPTIONAL_LABELS: Record<OptionalSection, { title: string; hint: string }> 
 };
 
 const LOCKED_LABELS: Record<typeof LOCKED_SECTIONS[number], { title: string; hint: string }> = {
-  team:     { title: "⚡ Mi Equipo",      hint: "Pantalla principal de operación." },
-  tickets:  { title: "📋 Tickets ADO",    hint: "Tablero de tickets sincronizados con Azure DevOps." },
+  tickets:  { title: "📋 Tickets ADO",    hint: "Vista índice de la app — no puede ocultarse." },
   settings: { title: "⚙️ Configuración", hint: "Esta misma pantalla — no puede ocultarse." },
 };
 

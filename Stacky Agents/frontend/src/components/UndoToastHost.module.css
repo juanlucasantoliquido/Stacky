@@ -1,0 +1,43 @@
+/* UndoToastHost — Plan 185 F2. Stack fijo de toasts de undo, esquina inferior
+   derecha. Capa 2 (toasts de acción) de la tabla de hosts flotantes 197 §6.11:
+   z-index por debajo del DialogHost del 164 (9700).
+
+   Sin hex (solo rgba) y SIN literales de tiempo (ratchet uiDebt/motionDebt para
+   archivos nuevos = 0): la duración del countdown la inyecta el host por ref
+   (--undo-grace-ms), no un literal en CSS. */
+
+.host {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 4000; /* capa 2 tabla 197 §6.11 (< 9700 del DialogHost 164) */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, 92vw);
+  pointer-events: none; /* el hueco entre toasts no bloquea la UI de abajo */
+}
+
+/* Wrapper BARE: el <Toast inStack> reusado aporta el card (bg/borde/padding);
+   acá solo posicionamos y alojamos la barra de countdown como hermana. */
+.item {
+  pointer-events: auto;
+  position: relative;
+}
+
+.countdownBar {
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: rgba(74, 222, 128, 0.75);
+  transform-origin: left center;
+  animation-name: undoCountdown;
+  animation-duration: var(--undo-grace-ms); /* la setea el host por ref (sin literal) */
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes undoCountdown {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}

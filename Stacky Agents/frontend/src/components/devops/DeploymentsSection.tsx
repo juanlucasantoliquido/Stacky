@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DevOpsDeployments, DevOps, type DeployApp, type DeployOverviewApp } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
-import { useTextPrompt } from '../ui';
+import { useTextPrompt, Dialog } from '../ui';
 import { useWorkbench } from '../../store/workbench';
 import {
   buildTargetCards, rollbackChoices, confirmRequirement, waveOrder, formatDora,
@@ -284,8 +284,13 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
           )}
 
           {planResult && (
-            <div className={styles.modalOverlay} role="dialog" aria-label="Plan de despliegue">
-              <div className={styles.modalBodyWide}>
+            <Dialog
+              open
+              onClose={() => setPlanResult(null)}
+              closeGuard={{ dirty: false, busy }}
+              ariaLabel="Plan de despliegue"
+              size="lg"
+            >
                 <h3>Plan de despliegue — {planResult.version_id}</h3>
                 {planResult.targets.map((t) => (
                   <div key={t.target} className={styles.panelMuted}>
@@ -321,13 +326,17 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                   </button>
                   <button type="button" onClick={() => setPlanResult(null)}>Cancelar</button>
                 </div>
-              </div>
-            </div>
+            </Dialog>
           )}
 
           {rollbackTarget && (
-            <div className={styles.modalOverlay} role="dialog" aria-label="Rollback">
-              <div className={styles.modalBody}>
+            <Dialog
+              open
+              onClose={() => setRollbackTarget(null)}
+              closeGuard={{ dirty: false, busy }}
+              ariaLabel="Rollback"
+              size="md"
+            >
                 <h3>Rollback — {rollbackTarget}</h3>
                 {historyQuery.data && (
                   <ul>
@@ -342,8 +351,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                   </ul>
                 )}
                 <button type="button" onClick={() => setRollbackTarget(null)}>Cerrar</button>
-              </div>
-            </div>
+            </Dialog>
           )}
         </>
       )}

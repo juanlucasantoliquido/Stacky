@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tickets, Agents, FlowConfig, Executions, Memory, Incidents, type StackyMemoryTicketBadge } from "../api/endpoints";
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
@@ -11,7 +10,7 @@ import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
 import TicketGraphView from "../components/TicketGraphView";
 import RecoverExecutionButton from "../components/RecoverExecutionButton";
 import Toast, { type ToastState } from "../components/Toast";
-import { useConfirm } from "../components/ui";
+import { useConfirm, Dialog } from "../components/ui";
 import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
@@ -130,9 +129,16 @@ function RunModal({
     (mode === "suggested" ? !!suggestedLabel : !!selectedFilename) &&
     (!runtimeRequiresVsCodeAgent(agentRuntime) || !!resolvedFilename);
 
-  const modalContent = (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+  const dirty = note.trim().length > 0 || (mode === "custom" && !!selectedFilename);
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      closeGuard={{ dirty, busy: isLaunching }}
+      ariaLabel={mode === "suggested" ? "Run Sugerido" : "Run Personalizado"}
+      size="md"
+    >
         <div className={styles.modalHeader}>
           <span className={styles.modalIcon}>{mode === "suggested" ? "🤖" : "⚙️"}</span>
           <div className={styles.modalTitleBlock}>
@@ -227,11 +233,8 @@ function RunModal({
             {isLaunching ? launchInProgressLabel(agentRuntime) : "▶ Ejecutar"}
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
-
-  return createPortal(modalContent, document.body);
 }
 
 // ─── TicketCard ───────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Agents, ClaudeCli, Executions, Tickets, type ClaudeSessionStatus, type IntentBriefDTO } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
-import { useConfirm } from "./ui";
+import { useConfirm, Dialog } from "./ui";
 import {
   isCliRuntime,
   openConsoleIfCliRuntime,
@@ -17,7 +17,7 @@ import {
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import IntentPreflightModal from "./IntentPreflightModal";
-import { canGenerateEpic, shouldCloseOnBackdrop } from "../services/uiGuards";
+import { canGenerateEpic } from "../services/uiGuards";
 import { clearBriefDraft, readBriefDraft, writeBriefDraft } from "../services/briefDraft";
 import { useModelCatalog } from "../hooks/useModelCatalog";
 import type { AgentRuntime } from "../types";
@@ -420,15 +420,6 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
     }
   }
 
-  function handleBackdrop(e: React.MouseEvent) {
-    if (e.target !== e.currentTarget) return;
-    // dirty: hay brief tipeado o el flujo ya avanzó (running/creating/error).
-    // En "done" no hay nada que perder: el backdrop vuelve a cerrar.
-    const dirty = step !== "done" && (brief.trim().length > 0 || step !== "brief");
-    const busy = isLaunching || step === "running" || step === "creating";
-    if (shouldCloseOnBackdrop({ dirty, busy })) onClose();
-  }
-
   const canGenerate = canGenerateEpic({
     step,
     briefEmpty: brief.trim().length === 0,
@@ -437,8 +428,17 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
   });
 
   return (
-    <div className={styles.overlay} onClick={handleBackdrop}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Nueva Épica desde Brief">
+    <>
+      <Dialog
+        open
+        onClose={onClose}
+        closeGuard={{
+          dirty: step !== "done" && (brief.trim().length > 0 || step !== "brief"),
+          busy: isLaunching || step === "running" || step === "creating",
+        }}
+        ariaLabel="Nueva Épica desde Brief"
+        size="lg"
+      >
         <header className={styles.header}>
           <h2 className={styles.title}>Nueva Épica desde Brief</h2>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">✕</button>
@@ -660,7 +660,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
             </footer>
           </div>
         )}
-      </div>
+      </Dialog>
 
       {showClaudeConfig && (
         <ClaudeCliConfigModal
@@ -684,6 +684,6 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
           }}
         />
       )}
-    </div>
+    </>
   );
 }

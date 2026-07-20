@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DbCompareRepo } from "../../api/endpoints";
 import type { RepoCoverage } from "./repoCoverageTypes";
 import { coverageSummary, severityOrder } from "./repoCoverageLogic";
+import { copyText } from "../../services/copyService";
 import styles from "./dbcompare.module.css";
 
 interface Props {
@@ -99,7 +100,7 @@ export function RepoCoveragePanel({ runId }: Props) {
                       <button
                         type="button"
                         className={styles.repoCoverageCopy}
-                        onClick={() => void navigator.clipboard?.writeText(cand.path)}
+                        onClick={() => void copyText(cand.path)}
                         title="Copiar ruta"
                       >
                         Copiar ruta

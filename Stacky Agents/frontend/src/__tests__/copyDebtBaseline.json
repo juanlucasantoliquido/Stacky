@@ -1,0 +1,15 @@
+{
+  "copyByFile": {
+    "components/ChatDrawer.tsx": 2,
+    "components/CodeIntegrityCard.tsx": 1,
+    "components/DailyStandupModal.tsx": 1,
+    "components/HarnessFlagsPanel.tsx": 1,
+    "components/MermaidDiagram.tsx": 1,
+    "components/QaBrowserRunModal.tsx": 1,
+    "components/dbcompare/SqlViewer.tsx": 1,
+    "components/dbcompare/SummaryHero.tsx": 1,
+    "components/devops/DirTreePreview.tsx": 1,
+    "components/devops/RemediationCard.tsx": 1,
+    "pages/PlansBoardPage.tsx": 1
+  }
+}

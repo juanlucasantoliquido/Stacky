@@ -1,0 +1,45 @@
+/* Plan 192 F3 — banner global de conexión. Capa 1 (banners de página, tabla 197 §6.11):
+   franja superior en el flujo del layout, junto a HealthBanner. Colores SOLO con
+   tokens de theme.css (cero hex). */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 8px 12px 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid currentColor;
+  background: var(--bg-panel);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.down {
+  color: var(--danger);
+}
+
+.recovering {
+  color: var(--warn);
+}
+
+.msg {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.attempt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Announcer persistente (C12): live region invisible pero presente en el DOM. Sin colores. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

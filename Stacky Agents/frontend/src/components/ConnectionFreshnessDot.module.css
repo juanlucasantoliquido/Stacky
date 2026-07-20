@@ -1,0 +1,23 @@
+/* Plan 192 F6 — punto de frescura decorativo en la TopBar. Colores SOLO con
+   tokens de theme.css (cero hex). */
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.ok {
+  color: var(--success);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.bad {
+  color: var(--danger);
+}

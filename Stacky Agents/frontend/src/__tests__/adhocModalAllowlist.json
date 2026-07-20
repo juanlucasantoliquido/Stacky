@@ -1,0 +1,13 @@
+[
+  { "file": "components/ABCompare.tsx", "reason": "Excepción permanente (§8): overlay comparador A/B con foco/teclado propios, no es un diálogo modal." },
+  { "file": "components/CommandPalette.tsx", "reason": "Excepción permanente (§8): paleta de comandos con navegación de teclado propia, no es un diálogo modal." },
+  { "file": "components/CreateChildTaskButton.tsx", "reason": "Excepción permanente (§8): popover anclado al botón, no es un diálogo modal." },
+  { "file": "components/ExecutionDetailDrawer.tsx", "reason": "Excepción permanente (§8): drawer lateral con foco propio, no es un diálogo modal." },
+  { "file": "components/NotificationPanel.tsx", "reason": "Excepción permanente (§8): panel/popover de notificaciones (plan 152), no es un diálogo modal." },
+  { "file": "components/OnboardingTour.tsx", "reason": "Excepción permanente (§8): tour guiado con overlay propio, no es un diálogo modal." },
+  { "file": "components/ProvenanceDrawer.tsx", "reason": "Excepción permanente (§8): drawer lateral con foco propio, no es un diálogo modal." },
+  { "file": "components/RecoverExecutionButton.tsx", "reason": "Excepción permanente (§8): popover/toast anclado al botón, no es un diálogo modal." },
+  { "file": "components/ShortcutsCheatsheet.tsx", "reason": "Excepción permanente (§8): hoja de atajos con overlay propio, no es un diálogo modal." },
+  { "file": "components/TeamManageDrawer.tsx", "reason": "Excepción permanente (§8): drawer lateral con foco propio, no es un diálogo modal." },
+  { "file": "pages/memory/MemoryEditor.tsx", "reason": "Excepción permanente (§8): editor de página con overlay/portal propio, no es un diálogo modal." }
+]

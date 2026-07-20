@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DbCompareDemo } from "../../api/endpoints";
 import type { DbEnvironment } from "./dbcompareTypes";
 import { demoPanelState, type DemoStatus } from "./demoLogic";
+import { useConfirm } from "../ui";
 import styles from "./dbcompare.module.css";
 
 interface Props {
@@ -20,6 +21,7 @@ export function DemoSandboxPanel({ environments, onChanged }: Props) {
   const [visible, setVisible] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const askConfirm = useConfirm();
 
   const refresh = useCallback(async () => {
     try {
@@ -52,10 +54,14 @@ export function DemoSandboxPanel({ environments, onChanged }: Props) {
   };
 
   const handleSeed = () => runAction(() => DbCompareDemo.seed());
-  const handleRemove = () => {
-    if (!window.confirm("¿Quitar los ambientes de demostración? Se borran solo los archivos del sandbox.")) {
-      return;
-    }
+  const handleRemove = async () => {
+    const ok = await askConfirm({
+      title: "Quitar ambientes de demostración",
+      message: "¿Quitar los ambientes de demostración? Se borran solo los archivos del sandbox.",
+      tone: "danger",
+      confirmLabel: "Quitar",
+    });
+    if (!ok) return;
     void runAction(() => DbCompareDemo.remove());
   };
 

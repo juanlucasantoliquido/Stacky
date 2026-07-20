@@ -26,6 +26,7 @@ import {
 import type { AgentRuntime } from "../types";
 import { useModelCatalog } from "../hooks/useModelCatalog";
 import { EMERGENCY_MODEL_CATALOG } from "../services/modelCatalogFallback";
+import { Dialog } from "./ui";
 import styles from "./IncidentResolverModal.module.css";
 
 const QUEUE_POLL_INTERVAL_MS = 3000; // Plan 166 F3/C8 — coherente con el latido único (plan 156)
@@ -359,10 +360,6 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
     }
   }
 
-  function handleBackdrop(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose();
-  }
-
   if (status !== null && !status.enabled) {
     return null;
   }
@@ -370,8 +367,17 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
   const canSubmit = status !== null && canAnalyze(text, files) && validationErrors.length === 0;
 
   return (
-    <div className={styles.overlay} onClick={handleBackdrop}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Resolver incidencia" onPaste={handlePaste}>
+    <Dialog
+      open
+      onClose={onClose}
+      closeGuard={{
+        dirty: text.trim().length > 0 || files.length > 0,
+        busy: step === "running" || step === "publishing",
+      }}
+      ariaLabel="Resolver incidencia"
+      size="lg"
+    >
+      <div className={styles.pasteZone} onPaste={handlePaste}>
         <header className={styles.header}>
           <h2 className={styles.title}>🚑 Resolver incidencia</h2>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">✕</button>
@@ -606,6 +612,6 @@ export default function IncidentResolverModal({ onClose }: IncidentResolverModal
           </div>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

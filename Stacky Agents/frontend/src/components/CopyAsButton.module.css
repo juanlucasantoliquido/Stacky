@@ -1,0 +1,11 @@
+/* Plan 194 F3 — grupo inline "Copiar: …". Solo tokens var(--…) (G7). */
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+.prefix {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm, 12px);
+}

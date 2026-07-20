@@ -86,6 +86,33 @@ def _normalize_default(s):
     return s
 
 
+def _normalize_default_v2(s):
+    """Plan 179 F1 (v2, fix C2) — normalización ENDURECIDA de defaults para modo v2.
+    Reglas EXACTAS, en orden:
+      1. None -> None.
+      2. Strip de capas de paréntesis externos balanceados (reusa _normalize_default,
+         que ya mata `((0))` vs `(0)` — fix C1 del plan 123, intacto).
+      3. GUARDIA DE LITERALES (fix C2): si el resultado contiene comilla simple (')
+         hay un literal de string y CUALQUIER normalización interna podría cambiar
+         su semántica ('a, b' != 'a,b'; 'ABC' != 'Abc'; 'A  B' != 'A B') — se
+         retorna el resultado del paso 2 SIN más cambios (conservador total).
+         Limitación conocida y aceptada (C10): si el default mezcla función y
+         literal (CONVERT(varchar,'x') vs convert(VARCHAR,'x')), el case de la
+         parte función tampoco se foldea — falso positivo residual deliberado.
+      4. Colapsar todo whitespace a UN espacio + strip.
+      5. Eliminar espacios adyacentes a '(' , ')' y ',' — `CONVERT(bit, 0)` == `CONVERT(bit,0)`.
+      6. Case-folding: se retorna .upper() (acá ya no hay literales, por el paso 3).
+    """
+    s = _normalize_default(s)
+    if s is None:
+        return None
+    if "'" in s:
+        return s
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\s*([(),])\s*", r"\1", s)
+    return s.upper()
+
+
 def _normalize_check(s):
     """upper + colapsar espacios múltiples a uno + strip de una capa de paréntesis
     exteriores balanceados."""
@@ -106,7 +133,19 @@ def _change(kind, detail):
     return {"kind": kind, "severity": classify_severity(kind), "detail": detail}
 
 
-def _diff_columns(s_cols, t_cols):
+# Plan 179 §4 (fix C3) — clasificación de subcampos de type_detail para el modo v2:
+#  ESTRUCTURALES: `null` vs valor SÍ cuenta (una identity/precision que aparece ES drift).
+#  SENSIBLES A REFLEXIÓN: comparan SOLO si ambos lados son non-null (asimetría de
+#  permisos de catálogo / versión de driver / dialecto NO es drift confiable).
+_STRUCTURAL_DETAIL_FIELDS = ("base", "precision", "scale", "length", "identity", "computed")
+_REFLECTION_SENSITIVE_FIELDS = ("collation", "timezone")
+
+
+def _all_optional_null(td: dict) -> bool:
+    return all(td.get(k) is None for k in ("precision", "scale", "length", "collation", "timezone", "identity", "computed"))
+
+
+def _diff_columns(s_cols, t_cols, v2_mode: bool = False):
     changes = []
     s_by_name = {c["name"]: c for c in s_cols}
     t_by_name = {c["name"]: c for c in t_cols}
@@ -119,14 +158,32 @@ def _diff_columns(s_cols, t_cols):
         if tc is None:
             changes.append(_change("column_removed", {"column": name, "source": sc, "target": None}))
             continue
-        if str(sc.get("type")) != str(tc.get("type")):
+        # Tipo — Plan 179 F3: en modo v2 (ambos snapshots v2) el criterio es ESTRUCTURAL
+        # (type_detail), no el render del string. `changed_fields` es una clave ADITIVA
+        # del detail: lista ordenada y cerrada de subcampos que difieren; `["type"]` es
+        # la red de seguridad para tipos opacos sin atributos en ambos lados.
+        s_td, t_td = sc.get("type_detail"), tc.get("type_detail")
+        if v2_mode and isinstance(s_td, dict) and isinstance(t_td, dict):
+            changed_fields = [k for k in _STRUCTURAL_DETAIL_FIELDS if s_td.get(k) != t_td.get(k)]
+            changed_fields += [
+                k for k in _REFLECTION_SENSITIVE_FIELDS
+                if s_td.get(k) is not None and t_td.get(k) is not None and s_td.get(k) != t_td.get(k)
+            ]
+            if not changed_fields and _all_optional_null(s_td) and _all_optional_null(t_td) and str(sc.get("type")) != str(tc.get("type")):
+                changed_fields = ["type"]
+            if changed_fields:
+                changes.append(_change("column_type_changed", {
+                    "column": name, "source": sc, "target": tc, "changed_fields": changed_fields,
+                }))
+        elif str(sc.get("type")) != str(tc.get("type")):
             changes.append(_change("column_type_changed", {"column": name, "source": sc, "target": tc}))
         s_null, t_null = bool(sc.get("nullable")), bool(tc.get("nullable"))
         if s_null and not t_null:
             changes.append(_change("column_nullable_relaxed", {"column": name, "source": sc, "target": tc}))
         elif not s_null and t_null:
             changes.append(_change("column_nullable_tightened", {"column": name, "source": sc, "target": tc}))
-        if _normalize_default(sc.get("default")) != _normalize_default(tc.get("default")):
+        norm = _normalize_default_v2 if v2_mode else _normalize_default
+        if norm(sc.get("default")) != norm(tc.get("default")):
             changes.append(_change("column_default_changed", {"column": name, "source": sc, "target": tc}))
         if bool(sc.get("autoincrement")) != bool(tc.get("autoincrement")):
             changes.append(_change("column_autoincrement_changed", {"column": name, "source": sc, "target": tc}))
@@ -194,9 +251,9 @@ def _diff_checks(s_ck, t_ck):
     return _diff_by_signature(s_ck, t_ck, sig, "check_added", "check_removed")
 
 
-def _diff_table(s_table, t_table):
+def _diff_table(s_table, t_table, v2_mode: bool = False):
     changes = []
-    changes += _diff_columns(s_table.get("columns") or [], t_table.get("columns") or [])
+    changes += _diff_columns(s_table.get("columns") or [], t_table.get("columns") or [], v2_mode=v2_mode)
     changes += _diff_pk(s_table.get("primary_key") or {}, t_table.get("primary_key") or {})
     changes += _diff_fks(s_table.get("foreign_keys") or [], t_table.get("foreign_keys") or [])
     changes += _diff_indexes(s_table.get("indexes") or [], t_table.get("indexes") or [])
@@ -289,6 +346,12 @@ def diff_snapshots(source: dict, target: dict) -> dict:
     items: list = []
     objects_unchanged = 0
 
+    # Plan 179 F3 — modo v2 PASIVO por versión: las reglas v2 (type_detail + defaults
+    # endurecidos) se activan SOLO cuando AMBOS snapshots son v2. En cualquier otro
+    # caso (v1/v1, v1/v2, v2/v1) el diff es byte-idéntico a main. No hay flag propia:
+    # la pasividad es por construcción (§3.2 del plan).
+    v2_mode = int(source.get("version") or 1) >= 2 and int(target.get("version") or 1) >= 2
+
     s_schemas = source.get("schemas") or {}
     t_schemas = target.get("schemas") or {}
 
@@ -298,7 +361,10 @@ def diff_snapshots(source: dict, target: dict) -> dict:
 
         s_tables = s_schema.get("tables") or {}
         t_tables = t_schema.get("tables") or {}
-        objects_unchanged += _walk_object_type("table", schema, s_tables, t_tables, items, _diff_table)
+        objects_unchanged += _walk_object_type(
+            "table", schema, s_tables, t_tables, items,
+            lambda s, t: _diff_table(s, t, v2_mode=v2_mode),
+        )
 
         s_views = s_schema.get("views") or {}
         t_views = t_schema.get("views") or {}

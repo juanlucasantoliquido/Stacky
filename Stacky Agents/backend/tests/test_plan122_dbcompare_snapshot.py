@@ -70,6 +70,8 @@ def seeded_env(fake_keyring, tmp_path):
 def test_snapshot_estructura_v1(seeded_env, monkeypatch):
     from services import dbcompare_snapshot as snap
 
+    import config  # Plan 179: este test es el golden del SHAPE v1; se pinea la flag OFF.
+    monkeypatch.setattr(config.config, "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED", False, raising=False)
     monkeypatch.setattr(snap, "data_dir", lambda: seeded_env[1].parent)
     eng, _ = seeded_env
     result = snap.take_snapshot("test-snap", engine=eng)

@@ -26,7 +26,8 @@ from sqlalchemy import inspect
 from runtime_paths import data_dir
 from services import dbcompare_registry
 
-SNAPSHOT_VERSION = 1
+SNAPSHOT_VERSION = 1          # shape v1 (compat: NO tocar — referencia histórica)
+SNAPSHOT_VERSION_V2 = 2       # Plan 179 — superset aditivo con type_detail por columna
 _SNAPSHOTS_DIRNAME = "db_compare/snapshots"
 _MAX_SNAPSHOTS_PER_ALIAS = 20
 _VIEW_DEF_MAX_CHARS = 100_000
@@ -58,17 +59,83 @@ def _next_snapshot_id(alias: str, taken_at: datetime) -> str:
     return f"{base}_{i}"
 
 
-def _reflect_table(insp, tname: str, schema: str) -> dict:
+TYPE_DETAIL_KEYS = ("base", "precision", "scale", "length", "collation", "timezone", "identity", "computed")
+
+
+def _snapshot_v2_enabled() -> bool:
+    import config as _config
+
+    return bool(getattr(_config.config, "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED", False))
+
+
+def _int_or_none(value):
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_sqltext_for_hash(sqltext: str) -> str:
+    import re as _re
+
+    return _re.sub(r"\s+", " ", (sqltext or "")).strip().upper()
+
+
+def derive_type_detail(col: dict) -> dict:
+    """Plan 179 F1 — deriva el subobjeto type_detail v1 (doc 179 §4) desde el dict
+    de columna que devuelve insp.get_columns(). Función PURA: sin red, sin disco.
+    Los subcampos que el dialecto no reporta quedan None — NUNCA se inventan."""
+    col_type = col.get("type")
+    type_str = str(col_type).upper() if col_type is not None else ""
+    base = type_str.split("(")[0].strip()
+
+    tz_attr = getattr(col_type, "timezone", None)
+    identity_raw = col.get("identity")
+    identity = None
+    if isinstance(identity_raw, dict) and identity_raw:
+        identity = {
+            "start": _int_or_none(identity_raw.get("start")),
+            "increment": _int_or_none(identity_raw.get("increment")),
+        }
+    computed_raw = col.get("computed")
+    computed = None
+    if isinstance(computed_raw, dict) and computed_raw:
+        sqltext = computed_raw.get("sqltext")
+        computed = {
+            "persisted": bool(computed_raw.get("persisted") or False),
+            "sqltext_sha256": (
+                hashlib.sha256(_normalize_sqltext_for_hash(str(sqltext)).encode("utf-8")).hexdigest()
+                if sqltext else None
+            ),
+        }
+    return {
+        "base": base,
+        "precision": _int_or_none(getattr(col_type, "precision", None)),
+        "scale": _int_or_none(getattr(col_type, "scale", None)),
+        "length": _int_or_none(getattr(col_type, "length", None)),
+        "collation": (str(getattr(col_type, "collation")) if getattr(col_type, "collation", None) else None),
+        "timezone": (bool(tz_attr) if tz_attr is not None else None),
+        "identity": identity,
+        "computed": computed,
+    }
+
+
+def _reflect_table(insp, tname: str, schema: str, *, v2: bool = False) -> dict:
     columns = []
     for col in insp.get_columns(tname, schema=schema):
         default = col.get("default")
-        columns.append({
+        entry = {
             "name": col["name"],
             "type": str(col["type"]).upper(),
             "nullable": bool(col.get("nullable", True)),
             "default": (str(default) if default is not None else None),
             "autoincrement": bool(col.get("autoincrement") or False),
-        })
+        }
+        if v2:
+            entry["type_detail"] = derive_type_detail(col)
+        columns.append(entry)
 
     pk_raw = insp.get_pk_constraint(tname, schema=schema) or {}
     primary_key = {
@@ -155,6 +222,7 @@ def take_snapshot(alias: str, *, engine=None) -> dict:
         owns_engine = True
 
     try:
+        v2 = _snapshot_v2_enabled()  # Plan 179 — gate de captura (OFF ⇒ byte-idéntico a v1)
         insp = inspect(engine)
         schemas = env.get("schema_filter") or default_schemas(env["engine"], env["username"])
 
@@ -164,7 +232,7 @@ def take_snapshot(alias: str, *, engine=None) -> dict:
         for schema in schemas:
             tables_out = {}
             for tname in insp.get_table_names(schema=schema):
-                table = _reflect_table(insp, tname, schema)
+                table = _reflect_table(insp, tname, schema, v2=v2)
                 tables_out[tname] = table
                 counts_tables += 1
                 counts_columns += len(table["columns"])
@@ -195,8 +263,9 @@ def take_snapshot(alias: str, *, engine=None) -> dict:
             "columns": counts_columns,
         }
 
+        snapshot_version = SNAPSHOT_VERSION_V2 if v2 else SNAPSHOT_VERSION
         body = {
-            "version": SNAPSHOT_VERSION,
+            "version": snapshot_version,
             "alias": alias,
             "engine": env["engine"],
             "schemas": schemas_out,
@@ -208,7 +277,7 @@ def take_snapshot(alias: str, *, engine=None) -> dict:
 
         snapshot_id = _next_snapshot_id(alias, taken_at_dt)  # [FIX C2]
         result = {
-            "version": SNAPSHOT_VERSION,
+            "version": snapshot_version,
             "id": snapshot_id,
             "alias": alias,
             "engine": env["engine"],

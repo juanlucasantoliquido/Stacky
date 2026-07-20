@@ -346,6 +346,16 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED",   # Plan 157
         "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED",  # Plan 157
         "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED",   # Plan 157
+        "STACKY_DB_COMPARE_DEMO_ENABLED",         # Plan 183 — sandbox de demostración
+        "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (tipos exactos)
+        "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",   # Plan 182 — scripts de datos v2 (MERGE idempotente)
+        "STACKY_DB_COMPARE_MASKING_ENABLED",      # Plan 181 — masking de secretos en el data-diff (presentación)
+        "STACKY_DB_COMPARE_RADAR_ENABLED",        # Plan 178 — radar de ambientes (matriz/baseline/tendencia/avisos)
+        "STACKY_DB_COMPARE_WATCH_INTERVAL_MIN",   # Plan 178 — intervalo del vigía de drift
+        "STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY",  # Plan 178 — presupuesto diario del vigía
+        "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",  # Plan 180 — puente diff→repo (índice read-only de scripts ticketeados)
+        "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",    # Plan 180 — globs de scripts del repo (CSV)
+        "STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",  # Plan 180 — cap de archivos escaneados por refresh
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3260,6 +3270,121 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Panel de Migración de BD siempre visible",
         description="Muestra un panel persistente de scripts de paridad + backups por corrida, sin pegar el run_id a mano.",
         group="comparador_bd",
+    ),
+    # ── Plan 183 — Comparador de BD: sandbox de demostración (par sqlite RS-like) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DEMO_ENABLED",
+        type="bool",
+        default=True,  # default ON: nada corre solo (seed/delete son por click), sqlite es stdlib, jamás toca una BD real (curada en _CURATED_DEFAULTS_ON).
+        label="Comparador BD: sandbox de demostración",
+        description=(
+            "Par de ambientes sqlite de ejemplo (test-demo-dev/test-demo-test, prefijo "
+            "reservado al sandbox) con drift RS-like, sembrado y quitado con un click. "
+            "Nada corre solo; jamás toca una BD real. OFF = endpoints 403 y cero UI "
+            "(los ambientes ya sembrados persisten como ambientes normales)."
+        ),
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 179 — Fidelidad Snapshot v2 (tipos exactos + defaults normalizados) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",
+        type="bool",
+        default=True,  # ON: mejora invisible read-only del motor; los snapshots nuevos capturan type_detail. OFF: captura byte-idéntica a v1. El diff es pasivo por versión (usa v2 sii ambos snapshots lo traen).
+        label="Comparador BD: snapshot v2 (fidelidad de tipos)",
+        description="Captura estructurada por columna (precision, scale, length, collation, identity, computed cuando el dialecto los reporta) y diff quirúrgico con defaults normalizados. OFF = snapshots v1 idénticos a antes.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 182 — Scripts de datos v2: MERGE idempotente por dialecto ────────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DATA_MERGE_ENABLED",
+        type="bool",
+        default=True,  # ON: mejora invisible del ARTEFACTO generado (upsert set-based idempotente); nada se ejecuta solo, el operador sigue revisando/ejecutando. OFF = bundle byte-idéntico a v1 (data_insert). Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: scripts de datos v2 (MERGE idempotente)",
+        description="Emite un MERGE/upsert set-based por tabla para filas faltantes + UPDATE con guard anti-no-op NULL-safe; DELETE por PK intacto. Re-ejecutar las piezas DML es seguro y convergente. OFF = scripts v1 (INSERT idempotente por fila).",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 181 — Masking determinista de secretos/PII en el data-diff ───────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_MASKING_ENABLED",
+        type="bool",
+        default=True,  # presentación protegida por default; revelar = 1 click persistido (HITL); ninguna excepción dura aplica. OFF = respuesta del run byte-idéntica a main. Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: masking de secretos en el data-diff",
+        description="Enmascara por default los valores de columnas sensibles (password/token/connection string) en las respuestas de presentación del data-diff; el motor, el disco y los scripts DML del bundle quedan intactos. Revelar una columna es 1 click humano persistido. OFF = respuesta cruda byte-idéntica a v1.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 178 — Radar de ambientes (vigía de drift + matriz N×N + baseline) ──
+    FlagSpec(
+        key="STACKY_DB_COMPARE_RADAR_ENABLED",
+        type="bool",
+        default=True,  # ON: matriz/baseline/tendencia/avisos solo LEEN datos locales; el vigía per-par nace OFF y se enciende con 1 click (aprobación humana explícita — excepción dura 3: credenciales/conectividad a BD del cliente no garantizadas). Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: radar de ambientes",
+        description="Radar continuo (plan 178): matriz N×N de drift por par, baseline pinneado, tendencia y avisos locales. El vigía programado por par se activa con un click en la UI. OFF = todo invisible y el loop de fondo en no-op.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_WATCH_INTERVAL_MIN",
+        type="int",
+        label="Comparador BD: intervalo del vigía (min)",
+        description="Cada cuántos minutos el vigía re-corre snapshot+diff de esquema de cada par vigilado. Default 60.",
+        group="global",
+        # NO default= acá: mismo gotcha que STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC
+        # (Plan 122) — default_is_known() trata cualquier spec.default no-None como
+        # "curado" y exige alta en _CURATED_DEFAULTS_ON, set reservado a promociones
+        # bool=True. El valor real "60" vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=5,
+        max_value=1440,
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY",
+        type="int",
+        label="Comparador BD: presupuesto del vigía (corridas/día)",
+        description="Cap duro de corridas lanzadas por el vigía por día calendario UTC, sumando todos los pares vigilados. Default 48.",
+        group="global",
+        # NO default= acá: mismo gotcha que arriba; el valor real "48" vive en config.py.
+        # max_value=100 y no más (fix C5): el conteo diario se computa desde los runs
+        # retenidos (_MAX_RUNS_KEPT=100, services/dbcompare_runs.py:32) — un presupuesto
+        # mayor a la retención sería incontable y por lo tanto una promesa falsa.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=1,
+        max_value=100,
+    ),
+    # ── Plan 180 — Puente diff→repo: índice de scripts SQL ticketeados ────────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",
+        type="bool",
+        default=True,  # read-only sobre archivos LOCALES del workspace ya configurado; sin credenciales, sin red, sin acciones automáticas => ninguna excepción dura aplica. Sin workspace o sin .sql => no-op inocuo. Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: puente al repo (scripts ticketeados)",
+        description="Indexa (solo lectura) los scripts .sql ticketeados del workspace del proyecto activo y muestra qué ítems del diff ya tienen script candidato. Solo informa: nunca excluye, edita ni ejecuta nada.",
+        group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",
+        type="csv",
+        label="Comparador BD: patrones de scripts del repo (CSV)",
+        description="Globs relativos al workspace_root del proyecto activo donde viven los .sql ticketeados. Default: trunk/BD/**/*.sql,**/BD/**/*.sql (convención del prior art). Patrones absolutos, con ':' o con '..' se ignoran (log).",
+        group="global",
+        # NO default= acá: mismo gotcha que STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC
+        # (Plan 122) — default_is_known() trata cualquier spec.default no-None como
+        # "curado" y ese set es reservado a bools True. El valor real vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",
+        type="int",
+        label="Comparador BD: máx. archivos escaneados por refresh",
+        description="Cap duro de archivos .sql procesados por escaneo del puente al repo; excedente = índice truncado REPORTADO. Default 5000.",
+        group="global",
+        # NO default= acá: mismo gotcha; el valor real "5000" vive en config.py.
+        requires="STACKY_DB_COMPARE_ENABLED",
+        min_value=100,
+        max_value=50000,
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
     # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de

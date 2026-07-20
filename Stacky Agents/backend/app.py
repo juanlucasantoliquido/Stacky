@@ -658,6 +658,34 @@ def create_app() -> Flask:
         ).start()
         logger.info("ado edit learning daemon armed (interval=%ds)", _ado_edit_seconds)
 
+    # ── Plan 178 — Vigía de drift del comparador de BD (radar de ambientes) ──
+    # Mismo patrón que el sweep del plan 117: el thread arranca siempre en
+    # producción y los gates (flags + watches habilitados) se evalúan en CADA
+    # iteración dentro de run_watch_sweep_once() → hot-apply real, sin
+    # restart_required. Bajo pytest NO arranca (guard idéntico al del 117).
+    # Costo con radar ON sin pares vigilados: ~0 (lee un JSON local y duerme).
+    # El vigía JAMÁS escribe en BD: solo create_run() del motor 122/123 (SELECTs
+    # de metadata de esquema). El data-diff (126) queda excluido por diseño.
+    if "pytest" not in _sys.modules:
+        def _dbcompare_watch_sweep_loop() -> None:
+            from services import dbcompare_watch
+
+            while True:
+                try:
+                    launched = dbcompare_watch.run_watch_sweep_once()
+                    if launched:
+                        logger.info("dbcompare watch sweep: %d corridas lanzadas", launched)
+                except Exception:
+                    logger.exception("dbcompare watch sweep daemon falló")
+                time.sleep(60)
+
+        threading.Thread(
+            target=_dbcompare_watch_sweep_loop,
+            name="stacky-dbcompare-watch-daemon",
+            daemon=True,
+        ).start()
+        logger.info("dbcompare watch daemon armed")
+
     # ── Structured logging middleware ─────────────────────────────────────
 
     @app.before_request

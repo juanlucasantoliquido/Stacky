@@ -144,6 +144,64 @@ class Config:
         "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 183 — Comparador de BD: sandbox de demostración (par sqlite RS-like) ──
+    # Default ON: seed/delete son por click (nada corre solo), sqlite es stdlib y
+    # jamás toca una BD real; curada en _CURATED_DEFAULTS_ON (test_harness_flags).
+    STACKY_DB_COMPARE_DEMO_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_DEMO_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 179 — Fidelidad Snapshot v2 (mejora invisible del motor) ────────
+    # Default ON: read-only, sin prerequisitos; captura type_detail por columna.
+    STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 182 — Scripts de datos v2 (MERGE idempotente por dialecto) ──────
+    # Default ON: mejora invisible del artefacto generado; nada corre solo, el
+    # bundle sale byte-idéntico a v1 con la flag OFF. Curada en _CURATED_DEFAULTS_ON.
+    STACKY_DB_COMPARE_DATA_MERGE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_DATA_MERGE_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 181 — Masking determinista de secretos/PII en el data-diff ──────
+    # Default ON: presentación protegida por default; revelar = 1 click persistido
+    # (HITL). No conecta/publica nada, no escribe fuera de data_dir(); ninguna de
+    # las 4 excepciones duras aplica. Curada en _CURATED_DEFAULTS_ON. OFF = respuesta
+    # del run byte-idéntica a main (KPI-2). La exclusión de data_diff de la LISTA de
+    # runs (perímetro) es incondicional, no depende de esta flag.
+    STACKY_DB_COMPARE_MASKING_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_MASKING_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 178 — Radar de ambientes (vigía de drift programado) ──────────
+    # Default ON: la matriz/baseline/tendencia solo leen datos locales; el vigía
+    # per-par nace OFF por par (excepción dura 3) y se enciende con 1 click.
+    STACKY_DB_COMPARE_RADAR_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_RADAR_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_WATCH_INTERVAL_MIN: int = int(
+        os.getenv("STACKY_DB_COMPARE_WATCH_INTERVAL_MIN", "60")
+    )
+    STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY: int = int(
+        os.getenv("STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY", "48")
+    )
+
+    # ── Plan 180 — Puente diff→repo (índice read-only de scripts ticketeados) ──
+    # Default ON: read-only sobre archivos LOCALES del workspace ya configurado;
+    # sin credenciales, sin red, sin acciones automáticas. Sin workspace o sin
+    # .sql => no-op inocuo. GLOBS/MAX_FILES: el default efectivo vive acá (gotcha
+    # Plan 63/81: el spec del registry no lleva default=).
+    STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS: str = os.getenv(
+        "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS", "trunk/BD/**/*.sql,**/BD/**/*.sql"
+    ).strip()
+    STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES: int = int(
+        os.getenv("STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES", "5000")
+    )
+
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (
         "1", "true", "yes",

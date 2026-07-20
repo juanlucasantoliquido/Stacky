@@ -609,6 +609,13 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_LOCAL_INSIGHTS_DIGEST_NARRATIVE_ENABLED",
     "STACKY_DB_COMPARE_ENABLED",
     "STACKY_DB_COMPARE_DATA_DIFF_ENABLED",
+    "STACKY_DB_COMPARE_DEMO_ENABLED",  # Plan 183 — sandbox de demostración
+    "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (default ON, mejora invisible read-only)
+    "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",  # Plan 182 — scripts de datos v2 (MERGE idempotente, default ON, mejora invisible del artefacto)
+    "STACKY_DB_COMPARE_MASKING_ENABLED",  # Plan 181 — masking de secretos en el data-diff (default ON, presentación protegida; revelar = 1 click HITL)
+    "STACKY_DB_COMPARE_RADAR_ENABLED",  # Plan 178 — radar de ambientes (default ON, solo lee datos locales; el vigía per-par nace OFF y se enciende con 1 click)
+    "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",  # Plan 180 — puente diff→repo (default ON, read-only local; sin workspace o sin .sql => no-op inocuo)
+
     "INTENT_PREFLIGHT_ENABLED",
     "INTENT_PREFLIGHT_AUTO_APPROVE",  # min_conf queda en su default 0.8
     "STACKY_TRACE_PROMPT_TEXT_ENABLED",  # nota: persiste texto crudo de prompts en traza local

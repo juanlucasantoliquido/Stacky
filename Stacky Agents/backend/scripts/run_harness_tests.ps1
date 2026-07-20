@@ -507,6 +507,35 @@ $HarnessTestFiles = @(
   "tests/test_knowledge_injection.py"
   "tests/test_knowledge_eval_link.py"
   "tests/test_knowledge_endpoints.py"
+  # — Plan 183 · Sandbox demo comparador BD —
+  "tests/test_plan183_demo_seed.py"
+  "tests/test_plan183_demo_lifecycle.py"
+  "tests/test_plan183_demo_api.py"
+  "tests/test_plan183_demo_e2e.py"
+  # — Plan 179 · Fidelidad snapshot v2 (tipos exactos + diff quirúrgico) —
+  "tests/test_plan179_snapshot_v2.py"
+  "tests/test_plan179_diff_v2.py"
+  # — Plan 182 · Scripts de datos v2 (MERGE idempotente por dialecto) —
+  "tests/test_plan182_data_merge_emitters.py"
+  "tests/test_plan182_data_merge_bundle.py"
+  "tests/test_plan182_data_merge_e2e_sqlite.py"
+  # — Plan 181 · Masking determinista de secretos en el data-diff (presentación) —
+  "tests/test_plan181_masking_core.py"
+  "tests/test_plan181_prefs.py"
+  "tests/test_plan181_response.py"
+  "tests/test_plan181_api.py"
+  # — Plan 178 · Radar de ambientes (vigía de drift + matriz + baseline) —
+  "tests/test_plan178_flags.py"
+  "tests/test_plan178_watch_store.py"
+  "tests/test_plan178_sweep.py"
+  "tests/test_plan178_events.py"
+  "tests/test_plan178_baseline.py"
+  "tests/test_plan178_api.py"
+  # — Plan 180 · Puente diff→repo (índice read-only de scripts SQL ticketeados) —
+  "tests/test_plan180_extract.py"
+  "tests/test_plan180_scanner.py"
+  "tests/test_plan180_coverage.py"
+  "tests/test_plan180_api.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -5,6 +5,8 @@ import { EMPTY_FILTERS, filterDiffItems, type DiffFilters } from "./filterLogic"
 import { buildSnapshotCounts } from "./snapshotCounts";
 import { EnvironmentsPanel } from "./EnvironmentsPanel";
 import { DbCompareSettingsSection } from "./DbCompareSettingsSection";
+import { EnvironmentRadar } from "./EnvironmentRadar";
+import { DemoSandboxPanel } from "./DemoSandboxPanel";
 import { ScriptsPanel } from "./ScriptsPanel";
 import { CompareWizard } from "./CompareWizard";
 import { RunProgress } from "./RunProgress";
@@ -18,6 +20,7 @@ import { DataParitySection } from "./DataParitySection";
 import { EnvSetupWizard } from "./EnvSetupWizard";
 import { MigrationPanel } from "./MigrationPanel";
 import { shouldShowEmptyCta, shouldNudgeAddMore } from "./envPlacementLogic";
+import { RepoCoveragePanel } from "./RepoCoveragePanel";
 import styles from "./dbcompare.module.css";
 
 type ViewState = "wizard" | "progress" | "results";
@@ -185,8 +188,16 @@ export function DbComparePage() {
           <EnvironmentsPanel key={envRefreshToken} keyringAvailable={health?.keyring_available ?? true} />
         </section>
       )}
+      <DemoSandboxPanel environments={environments} onChanged={() => { reloadEnvironments(); reloadRuns(); }} />
 
       <DbCompareSettingsSection />
+
+      <EnvironmentRadar
+        environments={environments}
+        runs={runs}
+        onOpenRun={(runId: string) => { void handleSelectHistoricalRun({ run_id: runId } as CompareRun); }}
+        onChanged={reloadRuns}
+      />
 
       <RunsTimeline runs={runs} activeRunId={activeRun?.run_id ?? null} onSelectRun={handleSelectHistoricalRun} />
 
@@ -227,6 +238,7 @@ export function DbComparePage() {
             <DiffList items={filteredItems} onSelectItem={setSelectedItem} />
           )}
           {health?.data_diff_enabled && <DataParitySection run={activeRun} onRunUpdate={setActiveRun} />}
+          <RepoCoveragePanel runId={activeRun.run_id} />
         </>
       )}
 

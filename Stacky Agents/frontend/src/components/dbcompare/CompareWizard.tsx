@@ -36,7 +36,7 @@ export function CompareWizard({ environments, onLaunched }: Props) {
   const launch = canLaunch(source, target);
 
   const selectSource = (env: DbEnvironment) => {
-    if (!env.has_password) return;
+    if (!env.has_password && env.engine !== "sqlite") return;  // Plan 183 §3.2
     setSource(env);
     if (target && (target.alias === env.alias || target.engine !== env.engine)) {
       setTarget(null);
@@ -82,8 +82,8 @@ export function CompareWizard({ environments, onLaunched }: Props) {
                 className={styles.wizardCard + " " + styles.card}
                 role="button"
                 aria-pressed={source?.alias === env.alias}
-                aria-disabled={!env.has_password}
-                title={!env.has_password ? "Este ambiente no tiene contraseña configurada." : undefined}
+                aria-disabled={!env.has_password && env.engine !== "sqlite"}
+                title={!env.has_password && env.engine !== "sqlite" ? "Este ambiente no tiene contraseña configurada." : undefined}
                 onClick={() => selectSource(env)}
               >
                 <div className={styles.cardHeader}>
@@ -92,7 +92,7 @@ export function CompareWizard({ environments, onLaunched }: Props) {
                 </div>
                 <div className={styles.cardBody}>
                   <div>{env.host}</div>
-                  {!env.has_password && <div>⚠ sin contraseña</div>}
+                  {!env.has_password && env.engine !== "sqlite" && <div>⚠ sin contraseña</div>}
                 </div>
               </div>
             ))}

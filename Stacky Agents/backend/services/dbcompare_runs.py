@@ -127,7 +127,11 @@ def _resolve_snapshot(alias: str, mode: str) -> dict:
     return snap
 
 
-def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh") -> dict:
+def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh", initiated_by: str = "operator") -> dict:
+    # Plan 178: initiated_by ("operator" manual | "watch" vigía) es aditivo opcional
+    # (NO contrato congelado). Compat: runs viejos se leen con run.get("initiated_by",
+    # "operator"). RECORDATORIO de merge (§2bis, fix C3): el plan 176 también agrega
+    # kwargs keyword-only a ESTA firma; quien mergea segundo combina ambos sets.
     if mode not in ("fresh", "cached"):
         raise DbCompareRunError(f"modo desconocido: '{mode}' (fresh|cached)")
 
@@ -155,6 +159,7 @@ def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh") -> 
         "run_id": run_id,
         "source_alias": source_alias, "target_alias": target_alias,
         "engine": source_env["engine"],
+        "initiated_by": initiated_by,  # Plan 178 — "operator" | "watch" (aditivo)
         "mode": mode, "status": "running", "phase": "queued",
         "started_at": _iso(started), "finished_at": None, "duration_ms": 0,
         "source_snapshot_id": None, "target_snapshot_id": None,
@@ -224,7 +229,7 @@ def list_runs(limit: int = 50) -> list[dict]:
             run = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        meta = {k: v for k, v in run.items() if k != "diff"}
+        meta = {k: v for k, v in run.items() if k not in ("diff", "data_diff")}  # Plan 181: la lista JAMÁS arrastra filas (los secretos crudos viajaban por acá) ni el peso del data-diff
         meta["stale"] = _is_stale(run)
         runs.append(meta)
     runs.sort(key=lambda r: r.get("started_at") or "", reverse=True)

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useModelCatalog } from "../hooks/useModelCatalog";
 import styles from "./ModelDecisionChip.module.css";
 
 interface RoutingDecision {
@@ -12,19 +13,13 @@ interface Props {
   onRerun?: (model: string) => void;
 }
 
-const ALT_MODELS = ["claude-opus-4-7", "claude-sonnet-5", "claude-haiku-4-5"];
-
-const MODEL_LABEL: Record<string, string> = {
-  "claude-opus-4-7": "Opus",
-  "claude-sonnet-5": "Sonnet",
-  // Fallback del CLI (config.CLAUDE_CODE_CLI_MODEL_FALLBACK) — sigue siendo
-  // un modelo Claude válido que puede aparecer en decision.model.
-  "claude-sonnet-4-6": "Sonnet 4.6 (fallback)",
-  "claude-haiku-4-5": "Haiku",
-};
+// Plan 159 — labels y alternativas de modelo vienen del catálogo único
+// (useModelCatalog); ya no se declaran acá (corrige el bug del modelo stale).
 
 export default function ModelDecisionChip({ decision, onRerun }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const { catalog } = useModelCatalog();
+  const claudeModels = catalog.claude_code_cli?.models ?? [];
 
   if (!decision || !decision.model) return null;
 
@@ -33,8 +28,11 @@ export default function ModelDecisionChip({ decision, onRerun }: Props) {
     typeof cost === "number" && Number.isFinite(cost)
       ? ` ($${cost.toFixed(2)})`
       : "";
-  const modelLabel = MODEL_LABEL[decision.model] ?? decision.model;
-  const alternatives = ALT_MODELS.filter((m) => m !== decision.model);
+  const modelLabel =
+    claudeModels.find((m) => m.id === decision.model)?.label ?? decision.model;
+  const alternatives = claudeModels
+    .map((m) => m.id)
+    .filter((id) => id !== decision.model);
 
   return (
     <div className={styles.wrap}>
@@ -61,7 +59,7 @@ export default function ModelDecisionChip({ decision, onRerun }: Props) {
                   className={styles.rerunBtn}
                   onClick={() => onRerun(m)}
                 >
-                  {MODEL_LABEL[m] ?? m}
+                  {claudeModels.find((mm) => mm.id === m)?.label ?? m}
                 </button>
               ))}
             </div>

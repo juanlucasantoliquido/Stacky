@@ -701,6 +701,9 @@ _CURATED_DEFAULTS_ON = {
     # int TOP_N/MAX_CHARS/MAX_LESSONS NO van acá — G4/C14) ──
     "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED",
     "STACKY_KNOWLEDGE_INJECTION_ENABLED",
+    # ── Plan 159 — Catálogo unificado de modelos/efforts (bool default ON;
+    # solo UI, sin costo de tokens, ninguna de las 4 excepciones duras aplica) ──
+    "STACKY_MODEL_CATALOG_ENABLED",
 }
 
 

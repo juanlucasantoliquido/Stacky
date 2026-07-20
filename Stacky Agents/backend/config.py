@@ -822,6 +822,13 @@ class Config:
     # Piso de effort: nunca bajar por debajo de este valor.
     STACKY_EFFORT_FLOOR: str = os.getenv("STACKY_EFFORT_FLOOR", "medium").strip().lower()
 
+    # Plan 159 — kill-switch del catálogo unificado de modelos/efforts. OFF:
+    # el endpoint devuelve {"ok": False, "reason": "catalog_disabled"} y el
+    # frontend cae a su fallback embebido único (nunca selector vacío).
+    STACKY_MODEL_CATALOG_ENABLED: bool = os.getenv(
+        "STACKY_MODEL_CATALOG_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Q1.1 — Pase correctivo único de criterios incumplidos.
     # OFF default: sin pase correctivo.
     STACKY_CRITERIA_REPAIR_ENABLED: bool = os.getenv(

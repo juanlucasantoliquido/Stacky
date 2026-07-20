@@ -595,6 +595,12 @@ New-Item -ItemType Directory -Path $releaseBackendDir -Force | Out-Null
 Copy-Item -Path (Join-Path $frozenBackend "*") -Destination $releaseBackendDir -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $backendDir ".env.example") -Destination (Join-Path $releaseBackendDir ".env.example") -Force
 
+# Plan 159: catalogo de modelos como archivo EXTERNO editable junto al exe
+# (mismo patron que backend\.env). services/model_catalog.py lo resuelve via
+# runtime_paths.backend_root()\config\model_catalog.json en dev y en frozen.
+New-Item -ItemType Directory -Path (Join-Path $releaseBackendDir "config") -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $backendDir "config\model_catalog.json") -Destination (Join-Path $releaseBackendDir "config\model_catalog.json") -Force
+
 # Hornear backend\.env con el arnes por defecto, en TODO deploy (con o sin
 # -ExportConfig): .env.example (base sin secretos) + harness_defaults.env (flags
 # del arnes). Es el .env que config.py carga al arrancar (backend_root()\.env),

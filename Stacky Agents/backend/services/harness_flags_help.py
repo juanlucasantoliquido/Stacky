@@ -24,6 +24,12 @@ class PlainHelp:
 
 PLAIN_HELP: dict[str, PlainHelp] = {
     # ── runtimes_cli ──────────────────────────────────────────────────────
+    "STACKY_MODEL_CATALOG_ENABLED": PlainHelp(
+        what="Controla si el selector de modelo/effort del Resolutor de Incidencias y de la Épica desde Brief usa la lista actualizada del servidor o una lista fija.",
+        on_effect="Si la activás: los selectores siempre muestran los modelos/efforts vigentes, sin necesitar una actualización de la app.",
+        off_effect="Si la apagás: los selectores muestran una lista mínima fija embebida, que puede quedar desactualizada.",
+        example="Como una carta de restaurante que se actualiza sola en vez de tener que reimprimirla cada vez que cambia un plato.",
+    ),
     "CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED": PlainHelp(
         what="Un control de calidad automático que revisa el trabajo del agente antes de darlo por bueno.",
         on_effect="Si la activás: cuando el resultado tiene errores graves, el trabajo queda marcado 'para revisar' en vez de figurar como terminado.",

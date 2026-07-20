@@ -1012,6 +1012,31 @@ export interface IntentBriefDTO {
   version: string;
 }
 
+// Plan 159 — catálogo unificado de modelos/efforts por runtime CLI.
+export interface ModelCatalogEntry { id: string; label: string; recommended?: boolean }
+export interface RuntimeModelCatalog {
+  source: string;
+  default_model: string | null;
+  default_effort: string | null;
+  models: ModelCatalogEntry[];
+  efforts: { id: string; label: string }[];
+  effort_support: Record<string, string[]>;
+  note?: string;
+  error?: string | null;
+}
+export interface ModelCatalogResponse {
+  ok: boolean;
+  reason?: string;
+  cached_at?: number;
+  ttl_sec?: number;
+  fallback_used?: boolean;
+  runtimes: Partial<Record<"claude_code_cli" | "codex_cli" | "github_copilot", RuntimeModelCatalog>>;
+}
+export const ModelCatalogApi = {
+  get: (refresh = false) =>
+    api.get<ModelCatalogResponse>(`/api/agents/model-catalog${refresh ? "?refresh=true" : ""}`),
+};
+
 export const Agents = {
   list: () => api.get<AgentDefinition[]>("/api/agents"),
   vsCodeAgents: () => api.get<VsCodeAgent[]>("/api/agents/vscode"),

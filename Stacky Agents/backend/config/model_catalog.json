@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "updated_at": "2026-07-17",
+  "runtimes": {
+    "claude_code_cli": {
+      "source": "static_config_file",
+      "default_model": "claude-sonnet-5",
+      "default_effort": "medium",
+      "models": [
+        {"id": "claude-sonnet-5", "label": "Sonnet 5 (recomendado)", "recommended": true},
+        {"id": "claude-opus-4-8", "label": "Opus 4.8 (mayor calidad, más lento, mayor costo)", "recommended": false},
+        {"id": "claude-haiku-4-5", "label": "Haiku 4.5 (más rápido, menor costo)", "recommended": false},
+        {"id": "claude-sonnet-4-6", "label": "Sonnet 4.6 (fallback del CLI)", "recommended": false}
+      ],
+      "efforts": [
+        {"id": "low", "label": "low — mínimo (respuestas rápidas)"},
+        {"id": "medium", "label": "medium — estándar"},
+        {"id": "high", "label": "high — alto (recomendado para épicas)"},
+        {"id": "xhigh", "label": "xhigh — muy alto"},
+        {"id": "max", "label": "max — máximo"}
+      ],
+      "effort_support": {
+        "claude-haiku-4-5": ["low", "medium", "high"],
+        "claude-sonnet-5": ["low", "medium", "high", "max"],
+        "claude-sonnet-4-6": ["low", "medium", "high", "max"],
+        "claude-opus-4-8": ["low", "medium", "high", "xhigh", "max"]
+      }
+    },
+    "codex_cli": {
+      "source": "static_config_file",
+      "default_model": "",
+      "default_effort": null,
+      "models": [
+        {"id": "", "label": "Automático (decide Codex CLI)", "recommended": true}
+      ],
+      "efforts": [],
+      "effort_support": {},
+      "note": "Codex CLI no soporta --effort como flag; el nivel se traduce internamente a presupuesto de turnos (ver codex_cli_runner.py:576-591)."
+    },
+    "github_copilot": {
+      "source": "live_introspection",
+      "default_model": null,
+      "default_effort": null,
+      "models": [],
+      "efforts": [],
+      "effort_support": {},
+      "note": "Poblado en runtime desde copilot_bridge.list_copilot_models() con caché TTL; ver campo 'error' de la respuesta del endpoint si la introspección falla."
+    }
+  }
+}

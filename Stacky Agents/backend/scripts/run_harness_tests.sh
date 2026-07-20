@@ -386,6 +386,10 @@ HARNESS_TEST_FILES=(
   tests/test_cost_codeburn_import.py
   # — Plan 158 — Centro de Costos: telemetria real claude_code_cli —
   tests/test_plan158_claude_cli_cost_parity.py
+  # — Plan 159 — Catalogo unificado de modelos/efforts (dinamico) —
+  tests/test_plan159_model_catalog_loader.py
+  tests/test_plan159_model_catalog_endpoint.py
+  tests/test_plan159_model_catalog_flag.py
   # — Plan 144 — Ejecucion confiable Claude CLI: trust, stalls, estados —
   tests/test_status_vocabulary_contract.py
   tests/test_ticket_status_robust_transition.py

@@ -11,7 +11,19 @@ import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
 import { formatStallReason, type StallMeta } from "../utils/stallReason";
 import { formatDuration, formatCostUsd, formatInt } from "../services/format";
+import CopyAsButton, { type CopyAsOption } from "./CopyAsButton";
+import { executionToMarkdown, executionToPlainText } from "../services/copyFormats";
+import { copyText } from "../services/copyService";
+import type { AgentExecution } from "../types";
 import styles from "./ExecutionDetailDrawer.module.css";
+
+/** Plan 194 F4.a — opciones "Copiar como…" del drawer (SIN "Enlace": §4.6). */
+function drawerCopyOptions(e: AgentExecution): CopyAsOption[] {
+  return [
+    { label: "Markdown", build: () => executionToMarkdown(e) },
+    { label: "Texto", build: () => executionToPlainText(e) },
+  ];
+}
 
 interface Props {
   executionId: number | null;
@@ -74,6 +86,7 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                 Ticket {content.ticket_id} · {content.status} · {formatDuration(content.duration_ms)}
               </div>
             )}
+            {content && <CopyAsButton options={drawerCopyOptions(content)} />}
           </div>
           <button className={styles.closeButton} onClick={onClose} title="Cerrar detalle">
             <X size={16} />
@@ -140,7 +153,7 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                         <button
                           className={styles.copyButton}
                           title="Copiar ruta"
-                          onClick={() => void navigator.clipboard.writeText(absolutePath)}
+                          onClick={() => void copyText(absolutePath)}
                         >
                           <Copy size={14} />
                         </button>

@@ -359,6 +359,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
+        "STACKY_COPY_EXPORT_ENABLED",  # Plan 194 — portapapeles universal ("Copiar como…")
+        "STACKY_UNDO_UNIVERSAL_ENABLED",  # Plan 185 — undo universal (acciones optimistas + gracia)
+        "STACKY_BULK_ACTIONS_ENABLED",  # Plan 187 — selección múltiple y acciones en lote
+        "STACKY_CONNECTION_RESILIENCE_ENABLED",  # Plan 192 — resiliencia de conexión (banner + re-hidratación)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -3405,6 +3409,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         default=True,  # promovida a default ON (operador 2026-07-18, curada en _CURATED_DEFAULTS_ON)
     ),
+    # ── Plan 187 — Selección múltiple y acciones en lote ──────────────────────
+    FlagSpec(
+        key="STACKY_BULK_ACTIONS_ENABLED",
+        type="bool",
+        label="Selección múltiple y acciones en lote",
+        description=(
+            "Plan 187 — Checkboxes por fila, rango con Shift, barra flotante de "
+            "acciones en lote y resultado agregado en Bandeja de revisión e "
+            "Historial. OFF = interfaz idéntica a la actual."
+        ),
+        group="global",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica; curada en _CURATED_DEFAULTS_ON)
+    ),
     # ── Plan 121 — Centinela local de egreso ──────────────────────────────────
     FlagSpec(
         key="STACKY_EGRESS_SENTINEL_ENABLED",
@@ -3724,6 +3741,45 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Centro de notificaciones y actividad",
         description="Muestra una campana en la barra superior con un contador de novedades sin leer y un feed desplegable que reúne fines de ejecución, errores de la interfaz y avisos de costo. Solo informa y navega; nunca ejecuta acciones. Con OFF la barra queda igual que hoy.",
         group="global", env_only=False,
+    ),
+    # ── Plan 194 — Portapapeles universal ("Copiar como…") ─────────────────────
+    FlagSpec(
+        key="STACKY_COPY_EXPORT_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica: copiar es read-only; curada en _CURATED_DEFAULTS_ON)
+        label="Copiar como… (portapapeles universal)",
+        description=(
+            "Plan 194 — Botones 'Copiar como' (Markdown/CSV/Texto/Tabla ADO) en drawers y tablas. "
+            "Solo lectura: copiar nunca muta datos. Default ON; desactivable desde la UI."
+        ),
+        group="global",
+    ),
+    # ── Plan 185 — Undo universal (acciones optimistas + gracia de deshacer) ────
+    FlagSpec(
+        key="STACKY_UNDO_UNIVERSAL_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica: la acción la inicia el operador y es cancelable; curada en _CURATED_DEFAULTS_ON)
+        label="Undo universal (deshacer con gracia)",
+        description=(
+            "Plan 185 — Las acciones reversibles se aplican de forma optimista y su efecto real "
+            "se difiere una gracia corta (6 s) con un toast 'Deshacer' (y Ctrl+Z). Con OFF el "
+            "dashboard se comporta como antes (commit inmediato, sin toast). Default ON; "
+            "desactivable desde la UI."
+        ),
+        group="global",
+    ),
+    # ── Plan 192 — Resiliencia de conexión dashboard-backend (UI) ──────────────
+    FlagSpec(
+        key="STACKY_CONNECTION_RESILIENCE_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica; curada en _CURATED_DEFAULTS_ON)
+        label="Resiliencia de conexion del dashboard",
+        description=(
+            "Plan 192 - Monitor pasivo de conexion dashboard-backend: banner global "
+            "con reintento exponencial durante caidas y re-hidratacion automatica "
+            "(refetch de lecturas) al recuperar. Solo observa; nunca reintenta mutaciones."
+        ),
+        group="global",
     ),
 )
 

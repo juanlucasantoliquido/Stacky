@@ -66,3 +66,30 @@
   line-height: 1;
 }
 .toastClose:hover { color: rgba(255, 255, 255, 0.8); }
+
+/* Plan 185 — botón de acción "Deshacer" (alineado al estilo de la casa).
+   color: inherit ⇒ toma el color de texto del .toast (sin hex nuevo: ratchet). */
+.toastAction {
+  margin-top: 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  line-height: 1.2;
+}
+.toastAction:hover { border-color: rgba(255, 255, 255, 0.6); }
+
+/* Plan 185 — dentro del stack del UndoToastHost el contenedor gobierna el
+   layout: se anula el position:fixed propio del toast. */
+.toast_inStack {
+  position: static;
+  bottom: auto;
+  right: auto;
+  width: 100%;
+  box-shadow: none;
+  animation: none;
+}

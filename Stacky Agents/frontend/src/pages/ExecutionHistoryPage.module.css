@@ -164,3 +164,9 @@
 .riskLow { color: var(--success, #4caf50); }
 .riskMedium { color: var(--warn, #ffb300); }
 .riskHigh { color: var(--danger, #e53935); }
+
+/* Plan 187 — celda de selección: sin selección de texto (colisión Shift+click) */
+.selectCell {
+  width: 2.25rem;
+  user-select: none;
+}

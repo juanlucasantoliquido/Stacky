@@ -21,6 +21,12 @@
   overflow: hidden;
 }
 
+.pasteZone {
+  /* Wrapper para conservar onPaste sin generar caja propia (plan 164 F3):
+     display:contents mantiene el layout flex del panel de <Dialog>. */
+  display: contents;
+}
+
 .header {
   display: flex;
   align-items: center;

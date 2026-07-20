@@ -293,7 +293,6 @@ $HarnessTestFiles = @(
   "tests/test_issue_phase_publisher.py",
   "tests/test_issue_no_children_guard.py",
   "tests/test_issue_phase_runtime_parity.py",
-  "tests/test_harness_flags.py",
   # Plan 79 — Estados de tarea deterministas y configurables
   "tests/test_plan79_flag.py",
   "tests/test_plan79_resolver.py",
@@ -316,6 +315,8 @@ $HarnessTestFiles = @(
   "tests/test_plan80_routes_registered.py",
   # Plan 82 - Claridad de configuracion del arnes (requires + profile_deltas)
   "tests/test_harness_flags_requires.py",
+  # Plan 185 - Undo universal (flag F0)
+  "tests/test_harness_flags_undo.py",
   "tests/test_harness_profile_deltas.py",
   # Plan 83 - Bounds declarativos para flags numericas
   "tests/test_harness_flags_bounds.py"
@@ -536,6 +537,10 @@ $HarnessTestFiles = @(
   "tests/test_plan180_scanner.py"
   "tests/test_plan180_coverage.py"
   "tests/test_plan180_api.py"
+  # — Plan 187 · Selección múltiple y lote —
+  "tests/test_bulk_actions_flag.py"
+  # — Plan 192 · Resiliencia de conexión —
+  "tests/test_connection_resilience_flag.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

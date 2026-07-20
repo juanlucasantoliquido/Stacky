@@ -9,6 +9,7 @@ import EditProjectModal from "./EditProjectModal";
 import StreakBadge from "./StreakBadge";
 import CostCapIndicator from "./CostCapIndicator";
 import HelpLauncher from "./HelpLauncher";
+import ConnectionFreshnessDot from "./ConnectionFreshnessDot"; // Plan 192
 import NotificationBell from "./NotificationBell"; // Plan 152
 import { versionChipLabel, buildTooltip, driftMessage, type BuildIdentity } from "./buildIdentity"; // Plan 163 F2
 import Toast, { type ToastState } from "./Toast";
@@ -214,6 +215,7 @@ export default function TopBar({ onGoToTeam, shellV2, notificationsEnabled, onAc
           </button>
         </div>
         <div className={styles.actions} data-tour="topbar-actions">
+          <ConnectionFreshnessDot />
           <HelpLauncher />
           {isRunning && (
             <span className={styles.runningBadge}>

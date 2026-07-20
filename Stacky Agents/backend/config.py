@@ -622,6 +622,19 @@ class Config:
         "STACKY_COST_CODEBURN_IMPORT_PATH", ""
     ).strip()
 
+    # ── Plan 194 — Portapapeles universal ("Copiar como…") ────────────────────
+    # Read-only puro; default ON (ninguna de las 4 excepciones duras aplica).
+    STACKY_COPY_EXPORT_ENABLED: bool = os.getenv(
+        "STACKY_COPY_EXPORT_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 185 — Undo universal (acciones optimistas + gracia de deshacer) ──
+    # Kill-switch; default ON (la acción la inicia el operador y es cancelable;
+    # ninguna de las 4 excepciones duras aplica). OFF = commit inmediato (pre-plan).
+    STACKY_UNDO_UNIVERSAL_ENABLED: bool = os.getenv(
+        "STACKY_UNDO_UNIVERSAL_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # ── Plan 158 — Fix telemetría de costo claude_code_cli (paridad con codex) ──
     # Kill-switch: default ON (bug fix de observabilidad, ninguna de las 4
     # excepciones duras aplica). OFF revierte al comportamiento previo exacto.
@@ -1409,6 +1422,20 @@ class Config:
     # _CURATED_DEFAULTS_ON (test_harness_flags) y espejada en la FlagSpec.
     STACKY_UI_SHELL_V2_ENABLED: bool = os.getenv(
         "STACKY_UI_SHELL_V2_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 192 — Resiliencia de conexión dashboard-backend (UI) ──────────────
+    # Monitor pasivo + banner global + re-hidratación al recuperar. Default ON;
+    # editable por UI (HarnessFlagsPanel). OFF => comportamiento actual intacto.
+    STACKY_CONNECTION_RESILIENCE_ENABLED: bool = os.getenv(
+        "STACKY_CONNECTION_RESILIENCE_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 187 — Selección múltiple y acciones en lote (UI) ──────────────────
+    # Default ON: no publica nada solo, no destruye (agrega confirmación),
+    # sin prerequisitos, no reduce seguridad (OFF = UI idéntica).
+    STACKY_BULK_ACTIONS_ENABLED: bool = os.getenv(
+        "STACKY_BULK_ACTIONS_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 148 — Degradación explícita de integraciones no configuradas. Default ON

@@ -19,9 +19,11 @@ import PlansBoardPage from "./pages/PlansBoardPage"; // Plan 128
 import EvolutionCenterPage from "./pages/EvolutionCenterPage"; // Plan 167
 import TopBar from "./components/TopBar";
 import HealthBanner from "./components/HealthBanner";
+import ConnectionBanner from "./components/ConnectionBanner";
 import CommandPalette from "./components/CommandPalette";
 import DailyStandupModal from "./components/DailyStandupModal";
 import OnboardingTour from "./components/OnboardingTour";
+import UndoToastHost from "./components/UndoToastHost";
 import ShortcutsCheatsheet from "./components/ShortcutsCheatsheet";
 import DemoModeBanner from "./components/DemoModeBanner";
 import CodexConsoleDock from "./components/CodexConsoleDock";
@@ -310,6 +312,7 @@ export default function App() {
         notificationsEnabled={notifEnabled}
         onActivityNavigate={(nav) => selectTab(nav.tab as Tab)}
       />
+      <ConnectionBanner />
       <HealthBanner />
 
       {shellV2Enabled ? (
@@ -480,6 +483,10 @@ export default function App() {
       />
       <DailyStandupModal />
       <OnboardingTour />
+
+      {/* Plan 185 — host global de toasts de "Deshacer" (undo universal con
+          gracia). Capa 2 esquina inferior derecha; ver tabla 197 §6.11. */}
+      <UndoToastHost />
 
       {/* Consola flotante de runtimes CLI (Codex / Claude): muestra la actividad
           en vivo y permite responderle al agente. Se activa al lanzar un run CLI. */}

@@ -711,6 +711,18 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 159 — Catálogo unificado de modelos/efforts (bool default ON;
     # solo UI, sin costo de tokens, ninguna de las 4 excepciones duras aplica) ──
     "STACKY_MODEL_CATALOG_ENABLED",
+    # ── Plan 194 — Portapapeles universal ("Copiar como…"): bool default ON;
+    # read-only, ninguna de las 4 excepciones duras aplica. ──
+    "STACKY_COPY_EXPORT_ENABLED",
+    # ── Plan 185 — Undo universal: bool default ON; la acción la inicia el
+    # operador y es cancelable, ninguna de las 4 excepciones duras aplica. ──
+    "STACKY_UNDO_UNIVERSAL_ENABLED",
+    # ── Plan 187 — Selección múltiple y acciones en lote: bool default ON;
+    # OFF = UI idéntica, ninguna de las 4 excepciones duras aplica. ──
+    "STACKY_BULK_ACTIONS_ENABLED",
+    # ── Plan 192 — Resiliencia de conexión: bool default ON; solo observa y
+    # re-fetchea lecturas, ninguna de las 4 excepciones duras aplica. ──
+    "STACKY_CONNECTION_RESILIENCE_ENABLED",
 }
 
 
@@ -1011,3 +1023,15 @@ def test_plan158_claude_cli_telemetry_flags_registered_default_on():
         assert by_key[key].default is True
         assert categorize(key) == "observabilidad_notif"
         assert key in _CURATED_DEFAULTS_ON
+
+
+def test_copy_export_flag_registered():
+    """Plan 194 F0 — STACKY_COPY_EXPORT_ENABLED: registrada, categorizada, default ON curado."""
+    from services.harness_flags import FLAG_REGISTRY, categorize
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    assert "STACKY_COPY_EXPORT_ENABLED" in by_key
+    assert by_key["STACKY_COPY_EXPORT_ENABLED"].type == "bool"
+    assert by_key["STACKY_COPY_EXPORT_ENABLED"].default is True
+    assert categorize("STACKY_COPY_EXPORT_ENABLED") == "interfaz_ui"
+    assert "STACKY_COPY_EXPORT_ENABLED" in _CURATED_DEFAULTS_ON

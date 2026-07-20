@@ -3,6 +3,7 @@ import { Agents } from "../api/endpoints";
 import type { AgentHistoryEntry, AgentHistoryResponse } from "../api/endpoints";
 import PixelAvatar from "./PixelAvatar";
 import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
+import { Dialog } from "./ui";
 import styles from "./AgentHistoryModal.module.css";
 
 interface AgentHistoryModalProps {
@@ -62,8 +63,8 @@ export default function AgentHistoryModal({
   }
 
   return (
-    <div className={styles.backdrop} onClick={handleBackdrop}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Historial del agente">
+    <>
+      <Dialog open onClose={onClose} ariaLabel="Historial del agente" size="lg">
         <div className={styles.header}>
           <PixelAvatar value={avatarValue} size="sm" name={displayName} />
           <div className={styles.headerText}>
@@ -107,12 +108,12 @@ export default function AgentHistoryModal({
             <div className={styles.footnote}>{data.mapping_note}</div>
           </>
         )}
-      </div>
+      </Dialog>
       <ExecutionDetailDrawer
         executionId={detailExecutionId}
         onClose={() => setDetailExecutionId(null)}
       />
-    </div>
+    </>
   );
 }
 

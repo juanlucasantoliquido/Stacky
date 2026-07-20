@@ -69,3 +69,9 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Plan 187 — celda de selección: sin selección de texto (colisión Shift+click) */
+.selectCell {
+  width: 2.25rem;
+  user-select: none;
+}

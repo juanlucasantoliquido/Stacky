@@ -8,6 +8,7 @@ import { useWorkbench } from "../store/workbench";
 import PixelAvatar from "./PixelAvatar";
 import Toast, { type ToastState } from "./Toast";
 import { useConfirm } from "./ui";
+import { scheduleUndoable } from "../services/undoManager";
 import styles from "./AgentHistoryPage.module.css";
 
 /*
@@ -388,7 +389,6 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState<number | null>(null);
   const [actionToast, setActionToast] = useState<ToastState | null>(null);
-  const askConfirm = useConfirm();
 
   useEffect(() => {
     setLoading(true);
@@ -411,20 +411,31 @@ function NotesTab({ ticketId, agentFilename, onAllDeleted }: NotesTabProps) {
       return next;
     });
 
-  const handleDeleteNote = useCallback(async (ex: AgentExecution) => {
-    if (!(await askConfirm({ title: "Eliminar ejecución", message: `Eliminar esta ejecucion (#${ex.id})?`, tone: "danger", confirmLabel: "Eliminar" }))) return;
-    setDeleting(ex.id);
-    try {
-      await Executions.deleteOne(ex.id);
-      const remaining = executions.filter((e) => e.id !== ex.id);
-      setExecutions(remaining);
-      if (remaining.length === 0) onAllDeleted?.();
-    } catch (e) {
-      setActionToast({ variant: "error", body: String(e) });
-    } finally {
-      setDeleting(null);
-    }
-  }, [executions, onAllDeleted, askConfirm]);
+  const handleDeleteNote = useCallback((ex: AgentExecution) => {
+    // Plan 185 — undo con gracia (reemplaza la confirmación previa). Quitamos la
+    // ejecución de la lista de forma OPTIMISTA y DIFERIMOS el DELETE real 6 s con
+    // un toast "Deshacer" (o Ctrl+Z). El borrado es LOCAL (registro propio del
+    // dashboard, no remoto ADO): dentro de la gracia el undo restaura la fila y
+    // nunca se llama al backend; si la gracia expira, se commitea garantizado.
+    const snapshot = executions;
+    const remaining = executions.filter((e) => e.id !== ex.id);
+    setExecutions(remaining);
+    scheduleUndoable({
+      id: `execution:${ex.id}`,
+      label: `Ejecución #${ex.id} eliminada`,
+      commit: async () => {
+        await Executions.deleteOne(ex.id);
+      },
+      onUndo: () => setExecutions(snapshot),
+      onCommitted: () => {
+        if (remaining.length === 0) onAllDeleted?.();
+      },
+      onError: (e) => {
+        setExecutions(snapshot); // el backend rechazó ⇒ restaurar la fila
+        setActionToast({ variant: "error", body: String(e) });
+      },
+    });
+  }, [executions, onAllDeleted]);
 
   if (loading) return <div className={styles.loading}>Cargando notas...</div>;
   if (error) return <div className={styles.error}>{error}</div>;
@@ -507,6 +518,8 @@ export default function AgentHistoryPage({
   const [reattaching, setReattaching] = useState(false);
   const [reattachResult, setReattachResult] = useState<string | null>(null);
   const [deletingTicketId, setDeletingTicketId] = useState<number | null>(null);
+  const ask = useConfirm();
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const activeProject = useWorkbench((s) => s.activeProject);
   const agentWorkflows = useWorkbench((s) => s.agentWorkflows);
@@ -787,6 +800,7 @@ export default function AgentHistoryPage({
           )}
         </main>
       </div>
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
     </div>
     {actionToast && <Toast toast={actionToast} onClose={() => setActionToast(null)} />}
     </>

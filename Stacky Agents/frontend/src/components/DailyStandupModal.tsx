@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Dialog } from "./ui";
 import styles from "./DailyStandupModal.module.css";
 
 interface StandupResponse {
@@ -65,8 +66,7 @@ export default function DailyStandupModal() {
   };
 
   return (
-    <div className={styles.backdrop} role="dialog" aria-modal="true" aria-label="Standup diario">
-      <div className={styles.modal}>
+    <Dialog open onClose={() => setOpen(false)} ariaLabel="Standup diario" size="md">
         <header className={styles.header}>
           <h2 className={styles.title}>☀️ Buen día, {data.user.split("@")[0]}.</h2>
           <p className={styles.subtitle}>Tu standup está listo.</p>
@@ -80,7 +80,6 @@ export default function DailyStandupModal() {
             Cerrar
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }

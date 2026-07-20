@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Terminal, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { ClaudeCli, type ClaudeSessionStatus, type ClaudeTestResult } from "../api/endpoints";
+import { Dialog } from "./ui";
 import styles from "./ClaudeCliConfigModal.module.css";
 
 interface ClaudeCliConfigModalProps {
@@ -130,8 +131,13 @@ export default function ClaudeCliConfigModal({ onClose, onConfigured }: ClaudeCl
   }
 
   return (
-    <div className={styles.backdrop} onClick={handleBackdrop}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Configurar Claude Code CLI">
+    <Dialog
+      open
+      onClose={onClose}
+      closeGuard={{ dirty: false, busy: saving }}
+      ariaLabel="Configurar Claude Code CLI"
+      size="md"
+    >
         <div className={styles.header}>
           <Terminal size={18} strokeWidth={2.2} />
           <div className={styles.headerText}>
@@ -247,7 +253,6 @@ export default function ClaudeCliConfigModal({ onClose, onConfigured }: ClaudeCl
             {saving ? "Guardando…" : ready ? "✓ Listo" : "Completá los pasos"}
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

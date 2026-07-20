@@ -4,6 +4,7 @@ import { QaBrowser, Tickets } from "../api/endpoints";
 import type { QaBrowserRunResponse } from "../api/endpoints";
 import type { Ticket } from "../types";
 import { useWorkbench } from "../store/workbench";
+import { Dialog } from "./ui";
 import styles from "./QaBrowserRunModal.module.css";
 
 interface QaBrowserRunModalProps {
@@ -85,8 +86,13 @@ export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModal
   const runStarted = run?.status === "running";
 
   return (
-    <div className={styles.backdrop} onClick={(e) => e.currentTarget === e.target && onClose()}>
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="TEST QA UAT CODEX">
+    <Dialog
+      open
+      onClose={onClose}
+      closeGuard={{ dirty: false, busy: loading }}
+      ariaLabel="TEST QA UAT CODEX"
+      size="md"
+    >
         <header className={styles.header}>
           <div>
             <h2>TEST QA UAT CODEX</h2>
@@ -187,7 +193,6 @@ export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModal
             {loading ? "Preparando..." : "TEST QA UAT CODEX"}
           </button>
         </footer>
-      </section>
-    </div>
+    </Dialog>
   );
 }

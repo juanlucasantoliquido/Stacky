@@ -13,6 +13,7 @@ import type { AgentType } from "../types";
 import MermaidDiagram from "./MermaidDiagram";
 import { TrackerDeepLink } from "./TrackerDeepLink";
 import { adoUrl } from "../utils/trackerUrls";
+import { copyText } from "../services/copyService";
 import styles from "./StructuredOutput.module.css";
 
 // FA-21 — Intercepts ```mermaid blocks and replaces with <MermaidDiagram>.
@@ -227,12 +228,12 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(text);
+    // Plan 194 F4.c — vía copyService (fallback + foco preservado). copyText
+    // jamás lanza; conserva el ✓ inline de 1500 ms como ÚNICO feedback (§4.4).
+    const r = await copyText(text);
+    if (r.ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard not available in all contexts
     }
   }, [text]);
 

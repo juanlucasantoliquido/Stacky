@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import type { Ticket } from "../types";
 import type { TicketAttachment } from "../api/endpoints";
 import { Tickets } from "../api/endpoints";
+import { Dialog } from "./ui";
 import styles from "./FileSelectorModal.module.css";
 
 interface FileSelectorModalProps {
@@ -78,8 +79,13 @@ export default function FileSelectorModal({
   const noneSelected = selected.size === 0;
 
   return (
-    <div className={styles.backdrop} onClick={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className={styles.modal} role="dialog" aria-modal="true">
+    <Dialog
+      open
+      onClose={onCancel}
+      closeGuard={{ dirty: false, busy: loading }}
+      ariaLabel="Seleccionar ficheros de entrada"
+      size="md"
+    >
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerIcon}>📂</div>
@@ -172,7 +178,6 @@ export default function FileSelectorModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

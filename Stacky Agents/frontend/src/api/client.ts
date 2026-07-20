@@ -1,4 +1,20 @@
+import {
+  GATEWAY_DOWN_STATUSES,
+  reportConnectionSuccess,
+  reportConnectionFailure,
+} from "../services/connectionMonitor";
+
 const BASE = (import.meta as any).env?.VITE_API_BASE ?? "";
+
+// Plan 192 F2 — instrumentacion pasiva del choke-point de red. GATEWAY_DOWN_STATUSES
+// se IMPORTA del monitor (fuente unica; prohibido duplicar el Set aca — C8).
+function isAbortError(e: unknown): boolean {
+  return e instanceof DOMException && e.name === "AbortError";
+}
+function reportOutcome(res: Response): void {
+  if (GATEWAY_DOWN_STATUSES.has(res.status)) reportConnectionFailure();
+  else reportConnectionSuccess();
+}
 
 /**
  * Respuesta estructurada del gateway que preserva el cuerpo JSON
@@ -30,15 +46,22 @@ export async function rawPost<T>(
   body: unknown,
   extraHeaders: Record<string, string> = {}
 ): Promise<RawResponse<T>> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-User-Email": "dev@local",
-      ...extraHeaders,
-    },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Email": "dev@local",
+        ...extraHeaders,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    if (!isAbortError(e)) reportConnectionFailure();
+    throw e; // semantica intacta: el caller ve el mismo error
+  }
+  reportOutcome(res);
 
   let data: T | null = null;
   let errorBody: GatewayErrorBody | null = null;
@@ -65,14 +88,21 @@ export async function rawPost<T>(
 export const apiBase = BASE;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "X-User-Email": "dev@local",
-      ...(init.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Email": "dev@local",
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    if (!isAbortError(e)) reportConnectionFailure();
+    throw e; // semantica intacta: el caller ve el mismo error
+  }
+  reportOutcome(res);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}: ${text}`);

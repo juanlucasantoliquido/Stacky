@@ -14,18 +14,33 @@ export interface ToastState {
   title?: string;
   body: string;
   correlationId?: string;
+  /**
+   * Plan 185 — botón de acción opcional (ej: "Deshacer"). Backward-compatible:
+   * ningún caller existente lo pasa; si falta, no se renderiza.
+   */
+  action?: { label: string; onAction: () => void };
 }
 
 export default function Toast({
   toast,
   onClose,
+  inStack = false,
 }: {
   toast: ToastState;
   onClose: () => void;
+  /**
+   * Plan 185 — cuando el toast se renderiza DENTRO de un stack propio del host
+   * (UndoToastHost), `inStack` desactiva su `position: fixed` para que el
+   * contenedor gobierne el layout. Default false ⇒ comportamiento previo
+   * (fijo esquina inferior derecha) intacto para todos los callers existentes.
+   */
+  inStack?: boolean;
 }) {
   return (
     <div
-      className={`${styles.toast} ${styles[`toast_${toast.variant}`]}`}
+      className={`${styles.toast} ${styles[`toast_${toast.variant}`]}${
+        inStack ? ` ${styles.toast_inStack}` : ""
+      }`}
       data-correlation-id={toast.correlationId ?? undefined}
       role="alert"
       aria-live="assertive"
@@ -45,6 +60,11 @@ export default function Toast({
         </button>
       </div>
       <p className={styles.toastBody}>{toast.body}</p>
+      {toast.action ? (
+        <button className={styles.toastAction} onClick={toast.action.onAction}>
+          {toast.action.label}
+        </button>
+      ) : null}
     </div>
   );
 }

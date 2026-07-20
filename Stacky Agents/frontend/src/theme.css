@@ -92,6 +92,10 @@
   /* Pista del spinner (translúcida): el 141 la re-apunta en el bloque claro (C1). */
   --spinner-track: rgba(255, 255, 255, 0.15);
 
+  /* Plan 164 — z-index de la primitiva Dialog. Debe quedar por encima de drawers
+     (<=9400), paleta de comandos (9500) y tour de onboarding (9600). */
+  --z-dialog: 9700;
+
   /* Escala de spacing */
   --space-1: 2px;
   --space-2: 4px;

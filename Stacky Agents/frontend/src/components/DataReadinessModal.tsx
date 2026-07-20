@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { QaUat } from "../api/endpoints";
 import type { DataRequest } from "../api/endpoints";
+import { Dialog } from "./ui";
 import styles from "./DataReadinessModal.module.css";
 
 interface Props {
@@ -241,8 +242,7 @@ export default function DataReadinessModal({ runId, ticketId, onClose, onResolve
   }
 
   return (
-    <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Data Readiness">
+    <Dialog open onClose={onClose} ariaLabel="Data Readiness" size="lg">
         {/* Header */}
         <div className={styles.header}>
           <span className={styles.headerIcon}>🔒</span>
@@ -465,7 +465,6 @@ export default function DataReadinessModal({ runId, ticketId, onClose, onResolve
             Cerrar
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

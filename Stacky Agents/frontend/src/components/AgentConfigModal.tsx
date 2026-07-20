@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { AgentRoles, type AgentRoleEntry } from "../api/endpoints";
 import { formatLoadErrorMessage } from "../utils/loadError";
-import { shouldCloseOnBackdrop } from "../services/uiGuards";
+import { Dialog } from "./ui";
 import styles from "./AgentConfigModal.module.css";
 
 interface Props {
@@ -104,18 +104,13 @@ export default function AgentConfigModal({ onClose }: Props) {
   );
 
   return (
-    <div
-      className={styles.overlay}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty: Object.keys(dirty).length > 0, busy: saving })) onClose();
-      }}
+    <Dialog
+      open
+      onClose={onClose}
+      closeGuard={{ dirty: Object.keys(dirty).length > 0, busy: saving }}
+      ariaLabel="Configuracion de agentes"
+      size="md"
     >
-      <div
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Configuracion de agentes"
-      >
         <header className={styles.header}>
           <span className={styles.title}>Configuracion de agentes</span>
           <button className={styles.closeBtn} onClick={onClose} title="Cerrar">
@@ -215,7 +210,6 @@ export default function AgentConfigModal({ onClose }: Props) {
             {saved ? "Guardado" : saving ? "Guardando..." : "Guardar"}
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }

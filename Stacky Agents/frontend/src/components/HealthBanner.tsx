@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { connectionMonitorOwnsBackendSurface } from "../services/connectionMonitor";
 import styles from "./HealthBanner.module.css";
 
 type CheckStatus = "ok" | "warning" | "error";
@@ -79,12 +80,18 @@ export default function HealthBanner() {
         }
       } catch {
         if (!cancelled) {
-          setWorst({
-            id: "backend",
-            label: "Backend",
-            status: "error",
-            message: "El backend no responde — revisá que esté corriendo.",
-          });
+          if (connectionMonitorOwnsBackendSurface()) {
+            // Plan 192 F5: con el monitor de conexion activo, ConnectionBanner es
+            // el dueno del aviso "backend caido"; HealthBanner no lo duplica.
+            setWorst((prev) => (prev && prev.id === "backend" ? null : prev));
+          } else {
+            setWorst({
+              id: "backend",
+              label: "Backend",
+              status: "error",
+              message: "El backend no responde — revisá que esté corriendo.",
+            });
+          }
         }
       } finally {
         if (!cancelled) {

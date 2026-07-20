@@ -10,9 +10,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FlowConfig, Projects } from "../api/endpoints";
-import type { FlowConfigRule } from "../api/endpoints";
+import type { FlowConfigRule, FlowConfigListResponse } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import { useConfirm } from "../components/ui";
+import { scheduleUndoable } from "../services/undoManager";
 import styles from "./FlowConfigPage.module.css";
 
 const VALID_AGENT_TYPES = ["business", "functional", "technical", "developer", "qa"] as const;
@@ -150,7 +151,6 @@ interface RuleRowProps {
 }
 
 function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: RuleRowProps) {
-  const askConfirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [editAdoState, setEditAdoState] = useState(rule.ado_state);
   const [editAgentType, setEditAgentType] = useState<ValidAgentType>(
@@ -160,6 +160,7 @@ function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: Ru
   );
   const [error, setError] = useState<string | null>(null);
   const qc = useQueryClient();
+  const ask = useConfirm();
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -292,10 +293,30 @@ function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: Ru
         </button>
         <button
           className={`${styles.btnIcon} ${styles.btnIconDanger}`}
-          onClick={async () => {
-            if (await askConfirm({ title: "Eliminar regla", message: `Eliminar regla "${rule.ado_state} → ${rule.agent_type}"?`, tone: "danger", confirmLabel: "Eliminar" })) {
-              deleteMutation.mutate();
-            }
+          onClick={() => {
+            // Plan 185 — undo con gracia (reemplaza la confirmación previa).
+            // Quitamos la regla del cache de forma OPTIMISTA y DIFERIMOS el
+            // DELETE real (config LOCAL del dashboard, no remoto) 6 s con un toast
+            // "Deshacer" (o Ctrl+Z). Undo restaura el cache y nunca llama al
+            // backend; si la gracia expira, se commitea garantizado.
+            const key = ["flow-config", activeProjectName];
+            const prevData = qc.getQueryData<FlowConfigListResponse>(key);
+            qc.setQueryData<FlowConfigListResponse>(key, (old) =>
+              old ? { ...old, rules: old.rules.filter((r) => r.id !== rule.id) } : old
+            );
+            scheduleUndoable({
+              id: `flow-rule:${rule.id}`,
+              label: `Regla "${rule.ado_state} → ${rule.agent_type}" eliminada`,
+              commit: async () => {
+                await FlowConfig.delete(rule.id, activeProjectName);
+                qc.invalidateQueries({ queryKey: key });
+              },
+              onUndo: () => qc.setQueryData<FlowConfigListResponse>(key, prevData),
+              onError: (err) => {
+                qc.setQueryData<FlowConfigListResponse>(key, prevData); // rechazó ⇒ restaurar
+                setError(extractErrorMessage(err));
+              },
+            });
           }}
           disabled={isLoading}
           title="Eliminar"

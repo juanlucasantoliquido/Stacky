@@ -6,6 +6,17 @@
 
 ---
 
+## Planes downstream que consumen este plan (agregado 2026-07-21)
+
+Este builder Release + `build.summary.json` + detección de toolchain/doctor (G7) es **prerequisito** de:
+
+- **Plan 210** — "Gate de build determinista del Developer: fin del falso 'Build OK'" (`Stacky Agents/docs/210_PLAN_GATE_DE_BUILD_DETERMINISTA_DEL_DEVELOPER_FIN_DEL_FALSO_BUILD_OK.md`). Reusa `solution_builder`/`solution_store`/`build_toolchain`/`solution_scanner` de este plan para convertir el "Build OK" del Developer de narración del LLM a **hecho verificado por máquina**. Si el 201 no está mergeado, el 210 degrada a `build_workshop_unavailable` (no rompe).
+- **Plan 211** — "Inspector post-build + barrido de residuos de port entre clientes" (`Stacky Agents/docs/211_PLAN_INSPECTOR_POST_BUILD_Y_BARRIDO_DE_RESIDUOS_DE_PORT_ENTRE_CLIENTES.md`). Inspecciona los project files que este builder construyó (vía `verdict.solutions` + `build.summary.json`).
+
+> Nota: este plan (201) **no se modifica** por 210/211 — solo se lo reusa. Este bloque es únicamente un puntero de trazabilidad.
+
+---
+
 ## 0. CHANGELOG v1 → v2 (2026-07-18)
 
 > Crítica adversarial (juez severo + arquitecto). **Todas las anclas file:línea de v1 fueron verificadas contra el código y son VERÍDICAS** (deploymentsModel `DeployApp`, deploy_store `upsert_app`/`append_ledger`, deploy_planner `_APP_ID_RE`/`validate_app`, harness_flags `FlagSpec`/`_CATEGORY_KEYS["devops"]`, test_harness_flags `_CURATED_DEFAULTS_ON:467`, config.py `STACKY_DEVOPS_SERVERS_ENABLED:1196`, devops.py `_health_payload` `*_enabled`, DevOpsPage `DEVOPS_SECTIONS:97`, pipeline_stack_detector `:19-55`, runtime_paths `_active_workspace_root:66`). El flag/section-id/health-key/url_prefix del 201 son NUEVOS (cero colisión con 199/200 ni con el código). Veredicto v2: **APROBADO-CON-CAMBIOS**.

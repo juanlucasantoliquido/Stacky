@@ -1,8 +1,20 @@
 # Plan 209 — Guía de validación al usuario al completar una task ("Cómo validar esto")
 
-Estado: PROPUESTO v1 (2026-07-20)
+Estado: CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-21)
 Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Opus 4.8)
 Plan hermano en paralelo: **208** (auto-sync ADO + matriz de estados por tipo de ticket x agente). Se cita donde toca; 209 NO depende de 208.
+
+### CHANGELOG v1 → v2 (2026-07-21) — juez adversarial + súper arquitecto
+Veredicto: **APROBADO-CON-CAMBIOS** (0 bloqueantes, 5 importantes, 4 menores). Cambios aplicados:
+- **C1 (IMPORTANTE, [ADICIÓN ARQUITECTO]):** el mecanismo se acotó a agentes **user-facing** con la nueva constante `USER_FACING_AGENT_TYPES` que gatea **A y B** — antes F1 inyectaba la instrucción en `base.py` para los 14 tipos de agente y el post-hook B corría para todos, contradiciendo KPI-1 ("user-facing"), quemando input tokens en agentes irrelevantes (devops, `__critic__`, incident, pr_review, documenter, evolution_mutator) y ensuciando la UI con panes "Cómo validar en RS" degradados en ejecuciones no-producto. Patrón idéntico al gate `agent_type != "incident"` de `incident_autopublish.py:16`.
+- **C2 (IMPORTANTE):** corregido el claim falso "costo cero de tokens extra (A)". A no agrega **llamadas LLM**, pero sí input tokens (la instrucción) + output tokens (la sección). Reescrito a "sin LLM extra; costo marginal acotado a user-facing".
+- **C3 (IMPORTANTE):** corregido el bug de persistencia `execution.metadata_json["validation_playbook"] = ...` (item-assignment sobre un `str` de columna `Text` ⇒ `TypeError`, tragado en silencio por el post-hook advisory ⇒ feature muerta con KPI-1=0%). Ahora usa el patrón exacto de `_close_execution` (`agent_completion.py:800-813`): `json.loads` → mutar → `json.dumps`.
+- **C4 (IMPORTANTE):** resuelto el mismatch de interfaz — `catalog_unknown_processes(html, catalog)` (`tickets.py:6241`) toma **HTML crudo**, pero `assess_grounding` recibía el objeto parseado. Nueva firma con `source_text` sintetizado desde los pasos.
+- **C5 (IMPORTANTE):** `render_playbook_html` no tenía consumidor de producción (UI renderiza desde el objeto; ADO diferido en F3.4) ⇒ el Principio 2 "un solo renderer" era falso. Suavizado a "un solo **objeto canónico**, dos vistas equivalentes"; el renderer HTML queda declarado como oráculo de tests + camino ADO futuro.
+- **C6 (MENOR):** import de `api.tickets` (6600+ líneas) forzado a ser **lazy dentro de la función** (evita acoplar api→service y peso en cada run).
+- **C7 (MENOR):** para evitar divergencia A(ADO)/B(UI) en carrera de timing, el hook prefiere `execution.html_output_path` (persistido al cierre, `agent_completion.py:796`) antes de reconstruir el path por `ado_id`.
+- **C8 (MENOR):** citado el import exacto `from db import session_scope` (gotcha: está en `db.py`, no `models.py`).
+- **C9 (MENOR):** `build_index` ahora recibe `content_hash` para reuso del índice TF-IDF (la firma lo soporta, `rag_retriever.py:63`) — evita reconstruirlo sincrónico en cada corrida de B.
 
 ---
 
@@ -35,12 +47,12 @@ Hoy el ciclo produce un entregable **técnicamente correcto** pero **mudo para e
 ## 3. Principios y guardarraíles
 
 1. **Anti-alucinación innegociable.** Ningún paso sin fuente citada. Sin evidencia → **degradación honesta** (mensaje fijo), nunca invención. Cableado con gate (F2) + sentinel (F5).
-2. **Híbrido A + B con un único objeto canónico.** Una sola estructura `ValidationPlaybook` con dos productores (A: parseado del HTML del agente; B: construido por RAG) y **un solo renderer** → ADO y UI muestran exactamente lo mismo, venga de donde venga.
+2. **Híbrido A + B con un único objeto canónico (C5).** Una sola estructura `ValidationPlaybook` con dos productores (A: parseado del HTML del agente; B: construido por RAG). La **fuente de verdad para todas las vistas es el objeto** (persistido en `execution.metadata.validation_playbook`): la UI (F4) lo renderiza como JSX y el camino ADO futuro reusa `render_playbook_html`. No es "un solo renderer" (la UI no renderiza HTML crudo por seguridad), sino **un solo objeto → vistas equivalentes**. `render_playbook_html` (F3) queda como oráculo de tests + generador del camino ADO diferido (F3.4), no como renderer de la UI.
 3. **Cero trabajo al operador.** Flag `STACKY_VALIDATION_PLAYBOOK_ENABLED` **default ON**. La guía se anexa sola. No dispara ninguna de las 4 excepciones duras (ver §5): es **texto**, no acción externa, no bypass de revisión, no destructivo, no baja seguridad y **no exige prerequisito nuevo** (si falta grounding, degrada; no rompe).
 4. **Human-in-the-loop.** La guía **amplifica** al novato; el operador sigue siendo quien valida y aprueba. No auto-ejecuta nada en RS ni en ADO.
 5. **No romper el contrato ADO.** Los agentes **no** tocan ADO (`agents/functional.py:25-27`); la guía es contenido del deliverable, no una acción.
-6. **Paridad de 3 runtimes.** A = instrucción de prompt (la siguen Codex/Claude/Copilot por igual). B + gate = Python runtime-agnóstico. Si un runtime omite A, B rellena; si no hay grounding, degrada. Nada atado a un runtime.
-7. **No degradar performance/estabilidad/seguridad/DX.** A no agrega llamadas LLM (es parte de la salida que el agente ya produce). B es retrieval **local** (TF-IDF, sin red, sin LLM). Backward-compatible: flag OFF o sin grounding → el deliverable queda como hoy. Reusar `agent_html_output`, `rag_retriever`, `docs_rag`, la maquinaria de grounding y el registry de flags existentes.
+6. **Paridad de 3 runtimes, acotada a user-facing (C1).** A = instrucción de prompt (la siguen Codex/Claude/Copilot por igual) **solo para los agentes en `USER_FACING_AGENT_TYPES`**. B + gate = Python runtime-agnóstico, con el **mismo gate por tipo de agente**. Si un runtime omite A, B rellena; si no hay grounding, degrada. Nada atado a un runtime. Los agentes no-producto (devops, `__critic__`, incident, pr_review, documenter, evolution_mutator) quedan `disabled` por diseño (no es una task de RS a validar).
+7. **No degradar performance/estabilidad/seguridad/DX (C2).** A **no agrega llamadas LLM** (la sección es parte de la salida que el agente ya produce), pero sí un costo marginal de **input tokens** (la instrucción) + **output tokens** (la sección); por eso se **acota a agentes user-facing** (C1), donde ese costo compra valor de onboarding. B es retrieval **local** (TF-IDF, sin red, sin LLM) y **solo corre cuando A faltó**. Backward-compatible: flag OFF o sin grounding → el deliverable queda como hoy. Reusar `agent_html_output`, `rag_retriever`, `docs_rag`, la maquinaria de grounding y el registry de flags existentes.
 8. **Mono-operador sin auth.** Nada de RBAC/multiusuario.
 9. **No bloquear el cierre.** El gate es **advisory** (como `_catalog_grounding_warnings`): emite warnings + métricas, nunca frena la completación ni la publicación.
 
@@ -86,6 +98,14 @@ cd "Stacky Agents/frontend" && npx vitest run src/components/__tests__/Validatio
   - `DEGRADED_MESSAGE = "Estos pasos no pudieron verificarse contra la documentacion del producto. Confirma con un referente de RS antes de usarlos."`
   - `SECTION_MARKER = 'data-stacky="validation-playbook"'` (marca para parseo A e idempotencia de append).
   - `MARKER_COMMENT = "<!-- stacky:validation-playbook v1 -->"` (centinela de idempotencia para no anexar dos veces).
+  - **`USER_FACING_AGENT_TYPES` (C1, [ADICIÓN ARQUITECTO]) — allowlist de tipos de agente cuya salida es un cambio de producto RS validable por un usuario novato:**
+    ```python
+    USER_FACING_AGENT_TYPES = frozenset({
+        "functional", "developer", "incident_dev", "qa", "technical", "business",
+    })
+    ```
+    Los tipos verificados en `backend/agents/*.py` que quedan **fuera** (mecanismo `disabled`, por diseño): `devops`, `__critic__`, `debug`, `pr_review`, `Documentador`, `evolution_mutator`, `incident`, `custom`. Motivo: su entregable no es una feature de UI/negocio de RS (infra, meta-agentes, triage, docs) ⇒ una guía "Cómo validar en RS" sería ruido + tokens desperdiciados. Este es el **mismo patrón** del gate `agent_type != "incident"` en `incident_autopublish.py:16`.
+  - Helper `is_user_facing(agent_type: str | None) -> bool`: `agent_type in USER_FACING_AGENT_TYPES` (None → False). Único punto de decisión de scope, compartido por A (F1) y B (F3).
 - Helper `flag_enabled() -> bool`: lee `config.config.STACKY_VALIDATION_PLAYBOOK_ENABLED` con fallback a `os.getenv(..., "true")`. Usar **`config.config`** (la instancia), no el módulo (gotcha conocido: el módulo devuelve el default y mata el branch OFF).
 
 **Diff ilustrativo `harness_flags.py`** (agregar al tuple `FLAG_REGISTRY`; el nombre del tuple ya existe en el módulo):
@@ -120,6 +140,7 @@ STACKY_VALIDATION_PLAYBOOK_ENABLED: bool = os.getenv(
 - `test_status_values`: sólo se aceptan los 4 status; otro valor lanza `ValueError`.
 - `test_degraded_message_constante`: `DEGRADED_MESSAGE` contiene "referente" y NO contiene dígitos de pasos.
 - `test_step_source_required`: `ValidationStep` con `source=""` es rechazado por el validador de F5 (import del check).
+- `test_user_facing_allowlist` (C1): `is_user_facing("functional") is True`; `is_user_facing("devops") is False`; `is_user_facing("__critic__") is False`; `is_user_facing(None) is False`. Y `USER_FACING_AGENT_TYPES` es `frozenset` (inmutable).
 
 **Tests primero (`test_plan209_flag.py`):**
 - `test_flag_registrada`: la key aparece en `FLAG_REGISTRY` y en `_CATEGORY_KEYS["calidad_verificacion"]`.
@@ -132,7 +153,7 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan
 ```
 Verde = F0 hecho. (Se incluye `test_harness_flags.py` porque el cambio en `_CURATED_DEFAULTS_ON` lo afecta.)
 
-**Flag que la protege + default:** `STACKY_VALIDATION_PLAYBOOK_ENABLED`, default **ON**. Justificación del ON: la guía es texto en un deliverable que el agente ya produce; no agrega costo de tokens (A) ni llamadas de red/LLM (B es TF-IDF local); si falta grounding, degrada (no rompe). No cae en ninguna excepción dura de "flags que quemen tokens ociosos".
+**Flag que la protege + default:** `STACKY_VALIDATION_PLAYBOOK_ENABLED`, default **ON**. Justificación del ON: la guía es texto en un deliverable que el agente ya produce; **no agrega llamadas de red/LLM** (B es TF-IDF local y solo corre cuando A faltó). El costo es marginal (input de la instrucción + output de la sección) y **acotado a agentes user-facing** (C1). Si falta grounding, degrada (no rompe). No es un flag "ocioso": **no pre-ejecuta nada de forma especulativa** — A viaja en un prompt que ya se compone y B solo se dispara al terminar una task user-facing sin sección. No cae en ninguna excepción dura de "flags que quemen tokens ociosos".
 
 **Impacto por runtime:** ninguno en F0 (sólo schema/flag). **Trabajo del operador: ninguno.**
 
@@ -140,7 +161,7 @@ Verde = F0 hecho. (Se incluye `test_harness_flags.py` porque el cambio en `_CURA
 
 ### F1 — Enfoque A: extender el contrato de salida (system_prompt compartido)
 
-**Objetivo (1 frase).** Instruir a **todos** los agentes, de forma uniforme y gateada por flag, a incluir en su entregable la sección "Cómo validar" con pasos de UI de RS **citando** los docs/catálogo que ya reciben. **Valor:** el productor primario es el agente, que tiene el contexto exacto; costo cero de tokens extra.
+**Objetivo (1 frase).** Instruir a los agentes **user-facing** (C1: `USER_FACING_AGENT_TYPES`), de forma uniforme y gateada por flag + tipo, a incluir en su entregable la sección "Cómo validar" con pasos de UI de RS **citando** los docs/catálogo que ya reciben. **Valor:** el productor primario es el agente, que tiene el contexto exacto; **sin llamadas LLM extra** (la sección viaja en la salida que el agente ya produce), con costo marginal de tokens acotado a agentes de producto (C2).
 
 **Archivos a crear/editar:**
 - EDITAR `backend/agents/base.py` (`compose_system_prompt`, `base.py:56`).
@@ -150,7 +171,7 @@ Verde = F0 hecho. (Se incluye `test_harness_flags.py` porque el cambio en `_CURA
 
 **Nombres exactos:**
 - Constante `VALIDATION_PLAYBOOK_INSTRUCTION` en `services/validation_playbook.py` (texto español, ver abajo).
-- Función `validation_prompt_block() -> str`: devuelve `VALIDATION_PLAYBOOK_INSTRUCTION` si `flag_enabled()`, si no `""`.
+- Función `validation_prompt_block(agent_type: str | None) -> str` (C1): devuelve `VALIDATION_PLAYBOOK_INSTRUCTION` **solo si** `flag_enabled()` **y** `is_user_facing(agent_type)`; en cualquier otro caso `""`. El gate por tipo evita inyectar la instrucción en los 14 tipos de agente (desperdicio de input tokens + secciones sin sentido en agentes no-producto).
 
 **Texto EXACTO de la instrucción (`VALIDATION_PLAYBOOK_INSTRUCTION`):**
 ```
@@ -191,10 +212,10 @@ Reglas OBLIGATORIAS:
 
 **Diff ilustrativo `base.py`** (dentro de `compose_system_prompt`, justo antes del ensamblado final en `base.py:196`):
 ```python
-        # Plan 209 — instrucción de "Cómo validar" (enfoque A), gateada por flag.
+        # Plan 209 — instrucción de "Cómo validar" (enfoque A), gateada por flag + tipo (C1).
         try:
             from services import validation_playbook as _vp  # noqa: PLC0415
-            _vp_block = _vp.validation_prompt_block()
+            _vp_block = _vp.validation_prompt_block(self.type)  # gate user-facing adentro
             if _vp_block:
                 prefix_parts.append(_vp_block)
                 meta["validation_playbook_prompt"] = True
@@ -210,15 +231,16 @@ Reglas OBLIGATORIAS:
 (El bloque `if prefix_parts: ... return full, meta` ya existe en `base.py:196-200`; sólo se agrega el `try` de arriba **antes** de esas líneas y no se duplican.)
 
 **Casos borde:**
-- Flag OFF → `validation_prompt_block()` devuelve `""` → prompt idéntico al de hoy (backward-compatible, verificado por test).
+- Flag OFF (o agente no user-facing) → `validation_prompt_block(agent_type)` devuelve `""` → prompt idéntico al de hoy (backward-compatible, verificado por test).
 - `system_prompt_override` activo (FA-50, `base.py:59`) → `compose_system_prompt` retorna temprano y **no** inyecta la instrucción. Correcto: si el operador overridea el prompt, respetamos su override (documentar como limitación conocida; B lo cubre igual en F3).
 - Import de `validation_playbook` falla → se captura, se registra en meta, el prompt sigue funcionando (no rompe el run).
 
 **Tests primero (`test_plan209_prompt_contract.py`):**
 - `test_instruction_presente_flag_on`: con flag ON, `FunctionalAgent().compose_system_prompt(RunContext())[0]` contiene `SECTION_TITLE` y `"data-stacky=\"validation-playbook\""`.
 - `test_instruction_ausente_flag_off`: con `STACKY_VALIDATION_PLAYBOOK_ENABLED=false`, el system prompt NO contiene `SECTION_TITLE`.
+- `test_instruction_ausente_agente_no_user_facing` (C1): con flag ON, `DevOpsAgent().compose_system_prompt(RunContext())[0]` NO contiene `SECTION_TITLE` (el gate `is_user_facing("devops")` es False). Verifica que la instrucción no se inyecta en agentes no-producto.
 - `test_override_no_inyecta`: con `RunContext(system_prompt_override="X")`, el resultado es exactamente `"X"` (sin instrucción).
-- `test_meta_flag`: `meta["validation_playbook_prompt"] is True` con flag ON.
+- `test_meta_flag`: `meta["validation_playbook_prompt"] is True` con flag ON (agente user-facing).
 
 **Criterio de aceptación binario + comando:**
 ```
@@ -253,8 +275,10 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan
     - `<p data-sources>Fuentes: ...</p>` → `sources`.
   - Si el HTML contiene el texto exacto `DEGRADED_MESSAGE` → status `"degraded"`, `steps=[]`.
   - Si hay `<li>` sin `data-source` (o `source` vacío) → se conserva el paso pero se marca la lista como no-grounded (lo evalúa `assess_grounding`), status tentativo `"agent_provided"`.
-- `assess_grounding(pb: ValidationPlaybook, process_catalog: list | None) -> tuple[ValidationPlaybook, list[str]]`
-  - Reutiliza `api/tickets.py::catalog_unknown_processes` para detectar procesos citados en los pasos que NO están en el catálogo del cliente (importar la función; es PURA, `tickets.py:6241`).
+- `assess_grounding(pb: ValidationPlaybook, process_catalog: list | None, *, source_text: str | None = None) -> tuple[ValidationPlaybook, list[str]]`
+  - **C4 — mismatch de interfaz resuelto:** `catalog_unknown_processes(html, process_catalog)` (`tickets.py:6241`) toma **texto HTML crudo**, NO una lista de pasos. Como `assess_grounding` recibe el objeto ya parseado, sintetiza el texto a evaluar:
+    `text = source_text or " ".join(f"{s.action} {s.source}" for s in pb.steps)` y lo pasa como primer argumento. (El post-hook, que tiene el HTML original, puede pasarlo como `source_text` para máxima fidelidad.)
+  - **C6 — import lazy obligatorio:** importar `catalog_unknown_processes` **dentro de la función** (`from api.tickets import catalog_unknown_processes`), NUNCA al top del módulo. `api/tickets.py` tiene 6600+ líneas y es un blueprint; un import top-level acoplaría `service → api` y cargaría todo el módulo en cada composición de prompt (base.py) y en el arranque. Envolver en try/except → si falla el import, se omiten solo los warnings de catálogo (degradación honesta, no rompe). Es PURA.
   - Warnings (lista de strings, formato espejo de `_catalog_grounding_warnings`, `tickets.py:6260`):
     - `"validation_playbook.ungrounded_step: paso {n} sin fuente"` por cada paso con `source` vacío.
     - `"validation_playbook.process_not_in_catalog: {procs}"` si hay procesos citados fuera del catálogo.
@@ -299,7 +323,7 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan
 
 ### F3 — Enfoque B: relleno por RAG + post-hook de completación (compute_and_attach)
 
-**Objetivo (1 frase).** Cuando A no produjo la sección (o quedó pobre) y hay flag ON, construir el playbook de forma determinista desde el grounding local (docs del cliente + catálogo de procesos) con citas, o degradar honestamente; y adjuntarlo a la ejecución para UI y ADO. **Valor:** garantiza cobertura en los 3 runtimes sin LLM extra y sin inventar.
+**Objetivo (1 frase).** Cuando A no produjo la sección (o quedó pobre), hay flag ON **y el agente es user-facing (C1)**, construir el playbook de forma determinista desde el grounding local (docs del cliente + catálogo de procesos) con citas, o degradar honestamente; y adjuntarlo a la ejecución para UI (y ADO futuro). **Valor:** garantiza cobertura en los 3 runtimes sin LLM extra y sin inventar.
 
 **Seam CORRECTO (corregido por hallazgo del plan hermano 208, verificado):** el punto de completación **runtime-agnóstico** NO es `agent_completion.run_on` (no todos los runners pasan por el gateway). Es el **post-hook** `services/ticket_status.py::on_execution_end` (`ticket_status.py:231`) → `_run_post_hooks` (`:279`), con registro vía `register_post_hook(fn)` (`:307`). Los 3 runners y el output_watcher terminan ahí. Firma del hook: `fn(*, ticket_id, execution_id, final_status, agent_type, error, **kwargs)`. Corre en orden de registro y **nunca bloquea** (errores se loguean, `:325-330`) → advisory por construcción. Patrón de registro en arranque: `app.py:853-855` (`incident_autopublish.register(ticket_status.register_post_hook)`).
 
@@ -313,29 +337,51 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan
 **Nombres exactos y firmas:**
 - `build_from_grounding(*, ticket_title: str, ticket_text: str, project_name: str | None, process_catalog: list | None) -> ValidationPlaybook`
   - Retrieval 1 (docs funcionales del cliente): `docs_rag.search(project_name, query, top_k=5)` con `query = f"cómo validar {ticket_title}"` (envuelto en try/except; si el índice no existe → sin hits). (`docs_rag.py:265`.)
-  - Retrieval 2 (catálogo de procesos): `rag_retriever.build_index(rag_retriever.chunks_from_process_catalog(process_catalog))` + `rag_retriever.retrieve(index, ticket_title + " " + ticket_text, top_k=5)`. (`rag_retriever.py:63,75,94`.)
+  - Retrieval 2 (catálogo de procesos): `rag_retriever.build_index(rag_retriever.chunks_from_process_catalog(process_catalog), content_hash=f"{project_name}:{len(process_catalog or [])}")` + `rag_retriever.retrieve(index, ticket_title + " " + ticket_text, top_k=5)`. (`rag_retriever.py:63,75,94`.) **C9:** pasar `content_hash` (la firma lo soporta) permite que `build_index` reuse el índice TF-IDF entre corridas de B en vez de reconstruirlo sincrónicamente en el hilo de completación cada vez. Si el catálogo cambia de tamaño/proyecto, la clave cambia y se reindexa; correcto.
   - **Regla anti-alucinación (núcleo):**
     - Si ambos retrievals vacíos → `ValidationPlaybook(status="degraded", steps=[], sources=[], confidence=0.0, degraded_reason="no_grounding")`. B **no** inventa pasos.
     - Si hay hits: cada paso se construye **a partir de un fragmento recuperado**, con `source` = ref del hit (nombre del doc/`DocHit` o `catalog:<proceso>`). B **no** redacta pasos sin un fragmento detrás. Si los fragmentos existen pero no describen pasos de UI accionables, el playbook se arma como "consultá estas fuentes documentadas" (status `"enriched"` con `steps` que apuntan a las fuentes, `confidence` baja) — sigue siendo grounded, sin inventar UI.
     - `assess_grounding` (F2) se corre sobre el resultado: cualquier paso que quede sin `source` se elimina; si no queda ninguno → `degraded`.
   - `confidence = min(1.0, 0.3 + 0.1 * n_sources)` (heurística acotada; documentada como tal, sin pretensión de precisión).
 - `render_playbook_html(pb: ValidationPlaybook) -> str`
-  - **Único renderer** para UI y ADO. Devuelve el `<section data-stacky="validation-playbook">...</section>` precedido por `MARKER_COMMENT`.
+  - **C5 — alcance real:** NO es el renderer de la UI (F4 renderiza JSX desde el objeto por seguridad, sin `dangerouslySetInnerHTML`). Sirve al **camino ADO futuro (F3.4, diferido)** y como **oráculo de tests** (F3/F5). El invariante que sí se garantiza es "un solo **objeto canónico** → vistas equivalentes". Devuelve el `<section data-stacky="validation-playbook">...</section>` precedido por `MARKER_COMMENT`.
   - `status == "degraded"` → renderiza `<section>` con `<h2>` + un `<p class="stacky-degraded">` con `DEGRADED_MESSAGE` y **sin** `<ol>` de pasos.
   - `status in {"agent_provided","enriched"}` → `<ol>` con los pasos + `<p data-sources>`.
-- `compute_and_attach(*, execution, html: str | None, project_name: str | None, process_catalog: list | None) -> ValidationPlaybook` (núcleo testeable, sin dependencia del hook):
-  - Si `not flag_enabled()` → `ValidationPlaybook(status="disabled", ...)` y NO escribe nada.
+- `compute_and_attach(*, execution, agent_type: str | None, html: str | None, project_name: str | None, process_catalog: list | None) -> ValidationPlaybook` (núcleo testeable, sin dependencia del hook):
+  - **Gate de scope (C1):** si `not flag_enabled()` **o** `not is_user_facing(agent_type)` → `ValidationPlaybook(status="disabled", steps=[], sources=[], confidence=0.0, degraded_reason="not_applicable")` y **NO escribe nada**. Esto evita que B corra (y adjunte panes degradados) en ejecuciones de agentes no-producto (devops, incident, `__critic__`, etc.).
   - `pb = detect(html)`; si `pb is None` o `pb.steps == []` → `pb = build_from_grounding(...)`.
-  - `pb, warnings = assess_grounding(pb, process_catalog)`.
-  - Persistir `pb.to_dict()` en `execution.metadata_json["validation_playbook"]` (merge idéntico al patrón de `_close_execution`, `agent_completion.py:800-813`).
+  - `pb, warnings = assess_grounding(pb, process_catalog, source_text=html)` (C4: pasa el HTML original cuando existe para máxima fidelidad del chequeo de catálogo).
+  - **Persistir (C3) — patrón EXACTO de `_close_execution` (`agent_completion.py:800-813`); NO usar item-assignment sobre `metadata_json` (es una columna `Text`/`str`, no un dict):**
+    ```python
+    import json
+    _meta = {}
+    if getattr(execution, "metadata_json", None):
+        try:
+            _meta = json.loads(execution.metadata_json)
+        except (json.JSONDecodeError, TypeError):
+            _meta = {}
+    _meta["validation_playbook"] = pb.to_dict()
+    execution.metadata_json = json.dumps(_meta, ensure_ascii=False, default=str)
+    ```
+    (Este patrón funciona tanto con el modelo real como con un fake de test que exponga `metadata_json` como atributo `str`, y coincide con el assert de `test_attach_persiste_metadata`.)
   - Emitir por cada warning un log `validation_playbook.<warning>` (para KPI-2), sin bloquear.
   - Devolver `pb`.
 - `validation_playbook_post_hook(*, ticket_id, execution_id, final_status, agent_type=None, error=None, **kwargs) -> None` (wrapper que registra el seam; firma EXACTA de `register_post_hook`, `ticket_status.py:310`):
-  - Si `not flag_enabled()` → return.
-  - Abrir `session_scope()`; cargar `execution = session.get(AgentExecution, execution_id)` y su `ticket` (para `ado_id` y `project`).
-  - Leer el HTML del deliverable: `agent_html_output.read_and_validate(ado_id).html` dentro de try/except (si no hay HTML → `html=None`, B decide).
-  - `_catalog = (load_client_profile(project) or {}).get("process_catalog") or []` (`services/client_profile.py:266`).
-  - Llamar `compute_and_attach(execution=execution, html=html, project_name=project, process_catalog=_catalog)`; commit.
+  - Si `not flag_enabled()` **o** `not is_user_facing(agent_type)` → return **temprano** (C1: no abrir sesión ni leer disco para agentes no-producto; ahorra I/O en cada cierre de devops/incident/etc.).
+  - Import exacto (C8): `from db import session_scope` (el helper vive en `db.py`, **no** en `models.py`; gotcha conocido) y `from models import AgentExecution`.
+  - Abrir `session_scope()`; cargar `execution = session.get(AgentExecution, execution_id)`; `_ticket = execution.ticket` (relación `AgentExecution.ticket`, `models.py:234`); `ado_id = _ticket.ado_id` (`models.py:42`), `project = _ticket.stacky_project_name` (`models.py:48`). Si `execution is None` o `_ticket is None` (task borrada — trap conocida) → return.
+  - **Leer el HTML del deliverable (C7 — preferir el path persistido):**
+    ```python
+    html = None
+    try:
+        _hint = getattr(execution, "html_output_path", None)  # persistido al cierre (agent_completion.py:796)
+        html = agent_html_output.read_and_validate(ado_id, hint=_hint).html
+    except Exception:  # noqa: BLE001 — NOT_FOUND/EMPTY/TOO_LARGE/SECRET_DETECTED → B decide
+        html = None
+    ```
+    Usar `html_output_path` como `hint` reduce la divergencia A(ADO)/B(UI): si A ya escribió `comment.html`, `detect` lo parsea y B no se dispara.
+  - `_catalog = (load_client_profile(project) or {}).get("process_catalog") or []` (`load_client_profile(project_name: str)`, `services/client_profile.py:266`; envolver en try/except → `[]`).
+  - Llamar `compute_and_attach(execution=execution, agent_type=agent_type, html=html, project_name=project, process_catalog=_catalog)`; el `session_scope` commitea al salir.
   - Todo envuelto en try/except (el `_run_post_hooks` ya loguea y no bloquea, pero reforzamos).
 - `register(register_post_hook) -> None`: `register_post_hook(validation_playbook_post_hook)` (patrón idéntico a `incident_autopublish.register`, `incident_autopublish.py:52`).
 
@@ -363,13 +409,15 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan
 - `test_render_degradado_sin_ol`: `render_playbook_html(degraded)` contiene `DEGRADED_MESSAGE` y NO contiene `<ol>`.
 - `test_render_idempotente`: el output empieza con `MARKER_COMMENT`.
 
-**Tests primero (`test_plan209_compute_attach.py`):**
-- `test_attach_persiste_metadata`: execution fake con `metadata_json` ⇒ tras `compute_and_attach`, `json.loads(execution.metadata_json)["validation_playbook"]["status"]` es válido.
+**Tests primero (`test_plan209_compute_attach.py`):** (todas las llamadas pasan `agent_type="functional"` salvo donde se prueba el gate)
+- `test_attach_persiste_metadata`: execution fake con `metadata_json` (atributo `str`) ⇒ tras `compute_and_attach(..., agent_type="functional", ...)`, `json.loads(execution.metadata_json)["validation_playbook"]["status"]` es válido. **(C3: prueba que la escritura NO usa item-assignment sobre el `str`.)**
 - `test_flag_off_no_escribe`: con flag OFF ⇒ status `"disabled"` y `metadata_json` sin la key `validation_playbook`.
+- `test_gate_no_user_facing_disabled` (C1): con flag ON pero `agent_type="devops"` ⇒ status `"disabled"`, `degraded_reason=="not_applicable"` y `metadata_json` sin la key `validation_playbook` (B no corre para agentes no-producto).
 - `test_detect_gana_sobre_build`: si `html` ya trae la sección con pasos ⇒ status `"agent_provided"` (no se llama a `build_from_grounding`; verificar con monkeypatch que build no se invoca).
 - `test_warning_ungrounded_emite_log`: paso sin fuente ⇒ se registró el log `validation_playbook.ungrounded_step`.
 - `test_register_agrega_post_hook`: un `register(fake_register)` llama a `fake_register` con `validation_playbook_post_hook`.
-- `test_post_hook_no_lanza_sin_html`: `validation_playbook_post_hook(ticket_id=..., execution_id=..., final_status="completed")` con execution sin `comment.html` NO lanza y deja status `degraded`/`disabled` según flag (nunca rompe el cierre).
+- `test_post_hook_gate_no_user_facing_no_toca_db` (C1): `validation_playbook_post_hook(..., agent_type="devops", final_status="completed")` retorna sin abrir sesión ni leer disco (monkeypatch `session_scope`/`read_and_validate` para asertar que NO se llamaron).
+- `test_post_hook_no_lanza_sin_html`: `validation_playbook_post_hook(ticket_id=..., execution_id=..., final_status="completed", agent_type="functional")` con execution sin `comment.html` NO lanza y deja status `degraded`/`disabled` según flag (nunca rompe el cierre).
 
 **Criterio de aceptación binario + comando:**
 ```
@@ -482,6 +530,9 @@ Verde = la garantía anti-alucinación es un invariante del sistema.
 | R7 | **Ruido visual** en el deliverable. | BAJA | Pane distinguible y colapsable (F4); sólo se muestra si status ≠ disabled. |
 | R8 | **Ratchet UI rojo** por inline styles en el pane. | BAJA | `.module.css` con tokens `var(--...)`, archivo nuevo alcance 0 (gotcha conocido). |
 | R9 | **Contaminación cross-file de pytest** da falsos verdes/rojos. | MEDIA | Correr **por archivo** siempre (comandos de cada fase). |
+| R10 | **Divergencia A(ADO)/B(UI)** si A escribió `comment.html` pero el hook no lo pudo leer a tiempo (carrera de mtime) ⇒ ADO muestra la sección de A y la UI la de B. | MEDIA | C7: el hook lee vía `hint=execution.html_output_path` (persistido al cierre, `agent_completion.py:796`); en el output_watcher `comment.html` es el disparador (ya existe). Piso garantizado = UI (metadata); ADO best-effort (F3.4). |
+| R11 | **Persistencia silenciosa rota**: un write mal escrito (`metadata_json[...]=`) tira `TypeError`, que el post-hook advisory traga ⇒ feature muerta sin señal (KPI-1=0%). | ALTA (mitigada) | C3: patrón exacto `json.loads`→mutar→`json.dumps`; el test nombrado `test_attach_persiste_metadata` va **rojo** si la escritura falla, forzando el fix antes del merge. |
+| R12 | **Scope creep de tokens/ruido**: inyectar A en los 14 tipos de agente + correr B para todos ensucia UI y quema input tokens en agentes no-producto. | MEDIA | C1: `USER_FACING_AGENT_TYPES` gatea A y B; los no-producto quedan `disabled` sin abrir sesión ni leer disco. |
 
 ---
 
@@ -514,9 +565,9 @@ F0 (flag + schema) → F1 (prompt A) → F2 (gate detect/assess) → F3 (build B
 
 ### Definición de Hecho (DoD) global
 - [ ] `STACKY_VALIDATION_PLAYBOOK_ENABLED` en `FLAG_REGISTRY`, `_CATEGORY_KEYS`, `config.py` y `_CURATED_DEFAULTS_ON`; editable desde la UI (HarnessFlagsPanel), default ON. `test_harness_flags.py` verde.
-- [ ] Con flag ON, todos los agentes reciben la instrucción A (F1); con override, no (documentado).
+- [ ] Con flag ON, **solo los agentes `USER_FACING_AGENT_TYPES`** reciben la instrucción A (F1); los no-producto y el caso override, no (documentado). Gate compartido por A y B (C1).
 - [ ] `detect` + `assess_grounding` (F2) convierten HTML → objeto y emiten warnings sin bloquear.
-- [ ] `build_from_grounding` (F3) nunca inventa: con grounding arma pasos citados; sin grounding degrada. `compute_and_attach` persiste en `execution.metadata.validation_playbook`, invocado por el post-hook `validation_playbook_post_hook` registrado en `on_execution_end` (3 runtimes, verificado).
+- [ ] `build_from_grounding` (F3) nunca inventa: con grounding arma pasos citados; sin grounding degrada. `compute_and_attach` persiste en `execution.metadata.validation_playbook` **vía `json.loads`→mutar→`json.dumps`** (C3, patrón `_close_execution`), gateado por `is_user_facing(agent_type)` (C1), invocado por el post-hook `validation_playbook_post_hook` registrado en `on_execution_end` (3 runtimes, verificado).
 - [ ] Pane `ValidationPlaybookPane` (F4) renderiza pasos+fuentes+confianza o el mensaje de degradación; no rompe ratchet UI.
 - [ ] Sentinel (F5) verde: 0 pasos sin fuente en cualquier camino; degradación honesta verificada.
 - [ ] Los 7 archivos de test `test_plan209_*.py` registrados en `HARNESS_TEST_FILES` (`run_harness_tests.sh` y `.ps1`); meta-test ratchet verde.

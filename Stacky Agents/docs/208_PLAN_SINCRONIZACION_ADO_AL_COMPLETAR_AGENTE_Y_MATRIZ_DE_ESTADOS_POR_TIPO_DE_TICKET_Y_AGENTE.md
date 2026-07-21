@@ -1,9 +1,24 @@
 # Plan 208 — Sincronización ADO al completar un agente + Matriz de estados por (tipo de ticket x tipo de agente)
 
-> Estado: PROPUESTO v1 (2026-07-20)
+> Estado: CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-21)
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, Opus 4.8)
 > Plan hermano: **209** (guía de validación para el operador) — se escribe en paralelo; este plan NO lo diseña, solo lo cita donde corresponde.
 > Numeración: 208 (los NN 203-207 están reservados a la serie "Fragua Nocturna" 202-207; para no fragmentarla, esta línea de trabajo arranca en 208).
+
+---
+
+## 0. Historial de versiones — v1 -> v2 (2026-07-21)
+
+Revisión adversarial (juez + arquitecto). Veredicto: **APROBADO-CON-CAMBIOS** (sin bloqueantes; IMPORTANTES corregidos). El diseño base se sostiene y quedó re-verificado contra código: el chokepoint runtime-agnóstico correcto ES `ticket_status.on_execution_end`; la firma con la que `_run_post_hooks` invoca los hooks (`ticket_id, execution_id, final_status, agent_type, error`) coincide EXACTAMENTE con el `_post_hook` propuesto (`ticket_status.py:279-285,310`); y `_safe_transition(provider, ado_id, target, *, phase, legacy_client_fn=None, correlation_id=None)` coincide con las llamadas (`task_states.py:104-141`). Cambios aplicados:
+
+- **C1 (IMPORTANTE):** F2/F3 leían la flag del ATRIBUTO DE CLASE `Config` (`from config import Config; getattr(Config, ...)`) en vez de la INSTANCIA `config.config`. Rompía el branch OFF de los tests nombrados (`monkeypatch.setattr(config.config, ..., False)` no voltea el atributo de clase) => falso verde + inconsistente con el hermano 209 y con todo el repo. Fix: `from config import config as _cfg; bool(getattr(_cfg, ...))` en `matrix_enabled()` y `sync_on_completion_enabled()`.
+- **C2 (IMPORTANTE, arista HITL):** `_OK_STATUSES = {"completed","done","success"}  # ajustar al set real` era un "según corresponda" encubierto con valores MUERTOS. El `final_status` que llega al post-hook YA pasó por `_coerce_terminal_status` (`ticket_status.py:268`), que solo produce estados de `status_vocabulary.VALID_TICKET_STATUSES = {idle,running,completed,error,cancelled,needs_review}` (`status_vocabulary.py:11-18`). "done"/"success" NUNCA matchean. El único terminal de éxito es **"completed"**. Riesgo HITL: si el implementador "ajustaba" e incluía `needs_review`, R3 transicionaría a estado final tickets que EXIGEN revisión humana. Fix: set exacto resuelto e importado del vocabulario canónico, sin instrucción de "grep/ajustar".
+- **C3 (IMPORTANTE):** identidad de proyecto colapsada (`stacky_project_name or project`). `stacky_project_name` (workspace Stacky) y `project` (proyecto en el tracker) son columnas DISTINTAS (`models.py:47-48`). `_startup_sync` deriva la key del breaker con `ado_breaker_project(active)` y construye el cliente con `build_ado_client(project_name=active)` usando el nombre STACKY (`app.py:196,203`). Caer al nombre del tracker divergía la key del breaker (rompía P4/R-BREAKER) y podía devolver profile/provider vacío. Fix: `stacky_project_name` como fuente canónica única; si es None -> skip, nunca usar el nombre del tracker para profile/provider/breaker.
+- **C4 (IMPORTANTE):** F3 tenía DOS instrucciones contradictorias para construir el cliente ADO (cuerpo: `from api.tickets import _ado_client_for_ticket`; nota: usar `build_ado_client`). El import service->api acopla y arriesga ciclo al arrancar el daemon. Fix único: `from services.project_context import build_ado_client` (firma en `project_context.py:208`, ya usada así en `app.py:203`).
+- **C5 (MENOR):** el test de regresión de Plan 79 no se llama `test_plan79_task_states.py` (no existe); el real es **`tests/test_plan79_resolver.py`**. Fijado el comando exacto, sin "grep el nombre".
+- **C6 (MENOR):** F6 podía loguear `source` desde el resultado de `_safe_transition`, que devuelve `"source":"config"` HARDCODEADO (`task_states.py:136`) aun cuando la resolución fue por matriz. Fix: F6 loguea `plan.source` (="matrix").
+- **C7 (MENOR):** el racional "el sync captura el estado nuevo" solo aplica al path de sync inmediato; bajo coalescing el sync se difiere. Aclarado que la convergencia es EVENTUAL (el próximo pull captura el `System.State` que R3 escribió).
+- **[ADICIÓN ARQUITECTO] Guardia de origen esperado (anti-pisada del humano):** ver F2/P11. R3 ya no re-empuja `next_state_ok` si el humano movió el ticket, en el tracker, fuera del flujo de trabajo esperado (p.ej. lo devolvió a "In Progress" a propósito tras un `needs_review`). Cierra un agujero HITL real que v1 no cubría (v1 solo tenía idempotencia "ya en target", no "el humano lo movió a otro lado"). Determinista, reusa `input_states`/`in_progress`/`blocked_state` del perfil que el operador YA llena, runtime-agnóstico, sin flag nueva ni trabajo extra.
 
 ---
 
@@ -64,6 +79,7 @@ Verifiqué cada archivo:línea releyendo el repo (no cito de memoria):
 - **P8 — Mono-operador sin auth:** nada de RBAC/multiusuario. La config va por el editor de perfil existente.
 - **P9 — Reusar, no reinventar:** breaker (148), `task_states` (79), `_safe_transition`, `sync_tickets`/`upsert_single`, `get_tracker_provider`, `ClientProfileEditor`, `SystemLog`. Cero módulos nuevos salvo el dispatcher de completación y (opcional) el resolver de sync por tracker.
 - **P10 — TDD y sin falsos verdes:** cada fase con su test nombrado, corrido por archivo con el venv del repo; el criterio de aceptación es binario y verificable por comando.
+- **P11 — [ADICIÓN ARQUITECTO] No pisar la decisión humana:** R3 solo aplica `next_state_ok` si el ticket, en el tracker, sigue dentro del flujo esperado del rol (`input_states`/`in_progress`/`blocked_state`/`next_state_ok`, que el operador ya configura). Si el humano lo movió fuera a propósito, R3 hace skip `human_moved_out_of_flow`. La idempotencia "ya en target" NO alcanza: sin esto, un reintento/zombie re-empujaría un ticket que el humano devolvió a trabajo. Determinista, reusa el perfil, runtime-agnóstico, sin flag ni trabajo extra. Best-effort: si no se puede leer el estado, no bloquea.
 
 ---
 
@@ -142,7 +158,9 @@ def _drain_loop() -> None:
             except queue.Empty:
                 flush_pending_syncs()   # vencer ventana de coalescing sin segundo hilo
                 continue
-            # Orden: R3 (transiciona ADO) ANTES que R2 (pull ADO->local), para que el sync capture el estado nuevo.
+            # Orden: R3 (transiciona ADO) ANTES que R2 (pull ADO->local). C7: esto solo optimiza
+            # el caso de sync INMEDIATO; bajo coalescing el sync puede diferirse a flush_pending_syncs,
+            # y la convergencia es EVENTUAL igual (el próximo pull captura el System.State que R3 escribió).
             maybe_apply_state_transition(ev)   # gated por STACKY_ADO_STATE_MATRIX_ENABLED (no-op si off/sin matriz)
             maybe_coalesced_sync(ev)           # gated por STACKY_ADO_SYNC_ON_COMPLETION_ENABLED (coalesce por proyecto)
         except Exception:
@@ -289,7 +307,7 @@ def resolve_task_state_plan(profile: dict, agent_type: Optional[str],
 **Comando exacto:** `cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan208_matrix_resolver.py -q`
 Registrar en `HARNESS_TEST_FILES`.
 
-**Criterio de aceptación (binario):** el comando pasa (>=9 casos); `grep -n "by_work_item_type" backend/harness/task_states.py` devuelve >=1; los tests existentes de Plan 79 siguen verdes: `cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan79_task_states.py -q` (o el archivo real; grep `resolve_task_state_plan` en tests para el nombre exacto).
+**Criterio de aceptación (binario):** el comando pasa (>=9 casos); `grep -n "by_work_item_type" backend/harness/task_states.py` devuelve >=1; los tests existentes de Plan 79 siguen verdes con el archivo REAL (C5): `cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan79_resolver.py -q`.
 
 **Flag:** ninguna (módulo puro; la aplicación se gatea en F2). **Impacto por runtime:** ninguno (puro). **Trabajo del operador:** ninguno.
 
@@ -311,14 +329,21 @@ Registrar en `HARNESS_TEST_FILES`.
 import logging
 logger = logging.getLogger("stacky_agents.completion_state")
 
-# Estados de fin OK (reusar la noción terminal existente; grep TERMINAL_STATUSES en services/agent_completion.py
-# y _coerce_terminal_status en services/ticket_status.py). Para v1: OK == status coercionado que NO sea de error.
-_OK_STATUSES = {"completed", "done", "success"}  # ajustar al set real terminal-OK del repo (grep antes)
+# C2 (RESUELTO — set exacto, NO "ajustar"): el final_status que llega al post-hook YA pasó por
+# _coerce_terminal_status (ticket_status.py:268), que SOLO produce valores de
+# status_vocabulary.VALID_TICKET_STATUSES = {idle, running, completed, error, cancelled, needs_review}.
+# El ÚNICO terminal de éxito es "completed". PROHIBIDO incluir "needs_review" (exige revisión humana
+# -> auto-transicionar violaría HITL) y "error"/"cancelled" (fallo).
+from services.status_vocabulary import TERMINAL_STATUSES  # ancla/invariante: "completed" in TERMINAL_STATUSES
+_OK_STATUSES = frozenset({"completed"})
 
 def matrix_enabled() -> bool:
+    # C1: leer la INSTANCIA config.config (NO el atributo de clase Config), igual que todo el repo
+    # y el hermano 209. Con la clase, monkeypatch.setattr(config.config, ..., False) del test OFF-path
+    # no voltea el branch -> falso verde.
     try:
-        from config import Config
-        return bool(getattr(Config, "STACKY_ADO_STATE_MATRIX_ENABLED", False))
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_ADO_STATE_MATRIX_ENABLED", False))
     except Exception:
         return False
 
@@ -344,14 +369,16 @@ def maybe_apply_state_transition(ev: dict) -> dict:
             if t is None:
                 return {"skipped": True, "reason": "no_ticket"}
             ado_id = getattr(t, "ado_id", None)
-            project = getattr(t, "stacky_project_name", None) or getattr(t, "project", None)
+            # C3: stacky_project_name (workspace Stacky) es la clave canónica para profile/provider/breaker.
+            # NO caer a t.project (nombre del tracker): divergiría de _startup_sync (app.py:196,203).
+            stacky_project = getattr(t, "stacky_project_name", None)
             work_item_type = getattr(t, "work_item_type", None)
         agent_type = ev.get("agent_type")
-        if not ado_id or not project:
-            return {"skipped": True, "reason": "no_ado_id_or_project"}
+        if not ado_id or not stacky_project:
+            return {"skipped": True, "reason": "no_ado_id_or_stacky_project"}
         from services.client_profile import load_effective_client_profile
         from harness.task_states import resolve_task_state_plan, applicable_states, _safe_transition
-        profile = load_effective_client_profile(project) or {}
+        profile = load_effective_client_profile(stacky_project) or {}
         plan = resolve_task_state_plan(profile, agent_type, work_item_type)
         if plan.source != "matrix":
             # Backward-compat DURA: sin cell configurado, los paths de runner NO transicionan.
@@ -361,20 +388,59 @@ def maybe_apply_state_transition(ev: dict) -> dict:
             return {"skipped": True, "reason": "no_final_or_not_applicable"}
         from services.tracker_provider import get_tracker_provider
         try:
-            provider = get_tracker_provider(project)
+            provider = get_tracker_provider(stacky_project)
         except Exception:
             provider = None
+        # [ADICIÓN ARQUITECTO] Guardia de origen esperado (anti-pisada del humano, P11): si el humano
+        # movió el ticket, en el tracker, fuera del flujo esperado del rol, NO re-empujar next_state_ok.
+        guard = _origin_guard(provider, ado_id, plan, profile, agent_type, target)
+        if guard is not None:
+            return guard
         return _safe_transition(provider, ado_id, target, phase="final_matrix",
                                 legacy_client_fn=None)
     except Exception:
         logger.debug("maybe_apply_state_transition falló (no crítico)", exc_info=True)
         return {"skipped": True, "reason": "exception"}
+
+
+def _origin_guard(provider, ado_id, plan, profile: dict, agent_type, target) -> dict | None:
+    """[ADICIÓN ARQUITECTO / P11] Devuelve un dict-skip si el estado ACTUAL en el tracker cayó
+    FUERA del flujo esperado del rol (el humano lo movió a propósito) -> no pisar. Devuelve None
+    para 'seguir' (deja que _safe_transition haga su idempotencia habitual). Best-effort: si no se
+    puede leer el estado, NO bloquea (return None). Reusa _extract_current_state de task_states."""
+    try:
+        if provider is None or not hasattr(provider, "get_item"):
+            return None  # sin lectura -> no bloqueamos; _safe_transition decide
+        from harness.task_states import _extract_current_state
+        current = _extract_current_state(provider.get_item(str(ado_id)) or {})
+        if not current:
+            return None
+        cl = current.strip().lower()
+        if cl == (target or "").strip().lower():
+            return None  # ya está en target: idempotencia la maneja _safe_transition
+        # Estados de origen legítimos = los que el propio flujo produce/espera para el rol.
+        machine = (profile.get("tracker_state_machine") or {}).get(agent_type) or {}
+        expected = set()
+        for k in ("in_progress", "blocked_state", "next_state_ok"):
+            v = (machine.get(k) or "").strip()
+            if v:
+                expected.add(v.lower())
+        for st in (machine.get("input_states") or []):
+            if isinstance(st, str) and st.strip():
+                expected.add(st.strip().lower())
+        if expected and cl not in expected:
+            return {"skipped": True, "reason": "human_moved_out_of_flow", "current": current, "to": target}
+        return None
+    except Exception:
+        logger.debug("_origin_guard falló (no crítico) -> no bloquea", exc_info=True)
+        return None
 ```
 Notas:
 - **No bloquea la completación:** corre en el hilo del daemon, no en el de `on_execution_end`.
 - **Idempotente:** `_safe_transition` lee el estado actual y hace skip si ya está en target (`task_states.py:121-126`).
 - **`get_tracker_provider` None-safe:** si el provider no se resuelve, `_safe_transition` con `provider=None` y sin `legacy_client_fn` devuelve `{"skipped": ..., "reason": "no_provider"}` (`task_states.py:135`). Documentar que para ADO conviene pasar `legacy_client_fn` si el provider ADO no está disponible; para v1, `get_tracker_provider` cubre ADO/GitLab (`tracker_provider.py:118-120`).
-- **`_OK_STATUSES`:** ANTES de codificar, grep el set terminal real (`TERMINAL_STATUSES` en `services/agent_completion.py`; `_coerce_terminal_status` en `services/ticket_status.py`) y derivar OK = terminal que representa éxito. NO hardcodear a ciegas.
+- **`_OK_STATUSES` (RESUELTO, no "ajustar"):** el `final_status` del post-hook ya está coercionado por `_coerce_terminal_status` (`ticket_status.py:268`) al vocabulario `status_vocabulary.VALID_TICKET_STATUSES = {idle,running,completed,error,cancelled,needs_review}`. El único terminal de éxito es **"completed"** -> `_OK_STATUSES = frozenset({"completed"})`, importando `TERMINAL_STATUSES` del vocabulario canónico como ancla. **Prohibido** incluir `needs_review` (requiere revisión humana; auto-transicionar violaría HITL) o `error`/`cancelled` (fallo).
+- **Guardia de origen (`_origin_guard`, [ADICIÓN ARQUITECTO] / P11):** corre entre la resolución del plan y `_safe_transition`. Lee el estado actual del tracker (reusa `_extract_current_state`) y, si cayó fuera de `{input_states, in_progress, blocked_state, next_state_ok}` del rol (el humano lo movió), hace skip `human_moved_out_of_flow`. Trade-off honesto: en el peor caso son 2 GET (`_origin_guard` + la idempotencia de `_safe_transition`); es daemon best-effort y solo con cell configurado (path raro, nunca en el hilo de completación). Follow-up opcional (fuera de v1): pasar `expected_from` a `_safe_transition` para un único GET.
 
 **Edit en `_apply_task_state` (`backend/api/tickets.py:530`)** — hacerlo matrix-aware sin cambiar su comportamiento legacy:
 ```python
@@ -382,17 +448,18 @@ plan = resolve_task_state_plan(profile, agent_type, getattr(ticket, "work_item_t
 ```
 (Con esto el path manual de finish ya respeta la matriz cuando hay cell; si no, sigue usando el agent-level de hoy. No se toca el resto de `_apply_task_state`.)
 
-**Casos borde (todos en el test):** flag off; status de fallo (no transiciona); ticket sin `ado_id`; ticket sin project; `source != "matrix"` (no-op); target fuera de `applicable_states` (skip por centinela); provider None (skip `no_provider`); estado ya == target (skip `already_in_state`); shadow mode (ver nota abajo).
+**Casos borde (todos en el test):** flag off; status de fallo (no transiciona); `needs_review` (no transiciona — exige humano, C2); ticket sin `ado_id`; ticket sin `stacky_project_name`; `source != "matrix"` (no-op); target fuera de `applicable_states` (skip por centinela); provider None (skip `no_provider`); estado ya == target (skip `already_in_state`); **estado movido por el humano fuera del flujo (skip `human_moved_out_of_flow`, P11);** shadow mode (ver nota abajo).
 
 **Paridad shadow:** `run_shadow` (`agent_completion.py:473`) NO llama `on_execution_end` (solo simula/lee) -> **no encola eventos** -> R3 no transiciona en shadow. Correcto y sin trabajo extra: el modo simulación no muta ADO. Documentar como test `test_shadow_no_transiciona` (invocar `run_shadow` con mocks y verificar que `_Q` queda vacío / `maybe_apply_state_transition` no se llama).
 
 **Tests (TDD) — crear `backend/tests/test_plan208_state_transition.py`** con provider fake (implementa `get_item`/`update_item_state`/`name`) y `resolve_task_state_plan` real:
-- transiciona a `next_state_ok` de la matriz cuando cell configurado + status OK.
+- transiciona a `next_state_ok` de la matriz cuando cell configurado + status OK (estado actual dentro del flujo).
 - no-op cuando `source != "matrix"` (solo agent-level configurado).
 - idempotente (segundo llamado -> skip `already_in_state`).
-- flag off -> skip.
-- status de fallo -> skip.
+- flag off -> skip (con `monkeypatch.setattr(config.config, "STACKY_ADO_STATE_MATRIX_ENABLED", False)` — C1: sobre la INSTANCIA).
+- status de fallo -> skip; `test_needs_review_no_transiciona` (C2): `final_status="needs_review"` -> skip `not_ok_status`.
 - provider None -> skip `no_provider`.
+- **[ADICIÓN ARQUITECTO]** `test_no_pisa_estado_movido_por_humano` (P11): cell configurado + status OK, pero `get_item` devuelve un estado FUERA de `input_states/in_progress/blocked_state/next_state_ok` (p.ej. "On Hold") -> skip `human_moved_out_of_flow` y `update_item_state` NO se llama.
 
 **Comando exacto:** `cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan208_state_transition.py -q`
 Registrar en `HARNESS_TEST_FILES`.
@@ -424,9 +491,10 @@ _pending: dict[str, dict] = {}       # project -> último evento visto en la ven
 _mutex = threading.Lock()
 
 def sync_on_completion_enabled() -> bool:
+    # C1: INSTANCIA config.config, no el atributo de clase (ver F2/matrix_enabled y gotcha config.config).
     try:
-        from config import Config
-        return bool(getattr(Config, "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED", False))
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED", False))
     except Exception:
         return False
 
@@ -434,11 +502,13 @@ def coalesce_window_sec() -> float:
     return float(_COALESCE_WINDOW_SEC)
 
 def _resolve_sync_and_project(ticket) -> tuple:
-    """Devuelve (sync_callable, project_name, tracker_type). Multi-tracker:
-       azure_devops -> ado_sync.sync_tickets ; jira -> jira_sync.sync_tickets ; mantis -> mantis_sync.sync_tickets.
-       Fallback: azure_devops."""
+    """Devuelve (sync_callable, project_name, tracker_type). project_name es SIEMPRE el
+    stacky_project_name (workspace Stacky): clave canónica de breaker/cliente, coherente con
+    _startup_sync (app.py:196,203). Multi-tracker: azure_devops -> ado_sync.sync_tickets ;
+    jira -> jira_sync.sync_tickets ; mantis -> mantis_sync.sync_tickets. Fallback: azure_devops."""
     tracker_type = (getattr(ticket, "tracker_type", None) or "azure_devops").strip().lower()
-    project = getattr(ticket, "stacky_project_name", None) or getattr(ticket, "project", None)
+    # C3: NO caer a ticket.project (nombre del tracker) -> divergiría la key del breaker.
+    project = getattr(ticket, "stacky_project_name", None)
     if tracker_type == "jira":
         from services.jira_sync import sync_tickets as fn
     elif tracker_type == "mantis":
@@ -458,8 +528,11 @@ def _do_project_sync(project: str, tracker_type: str, ado_id=None) -> None:
     try:
         if tracker_type == "azure_devops":
             from services.ado_sync import sync_tickets, upsert_single_work_item
-            from api.tickets import _ado_client_for_ticket  # reusar builder de cliente (o build_ado_client)
-            client = _ado_client_for_ticket(project_name=project)
+            # C4: construir el cliente desde services (NO importar api.tickets: acopla service->api y
+            # arriesga import circular al arrancar el daemon). build_ado_client(project_name=<stacky>) es
+            # la firma canónica (project_context.py:208), ya usada así en _startup_sync (app.py:203).
+            from services.project_context import build_ado_client
+            client = build_ado_client(project_name=project)
             if ado_id:
                 try: upsert_single_work_item(client, int(ado_id))   # refleja el ticket puntual YA
                 except Exception: logger.debug("upsert_single best-effort falló", exc_info=True)
@@ -522,7 +595,7 @@ Notas:
 - **No bloqueante:** todo corre en el hilo del daemon; la completación solo hizo `put_nowait`.
 - **Coalescing real:** primer evento de un proyecto sincroniza y sella `_last_sync_ts`; eventos dentro de la ventana solo marcan `_pending`; al vaciarse la cola por >= ventana, `flush_pending_syncs` hace **1** sync por proyecto pendiente. N completaciones -> <= 2 syncs por proyecto por ventana (1 inmediato + 1 flush), no N.
 - **Breaker:** `should_skip` antes de la red; `record_success`/`record_failure` con la MISMA key (`ado_breaker_project`) que `_startup_sync` y el sync manual, para que las ventanas de backoff coincidan.
-- **`_ado_client_for_ticket`** está en `api/tickets.py:357`; si importar desde `api` en un service incomoda, usar `build_ado_client(project_name=project)` (lo usa `ado_sync.sync_tickets` internamente, `ado_sync.py:108-112`). Preferir `build_ado_client` para no acoplar service->api.
+- **Cliente ADO (RESUELTO, C4):** usar SIEMPRE `from services.project_context import build_ado_client; client = build_ado_client(project_name=<stacky_project>)` (`project_context.py:208`, ya usado por `_startup_sync` en `app.py:203`). NO importar `api.tickets._ado_client_for_ticket` desde un service (acople service->api + riesgo de import circular al arrancar el daemon). `sync_tickets(client=None, project_name=<stacky>)` también construye el cliente solo (`ado_sync.py:108-112`), pero para `upsert_single_work_item(client, ado_id)` necesitamos el `client` explícito.
 
 **Casos borde (todos en el test):** flag off (no sync); breaker abierto (skip sin tocar red); 5 eventos del mismo proyecto en < ventana -> 1 sola llamada a `sync_tickets` inmediata + a lo sumo 1 en flush; proyecto None (skip); tracker jira/mantis (despacha al sync correcto); excepción de `sync_tickets` -> `record_failure` llamado, no propaga.
 
@@ -618,7 +691,7 @@ Registrar en `HARNESS_TEST_FILES`.
 - `backend/services/completion_state.py` y `backend/services/completion_sync.py` (emitir `SystemLog`)
 
 **Qué loguear (reusar el emisor de SystemLog que usan estos flujos; grep `SystemLog` / `_emit_system_log` en `services/agent_completion.py:1240` como patrón):**
-- R3: `action="completion.matrix_transition"`, context `{ado_id, project, work_item_type, agent_type, target, result: ok|skipped|error, reason, source}`, tags `["plan208","matrix"]`.
+- R3: `action="completion.matrix_transition"`, context `{ado_id, project, work_item_type, agent_type, target, result: ok|skipped|error, reason, source}`. **C6:** `source` = `plan.source` (="matrix"), NUNCA el `source` del dict de `_safe_transition` (hardcodeado a "config" en `task_states.py:136`). El `reason` incluye el nuevo `human_moved_out_of_flow` de la guardia de origen (P11). tags `["plan208","matrix"]`.
 - R2: `action="completion.auto_sync"`, context `{project, tracker_type, coalesced: bool, breaker_open: bool, fetched, created, updated, removed}`, tags `["plan208","auto_sync"]`.
 - Nivel INFO en éxito/skip esperado; WARNING en fallo de red/transición.
 
@@ -639,11 +712,12 @@ Registrar en `HARNESS_TEST_FILES`.
 - **R-COLISION-ado_workflow (no-op).** `_apply_workflow_transition` (`agent_completion.py:859`) seguirá siendo no-op (no existe `ado_workflow.py`). **Decisión explícita: NO materializar `ado_workflow.py`** para no crear un segundo mecanismo de transición que compita con `task_states`/matriz. R3 usa exclusivamente `resolve_task_state_plan` + `_safe_transition`. (Opcional de higiene, fuera de scope: bajar el log de `:898` a DEBUG para no ensuciar; no es necesario.)
 - **R-DOBLE-TRANSICION (manual + post-hook).** En una completación manual, `_apply_task_state(final)` (`tickets.py:1381`) y el post-hook de F2 podrían transicionar ambos. *Mitigación:* `_safe_transition` es idempotente (skip si ya está en target); el segundo es no-op. Documentado y testeado.
 - **R-IDEMPOTENCIA-REINTENTOS/ZOMBIES.** Reintentos de completación o ejecuciones zombie que re-disparan `on_execution_end` -> múltiples eventos. *Mitigación:* transición idempotente + sync coalescido; el peor caso es un sync extra dentro de la ventana. No hay efecto acumulativo.
+- **R-PISADA-HUMANA ([ADICIÓN ARQUITECTO] / P11).** Un reintento/zombie que re-dispara `on_execution_end` podría re-empujar `next_state_ok` DESPUÉS de que el humano movió el ticket a otro estado a propósito (p.ej. lo devolvió a "In Progress" tras un `needs_review`). La idempotencia sola NO cubría esto (solo "ya en target"). *Mitigación:* `_origin_guard` (F2) hace skip `human_moved_out_of_flow` si el estado actual del tracker cayó fuera del flujo esperado del rol (`input_states/in_progress/blocked_state/next_state_ok`). Best-effort: si no se puede leer el estado, no bloquea (delega en `_safe_transition`). Reusa datos del perfil que el operador ya llena; determinista; runtime-agnóstico. Test `test_no_pisa_estado_movido_por_humano`.
 - **R-BREAKER.** Si ADO está caído, no golpear la red en loop. *Mitigación:* `should_skip` antes de cada intento, con la MISMA key (`ado_breaker_project`) que los otros consumidores, respetando el backoff exponencial existente.
 - **R-PARIDAD (3 runtimes).** Los 3 runners llaman `on_execution_end` directamente (evidencia en §2.2), y `run_on` también. *Fallback por runtime:* si un runtime futuro completara sin llamar `on_execution_end`, R2/R3 no se dispararían para él; la red de seguridad es (a) el `_startup_sync` periódico para R2, y (b) el path manual `_apply_task_state`/`finish-work` para R3. Documentar que **todo runtime nuevo debe llamar `ticket_status.on_execution_end` al terminar** (ya es la convención; ver `docs/25_CHECKLIST_NUEVO_RUNTIME.md`). Shadow mode no dispara nada (no llama `on_execution_end`).
 - **R-EXCEPCION (¿default ON viola alguna de las 4 excepciones duras?).** Análisis riguroso, no cosmético:
   - **R2 (auto-sync): default ON, sin reservas.** Es un **PULL read-only** de ADO -> DB local (`sync_tickets`/`upsert_single` GET+upsert; `ado_sync.py:102,:235`). No escribe en ADO, no bypassa revisión humana, no es destructivo (los tickets con ejecuciones nunca se borran, `ado_sync.py:105-106`), no baja seguridad, no requiere prerequisito nuevo, no quema tokens ociosos (no invoca LLM). No dispara ninguna de las 4 excepciones. Default ON correcto.
-  - **R3 (matriz): default ON, defendible por inercia + HITL explícito.** Escribir `System.State` en ADO **es** una mutación externa. ¿Es "bypass de revisión humana"? **No**, y esta es la clave: (1) la matriz está **vacía por default** y el post-hook exige `source=="matrix"` -> **con la config default no ocurre ninguna transición nueva en ningún path** (backward-compat dura, P5); (2) cuando el operador llena un cell, está **pre-autorizando explícitamente** (acto HITL en la UI) qué estado usar por (tipo x agente) — la transición es amplificación **determinista** de su intención declarada, no una decisión del LLM (P6); (3) hay **precedente default-ON** para escrituras deterministas de estado ADO: `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` ya es default ON (`config.py:1192`) y ya escribe `System.State` vía `_apply_task_state` en el path manual. R3 extiende ese mecanismo ya-default-ON agregando la dimensión `work_item_type` y cerrando la asimetría (runner no transicionaba). El operador elige estados conservadores; el centinela impide estados fuera de la matriz. **Conclusión:** default ON no matchea ninguna de las 4 excepciones **porque el flag ON no es la mutación** — la mutación la habilita el operador al configurar la matriz. Si un revisor insistiera en gate, el candidato sería "bypass de revisión humana", pero se refuta con P5+P6 (no hay bypass: hay pre-autorización explícita y no hay agente decidiendo). Se documenta el matiz honesto: el comportamiento nuevo (transicionar en paths de runner) se activa **solo** con la dimensión de matriz configurada, no con el legacy agent-level, para no cambiar el comportamiento de proyectos que hoy tienen `next_state_ok` a nivel rol.
+  - **R3 (matriz): default ON, defendible por inercia + HITL explícito.** Escribir `System.State` en ADO **es** una mutación externa. ¿Es "bypass de revisión humana"? **No**, y esta es la clave: (1) la matriz está **vacía por default** y el post-hook exige `source=="matrix"` -> **con la config default no ocurre ninguna transición nueva en ningún path** (backward-compat dura, P5); (2) cuando el operador llena un cell, está **pre-autorizando explícitamente** (acto HITL en la UI) qué estado usar por (tipo x agente) — la transición es amplificación **determinista** de su intención declarada, no una decisión del LLM (P6); (3) hay **precedente default-ON** para escrituras deterministas de estado ADO: `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` ya es default ON (`config.py:1192`) y ya escribe `System.State` vía `_apply_task_state` en el path manual. R3 extiende ese mecanismo ya-default-ON agregando la dimensión `work_item_type` y cerrando la asimetría (runner no transicionaba). El operador elige estados conservadores; el centinela impide estados fuera de la matriz. **Conclusión:** default ON no matchea ninguna de las 4 excepciones **porque el flag ON no es la mutación** — la mutación la habilita el operador al configurar la matriz. Si un revisor insistiera en gate, el candidato sería "bypass de revisión humana", pero se refuta con P5+P6 (no hay bypass: hay pre-autorización explícita y no hay agente decidiendo). Se documenta el matiz honesto: el comportamiento nuevo (transicionar en paths de runner) se activa **solo** con la dimensión de matriz configurada, no con el legacy agent-level, para no cambiar el comportamiento de proyectos que hoy tienen `next_state_ok` a nivel rol. **La solidez de este default ON depende de dos guardas incorporadas en v2:** (a) C2 — `_OK_STATUSES == {"completed"}`, que EXCLUYE `needs_review` (jamás se auto-transiciona un ticket que pide revisión humana); (b) P11 — la guardia de origen, que no pisa un estado que el humano movió a propósito. Sin C2+P11 el default ON sí tendría una arista HITL; con ellas, la mutación externa queda estrictamente acotada a la intención declarada del operador.
 
 ---
 
@@ -684,7 +758,7 @@ Registrar en `HARNESS_TEST_FILES`.
 - [ ] Ambas flags en `FLAG_REGISTRY` + `_CATEGORY_KEYS` + `_CURATED_DEFAULTS_ON` + `config.py`; default ON verificado.
 - [ ] `completion_dispatcher.start` en `create_app`; post-hook registrado; con ambas flags off el sistema es byte-inerte (ningún sync, ninguna transición).
 - [ ] `resolve_task_state_plan(profile, agent_type, work_item_type)` retrocompatible (sin `work_item_type` = comportamiento previo) y `source=="matrix"` solo con cell configurado.
-- [ ] Transición ADO aplicada por los 3 runtimes cuando el operador configura un cell + status OK; idempotente; nunca en fallo/shadow; centinela activo.
+- [ ] Transición ADO aplicada por los 3 runtimes cuando el operador configura un cell + status OK; idempotente; nunca en fallo/shadow/`needs_review`; centinela activo; **guardia de origen (P11) activa: no re-empuja si el humano movió el ticket fuera del flujo (`human_moved_out_of_flow`).**
 - [ ] Auto-sync coalescido (<= 1 sync/proyecto/ventana), no bloqueante, respeta breaker, multi-tracker (ADO/Jira/Mantis).
 - [ ] Editor de matriz en `ClientProfileEditor` con dropdowns de estados reales (`fetch_states`) y tipos reales; PUT persiste; validación no bloqueante.
 - [ ] SystemLog `completion.matrix_transition` y `completion.auto_sync` emitidos.

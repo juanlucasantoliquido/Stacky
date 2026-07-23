@@ -1,9 +1,32 @@
 # Plan 215 — Publicador de Soluciones: escaneo único persistido, publish 1-click por solución y asistente DevOps HITL
 
-> Estado: **PROPUESTO v1** (2026-07-23). Pipeline: **[este paso ✓]** proponer → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **CRITICADO v2** (2026-07-23) — **v1 RECHAZADO** (C1 BLOQUEANTE: timeout/cancel del runner inefectivos + runs pegados en "running" sin recuperación) → **corregido en esta v2**. Pipeline: proponer ✓ → **criticar ✓ [este paso]** (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5).
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
 > Origen: pedido EXPLÍCITO del operador — "El publicador actual no me resulta cómodo. La idea es que la herramienta realice un escaneo inicial de todos los archivos .sln del proyecto, identifique cada solución y permita configurar su proceso de publicación de manera individual. Luego, desde una interfaz simple, debería ser posible seleccionar una solución y generar su publish con un solo botón. Además […] una opción asistida por un agente de DevOps […] cuando el proceso de publicación presente errores […]. El primer escaneo debería ejecutarse una única vez y guardar […] una lista con todas las soluciones detectadas y sus respectivas rutas. […] Idealmente, el escaneo inicial debería realizarse de forma determinística. Sin embargo, si ese mecanismo no logra identificar correctamente las soluciones, debería existir la posibilidad de ejecutar un escaneo de forma agéntica como alternativa."
+
+---
+
+## Changelog v1 → v2 (crítica adversarial 2026-07-23)
+
+Veredicto v1: **RECHAZADO** (1 BLOQUEANTE, 4 IMPORTANTES, 8 MENORES). Todos resueltos en esta v2:
+
+- **C1 (BLOQUEANTE, F4):** el timeout y el cancel dependían de que el proceso emitiera output (`_cancel` se chequeaba solo al llegar una línea; `proc.wait(timeout=…)` corría recién tras EOF → un publish colgado y silencioso NUNCA vencía) y un restart del backend dejaba runs pegados en "running" invisibles (registro solo en memoria, ledger solo al terminar). **Fix:** watchdog `threading.Timer` que mata el árbol al vencer el plazo; `cancel()` termina el árbol INMEDIATAMENTE; línea `"started"` en el ledger al arrancar + reconciliación `interrupted` en `list_runs`; regla de UI para status 404.
+- **C2 (IMPORTANTE, §0/§10/F5):** la degradación `build_workshop_unavailable` solo cubría `/catalog`, `/rescan` y `/run`, pero `/solutions/import`, `/deep-scan` y `/register-deploy-app` también importan módulos del 201 (ImportError → 500); y F3 EDITA archivos del 201 que no existen si 201 no está. **Fix:** guard extendido a TODO endpoint que toque `solution_store`/`solution_scanner` + gate por fase explícito en §10 (F0-F2 implementables sin 201; F3+ exigen 201 mergeado).
+- **C3 (IMPORTANTE, F6):** `mask_token_values` solo cubría el tail del log; argv/config/doctor iban CRUDOS al chat del agente (un `extra_arg` `/p:Password=...` pasa la allowlist y se fugaba). **Fix:** se enmascara el mensaje COMPLETO + test nuevo.
+- **C4 (IMPORTANTE, KPI-2/§5.1):** "GET /catalog NO toca el disco" era falso: el enriquecimiento (`missing`/`plan`/`publish_profiles`) hace lecturas dirigidas por diseño. Contradicción que invitaba a "arreglar" mal (quitar el enriquecimiento o gamear el test). **Fix:** KPI-2 reformulado = **no re-WALK** del workspace; lecturas dirigidas O(#proyectos) permitidas, baratas y que degradan sin lanzar.
+- **C5 (IMPORTANTE, F1):** la rama dotnet aceptaba un toolchain contradictorio (`builder=="dotnet"` sin `dotnet_path`) → `argv[0]=None` en F4. **Fix:** la condición es `not toolchain.get("dotnet_path")` a secas.
+- **C6 (MENOR, F4):** prune corría solo en `success` → stagings de runs fallidos se acumulaban sin tope. **Fix:** `_finish` poda SIEMPRE (dirs `<ts>/` y zips `<ts>.zip` huérfanos).
+- **C7 (MENOR, F3):** `os.path.commonpath` lanza `ValueError` con drives distintos en Windows y es case-sensitive. **Fix:** normcase + try/except con rechazo legible.
+- **C8 (MENOR, F0/F7):** dos tests frontend con el MISMO basename en carpetas distintas. **Fix:** el de F0 se llama `SolutionPublisherRegistration.test.ts`.
+- **C9 (MENOR, F7.3):** el escaneo agéntico hardcodeaba `'claude_code_cli'`; el assist (F7.8) sí tenía selector. **Fix:** mismo selector claude/codex en ambos.
+- **C10 (MENOR, F1):** `method` del `.pubxml` se comparaba case-sensitive contra `"FileSystem"`. **Fix:** canonicalización case-insensitive (`_METHOD_CANON`).
+- **C11 (MENOR, F4):** `list_runs` no especificaba qué hacer con líneas JSONL corruptas. **Fix:** las salta con `logger.warning`.
+- **C12 (MENOR, F3):** acople a símbolos PRIVADOS del 201 (`_dedupe`/`_title_case`/`_parse_sln_projects`/`_is_deployable`/`_load_doc`/`_save_doc`) que hoy solo existen en papel. **Fix:** nota de adaptación a los nombres reales de la implementación del 201.
+- **C13 (MENOR, F5):** `/deep-scan` es un request síncrono de hasta 45s sin aviso. **Fix:** budget documentado, spinner obligatorio en UI y nota de timeout del fetch.
+- **[ADICIÓN ARQUITECTO 1]** Ledger con eventos `started`/`finished` + estado `interrupted`: los runs cortados por un restart del backend quedan visibles y cerrados en el historial (antes: limbo eterno).
+- **[ADICIÓN ARQUITECTO 2]** `classify_publish_failure` — clasificador DETERMINISTA (regex, sin LLM) de fallos típicos de publish (.NET): NuGet restore, targeting pack, error de compilación, Configuration inválida, .targets faltantes. Chip "causa probable" en la UI + se antepone al contexto del asistente (mejor diagnóstico del agente, 3/3 runtimes, costo cero).
+- Verificación de renumeración 214→215: **cero** referencias internas viejas a "214" (grep limpio).
 
 ---
 
@@ -21,7 +44,16 @@
 - **Coordinación con Plan 210** (gate de build del Developer): 210 consume el builder del 201 para el flujo del **agente Developer**; 215 es una herramienta del **operador**. Cero archivos compartidos entre 210 y 215 salvo el 201 (que ninguno modifica en sus contratos). Sin colisión.
 - **Coordinación con Plan 211** (inspector post-build): 211 inspecciona artefactos del gate del 210. 215 NO se engancha en `register_evidence_contributor` ni en `BuildVerdict`. Sin colisión.
 - **NO TOCA:** la sección "Publicaciones" existente del Plan 88 (`frontend/src/components/devops/PublicationsSection.tsx`, `POST /api/devops/publications/materialize`, `api/devops.py:191-215`, `services/publication_spec.py`) — ese es el "publicador actual" incómodo (presets de catálogo de procesos → PipelineSpec YAML, pensado para pipelines, no para `.sln`). Se deja intacto y funcionando; este plan agrega una sección NUEVA. Tampoco toca `services/publish_ledger.py` (Plan 153 — ledger de publicaciones **a ADO**, dominio distinto pese al nombre) ni `deployment/Prepare-Publication.ps1` (publica Stacky mismo).
-- **Regla de secuencia:** si al implementar 215 el 201 aún no está mergeado, **implementar primero 201 (F0-F5 como mínimo)**. Defensa adicional en runtime (paridad con 210 G7): los endpoints de 215 envuelven los imports del 201 y, si faltan, responden `200 {"error": "build_workshop_unavailable"}` y la UI muestra "Requiere el Taller de Compilación (Plan 201)" — degradación controlada, nunca crash (ver F5).
+- **Regla de secuencia (C2 v2 — gate por fase, dependencia dura HONESTA):** si al implementar 215 el 201 aún no está mergeado, **implementar primero 201 (F0-F5 como mínimo; F7-F8 para download/bridge)**. Gate explícito por fase de 215:
+
+  | Fase 215 | ¿Implementable sin 201? | Motivo |
+  |----------|-------------------------|--------|
+  | F0 (flag+sección), F1 (`publish_profile_scanner`), F2 (`publish_config_store`) | **SÍ** — archivos 100% propios | ninguna línea toca módulos del 201 |
+  | F3 | **NO** — EDITA `solution_scanner.py`/`solution_store.py`, que **no existen** sin 201 F1-F2 | no hay degradación posible: es un gate duro de orden |
+  | F4 | **NO** — importa `build_toolchain` (201 F3) y `solution_store` | gate duro |
+  | F5, F6, F7 | **NO** para funcionalidad real (dependen de F3/F4) | el runtime además degrada (abajo) |
+
+  Defensa adicional en runtime (paridad con 210 G7), para el caso "215 mergeado con imports envueltos pero 201 roto/ausente": **TODO endpoint que importe `solution_store`/`solution_scanner`/`build_toolchain`** — `/catalog`, `/rescan`, `/run`, `/solutions/import`, `/deep-scan` (usa `load_catalog` para calcular `new_paths`) y `/register-deploy-app` (resuelve el slug contra el catálogo) — envuelve los imports vía `_deps_or_none()` y, si faltan, responde `200 {"error": "build_workshop_unavailable"}`; la UI muestra "Requiere el Taller de Compilación (Plan 201)" — degradación controlada, nunca crash ni 500 (ver F5). `/config` y `/runs/<id>/status` no importan módulos del 201 y no degradan.
 
 ---
 
@@ -33,7 +65,7 @@
 
 **KPI / impacto medible.**
 - **KPI-1 — Primer uso sin pasos:** abrir la sección por primera vez dispara el escaneo solo; el operador NO clickea "Escanear" (0 pasos manuales para tener el catálogo).
-- **KPI-2 — Usos siguientes sin re-scan:** con catálogo persistido, `GET /catalog` NO recorre el disco (verificable: el test lo prueba con un workspace inexistente y catálogo pre-sembrado).
+- **KPI-2 — Usos siguientes sin re-scan (C4 v2, semántica precisa):** con catálogo persistido, `GET /catalog` **NO re-recorre (walk) el workspace** buscando `.sln`. Sí hace lecturas dirigidas O(#proyectos) para el enriquecimiento (`missing` = `os.path.exists`; `plan`/`publish_profiles` = listdir de `Properties/PublishProfiles` + head del `.csproj`), baratas y que degradan sin lanzar. Verificable: el test usa un workspace inexistente y catálogo pre-sembrado → responde 200 con todas las soluciones `missing:true`/plan degradado y el spy de `rescan_preserving_manual` NO se invoca.
 - **KPI-3 — Publish en 2 clicks:** seleccionar solución → `Publicar` → confirmar. 0 caracteres tipeados en el camino feliz.
 - **KPI-4 — Fallo a asistencia en 1 click:** un run `failed` muestra el botón "Asistir con agente DevOps"; un click crea la conversación con el contexto ya cargado (enmascarado).
 - **KPI-5 — Paridad de runtimes:** núcleo (scan/config/publish/doctor) determinista, 3/3 idéntico; escalones agénticos con fallback explícito por runtime (§F6/F7).
@@ -115,7 +147,7 @@ DATOS (data_dir() = Stacky Agents/backend/data/ en dev)
 
 ### 5.1 Dónde vive la "lista de soluciones detectadas y sus rutas" (pedido explícito del operador)
 
-En **`data/build_solutions.json`** (contrato del 201 F2, keyed por `workspace_root` absoluto — es decir, **por proyecto**). Este plan NO crea un catálogo paralelo: un solo escaneo sirve al Taller de Compilación (201) y al Publicador (215). El "primer escaneo una única vez" se cumple porque `GET /catalog` (F5) solo dispara `rescan_preserving_manual` cuando `load_catalog(ws)["scanned_at"] is None`; con catálogo persistido, lee el JSON y NO toca el disco del workspace. Cambio aditivo al schema: cada solución puede llevar `"origin": "scan"|"manual"` (ausente = `"scan"`).
+En **`data/build_solutions.json`** (contrato del 201 F2, keyed por `workspace_root` absoluto — es decir, **por proyecto**). Este plan NO crea un catálogo paralelo: un solo escaneo sirve al Taller de Compilación (201) y al Publicador (215). El "primer escaneo una única vez" se cumple porque `GET /catalog` (F5) solo dispara `rescan_preserving_manual` cuando `load_catalog(ws)["scanned_at"] is None`; con catálogo persistido, lee el JSON y **NO re-walkea el workspace** (las lecturas dirigidas del enriquecimiento — C4 v2 — son O(#proyectos) y degradan sin lanzar; ver KPI-2). Cambio aditivo al schema: cada solución puede llevar `"origin": "scan"|"manual"` (ausente = `"scan"`).
 
 ### 5.2 Contrato de datos de `data/publish_configs.json` (schema NUEVO, congelado por F2)
 
@@ -198,9 +230,9 @@ export const SolutionPublisherSection: React.FC<{ ctx: DevOpsSectionContext }> =
 - `test_flag_registered_and_curated`: la key está en `FLAG_REGISTRY`, en `_CATEGORY_KEYS["devops"]` y en `_CURATED_DEFAULTS_ON`.
 - `test_health_exposes_solution_publisher_enabled`: `/api/devops/health` incluye `solution_publisher_enabled` (molde `test_plan120_api.py`).
 - Registrar en `HARNESS_TEST_FILES`.
-- Frontend: `Stacky Agents/frontend/src/pages/__tests__/SolutionPublisherSection.test.ts`: `DEVOPS_SECTIONS` contiene `{ id:'publicador-soluciones', gateFlagKey:'STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED' }` (molde `RemoteConsoleSection.test.ts:7-11`).
+- Frontend: `Stacky Agents/frontend/src/pages/__tests__/SolutionPublisherRegistration.test.ts` (C8 v2 — nombre distinto del test de componente de F7 para no duplicar basename): `DEVOPS_SECTIONS` contiene `{ id:'publicador-soluciones', gateFlagKey:'STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED' }` (molde `RemoteConsoleSection.test.ts:7-11`).
 
-**Criterio BINARIO:** `& ".venv\Scripts\python.exe" -m pytest tests\test_plan215_flag.py tests\test_harness_flags.py -q` verde; `npx vitest run src\pages\__tests__\SolutionPublisherSection.test.ts` verde; `grep -rn "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED" "Stacky Agents/backend/config.py"` → 1+ match.
+**Criterio BINARIO:** `& ".venv\Scripts\python.exe" -m pytest tests\test_plan215_flag.py tests\test_harness_flags.py -q` verde; `npx vitest run src\pages\__tests__\SolutionPublisherRegistration.test.ts` verde; `grep -rn "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED" "Stacky Agents/backend/config.py"` → 1+ match.
 
 **Flag:** la propia (default ON, sin excepción — read-only). **Runtimes:** idéntico 3/3. **Trabajo del operador:** ninguno.
 
@@ -232,6 +264,8 @@ _PUBXML_HEAD_BYTES = 32768
 _METHOD_RE = re.compile(r"<webpublishmethod[^>]*>([^<]+)</webpublishmethod", re.I)
 _PUBURL_RE = re.compile(r"<publishurl[^>]*>([^<]+)</publishurl", re.I)
 _SDK_ATTR_RE = re.compile(r"<project\s[^>]*\bsdk\s*=", re.I)
+# C10 v2 — canonicalización case-insensitive del método del .pubxml:
+_METHOD_CANON = {"filesystem": "FileSystem", "msdeploy": "MSDeploy", "package": "Package", "ftp": "FTP"}
 ```
 
 **Pseudocódigo:**
@@ -257,7 +291,7 @@ def scan_publish_profiles(projects):
                 continue
             m = _METHOD_RE.search(head)
             method_raw = (m.group(1).strip() if m else "")
-            method = method_raw if method_raw in ("FileSystem", "MSDeploy", "Package", "FTP") else ("unknown" if not method_raw else method_raw)
+            method = _METHOD_CANON.get(method_raw.lower(), method_raw or "unknown")   # C10 v2
             u = _PUBURL_RE.search(head)
             entries.append({"name": os.path.splitext(fname)[0], "path": path,
                             "method": method, "publish_url": (u.group(1).strip() if u else "")})
@@ -289,7 +323,9 @@ def resolve_publish_plan(solution, cfg, toolchain):
     if mode == "build_only" or (mode == "auto" and target_csproj is None):
         return _plan_build_only(solution, cfg, toolchain)      # target = sln_path
     if mode == "dotnet_publish" or (mode == "auto" and detect_sdk_style(target_csproj)):
-        if not toolchain.get("dotnet_path") and toolchain.get("builder") != "dotnet":
+        # C5 v2 — la condición es SOLO dotnet_path: un toolchain con builder=="dotnet" pero sin
+        # dotnet_path es contradictorio y debe degradar acá (si pasara, F4 armaría argv[0]=None).
+        if not toolchain.get("dotnet_path"):
             return {"mode_effective": "dotnet_publish", "supported": False,
                     "reason": "requiere_dotnet_sdk", "target": target_csproj, "argv_tail": []}
         return {"mode_effective": "dotnet_publish", "supported": True, "reason": "",
@@ -343,6 +379,8 @@ def _plan_build_only(solution, cfg, toolchain):
 - `test_resolve_msdeploy_pubxml_unsupported`
 - `test_resolve_configured_pubxml_missing_reports_reason`
 - `test_resolve_never_raises_on_bad_paths`
+- `test_scan_profiles_method_case_insensitive` (`<WebPublishMethod>fileSystem</...>` → `"FileSystem"` — C10)
+- `test_resolve_dotnet_missing_dotnet_path_unsupported_even_if_builder_dotnet` (toolchain `{"builder":"dotnet","dotnet_path":None,...}` → `supported:false, reason:"requiere_dotnet_sdk"` — C5)
 - Registrar en `HARNESS_TEST_FILES`. Correr: `& ".venv\Scripts\python.exe" -m pytest tests\test_plan215_publish_profile_scanner.py -q`
 
 **Criterio BINARIO:** comando verde; `grep -n "shell=True\|import requests\|copilot\|llm" "Stacky Agents/backend/services/publish_profile_scanner.py"` → 0 matches.
@@ -419,6 +457,8 @@ def validate_config(cfg):
 
 **Objetivo:** cubrir "el determinístico no encontró la solución": alta manual validada, re-scan que no pierde altas manuales, y escaneo profundo con presupuesto de tiempo. Valor: escalera de fallback determinista completa (el escalón agéntico la usa en F6).
 
+> **C12 v2 — acople a símbolos privados del 201:** los helpers `_dedupe`, `_title_case`, `_parse_sln_projects`, `_is_deployable`, `_LOCK`, `_load_doc`, `_save_doc` citados abajo son los nombres del **plan** 201 (aún en papel). Si la implementación real del 201 los nombró distinto, **adaptar estos pseudocódigos a los nombres reales** (misma semántica); NO crear duplicados propios ni "arreglar" el 201.
+
 **Archivos a editar/crear:**
 
 1. `Stacky Agents/backend/services/solution_scanner.py` (**ADITIVO** — solo AGREGAR al final, no tocar lo existente):
@@ -443,7 +483,13 @@ def add_manual_solution(workspace_root, sln_path):
     from solution_scanner import scan_single_solution
     root = os.path.normpath(workspace_root or "")
     target = os.path.normpath(os.path.abspath(sln_path or ""))
-    if not root or os.path.commonpath([root, target]) != root:      # dentro del workspace, siempre
+    # C7 v2 — commonpath lanza ValueError con drives distintos en Windows y compara case-sensitive:
+    try:
+        inside = bool(root) and os.path.commonpath(
+            [os.path.normcase(root), os.path.normcase(target)]) == os.path.normcase(root)
+    except ValueError:
+        inside = False
+    if not inside:      # dentro del workspace, siempre
         raise ValueError("La ruta debe estar dentro del workspace del proyecto activo")
     with _LOCK:
         doc = _load_doc()
@@ -533,10 +579,11 @@ def deep_scan_sln_paths(workspace_root, time_budget_sec=_DEEP_TIME_BUDGET_SEC):
 **API pública (nombres exactos):**
 ```python
 def start_publish(slug: str, workspace_root: str) -> str       # run_id (uuid4 hex); lanza thread daemon; NO bloquea
-def get_status(run_id: str) -> dict | None
-def cancel(run_id: str) -> bool
+def get_status(run_id: str) -> dict | None                     # memoria; si no está, reconstruye básico del ledger; None = desconocido (404)
+def cancel(run_id: str) -> bool                                # C1 v2: setea _cancel Y termina el árbol INMEDIATAMENTE
 def artifact_zip_path(run_id: str) -> Path | None              # resuelto de registro en memoria o ledger (patrón 201)
-def list_runs(workspace_root: str, slug: str | None = None, limit: int = 20) -> list[dict]   # lee el ledger, más nuevos primero
+def list_runs(workspace_root: str, slug: str | None = None, limit: int = 20) -> list[dict]   # lee el ledger, más nuevos primero; reconcilia "interrupted"
+def classify_publish_failure(log_tail: list[str]) -> dict | None   # ADICIÓN 2: {"code","hint"} determinista o None
 ```
 
 **Estado y almacenamiento (espejo del 201 F5 — mismos conceptos, archivos propios):**
@@ -546,10 +593,10 @@ _RUNS: dict[str, dict] = {}   # run_id -> {status, slug, mode_effective, argv, b
 _PUBLISH_TIMEOUT_SEC = 1800
 _MAX_RETAINED_RUNS = 10
 ```
-- `status` ∈ `{"running","success","failed","cancelled","toolchain_missing","unsupported"}`.
+- `status` ∈ `{"running","success","failed","cancelled","toolchain_missing","unsupported"}`. (`"interrupted"` existe SOLO como estado reconciliado por `list_runs` desde el ledger — ADICIÓN 1 —, nunca dentro de `_RUNS`.)
 - Log = lista `{"ts","level","message"}` (shape `log_streamer.LogEvent.to_dict`, `log_streamer.py:31-43`), buffer PROPIO — **PROHIBIDO `log_streamer.close()`** (misma razón FK que 201 F5: un publish no es un `AgentExecution`). Volcado final a `<base_dir>/publish.log`.
 - Staging: `base_dir = data_dir()/"solution_publish_artifacts"/<slug>/<ts>/` con `<ts> = _ts()` (copiar el body de `_ts()` del 201 F5 C5: `strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]`). Bits en `base_dir/out/`.
-- Ledger append-only `data/solution_publish_runs.jsonl`: una línea al terminar con `{"run_id","slug","mode_effective","status","returncode","zip_path","base_dir","workspace_root","finished_at","duration_sec"}`. (Nombre distinto de `publish_ledger` del Plan 153 — dominio ADO, no confundir.)
+- Ledger append-only `data/solution_publish_runs.jsonl` (**ADICIÓN ARQUITECTO 1 — eventos `started`/`finished`**): (a) al ARRANCAR el run se escribe `{"event":"started","run_id","slug","workspace_root","started_at"}`; (b) al terminar, `{"event":"finished","run_id","slug","mode_effective","status","returncode","zip_path","base_dir","workspace_root","finished_at","duration_sec"}`. `list_runs` reconcilia: un `started` sin `finished` cuyo `run_id` NO está en `_RUNS` (backend reiniciado a mitad de publish) se reporta como `{"status":"interrupted"}` — los runs cortados quedan VISIBLES y cerrados en el historial, nunca "running" eterno. Líneas JSONL corruptas se SALTAN con `logger.warning` (C11). (Nombre distinto de `publish_ledger` del Plan 153 — dominio ADO, no confundir.)
 - `publish.summary.json` en `base_dir` al terminar (siempre, aun failed): `{"run_id","slug","mode_effective","argv","status","returncode","started_at","finished_at","duration_sec","staging_dir","zip_path","toolchain":{"builder","version"},"files":N,"bytes":N}`.
 - Retención: `prune_old_publish_runs(scope_dir)` — copiar el body de `prune_old_builds` del 201 F5 (ADICIÓN 1) con `_MAX_RETAINED_RUNS`.
 
@@ -571,13 +618,42 @@ def _build_argv(plan, cfg, toolchain, staging_out):
 ```
 > `/p:publishUrl=` con el `os.sep` final DENTRO del elemento de lista — el bug `"...\"` solo existe con strings de shell, prohibidos acá (idéntico razonamiento 201 F5).
 
-**Flujo `start_publish` (pseudocódigo):**
+**Flujo `start_publish` (pseudocódigo — C1 v2: watchdog + cancel inmediato):**
+
+> **REGLA C1 (el porqué del rediseño):** el timeout y la cancelación **NO pueden depender de que el proceso emita output**. `for line in proc.stdout` bloquea en `readline`; un `proc.wait(timeout=…)` puesto DESPUÉS del loop recién corre tras EOF → un msbuild colgado y mudo (restore trabado, diálogo invisible) jamás vencería y un cancel no tomaría efecto hasta la próxima línea. Por eso: **watchdog `threading.Timer`** que mata el árbol al vencer el plazo (el reader ve EOF y sale) y **`cancel()` que termina el árbol en el momento**.
+
 ```python
 def start_publish(slug, workspace_root):
     run_id = uuid.uuid4().hex
-    _RUNS[run_id] = {"status": "running", "slug": slug, "log": [], "_cancel": False, ...}
+    _RUNS[run_id] = {"status": "running", "slug": slug, "log": [], "_cancel": False,
+                     "_timed_out": False, "started_at": _iso_now(), ...}
+    _ledger_append({"event": "started", "run_id": run_id, "slug": slug,
+                    "workspace_root": workspace_root, "started_at": _iso_now()})   # ADICIÓN 1
     threading.Thread(target=_run, args=(run_id, slug, workspace_root), daemon=True).start()
     return run_id
+
+def cancel(run_id):
+    # C1 v2 — cancel INMEDIATO: bandera + terminar el árbol YA (no esperar la próxima línea de output).
+    with _LOCK:
+        run = _RUNS.get(run_id)
+        if not run or run.get("status") != "running":
+            return False
+        run["_cancel"] = True
+        proc = run.get("_proc")
+    if proc is not None:
+        _terminate_tree(proc)          # el reader de _run ve EOF y cierra con status "cancelled"
+    return True
+
+def _timeout_kill(run_id):
+    # Corre en el thread del Timer. NUNCA lanza.
+    with _LOCK:
+        run = _RUNS.get(run_id)
+        if not run or run.get("status") != "running":
+            return
+        run["_timed_out"] = True
+        proc = run.get("_proc")
+    if proc is not None:
+        _terminate_tree(proc)
 
 def _run(run_id, slug, workspace_root):
     from services import solution_store, publish_config_store, publish_profile_scanner
@@ -602,36 +678,73 @@ def _run(run_id, slug, workspace_root):
     proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace", cwd=os.path.dirname(plan["target"]))
     _set(run_id, _proc=proc)
+    watchdog = threading.Timer(_PUBLISH_TIMEOUT_SEC, _timeout_kill, args=(run_id,))
+    watchdog.daemon = True
+    watchdog.start()
     try:
-        for line in proc.stdout:
-            if _RUNS[run_id]["_cancel"]:
-                _terminate_tree(proc); _finish(run_id, "cancelled"); return
+        for line in proc.stdout:       # bloquea por línea; cancel/timeout MATAN el árbol → EOF y el loop sale
             _push(run_id, "info", line.rstrip())
-        proc.wait(timeout=_PUBLISH_TIMEOUT_SEC)
-    except subprocess.TimeoutExpired:
-        _terminate_tree(proc); _push(run_id, "error", "timeout"); _finish(run_id, "failed", returncode=-1); return
+        proc.wait()                    # el proceso ya cerró stdout; wait es inmediato o casi
+    finally:
+        watchdog.cancel()
+    if _RUNS[run_id]["_cancel"]:
+        _finish(run_id, "cancelled", returncode=proc.returncode); return
+    if _RUNS[run_id]["_timed_out"]:
+        _push(run_id, "error", "timeout (" + str(_PUBLISH_TIMEOUT_SEC) + "s) — proceso terminado por watchdog")
+        _finish(run_id, "failed", returncode=proc.returncode, error="timeout"); return
     status = "success" if proc.returncode == 0 else "failed"
     if status == "success":
         zip_path = shutil.make_archive(str(base_dir), "zip", root_dir=staging_out)
         _set(run_id, zip_path=zip_path)
-        prune_old_publish_runs((data_dir() / "solution_publish_artifacts" / slug))
-    _finish(run_id, status, returncode=proc.returncode)   # _finish escribe summary + publish.log + línea de ledger SIEMPRE
+    _finish(run_id, status, returncode=proc.returncode)
 ```
 - `_terminate_tree(proc)`: copiar del 201 F5 (`terminate()` + `taskkill /PID /T /F` best-effort; nunca lanza).
-- `_finish` NUNCA lanza: summary/ledger con try/except + `logger.warning`.
+- `_finish` NUNCA lanza (summary/ledger con try/except + `logger.warning`) y hace SIEMPRE, en este orden: `publish.summary.json` + volcado `publish.log` + línea `finished` del ledger + **`prune_old_publish_runs(data_dir()/"solution_publish_artifacts"/slug)` también en failed/cancelled/timeout (C6 v2)** — la poda elimina tanto dirs `<ts>/` como zips hermanos `<ts>.zip` excedentes, manteniendo los `_MAX_RETAINED_RUNS` más nuevos por slug.
+- Si al fallar (`status in ("failed","unsupported")`) hay tail de log, `_finish` calcula `classify_publish_failure(tail)` y lo guarda en el run y el summary como `"failure_class"` (ADICIÓN 2; `None` si no matchea).
+- `get_status(run_id)`: primero memoria; si no está, busca la línea `finished` en el ledger y reconstruye `{status, slug, mode_effective, summary}` básico; si tampoco está (solo `started` o nada) → `None` → el endpoint responde 404 y **la UI corta el polling** y muestra "Run desconocido (backend reiniciado)" (regla F7).
 
-**Casos borde:** slug inexistente → `failed/solucion_no_encontrada`; `.sln` movido → idem; plan no soportado → `unsupported` con `reason` (la UI ofrece el asistente — F6); doble click Publicar mismo slug → dos runs con `<ts>` únicos (no colisionan); cancel a mitad → `cancelled`; rutas con espacios/acentos → OK (lista de args).
+**ADICIÓN ARQUITECTO 2 — clasificador determinista de fallos (`classify_publish_failure`):**
+```python
+_FAILURE_PATTERNS = (
+    (re.compile(r"error NU1\d{3}", re.I), "nuget_restore",
+     "Fallo de restore NuGet (feed o paquete). Revisar NuGet.config / conectividad."),
+    (re.compile(r"error MSB3644", re.I), "targeting_pack_missing",
+     "Falta el targeting pack / SDK del framework objetivo."),
+    (re.compile(r"error CS\d{4}", re.I), "compile_error",
+     "Error de compilación C# (ver líneas 'error CS' del log)."),
+    (re.compile(r"error MSB4126", re.I), "invalid_configuration",
+     "Configuration/Platform inválida para esta solución — revisar 'configuration' en la config."),
+    (re.compile(r"MSB4019|MSB4236", re.I), "missing_targets",
+     "Faltan .targets/SDK de MSBuild (p. ej. WebApplication.targets) — suele requerir workload de VS."),
+)
+
+def classify_publish_failure(log_tail):
+    text = "\n".join(log_tail or [])
+    for rx, code, hint in _FAILURE_PATTERNS:
+        if rx.search(text):
+            return {"code": code, "hint": hint}
+    return None
+```
+Determinista, sin LLM, idéntico 3/3. La UI lo muestra como chip "causa probable" y F6 lo antepone al contexto del asistente (el agente arranca con el diagnóstico grueso ya hecho, gratis).
+
+**Casos borde:** slug inexistente → `failed/solucion_no_encontrada`; `.sln` movido → idem; plan no soportado → `unsupported` con `reason` (la UI ofrece el asistente — F6); doble click Publicar mismo slug → dos runs con `<ts>` únicos (no colisionan); cancel a mitad → `cancelled` INMEDIATO aunque el proceso esté mudo (C1); **proceso colgado sin output → watchdog lo mata al vencer `_PUBLISH_TIMEOUT_SEC` → `failed/timeout` (C1)**; **backend reiniciado a mitad de run → `started` sin `finished` en ledger → `interrupted` en historial y 404 en status (ADICIÓN 1)**; línea JSONL corrupta en el ledger → se salta (C11); rutas con espacios/acentos → OK (lista de args).
 
 **Tests (TDD) — `Stacky Agents/backend/tests/test_plan215_solution_publisher.py`:** (monkeypatch `detect_toolchain`, `subprocess.Popen` fake, `data_dir` → tmp, stores → tmp)
 - `test_toolchain_missing_sets_status`
 - `test_unsupported_plan_sets_status_and_reason`
 - `test_success_produces_staging_zip_summary_and_ledger_line`
 - `test_failed_returncode_sets_failed_and_still_writes_summary`
-- `test_cancel_terminates`
+- `test_cancel_terminates_immediately_without_new_output` (C1: fake `Popen` cuyo `stdout` bloquea hasta que `terminate()` lo cierra — `cancel()` debe destrabarlo y dejar `cancelled` SIN que llegue ninguna línea)
+- `test_timeout_watchdog_kills_silent_process` (C1: monkeypatch `_PUBLISH_TIMEOUT_SEC` a `1` + fake proc mudo con stdout abierto → status `failed`, error `timeout`, y `terminate` invocado)
 - `test_argv_dotnet_publish_shape` (assert argv exacto: `["dotnet","publish",csproj,"-c","Release","--nologo","-o",staging]`-orden según `_build_argv`, y que `extra_args` van al final)
 - `test_argv_msbuild_pubxml_includes_deployonbuild_and_publishurl`
 - `test_no_shell_true` (inspección del source: ver criterio binario)
+- `test_ledger_started_then_finished_lines` (ADICIÓN 1: dos líneas por run, `event` correcto)
 - `test_list_runs_reads_ledger_newest_first`
+- `test_list_runs_marks_interrupted_when_started_without_finished` (ADICIÓN 1; `run_id` no presente en `_RUNS`)
+- `test_list_runs_skips_corrupt_jsonl_lines` (C11)
+- `test_finish_prunes_also_on_failed` (C6: run fallido nº `_MAX_RETAINED_RUNS+1` dispara poda de dir Y zip más viejos)
+- `test_classify_publish_failure_known_and_none` (ADICIÓN 2: `"error NU1101"` → `nuget_restore`; tail sin patrón → `None`)
 - `test_prune_keeps_max_retained`
 - Registrar en `HARNESS_TEST_FILES`. Correr por archivo.
 
@@ -686,7 +799,9 @@ def _deps_or_none():
 - `/solutions/import`: por cada path → normalizar, validar con `add_manual_solution` (que ya exige commonpath dentro del workspace + `.sln` legible); acumular `rejected` con `reason` = mensaje del `ValueError`. NUNCA 500 por una ruta mala.
 - `/run`: `_guard()`; body sin `confirm:true` → `400 {"error":"confirm requerido"}`; slug ausente del catálogo → `400`. Responder SIEMPRE `200` para `toolchain_missing`/`unsupported` (la UI los renderiza; memoria `gotcha-frontend-api-wrapper-lanza-en-non-2xx` — `api.post` lanza en non-2xx).
 - `/register-deploy-app`: exige run `success`; usa el ledger/summary para resolver `staging_dir` (= `base_dir/out`); payload y validación IDÉNTICOS al 201 F8 (`deploy_store.upsert_app`, `artifact:{kind:"folder", path:abspath}`, `id=slug` — `slugify_solution` ya garantiza `_APP_ID_RE`).
-- Degradación 201 ausente: si `_deps_or_none()` da `None` → `200 {"error":"build_workshop_unavailable","detail":"Requiere el Taller de Compilación (Plan 201) implementado."}` en `/catalog`, `/rescan`, `/run`.
+- **Degradación 201 ausente (C2 v2 — cobertura COMPLETA):** si `_deps_or_none()` da `None` → `200 {"error":"build_workshop_unavailable","detail":"Requiere el Taller de Compilación (Plan 201) implementado."}` en **TODOS** los endpoints que tocan módulos del 201: `/catalog`, `/rescan`, `/run`, `/solutions/import`, `/deep-scan` y `/register-deploy-app`. `/config` y `/runs/*` (status/cancel/download/historial) no importan módulos del 201 y siguen operativos. NUNCA un 500 por ImportError.
+- **`/deep-scan` es síncrono con presupuesto (C13 v2):** el request puede tardar hasta `_DEEP_TIME_BUDGET_SEC` (45s). La UI DEBE mostrar spinner con texto "Escaneo profundo en curso (hasta 45s)…" y el fetch no debe tener timeout menor al presupuesto. No se hace async/job: sobre-ingeniería para una acción manual esporádica.
+- **`/runs/<run_id>/status` desconocido (C1 v2):** `get_status` devuelve `None` → `404`; la UI CORTA el polling al primer 404 y muestra "Run desconocido (backend reiniciado)". `/runs?slug=` incluye los `interrupted` reconciliados del ledger (ADICIÓN 1) y `failure_class` cuando exista (ADICIÓN 2).
 - Registro del blueprint en `Stacky Agents/backend/api/__init__.py` (patrón `:107-123`): `from .devops_solution_publisher import bp as devops_solution_publisher_bp  # Plan 215` + `api_bp.register_blueprint(devops_solution_publisher_bp)  # Plan 215 — url_prefix="/devops/solution-publisher"`.
 
 **Casos borde:** flag OFF → 404 en todos; sin workspace activo → 200 vacío + warning; `run_id` inexistente → 404 en status/cancel/download; zip movido → 404; path con `..` en import → rechazado por commonpath.
@@ -704,7 +819,8 @@ def _deps_or_none():
 - `test_run_starts_and_returns_run_id`
 - `test_download_guard_rejects_outside_root`
 - `test_register_deploy_app_requires_success_run`
-- `test_catalog_degrades_when_201_absent` (monkeypatch `_deps_or_none` → `(None, None)` → `build_workshop_unavailable`)
+- `test_all_201_dependent_endpoints_degrade_when_201_absent` (C2: monkeypatch `_deps_or_none` → `(None, None)` → `build_workshop_unavailable` en `/catalog`, `/rescan`, `/run`, `/solutions/import`, `/deep-scan`, `/register-deploy-app`; y `/config` + `/runs` siguen respondiendo)
+- `test_status_unknown_run_returns_404`
 - Registrar en `HARNESS_TEST_FILES`. Correr por archivo.
 
 **Criterio BINARIO:** comando verde; `grep -rn "devops_solution_publisher_bp" "Stacky Agents/backend/api/__init__.py"` → 2 matches; `grep -n "commonpath" "Stacky Agents/backend/api/devops_solution_publisher.py"` → 1+.
@@ -736,15 +852,20 @@ def build_assist_message(run: dict, cfg: dict, solution: dict, toolchain: dict) 
     ]
     if toolchain.get("remediation"):
         lines.append("Doctor: " + toolchain["remediation"]["message"])
+    if run.get("failure_class"):        # ADICIÓN 2 — diagnóstico determinista primero
+        fc = run["failure_class"]
+        lines.append("Clasificación determinista del fallo: " + fc["code"] + " — " + fc["hint"])
     tail = [e.get("message", "") for e in (run.get("log") or [])][-_ASSIST_LOG_TAIL:]
     lines.append("Últimas líneas del log del publish:")
-    lines.append(mask_token_values("\n".join(tail)))
+    lines.append("\n".join(tail))
     lines.append(
         "Diagnosticá la causa raíz y proponé la corrección EXACTA (por ejemplo el JSON de config "
         "corregido para esta solución, o el comando de instalación del toolchain). NO ejecutes nada: "
         "yo aplico los cambios desde la UI y confirmo con CONFIRMO si hace falta ejecutar algo."
     )
-    return "\n".join(lines)
+    # C3 v2 — el masking cubre el mensaje COMPLETO (argv, config, doctor y tail incluidos):
+    # un extra_arg tipo /p:Password=... pasa la allowlist de F2 y NO debe llegar crudo al chat.
+    return mask_token_values("\n".join(lines))
 ```
 
 **Endpoint nuevo:**
@@ -766,6 +887,8 @@ def build_assist_message(run: dict, cfg: dict, solution: dict, toolchain: dict) 
 **Tests (TDD) — `Stacky Agents/backend/tests/test_plan215_assist.py`:**
 - `test_assist_context_includes_argv_config_and_tail`
 - `test_assist_context_masks_secrets` (sembrar en el log un valor tipo token — PARTIR el literal en el fixture para no gatillar push-protection, memoria `gotcha-github-push-protection-test-fixture-secret` — y assert que NO aparece en `message`)
+- `test_assist_context_masks_secrets_in_argv_and_config` (C3: sembrar el token en `run["argv"]` y en `cfg["extra_args"]` — NO debe aparecer en `message`)
+- `test_assist_context_includes_failure_class_when_present` (ADICIÓN 2)
 - `test_assist_context_unknown_run_404`
 - `test_assist_context_no_active_project_400`
 - Registrar en `HARNESS_TEST_FILES`. Correr por archivo.
@@ -814,8 +937,8 @@ export interface PublisherSolution { slug: string; sln_path: string; friendly_na
 
 export function canPublish(sol: PublisherSolution, toolchainAvailable: boolean): boolean
 // !sol.missing && sol.plan.supported && toolchainAvailable
-export function publishStatusLabel(s: 'running'|'success'|'failed'|'cancelled'|'toolchain_missing'|'unsupported'): string
-// español: 'Publicando…','Publicado','Falló','Cancelado','Falta toolchain .NET','No soportado' (sin colisionar con labels de deployments/buildWorkshop)
+export function publishStatusLabel(s: 'running'|'success'|'failed'|'cancelled'|'toolchain_missing'|'unsupported'|'interrupted'): string
+// español: 'Publicando…','Publicado','Falló','Cancelado','Falta toolchain .NET','No soportado','Interrumpido (backend reiniciado)' (sin colisionar con labels de deployments/buildWorkshop)
 export function commandPreview(argv: string[]): string
 // join con espacios, cada elemento con comillas si contiene espacio — SOLO para mostrar en el confirm (evidencia), jamás se ejecuta
 export function planReasonLabel(reason: string): string
@@ -829,14 +952,14 @@ Tests (`solutionPublisherModel.test.ts`): un `it` por función; bordes: `parseSo
 
 3. `Stacky Agents/frontend/src/components/devops/SolutionPublisherSection.tsx` — reemplaza el placeholder de F0. Comportamiento (todo clicks):
    1. Al montar: `useQuery(['solution-publisher-catalog'], DevOpsSolutionPublisher.catalog)` — **el primer GET dispara el scan solo** (F5). Si `first_scan_ran`, toast "Se escanearon las soluciones del proyecto (una única vez)". Si `error === 'build_workshop_unavailable'` → panel "Requiere el Taller de Compilación (Plan 201)".
-   2. Header: chip de toolchain (verde/doctor con **Copiar comando** vía copyService — patrón 201 F10.1) + botones `Re-escanear` (→ `rescan`, invalida la query), `Escaneo profundo` (→ `deepScan`; muestra `new_paths` como checkboxes → botón `Importar seleccionadas` con confirm → `importSolutions`) y `Agregar .sln…` (modal `Dialog` canónico del Plan 164 con textarea; `parseSolutionPathsFromText` prellena/limpia; import validado server-side; muestra `rejected` con razones).
-   3. Si el catálogo quedó vacío tras deep-scan: bloque "Escaneo agéntico" con botón **Buscar con agente DevOps** → `assistContext`-like mensaje fijo (NO requiere run): texto estático `"Buscá todos los archivos .sln del workspace <ws> y respondé SOLO la lista de rutas absolutas, una por línea."` armado en el componente + `DevOpsAgentChat.startConversation(project, message, 'claude_code_cli')` → al 202, `ctx.setActiveSection('agente')` (`DevOpsPage.tsx:237`) + toast "Conversación creada — pegá las rutas que devuelva en 'Agregar .sln…'". Con health `agent_enabled` false o runtime copilot: solo botón **Copiar pedido** (copyService).
+   2. Header: chip de toolchain (verde/doctor con **Copiar comando** vía copyService — patrón 201 F10.1) + botones `Re-escanear` (→ `rescan`, invalida la query), `Escaneo profundo` (→ `deepScan`; **spinner "Escaneo profundo en curso (hasta 45s)…" mientras responde — C13**; muestra `new_paths` como checkboxes → botón `Importar seleccionadas` con confirm → `importSolutions`) y `Agregar .sln…` (modal `Dialog` canónico del Plan 164 con textarea; `parseSolutionPathsFromText` prellena/limpia; import validado server-side; muestra `rejected` con razones).
+   3. Si el catálogo quedó vacío tras deep-scan: bloque "Escaneo agéntico" con botón **Buscar con agente DevOps** → `assistContext`-like mensaje fijo (NO requiere run): texto estático `"Buscá todos los archivos .sln del workspace <ws> y respondé SOLO la lista de rutas absolutas, una por línea."` armado en el componente + **el MISMO selector de runtime del punto 8 (`claude_code_cli` default / `codex_cli` — C9 v2, nada hardcodeado)** + `DevOpsAgentChat.startConversation(project, message, runtimeElegido)` → al éxito, `ctx.setActiveSection('agente')` (`DevOpsPage.tsx:237`) + toast "Conversación creada — pegá las rutas que devuelva en 'Agregar .sln…'". Con health `agent_enabled` false o runtime copilot: solo botón **Copiar pedido** (copyService).
    4. Tabla de soluciones: `friendly_name`, `sln_path` (badge `manual` si `origin==='manual'`, badge rojo "no encontrado" si `missing`), chips de proyectos, `plan.mode_effective` + (si `!plan.supported`) `planReasonLabel(reason)` en ámbar, botón **Configurar** y botón **Publicar** (deshabilitado según `canPublish`).
    5. **Configurar** abre modal (Dialog canónico): select `mode` (4 opciones), select `project_csproj` (proyectos de la solución + "auto"), select `publish_profile` (de `publish_profiles`, con method visible; solo FileSystem seleccionable), input `configuration`, editor de `extra_args` (chips; validación espejo del regex de F2 antes de enviar), toggle `register_as_deploy_app`. Guardar → `saveConfig` → invalida catálogo. Errores 400 del server se muestran textuales.
    6. **Publicar** abre confirm HITL mostrando `commandPreview` del argv previsto (derivado de `plan.argv_tail` + staging placeholder) → `run(slug)`. Respuesta `toolchain_missing` → doctor; `unsupported` → razón + botón asistente.
-   7. Con `run_id`: `useQuery(['solution-publisher-run', runId], () => runStatus(runId), { refetchInterval: 1500, enabled: !!runId })` — log vivo, `publishStatusLabel`, **Cancelar** (confirm) mientras `running`.
-   8. Al terminar: `success` → evidencia del `summary` (duración, files, bytes — reusar `formatBytes` de `buildWorkshopModel` si el 201 ya lo creó; si no, duplicar la función en `solutionPublisherModel` y anotar TODO de unificación), botón **Descargar** (`<a download>`), y si `config.register_as_deploy_app` botón **Registrar como app de despliegue** (confirm → `registerDeployApp` → toast + invalidar `['devops-deployments-overview']`). `failed`/`unsupported`/`toolchain_missing` → botón **Asistir con agente DevOps**: `assistContext(runId)` → modal con preview del mensaje + selector runtime (`claude_code_cli` default / `codex_cli`) + botones **Iniciar conversación** (→ `DevOpsAgentChat.startConversation` → `ctx.setActiveSection('agente')`) y **Copiar contexto** (copyService — único camino con copilot o chat OFF).
-   9. Historial: acordeón por solución con `runs(slug)` (fecha, estado, duración, descargar si zip vigente).
+   7. Con `run_id`: `useQuery(['solution-publisher-run', runId], () => runStatus(runId), { refetchInterval: 1500, enabled: !!runId })` — log vivo, `publishStatusLabel`, **Cancelar** (confirm) mientras `running`. **Regla C1 v2:** `api.get` LANZA en 404 → en el `onError`/estado de error de la query, CORTAR el polling (`setRunId(null)`) y mostrar "Run desconocido (backend reiniciado)" — jamás loop infinito de 404.
+   8. Al terminar: `success` → evidencia del `summary` (duración, files, bytes — reusar `formatBytes` de `buildWorkshopModel` si el 201 ya lo creó; si no, duplicar la función en `solutionPublisherModel` y anotar TODO de unificación), botón **Descargar** (`<a download>`), y si `config.register_as_deploy_app` botón **Registrar como app de despliegue** (confirm → `registerDeployApp` → toast + invalidar `['devops-deployments-overview']`). `failed`/`unsupported`/`toolchain_missing` → chip **"causa probable"** si el status trae `failure_class` (ADICIÓN 2) + botón **Asistir con agente DevOps**: `assistContext(runId)` → modal con preview del mensaje + selector runtime (`claude_code_cli` default / `codex_cli`) + botones **Iniciar conversación** (→ `DevOpsAgentChat.startConversation` → `ctx.setActiveSection('agente')`) y **Copiar contexto** (copyService — único camino con copilot o chat OFF).
+   9. Historial: acordeón por solución con `runs(slug)` (fecha, estado — incluye `interrupted` con su label —, causa probable si hay `failure_class`, duración, descargar si zip vigente).
 
 **Ratchets (memoria):** cero `style={{}}` inline (clases en `./devops.module.css`); portapapeles SIEMPRE vía copyService (Plan 194); si `uiDebtRatchet`/`formDebtBaseline.json` marcan el archivo, agregar baseline propio sin empeorar deuda ajena; RTL/jsdom NO están instalados → el test de la sección valida SOLO el export (memoria `gotcha-rtl-jsdom-structural-gap`), gate real = `npx tsc --noEmit` + smoke manual.
 
@@ -863,6 +986,8 @@ Tests (`solutionPublisherModel.test.ts`): un `it` por función; bordes: `parseSo
 | Disco lleno por artefactos | `prune_old_publish_runs` (≤10 por slug) + zip hermano (F4). |
 | Path traversal en download | `commonpath` contra `data/solution_publish_artifacts` (F5, patrón 201 F7). |
 | Doble-click Publicar | `<ts>` único (`_ts()` del 201 C5) → runs independientes (F4). |
+| Publish colgado y MUDO (restore trabado, diálogo invisible) | Watchdog `threading.Timer` mata el árbol al vencer `_PUBLISH_TIMEOUT_SEC`; cancel termina el árbol inmediato (F4, C1 v2). |
+| Backend reiniciado a mitad de publish → run pegado en "running" | Ledger `started`/`finished` + reconciliación `interrupted` en historial; status 404 corta el polling en UI (F4/F5/F7, C1/ADICIÓN 1). |
 | Secretos en el log del assist | `mask_token_values` sobre TODO el tail antes de componer el mensaje (F6). |
 | Agente DevOps "arregla" solo | R-HITL del system prompt (Plan 90) + el agente no tiene endpoint de escritura de config; el operador pega/edita y el server valida (F2/F6). |
 | Re-scan pierde altas manuales | `rescan_preserving_manual` re-anexa manuales existentes en disco (F3). |
@@ -914,6 +1039,8 @@ Tests (`solutionPublisherModel.test.ts`): un `it` por función; bordes: `parseSo
 
 F1/F2/F3 son independientes entre sí tras F0; F4 depende de F1+F2 (+201 F3); F5 depende de F3+F4; F6 depende de F4/F5; F7 depende de F5/F6.
 
+**Gate 201 (C2 v2):** F0-F2 pueden implementarse ANTES de que el 201 esté mergeado (archivos 100% propios). **F3 en adelante NO arranca sin el 201 F1-F2 en `main`** (F3 edita sus archivos; F4-F7 los importan). Si al llegar a F3 el 201 sigue en papel, el orden obligatorio es: implementar 201 (F0-F5 mínimo; F7-F8 para download/bridge) → recién entonces continuar 215-F3. La degradación `build_workshop_unavailable` (F5) es SOLO una red de seguridad en runtime, NUNCA una licencia para implementar 215 completo sin 201.
+
 ---
 
 ## 11. Definición de Hecho (DoD) — binaria
@@ -924,11 +1051,14 @@ F1/F2/F3 son independientes entre sí tras F0; F4 depende de F1+F2 (+201 F3); F5
 - [ ] El catálogo vive en `data/build_solutions.json` (el del 201 — un solo catálogo para 201 y 215) y marca `missing` para `.sln` borrados/movidos.
 - [ ] Config individual por solución persistida en `data/publish_configs.json` con el shape de §5.2; `extra_args` inválidos rechazados con 400.
 - [ ] `resolve_publish_plan` decide determinísticamente (`auto` → dotnet_publish / msbuild_pubxml / build_only) y reporta `reason` cuando no puede; pubxml no-FileSystem = `unsupported`.
-- [ ] `POST /run` exige `confirm:true`; publica a staging propio; produce `publish.log`, `publish.summary.json`, `.zip` y línea en `data/solution_publish_runs.jsonl`; jamás `shell=True`.
-- [ ] Sin toolchain → doctor 200 (no crash); sin Plan 201 → `build_workshop_unavailable` 200 (no crash).
+- [ ] `POST /run` exige `confirm:true`; publica a staging propio; produce `publish.log`, `publish.summary.json`, `.zip` y líneas `started`+`finished` en `data/solution_publish_runs.jsonl`; jamás `shell=True`.
+- [ ] **C1:** watchdog mata un proceso mudo al vencer `_PUBLISH_TIMEOUT_SEC` (`test_timeout_watchdog_kills_silent_process` verde); `cancel` termina el árbol sin esperar output (`test_cancel_terminates_immediately_without_new_output` verde); run cortado por restart aparece como `interrupted` en el historial y su status 404 corta el polling.
+- [ ] **C6/C11:** la poda corre también en runs fallidos (dirs + zips); `list_runs` salta líneas JSONL corruptas.
+- [ ] **ADICIÓN 2:** `classify_publish_failure` clasifica los 5 patrones congelados y el chip/contexto del asistente lo muestran.
+- [ ] Sin toolchain → doctor 200 (no crash); sin Plan 201 → `build_workshop_unavailable` 200 en TODOS los endpoints que tocan módulos 201 (C2; no crash, no 500).
 - [ ] Download con guard `commonpath`; `register-deploy-app` crea la `DeployApp` vía `deploy_store.upsert_app`.
 - [ ] Escalera de fallback operativa: `Re-escanear` (preserva manuales y `tracked`), `Escaneo profundo` (presupuesto de tiempo, `timed_out`), `Agregar .sln…`/import (validación commonpath + `.sln` legible; `rejected` con razones), y botón de escaneo agéntico que abre el chat DevOps prellenado (o copia el pedido con copilot/chat OFF).
-- [ ] Run fallido → `assist-context` compone mensaje con argv + config + tail ENMASCARADO (`mask_token_values`); 1 click crea la conversación DevOps (claude/codex) o copia el contexto (copilot); el agente solo propone (R-HITL).
+- [ ] Run fallido → `assist-context` compone mensaje con clasificación determinista + argv + config + tail, **ENMASCARADO COMPLETO** (`mask_token_values` sobre el mensaje final — C3); 1 click crea la conversación DevOps (claude/codex, selector también en el escaneo agéntico — C9) o copia el contexto (copilot); el agente solo propone (R-HITL).
 - [ ] Todos los `test_plan215_*.py` registrados en `HARNESS_TEST_FILES` y verdes POR ARCHIVO con el venv del backend; `solutionPublisherModel.test.ts` verde; `npx tsc --noEmit` sin errores nuevos.
 - [ ] Flag OFF → endpoints 404 y sección oculta (byte-idéntico al estado actual).
 - [ ] Paridad 3 runtimes: núcleo sin LLM (grep sin imports de llm/copilot/requests en los servicios nuevos deterministas); escalones agénticos con fallback explícito por runtime.

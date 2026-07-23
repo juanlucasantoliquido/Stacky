@@ -1,7 +1,19 @@
 # Plan 212 — Selector vivo de modelo y effort en tickets ADO, y cumplimiento REAL de la elección
 
-> Estado: **v1 · PROPUESTO** (2026-07-22). Pipeline: **[este paso ✓]** → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
-> Autor: StackyArchitectaUltraEficientCode (perfil max, heredado de Opus 4.8). Sin modelos menores en la elaboración (directiva del operador).
+> Estado: **v1 -> v2 · CRITICADO (v1 RECHAZADO — 1 BLOQUEANTE; v2 corrige todo)** (2026-07-23). Pipeline: proponer ✓ → **criticar ✓ (este paso)** → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor: StackyArchitectaUltraEficientCode (v1 perfil max; crítica v2 perfil normal, heredado de Fable 5). Sin modelos menores en la elaboración (directiva del operador).
+>
+> **CHANGELOG v1 → v2 (crítica adversarial 2026-07-23, cada ancla re-verificada contra el repo):**
+> - **C1 (BLOQUEANTE, resuelto):** F1 v1 abría un **bypass del guardarraíl 11** — `DevOpsAgent` está en el registry genérico (`backend/agents/__init__.py:15-31`) y `POST /api/agents/run` pasa `model_override` **crudo, sin ningún clamp** (`api/agents.py:512`); con la exención v1 (`is_opus_allowlisted(model_override)` a secas), `{agent_type:"devops", model_override:"claude-opus-4-8"}` por `/run` ejecutaba Opus. Además la justificación de G5 ("ya pasó el clamp del endpoint :700/:946/:1136") era **falsa para `/run`**: esas anclas son brief/incident/dev-resolver. v2: la exención en el runner exige `agent_type != "devops"`, test nombrado nuevo, y G5/F1 reescritos con la verdad.
+> - **C2 (IMPORTANTE, resuelto):** `AgentLaunchModal.tsx` estaba citado como hueco en §2.2 pero F4 no lo montaba ni lo declaraba fuera de scope. v2: es el 4º punto de montaje.
+> - **C3 (IMPORTANTE, resuelto):** F7 v1 prometía escribir metadata para Codex y Copilot editando **solo** `claude_code_cli_runner.py` (imposible tal como estaba escrito). v2: F7 se acota honestamente a `claude_code_cli` y declara codex/copilot fuera de scope con razón.
+> - **C4 (IMPORTANTE, resuelto):** ruta errónea del gate de flags: es `frontend/src/services/flagGate.ts` (verificado), no `utils/flagGate.ts`. Un modelo menor habría creado un duplicado.
+> - **C5 (IMPORTANTE, resuelto):** hay una **sesión paralela viva** con cambios sin commitear en `TicketBoard.tsx`, `UnblockerPage.tsx`, `SprintBoardPage.tsx` y otros; las anclas de línea ya driftean (`handleRunConfirm` real `:316` vs `:323` citado; existe un `<AgentRuntimeSelector>` adicional en `TicketBoard.tsx:1035` que v1 no contemplaba). v2: sección §0 obligatoria de re-anclaje por símbolo antes de editar.
+> - **C6 (IMPORTANTE, resuelto):** el effort no se degradaba contra el modelo **EFECTIVO**: con `model_override=None` (adaptativo), `_clamp_effort_for_model(effort, None)` devuelve el effort intacto (`api/agents.py:596-597`) y el runner no degrada por modelo (`claude_code_cli_runner.py:879, :2134`) → `--model claude-sonnet-5 --effort xhigh` era posible. v2: **[ADICIÓN ARQUITECTO]** la matriz vive en UNA función pública de `services/llm_router.py` y el runner aplica el clamp final contra `routed_model`.
+> - **C7 (MENOR, resuelto):** faltaba la huella de regresión en `docs/sistema/error_fingerprints.json` (shape verificado: `id/title/killed_by/guard_test`). v2: entrada `model_effort_silent_downgrade` en F7.
+> - **C8 (MENOR, resuelto):** el `'decision' in dir()` de F7 era un hack frágil; v2 usa `_route_reason` inicializada.
+> - **C9 (MENOR, resuelto):** el criterio de F0 ("exactamente 3 fallos") podía romperse por drift ajeno en los casos "VERDE hoy"; v2 agrega la instrucción de frenar e investigar si eso pasa.
+> - Verificaciones que SÍ pasaron (sin cambio): sentinel `claudeModels/claudeEfforts` real (`EpicFromBriefModal.tsx:81-82`, `IncidentResolverModal.tsx:84-85`); `ModelCatalogApi.get(refresh)` existe (`endpoints.ts:1049-1050`); anclas del ratchet exactas (`run_harness_tests.sh:20`, `.ps1:13`); `CLAUDE_CODE_CLI_BIN` en `config.py:301`; `WORKBENCH_PERSIST_VERSION = 3` en `workbenchPure.ts:7`; la paridad de la matriz de efforts HOY coincide (revisada a mano contra `api/agents.py:588-605` y `model_catalog.json:22-27`); la cadena de degradación silenciosa de §2.1 es correcta línea por línea.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
 > Origen: **incidencia reportada por el operador** — *"En los tickets ADO, cuando selecciono Claude Code me debe dar la lista de todos los modelos disponibles al momento con todos los efforts disponibles."*
 
@@ -13,6 +25,17 @@
 - **COMPLEMENTA Plan 43** — "Generador de épicas config-auto + selector modelo/effort" (F0/F1 en código: `_clamp_effort_for_model`, `clamp_model(allow_opus=)`). Este plan **cierra el agujero que dejó el 43**: el `allow_opus=True` del endpoint se deshace río abajo en el runner (§2.1). No cambia la política (Opus sigue restringido a `_OPUS_ALLOWLIST`), solo hace que la política **se cumpla de punta a punta**.
 - **HABILITA Plan 196** — "Gestor de planes accionable + selector dinámico modelo/effort" (`docs/196_*`, CRITICADO v2, SIN implementar). El 196 necesita un selector modelo/effort en `/planes`; F4 de este plan entrega el componente único `ModelEffortPicker.tsx` que el 196 debe **consumir en vez de crear el suyo**. Si el 196 se implementa primero, quien implemente 212 F4 **integra** (no duplica) y migra el selector del 196 al componente compartido. Verificación tras merge: `grep -rn "ModelEffortPicker" "Stacky Agents/frontend/src"` → 1 definición + N usos, **cero** selectores `<select>` de modelo Claude fuera de ese componente (sentinel de F4).
 - **NO colisiona con 208/210/211.** 208 toca `api/tickets.py::_apply_task_state` y el daemon de completion; 210/211 tocan `harness/post_run.py` y el deliverable del developer. Este plan toca `api/agents.py` (endpoint `run`), `services/llm_router.py`, `services/claude_code_cli_runner.py` (bloque de routing) y frontend de selección. **Cero archivos compartidos con 208/210/211 salvo `backend/scripts/run_harness_tests.sh|.ps1`** (ratchet, siempre aditivo: agregar líneas propias, nunca reordenar las ajenas).
+
+---
+
+## 0. ADVERTENCIA DURA — colisión con sesión paralela (leer ANTES de tocar cualquier archivo) *(C5)*
+
+Al momento de esta crítica (2026-07-23) hay **otra sesión trabajando en el MISMO working tree** con cambios **sin commitear** en, al menos: `frontend/src/pages/TicketBoard.tsx`, `frontend/src/pages/UnblockerPage.tsx`, `frontend/src/pages/SprintBoardPage.tsx`, `frontend/src/components/TicketGraphView.jsx`, `frontend/src/incidents/devResolverModel.ts`, `frontend/src/utils/workItemTypeColor.ts`. Dos de esos (`TicketBoard.tsx`) son **objetivo de edición de F4**. Reglas obligatorias para quien implemente:
+
+1. **Re-anclar por símbolo, no por línea.** Toda ancla `archivo:línea` de este plan sobre archivos con cambios vivos puede estar corrida (ejemplo real: `handleRunConfirm` está hoy en `TicketBoard.tsx:316`, el plan v1 citaba `:323-329`). Antes de editar: `grep -n "<símbolo>"` y trabajar sobre el resultado fresco. Las anclas de archivos backend no colisionados sí fueron re-verificadas el 2026-07-23.
+2. **PROHIBIDO** `git stash`, `git reset`, `git checkout --`, `git add -A` y `git commit` sin pathspec explícito (memorias `feedback_concurrent-branch-git-amend-hazard` y `gotcha-shared-index-commit-sweeps-foreign`). Commitear SOLO con `git commit -- "<ruta propia>"`.
+3. **Punto de montaje emergente:** existe un `<AgentRuntimeSelector>` adicional en `TicketBoard.tsx:1035` (probablemente de la sesión paralela). Al implementar F4, listar TODOS los `<AgentRuntimeSelector>` del archivo (`grep -n "AgentRuntimeSelector" TicketBoard.tsx`) y montar el picker junto a **cada** instancia que lance agentes sobre tickets ADO, no solo las dos que cita F4.
+4. Si al llegar a F4 los archivos colisionados ya fueron commiteados por la otra sesión, hacer `git log --oneline -3 -- "<archivo>"` y releer el estado real antes de aplicar los cambios.
 
 ---
 
@@ -99,7 +122,7 @@ Hoy coinciden; nada garantiza que sigan coincidiendo. No existe test de paridad 
 - **G2 — Human-in-the-loop.** El plan **amplifica** al operador: le muestra opciones reales y honra su elección. No decide por él, no auto-cambia modelos, no publica nada. El selector adaptativo existente (`services/adaptive_selector.py`) sigue actuando **solo cuando el operador no eligió**.
 - **G3 — Cero trabajo extra al operador.** Todo default preserva el comportamiento actual: si no toca el selector, el sistema hace exactamente lo de hoy. La preferencia se recuerda (F4) — el operador elige una vez, no en cada run.
 - **G4 — No aflojar la política de modelos.** `clamp_model` sigue siendo la **única** función que decide qué está capado (`llm_router.py:38-57`) y `_OPUS_ALLOWLIST` sigue siendo `{"claude-opus-4-8"}`. Este plan **no agrega ni un modelo** a la allowlist: hace que el permiso ya otorgado por el Plan 43 llegue a destino. `fable` y cualquier Opus fuera de la allowlist siguen capados.
-- **G5 — Guardarraíl 11 intacto (DevOps nunca Opus).** El desbloqueo de F1 se activa **exclusivamente** desde un `model_override` explícito por-run que ya pasó el clamp del endpoint. El agente DevOps clampea con `allow_opus=False` en su endpoint (test vivo: `backend/tests/test_plan90_devops_agent_endpoints.py:147`), así que su `model_override` nunca puede ser Opus. El default global `CLAUDE_CODE_CLI_MODEL` **no** desbloquea Opus (§F1, decisión explícita).
+- **G5 — Guardarraíl 11 intacto (DevOps nunca Opus). *(reescrito en v2 por C1)*** Hecho verificado: `POST /api/agents/run` **NO clampea** `model_override` en el endpoint (pasa `payload.get("model_override")` crudo — `api/agents.py:512`), y `DevOpsAgent` **SÍ está** en el registry genérico que ese endpoint usa (`backend/agents/__init__.py:15-31`), o sea que el flujo estándar puede lanzar el agente DevOps. Por eso el desbloqueo de F1 se gatea con **DOS** condiciones en el runner: (a) el `model_override` explícito por-run es exactamente un id de `_OPUS_ALLOWLIST`, **y (b) `agent_type != "devops"`**. Los endpoints dedicados de DevOps además clampean con `allow_opus=False` (test vivo: `backend/tests/test_plan90_devops_agent_endpoints.py:147`) — defensa en profundidad, no la única defensa. El default global `CLAUDE_CODE_CLI_MODEL` **no** desbloquea Opus (§F1, decisión explícita).
 - **G6 — Cero costo de tokens ociosos.** El descubrimiento vivo (F6) **no invoca ningún modelo**: solo ejecuta subcomandos de listado del CLI con timeout corto y parseo JSON. Ningún prompt, ningún turno. (Directiva del operador: flags ON por default salvo las que quemen tokens ociosos — esta no quema ninguno.)
 - **G7 — Degradación explícita, nunca silenciosa.** Si el modelo o el effort efectivo difiere del elegido, el sistema lo **dice** (log + badge en UI, F7). Prohibido "arreglarlo por atrás" sin avisar — es la causa raíz de esta incidencia.
 - **G8 — Config del operador vía UI.** Toda flag nueva se registra en `harness_flags.py` (visible/editable desde la UI de flags), nunca env-only.
@@ -135,6 +158,7 @@ Hoy coinciden; nada garantiza que sigan coincidiendo. No existe test de paridad 
 
 **Comando:** `& ".venv\Scripts\python.exe" -m pytest tests\test_plan212_characterization.py -q`
 **Criterio de aceptación BINARIO:** al terminar F0, el comando reporta **exactamente 3 fallos** (casos 1, 3, 4) y 3 pasos. Al terminar F3, reporta **6 passed, 0 failed**.
+> *(v2, C9)* Si alguno de los casos "VERDE hoy" (2, 5, 6) aparece ROJO al escribir F0, **NO ajustar el test ni el criterio para que cierre**: significa que la matriz o la política driftearon desde esta crítica (p. ej. por una rama paralela). Frenar, investigar el drift con `git log -3 -- backend/api/agents.py backend/config/model_catalog.json backend/services/llm_router.py`, y recién después seguir (memoria `gotcha-plan-comment-matches-own-gate`: el gate gana, no se gamea).
 **Registro en ratchet:** agregar `tests/test_plan212_characterization.py` a los dos scripts (ver convención en §3).
 **Flag:** ninguna (son tests).
 **Impacto por runtime:** ninguno (no toca runtime).
@@ -181,18 +205,23 @@ Y en el bloque de override (`llm_router.py:233-241`) cambiar **una sola línea**
 
 Nada más de `decide()` se toca.
 
-**Cambio 3 — el runner pide el permiso solo para overrides explícitos por-run.**
+**Cambio 3 — el runner pide el permiso solo para overrides explícitos por-run Y para agentes que no sean DevOps *(v2, fix C1)*.**
 En `claude_code_cli_runner.py`, reemplazar el comentario obsoleto de `:807` y la llamada de `:840-850`:
 
 ```python
 -        # decide() aplica el cap duro (clamp_model): jamás opus/fable, ni por override.
 +        # Plan 212 F1 — decide() aplica el cap duro (clamp_model). El ÚNICO caso que
 +        # se exime es un model_override EXPLÍCITO por-run cuyo id está en la
-+        # allowlist de Opus (el endpoint ya lo autorizó con allow_opus=True,
-+        # api/agents.py:700/:946/:1136). El default global CLAUDE_CODE_CLI_MODEL NO
-+        # desbloquea Opus: evitaría el guardarraíl 11 (DevOps nunca Opus).
++        # allowlist de Opus Y cuyo agent_type NO es "devops" (guardarraíl 11).
++        # OJO (C1): /api/agents/run NO clampea model_override en el endpoint
++        # (api/agents.py:512 lo pasa crudo) y DevOpsAgent está en el registry
++        # genérico (agents/__init__.py) — este gate del runner es la defensa REAL.
++        # El default global CLAUDE_CODE_CLI_MODEL NO desbloquea Opus.
 ...
-+        _allow_opus_for_run = llm_router.is_opus_allowlisted(model_override)
++        _allow_opus_for_run = (
++            llm_router.is_opus_allowlisted(model_override)
++            and (agent_type or "").strip().lower() != "devops"   # C1 — guardarraíl 11
++        )
          decision = llm_router.decide(
              agent_type=agent_type or "",
              blocks=enriched_blocks,
@@ -205,6 +234,7 @@ En `claude_code_cli_runner.py`, reemplazar el comentario obsoleto de `:807` y la
 ```
 
 **Decisión explícita y su razón (para el juez):** se desbloquea **solo** desde `model_override`, no desde `config.CLAUDE_CODE_CLI_MODEL`. Motivo: si el default global desbloqueara Opus, **todo** run del sistema —incluido el agente DevOps— pasaría a Opus con solo cambiar una config, rompiendo el guardarraíl 11 sin que nadie lo note. Contrapartida asumida: si el operador escribe `claude-opus-4-8` como default global, sus runs sin selección explícita seguirán corriendo Sonnet 5 — pero **eso deja de ser silencioso**: F7 lo muestra como "solicitado ≠ efectivo" con la razón exacta.
+**Decisión v2 (C1) — por qué el gate de DevOps va en el runner y no en el endpoint:** clampear en `/api/agents/run` con `clamp_model(payload.get("model_override"), allow_opus=...)` rompería la semántica de `None` (`clamp_model(None)` devuelve `CLAUDE_CAP_MODEL` — `llm_router.py:50-51` — y `None` significa "selector adaptativo", no "Sonnet forzado"). El runner es el único punto donde conviven `agent_type` + `model_override` + routing; una sola línea cierra TODOS los callers (endpoint estándar, brief, incident, resolutor, pools).
 
 **Tests (TDD) — archivo `Stacky Agents/backend/tests/test_plan212_opus_end_to_end.py`:**
 
@@ -216,6 +246,7 @@ En `claude_code_cli_runner.py`, reemplazar el comentario obsoleto de `:807` y la
 | `test_decide_allow_opus_true_still_blocks_opus_47` | `override="claude-opus-4-7", allow_opus=True` → `"claude-sonnet-5"` |
 | `test_is_opus_allowlisted` | `True` solo para `"claude-opus-4-8"`; `False` para `None`, `""`, `"claude-sonnet-5"`, `"claude-opus-4-7"` |
 | `test_runner_passes_allow_opus_only_for_explicit_override` | monkeypatch de `llm_router.decide` que captura kwargs; invocar el bloque de routing con `model_override="claude-opus-4-8"` → `kwargs["allow_opus"] is True`; con `model_override=None` y `config.CLAUDE_CODE_CLI_MODEL="claude-opus-4-8"` → `kwargs["allow_opus"] is False` |
+| `test_runner_never_allows_opus_for_devops_agent_type` | **(v2, C1 — el test del bloqueante)** mismo harness que el anterior, con `agent_type="devops"` y `model_override="claude-opus-4-8"` → `kwargs["allow_opus"] is False` (el guardarraíl 11 aguanta aunque `/api/agents/run` no clampee) |
 | `test_build_command_receives_opus` | **el test que faltaba (KPI-1)**: con `model_override="claude-opus-4-8"`, el comando construido por `_build_command(model_override=<modelo ruteado>, ...)` contiene la pareja consecutiva `["--model", "claude-opus-4-8"]` |
 
 > Para `test_build_command_receives_opus`, reusar el patrón de `backend/tests/test_adaptive_effort.py:95-126` (ya ejercita `_build_command` y asserta pares de flags). Leerlo antes de escribir.
@@ -233,9 +264,30 @@ En `claude_code_cli_runner.py`, reemplazar el comentario obsoleto de `:807` y la
 **Objetivo (1 frase).** Que el effort elegido por el operador viaje desde el frontend hasta `--effort` del CLI en el flujo que usan los tickets ADO.
 
 **Archivos a editar:**
-1. `Stacky Agents/backend/api/agents.py`
-2. `Stacky Agents/frontend/src/api/endpoints.ts`
-3. `Stacky Agents/frontend/src/services/agentLaunch.ts`
+1. `Stacky Agents/backend/services/llm_router.py` *(v2, C6)*
+2. `Stacky Agents/backend/services/claude_code_cli_runner.py` *(v2, C6)*
+3. `Stacky Agents/backend/api/agents.py`
+4. `Stacky Agents/frontend/src/api/endpoints.ts`
+5. `Stacky Agents/frontend/src/services/agentLaunch.ts`
+
+**Cambio 0 — [ADICIÓN ARQUITECTO v2, fix C6] la matriz de degradación de effort pasa a tener UNA sola implementación, y el runner clampea contra el modelo EFECTIVO.**
+
+*Problema verificado:* `_clamp_effort_for_model(effort, None)` devuelve el effort intacto (`api/agents.py:596-597`). Con `model_override=None` (selector adaptativo) y `effort="xhigh"`, el endpoint no degrada nada, el runner tampoco (solo valida membership en `:2134`), y el CLI recibiría `--model claude-sonnet-5 --effort xhigh` — combinación inválida que el propio plan declara imposible de mostrar en la UI. La degradación DEBE ocurrir donde el modelo efectivo ya se conoce.
+
+*Cambio exacto:*
+1. **Mover** el cuerpo de `_clamp_effort_for_model` (`api/agents.py:588-605`) a `services/llm_router.py` como función pública `clamp_effort_for_model(effort: str, model_id: str | None) -> str`, docstring intacto + línea "Plan 212 F2 (C6) — única implementación de la matriz".
+2. En `api/agents.py`, dejar el símbolo existente como **delegado retro-compatible** (los callers de brief/incident/resolutor no se tocan):
+   ```python
+   def _clamp_effort_for_model(effort: str, model_id: str | None) -> str:
+       from services.llm_router import clamp_effort_for_model
+       return clamp_effort_for_model(effort, model_id)
+   ```
+3. En `claude_code_cli_runner.py`, después de resolver `_effective_effort = effort_override or _adaptive_effort` (`:879`), agregar el **clamp final contra el modelo ruteado**:
+   ```python
+   _effective_effort = llm_router.clamp_effort_for_model(_effective_effort, routed_model)  # Plan 212 C6
+   ```
+   (con `routed_model` ya resuelto en `:851`/fallback `:855`; si `_effective_effort` es None/"" no llamar — preservar el caso "sin effort").
+4. Los tests de paridad de F0/F3 apuntan a `llm_router.clamp_effort_for_model` (la única implementación); el delegado se cubre gratis.
 
 **Cambio 1 — validación + propagación en el endpoint `run` (`api/agents.py`).** Insertar **antes** del bloque `try:` de `:505`:
 
@@ -305,6 +357,8 @@ Y en la llamada a `run_agent` (`api/agents.py:506-522`), agregar **una línea** 
   - `test_run_rejects_invalid_effort` → 400 + `error == "invalid_effort"` + `"low" in body["valid"]`.
   - `test_run_degrades_effort_for_model` → `{"effort": "xhigh", "model_override": "claude-sonnet-5"}` → `effort_override == "high"`.
   - `test_run_invalid_effort_releases_slot` → tras un 400, `run_slots.active_count()` vuelve al valor previo.
+  - `test_runner_clamps_effort_against_routed_model` *(v2, C6)* → con `effort_override="xhigh"` y routing que resuelve `claude-sonnet-5` (sin model_override), el `--effort` del comando es `"high"`, no `"xhigh"` (mismo harness de `_build_command` que `test_build_command_receives_opus`).
+  - `test_clamp_effort_delegate_matches_router` *(v2, C6)* → `api.agents._clamp_effort_for_model(e, m) == llm_router.clamp_effort_for_model(e, m)` para 3 pares representativos (haiku/xhigh, sonnet/max, None/xhigh).
   - Comando: `& ".venv\Scripts\python.exe" -m pytest tests\test_plan212_effort_channel.py -q`
 - Frontend — `Stacky Agents/frontend/src/services/__tests__/agentLaunchEffort.test.ts`:
   - `it("propaga effort a runWithOptions")` — mock de `Agents.runWithOptions`, assert `effort === "high"`.
@@ -450,10 +504,13 @@ Comportamiento:
 - Agregarlos a `partialize` (`:148-152`) junto a `agentRuntime`.
 - **Bumpear `WORKBENCH_PERSIST_VERSION`** y extender `migrateWorkbenchPersist` en `store/workbenchPure.ts` para que una versión vieja rehidrate con `agentModel: null, agentEffort: null` (nunca `undefined`). Actualizar `store/workbenchPure.test.ts` con un caso nuevo para la versión nueva. **Sin este paso, la rehidratación de un localStorage viejo deja las keys ausentes** — es la trampa clásica de este store.
 
-**Montaje (los 3 puntos de la incidencia):**
-1. `TicketBoard.tsx` `RunModal` — insertar `<ModelEffortPicker variant="block" runtime={agentRuntime} model={agentModel} effort={agentEffort} onChange={...} disabled={isLaunching} />` **dentro del `<div className={styles.modalSection}>` de `:188-202`**, justo después del `<p className={styles.runtimeBadge}>` (`:194-196`).
-2. `TicketBoard.tsx` `handleRunConfirm` (`:323-329`) y el resolutor (`:394-402`) — pasar `modelOverride: agentModel` y `effort: agentEffort` a `launchAgentWithRuntime` / `Incidents.runDevResolver`. **Borrar el comentario `:394-396`** que declara que el board no tiene selector (queda falso).
+**Montaje (los 4 puntos de la incidencia — v2 agrega el 4º por C2; anclas de `TicketBoard.tsx` sujetas a §0: re-anclar por símbolo con grep antes de editar):**
+1. `TicketBoard.tsx` `RunModal` — insertar `<ModelEffortPicker variant="block" runtime={agentRuntime} model={agentModel} effort={agentEffort} onChange={...} disabled={isLaunching} />` **dentro del `<div className={styles.modalSection}>`** del RunModal (v1: `:188-202`), justo después del `<p className={styles.runtimeBadge}>`. **§0.3:** listar todas las instancias de `<AgentRuntimeSelector>` del archivo (hoy hay otra en `:1035`) y montar el picker junto a cada una que lance agentes sobre tickets.
+2. `TicketBoard.tsx` `handleRunConfirm` (v1 `:323-329`, hoy `:316`; re-anclar) y el resolutor (comentario "Sin selector de modelo/effort", hoy `:394-396`) — pasar `modelOverride: agentModel` y `effort: agentEffort` a `launchAgentWithRuntime` / `Incidents.runDevResolver`. **Borrar ese comentario** (queda falso).
 3. `IncidentResolverModal.tsx` (`:408-425`) y `EpicFromBriefModal.tsx` (`:487-514`) — borrar los `<select>` propios y montar `<ModelEffortPicker variant="inline" ... />`. Conservar intacto el envío existente (`IncidentResolverModal.tsx:241-242`, `EpicFromBriefModal` equivalente).
+4. *(v2, C2)* `AgentLaunchModal.tsx` (asignar ticket desde el equipo, citado como hueco en §2.2 `:305-310`) — montar `<ModelEffortPicker variant="inline" ... />` junto a su `<AgentRuntimeSelector>` y propagar `modelOverride`/`effort` por la **misma vía de envío que ese modal ya usa para el runtime** (leer primero su handler de submit; no inventar un canal nuevo). Sin este punto la incidencia queda abierta en el flujo "Mi Equipo".
+
+> *Nota de política (C1):* el picker es agnóstico — la defensa "DevOps nunca Opus" vive en el runner (F1), no en la UI. Si algún contexto de montaje futuro lanza el agente DevOps, elegir Opus resultará en Sonnet 5 **anunciado por F7**, nunca en Opus silencioso ni en un error.
 
 > Si `Incidents.runDevResolver` (`endpoints.ts:4627`) no acepta `effort`, agregarlo como campo opcional del payload y propagarlo en el endpoint correspondiente con la **misma** validación de F2 (`_VALID_EFFORTS` + `_clamp_effort_for_model`). Si ya lo acepta, no tocar.
 
@@ -482,7 +539,7 @@ Comportamiento:
 **Flag que la protege:** `STACKY_MODEL_PICKER_IN_BOARD_ENABLED`, **default ON**.
 - Registro: `FlagSpec(key="STACKY_MODEL_PICKER_IN_BOARD_ENABLED", type="bool", label="Selector de modelo/effort en el tablero de tickets", description="Plan 212 — muestra el selector de modelo y effort al lanzar agentes sobre tickets ADO. OFF = el tablero lanza con el default del backend (comportamiento pre-212).", group="global", default=True)` en `backend/services/harness_flags.py` (junto a `STACKY_MODEL_CATALOG_ENABLED`, `:1126-1138`), + entrada en `backend/config.py` con `os.getenv(..., "true")`, + ayuda llana en `backend/services/harness_flags_help.py`.
 - **Obligatorio (memoria `harness-flags-default-explicit-gotcha`):** agregar la clave a `_CURATED_DEFAULTS_ON` en `backend/tests/test_harness_flags.py:467`, o `test_default_known_only_for_curated` se pone rojo.
-- El frontend la lee vía el gate existente `frontend/src/utils/flagGate.ts` (creado por el Plan 194).
+- El frontend la lee vía el gate existente **`frontend/src/services/flagGate.ts`** (creado por el Plan 194; *ruta corregida en v2 — C4: NO está en `utils/`, verificado con Glob*).
 - **Default ON** porque no dispara ninguna de las 4 excepciones duras: no bypasea revisión humana (el operador elige *más* conscientemente), no es destructiva, no requiere prerequisito nuevo (el catálogo ya tiene fallback de emergencia) y no reduce seguridad (la política de modelos sigue en `clamp_model`).
 **Impacto por runtime:** los 3 se benefician; el contenido lo dicta el catálogo (Claude: 4 modelos + 5 efforts; Codex: "Automático" + nota; Copilot: modelos vivos, sin efforts). Fallback: catálogo de emergencia completo (F3).
 **Trabajo del operador:** ninguno (opt-in con default ON; la preferencia se recuerda).
@@ -629,10 +686,12 @@ Extracción de ids del JSON (tolerante, en este orden): `data` si es `list[str]`
         (model_override and routed_model != model_override)
         or (effort_override and _effective_effort != effort_override)
     ),
-    "reason": decision.reason if 'decision' in dir() else "",
+    "reason": _route_reason,
   }
 }
 ```
+
+> *(v2, C8)* **Nada de `'decision' in dir()`** (hack frágil que se rompe al refactorizar): declarar `_route_reason = ""` **antes** del `try:` del routing (`claude_code_cli_runner.py:839`) y asignar `_route_reason = decision.reason` junto a `routed_model = decision.model` (`:851`); en el `except` (`:853`) asignar `_route_reason = "routing-fallback"`.
 
 > **Gotcha obligatorio (memoria `plan-209-status`, hallazgo C3):** `AgentExecution.metadata_json` es una columna **`Text`** (`backend/models.py:219`). Escribir un dict directamente la deja como feature muerta silenciosa. Usar el accessor existente `metadata_dict` (`models.py:259`) para leer y **`json.dumps`** para escribir, siguiendo exactamente el patrón que ya usan otros escritores de metadata (leer `harness/post_run.py` y el punto donde se fusiona `metadata_patch` antes de copiarlo).
 
@@ -646,9 +705,20 @@ Extracción de ids del JSON (tolerante, en este orden): `data` si es `list[str]`
   - Comando: `& ".venv\Scripts\python.exe" -m pytest tests\test_plan212_requested_vs_effective.py -q`
 - Frontend — extender `modelEffortModel.test.ts` con `describeDowngrade(metadata)` (función pura que arma el string del badge) y sus 3 casos (sin metadata / sin downgrade / con downgrade).
 
-**Criterio BINARIO:** ambos comandos verdes **y** `grep -n "model_effort" "Stacky Agents/backend/services/claude_code_cli_runner.py"` → 1+ match.
+**Cambio 3 — huella de regresión *(v2, C7)*.** Agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` (respetando el shape existente del archivo — `id/title/killed_by/guard_test`, ver la entrada `integration_silent_degradation` en `:92-101` como plantilla):
+
+```json
+{
+  "id": "model_effort_silent_downgrade",
+  "title": "Elegir Opus/effort no se cumplia: decide() re-clampeaba sin allow_opus y el effort no se degradaba contra el modelo efectivo",
+  "killed_by": "plan 212 (F1 allow_opus end-to-end + C6 clamp contra routed_model + F7 solicitado-vs-efectivo)",
+  "guard_test": "tests/test_plan212_opus_end_to_end.py"
+}
+```
+
+**Criterio BINARIO:** ambos comandos verdes **y** `grep -n "model_effort" "Stacky Agents/backend/services/claude_code_cli_runner.py"` → 1+ match **y** `grep -n "model_effort_silent_downgrade" "Stacky Agents/docs/sistema/error_fingerprints.json"` → 1 match *(v2, C7)*.
 **Flag:** ninguna (solo escribe metadata aditiva y renderiza condicionalmente; sin la clave, la UI no muestra nada — degradación natural).
-**Impacto por runtime:** Claude Code CLI = completo. Codex CLI = escribe el par con `effective_effort=""` y una `reason` que dice que Codex no usa `--effort` (honestidad, G7). GitHub Copilot = escribe modelo solicitado/efectivo, sin effort.
+**Impacto por runtime *(reescrito en v2 por C3 — la tabla v1 prometía ediciones en archivos que la fase no toca)*:** Claude Code CLI = completo (es el único runtime con `--model`/`--effort` reales y el único archivo editado). Codex CLI y GitHub Copilot = **fuera de scope de F7, explícitamente**: Codex no tiene override real de modelo (catálogo "Automático", `model_catalog.json:34`) ni flag de effort, y Copilot no spawnea CLI ni acepta effort — no existe "solicitado vs efectivo" que reportar. La UI (Cambio 2) solo renderiza el badge si la clave `model_effort` existe en la metadata, así que la ausencia en esos runtimes degrada sola, sin código extra. Si a futuro Codex expone selección real de modelo, extender será agregar el mismo bloque a `codex_cli_runner.py` — deuda anotada, no simulada.
 **Trabajo del operador:** ninguno.
 
 ---
@@ -658,7 +728,8 @@ Extracción de ids del JSON (tolerante, en este orden): `data` si es `list[str]`
 | Riesgo | Prob. | Mitigación (concreta) |
 |---|---|---|
 | **Habilitar Opus dispara el costo** de los runs sin que el operador lo note | Media | El desbloqueo requiere elección **explícita por-run** (F1); el default global no desbloquea. El label del catálogo ya advierte *"mayor calidad, más lento, mayor costo"* (`model_catalog.json:11`). El Centro de Costos existente (Plan 142) sigue midiendo por ejecución. |
-| **Se rompe el guardarraíl 11** (DevOps nunca Opus) | Baja | El endpoint DevOps clampea con `allow_opus=False`; su `model_override` nunca llega como Opus. Test vivo `test_plan90_devops_agent_endpoints.py:147` se corre en el comando de F1 como no-regresión. |
+| **Se rompe el guardarraíl 11** (DevOps nunca Opus) | **Media (v2, C1 — era el bloqueante de v1)** | La defensa REAL es el gate del runner (F1 Cambio 3: `agent_type != "devops"`), porque `/api/agents/run` no clampea `model_override` y DevOps está en el registry genérico. Tests: `test_runner_never_allows_opus_for_devops_agent_type` (nuevo) + `test_plan90_devops_agent_endpoints.py:147` (endpoint dedicado) en el comando de F1. |
+| **Colisión con la sesión paralela** en `TicketBoard.tsx`/`UnblockerPage.tsx` (v2, C5) | Alta | Sección §0 obligatoria: re-anclaje por símbolo, prohibición de stash/reset/add -A, commit con pathspec, y barrido de `<AgentRuntimeSelector>` antes de montar F4. |
 | **El probe del CLI ejecuta algo inesperado** | Baja | Allowlist cerrada de 3 candidatos de solo-listado, sin `shell`, con timeout 5s, y el test `test_probe_never_sends_a_prompt` inspecciona los argv. Ante cualquier fallo: catálogo del archivo intacto. |
 | **El probe agrega modelos basura al selector** | Baja | Union-merge que solo **agrega** ids que el CLI declaró, etiquetados `(detectado en el CLI)` y nunca `recommended`. Si el JSON no parsea, no se agrega nada. |
 | **Mostrar efforts no soportados confunde** | Media | No se muestran "pelados": cada uno lleva su equivalencia efectiva (`se aplicará como high`) y la línea `Se ejecutará: …` cierra la duda. Es preferible a la situación actual (opciones ocultas o deshabilitadas sin explicación) y es literalmente lo pedido. |
@@ -719,7 +790,10 @@ Extracción de ids del JSON (tolerante, en este orden): `data` si es `list[str]`
 - [ ] `test_plan212_effort_matrix_parity.py` verde; las 3 fuentes de la matriz coinciden — **KPI-4**.
 - [ ] El picker muestra la antigüedad del catálogo y `↻ Actualizar` re-consulta sin recargar la página — **KPI-5**.
 - [ ] Con `STACKY_MODEL_PICKER_IN_BOARD_ENABLED=false` y `STACKY_MODEL_PROBE_ENABLED=false`, la suite existente pasa sin cambios y el catálogo es byte-idéntico al pre-212 — **KPI-6**.
-- [ ] Sentinels: `grep -rn "claudeEfforts\|claudeModels" frontend/src` → **0**; `grep -rln "ModelEffortPicker" frontend/src` → **≥4**; `grep -n "allow_opus" backend/services/claude_code_cli_runner.py` → **≥2**.
+- [ ] Sentinels: `grep -rn "claudeEfforts\|claudeModels" frontend/src` → **0**; `grep -rln "ModelEffortPicker" frontend/src` → **≥5** *(v2: 4 montajes + definición, por C2)*; `grep -n "allow_opus" backend/services/claude_code_cli_runner.py` → **≥2**.
+- [ ] *(v2, C1)* `test_runner_never_allows_opus_for_devops_agent_type` verde — el guardarraíl 11 aguanta el path `/api/agents/run` sin clamp de endpoint.
+- [ ] *(v2, C6)* `llm_router.clamp_effort_for_model` es la ÚNICA implementación de la matriz (grep del cuerpo viejo en `api/agents.py` → solo el delegado) y `test_runner_clamps_effort_against_routed_model` verde.
+- [ ] *(v2, C7)* `model_effort_silent_downgrade` registrado en `docs/sistema/error_fingerprints.json`.
 - [ ] Las 2 flags nuevas están en `harness_flags.py` + `config.py` + `harness_flags_help.py` + `_CURATED_DEFAULTS_ON`, y son editables desde la UI de flags (riel: config del operador siempre por UI).
 - [ ] Los 5 archivos de test nuevos están en `run_harness_tests.sh` **y** `run_harness_tests.ps1`; `test_harness_ratchet_meta.py` verde.
 - [ ] `& ".venv\Scripts\python.exe" -m compileall backend -q` sin errores y `npx tsc --noEmit` limpio.

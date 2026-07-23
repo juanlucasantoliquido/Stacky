@@ -1,7 +1,19 @@
 # Plan 214 — Reactivación y fortalecimiento del agente QAUAT E2E (Playwright): navegación sin desvíos y validación post-desarrollo desde Agenda Web
 
-> Estado: **v1 · PROPUESTO** (2026-07-23). Pipeline: proponer → **[este paso ✓]** → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
-> Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5).
+> Estado: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-23). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5). Juez v2: el mismo agente en rol adversarial.
+
+**CHANGELOG v1 → v2 (hallazgos del juez, todos verificados contra código):**
+- **C1 (IMPORTANTE, resuelto):** F2 citaba atributos INEXISTENTES del driver (`self._page`/`self._timeout_ms`) y ubicaba el `click()` en el método equivocado. Reales: `self.page` (`navigation_driver.py:224`), `timeout_ms` es parámetro LOCAL de los métodos (`_execute_nav:349`), y el `locator.click()` vive en `via_link_click` (`navigation_driver.py:300`), no en `_execute_nav`. Instrucciones F2 corregidas quirúrgicamente.
+- **C2 (IMPORTANTE, resuelto):** faltaba la arista `requires=` entre flags: con `STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED` OFF, el autorun ON es un no-op silencioso (vive DENTRO del hook gateado). El harness soporta `requires` (`harness_flags.py:30`) y exige declarar la arista en `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py:120`, profundidad 1 — cumple R4). F3 ahora la declara (5 lugares, no 4).
+- **C3 (IMPORTANTE, resuelto):** el plan declaraba "NAV|DATA|ENV|APP" como LA taxonomía del normalizador; el `CATEGORY_SET` real tiene **9** categorías (`APP, ENV, DATA, PIP, GEN, NAV, OBS, SEC, OPS` — `verdict_normalizer.py:47-57`). `categoryLabel` (F4) colapsaba 5 categorías reales a "—" (un BLOCKED/PIP perdía su señal). F4 mapea las 9 y ante desconocida devuelve el código crudo.
+- **C4 (IMPORTANTE, resuelto):** F3 lee `build_verdict` asumiendo que el 210 ya escribió. Verificado: en `on_execution_end` los post-hooks corren DESPUÉS de `set_status` (`ticket_status.py:270-286`), así que el gate del 210 (que corre en el camino de estado) es visible. Regla nueva explícita: si el 210 se implementara como post-hook, debe registrarse en `app.py` ANTES que `qa_uat_enqueue` (el orden de `_POST_HOOKS` es el orden de registro).
+- **C5 (MENOR, resuelto):** el plan mata la clase de regresión "QAUAT se desvía de la ruta" pero no sembraba su huella en `docs/sistema/error_fingerprints.json` (registro real: `services/error_fingerprints.py:18`). F2 ahora la siembra.
+- **C6 (MENOR, resuelto):** KPI-1 ("≥90% de los runs") no era binario sin población definida. Redefinido como binario verificable.
+- **C7 (MENOR, resuelto):** `tmp72.py` NO matchea el glob `tmp_*` (sin guion bajo) — verificado que existe; F0 aclara que el `git mv` es por lista literal, jamás por glob.
+- **C8 (MENOR, resuelto):** `build_guarded_browser_spec(data: BrowserRunInput)` (`qa_browser_plan.py:27`) tiene firma pública con callers; F5 ahora exige parámetro keyword con default (`pipeline_root=None` → sin candidatos extra) para no romper contrato.
+- **C9 (MENOR, resuelto):** el DoD v1 decía "5 archivos de test" pero enumeraba 2+3+1=**6**; corregido.
+- **[ADICIÓN ARQUITECTO] (resuelta en F4):** cierre de loop bidireccional — al terminar el run qa-uat, el `qa_uat_candidate` de la ejecución del Developer se actualiza best-effort a `validated|failed|blocked` con `qa_uat_execution_id`, para que la tarjeta deje de decir "sugerida" cuando la validación ya corrió. Cero trabajo del operador, HITL intacto.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo del pipeline NO usa LLM).
 > Origen: **pedido textual del operador** — *"Investigar cómo retomar, fortalecer y poner en funcionamiento el agente QAUAT E2E basado en Playwright… que pueda ejecutar los flujos completos sin desviarse ni fallar durante la navegación… que, una vez finalizado un desarrollo, el agente pueda tomarlo, validarlo de punta a punta desde la Agenda Web, navegar de forma autónoma por las distintas pantallas y verificar correctamente el funcionamiento del flujo implementado."*
 
@@ -22,10 +34,10 @@
 **Objetivo (1 párrafo).** El agente QAUAT E2E **ya existe** con muchísimo trabajo previo en `Stacky tools/QA UAT Agent/` (pipeline determinista de 8 herramientas, 72 archivos de tests unit, schemas JSON, replan engine, session recorder, contratos de navegación) y con integración backend viva (`api/qa_uat.py`, blueprint `/api/qa-uat`), pero está **dormido y se desvía al navegar**: su base de conocimiento de navegación está casi vacía (**1** playbook en `cache/playbooks/`, **2** ui_maps en `cache/ui_maps/`, verificado 2026-07-23), su driver no aplica el patrón WebForms-safe de forma sistemática, nada lo dispara cuando un desarrollo termina, y su veredicto no aterriza en la UI de Stacky. Este plan lo **retoma y fortalece sin reescribir nada**: (F0) higiene del tool y arnés de tests veraz; (F1) inventario + curación para **crecer la base de playbooks/ui_maps** con las piezas que ya existen (`session_recorder` → `session_to_playbook`); (F2) navegación **WebForms-safe** (`noWaitAfter` + espera de idle ASP.NET + validación de llegada por DOM) con **detección temprana de desvío** y replan acotado; (F3) **disparo post-desarrollo** vía el chokepoint `on_execution_end` (patrón del 208), con candidato visible al operador y autorun opt-in; (F4) **veredicto preciso y visible** (NAV|DATA|ENV|APP + weak assertions + evidencia) en un pane de la UI; (F5) **paridad de 3 runtimes** con playbooks-first en el agente Claude y en los planes del Codex Browser.
 
 **KPI / impacto medible (binarios).**
-- **KPI-1 — Navegación sin desvío:** en pantallas con ui_map + playbook curado, ≥ 90% de los runs del pipeline terminan con `nav_deviations == 0` en el output del runner (contador de F2). Medible: campo `nav_deviations` en `stages.runner` de la salida del pipeline.
+- **KPI-1 — Navegación sin desvío (binario, C6):** (a) el 100% de los runs nuevos del pipeline exponen el contador `nav_deviations` en `stages.runner` (F2 — hoy el campo no existe); (b) el run del smoke E2E de F6, ejecutado sobre una pantalla con ui_map + playbook curado, termina con `nav_deviations == 0`. Ambos verificables leyendo el JSON de salida del pipeline.
 - **KPI-2 — Base de conocimiento poblada:** 100% de las pantallas declaradas en `navigation_contracts.yml` con ui_map en `cache/ui_maps/`, y ≥ 5 playbooks curados en `cache/playbooks/` (hoy: 2 ui_maps, 1 playbook). Medible: `GET /api/qa-uat/kb` (F1) devuelve `coverage_pct == 100.0` y `playbooks_total >= 5`.
 - **KPI-3 — Tiempo dev-terminado → validación disponible:** el candidato QAUAT aparece en la ejecución del Developer ≤ 5 segundos después de completar (post-hook síncrono, O(ms)); con autorun ON (opt-in), el veredicto llega al terminar el pipeline. Hoy: **nunca** (cero disparo automático). Medible: presencia de `metadata.qa_uat_candidate` en la ejecución del Developer.
-- **KPI-4 — Cero falso verde silencioso:** 100% de los runs del pipeline exponen en `execution.metadata` el veredicto normalizado + categoría (NAV|DATA|ENV|APP) + conteo de weak assertions. Un PASS con assertions débiles queda ANOTADO (nunca oculto). Medible: campos de F4 presentes en todo run nuevo.
+- **KPI-4 — Cero falso verde silencioso:** 100% de los runs del pipeline exponen en `execution.metadata` el veredicto normalizado + categoría canónica (una de las **9** del `CATEGORY_SET`: `APP|ENV|DATA|PIP|GEN|NAV|OBS|SEC|OPS`, `verdict_normalizer.py:47-57` — C3) + conteo de weak assertions. Un PASS con assertions débiles queda ANOTADO (nunca oculto). Medible: campos de F4 presentes en todo run nuevo.
 - **KPI-5 — Paridad 3 runtimes:** Claude Code → `QAUat1.agent.md` con política playbooks-first; Codex → `qa_browser` con candidatos desde playbooks; fallback universal (Copilot y cualquier runtime) → pipeline determinista `qa_uat_pipeline.py` sin LLM. Medible: tabla §5 con test por mecanismo.
 - **KPI-6 — Cero regresión:** con las 2 flags nuevas en su default y sin configurar nada, el comportamiento actual de Stacky es byte-idéntico salvo: candidato en metadata (aditivo) y pane nuevo (data-driven, solo renderiza si hay datos). Ningún test existente se rompe.
 
@@ -38,7 +50,7 @@ Cada ancla fue verificada contra el repo en frío (no se cita de memoria):
 1. **El pipeline determinista existe y es serio.** `Stacky tools/QA UAT Agent/qa_uat_pipeline.py` (4427 líneas) orquesta 8 etapas (`reader → ui_map → compiler → generator → runner → dossier → publisher`, ver `--skip-to` en `qa_uat_pipeline.py:27`) con preflight de entorno (`environment_preflight`, stage en `:400-424`), fingerprint de deploy (`:506-524`), smoke path (`:553-576`) y replan hasta `MAX_REPLAN_ROUNDS=3` (`replan_engine.py:66`). Tests: 72 archivos en `tests/unit/` + `tests/integration/` + `tests/regression/`, corridos con pytest vía `conftest.py` de la raíz del tool (agrega el tool a `sys.path` y fuerza `STACKY_LLM_BACKEND=mock`).
 2. **GAP CENTRAL — la base de conocimiento de navegación está casi vacía.** `cache/playbooks/` tiene **1** archivo (`agregar_usuario_nuevo.json`) y `cache/ui_maps/` tiene **2** (`FrmAgenda.aspx.json`, `FrmDetalleClie.aspx.json`), pese a que las herramientas para crecerla existen y funcionan: `session_recorder.py` (graba una sesión humana, CLI `--goal/--url/--no-learn/--background`, `session_recorder.py:563-580`) y `session_to_playbook.py::run(session_dir, dry_run, verbose)` (`session_to_playbook.py:47-51`, convierte la grabación en playbook + actualiza `form_knowledge.json`). Sin playbooks ni ui_maps, el agente navega "a ciegas" y se desvía: **ese es el porqué del síntoma que reporta el operador.**
 3. **El patrón WebForms-safe no está aplicado sistemáticamente.** AgendaWeb es ASP.NET WebForms (postbacks, UpdatePanels, `__doPostBack` — el propio driver lo documenta, `navigation_driver.py:9,:188-195`). `grep -n "noWaitAfter\|no_wait_after" navigation_driver.py` → **0 hits**; el template de specs `templates/playwright_test.spec.ts.j2` tampoco impone `noWaitAfter` + espera de idle ASP.NET. La navegación robusta en WebForms exige `click` con `noWaitAfter` + espera corta de idle + validación por DOM, no esperas largas ciegas.
-4. **La detección de desvío existe pero no está cableada como señal de primera clase.** `screen_error_detector.py` (detectores JS de excepción ASP.NET y DOM, `:295-318`), `smoke_path_checker.py::run_smoke_path` (`:45`), `screen_detector.py::detect_screens` (`:121`) y `verdict_normalizer.py` (VERDICT_SET `{PASS, FAIL, BLOCKED, MIXED, SKIPPED}` `:45`, reason codes con categoría NAV|DATA|ENV|APP `:61-120`) existen. Falta: aserción de llegada por pantalla tras cada paso y el código de error `NAV_DEVIATION` que el `replan_engine._classify_failure` (`replan_engine.py:256`) pueda patchear con un camino alternativo del contrato.
+4. **La detección de desvío existe pero no está cableada como señal de primera clase.** `screen_error_detector.py` (detectores JS de excepción ASP.NET y DOM, `:295-318`), `smoke_path_checker.py::run_smoke_path` (`:45`), `screen_detector.py::detect_screens` (`:121`) y `verdict_normalizer.py` (VERDICT_SET `{PASS, FAIL, BLOCKED, MIXED, SKIPPED}` `:45`, `CATEGORY_SET` de **9** categorías `APP|ENV|DATA|PIP|GEN|NAV|OBS|SEC|OPS` `:47-57` — C3: NAV/DATA/ENV/APP son las 4 que el operador ve más seguido, NO el set completo) existen. Falta: aserción de llegada por pantalla tras cada paso y el código de error `NAV_DEVIATION` que el `replan_engine._classify_failure` (`replan_engine.py:256`) pueda patchear con un camino alternativo del contrato.
 5. **Nada dispara QAUAT al terminar un desarrollo.** El chokepoint universal "un agente terminó" es `ticket_status.on_execution_end` (`ticket_status.py:231`) con registro de post-hooks (`register_post_hook` `:307`, firma esperada `fn(*, ticket_id, execution_id, final_status, agent_type, error, **kwargs)` `:310`, ejecutados con captura de excepciones `:325-331`). Hoy los únicos hooks registrados son `incident_autopublish` e `incident_dev_autocommit` (`app.py:853-855`). Cero conexión con QA UAT.
 6. **La integración backend ya existe y es reusable tal cual.** `api/qa_uat.py`: blueprint `/qa-uat` (`:50`), `_AGENT_TYPE = "qa-uat"` (`:63`), `_PIPELINE_ROOT` apunta a `../../Stacky tools/QA UAT Agent` (`:58`), `POST /run` valida `ticket_id/mode(dry-run|publish)/headed/timeout_ms`, crea la `AgentExecution` con `metadata_dict` y lanza `_run_pipeline_in_background` en thread daemon (`:76-171`), logs por SSE `stream_url=/api/executions/{id}/logs/stream` (`:170`). El frontend ya tiene los endpoints tipados (`frontend/src/api/endpoints.ts:2450-2526`).
 7. **La seguridad HITL ya está resuelta por diseño previo.** Default `mode="dry-run"`; `mode="publish"` publica Stacky centralmente (nunca el agente directo a ADO); existe `check_run_publish_policy` (`api/qa_uat.py:462`) y la gobernanza de datos v2.0 (SQL seed NUNCA auto-ejecutado, `approve_seed_proposal` `:1119` es un endpoint de aprobación humana). Este plan NO abre ninguna salida externa nueva.
@@ -125,6 +137,7 @@ El disparo post-desarrollo (F3) es **runtime-agnóstico por construcción**: el 
 **Archivos a tocar (todos bajo `N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\`, OJO ruta con espacios — SIEMPRE entre comillas):**
 1. CREAR carpeta `_attic/` y MOVER con `git mv` estos 12 archivos exactos (ni uno más — los `diag_*.py`, `check_*.py` y `smoke_phase*.py` NO se tocan):
    `tmp_db_check.py`, `tmp_db2.py`, `tmp_db3.py`, `tmp_db4.py`, `tmp_db5.py`, `tmp_db6.py`, `tmp_db7.py`, `tmp_db8.py`, `tmp_dbquery.py`, `tmp_pablo_clients.py`, `tmp_rdire_query.py`, `tmp72.py`.
+   **(C7) Mover por LISTA LITERAL, jamás por glob:** `tmp72.py` NO matchea `tmp_*` (no tiene guion bajo) — un `git mv tmp_*.py` movería 11 y dejaría 1; los 12 existen (verificado 2026-07-23). El criterio de aceptación usa `grep -c "^tmp"`, que sí cubre a los 12.
    **Pre-check obligatorio (antes de mover):** `grep -rn "import tmp_\|from tmp_\|tmp_db\|tmp_pablo\|tmp_rdire\|tmp72" --include="*.py" .` excluyendo los propios archivos → debe dar **0 hits** fuera de ellos mismos. Si diera >0, NO mover ese archivo y reportarlo (no improvisar).
 2. EDITAR `run_tests.py` (28 líneas, reescritura completa permitida — es un script suelto, nadie lo importa):
    ```python
@@ -313,13 +326,16 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
              await asyncio.sleep(0.1)
          return False
      ```
-   - En `NavigationDriver._execute_nav` (`navigation_driver.py:342`): en cada `click(...)` de Playwright del cuerpo, agregar el kwarg **`no_wait_after=True`** (API Python de Playwright) e, inmediatamente después de cada acción que dispare postback (click/submit/`__doPostBack`), insertar `await wait_aspnet_idle(self._page, min(self._timeout_ms, 5000))` ANTES de cualquier aserción o lectura de URL. NO quitar los timeouts existentes: el idle-wait es adicional y corto.
+   - **(C1 — anclajes exactos verificados; NO existen `self._page` ni `self._timeout_ms`):** el atributo real es **`self.page`** (`navigation_driver.py:224`) y `timeout_ms` es **parámetro local** de los métodos (no atributo). Dos sitios de edición:
+     1. `via_link_click` (`navigation_driver.py:280`, el `await locator.click()` está en `:300`): cambiar a `await locator.click(no_wait_after=True)` (API Python de Playwright) e, inmediatamente después, insertar `await wait_aspnet_idle(self.page, min(timeout_ms, 5000))` usando el `timeout_ms` local del método, ANTES de los `wait_for_url`/lecturas de URL existentes.
+     2. `_execute_nav` (`navigation_driver.py:342`, firma con `timeout_ms` local en `:349`): inmediatamente después de cada acción que dispare postback en su cuerpo (el trigger JS de `__doPostBack` vía `self.page.evaluate`, `:364`), insertar `await wait_aspnet_idle(self.page, min(timeout_ms, 5000))` ANTES de cualquier aserción o lectura de URL.
+     NO quitar los timeouts/esperas existentes: el idle-wait es adicional y corto. Si al implementar aparece otro sitio con `click(` sobre controles de postback, aplicar el mismo par (kwarg + idle-wait) y anotarlo en el commit.
    - NUEVO método:
      ```python
      async def assert_arrival(self, expected_screen: str) -> dict:
          """Valida por DOM que estamos en expected_screen. {'ok': bool, 'deviation': str|None}.
          1) Carga cache/ui_maps/{expected_screen}.json; toma el primer elemento con 'id'.
-            Si existe: page.locator(f"#{el_id}").count() > 0 => ok.
+            Si existe: self.page.locator(f"#{el_id}").count() > 0 => ok.
          2) Fallback (sin ui_map): expected_screen.lower() in current_url.lower() => ok.
          3) No-ok => {'ok': False, 'deviation': f'expected={expected_screen} url={current_url}'}.
          NUNCA lanza; ante error de I/O devuelve fallback por URL."""
@@ -351,6 +367,7 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
      ```
    - Y en los bloques del template que emiten `click(` sobre controles de postback: emitir `{ noWaitAfter: true }` + `await waitForAspNetIdle(page);` en la línea siguiente. (Solo el template: los specs YA generados en `playwright/uat/*.spec.ts` no se regeneran en esta fase.)
 4. `Stacky tools/QA UAT Agent/qa_uat_pipeline.py`: en el resumen del stage runner (donde se arma `stages["runner"]`), agregar el contador `nav_deviations` = cantidad de resultados con clase `NAV_DEVIATION` (sumar desde el runner output; 0 si no hay). Aditivo: ningún consumidor existente se rompe por una key nueva.
+5. **(C5 — huella de regresión)** `Stacky Agents/docs/sistema/error_fingerprints.json` (registro real consumido por `backend/services/error_fingerprints.py:18`): AGREGAR una entrada con id `qa_uat_nav_deviation` para la clase "QAUAT se desvía de la ruta de navegación" — **leer primero el JSON y copiar el shape exacto de una entrada existente** (no inventar keys); el patrón de matching es el literal `NAV_DEVIATION`. Aditivo puro: una entrada nueva al array, jamás editar entradas ajenas.
 
 **Tests (TDD — escribir ANTES; tool, pytest por archivo):**
 - `tests/unit/test_plan214_webforms_idle.py`:
@@ -365,7 +382,7 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
   - `test_replan_switch_human_path`: fixture contracts con 2 human_paths; fallo NAV_DEVIATION → decisión `switch_human_path`; con 1 solo path → `abort_round`.
   - `test_template_contiene_helper`: leer `templates/playwright_test.spec.ts.j2` → contiene `waitForAspNetIdle` y `noWaitAfter: true` (test de presencia, anti-regresión del template).
 
-**Criterio de aceptación (binario):** los 2 archivos de test → verdes por archivo; `grep -c "no_wait_after=True" navigation_driver.py` → ≥1; `grep -c "NAV_DEVIATION" navigation_driver.py replan_engine.py` → ≥1 en cada uno; `grep -c "waitForAspNetIdle" templates/playwright_test.spec.ts.j2` → ≥2 (definición + al menos un uso). Regresión: `...python.exe -m pytest tests\unit\test_navigation_driver.py -q` y `tests\unit\test_navigation_plan_gate.py -q` siguen verdes (contratos previos intactos).
+**Criterio de aceptación (binario):** los 2 archivos de test → verdes por archivo; `grep -c "no_wait_after=True" navigation_driver.py` → ≥1; `grep -c "NAV_DEVIATION" navigation_driver.py replan_engine.py` → ≥1 en cada uno; `grep -c "waitForAspNetIdle" templates/playwright_test.spec.ts.j2` → ≥2 (definición + al menos un uso); `grep -c "qa_uat_nav_deviation" "Stacky Agents/docs/sistema/error_fingerprints.json"` → ≥1 y `python -m json.tool` sobre ese JSON → exit 0 (C5). Regresión: `...python.exe -m pytest tests\unit\test_navigation_driver.py -q` y `tests\unit\test_navigation_plan_gate.py -q` siguen verdes (contratos previos intactos).
 
 **Flag:** ninguna — robustez interna del tool; `wait_aspnet_idle` devuelve True casi inmediato en páginas sin ScriptManager (backward-safe), y `assert_arrival` degrada a chequeo por URL cuando no hay ui_map (comportamiento equivalente al actual).
 **Impacto por runtime:** los 3 se benefician idéntico (driver y template son del pipeline determinista). El agente Claude (F5) recibe la MISMA regla vía prompt.
@@ -460,7 +477,8 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
   qa_uat_enqueue.register(ticket_status.register_post_hook)   # Plan 214 — QAUAT post-desarrollo
   ```
   (Si el 208 ya mergeó `completion_dispatcher` en ese bloque: agregar DEBAJO, jamás reordenar — memoria `gotcha-merge-silent-duplicate-keyword`.)
-- Flags (4 lugares cada una; NO hand-editar `harness_defaults.env`):
+  **(C4 — garantía de orden para leer `build_verdict`):** verificado en código: `on_execution_end` corre `set_status(...)` (`ticket_status.py:270-278`) ANTES de `_run_post_hooks` (`:279-286`), así que si el 210 escribe `build_verdict` en el camino de aplicación de estado (su diseño v2), este hook lo ve. Regla para quien implemente el 210: si su gate se materializara como post-hook, DEBE registrarse en `app.py` ANTES que `qa_uat_enqueue.register(...)` — el orden de `_POST_HOOKS` es el orden de registro (`ticket_status.py:313,:326`). Si aun así el campo no está, la degradación ya prevista aplica: candidato `pending` (best-effort honesto, nunca bloquea).
+- Flags (**5 lugares** — C2; NO hand-editar `harness_defaults.env`):
   1. `backend/services/harness_flags.py` → `FLAG_REGISTRY` (`:379`):
      ```python
      FlagSpec(key="STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED", type="bool", group="global",
@@ -470,7 +488,10 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
      FlagSpec(key="STACKY_QA_UAT_AUTORUN_ENABLED", type="bool", group="global",
          label="Autorun QAUAT (dry-run) al completar el Developer",
          description="Lanza automaticamente el pipeline QA UAT en dry-run al completar el Developer. Requiere AgendaWeb local corriendo, credenciales agenda_web.env y browsers Playwright instalados. Default OFF.",
-         default=False),
+         default=False,
+         requires="STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED"),   # C2: el autorun vive DENTRO del
+         # hook gateado por la otra flag; sin requires, autorun ON + encolado OFF = no-op mudo.
+         # El campo requires existe en FlagSpec (harness_flags.py:30); profundidad 1 → cumple R4.
      ```
   2. `_CATEGORY_KEYS` (`:117`): ambas keys bajo `calidad_verificacion`.
   3. `backend/config.py` (espejo del patrón `config.py:1192-1194`):
@@ -479,9 +500,10 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
      STACKY_QA_UAT_AUTORUN_ENABLED: bool = os.getenv("STACKY_QA_UAT_AUTORUN_ENABLED", "false").lower() in ("1", "true", "yes")
      ```
   4. `backend/tests/test_harness_flags.py` → `_CURATED_DEFAULTS_ON` (`:467`): agregar **SOLO** `STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED` (la de autorun es default OFF: NO va).
+  5. **(C2)** `backend/tests/test_harness_flags_requires.py` → `_REQUIRES_MAP_FROZEN` (`:120`): agregar la arista `"STACKY_QA_UAT_AUTORUN_ENABLED": "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED"` — SOLO la propia (gotcha `_FROZEN_BOUNDS deuda ajena`: no tocar aristas ajenas aunque el test estuviera rojo por otras).
 
 **Tests (TDD — crear `Stacky Agents/backend/tests/test_plan214_qa_uat_enqueue.py`; fixtures espejo de `tests/test_qa_uat_endpoint.py`):**
-- `test_flags_registradas_y_defaults`: ambas en `FLAG_REGISTRY` + `_CATEGORY_KEYS`; `config.Config` con ON/OFF respectivos; solo la primera en `_CURATED_DEFAULTS_ON`.
+- `test_flags_registradas_y_defaults`: ambas en `FLAG_REGISTRY` + `_CATEGORY_KEYS`; `config.Config` con ON/OFF respectivos; solo la primera en `_CURATED_DEFAULTS_ON`; **el FlagSpec de autorun tiene `requires == "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED"` y la arista está en `_REQUIRES_MAP_FROZEN`** (C2).
 - `test_hook_ignora_no_completed`: `final_status="error"` → sin `qa_uat_candidate` en metadata.
 - `test_hook_ignora_agente_no_developer`: `agent_type="qa-uat"` y `agent_type="functional"` → no-op (anti-recursión y scope).
 - `test_hook_escribe_candidato`: developer + completed + ticket con `ado_id` → metadata con `qa_uat_candidate.status == "pending"` y `mode == "dry-run"`.
@@ -514,6 +536,7 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
   - `replan_rounds` (int, de `stages` si el pipeline replaneó),
   - `playbooks_used` (list[str] si el runner la reporta).
   Regla dura: SOLO agregar keys al dict de metadata existente (patrón `md = dict(row.metadata_dict); md.update(...); row.metadata_dict = md`), jamás reasignar el dict entero pisando keys ajenas (208/210/213 escriben keys hermanas).
+- **[ADICIÓN ARQUITECTO] Cierre de loop bidireccional (best-effort, mismo `_run_pipeline_in_background`):** tras persistir el veredicto en la ejecución qa-uat, buscar la ÚLTIMA `AgentExecution` con `agent_type == "developer"` del MISMO ticket cuya metadata contenga `qa_uat_candidate`, y actualizar (con la misma regla de merge de metadata) SOLO estas sub-keys del candidato: `status` → `"validated"` si verdict `PASS`, `"failed"` si `FAIL|MIXED`, `"blocked"` si `BLOCKED`; y `qa_uat_execution_id` → id del run qa-uat. Si no hay tal ejecución o cualquier error: no-op silencioso (try/except + log debug). Así la tarjeta del Developer deja de decir "sugerida" cuando la validación ya corrió — cero clic del operador, y el link ejecución↔validación queda navegable. NO cambia estados ADO ni publica nada (HITL intacto, G2).
 
 **Archivos a crear (frontend):**
 - `frontend/src/components/qaUatVerdictModel.ts` — helpers PUROS (sin React, sin fetch):
@@ -522,11 +545,16 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
   export function verdictTone(v: string | undefined): "success" | "danger" | "warning" | "neutral";
   //   PASS→success; FAIL→danger; BLOCKED/MIXED→warning; otro/undefined→neutral
   export function categoryLabel(c: string | undefined): string;
-  //   NAV→"Navegación", DATA→"Datos", ENV→"Entorno", APP→"Aplicación", otro→"—"
+  //   (C3) Mapea las 9 categorías reales del CATEGORY_SET (verdict_normalizer.py:47-57):
+  //   NAV→"Navegación", DATA→"Datos", ENV→"Entorno", APP→"Aplicación", PIP→"Pipeline",
+  //   GEN→"Generación", OBS→"Evidencia", SEC→"Seguridad", OPS→"Infraestructura".
+  //   Desconocida no-vacía → devolver el código CRUDO (nunca ocultar señal); undefined/vacía → "—"
   export function weaknessNote(weakCount: number | undefined, verdict: string | undefined): string | null;
   //   PASS con weakCount>0 → "PASS con N assertions débiles — revisar evidencia"; si no → null
   export function candidateLabel(c: {status?: string} | undefined): string | null;
-  //   pending→"Validación E2E sugerida"; blocked_by_build→"E2E en espera: build sin verificar"; otro→null
+  //   pending→"Validación E2E sugerida"; blocked_by_build→"E2E en espera: build sin verificar";
+  //   [ADICIÓN ARQUITECTO] validated→"Validación E2E corrida: PASS"; failed→"Validación E2E corrida: FALLÓ";
+  //   blocked→"Validación E2E corrida: BLOQUEADA (entorno)"; otro→null
   ```
 - `frontend/src/components/QaUatVerdictPane.tsx` + `QaUatVerdictPane.module.css`:
   - Renderiza SOLO si hay datos (data-driven): para ejecuciones `agent_type === "qa-uat"` con `metadata.verdict` → badge de veredicto (tono por `verdictTone`), categoría, `nav_deviations`, `weaknessNote`, `replan_rounds`, `playbooks_used`; para ejecuciones `agent_type === "developer"` con `metadata.qa_uat_candidate` → tarjeta con `candidateLabel` y botón "Validar E2E (dry-run)" que llama el endpoint existente `POST /api/qa-uat/run` (helper ya tipado en `frontend/src/api/endpoints.ts:2450`) con `{ ticket_id: candidate.ado_id, mode: "dry-run" }` y muestra el `stream_url` devuelto como link a logs.
@@ -534,11 +562,15 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
 - Wiring: `frontend/src/components/OutputPanel.tsx` — insertar `<QaUatVerdictPane execution={...} />` junto al render de `StructuredOutput` (`OutputPanel.tsx:140`, seam ya usada por el enriquecimiento de deliverables). Aditivo: si la metadata no trae los campos, el pane devuelve `null`.
 - Test: `frontend/src/components/__tests__/qaUatVerdictModel.test.ts` (SOLO el modelo puro — RTL/jsdom NO están instalados en este frontend, gotcha estructural):
   - `verdictTone`: los 5 veredictos + undefined.
-  - `categoryLabel`: 4 categorías + basura.
+  - `categoryLabel`: las **9** categorías del CATEGORY_SET + desconocida (`"XYZ"` → `"XYZ"` crudo) + undefined (`"—"`) (C3).
   - `weaknessNote`: PASS+3 → string con "3"; PASS+0 → null; FAIL+3 → null.
-  - `candidateLabel`: pending / blocked_by_build / undefined.
+  - `candidateLabel`: pending / blocked_by_build / validated / failed / blocked / undefined.
+- Tests backend del back-link (ADICIÓN — van en `tests/test_plan214_qa_uat_enqueue.py`, que ya monta fixtures de ejecuciones+tickets; se implementan en F4):
+  - `test_backlink_actualiza_candidato`: run qa-uat PASS sobre ticket cuyo Developer tiene `qa_uat_candidate` → `status == "validated"` + `qa_uat_execution_id` seteado; las demás keys del candidato intactas.
+  - `test_backlink_sin_candidato_noop`: sin ejecución Developer con candidato → no lanza, nada cambia.
+  Para testeabilidad, el back-link se implementa como helper nombrado `_update_dev_candidate(ticket_id, verdict, qa_execution_id)` en `api/qa_uat.py` (llamado desde `_run_pipeline_in_background`).
 
-**Criterio de aceptación (binario):** `npx vitest run src/components/__tests__/qaUatVerdictModel.test.ts` → verde; `cd "Stacky Agents/frontend" && npx tsc --noEmit` → exit 0; `grep -n "QaUatVerdictPane" src/components/OutputPanel.tsx` → 1; `grep -c "style={{" src/components/QaUatVerdictPane.tsx` → **0**.
+**Criterio de aceptación (binario):** `npx vitest run src/components/__tests__/qaUatVerdictModel.test.ts` → verde; `cd "Stacky Agents/frontend" && npx tsc --noEmit` → exit 0; `grep -n "QaUatVerdictPane" src/components/OutputPanel.tsx` → 1; `grep -c "style={{" src/components/QaUatVerdictPane.tsx` → **0**; backend: `...python.exe -m pytest tests\test_plan214_qa_uat_enqueue.py -q` → **11/11** (los 9 de F3 + los 2 del back-link) y `grep -n "def _update_dev_candidate" "Stacky Agents/backend/api/qa_uat.py"` → 1.
 
 **Flag:** sin flag frontend propia — el gating es server-side: el candidato SOLO existe en metadata si `STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED` está ON (F3), y el pane es data-driven (sin datos, no renderiza). Backward-compatible por construcción.
 **Impacto por runtime:** idéntico (la UI lee metadata; los 3 runtimes la producen por el mismo pipeline/hook).
@@ -576,7 +608,7 @@ Esto NO es un paso manual obligatorio nuevo: sin hacerlo, todo lo demás funcion
                    "steps": <len(steps) si existe, 0 si no>}.
        JSON inválido => se saltea (log debug). Dir inexistente => []. NUNCA lanza."""
    ```
-   e integrarla donde `build_guarded_browser_spec` arma sus `plan_candidates` (localizar con `grep -n "plan_candidates\|def build_guarded_browser_spec" services/qa_browser_plan.py`; los candidatos de playbook se AGREGAN a los existentes, nunca los reemplazan). `pipeline_root` se resuelve con el mismo `_PIPELINE_ROOT` de `api/qa_uat.py:58` (pasarlo como argumento, no duplicar la constante).
+   e integrarla donde `build_guarded_browser_spec` arma sus `plan_candidates` (verificado: `qa_browser_plan.py:27-28` — `def build_guarded_browser_spec(data: BrowserRunInput)` toma los candidatos de `data.context.get("plan_candidates")`; los de playbook se AGREGAN a los existentes, nunca los reemplazan). **(C8 — contrato público con callers):** NO cambiar la firma de forma rompiente — agregar parámetro keyword con default: `def build_guarded_browser_spec(data: BrowserRunInput, *, pipeline_root: Path | None = None)`; con `None` (todos los callers actuales) el comportamiento es byte-idéntico al de hoy. El caller de `api/qa_browser.py` pasa el root real, resuelto con el mismo `_PIPELINE_ROOT` de `api/qa_uat.py:58` (importarlo, no duplicar la constante).
 3. (Documental) La fila Copilot de la tabla §5 no requiere cambios: su camino ES el pipeline determinista.
 
 **Tests (TDD):** `Stacky Agents/backend/tests/test_plan214_qa_browser_playbooks.py`:
@@ -647,10 +679,10 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent"
 - **playbook:** JSON en `cache/playbooks/<slug>.json` con los pasos parametrizados y validados de un flujo de navegación (lo produce `session_to_playbook.py` desde una grabación de `session_recorder.py`).
 - **dossier:** paquete de evidencia del run (screenshots, resultados, triage) que arma `uat_dossier_builder.py`.
 - **handoff:** exportación del resultado a `Agentes/outputs/<ADO_ID>/` (`comment.html` + `attachments.json` + `comment.meta.json`) para que Stacky publique centralmente.
-- **NAV / DATA / ENV / APP:** categorías de falla — Navegación (no llegó/se desvió), Datos (faltan datos de prueba), Entorno (AgendaWeb caída, credenciales), Aplicación (bug real del desarrollo). Vienen de `verdict_normalizer.ReasonCodeMeta.category`.
+- **NAV / DATA / ENV / APP:** las 4 categorías de falla más frecuentes para el operador — Navegación (no llegó/se desvió), Datos (faltan datos de prueba), Entorno (AgendaWeb caída, credenciales), Aplicación (bug real del desarrollo). **(C3)** Son un SUBCONJUNTO del `CATEGORY_SET` canónico de **9** (`verdict_normalizer.py:47-57`), que suma `PIP` (pipeline roto), `GEN` (generación/ui_map faltante), `OBS` (evidencia incompleta), `SEC` (seguridad) y `OPS` (infraestructura); la UI (F4) las muestra todas.
 - **dry-run vs publish:** dry-run = corre y deja evidencia local, no publica nada; publish = Stacky publica el resultado (HITL, decisión del operador).
 - **chokepoint `on_execution_end`:** único punto runtime-agnóstico donde Stacky se entera de que un agente terminó (`services/ticket_status.py:231`), con post-hooks registrables (`register_post_hook:307`). Patrón establecido por el Plan 208.
-- **candidato QAUAT (`qa_uat_candidate`):** marca en la metadata de la ejecución del Developer que dice "este desarrollo está listo para validarse E2E" (estado `pending` o `blocked_by_build`).
+- **candidato QAUAT (`qa_uat_candidate`):** marca en la metadata de la ejecución del Developer que dice "este desarrollo está listo para validarse E2E". Estados: `pending`, `blocked_by_build` (F3) y, tras correr la validación, `validated | failed | blocked` con `qa_uat_execution_id` (back-link de F4, ADICIÓN ARQUITECTO).
 - **weak assertion:** aserción de test que pasa sin verificar nada sustantivo (detectadas por `weak_assertion_detector.py`); un PASS con weak assertions se anota, nunca se oculta.
 
 ## 10. Orden de implementación
@@ -665,11 +697,12 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent"
 
 ## 11. Definición de Hecho (DoD) global
 
-- [ ] Los 5 archivos de test nuevos (2 tool + 3 backend + 1 vitest) verdes, corridos POR ARCHIVO con los comandos exactos de §4, output real leído (cero "pasó todo" sin pegar salida).
+- [ ] Los **6** archivos de test nuevos (2 tool + 3 backend + 1 vitest — C9: v1 decía "5" con la suma mal) verdes, corridos POR ARCHIVO con los comandos exactos de §4, output real leído (cero "pasó todo" sin pegar salida). `test_plan214_qa_uat_enqueue.py` termina en 11/11 (9 de F3 + 2 del back-link de F4).
 - [ ] Los 3 `backend/tests/test_plan214_*.py` registrados en `HARNESS_TEST_FILES` (sh **y** ps1); meta-ratchet verde.
 - [ ] Regresiones nombradas verdes: `test_navigation_driver.py`, `test_navigation_plan_gate.py`, `test_qa_uat_endpoint.py`, `test_qa_browser_plan.py`, `test_harness_flags.py` (por archivo).
 - [ ] `grep` sentinels de cada fase (F0-F5) en verde, tal como se listan en cada criterio de aceptación.
-- [ ] Flags visibles en Configuración → Arnés (categoría `calidad_verificacion`); `STACKY_QA_UAT_AUTORUN_ENABLED` OFF por default con su excepción #3 documentada en la description.
+- [ ] Flags visibles en Configuración → Arnés (categoría `calidad_verificacion`); `STACKY_QA_UAT_AUTORUN_ENABLED` OFF por default con su excepción #3 documentada en la description, **con `requires=` hacia la flag de encolado y la arista en `_REQUIRES_MAP_FROZEN` (C2)**.
+- [ ] Huella `qa_uat_nav_deviation` sembrada en `docs/sistema/error_fingerprints.json` y el JSON sigue parseando (C5).
 - [ ] Con flags en default y KB vacía: comportamiento de Stacky byte-idéntico salvo aditivos declarados (candidato en metadata + pane data-driven + endpoint `/kb`).
 - [ ] `npx tsc --noEmit` limpio en frontend; `compileall` limpio en los módulos Python tocados.
 - [ ] Raíz del tool sin `tmp_*.py`; `run_tests.py` sin rutas RSPACIFICO.

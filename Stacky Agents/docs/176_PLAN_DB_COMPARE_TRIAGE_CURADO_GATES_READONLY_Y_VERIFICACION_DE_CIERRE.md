@@ -1,13 +1,31 @@
 # Plan 176 — Comparador de BD: ciclo de migración curada — triage del diff, gates read-only de precondiciones y verificación de cierre
 
-**Estado:** PROPUESTO (v1, 2026-07-18, autor Fable 5 vía `proponer-plan-stacky`).
-**Serie:** capa 3 del Comparador de BD. Capa 1 = serie 122-126 (motor, IMPLEMENTADA en `main`). Capa 2 = Plan 157 (config in-place + import web.config + Panel de Migración, CRITICADO v2 APROBADO-CON-CAMBIOS, **base comprometida aún sin implementar**). Este plan es la capa 3 y **NO duplica nada del 157**: el 157 arregla la *entrada* (registrar ambientes, credenciales, panel visible); el 176 arregla el *ciclo de trabajo* (curar el diff, verificar precondiciones, cerrar la migración).
-**Relación con el 157 (explícita):** independiente en código — este plan NO toca `EnvSetupWizard.tsx`, `CredentialWarningBanner.tsx`, `MigrationPanel.tsx` ni `dbcompare_config_import.py` (archivos del 157, todavía inexistentes). Integración condicional declarada en F5/F7: si al implementar este plan el `MigrationPanel.tsx` del 157 ya existe, los botones de gates/cierre se montan TAMBIÉN ahí; si no existe, se montan en la vista de resultados actual (`DbComparePage.tsx`). Ninguna flag de este plan depende de flags del 157 (`requires` apunta solo al master `STACKY_DB_COMPARE_ENABLED`). Los dos planes pueden implementarse en cualquier orden.
+**Estado:** CRITICADO **v1 -> v2** (crítica adversarial 2026-07-23, juez `criticar-y-mejorar-plan`; v1 RECHAZADO — 3 bloqueantes; v2 = v1 con los fixes aplicados). Autor v1: Fable 5 vía `proponer-plan-stacky` (2026-07-18).
+**Serie:** capa del Comparador de BD que aterriza ÚLTIMA sobre `main`. Capa 1 = serie 122-126 (motor, en `main`). **Los planes 157 (config in-place + import web.config + MigrationPanel) y 178-183 (radar, snapshot v2, puente diff→repo, masking, merge v2, sandbox demo) están IMPLEMENTADOS Y MERGEADOS a `main` (2026-07-20)** — este plan ya NO convive con ellos "en papel": se implementa SOBRE ellos. Este plan cubre el *ciclo de trabajo* (curar el diff, verificar precondiciones, cerrar la migración) y no duplica nada ya entregado.
+**Relación con el 157 (actualizada en v2):** `MigrationPanel.tsx`, `EnvSetupWizard.tsx` y `CredentialWarningBanner.tsx` EXISTEN en `main` (157 implementado; sus flags están en `config.py:137-144` y `/health` ya reporta `migration_panel_enabled`, `api/db_compare.py:83`). La integración de F5/F7 con el MigrationPanel es por lo tanto INCONDICIONAL (ver esas fases); desaparece la regla condicional "si el archivo existe" de la v1.
+
+**CHANGELOG v1 -> v2 (hallazgos del juez):**
+- **C1 (BLOQUEANTE):** la premisa "archivos del 157 todavía inexistentes" es FALSA — 157 está en `main`. F5/F7 pasan de montaje condicional a montaje incondicional en `MigrationPanel.tsx`; encabezado y §Relación corregidos.
+- **C2 (BLOQUEANTE):** colisión con el masking del 181: `get_run_route` enmascara valores de PK del data-diff (`api/db_compare.py:427-428` → `dbcompare_masking.py:144-147`), por lo que la UI NO puede derivar `item_key` de filas de datos desde la respuesta (key cliente ≠ key backend ⇒ exclusiones rotas en silencio). Fix estructural en F1/F2: el backend emite `item_key` ADITIVO por ítem/fila ANTES del masking; la UI nunca deriva keys ([ADICIÓN ARQUITECTO A1]).
+- **C3 (BLOQUEANTE):** la vía canónica de default ON estaba anclada al archivo equivocado: `_CURATED_DEFAULTS_ON` NO vive en `harness_flags.py` — vive en `backend/tests/test_harness_flags.py:467`. F0 corregida (un modelo menor habría roto `test_default_known_only_for_curated`).
+- **C4 (IMPORTANTE):** ~40 anclajes `archivo:línea` quedaron STALE tras los merges de 157+178-183 (p.ej. `health_route` :52→:72, `generate_parity_bundle` :952→:1164, `_scripts_allowlist` :294→:492, `get_run` :207→:212, `load_snapshot` :261→:330, categoría de flags :314→:349). TODOS re-verificados 2026-07-23 y re-anclados en el cuerpo.
+- **C5 (IMPORTANTE):** F3 ignoraba el kwarg `data_merge_mode` del 182 (`emit_data_scripts`, `dbcompare_scripts.py:719-721`). El filtrado por triage se aplica ANTES de emitir en AMBOS modos; test nuevo `test_fila_excluida_no_emite_merge`.
+- **C6 (IMPORTANTE):** F8 (histórico) desactualizado: el doc del run YA persiste `source_snapshot_id`/`target_snapshot_id` (`dbcompare_runs.py:165,189`) y `create_run` ya tiene kwarg `initiated_by` (178). F7/F8 corregidas (modo literal `"snapshot"`, `initiated_by="closure"`).
+- **C7 (IMPORTANTE):** Riesgo #9 y dos bullets de "Fuera de scope" STALE: masking (181) y snapshot v2 con `type_detail` (179) YA ENTREGADOS. Actualizados; F4 ahora puede leer `type_detail` ([ADICIÓN ARQUITECTO A3]).
+- **C8 (IMPORTANTE):** F8.5 parcialmente hecha en `main`: `DataParitySection.tsx:50` YA muestra error; los catch silenciosos reales hoy son `DbComparePage.tsx:53,59,64,81,86` y `DataParitySection.tsx:158`. Inventario corregido.
+- **C9 (MENOR):** aritmética: son 12 archivos `test_plan176_*.py` (no 10) y 7 targets vitest (6 nuevos + `filterLogic` extendido). F9/DoD corregidos.
+- **C10 (MENOR):** en `api/db_compare.py` el módulo config está importado como `_config` ⇒ el patrón literal es `getattr(_config.config, ...)` (`api/db_compare.py:75`), no `config.config`. Precisado en F0/F1.
+- **C11 (MENOR):** fecha de verificación de anclajes re-declarada (2026-07-23).
+- **C12 (MENOR):** F4 sobre-prometía "engine read-only": la garantía real de solo-lectura es `validate_select_only` por gate (el engine no impone read-only a nivel conexión en sqlserver/oracle). Prosa precisada.
+- **[ADICIÓN ARQUITECTO A1]:** el backend es el ÚNICO emisor de `item_key` (campo aditivo pre-masking en la respuesta del run, ítems de esquema Y filas de datos); se elimina la función espejo TS `itemKeyForSchemaItem` de la v1 y con ella todo riesgo de drift de la regla de keys entre lenguajes.
+- **[ADICIÓN ARQUITECTO A2]:** el smoke de F9 corre sobre el sandbox demo del 183 (seed 1-click con drift RS-like) en vez de armar ambientes `test-` a mano: cero setup para el operador.
+- **[ADICIÓN ARQUITECTO A3]:** `derive_gates` (F4) usa `type_detail` del snapshot v2 (179, `dbcompare_snapshot.py:86,137`) cuando está presente para resolver columnas con precisión, con fallback al detalle del diff.
 
 > Este documento está redactado para que un MODELO MENOR (Haiku, Codex CLI o GitHub
 > Copilot Pro) lo implemente SIN inferir nada. Toda afirmación sobre código existente
-> cita `archivo:línea` verificada el 2026-07-18 sobre el working tree. Rutas de código
-> relativas a `Stacky Agents/`. Prohibido desviarse de los nombres exactos.
+> cita `archivo:línea` RE-VERIFICADA el 2026-07-23 sobre el working tree (post-merge de
+> 157 y 178-183). Rutas de código relativas a `Stacky Agents/`. Prohibido desviarse de
+> los nombres exactos.
 
 ---
 
@@ -28,7 +46,7 @@ Stacky **no cubre**:
    `-- AJUSTAR` (Plan 125 §F2) pero no genera ni evalúa la query de precondición.
 3. **Claves naturales para tablas sin PK** — `Compare-DevTestDatabase.ps1` líneas 495-499
    (`FallbackKeyColumns`): `RCONTROLES` no tiene PK en el motor y se compara por clave natural
-   elegida por el humano. Stacky 126 exige PK (`services/dbcompare_data.py:117`) → `RCONTROLES`
+   elegida por el humano. Stacky 126 exige PK (`services/dbcompare_data.py:118`) → `RCONTROLES`
    hoy NO es comparable en datos. Además, el 126 §6 difirió explícitamente a v2 "marcar tablas de
    parámetros persistentemente": hoy el operador re-elige las ≤20 tablas EN CADA corrida.
 4. **Verificación de cierre con expectativas** — el paso 5 del replay re-corre el compare y
@@ -65,19 +83,20 @@ precedente de ejecución son SELECTs validados por `validate_select_only`,
 
 ## 2. Por qué ahora / gap que cierra
 
-- La serie 122-126 dejó el motor completo y el 157 (aprobado) deja la puerta de entrada; lo que
-  falta es exactamente el TRABAJO DIARIO del operador entre "vi el diff" y "migré y verifiqué".
+- La serie 122-126 dejó el motor completo y el 157 (ya en `main`) dejó la puerta de entrada; lo
+  que falta es exactamente el TRABAJO DIARIO del operador entre "vi el diff" y "migré y verifiqué".
   El prior art demuestra que ese trabajo hoy vive en un `.md` manual + scripts PowerShell ad-hoc.
 - Diferidos explícitos que este plan salda: 126 §6 ("marcar tablas de parámetros
   persistentemente" — F6); la brecha #2/#4/#5 del prior art (gates, claves naturales,
   exclusión de filas) que ningún plan de la serie tomó.
 - Fricciones UX medidas en el código actual que este plan elimina (F8): filtro de tipo
-  mono-selección (`frontend/src/components/dbcompare/FiltersBar.tsx:48`); diff de vistas = dos
-  `<pre>` crudos sin resaltado (`ObjectDrilldown.tsx:149-152`); sin export CSV/JSON del diff
-  (solo `.md` del run completo, `SummaryHero.tsx:121`); imposible comparar snapshots históricos
-  aunque la API los lista (`CompareWizard.tsx:138` solo fresh/cached vs
-  `api/db_compare.py:162` `list_snapshots_route`); errores de fetch silenciosos
-  (`DbComparePage.tsx:50,55`; `DataParitySection.tsx:69`).
+  mono-selección (`frontend/src/components/dbcompare/FiltersBar.tsx:47-50`); diff de vistas = dos
+  `<pre>` crudos sin resaltado (`ObjectDrilldown.tsx:150-151`); sin export CSV/JSON del diff
+  (solo `.md` del run completo, `SummaryHero.tsx:121-122`); imposible comparar snapshots
+  históricos aunque la API los lista (`CompareWizard.tsx:138-144` solo fresh/cached vs
+  `api/db_compare.py:360` `list_snapshots_route`); errores de fetch silenciosos
+  (`DbComparePage.tsx:53,59,64,81,86`; `DataParitySection.tsx:158` — OJO: el catch de
+  `DataParitySection.tsx:50` YA muestra error en `main`, no tocarlo).
 
 ## 3. Principios y guardarraíles (obligatorios en TODO el plan)
 
@@ -90,14 +109,16 @@ precedente de ejecución son SELECTs validados por `validate_select_only`,
    se lanza solo por click explícito.
 2. **Contratos congelados: NO se tocan.** Snapshot v1 (122 §F3), SchemaDiff v1 + tabla cerrada
    `_KIND_SEVERITY` + semántica origen/destino (123 §F1, `services/dbcompare_diff.py:28`),
-   Manifest v1 + REGLA DE ORO de backup pareado 1:1 (125 §F3, assert en
-   `services/dbcompare_scripts.py:896`), DataDiff v1 + reglas literales de `dbcompare_sqlvalues`
+   Manifest v1 + REGLA DE ORO de backup pareado 1:1 (125 §F3, invariante
+   `_assert_pairing_invariant`, `services/dbcompare_scripts.py:878-889`, ya extendida a
+   `data_merge` por el 182), DataDiff v1 + reglas literales de `dbcompare_sqlvalues`
    (126 §F1-F2). Este plan solo AGREGA contratos nuevos versionados (Triage v1, Gates v1,
    TablePrefs v1, ClosureReport v1) y campos ADITIVOS opcionales en respuestas existentes.
    Regla dura para el implementador: ningún campo existente cambia de nombre, tipo ni semántica.
 3. **Config del operador SIEMPRE por UI.** Las 4 flags nuevas se registran en `FLAG_REGISTRY` y en
-   `_CATEGORY_KEYS["comparador_bd"]` (`services/harness_flags.py:314`, tupla existente
-   `:320-324`) → visibles y toggleables desde el panel de flags del arnés.
+   `_CATEGORY_KEYS["comparador_bd"]` (`services/harness_flags.py:117` dict; tupla existente
+   `:349-366`, hoy con 16 keys de los planes 122-183) → visibles y toggleables desde el panel de
+   flags del arnés.
 4. **Cero trabajo extra al operador / default ON.** Las 4 flags nacen default ON bajo el master
    `STACKY_DB_COMPARE_ENABLED` (ya ON, `backend/config.py:119-121`). Ninguna de las 4 excepciones
    duras aplica: (1) nada bypasea revisión humana — gates y cierre corren solo por click, el triage
@@ -153,9 +174,10 @@ aditivamente en `/health` para que el frontend gatee cada feature.
 
 **Cambios exactos:**
 
-1. En `backend/config.py`, junto al bloque `STACKY_DB_COMPARE_*` existente (`config.py:119-133`),
-   agregar 4 atributos replicando LITERALMENTE el idioma del bloque existente (verificar el
-   operador `.strip().lower() == "true"` real en `config.py:119-121` y copiarlo):
+1. En `backend/config.py`, al FINAL del bloque `STACKY_DB_COMPARE_*` existente (hoy
+   `config.py:119-202`; el último sub-bloque es `STACKY_DB_COMPARE_REPO_BRIDGE_*` del Plan 180,
+   `:195-202`), agregar 4 atributos replicando LITERALMENTE el idioma del bloque existente
+   (verificar el operador `.strip().lower() == "true"` real en `config.py:119-121` y copiarlo):
 ```python
     STACKY_DB_COMPARE_TRIAGE_ENABLED: bool = os.getenv(
         "STACKY_DB_COMPARE_TRIAGE_ENABLED", "true"
@@ -171,7 +193,8 @@ aditivamente en `/health` para que el frontend gatee cada feature.
     ).strip().lower() == "true"
 ```
 2. En `backend/services/harness_flags.py`, dentro de `FLAG_REGISTRY` (después del último
-   `FlagSpec` del grupo `comparador_bd`, cerca de `harness_flags.py:3162-3175`), agregar 4
+   `FlagSpec` del grupo `comparador_bd` — hoy `STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES`,
+   `harness_flags.py:3518`), agregar 4
    `FlagSpec` con `key` exacta, `type="bool"`, `default=True`,
    `requires="STACKY_DB_COMPARE_ENABLED"`, `group="comparador_bd"` y labels:
    - "Triage del diff (curar qué migrar)" / description: "Permite marcar cada diferencia como
@@ -185,19 +208,24 @@ aditivamente en `/health` para que el frontend gatee cada feature.
    - "Diff UX v2 (filtros múltiples, export, snapshots históricos)" / description: "Filtro
      multi-tipo, export CSV/JSON del diff filtrado, diff por líneas en vistas y comparación de
      snapshots históricos."
-   **Gotcha obligatorio (Plan 63/122):** para `type="bool"` con `default=True` la vía canónica es
-   `_CURATED_DEFAULTS_ON` (`harness_flags.py:328-335`); seguir el patrón EXACTO de
-   `STACKY_DB_COMPARE_DATA_DIFF_ENABLED` (`harness_flags.py:3153-3161`).
-3. En `_CATEGORY_KEYS["comparador_bd"]` (tupla que arranca en `harness_flags.py:314`), agregar las
-   4 keys al final. Criterio: `test_every_registry_flag_is_categorized` verde.
+   **Gotcha obligatorio (Plan 63/122) — [FIX C3, anclaje corregido]:** para `type="bool"` con
+   `default=True` la vía canónica exige agregar la key TAMBIÉN al set `_CURATED_DEFAULTS_ON`,
+   que vive en `backend/tests/test_harness_flags.py:467` (NO en `harness_flags.py`); si falta,
+   `test_default_known_only_for_curated` (mismo archivo) rompe a propósito. Seguir el patrón
+   EXACTO del FlagSpec de `STACKY_DB_COMPARE_DATA_DIFF_ENABLED` (`harness_flags.py:3367-3375`).
+3. En la tupla `"comparador_bd"` de `_CATEGORY_KEYS` (`harness_flags.py:349-366`), agregar las
+   4 keys al final (después de `STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES`, `:365`), cada una con
+   comentario `# Plan 176`. Criterio: `test_every_registry_flag_is_categorized` verde.
 4. En `backend/tests/test_harness_flags_requires.py`, agregar al dict `_REQUIRES_MAP_FROZEN` las 4
    entradas `"<KEY>": "STACKY_DB_COMPARE_ENABLED"` (aristas de profundidad 1; regla R4: jamás
    encadenar a una flag hija).
-5. En `backend/api/db_compare.py`, en `health_route` (`api/db_compare.py:52-53`), agregar al dict
-   de respuesta 4 keys ADITIVAS (sin tocar las existentes):
-   `"triage_enabled"`, `"gates_enabled"`, `"table_prefs_enabled"`, `"diff_ux_v2_enabled"`,
-   cada una leyendo `config.config.<FLAG>` (gotcha: la instancia de flags es `config.config`, NO
-   el módulo `config`).
+5. En `backend/api/db_compare.py`, en `health_route` (`api/db_compare.py:72-86`; el dict YA tiene
+   `flag_enabled`, `data_diff_enabled` y las 3 keys del 157 `config_in_place_enabled` /
+   `webconfig_import_enabled` / `migration_panel_enabled`), agregar 4 keys ADITIVAS (sin tocar
+   las existentes): `"triage_enabled"`, `"gates_enabled"`, `"table_prefs_enabled"`,
+   `"diff_ux_v2_enabled"`, replicando el patrón literal existente
+   `bool(getattr(_config.config, "<FLAG>", False))` (`api/db_compare.py:75`) — **[FIX C10]** en
+   este archivo el módulo config está importado como `_config`; la instancia es `_config.config`.
 
 **Test PRIMERO (TDD):** `backend/tests/test_plan176_dbcompare_flags.py`
 Casos:
@@ -229,7 +257,7 @@ persistida por `run_id`.
 **Valor:** convierte el `PLAN-replay-a-TEST.md` manual del prior art en una capacidad del producto.
 
 **Archivo a crear:** `backend/services/dbcompare_triage.py`
-**Archivo a editar:** `backend/api/db_compare.py` (mismo blueprint `bp` de `api/db_compare.py:24`;
+**Archivo a editar:** `backend/api/db_compare.py` (mismo blueprint `bp` de `api/db_compare.py:33`;
 NO crear blueprint nuevo).
 
 **Contrato Triage v1 (NUEVO, versionado — archivo `data_dir()/db_compare/triage/<run_id>.json`):**
@@ -266,12 +294,24 @@ NO crear blueprint nuevo).
 - `def triage_summary(triage: dict, total_items: int) -> dict` — devuelve
   `{"confirmado": n1, "excluido": n2, "pendiente": total_items - n1 - n2}`.
 - `def excluded_keys(triage: dict) -> set[str]` — keys con decision == "excluido".
+- `def attach_item_keys(run: dict) -> dict` — **[FIX C2 / ADICIÓN ARQUITECTO A1]** enriquece IN
+  PLACE la respuesta del run con el campo ADITIVO `"item_key"`: (a) en cada elemento de
+  `run["diff"]["items"]` usando `item_key_for_schema_item`; (b) si el run tiene data-diff, en
+  cada fila de `only_source`/`only_target` y cada entrada de `changed` de cada tabla usando
+  `item_key_for_data_row(schema, table, pk)` con los valores REALES de la PK. Devuelve el mismo
+  dict. **Motivo:** el masking del Plan 181 enmascara valores de PK en la respuesta
+  (`api/db_compare.py:427-428` → `services/dbcompare_masking.py:144-147`), así que el frontend
+  NUNCA puede derivar keys de filas de datos; el backend es el ÚNICO emisor de `item_key`.
+  **Wiring obligatorio:** en `get_run_route` (`api/db_compare.py:427-428`), llamar
+  `attach_item_keys(run)` ANTES de `dbcompare_masking.apply_to_run_response(run)` (el masking no
+  toca el campo `item_key`; test en F1). Campo aditivo ⇒ contratos congelados intactos.
 
 **Endpoints (en `api/db_compare.py`, todos gateados por `_require_enabled()`
-(`api/db_compare.py:27`) + nueva `_require_triage_enabled()` que devuelve 403 si
-`STACKY_DB_COMPARE_TRIAGE_ENABLED` OFF — leer con `config.config`, patrón de `_require_enabled`):**
+(`api/db_compare.py:36`) + nueva `_require_triage_enabled()` que devuelve 403 si
+`STACKY_DB_COMPARE_TRIAGE_ENABLED` OFF — leer con `_config.config` [FIX C10], patrón de
+`_require_enabled`):**
 - `GET /runs/<run_id>/triage` → `get_triage_route()`. 404 si `get_run(run_id)` (de
-  `services/dbcompare_runs.py:207`) devuelve None; si no, `load_triage(run_id)` + campo aditivo
+  `services/dbcompare_runs.py:212`) devuelve None; si no, `load_triage(run_id)` + campo aditivo
   `"summary"` calculado con `triage_summary` sobre `len(run["diff"]["items"])` cuando el run está
   `done` (si no está done, `summary` = None).
 - `PUT /runs/<run_id>/triage/item` → `put_triage_item_route()`. Body JSON:
@@ -284,7 +324,7 @@ NO crear blueprint nuevo).
   Respuesta: el doc Triage v1 actualizado + `summary`.
 - `GET /runs/<run_id>/triage/exclusions.md` → `get_triage_exclusions_route()`. Markdown
   determinista descargable (`Content-Disposition: attachment`, patrón de
-  `export_run_markdown_route`, `api/db_compare.py:233-234`) listando cada ítem excluido con su
+  `export_run_markdown_route`, `api/db_compare.py:432-433`) listando cada ítem excluido con su
   nota y `decided_at`, ordenado por `item_key`. 404 si run inexistente; si no hay exclusiones,
   cuerpo con la línea literal `Sin exclusiones.`.
 
@@ -301,6 +341,8 @@ NO crear blueprint nuevo).
 - `test_volver_a_pendiente_borra_la_entrada`
 - `test_note_se_trunca_a_2000`
 - `test_summary_cuenta_bien`
+- `test_attach_item_keys_enriquece_schema_y_data` — [A1] items de esquema y filas de data-diff
+  del fixture ganan `item_key` con el formato literal.
 `backend/tests/test_plan176_dbcompare_triage_api.py` (con `app.test_client()` y un run fixture
 `done` construido con el patrón de `test_plan123_dbcompare_api.py`):
 - `test_triage_403_si_flag_off`
@@ -309,6 +351,11 @@ NO crear blueprint nuevo).
 - `test_put_item_key_desconocida_404`
 - `test_put_run_no_done_409`
 - `test_exclusions_md_lista_notas`
+- `test_get_run_expone_item_key_pre_masking` — **[FIX C2, bloqueante]** con
+  `STACKY_DB_COMPARE_MASKING_ENABLED` ON y una columna de PK sensible en el fixture, GET
+  `/runs/<id>` devuelve cada fila con `item_key` calculada sobre los valores REALES (coincide con
+  `item_key_for_data_row` sobre el data-diff persistido) mientras el valor de PK visible viene
+  enmascarado; `item_key` presente también en `diff.items`.
 Comando (por archivo):
 ```
 cd "Stacky Agents/backend" && "./venv/Scripts/python.exe" -m pytest tests/test_plan176_dbcompare_triage.py -q
@@ -348,8 +395,11 @@ del diff y en el drill-down, con resumen de curación en el hero.
   ausente ⇒ `"pendiente"`.
 - `export function cycleDecision(current: TriageDecision): TriageDecision` — orden literal
   `pendiente → confirmado → excluido → pendiente`.
-- `export function itemKeyForSchemaItem(item: {object_type: string; schema: string; name: string}): string`
-  — ESPEJO EXACTO de `item_key_for_schema_item` del backend (mismo formato).
+- **[FIX C2 / A1 — SIN espejo TS]:** la v1 pedía `itemKeyForSchemaItem` espejo del backend; se
+  ELIMINA. La UI toma SIEMPRE el campo aditivo `item.item_key` que el backend emite en la
+  respuesta del run (F1, `attach_item_keys`) — tanto para ítems de esquema como para filas de
+  datos (cuyas PK llegan enmascaradas por el 181 y jamás sirven para derivar keys). Tipo TS:
+  extender los tipos espejo con `item_key?: string` (opcional, aditivo).
 - `export function summarizeTriage(triage: TriageDoc | null, totalItems: number): {confirmado: number; excluido: number; pendiente: number}`
 - `export function decisionBadgeClass(d: TriageDecision): string` — nombres de clase CSS module:
   `"triageConfirmado" | "triageExcluido" | "triagePendiente"`.
@@ -370,8 +420,8 @@ del diff y en el drill-down, con resumen de curación en el hero.
 **Test PRIMERO (TDD, vitest puro):**
 `frontend/src/components/dbcompare/__tests__/triageLogic.test.ts`
 Casos: `decisionFor` default pendiente; `cycleDecision` cicla en el orden literal;
-`itemKeyForSchemaItem` produce `"table:dbo.RCONTROLES"` (paridad con backend);
-`summarizeTriage` con doc null y con decisiones mixtas.
+`decisionFor` con `item_key` provisto por el backend (la paridad de formato de keys se prueba en
+el backend, F1 — la UI no deriva keys); `summarizeTriage` con doc null y con decisiones mixtas.
 Comando:
 ```
 cd "Stacky Agents/frontend" && npx vitest run src/components/dbcompare/__tests__/triageLogic.test.ts
@@ -408,23 +458,29 @@ bloques del script generado).
    las filas cuya `item_key_for_data_row(schema, table, pk)` esté en `excluded`. NO muta el
    original. Si tras filtrar la tabla queda sin filas en las 3 listas, la tabla no emite DML (y por
    la REGLA DE ORO tampoco requiere backup: ningún script la modifica).
-3. `generate_parity_bundle(run_id, ...)` (`dbcompare_scripts.py:952`) y
-   `generate_parity_bundle_from_diff(...)` (`:726`): nuevo parámetro keyword-only
+3. `generate_parity_bundle(run_id)` (`dbcompare_scripts.py:1164`) y
+   `generate_parity_bundle_from_diff(...)` (`:941`): nuevo parámetro keyword-only
    `excluded_keys: set[str] | None = None` (default None = comportamiento EXACTO de `main`).
    Cuando no es None: aplicar `filter_pieces_by_triage` ANTES de `emit_parity`/`emit_resguardo`
-   (`:178`/`:462`) y `filter_data_rows_by_triage` ANTES de `emit_data_scripts` (`:568`). El
-   pareo backup/rollback y el assert del invariante (`:896`) operan sobre las piezas YA filtradas
-   ⇒ la REGLA DE ORO se preserva sin cambios.
+   (`:178`/`:462`) y `filter_data_rows_by_triage` ANTES de `emit_data_scripts` (`:719`). El
+   pareo backup/rollback y el invariante `_assert_pairing_invariant` (`:878-889`) operan sobre
+   las piezas YA filtradas ⇒ la REGLA DE ORO se preserva sin cambios.
+   **[FIX C5 — composición con el 182]:** `emit_data_scripts` YA tiene el kwarg
+   `data_merge_mode: bool = False` (`:719-721`, Plan 182). El filtrado por triage ocurre SOBRE el
+   DataDiff, ANTES de emitir, por lo que aplica idéntico en ambos modos: una fila `only_source`
+   excluida no debe emitir ni `data_insert` (modo v1) ni aparecer en la pieza `data_merge`
+   (modo v2). No tocar la firma ni la lógica interna de `data_merge_mode`; el 176 solo pre-filtra
+   el DataDiff que se le pasa.
 4. Si hubo exclusiones (`piezas_excluidas` no vacía o filas de datos excluidas), escribir en la
    raíz del bundle el archivo `TRIAGE_EXCLUSIONS.md` (contenido determinista: un ítem por línea
    `- <item_key> — <note> (<decided_at>)`, ordenado por `item_key`). Este archivo NO se agrega a
    `entries` del manifest (Manifest v1 intacto); entra al `.zip` automáticamente porque
-   `bundle_zip_bytes` (`:932`) zipea el directorio completo.
-5. En `api/db_compare.py`, `_scrips_allowlist` — nombre real `_scripts_allowlist`
-   (`api/db_compare.py:294`) — extender ADITIVAMENTE: al set derivado del manifest, agregar el
-   literal `"TRIAGE_EXCLUSIONS.md"` para que `get_scripts_file_route` (`:305-306`) pueda servirlo.
-   El guard anti-traversal existente (`:311`) no se toca.
-6. En `generate_scripts_route` (`api/db_compare.py:260-261`): si
+   `bundle_zip_bytes` (`:1144`) zipea el directorio completo.
+5. En `api/db_compare.py`, `_scripts_allowlist`
+   (`api/db_compare.py:492-500`) — extender ADITIVAMENTE: al set derivado del manifest, agregar el
+   literal `"TRIAGE_EXCLUSIONS.md"` para que `get_scripts_file_route` (`:503-522`) pueda servirlo.
+   El guard anti-traversal existente (`:509`) no se toca.
+6. En `generate_scripts_route` (`api/db_compare.py:459-475`): si
    `STACKY_DB_COMPARE_TRIAGE_ENABLED` ON, cargar `excluded_keys(load_triage(run_id))` y pasarlo a
    `generate_parity_bundle`; agregar a la respuesta el campo ADITIVO
    `"triage_applied": {"excluded_count": n}` (n=0 cuando no hay exclusiones). Con flag OFF:
@@ -434,15 +490,18 @@ bloques del script generado).
 (reusar fixtures de `backend/tests/_plan125_fixtures.py`):
 - `test_sin_triage_bundle_identico` — con `excluded_keys=None` y con `set()` vacío, el manifest y
   el contenido de TODOS los archivos emitidos son idénticos a los de `main` (comparar con una
-  generación sin parámetro). **Bloqueante (KPI-5).**
+  generación sin parámetro). Correr el caso con `data_merge_mode=False` Y `=True` [FIX C5].
+  **Bloqueante (KPI-5).**
 - `test_item_excluido_no_emite_script` — excluir una tabla del fixture ⇒ ningún archivo del bundle
   contiene su nombre calificado (`qualified`, `services/dbcompare_sqlnames.py:30`). **Bloqueante
   (KPI-1).**
 - `test_exclusiones_md_presente_y_ordenado`
-- `test_regla_de_oro_se_mantiene_con_exclusiones` — el assert del invariante (`:896`) pasa con
+- `test_regla_de_oro_se_mantiene_con_exclusiones` — `_assert_pairing_invariant` (`:878-889`) pasa con
   piezas filtradas (ítem destructivo excluido ⇒ ni script ni backup).
 - `test_fila_datos_excluida_no_emite_dml` — una fila `only_source` excluida no aparece en
-  `03_datos/`.
+  `03_datos/` (modo v1, `data_merge_mode=False`).
+- `test_fila_excluida_no_emite_merge` — **[FIX C5]** la misma fila excluida, con
+  `data_merge_mode=True` (Plan 182), tampoco aparece en la pieza `data_merge` emitida.
 - `test_endpoint_scripts_file_sirve_exclusions_md` — GET
   `/runs/<id>/scripts/file?path=TRIAGE_EXCLUSIONS.md` responde 200 tras generar con exclusiones.
 Comando:
@@ -495,14 +554,20 @@ persistir pass/fail por gate.
 - `def derive_gates(diff: dict, target_alias: str) -> list[dict]` — pura, determinista, sin I/O.
   Las columnas/pkcols se leen del detalle del ítem de SchemaDiff v1 (campo `changes[].detail` y
   el snapshot del run si el detail no alcanza; el implementador usa `run["diff"]` +
-  `load_snapshot` (`services/dbcompare_snapshot.py:261`) del snapshot TARGET del run para obtener
+  `load_snapshot` (`services/dbcompare_snapshot.py:330`) del snapshot TARGET del run para obtener
   las columnas de PK/UNIQUE cuando el detail no las trae).
+  **[ADICIÓN ARQUITECTO A3]:** si el snapshot cargado es v2 (Plan 179, ya en `main`:
+  `SNAPSHOT_VERSION_V2`, `dbcompare_snapshot.py:30`; cada columna puede traer `type_detail`,
+  `:137`), usar `type_detail`/los campos v2 como fuente PREFERIDA para resolver nullability y
+  columnas; fallback literal al camino v1 si `type_detail` no está. Cero dependencia dura: los
+  snapshots viejos v1 siguen funcionando.
 - `def evaluate_gates(run_id: str, gate_ids: list[str] | None) -> dict` — carga el run
-  (`get_run`, `dbcompare_runs.py:207`; debe estar `done`, si no `ValueError`), deriva gates,
+  (`get_run`, `dbcompare_runs.py:212`; debe estar `done`, si no `ValueError`), deriva gates,
   filtra por `gate_ids` si no es None, cap `_MAX_GATES_PER_EVAL` (exceso ⇒ `ValueError`), y por
   cada gate: (i) `validate_select_only(sql)` de `services/db_query.py` — si falla, status
-  `error` sin ejecutar; (ii) ejecutar con `open_engine(target_alias)`
-  (`services/dbcompare_engine.py:88`, read-only, pool 1) con el timeout existente
+  `error` sin ejecutar; **[FIX C12] la garantía de solo-lectura ES este guard por gate (test
+  bloqueante), no una propiedad del engine**; (ii) ejecutar con `open_engine(target_alias)`
+  (`services/dbcompare_engine.py:88`) con el timeout existente
   (`STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC`); (iii) status: `expect_zero` ⇒ `pass` si el escalar
   es 0, `fail` si > 0; `info_rowcount` ⇒ `info` con `value`; excepción de conexión ⇒ `error` con
   `detail` scrubbed (patrón `_scrub`, `dbcompare_engine.py:78`). Persiste atómico y devuelve el
@@ -535,7 +600,7 @@ persistir pass/fail por gate.
 - `test_derivacion_determinista` — dos llamadas producen listas idénticas (mismos `gate_id`).
 - `test_export_sql_determinista_y_comentado`
 `backend/tests/test_plan176_dbcompare_gates_api.py` (test_client + ambiente sqlite `test-` — los
-alias `test-*` habilitan sqlite, `services/dbcompare_registry.py:80` — con una tabla con NULLs
+alias `test-*` habilitan sqlite, `services/dbcompare_registry.py:81-84` — con una tabla con NULLs
 sembrados):
 - `test_gates_403_si_flag_off`
 - `test_get_gates_409_run_no_done`
@@ -595,10 +660,10 @@ lista de gates, botón único "Verificar precondiciones" y semáforo por gate.
   corrés vos."
 - Si `overallStatus === "hay_fail"`, mostrar aviso: "Hay precondiciones que fallan: revisá antes
   de ejecutar los scripts." (aviso informativo; NO bloquea nada — HITL, decide el humano).
-- **Integración condicional con el 157 (regla literal):** si el archivo
-  `frontend/src/components/dbcompare/MigrationPanel.tsx` EXISTE en el árbol al implementar,
-  agregar también `<GatesPanel>` dentro de ese panel (mismo componente, misma prop `runId`); si
-  NO existe, montar SOLO en `DbComparePage.tsx`. No crear dependencia de import incondicional.
+- **Integración con el 157 [FIX C1 — ahora INCONDICIONAL]:**
+  `frontend/src/components/dbcompare/MigrationPanel.tsx` EXISTE en `main` (157 implementado).
+  Montar `<GatesPanel>` TAMBIÉN dentro de ese panel (mismo componente, misma prop `runId`),
+  respetando su gate existente `health.migration_panel_enabled` (`api/db_compare.py:83`).
 - Gate por `health.gates_enabled`; OFF ⇒ no se renderiza nada.
 
 **Test PRIMERO (TDD, vitest):**
@@ -623,8 +688,9 @@ cd "Stacky Agents/frontend" && npx tsc --noEmit
 claves naturales para tablas sin PK; el picker de datos las preselecciona y las tablas sin PK se
 vuelven comparables.
 **Valor:** salda el diferido explícito del 126 §6 y habilita el caso real `RCONTROLES` del prior
-art; elimina la re-selección manual de ≤20 tablas en cada corrida
-(`DataParitySection.tsx:121-145`).
+art; elimina la re-selección manual de ≤20 tablas en cada corrida (picker de
+`DataParitySection.tsx` — re-anclar por símbolo: el 181 insertó `<DataMaskingBar>` en ese archivo
+y corrió las líneas de la v1).
 
 **Archivo a crear:** `backend/services/dbcompare_table_prefs.py`
 **Archivos a editar:** `backend/api/db_compare.py`, `backend/services/dbcompare_data.py`,
@@ -659,8 +725,8 @@ prior art `FallbackKeyColumns`; mono-operador, mismo producto RS en todos los am
 
 **Integración con datos (cambios ADITIVOS en `dbcompare_data.py`):**
 - En la construcción de candidatas (consumida por `data_candidates_route`,
-  `api/db_compare.py:372-373`): si la tabla NO tiene PK (hoy ⇒ `comparable: false`,
-  `dbcompare_data.py:117`) y `STACKY_DB_COMPARE_TABLE_PREFS_ENABLED` ON y existe
+  `api/db_compare.py:571`): si la tabla NO tiene PK (hoy ⇒ no comparable; el rechazo duro vive en
+  `dbcompare_data.py:118`) y `STACKY_DB_COMPARE_TABLE_PREFS_ENABLED` ON y existe
   `natural_key_for(schema, table)`: validar que TODAS las columnas de la clave existan en las
   columnas de AMBOS snapshots; si sí ⇒ `comparable: true` + campos ADITIVOS
   `"key_source": "natural"` y `"key_cols": [...]`; si falta alguna columna ⇒ `comparable: false`
@@ -672,7 +738,7 @@ prior art `FallbackKeyColumns`; mono-operador, mismo producto RS en todos los am
   su semántica "columnas usadas como clave" — más el campo ADITIVO `"key_source": "natural"`).
   El SELECT sigue construyéndose con `build_select` (`:48`) y ejecutándose vía `fetch_rows`
   (`:67`, guard `validate_select_only` intacto).
-- En `start_data_diff_route` (`api/db_compare.py:410-411`): para cada tabla pedida sin PK, resolver
+- En `start_data_diff_route` (`api/db_compare.py:609`): para cada tabla pedida sin PK, resolver
   `key_cols` desde prefs (flag ON); si la tabla no tiene ni PK ni clave natural válida ⇒ se
   mantiene el rechazo actual (sin cambios de contrato).
 
@@ -756,15 +822,18 @@ completa y si NO tocó lo que no debía.
   `ok` si la key NO está; `persiste` ⇒ `ok` si la key SÍ está; lo demás `violado`. Devuelve
   ClosureReport v1.
 - `def start_closure(old_run_id: str) -> dict` — carga old_run (`ValueError` si no existe o no
-  está `done`); lanza `create_run(source, target, mode="fresh")`
-  (`services/dbcompare_runs.py:130`, mismo lock por par y 409-busy existentes); persiste el
-  linkage atómico; devuelve `{"verification_run_id": ...}`.
+  está `done`); lanza `create_run(source, target, mode="fresh", initiated_by="closure")`
+  (`services/dbcompare_runs.py:130`; **[FIX C6]** el kwarg `initiated_by` YA existe — lo agregó
+  el Plan 178 — y pasar `"closure"` deja el run de verificación distinguible del radar y del
+  operador en la timeline; mismo lock por par y 409-busy existentes, raise en `:153`); persiste
+  el linkage atómico; devuelve `{"verification_run_id": ...}`.
 
 **Endpoints (gate `_require_enabled()` + `_require_triage_enabled()` — el cierre pertenece a la
 capacidad de triage, misma flag):**
 - `POST /runs/<run_id>/verify-closure` → `verify_closure_route()`. 404 run inexistente; 409 run no
-  `done`; 409 si el par está ocupado (propaga el `DbCompareBusyError` existente, patrón de
-  `create_compare_run_route`, `api/db_compare.py:185-186`). Respuesta **202**
+  `done`; 409 si el par está ocupado (propaga el `DbCompareBusyError` existente,
+  `dbcompare_runs.py:38`, patrón de
+  `create_compare_run_route`, `api/db_compare.py:383`). Respuesta **202**
   `{"verification_run_id": ...}`.
 - `GET /runs/<run_id>/closure` → `get_closure_route()`. 404 si nunca se lanzó verificación para
   ese run; si el run de verificación sigue `running` ⇒ 409 `{"error": "verificacion_en_curso",
@@ -776,8 +845,9 @@ capacidad de triage, misma flag):**
   (`useCompareRun`, ya usado por `RunProgress.tsx`) → al terminar, panel con el reporte: filas
   `item_key · expectativa · estado` (`ok` verde / `violado` rojo con token `--dbc-danger`), y
   resumen `N ok · N violados · N sin expectativa`.
-- **Integración condicional con el 157:** misma regla literal que F5 — si `MigrationPanel.tsx`
-  existe, montar también ahí; si no, solo en `DbComparePage.tsx`.
+- **Integración con el 157 [FIX C1 — INCONDICIONAL]:** misma regla que F5 —
+  `MigrationPanel.tsx` existe en `main`; montar `<ClosurePanel>` también ahí (gate
+  `health.migration_panel_enabled`).
 - Lógica pura en `closureLogic.ts` (símbolos EXACTOS):
   `export function canVerify(runStatus: string, summary: {confirmado: number; excluido: number} | null): boolean`
   (true solo si `runStatus === "done"` y hay ≥1 decisión);
@@ -814,15 +884,17 @@ en definiciones de vistas, comparación de snapshots históricos y errores visib
 - `frontend/src/components/dbcompare/DbComparePage.tsx` (estado `objectTypes: string[]`; hoy
   fuerza un solo valor)
 - `frontend/src/components/dbcompare/ObjectDrilldown.tsx` (vistas: diff por líneas en lugar de los
-  dos `<pre>` de `:149-152`)
+  dos `<pre>` de `:150-151`)
 - `frontend/src/components/dbcompare/SummaryHero.tsx` (botones "CSV" y "JSON" junto a
-  "Exportar .md" de `:121`)
+  "Exportar .md" de `:121-122`)
 - `frontend/src/components/dbcompare/CompareWizard.tsx` (tercer modo "Histórico" junto a los
-  radios fresh/cached de `:138`)
+  radios fresh/cached de `:138-144`)
 - `frontend/src/components/dbcompare/DataParitySection.tsx` y
-  `frontend/src/components/dbcompare/DbComparePage.tsx` (reemplazar los `.catch(() => ...)`
-  silenciosos de `DbComparePage.tsx:50,55` y `DataParitySection.tsx:69` por estado de error +
-  banner `errorBanner` existente)
+  `frontend/src/components/dbcompare/DbComparePage.tsx` (**[FIX C8]** reemplazar los
+  `.catch(() => ...)` silenciosos REALES de hoy: `DbComparePage.tsx:53` (health), `:59`
+  (ambientes), `:64` (corridas), `:81` y `:86` (snapshots) y `DataParitySection.tsx:158`
+  (refresh de run) por estado de error + banner `errorBanner` existente; NO tocar
+  `DataParitySection.tsx:50`, que YA setea error en `main`)
 - `backend/services/dbcompare_runs.py` + `backend/api/db_compare.py` (modo snapshot histórico)
 - `frontend/src/api/endpoints.ts`
 
@@ -846,29 +918,35 @@ en definiciones de vistas, comparación de snapshots históricos y errores visib
      sobre líneas (split por `\n`, sin normalizar espacios). **Cap literal:** si
      `a.split("\n").length > 3000` o ídem `b`, devolver `null` (el caller cae al render actual de
      dos `<pre>`). Sin dependencias nuevas.
-   - En `ObjectDrilldown.tsx` (`:149-152`): si ambos lados tienen definición y `diffLines` no
+   - En `ObjectDrilldown.tsx` (`:150-151`): si ambos lados tienen definición y `diffLines` no
      devuelve null, render unificado: líneas `add` con clase `lineAdd` (token `--dbc-added`),
      `del` con `lineDel` (token `--dbc-removed`), `equal` sin clase; contenedor con
      `overflow-x: auto` en el CSS module. Si un lado falta o hay cap ⇒ render actual sin cambios.
 4. **Snapshots históricos:**
    - Backend: `create_run` (`services/dbcompare_runs.py:130`) acepta parámetros keyword-only
      ADITIVOS `source_snapshot_id: str | None = None`, `target_snapshot_id: str | None = None`.
-     Cuando AMBOS vienen: no tomar snapshots nuevos; cargar con `load_snapshot`
-     (`services/dbcompare_snapshot.py:261`); `ValueError` si alguno no existe, si su `alias` no
+     **[FIX C6]** el doc del run YA persiste las claves `source_snapshot_id` /
+     `target_snapshot_id` (se setean en `:165` y `:189`): en modo histórico se rellenan con los
+     ids RECIBIDOS (no crear claves nuevas) y el campo `mode` del run lleva el literal
+     `"snapshot"` (valor ADITIVO; los modos existentes `fresh`/`cached` no cambian). El kwarg
+     `initiated_by` existente (Plan 178) conserva su default `"operator"`.
+     Cuando AMBOS ids vienen: no tomar snapshots nuevos; cargar con `load_snapshot`
+     (`services/dbcompare_snapshot.py:330`); `ValueError` si alguno no existe, si su `alias` no
      coincide con el ambiente correspondiente, o si los engines difieren (el motor de diff ya
-     lanza `DbCompareDiffError` si difieren, `dbcompare_diff.py:284`). Si viene UNO solo ⇒
+     lanza `DbCompareDiffError` si difieren, `dbcompare_diff.py:342`). Si viene UNO solo ⇒
      `ValueError`.
-   - `create_compare_run_route` (`api/db_compare.py:185-186`): leer los 2 campos ADITIVOS del
+   - `create_compare_run_route` (`api/db_compare.py:383`): leer los 2 campos ADITIVOS del
      body y pasarlos; 400 en `ValueError` (comportamiento de error existente).
    - Frontend: en `CompareWizard.tsx`, tercer radio "Histórico"; al elegirlo, por cada ambiente un
      `<select>` de snapshots poblado con el endpoint existente
-     `GET /environments/<alias>/snapshots` (`api/db_compare.py:162-163`), mostrando
+     `GET /environments/<alias>/snapshots` (`api/db_compare.py:360`), mostrando
      `taken_at` + `content_hash` corto (8 chars). El submit envía los dos snapshot_ids.
    - Gate: el modo "Histórico" solo se muestra si `health.diff_ux_v2_enabled`.
-5. **Errores visibles:** los catch silenciosos citados pasan a setear un estado de error rendereado
-   con el patrón `errorBanner` que la página ya usa; el texto incluye la operación fallida
-   ("No se pudieron cargar los ambientes", "No se pudieron cargar las corridas", "No se pudo
-   consultar el diff de datos"). Sin dependencias de toast.
+5. **Errores visibles:** los catch silenciosos citados [FIX C8] pasan a setear un estado de error
+   rendereado con el patrón `errorBanner` que la página ya usa; el texto incluye la operación
+   fallida ("No se pudo consultar el estado del comparador", "No se pudieron cargar los
+   ambientes", "No se pudieron cargar las corridas", "No se pudieron cargar los snapshots",
+   "No se pudo actualizar la corrida"). Sin dependencias de toast.
 
 **Test PRIMERO (TDD, vitest por archivo):**
 - `frontend/src/components/dbcompare/__tests__/lineDiff.test.ts` — iguales ⇒ todo equal; una línea
@@ -896,15 +974,19 @@ tragarlo).
 
 **Objetivo (1 frase):** verificar el flujo end-to-end, dejar toda la regresión en el arnés y
 documentar el smoke manual.
-**Archivos a editar:** `backend/scripts/run_harness_tests.sh` + `.ps1` (confirmar los 10 archivos
-`test_plan176_*.py` en `HARNESS_TEST_FILES`).
+**Archivos a editar:** `backend/scripts/run_harness_tests.sh` + `.ps1` (confirmar los 12 archivos
+`test_plan176_*.py` en `HARNESS_TEST_FILES` — conteo corregido [FIX C9]: flags 1, triage 2,
+triage_bundle 1, gates 2, table_prefs 2, natural_key_datadiff 1, closure 2, snapshot_mode 1).
 **Pasos:**
-1. Backend: correr los 10 archivos de test del plan POR ARCHIVO con el venv real; pegar el output.
-2. Frontend: `npx vitest run` de los 6 archivos nuevos/extendidos POR ARCHIVO +
-   `npx tsc --noEmit`.
+1. Backend: correr los 12 archivos de test del plan POR ARCHIVO con el venv real; pegar el output.
+2. Frontend: `npx vitest run` de los 7 targets (6 archivos nuevos: triageLogic, gatesLogic,
+   tablePrefsLogic, closureLogic, lineDiff, diffExport + `filterLogic` extendido) POR ARCHIVO +
+   `npx tsc --noEmit` [FIX C9].
 3. `test_harness_ratchet_meta.py` verde.
-4. Smoke manual (checklist para el operador, HITL, no bloquea merge): con las 4 flags ON, sobre
-   ambientes `test-` sqlite: (i) correr un compare, excluir 1 ítem con nota, regenerar scripts y
+4. Smoke manual (checklist para el operador, HITL, no bloquea merge) — **[ADICIÓN ARQUITECTO
+   A2]: usar el sandbox demo del Plan 183 (ya en `main`): un click en el panel de demo siembra el
+   par sqlite `test-*` con drift RS-like, cero setup manual.** Con las 4 flags ON, sobre ese
+   par sembrado: (i) correr un compare, excluir 1 ítem con nota, regenerar scripts y
    verificar que el bundle no lo contiene y que `TRIAGE_EXCLUSIONS.md` sí; (ii) "Verificar
    precondiciones" sobre un diff con NOT NULL pinta fail con NULLs sembrados; (iii) marcar una
    tabla de parámetro, recargar candidatas y verla preseleccionada; definir clave natural en una
@@ -922,13 +1004,14 @@ resultado.
 |---|--------|------------|
 | 1 | Ejecutar SQL contra la BD del operador (gates) | Solo SELECT; guard `validate_select_only` OBLIGATORIO por gate (test bloqueante); solo por click explícito; cap `_MAX_GATES_PER_EVAL=50`; timeout existente; engine read-only pool 1. |
 | 2 | Drift de nombres de kind entre `_GATE_RULES` y la tabla congelada del 123 | Test anti-drift bloqueante `test_gate_kinds_existen_en_kind_severity` (compara contra el `_KIND_SEVERITY` real importado). |
-| 3 | Romper Manifest v1 / REGLA DE ORO al filtrar por triage | El filtrado ocurre ANTES de emitir; el assert del invariante (`dbcompare_scripts.py:896`) corre sobre piezas filtradas; `TRIAGE_EXCLUSIONS.md` va fuera de `entries`; test `test_regla_de_oro_se_mantiene_con_exclusiones`. |
+| 3 | Romper Manifest v1 / REGLA DE ORO al filtrar por triage | El filtrado ocurre ANTES de emitir (en ambos modos, v1 y `data_merge_mode` del 182); `_assert_pairing_invariant` (`dbcompare_scripts.py:878-889`) corre sobre piezas filtradas; `TRIAGE_EXCLUSIONS.md` va fuera de `entries`; tests `test_regla_de_oro_se_mantiene_con_exclusiones` + `test_fila_excluida_no_emite_merge`. |
 | 4 | Triage aplicado "en silencio" sorprende al operador | Respuesta de generación con `triage_applied.excluded_count`; `TRIAGE_EXCLUSIONS.md` dentro del bundle y servible por el visor; sin decisiones ⇒ bundle idéntico (test bloqueante). |
 | 5 | `item_key` inestable entre corridas rompería el cierre | La key NO incluye run_id/timestamps (solo object_type/schema/name); test de estabilidad + determinismo en F1/F7. |
 | 6 | Clave natural mal definida produce diff de datos engañoso | Validación de existencia de columnas en AMBOS snapshots (`natural_key_invalid`); el operador la define explícitamente (HITL); mismo cap de filas existente. |
 | 7 | Re-compare de cierre choca con corrida activa del par | Reusa el lock por par y el 409 `DbCompareBusyError` existentes (`dbcompare_runs.py:147`). |
 | 8 | Campos aditivos rompen los tipos TS espejo | Los tipos espejo de 124 se extienden con campos OPCIONALES (`key_source?`, `param_table?`, `reason?`); `tsc --noEmit` en cada fase frontend. |
-| 9 | PII en datos mostrados/exportados (diff de datos) | Preexistente de la serie (126) y ya anotado como riesgo #7 del Plan 157; este plan no agrega superficies nuevas de datos (el export CSV/JSON de F8 exporta el diff de ESQUEMA, no filas de datos). Sigue anotado para un plan futuro de masking. |
+| 9 | PII en datos mostrados/exportados (diff de datos) | **[FIX C7 — SALDADO por el Plan 181, ya en `main`]:** el masking determinista de presentación existe (`services/dbcompare_masking.py`, aplicado en `get_run_route`, `api/db_compare.py:427-428`, flag `STACKY_DB_COMPARE_MASKING_ENABLED` ON). Este plan no agrega superficies nuevas de datos (el export CSV/JSON de F8 exporta el diff de ESQUEMA). Riesgo derivado NUEVO: keys de triage vs valores enmascarados — mitigado por A1 (`item_key` emitido por backend PRE-masking; el masking nunca toca `item_key`; test bloqueante en F1). |
+| 11 | El radar del 178 (vigía automático) o el modo demo del 183 conviven con los runs de cierre | `start_closure` pasa `initiated_by="closure"` (kwarg del 178) ⇒ los runs quedan distinguibles en la timeline y el linkage de cierre apunta a un `verification_run_id` exacto, nunca "al último run del par". |
 | 10 | Colisión con planes 172-175 (teclado/presets/virtualización/peek, sesión paralela) | Sin solapamiento de archivos objetivo: este plan no toca registro de atajos ni presets globales ni virtualización (declarada fuera de scope acá justamente porque el 174 la cubre a nivel app). |
 
 ## 6. Fuera de scope
@@ -942,10 +1025,11 @@ resultado.
 - **Scheduling / diffs programados / notificaciones** — siguen diferidos (123 §6, 124 §6).
 - **Comparar 3+ ambientes a la vez** — sigue diferido (124 §6).
 - **MERGE statements** en scripts de datos — sigue diferido (126 §6).
-- **Snapshot v2 con precision/scale/max_length como subcampos** (prior art #6) — requiere versionar
-  el contrato congelado Snapshot v1; se anota para una eventual serie v2 del comparador.
-- **Masking de PII** en grids/exports de datos — se mantiene anotado (riesgo #9), igual que en el
-  157.
+- ~~Snapshot v2 con precision/scale/max_length~~ — **[FIX C7] ENTREGADO por el Plan 179**
+  (`SNAPSHOT_VERSION_V2` + `type_detail`, `dbcompare_snapshot.py:30,86,137`); F4 lo APROVECHA
+  (A3) pero no lo modifica.
+- ~~Masking de PII en grids/exports de datos~~ — **[FIX C7] ENTREGADO por el Plan 181**
+  (`dbcompare_masking.py`); este plan solo debe respetarlo (A1).
 
 ## 7. Glosario + Orden de implementación + DoD
 
@@ -1002,7 +1086,10 @@ resultado.
 - UX v2: multi-filtro de tipos, export CSV/JSON del diff filtrado, diff por líneas en vistas (cap
   3000), modo Histórico de snapshots, errores de fetch visibles.
 - Con las 4 flags OFF: API y UI idénticas a `main` (tests por fase verdes).
-- Los 10 `test_plan176_*.py` en `HARNESS_TEST_FILES`; `test_harness_ratchet_meta.py` verde;
-  `tsc --noEmit` 0; vitest de los 6 archivos frontend verde POR ARCHIVO.
+- Los 12 `test_plan176_*.py` en `HARNESS_TEST_FILES` [FIX C9]; `test_harness_ratchet_meta.py`
+  verde; `tsc --noEmit` 0; vitest de los 7 targets frontend verde POR ARCHIVO.
+- `item_key` emitido por el backend (pre-masking) en la respuesta del run para ítems de esquema y
+  filas de datos; la UI no deriva ninguna key [A1]; `GatesPanel`/`ClosurePanel` montados también
+  en `MigrationPanel.tsx` [C1].
 - Ningún contrato congelado (Snapshot v1, SchemaDiff v1, Manifest v1, DataDiff v1) modificado;
   solo contratos nuevos versionados y campos aditivos opcionales.

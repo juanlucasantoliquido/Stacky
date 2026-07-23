@@ -1,8 +1,24 @@
 # Plan 216 — Centralización de la configuración de estados en el Perfil del Cliente, dropdowns de estados reales y sección "Estados" independiente
 
-**Estado:** PROPUESTO v1 (2026-07-23)
+**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-23)
 **Autor:** StackyArchitectaUltraEficientCode
 **Depende de:** ninguno para implementarse. **Coordina con:** Plan 208 (matriz `by_work_item_type`) — ver §3.1 "Contrato de coherencia con 208".
+
+---
+
+## 0. Historial de versiones — v1 -> v2 (2026-07-23)
+
+Revisión adversarial (juez + arquitecto). Veredicto: **APROBADO-CON-CAMBIOS** (sin bloqueantes; IMPORTANTES corregidos). Anclas re-verificadas contra código real: `flow_config_store.py` (símbolos y líneas OK), `client_profile.py` service (`save_client_profile:315` valida TODO el perfil y lanza; `validate_client_profile:185` preserva keys desconocidas vía deepcopy) y api (`put_client_profile:148`), `SettingsPage.tsx:150,190-193,246`, `ClientProfileEditor.tsx:404,461,992-993`, `FlowConfigPage.tsx:344-347,357`, `harness_flags.py:70,238`, `config_transfer.py:296`. Cambios aplicados:
+
+- **C1 (IMPORTANTE):** la migración lazy corre DENTRO de un path de LECTURA (`_read_raw`) y escribe vía `save_client_profile`, que valida el perfil COMPLETO (`client_profile.py:315-331`) y lanza `ClientProfileError`. Un perfil con errores bloqueantes preexistentes en OTRA sección, o un `flow_config.json` editado a mano con `agent_type` inválido / `ado_state` duplicado, rompía `GET /api/flow-config` con 500 — el legacy jamás falla en lectura. Fix: la migración SANEA las reglas legacy (`_sanitize_rules`: descarta inválidas con warning, conserva válidas) y ante CUALQUIER excepción al escribir cae al dict legacy SIN migrar (la lectura nunca rompe; se reintenta en el próximo acceso). Tests nuevos en F1.
+- **C2 (IMPORTANTE):** la mitigación v1 de R3 (invalidar `["client-profile", projectName]`) NO cerraba la ventana real de pisado: el editor de perfil guarda su draft en `useState` LOCAL (`baseProfile`, `ClientProfileEditor.tsx:461`) y una invalidación de cache no refresca ese draft. Secuencia rota: abrir editor (GET t0) → editar reglas en Estados (t1) → Guardar perfil → PUT full-object con `state_flow` de t0 → reglas revertidas en silencio. Fix determinista de DOS lados: backend merge-preserve en `put_client_profile` (payload sin la key ⇒ se preserva la almacenada, F1) + las UIs NUNCA envían `state_flow` en sus PUT (F2 editor la elimina al ingerir el GET; F3 la quita antes del PUT). Test `test_put_perfil_sin_state_flow_preserva_reglas`.
+- **C3 (IMPORTANTE):** el criterio de aceptación de F2 ("0 hits en copys de usuario; comentarios de código pueden quedar") no era binario — exigía juicio humano, y el `<h2>` de `FlowConfigPage.tsx:357` más el comentario de `PipelineStatus.tsx:72` seguían matcheando el grep. Fix: se renombra también el `<h2>` legacy y el comentario; el criterio pasa a grep = **0 hits totales** en `frontend/src` (binario puro, sin excepciones interpretables).
+- **C4 (IMPORTANTE):** F0 tenía una instrucción condicional ("si la categoría aún no existe… usar la primera que aplique") — un "según corresponda" encubierto que hacía inferir a un modelo menor. VERIFICADO: la categoría `flujo_funcional` YA existe hoy (`harness_flags.py:70` `CategorySpec("flujo_funcional", ...)`; `:238` su tupla en `_CATEGORY_KEYS`), independiente de que 208 no esté implementado. Instrucción ahora categórica.
+- **C5 (MENOR):** `TicketBoard.tsx` está siendo modificado por una sesión paralela (colisión conocida de los planes 212/213): los copys a corregir en F2 se localizan por GREP DEL LITERAL, nunca por número de línea.
+- **C6 (MENOR):** `statesConfigModel.ts` usaba los tipos `CoherenceIssue` y `Machine` sin definirlos. Ahora se declaran exportados, literales, en el propio archivo.
+- **C7 (MENOR):** el plan mata la clase de error "estado tipeado inexistente" (`state_not_in_tracker`) pero no registraba su huella. F4 agrega la entrada en `docs/sistema/error_fingerprints.json` (convención de huellas de regresión).
+- **C8 (MENOR):** la semántica de retorno de `seed_defaults_if_empty` cuando la migración cae al fallback legacy (C1) quedaba indefinida. Fijada: devuelve lo que devuelva el cuerpo legacy actual.
+- **[ADICIÓN ARQUITECTO] Espejo legacy para rollback SIN pérdida:** v1 tenía un agujero de rollback real: editar reglas con flag ON y luego apagar la flag volvía al `flow_config.json` VIEJO (stale) — el operador perdía sus ediciones. Ahora, con flag ON, cada ESCRITURA de reglas (acto explícito del operador) también actualiza `flow_config.json` como espejo best-effort (try/except, nunca rompe el guardado). Apagar la flag ⇒ estado idéntico al último guardado. La MIGRACIÓN en sí sigue sin tocar el archivo (la propiedad "legacy intacto" se preserva donde importa: ningún acto automático pisa una config buena).
 
 ---
 
@@ -11,7 +27,7 @@
 **Objetivo (1 párrafo):** hoy la configuración de estados del tracker vive DUPLICADA en dos ubicaciones con dos storages y dos UX distintas: (a) la pestaña **Configuración → Flujo** (`FlowConfigPage.tsx`, reglas `ado_state → agent_type` persistidas en `projects/<NAME>/flow_config.json` vía `services/flow_config_store.py`) y (b) la sección **"Máquina de estados del tracker"** enterrada dentro del editor de Perfil del Cliente (`ClientProfileEditor.tsx:992-1004`, key `tracker_state_machine` dentro de `client_profile` en `projects/<NAME>/config.json`), donde además los estados se tipean como **texto libre** (`TrackerRoleField`, `ClientProfileEditor.tsx:416-436`) con riesgo de typo/alucinación. Este plan centraliza TODO el mapeo de estados en el **perfil del cliente** (única fuente de verdad, con migración automática e idempotente del JSON legacy), convierte todos los campos de estado en **dropdowns poblados con los estados reales del proyecto** (reusando `GET /api/projects/<name>/tracker-states`, exactamente como ya lo hace la ventana de Flujo en `FlowConfigPage.tsx:102-116`), elimina la configuración de estados de la pestaña "Flujo" y la reagrupa junto con la "Máquina de estados" en una **sección independiente "Estados"** dentro del módulo Configuración, con una pasada de UX (copys, validación visible, coherencia entre reglas y máquina).
 
 **KPI / impacto esperado:**
-- Fuentes de verdad del mapeo de estados: **2 → 1** (todo en `client_profile`; `flow_config.json` queda inerte tras migración automática).
+- Fuentes de verdad del mapeo de estados: **2 → 1** (todo en `client_profile`; con flag ON `flow_config.json` ya no se LEE — queda como espejo de rollback que solo se escribe junto al perfil, [ADICIÓN ARQUITECTO]).
 - Campos de estado de texto libre en el perfil: **5 por rol → 0** (todos dropdowns con estados reales del tracker).
 - Warnings `state_not_in_tracker` por typo del operador (`task_states.py:171`): tienden a **0** (imposible tipear un estado inexistente desde la UI).
 - Pantallas que el operador debe visitar para configurar estados: **2 → 1**.
@@ -36,7 +52,7 @@
 ## 3. Principios y guardarraíles (no negociables)
 
 - **P1 — Contratos intactos:** la API pública de `flow_config_store.py` (`list_rules`, `create_rule`, `update_rule`, `delete_rule`, `resolve`, `seed_defaults_if_empty`) y el blueprint `/api/flow-config` (`backend/api/flow_config.py:50,61,122,185,206`) NO cambian de firma ni de shape de respuesta. Consumidores que no se tocan: `TicketBoard.tsx:936` (Run Sugerido), `PipelineStatus.tsx`, `backend/api/tickets.py`, `TopBar.tsx:132` (invalidación de cache).
-- **P2 — Migración automática, idempotente y NO destructiva:** el JSON legacy se copia al perfil en el primer acceso; el archivo viejo NO se borra ni se renombra (rollback = flag OFF). Cero pasos manuales del operador.
+- **P2 — Migración automática, idempotente y NO destructiva:** el JSON legacy se copia al perfil en el primer acceso; la MIGRACIÓN no borra, renombra ni pisa el archivo viejo, y si no puede escribir el perfil cae al legacy sin romper la lectura (C1). Las ESCRITURAS explícitas del operador con flag ON sí actualizan el archivo como espejo best-effort ([ADICIÓN ARQUITECTO]) para que el rollback (flag OFF) no pierda ediciones. Cero pasos manuales del operador.
 - **P3 — Flag default ON por UI:** `STACKY_STATE_CONFIG_CENTRALIZED_ENABLED` (bool, default **ON**) registrada en el arnés y editable desde Configuración → Arnés. No aplica ninguna de las 4 excepciones duras (no bypassa revisión humana, no es destructiva —el legacy queda intacto—, no tiene prerequisito no garantizado, no reduce seguridad).
 - **P4 — Human-in-the-loop:** nada se guarda sin que el operador apriete Guardar/Agregar; los borrados usan el undo con gracia existente (`scheduleUndoable`, patrón de `FlowConfigPage.tsx:297-319`). Las acciones de coherencia (F3) son sugerencias con botón, jamás automáticas.
 - **P5 — Estados reales, nunca texto libre:** todos los dropdowns se pueblan de `GET /api/projects/<name>/tracker-states` (mismo mecanismo que la ventana de Flujo). Valores preexistentes que no estén en el tracker se conservan como opción marcada "(no existe en el tracker)" — patrón ya implementado en `FlowConfigPage.tsx:211-215`.
@@ -83,7 +99,7 @@
        description="Las reglas estado→agente (Flujo) se leen y escriben en client_profile.state_flow con migración automática desde flow_config.json. OFF: comportamiento legacy byte-idéntico (archivo flow_config.json). Default ON.",
        default=True),
    ```
-   y agregar la key a `_CATEGORY_KEYS` bajo la categoría `flujo_funcional` (buscar `flujo_funcional` en el mismo archivo; si la categoría aún no existe porque 208 no se implementó, usar la categoría existente donde viven las flags de flujo — verificar con `grep -n "flujo" backend/services/harness_flags.py` y usar la primera que aplique; NUNCA dejar la key sin categorizar: `test_every_registry_flag_is_categorized` queda rojo).
+   y agregar la key a `_CATEGORY_KEYS` bajo la categoría `flujo_funcional` — **VERIFICADO (C4): la categoría YA existe hoy**: `harness_flags.py:70` (`CategorySpec("flujo_funcional", "Flujo funcional (Tasks)", ...)`) y `:238` (su tupla dentro de `_CATEGORY_KEYS`). Agregar la key a ESA tupla existente. NUNCA dejar la key sin categorizar: `test_every_registry_flag_is_categorized` queda rojo.
 2. `backend/config.py` — dentro de `class Config`, junto al bloque del Plan 79 (`config.py:1186-1194`):
    ```python
    # Plan 216 — fuente única de la config de estados en client_profile.state_flow.
@@ -127,7 +143,7 @@
 
 **Valor:** una sola fuente de verdad; las reglas de flujo pasan a viajar en backups/transfers del proyecto; rollback trivial (flag OFF ⇒ legacy byte-idéntico, el archivo nunca se tocó).
 
-**Archivos a editar:** `backend/services/flow_config_store.py` (único). NO tocar `backend/api/flow_config.py` (el contrato HTTP no cambia).
+**Archivos a editar:** `backend/services/flow_config_store.py` y `backend/api/client_profile.py` (merge-preserve, C2). NO tocar `backend/api/flow_config.py` (el contrato HTTP no cambia).
 
 **Cambios exactos (pseudocódigo):**
 ```python
@@ -157,30 +173,57 @@ def _write_state_flow_to_profile(project_name, data) -> None:
     data["updated_at"] = _now_iso()
     set_client_profile_state_flow(project_name, data)
 
+def _sanitize_rules(data: dict) -> dict:
+    """C1. Devuelve un dict {"version","rules"} SOLO con reglas válidas del legacy:
+    descarta (con _log.warning por cada una) las que tengan agent_type fuera de
+    VALID_AGENT_TYPES, ado_state vacío/no-string, o ado_state duplicado (gana la
+    primera aparición). Nunca lanza. Un legacy editado a mano no puede romper la
+    migración ni la validación del perfil."""
+
 def migrate_legacy_flow_config(project_name) -> dict:
     """Idempotente. Si el perfil YA tiene state_flow => lo devuelve sin tocar nada.
-    Si no: lee el legacy con la lógica EXISTENTE _read_raw (que ya resuelve
-    projects/<NAME>/flow_config.json con fallback a data/flow_config.json,
-    flow_config_store.py:132-161); si tampoco hay legacy => siembra
-    _DEFAULT_RULES_SEED (mismas 4 reglas de :57-62). Escribe el resultado en el
-    perfil, loguea "flow_config migrado a client_profile.state_flow (N reglas)"
-    con _log.info y devuelve el dict. El archivo legacy NO se borra ni renombra."""
+    Si no: lee el legacy con la lógica EXISTENTE del cuerpo actual de _read_raw
+    (que ya resuelve projects/<NAME>/flow_config.json con fallback a
+    data/flow_config.json, flow_config_store.py:132-161); si tampoco hay legacy =>
+    siembra _DEFAULT_RULES_SEED (mismas 4 reglas de :57-62). SANEA con
+    _sanitize_rules (C1), escribe el resultado en el perfil, loguea
+    "flow_config migrado a client_profile.state_flow (N reglas)" con _log.info
+    y devuelve el dict.
+    C1 — LA LECTURA NUNCA ROMPE: si set_client_profile_state_flow lanza
+    (ClientProfileError por errores preexistentes en OTRA sección del perfil, o
+    cualquier otra excepción), _log.warning y DEVOLVER el dict legacy saneado
+    SIN migrar (se reintenta en el próximo acceso).
+    El archivo legacy NO se borra ni renombra."""
 ```
 - En `_read_raw(project_name)` (`:132`): PRIMERA línea nueva — `project = _resolve_project(project_name)`; si `state_flow_centralized_enabled()` y `project` no es None ⇒ `return migrate_legacy_flow_config(project)`. Caso contrario ⇒ cuerpo actual sin cambios.
-- En `_write(data, project_name)` (`:164`): mismo guard; con flag ON y proyecto resuelto ⇒ `_write_state_flow_to_profile(project, data)` y `return`; caso contrario ⇒ cuerpo actual.
-- En `seed_defaults_if_empty` (`:311`): con flag ON y proyecto resuelto ⇒ `migrate_legacy_flow_config(project)` cubre el seed; devolver la cantidad de reglas escritas si el perfil no tenía `state_flow`, 0 si ya tenía.
+- En `_write(data, project_name)` (`:164`): mismo guard; con flag ON y proyecto resuelto ⇒ `_write_state_flow_to_profile(project, data)` **y además espejo legacy best-effort ([ADICIÓN ARQUITECTO]):** ejecutar el cuerpo legacy actual de `_write` dentro de `try/except Exception: _log.debug("mirror legacy falló (best-effort)", exc_info=True)` para que `flow_config.json` quede sincronizado con lo último guardado (rollback flag OFF sin pérdida de ediciones); luego `return`. Caso contrario ⇒ cuerpo actual sin cambios. El espejo NUNCA puede hacer fallar el guardado del perfil.
+- En `seed_defaults_if_empty` (`:311`): con flag ON y proyecto resuelto ⇒ `migrate_legacy_flow_config(project)` cubre el seed; devolver la cantidad de reglas escritas si el perfil no tenía `state_flow`, 0 si ya tenía; si la migración cayó al fallback legacy (C1), devolver lo que devuelva el cuerpo legacy actual (C8).
 - El override de tests `_CONFIG_FILE != _DEFAULT_CONFIG_FILE` (`:97-98`) conserva prioridad ABSOLUTA (si un test seteó `_CONFIG_FILE`, se usa el archivo aunque la flag esté ON) — así los tests legacy (`test_flow_config.py`, `test_b2_transition_from_config.py`) siguen verdes sin tocar.
+
+**Merge-preserve del PUT del perfil (C2, backend — `backend/api/client_profile.py`):** en `put_client_profile` (`api/client_profile.py:148`), inmediatamente ANTES de la llamada que persiste (la que termina en `save_client_profile`): 
+```python
+# Plan 216 C2 — un PUT full-object que NO trae state_flow jamás borra las reglas
+# (el editor de perfil trabaja sobre un snapshot local stale; ver ClientProfileEditor.tsx:461).
+from services.flow_config_store import state_flow_centralized_enabled
+from services.client_profile import load_client_profile
+if state_flow_centralized_enabled() and "state_flow" not in profile:
+    stored = load_client_profile(project_name) or {}
+    if "state_flow" in stored:
+        profile["state_flow"] = stored["state_flow"]
+```
+Consecuencia deliberada: borrar reglas se hace SOLO desde la pestaña Estados (vía `/api/flow-config`), nunca omitiendo la key en un PUT del perfil — eso es lo que cierra la ventana de pisado.
 
 **Casos borde (cubrir en tests):**
 - Sin proyecto activo ni parámetro (`_resolve_project` → None) ⇒ path legacy global aunque la flag esté ON.
 - Perfil inexistente (`load_client_profile` → None) ⇒ la migración crea el perfil mínimo `{"state_flow": ...}` vía `set_client_profile_state_flow` (F0 lo permite: perfil parcial es válido).
 - `state_flow` presente pero corrupto (rules no-list) ⇒ tratar como ausente ⇒ re-migrar desde legacy (defensivo, sin lanzar).
+- Legacy con reglas inválidas o perfil con errores en otra sección ⇒ sanear / caer al legacy sin lanzar (C1, ver docstrings).
 - Doble llamada a `migrate_legacy_flow_config` ⇒ segunda es no-op (idempotencia).
 - Flag OFF ⇒ ningún acceso a `client_profile` (assert con monkeypatch espía).
 
 **Tests PRIMERO:**
-- `backend/tests/test_plan216_state_flow_store.py`: `test_flag_on_crud_lee_y_escribe_perfil` (create/list/update/delete/resolve contra perfil en `tmp_path`), `test_flag_off_byte_identico_legacy` (mismos asserts que hoy sobre el archivo), `test_duplicate_state_sigue_409` (DuplicateStateError con storage perfil), `test_override_config_file_gana_a_flag` (prioridad del override de tests), `test_sin_proyecto_usa_legacy_global`.
-- `backend/tests/test_plan216_migration.py`: `test_migra_archivo_proyecto_a_perfil`, `test_migra_fallback_legacy_global`, `test_sin_legacy_siembra_defaults` (4 reglas seed), `test_idempotente_segunda_llamada_noop`, `test_archivo_legacy_queda_intacto` (bytes idénticos post-migración), `test_state_flow_corrupto_se_remigra`.
+- `backend/tests/test_plan216_state_flow_store.py`: `test_flag_on_crud_lee_y_escribe_perfil` (create/list/update/delete/resolve contra perfil en `tmp_path`), `test_flag_off_byte_identico_legacy` (mismos asserts que hoy sobre el archivo), `test_duplicate_state_sigue_409` (DuplicateStateError con storage perfil), `test_override_config_file_gana_a_flag` (prioridad del override de tests), `test_sin_proyecto_usa_legacy_global`, `test_write_flag_on_espeja_legacy` ([ADICIÓN ARQUITECTO]: tras `create_rule` con flag ON, `flow_config.json` del proyecto contiene la misma regla), `test_put_perfil_sin_state_flow_preserva_reglas` (C2: PUT del perfil SIN la key ⇒ `state_flow` almacenada sobrevive; usar el test client Flask contra `put_client_profile` con `PROJECTS_DIR` monkeypatcheado).
+- `backend/tests/test_plan216_migration.py`: `test_migra_archivo_proyecto_a_perfil`, `test_migra_fallback_legacy_global`, `test_sin_legacy_siembra_defaults` (4 reglas seed), `test_idempotente_segunda_llamada_noop`, `test_archivo_legacy_queda_intacto` (bytes idénticos post-migración — la migración sola NO escribe el espejo; solo las escrituras del operador lo hacen), `test_state_flow_corrupto_se_remigra`, `test_legacy_con_regla_invalida_se_sanea` (C1: legacy con `agent_type` inválido + `ado_state` duplicado ⇒ migra solo las válidas, sin lanzar), `test_perfil_invalido_no_rompe_lectura_cae_legacy` (C1: perfil con error bloqueante en otra sección ⇒ `list_rules` devuelve las reglas legacy sin 500 y el perfil queda sin tocar).
 - Regresión obligatoria por archivo: `tests/test_flow_config.py` y `tests/test_b2_transition_from_config.py` sin modificar.
 
 **Comando exacto:** `cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_plan216_state_flow_store.py -q && .venv/Scripts/python.exe -m pytest tests/test_plan216_migration.py -q && .venv/Scripts/python.exe -m pytest tests/test_flow_config.py -q && .venv/Scripts/python.exe -m pytest tests/test_b2_transition_from_config.py -q`
@@ -207,7 +250,7 @@ def migrate_legacy_flow_config(project_name) -> dict:
    - `:2` → `import StatesConfigPage from "./StatesConfigPage";` (reemplaza el import de `FlowConfigPage`).
    - `:193` → label del botón: `Flujo` → `Estados`. El **id interno del sub-tab sigue siendo `"flow"`** (NO renombrarlo: es el default sin segmento de URL, `SettingsPage.tsx:150,181`, contrato de deep-links del plan 165; renombrarlo rompería `/settings`).
    - `:246` → `{sub === "flow" && <StatesConfigPage />}`.
-2. `frontend/src/pages/FlowConfigPage.tsx`: exportar el contenido como card embebible — cambio mínimo: agregar prop opcional `embedded?: boolean` que (a) oculta el `<h2>` propio ("Config de Flujo") cuando `embedded`, y (b) nada más. `StatesConfigPage` lo renderiza con `embedded` bajo un heading propio "¿Qué agente toma cada estado?". (Alternativa PROHIBIDA: copiar/pegar el componente — duplicaría lógica.)
+2. `frontend/src/pages/FlowConfigPage.tsx`: exportar el contenido como card embebible — cambio mínimo: agregar prop opcional `embedded?: boolean` que (a) oculta el `<h2>` propio cuando `embedded`, (b) nada más de lógica; y (c) **cambiar el literal del `<h2>`** (`FlowConfigPage.tsx:357`) de `Config de Flujo` a `Reglas de flujo` (C3: el literal viejo desaparece del código y el criterio grep queda binario). `StatesConfigPage` lo renderiza con `embedded` bajo un heading propio "¿Qué agente toma cada estado?". (Alternativa PROHIBIDA: copiar/pegar el componente — duplicaría lógica.)
 3. `frontend/src/components/ClientProfileEditor.tsx:992-1004`: reemplazar la `<Section title="Máquina de estados del tracker" required>` por una nota compacta (sin editor):
    ```tsx
    <Section title="Máquina de estados del tracker">
@@ -217,8 +260,9 @@ def migrate_legacy_flow_config(project_name) -> dict:
    </Section>
    ```
    El JSON avanzado (`advancedJson`) sigue permitiendo editar `tracker_state_machine` a mano — no tocar.
+   **Además (C2):** en el punto donde el GET puebla el estado local (`setBaseProfile`, buscar sus call-sites alrededor de `ClientProfileEditor.tsx:461`), ELIMINAR la key `state_flow` del objeto antes de setearla (`const { state_flow: _sf, ...rest } = fetched;` o `delete copy.state_flow;`). El editor de perfil (formulario Y vista JSON avanzada) NUNCA muestra ni re-manda `state_flow`; el backend la preserva cuando el payload no la trae (F1 merge-preserve). Editar/borrar reglas se hace SOLO en la pestaña Estados.
 4. `frontend/src/pages/__tests__/SettingsPage.harness.test.tsx:75-76,118-119`: actualizar el mock (`vi.mock("../StatesConfigPage", ...)`) y el click al botón `"Estados"`.
-5. Copys que apuntan a la pestaña vieja: `frontend/src/pages/TicketBoard.tsx:545` ("Configurá el flujo en la pestaña Config de Flujo" → "…en Configuración → Estados") y `frontend/src/components/EmployeeEditDrawer.tsx:191` (misma corrección de texto).
+5. Copys/comentarios que apuntan a la pestaña vieja — **localizar por GREP DEL LITERAL, nunca por número de línea (C5: `TicketBoard.tsx` lo está tocando una sesión paralela, planes 212/213):** correr `grep -rn "Config de Flujo" "Stacky Agents/frontend/src"` y corregir TODAS las ocurrencias. Hoy son 4: `TicketBoard.tsx` (copy `…Configurá el flujo en la pestaña Config de Flujo.` → `…Configurá el flujo en Configuración → Estados.`), `EmployeeEditDrawer.tsx` (`Usado por "Config de Flujo" para resolver…` → `Usado por Configuración → Estados para resolver…`), `PipelineStatus.tsx` (comentario → `…en la pestaña Estados (StatesConfig).`) y el `<h2>` de `FlowConfigPage.tsx` (punto 2c). Si el grep encuentra ocurrencias nuevas, corregirlas con el mismo criterio.
 
 **Casos borde:** sin proyecto activo ⇒ ambos cards muestran el empty-state existente (`FlowConfigPage.tsx:364-368` ya lo hace; `TrackerRoleStateCard` replica el mismo mensaje); deep-link `/settings` sigue abriendo esta pestaña (id `"flow"` intacto).
 
@@ -226,7 +270,7 @@ def migrate_legacy_flow_config(project_name) -> dict:
 
 **Comandos exactos:** `cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/SettingsPage.harness.test.tsx` y `cd "Stacky Agents/frontend" && npx tsc --noEmit`.
 
-**Criterio de aceptación (binario):** ambos comandos verdes; `grep -rn "Config de Flujo" "Stacky Agents/frontend/src" --include=*.tsx` devuelve 0 hits en copys de usuario (comentarios de código pueden quedar); `grep -n "Máquina de estados" "Stacky Agents/frontend/src/components/ClientProfileEditor.tsx"` sigue devolviendo la Section-nota (no se pierde el ancla visual).
+**Criterio de aceptación (binario):** ambos comandos verdes; `grep -rn "Config de Flujo" "Stacky Agents/frontend/src"` devuelve **0 hits totales** (C3 — sin excepciones interpretables); `grep -n "Máquina de estados" "Stacky Agents/frontend/src/components/ClientProfileEditor.tsx"` sigue devolviendo la Section-nota (no se pierde el ancla visual); `grep -c "state_flow" "Stacky Agents/frontend/src/components/ClientProfileEditor.tsx"` ≥1 (el strip de C2 está presente).
 
 **Flag:** sin gate de UI (reorganización pura; el storage ya está gateado por F1). **Impacto por runtime:** N/A (UI). **Trabajo del operador:** ninguno — encuentra lo mismo, mejor agrupado.
 
@@ -246,11 +290,25 @@ def migrate_legacy_flow_config(project_name) -> dict:
 - Por cada rol (`functional`, `technical`, `developer` — el mismo array literal de `ClientProfileEditor.tsx:995`):
   - `input_states` (array): chips de los estados actuales + un `StateSelect` "Añadir estado…" que solo ofrece estados del tracker aún no elegidos para ese rol; cada chip tiene botón "×". Chip cuyo valor no existe en el tracker ⇒ clase CSS `warn` + title "(no existe en el tracker)". El ORDEN del array se preserva (los prompts usan `input_states[0]`, `TechnicalAnalyst.v2.agent.md:190` — NO ordenar alfabéticamente).
   - `in_progress`, `blocked_state`, `next_state_ok` (strings): `StateSelect` single con primera opción `"(sin configurar)"` (value `""` ⇒ se persiste string vacío, igual que hoy: `resolve_task_state_plan` ya trata `"" → None`, `task_states.py:67-68`). Si el valor guardado no está en el tracker, se agrega como opción extra marcada — patrón `FlowConfigPage.tsx:211-215`.
-- Botón "Guardar máquina de estados" por card global (no por rol): construye `{...profile, tracker_state_machine: draft}` y hace `ClientProfileApi.put` (riel PUT existente, `api/client_profile.py:147`); muestra `state_warnings` de la respuesta (`api/client_profile.py:239-244`) en el banner de la card. HITL: nada se persiste hasta el click.
+- Botón "Guardar máquina de estados" por card global (no por rol): construye `{...profile, tracker_state_machine: draft}`, **quita `state_flow` antes del PUT (C2: `const { state_flow: _sf, ...payload } = merged;` — las reglas viajan por `/api/flow-config`, nunca por este PUT; el backend preserva la almacenada)** y hace `ClientProfileApi.put` (riel PUT existente, `api/client_profile.py:147`); muestra `state_warnings` de la respuesta (`api/client_profile.py:239-244`) en el banner de la card. HITL: nada se persiste hasta el click.
 - Preserva las keys que este editor no muestra (p. ej. `by_work_item_type` del 208, roles extra como `business`/`qa` si existieran en el JSON): el draft se construye con spread del objeto original por rol, nunca desde cero. Comentario ancla `{/* PLAN-208: matriz by_work_item_type va aquí */}`.
 
-**`statesConfigModel.ts` (puro, sin React) — funciones exactas:**
+**`statesConfigModel.ts` (puro, sin React) — tipos y funciones exactas (C6: los tipos se definen y exportan ACÁ, literales):**
 ```ts
+export type CoherenceIssue = {
+  ado_state: string;
+  agent_type: string;
+  suggestion: "add_input_state";
+};
+export type RoleMachine = {
+  input_states?: string[];
+  in_progress?: string;
+  blocked_state?: string;
+  next_state_ok?: string;
+  [k: string]: unknown; // preserva keys ajenas (p. ej. by_work_item_type del 208)
+};
+export type Machine = Record<string, RoleMachine>;
+
 export function addableStates(trackerStates: string[], chosen: string[]): string[]
 // trackerStates - chosen, preservando el orden de trackerStates.
 export function staleValues(trackerStates: string[], values: string[]): string[]
@@ -289,6 +347,7 @@ export function applyAddInputState(machine, agentType, adoState): Machine
 3. `backend/scripts/run_harness_tests.sh` — confirmar los 3 `test_plan216_*.py` registrados (gotcha: test nuevo sin registrar ⇒ meta-test rojo).
 4. Actualizar este doc a estado IMPLEMENTADO al cierre (feedback recurrente del operador: sincronizar el encabezado del plan).
 5. Si `docs/sistema/` referencia la pestaña "Flujo" (verificar con `grep -rn "Config de Flujo" "Stacky Agents/docs/sistema"`), actualizar la mención puntual (corrección mínima, no reescritura).
+6. **Huella de regresión (C7, convención):** agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` la entrada `{"id": "plan216-state-typo", "pattern": "state_not_in_tracker", "plan": "216", "date": "<fecha de implementación>", "guard_test": "backend/tests/test_plan216_profile_schema.py"}` respetando la shape existente del archivo (leerla antes de escribir; si el archivo no existe, crearlo como lista JSON con esa única entrada).
 
 **Tests/comandos exactos:** re-correr POR ARCHIVO todo lo del plan: los 3 comandos backend de F0/F1 + los 2 comandos vitest de F2/F3 + `npx tsc --noEmit`.
 
@@ -302,7 +361,7 @@ export function applyAddInputState(machine, agentType, adoState): Machine
 
 - **R1 — Romper consumidores de `/api/flow-config` (Run Sugerido, PipelineStatus, tickets.py).** *Mitigación:* el blueprint y la API del store no cambian (P1); tests de regresión `test_flow_config.py` y `test_b2_transition_from_config.py` corren sin modificarse en F1.
 - **R2 — Migración que pise una config buena.** *Mitigación:* la migración solo corre si el perfil NO tiene `state_flow` (idempotencia testeada); el archivo legacy queda byte-intacto (test `test_archivo_legacy_queda_intacto`); rollback = flag OFF.
-- **R3 — PUT del perfil concurrente pisa `state_flow` (el editor de perfil hace PUT del objeto completo).** Ventana real pero mono-operador y misma pestaña de Settings; además `ClientProfileEditor` siempre parte del GET fresco (`baseProfile`) que ya incluye `state_flow`, así que el PUT completo lo re-manda intacto. *Mitigación adicional:* `StatesConfigPage` invalida `["client-profile", projectName]` tras cada guardado para que ambas vistas relean.
+- **R3 — PUT full-object del editor de perfil pisa `state_flow` (C2).** El draft del editor vive en `useState` LOCAL (`baseProfile`, `ClientProfileEditor.tsx:461`): es un snapshot stale y la invalidación de la query NO lo refresca — la "mitigación" v1 era insuficiente. *Mitigación real (doble cierre determinista):* backend merge-preserve en `put_client_profile` (payload sin la key ⇒ se preserva la almacenada, F1) + las UIs NUNCA envían `state_flow` (el editor la elimina al ingerir el GET, F2; `TrackerRoleStateCard` la quita antes del PUT, F3). Test `test_put_perfil_sin_state_flow_preserva_reglas`. `StatesConfigPage` igual invalida `["client-profile", projectName]` tras guardar (frescura de lectura, no de protección).
 - **R4 — Renombrar el sub-tab rompe deep-links.** *Mitigación:* el id interno `"flow"` NO se renombra (solo el label visible); contrato del plan 165 intacto.
 - **R5 — Ratchet inline-style / registro de tests.** *Mitigación:* archivos `.tsx` nuevos con CSS modules exclusivamente; `test_plan216_*` registrados en `HARNESS_TEST_FILES` (criterio binario en F4).
 - **R6 — Colisión con la implementación futura del 208.** *Mitigación:* §3.1 fija el contrato en ambas direcciones; keys del perfil idénticas; comentario ancla `PLAN-208` en el componente.
@@ -329,7 +388,7 @@ export function applyAddInputState(machine, agentType, adoState): Machine
 ## 8. Orden de implementación
 
 1. F0 — flag (5 lugares del arnés) + `_check_state_flow` + `set_client_profile_state_flow` + tests schema.
-2. F1 — store centralizado + migración lazy + tests store/migración + regresión flow_config/B2 por archivo.
+2. F1 — store centralizado + migración lazy con saneo/fallback (C1) + espejo legacy ([ADICIÓN ARQUITECTO]) + merge-preserve en `put_client_profile` (C2) + tests store/migración + regresión flow_config/B2 por archivo.
 3. F2 — pestaña "Estados" (`StatesConfigPage` + `FlowConfigPage embedded` + nota en `ClientProfileEditor`) + test harness de SettingsPage + copys TicketBoard/EmployeeEditDrawer.
 4. F3 — `TrackerRoleStateCard` con dropdowns + `statesConfigModel.ts` + coherencia 1-click + tests vitest por archivo.
 5. F4 — pulido UX, paridad flag-OFF, registro en `HARNESS_TEST_FILES`, docs y cierre del doc.
@@ -337,8 +396,9 @@ export function applyAddInputState(machine, agentType, adoState): Machine
 ## 9. Definición de Hecho (DoD) global
 
 - [ ] `STACKY_STATE_CONFIG_CENTRALIZED_ENABLED` visible y toggleable en Configuración → Arnés, default ON.
-- [ ] Con flag ON: crear/editar/borrar reglas en la pestaña Estados persiste en `client_profile.state_flow` (verificable leyendo `projects/<NAME>/config.json`); `flow_config.json` legacy intacto.
-- [ ] Con flag OFF: comportamiento byte-idéntico al legacy (archivo), sin errores en la UI.
+- [ ] Con flag ON: crear/editar/borrar reglas en la pestaña Estados persiste en `client_profile.state_flow` (verificable leyendo `projects/<NAME>/config.json`) y el espejo legacy `flow_config.json` queda sincronizado con lo último guardado ([ADICIÓN ARQUITECTO]); la migración sola NO modifica el archivo (test de bytes intactos).
+- [ ] Con flag OFF: comportamiento byte-idéntico al legacy (archivo), sin errores en la UI; apagar la flag tras editar con ON muestra las MISMAS reglas (rollback sin pérdida — smoke manual).
+- [ ] Un PUT del perfil sin `state_flow` NO borra las reglas (C2: test backend verde; el editor de perfil y la card de máquina no envían la key).
 - [ ] La pestaña "Flujo" ya no existe como tal; "Estados" agrupa reglas + máquina; el editor de perfil muestra la nota de reubicación y su JSON avanzado sigue editando `tracker_state_machine`.
 - [ ] Cero campos de texto libre para estados en la nueva sección (criterio grep de F3).
 - [ ] `Run Sugerido` del tablero sigue resolviendo agente por estado (smoke manual).

@@ -1,27 +1,41 @@
 # Plan 171 — Telemetría operativa: salud y tendencias por agente/runtime/modelo, baselines deterministas con avisos HITL y traza por corrida
 
-**Estado:** PROPUESTO v1 — 2026-07-18 · **Autor:** StackyArchitectaUltraEficientCode
+**Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS — 2026-07-23 (v1 PROPUESTO 2026-07-18) · **Autor:** StackyArchitectaUltraEficientCode · **Juez v2:** StackyArchitectaUltraEficientCode
+
+### CHANGELOG v1 -> v2 (crítica adversarial 2026-07-23)
+
+- **C1 (staleness post-consolidación 2026-07-20):** el v1 declaraba 158 "sin implementar", serie RSI 167-170 "SOLO PROPUESTA" y 152-156/163-165 "pendientes". HOY: **158 IMPLEMENTADO+AUDITADO** (evidencia: `services/cost_analytics.py:547` `_BACKFILL_MAX_ROWS` + flags Plan 158 en `harness_flags.py:272-273`), **RSI 167-170 MERGEADA** (`services/evolution_cycle.py`), 152/153/154/156/163/164/165 mergeados. Reescritos: intro, deps, "Ortogonal a", §2, §4.1, §8.1, §8.3, F7, tabla KPI.
+- **C2 (contrato RSI muerto → consumidor real):** `evolution_signals()` ya tiene consumidor vivo: `evolution_cycle.collect_signals()` (`:57`). Nueva **F2b [ADICIÓN ARQUITECTO]**: `signals["ops"]` aditivo con try/except + test.
+- **C3 (group= contradictorio y falso):** el v1 hardcodeaba `group="observabilidad_notif"` "verificado"; el real de `STACKY_COST_CENTER_ENABLED` es `group="observabilidad"` (`harness_flags.py:1681`) y el 199 ya unificó ahí (su C2). Corregidos los 3 FlagSpec de F0. La tupla de `_CATEGORY_KEYS` del ancla sigue siendo la de `"observabilidad_notif"` (divergencia categoría/grupo PREEXISTENTE del sustrato; no se corrige acá).
+- **C4 (reuso ignorado — Plan 46):** existe `services/operational_health.py` + `/api/diag/operational-health` (`api/diag.py:623`) con detección de zombies cuyo default es `EXECUTION_TIMEOUT_MINUTES` (fuente única). R-O4 ahora hereda ese default (`stall_minutes: null` = default del sistema) y se delimita el prior art.
+- **C5 (colisión de merge con 199):** nueva §8.4 con la frontera espejo del 199 §9-10: orden de inserción determinista en `CostCenterPage.tsx`, rebase aditivo de `ExecRecord`/`CostFilters`, delimitación de gráficos.
+- **C6 (naming near-collision):** notas de desambiguación vs `STACKY_EXECUTION_TRACE_ENABLED` (captura runner-side), `STACKY_LIVE_TELEMETRY_ENABLED` y `STACKY_OPERATIONAL_HEALTH_ENABLED` en F0.
+- **C7 (anclas numéricas drifteadas):** refrescadas a lo verificado 2026-07-23 (`endpoints.ts:1464`, drawer `:108`, `harness_flags.py:270-271/:1672-1681`).
+- **C8 (`datetime.utcnow()` deprecado py3.13):** helper congelado `_utcnow()` naive-UTC en `run_signals.py`, usado en todo el plan (el sustrato es naive-UTC: `cost_analytics.py:173`).
+- **C9 [ADICIÓN ARQUITECTO] (traza más rica gratis):** §4.9 surfacea `agent_name`/`prompt_sha` que los runners YA persisten (`agent_runner.py:33` `_build_trace_metadata`, gated `STACKY_EXECUTION_TRACE_ENABLED`).
 **Directiva del operador (2026-07-18):** telemetría avanzada que MEJORE EL USO de la
 herramienta y sea una EVOLUCIÓN, no un fix puntual. Recorte elegido: convertir la
 telemetría que YA existe (y hoy solo alimenta costos, Plan 142) en **señal operativa
 determinista**: salud y tendencias por agente×runtime×modelo (tasas de fallo, percentiles
 de duración, series diarias), **detección determinista de regresiones contra baseline**,
 **umbrales/presupuestos que AVISAN (jamás actúan)** y una **traza estructurada por
-corrida** — más el **contrato congelado** que el Monitor del futuro Centro de Evolución
-(Plan 167, PROPUESTO) podrá consumir sin que este plan dependa de él.
+corrida** — más el aporte aditivo `signals["ops"]` al Centro de Evolución (Plan 167,
+IMPLEMENTADO y mergeado 2026-07-20), que su `collect_signals()` ya existente incorpora
+con degradación graciosa (F2b).
 
 > Este documento está redactado para que un **MODELO MENOR** (Haiku, Codex CLI o
 > GitHub Copilot Pro) lo implemente **SIN inferir nada**. Los nombres de símbolos,
 > rutas, shapes JSON, literales de mensajes y comandos son **LITERALES**: prohibido
 > desviarse de los nombres exactos, prohibido "mejorar" el alcance. Todo lo ambiguo ya
 > fue decidido acá. Cada afirmación sobre código existente está anclada a
-> `archivo:línea` **verificada el 2026-07-18**; este repo tiene sesiones paralelas con
+> `archivo:línea` **re-verificada el 2026-07-23** (post-consolidación de 158 commits a
+> main del 2026-07-20); este repo tiene sesiones paralelas con
 > WIP ajeno vivo (p. ej. `runtime_paths.py` y `scripts/run_harness_tests.sh` aparecen
 > modificados hoy), así que TODA edición se ancla por el CONTENIDO/símbolo citado,
 > nunca solo por el número de línea. Los comandos con `&&` se ejecutan en **Git Bash**
 > (en PowerShell 5.1 `&&` es error de parser).
 
-**Dependencias (todas verificadas 2026-07-18; ninguna dura — el plan reusa, no bloquea):**
+**Dependencias (re-verificadas 2026-07-23 post-consolidación; ninguna dura — el plan reusa, no bloquea):**
 
 | Sustrato | Anclaje verificado | Rol en el 171 |
 |---|---|---|
@@ -33,41 +47,57 @@ corrida** — más el **contrato congelado** que el Monitor del futuro Centro de
 | Telemetría de harness | `backend/harness/telemetry.py:28-50` (`RunTelemetry.to_dict` SIN `raw`), `:5` (persist escribe `metadata["harness_telemetry"]`) | Solo LECTURA vía `extract_cost_row`; el 171 NO escribe telemetría |
 | Incidencias (Plan 166, IMPLEMENTADO) | `backend/services/incident_store.py:230` (`list_incidents`), `:237` (`find_by_execution(execution_id)`) | F3: la traza enlaza el incidente de la corrida (si existe) |
 | Persistencia runtime | `backend/runtime_paths.py:48` (`def data_dir()`; archivo con WIP ajeno hoy → anclar por símbolo) | F2: `data_dir()/telemetry/ops_thresholds.json` |
-| Flags patrón triple | `backend/services/harness_flags.py:117` (`_CATEGORY_KEYS`), `:262-263` (tupla de categoría que contiene `"STACKY_COST_CENTER_ENABLED"` y `"STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142` — ancla de inserción), `:331` (nota "toda flag nueva…"), `:1612-1616` (FlagSpec `STACKY_COST_CENTER_ENABLED`, bloque Plan 142 en `FLAG_REGISTRY` — ancla de inserción; copiar su literal `group=`, verificado `observabilidad_notif` por el juez del 158 en `:1651`) | F0 |
+| Flags patrón triple | `backend/services/harness_flags.py:117` (`_CATEGORY_KEYS`), `:270-271` (tupla `"observabilidad_notif"` que contiene `"STACKY_COST_CENTER_ENABLED"` y `"STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142` — ancla de inserción de CATEGORÍA), `:377` (nota "toda flag nueva…"), `:1672-1681` (FlagSpec `STACKY_COST_CENTER_ENABLED`, bloque Plan 142 en `FLAG_REGISTRY` — ancla de inserción; su `group=` REAL es **`"observabilidad"`** en `:1681` — C3: NO `observabilidad_notif`; mismo grupo que unificó el 199 en su C2) | F0 |
+| Triage operativo existente (Plan 46, IMPLEMENTADO — prior art de stalls) | `backend/api/diag.py:623` (`/operational-health`, gated `STACKY_OPERATIONAL_HEALTH_ENABLED`), `backend/services/operational_health.py` (`aggregate_operational_health`), `api/diag.py:644` (`zombie_minutes` default = `EXECUTION_TIMEOUT_MINUTES` de `services/ticket_status.py` — fuente ÚNICA del timeout) | C4: R-O4 hereda ese default (§4.2/§4.8); delimitación en "Ortogonal a" |
+| Ciclo de evolución (serie RSI 167-170, MERGEADA 2026-07-20) | `backend/services/evolution_cycle.py:57` (`collect_signals()` — ya agrega `executions/costs/incidents/plans` vía `cost_analytics`, cada clave en su propio try/except) | F2b: clave aditiva `signals["ops"]` (C2) |
+| Trazabilidad runner-side ya persistida | `backend/agent_runner.py:33` (`_build_trace_metadata`: `prompt_sha/prompt_len/agent_type/agent_name`, fusionado con `setdefault` en metadata; gated `STACKY_EXECUTION_TRACE_ENABLED`, `config.py:1130`) | C9: §4.9 la surfacea read-only (`agent_name`, `prompt_sha`) |
 | Meta-tests de flags | `backend/tests/test_harness_flags.py` (set `_CURATED_DEFAULTS_ON`; ubicar por el literal del símbolo), `backend/tests/test_harness_flags_requires.py` (`_REQUIRES_MAP_FROZEN`) | F0 |
 | Ayuda llana de flags | `backend/services/harness_flags_help.py` (entradas `PlainHelp`; espejo de las del Plan 142/166) | F0 |
 | Ratchet de tests | `backend/scripts/run_harness_tests.sh` (`HARNESS_TEST_FILES=(` en `:20`; últimas entradas hoy `:459-462` — la `:462` es WIP local de otra sesión, NO tocarla), `backend/scripts/run_harness_tests.ps1` (`$HarnessTestFiles`, últimas entradas `:412-414`); el meta-test parsea SOLO el `.sh` (`tests/test_harness_ratchet_meta.py:13,21`, verificado por el Plan 117 C4a) — ambos se editan igual | F8 |
 | conftest de tests | `backend/tests/conftest.py:11` (`os.environ.setdefault("STACKY_TEST_MODE", "1")`) | Todos los tests: cero egress, cero logs sucios |
 | Patrón de test de endpoints | `backend/tests/test_cost_center_api.py:23-37` (fixture module-scope `create_app()` + `test_client`), `:42-80` (helper `_seed_exec` con `Ticket`+`AgentExecution`) | F4: espejo EXACTO |
 | Frontend — página de costos (Plan 142) | `frontend/src/pages/CostCenterPage.tsx:1-14` (imports), `:26-37` (`useQuery` on-mount, SIN `refetchInterval`), `:93-98` (`<CostTable …/>` — ancla de inserción de las secciones nuevas), `CostCenterPage.module.css` | F6 |
-| Frontend — namespace HTTP | `frontend/src/api/endpoints.ts:1400` (`costFiltersToQuery`), `:1417` (`export const CostCenter = {` — el namespace `Ops` nuevo se inserta inmediatamente DESPUÉS de cerrar este objeto) | F5 |
+| Frontend — namespace HTTP | `frontend/src/api/endpoints.ts` (`costFiltersToQuery`; `export const CostCenter = {` hoy `:1464` — el namespace `Ops` nuevo se inserta inmediatamente DESPUÉS de cerrar este objeto) | F5 |
 | Frontend — tipos de costos | `frontend/src/lib/costCenterTypes.ts:139` (`CostFiltersParams`) | F5: se IMPORTA; los tipos nuevos van a archivo propio |
 | Primitivas UI (Planes 138+162) | `frontend/src/components/ui/index.ts:7-34` (barrel: `Button/IconButton/StatusChip(StatusTone)/Card/SectionHeader/Tabs/Skeleton/Spinner/Field/Input/Select/Textarea/Checkbox`, `firstErrorFieldId`) | F6/F7 |
 | Estados universales (Plan 140) | `frontend/src/components/EmptyState.tsx` y `frontend/src/components/LoadErrorState.tsx` (usados por `CostCenterPage.tsx:12-13`; NO están en el barrel) | F6 |
 | Formato humano (Plan 161) | `frontend/src/services/format.ts:40-118` (`formatDate/formatTime/formatDateTime/formatDuration/formatCostUsd/formatTokens/formatInt/formatBytes/formatPercent/formatDurationBetween`) — PROHIBIDO `Intl` directo (ratchet 161) | F5/F6/F7 |
-| Drawer de detalle de ejecución | `frontend/src/components/ExecutionDetailDrawer.tsx:6` (import `ExecutionInsightBlock`), `:35` (`export default function ExecutionDetailDrawer({ executionId, onClose }`), `:49` (`const metadata = (content?.metadata ?? {})`), `:95` (mount de `<ExecutionInsightBlock`) | F7: `RunTraceBlock` se monta inmediatamente después del bloque de Insight |
+| Drawer de detalle de ejecución | `frontend/src/components/ExecutionDetailDrawer.tsx:6` (import `ExecutionInsightBlock`), mount de `<ExecutionInsightBlock` hoy `:108` — anclar SIEMPRE por el nombre del componente | F7: `RunTraceBlock` se monta inmediatamente después del bloque de Insight |
 | Toast (Plan 135) | `frontend/src/components/Toast.tsx` (patrón component-local) | F6: feedback del guardado de umbrales |
 | venv backend REAL (verificado hoy corriendo `--version`) | `backend/.venv/Scripts/python.exe` → Python 3.13.5, pytest 8.3.3 ✔ (canónico). OJO: hoy TAMBIÉN existe `backend/venv/` (Python 3.11.9, untracked, WIP de sesión paralela) — **NO usarlo, NO borrarlo** | Comandos de test |
 
-**Ortogonal a (NO tocar, NO depender):**
-- **Plan 158** (fix telemetría claude_code_cli, CRITICADO v2 SIN implementar) — **plan hermano
-  y frontera dura**: el 158 arregla la PRODUCCIÓN de telemetría del runner claude
-  (`metadata["model"]` + `persist()` + backfill). El 171 solo la CONSUME vía el extractor
-  canónico. PROHIBIDO acá tocar `claude_code_cli_runner.py`, re-diseñar el backfill o
-  inventar el modelo faltante: mientras el 158 no esté implementado, las filas
-  `claude_code_cli` sin `model` se agrupan bajo el literal **"sin dato"** y su costo queda
-  `cost_kind="unknown"` (no facturable). Cuando el 158 se implemente, este plan mejora
-  SOLO (mismo extractor), sin cambiar una línea (§8.3).
-- **Plan 117** (insights locales, IMPLEMENTADO — verificado en el doc, encabezado): interpretación
+**Ortogonal a (NO tocar, NO depender) — estados re-verificados 2026-07-23 (C1):**
+- **Plan 158** (fix telemetría claude_code_cli, **IMPLEMENTADO F0-F7 + AUDITADO** — evidencia:
+  backfill en `cost_analytics.py:547` y flags Plan 158 en `harness_flags.py:272-273`) —
+  **frontera dura intacta**: el 158 arregló la PRODUCCIÓN de telemetría del runner claude;
+  el 171 solo la CONSUME vía el extractor canónico. PROHIBIDO acá tocar
+  `services/claude_code_cli_runner.py` o el backfill. La degradación **"sin dato"** /
+  `cost_kind="unknown"` aplica HOY solo a **corridas históricas pre-158 que el backfill no
+  alcanzó** — sigue siendo obligatoria (NUNCA inventar modelo) pero es residual, no el caso
+  dominante (§8.3). El Plan 199 (cosecha desde disco) reducirá ese residuo aún más.
+- **Plan 199** (cosecha histórica telemetría, CRITICADO v2 SIN implementar): frontera
+  espejo declarada en **§8.4** — el 199 NO hace salud/tendencias/baselines/traza ni
+  `/ops-*` (su §6); ambos tocan `CostFilters`/`ExecRecord`/`CostCenterPage.tsx` de forma
+  aditiva → reglas de merge en §8.4.
+- **Plan 117** (insights locales, IMPLEMENTADO): interpretación
   CUALITATIVA por LLM local (TL;DR, triage narrado, digest). El 171 es 100% determinista,
   agregado y sin LLM. Comparten UI vecina en el drawer (F7 se ancla DESPUÉS del bloque 117).
-- **Plan 163** (identidad de build + huellas de regresión en LOGS crudos, CRITICADO v2): sus
-  "regresiones" son clases de error resueltas reapareciendo en texto de logs; las del 171
-  son MÉTRICAS (tasa de error/latencia/costo) contra ventanas baseline. Cero archivos en común.
-- **Planes 153/154/156/164/165 y 152** (pendientes): ortogonales. Del **156** (latido único,
-  KPI ≤2 req/tick) este plan hereda el guardarraíl: **cero polling nuevo** (§3.6).
-- **Serie RSI 167-170** (SOLO PROPUESTA): prohibido depender de ella. §8 congela el contrato
-  de consumo con degradación declarada si nunca se implementa.
+- **Plan 163** (identidad de build + huellas de regresión en LOGS crudos, **IMPLEMENTADO y
+  MERGEADO 2026-07-20**): sus "regresiones" son clases de error resueltas reapareciendo en
+  texto de logs; las del 171 son MÉTRICAS (tasa de error/latencia/costo) contra ventanas
+  baseline. Cero archivos en común.
+- **Planes 152/153/154/156/163/164/165** (**IMPLEMENTADOS/MERGEADOS 2026-07-20**):
+  ortogonales. Del **156** (latido único, KPI ≤2 req/tick) este plan hereda el
+  guardarraíl: **cero polling nuevo** (§3.6).
+- **Serie RSI 167-170** (**IMPLEMENTADA y MERGEADA 2026-07-20**): el 171 NO modifica su
+  ciclo, prompts ni stores; el ÚNICO toque es la clave aditiva `signals["ops"]` en
+  `evolution_cycle.collect_signals()` (F2b), con el mismo patrón try/except que las claves
+  existentes — si `ops_telemetry` fallara, el ciclo sigue intacto.
+- **Plan 46 — `services/operational_health.py` + `/api/diag/operational-health`** (C4):
+  triage read-only por corrida reciente (zombies/costo/needs_review stale) con umbrales
+  por query param. NO se modifica ni se llama: el 171 opera sobre AGREGADOS con baseline y
+  vive en el Centro de Costos. Único vínculo: el default de `stall_minutes` hereda la
+  MISMA fuente única `EXECUTION_TIMEOUT_MINUTES` (§4.2/§4.8) para no contradecir al triage.
 - **`services/harness_health.py`** (`compute_health`) y **`services/run_advisor.py`** (recomendador
   de runtime): NO se modifican; el 171 es un módulo nuevo paralelo (delimitación §2).
 - **`api/metrics.py:_execution_costs` (:52)**: pipeline LEGACY con gotchas conocidas
@@ -94,8 +124,9 @@ acción automática); (c) **4 endpoints read-only** en el blueprint de métricas
 computados on-read (cero daemons, cero cron, cero polling); (d) la sección **"Salud
 operativa"** dentro del Centro de Costos existente (misma página, mismos filtros, cero
 navegación nueva) y la **traza estructurada** de una corrida en el drawer de detalle ya
-existente; y (e) el **contrato congelado** `evolution_signals()` que el Monitor del Plan
-167 podrá consumir el día que exista.
+existente; y (e) el contrato `evolution_signals()` **cableado de verdad** (F2b) como
+clave aditiva `signals["ops"]` de `evolution_cycle.collect_signals()` (serie RSI ya
+mergeada), con degradación graciosa.
 
 **KPIs binarios:**
 
@@ -132,7 +163,8 @@ existente; y (e) el **contrato congelado** `evolution_signals()` que el Monitor 
 | Presupuesto diario con aviso | inexistente | `daily_budget_usd` opcional (default null = silencioso), solo AVISA (R-O5) |
 | Reconstruir qué pasó en una corrida | leer metadata JSON crudo / logs | traza estructurada en el drawer (fases, costo, fuente de telemetría, incidente enlazado, campos sin dato EXPLÍCITOS) |
 | Requests periódicas nuevas del frontend | — | **0** (on-mount + refresh manual; sin `refetchInterval`) |
-| Filas claude_code_cli sin modelo (gap del 158) | invisibles (se pierden en "unknown") | contadas y visibles como "sin dato" (`runs_sin_modelo`) — métrica que el 158 hará bajar sola |
+| Filas claude_code_cli sin modelo (residuo histórico pre-158) | invisibles (se pierden en "unknown") | contadas y visibles como "sin dato" (`runs_sin_modelo`) — residuo que el backfill del 158 (implementado) ya redujo y la cosecha del 199 reducirá más |
+| Señal operativa en el ciclo de evolución nocturno (RSI) | `collect_signals()` solo ve conteos/costos | `signals["ops"]` con regresiones R-O2/R-O3, breaches y stalls (F2b) |
 
 ---
 
@@ -150,19 +182,22 @@ existente; y (e) el **contrato congelado** `evolution_signals()` que el Monitor 
    pero cero duraciones, cero percentiles, cero series temporales, cero comparación entre
    ventanas, y agrupa por runtime (no por agente×runtime×modelo). Es una foto, no una
    tendencia.
-3. **Nada detecta regresiones operativas.** El Plan 163 (pendiente) detectará huellas de
-   ERRORES RESUELTOS en logs crudos; ningún plan compara métricas de HOY contra la
+3. **Nada detecta regresiones operativas.** El Plan 163 (implementado) detecta huellas de
+   ERRORES RESUELTOS en logs crudos; ningún módulo compara métricas de HOY contra la
    historia del propio sistema. Un agente que pasó de 5% a 40% de error esta semana es
-   invisible hasta que el operador lo sufre.
+   invisible hasta que el operador lo sufre. (El triage del Plan 46,
+   `operational_health.py`, mira corridas individuales recientes — no tendencias ni
+   baselines por celda agente×runtime.)
 4. **No hay traza por corrida.** El drawer de detalle muestra output/metadata cruda y el
    insight LLM del 117; no existe una vista determinista y estructurada (fases, fuente de
    telemetría, costo clasificado, incidente enlazado vía `find_by_execution`, campos
    ausentes explícitos).
-5. **El Plan 167 (PROPUESTO) declara un Monitor que lee "solo telemetría existente"** y su
-   §4.6 hoy solo cuenta ejecuciones/errores/costos/incidencias/planes. La señal de salud
-   con baseline que este plan produce es exactamente el insumo que esa serie declara
-   necesitar — y este plan la deja congelada en un contrato (§8) sin depender de que la
-   serie RSI se implemente.
+5. **El Centro de Evolución (Plan 167, IMPLEMENTADO) ya recolecta señales pero sin salud
+   operativa.** `evolution_cycle.collect_signals()` (`:57`) agrega
+   ejecuciones/costos/incidencias/planes — cero percentiles, cero baseline, cero
+   regresiones. La señal que este plan produce es exactamente el insumo que a ese ciclo
+   le falta, y F2b la agrega como clave aditiva `signals["ops"]` sin tocar el resto del
+   ciclo (§8.1).
 
 **El gap real en una frase:** Stacky registra todo y no OBSERVA nada en el tiempo; este
 plan convierte los datos ya persistidos en señal operativa determinista, visible donde el
@@ -229,9 +264,10 @@ operador ya mira (Centro de Costos + drawer), con avisos HITL y cero trabajo nue
   `uiDebtRatchet`: TODO estilo va a `.module.css`; prohibido `style={{}}`. Para anchos
   dinámicos de barras usar ref imperativo (patrón congelado en §F6), NUNCA `style={{}}`.
 - **G7 — `_CATEGORY_KEYS` obligatorio:** toda flag nueva va también al dict
-  `_CATEGORY_KEYS` (`services/harness_flags.py:117`; nota normativa `:331`). Ancla de
-  inserción: la línea `"STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142` (`:263`), dentro
-  de la MISMA tupla.
+  `_CATEGORY_KEYS` (`services/harness_flags.py:117`; nota normativa `:377`). Ancla de
+  inserción: la línea `"STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142` (hoy `:271`),
+  dentro de la MISMA tupla (la de `"observabilidad_notif"` — ver nota C3 en F0: la
+  categoría del ancla y el `group=` del FlagSpec divergen en el sustrato y así se queda).
 - **G8 — `requires` profundidad 1:** las 2 aristas apuntan SIEMPRE al flag ROOT
   (`STACKY_OPS_TELEMETRY_ENABLED`), nunca en cadena.
 - **G9 — Sin pollers nuevos (Plan 156):** carga on-mount + botón Refrescar + fetch
@@ -259,7 +295,7 @@ operador ya mira (Centro de Costos + drawer), con avisos HITL y cero trabajo nue
 
 ### 4.1 Matriz de paridad por runtime y campo (fuente → fallback)
 
-| Campo | codex_cli | claude_code_cli (HOY, sin Plan 158) | claude_code_cli (con 158 implementado) | github_copilot | Fallback congelado |
+| Campo | codex_cli | claude_code_cli (residuo histórico pre-158 sin backfill) | claude_code_cli (corridas nuevas/backfilleadas — 158 IMPLEMENTADO, caso dominante HOY) | github_copilot | Fallback congelado |
 |---|---|---|---|---|---|
 | `agent_type/status/started_at/completed_at` | columnas `AgentExecution` ✔ | ✔ | ✔ | ✔ | siempre presentes (started_at); `completed_at` `null` si no terminó |
 | `runtime` | `metadata["runtime"]` ✔ | ✔ | ✔ | ✔ | literal `"desconocido"` |
@@ -289,10 +325,27 @@ DEFAULT_THRESHOLDS = {
     "baseline_min_runs": 10,       # mínimo de runs terminales en baseline (R-O2/R-O3)
     "p90_regression_factor": 1.5,  # R-O3
     "p90_min_seconds": 30.0,       # R-O3: baseline p90 menor a esto = ruido, no dispara
-    "stall_minutes": 60,           # R-O4
+    "stall_minutes": None,         # R-O4 — C4: None = usar EXECUTION_TIMEOUT_MINUTES
+                                   # (services/ticket_status.py, fuente ÚNICA del timeout,
+                                   # misma que usa /api/diag/operational-health). La
+                                   # resolución vive en ops_telemetry.load_thresholds();
+                                   # el core puro SIEMPRE recibe el valor efectivo (int).
     "daily_budget_usd": None,      # R-O5: null = regla apagada (default silencioso)
 }
 ```
+
+Helper de tiempo congelado (C8 — py3.13 deprecó `datetime.utcnow()`; el sustrato de
+`started_at` es **naive-UTC**, ver `cost_analytics.py:173`):
+
+```python
+def _utcnow() -> datetime:
+    """Naive-UTC canónico del plan (comparable con started_at de la DB)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+```
+
+Vive en `run_signals.py` (agregar `timezone` al import de `datetime`); TODO `now` de este
+plan (F1/F2/F3) sale de acá — PROHIBIDO `datetime.utcnow()` y PROHIBIDO comparar
+datetimes aware contra `started_at` naive.
 
 ### 4.3 `RunPoint` (proyección pura de un `ExecRecord`)
 
@@ -398,7 +451,12 @@ escritura bajo `_THRESHOLDS_LOCK = threading.Lock()`; `data_dir()` se llama EN C
 operación — los tests lo monkeypatchean).
 
 Efectivo = `DEFAULT_THRESHOLDS` con overrides superficiales del archivo (claves
-desconocidas del archivo se IGNORAN al leer).
+desconocidas del archivo se IGNORAN al leer) **+ resolución final en
+`load_thresholds()`**: si el efectivo trae `stall_minutes is None`, se reemplaza por
+`EXECUTION_TIMEOUT_MINUTES` (import local `from services.ticket_status import
+EXECUTION_TIMEOUT_MINUTES` en `ops_telemetry.py` — capa I/O, NO en `run_signals.py` que
+sigue puro). El dict que viaja al core y al payload `thresholds` de §4.5 lleva SIEMPRE el
+int resuelto.
 
 - `GET /api/metrics/ops-thresholds` → 200 `{"enabled": true, "thresholds": {…efectivo…}}`
   (flag OFF → `{"enabled": false}`, 200).
@@ -406,7 +464,8 @@ desconocidas del archivo se IGNORAN al leer).
   persiste SOLO claves conocidas; 200 `{"ok": true, "thresholds": {…efectivo nuevo…}}`.
   Validación congelada (400 `{"ok": false, "error": "invalid_thresholds:<clave>"}` en el
   PRIMER fallo): `error_rate_warn`/`error_rate_delta` float en `[0,1]`;
-  `min_runs`/`baseline_min_runs`/`stall_minutes` int `>= 1`; `p90_regression_factor`
+  `min_runs`/`baseline_min_runs` int `>= 1`; `stall_minutes` `null` (= volver al default
+  del sistema `EXECUTION_TIMEOUT_MINUTES` — C4) o int `>= 1`; `p90_regression_factor`
   float `>= 1.0`; `p90_min_seconds` float `>= 0`; `daily_budget_usd` `null` o float `> 0`;
   `schema_version` NO editable (ignorar si viene); clave desconocida en el body → 400.
 
@@ -423,6 +482,7 @@ desconocidas del archivo se IGNORAN al leer).
            "cache_read_tokens": null, "cache_savings_usd": null},
   "telemetry_source": "harness_telemetry",
   "session_id": null, "num_turns": null,
+  "agent_name": null, "prompt_sha": null,
   "stalled": false,
   "incident": null,
   "sin_dato": ["model", "session_id", "num_turns"]
@@ -436,7 +496,12 @@ final; el status va aparte); `telemetry_source` determinista:
 `"claude_telemetry"` si ese dict existe no vacío, si no `"bridge_metadata"` si existe
 `metadata["tokens_in"]` o `metadata["tokens_out"]` o `metadata["model"]`, si no
 `"ninguna"`; `session_id`/`num_turns` de `metadata` top-level o del dict de telemetría
-detectado (primer no-null); `stalled` = `status in ACTIVE_STATUSES` y edad >
+detectado (primer no-null); `agent_name`/`prompt_sha` (C9 [ADICIÓN ARQUITECTO]) =
+`metadata.get("agent_name")` / `metadata.get("prompt_sha")` — los runners YA los
+persisten cuando `STACKY_EXECUTION_TRACE_ENABLED` está ON (`agent_runner.py:33`
+`_build_trace_metadata`); si ausentes → `null` y NO entran en `sin_dato` (el orden de
+chequeo de `sin_dato` queda congelado como está); PROHIBIDO exponer `prompt_text`
+(privacidad — solo el SHA); `stalled` = `status in ACTIVE_STATUSES` y edad >
 `stall_minutes` efectivo; `incident` = `{"id","title","status"}` del dict de
 `incident_store.find_by_execution(execution_id)` o `null` (envuelto en try/except: un
 store roto NUNCA rompe la traza); `sin_dato` lista (orden fijo de chequeo:
@@ -444,7 +509,7 @@ store roto NUNCA rompe la traza); `sin_dato` lista (orden fijo de chequeo:
 Execution inexistente → 404 `{"ok": false, "error": "execution_not_found"}`.
 Flag `STACKY_OPS_TRACE_ENABLED` OFF → `{"enabled": false}`, 200.
 
-### 4.10 Contrato congelado hacia la serie RSI (§8): `evolution_signals()`
+### 4.10 Contrato hacia la serie RSI (MERGEADA — consumida de verdad en F2b, §8.1): `evolution_signals()`
 
 ```json
 {"schema_version": 1, "generated_at": "<iso utc>", "window_days": 7,
@@ -458,7 +523,8 @@ Flag `STACKY_OPS_TRACE_ENABLED` OFF → `{"enabled": false}`, 200.
 
 ## 5. Fases
 
-Orden por dependencia: **F0 → F1 → F2 → F3 → F4 → F5 → F6 → F7 → F8**.
+Orden por dependencia: **F0 → F1 → F2 → F2b → F3 → F4 → F5 → F6 → F7 → F8** (F2b se
+valida junto con F4, que aporta el arnés de tests de integración).
 
 > **Comandos de test:** backend desde `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend`
 > con `.venv\Scripts\python.exe -m pytest tests/<archivo> -q` (equivalente Git Bash:
@@ -514,7 +580,7 @@ ambos son aditivos):
 
 **`harness_flags.py` — 2 toques:**
 (a) `_CATEGORY_KEYS` (G7): ubicar la línea `"STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142`
-(hoy `:263`) y agregar inmediatamente después, dentro de la MISMA tupla:
+(hoy `:271`) y agregar inmediatamente después, dentro de la MISMA tupla:
 
 ```python
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -525,8 +591,13 @@ ambos son aditivos):
 (b) `FLAG_REGISTRY`: insertar 3 `FlagSpec` inmediatamente DESPUÉS del último `FlagSpec`
 del bloque `# ── Plan 142 — Centro de Costos + Codeburn` (ubicar por
 `key="STACKY_COST_CODEBURN_IMPORT_PATH"`). Usar EXACTAMENTE el mismo literal `group=` que
-tiene el `FlagSpec` de `STACKY_COST_CENTER_ENABLED` (leerlo del archivo; verificado
-`observabilidad_notif`):
+tiene el `FlagSpec` de `STACKY_COST_CENTER_ENABLED` (leerlo del archivo; **C3: verificado
+2026-07-23 = `"observabilidad"`**, `harness_flags.py:1681` — el v1 decía
+`observabilidad_notif` y era FALSO; el 199 §F7 unificó al mismo grupo). OJO (divergencia
+PREEXISTENTE del sustrato, NO corregirla acá): la CATEGORÍA de `_CATEGORY_KEYS` donde se
+insertan las keys (paso a) es la tupla de `"observabilidad_notif"` (la del ancla), aunque
+el `group=` del FlagSpec sea `"observabilidad"` — así está hoy el propio
+`STACKY_COST_CENTER_ENABLED` y los meta-tests lo aceptan:
 
 ```python
     # ── Plan 171 — Telemetría operativa ─────────────────────────────────────────
@@ -534,22 +605,22 @@ tiene el `FlagSpec` de `STACKY_COST_CENTER_ENABLED` (leerlo del archivo; verific
         key="STACKY_OPS_TELEMETRY_ENABLED",
         type="bool", default=True,
         label="Telemetría operativa",
-        description="Salud y tendencias por agente/runtime/modelo dentro del Centro de Costos: tasas de fallo, percentiles de duración, series diarias y avisos por umbral. Solo lectura, calculado al abrir la página.",
-        group="observabilidad_notif",
+        description="Salud y tendencias por agente/runtime/modelo dentro del Centro de Costos: tasas de fallo, percentiles de duración, series diarias y avisos por umbral. Solo lectura, calculado al abrir la página. (Distinta de 'Telemetría en vivo' STACKY_LIVE_TELEMETRY_ENABLED, que emite eventos durante la corrida.)",
+        group="observabilidad",
     ),
     FlagSpec(
         key="STACKY_OPS_BASELINE_ENABLED",
         type="bool", default=True,
         label="Regresiones vs baseline",
         description="Compara la última semana contra las 4 semanas previas por agente y runtime, y avisa (solo avisa) si la tasa de error o la latencia p90 empeoraron más allá del umbral.",
-        group="observabilidad_notif", requires="STACKY_OPS_TELEMETRY_ENABLED",
+        group="observabilidad", requires="STACKY_OPS_TELEMETRY_ENABLED",
     ),
     FlagSpec(
         key="STACKY_OPS_TRACE_ENABLED",
         type="bool", default=True,
         label="Traza por corrida",
-        description="Vista estructurada de una ejecución en su panel de detalle: fases, duración, costo clasificado, fuente de telemetría, incidente enlazado y campos sin dato explícitos.",
-        group="observabilidad_notif", requires="STACKY_OPS_TELEMETRY_ENABLED",
+        description="Vista estructurada de una ejecución en su panel de detalle: fases, duración, costo clasificado, fuente de telemetría, incidente enlazado y campos sin dato explícitos. (Distinta de 'Traza de ejecución' STACKY_EXECUTION_TRACE_ENABLED, que es la CAPTURA runner-side de prompt_sha/agent_name; esta flag solo LEE.)",
+        group="observabilidad", requires="STACKY_OPS_TELEMETRY_ENABLED",
     ),
 ```
 
@@ -679,14 +750,18 @@ _THRESHOLDS_LOCK = threading.Lock()
 _THRESHOLDS_FILENAME = "ops_thresholds.json"
 
 def telemetry_root() -> Path               # runtime_paths.data_dir() / "telemetry"
-def load_thresholds() -> dict              # merge_thresholds(overrides tolerantes del JSON)
+def load_thresholds() -> dict
+    # merge_thresholds(overrides tolerantes del JSON) + resolución C4: si el efectivo
+    # trae stall_minutes None -> from services.ticket_status import EXECUTION_TIMEOUT_MINUTES
+    # (import LOCAL dentro de la función) y stall_minutes = EXECUTION_TIMEOUT_MINUTES.
+    # Devuelve SIEMPRE stall_minutes int.
 def save_thresholds(patch: dict) -> dict
     # Valida §4.8 (ValueError(f"invalid_thresholds:{clave}") en el primer fallo, claves
     # desconocidas incluidas), aplica sobre el efectivo actual, escribe el JSON bajo el
     # lock (mkdir parents=True exist_ok=True) y devuelve el efectivo nuevo.
 def ops_summary(filters: "ca.CostFilters", *, baseline_enabled: bool) -> dict
     # 1) records = ca.load_records(filters); points = [rs.from_exec_record(r) ...]
-    # 2) body = rs.summarize_groups(points); th = load_thresholds(); now = datetime.utcnow()
+    # 2) body = rs.summarize_groups(points); th = load_thresholds(); now = rs._utcnow()  # C8
     # 3) breaches, stalls = rs.evaluate_thresholds(points, th, now)
     # 4) baseline: si baseline_enabled: base_f = dataclasses.replace(filters,
     #        days=rs.CURRENT_WINDOW_DAYS + rs.BASELINE_WINDOW_DAYS, date_from=None, date_to=None)
@@ -704,7 +779,7 @@ def evolution_signals() -> dict
 `tests/test_ops_telemetry_api.py` (F4) para no duplicar seeding; en ESTA fase se
 implementa el módulo y se valida su parte pura con un caso agregado a
 `tests/test_run_signals.py`:
-15. `test_ops_thresholds_roundtrip_con_tmp_path` — `monkeypatch.setattr(runtime_paths, "data_dir", lambda: tmp_path)`; `load_thresholds()` == defaults; `save_thresholds({"stall_minutes": 30})` persiste y `load_thresholds()["stall_minutes"] == 30`; `save_thresholds({"error_rate_warn": 2})` lanza `ValueError` que empieza con `"invalid_thresholds:error_rate_warn"`; archivo corrupto (escribir `"{{{"`) → `load_thresholds()` devuelve defaults.
+15. `test_ops_thresholds_roundtrip_con_tmp_path` — `monkeypatch.setattr(runtime_paths, "data_dir", lambda: tmp_path)`; `load_thresholds()` == defaults **salvo `stall_minutes`, que llega resuelto**: `load_thresholds()["stall_minutes"] == EXECUTION_TIMEOUT_MINUTES` (importarlo de `services.ticket_status` en el test — C4) y NUNCA `None`; `save_thresholds({"stall_minutes": 30})` persiste y `load_thresholds()["stall_minutes"] == 30`; `save_thresholds({"stall_minutes": None})` vuelve al default del sistema; `save_thresholds({"error_rate_warn": 2})` lanza `ValueError` que empieza con `"invalid_thresholds:error_rate_warn"`; archivo corrupto (escribir `"{{{"`) → `load_thresholds()` devuelve defaults (con `stall_minutes` resuelto).
 
 **Comando:**
 ```bash
@@ -713,6 +788,51 @@ cd "Stacky Agents/backend" && .venv/Scripts/python.exe -m pytest tests/test_run_
 **Criterio BINARIO:** verde, incluyendo el caso 15.
 **Flag:** el gating vive en F4 (este módulo no lee flags — recibe `baseline_enabled` como
 parámetro). **Impacto por runtime:** heredado de F1. **Trabajo del operador:** ninguno.
+
+---
+
+### F2b — [ADICIÓN ARQUITECTO — C2] `signals["ops"]` en el ciclo de evolución (RSI mergeada)
+
+**Objetivo (1 frase):** que el ciclo nocturno de auto-mejora VEA la señal operativa —
+regresiones, breaches y stalls — sin tocar nada más del ciclo.
+**Valor:** el contrato §4.10 deja de ser una función sin consumidor: el Centro de
+Evolución analiza salud real, no solo conteos y costos.
+
+**Archivo a EDITAR:** `Stacky Agents/backend/services/evolution_cycle.py` — en
+`collect_signals()` (`:57`), agregar inmediatamente ANTES del `return signals` final
+(anclar por el literal `return signals`), con el MISMO patrón try/except de las claves
+existentes (`executions/costs/incidents/plans` — cada una aislada):
+
+```python
+    # Plan 171 — señal operativa (salud/regresiones/stalls). Aislada: si falla,
+    # el ciclo sigue con el resto de las señales.
+    try:
+        import config as _cfg_mod
+        if getattr(_cfg_mod.config, "STACKY_OPS_TELEMETRY_ENABLED", False):
+            from services import ops_telemetry
+            signals["ops"] = ops_telemetry.evolution_signals()
+    except Exception as exc:  # noqa: BLE001 — espejo de las claves vecinas
+        signals["ops"] = {"error": str(exc)}
+```
+
+(G1 aplica: la instancia es `config.config`; con la flag OFF la clave `"ops"` NO se
+agrega — el shape previo de `collect_signals()` queda byte-idéntico, cero regresión de la
+serie RSI.)
+
+**Tests (TDD — van en `tests/test_ops_telemetry_api.py`, F4, casos 10 y 11):**
+10. `test_evolution_collect_signals_incluye_ops` — con flag ON (fixture) y datos
+    sembrados, `from services.evolution_cycle import collect_signals`;
+    `s = collect_signals()` → `"ops" in s` y `s["ops"]["schema_version"] == 1` y
+    `"regressions" in s["ops"]`.
+11. `test_evolution_collect_signals_flag_off_sin_ops` — monkeypatch
+    `config.config.STACKY_OPS_TELEMETRY_ENABLED = False` (G1) → `"ops" not in
+    collect_signals()`.
+
+**Comando:** el de F4. **Criterio BINARIO:** casos 10-11 verdes y (regresión RSI) los
+tests existentes del ciclo de evolución que nombre el ratchet siguen verdes por archivo.
+**Flag:** `STACKY_OPS_TELEMETRY_ENABLED` (gate en call-site, patrón 199 F1).
+**Impacto por runtime:** N/A (agregado). **Trabajo del operador:** ninguno (el ciclo RSI
+ya tiene su propio HITL — este plan solo le suma datos de LECTURA; ninguna acción nueva).
 
 ---
 
@@ -878,7 +998,8 @@ def client(_app):
 
 Más un fixture `autouse` de función que monkeypatchea `runtime_paths.data_dir` a un
 `tmp_path` (umbrales aislados por test) y el helper `_seed_exec` copiado del patrón
-`test_cost_center_api.py:42-80` con `_NEXT_ADO_ID = 171000`. 9 casos:
+`test_cost_center_api.py:42-80` con `_NEXT_ADO_ID = 171000`. 11 casos (1-9 acá; 10-11
+especificados en F2b):
 1. `test_ops_health_siempre_200` — GET `/api/metrics/ops/health` → 200 con `ok` y `flag_enabled` booleanos.
 2. `test_summary_off_devuelve_enabled_false` — monkeypatch `config.config.STACKY_OPS_TELEMETRY_ENABLED = False` (G1: sobre la INSTANCIA) → `{"enabled": False}` 200; ídem `/ops-trends`, `/ops-thresholds`, `/run-trace/1`.
 3. `test_summary_on_agrupa_por_agente_runtime` — seed 3 codex developer (1 error) + 1 copilot qa → groups correctos, `totals["error"] == 1`.
@@ -1057,7 +1178,8 @@ traza estructurada de la corrida abierta, con fetch on-open (jamás periódico).
 "Traza de la corrida" + lista definición desde `traceRows(trace)` + fila de fases
 (`phases` como `name → formatDateTime(ts)`) + si `trace.sin_dato.length > 0` una línea
 atenuada literal: `"Sin dato en esta corrida: {lista}. Las corridas claude_code_cli
-anteriores al fix de telemetría (Plan 158) no registran modelo."` + si `trace.stalled`
+históricas previas al Plan 158 pueden no registrar modelo si el backfill no las
+alcanzó."` + si `trace.stalled`
 un `StatusChip` tono warning con texto "Posiblemente colgada".
 
 **Archivo a EDITAR:** `Stacky Agents/frontend/src/components/ExecutionDetailDrawer.tsx`:
@@ -1147,6 +1269,8 @@ Actualizar el encabezado de ESTE doc a IMPLEMENTADO al cerrar (riel
 | R7 | Umbrales corruptos a mano en disco | lectura tolerante → defaults; POST valida todo; `schema_version` no editable |
 | R8 | Drift del ratchet por planes ajenos (meta-test rojo preexistente) | criterio binario "sin regresión vs. foto previa" (precedente Plan 146/154) |
 | R9 | `stalls` no ve zombies más viejos que la ventana de filtro | limitación aceptada y documentada: R-O4 opera sobre la ventana visible (default 30d cubre cualquier stall real; un zombie de >30d ya es visible en el historial) |
+| R10 | Colisión de merge con el 199 (mismos archivos aditivos: `CostCenterPage.tsx`, `endpoints.ts`, `CostFilters`/`ExecRecord`) | reglas de merge deterministas congeladas en §8.4 (espejo de la nota §10 del 199); ambos planes son append-only sobre atributos distintos |
+| R11 | La clave `signals["ops"]` (F2b) rompe o enlentece el ciclo RSI | try/except aislado idéntico al de las claves vecinas + gate por flag en call-site; flag OFF = shape previo byte-idéntico; cómputo acotado por `_MAX_ROWS` (misma query que la página) |
 
 ## 7. Fuera de scope (explícito)
 
@@ -1164,31 +1288,48 @@ Actualizar el encabezado de ESTE doc a IMPLEMENTADO al cerrar (riel
 
 ## 8. Contratos congelados hacia otros planes (implementados acá, consumidos allá)
 
-### 8.1 → Plan 167/168 (serie RSI, SOLO PROPUESTA)
+### 8.1 → Serie RSI 167-170 (IMPLEMENTADA y MERGEADA 2026-07-20) — cableado en F2b
 
-`services/ops_telemetry.py::evolution_signals()` (§4.10) queda implementado y testeado
-(caso `test_r_o2_regresion_error_rate` + el shape lo cubre `test_ops_telemetry_api.py`
-indirectamente vía `ops_summary`; agregar assert directo del shape es OPCIONAL para el
-implementador del 167, no de este plan). Cuando el 167 se implemente, su Monitor PUEDE
-sumar `signals["ops"] = ops_telemetry.evolution_signals()` — eso requiere actualizar el
-shape congelado del §4.6 DEL 167 en SU implementación (una clave aditiva), no acá.
-**Degradación:** si la serie RSI nunca se implementa, `evolution_signals()` no tiene
-consumidores y no corre (costo cero); los endpoints de este plan valen por sí mismos.
+`services/ops_telemetry.py::evolution_signals()` (§4.10) queda implementado, testeado
+(casos 10-11 de F2b) y CONSUMIDO: F2b agrega la clave aditiva `signals["ops"]` en
+`evolution_cycle.collect_signals()` (`:57`) con try/except aislado y gate por flag en el
+call-site. **Degradación:** flag OFF → la clave no existe y el shape previo del ciclo
+queda byte-idéntico; excepción en `ops_telemetry` → `{"error": ...}` como las claves
+vecinas, el ciclo nunca se cae por este plan.
 
-### 8.2 → Plan 152 (centro de notificaciones, pendiente)
+### 8.2 → Plan 152 (centro de notificaciones, IMPLEMENTADO)
 
 Los `breaches` de §4.6 son el shape natural para una futura entrada de notificación.
 Este plan NO integra nada con el 152; si el 152 quisiera consumirlos, llama
 `ops_summary` on-demand. Cero acoplamiento.
 
-### 8.3 ← Plan 158 (fix telemetría claude_code_cli, pendiente)
+### 8.3 ← Plan 158 (fix telemetría claude_code_cli, IMPLEMENTADO + AUDITADO)
 
-Contrato de convivencia: este plan lee SOLO por `extract_cost_row`. El día que el 158
-se implemente, las corridas claude nuevas (y las backfilleadas) traen `model` → los
-buckets "sin dato" y `runs_sin_modelo` bajan SOLOS, los costos claude pasan de
-`unknown` a `estimated`, y las reglas de costo/baseline los incorporan sin cambiar UNA
-línea de este plan. Verificación cruzada declarativa: tras implementar 158,
-`runs_sin_modelo` debe tender a 0 en ejecuciones nuevas.
+Contrato de convivencia: este plan lee SOLO por `extract_cost_row`. Con el 158 ya
+implementado, las corridas claude nuevas (y las backfilleadas) traen `model` → el bucket
+"sin dato" y `runs_sin_modelo` cubren solo el residuo histórico que el backfill no
+alcanzó. Verificación cruzada declarativa: `runs_sin_modelo` debe ser ~0 en ejecuciones
+nuevas; si NO lo es, eso señala una regresión del 158 (valor extra de esta métrica).
+
+### 8.4 ↔ Plan 199 (cosecha histórica telemetría, CRITICADO v2 sin implementar) — frontera espejo (C5)
+
+El 199 declaró su lado (su §6/§9-10): NO hace salud/tendencias/baselines/umbrales/traza
+ni `/ops-*`. Espejo del 171: NO cosecha disco, NO agrega filtros multi-runtime/modelo ni
+gráficos de costos (serie apilada/heatmap/distribución — esos son del 199). Reglas de
+merge deterministas (ambos son aditivos, cualquiera puede aterrizar primero):
+- **`ExecRecord`/`CostFilters`:** cada plan agrega SUS campos AL FINAL del dataclass al
+  momento de editar (171: `completed_at`; 199: `runtimes/models/min_cost/max_cost`). El
+  segundo en llegar rebasea los suyos al final — nunca reordenar los del otro.
+- **`CostCenterPage.tsx`:** el orden congelado de secciones tras `<CostTable/>` es:
+  secciones del 171 (`OpsHealthSection`, `OpsTrendsSection`, `OpsThresholdsForm`) y
+  DESPUÉS las del 199 (gráficos + cosecha). Si el 199 aterrizó primero, insertar las del
+  171 ENTRE `<CostTable/>` y las del 199.
+- **`endpoints.ts`:** namespaces separados (`Ops` del 171, `TelemetryHarvest` del 199),
+  ambos insertados después de `CostCenter` — el orden relativo entre ellos es indistinto.
+- **Flags:** grupos coherentes (`group="observabilidad"` en ambos, C3/199-C2); keys
+  disjuntas.
+- **Sin dato claude:** la cosecha del 199 puede rellenar telemetría histórica → tras
+  implementarla, `runs_sin_modelo` baja SOLO (mismo extractor); cero cambios acá.
 
 ## 9. Glosario (para un modelo menor)
 
@@ -1222,12 +1363,14 @@ línea de este plan. Verificación cruzada declarativa: tras implementar 158,
 1. F0 — flags patrón triple + meta-tests (`test_ops_telemetry_flags.py` primero, rojo → verde).
 2. F1 — `test_run_signals.py` (rojo) → campo aditivo `ExecRecord.completed_at` → `run_signals.py` (verde) → regresión 142.
 3. F2 — caso 15 de umbrales (rojo) → `ops_telemetry.py` (verde).
-4. F3 — `test_run_trace.py` (rojo) → `run_trace.py` (verde).
-5. F4 — `test_ops_telemetry_api.py` (rojo) → rutas en `api/metrics.py` (verde) → regresión 142.
-6. F5 — `opsTelemetry.test.ts` (rojo) → tipos + helpers + namespace `Ops` (verde) → `tsc`.
-7. F6 — secciones en Centro de Costos → `tsc` + grep KPI-6.
-8. F7 — `RunTraceBlock` en el drawer → `tsc`.
-9. F8 — ratchet (.sh + .ps1) + batería final completa + actualizar estado del doc.
+4. F2b — casos 10-11 de `test_ops_telemetry_api.py` (rojos) → `signals["ops"]` en
+   `evolution_cycle.collect_signals()` (verdes junto con F4).
+5. F3 — `test_run_trace.py` (rojo) → `run_trace.py` (verde).
+6. F4 — `test_ops_telemetry_api.py` (rojo) → rutas en `api/metrics.py` (verde) → regresión 142.
+7. F5 — `opsTelemetry.test.ts` (rojo) → tipos + helpers + namespace `Ops` (verde) → `tsc`.
+8. F6 — secciones en Centro de Costos → `tsc` + grep KPI-6.
+9. F7 — `RunTraceBlock` en el drawer → `tsc`.
+10. F8 — ratchet (.sh + .ps1) + batería final completa + actualizar estado del doc.
 
 ## 11. Definición de Hecho (DoD)
 
@@ -1238,11 +1381,18 @@ línea de este plan. Verificación cruzada declarativa: tras implementar 158,
 - [ ] Con `STACKY_OPS_TELEMETRY_ENABLED=false`: endpoints nuevos → `{"enabled": false}`
       200, `ops/health` → 200, página y drawer idénticos a hoy.
 - [ ] Cero cambios en: `claude_code_cli_runner.py`, `codex_cli_runner.py`,
-      `harness_health.py`, `run_advisor.py`, contratos del 142, `_execution_costs`.
+      `harness_health.py`, `run_advisor.py`, `operational_health.py`, contratos del 142,
+      `_execution_costs`. (Excepción declarada y acotada: las líneas aditivas de F2b en
+      `evolution_cycle.collect_signals()` — try/except aislado, flag-gated.)
+- [ ] `signals["ops"]` presente en `collect_signals()` con flag ON y AUSENTE con flag OFF
+      (casos 10-11 de F2b verdes); tests previos del ciclo RSI sin regresión.
+- [ ] Los 3 FlagSpec con `group="observabilidad"` (C3 — espejo de
+      `STACKY_COST_CENTER_ENABLED:1681`), y `stall_minutes` efectivo derivado de
+      `EXECUTION_TIMEOUT_MINUTES` cuando no hay override (C4).
 - [ ] Cero `setInterval`/`refetchInterval`/daemons/cron nuevos (KPI-6 + revisión de diff).
 - [ ] `harness_defaults.env` NO editado a mano (G10).
 - [ ] Smoke visual manual del operador (NO bloqueante, post-implementación): abrir
       Centro de Costos → ver "Salud operativa" y "Tendencia diaria"; abrir el detalle de
       una ejecución → ver "Traza de la corrida"; guardar un umbral → Toast.
-- [ ] Estado de este doc actualizado (PROPUESTO → IMPLEMENTADO) con nota honesta de
+- [ ] Estado de este doc actualizado (CRITICADO v2 → IMPLEMENTADO) con nota honesta de
       cualquier desvío.

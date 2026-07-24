@@ -1,0 +1,91 @@
+{
+  "$schema_version": "1.0",
+
+  "origin": {
+    "type": "mantis",
+    "base_url": "https://mantis.ejemplo.local/mantis",
+    "project_ids": [900, 901],
+    "extraction_mode": "auto",
+    "auth": {
+      "auth_file": "auth/mantis_auth_ejemplo.json",
+      "protocol": "rest"
+    },
+    "include_resolved_closed": true,
+    "csv_export_fallback": true
+  },
+
+  "destination": {
+    "type": "gitlab",
+    "base_url": "https://gitlab.ejemplo.local",
+    "project_path": "grupo-ejemplo/proyecto-ejemplo",
+    "auth": {
+      "auth_file": "auth/gitlab_auth_ejemplo.json",
+      "secret_backend": "auto"
+    },
+    "preserve_authorship_mode": "metadata_only",
+    "epics_strategy": "auto"
+  },
+
+  "user_mapping": {
+    "default_fallback": "unassigned",
+    "map": {
+      "usuario.origen.uno": "usuario.destino.uno",
+      "usuario.origen.dos": "usuario.destino.dos",
+      "_comment": "clave = username Mantis, valor = username GitLab. No mapeados -> default_fallback"
+    }
+  },
+
+  "field_mapping": {
+    "status": {
+      "new": { "gitlab_state": "opened", "label": "status::new" },
+      "feedback": { "gitlab_state": "opened", "label": "status::feedback" },
+      "acknowledged": { "gitlab_state": "opened", "label": "status::acknowledged" },
+      "confirmed": { "gitlab_state": "opened", "label": "status::confirmed" },
+      "assigned": { "gitlab_state": "opened", "label": "status::assigned" },
+      "resolved": { "gitlab_state": "closed", "label": "status::resolved" },
+      "closed": { "gitlab_state": "closed", "label": "status::closed" },
+      "_unmapped_fallback": { "gitlab_state": "opened", "label": "status::sin_mapear" }
+    },
+    "priority": {
+      "_reuse": "mantis_client._PRIORITY_MAP",
+      "label_prefix": "priority::",
+      "scale": { "1": "P1-critica", "2": "P2-alta", "3": "P3-normal", "4": "P4-baja", "5": "P5-trivial" }
+    },
+    "severity": { "label_prefix": "severity::" },
+    "category": { "label_prefix": "category::" },
+    "tags": { "label_prefix": "tag::" },
+    "version": {
+      "target_version_as": "milestone",
+      "fixed_in_version_as": "label:fixed_in::",
+      "affects_version_as": "label:affects::"
+    },
+    "relationships": {
+      "parent_child": "gitlab_epic_issue_link",
+      "related_to": "relates_to",
+      "duplicate_of": "relates_to",
+      "has_duplicate": "relates_to",
+      "depends_on": "blocks",
+      "blocks": "blocks"
+    },
+    "custom_fields": { "mode": "metadata_block" }
+  },
+
+  "options": {
+    "dry_run": true,
+    "batch_size": 25,
+    "max_retries": 5,
+    "retry_backoff_seconds": [2, 5, 15, 30, 60],
+    "rate_limit_pause_on_429_seconds": 60,
+    "attachments": { "max_size_mb": 50, "skip_if_over_limit": true, "download_temp_dir": null },
+    "incremental": { "enabled": true, "since_field": "last_updated", "checkpoint_file": "run_state/ejemplo_checkpoint.json" },
+    "verify_after_execute": true,
+    "report_formats": ["markdown", "json"],
+    "report_output_dir": "reports/"
+  },
+
+  "logging": {
+    "level": "INFO",
+    "file": "logs/migrar_mantis_gitlab_{run_id}.log",
+    "redact_secrets": true
+  }
+}

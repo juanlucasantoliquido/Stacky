@@ -1,0 +1,20 @@
+{
+  "$schema_version": "1.0",
+  "origin": {
+    "type": "mantis",
+    "base_url": "https://mantis.ejemplo.local/mantis",
+    "project_ids": [900],
+    "auth": { "auth_file": "auth/mantis_auth_ejemplo.json" }
+  },
+  "destination": {
+    "type": "gitlab",
+    "base_url": "https://gitlab.ejemplo.local",
+    "project_path": "grupo-ejemplo/proyecto-ejemplo",
+    "auth": { "auth_file": "auth/gitlab_auth_ejemplo.json" }
+  },
+  "field_mapping": {
+    "status": {
+      "_unmapped_fallback": { "gitlab_state": "opened", "label": "status::sin_mapear" }
+    }
+  }
+}

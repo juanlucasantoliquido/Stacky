@@ -618,6 +618,32 @@ HARNESS_TEST_FILES=(
   # — Plan 198 · Bitácora de applies de ambientes (ledger + drift + hook) —
   tests/test_plan198_env_ledger.py
   tests/test_plan198_env_hook.py
+  # — Plan 217 · Migrador Mantis→GitLab (F1: config_schema + secret_backend) —
+  tests/test_mg_config_schema.py
+  tests/test_mg_secret_backend.py
+  # — Plan 217 · Migrador Mantis→GitLab (F2b: scraping adapter, F2a: api adapter + mantis_client ext) —
+  tests/test_mg_adapters_scraping.py
+  tests/test_mg_adapters_api.py
+  tests/test_mg_mantis_client_ext.py
+  # — Plan 217 · Migrador Mantis→GitLab (F3: mapping status/priority-severity/users + extra) —
+  tests/test_mg_mapping_status.py
+  tests/test_mg_mapping_priority_severity.py
+  tests/test_mg_mapping_users.py
+  tests/test_mg_mapping_extra.py
+  # — Plan 217 · Migrador Mantis→GitLab (F4: migrator_mg_core + destination_writer) —
+  tests/test_mg_core.py
+  tests/test_mg_destination_writer.py
+  # — Plan 217 · Migrador Mantis→GitLab (F5: executor + checkpoint; F6: adjuntos + links) —
+  tests/test_mg_executor.py
+  tests/test_mg_attachments.py
+  tests/test_mg_links.py
+  # — Plan 217 · Migrador Mantis→GitLab (F7: verify + reporte + anti-PII; F8: retry/circuit breaker) —
+  tests/test_mg_verify.py
+  tests/test_mg_report.py
+  tests/test_mg_fixtures_no_pii.py
+  tests/test_mg_retry.py
+  # — Plan 217 · Migrador Mantis→GitLab (F9: CLI __main__.py, último batch de código) —
+  tests/test_mg_cli_integration.py
 )
 
 pass=0

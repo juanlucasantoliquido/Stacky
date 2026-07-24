@@ -296,6 +296,41 @@ class MantisClient:
 
         return all_issues
 
+    def fetch_all_issues(self) -> list[dict]:
+        """Retorna TODOS los issues del proyecto (abiertos y resueltos/cerrados).
+
+        Mismo patrón de paginación que `fetch_open_issues()` (arriba) pero
+        SIN el filtro de `_RESOLVED_STATUS_IDS` — usado por el migrador
+        Mantis->GitLab (Plan 217 F2a), que necesita migrar el histórico
+        completo (`origin.include_resolved_closed: true`), no solo lo abierto.
+
+        Aditivo (Plan 217 F2a, C6): no modifica `fetch_open_issues`.
+        """
+        if not self.project_id:
+            raise MantisConfigError("Mantis project_id no configurado.")
+
+        all_issues: list[dict] = []
+        page = 1
+        page_size = 50
+
+        while True:
+            data = self._get("issues", {
+                "project_id": self.project_id,
+                "page_size":  page_size,
+                "page":       page,
+            })
+            issues = data.get("issues", []) if isinstance(data, dict) else []
+            if not issues:
+                break
+
+            all_issues.extend(issues)
+
+            if len(issues) < page_size:
+                break
+            page += 1
+
+        return all_issues
+
     def issue_url(self, issue_id: int | str) -> str:
         return f"{self.base_url}/view.php?id={issue_id}"
 
@@ -412,6 +447,58 @@ class MantisClient:
 
             out.append({"id": att_id, "name": name, "size": size, "url": dl_url, "text_content": text_content})
         return out
+
+    def download_attachment_binary(self, file_id: str | int) -> bytes:
+        """Descarga el contenido BINARIO crudo de un adjunto (Plan 217 F2a).
+
+        Usa el mismo endpoint REST que `fetch_attachments` para `dl_url`
+        (`GET {api_base}/files/{file_id}`), pero devuelve `bytes` crudos —
+        a diferencia de `_download_text` (abajo), NO decodifica como texto.
+
+        Igual que `_download_text` ya contempla, algunas instalaciones de
+        Mantis REST envuelven el binario en JSON con un campo `content` en
+        base64 — se detecta y decodifica ese caso también; si no aplica, se
+        devuelven los bytes crudos de la respuesta tal cual.
+
+        Aditivo (Plan 217 F2a, C6): no modifica `fetch_attachments`/
+        `_download_text`. Reusa `self._headers()` y `MantisApiError`, igual
+        patrón que el resto de la clase.
+        """
+        url = f"{self._api_base}/files/{file_id}"
+        ctx = None
+        if not self.verify_ssl:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+
+        req = urllib.request.Request(url, headers=self._headers(), method="GET")
+        kw: dict = {"timeout": _TIMEOUT_SEC}
+        if ctx:
+            kw["context"] = ctx
+        try:
+            with urllib.request.urlopen(req, **kw) as resp:
+                content_type = (resp.headers.get("Content-Type") or "").lower()
+                raw = resp.read()
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")[:500]
+            raise MantisApiError(f"Mantis API {e.code} en {url}: {body}") from e
+        except urllib.error.URLError as e:
+            raise MantisApiError(f"Mantis API no accesible ({url}): {e.reason}") from e
+
+        if "application/json" in content_type or raw[:1] == b"{":
+            try:
+                import base64 as _base64
+                parsed = json.loads(raw)
+                b64 = (
+                    parsed.get("content")
+                    or (parsed.get("file") or {}).get("content")
+                    or ((parsed.get("files") or [{}])[0]).get("content")
+                )
+                if b64:
+                    return _base64.b64decode(b64)
+            except Exception:
+                pass  # No es JSON con base64 -> devolver los bytes crudos tal cual
+        return raw
 
     def delete_attachment(self, issue_id: int | str, attachment_id: str) -> bool:
         """Elimina un adjunto de un issue de Mantis BT.

@@ -1,0 +1,96 @@
+{
+  "_pending_operator_confirmation": "Confirmar si el project_id Mantis correcto es 310 o 311 contra soporte.ais-int.net antes de correr validate/plan real (Plan 217 F0, HITL). Este archivo NO debe usarse para una migración real hasta que el operador humano confirme este valor -- ver §16 fila F0 del plan: 'Confirmar project_id correcto (310 vs 311) ... Validación manual (HITL)'.",
+  "_notes": {
+    "que_es_este_archivo": "Config de referencia para Ripley (Plan 217). base_url/project_path de destino YA completados con los valores de referencia del encabezado del plan -- origin.project_ids es un PLACEHOLDER ([310]) pendiente de confirmación del operador. NO es la plantilla genérica -- para otro proyecto usá migration_config.example.json.",
+    "origin": "extraction_mode='scraping' porque contra soporte.ais-int.net ya se verificó en vivo (§0 del plan) que el plugin MantisConnect (SOAP) no está habilitado y la sección de Tokens de API no está disponible -- el login web en 2 pasos es el único camino viable hoy.",
+    "decidir_cuantos_migrar": "El plan (§16 F0) también pide decidir con el operador CUÁNTOS proyectos/sub-proyectos migrar -- si hace falta unificar varios, project_ids acepta una lista (ej. [310, 311])."
+  },
+
+  "$schema_version": "1.0",
+
+  "origin": {
+    "type": "mantis",
+    "base_url": "https://soporte.ais-int.net/mantis",
+    "project_ids": [310],
+    "extraction_mode": "scraping",
+    "auth": {
+      "auth_file": "auth/mantis_auth_ripley.json",
+      "protocol": "rest"
+    },
+    "include_resolved_closed": true,
+    "csv_export_fallback": true
+  },
+
+  "destination": {
+    "type": "gitlab",
+    "base_url": "https://srvcgit01.imsolutions.local",
+    "project_path": "juanluca.santoliquido/ripley",
+    "auth": {
+      "auth_file": "auth/gitlab_auth_ripley.json",
+      "secret_backend": "auto"
+    },
+    "preserve_authorship_mode": "metadata_only",
+    "epics_strategy": "auto"
+  },
+
+  "user_mapping": {
+    "default_fallback": "unassigned",
+    "map": {
+      "_comment": "clave = username Mantis, valor = username GitLab. Completar tras revisar los usuarios reales del proyecto 310/311 en soporte.ais-int.net. No mapeados -> default_fallback"
+    }
+  },
+
+  "field_mapping": {
+    "status": {
+      "new": { "gitlab_state": "opened", "label": "status::new" },
+      "feedback": { "gitlab_state": "opened", "label": "status::feedback" },
+      "acknowledged": { "gitlab_state": "opened", "label": "status::acknowledged" },
+      "confirmed": { "gitlab_state": "opened", "label": "status::confirmed" },
+      "assigned": { "gitlab_state": "opened", "label": "status::assigned" },
+      "resolved": { "gitlab_state": "closed", "label": "status::resolved" },
+      "closed": { "gitlab_state": "closed", "label": "status::closed" },
+      "_unmapped_fallback": { "gitlab_state": "opened", "label": "status::sin_mapear" }
+    },
+    "priority": {
+      "_reuse": "mantis_client._PRIORITY_MAP",
+      "label_prefix": "priority::",
+      "scale": { "1": "P1-critica", "2": "P2-alta", "3": "P3-normal", "4": "P4-baja", "5": "P5-trivial" }
+    },
+    "severity": { "label_prefix": "severity::" },
+    "category": { "label_prefix": "category::" },
+    "tags": { "label_prefix": "tag::" },
+    "version": {
+      "target_version_as": "milestone",
+      "fixed_in_version_as": "label:fixed_in::",
+      "affects_version_as": "label:affects::"
+    },
+    "relationships": {
+      "parent_child": "gitlab_epic_issue_link",
+      "related_to": "relates_to",
+      "duplicate_of": "relates_to",
+      "has_duplicate": "relates_to",
+      "depends_on": "blocks",
+      "blocks": "blocks"
+    },
+    "custom_fields": { "mode": "metadata_block" }
+  },
+
+  "options": {
+    "dry_run": true,
+    "batch_size": 25,
+    "max_retries": 5,
+    "retry_backoff_seconds": [2, 5, 15, 30, 60],
+    "rate_limit_pause_on_429_seconds": 60,
+    "attachments": { "max_size_mb": 50, "skip_if_over_limit": true, "download_temp_dir": null },
+    "incremental": { "enabled": true, "since_field": "last_updated", "checkpoint_file": "run_state/ripley_checkpoint.json" },
+    "verify_after_execute": true,
+    "report_formats": ["markdown", "json"],
+    "report_output_dir": "reports/"
+  },
+
+  "logging": {
+    "level": "INFO",
+    "file": "logs/migrar_mantis_gitlab_{run_id}.log",
+    "redact_secrets": true
+  }
+}

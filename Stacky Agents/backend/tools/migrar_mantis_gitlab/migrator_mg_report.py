@@ -260,7 +260,10 @@ def generate_report(
     (`"markdown"`/`"json"` en `formats`). Devuelve `{"markdown": ruta,
     "json": ruta}` con solo las claves de los formatos generados."""
     relationships = relationships or []
-    reports_dir = Path(output_dir) / "reports"
+    # `output_dir` YA ES el directorio de reportes: el config lo define como
+    # `options.report_output_dir` (§4, ej. "reports/"). Agregarle otro
+    # "reports" producía rutas duplicadas tipo `reports/reports/...`.
+    reports_dir = Path(output_dir)
     reports_dir.mkdir(parents=True, exist_ok=True)
     slug = _slugify_project_path(project_path)
 

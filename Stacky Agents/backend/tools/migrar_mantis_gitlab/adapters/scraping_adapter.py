@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import html as _html
 import re
+import unicodedata
 from typing import Any, Optional
 
 import requests
@@ -40,14 +41,43 @@ class MantisScrapingAuthError(RuntimeError):
 
 # ── Detección de página de login (sesión no autenticada o expirada) ───────
 
-_LOGIN_PAGE_MARKERS = ('name="username"', 'login.php')
+# Marcador POSITIVO de sesión autenticada: Mantis renderiza el link de
+# logout en la barra de navegación de toda página autenticada, y NUNCA en
+# las páginas de login. Es el discriminante fiable.
+_AUTHENTICATED_MARKER = "logout_page.php"
+
+# Marcadores de "esto es un formulario de login" (paso 1 usuario o paso 2
+# contraseña). Verificados contra la instancia real: `login_page.php` postea
+# a `login_password_page.php`, y esa página postea a `login.php`.
+_LOGIN_FORM_MARKERS = (
+    "login_password_page.php",
+    'action="login.php"',
+    "action='login.php'",
+)
+
+_PASSWORD_FIELD_RE = re.compile(r'name=["\']password["\']', re.IGNORECASE)
 
 
 def _looks_like_login_page(text: str) -> bool:
-    """Heurística tolerante: la respuesta es la página de login (o volvió a
-    ella) si trae el campo de usuario Y hace referencia a login.php."""
+    """La respuesta es una página de login (sesión no autenticada o expirada).
+
+    OJO — la heurística original ('name="username"' Y 'login.php' presentes)
+    estaba ROTA contra Mantis real: el `login_page.php` real NO contiene el
+    literal `login.php` (su form postea a `login_password_page.php`), así que
+    jamás detectaba ni un login fallido ni una sesión expirada. Se reemplaza
+    por: autenticada si trae el link de logout; si no, es login cuando trae
+    cualquier marcador de formulario de login.
+    """
     lowered = (text or "").lower()
-    return all(marker in lowered for marker in _LOGIN_PAGE_MARKERS)
+    if _AUTHENTICATED_MARKER in lowered:
+        return False
+    return any(marker in lowered for marker in _LOGIN_FORM_MARKERS)
+
+
+def _has_password_field(text: str) -> bool:
+    """El paso 1 del login fue aceptado si Mantis devuelve el formulario de
+    contraseña (la página de usuario no lo tiene)."""
+    return bool(_PASSWORD_FIELD_RE.search(text or ""))
 
 
 # ── Extracción de campos ocultos (CSRF token, si el HTML lo trae) ─────────
@@ -116,28 +146,68 @@ def _parse_issue_list_html(html_text: str, project_id: int) -> list[dict[str, An
     return issues
 
 
+def _normalize_label(raw: str) -> str:
+    """Normaliza una etiqueta de `view.php` para comparar sin depender de
+    acentos, mayúsculas ni espaciado (`"Información adicional"` ->
+    `"informacion adicional"`)."""
+    text = _html.unescape(raw or "").strip().lower()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r"[\s_]+", " ", text).strip(" :")
+
+
+# Mantis renderiza las etiquetas de `view.php` EN EL IDIOMA DE LA INSTANCIA.
+# La instancia de referencia (soporte.ais-int.net) está en ESPAÑOL, así que
+# buscar solo claves en inglés devolvía el detalle 100% vacío. Se aceptan
+# ambos idiomas (y las variantes habituales de la traducción es_ES).
+_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
+    "summary": ("summary", "resumen"),
+    "reporter": ("reporter", "reportador", "informador", "reportado por"),
+    "handler": ("handler", "assigned to", "asignado a", "responsable"),
+    "status": ("status", "estado"),
+    "priority": ("priority", "prioridad"),
+    "severity": ("severity", "gravedad", "severidad"),
+    "category": ("category", "categoria"),
+    "description": ("description", "descripcion"),
+    "steps_to_reproduce": (
+        "steps to reproduce", "pasos para reproducir", "pasos a reproducir",
+    ),
+    "additional_information": (
+        "additional information", "informacion adicional", "info adicional",
+    ),
+    "target_version": ("target version", "version objetivo", "version destino"),
+    "fixed_in_version": ("fixed in version", "corregido en version"),
+    "version": ("version", "producto version"),
+    "tags": ("tags", "etiquetas"),
+}
+
+
 def _parse_issue_detail_html(html_text: str, issue_id: int) -> dict[str, Any]:
     """Parsea la tabla `bug-description-table` de `view.php` a un dict plano
-    `{label: valor}` más los campos estructurados (notas/adjuntos/relaciones)."""
+    `{label: valor}` más los campos estructurados (notas/adjuntos/relaciones).
+
+    Tolerante al idioma de la instancia (ver `_LABEL_ALIASES`)."""
     fields: dict[str, str] = {}
     for label_match in _LABELED_ROW_RE.finditer(html_text):
-        label = label_match.group(1).strip().lower()
+        label = _normalize_label(label_match.group(1))
         fields[label] = _strip_tags(label_match.group(2))
 
-    return {
+    def pick(canonical: str) -> str:
+        for alias in _LABEL_ALIASES.get(canonical, (canonical,)):
+            value = fields.get(_normalize_label(alias))
+            if value:
+                return value
+        return ""
+
+    detail = {
         "id": issue_id,
-        "summary": fields.get("summary", ""),
-        "reporter": fields.get("reporter", ""),
-        "handler": fields.get("handler", ""),
-        "status": fields.get("status", ""),
-        "priority": fields.get("priority", ""),
-        "description": fields.get("description", ""),
-        "steps_to_reproduce": fields.get("steps_to_reproduce", ""),
-        "additional_information": fields.get("additional_information", ""),
         "notes": _parse_bugnotes_html(html_text),
         "attachments": _parse_attachments_html(html_text),
         "relationships": _parse_relationships_html(html_text),
     }
+    for canonical in _LABEL_ALIASES:
+        detail[canonical] = pick(canonical)
+    return detail
 
 
 def _parse_bugnotes_html(html_text: str) -> list[dict[str, Any]]:
@@ -221,30 +291,51 @@ class MantisWebScrapingReadAdapter(MantisReadAdapter):
         return resp.text
 
     def _login(self) -> None:
+        """Login web de Mantis en 2 pasos, verificado contra la instancia real.
+
+        Flujo REAL (comprobado en vivo contra soporte.ais-int.net):
+          1. GET  /login_page.php            -> form action="login_password_page.php"
+                                                campos: username + hidden `return`
+          2. POST /login_password_page.php   -> form action="login.php"
+                                                campos: password + hidden username/`return`
+          3. POST /login.php                 -> autentica y redirige a `return`
+
+        (La versión anterior posteaba a `login.php` PRIMERO y a
+        `login_password_page.php` después — invertido — por lo que jamás
+        habría podido autenticarse contra un Mantis real.)
+        """
         self._authenticated = False
 
         login_page_html = self._http_get(f"{self._base_url}/login_page.php")
-        csrf_step1 = _extract_hidden_input(login_page_html, "csrf_token")
+        return_to = _extract_hidden_input(login_page_html, "return") or "index.php"
 
-        step1_data: dict[str, str] = {"username": self._username}
+        # Paso 1 — usuario. El form de login_page.php postea a login_password_page.php.
+        step1_data: dict[str, str] = {"username": self._username, "return": return_to}
+        csrf_step1 = _extract_hidden_input(login_page_html, "csrf_token")
         if csrf_step1:
             step1_data["csrf_token"] = csrf_step1
-        step2_html = self._http_post(f"{self._base_url}/login.php", step1_data)
+        password_page_html = self._http_post(
+            f"{self._base_url}/login_password_page.php", step1_data
+        )
 
-        if _looks_like_login_page(step2_html):
+        # Éxito del paso 1 = Mantis devolvió el formulario de contraseña.
+        if not _has_password_field(password_page_html):
             raise MantisScrapingAuthError(
-                "Login Mantis fallido (paso 1 - usuario): la respuesta volvió "
-                "a la página de login. Verificá el usuario configurado."
+                "Login Mantis fallido (paso 1 - usuario): la respuesta no trae "
+                "el formulario de contraseña. Verificá el usuario configurado."
             )
 
-        csrf_step2 = _extract_hidden_input(step2_html, "csrf_token")
+        # Paso 2 — contraseña. Ese form postea a login.php.
+        return_to = _extract_hidden_input(password_page_html, "return") or return_to
         step2_data: dict[str, str] = {
             "username": self._username,
             "password": self._password,
+            "return": return_to,
         }
+        csrf_step2 = _extract_hidden_input(password_page_html, "csrf_token")
         if csrf_step2:
             step2_data["csrf_token"] = csrf_step2
-        final_html = self._http_post(f"{self._base_url}/login_password_page.php", step2_data)
+        final_html = self._http_post(f"{self._base_url}/login.php", step2_data)
 
         if _looks_like_login_page(final_html):
             raise MantisScrapingAuthError(

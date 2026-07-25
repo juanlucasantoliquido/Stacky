@@ -63,3 +63,41 @@ def test_map_priority_escala_faltante_en_config_lanza_unmapped_priority_error():
 def test_map_severity_label_simple_con_prefijo():
     assert map_severity("major") == "severity::major"
     assert map_severity("  minor  ", label_prefix="sev::") == "sev::minor"
+
+
+# ── Prioridad por NOMBRE (regresión: bug hallado en el smoke E2E) ────────
+
+
+def test_map_priority_acepta_nombre_ademas_de_id_numerico():
+    """El adapter de SCRAPING lee la prioridad de la tabla HTML, donde Mantis
+    muestra el NOMBRE ("high"/"alta"), no el ID numérico que sí trae la API
+    REST. `map_priority` solo aceptaba int, así que toda migración por
+    scraping —el único camino viable contra la instancia de referencia—
+    perdía el 100% de las prioridades."""
+    scale = {
+        "1": "P1-critica", "2": "P2-alta", "3": "P3-normal",
+        "4": "P4-baja", "5": "P5-trivial",
+    }
+
+    # ID numérico (API REST) — comportamiento previo, intacto.
+    assert map_priority(40, scale) == "priority::P2-alta"
+    assert map_priority("40", scale) == "priority::P2-alta"
+
+    # Nombre en inglés (scraping, instancia en inglés).
+    assert map_priority("high", scale) == "priority::P2-alta"
+    assert map_priority("normal", scale) == "priority::P3-normal"
+    assert map_priority("urgent", scale) == "priority::P1-critica"
+
+    # Nombre en español (la instancia de referencia está en español),
+    # tolerante a mayúsculas y acentos.
+    assert map_priority("alta", scale) == "priority::P2-alta"
+    assert map_priority("Alta", scale) == "priority::P2-alta"
+    assert map_priority("baja", scale) == "priority::P5-trivial"
+    assert map_priority("Inmediata", scale) == "priority::P1-critica"
+
+
+def test_map_priority_nombre_desconocido_sigue_lanzando():
+    """No se adivina: un nombre no reconocido sigue siendo un gap explícito."""
+    scale = {"1": "P1", "2": "P2", "3": "P3", "4": "P4", "5": "P5"}
+    with pytest.raises(UnmappedPriorityError):
+        map_priority("prioridad-inventada", scale)

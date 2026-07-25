@@ -242,7 +242,7 @@ def test_execute_dry_run_produce_reporte_simulacro_en_disco(tmp_path, fake_adapt
     assert exit_code == 0
 
     config = load_config(config_path)
-    reports_dir = Path(config.options.report_output_dir) / "reports"
+    reports_dir = Path(config.options.report_output_dir)
     md_files = sorted(reports_dir.glob("*.md"))
     json_files = sorted(reports_dir.glob("*.json"))
     assert len(md_files) == 1

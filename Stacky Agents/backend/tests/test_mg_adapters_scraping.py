@@ -24,19 +24,31 @@ _FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "mg"
 _BASE_URL = "https://mantis.ejemplo.local/mantis"
 
 # HTML sintético mínimo de las páginas de login (2 pasos) — sin datos reales.
+# La ESTRUCTURA replica la verificada en vivo contra una instancia Mantis real
+# (no una inventada): `login_page.php` postea el usuario a
+# `login_password_page.php`, y ESA página postea la contraseña a `login.php`.
+# Antes estaba invertido, y por eso los tests pasaban contra un flujo que
+# jamás habría autenticado contra un Mantis de verdad.
 _LOGIN_PAGE_HTML = (
-    '<html><body><form action="login.php" method="post">'
+    '<html><body><form id="login-form" method="post" action="login_password_page.php">'
+    '<input type="hidden" name="return" value="index.php"/>'
     '<input type="hidden" name="csrf_token" value="tok-paso1"/>'
-    '<input type="text" name="username"/>'
-    '<button>Login</button></form></body></html>'
+    '<input id="username" name="username" type="text"/>'
+    '<input type="submit" value="Iniciar sesion"/></form></body></html>'
 )
 _LOGIN_PASSWORD_PAGE_HTML = (
-    '<html><body><form action="login_password_page.php" method="post">'
+    '<html><body><form id="login-form" method="post" action="login.php">'
+    '<input type="hidden" name="return" value="index.php"/>'
     '<input type="hidden" name="csrf_token" value="tok-paso2"/>'
-    '<input type="hidden" name="username" value="testuser"/>'
-    '<input type="password" name="password"/></form></body></html>'
+    '<input hidden readonly type="text" name="username" value="testuser"/>'
+    '<input id="password" name="password" type="password"/></form></body></html>'
 )
-_LOGGED_IN_HOME_HTML = "<html><body><h1>Bienvenido, testuser</h1></body></html>"
+# Página autenticada: lo que la distingue de una de login es el link de
+# logout en la barra de navegación (marcador positivo de sesión activa).
+_LOGGED_IN_HOME_HTML = (
+    '<html><body><a href="logout_page.php">Salir</a>'
+    "<h1>Bienvenido, testuser</h1></body></html>"
+)
 
 
 class _FakeResponse:
@@ -78,8 +90,9 @@ def _make_session(get_map: dict[str, str], post_map: dict[str, str]) -> MagicMoc
 def _happy_path_login_maps() -> tuple[dict[str, str], dict[str, str]]:
     get_map = {f"{_BASE_URL}/login_page.php": _LOGIN_PAGE_HTML}
     post_map = {
-        f"{_BASE_URL}/login.php": _LOGIN_PASSWORD_PAGE_HTML,
-        f"{_BASE_URL}/login_password_page.php": _LOGGED_IN_HOME_HTML,
+        # Flujo REAL: usuario -> login_password_page.php, contraseña -> login.php.
+        f"{_BASE_URL}/login_password_page.php": _LOGIN_PASSWORD_PAGE_HTML,
+        f"{_BASE_URL}/login.php": _LOGGED_IN_HOME_HTML,
     }
     return get_map, post_map
 
@@ -107,9 +120,10 @@ def test_login_exitoso_autentica_y_expone_sesion():
 def test_login_fallido_credenciales_malas_lanza_auth_error():
     get_map = {f"{_BASE_URL}/login_page.php": _LOGIN_PAGE_HTML}
     post_map = {
-        f"{_BASE_URL}/login.php": _LOGIN_PASSWORD_PAGE_HTML,
-        # Contraseña incorrecta: Mantis vuelve a servir la página de login.
-        f"{_BASE_URL}/login_password_page.php": _LOGIN_PAGE_HTML,
+        f"{_BASE_URL}/login_password_page.php": _LOGIN_PASSWORD_PAGE_HTML,
+        # Contraseña incorrecta: Mantis vuelve a servir la página de login
+        # (sin link de logout = sesión NO autenticada).
+        f"{_BASE_URL}/login.php": _LOGIN_PAGE_HTML,
     }
     session = _make_session(get_map, post_map)
 
@@ -123,9 +137,9 @@ def test_login_fallido_credenciales_malas_lanza_auth_error():
 def test_login_fallido_usuario_invalido_lanza_auth_error_en_paso1():
     get_map = {f"{_BASE_URL}/login_page.php": _LOGIN_PAGE_HTML}
     post_map = {
-        # Usuario inexistente: Mantis vuelve a servir la página de login ya
-        # en el paso 1 (nunca llega a pedir contraseña).
-        f"{_BASE_URL}/login.php": _LOGIN_PAGE_HTML,
+        # Usuario inexistente: Mantis devuelve de nuevo el form de usuario
+        # (SIN campo de contraseña) en vez de avanzar al paso 2.
+        f"{_BASE_URL}/login_password_page.php": _LOGIN_PAGE_HTML,
     }
     session = _make_session(get_map, post_map)
 
@@ -214,9 +228,9 @@ def test_relogin_automatico_ante_sesion_expirada_a_mitad_de_corrida():
         raise AssertionError(f"GET inesperado en el mock: {url}")
 
     def fake_post(url, data=None, timeout=None):
-        if url == f"{_BASE_URL}/login.php":
-            return _FakeResponse(_LOGIN_PASSWORD_PAGE_HTML)
         if url == f"{_BASE_URL}/login_password_page.php":
+            return _FakeResponse(_LOGIN_PASSWORD_PAGE_HTML)
+        if url == f"{_BASE_URL}/login.php":
             return _FakeResponse(_LOGGED_IN_HOME_HTML)
         raise AssertionError(f"POST inesperado en el mock: {url}")
 
@@ -284,9 +298,9 @@ def test_download_attachment_binary_relogin_automatico_ante_sesion_expirada():
         raise AssertionError(f"GET inesperado en el mock: {url}")
 
     def fake_post(url, data=None, timeout=None):
-        if url == f"{_BASE_URL}/login.php":
-            return _FakeResponse(_LOGIN_PASSWORD_PAGE_HTML)
         if url == f"{_BASE_URL}/login_password_page.php":
+            return _FakeResponse(_LOGIN_PASSWORD_PAGE_HTML)
+        if url == f"{_BASE_URL}/login.php":
             return _FakeResponse(_LOGGED_IN_HOME_HTML)
         raise AssertionError(f"POST inesperado en el mock: {url}")
 
@@ -320,3 +334,57 @@ def test_download_attachment_binary_lanza_si_relogin_tambien_falla():
     )
     with pytest.raises(MantisScrapingAuthError, match="adjunto"):
         adapter.download_attachment_binary("501")
+
+
+# ── Instancia en ESPAÑOL (regresión: bug hallado contra el Mantis real) ──
+
+
+_DETALLE_ES_HTML = (
+    '<html><body><a href="logout_page.php">Salir</a>'
+    '<table class="bug-description-table">'
+    '<tr><td class="bug-label">Resumen</td>'
+    '<td class="bug-value">Fallo al generar reporte</td></tr>'
+    '<tr><td class="bug-label">Descripci&oacute;n</td>'
+    '<td class="bug-value">Detalle del problema</td></tr>'
+    '<tr><td class="bug-label">Reportador</td>'
+    '<td class="bug-value">reportero.demo</td></tr>'
+    '<tr><td class="bug-label">Asignado a</td>'
+    '<td class="bug-value">dev.demo</td></tr>'
+    '<tr><td class="bug-label">Estado</td><td class="bug-value">new</td></tr>'
+    '<tr><td class="bug-label">Prioridad</td><td class="bug-value">high</td></tr>'
+    '<tr><td class="bug-label">Gravedad</td><td class="bug-value">minor</td></tr>'
+    '<tr><td class="bug-label">Categor&iacute;a</td>'
+    '<td class="bug-value">General</td></tr>'
+    '<tr><td class="bug-label">Pasos para reproducir</td>'
+    '<td class="bug-value">1. Abrir 2. Fallar</td></tr>'
+    '<tr><td class="bug-label">Informaci&oacute;n adicional</td>'
+    '<td class="bug-value">Notas extra</td></tr>'
+    "</table></body></html>"
+)
+
+
+def test_detalle_parsea_instancia_en_espanol():
+    """Mantis renderiza las etiquetas de `view.php` en el idioma de la
+    instancia. La de referencia (soporte.ais-int.net) está en ESPAÑOL: el
+    parser original solo miraba claves en inglés y devolvía el detalle
+    entero VACÍO contra el servidor real. Los fixtures en inglés no lo
+    detectaban porque estaban hechos a medida del parser."""
+    get_map, post_map = _happy_path_login_maps()
+    get_map[f"{_BASE_URL}/view.php?id=1001"] = _DETALLE_ES_HTML
+    session = _make_session(get_map, post_map)
+
+    adapter = MantisWebScrapingReadAdapter(
+        _BASE_URL, [310], "testuser", "correcthorsebattery", session=session
+    )
+    detail = adapter.fetch_issue_detail(1001)
+
+    assert detail["summary"] == "Fallo al generar reporte"
+    assert detail["reporter"] == "reportero.demo"
+    assert detail["handler"] == "dev.demo"
+    assert detail["status"] == "new"
+    assert detail["priority"] == "high"
+    assert detail["severity"] == "minor"
+    assert detail["category"] == "General"
+    assert detail["description"] == "Detalle del problema"
+    assert detail["steps_to_reproduce"] == "1. Abrir 2. Fallar"
+    assert detail["additional_information"] == "Notas extra"

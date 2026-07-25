@@ -138,24 +138,21 @@ def _build_payload(issue: dict, field_mapping: dict, user_mapping: dict, warning
     raw_priority = issue.get("priority")
     if raw_priority not in (None, ""):
         priority_cfg = field_mapping.get("priority") or {}
+        # NO se pre-filtra por `int()`: el adapter de SCRAPING entrega el
+        # NOMBRE de la prioridad ("high"/"alta"), no el ID numérico de la API
+        # REST. `map_priority` acepta ambos (ver `resolve_priority_id`); el
+        # pre-chequeo anterior descartaba el 100% de las prioridades leídas
+        # por scraping antes siquiera de consultar al mapper.
         try:
-            priority_id = int(raw_priority)
-        except (TypeError, ValueError):
-            warnings.append(
-                f"issue {issue_id}: priority {raw_priority!r} no es un ID numérico Mantis "
-                "(_PRIORITY_MAP espera int); se omite el label de prioridad"
-            )
-        else:
-            try:
-                labels.append(
-                    map_priority(
-                        priority_id,
-                        priority_cfg.get("scale") or {},
-                        priority_cfg.get("label_prefix", "priority::"),
-                    )
+            labels.append(
+                map_priority(
+                    raw_priority,
+                    priority_cfg.get("scale") or {},
+                    priority_cfg.get("label_prefix", "priority::"),
                 )
-            except UnmappedPriorityError as exc:
-                warnings.append(f"issue {issue_id}: {exc}")
+            )
+        except UnmappedPriorityError as exc:
+            warnings.append(f"issue {issue_id}: {exc}")
 
     severity = issue.get("severity")
     if severity:

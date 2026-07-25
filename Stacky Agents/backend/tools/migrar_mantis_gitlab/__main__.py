@@ -576,6 +576,16 @@ def cmd_execute(args: argparse.Namespace) -> int:
             verify_origin_issues = _build_verify_origin_issues(origin_issues_raw, field_mapping_raw)
             mapping_rows = get_full_mapping(conn, config.destination.project_path)
             verification = verify_migration(mapping_rows, verify_origin_issues, writer=writer)
+            if dry_run:
+                # En simulacro no existe nada en GitLab contra qué comparar: el
+                # muestreo campo-a-campo devolvería un "mismatch" por cada issue
+                # (real=None) que NO es un hallazgo real. Se descarta esa parte
+                # para no emitir falsos positivos; los chequeos que sí aplican
+                # (conteos, markers duplicados) se conservan intactos.
+                verification.sample_mismatches = []
+                verification.passed = (
+                    verification.count_gap == 0 and not verification.duplicate_markers
+                )
             print(f"[execute] Verificación: {'APROBADA' if verification.passed else 'CON HALLAZGOS'}")
         else:
             verification = MgVerificationResult()

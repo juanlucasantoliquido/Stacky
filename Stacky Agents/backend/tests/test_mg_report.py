@@ -67,8 +67,8 @@ def test_genera_markdown_y_json_en_tmp_path(tmp_path):
     )
 
     assert set(paths.keys()) == {"markdown", "json"}
-    md_path = tmp_path / "reports" / "grupo_proyecto_run-1.md"
-    json_path = tmp_path / "reports" / "grupo_proyecto_run-1.json"
+    md_path = tmp_path / "grupo_proyecto_run-1.md"
+    json_path = tmp_path / "grupo_proyecto_run-1.json"
     assert md_path.exists()
     assert json_path.exists()
     assert paths["markdown"] == str(md_path)
@@ -86,7 +86,7 @@ def test_genera_solo_el_formato_pedido(tmp_path):
     )
 
     assert set(paths.keys()) == {"markdown"}
-    assert not (tmp_path / "reports" / "grupo_proyecto_run-2.json").exists()
+    assert not (tmp_path / "grupo_proyecto_run-2.json").exists()
 
 
 # ── secciones esperadas en el Markdown ───────────────────────────────────

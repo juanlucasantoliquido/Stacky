@@ -226,8 +226,13 @@ def _build_verify_origin_issues(issues: "list[dict]", field_mapping_raw: dict) -
         raw_priority = issue.get("priority")
         if raw_priority not in (None, ""):
             try:
+                # Sin `int()`: el scraping entrega el NOMBRE de la prioridad
+                # ("alta"/"high"). Con la conversión, `expected` quedaba en
+                # None para TODO issue leído por scraping y `verify` marcaba
+                # 20 "mismatches" contra labels que en realidad eran
+                # correctos — ruido que tapaba hallazgos de verdad.
                 expected_priority_label = map_priority(
-                    int(raw_priority),
+                    raw_priority,
                     priority_cfg.get("scale") or {},
                     priority_cfg.get("label_prefix", "priority::"),
                 )

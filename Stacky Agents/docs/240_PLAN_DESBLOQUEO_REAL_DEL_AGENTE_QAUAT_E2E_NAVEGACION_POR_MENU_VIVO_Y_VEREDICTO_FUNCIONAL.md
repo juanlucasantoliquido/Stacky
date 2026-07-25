@@ -1,6 +1,14 @@
 # Plan 240 — Desbloqueo real del agente QAUAT E2E: guard de runtime, login sin falso negativo, navegación por menú vivo y veredicto funcional
 
-> Estado: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-25). El v1 fue **RECHAZADO** por 3 hallazgos BLOQUEANTES (C1, C2, C3), todos resueltos en esta v2. Pipeline: proponer ✓ → **criticar ✓ [este paso]** → criticar v2 → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **v3 · CRITICADO 2 VECES (v1 → v2 → v3)** — VEREDICTO FINAL: **APROBADO-CON-CAMBIOS** (2026-07-25). El v1 fue **RECHAZADO** (3 BLOQUEANTES: C1, C2, C3) y el v2 también fue **RECHAZADO** (1 BLOQUEANTE nuevo: C14 — la feature de veredicto funcional habría nacido muerta). Todos resueltos en esta v3. Pipeline: proponer ✓ → criticar ✓ → **criticar v2 ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+
+**CHANGELOG v2 → v3 (segunda pasada de juez; 5 hallazgos nuevos, todos probados ejecutando):**
+- **C14 (BLOQUEANTE, resuelto):** `AdoClient.get_work_item(ado_id, fields=None)` tiene una **lista hardcodeada de 7 campos** (`ado_client.py:868-871`) que **NO incluye `System.Description`**. Probado: `get_work_item(367)` → `System.Description` **ausente (0 chars)**; con lista explícita → **12.622 chars**. Como F5 llamaba `get_work_item(ticket_id)` sin `fields`, F6 habría recibido siempre un work item vacío y **todo** run habría dado `MIXED/NO_FUNCTIONAL_ASSERTION`: la feature nacía muerta. F5 ahora pasa la lista explícita (verificado que ADO **no** devuelve 400 cuando un campo no existe para ese tipo: simplemente lo omite — se pidieron 11 y volvieron 9).
+- **C15 (IMPORTANTE, resuelto) — [ADICIÓN ARQUITECTO #2], cambia F6 de heurística a parseo estructural:** `Microsoft.VSTS.Common.AcceptanceCriteria` **no existe en este proyecto** (0 chars en los 4 tickets sondeados; ausente del dump completo de 25 campos). Pero los criterios **sí existen**, dentro de `System.Description`, con una **estructura canónica por headings** verificada: `RESUMEN EJECUTIVO`, `CONTEXTO DE NEGOCIO`, `ANALISIS FUNCIONAL`, `ANALISIS TECNICO`, `PASOS DE REPRODUCCION`, `CRITERIOS DE ACEPTACION`, `ARCHIVOS Y MODULOS PROBABLES`, `EPICA RELACIONADA`, `PRIORIDAD Y ESTIMACION` (sin acentos). Los criterios son `<li>` con ids tipo `CA-01:`, **pantalla explícita** (`FrmBusqueda.aspx`) y **valor esperado** (`50 caracteres`); y `PASOS DE REPRODUCCION` son `<li>` que describen literalmente la navegación a ejecutar. F6 ahora **parsea secciones** (mucho más preciso que regex sobre prosa) y devuelve además `repro_steps`, que F3 consume como guion de navegación. Casos borde probados: el 367 **duplica todo el bloque** (headings dos veces → gana la primera aparición) y arranca con un **preámbulo espurio de agente** ("Ahora reviso la capa de negocio…") que hay que descartar.
+- **C12 (IMPORTANTE, resuelto):** el guard de F0 tenía un **falso positivo propio**. `pw.chromium.executable_path` devuelve el Chrome **headed** (`…\chromium-1228\chrome-win64\chrome.exe`), pero `launch(headless=True)` usa el **headless shell** (`…\chromium_headless_shell-1228\chrome-headless-shell-win64\chrome-headless-shell.exe`) — ejecutables distintos, probado. Un chequeo que solo hace `stat` de `executable_path` puede dar **OK mientras el launch falla** (exactamente el error original: *"Executable doesn't exist at …chromium_headless_shell-1228…"*). F0 ahora valida **ambas** rutas y el preflight llama `probe_launch=True` **una vez por run** (autoritativo, ~1 s, evita un fallo de 25 s más tarde).
+- **C13 (IMPORTANTE, resuelto):** el launcher de F2 leía su flag solo de `os.environ`, pero la exportación vive en `_run_pipeline_in_background` (camino backend). Corriendo `qa_uat_pipeline.py` **desde la CLI** — que es exactamente cómo se hacen las verificaciones en vivo del DoD y cómo depura el operador — nada la exporta ⇒ autostart quedaba **permanentemente `AUTOSTART_DISABLED`**. F2 agrega el flag de CLI `--autostart`.
+- **C16 (MENOR, verificado y anotado):** `services/ado_client.py` importa **solo** `config` y `services.secrets_store` (`:27-28`) — **no** importa `db` ni `models`, así que el `sys.path` insert del bridge es **liviano** y seguro también desde la CLI (no levanta engine de BD). Anotado en F5 para que quien implemente no tema un import pesado.
+
 > Autor: Claude Opus 5 (1M context) en rol StackyArchitectaUltraEficientCode. Juez v2: el mismo agente en rol adversarial, **verificando contra el código instalado y contra AgendaWeb viva**.
 
 **CHANGELOG v1 → v2 (11 hallazgos; cada uno verificado ejecutando, no leyendo):**
@@ -190,10 +198,25 @@ def check_browser_runtime(probe_launch: bool = False) -> dict:
       code (str: "" | "BROWSER_RUNTIME_MISSING" | "PLAYWRIGHT_SHADOWED_BY_TOOL_DIR"),
       binding_version (str|None), executable_path (str|None),
       shadowed_by (str|None), remediation (str), detail (str)
-    probe_launch=False (default): NO lanza browser; valida existencia del executable
-      por filesystem (costo: un stat). probe_launch=True: lanza y cierra chromium
-      headless (solo para el doctor bajo demanda, nunca en el camino caliente).
+    probe_launch=False: heurístico — NO lanza browser, valida por filesystem AMBOS
+      ejecutables (ver _headless_shell_path abajo). probe_launch=True: lanza y cierra
+      chromium headless — es el ÚNICO chequeo autoritativo.
+    (C12) POR QUÉ AMBAS RUTAS: pw.chromium.executable_path devuelve el Chrome HEADED
+      (…\\chromium-<rev>\\chrome-win64\\chrome.exe), pero launch(headless=True) usa el
+      HEADLESS SHELL (…\\chromium_headless_shell-<rev>\\chrome-headless-shell-win64\\
+      chrome-headless-shell.exe) — son ejecutables DISTINTOS (probado 2026-07-25).
+      Un stat solo de executable_path da OK MIENTRAS el launch falla: ese fue
+      literalmente el error original ("Executable doesn't exist at
+      …chromium_headless_shell-1228…"). browser_ok exige que existan LAS DOS.
     """
+
+def _headless_shell_path(executable_path: str) -> str | None:
+    """Deriva la ruta del headless shell desde la del Chrome headed (C12).
+    Reemplaza en el path: el componente 'chromium-<rev>' por
+    'chromium_headless_shell-<rev>', 'chrome-win64' por 'chrome-headless-shell-win64'
+    y el archivo 'chrome.exe' por 'chrome-headless-shell.exe'.
+    Devuelve None si el patrón no matchea (otra plataforma/otro layout): en ese caso
+    browser_ok se decide solo por executable_path y `detail` lo declara."""
     shadowed = _detect_shadowing()
     try:
         from playwright.sync_api import sync_playwright  # import REAL, no find_spec
@@ -242,7 +265,10 @@ CLI en el mismo archivo: `--report` imprime el JSON de `check_browser_runtime()`
      # ── Check 0: runtime de navegador (Plan 240 F0) ───────────────────────────
      try:
          from browser_runtime_guard import check_browser_runtime
-         guard = check_browser_runtime(probe_launch=False)
+         # (C12) probe_launch=True: el stat es heurístico y puede dar falso OK
+         # (headed vs headless-shell). Un launch+close cuesta ~1 s UNA vez por run y
+         # evita un fallo de 25 s más tarde con diagnóstico peor.
+         guard = check_browser_runtime(probe_launch=True)
      except Exception:
          guard = {"ok": True}          # el guard nunca puede bloquear por su propio fallo
      if not guard.get("ok", True):
@@ -275,6 +301,8 @@ CLI en el mismo archivo: `--report` imprime el JSON de `check_browser_runtime()`
 - `test_detecta_shadowing_del_directorio_del_tool`: `_detect_shadowing()` → string no vacío terminando en `playwright` (el directorio de specs TS existe en la raíz del tool).
 - `test_guard_sin_binding_no_lanza_y_da_remediacion`: monkeypatch de `builtins.__import__` para que `playwright.sync_api` lance `ImportError` → `ok is False`, `binding_ok is False`, `code in ("BROWSER_RUNTIME_MISSING","PLAYWRIGHT_SHADOWED_BY_TOOL_DIR")`, `"pip install" in remediation`, `detail` contiene `ImportError` (H3: el texto real, no un hardcode).
 - `test_keys_del_contrato_siempre_presentes`: las 10 keys fijas existen en ambos caminos (ok y no-ok).
+- `test_headless_shell_path_derivada` (**C12**): `_headless_shell_path(r"C:\x\ms-playwright\chromium-1228\chrome-win64\chrome.exe")` → termina en `chromium_headless_shell-1228\chrome-headless-shell-win64\chrome-headless-shell.exe`; con un path que no matchea el patrón → `None`.
+- `test_browser_ok_falso_si_falta_el_headless_shell` (**C12, el test del falso positivo**): monkeypatch para que `executable_path` exista pero la ruta derivada del headless shell **no** → `browser_ok is False`, `code == "BROWSER_RUNTIME_MISSING"`, `remediation` contiene `playwright install`.
 - `test_preflight_bloquea_sin_browser`: monkeypatch de `browser_runtime_guard.check_browser_runtime` → `{"ok": False, "code": "BROWSER_RUNTIME_MISSING", "detail": "x", "remediation": "y"}`; `run_environment_preflight()` → `ok is False`, `verdict == "BLOCKED"`, `reason == "BROWSER_RUNTIME_MISSING"`, y **no** hizo ninguna request HTTP (spy sobre `_http_get` → 0 llamadas).
 
 **Criterio de aceptación (binario):**
@@ -410,6 +438,16 @@ def stop_agenda_web(handle: dict) -> dict:
 ```
 
 **Archivo a EDITAR: `Stacky tools/QA UAT Agent/qa_uat_pipeline.py`**
+- **(C13) Flag alcanzable desde la CLI.** El launcher lee `STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED` de `os.environ`, pero esa variable la exporta el backend en `_run_pipeline_in_background` (F8). Corriendo el pipeline **desde la CLI** —que es exactamente cómo se hacen las verificaciones en vivo del DoD y cómo depura el operador— nadie la exporta y el autostart quedaría **permanentemente `AUTOSTART_DISABLED`**. Por lo tanto, agregar al `argparse` del pipeline:
+  ```python
+  parser.add_argument("--autostart", action="store_true",
+                      help="Intenta arrancar AgendaWeb local si no responde (Plan 240 F2). "
+                           "Equivale a la flag STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED de la UI.")
+  # ... y al procesar args, ANTES del stage de preflight:
+  if args.autostart:
+      os.environ["STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED"] = "true"
+  ```
+  Regla: el flag de CLI **solo puede activar**, nunca desactivar lo que la UI dejó en ON (sin `--autostart` la variable no se toca, así que el valor exportado por el backend manda).
 - En el stage de preflight (`:400-424`), cuando el resultado sea `ok=False` **y** `reason == "APP_NOT_RUNNING"`: **un** intento de autostart y **un** re-preflight:
   ```python
   agenda_handle = {"started_by_us": False}
@@ -807,11 +845,28 @@ def bridge_available() -> bool:
     except Exception:
         return False
 
+# (C14) Lista EXPLÍCITA de campos: get_work_item(ado_id, fields=None) usa por default
+# una lista hardcodeada de 7 campos (ado_client.py:868-871) que NO incluye
+# System.Description. Probado: sin esta lista, Description vuelve VACÍO (0 chars) y el
+# extractor de criterios de F6 no tiene nada que leer => todo run daría
+# MIXED/NO_FUNCTIONAL_ASSERTION. Con la lista, el 367 devuelve 12.622 chars.
+# Verificado también que ADO NO devuelve 400 si un campo no existe para ese tipo de
+# work item: simplemente lo omite del dict (se piden 11, vuelven 9).
+_WORK_ITEM_FIELDS = [
+    "System.Id", "System.Title", "System.State", "System.WorkItemType",
+    "System.Parent", "System.AssignedTo", "System.ChangedDate", "System.Tags",
+    "System.Description",
+    "Microsoft.VSTS.Common.AcceptanceCriteria",   # no existe en este proyecto: se omite solo
+    "Microsoft.VSTS.TCM.ReproSteps",              # idem
+]
+
 def fetch_work_item(ticket_id: int) -> dict:
     """{"ok": bool, "work_item": dict|None, "source": "stacky_dpapi",
         "error": str|None, "message": str|None}
     Devuelve el work item con el MISMO shape que ado.py get (dict con 'id' y 'fields'),
-    para que uat_ticket_reader lo consuma sin cambios de forma. NUNCA lanza."""
+    para que uat_ticket_reader lo consuma sin cambios de forma.
+    OBLIGATORIO: llamar get_work_item(ticket_id, fields=_WORK_ITEM_FIELDS) — jamás sin
+    fields (C14). NUNCA lanza."""
 
 def fetch_comments(ticket_id: int, top: int = 20) -> dict:
     """{"ok": bool, "comments": list, "source": "stacky_dpapi", "error": str|None}. NUNCA lanza."""
@@ -888,27 +943,67 @@ _SCREEN_HINTS = {
 #   "color"      -> color / rojo / verde / chip / semaforo
 #   "no_error"   -> error ajax / input string was not in a correct format / excepcion
 
+
+# (C15) PARSEO ESTRUCTURAL, no heurístico. Verificado el 2026-07-25 en los tickets
+# 367, 366, 57 y 61: System.Description trae SIEMPRE esta estructura canónica de
+# headings h1-h6 (SIN acentos), y los ítems son <li>:
+_CANONICAL_SECTIONS = (
+    "RESUMEN EJECUTIVO", "CONTEXTO DE NEGOCIO", "ANALISIS FUNCIONAL",
+    "ANALISIS TECNICO", "PASOS DE REPRODUCCION", "CRITERIOS DE ACEPTACION",
+    "ARCHIVOS Y MODULOS PROBABLES", "EPICA RELACIONADA", "PRIORIDAD Y ESTIMACION",
+)
+# El campo Microsoft.VSTS.Common.AcceptanceCriteria NO EXISTE en este proyecto
+# (0 chars en los 4 tickets sondeados, ausente del dump de 25 campos): los criterios
+# viven dentro de System.Description bajo el heading "CRITERIOS DE ACEPTACION".
+
+def split_sections(html: str) -> dict:
+    """Parte el HTML por headings h1-h6 -> {HEADING_UPPER: html_del_bloque}.
+    Implementación EXACTA: re.split(r"<h[1-6][^>]*>(.*?)</h[1-6]>", html, flags=re.I|re.S)
+    y recorrer de dos en dos (heading, cuerpo).
+    CASO BORDE PROBADO (ticket 367): la descripción DUPLICA todo el bloque de headings;
+    gana SIEMPRE la PRIMERA aparición (if head not in out). El texto anterior al primer
+    heading es preámbulo espurio (en el 367: "Ahora reviso la capa de negocio…", una
+    frase de agente) y se DESCARTA. NUNCA lanza: ante error devuelve {}."""
+
+def _li_items(block_html: str) -> list[str]:
+    """Extrae los <li> de un bloque y los limpia: quita tags, resuelve &quot; &amp;
+    &nbsp; &gt; &lt;, colapsa espacios. Si el bloque no tiene <li>, parte el texto plano
+    por saltos de línea y descarta lo de menos de 4 palabras."""
+
 def extract_acceptance(work_item: dict) -> dict:
-    """Lee fields System.Title, System.Description,
-    Microsoft.VSTS.Common.AcceptanceCriteria y (si vienen) los comentarios.
+    """Lee fields System.Title y System.Description (el único que trae contenido real).
     Devuelve:
       {"ok": True,
-       "criteria": [{"id": "AC-1", "text": <frase>, "kind": <uno de los 8 arriba>,
+       "criteria": [{"id": "CA-01"|"AC-n", "text": <ítem completo>, "kind": <uno de los 8>,
                      "screen_hint": "FrmX.aspx"|None, "tokens": [<literales citados>],
-                     "expected": <str|int|None>}],
-       "screens": [<pantallas mencionadas, deduplicadas, orden de aparición>],
+                     "expected": <str|None>}],
+       "repro_steps": [<texto de cada <li> de PASOS DE REPRODUCCION, en orden>],
+       "screens": [<pantallas .aspx mencionadas, deduplicadas, orden de aparición>],
        "confidence": "high"|"medium"|"low",
+       "sections_found": [<headings canónicos presentes>],
        "notes": [<supuestos declarados>]}
-    Reglas:
-      - HTML de la descripción se limpia por tags (re.sub(r"<[^>]+>", " ", ...)) — sin deps nuevas.
-      - Se parte en frases por [.;\\n] y se descarta lo de <4 palabras.
-      - kind: primer patrón que matcha en el orden declarado arriba. Sin match => se descarta
-        la frase (no se inventan criterios).
-      - tokens: literales entre comillas dobles/simples y valores tipo MaxLength=20 -> "20".
-      - confidence: "high" si hay AcceptanceCriteria no vacío; "medium" si solo descripción;
-        "low" si solo título.
-      - NUNCA lanza: ante cualquier error devuelve {"ok": True, "criteria": [], "screens": [],
-        "confidence": "low", "notes": ["extraction_failed: <detalle>"]}.
+    Reglas EXACTAS:
+      - secs = split_sections(description). Criterios = _li_items(secs["CRITERIOS DE
+        ACEPTACION"]); repro_steps = _li_items(secs["PASOS DE REPRODUCCION"]).
+      - id: si el ítem arranca con un prefijo tipo "CA-01:" / "CA-1 -" se usa ese id
+        literal (verificado en el 367); si no, se genera "AC-<n>" por posición.
+      - kind: primer patrón que matcha en el orden declarado arriba. Si ninguno matcha,
+        el criterio SE CONSERVA con kind="assertion" (a diferencia del v2, que lo
+        descartaba: un criterio explícito del ticket JAMÁS se tira — descartarlo
+        inflaría el falso PASS que este plan viene a matar).
+      - screen_hint: primer match de _SCREEN_RE en el ítem; si no hay, primer match en
+        el título; si no, _SCREEN_HINTS por sinónimo funcional; si no, None.
+      - expected: valor numérico o entrecomillado citado en el ítem
+        (ej "admite hasta 50 caracteres" -> "50"; MaxLength=20 -> "20").
+      - confidence: "high" si existe la sección CRITERIOS DE ACEPTACION con >=1 <li>;
+        "medium" si hay descripción con secciones canónicas pero sin esa sección;
+        "low" si no hay descripción (solo título).
+      - Si NO hay sección de criterios, se cae al modo heurístico sobre ANALISIS
+        FUNCIONAL + título (partir por [.;\\n], descartar <4 palabras) y confidence
+        queda en "medium"/"low". Nunca se inventan criterios.
+      - NUNCA lanza: ante cualquier error devuelve {"ok": True, "criteria": [],
+        "repro_steps": [], "screens": [], "confidence": "low",
+        "notes": ["extraction_failed: <detalle>"]}.
         Motivo: 0 criterios NO es un error, es una señal — F6 la convierte en MIXED, no en PASS.
     """
 ```
@@ -954,10 +1049,14 @@ def build_functional_verdict(criteria_results: list[dict], technical: dict) -> d
   Regla dura: `APP_ERROR_PAGE` **jamás** se reintenta — reintentar un bug del desarrollo lo convertiría en flaky y podría enmascararlo.
 
 **Tests (TDD): `Stacky tools/QA UAT Agent/tests/unit/test_plan240_functional_verdict.py`**
-- `test_extract_maxlength_del_ticket_367`: work item con título *"Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)"* → ≥1 criterio con `kind == "maxlength"`, `expected == "20"`, `screen_hint == "FrmBusqueda.aspx"`.
+- `test_split_sections_encuentra_las_canonicas` (**C15**): fixture con el HTML de headings canónicos → `sections_found` contiene `CRITERIOS DE ACEPTACION` y `PASOS DE REPRODUCCION`.
+- `test_split_sections_duplicado_gana_el_primero` (**C15, caso borde real del 367**): HTML con el bloque de headings DUPLICADO y con preámbulo espurio antes del primer heading → el cuerpo devuelto es el de la **primera** aparición y el preámbulo no aparece en ningún criterio.
+- `test_extract_criterios_con_id_CA` (**C15, formato real del 367**): `<li>CA-01: El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres…</li>` → criterio con `id == "CA-01"`, `screen_hint == "FrmBusqueda.aspx"`, `expected == "50"`, y `confidence == "high"`.
+- `test_extract_repro_steps` (**C15**): 3 `<li>` bajo `PASOS DE REPRODUCCION` → `repro_steps` con 3 items en orden, el primero conteniendo `FrmBusqueda.aspx`.
+- `test_extract_maxlength_del_ticket_367`: título *"Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)"* sin sección de criterios → modo heurístico: ≥1 criterio con `kind == "maxlength"`, `expected == "20"`, `screen_hint == "FrmBusqueda.aspx"`, `confidence != "high"`.
 - `test_extract_catalogo_del_ticket_366`: *"Catalogo Tipo de Telefono no incluye Laboral ni Particular"* → `kind == "catalog"`, `tokens` con `Laboral` y `Particular`, `screen_hint == "FrmDetalleClie.aspx"`.
-- `test_extract_duplicado_del_ticket_387`: *"Columna duplicada 'Medio de Contacto' en grid Gestiones de Detalle de Cliente"* → `kind == "absence"`, token `Medio de Contacto`.
-- `test_extract_html_limpio`: descripción con `<div><b>texto</b></div>` → el criterio no contiene `<` ni `>`.
+- `test_criterio_sin_kind_reconocido_se_conserva` (**C15**): `<li>` con prosa que no matchea ningún patrón → el criterio **está** en la lista con `kind == "assertion"` (no se descarta: descartarlo infla el falso PASS).
+- `test_extract_html_limpio`: descripción con `<div><b>texto</b></div>` y entidades `&quot; &amp; &nbsp; &gt;` → el criterio no contiene `<`, `>` ni `&…;`.
 - `test_extract_sin_nada_no_lanza`: `{}` → `ok True`, `criteria == []`, `confidence == "low"`.
 - `test_confidence_por_fuente`: con AcceptanceCriteria → `"high"`; solo descripción → `"medium"`; solo título → `"low"`.
 - `test_verdict_sin_criterios_no_es_pass` (**KPI-5, el test clave**): `build_functional_verdict([], {"verdict": "PASS"})` → `verdict == "MIXED"`, `reason == "NO_FUNCTIONAL_ASSERTION"`, `functional_pass is False`.
@@ -1177,6 +1276,9 @@ Tras editar: `python -m json.tool "Stacky Agents/docs/sistema/error_fingerprints
 | R11 | **(C1)** Alguien vuelve a llamar código sync de Playwright desde un método async del driver | Prohibición verificable en el DoD (`grep -c "run_auth_session" navigation_driver.py` → 0) + `reauth_in_page` async como única vía soportada + explicación del crash real (`sync_api/_context_manager.py:48`) escrita en el docstring del helper |
 | R12 | **(C4)** Aparece otra custom error page con un título que tampoco está en la lista de patrones | El gate de `assert_arrival` no depende solo del título: también mira `DOM_ERROR_TEXT_PATTERNS` sobre el body, los `DOM_ERROR_SELECTORS` y los indicadores de URL (`errors.aspx`, `aspxerrorpath`); cualquier patrón nuevo se agrega al final de la lista existente (aditivo, nunca reordenar) |
 | R13 | **(C5)** Dos runs QA UAT concurrentes con flags distintas comparten el último export a `os.environ` | Candado de módulo para que los exports no se interleaven + limitación escrita en el docstring; aceptable bajo el modelo mono-operador (G6). Prohibido "arreglarlo" con `setdefault` (volvería inefectivo el toggle de la UI) |
+| R14 | **(C14)** Alguien vuelve a llamar `get_work_item` sin `fields` y el veredicto funcional queda vacío en silencio | `_WORK_ITEM_FIELDS` obligatorio en el bridge + el propio `functional_verdict` convierte "0 criterios" en `MIXED/NO_FUNCTIONAL_ASSERTION` **visible**, nunca en un PASS: el modo de falla es ruidoso, no silencioso |
+| R15 | **(C15)** Un ticket futuro no sigue la estructura canónica de headings | Degradación explícita por capas: sin sección `CRITERIOS DE ACEPTACION` se cae al modo heurístico sobre `ANALISIS FUNCIONAL` + título con `confidence` `medium`/`low`, y si tampoco hay nada, 0 criterios → `MIXED` honesto. Nunca se inventan criterios |
+| R16 | **(C16)** El `sys.path` insert del bridge arrastra imports pesados del backend desde la CLI | Verificado: `services/ado_client.py` importa solo `config` y `services.secrets_store` (`:27-28`); **no** importa `db` ni `models`, así que no se levanta engine de BD. Si un refactor futuro lo cambiara, el bridge seguiría degradando al CLI legacy por su `try/except` |
 
 ## 8. Fuera de scope (explícito)
 
@@ -1217,7 +1319,7 @@ Tras editar: `python -m json.tool "Stacky Agents/docs/sistema/error_fingerprints
 
 ## 11. Definición de Hecho (DoD) global
 
-- [ ] Los **9** archivos de test nuevos verdes (C8: el v1 decía "8" y enumeraba 7+1), corridos **POR ARCHIVO** con los comandos exactos de §4, con la salida real pegada (cero "pasó todo" sin evidencia). **8 del tool:** `test_plan240_browser_runtime_guard.py` **5**, `test_plan240_login_url_predicate.py` **6**, `test_plan240_agenda_launcher.py` **8**, `test_plan240_menu_resolver.py` **10**, `test_plan240_arrival_and_console.py` **15** (13 + los 2 de C4), `test_plan240_ado_bridge.py` **8**, `test_plan240_functional_verdict.py` **15**, `test_plan240_evidence_manifest.py` **8**. **1 backend:** `test_plan240_qa_uat_runtime.py` **8** (6 + C9 + C10). **Total 83 casos.**
+- [ ] Los **9** archivos de test nuevos verdes (C8: el v1 decía "8" y enumeraba 7+1), corridos **POR ARCHIVO** con los comandos exactos de §4, con la salida real pegada (cero "pasó todo" sin evidencia). **8 del tool:** `test_plan240_browser_runtime_guard.py` **7** (5 + los 2 de C12), `test_plan240_login_url_predicate.py` **6**, `test_plan240_agenda_launcher.py` **8**, `test_plan240_menu_resolver.py` **10**, `test_plan240_arrival_and_console.py` **15** (13 + los 2 de C4), `test_plan240_ado_bridge.py` **8**, `test_plan240_functional_verdict.py` **19** (15 + los 4 de C15), `test_plan240_evidence_manifest.py` **8**. **1 backend:** `test_plan240_qa_uat_runtime.py` **8** (6 + C9 + C10). **Total 89 casos.**
 - [ ] El único `backend/tests/test_plan240_*.py` registrado en `HARNESS_TEST_FILES` (sh **y** ps1); meta-ratchet verde.
 - [ ] Regresiones nombradas verdes (por archivo): `test_navigation_driver.py`, `test_navigation_plan_gate.py`, `test_replan_engine.py`, `test_uat_ticket_reader.py`, `test_screen_error_detector.py` (por C4), `test_qa_uat_endpoint.py`, `test_harness_flags.py`, `test_harness_flags_requires.py` (por C9).
 - [ ] **Prohibiciones de arquitectura verificadas (los 3 bloqueantes del v1 no pueden volver):** `grep -c "run_auth_session" navigation_driver.py` → **0** (C1: jamás Sync API desde async); `grep -c "def reauth_in_page" auth_session_factory.py` → **1** (C1); `grep -c "get_agenda_base_url" navigation_driver.py` → **≥1** (C2: base_url resuelto por la fuente única); `grep -cE "evaluate\(\s*render_(aspnet_exception|dom)_detector_js" navigation_driver.py` → **0** (C3: no se evalúa una definición de función TS).

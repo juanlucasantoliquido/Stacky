@@ -1170,6 +1170,24 @@ class Config:
     STACKY_GITLAB_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 218 — Paridad total ADO ↔ GitLab (sustrato multi-proveedor) ──────
+    # Las 4 nacen ON: ninguna dispara las 4 excepciones duras (no bypasean revisión
+    # humana, no son destructivas, no exigen prerequisitos nuevos, no reducen
+    # seguridad). El kill-switch del eje GitLab sigue siendo STACKY_GITLAB_ENABLED
+    # (OFF por excepción 3: exige instancia GitLab + token, que no existen en una
+    # instalación limpia). Editables por UI en la categoría `paridad_proveedores`.
+    STACKY_PROVIDER_PARITY_ENABLED: bool = os.getenv(
+        "STACKY_PROVIDER_PARITY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_CANONICAL_VOCABULARY_ENABLED: bool = os.getenv(
+        "STACKY_CANONICAL_VOCABULARY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_CAPABILITY_DEGRADATION_ENABLED: bool = os.getenv(
+        "STACKY_CAPABILITY_DEGRADATION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 70 — Desacople consumers TrackerProvider ─────────────────────────
     # ON: api/tickets.py enruta los ~18 call sites por el puerto TrackerProvider
     # (get_tracker_provider) en vez de por _ado_client_for_ticket; cae al fallback

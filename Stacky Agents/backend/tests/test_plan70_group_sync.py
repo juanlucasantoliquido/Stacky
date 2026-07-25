@@ -51,19 +51,27 @@ def test_sync_helper_flag_on_ado_provider_calls_sync_tickets():
     assert result == mock_result
 
 
-def test_sync_helper_flag_on_gitlab_raises_not_implemented():
-    """Flag ON + GitLab: NotImplementedError ruidoso (GAP-A, Plan 71 lo implementa)."""
+def test_sync_helper_flag_on_gitlab_declara_capacidad_ausente():
+    """Flag ON + GitLab: la capacidad ausente se DECLARA (GAP-A, Plan 220 la implementa).
+
+    Plan 218 F6 reemplazó el NotImplementedError ruidoso por `CapabilityUnavailable`:
+    el hueco sigue siendo visible (nunca se silencia), pero ahora es un límite tipado
+    que el endpoint traduce a un 200 accionable en vez de un 500 mudo.
+    """
     import api.tickets as tickets
     import pytest
+    from services.tracker_provider import CapabilityUnavailable
 
     mock_provider = MagicMock()
     mock_provider.name = "gitlab"
 
     with patch("api.tickets._provider_for_ticket", return_value=mock_provider):
-        with pytest.raises(NotImplementedError) as exc_info:
+        with pytest.raises(CapabilityUnavailable) as exc_info:
             tickets._sync_via_provider_or_ado(project_name="p")
 
-    assert "gitlab" in str(exc_info.value).lower() or "provider" in str(exc_info.value).lower()
+    assert exc_info.value.capability == "tracker.sync.full"
+    assert exc_info.value.provider == "gitlab"
+    assert "gitlab" in str(exc_info.value).lower()
 
 
 def test_sync_helper_is_idempotent_with_same_input():

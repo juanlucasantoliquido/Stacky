@@ -24,6 +24,11 @@ from services.vscode_instance_manager import (
 
 logger = logging.getLogger("stacky_agents.project_context")
 
+# Tracker por defecto cuando el proyecto no declara `issue_tracker.type`.
+# Plan 218 F1/F4: estaba repetido en 5 sitios de este archivo; centralizarlo baja el
+# censo de acoplamiento (K4) sin cambiar una sola decisión de comportamiento.
+_DEFAULT_TRACKER_TYPE = "azure_devops"
+
 _LEGACY_BRIDGE_WARNED = False
 
 
@@ -48,12 +53,26 @@ class ProjectContext:
     tracker_type: str
     tracker_project: str
     organization: str | None = None
+    base_url: str | None = None          # URL de instancia (GitLab self-managed, Mantis, Jira)
+    tracker_group: str | None = None     # grupo/namespace (GitLab epics)
     workspace_root: str | None = None
     auth_path: str | None = None
     vscode_port: int | None = None
 
     def with_vscode_port(self, port: int | None) -> "ProjectContext":
         return replace(self, vscode_port=port)
+
+
+@dataclass(frozen=True)
+class TrackerTarget:
+    """Destino resuelto de escritura/lectura. CONGELADO por el Plan 218 (§3.1)."""
+
+    tracker_type: str
+    project_path: str          # ADO: nombre de proyecto | GitLab: 'grupo/proyecto'
+    base_url: str | None
+    organization: str | None
+    group: str | None
+    auth_path: str | None
 
 
 def _normalize_project_name(name: str | None) -> str | None:
@@ -70,7 +89,7 @@ def _normalize_workspace_root(path: str | None) -> str | None:
 
 def _tracker_project_for(cfg: dict) -> str:
     tracker = cfg.get("issue_tracker") or {}
-    tracker_type = (tracker.get("type") or "azure_devops").strip().lower()
+    tracker_type = (tracker.get("type") or _DEFAULT_TRACKER_TYPE).strip().lower()
     if tracker_type == "jira":
         return (tracker.get("project_key") or tracker.get("project") or cfg.get("name") or "").strip()
     if tracker_type == "mantis":
@@ -85,16 +104,32 @@ def _organization_for(cfg: dict) -> str | None:
     return org or None
 
 
+def _base_url_for(cfg: dict) -> str | None:
+    """URL de instancia declarada por el proyecto (Plan 218 F4). None = usar la global."""
+    tracker = cfg.get("issue_tracker") or {}
+    return (tracker.get("base_url") or "").strip() or None
+
+
+def _tracker_group_for(cfg: dict) -> str | None:
+    """Grupo/namespace del tracker (GitLab epics). Plan 218 F4."""
+    tracker = cfg.get("issue_tracker") or {}
+    return (tracker.get("group") or "").strip() or None
+
+
 def _auth_path_for(cfg: dict) -> str | None:
     tracker = cfg.get("issue_tracker") or {}
     project_name = _normalize_project_name(cfg.get("name"))
     if not project_name:
         return None
-    tracker_type = (tracker.get("type") or "azure_devops").strip().lower()
+    tracker_type = (tracker.get("type") or _DEFAULT_TRACKER_TYPE).strip().lower()
     if tracker_type == "jira":
         default_auth = "auth/jira_auth.json"
     elif tracker_type == "mantis":
         default_auth = "auth/mantis_auth.json"
+    elif tracker_type == "gitlab":
+        # Plan 218 F4 (B1): sin esta rama, todo proyecto GitLab caía en el `else` y
+        # apuntaba a las credenciales de Azure DevOps.
+        default_auth = "auth/gitlab_auth.json"
     else:
         default_auth = "auth/ado_auth.json"
     rel = (tracker.get("auth_file") or default_auth).strip()
@@ -172,7 +207,7 @@ def resolve_project_context(
     if not cfg or not stacky_name:
         return None
 
-    tracker_type = ((cfg.get("issue_tracker") or {}).get("type") or "azure_devops").strip().lower()
+    tracker_type = ((cfg.get("issue_tracker") or {}).get("type") or _DEFAULT_TRACKER_TYPE).strip().lower()
     tracker_project_name = _tracker_project_for(cfg)
     workspace_root = (cfg.get("workspace_root") or "").strip() or None
     auth_path = _auth_path_for(cfg)
@@ -186,9 +221,55 @@ def resolve_project_context(
         tracker_type=tracker_type,
         tracker_project=tracker_project_name,
         organization=_organization_for(cfg),
+        base_url=_base_url_for(cfg),
+        tracker_group=_tracker_group_for(cfg),
         workspace_root=workspace_root,
         auth_path=auth_path,
         vscode_port=vscode_port,
+    )
+
+
+def build_tracker_target(project_name: str | None = None) -> TrackerTarget:
+    """Resuelve el destino desde issue_tracker del config.json del proyecto.
+
+    Plan 218 F4. Compatibilidad: si el proyecto NO declara base_url/project para
+    gitlab, cae a config.config.GITLAB_URL / GITLAB_PROJECT (comportamiento actual),
+    de modo que los proyectos existentes siguen funcionando sin declarar nada nuevo.
+    """
+    import config as _config  # noqa: PLC0415
+
+    ctx = resolve_project_context(project_name=project_name)
+    tracker_type = (getattr(ctx, "tracker_type", None) or _DEFAULT_TRACKER_TYPE).strip().lower()
+    project_path = (getattr(ctx, "tracker_project", None) or "").strip()
+    base_url = getattr(ctx, "base_url", None)
+    group = getattr(ctx, "tracker_group", None)
+
+    if tracker_type == "gitlab":
+        # B1: `_tracker_project_for` cae al NOMBRE Stacky cuando el proyecto no declara
+        # `issue_tracker.project` — y un nombre Stacky NUNCA es un path 'grupo/proyecto'
+        # de GitLab. Acá se usa el valor DECLARADO (sin ese fallback) para poder caer
+        # a la config global, que es el comportamiento compatible.
+        cfg = _config_for_project_name(project_name) if project_name else None
+        if cfg is None:
+            activo = get_active_project()
+            cfg = _config_for_project_name(activo) if activo else None
+        declarado = ((cfg or {}).get("issue_tracker") or {}).get("project")
+        project_path = (declarado or "").strip()
+
+        if not base_url:
+            base_url = (getattr(_config.config, "GITLAB_URL", "") or "").strip() or None
+        if not project_path:
+            project_path = (getattr(_config.config, "GITLAB_PROJECT", "") or "").strip()
+        if not group:
+            group = (getattr(_config.config, "STACKY_GITLAB_GROUP", "") or "").strip() or None
+
+    return TrackerTarget(
+        tracker_type=tracker_type,
+        project_path=project_path,
+        base_url=base_url,
+        organization=getattr(ctx, "organization", None),
+        group=group,
+        auth_path=getattr(ctx, "auth_path", None),
     )
 
 
@@ -214,7 +295,7 @@ def build_ado_client(
     from services.ado_client import AdoClient, AdoConfigError
 
     ctx = require_project_context(project_name, tracker_project=tracker_project, ticket=ticket)
-    if ctx.tracker_type != "azure_devops":
+    if ctx.tracker_type != _DEFAULT_TRACKER_TYPE:
         raise AdoConfigError(
             f"El proyecto '{ctx.stacky_project_name}' no usa Azure DevOps (tracker_type={ctx.tracker_type})."
         )

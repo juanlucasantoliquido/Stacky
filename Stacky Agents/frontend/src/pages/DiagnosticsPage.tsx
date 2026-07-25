@@ -14,6 +14,7 @@ import HarnessHealthCard from "../components/HarnessHealthCard";
 import PublishLedgerPanel from "../components/PublishLedgerPanel";
 import OperationalHealthCard from "../components/OperationalHealthCard";
 import CodeIntegrityCard from "../components/CodeIntegrityCard";
+import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
 
@@ -212,6 +213,10 @@ export default function DiagnosticsPage() {
 
       {/* Plan 130 — Verificador de integridad de código (on-demand) */}
       <CodeIntegrityCard />
+
+      {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
+          maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}
+      <ParityMatrixPanel />
 
       {/* Drawer para detalle de ejecución (Plan 38 C2) */}
       <ExecutionDetailDrawer executionId={detailId} onClose={() => setDetailId(null)} />

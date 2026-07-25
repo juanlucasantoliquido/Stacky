@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "generated_by": "Plan 218 F7",
+  "measured_at": "2026-07-25",
+  "_comment": "C12 — resuelve la divergencia documento<->codigo de §2.4: cinco de estos planes dicen 'PROPUESTO' en su encabezado pero su codigo EXISTE. Este archivo congela el estado MEDIDO contra el codigo, no contra la prosa. Cada simbolo se verifica en test_plan218_serie_integridad.py.",
+  "estados_validos": [
+    "IMPLEMENTADO",
+    "IMPLEMENTADO_PARCIAL",
+    "IMPLEMENTADO_INALCANZABLE",
+    "NO_IMPLEMENTADO"
+  ],
+  "planes": [
+    {
+      "plan": 65,
+      "doc_dice": "PROPUESTO",
+      "estado_real": "IMPLEMENTADO",
+      "evidencia": [
+        {"file": "backend/services/tracker_provider.py", "symbol": "get_tracker_provider"},
+        {"file": "backend/services/gitlab_provider.py", "symbol": "GitLabTrackerProvider"}
+      ],
+      "nota": "Era IMPLEMENTADO_INALCANZABLE hasta el Plan 218 F0: la fabrica leia STACKY_GITLAB_ENABLED del MODULO config y rechazaba gitlab SIEMPRE (D1). Con D1 corregido el adaptador es alcanzable de verdad."
+    },
+    {
+      "plan": 70,
+      "doc_dice": "PROPUESTO",
+      "estado_real": "IMPLEMENTADO_PARCIAL",
+      "evidencia": [
+        {"file": "backend/api/tickets.py", "symbol": "_provider_for_ticket"}
+      ],
+      "nota": "El desacople existe pero la flag STACKY_TICKETS_PROVIDER_ENABLED nace en OFF (config.py) => inactivo en produccion. El subplan 221 lo cierra y la enciende."
+    },
+    {
+      "plan": 71,
+      "doc_dice": "PROPUESTO",
+      "estado_real": "IMPLEMENTADO",
+      "evidencia": [
+        {"file": "backend/services/ci_provider.py", "symbol": "get_ci_provider"},
+        {"file": "backend/services/gitlab_ci_provider.py", "symbol": "GitLabCIProvider"}
+      ],
+      "nota": "Era IMPLEMENTADO_INALCANZABLE: GitLabCIProvider se construia con el kwarg inexistente project_name= y moria con TypeError al instante (D3). Corregido en 218 F0."
+    },
+    {
+      "plan": 72,
+      "doc_dice": "PROPUESTO",
+      "estado_real": "IMPLEMENTADO",
+      "evidencia": [
+        {"file": "backend/services/gitlab_provider.py", "symbol": "trigger_pipeline"},
+        {"file": "backend/services/ado_ci_provider.py", "symbol": "trigger_pipeline"}
+      ],
+      "nota": "Trigger de pipeline en los dos adaptadores. El lado GitLab dependia de D3, corregido en 218 F0."
+    },
+    {
+      "plan": 73,
+      "doc_dice": "PROPUESTO",
+      "estado_real": "IMPLEMENTADO",
+      "evidencia": [
+        {"file": "backend/services/pipeline_spec.py", "symbol": "PipelineSpec"},
+        {"file": "backend/services/pipeline_renderers.py", "symbol": "to_gitlab_yaml"}
+      ],
+      "nota": "Spec neutral + renderers puros por dialecto. Es el patron canonico que §3.1 generaliza a todo dominio multi-proveedor."
+    },
+    {
+      "plan": 74,
+      "doc_dice": "TERMINADO-POR-SUPERVISOR",
+      "estado_real": "IMPLEMENTADO",
+      "evidencia": [
+        {"file": "backend/services/migrator_core.py", "symbol": "MigrationPlan"},
+        {"file": "backend/api/migrator.py", "symbol": "migrator"}
+      ],
+      "nota": "Unico de la serie que figura en docs/_supervision/ledger.json junto con el 75. Migrador one-shot; la coexistencia y el cutover reversible son del subplan 234."
+    },
+    {
+      "plan": 75,
+      "doc_dice": "TERMINADO-POR-SUPERVISOR",
+      "estado_real": "IMPLEMENTADO",
+      "evidencia": [
+        {"file": "backend/services/gitlab_deep_links.py", "symbol": "compose_issue_url"}
+      ],
+      "nota": "11 funciones puras de deep links; mejor cubierto que el lado ADO, que no tiene modulo equivalente (capacidad links.* en la matriz)."
+    },
+    {
+      "plan": 95,
+      "doc_dice": "TERMINADO-POR-SUPERVISOR",
+      "estado_real": "IMPLEMENTADO_PARCIAL",
+      "evidencia": [
+        {"file": "backend/services/merge_request_provider.py", "symbol": "get_merge_request_provider"},
+        {"file": "backend/services/gitlab_provider.py", "symbol": "approve_merge_request"}
+      ],
+      "nota": "Puerto MR completo del lado GitLab; ADO no tiene approve (se detecta por hasattr en api/pr_review.py) ni diff real. El subplan 228 cierra la asimetria."
+    }
+  ]
+}

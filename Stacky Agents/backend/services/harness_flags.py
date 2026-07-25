@@ -109,6 +109,9 @@ FLAG_CATEGORIES: tuple[CategorySpec, ...] = (
     CategorySpec("interfaz_ui", "Interfaz",
         "Aspecto y disposición de la aplicación: estilo de navegación (fila de pestañas o barra lateral agrupada) y presentación general.",
         tier="simple", intent="Elegir el estilo de navegación y la presentación de la app"),
+    CategorySpec("paridad_proveedores", "Paridad de proveedores (ADO ↔ GitLab)",
+        "Plan 218 — registro de capacidades, destino por proyecto, vocabulario canónico y degradación declarada del eje multi-proveedor.",
+        tier="advanced", intent="Ver y controlar la paridad entre Azure DevOps y GitLab"),
     CategorySpec("otros", "Otros / sin categorizar",
         "Flags aún no asignadas a una categoría (no debería haber ninguna; el test lo garantiza).",
         tier="advanced", intent="Flags sin categorizar (no debería haber ninguna)"),
@@ -370,6 +373,12 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UNDO_UNIVERSAL_ENABLED",  # Plan 185 — undo universal (acciones optimistas + gracia)
         "STACKY_BULK_ACTIONS_ENABLED",  # Plan 187 — selección múltiple y acciones en lote
         "STACKY_CONNECTION_RESILIENCE_ENABLED",  # Plan 192 — resiliencia de conexión (banner + re-hidratación)
+    ),
+    "paridad_proveedores": (
+        "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
+        "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED",  # Plan 218 F4 — destino de tracker por proyecto
+        "STACKY_CANONICAL_VOCABULARY_ENABLED",        # Plan 218 F5 — alias canónicos aditivos
+        "STACKY_CAPABILITY_DEGRADATION_ENABLED",      # Plan 218 F6 — 200 available:false en vez de 500 mudo
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -3913,6 +3922,60 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 192 - Monitor pasivo de conexion dashboard-backend: banner global "
             "con reintento exponencial durante caidas y re-hidratacion automatica "
             "(refetch de lecturas) al recuperar. Solo observa; nunca reintenta mutaciones."
+        ),
+        group="global",
+    ),
+    # ── Plan 218 — Paridad total Azure DevOps ↔ GitLab (sustrato multi-proveedor) ──
+    FlagSpec(
+        key="STACKY_PROVIDER_PARITY_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica; curada en _CURATED_DEFAULTS_ON)
+        label="Registro de capacidades por proveedor",
+        description=(
+            "Plan 218 — Maestra del eje multi-proveedor: expone GET /api/parity/matrix y el "
+            "panel de paridad en Diagnósticos, y habilita que el backend consulte qué soporta "
+            "el tracker activo ANTES de intentarlo. Es un registro puro leído en proceso: sin "
+            "red, sin prerequisitos. Con OFF el endpoint devuelve 404, el panel no se monta y "
+            "toda capacidad se considera disponible ⇒ comportamiento byte-idéntico al previo."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED",
+        type="bool",
+        default=True,  # default ON (corrección de resolución interna; curada en _CURATED_DEFAULTS_ON)
+        label="Destino de tracker por proyecto",
+        description=(
+            "Plan 218 — Cada proyecto resuelve su propio destino de tracker (URL de instancia, "
+            "path de proyecto, grupo y archivo de credenciales) en vez de compartir un único "
+            "GitLab global. Si el proyecto no declara nada, cae a la configuración global de "
+            "hoy. Con OFF vuelve la ruta legacy, byte-idéntica."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_CANONICAL_VOCABULARY_ENABLED",
+        type="bool",
+        default=True,  # default ON (cambio puramente aditivo; curada en _CURATED_DEFAULTS_ON)
+        label="Vocabulario canónico de tickets",
+        description=(
+            "Plan 218 — El payload de cada ticket suma los campos neutrales "
+            "(external_id, tracker_state, item_url, parent_external_id, assignee, item_type) "
+            "SIN quitar los campos ado_* existentes. Es un superconjunto: ningún consumidor "
+            "actual se rompe. Con OFF el payload es idéntico al de hoy."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_CAPABILITY_DEGRADATION_ENABLED",
+        type="bool",
+        default=True,  # default ON (convierte un 500 mudo en un 200 accionable; curada en _CURATED_DEFAULTS_ON)
+        label="Degradación declarada por capacidad",
+        description=(
+            "Plan 218 — Cuando el tracker activo no soporta una capacidad, el endpoint responde "
+            "200 con {available:false, capability, reason, workaround} en vez de reventar con "
+            "un 500 mudo. Mejora estabilidad y DX; no agrega prerequisitos ni reduce seguridad. "
+            "Con OFF vuelve la excepción legacy."
         ),
         group="global",
     ),

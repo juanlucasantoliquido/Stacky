@@ -733,6 +733,11 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_CI_RUN_LEDGER_ENABLED",  # Plan 191 — bitácora durable de corridas CI
     "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
     "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
+    # ── Plan 218 — Paridad total ADO ↔ GitLab (categoría `paridad_proveedores`) ──
+    "STACKY_PROVIDER_PARITY_ENABLED",             # registro de capacidades + panel de paridad
+    "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED",  # destino de tracker por proyecto
+    "STACKY_CANONICAL_VOCABULARY_ENABLED",        # alias canónicos aditivos en el payload
+    "STACKY_CAPABILITY_DEGRADATION_ENABLED",      # 200 available:false en vez de 500 mudo
 }
 
 

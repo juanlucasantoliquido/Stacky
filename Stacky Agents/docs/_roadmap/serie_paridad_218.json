@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "orchestrator": 218,
+  "_comment": "Catalogo EJECUTABLE de la serie multi-proveedor. Validado por backend/tests/test_plan218_serie_integridad.py: numeros sin huecos, dependencias existentes, sin ciclos, sin colision de propiedad de archivos, capacidades reales y sin gaps huerfanos. C11: el orquestador 218 tambien declara sus archivos, o sus 12 archivos quedarian fuera del test de colisiones.",
+  "milestones": [
+    {"id": "M0", "title": "Sustrato", "plans": [218]},
+    {"id": "M1", "title": "GitLab usable de punta a punta", "plans": [219, 220, 221]},
+    {"id": "M2", "title": "Escritura y dominio", "plans": [222, 223, 224]},
+    {"id": "M3", "title": "DevOps completo", "plans": [226, 227, 228, 230]},
+    {"id": "M4", "title": "Operacion y superficie", "plans": [225, 229, 231, 232, 233]},
+    {"id": "M5", "title": "Extensibilidad y cierre", "plans": [234, 235, 236]}
+  ],
+  "subplans": [
+    {
+      "number": 218,
+      "slug": "PARIDAD_TOTAL_ADO_GITLAB_ORQUESTADOR_SERIE_MULTIPROVEEDOR",
+      "title": "Sustrato multi-proveedor (F0..F8)",
+      "priority": "P0",
+      "milestone": "M0",
+      "depends_on": [],
+      "owns_files": [
+        "backend/services/flag_binding_audit.py",
+        "backend/services/provider_coupling_audit.py",
+        "backend/services/provider_capabilities.py",
+        "backend/services/tracker_vocabulary.py",
+        "backend/services/parity_series.py",
+        "backend/services/parity_rollout.py",
+        "backend/api/parity.py",
+        "backend/services/client_profile_defaults/gitlab.json",
+        "frontend/src/services/trackerVocabulary.ts",
+        "frontend/src/services/parityMatrixModel.ts",
+        "frontend/src/components/ParityMatrixPanel.tsx",
+        "frontend/src/pages/DiagnosticsPage.tsx"
+      ],
+      "capabilities": [],
+      "acceptance": "Ver §13 del documento 218 (DoD global)."
+    },
+    {
+      "number": 219,
+      "slug": "ONBOARDING_Y_CREDENCIALES_GITLAB_POR_PROYECTO",
+      "title": "Onboarding y credenciales GitLab por proyecto",
+      "priority": "P0",
+      "milestone": "M1",
+      "depends_on": [218],
+      "owns_files": [
+        "backend/project_manager.py",
+        "backend/api/projects.py",
+        "frontend/src/components/NewProjectModal.tsx",
+        "backend/services/gitlab_auth_store.py"
+      ],
+      "capabilities": ["identity.me", "identity.token.scopes"],
+      "acceptance": "Crear un proyecto con type=gitlab desde la UI genera backend/projects/<N>/config.json con issue_tracker.{type,base_url,project,group,auth_file} y backend/projects/<N>/auth/gitlab_auth.json CIFRADO; GET /api/projects/<N>/credentials devuelve {tracker_type:gitlab, has_credentials:true, gitlab_user:<username>}."
+    },
+    {
+      "number": 220,
+      "slug": "SINCRONIZACION_DE_ITEMS_AGNOSTICA_TRACKER_SYNC",
+      "title": "Sincronizacion de items agnostica (tracker_sync)",
+      "priority": "P0",
+      "milestone": "M1",
+      "depends_on": [218, 219],
+      "owns_files": [
+        "backend/services/tracker_sync.py",
+        "backend/services/ado_sync.py"
+      ],
+      "notes": "Toca api/tickets.py SOLO en la funcion _sync_via_provider_or_ado; el archivo lo posee el 221 (§5.3, mapa de colisiones). Anclar por texto, nunca por numero de linea.",
+      "capabilities": [
+        "tracker.sync.full", "tracker.sync.incremental", "tracker.items.list",
+        "tracker.query.search"
+      ],
+      "acceptance": "Con un proyecto GitLab y el servidor falso de 233 (o fixtures), POST /api/tickets/sync devuelve 200 y crea N filas Ticket con tracker_type=gitlab y external_id = iid; re-correr no duplica (unicidad ux_tickets_stacky_tracker_external); test_plan70_group_sync.py verde. external_id = iid (el visible, el de los deep links); el id global va en fields."
+    },
+    {
+      "number": 221,
+      "slug": "CIERRE_DESACOPLE_API_TICKETS_PLAN_70_AL_100",
+      "title": "Cierre del desacople de api/tickets.py (Plan 70 al 100%)",
+      "priority": "P0",
+      "milestone": "M1",
+      "depends_on": [220],
+      "owns_files": [
+        "backend/api/tickets.py",
+        "backend/tests/test_plan70_no_typed_adoclient_in_api.py"
+      ],
+      "capabilities": [
+        "tracker.items.get", "tracker.items.create", "tracker.items.update_state",
+        "tracker.comments.post", "tracker.comments.idempotent"
+      ],
+      "acceptance": "Las lineas con _ado_client_for_ticket( en backend/api/tickets.py bajan de 20 a 1 (solo la definicion); config.py declara STACKY_TICKETS_PROVIDER_ENABLED con default 'true' y la clave figura en _CURATED_DEFAULTS_ON; la suite de contrato de 218 F3 queda verde con la flag ON.",
+      "cuidado": "api/tickets.py tiene ~7250 lineas y es el archivo con mas colisiones historicas (70, 71, 148, 153, 208, 212, 218 F6). Anclar por TEXTO."
+    },
+    {
+      "number": 222,
+      "slug": "PUBLICACION_AGNOSTICA_PUBLISHER_PROVIDER_Y_OUTBOX",
+      "title": "Publicacion agnostica: puerto PublisherProvider + outbox neutral",
+      "priority": "P1",
+      "milestone": "M2",
+      "depends_on": [221],
+      "owns_files": [
+        "backend/services/publisher_provider.py",
+        "backend/services/ado_publisher.py",
+        "backend/services/ado_write_outbox.py",
+        "backend/services/gitlab_publisher.py"
+      ],
+      "capabilities": [
+        "tracker.comments.list", "tracker.comments.list_all",
+        "tracker.attachments.list", "tracker.attachments.upload",
+        "tracker.attachments.link"
+      ],
+      "acceptance": "Publicar el HTML de una ejecucion en un proyecto GitLab crea una nota con el marcador y adjunta los archivos; re-publicar no duplica (idempotencia por marcador, verificada por el contrato de F3); publish_ledger registra la operacion con provider=gitlab. Ademas: fetch_all_comments devuelve la forma neutral {author,date,text} en AMBOS proveedores (gap firmado en known_gaps.py) y se corrige el docstring de ado_write_outbox.py, que nombra 3 modulos inexistentes."
+    },
+    {
+      "number": 223,
+      "slug": "IDENTIDAD_USUARIOS_Y_MIEMBROS_MULTIPROVEEDOR",
+      "title": "Identidad, usuarios y miembros multi-proveedor",
+      "priority": "P1",
+      "milestone": "M2",
+      "depends_on": [221],
+      "owns_files": [
+        "backend/services/identity_provider.py",
+        "backend/services/ado_identity.py",
+        "backend/services/gitlab_identity.py",
+        "backend/services/ticket_assigner.py"
+      ],
+      "capabilities": [
+        "identity.me", "identity.user.find", "identity.members.list",
+        "identity.groups.list", "tracker.items.update_assignee"
+      ],
+      "acceptance": "Asignar un ticket a un usuario existente funciona en los dos trackers; asignar a un usuario INEXISTENTE levanta error tipado y NO borra el asignado (hoy GitLab lo silencia: gap firmado en known_gaps.py). Guardarrail P9: miembros y grupos son LECTURA del proveedor para poder asignar y hacer preflight de permisos; prohibido introducir roles o control de acceso dentro de Stacky."
+    },
+    {
+      "number": 224,
+      "slug": "TIPOS_JERARQUIA_ETIQUETAS_MILESTONES_E_ITERACIONES",
+      "title": "Tipos de item, jerarquia, etiquetas, milestones e iteraciones",
+      "priority": "P1",
+      "milestone": "M2",
+      "depends_on": [220],
+      "owns_files": [
+        "backend/services/item_taxonomy.py",
+        "backend/api/pm.py",
+        "backend/services/pm",
+        "frontend/src/utils/workItemTypeColor.ts",
+        "frontend/src/utils/resolveSuggestedAgent.ts"
+      ],
+      "capabilities": [
+        "tracker.types.list", "tracker.states.list",
+        "tracker.hierarchy.link_parent", "tracker.hierarchy.find_child",
+        "tracker.epics.list", "tracker.epics.create_native",
+        "tracker.iterations.list", "tracker.milestones.list", "tracker.labels.ensure"
+      ],
+      "acceptance": "Epica->hijos y tablero de sprint funcionan en GitLab; fetch_states devuelve estados REALES (no las 4 claves hardcodeadas) y find_child_by_marker devuelve el HIJO, no el padre. Contrato con el Plan 216: el mapa de estados sale del perfil del cliente (state_flow), no del codigo; si 216 no esta implementado, 224 usa client_profile_defaults/gitlab.json (creado en 218 F4).",
+      "cuidado": "frontend/src/utils/workItemTypeColor.ts tiene cambios sin commitear de una sesion paralela (y un test nuevo sin trackear). Releer en frio antes de editar; jamas stash/reset/amend."
+    },
+    {
+      "number": 225,
+      "slug": "APRENDIZAJE_DE_EDICIONES_Y_LEDGER_MULTIPROVEEDOR",
+      "title": "Aprendizaje de ediciones y ledger multi-proveedor",
+      "priority": "P2",
+      "milestone": "M4",
+      "depends_on": [224],
+      "owns_files": [
+        "backend/services/ado_edit_learning.py",
+        "backend/services/ado_edit_ledger.py",
+        "backend/services/edit_learning_provider.py",
+        "backend/harness/ado_edit_detect.py"
+      ],
+      "capabilities": ["tracker.updates.history"],
+      "acceptance": "El golden negativo (Planes 60/81) se alimenta tambien de ediciones hechas en GitLab; la clave de idempotencia deja de ser (ado_id, rev) —que GitLab no tiene— y pasa a una neutral apoyada en resource_state_events / resource_label_events."
+    },
+    {
+      "number": 226,
+      "slug": "CI_CD_DEFINICIONES_ARTEFACTOS_AMBIENTES_Y_APROBACIONES",
+      "title": "CI/CD: definiciones, artefactos, ambientes y aprobaciones",
+      "priority": "P1",
+      "milestone": "M3",
+      "depends_on": [218],
+      "owns_files": [
+        "backend/services/ci_definitions_provider.py",
+        "backend/services/ado_pipeline_definitions.py",
+        "backend/services/gitlab_ci_definitions.py",
+        "backend/services/ci_artifacts_provider.py",
+        "backend/api/ci.py"
+      ],
+      "capabilities": [
+        "ci.pipeline.infer", "ci.variables.list", "ci.variables.set",
+        "ci.variables.delete", "ci.variables.masked", "ci.artifacts.list",
+        "ci.artifacts.download", "ci.environments.list", "ci.approvals"
+      ],
+      "acceptance": "Paridad CI completa en la matriz: artefactos y ambientes dejan de estar ausentes en AMBOS proveedores; ado_variables.py deja de ligar AdoClient._request sin bind (defecto abierto declarado en CAPABILITY_MATRIX); la matriz declara ci.pipeline.infer como partial con la perdida (ADO infiere por LLM, GitLab lee pipelines reales)."
+    },
+    {
+      "number": 227,
+      "slug": "REPOSITORIO_RAMAS_COMMITS_TAGS_Y_LECTURA_DE_ARCHIVOS",
+      "title": "Repositorio: ramas, commits, tags y lectura de archivos",
+      "priority": "P1",
+      "milestone": "M3",
+      "depends_on": [218],
+      "owns_files": [
+        "backend/services/repo_writer.py",
+        "backend/services/repo_provider.py"
+      ],
+      "capabilities": [
+        "repo.file.read", "repo.branch.list", "repo.branch.create",
+        "repo.commit.list", "repo.tag.create"
+      ],
+      "acceptance": "Puerto RepoProvider con lectura y gestion de ramas en los dos proveedores. Compatibilidad: RepoWriter y REPO_WRITER_METHODS se CONSERVAN (los usa merge_request_provider.get_merge_request_provider); RepoProvider los extiende."
+    },
+    {
+      "number": 228,
+      "slug": "MR_PR_DIFF_REAL_EN_ADO_REVISORES_APROBACIONES_Y_POLITICAS",
+      "title": "MR/PR: diff real en ADO, revisores, aprobaciones y politicas",
+      "priority": "P1",
+      "milestone": "M3",
+      "depends_on": [227],
+      "owns_files": [
+        "backend/services/merge_request_provider.py",
+        "backend/api/pr_review.py",
+        "backend/api/devops_production.py",
+        "frontend/src/components/devops/PrReviewerSection.tsx"
+      ],
+      "capabilities": ["mr.diff", "mr.approve", "mr.reviewers", "mr.policies"],
+      "acceptance": "mr.diff pasa a full en ADO (hoy devuelve diff_available=False); approve deja de detectarse por hasattr. Guardarrail P8: el merge sigue exigiendo confirmacion literal del operador; PROHIBIDO auto-merge y merge-when-pipeline-succeeds."
+    },
+    {
+      "number": 229,
+      "slug": "EVENTOS_ENTRANTES_WEBHOOKS_ADO_GITLAB_A_STACKY",
+      "title": "Eventos entrantes: webhooks ADO/GitLab -> Stacky",
+      "priority": "P2",
+      "milestone": "M4",
+      "depends_on": [220],
+      "owns_files": [
+        "backend/api/webhooks_inbound.py",
+        "backend/services/webhook_inbound.py"
+      ],
+      "capabilities": ["events.webhook.inbound", "events.webhook.verify"],
+      "acceptance": "Stacky recibe eventos del tracker en vez de solo poll. Flag default OFF citando la EXCEPCION DURA 3 (prerequisito no garantizado en instalacion default): exige que la instancia sea alcanzable desde el tracker y un secreto compartido, que no existen en una instalacion limpia. Guardarrail P8: un webhook entrante JAMAS dispara una escritura ni un agente por su cuenta; solo invalida cache y encola una notificacion."
+    },
+    {
+      "number": 230,
+      "slug": "SEGURIDAD_TOKENS_SCOPES_MINIMOS_Y_CIFRADO_UNIFORME",
+      "title": "Seguridad: tokens, scopes minimos y cifrado uniforme",
+      "priority": "P1",
+      "milestone": "M3",
+      "depends_on": [219],
+      "owns_files": [
+        "backend/services/secrets_store.py",
+        "backend/services/secret_scanner.py",
+        "backend/services/token_scopes.py",
+        "backend/services/connection_doctor.py"
+      ],
+      "capabilities": ["identity.token.scopes"],
+      "acceptance": "El token GitLab deja el texto plano (auth/gitlab_auth.json) y usa el backend cifrado de secrets_store; secret_scanner gana la regla de token GitLab; el operador sabe ANTES de fallar si su token alcanza. Portabilidad: DPAPI es Windows-only, asi que el backend de secretos se declara enchufable (patron del Plan 217 §4)."
+    },
+    {
+      "number": 231,
+      "slug": "OBSERVABILIDAD_POR_PROVEEDOR_TELEMETRIA_ERRORES_Y_SALUD",
+      "title": "Observabilidad por proveedor: telemetria, errores tipados y salud",
+      "priority": "P1",
+      "milestone": "M4",
+      "depends_on": [218],
+      "owns_files": [
+        "backend/services/integration_breaker.py",
+        "backend/api/integrations.py",
+        "backend/services/stacky_logger.py",
+        "backend/api/metrics.py"
+      ],
+      "capabilities": [
+        "tracker.items.get", "tracker.rate_limit.clamp", "tracker.auth.html_redirect"
+      ],
+      "acceptance": "Toda metrica, log y error lleva la dimension provider con su valor REAL (hoy ado_publisher.py y api/tickets.py usan 'ado' como default, asi que una corrida GitLab se etiqueta como ADO). Ademas cierra los 3 gaps de errores tipados firmados en known_gaps.py: AdoTrackerProvider deja de propagar AdoApiError crudo donde el puerto promete TrackerApiError(kind='not_found'); GitLab clampea Retry-After como ADO; y GitLab levanta error de auth ante el HTML de login en vez de devolver texto crudo."
+    },
+    {
+      "number": 232,
+      "slug": "FRONTEND_AGNOSTICO_VOCABULARIO_CAPACIDADES_Y_DEEP_LINKS",
+      "title": "Frontend agnostico: vocabulario, capacidades y deep links",
+      "priority": "P1",
+      "milestone": "M4",
+      "depends_on": [218],
+      "owns_files": [
+        "frontend/src/utils/trackerUrls.ts",
+        "frontend/src/components/StructuredOutput.tsx",
+        "frontend/src/components/shell/shellNav.ts",
+        "frontend/src/pages/TicketBoard.tsx",
+        "frontend/src/pages/PMCommandCenter.tsx",
+        "frontend/src/pages/SprintBoardPage.tsx"
+      ],
+      "capabilities": [
+        "tracker.items.url", "links.item", "links.mr", "links.commit",
+        "links.pipeline", "links.epic"
+      ],
+      "acceptance": "trackerUrls.ts deja de hardcodear la organizacion y el proyecto de ADO; StructuredOutput reconoce citas de los dos trackers; item_url devuelve str no vacio SIEMPRE (hoy GitLab devuelve None con deep links OFF: gap firmado). Restriccion dura P6: las rutas REST by-ado se MANTIENEN como alias y se agregan las neutrales; nada de renombrar campos ado_* en el frontend (495 usos en 88 archivos): se adopta trackerVocabulary.ts (218 F5) gradualmente.",
+      "cuidado": "TicketBoard.tsx, UnblockerPage.tsx y SprintBoardPage.tsx tienen cambios sin commitear de una sesion paralela. El frontend no tiene jsdom ni @testing-library: los tests de este subplan deben ser de logica pura (.test.ts), no de componentes."
+    },
+    {
+      "number": 233,
+      "slug": "BANCO_DE_PRUEBAS_CROSS_PROVEEDOR_SERVIDOR_FALSO_Y_E2E",
+      "title": "Banco de pruebas cross-proveedor: servidor falso + E2E",
+      "priority": "P1",
+      "milestone": "M4",
+      "depends_on": [218],
+      "owns_files": [
+        "backend/tests/e2e",
+        "backend/services/provider_sandbox.py"
+      ],
+      "capabilities": [],
+      "acceptance": "Un test E2E que, contra el servidor falso, hace: crear proyecto GitLab -> sync -> lanzar agente (runtime mock) -> publicar -> verificar comentario, y el MISMO test contra el servidor falso de ADO. Registro obligatorio: todo tests/e2e/test_*.py va con su ruta relativa completa en run_harness_tests.sh y .ps1 (el meta-test del ratchet es recursivo)."
+    },
+    {
+      "number": 234,
+      "slug": "COEXISTENCIA_Y_MIGRACION_DOS_TRACKERS_CUTOVER_Y_ROLLBACK",
+      "title": "Coexistencia y migracion: dos trackers, cutover y rollback",
+      "priority": "P2",
+      "milestone": "M5",
+      "depends_on": [220, 222],
+      "owns_files": [
+        "backend/services/migrator_verify.py",
+        "backend/api/migrator.py",
+        "frontend/src/components/MigratorWizard.tsx",
+        "docs/_roadmap/RUNBOOK_CUTOVER_ADO_GITLAB.md"
+      ],
+      "capabilities": [],
+      "acceptance": "Proyectos ADO y GitLab operan simultaneamente y el cutover es reversible, con runbook ejecutado en dry-run. Guardarrail P8 + EXCEPCION DURA 2: la fase de corte es destructiva/irreversible => flag default OFF, confirmacion literal del operador y dry-run previo obligatorio."
+    },
+    {
+      "number": 235,
+      "slug": "TERCER_PROVEEDOR_KIT_DE_CONFORMIDAD_Y_ADAPTADOR_DE_PRUEBA",
+      "title": "Tercer proveedor: kit de conformidad + adaptador de prueba",
+      "priority": "P2",
+      "milestone": "M5",
+      "depends_on": [233],
+      "owns_files": [
+        "docs/_roadmap/KIT_NUEVO_PROVEEDOR.md",
+        "backend/tests/contract/stub_provider.py"
+      ],
+      "capabilities": [],
+      "acceptance": "El adaptador stub pasa la suite de contrato de 218 F3 SIN modificar ni un archivo de backend/services/ fuera del propio adaptador. Si hay que tocar el nucleo, la abstraccion fallo y el subplan lo reporta como hallazgo. Alcance explicito: el stub NO se registra en la fabrica de produccion (queda en tests/), para no crear un prerequisito ni una superficie nueva."
+    },
+    {
+      "number": 236,
+      "slug": "DOCUMENTACION_VIVA_Y_CORPUS_RAG_DEL_MODELO_MULTIPROVEEDOR",
+      "title": "Documentacion viva y corpus RAG del modelo multi-proveedor",
+      "priority": "P2",
+      "milestone": "M5",
+      "depends_on": [235],
+      "owns_files": [
+        "docs/sistema",
+        "backend/services/docs_rag_corpus.py"
+      ],
+      "capabilities": [],
+      "acceptance": "La documentacion del modelo multi-proveedor se GENERA desde CAPABILITY_MATRIX (como ya hace PARIDAD_ADO_GITLAB.md) y entra al corpus RAG. Restriccion dura: el corpus bajo docs/ debe ser .jsonl/.json/.txt, NUNCA .md (contamina el DocTree)."
+    }
+  ]
+}

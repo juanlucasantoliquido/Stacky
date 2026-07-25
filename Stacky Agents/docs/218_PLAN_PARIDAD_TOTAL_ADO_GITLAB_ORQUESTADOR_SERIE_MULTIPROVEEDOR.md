@@ -1,6 +1,7 @@
 # Plan 218 — Paridad total Azure DevOps ↔ GitLab: plan ORQUESTADOR de la serie multi-proveedor
 
-**Estado:** **v2 — CRITICADO (v1 RECHAZADO) → APROBADO-CON-CAMBIOS, listo para `implementar-plan-stacky`**
+**Estado:** **IMPLEMENTADO (F0..F8) — 2026-07-25.** 81 tests verdes en 9 archivos + 14 tests de frontend + `tsc --noEmit` limpio. Ver §15 (reporte de implementación). El catálogo §5 (subplanes 219..236) queda materializado en `docs/_roadmap/serie_paridad_218.json` y validado por tests; los subplanes **no** se implementan acá.
+_v2 — CRITICADO (v1 RECHAZADO) → APROBADO-CON-CAMBIOS_
 **Autor:** generado con Claude Code (Opus 5) a pedido del operador (Juan Luca Santoliquido), 2026-07-25 · **criticado y reescrito a v2 el 2026-07-25** (`criticar-y-mejorar-plan`)
 **Tipo:** plan orquestador (hoja de ruta ejecutable) — define el sustrato técnico + los 18 subplanes 219..236
 **Precedentes directos:** 65, 70, 71, 72, 73, 74, 75, 95 (serie GitLab) · 184, 195, 197 (planes hoja-de-ruta previos, cuyo formato se reusa) · 217 (migrador Mantis→GitLab, adyacente)
@@ -1430,3 +1431,78 @@ Las correcciones de F0 **no tienen rollback por flag y no deben tenerlo**: rever
   - **Sin cambios:** los 3 rieles duros quedaron intactos — paridad de 3 runtimes (todas las fases son backend puro o UI ajena al motor de agentes, con fallback por flag), cero trabajo extra al operador (las 4 flags nacen ON; la única OFF es la preexistente `STACKY_GITLAB_ENABLED`, excepción dura 3 citada), human-in-the-loop (ninguna adición introduce autonomía; el ratchet inverso **exige** decisión humana explícita para borrar una entrada de `KNOWN_GAPS`), mono-operador sin RBAC (P9 verificado en 223/230), y backward-compatibilidad (P6: cero renombres).
 
 - **v1 (2026-07-25)** — Versión inicial. Relevamiento con evidencia `archivo:línea` de todo el acoplamiento ADO del backend y del frontend; **4 defectos del camino GitLab reproducidos por ejecución** (D1..D4, §2.1); 3 bloqueos estructurales (§2.2); doctrina de normalización en 3 capas (§3.1); 9 fases de sustrato (F0..F8); catálogo de 18 subplanes 219..236 con mapa de colisiones ejecutable (§5); matriz de paridad inicial verificada (§6). Pendiente: pasar por `criticar-y-mejorar-plan`.
+
+---
+
+## 15. Reporte de implementación (2026-07-25)
+
+Implementado con `implementar-plan-stacky` sobre la rama `feat/plan-217-migrador-mantis-gitlab`
+(árbol compartido con una sesión paralela: commit con pathspec explícito, sin `stash`/`reset`/`amend`).
+
+### 15.1 Estado por fase
+
+| Fase | Estado | Comando corrido | Resultado real |
+|---|---|---|---|
+| F0 | IMPLEMENTADA | `pytest tests/test_plan218_gitlab_reachable.py -q` | **13 passed** |
+| F1 | IMPLEMENTADA | `pytest tests/test_plan218_coupling_ratchet.py -q` | **10 passed** |
+| F2 | IMPLEMENTADA | `pytest tests/test_plan218_capability_matrix.py -q` + `test_harness_flags.py` | **10 passed** + **56 passed** |
+| F3 | IMPLEMENTADA | `pytest tests/test_plan218_tracker_contract.py -q` + `test_tracker_provider_conformance.py` | **10 passed** + **13 passed** |
+| F4 | IMPLEMENTADA | `pytest tests/test_plan218_tracker_target.py -q` | **8 passed** |
+| F5 | IMPLEMENTADA | `pytest tests/test_plan218_vocabulary_aliases.py -q` + `vitest trackerVocabulary` + `tsc` | **8 passed** + **5 passed** + **0 errores** |
+| F6 | IMPLEMENTADA | `pytest tests/test_plan218_capability_unavailable.py -q` + `test_plan70_group_sync.py` | **5 passed** + **5 passed** |
+| F7 | IMPLEMENTADA | `pytest tests/test_plan218_serie_integridad.py -q` | **10 passed** |
+| F8 | IMPLEMENTADA | `pytest tests/test_plan218_parity_endpoint.py -q` + `vitest parityMatrixModel` + `uiDebtRatchet` + `tsc` | **7 passed** + **6 passed** + **3 passed** + **0 errores** |
+
+Total propio: **81 tests backend** en 9 archivos + **14 tests frontend**. Regresión ADO verde por archivo:
+`test_ado_provider.py` (8), `test_ado_client_stacky_name_resolution.py` (3), `test_tracker_factory.py` (4),
+`test_plan70_group_sync.py` (5), `test_plan95_mr_providers.py` (11), `test_gitlab_provider.py` (26),
+`test_plan94_variables_providers.py` (13), `test_plan93_preflight_providers.py` (15),
+`test_plan70_no_typed_adoclient_in_api.py` (4), `test_harness_ratchet_meta.py` (4),
+`test_error_fingerprints_catalog.py` (8).
+
+### 15.2 Hallazgos nuevos (no estaban en el relevamiento de §2)
+
+1. **`ado_provider.py:44` lee `ADO_PAT` del MÓDULO `config`** ⇒ `AdoTrackerProvider.credentials_present()`
+   devuelve **siempre `False`**. Lo encontró `flag_binding_audit` (F0) fuera de los 5 sitios conocidos.
+   Por P11 **no se arregla acá** (cambia comportamiento): queda congelado en
+   `backend/tests/flag_binding_baseline.json` (`violation_count: 1`) y es trabajo del subplan **231**.
+2. **`AdoTrackerProvider.get_item` propaga `AdoApiError` crudo** donde el puerto promete
+   `TrackerApiError(kind="not_found")`. Lo encontró el contrato conductual de F3 — el relevamiento en papel
+   solo había visto gaps de GitLab. La matriz baja esa capacidad de `full` a `partial` con su pérdida
+   declarada y el gap queda firmado en `KNOWN_GAPS` con dueño **231**.
+3. **`AdoTrackerProvider.fetch_open_items` nunca devuelve ítems**: llama a `self._client.list_work_items`,
+   que **no existe** en `AdoClient` (tiene `fetch_open_work_items`), y el `except AttributeError` devuelve `[]`.
+   Declarado sin escenario con dueño **220** en `_SIN_ESCENARIO_CON_DUENO`.
+4. **Ruta con doble prefijo preexistente**: `/api/api/projects/<project_name>/tasks` (ajena al 218, R6).
+
+### 15.3 Desvíos respecto del texto del plan (con motivo)
+
+- **F3 — `xfail(strict=True)`**: la semántica (gap roto ⇒ verde; gap arreglado ⇒ FALLO hasta borrar la
+  entrada) está implementada **dentro de `run_tracker_contract`**, no con el marcador de pytest. Motivo: el
+  criterio binario exige que `test_contrato_del_puerto_tracker` parametrice **exactamente 2 veces**, y eso
+  obliga a correr todos los escenarios dentro de un único test por proveedor. El efecto observable es idéntico.
+- **F3 — cobertura**: `test_contrato_cubre_toda_capacidad_full_o_partial` exige que cada capacidad `tracker.*`
+  esté **ejercitada o declarada con dueño** en `_SIN_ESCENARIO_CON_DUENO`. Motivo: 10 de las 28 capacidades
+  `tracker.*` no tienen método del puerto (sync, épicas, iteraciones, milestones, etiquetas, tipos, query),
+  así que el contrato del tracker no puede ejercitarlas; exigirlo sería el criterio imposible que el C3 corrigió.
+- **F6 — flag OFF**: restaura la **respuesta HTTP legacy** (500 `unexpected`), no la excepción
+  `NotImplementedError` literal. Motivo: reintroducirla contradiría el propio centinela de la fase
+  (`raise NotImplementedError` en `backend/api/` = 0). Lo que el operador recupera es lo que consumen sus clientes.
+- **F8 — apagado por flag**: el blueprint se registra siempre y el 404 se decide **dentro de la ruta**.
+  Motivo: el registro se evalúa una sola vez al importar el módulo, así que gatearlo ahí obligaría a
+  reiniciar el backend para que el operador viera el efecto de tocar la flag desde la UI.
+- **F1 — alcance del censo de literales**: `tracker_literal_*` incluye la familia `services/ado_*.py`
+  (los importadores no). Es la única lectura que reproduce los números medidos del propio plan
+  (**33 archivos / 82 líneas**, §1 K4) y es coherente con su meta ("≤ 20: adaptadores + factories + defaults").
+
+### 15.4 Pendientes / fuera de alcance de esta corrida
+
+- **4 tests preexistentes en rojo, ajenos al 218** (verificado: los archivos que ejercitan son byte-idénticos
+  a `HEAD` y ninguno está en el diff de este plan):
+  `test_no_adoclient_outside_ado_provider.py` (4 módulos `ado_*` fuera de su allowlist),
+  `test_plan71_ado_ci_provider.py::test_monitor_pipeline_not_implemented` (espera `NotImplementedError`;
+  hoy `monitor_pipeline` intenta red real), `test_plan93_preflight_endpoint.py::test_f3_source_scan_readonly_allowlist`
+  (`ado_pipeline_definitions.py:172`), y `test_agent_completion_gateway.py` (pasa aislado; está en
+  `harness_ratchet_allowlist.txt` como *pendiente-de-triage*).
+- **Smoke real contra una instancia GitLab** del operador: sigue siendo HITL y opcional (subplan 233).
+- Los **18 subplanes 219..236** siguen sin implementar: este plan solo los cataloga y valida.

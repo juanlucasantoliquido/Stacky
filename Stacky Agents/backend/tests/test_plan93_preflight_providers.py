@@ -18,7 +18,13 @@ def test_f2_factory_resolves_gitlab_and_ado():
     class _Ctx:
         tracker_type = "gitlab"
 
-    with patch("services.project_context.resolve_project_context", return_value=_Ctx()):
+    import config as config_module
+
+    # Plan 218 F0: get_preflight_provider era la única de las 6 fábricas sin gate
+    # STACKY_GITLAB_ENABLED. La flag se enciende en la INSTANCIA (P4/P5), nunca
+    # parcheando el módulo config.
+    with patch("services.project_context.resolve_project_context", return_value=_Ctx()), \
+         patch.object(config_module.config, "STACKY_GITLAB_ENABLED", True):
         with patch("services.gitlab_provider.GitLabClient") as MockClient:
             MockClient.return_value = MagicMock()
             provider = get_preflight_provider("proj")

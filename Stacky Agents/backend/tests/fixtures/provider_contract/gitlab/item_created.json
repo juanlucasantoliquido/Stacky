@@ -1,0 +1,14 @@
+{
+  "_comment": "Fixture ANONIMIZADO del contrato 218 F3. Sin PII, sin tokens, sin nombres reales.",
+  "recorded_at": "2026-07-25",
+  "api_version": "v4",
+  "id": 90001,
+  "iid": 4242,
+  "title": "Contrato 218 - item de prueba",
+  "description": "<p>cuerpo</p>",
+  "state": "opened",
+  "labels": ["type::task", "stacky::accepted"],
+  "assignees": [],
+  "web_url": "https://gl.test/grupo/proyecto/-/issues/4242",
+  "updated_at": "2026-07-25T10:00:00.000Z"
+}

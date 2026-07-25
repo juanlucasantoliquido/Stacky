@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "code_layout": {
+    "online_path": "",
+    "batch_path": "",
+    "db_scripts_path": "",
+    "lib_path": "",
+    "test_path": "",
+    "file_extensions": {
+      "ui": "",
+      "ui_code_behind": "",
+      "code": ""
+    },
+    "architecture_layers": []
+  },
+  "language": {
+    "primary": "",
+    "comment_traceability": "// {ticket_token} | {YYYY-MM-DD} | {description}",
+    "ticket_token_pattern": "GL-{id}",
+    "languages_in_ridioma": []
+  },
+  "database": {
+    "type": "",
+    "server": "",
+    "readonly_auth_ref": "auth/db_readonly.json",
+    "readonly_user_hint": "",
+    "connection_kind": "",
+    "dml_policy": "prohibited_runtime_must_emit_sql",
+    "catalog_master_files": {},
+    "naming_conventions": {}
+  },
+  "build": {
+    "tool": "",
+    "msbuild_path": "",
+    "configuration": "Release",
+    "online_solutions": [],
+    "batch_proj_glob": ""
+  },
+  "conventions": {
+    "ridioma_helper": "",
+    "ridioma_message_const": "",
+    "string_sanitizer": "",
+    "error_helpers": []
+  },
+  "docs_indexes": {
+    "technical_master": "",
+    "functional_online": "",
+    "functional_batch": ""
+  },
+  "tracker_state_machine": {
+    "_comment": "GitLab no tiene estados de work item: se modelan con etiquetas stacky::* + open/closed, coherente con gitlab_provider._state_map_for_gitlab. El Plan 216 centraliza esto en el perfil del cliente; 224 lo consume.",
+    "functional": {
+      "input_states": ["stacky::to-do"],
+      "blocked_state": "stacky::blocked",
+      "next_state_ok": "stacky::review"
+    },
+    "technical": {
+      "input_states": ["stacky::review"],
+      "blocked_state": "stacky::blocked",
+      "next_state_ok": "stacky::to-do"
+    },
+    "developer": {
+      "input_states": ["stacky::to-do"],
+      "in_progress": "stacky::doing",
+      "blocked_state": "stacky::blocked",
+      "next_state_ok": "stacky::review"
+    }
+  },
+  "terminology": {
+    "product_name": "",
+    "client_label": "",
+    "domain_glossary_ref": ""
+  },
+  "extensions": {}
+}

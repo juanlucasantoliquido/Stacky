@@ -15,12 +15,19 @@ from services.tracker_provider import TrackerConfigError, TrackerApiError
 
 
 @pytest.fixture
-def mock_gitlab_client():
-    """Mock del cliente GitLab (gitlab_client.py)."""
-    with mock.patch("services.gitlab_variables.GitLabTrackerProvider") as mock_provider:
+def mock_gitlab_client(monkeypatch):
+    """Mock del TRANSPORTE GitLab (gitlab_client.GitLabClient).
+
+    Plan 218 F0/P4: antes se mockeaba `GitLabTrackerProvider` ENTERO, lo que
+    escondía D3 (se construía con el kwarg inexistente `project_name=` ⇒ TypeError)
+    y D4 (kwargs equivocados contra el cliente real). Ahora el provider se
+    construye DE VERDAD y solo se dobla el transporte.
+    """
+    monkeypatch.setenv("GITLAB_TOKEN", "t0k3n-de-test")
+    with mock.patch("services.gitlab_provider.GitLabClient") as mock_cls:
         mock_client = mock.MagicMock()
-        mock_provider.return_value._client = mock_client
         mock_client._project_path.return_value = "mygroup/myproj"
+        mock_cls.return_value = mock_client
         yield mock_client
 
 
@@ -139,10 +146,11 @@ def test_f2_gitlab_masked_rejected_fallback(mock_gitlab_client):
 
     result = provider.set_variable("WEAK", "short", True)
     assert mock_gitlab_client._request.call_count == 3
-    # Ambos intentos de mutación llevan raw:true (A3); el GET de existencia no lleva json=
-    first_call_body = mock_gitlab_client._request.call_args_list[1][1]["json"]
+    # Ambos intentos de mutación llevan raw:true (A3); el GET de existencia no lleva body.
+    # D4 (Plan 218 F0): el kwarg real de gitlab_client._request es json_body=, no json=.
+    first_call_body = mock_gitlab_client._request.call_args_list[1][1]["json_body"]
     assert first_call_body["raw"] is True
-    second_call_body = mock_gitlab_client._request.call_args_list[2][1]["json"]
+    second_call_body = mock_gitlab_client._request.call_args_list[2][1]["json_body"]
     assert second_call_body["raw"] is True
     # El retorno tiene masked:false
     assert result["masked"] is False
@@ -155,13 +163,13 @@ def test_f2_gitlab_secret_sends_raw_true(mock_gitlab_client):
 
     # Secret=True ⇒ raw en el body
     provider.set_variable("PASS", "pa$$word", True)
-    call_body = mock_gitlab_client._request.call_args[1]["json"]
+    call_body = mock_gitlab_client._request.call_args[1]["json_body"]
     assert call_body.get("raw") is True
 
     # Secret=False ⇒ sin raw
     mock_gitlab_client._request.reset_mock()
     provider.set_variable("PATH", "/usr/bin", False)
-    call_body = mock_gitlab_client._request.call_args[1]["json"]
+    call_body = mock_gitlab_client._request.call_args[1]["json_body"]
     assert "raw" not in call_body
 
 
@@ -283,13 +291,14 @@ def test_f2_port_structural_conformance():
     assert VARIABLES_PORT_METHODS == ("list_variables", "set_variable", "delete_variable")
 
 
-def test_f2_no_value_in_exceptions():
+def test_f2_no_value_in_exceptions(monkeypatch):
     """Centinela §3.1: excepciones NO contienen el value."""
-    # GitLab
-    with mock.patch("services.gitlab_variables.GitLabTrackerProvider") as mock_provider:
+    # GitLab — Plan 218 F0/P4: se dobla el TRANSPORTE, no el provider.
+    monkeypatch.setenv("GITLAB_TOKEN", "t0k3n-de-test")
+    with mock.patch("services.gitlab_provider.GitLabClient") as mock_cls:
         mock_client = mock.MagicMock()
-        mock_provider.return_value._client = mock_client
         mock_client._project_path.return_value = "p"
+        mock_cls.return_value = mock_client
         mock_client._request.side_effect = RuntimeError("boom S3cr3t!XYZ")
 
         provider = GitLabVariablesProvider(project="p")

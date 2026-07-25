@@ -10,14 +10,20 @@ from services.tracker_provider import TrackerItem, TrackerQuery
 
 
 def _make_provider(project="123", group="", epics_native=False):
-    """Crea GitLabTrackerProvider con GitLabClient completamente mockeado."""
+    """Crea GitLabTrackerProvider con GitLabClient (el TRANSPORTE) mockeado.
+
+    Plan 218 F0/P4: ya NO se parchea `services.gitlab_provider.config`. Ese patch
+    escondía D2 (las flags se leían del MÓDULO y quedaban muertas). Ahora se
+    parchean los atributos de la INSTANCIA real `config.config`, que es de donde
+    el provider los lee de verdad.
+    """
+    import config as config_module
     from services.gitlab_provider import GitLabTrackerProvider
     with patch("services.gitlab_provider.GitLabClient") as mock_cls, \
-         patch("services.gitlab_provider.config") as mock_cfg:
-        mock_cfg.GITLAB_URL = "https://gl.example.com"
-        mock_cfg.GITLAB_PROJECT = project
-        mock_cfg.STACKY_GITLAB_GROUP = group
-        mock_cfg.STACKY_GITLAB_EPICS_NATIVE = epics_native
+         patch.object(config_module.config, "GITLAB_URL", "https://gl.example.com"), \
+         patch.object(config_module.config, "GITLAB_PROJECT", project), \
+         patch.object(config_module.config, "STACKY_GITLAB_GROUP", group), \
+         patch.object(config_module.config, "STACKY_GITLAB_EPICS_NATIVE", epics_native):
         mock_client = MagicMock()
         mock_client._base_url = "https://gl.example.com"
         mock_client._project_path.return_value = project

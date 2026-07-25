@@ -78,8 +78,14 @@ def test_both_adapters_implement_all_port_methods(adapter_name, make_fn):
     ("AdoTrackerProvider", _make_ado_double),
     ("GitLabTrackerProvider", _make_gitlab_double),
 ])
-def test_no_port_method_is_a_stub(adapter_name, make_fn):
-    """Ningún método del puerto levanta NotImplementedError por default."""
+def test_port_methods_son_callables(adapter_name, make_fn):
+    """Conformance ESTRUCTURAL: los 18 métodos del puerto existen y son callables.
+
+    Plan 218 F3: este test se llamaba `test_no_port_method_is_a_stub` y prometía algo
+    que no verificaba. Verificar que el método haga lo que el puerto promete es
+    responsabilidad del contrato CONDUCTUAL (tests/test_plan218_tracker_contract.py),
+    que corre el mismo cuerpo contra los dos adaptadores reales con transporte falso.
+    """
     provider = make_fn()
     # Patchear el _client para que todos los llamados retornen algo válido
     provider._client = MagicMock()
@@ -88,7 +94,6 @@ def test_no_port_method_is_a_stub(adapter_name, make_fn):
 
     for m in PORT_METHODS:
         method = getattr(provider, m)
-        # Solo verificamos que el atributo exista y sea callable (no que esté hardcoded NotImplementedError)
         assert callable(method), f"{adapter_name}.{m} no es callable"
 
 

@@ -70,6 +70,20 @@ def set_exec_id(exec_id) -> None:
             pass  # sin request context → no-op
 
 
+def capability_unavailable_envelope(exc) -> dict:
+    """Plan 218 F6 — traducción HTTP de `CapabilityUnavailable`.
+
+    Una capacidad que el proveedor activo no tiene NO es un bug: es un límite conocido.
+    Se responde **200 con `available:false`** y un mensaje accionable (patrón del Plan
+    148: 200 + available:false en vez de 502; y del Plan 135: cero errores mudos),
+    nunca un 500 que el operador tiene que interpretar.
+    """
+    payload = exc.to_payload()
+    payload.setdefault("ok", True)
+    payload["message"] = str(exc)
+    return payload
+
+
 def build_error_envelope(
     *,
     error_type: str,

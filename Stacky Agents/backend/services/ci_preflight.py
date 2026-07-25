@@ -28,11 +28,18 @@ def get_preflight_provider(project: Optional[str] = None) -> CIPreflightProvider
     azure_devops -> AdoPreflightProvider; otro -> TrackerConfigError."""
     from services.project_context import resolve_project_context  # noqa: PLC0415
     from services.tracker_provider import TrackerConfigError  # noqa: PLC0415
+    import config as _config  # noqa: PLC0415
 
     ctx = resolve_project_context(project_name=project)
     ttype = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
 
     if ttype == "gitlab":
+        # Plan 218 F0: era la única de las 6 fábricas sin gate. La flag se lee de la
+        # INSTANCIA (_config.config), igual que ci_provider.py:121 (P5).
+        if not bool(getattr(_config.config, "STACKY_GITLAB_ENABLED", False)):
+            raise TrackerConfigError(
+                "issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"
+            )
         from services.gitlab_preflight import GitLabPreflightProvider  # noqa: PLC0415
         return GitLabPreflightProvider(project=project)
 

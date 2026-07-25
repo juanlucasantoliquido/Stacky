@@ -570,6 +570,16 @@ $HarnessTestFiles = @(
   # — Plan 198 · Bitácora de applies de ambientes (ledger + drift + hook) —
   "tests/test_plan198_env_ledger.py"
   "tests/test_plan198_env_hook.py"
+  # — Plan 218 · Paridad total ADO ↔ GitLab (sustrato multi-proveedor F0..F8) —
+  "tests/test_plan218_gitlab_reachable.py"
+  "tests/test_plan218_coupling_ratchet.py"
+  "tests/test_plan218_capability_matrix.py"
+  "tests/test_plan218_tracker_contract.py"
+  "tests/test_plan218_tracker_target.py"
+  "tests/test_plan218_vocabulary_aliases.py"
+  "tests/test_plan218_capability_unavailable.py"
+  "tests/test_plan218_serie_integridad.py"
+  "tests/test_plan218_parity_endpoint.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

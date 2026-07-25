@@ -52,6 +52,26 @@ class TrackerApiError(TrackerError):
         self.kind = kind
 
 
+class CapabilityUnavailable(TrackerError):
+    """La capacidad no existe (o es parcial) en el proveedor activo. NO es un bug.
+
+    Plan 218 F2 (§3.1 la congela acá porque F3 la necesita y corre antes que F6).
+    F6 agrega su traducción HTTP: 200 + {"available": false, ...}, nunca un 500 mudo.
+    """
+
+    def __init__(self, capability: str, provider: str, *, reason: str, workaround: str = ""):
+        super().__init__(f"'{capability}' no disponible en {provider}: {reason}")
+        self.capability = capability
+        self.provider = provider
+        self.reason = reason
+        self.workaround = workaround
+
+    def to_payload(self) -> dict:
+        return {"available": False, "capability": self.capability,
+                "provider": self.provider, "reason": self.reason,
+                "workaround": self.workaround}
+
+
 @runtime_checkable
 class TrackerProvider(Protocol):
     name: str
@@ -108,12 +128,24 @@ def get_tracker_provider(project: Optional[str] = None):
     ttype = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
 
     if ttype == "gitlab":
-        if not getattr(config, "STACKY_GITLAB_ENABLED", False):
+        # P5 / D1 (Plan 218 F0): la flag vive en la INSTANCIA (config.py:1631
+        # `config = Config()`), no en el módulo. Mismo patrón que ci_provider.py:121.
+        if not bool(getattr(config.config, "STACKY_GITLAB_ENABLED", False)):
             raise TrackerConfigError(
                 "issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"
             )
         from services.gitlab_provider import GitLabTrackerProvider
-        return GitLabTrackerProvider(project=project)
+        # Plan 218 F4 (B1): el destino se resuelve POR PROYECTO. Antes se pasaba el
+        # NOMBRE Stacky ("RSPACIFICO") a un constructor que lo interpreta como path
+        # de proyecto GitLab.
+        if bool(getattr(config.config, "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED", True)):
+            from services.project_context import build_tracker_target
+            tgt = build_tracker_target(project)
+            return GitLabTrackerProvider(
+                project=tgt.project_path, base_url=tgt.base_url,
+                group=tgt.group, auth_path=tgt.auth_path,
+            )
+        return GitLabTrackerProvider(project=project)   # ruta legacy, byte-idéntica
 
     if ttype == "azure_devops":
         from services.ado_provider import AdoTrackerProvider

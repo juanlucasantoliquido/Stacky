@@ -30,13 +30,25 @@ class GitLabTrackerProvider:
 
     name = "gitlab"
 
-    def __init__(self, project: Optional[str] = None):
-        base_url = getattr(config, "GITLAB_URL", "") or ""
-        proj = project or getattr(config, "GITLAB_PROJECT", "") or ""
-        self._client = GitLabClient(base_url=base_url, project=proj)
+    def __init__(
+        self,
+        project: Optional[str] = None,
+        *,
+        base_url: Optional[str] = None,
+        group: Optional[str] = None,
+        auth_path: Optional[str] = None,
+    ):
+        # D2 (Plan 218 F0): las 4 lecturas iban al MÓDULO config y devolvían
+        # siempre el default ⇒ _group y _epics_native quedaban muertos.
+        # F4: la firma se amplía de forma ADITIVA — todos los parámetros nuevos son
+        # opcionales y caen a la config global si vienen None, así
+        # GitLabTrackerProvider(project="x") sigue funcionando igual.
+        base = base_url or (getattr(config.config, "GITLAB_URL", "") or "")
+        proj = project or (getattr(config.config, "GITLAB_PROJECT", "") or "")
+        self._client = GitLabClient(base_url=base, project=proj, auth_path=auth_path)
         self._project = proj
-        self._group = getattr(config, "STACKY_GITLAB_GROUP", "") or ""
-        self._epics_native = getattr(config, "STACKY_GITLAB_EPICS_NATIVE", False)
+        self._group = group or (getattr(config.config, "STACKY_GITLAB_GROUP", "") or "")
+        self._epics_native = bool(getattr(config.config, "STACKY_GITLAB_EPICS_NATIVE", False))
 
     # ── Helpers internos ──────────────────────────────────────────────────────
 

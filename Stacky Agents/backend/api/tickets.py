@@ -678,20 +678,23 @@ def _sync_via_provider_or_ado(project_name: str | None) -> dict:
     """Plan 70 F10 — GAP-A: branch provider vs ADO para sync de tickets.
 
     - Flag OFF o provider.name == "azure_devops": delegamos a sync_tickets (ADO legacy).
-    - Flag ON + provider no-ADO (ej. gitlab): no soportado aun → NotImplementedError
-      ruidoso que el operador puede resolver volviendo a usar ADO o esperando la
-      implementacion de _apply_synced_items para GitLab.
+    - Flag ON + provider no-ADO (ej. gitlab): la capacidad todavía no existe → se
+      levanta `CapabilityUnavailable` (Plan 218 F6), que el endpoint traduce a un
+      200 accionable o, con la degradación apagada, al 500 legacy.
 
     Nunca silencia el error del path GitLab: el operador debe ver el fallo claro.
     """
-    from services.tracker_provider import TrackerQuery
+    from services.tracker_provider import TrackerQuery, CapabilityUnavailable
     provider = _provider_for_ticket(project_name=project_name)
     if provider is not None and getattr(provider, "name", "azure_devops") != "azure_devops":
-        # Path no-ADO: GitLab u otro tracker
-        # TODO (Plan 71): implementar _apply_synced_items para normalizar items del provider
-        raise NotImplementedError(
-            f"Sync para tracker '{provider.name}' aun no implementado. "
-            "Activá STACKY_TICKETS_PROVIDER_ENABLED=false o esperá Plan 71."
+        # Path no-ADO: GitLab u otro tracker.
+        # El dominio SIEMPRE levanta el error tipado (así `backend/api/` queda sin un
+        # solo NotImplementedError). Quien decide la forma HTTP —200 accionable vs 500
+        # legacy— es el endpoint, según STACKY_CAPABILITY_DEGRADATION_ENABLED.
+        raise CapabilityUnavailable(
+            "tracker.sync.full", provider.name,
+            reason="el sync de ítems de este tracker todavía no está implementado",
+            workaround="Plan 220 lo implementa; mientras tanto usá un proyecto Azure DevOps.",
         )
     # Path ADO: usar sync_tickets legacy (byte-identico con flag OFF)
     return sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
@@ -701,9 +704,22 @@ def _sync_via_provider_or_ado(project_name: str | None) -> dict:
 def sync_from_ado():
     """Trae los work items abiertos desde el tracker y actualiza la BD local."""
     project_name = _request_project_name()
+    from services.tracker_provider import CapabilityUnavailable
     try:
         # Plan 70 F10 — branch provider/GAP-A: sync para trackers no-ADO
         result = _sync_via_provider_or_ado(project_name=project_name)
+    except CapabilityUnavailable as e:
+        # Plan 218 F6 — degradación DECLARADA: el hueco se ve, no revienta el proceso.
+        import config as _config
+        from api.errors import capability_unavailable_envelope
+        if bool(getattr(_config.config, "STACKY_CAPABILITY_DEGRADATION_ENABLED", True)):
+            logger.info("sync — capacidad no disponible: %s", e)
+            return jsonify(capability_unavailable_envelope(e)), 200
+        # Rollback por flag: se restaura la RESPUESTA legacy (500 "unexpected") sin
+        # reintroducir en el dominio la excepción de "no implementado" que esta fase
+        # eliminó (el centinela de F6 exige cero de esos `raise` en backend/api/).
+        logger.exception("ADO sync — fallo inesperado")
+        return jsonify({"ok": False, "error": "unexpected", "message": str(e)}), 500
     except AdoConfigError as e:
         logger.warning("ADO sync — config: %s", e)
         return jsonify({"ok": False, "error": "config", "message": str(e)}), 400

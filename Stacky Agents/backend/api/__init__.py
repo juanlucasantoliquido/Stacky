@@ -68,6 +68,7 @@ from .evolution import bp as evolution_bp  # Plan 167 — Centro de Evolución
 from .evolution_fitness import bp as evolution_fitness_bp  # Plan 168 — arnés de fitness
 from .evolution_optimizer import bp as evolution_optimizer_bp  # Plan 169 — optimizador evolutivo
 from .evolution_knowledge import bp as evolution_knowledge_bp  # Plan 170 — flywheel de conocimiento
+from .parity import parity_bp  # Plan 218 F8 — matriz de paridad ADO ↔ GitLab
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -138,6 +139,13 @@ api_bp.register_blueprint(evolution_bp)  # Plan 167 — url_prefix="/evolution" 
 api_bp.register_blueprint(evolution_fitness_bp)  # Plan 168 — /api/evolution/fitness/...
 api_bp.register_blueprint(evolution_optimizer_bp)  # Plan 169 — /api/evolution/optimizer/...
 api_bp.register_blueprint(evolution_knowledge_bp)  # Plan 170 — /api/evolution/knowledge/...
+
+# Plan 218 F8 — matriz de paridad ADO ↔ GitLab (solo lectura).
+# url_prefix="/parity" → /api/parity/... (R6: NUNCA declarar /api acá).
+# El apagado por flag vive DENTRO de la ruta (404), no en el registro: el registro
+# se evalúa una sola vez al importar el módulo, así que gatearlo acá obligaría a
+# reiniciar el backend para que el operador viera el efecto de tocar la flag.
+api_bp.register_blueprint(parity_bp)  # Plan 218 — /api/parity/matrix
 
 
 @api_bp.get("/health")

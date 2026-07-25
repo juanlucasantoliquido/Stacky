@@ -171,6 +171,50 @@
           "{\"snapshots\": []}"
         ]
       }
+    },
+    {
+      "id": "flag-leida-del-modulo-config",
+      "title": "Flag leida del MODULO config (rama muerta silenciosa)",
+      "class": "flag-binding",
+      "status": "resolved",
+      "log_pattern": "issue_tracker\\.type=gitlab pero STACKY_GITLAB_ENABLED=false",
+      "log_guarded": false,
+      "killed_by": "plan 218 F0 (D1/D2 - paridad total ADO<->GitLab)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan218_gitlab_reachable.py::test_audit_marca_binding_de_modulo",
+      "evidence": "backend/services/tracker_provider.py:111; backend/services/gitlab_provider.py:34-39; backend/services/flag_binding_audit.py",
+      "note": "Patron: un modulo que hace `import config` (el MODULO) y lee un atributo STACKY_*/GITLAB_*/ADO_* del nombre pelado obtiene SIEMPRE el default de la clase => la rama nunca se ejecuta, sin error visible. log_guarded=false a proposito: con STACKY_GITLAB_ENABLED=false (default de fabrica) este mensaje es LEGITIMO, asi que el smoke de logs alarmaria en falso. El guard real es el pytest, mas el ratchet AST flag_binding_audit.scan() congelado en tests/flag_binding_baseline.json.",
+      "self_test": {
+        "matches": [
+          "TrackerConfigError: issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"
+        ],
+        "clean": [
+          "INFO tracker provider resuelto: gitlab"
+        ]
+      }
+    },
+    {
+      "id": "kwarg-inexistente-en-constructor-de-provider",
+      "title": "Provider construido con un kwarg que su __init__ no declara",
+      "class": "provider-construction",
+      "status": "resolved",
+      "log_pattern": "TypeError:[^\\n]*unexpected keyword argument '(project_name|json)'",
+      "log_guarded": false,
+      "killed_by": "plan 218 F0 (D3/D4 - paridad total ADO<->GitLab)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan218_gitlab_reachable.py::test_gitlab_ci_provider_construye",
+      "evidence": "backend/services/gitlab_ci_provider.py:30; backend/services/gitlab_variables.py:13,28,80,90",
+      "note": "Patron: construir un provider (o llamar a su cliente) con un kwarg que la firma real no declara => TypeError en el PRIMER uso real, invisible mientras el test mockee el provider entero en vez del transporte. El guard es el pytest que construye el provider de verdad y dobla solo GitLabClient (P4).",
+      "self_test": {
+        "matches": [
+          "TypeError: GitLabTrackerProvider.__init__() got an unexpected keyword argument 'project_name'"
+        ],
+        "clean": [
+          "DEBUG GitLabTrackerProvider(project='grupo/proyecto') construido"
+        ]
+      }
     }
   ]
 }

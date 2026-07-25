@@ -101,6 +101,17 @@ export interface Ticket {
   // Estado interno de Stacky (independiente de ado_state).
   // Actualizado por agent_runner vía ticket_status service.
   stacky_status?: TicketStackyStatus;
+  // Plan 218 F5 — vocabulario canónico multi-proveedor. ADITIVO: los campos ado_*
+  // de arriba siguen siendo la fuente principal y NO se tocan (P6). Leelos con los
+  // helpers de services/trackerVocabulary.ts, que caen al legacy si falta el canónico.
+  external_id?: number;
+  tracker_type?: string;
+  tracker_project?: string;
+  tracker_state?: string;
+  item_url?: string;
+  item_type?: string;
+  parent_external_id?: number | null;
+  assignee?: string | null;
   last_execution?: AgentExecution | null;
   pipeline_summary?: {
     done_stages: string[];

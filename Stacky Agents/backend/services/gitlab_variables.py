@@ -10,7 +10,8 @@ class GitLabVariablesProvider:
 
     def __init__(self, project: str | None):
         self._project = project
-        self._provider = GitLabTrackerProvider(project_name=project)
+        # D3 (Plan 218 F0): el kwarg real es `project=` — project_name= levantaba TypeError.
+        self._provider = GitLabTrackerProvider(project=project)
         # C2: _request vive en gitlab_client.py:107 y devuelve TUPLA (body, status)
         self._client = self._provider._client
 
@@ -24,8 +25,9 @@ class GitLabVariablesProvider:
         C2: usa _request_paginated porque GET simple pagina de a 20.
         """
         proj = self._project_path()
-        # C2: _request_paginated (gitlab_client.py:177) devuelve lista completa unida
-        items = self._client._request_paginated("GET", f"/projects/{proj}/variables")
+        # C2: _request_paginated (gitlab_client.py:177) devuelve lista completa unida.
+        # D4 (Plan 218 F0): NO acepta `method` — es GET por definición.
+        items = self._client._request_paginated(f"/projects/{proj}/variables")
 
         result = []
         for v in items:
@@ -77,7 +79,8 @@ class GitLabVariablesProvider:
 
             # C8: reintento determinista si masking rechazado
             try:
-                self._client._request(verb, url, json=body)
+                # D4 (Plan 218 F0): el kwarg real de gitlab_client._request es json_body=
+                self._client._request(verb, url, json_body=body)
                 masked_value = secret  # éxito con masked=true
             except TrackerApiError as e:
                 # Si status 400 ⇒ posiblemente rejection de masking (valor no cumple reglas)
@@ -87,7 +90,7 @@ class GitLabVariablesProvider:
                     retry_body["masked"] = False
                     # A3: raw se conserva en el reintento (solo masking muta)
                     try:
-                        self._client._request(verb, url, json=retry_body)
+                        self._client._request(verb, url, json_body=retry_body)
                         masked_value = False  # éxito con masked=false
                     except TrackerApiError:
                         raise TrackerApiError(400, "Valor no válido para variable masked", kind="masked_rejected")

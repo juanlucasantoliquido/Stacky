@@ -1,0 +1,141 @@
+/* ParityMatrixPanel — Plan 218 F8.
+   Ratchet de deuda de UI: CERO literales hex, CERO style={{ }}, CERO diálogos
+   nativos. Todos los colores salen de los tokens ya existentes (var(--…)) y cada
+   estado lleva además una marca NO cromática, para no depender solo del color. */
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.provider {
+  font-family: var(--font-mono);
+  background: var(--mono-bg);
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--text-primary);
+}
+
+.summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.summaryItem {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.summaryCount {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+}
+
+.table td {
+  border-bottom: 1px solid var(--border-muted);
+  padding: 6px 8px;
+  vertical-align: top;
+  color: var(--text-primary);
+}
+
+.domainRow td {
+  background: var(--bg-elev);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.capability {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.mark {
+  font-family: var(--font-mono);
+  margin-right: 6px;
+}
+
+.statusFull {
+  color: var(--success);
+}
+
+.statusPartial {
+  color: var(--warn);
+}
+
+.statusAbsent {
+  color: var(--danger);
+}
+
+.statusNa {
+  color: var(--text-muted);
+}
+
+.loss {
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.disabled {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.owner {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.empty {
+  color: var(--text-muted);
+  padding: 12px 0;
+}

@@ -77,7 +77,12 @@ class Ticket(Base):
         ),
     )
 
-    def to_dict(self) -> dict:
+    def _legacy_payload(self) -> dict:
+        """Las 16 claves EXACTAS que este método emitía antes del Plan 218 F5.
+
+        Es la referencia de no-regresión: con la flag apagada, `to_dict()` devuelve
+        esto y nada más (P11 — byte-idéntico).
+        """
         return {
             "id": self.id,
             "ado_id": self.ado_id,
@@ -96,6 +101,42 @@ class Ticket(Base):
             "stacky_status": self.stacky_status or "idle",
             "assigned_to_ado": self.assigned_to_ado,
         }
+
+    def to_dict(self) -> dict:
+        """Payload del ticket. Plan 218 F5: superconjunto ADITIVO del histórico.
+
+        Ninguna columna se renombra (P6): `ado_id`, `ado_state`, `ado_url`,
+        `parent_ado_id` y `assigned_to_ado` quedan intactas en la BD y en el JSON.
+        Lo que se agrega son los campos NEUTRALES del vocabulario canónico.
+        """
+        import config as _config  # noqa: PLC0415 — evita ciclo de import a nivel módulo
+
+        if not bool(getattr(_config.config, "STACKY_CANONICAL_VOCABULARY_ENABLED", True)):
+            return self._legacy_payload()
+
+        from services.tracker_vocabulary import with_legacy_aliases  # noqa: PLC0415
+
+        canonico = {
+            "id": self.id,
+            # `ado_id` es una columna PROPIA, no derivable de external_id (que puede
+            # ser NULL): se emite explícitamente para que el alias no la pise.
+            "ado_id": self.ado_id,
+            "external_id": self.external_id,
+            "tracker_project": self.project,
+            "stacky_project_name": self.stacky_project_name,
+            "tracker_type": self.tracker_type,
+            "title": self.title,
+            "description": self.description,
+            "tracker_state": self.ado_state,
+            "item_url": self.ado_url,
+            "priority": self.priority,
+            "item_type": self.work_item_type,
+            "parent_external_id": self.parent_ado_id,
+            "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
+            "stacky_status": self.stacky_status or "idle",
+            "assignee": self.assigned_to_ado,
+        }
+        return with_legacy_aliases(canonico)
 
 
 class User(Base):

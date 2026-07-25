@@ -27,7 +27,8 @@ class GitLabCIProvider:
 
     def __init__(self, project: str | None = None) -> None:
         self._project = project
-        self._delegate = GitLabTrackerProvider(project_name=project)
+        # D3 (Plan 218 F0): el kwarg real es `project=` — project_name= levantaba TypeError.
+        self._delegate = GitLabTrackerProvider(project=project)
 
     def infer_item_pipeline(self, item_ref: ItemRef) -> ItemPipelineResult:
         try:

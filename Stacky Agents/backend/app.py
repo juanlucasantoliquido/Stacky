@@ -740,6 +740,15 @@ def create_app() -> Flask:
             return exc  # 4xx/5xx de abort() → Flask los maneja (sin cambio)
 
         from api.errors import StackyApiError, build_error_envelope
+        # Plan 218 F6 — una capacidad ausente del proveedor activo NO es un bug:
+        # 200 + available:false con mensaje accionable, en CUALQUIER endpoint.
+        from services.tracker_provider import CapabilityUnavailable
+        from api.errors import capability_unavailable_envelope
+        if isinstance(exc, CapabilityUnavailable) and getattr(
+            config, "STACKY_CAPABILITY_DEGRADATION_ENABLED", True
+        ):
+            return jsonify(capability_unavailable_envelope(exc)), 200
+
         # `config` ya es la INSTANCIA en este módulo (from config import config,
         # import top-level) — leer el flag directo, sin `.config` (gotcha
         # config-vs-config.config: acá NO hace falta el doble acceso).

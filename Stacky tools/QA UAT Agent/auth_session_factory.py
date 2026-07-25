@@ -69,6 +69,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import stat
 import sys
 import time
@@ -93,6 +94,21 @@ _LOGIN_USER_SEL = "#c_abfUsuario"
 _LOGIN_PASS_SEL = "#c_abfContrasena"
 _LOGIN_BTN_SEL = "#c_btnOk"
 _POST_LOGIN_URL_RE = r"FrmAgenda|FrmMain"
+_POST_LOGIN_URL_PATTERN = re.compile(_POST_LOGIN_URL_RE, re.IGNORECASE)
+
+
+def _is_post_login_url(url: str) -> bool:
+    """True si la URL ya NO es el login (Plan 240 F1).
+
+    Predicado CALLABLE a proposito: Playwright trata los strings planos de
+    wait_for_url como GLOB, no como regex. Pasar r"FrmAgenda|FrmMain" producia
+    el regex ^FrmAgenda\\|FrmMain$ (pipe escapado y anclado), que NO matchea
+    ninguna URL => el wait expiraba SIEMPRE a los 25s y todo login se reportaba
+    AUTH_CREDENTIALS_INVALID aunque hubiera aterrizado en FrmAgenda.aspx.
+
+    La app redirige a 'frmLogin.aspx' con f minuscula: comparacion case-insensitive.
+    """
+    return "frmlogin" not in (url or "").lower()
 
 # Timeout de login real (ms)
 _LOGIN_NAVIGATE_TIMEOUT_MS = 30_000
@@ -122,6 +138,10 @@ class AuthSessionResult:
     reused: bool = False
     human_action_required: Optional[str] = None
     message: str = ""
+    # Plan 240 F1 — pantalla de aterrizaje real, para que un falso negativo de
+    # login no pueda volver a repetirse a ciegas.
+    landing_url: Optional[str] = None
+    landing_title: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -242,12 +262,22 @@ def _do_playwright_login(
     """
     try:
         from playwright.sync_api import sync_playwright
-    except ImportError:
-        return {
-            "ok": False,
-            "reason": "AUTH_NOT_AVAILABLE",
-            "error": "playwright no está instalado — pip install playwright && playwright install chromium",
-        }
+    except ImportError as exc:
+        # Plan 240 F0/H3: devolver el diagnostico REAL del guard, jamas un texto
+        # hardcodeado que contradiga la causa (antes decia "playwright no esta
+        # instalado" para cualquier ImportError, y aguas arriba se traducia a
+        # "AgendaWeb no responde").
+        try:
+            from browser_runtime_guard import check_browser_runtime
+            g = check_browser_runtime()
+            return {
+                "ok": False,
+                "reason": g.get("code") or "BROWSER_RUNTIME_MISSING",
+                "error": f"{g.get('detail') or exc} — remediacion: {g.get('remediation', '')}",
+            }
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "reason": "BROWSER_RUNTIME_MISSING",
+                    "error": f"{type(exc).__name__}: {exc}"}
 
     _AUTH_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -268,19 +298,28 @@ def _do_playwright_login(
 
                 login_succeeded = False
                 try:
-                    page.wait_for_url(_POST_LOGIN_URL_RE, timeout=_LOGIN_WAIT_URL_TIMEOUT_MS)
+                    # Plan 240 F1: predicado CALLABLE, jamas un regex-string (seria glob).
+                    page.wait_for_url(lambda u: _is_post_login_url(u),
+                                      timeout=_LOGIN_WAIT_URL_TIMEOUT_MS)
                     page.wait_for_load_state("domcontentloaded", timeout=_LOGIN_LOAD_STATE_TIMEOUT_MS)
-                    login_succeeded = "frmlogin" not in page.url.lower()
+                    login_succeeded = _is_post_login_url(page.url)
                 except Exception:
                     login_succeeded = False
 
                 if not login_succeeded:
+                    still_login = "frmlogin" in (page.url or "").lower()
                     return {
                         "ok": False,
-                        "reason": "AUTH_CREDENTIALS_INVALID",
+                        # Plan 240 F1: "no reconozco donde aterrice" NO es
+                        # "credenciales invalidas".
+                        "reason": ("AUTH_CREDENTIALS_INVALID" if still_login
+                                   else "AUTH_POST_LOGIN_UNRECOGNIZED"),
                         "error": (
-                            f"Login falló — sigue en {page.url}. "
+                            f"Login rechazado — sigue en {page.url}. "
                             "Verificar AGENDA_WEB_USER / AGENDA_WEB_PASS."
+                            if still_login else
+                            f"Login aparentemente OK pero la pantalla de aterrizaje "
+                            f"no es reconocible: {page.url}"
                         ),
                     }
 
@@ -306,7 +345,16 @@ def _do_playwright_login(
                 )
 
                 logger.info("[auth_session_factory] Login OK — storage_state guardado en %s", auth_file)
-                return {"ok": True, "reason": "AUTH_LOGIN_OK", "error": None}
+                try:
+                    landing_title = (page.title() or "")[:120]
+                except Exception:  # noqa: BLE001
+                    landing_title = ""
+                return {
+                    "ok": True, "reason": "AUTH_LOGIN_OK", "error": None,
+                    "landing_url": page.url,
+                    "landing_title": landing_title,
+                    "post_login_matched": bool(_POST_LOGIN_URL_PATTERN.search(page.url or "")),
+                }
 
             finally:
                 browser.close()
@@ -510,6 +558,22 @@ def run_auth_session(
                 "AgendaWeb no responde durante el login. "
                 "Verificar que la aplicación está corriendo (environment_preflight debería haber bloqueado antes)."
             ),
+            # Plan 240 H3: causas de runtime de navegador — NUNCA mezclar con
+            # "AgendaWeb no responde". La remediación viene del guard.
+            "BROWSER_RUNTIME_MISSING": (
+                "Falta el runtime de navegador (binding de Playwright y/o chromium). "
+                'Remediación: pip install "playwright>=1.44.0" && python -m playwright install chromium'
+            ),
+            "PLAYWRIGHT_SHADOWED_BY_TOOL_DIR": (
+                "El paquete Python de Playwright no está instalado y el directorio "
+                "'playwright/' del tool lo enmascara como namespace package. "
+                'Remediación: pip install "playwright>=1.44.0" && python -m playwright install chromium'
+            ),
+            "AUTH_POST_LOGIN_UNRECOGNIZED": (
+                "El login parece haber funcionado pero la pantalla de aterrizaje no es "
+                "reconocible. Revisar la URL reportada y, si es una pantalla válida, "
+                "sumarla a _POST_LOGIN_URL_RE."
+            ),
             "AUTH_LOGIN_TIMEOUT": (
                 "Timeout durante el login programático. "
                 "La aplicación puede estar iniciando lentamente. Reintentá en ~30s."
@@ -547,9 +611,62 @@ def run_auth_session(
         dry_run=False,
         reused=False,
         message="Nueva sesión generada exitosamente",
+        landing_url=login_result.get("landing_url"),
+        landing_title=login_result.get("landing_title"),
     )
     _emit_event(exec_log, result)
     return result
+
+
+# ── Re-auth ASYNC (Plan 240 F3 / C1) ──────────────────────────────────────────
+
+async def reauth_in_page(page, *, base_url: Optional[str] = None) -> dict:
+    """Re-login sobre una pagina ASYNC ya existente.
+
+    POR QUE EXISTE (Plan 240 C1): run_auth_session usa sync_playwright, y Playwright
+    LANZA si la Sync API se invoca dentro de un event loop asyncio
+    ("It looks like you are using Playwright Sync API inside the asyncio loop",
+    playwright/sync_api/_context_manager.py). NavigationDriver es async, asi que
+    llamar run_auth_session desde el driver crashea. Este helper hace el login con
+    la MISMA pagina async, reusando los selectores y el predicado de F1.
+
+    NO escribe storage_state: la sesion vive en el contexto async en curso.
+    Retorna {"ok": bool, "reason": str, "landing_url": str|None}. NUNCA lanza.
+    """
+    try:
+        base = (base_url or "").strip()
+        if not base:
+            try:
+                from environment_preflight import get_agenda_base_url
+                base = get_agenda_base_url()
+            except Exception:  # noqa: BLE001
+                base = os.environ.get(
+                    "AGENDA_WEB_BASE_URL", "http://localhost:35017/AgendaWeb/"
+                )
+        base = base.rstrip("/") + "/"
+        _b, user, password, missing = _read_credentials(None)
+        if missing:
+            return {"ok": False, "reason": "MISSING_CREDENTIALS", "landing_url": None}
+
+        await page.goto(base + "FrmLogin.aspx", wait_until="domcontentloaded",
+                        timeout=_LOGIN_NAVIGATE_TIMEOUT_MS)
+        await page.fill(_LOGIN_USER_SEL, user, timeout=_LOGIN_FILL_TIMEOUT_MS)
+        await page.fill(_LOGIN_PASS_SEL, password)
+        await page.locator(_LOGIN_BTN_SEL).click(no_wait_after=True)
+        try:
+            await page.wait_for_url(lambda u: _is_post_login_url(u),
+                                    timeout=_LOGIN_WAIT_URL_TIMEOUT_MS)
+            await page.wait_for_load_state("domcontentloaded",
+                                           timeout=_LOGIN_LOAD_STATE_TIMEOUT_MS)
+        except Exception:  # noqa: BLE001
+            pass
+        url = str(getattr(page, "url", "") or "")
+        if _is_post_login_url(url):
+            return {"ok": True, "reason": "AUTH_LOGIN_OK", "landing_url": url}
+        return {"ok": False, "reason": "AUTH_CREDENTIALS_INVALID", "landing_url": url}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("reauth_in_page fallo: %s", exc, exc_info=True)
+        return {"ok": False, "reason": "AUTH_REAUTH_FAILED", "landing_url": None}
 
 
 # ── Helpers internos ──────────────────────────────────────────────────────────

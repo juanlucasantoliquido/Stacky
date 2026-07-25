@@ -149,6 +149,28 @@ def detect_screens(ticket_result: dict) -> ScreenDetectionResult:
                 "confidence": confidence,
             }
 
+    # ── Source 0: primary_screen (decision EXPLICITA, corta la ambiguedad) ───
+    # Plan 240 H12: cuando el reader deriva la pantalla objetivo de los CRITERIOS DE
+    # ACEPTACION del ticket ("El campo Poliza en FrmBusqueda.aspx admite..."), esa es
+    # una decision explicita, no una inferencia por prosa. Sin este corto, la mencion
+    # de pantallas de CONTEXTO en el ANALISIS TECNICO (0.95) empata dentro del
+    # AMBIGUITY_GAP con el objetivo real (1.0) y bloquea el run con SCREEN_AMBIGUOUS.
+    # Backward-compatible: si primary_screen no viene, el comportamiento es el de siempre.
+    primary = str(ticket_result.get("primary_screen") or "").strip()
+    if primary and primary in SUPPORTED_SCREENS:
+        _logger.info("screen_detector: primary_screen explicito=%s (Plan 240 H12)", primary)
+        match = {"screen": primary, "source": "primary_screen",
+                 "match_type": "exact", "confidence": 1.0}
+        return ScreenDetectionResult(
+            selected_screens=[primary],
+            matches=[match],
+            fallback_used=False,
+            ambiguous=False,
+            blocked=False,
+            block_reason=None,
+            confidence=1.0,
+        )
+
     # ── Source 1: navigation_path (explicit, highest confidence) ─────────────
     for screen in ticket_result.get("navigation_path") or []:
         if screen in SUPPORTED_SCREENS:

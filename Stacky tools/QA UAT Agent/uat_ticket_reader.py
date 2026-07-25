@@ -165,9 +165,37 @@ def run(
     tecnico_comment = next(
         (c for c in classified if c["role"] == "analisis_tecnico"), None
     )
+    analysis_source = "comment"
     if tecnico_comment is None:
-        return _err("missing_technical_analysis",
-                    "No comment classified as analisis_tecnico found in ticket")
+        # Plan 240 H11: los tickets reales de RSPACIFICO no llevan el analisis en un
+        # COMENTARIO: lo llevan en System.Description con estructura canonica de
+        # headings (ANALISIS TECNICO / PASOS DE REPRODUCCION / CRITERIOS DE
+        # ACEPTACION). Antes de fallar, sintetizamos el analisis desde ahi.
+        # Backward-compatible: si existe el comentario, gana el camino de siempre.
+        desc_html = str((wi.get("fields") or {}).get("System.Description") or "")
+        synth = ""
+        if desc_html:
+            try:
+                from acceptance_extractor import split_sections, _clean_text
+                secs = split_sections(desc_html)
+                chunks = [
+                    secs.get("ANALISIS TECNICO") or "",
+                    secs.get("PASOS DE REPRODUCCION") or "",
+                    secs.get("CRITERIOS DE ACEPTACION") or "",
+                ]
+                synth = "\n".join(_clean_text(c) for c in chunks if c).strip()
+            except Exception:  # noqa: BLE001
+                synth = ""
+        if not synth:
+            return _err("missing_technical_analysis",
+                        "No comment classified as analisis_tecnico found in ticket "
+                        "and System.Description has no canonical analysis sections")
+        tecnico_comment = {
+            "id": 0, "author": "system", "date": "",
+            "text_md": desc_html, "role": "analisis_tecnico",
+        }
+        analysis_source = "description"
+        logger.info("[ticket_reader] analisis tomado de System.Description (Plan 240 H11)")
 
     analisis_text = _html_to_text(tecnico_comment["text_md"])
 
@@ -201,8 +229,26 @@ def run(
                     break
 
     if not plan_pruebas:
+        # Plan 240 F6 / H11 — Fallback 2: derivar el plan de los CRITERIOS DE
+        # ACEPTACION de System.Description (estructura canonica verificada en los
+        # tickets reales). Ultimo recurso antes de fallar: un criterio explicito del
+        # ticket es una asercion mejor que ninguna.
+        try:
+            from acceptance_extractor import build_plan_from_description, extract_acceptance
+            _pre = extract_acceptance(wi)
+            _primary = next((c.get("screen_hint") for c in (_pre.get("criteria") or [])
+                             if c.get("screen_hint")), None)
+            plan_pruebas = build_plan_from_description(wi, primary_screen=_primary) or []
+            if plan_pruebas:
+                logger.info("[ticket_reader] plan derivado de CRITERIOS DE ACEPTACION "
+                            "(%d casos, Plan 240 F6)", len(plan_pruebas))
+        except Exception:  # noqa: BLE001
+            plan_pruebas = plan_pruebas or []
+
+    if not plan_pruebas:
         return _err("no_test_plan_in_ticket",
-                    "Could not extract P01..P0N items from analisis_tecnico comment")
+                    "Could not extract P01..P0N items from analisis_tecnico comment "
+                    "nor from the CRITERIOS DE ACEPTACION section of the description")
 
     # Extract notas_qa
     notas_qa = _extract_notas_qa(classified)
@@ -214,8 +260,36 @@ def run(
     full_text = analisis_text + "\n".join(notas_qa)
     precondiciones = _detect_preconditions(full_text)
 
+    # Plan 240 H12 — pantalla objetivo desde los CRITERIOS DE ACEPTACION.
+    # Motivo: screen_detector bloquea con SCREEN_AMBIGUOUS cuando la prosa del
+    # ANALISIS TECNICO menciona varias pantallas de contexto (confianza 0.95 empatada).
+    # navigation_path es su Source 1 con confianza 1.0, y los criterios nombran la
+    # pantalla REALMENTE bajo prueba ("El campo Poliza en FrmBusqueda.aspx admite...").
+    # La pantalla PRIMARIA es la del PRIMER criterio (orden del ticket: CA-01 gana).
+    # Las demas NO se ocultan: quedan en candidate_screens para trazabilidad.
+    candidate_screens: list = []
+    try:
+        from acceptance_extractor import extract_acceptance
+        _acc = extract_acceptance(wi)
+        for _c in _acc.get("criteria") or []:
+            _s = _c.get("screen_hint")
+            if _s and _s not in candidate_screens:
+                candidate_screens.append(_s)
+    except Exception:  # noqa: BLE001
+        candidate_screens = []
+    navigation_path = candidate_screens[:1]
+    if candidate_screens:
+        logger.info("[ticket_reader] pantalla primaria=%s; candidatas=%s (Plan 240 H12)",
+                    navigation_path, candidate_screens)
+
     result: dict = {
         "ok": True,
+        "navigation_path": navigation_path,
+        "candidate_screens": candidate_screens,
+        # Plan 240 H12: decision explicita de pantalla objetivo (Source 0 del
+        # screen_detector). Solo se setea si vino de los CRITERIOS DE ACEPTACION.
+        "primary_screen": (navigation_path[0] if navigation_path else None),
+        "analysis_source": analysis_source,
         "ticket": {
             "id": int(wi.get("id") or ticket_id),
             "title": str(wi.get("title") or wi.get("fields", {}).get("System.Title", "")),
@@ -346,12 +420,55 @@ def _ado_run(ado_path: Path, args: list) -> dict:
         return {"ok": False, "message": f"ado.py output not JSON: {exc} — {proc.stdout[:200]}"}
 
 
+def _bridge_enabled() -> bool:
+    """Plan 240 F5: flag leida del entorno (el backend la exporta desde la UI).
+
+    AISLAMIENTO DE TESTS: bajo pytest el bridge queda DESACTIVADO salvo pedido
+    explicito. Motivo: los tests mockean `_ado_run` (el CLI legacy) para controlar
+    la lectura de ADO; si el bridge se adelanta, el reader saldria a la red real y
+    devolveria el ticket productivo en vez del fixture (regresion observada en
+    test_uat_ticket_reader.py). Los tests del bridge fuerzan el flag a mano.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST") and \
+            os.environ.get("STACKY_QA_UAT_ADO_BRIDGE_ENABLED", "").lower() not in ("1", "true", "yes"):
+        return False
+    return os.environ.get("STACKY_QA_UAT_ADO_BRIDGE_ENABLED", "true").lower() in (
+        "1", "true", "yes"
+    )
+
+
 def _ado_get(ado_path: Path, ticket_id: int) -> dict:
-    return _ado_run(ado_path, ["get", str(ticket_id)])
+    """Plan 240 F5: primero el bridge DPAPI de Stacky, fallback al CLI legacy."""
+    if _bridge_enabled():
+        try:
+            from stacky_ado_bridge import bridge_available, fetch_work_item
+            if bridge_available():
+                res = fetch_work_item(ticket_id)
+                if res.get("ok"):
+                    return res
+        except Exception:  # noqa: BLE001
+            pass          # fallback silencioso al CLI legacy
+    out = _ado_run(ado_path, ["get", str(ticket_id)])
+    if isinstance(out, dict):
+        out.setdefault("source", "ado_cli")
+    return out
 
 
 def _ado_comments(ado_path: Path, ticket_id: int) -> dict:
-    return _ado_run(ado_path, ["comments", str(ticket_id)])
+    """Plan 240 F5: primero el bridge DPAPI de Stacky, fallback al CLI legacy."""
+    if _bridge_enabled():
+        try:
+            from stacky_ado_bridge import bridge_available, fetch_comments
+            if bridge_available():
+                res = fetch_comments(ticket_id)
+                if res.get("ok"):
+                    return res
+        except Exception:  # noqa: BLE001
+            pass
+    out = _ado_run(ado_path, ["comments", str(ticket_id)])
+    if isinstance(out, dict):
+        out.setdefault("source", "ado_cli")
+    return out
 
 
 # ── Comment classification ─────────────────────────────────────────────────────

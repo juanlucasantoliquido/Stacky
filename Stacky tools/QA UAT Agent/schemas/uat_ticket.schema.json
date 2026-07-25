@@ -4,7 +4,18 @@
   "title": "UATTicket",
   "description": "Output normalizado de uat_ticket_reader.py — contrato de entrada del pipeline UAT",
   "type": "object",
-  "required": ["ok", "ticket", "description_md", "comments", "analisis_tecnico", "plan_pruebas", "notas_qa", "adjuntos", "precondiciones_detected", "meta"],
+  "required": [
+    "ok",
+    "ticket",
+    "description_md",
+    "comments",
+    "analisis_tecnico",
+    "plan_pruebas",
+    "notas_qa",
+    "adjuntos",
+    "precondiciones_detected",
+    "meta"
+  ],
   "additionalProperties": false,
   "properties": {
     "ok": {
@@ -13,14 +24,33 @@
     },
     "ticket": {
       "type": "object",
-      "required": ["id", "title", "state", "type"],
+      "required": [
+        "id",
+        "title",
+        "state",
+        "type"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "integer", "minimum": 1 },
-        "title": { "type": "string", "minLength": 1 },
-        "state": { "type": "string", "minLength": 1 },
-        "type": { "type": "string", "minLength": 1 },
-        "url": { "type": "string" }
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string"
+        }
       }
     },
     "description_md": {
@@ -31,16 +61,37 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "author", "date", "text_md", "role"],
+        "required": [
+          "id",
+          "author",
+          "date",
+          "text_md",
+          "role"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "integer", "minimum": 1 },
-          "author": { "type": "string" },
-          "date": { "type": "string" },
-          "text_md": { "type": "string" },
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "author": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "text_md": {
+            "type": "string"
+          },
           "role": {
             "type": "string",
-            "enum": ["analisis_funcional", "analisis_tecnico", "implementacion", "qa", "otros"]
+            "enum": [
+              "analisis_funcional",
+              "analisis_tecnico",
+              "implementacion",
+              "qa",
+              "otros"
+            ]
           }
         }
       }
@@ -54,7 +105,10 @@
       "description": "Items P01..P0N extraídos del análisis técnico",
       "items": {
         "type": "object",
-        "required": ["id", "descripcion"],
+        "required": [
+          "id",
+          "descripcion"
+        ],
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -62,26 +116,41 @@
             "pattern": "^P\\d{2,}$",
             "description": "Identificador del plan de prueba, ej: P01"
           },
-          "descripcion": { "type": "string", "minLength": 1 },
-          "datos": { "type": "string" },
-          "esperado": { "type": "string" }
+          "descripcion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "datos": {
+            "type": "string"
+          },
+          "esperado": {
+            "type": "string"
+          }
         }
       }
     },
     "notas_qa": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Notas textuales para QA extraídas del ticket"
     },
     "adjuntos": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "additionalProperties": false,
         "properties": {
-          "name": { "type": "string" },
-          "url": { "type": "string" }
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
         }
       }
     },
@@ -89,32 +158,95 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["tipo", "recurso"],
+        "required": [
+          "tipo",
+          "recurso"
+        ],
         "additionalProperties": false,
         "properties": {
           "tipo": {
             "type": "string",
-            "enum": ["RIDIOMA_INSERT", "BUILD_DEPLOY", "WEB_CONFIG_FLAG", "SQL_SCRIPT", "DATO_BD"]
+            "enum": [
+              "RIDIOMA_INSERT",
+              "BUILD_DEPLOY",
+              "WEB_CONFIG_FLAG",
+              "SQL_SCRIPT",
+              "DATO_BD"
+            ]
           },
-          "recurso": { "type": "string", "minLength": 1 },
-          "evidencia": { "type": "string" }
+          "recurso": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidencia": {
+            "type": "string"
+          }
         }
       }
     },
     "meta": {
       "type": "object",
-      "required": ["tool", "version"],
+      "required": [
+        "tool",
+        "version"
+      ],
       "additionalProperties": true,
       "properties": {
-        "tool": { "type": "string", "const": "uat_ticket_reader" },
-        "version": { "type": "string" },
-        "duration_ms": { "type": "integer", "minimum": 0 }
+        "tool": {
+          "type": "string",
+          "const": "uat_ticket_reader"
+        },
+        "version": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "navigation_path": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Plan 240 H12: pantalla objetivo derivada de los criterios de aceptacion."
+    },
+    "candidate_screens": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Plan 240 H12: todas las pantallas nombradas por los criterios (trazabilidad)."
+    },
+    "primary_screen": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Plan 240 H12: decision explicita de pantalla objetivo (Source 0 del screen_detector)."
+    },
+    "analysis_source": {
+      "type": "string",
+      "enum": [
+        "comment",
+        "description"
+      ],
+      "description": "Plan 240 H11: de donde se tomo el analisis tecnico."
+    }
+  },
+  "if": {
+    "properties": {
+      "ok": {
+        "const": false
       }
     }
   },
-  "if": { "properties": { "ok": { "const": false } } },
   "then": {
-    "required": ["ok", "error"],
+    "required": [
+      "ok",
+      "error"
+    ],
     "properties": {
       "error": {
         "type": "string",
@@ -128,7 +260,9 @@
           "llm_unavailable"
         ]
       },
-      "message": { "type": "string" }
+      "message": {
+        "type": "string"
+      }
     }
   }
 }

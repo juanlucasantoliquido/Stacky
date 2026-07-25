@@ -1918,6 +1918,23 @@ def _run_pipeline_stages(
             logger.debug("contract_validator unavailable — skipping compiler contract check")
             stages["compiler_contract"] = {"ok": True, "skipped": True, "reason": "module_not_found"}
 
+        # Plan 240 F6b — quitar oraculos de texto NO verificables antes de generar
+        # specs. Un oraculo derivado de prosa ("Cliente esperado") falla siempre y
+        # produce un FALSO NEGATIVO. Los criterios afectados quedan marcados
+        # not_verifiable => MIXED/PARTIAL_COVERAGE, nunca FAIL.
+        try:
+            from weak_oracle_filter import apply_filter as _weak_filter
+            _weak_summary = _weak_filter(compiler_result)
+            stages["weak_oracle_filter"] = {"ok": True, "skipped": False, **_weak_summary}
+            if _weak_summary.get("weak_total"):
+                logger.info("weak_oracle_filter: %d oraculos no verificables removidos "
+                            "en %d escenarios (Plan 240 F6b)",
+                            _weak_summary["weak_total"], _weak_summary["scenarios_touched"])
+        except Exception as _wexc:  # noqa: BLE001
+            logger.debug("weak_oracle_filter no disponible: %s", _wexc)
+            stages["weak_oracle_filter"] = {"ok": True, "skipped": True,
+                                            "reason": "module_not_found"}
+
         # Write scenarios.json now so that preconditions (next stage) can read it
         _persist_json(evidence_dir / "scenarios.json", compiler_result)
 

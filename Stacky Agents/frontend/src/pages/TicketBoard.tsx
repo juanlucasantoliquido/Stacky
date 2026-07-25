@@ -19,6 +19,7 @@ import LoadErrorState from "../components/LoadErrorState";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
 import IncidentResolverModal from "../components/IncidentResolverModal";
+import IncidentInboxEntryButton from "../components/IncidentInboxEntryButton"; // Plan 238
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -1003,6 +1004,7 @@ export default function TicketBoard() {
               🚑 Resolver incidencia
             </button>
           )}
+          <IncidentInboxEntryButton /> {/* Plan 238 — bandeja de incidencias */}
           {/* Toggle vista */}
           <div className={styles.viewToggle}>
             <button

@@ -1,7 +1,20 @@
 # Plan 240 — Desbloqueo real del agente QAUAT E2E: guard de runtime, login sin falso negativo, navegación por menú vivo y veredicto funcional
 
-> Estado: **v1 · PROPUESTO**. Pipeline: **proponer ✓ [este paso]** → criticar (`criticar-y-mejorar-plan`) → criticar v2 → implementar (`implementar-plan-stacky`) → supervisar.
-> Autor: Claude Opus 5 (1M context) en rol StackyArchitectaUltraEficientCode.
+> Estado: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-25). El v1 fue **RECHAZADO** por 3 hallazgos BLOQUEANTES (C1, C2, C3), todos resueltos en esta v2. Pipeline: proponer ✓ → **criticar ✓ [este paso]** → criticar v2 → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor: Claude Opus 5 (1M context) en rol StackyArchitectaUltraEficientCode. Juez v2: el mismo agente en rol adversarial, **verificando contra el código instalado y contra AgendaWeb viva**.
+
+**CHANGELOG v1 → v2 (11 hallazgos; cada uno verificado ejecutando, no leyendo):**
+- **C1 (BLOQUEANTE, resuelto):** F3 hacía re-auth llamando `run_auth_session` (que usa `sync_playwright`, `auth_session_factory.py:244,:258`) **desde dentro del método `async` `via_menu`**. Playwright **lanza** en ese caso: *"It looks like you are using Playwright Sync API inside the asyncio loop"* (`playwright/sync_api/_context_manager.py:48`). El driver es async (7 `async def` en `navigation_driver.py`). F3 ahora define un helper **async** nuevo, `reauth_in_page(page, *, base_url=None)`, que loguea sobre la MISMA página async reusando las constantes de selectores; queda **prohibido** llamar `run_auth_session` desde código async.
+- **C2 (BLOQUEANTE, resuelto):** F3 mandaba `page.goto(<base_url>)` pero **`NavigationDriver` no tiene `base_url`**: su constructor es `__init__(self, page, evidence_dir=None, scenario_id="nav")` (`navigation_driver.py:218-225`) y `grep -c "base_url" navigation_driver.py` → **0**. F3 ahora lo resuelve con `environment_preflight.get_agenda_base_url()` (la fuente única declarada, `environment_preflight.py:68`) por import lazy, sin tocar la firma del constructor.
+- **C3 (BLOQUEANTE, resuelto):** F4 instruía `await page.evaluate(render_aspnet_exception_detector_js())`. **No funciona:** esa función devuelve una **definición de función TS** (`async function __checkAspNetException(page) { … await page.evaluate(…) }`, `screen_error_detector.py:255-256,:295`) pensada para incrustarse en un `.spec.ts` — recibe `page` y llama `page.evaluate` ella misma; pasarla a `page.evaluate` desde Python falla. F4 ahora reusa las **constantes Python** del mismo módulo (`ASPNET_EXCEPTION_TITLE_PATTERNS:171`, `DOM_ERROR_SELECTORS:92`, `DOM_ERROR_TEXT_PATTERNS:131`) con un `evaluate` propio y mínimo.
+- **C4 (IMPORTANTE, resuelto) — [ADICIÓN ARQUITECTO]:** el detector existente **no detecta la página de error real**. Probado: el título de `FrmJDemanda.aspx` es `"500-Error interno del servidor ."` y matchea **0 de los 7** patrones de `ASPNET_EXCEPTION_TITLE_PATTERNS` (`"Server Error"`, `"Runtime Error"`, `"Error - AgendaWeb"`, `"Ha ocurrido un error"`, `"Se produjo un error"`, `"Application Error"`, `"Unhandled Exception"`). Sin este fix **KPI-4 era inalcanzable** aunque el cableado de C3 fuera correcto. F4 agrega los patrones faltantes al módulo existente + un test que usa el título real verificado.
+- **C5 (IMPORTANTE, resuelto):** F8 mutaba `os.environ` desde un **hilo** (`_run_pipeline_in_background` corre en `threading.Thread`) y `os.environ` es **global al proceso** ⇒ dos runs concurrentes con flags distintas se pisan. Verificado que el **mecanismo** es correcto (el pipeline corre in-process — `api/qa_uat.py:66-70` inserta el tool en `sys.path`, sin subprocess — y el runner de specs sí lanza subprocess `npx playwright test`, `uat_test_runner.py:352`, que **hereda** el entorno). F8 ahora envuelve export+lanzamiento en un `threading.Lock` de módulo y **documenta** la limitación de runs concurrentes.
+- **C6 (IMPORTANTE, resuelto):** la absorción declarada del **214 F2** era demasiado amplia y dejaba al 214 inconsistente: este plan **no** cubría 3 ítems de esa fase (el template `templates/playwright_test.spec.ts.j2`, el contador `nav_deviations` en `stages["runner"]`, y la huella en `error_fingerprints.json`). §0 ahora acota la absorción a exactamente `wait_aspnet_idle` + `assert_arrival` + clasificación `NAV_DEVIATION`; el contador `nav_deviations` y las huellas **se agregan a este plan** (F4/F8), y **solo el template J2 queda para el 214 F2**.
+- **C7 (MENOR, resuelto):** anclaje stale heredado del 214: `FLAG_REGISTRY` está en `harness_flags.py:392` (no `:379`); `_CATEGORY_KEYS` en `:120` (no `:117`) y su bloque `calidad_verificacion` en `:154`. Corregidos en F8.
+- **C8 (MENOR, resuelto):** el DoD decía "8 archivos de test" y enumeraba "7 del tool"; el conteo real es **9 archivos** (8 del tool + 1 backend). Los **79 casos** sí estaban bien (5+6+8+10+13+8+15+8+6). Corregido.
+- **C9 (MENOR, resuelto):** el plan no declaraba nada sobre `requires=`. Verificado: `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py:120`) lista **solo** las flags que TIENEN `requires`; las 3 nuevas son **independientes**, así que **no corresponde ninguna arista**, y además `FlagSpec.requires` es *"Solo informativo para la UI; NINGÚN runner lo evalúa"* (`harness_flags.py:30-32`). F8 lo declara y agrega un test que asserta la ausencia.
+- **C10 (MENOR, resuelto):** faltaba la huella de regresión (convención del repo para planes tipo-fix). F8 siembra 3 entradas en `Stacky Agents/docs/sistema/error_fingerprints.json`.
+- **C11 (MENOR, resuelto) — auto-colisión del gate:** el docstring que F5 mandaba escribir contenía **literalmente** `create_work_item`, `post_comment`, `update_work_item_state` y `upload_attachment`, mientras el criterio de aceptación de la misma fase exigía `grep -cE "create_work_item|post_comment|…" stacky_ado_bridge.py` → **0**. El plan se contradecía a sí mismo (misma clase que el gotcha `plan-comment-matches-own-gate`). F5 reescribe el docstring sin esos literales y conserva el grep en 0.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
 > Origen: **pedido textual del operador** — *"retomar, mejorar y poner en funcionamiento el agente QAUAT E2E basado en Playwright, de modo que pueda validar desarrollos de Agenda Web con la máxima precisión posible… evitando fallos por rutas, selectores, estados intermedios, tiempos de carga o datos de prueba… evitar falsos positivos y falsos negativos"*.
 
@@ -15,7 +28,7 @@ El Plan 214 (`Stacky Agents/docs/214_PLAN_REACTIVACION_QAUAT_E2E_PLAYWRIGHT_NAVE
 |---|---|
 | **F0** (higiene `tmp_*` + `run_tests.py`) | **NO se toca.** Sigue siendo del 214. Este plan no depende de ella. |
 | **F1** (`navigation_kb.py`, `playbook_curator.py`, `GET /api/qa-uat/kb`) | **NO se toca.** Este plan aporta el insumo que la hace útil: `sanitize_for_playbook` (F3) garantiza que lo que se cure NO contenga URLs `?q=` inservibles. |
-| **F2** (WebForms-safe: `wait_aspnet_idle`, `assert_arrival`, `NAV_DEVIATION`) | **ABSORBIDA CON CORRECCIONES** por F4 de este plan. El 214 F2 es correcta pero **insuficiente**: su `assert_arrival` valida por ui_map/URL y habría dado **PASS falso** en `FrmJDemanda.aspx` (HTTP 200 con cuerpo "500-Error interno del servidor", H5) y **NAV_AUTH_EXPIRED falso** en la cascada de sesión destruida (H4). Quien implemente el 214 después debe marcar su F2 como **ya cubierta por el 240 F3+F4** y NO reimplementarla. |
+| **F2** (WebForms-safe: `wait_aspnet_idle`, `assert_arrival`, `NAV_DEVIATION`) | **PARCIALMENTE ABSORBIDA, CON CORRECCIONES** (C6 — alcance acotado con precisión). Este plan implementa, con los nombres EXACTOS que pide el 214: `wait_aspnet_idle` + `no_wait_after=True` (F4), `assert_arrival` (F4, **superior**: agrega el gate de página de error que el 214 no tenía), la clasificación `NAV_DEVIATION` en `_classify_error` y su rama en `replan_engine` (F3/F6), el contador `nav_deviations` en `stages["runner"]` (F4) y la huella en `error_fingerprints.json` (F8). **Queda ÚNICAMENTE para el 214 F2:** inyectar el helper `waitForAspNetIdle` + `noWaitAfter: true` en el template `templates/playwright_test.spec.ts.j2` (superficie TS de los specs generados, que este plan no toca). Por qué el `assert_arrival` del 214 era insuficiente: valida por ui_map/URL y habría dado **PASS falso** en `FrmJDemanda.aspx` (HTTP 200 con cuerpo "500-Error interno del servidor", H5) y **NAV_AUTH_EXPIRED falso** en la cascada de sesión destruida (H4). Quien implemente el 214 después: marcar su F2 como cubierta salvo el template, y NO reimplementar lo demás. |
 | **F3** (post-hook `qa_uat_enqueue` + autorun) | **NO se toca.** Sigue siendo del 214. |
 | **F4** (pane de veredicto en `OutputPanel.tsx`) | **NO se toca.** Este plan produce los campos `functional_pass` y `criteria` que ese pane podrá mostrar; los deja en `execution.metadata` sin tocar frontend. |
 | **F5** (paridad: `QAUat1.agent.md` + `playbook_candidates`) | **NO se toca**, salvo un párrafo aditivo obligatorio en `QAUat1.agent.md` (F3 de este plan) porque la regla "nunca sintetices URLs con `?q=`" es una **regla de corrección**, no de estilo: sin ella el runtime Claude repite el bug. |
@@ -32,7 +45,7 @@ El Plan 214 (`Stacky Agents/docs/214_PLAN_REACTIVACION_QAUAT_E2E_PLAYWRIGHT_NAVE
 - **KPI-1 — Login veraz:** `run_auth_session(mode="normal")` contra AgendaWeb viva devuelve `ok=True, reason="AUTH_LOGIN_OK"` con `landing_url` conteniendo `FrmAgenda.aspx`. Hoy: `ok=False, AUTH_CREDENTIALS_INVALID` **siempre**, tras 25 s de espera inútil. Medible: F1.
 - **KPI-2 — Pipeline pasa el stage `reader`:** `python qa_uat_pipeline.py --ticket <ADO_ID> --mode dry-run` deja de devolver `{"verdict":"BLOCKED","category":"PIP","reason":"ado_error"}` y `stages.reader.ok == true` con `stages.reader.source == "stacky_dpapi"`. Hoy: BLOCKED en 5.9 s, siempre. Medible: F5.
 - **KPI-3 — Cero URL `?q=` persistida:** `menu_resolver.sanitize_for_playbook` elimina el payload y marca `requires_live_menu`; ratchet `test_plan240_menu_resolver.py::test_ningun_playbook_persiste_q_param` sobre `cache/playbooks/*.json` → 0 hits de `?q=`. Hoy: nada lo impide.
-- **KPI-4 — Cero falso PASS por 200-con-error:** `assert_arrival` sobre una pantalla que renderiza cuerpo de error devuelve `ok=False, code="APP_ERROR_PAGE"` (categoría `APP`). Verificable en test con fixture y en vivo con `FrmJDemanda.aspx`. Hoy: `assert_arrival` no existe y el status 200 se toma como llegada válida.
+- **KPI-4 — Cero falso PASS por 200-con-error:** `assert_arrival` sobre una pantalla que renderiza cuerpo de error devuelve `ok=False, code="APP_ERROR_PAGE"` (categoría `APP`). Verificable en test con fixture y **en vivo con `FrmJDemanda.aspx`**. Hoy: `assert_arrival` no existe, el status 200 se toma como llegada válida **y además** los patrones del detector existente no reconocen el título real (`"500-Error interno del servidor ."` matchea 0 de 7 — C4), así que el KPI exige **ambos** fixes: el cableado correcto (C3) y los patrones nuevos (C4).
 - **KPI-5 — Cero PASS sin aserción funcional:** `build_functional_verdict` con `criteria_results == []` devuelve `verdict="MIXED", reason="NO_FUNCTIONAL_ASSERTION"`, **nunca** `PASS`. Hoy: un run sin aserciones sustantivas puede reportar PASS.
 - **KPI-6 — Runtime auto-diagnosticado:** `GET /api/qa-uat/runtime-doctor` devuelve en un solo objeto binding Playwright, browser, AgendaWeb y credenciales, cada uno con `remediation` ejecutable. Hoy: el operador recibe diagnósticos contradictorios (H3).
 - **KPI-7 — Evidencia re-verificable:** todo run escribe `evidence_manifest.json` y `verify_evidence_manifest(run_dir)` devuelve `ok=True` con `mismatches == []`. Hoy: no hay manifiesto ni forma de probar que la evidencia no cambió.
@@ -528,13 +541,24 @@ def is_login_redirect(url: str) -> bool:
    - texto contiene `"MENU_LABEL_NOT_FOUND"` → `"MENU_LABEL_NOT_FOUND"`.
    - texto contiene `"APP_ERROR_PAGE"` → `"APP_ERROR_PAGE"` (F4).
    La rama existente `NAV_AUTH_EXPIRED` se conserva **pero deja de disparar por un redirect a login dentro de un paso**: ese caso ahora es `NAV_SESSION_LOST`. Diferencia semántica obligatoria: `NAV_AUTH_EXPIRED` = la sesión venció por tiempo; `NAV_SESSION_LOST` = la app nos expulsó **por navegar mal** (deep-link sin `?q=`) y es **recuperable con re-auth + reintento del paso**.
-3. Reintento con re-auth: en el bucle de retries de `via_menu` (y solo ahí), si `error_code == "NAV_SESSION_LOST"` y quedan intentos: llamar el re-login existente antes de reintentar. Import LAZY dentro del método para no crear ciclo:
+3. **Re-auth ASYNC (C1 — el v1 estaba roto).** **PROHIBIDO** llamar `run_auth_session` desde `via_menu`: usa `sync_playwright` (`auth_session_factory.py:244,:258`) y Playwright **lanza** si se invoca la Sync API dentro de un event loop asyncio (*"It looks like you are using Playwright Sync API inside the asyncio loop"*, `playwright/sync_api/_context_manager.py:48`). `NavigationDriver` es **async** (7 `async def`). Por lo tanto se AGREGA a `auth_session_factory.py` un helper **async** nuevo, que reusa las constantes de selectores ya existentes (`_LOGIN_USER_SEL:92`, `_LOGIN_PASS_SEL:93`, `_LOGIN_BTN_SEL:94`) y el predicado de F1:
    ```python
-   from auth_session_factory import run_auth_session
-   run_auth_session(mode="normal")          # regenera storage_state
-   await self.page.goto(<base_url>, wait_until="domcontentloaded")
+   async def reauth_in_page(page, *, base_url: str | None = None) -> dict:
+       """Re-login sobre una página ASYNC ya existente (Plan 240 F3, C1).
+       NO usa sync_playwright: es seguro llamarlo desde código async.
+       Lee las credenciales con _read_credentials(None) (ya existente, :149).
+       Pasos: goto(base_url + "FrmLogin.aspx", wait_until="domcontentloaded")
+              -> fill user/pass -> click(_LOGIN_BTN_SEL, no_wait_after=True)
+              -> await page.wait_for_url(lambda u: _is_post_login_url(u), timeout=25000)
+       Retorna {"ok": bool, "reason": str, "landing_url": str|None}. NUNCA lanza.
+       NO escribe storage_state: la sesión vive en el contexto async en curso."""
    ```
-   `MAX` de re-auths por paso: **1** (constante módulo `_MAX_REAUTH_PER_STEP = 1`). Sin esto un bucle de expulsión podría reintentar indefinidamente.
+   **(C2) De dónde sale `base_url`:** `NavigationDriver` **no lo tiene** — su constructor es `__init__(self, page, evidence_dir=None, scenario_id="nav")` (`navigation_driver.py:218-225`) y `grep -c "base_url" navigation_driver.py` → **0**. Se resuelve con la fuente única ya declarada, por import LAZY dentro del método (sin tocar la firma del constructor):
+   ```python
+   from environment_preflight import get_agenda_base_url   # :68, fuente única de verdad
+   base = get_agenda_base_url()
+   ```
+   En el bucle de retries de `via_menu` (y **solo** ahí), si `error_code == "NAV_SESSION_LOST"` y quedan intentos: `await reauth_in_page(self.page, base_url=base)` y luego `await self.page.goto(base, wait_until="domcontentloaded")` para volver a la shell y re-cosechar el menú. `MAX` de re-auths por paso: **1** (constante de módulo `_MAX_REAUTH_PER_STEP = 1`); sin esa cota un bucle de expulsión reintentaría indefinidamente.
 
 **Archivo a EDITAR: `Stacky Agents/backend/Stacky/agents/QAUat1.agent.md`** — agregar (regla de corrección, no de estilo; bump de versión en el frontmatter):
 ```markdown
@@ -621,14 +645,26 @@ AgendaWeb usa URLs con `?q=` ENCRIPTADO POR SESIÓN (ej: `FrmReportes.aspx?q=Tdb
        """Valida por DOM que estamos en expected_screen Y que no es página de error.
        Retorna {"ok": bool, "code": str, "deviation": str|None, "screen": str}.
        ORDEN OBLIGATORIO (el gate de error va PRIMERO — H5):
-       1) Página de error: llamar screen_error_detector (import lazy; usar la función
-          pública que exponga — localizar con `grep -n "^def " screen_error_detector.py`).
-          Si detecta error de servidor/excepción ASP.NET =>
-          {"ok": False, "code": "APP_ERROR_PAGE", "deviation": <resumen 200 chars>}.
-          Fallback si el detector no está disponible: evaluar sobre document.body.innerText
-          la regex /(^|\\s)(500|404)-Error|Server Error in|Runtime Error|Unhandled exception/i
-          y también document.title. (Caso real: FrmJDemanda.aspx responde 200 con
-          title "500-Error interno del servidor .".)
+       1) Página de error (C3 — cableado corregido). NO llamar
+          render_aspnet_exception_detector_js()/render_dom_detector_js(): esas funciones
+          devuelven una DEFINICIÓN de función TS que recibe `page` y llama page.evaluate
+          ella misma (screen_error_detector.py:255-256,:295,:302), pensada para incrustarse
+          en un .spec.ts; pasarla a page.evaluate desde Python FALLA.
+          Camino correcto: reusar las CONSTANTES Python del mismo módulo (import lazy)
+            from screen_error_detector import (ASPNET_EXCEPTION_TITLE_PATTERNS,   # :171
+                                               DOM_ERROR_SELECTORS,              # :92
+                                               DOM_ERROR_TEXT_PATTERNS)          # :131
+          y un evaluate propio y mínimo:
+            snap = await self.page.evaluate(
+                "() => ({title: document.title || '',"
+                " body: (document.body && document.body.innerText || '').slice(0, 4000),"
+                " url: window.location.href || ''})")
+          Detecta error si: (a) algún patrón de ASPNET_EXCEPTION_TITLE_PATTERNS está
+          (case-insensitive) en snap['title']; (b) algún patrón de DOM_ERROR_TEXT_PATTERNS
+          está en snap['body']; (c) snap['url'] contiene 'errors.aspx' o 'aspxerrorpath';
+          (d) algún selector de DOM_ERROR_SELECTORS tiene count() > 0.
+          Si detecta => {"ok": False, "code": "APP_ERROR_PAGE",
+                         "deviation": <title + primeros 160 chars del body>}.
        2) Expulsión: si menu_resolver.is_login_redirect(url) =>
           {"ok": False, "code": "NAV_SESSION_LOST", ...}
        3) Llegada por ui_map: cache/ui_maps/{expected_screen}.json, primer elemento con
@@ -640,6 +676,24 @@ AgendaWeb usa URLs con `?q=` ENCRIPTADO POR SESIÓN (ej: `FrmReportes.aspx?q=Tdb
        saca screenshot con self._screenshot (:482) como evidencia."""
    ```
    **Regla anti-falso-PASS (dura):** el chequeo de página de error corre **antes** que el de llegada. Una pantalla que "llegó" pero muestra error es `APP_ERROR_PAGE` (categoría `APP` = bug real del desarrollo), **nunca** un PASS.
+
+**Archivo a EDITAR: `Stacky tools/QA UAT Agent/screen_error_detector.py` — [ADICIÓN ARQUITECTO] (C4), sin esto KPI-4 es inalcanzable**
+
+Los patrones de título del detector **no reconocen la página de error real de AgendaWeb**. Probado el 2026-07-25: el título de `FrmJDemanda.aspx` es `"500-Error interno del servidor ."` y matchea **0 de los 7** patrones actuales de `ASPNET_EXCEPTION_TITLE_PATTERNS` (`:171`). AGREGAR a esa lista, al final (aditivo puro — el mismo array lo consume el JS del template, así que los specs generados también se benefician):
+```python
+    "Error interno del servidor",   # Plan 240 C4 — título REAL de la custom error page
+                                    # de AgendaWeb, verificado en vivo:
+                                    # FrmJDemanda.aspx => "500-Error interno del servidor ."
+    "Error interno",                # variante sin la palabra "servidor"
+```
+**Regla dura:** NO reordenar ni editar las 7 entradas existentes (otros consumidores dependen de ellas); solo agregar al final. Cambio backward-compatible: agregar patrones solo puede detectar MÁS errores, nunca menos.
+
+**Archivo a EDITAR: `Stacky tools/QA UAT Agent/qa_uat_pipeline.py` — contador `nav_deviations` (C6, ítem traído del 214 F2)**
+
+En el resumen del stage runner (donde se arma `stages["runner"]`; **localizar con `grep -n 'stages\["runner"\]' qa_uat_pipeline.py`, no adivinar la línea**), AGREGAR dos contadores derivados de los resultados del runner (0 si no hay ninguno):
+- `nav_deviations`: cantidad de resultados cuya clase de error es `NAV_DEVIATION`.
+- `app_error_pages`: cantidad con clase `APP_ERROR_PAGE`.
+Aditivo puro: son keys nuevas en un dict existente; ningún consumidor actual se rompe. Habilita KPI-1 del Plan 214 sin que el 214 tenga que tocar este archivo.
 
 **Archivo a CREAR: `Stacky tools/QA UAT Agent/console_noise_policy.py`**
 ```python
@@ -683,12 +737,17 @@ def classify_console(messages: list[str]) -> dict:
 - `test_console_no_ignora_excepcion_js`: `"Uncaught TypeError: x is not a function"` y `"Sys.WebForms.PageRequestManagerServerErrorException"` → `significant`.
 - `test_console_significativo_gana_el_empate`: `"Failed to load resource … Sys.WebForms"` → `significant`.
 - `test_console_ignora_no_strings`: `[None, 3, "favicon 404"]` → no lanza, `ignored_count == 1`.
+- `test_detector_reconoce_el_titulo_real` (**C4, el test que hace alcanzable KPI-4**): importar `ASPNET_EXCEPTION_TITLE_PATTERNS` y verificar que **al menos un patrón** matchea (case-insensitive) el título real verificado en vivo `"500-Error interno del servidor ."`. Hoy este test **falla** (0 de 7 patrones matchean) y con el fix pasa. Escribirlo ANTES del fix.
+- `test_no_se_reordenaron_los_patrones_existentes`: los 7 patrones originales siguen presentes y en el mismo orden relativo (anti-regresión de otros consumidores).
 
 **Criterio de aceptación (binario):**
-- `& "…python.exe" -m pytest tests\unit\test_plan240_arrival_and_console.py -q` → **13/13**.
+- `& "…python.exe" -m pytest tests\unit\test_plan240_arrival_and_console.py -q` → **15/15**.
 - `grep -c "no_wait_after=True" navigation_driver.py` → **≥1**.
 - `grep -c "APP_ERROR_PAGE" navigation_driver.py` → **≥1**.
 - `grep -c "def assert_arrival" navigation_driver.py` → **1**.
+- `grep -c "Error interno del servidor" screen_error_detector.py` → **≥1** (C4).
+- `grep -c "nav_deviations" qa_uat_pipeline.py` → **≥1** (C6).
+- Regresión por el cambio de patrones: `& "…python.exe" -m pytest tests\unit\test_screen_error_detector.py -q` → verde (si el nombre difiere, `ls tests\unit | grep -i error` y correr los que aparezcan, por archivo).
 - **Verificación en vivo (requiere AgendaWeb arriba):** `assert_arrival("FrmJDemanda.aspx")` estando en esa pantalla → `code == "APP_ERROR_PAGE"`. Pegar la salida real.
 - Regresión: `tests\unit\test_navigation_driver.py` → verde.
 
@@ -713,9 +772,13 @@ resuelve el PAT solo desde ado-config.json / PAT-ADO EN TEXTO PLANO (ado.py:59-8
 ninguno existe => el pipeline muere en el stage reader. Stacky ya tiene el PAT
 cifrado con DPAPI en backend/projects/<proyecto>/auth/ado_auth.json y funciona.
 
-ALCANCE DURO: SOLO LECTURA. Este módulo NO expone ni usa create_work_item,
-post_comment, update_work_item_state, upload_attachment ni ningún método de
-escritura de AdoClient. El HITL de publicación (G2) queda intacto.
+ALCANCE DURO: SOLO LECTURA. Este módulo no expone NINGÚN método de escritura de
+AdoClient — ni creación de work items, ni publicación de comentarios, ni cambio de
+estados, ni subida de adjuntos. El HITL de publicación (G2) queda intacto.
+
+(C11) El docstring evita a propósito escribir los nombres literales de los métodos
+de escritura: el criterio de aceptación de esta fase es un grep de esos literales
+con resultado 0, y nombrarlos aquí haría fallar el gate contra su propio autor.
 """
 from pathlib import Path
 import sys
@@ -777,7 +840,7 @@ def fetch_comments(ticket_id: int, top: int = 20) -> dict:
 **Tests (TDD): `Stacky tools/QA UAT Agent/tests/unit/test_plan240_ado_bridge.py`**
 - `test_backend_path_resuelto`: `_BACKEND` termina en `Stacky Agents\backend` y `is_dir()` es True en este árbol.
 - `test_bridge_available_true_aqui`: `bridge_available()` → True (PAT DPAPI presente, verificado).
-- `test_bridge_solo_lectura`: `_READ_ONLY_METHODS` no contiene ningún nombre de escritura; y `grep` del propio módulo (leído como texto por el test) no menciona `create_work_item`, `post_comment`, `update_work_item_state` ni `upload_attachment`. **Este test es el guardián de G2.**
+- `test_bridge_solo_lectura`: `_READ_ONLY_METHODS` contiene exactamente `{"get_work_item","fetch_comments","fetch_attachments"}`; y el propio módulo, leído como texto por el test, no contiene ninguno de los 4 nombres de escritura (el test los construye por concatenación de fragmentos — p. ej. `"create_" + "work_item"` — para no introducirlos él mismo como literales y colisionar con el mismo gate, C11). **Este test es el guardián de G2.**
 - `test_fetch_work_item_shape`: monkeypatch de `AdoClient.get_work_item` → dict con `id`/`fields` → `ok True`, `source == "stacky_dpapi"`, `work_item["id"]` correcto.
 - `test_fetch_no_lanza_si_ado_falla`: monkeypatch que lanza → `ok False`, `error` no vacío, sin excepción.
 - `test_reader_usa_bridge_primero`: spy sobre `_ado_run` (el CLI) + bridge fake que devuelve ok → `_ado_run` **0 llamadas**, resultado con `source == "stacky_dpapi"`.
@@ -995,8 +1058,10 @@ except Exception:
 
 **Valor:** cierra G8 (config del operador vía UI) y KPI-6 (fin del diagnóstico contradictorio, ahora consultable).
 
+**Sobre `requires=` (C9 — verificado, no hay aristas que declarar):** las 3 flags nuevas son **independientes entre sí** (ninguna vive dentro del branch de otra), así que **NO corresponde ninguna entrada** en `_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py:120`), que lista **solo** las flags que tienen `requires`. Además `FlagSpec.requires` está documentado como *"Solo informativo para la UI; NINGÚN runner lo evalúa"* (`harness_flags.py:30-32`), por lo que una arista inventada sería puramente cosmética. El test `test_sin_aristas_requires` (abajo) fija esta decisión.
+
 **Flags — los 5 lugares obligatorios (NO hand-editar `harness_defaults.env`):**
-1. `Stacky Agents/backend/services/harness_flags.py` → `FLAG_REGISTRY` (`:379`):
+1. `Stacky Agents/backend/services/harness_flags.py` → `FLAG_REGISTRY` (**`:392`** — C7: el `:379` del v1 era un anclaje stale heredado del 214):
    ```python
    FlagSpec(key="STACKY_QA_UAT_ADO_BRIDGE_ENABLED", type="bool", group="global",
        label="Leer tickets de QA UAT con las credenciales de Stacky",
@@ -1011,7 +1076,7 @@ except Exception:
        description="Si AgendaWeb no responde, el pipeline intenta UN arranque local con IIS Express y lo apaga al terminar. Requiere IIS Express instalado, el applicationhost.config del cliente y la solucion compilada. Solo localhost. Default OFF.",
        default=False),
    ```
-2. `_CATEGORY_KEYS` (`:117`): las **3** keys bajo `calidad_verificacion`.
+2. `_CATEGORY_KEYS` (**`:120`**, bloque `"calidad_verificacion"` en **`:154`** — C7): las **3** keys ahí. Sin esto, el test que exige categoría para toda flag nueva queda rojo (`harness_flags.py:390` lo advierte en un comentario del propio archivo).
 3. `Stacky Agents/backend/config.py` (espejo del patrón de `config.py:1192-1194`):
    ```python
    STACKY_QA_UAT_ADO_BRIDGE_ENABLED: bool = os.getenv("STACKY_QA_UAT_ADO_BRIDGE_ENABLED", "true").lower() in ("1", "true", "yes")
@@ -1019,15 +1084,21 @@ except Exception:
    STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED: bool = os.getenv("STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED", "false").lower() in ("1", "true", "yes")
    ```
 4. `Stacky Agents/backend/tests/test_harness_flags.py` → `_CURATED_DEFAULTS_ON` (`:467`): agregar **SOLO** las dos primeras (la de autostart es default OFF: **NO** va, o `test_default_known_only_for_curated` queda rojo — gotcha `harness-flags-default-explicit-gotcha`).
-5. **Propagación al subproceso/entorno del pipeline:** en `Stacky Agents/backend/api/qa_uat.py`, en `_run_pipeline_in_background` (`:203`), ANTES de invocar el pipeline, exportar las 3 flags a `os.environ` leyéndolas de la **instancia** `config.config` (gotcha `config.config` vs módulo):
+5. **Propagación al entorno del pipeline (C5 — con candado, el v1 tenía una carrera):** en `Stacky Agents/backend/api/qa_uat.py`, en `_run_pipeline_in_background` (`:203`), ANTES de invocar el pipeline, exportar las 3 flags a `os.environ` leyéndolas de la **instancia** `config.config` (gotcha `config.config` vs módulo):
    ```python
+   import threading
+   _FLAG_EXPORT_LOCK = threading.Lock()      # módulo-level, junto a las otras constantes
+
+   # dentro de _run_pipeline_in_background, antes de lanzar el pipeline:
    from config import config as _cfg
-   for _k in ("STACKY_QA_UAT_ADO_BRIDGE_ENABLED",
-              "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",
-              "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED"):
-       os.environ[_k] = "true" if bool(getattr(_cfg, _k, False)) else "false"
+   with _FLAG_EXPORT_LOCK:
+       for _k in ("STACKY_QA_UAT_ADO_BRIDGE_ENABLED",
+                  "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",
+                  "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED"):
+           os.environ[_k] = "true" if bool(getattr(_cfg, _k, False)) else "false"
    ```
-   Motivo: los módulos del tool leen las flags por `os.environ` (no importan `config`), así que sin esta línea el toggle de la UI no tendría efecto.
+   **Por qué este mecanismo es el correcto (verificado):** el pipeline corre **in-process** (`_ensure_pipeline_on_path`, `api/qa_uat.py:66-70`, inserta el tool en `sys.path`; no hay subprocess para el pipeline), así que los módulos del tool ven el mismo `os.environ`; y el runner de specs **sí** lanza un subprocess (`npx playwright test`, `uat_test_runner.py:352`) que **hereda** el entorno del padre. Sin esta exportación, el toggle de la UI no tendría ningún efecto sobre el tool (los módulos del tool leen por `os.environ`, no importan `config`).
+   **Limitación documentada (C5):** `os.environ` es global al proceso y `_run_pipeline_in_background` corre en un `threading.Thread`. El candado evita que dos exportaciones se **interleaven**, pero **dos runs concurrentes comparten los valores del último export**. Es aceptable para el modelo mono-operador (G6) y debe quedar escrito en el docstring de la función. Prohibido "arreglarlo" con `setdefault`: eso volvería inefectivo el toggle de la UI, que es justamente el bug que esta fase corrige.
 
 **Endpoint nuevo (read-only) en `Stacky Agents/backend/api/qa_uat.py`**, al final del blueprint, patrón de los GET existentes (sin flag):
 ```python
@@ -1057,17 +1128,28 @@ def get_runtime_doctor():
     return jsonify(out)
 ```
 
+**Huellas de regresión (C10) — `Stacky Agents/docs/sistema/error_fingerprints.json`** (registro real consumido por `backend/services/error_fingerprints.py:18`). **Leer primero el JSON y copiar el shape EXACTO de una entrada existente** (no inventar keys). AGREGAR 3 entradas nuevas al array, jamás editar entradas ajenas:
+| id | clase que mata | patrón de matching |
+|---|---|---|
+| `qa_uat_login_glob_false_negative` | login exitoso reportado como credenciales inválidas por pasar un regex-string a `wait_for_url` | literal `AUTH_CREDENTIALS_INVALID` junto a `FrmAgenda` |
+| `qa_uat_nav_session_lost` | expulsión a login por deep-link sin `?q=`, que cascada falsos auth-expired | literal `NAV_SESSION_LOST` |
+| `qa_uat_app_error_page` | HTTP 200 con cuerpo de error 500 tomado como llegada válida (falso PASS) | literal `APP_ERROR_PAGE` |
+Tras editar: `python -m json.tool "Stacky Agents/docs/sistema/error_fingerprints.json"` → exit 0.
+
 **Tests (TDD): `Stacky Agents/backend/tests/test_plan240_qa_uat_runtime.py`** (fixtures espejo de `tests/test_qa_uat_endpoint.py` — copiar su patrón de app factory, no inventar uno):
 - `test_flags_registradas`: las 3 en `FLAG_REGISTRY` y en `_CATEGORY_KEYS["calidad_verificacion"]`.
 - `test_defaults_de_config`: `config.Config()` → bridge True, functional True, autostart False.
 - `test_solo_las_on_en_curated`: `_CURATED_DEFAULTS_ON` contiene las 2 ON y **no** la de autostart.
+- `test_sin_aristas_requires` (**C9**): ninguna de las 3 keys aparece en `_REQUIRES_MAP_FROZEN`, y el `FlagSpec` de cada una tiene `requires is None`.
 - `test_doctor_endpoint_200`: `GET /api/qa-uat/runtime-doctor` → 200 con keys `ok, browser, agenda, ado_bridge`.
 - `test_doctor_degrada_sin_guard`: monkeypatch para que el import del guard lance → 200 con `browser.code == "GUARD_UNAVAILABLE"` (nunca 5xx).
 - `test_flags_se_exportan_al_entorno`: llamar el bloque de export con `config.config` monkeypatcheado (bridge True, autostart False) → `os.environ` con `"true"` y `"false"` respectivamente. Usar `monkeypatch.setattr(config.config, ...)` sobre la **INSTANCIA**.
+- `test_huellas_sembradas` (**C10**): las 3 ids nuevas están en `error_fingerprints.json` y el archivo parsea.
 - **Registrar el archivo en `HARNESS_TEST_FILES`** (`backend/scripts/run_harness_tests.sh` **y** `run_harness_tests.ps1`) — si no, el meta-ratchet queda rojo.
 
 **Criterio de aceptación (binario):**
-- `& ".venv\Scripts\python.exe" -m pytest tests\test_plan240_qa_uat_runtime.py -q` → **6/6**.
+- `& ".venv\Scripts\python.exe" -m pytest tests\test_plan240_qa_uat_runtime.py -q` → **8/8**.
+- `grep -cE "qa_uat_login_glob_false_negative|qa_uat_nav_session_lost|qa_uat_app_error_page" "Stacky Agents/docs/sistema/error_fingerprints.json"` → **3** (C10).
 - `grep -c "test_plan240_qa_uat_runtime.py" scripts/run_harness_tests.sh scripts/run_harness_tests.ps1` → **1 en cada uno**.
 - `grep -n "runtime-doctor" api/qa_uat.py` → **≥1**.
 - Regresión (por archivo): `tests\test_qa_uat_endpoint.py`, `tests\test_harness_flags.py` → verdes.
@@ -1092,6 +1174,9 @@ def get_runtime_doctor():
 | R8 | Sesión paralela viva en el árbol compartido | Este plan **no toca frontend** (superficie 100% tool + `api/qa_uat.py` + flags); commits SIEMPRE con pathspec explícito; `git worktree list` y `git status` antes de commitear |
 | R9 | El export de flags al entorno (F8 §5) pisa una env var que el operador seteó a mano | Documentado: la UI es la fuente de verdad (G8, memoria `operator-config-always-via-ui`). Si en el futuro se quisiera respetar el env, sería `setdefault` — pero eso volvería el toggle de la UI inefectivo, que es el bug que F8 arregla |
 | R10 | El ratchet AST de F1 falla en un archivo con sintaxis inválida | El test envuelve cada `ast.parse` en try/except y **cuenta** los archivos no parseables en un `skipped` que imprime; si `skipped > 0` el test **no** falla pero lo reporta (un archivo roto es un problema distinto, no de este ratchet) |
+| R11 | **(C1)** Alguien vuelve a llamar código sync de Playwright desde un método async del driver | Prohibición verificable en el DoD (`grep -c "run_auth_session" navigation_driver.py` → 0) + `reauth_in_page` async como única vía soportada + explicación del crash real (`sync_api/_context_manager.py:48`) escrita en el docstring del helper |
+| R12 | **(C4)** Aparece otra custom error page con un título que tampoco está en la lista de patrones | El gate de `assert_arrival` no depende solo del título: también mira `DOM_ERROR_TEXT_PATTERNS` sobre el body, los `DOM_ERROR_SELECTORS` y los indicadores de URL (`errors.aspx`, `aspxerrorpath`); cualquier patrón nuevo se agrega al final de la lista existente (aditivo, nunca reordenar) |
+| R13 | **(C5)** Dos runs QA UAT concurrentes con flags distintas comparten el último export a `os.environ` | Candado de módulo para que los exports no se interleaven + limitación escrita en el docstring; aceptable bajo el modelo mono-operador (G6). Prohibido "arreglarlo" con `setdefault` (volvería inefectivo el toggle de la UI) |
 
 ## 8. Fuera de scope (explícito)
 
@@ -1132,9 +1217,11 @@ def get_runtime_doctor():
 
 ## 11. Definición de Hecho (DoD) global
 
-- [ ] Los **8** archivos de test nuevos verdes, corridos **POR ARCHIVO** con los comandos exactos de §4, con la salida real pegada (cero "pasó todo" sin evidencia): 7 del tool (`test_plan240_browser_runtime_guard.py` 5, `test_plan240_login_url_predicate.py` 6, `test_plan240_agenda_launcher.py` 8, `test_plan240_menu_resolver.py` 10, `test_plan240_arrival_and_console.py` 13, `test_plan240_ado_bridge.py` 8, `test_plan240_functional_verdict.py` 15, `test_plan240_evidence_manifest.py` 8) + 1 backend (`test_plan240_qa_uat_runtime.py` 6). **Total 79 casos.**
+- [ ] Los **9** archivos de test nuevos verdes (C8: el v1 decía "8" y enumeraba 7+1), corridos **POR ARCHIVO** con los comandos exactos de §4, con la salida real pegada (cero "pasó todo" sin evidencia). **8 del tool:** `test_plan240_browser_runtime_guard.py` **5**, `test_plan240_login_url_predicate.py` **6**, `test_plan240_agenda_launcher.py` **8**, `test_plan240_menu_resolver.py` **10**, `test_plan240_arrival_and_console.py` **15** (13 + los 2 de C4), `test_plan240_ado_bridge.py` **8**, `test_plan240_functional_verdict.py` **15**, `test_plan240_evidence_manifest.py` **8**. **1 backend:** `test_plan240_qa_uat_runtime.py` **8** (6 + C9 + C10). **Total 83 casos.**
 - [ ] El único `backend/tests/test_plan240_*.py` registrado en `HARNESS_TEST_FILES` (sh **y** ps1); meta-ratchet verde.
-- [ ] Regresiones nombradas verdes (por archivo): `test_navigation_driver.py`, `test_navigation_plan_gate.py`, `test_replan_engine.py`, `test_uat_ticket_reader.py`, `test_qa_uat_endpoint.py`, `test_harness_flags.py`.
+- [ ] Regresiones nombradas verdes (por archivo): `test_navigation_driver.py`, `test_navigation_plan_gate.py`, `test_replan_engine.py`, `test_uat_ticket_reader.py`, `test_screen_error_detector.py` (por C4), `test_qa_uat_endpoint.py`, `test_harness_flags.py`, `test_harness_flags_requires.py` (por C9).
+- [ ] **Prohibiciones de arquitectura verificadas (los 3 bloqueantes del v1 no pueden volver):** `grep -c "run_auth_session" navigation_driver.py` → **0** (C1: jamás Sync API desde async); `grep -c "def reauth_in_page" auth_session_factory.py` → **1** (C1); `grep -c "get_agenda_base_url" navigation_driver.py` → **≥1** (C2: base_url resuelto por la fuente única); `grep -cE "evaluate\(\s*render_(aspnet_exception|dom)_detector_js" navigation_driver.py` → **0** (C3: no se evalúa una definición de función TS).
+- [ ] Las 3 huellas sembradas en `error_fingerprints.json` y el JSON parsea (C10).
 - [ ] Ratchet AST de F1 en **0 hits** (`wait_for_url` con string literal).
 - [ ] Ratchet KPI-3 en **0 hits** de `?q=` en `cache/playbooks/*.json` y `cache/ui_maps/*.json`.
 - [ ] `grep` sentinels de cada fase (F0-F8) verdes, tal como se listan en cada criterio de aceptación.

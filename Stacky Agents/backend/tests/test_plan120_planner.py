@@ -234,3 +234,57 @@ def test_planner_es_puro():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     assert not (imported & banned), f"deploy_planner.py importa módulos con I/O: {imported & banned}"
+
+
+# ── Plan 239 F1.0 — extensión ADITIVA de dora_metrics ────────────────────────
+
+def test_dora_expone_cfr_sample_30d():
+    """cfr_sample_30d = cuántos deploys TERMINADOS (éxito o fallo) entraron al CFR."""
+    now = datetime(2026, 7, 10, 12, 0, 0, tzinfo=_UTC)
+
+    def _ts(days_ago):
+        return (now - timedelta(days=days_ago)).isoformat()
+
+    entries = [
+        {"action": "deploy", "status": "success", "finished_at": _ts(5)},
+        {"action": "deploy", "status": "success", "finished_at": _ts(4)},
+        {"action": "deploy", "status": "failed", "finished_at": _ts(3)},
+    ]
+    metrics = dp.dora_metrics(entries, now)
+    assert metrics["cfr_sample_30d"] == 3
+
+
+def test_dora_cfr_sample_ignora_running():
+    """Un entry `running` no suma a la muestra: todavía no se sabe si es fallo o éxito."""
+    now = datetime(2026, 7, 10, 12, 0, 0, tzinfo=_UTC)
+
+    def _ts(days_ago):
+        return (now - timedelta(days=days_ago)).isoformat()
+
+    entries = [
+        {"action": "deploy", "status": "success", "finished_at": _ts(5)},
+        {"action": "deploy", "status": "failed", "finished_at": _ts(3)},
+        {"action": "deploy", "status": "running", "finished_at": _ts(1)},
+    ]
+    metrics = dp.dora_metrics(entries, now)
+    assert metrics["cfr_sample_30d"] == 2
+
+
+def test_dora_claves_previas_intactas():
+    """Backward-compat: las 5 claves del plan 120 siguen presentes."""
+    now = datetime(2026, 7, 10, 12, 0, 0, tzinfo=_UTC)
+    metrics = dp.dora_metrics([], now)
+    for clave in (
+        "deploys_7d",
+        "deploys_30d",
+        "change_failure_rate_30d",
+        "mttr_minutes_30d",
+        "last_deploy_at",
+    ):
+        assert clave in metrics, f"la extensión del plan 239 perdió la clave {clave}"
+    assert metrics["cfr_sample_30d"] == 0
+
+
+def test_failed_statuses_publico():
+    """Plan 239 F1.0 — services/devops_overview cita los estados fallidos por nombre."""
+    assert dp.FAILED_STATUSES == dp._FAILED_STATUSES

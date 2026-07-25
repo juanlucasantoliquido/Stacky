@@ -27,6 +27,12 @@ def _guard():
         abort(404)
 
 
+def get_snapshot() -> dict | None:
+    """Plan 239 — lectura del último snapshot SIN correr el chequeo (HITL intacto)."""
+    with _SNAPSHOT_LOCK:
+        return _SNAPSHOT
+
+
 def _is_stale(snap: dict) -> bool:
     ts = str(snap.get("generated_at") or "")
     try:

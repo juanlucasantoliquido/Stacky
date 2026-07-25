@@ -1,6 +1,18 @@
 # Plan 239 — Cockpit DevOps: rediseño integral de UX/UI y arquitectura de la información
 
-> **Estado:** MEJORADO (**v1 → v2**) — criticado 2026-07-25 · **Veredicto: RECHAZADO (v1) → corregido en v2**
+> **Estado:** **IMPLEMENTADO** (2026-07-25) — F0, F1.0, F1, F2, F3 (+F3.4 +F3.5), F4, F5, F6, F7a, F7b y F8
+> construidas y verificadas con sus tests corridos de verdad. Falta **solo lo VISUAL** (el checklist de
+> 10 puntos de F8, que requiere navegador y no es automatizable: `@testing-library/react` y `jsdom` no
+> están en el `package.json` del frontend).
+> KPI-8 medido: **385 ≤ 386** inline styles del panel; **0** hex en los `.module.css` de DevOps.
+> Rojos PREEXISTENTES ajenos al plan (verificados contra HEAD, no introducidos acá):
+> `test_plan120_flags.py::test_defaults_effective_off` (el `.env` del operador fuerza
+> `STACKY_DEPLOYMENTS_ENABLED=true`) y `test_{plan87,plan120}_*::*harness_defaults*`
+> (`backend/harness_defaults.env` quedó congelado el 2026-07-18 y no lista ni
+> `STACKY_DEVOPS_PANEL_ENABLED` ni `STACKY_DEPLOYMENTS_ENABLED`; regenerarlo es una chore de deploy
+> transversal, fuera del alcance de este plan).
+>
+> **Estado previo:** MEJORADO (**v1 → v2**) — criticado 2026-07-25 · **Veredicto: RECHAZADO (v1) → corregido en v2**
 > **Autor v1:** StackyArchitectaUltraEficientCode · **Juez/arquitecto v2:** `criticar-y-mejorar-plan` (perfil heredado del modelo activo)
 > **Pipeline:** `proponer-plan-stacky` (v1) → `criticar-y-mejorar-plan` (v2, este documento) → sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 

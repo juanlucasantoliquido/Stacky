@@ -53,27 +53,27 @@ export const FlagGateBanner: React.FC<FlagGateBannerProps> = ({
   };
 
   return (
-    <div className={styles.alertWarning} style={{ marginBottom: '16px' }}>
-      <div style={{ marginBottom: '8px' }}>
+    <div className={`${styles.alertWarning} ${styles.flagGateBanner__root}`}>
+      <div className={styles.flagGateBanner__msg}>
         <strong>{flagLabel}</strong>: {message}
       </div>
       <div>
         <button
           onClick={handleActivate}
           disabled={activating}
-          className={styles.btnSuccess}
-          style={{ padding: '6px 12px', opacity: activating ? 0.6 : 1 }}
+          className={[styles.btnSuccess, styles.flagGateBanner__btn,
+                      activating ? styles.flagGateBanner__btnBusy : ''].filter(Boolean).join(' ')}
         >
           {activating ? 'Activando...' : 'Activar ahora'}
         </button>
       </div>
       {error && (
-        <div className={styles.textDanger} style={{ marginTop: '8px', fontSize: '0.9em' }}>
+        <div className={`${styles.textDanger} ${styles.flagGateBanner__error}`}>
           {error}
         </div>
       )}
       {notice && (
-        <div style={{ marginTop: '8px', fontSize: '0.9em', color: '#fcd34d' }} role="status">
+        <div className={styles.flagGateBanner__notice} role="status">
           {notice}
         </div>
       )}

@@ -1345,6 +1345,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el panel DevOps se ve exactamente igual que hoy.",
         example="Como cambiar el tema visual de una app sin tocar ninguna función: mismo contenido, otro traje.",
     ),
+    "STACKY_DEVOPS_COCKPIT_ENABLED": PlainHelp(
+        what="Le agrega al panel DevOps una pantalla de Resumen y agrupa las pestañas.",
+        on_effect="Al entrar a DevOps ves primero un Resumen con los números clave "
+                  "(despliegues, fallos, tiempo de recuperacion, corridas de CI, "
+                  "conexiones), los avisos de lo que necesita atencion y la actividad "
+                  "reciente. Las pestañas quedan ordenadas en 4 grupos y cada seccion "
+                  "tiene su propia direccion web para guardar en favoritos.",
+        off_effect="El panel DevOps queda como antes: sin Resumen y con las 9 pestañas "
+                   "en una sola fila.",
+        example="Entras a DevOps y ves 'Ultimo despliegue: hace 2 dias' y un aviso "
+                "'2 corridas de CI fallaron esta semana' con un boton para ir a verlas.",
+    ),
     # ── Plan 127 — Reuso IA local: análisis de errores + doctor local DevOps ──
     "STACKY_EXEC_ERROR_ANALYSIS_ENABLED": PlainHelp(
         what="Agrega un botón en el detalle de una ejecución fallida que le pide al modelo local de tu máquina una explicación del error y qué hacer.",
@@ -1370,6 +1382,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         on_effect="Si la activás: aparece la sección Incidencias en el menú y un botón en el tablero de tickets que te lleva directo a la lista de abiertas.",
         off_effect="Si la apagás: desaparecen el botón del tablero y esa sección del menú, y todo queda igual que antes de tener la bandeja.",
         example="Como la bandeja de entrada del correo: en vez de buscar los reclamos sueltos entre todos los mensajes, los ves juntos y sabés cuántos siguen sin resolver.",
+    ),
+    "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED": PlainHelp(
+        what="Deja resolver las incidencias desde la misma bandeja, en vez de tener que abrir cada una en el tablero o en el tracker.",
+        on_effect="Si la activás (viene así de fábrica): cada fila suma un botón para darla por terminada y otro para que un agente la resuelva y deje el pedido de cambios armado. Podés tildar varias y hacerlo de a lote. Siempre pide confirmar.",
+        off_effect="Si la apagás: la bandeja vuelve a ser una lista para mirar, sin botones ni casillas, y seguís cerrando las incidencias desde el tablero como antes.",
+        example="Ves ocho reclamos ya arreglados, los tildás a todos y en un solo paso quedan cerrados, sin abrir ocho pestañas del tracker.",
     ),
     # ── Plan 237 — Planes en el Centro de Evolución ──────────────────────────
     "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED": PlainHelp(

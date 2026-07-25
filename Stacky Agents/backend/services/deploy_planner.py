@@ -22,7 +22,8 @@ MAX_ARTIFACT_MB = 500
 _APP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _ARTIFACT_KINDS = ("folder", "zip")
 _SMOKE_KINDS = ("http", "ps", "none")
-_FAILED_STATUSES = ("failed", "failed_smoke")
+FAILED_STATUSES = ("failed", "failed_smoke")   # Plan 239 — público: lo consume services/devops_overview
+_FAILED_STATUSES = FAILED_STATUSES             # alias retro-compatible (usos internos)
 
 
 # ── validate_app ────────────────────────────────────────────────────────────
@@ -346,4 +347,8 @@ def dora_metrics(entries: list[dict], now_utc: datetime) -> dict:
         "change_failure_rate_30d": change_failure_rate_30d,
         "mttr_minutes_30d": mttr_minutes_30d,
         "last_deploy_at": last_deploy_at,
+        # Plan 239 — tamaño de muestra del CFR: cuántos deploys de la ventana de 30 d
+        # terminaron en éxito o en fallo (los "running" no cuentan). Sin esto no se
+        # puede aplicar el umbral CFR_MIN_SAMPLE ni consolidar el CFR entre apps.
+        "cfr_sample_30d": total_30,
     }

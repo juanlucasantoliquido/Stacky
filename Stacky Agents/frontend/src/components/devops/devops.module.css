@@ -2,11 +2,14 @@
  * devops.module.css — paleta compartida de la sección DevOps (Plan de rediseño
  * visual arnés+devops, 2026-07-05).
  *
- * Antes: cada componente devops/*.tsx usaba style={{}} inline con hex de tema
- * CLARO (Bootstrap alert colors: #f8d7da, #d4edda, #fff3cd, #28a745, etc.),
- * lo que producía paneles blancos/pastel chocando contra el shell oscuro
- * (theme.css: --bg-base #0d1117, etc.). Este módulo centraliza esos estilos
- * usando los tokens reales del tema, para no duplicar la paleta 11 veces.
+ * Antes: cada componente devops/*.tsx usaba estilos inline con colores crudos de
+ * tema CLARO (la paleta de alertas de Bootstrap: rosa, verde agua, amarillo pastel),
+ * lo que producía paneles blancos/pastel chocando contra el shell oscuro definido
+ * en theme.css. Este módulo centraliza esos estilos usando los tokens reales del
+ * tema, para no duplicar la paleta 11 veces.
+ * Plan 239 F7a: este archivo quedó con CERO colores crudos — los literales del
+ * comentario original se reescribieron en prosa porque colisionaban con el gate
+ * de devopsDesignTokens.test.ts, que exige 0 hits en todo el archivo.
  *
  * Convención: clases semánticas por INTENCIÓN (panel, alertError, btnPrimary,
  * textSuccess...), NO por color crudo — así un futuro cambio de paleta se
@@ -72,7 +75,7 @@
 .btnPrimary {
   padding: 8px 16px;
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-solid); /* plan 239: era blanco crudo */
   border: none;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
@@ -86,7 +89,7 @@
 .btnSuccess {
   padding: 8px 16px;
   background: var(--success);
-  color: #fff;
+  color: var(--text-on-solid); /* plan 239: era blanco crudo */
   border: none;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
@@ -426,3 +429,92 @@
   word-break: break-word;
   color: var(--text);
 }
+
+/* ── Plan 239 F7b — clases del barrido de estilos inline ─────────────────────
+   Convención: <archivoCamel>__<rol>. Mismas propiedades que el style inline que
+   reemplazan, con tokens del plan 138 (⇒ densidad del 150 y tema claro del 141). */
+
+/* FlagGateBanner */
+.flagGateBanner__root { margin-bottom: var(--space-6); }
+.flagGateBanner__msg { margin-bottom: var(--space-4); }
+.flagGateBanner__btn { padding: var(--space-3) var(--space-5); }
+.flagGateBanner__btnBusy { opacity: 0.6; }
+.flagGateBanner__error { margin-top: var(--space-4); font-size: var(--text-sm); }
+.flagGateBanner__notice { margin-top: var(--space-4); font-size: var(--text-sm); color: var(--status-warning-text); }
+
+/* SectionDoctorButton */
+.sectionDoctor__mt { margin-top: var(--space-4); }
+.sectionDoctor__ml { margin-left: var(--space-4); }
+.sectionDoctor__mlNone { margin-left: 0; }
+.sectionDoctor__mtSm { margin-top: var(--space-3); }
+.sectionDoctor__clickable { cursor: pointer; }
+.sectionDoctor__pre { white-space: pre-wrap; word-break: break-word; font-size: var(--text-sm); margin-top: var(--space-2); }
+
+/* DeploymentsSection */
+.deployments__toolbar { display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center; margin-bottom: var(--space-5); }
+.deployments__kpiRow { display: flex; gap: var(--space-5); margin-bottom: var(--space-5); flex-wrap: wrap; }
+.deployments__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-5); }
+.deployments__cardHead { display: flex; justify-content: space-between; }
+.deployments__cardActions { display: flex; gap: var(--space-3); margin-top: var(--space-4); flex-wrap: wrap; }
+.deployments__block { margin-top: var(--space-6); }
+.deployments__actions { display: flex; gap: var(--space-4); margin-top: var(--space-4); }
+
+/* BlockTree */
+.blockTree__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
+.blockTree__headSm { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
+.blockTree__headBare { display: flex; justify-content: space-between; align-items: center; }
+.blockTree__btn { padding: var(--space-2) var(--space-4); font-size: var(--text-sm); }
+.blockTree__btnNext { padding: var(--space-2) var(--space-4); font-size: var(--text-sm); margin-left: var(--space-2); }
+.blockTree__btnSm { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.blockTree__btnSmNext { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); margin-left: var(--space-2); }
+.blockTree__btnXs { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+
+/* PreflightPanel */
+.preflight__root { margin-top: var(--space-6); }
+.preflight__title { margin-top: 0; }
+.preflight__desc { margin-top: 0; font-size: var(--text-sm); }
+.preflight__btn { padding: var(--space-4) var(--space-6); }
+.preflight__mt { margin-top: var(--space-5); }
+.preflight__list { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+.preflight__item { padding: var(--space-4); }
+.preflight__detail { font-size: var(--text-sm); margin-top: var(--space-2); }
+
+/* DirTreePreview */
+.dirTree__rootLevel { margin-left: 0; }
+.dirTree__nested { margin-left: var(--space-6); }
+.dirTree__row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) 0; }
+.dirTree__chip { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.dirTree__chipBare { padding: var(--space-1) var(--space-3); }
+.dirTree__meta { font-size: var(--text-xs); }
+.dirTree__block { margin-top: var(--space-4); }
+.dirTree__head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-4); }
+.dirTree__strong { font-weight: var(--weight-semibold); }
+.dirTree__sub { margin-top: var(--space-2); }
+.dirTree__toolbar { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); }
+.dirTree__btn { padding: var(--space-2) var(--space-5); font-size: var(--text-sm); }
+.dirTree__btnEnd { padding: var(--space-2) var(--space-5); font-size: var(--text-sm); margin-left: auto; }
+
+/* ProductionFlow */
+.production__root { margin-top: var(--space-6); }
+.production__title { margin-top: 0; }
+.production__btn { padding: var(--space-2) var(--space-5); }
+.production__col { display: flex; flex-direction: column; gap: var(--space-4); align-items: flex-start; }
+.production__input { padding: var(--space-4); width: 320px; }
+.production__stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.production__chip { padding: var(--space-1) var(--space-4); }
+.production__panel { padding: var(--space-5); }
+.production__row { display: flex; align-items: start; gap: var(--space-4); }
+.production__mt { margin-top: var(--space-4); }
+.production__mb { margin-bottom: var(--space-2); }
+
+/* TriggerPipelineSection */
+.trigger__root { margin-top: var(--space-6); }
+.trigger__title { margin-top: 0; }
+.trigger__field { margin-bottom: var(--space-5); }
+.trigger__label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-semibold); }
+.trigger__input { width: 100%; padding: var(--space-4); }
+.trigger__actions { margin-bottom: var(--space-5); display: flex; gap: var(--space-4); }
+.trigger__btn { padding: var(--space-4) var(--space-6); }
+.trigger__notice { margin-bottom: var(--space-5); padding: var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-md); }
+.trigger__ml { margin-left: var(--space-4); }
+.trigger__pre { margin: var(--space-2) 0 0 0; white-space: pre-wrap; }

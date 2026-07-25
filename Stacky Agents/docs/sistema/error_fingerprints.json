@@ -281,6 +281,34 @@
           "DEBUG AppSidebar: 18 tabs renderizados con icono valido"
         ]
       }
+    },
+    {
+      "id": "PLAN239-OUTLET-EN-BLANCO",
+      "title": "La sección activa no está en mountedIds y el panel DevOps se ve vacío",
+      "class": "shell-navigation",
+      "status": "resolved",
+      "log_pattern": "",
+      "log_guarded": false,
+      "killed_by": "plan 239 F3.4 (guard `s.id !== activeId` en el outlet + aterrizaje por useEffect)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "src/pages/__tests__/DevOpsCockpitRegression.test.ts",
+      "evidence": "frontend/src/pages/DevOpsPage.tsx sembraba mountedIds con DEVOPS_SECTIONS[0].id mientras el outlet cortaba con !mountedIds.has(s.id); cualquier deep-link/pin/flag-off dejaba la pantalla vacía",
+      "note": "Clase general: estado de montaje derivado de una constante en vez de derivado del estado activo. Regla: si un render depende de un Set de ids, la invariante \"lo activo siempre se renderiza\" va en el render, no en quien setea. Hermana de la trampa del inicializador perezoso de useState, que evalúa antes de que llegue la data async."
+    },
+    {
+      "id": "PLAN239-SONDEO-OCULTO-SETINTERVAL",
+      "title": "Un setInterval sigue sondeando el backend con la sección oculta (display:none, sin desmontar)",
+      "class": "polling-leak",
+      "status": "resolved",
+      "log_pattern": "",
+      "log_guarded": false,
+      "killed_by": "plan 239 F6 (ctx.visible + ratchet que cubre refetchInterval Y setInterval)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "src/__tests__/devopsPollingRatchet.test.ts",
+      "evidence": "frontend/src/components/devops/TriggerPipelineSection.tsx (dos setInterval) + DeploymentsSection.tsx (refetchInterval), bajo el montaje persistente C10 de DevOpsPage.tsx",
+      "note": "Un ratchet que solo mira refetchInterval declara victoria y deja viva la fuga de setInterval. Regla: el ratchet de sondeo se define por EFECTO (pedir datos periódicamente), no por API."
     }
   ]
 }

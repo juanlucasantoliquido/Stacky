@@ -140,28 +140,28 @@ export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, so
   };
 
   return (
-    <div className={styles.panel} style={{ marginTop: '16px' }}>
-      <h4 style={{ marginTop: 0 }}>Llevar a producción</h4>
+    <div className={`${styles.panel} ${styles.production__root}`}>
+      <h4 className={styles.production__title}>Llevar a producción</h4>
 
       {error && <div className={styles.alertError}>{error}</div>}
 
       {needsAdoDefinition && (
         <div className={styles.alertWarning}>
           ADO todavía no tiene la pipeline definition.{' '}
-          <button onClick={() => void handleEnsureDefinition()} style={{ padding: '4px 10px' }}>
+          <button onClick={() => void handleEnsureDefinition()} className={styles.production__btn}>
             Crear la definición del pipeline en ADO
           </button>
         </div>
       )}
 
       {!mr && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+        <div className={styles.production__col}>
           <input
             type="text"
             value={targetBranch}
             onChange={(e) => setTargetBranch(e.target.value)}
             placeholder="rama destino (vacío = rama principal del repo)"
-            style={{ padding: '8px', width: '320px' }}
+            className={styles.production__input}
           />
           <button onClick={() => void handleCreateMr()} disabled={creating || !sourceBranch} className={styles.btnSuccess}>
             {creating ? 'Creando…' : 'Crear Merge Request / Pull Request'}
@@ -170,21 +170,21 @@ export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, so
       )}
 
       {mr && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className={styles.production__stack}>
           <p>
             <a href={mr.web_url} target="_blank" rel="noreferrer">
               {mr.web_url}
             </a>{' '}
             — estado: <strong>{mr.state}</strong> — pipeline: {pipelineStatusLabel(mr.pipeline_status)}
             {' '}
-            <button onClick={() => void pollOnce(mr.id)} style={{ padding: '2px 8px' }}>
+            <button onClick={() => void pollOnce(mr.id)} className={styles.production__chip}>
               Actualizar
             </button>
           </p>
 
           {mr.state === 'open' && (
-            <div className={styles.panelMuted} style={{ padding: '12px' }}>
-              <label style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+            <div className={`${styles.panelMuted} ${styles.production__panel}`}>
+              <label className={styles.production__row}>
                 <input
                   type="checkbox"
                   checked={mergeConfirmed}
@@ -195,8 +195,7 @@ export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, so
               <button
                 onClick={() => void handleMerge()}
                 disabled={!mergeButtonEnabled(mr) || !mergeConfirmed || merging}
-                className={styles.btnSuccess}
-                style={{ marginTop: '8px' }}
+                className={`${styles.btnSuccess} ${styles.production__mt}`}
               >
                 {merging ? 'Mergeando…' : 'Mergear'}
               </button>
@@ -208,8 +207,8 @@ export const ProductionFlow: React.FC<ProductionFlowProps> = ({ ctx, project, so
               <div className={styles.alertSuccess}>🎉 Mergeado: el pipeline del proyecto quedó actualizado</div>
               {/* Paso 4 (opcional) — reusa TriggerPipelineSection existente (cero backend nuevo) */}
               {ctx.health.trigger_enabled && (
-                <div style={{ marginTop: '8px' }}>
-                  <p className={styles.textMuted} style={{ marginBottom: '4px' }}>
+                <div className={styles.production__mt}>
+                  <p className={`${styles.textMuted} ${styles.production__mb}`}>
                     Opcional: correr el pipeline en la rama principal.
                   </p>
                   <TriggerPipelineSection ctx={ctx} project={project} lastBranch={targetBranch} />

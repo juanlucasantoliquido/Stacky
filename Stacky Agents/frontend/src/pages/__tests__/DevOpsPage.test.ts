@@ -93,3 +93,99 @@ describe('Criterios binarios F4 (verificables por código)', () => {
     expect(hasGateLogic).toBe(true);
   });
 });
+
+// ── Plan 239 F3 — sección Resumen, aterrizaje (F3.4) y copiar (F3.5) ──────────
+describe('Plan 239 F3 — cockpit DevOps', () => {
+  const ROOT = 'N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend/src';
+
+  async function read(rel: string): Promise<string> {
+    const fs = await import('fs');
+    return fs.readFileSync(`${ROOT}/${rel}`, 'utf-8');
+  }
+
+  it('test_resumen_es_la_primera_seccion', async () => {
+    const mod = await import('../DevOpsPage');
+    expect(mod.DEVOPS_SECTIONS[0].id).toBe('resumen');
+  });
+
+  it('test_resumen_tiene_gate_completo', async () => {
+    const mod = await import('../DevOpsPage');
+    const s = mod.DEVOPS_SECTIONS.find((x) => x.id === 'resumen')!;
+    expect(s.healthKey).toBe('cockpit_enabled');
+    expect(s.gateFlagKey).toBe('STACKY_DEVOPS_COCKPIT_ENABLED');
+    expect(s.gateMessage).toBeTruthy();
+  });
+
+  it('test_overview_section_sin_estilos_inline', async () => {
+    expect(await read('components/devops/DevOpsOverviewSection.tsx')).not.toContain('style={{');
+  });
+
+  it('test_overview_section_no_ejecuta', async () => {
+    const src = await read('components/devops/DevOpsOverviewSection.tsx');
+    // Solo lectura: nada de ejecutar, desplegar, revertir ni disparar.
+    expect(src).not.toMatch(/\bexecute\(|\brollback\(|\btrigger\(|\bdeploy\(/);
+  });
+
+  it('test_aterrizaje_no_queda_gateado', async () => {
+    const src = await read('pages/DevOpsPage.tsx');
+    // El aterrizaje pasa por resolveLandingSection, no por el id crudo del array.
+    expect(src).toContain('resolveLandingSection');
+  });
+
+  it('test_filtros_usan_el_eco_del_backend', async () => {
+    const src = await read('components/devops/DevOpsOverviewSection.tsx');
+    // Los 3 Select leen p.filters.*, NO el estado local (KPI-11).
+    expect(src).toContain('value={p.filters.app_id ?? \'\'}');
+    expect(src).toContain('value={p.filters.project ?? \'\'}');
+    expect(src).toContain('value={String(p.filters.window_days)}');
+  });
+
+  it('test_filtros_en_la_querykey', async () => {
+    const src = await read('components/devops/DevOpsOverviewSection.tsx');
+    expect(src).toContain("queryKey: ['devops-overview', appId, project, windowDays]");
+  });
+
+  it('test_filtros_persisten', async () => {
+    const src = await read('components/devops/DevOpsOverviewSection.tsx');
+    expect(src).toContain('useLocalStorageState');
+    for (const key of ['stacky.devops.overview.appId', 'stacky.devops.overview.project',
+      'stacky.devops.overview.windowDays']) {
+      expect(src).toContain(key);
+    }
+  });
+
+  // ── F3.4 — aterrizaje (C1: BLOQUEANTE) ──
+  it('test_outlet_renderiza_siempre_la_activa', async () => {
+    const src = await read('pages/DevOpsPage.tsx');
+    expect(src).toContain('!mountedIds.has(s.id) && s.id !== activeId');
+  });
+
+  it('test_aterrizaje_no_va_en_useState', async () => {
+    const src = await read('pages/DevOpsPage.tsx');
+    // grep NEGATIVO: el inicializador perezoso corre ANTES de que llegue la salud.
+    expect(src).not.toMatch(/useState\(\s*\(\)\s*=>\s*resolveLandingSection/);
+  });
+
+  it('test_aterrizaje_espera_la_salud', async () => {
+    const src = await read('pages/DevOpsPage.tsx');
+    expect(src).toContain('landingApplied');
+    expect(src).toContain('if (!healthQuery.data) return;');
+  });
+
+  it('test_aterrizaje_usa_handleTabClick', async () => {
+    const src = await read('pages/DevOpsPage.tsx');
+    expect(src).toMatch(/handleTabClick\(resolveLandingSection\(/);
+  });
+
+  // ── F3.5 — copiar resumen (KPI-12) ──
+  it('test_overview_usa_CopyAsButton', async () => {
+    const src = await read('components/devops/DevOpsOverviewSection.tsx');
+    expect(src).toContain("import CopyAsButton from '../CopyAsButton'");
+    expect(src).toContain('buildOverviewClipboardText');
+  });
+
+  it('test_overview_no_toca_el_portapapeles_a_mano', async () => {
+    const src = await read('components/devops/DevOpsOverviewSection.tsx');
+    expect(src).not.toContain('navigator.clipboard');
+  });
+});

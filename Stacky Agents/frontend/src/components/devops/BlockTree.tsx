@@ -29,13 +29,13 @@ const StageBlock: React.FC<{
       className={isSelected ? `${styles.blockStage} ${styles.blockStageSelected}` : styles.blockStage}
       onClick={() => setSelected({ si })}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+      <div className={styles.blockTree__head}>
         <strong>📋 Stage: {stage.name || '(sin nombre)'}</strong>
         <div>
-          <button onClick={() => setSpec(removeStage(spec, si))} style={{ padding: '4px 8px', fontSize: '12px' }}>
+          <button onClick={() => setSpec(removeStage(spec, si))} className={styles.blockTree__btn}>
             ✕
           </button>
-          <button onClick={() => setSpec(addJob(spec, si))} style={{ padding: '4px 8px', fontSize: '12px', marginLeft: '4px' }}>
+          <button onClick={() => setSpec(addJob(spec, si))} className={styles.blockTree__btnNext}>
             + job
           </button>
         </div>
@@ -72,13 +72,13 @@ const JobBlock: React.FC<{
       className={isSelected ? `${styles.blockJob} ${styles.blockJobSelected}` : styles.blockJob}
       onClick={(e) => { e.stopPropagation(); setSelected({ si, ji }); }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+      <div className={styles.blockTree__headSm}>
         <strong>⚙️ Job: {job.name || '(sin nombre)'}</strong>
         <div>
-          <button onClick={() => setSpec(removeJob(spec, si, ji))} style={{ padding: '3px 6px', fontSize: '11px' }}>
+          <button onClick={() => setSpec(removeJob(spec, si, ji))} className={styles.blockTree__btnSm}>
             ✕
           </button>
-          <button onClick={() => setSpec(addStep(spec, si, ji))} style={{ padding: '3px 6px', fontSize: '11px', marginLeft: '4px' }}>
+          <button onClick={() => setSpec(addStep(spec, si, ji))} className={styles.blockTree__btnSmNext}>
             + step
           </button>
         </div>
@@ -117,11 +117,11 @@ const StepBlock: React.FC<{
       className={isSelected ? `${styles.blockStep} ${styles.blockStepSelected}` : styles.blockStep}
       onClick={(e) => { e.stopPropagation(); setSelected({ si, ji, sti }); }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className={styles.blockTree__headBare}>
         <span>📝 Step: {step.name || '(sin nombre)'}</span>
         <button
           onClick={() => setSpec(removeStep(spec, si, ji, sti))}
-          style={{ padding: '2px 5px', fontSize: '10px' }}
+          className={styles.blockTree__btnXs}
         >
           ✕
         </button>

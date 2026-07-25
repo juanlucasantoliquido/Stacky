@@ -1357,10 +1357,26 @@ class Config:
         "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # Plan 119 — Rediseño minimalista del shell DevOps (default OFF, editable por UI).
+    # Plan 119 — Rediseño minimalista del shell DevOps (editable por UI).
+    # PROMOVIDA a default ON (plan 239 F0): el shell v2 del plan 119 es ahora la
+    # presentación de fábrica del panel DevOps — hasta hoy quedaba a oscuras
+    # mientras el shell global de la app ya iba en v2 (STACKY_UI_SHELL_V2_ENABLED,
+    # promovida 2026-07-18), dejando el panel con píldoras Bootstrap por default.
+    # Curada en _CURATED_DEFAULTS_ON y espejada con default=True en la FlagSpec.
     STACKY_DEVOPS_UI_V2_ENABLED: bool = os.getenv(
-        "STACKY_DEVOPS_UI_V2_ENABLED", "false"
+        "STACKY_DEVOPS_UI_V2_ENABLED", "true"
     ).lower() in ("1", "true", "yes", "on")
+
+    # ── Plan 239 — Cockpit DevOps (Resumen + navegación agrupada + deep-link) ──
+    # Default ON: solo agrega una vista de LECTURA y reordena la navegación del
+    # panel. Ninguna de las 4 excepciones duras aplica (ver plan 239 F0):
+    # no bypassea revisión humana (no ejecuta nada), no es destructiva ni
+    # irreversible (OFF ⇒ panel del plan 119 idéntico), no tiene prerequisitos
+    # (lee ledgers locales; si no existen, estado vacío honesto) y no reduce
+    # seguridad (no expone dato nuevo: agrega lo que ya se ve en cada sección).
+    STACKY_DEVOPS_COCKPIT_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_COCKPIT_ENABLED", "true"
+    ).strip().lower() == "true"
 
     # ── Plan 120 — Centro de Despliegues ──────────────────────────────────────
     # Deploy multi-destino, rollback 1-click, verificación post-deploy y DORA
@@ -1527,6 +1543,14 @@ class Config:
     # seguridad. OFF => el tab, la pagina y el boton de entrada desaparecen.
     STACKY_INCIDENT_INBOX_ENABLED: bool = os.getenv(
         "STACKY_INCIDENT_INBOX_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Acciones dentro de la bandeja (cerrar en el tracker / resolver + PR) ──
+    # Levanta el guardarrail de solo-lectura del 238. Default ON: nada se
+    # dispara solo — cada accion la confirma el operador, y las de agente/PR
+    # siguen gateadas por STACKY_INCIDENT_DEV_RESOLVER_ENABLED / _DEV_PR_ENABLED.
+    STACKY_INCIDENT_INBOX_ACTIONS_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED", "true"
     ).strip().lower() == "true"
 
     # Plan 148 — Degradación explícita de integraciones no configuradas. Default ON

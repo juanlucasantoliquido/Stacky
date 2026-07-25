@@ -729,6 +729,7 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 238 — Bandeja de incidencias: bool default ON; solo lectura,
     # ninguna de las 4 excepciones duras aplica. ──
     "STACKY_INCIDENT_INBOX_ENABLED",
+    "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED",
     # ── Plan 190 — Equipaje DevOps en export/import (bool default ON; exportar
     # NUNCA incluye secretos e importar NUNCA toca el keyring; ninguna de las 4
     # excepciones duras aplica). ──
@@ -744,6 +745,9 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED",  # destino de tracker por proyecto
     "STACKY_CANONICAL_VOCABULARY_ENABLED",        # alias canónicos aditivos en el payload
     "STACKY_CAPABILITY_DEGRADATION_ENABLED",      # 200 available:false en vez de 500 mudo
+    # ── Plan 239 — Cockpit DevOps ──
+    "STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239 — cockpit DevOps (solo lectura)
+    "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 239 F0 — promovida a ON (shell v2 del plan 119)
 }
 
 

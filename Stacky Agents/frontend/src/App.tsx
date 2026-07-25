@@ -304,7 +304,7 @@ export default function App() {
       {tab === "diagnostics" && <DiagnosticsPage />}
       {tab === "history"     && <ExecutionHistoryPage exec={route.exec ?? null} />}
       {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
-      {tab === "devops"      && devopsEnabled && <DevOpsPage />} {/* Plan 87 */}
+      {tab === "devops"      && devopsEnabled && <DevOpsPage subTab={route.subtab ?? null} />} {/* Plan 87 + 239 */}
       {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
       {tab === "costcenter"  && costCenterEnabled && <CostCenterPage />} {/* Plan 142 */}
       {tab === "planes"      && planesEnabled && <PlansBoardPage />} {/* Plan 128 */}

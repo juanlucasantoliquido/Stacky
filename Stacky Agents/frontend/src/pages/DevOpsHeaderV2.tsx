@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import styles from './DevOpsPage.module.css';
 import { buildAwareness } from './devopsShell';
@@ -9,10 +10,17 @@ interface Props {
   serversEnabled: boolean;
   selectedAlias: string | null;
   onSelectServer: (alias: string | null) => void;
+  /** Plan 239 F4 — línea de estado OPERACIONAL (reemplaza a buildAwareness, que
+   *  contaba flags). Ausente ⇒ se conserva la línea del plan 119 tal cual. */
+  meta?: { text: string; tone: string }[];
+  /** Plan 239 F5 — control "Fijar como inicio". Ausente ⇒ no se muestra. */
+  actions?: ReactNode;
 }
 
-export function DevOpsHeaderV2({ health, servers, serversEnabled, selectedAlias, onSelectServer }: Props) {
-  const segs = buildAwareness(health, selectedAlias);
+export function DevOpsHeaderV2({
+  health, servers, serversEnabled, selectedAlias, onSelectServer, meta, actions,
+}: Props) {
+  const segs = meta ?? buildAwareness(health, selectedAlias);
   const showPicker = serversEnabled && servers.length >= 1;
   return (
     <div className={styles.head}>
@@ -31,6 +39,7 @@ export function DevOpsHeaderV2({ health, servers, serversEnabled, selectedAlias,
           ))}
         </div>
       </div>
+      {actions}
       {showPicker && (
         <div className={styles.picker}>
           <label className={styles.pickerLabel} htmlFor="devops-server-picker">Servidor activo</label>

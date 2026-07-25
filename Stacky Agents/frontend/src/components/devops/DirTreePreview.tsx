@@ -71,20 +71,20 @@ const TreeRow: React.FC<{
   const isDanger = node.status === 'mixed' || node.status === 'conflict' || node.status === 'unsafe';
 
   return (
-    <div style={{ marginLeft: depth === 0 ? 0 : 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
+    <div className={depth === 0 ? styles.dirTree__rootLevel : styles.dirTree__nested}>
+      <div className={styles.dirTree__row}>
         {hasChildren ? (
           <button
             type="button"
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? 'Colapsar' : 'Expandir'} carpeta ${node.path}`}
             onClick={() => onToggle(node.path)}
-            style={{ padding: '2px 6px', fontSize: '11px' }}
+            className={styles.dirTree__chip}
           >
             <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span> <span>{node.name}</span>
           </button>
         ) : (
-          <span style={{ padding: '2px 6px' }}>
+          <span className={styles.dirTree__chipBare}>
             <span aria-hidden="true">▪</span> <span>{node.name}</span>
           </span>
         )}
@@ -95,7 +95,7 @@ const TreeRow: React.FC<{
           {node.status}
         </span>
         {node.selfStatus === 'to_create' && (
-          <span className={styles.textSuccess} style={{ fontSize: '11px' }}>
+          <span className={`${styles.textSuccess} ${styles.dirTree__meta}`}>
             nuevo
           </span>
         )}
@@ -137,21 +137,21 @@ export const DirTreePreview: React.FC<DirTreePreviewProps> = ({ entries, sandbox
   };
 
   return (
-    <div className={styles.panel} style={{ marginTop: '8px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+    <div className={`${styles.panel} ${styles.dirTree__block}`}>
+      <div className={styles.dirTree__head}>
         <strong>Raíz: {rootLabel}</strong>
         {sandboxActive === true && (
-          <span className={styles.textWarn} style={{ fontWeight: 'bold' }}>
+          <span className={`${styles.textWarn} ${styles.dirTree__strong}`}>
             SANDBOX — PRUEBAS: no es producción
           </span>
         )}
       </div>
 
-      <p style={{ marginTop: '4px' }}>
+      <p className={styles.dirTree__sub}>
         {counts.to_create} nuevas · {counts.exists_ok} existentes · {counts.conflict + counts.unsafe} conflictos
       </p>
 
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+      <div className={styles.dirTree__toolbar}>
         {(
           [
             ['all', 'Todo'],
@@ -163,14 +163,13 @@ export const DirTreePreview: React.FC<DirTreePreviewProps> = ({ entries, sandbox
             key={value}
             type="button"
             onClick={() => setFilter(value)}
-            className={filter === value ? styles.btnPrimary : undefined}
-            style={{ padding: '4px 10px', fontSize: '12px' }}
+            className={`${filter === value ? styles.btnPrimary : undefined} ${styles.dirTree__btn}`}
           >
             {label}
           </button>
         ))}
         {canCopy && (
-          <button type="button" onClick={handleCopy} style={{ padding: '4px 10px', fontSize: '12px', marginLeft: 'auto' }}>
+          <button type="button" onClick={handleCopy} className={styles.dirTree__btnEnd}>
             Copiar árbol
           </button>
         )}

@@ -15,6 +15,7 @@ import type {
   BreakdownDimension,
 } from "../lib/costCenterTypes";
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse, EnvAppliesResponse } from "../devops/environmentModel";
+import type { OverviewPayload } from "../components/devops/overviewModel"; // Plan 239
 import type { PreflightCheck } from "../devops/preflightModel";
 // Plan 189 — contrato del semáforo de rollback (type-only, sin ciclo runtime).
 import type {
@@ -3744,10 +3745,21 @@ export const DevOps = {
       deployments_execute_enabled?: boolean; // Plan 120
       deployments_ai_enabled?: boolean; // Plan 120
       local_doctor_enabled?: boolean; // Plan 127
+      cockpit_enabled?: boolean; // Plan 239
     }>("/api/devops/health"),
   /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
   connectionsHealth: () =>
     api.get<ConnectionsHealthResponse>("/api/devops/connections/health"),
+  /** Plan 239 — Resumen agregado del panel (read-only). 404 si el cockpit está OFF.
+   *  Filtros opcionales; un valor inválido no falla (el backend lo descarta y lo declara). */
+  overview: (f?: { appId?: string | null; project?: string | null; windowDays?: number }) => {
+    const sp = new URLSearchParams();
+    if (f?.appId) sp.set("app_id", f.appId);
+    if (f?.project) sp.set("project", f.project);
+    if (f?.windowDays) sp.set("window_days", String(f.windowDays));
+    const qs = sp.toString();
+    return api.get<OverviewPayload>(`/api/devops/overview${qs ? `?${qs}` : ""}`);
+  },
   /** Plan 116 — corre el chequeo de conexiones (solo por click del operador). */
   connectionsCheck: () =>
     api.post<ConnectionsHealthResponse>("/api/devops/connections/check", {}),

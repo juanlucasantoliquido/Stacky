@@ -69,6 +69,7 @@ def _health_payload() -> dict:
             getattr(cfg, "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED", False)
             and getattr(cfg, "LOCAL_LLM_ENABLED", False)
         ),  # Plan 127 — CONJUNCIÓN: la UI solo ofrece el botón si el camino completo sirve
+        "cockpit_enabled": bool(getattr(cfg, "STACKY_DEVOPS_COCKPIT_ENABLED", False)),  # Plan 239
     }
 
 
@@ -117,6 +118,28 @@ def devops_bootstrap_route():
             "keyring_available": server_registry.keyring_available(),
         }
     return jsonify(payload)
+
+
+@bp.get("/overview")
+def devops_overview_route():
+    """Plan 239 — Resumen del panel (read-only). 404 si el cockpit está OFF.
+    SIEMPRE 200 cuando está ON: la degradación es POR BLOQUE, nunca por error.
+
+    Filtros opcionales (query string): ?app_id= &project= &window_days=7|14|30.
+    Un valor inválido NO es un 400: se descarta y el payload lo declara en `filters`
+    (la pantalla debe poder abrirse siempre, aunque el link venga con basura)."""
+    if not bool(getattr(_config.config, "STACKY_DEVOPS_COCKPIT_ENABLED", False)):
+        abort(404)
+    from services.devops_overview import build_overview  # import perezoso (patrón de la casa)
+    try:
+        window_days = int(request.args.get("window_days", "14"))
+    except (TypeError, ValueError):
+        window_days = 14
+    return jsonify(build_overview(
+        app_id=request.args.get("app_id") or None,
+        project=request.args.get("project") or None,
+        window_days=window_days,
+    ))
 
 
 @bp.get("/detect-stack")

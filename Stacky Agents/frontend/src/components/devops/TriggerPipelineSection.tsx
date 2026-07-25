@@ -202,6 +202,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
   // detiene cuando todos terminaron. Reusa el monitor existente /pipeline/<id>.
   React.useEffect(() => {
     if (!ledgerAvailable) return;
+    if (ctx.visible === false) return;   // Plan 239 F6 — no sondear con la sección oculta
     const targets = pollTargets(runs, statusById);
     if (targets.length === 0) return;
     const interval = setInterval(() => {
@@ -212,7 +213,9 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
       });
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [runs, statusById, ledgerAvailable, project]);
+    // Plan 239 F6 — ctx.visible EN LAS DEPS: sin esto el efecto no se re-evalúa al
+    // volver a la sección y el sondeo no se REANUDA (peor que sondear de más).
+  }, [runs, statusById, ledgerAvailable, project, ctx.visible]);
 
   // Re-disparar: PRECARGA el ref en el formulario; el operador confirma con "Disparar"
   // (flujo HITL existente). NUNCA dispara por sí solo (sin confirm automático).
@@ -289,35 +292,36 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
   // Auto-polling si está activo
   React.useEffect(() => {
-    if (polling && pipelineId) {
+    if (polling && pipelineId && ctx.visible !== false) {   // Plan 239 F6
       const interval = setInterval(() => {
         void handleMonitor();
       }, 3000);
       return () => clearInterval(interval);
     }
-  }, [polling, pipelineId]);
+    // Plan 239 F6 — ctx.visible EN LAS DEPS (ver nota del efecto de arriba).
+  }, [polling, pipelineId, ctx.visible]);
 
   return (
-    <div className={styles.panelMuted} style={{ marginTop: '16px' }}>
-      <h3 style={{ marginTop: 0 }}>Trigger CI</h3>
+    <div className={`${styles.panelMuted} ${styles.trigger__root}`}>
+      <h3 className={styles.trigger__title}>Trigger CI</h3>
 
-      <div style={{ marginBottom: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Ref (branch/tag/commit)</label>
+      <div className={styles.trigger__field}>
+        <label className={styles.trigger__label}>Ref (branch/tag/commit)</label>
         <input
           type="text"
           value={ref}
           onChange={(e) => setRef(e.target.value)}
           placeholder="main, feature/pipeline-x, v1.2.3..."
           disabled={loading}
-          style={{ width: '100%', padding: '8px' }}
+          className={styles.trigger__input}
         />
       </div>
 
-      <div style={{ marginBottom: '12px', display: 'flex', gap: '8px' }}>
+      <div className={styles.trigger__actions}>
         <button
           onClick={() => void handlePreview()}
           disabled={loading}
-          style={{ padding: '8px 16px' }}
+          className={styles.trigger__btn}
         >
           Preview
         </button>
@@ -332,17 +336,17 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
       {/* Preview HITL informado */}
       {previewData && (
-        <div className={styles.alertInfo} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={`${styles.alertInfo} ${styles.trigger__notice}`}>
           <strong>Preview:</strong> ref resuelto = "{previewData.ref}"
           {previewData.would_reuse && (
-            <span style={{ marginLeft: '8px' }}>→ pipeline reciente reusado (idempotencia 60s)</span>
+            <span className={styles.trigger__ml}>→ pipeline reciente reusado (idempotencia 60s)</span>
           )}
         </div>
       )}
 
       {/* Resultado del trigger */}
       {triggerResult && (
-        <div className={styles.alertSuccess} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={`${styles.alertSuccess} ${styles.trigger__notice}`}>
           <strong>Trigger exitoso:</strong> status = {triggerResult.status}
           {triggerResult.pipeline_id && (
             <span>, pipeline_id = {triggerResult.pipeline_id}</span>
@@ -352,9 +356,9 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
       {/* Monitoreo */}
       {monitorStatus && (
-        <div className={styles.alertWarning} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={`${styles.alertWarning} ${styles.trigger__notice}`}>
           <strong>Estado:</strong>
-          <pre style={{ margin: '4px 0 0 0', whiteSpace: 'pre-wrap' }}>
+          <pre className={styles.trigger__pre}>
             {JSON.stringify(monitorStatus, null, 2)}
           </pre>
         </div>
@@ -395,7 +399,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
       {/* Errores */}
       {error && (
-        <div className={styles.alertError} style={{ marginBottom: '12px', padding: '8px', borderRadius: '3px', fontSize: '13px' }}>
+        <div className={`${styles.alertError} ${styles.trigger__notice}`}>
           {error}
         </div>
       )}

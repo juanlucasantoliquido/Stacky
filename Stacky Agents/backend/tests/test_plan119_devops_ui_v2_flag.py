@@ -31,18 +31,23 @@ def test_flag_spec_bool_editable_by_ui_requires_panel():
 
 
 def test_flag_no_explicit_default_not_curated():
-    """SIN default= (gotcha Plan 63): solo _CURATED_DEFAULTS_ON puede declarar default ON."""
-    assert _spec(_KEY).default is None
+    """Plan 239 F0 — promovida a ON; el default OFF original era del plan 119.
+
+    Toda flag con default=True en su FlagSpec DEBE estar en _CURATED_DEFAULTS_ON
+    (gotcha Plan 63), así que los dos asertos se mueven juntos.
+    """
+    assert _spec(_KEY).default is True  # Plan 239 F0 — promovida a ON; el default OFF original era del plan 119.
     from tests.test_harness_flags import _CURATED_DEFAULTS_ON
-    assert _KEY not in _CURATED_DEFAULTS_ON
+    assert _KEY in _CURATED_DEFAULTS_ON  # Plan 239 F0 — promovida a ON; el default OFF original era del plan 119.
 
 
-def test_flag_default_off_in_config(monkeypatch):
+def test_default_on_tras_promocion_plan239(monkeypatch):
     monkeypatch.delenv(_KEY, raising=False)
     import config as config_module
     importlib.reload(config_module)
     try:
-        assert config_module.config.STACKY_DEVOPS_UI_V2_ENABLED is False
+        # Plan 239 F0 — promovida a ON; el default OFF original era del plan 119.
+        assert config_module.config.STACKY_DEVOPS_UI_V2_ENABLED is True
     finally:
         importlib.reload(config_module)
 

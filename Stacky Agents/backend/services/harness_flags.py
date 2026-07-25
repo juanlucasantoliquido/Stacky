@@ -237,6 +237,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_FAILURE_EVIDENCE_ENABLED",  # Plan 188 — evidencia de fallos de despliegue
         "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
         "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
+        "STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239 — cockpit DevOps (Resumen + nav agrupada)
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -375,6 +376,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_BULK_ACTIONS_ENABLED",  # Plan 187 — selección múltiple y acciones en lote
         "STACKY_CONNECTION_RESILIENCE_ENABLED",  # Plan 192 — resiliencia de conexión (banner + re-hidratación)
         "STACKY_INCIDENT_INBOX_ENABLED",  # Plan 238 — bandeja de incidencias abiertas
+        "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED",  # Acciones (cerrar / resolver+PR) desde la bandeja
     ),
     "paridad_proveedores": (
         "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
@@ -3286,18 +3288,35 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_DEVOPS_UI_V2_ENABLED",
         type="bool",
+        default=True,  # Plan 239 F0 — promovida a ON; curada en _CURATED_DEFAULTS_ON
         label="Shell DevOps minimalista (Plan 119)",
         description=(
             "Plan 119 — Reemplaza el shell del panel DevOps (header, sub-tabs y "
             "selector de servidor) por un diseño minimalista que usa los tokens de "
             "theme.css, y la sección Servidores por una tabla. Solo presentación: "
-            "cero cambios de comportamiento. Default OFF: con la flag apagada la UI "
-            "es idéntica a la actual."
+            "cero cambios de comportamiento. Default ON (plan 239 F0): con la flag "
+            "apagada la UI vuelve al shell legacy."
         ),
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # profundidad 1 (master del panel, no una flag hija)
-        # SIN default= (solo _CURATED_DEFAULTS_ON puede; default OFF vive en config.py).
+    ),
+    # ── Plan 239 — Cockpit DevOps ─────────────────────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_COCKPIT_ENABLED",
+        type="bool",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_harness_flags.py:467)
+        label="Cockpit DevOps (Plan 239)",
+        description=(
+            "Plan 239 — Agrega la sección Resumen del panel DevOps (KPIs de despliegue "
+            "y CI, alertas determinísticas, actividad reciente y tendencia de 14 días), "
+            "agrupa las secciones en 4 clusters navegables y hace cada sección "
+            "direccionable por URL (/devops/<seccion>). Solo lectura: no ejecuta "
+            "despliegues, pipelines ni comandos remotos. OFF = panel del plan 119."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # profundidad 1 (master del panel)
     ),
     # ── Plan 117 — Insights locales de ejecuciones (TL;DR + triage + digest narrado) ──
     FlagSpec(
@@ -4002,6 +4021,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "boton de entrada desaparecen, y el tablero general queda identico."
         ),
         group="global",
+    ),
+    # ── Acciones dentro de la bandeja de incidencias (cerrar / resolver+PR) ───
+    FlagSpec(
+        key="STACKY_INCIDENT_INBOX_ACTIONS_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica; curada en _CURATED_DEFAULTS_ON)
+        label="Acciones desde la bandeja de incidencias",
+        description=(
+            "Levanta el guardarrail de solo-lectura del Plan 238: la bandeja pasa a permitir "
+            "cerrar la incidencia en el tracker (mismo camino que 'Terminar trabajo' del "
+            "tablero) y lanzar el Dev Resolutor con 'Abrir PR', ademas de seleccion multiple "
+            "y lote. Cada accion sigue exigiendo confirmacion del operador y respeta los "
+            "gates de sus propias flags. OFF: la bandeja vuelve a ser un listado de solo "
+            "lectura y el tablero general queda identico."
+        ),
+        group="global",
+        requires="STACKY_INCIDENT_INBOX_ENABLED",
     ),
 )
 

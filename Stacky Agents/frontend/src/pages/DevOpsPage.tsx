@@ -22,6 +22,11 @@ import styles from './DevOpsPage.module.css'; // Plan 119
 import { DevOpsHeaderV2 } from './DevOpsHeaderV2'; // Plan 119
 import { DevOpsTabsV2 } from './DevOpsTabsV2'; // Plan 119
 import { readQueryParam } from '../utils/queryParams'; // Plan 129
+import type { DevOpsGroupId } from './devopsCockpitShell'; // Plan 239
+import { resolveLandingSection, buildOperationalMeta } from './devopsCockpitShell'; // Plan 239 F3.4/F4/F5.1
+import { DevOpsCockpitNav } from './DevOpsCockpitNav'; // Plan 239 F4
+import { useLocalStorageState } from '../hooks/useLocalStorageState'; // Plan 239 F5.3
+import { parseRoute, serializeRoute } from '../services/routes'; // Plan 165 (reuso, sin tocarlo)
 
 // Health con index signature para keys aditivas (plan 88/90)
 export interface DevOpsHealth {
@@ -45,6 +50,7 @@ export interface DevOpsHealth {
   deployments_execute_enabled?: boolean; // Plan 120 — ejecutar deploy/rollback
   deployments_ai_enabled?: boolean; // Plan 120 — diagnóstico IA de deploys fallidos
   local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
+  cockpit_enabled?: boolean; // Plan 239 — cockpit DevOps
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -59,6 +65,10 @@ export interface DevOpsSectionContext {
   // plan 91): navegar a otra sub-tab del shell. Ausente en shells que aún no lo
   // propaguen (p.ej. plan 119) ⇒ el caller degrada sin romper.
   setActiveSection?: (id: string) => void;
+  /** Plan 239 F6 — true si esta sección es la visible. Las secciones que sondean
+   *  DEBEN gatear su refetchInterval con esto. Ausente ⇒ tratar como true
+   *  (shells que no lo propaguen degradan al comportamiento de hoy). */
+  visible?: boolean;
 }
 
 // Contrato de sección del registro (§3.12 C20)
@@ -69,6 +79,8 @@ export interface DevOpsSection {
   healthKey?: string; // si health[healthKey] !== true → FlagGateBanner
   gateFlagKey?: string; // flag que el banner ofrece activar (requerido si hay healthKey)
   gateMessage?: string; // mensaje del banner (requerido si hay healthKey)
+  group?: DevOpsGroupId; // Plan 239 — cluster de navegación. Ausente ⇒ DEFAULT_GROUP.
+  summary?: string;      // Plan 239 — 1 línea para el header de sección (opcional).
   render: (ctx: DevOpsSectionContext) => React.ReactNode;
 }
 
@@ -91,18 +103,34 @@ import { RemoteConsoleSection } from '../components/devops/RemoteConsoleSection'
 import { PrReviewerSection } from '../components/devops/PrReviewerSection';
 // Importar DeploymentsSection (Plan 120 F7)
 import { DeploymentsSection } from '../components/devops/DeploymentsSection';
+// Importar DevOpsOverviewSection (Plan 239 F3)
+import { DevOpsOverviewSection } from '../components/devops/DevOpsOverviewSection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
 export const DEVOPS_SECTIONS: DevOpsSection[] = [
+  // Plan 239 — Resumen: aterrizaje del cockpit. healthKey cockpit_enabled ⇒ con la
+  // flag OFF la pestaña se atenúa y el shell v2/v1 sigue aterrizando en Pipelines.
+  {
+    id: 'resumen',
+    label: 'Resumen',
+    group: 'resumen',
+    summary: 'Estado de despliegues, CI y conexiones en una pantalla.',
+    healthKey: 'cockpit_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_COCKPIT_ENABLED',
+    gateMessage: 'El Resumen del panel DevOps necesita la flag STACKY_DEVOPS_COCKPIT_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <DevOpsOverviewSection ctx={ctx} />,
+  },
   {
     id: 'pipelines',
     label: 'Pipelines',
+    group: 'construir',
     render: (ctx) => <PipelineBuilderSection ctx={ctx} />,
   },
   {
     id: 'publicaciones',
     label: 'Publicaciones',
+    group: 'operar',
     healthKey: 'publications_enabled',
     gateFlagKey: 'STACKY_DEVOPS_PUBLICATIONS_ENABLED',
     gateMessage: 'La sección Publicaciones necesita la flag STACKY_DEVOPS_PUBLICATIONS_ENABLED (Configuración → Arnés, categoría DevOps).',
@@ -111,6 +139,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'ambientes',
     label: 'Ambientes',
+    group: 'operar',
     healthKey: 'environments_enabled',
     gateFlagKey: 'STACKY_DEVOPS_ENVIRONMENTS_ENABLED',
     gateMessage: 'La sección Ambientes necesita la flag STACKY_DEVOPS_ENVIRONMENTS_ENABLED (Configuración → Arnés, categoría DevOps).',
@@ -120,6 +149,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'agente',
     label: 'Agente DevOps',
+    group: 'diagnosticar',
     icon: '🛠️',
     healthKey: 'agent_enabled',
     gateFlagKey: 'STACKY_DEVOPS_AGENT_ENABLED',
@@ -130,6 +160,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'servidores',
     label: 'Servidores',
+    group: 'operar',
     icon: '🖥️',
     healthKey: 'servers_enabled',
     gateFlagKey: 'STACKY_DEVOPS_SERVERS_ENABLED',
@@ -140,6 +171,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'variables',
     label: 'Variables',
+    group: 'construir',
     icon: '🔒',
     healthKey: 'variables_enabled',
     gateFlagKey: 'STACKY_DEVOPS_VARIABLES_ENABLED',
@@ -150,6 +182,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'remote-console',
     label: 'Consola',
+    group: 'diagnosticar',
     icon: '💻',
     healthKey: 'remote_console_enabled',
     gateFlagKey: 'STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED',
@@ -160,6 +193,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'pr-review',
     label: 'Revisor de PRs',
+    group: 'diagnosticar',
     icon: '🔎',
     healthKey: 'pr_reviewer_enabled',
     gateFlagKey: 'STACKY_PR_REVIEWER_ENABLED',
@@ -170,6 +204,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'despliegues',
     label: 'Despliegues',
+    group: 'operar',
     icon: '🚀',
     healthKey: 'deployments_enabled',
     gateFlagKey: 'STACKY_DEPLOYMENTS_ENABLED',
@@ -178,13 +213,20 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   },
 ];
 
-export const DevOpsPage: React.FC = () => {
+export const DevOpsPage: React.FC<{ subTab?: string | null }> = ({ subTab = null }) => {
   const healthQuery = useQuery({
     queryKey: ['devops-health'],
     queryFn: () => DevOps.health(),
     retry: false,
   });
 
+  // Plan 239 F5.3 — sección de inicio fijada por el operador (un solo localStorage,
+  // sin backend ni config). NO es un sistema de vistas guardadas (eso es el plan 173).
+  const [pinned, setPinned] = useLocalStorageState<string | null>('stacky.devops.pinnedSection', null);
+
+  // NOTA (plan 239 C1): `activeId` NO se inicializa con resolveLandingSection — el
+  // aterrizaje lo aplica el efecto `landingApplied` de F3.4, que espera a que
+  // healthQuery.data exista.
   const [activeId, setActiveId] = useState(DEVOPS_SECTIONS[0].id);
   // C10 - Montaje persistente: las secciones NUNCA se desmontan (display:none)
   const [mountedIds, setMountedIds] = useState<Set<string>>(new Set([DEVOPS_SECTIONS[0].id]));
@@ -229,6 +271,48 @@ export const DevOpsPage: React.FC = () => {
     setMountedIds((prev) => new Set([...prev, id]));
   };
 
+  // Plan 239 F3.4 — aterrizaje resuelto una sola vez, con la salud REAL en la mano.
+  // Usa handleTabClick (no setActiveId) a propósito: es el único lugar que mantiene
+  // la invariante C10 "activeId ∈ mountedIds".
+  // NO va en un useState(() => …): el inicializador perezoso corre en el PRIMER
+  // render, cuando healthQuery.data todavía es undefined, y no vuelve a correr ⇒
+  // el cockpit ON aterrizaría igual en pipelines (KPI-1 fallaría en silencio).
+  const landingApplied = useRef(false);
+  useEffect(() => {
+    if (landingApplied.current) return;
+    if (!healthQuery.data) return;            // esperar la salud; jamás adivinarla
+    landingApplied.current = true;
+    handleTabClick(resolveLandingSection({
+      sections: DEVOPS_SECTIONS,
+      health: healthQuery.data as Record<string, unknown>,
+      subTab,                                  // F5.2 — prop viva de la URL
+      pinned,                                  // F5.3 — sección de inicio fijada
+      cockpitOn: healthQuery.data.cockpit_enabled === true,
+    }));
+  }, [healthQuery.data]);
+
+  // Plan 239 F5.3 (a) — prop VIVA: popstate / navegación in-app cambian subTab ⇒
+  // seguirlo, sin pisar el click local (patrón lastApplied de SettingsPage.tsx:164).
+  const lastAppliedSub = useRef(subTab);
+  useEffect(() => {
+    if (subTab !== lastAppliedSub.current) {
+      lastAppliedSub.current = subTab;
+      if (subTab && DEVOPS_SECTIONS.some((s) => s.id === subTab)) handleTabClick(subTab);
+    }
+  }, [subTab]);
+
+  // Plan 239 F5.3 (b) — write-back: la sección elegida por click se refleja en el path
+  // con replaceState (no pushState: no ensucia el historial, criterio del plan 165 F3 [A2]).
+  // GUARD obligatorio: solo si la ruta actual es /devops (si el operador ya navegó a otra
+  // tab, esta página puede estar desmontándose y reescribiría una URL ajena).
+  useEffect(() => {
+    const current = parseRoute(window.location.pathname, window.location.search);
+    if (current.tab !== 'devops') return;
+    const next = serializeRoute({ ...current, subtab: activeId });
+    const target = window.location.pathname + window.location.search;
+    if (next !== target) window.history.replaceState({}, '', next);
+  }, [activeId]);
+
   const ctx: DevOpsSectionContext = {
     health: healthQuery.data ?? { flag_enabled: false, generator_enabled: false, trigger_enabled: false },
     refetchHealth: () => healthQuery.refetch(),
@@ -237,8 +321,21 @@ export const DevOpsPage: React.FC = () => {
     setActiveSection: handleTabClick, // Plan 120 F8 (C7 v2) — precedente selectedServer (plan 91)
   };
 
-  // Plan 119 — shell v2 (presentación pura, conmutado por flag; default OFF = idéntico a hoy).
+  // Plan 119 — shell v2 (presentación pura, conmutado por flag; ahora default ON).
   const uiV2 = ctx.health.ui_v2_enabled === true;
+  // Plan 239 — cockpit (nav agrupada de 2 niveles + control de inicio fijable).
+  const cockpit = ctx.health.cockpit_enabled === true;
+
+  // Plan 239 F4 — estado operacional para el header. MISMA queryKey que usa la
+  // sección Resumen con sus filtros por default ⇒ react-query comparte la entrada
+  // de caché y NO se dispara una segunda request en el caso común. Sin sondeo
+  // propio: el latido lo pone la sección cuando es la visible (F6).
+  const overviewQuery = useQuery({
+    queryKey: ['devops-overview', null, null, 14],
+    queryFn: () => DevOps.overview({ appId: null, project: null, windowDays: 14 }),
+    retry: false,
+    enabled: cockpit,
+  });
 
   if (healthQuery.isLoading) {
     return <div style={{ padding: '20px' }}>Cargando salud DevOps...</div>;
@@ -264,6 +361,25 @@ export const DevOpsPage: React.FC = () => {
           serversEnabled={ctx.health.servers_enabled === true}
           selectedAlias={selectedAlias}
           onSelectServer={onSelectServer}
+          // Plan 239 F4 — con el cockpit ON la línea de contexto pasa a ser OPERACIONAL
+          // (estado real) en vez de "N / 10 capacidades activas" (que contaba flags).
+          meta={cockpit ? buildOperationalMeta({
+            selectedAlias,
+            overviewStatus: overviewQuery.data?.status ?? null,
+            lastDeployAt: overviewQuery.data?.kpis?.last_deploy_at ?? null,
+            nowMs: Date.now(),
+          }) : undefined}
+          // Plan 239 F5 — "Fijar como inicio": un solo localStorage, sin backend.
+          actions={cockpit ? (
+            <button
+              type="button"
+              className={styles.pinBtn}
+              onClick={() => setPinned(activeId === pinned ? null : activeId)}
+              title="Elegí en qué sección querés aterrizar al abrir DevOps"
+            >
+              {activeId === pinned ? 'Inicio fijado' : 'Fijar como inicio'}
+            </button>
+          ) : undefined}
         />
       ) : (
         <h2 style={{ marginTop: 0 }}>DevOps</h2>
@@ -274,8 +390,12 @@ export const DevOpsPage: React.FC = () => {
         <ConnectionHealthStrip onGotoSection={handleTabClick} />
       )}
 
-      {/* Barra de sub-tabs — Plan 119: v2 usa DevOpsTabsV2 (underline); v1 conserva el legacy Bootstrap. */}
-      {uiV2 ? (
+      {/* Barra de sub-tabs — escalera de 3 ramas (plan 239 F4.4):
+          cockpit ⇒ DevOpsCockpitNav (2 niveles); si no, DevOpsTabsV2 del plan 119;
+          si no, la barra inline v1. El outlet (C10) y ConnectionHealthStrip NO se tocan. */}
+      {cockpit ? (
+        <DevOpsCockpitNav sections={DEVOPS_SECTIONS} activeId={activeId} onSelect={handleTabClick} health={ctx.health} />
+      ) : uiV2 ? (
         <DevOpsTabsV2 sections={DEVOPS_SECTIONS} activeId={activeId} onSelect={handleTabClick} health={ctx.health} />
       ) : (
         <div role="tablist" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
@@ -321,10 +441,16 @@ export const DevOpsPage: React.FC = () => {
       {/* Render de secciones con gate declarativo (C20) */}
       {DEVOPS_SECTIONS.map((s) => {
         // Solo renderizar secciones montadas
-        if (!mountedIds.has(s.id)) return null;
+        // Plan 239 F3.4 — invariante: la sección ACTIVA siempre se renderiza, la
+        // monte quien la monte. Sin esto, cualquier camino que fije activeId sin
+        // pasar por handleTabClick (deep-link, pin, aterrizaje) deja el panel en blanco.
+        if (!mountedIds.has(s.id) && s.id !== activeId) return null;
 
         // Gate declarativo: si healthKey !== true, mostrar FlagGateBanner
         const isGated = s.healthKey && ctx.health[s.healthKey] !== true;
+        // Plan 239 F6 — ctx POR SECCIÓN: `visible` es true solo para la activa.
+        // Las secciones ocultas dejan de sondear sin perder el montaje (C10).
+        const sectionCtx: DevOpsSectionContext = { ...ctx, visible: activeId === s.id };
         const content = isGated ? (
           <FlagGateBanner
             flagKey={s.gateFlagKey!}
@@ -333,7 +459,7 @@ export const DevOpsPage: React.FC = () => {
             onEnabled={ctx.refetchHealth}
           />
         ) : (
-          s.render(ctx)
+          s.render(sectionCtx)
         );
 
         return (

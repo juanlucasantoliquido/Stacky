@@ -233,6 +233,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan117_digest_narrative.py
   # — Plan 119 · Rediseño minimalista del shell DevOps —
   tests/test_plan119_devops_ui_v2_flag.py
+  # — Plan 239 · Cockpit DevOps (Resumen + nav agrupada + deep-link) —
+  tests/test_plan239_cockpit_flag.py
+  tests/test_plan239_devops_overview_service.py
+  tests/test_plan239_devops_overview_endpoint.py
   # — Plan 120 · Centro de Despliegues (deploy multi-destino, rollback 1-click) —
   tests/test_plan120_flags.py
   tests/test_plan120_planner.py
@@ -661,6 +665,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan238_inbox_flag.py
   tests/test_plan238_incident_inbox_core.py
   tests/test_plan238_incident_inbox_api.py
+  # -- Acciones desde la bandeja de incidencias (cerrar / resolver+PR / lote) --
+  tests/test_incident_inbox_actions.py
 )
 
 pass=0

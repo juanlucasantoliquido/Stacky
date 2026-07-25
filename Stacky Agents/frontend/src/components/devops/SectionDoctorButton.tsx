@@ -100,7 +100,7 @@ export function SectionDoctorButton(props: {
   };
 
   return (
-    <div style={{ marginTop: '8px' }}>
+    <div className={styles.sectionDoctor__mt}>
       <select value={runtime} onChange={(e) => setRuntime(e.target.value as Runtime)} disabled={busy}>
         <option value="claude_code_cli">Claude</option>
         <option value="codex_cli">Codex</option>
@@ -109,8 +109,7 @@ export function SectionDoctorButton(props: {
       <button
         onClick={() => void handle()}
         disabled={busy || !!props.gateMessage || props.disabled || noProject}
-        className={styles.btnPrimary}
-        style={{ marginLeft: '8px' }}
+        className={`${styles.btnPrimary} ${styles.sectionDoctor__ml}`}
       >
         {busy ? 'Analizando…' : 'Doctor'}
       </button>
@@ -125,21 +124,21 @@ export function SectionDoctorButton(props: {
 
       {/* Plan 127 C3 — doctor local: solo si el health del panel lo habilita (conjunción H5). */}
       {props.localDoctorEnabled === true && (
-        <div style={{ marginTop: '8px' }}>
+        <div className={styles.sectionDoctor__mt}>
           <button
             onClick={() => void handleLocal()}
             disabled={localBusy || noProject}
-            style={{ marginLeft: '0' }}
+            className={styles.sectionDoctor__mlNone}
           >
             {localBusy ? 'Analizando (puede tardar 1-3 minutos)…' : 'Doctor local (no sale de tu máquina)'}
           </button>
           {localError && <p className={styles.textMuted}>No pude analizar ({localError}).</p>}
           {localAnalysis && (
-            <details open style={{ marginTop: '6px' }}>
-              <summary className={styles.textMuted} style={{ cursor: 'pointer' }}>
+            <details open className={styles.sectionDoctor__mtSm}>
+              <summary className={`${styles.textMuted} ${styles.sectionDoctor__clickable}`}>
                 Análisis local
               </summary>
-              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', marginTop: '4px' }}>
+              <pre className={styles.sectionDoctor__pre}>
                 {localAnalysis}
               </pre>
             </details>

@@ -47,7 +47,9 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
     queryKey: ['devops-deployments-overview'],
     queryFn: () => DevOpsDeployments.overview(),
     retry: false,
-    refetchInterval: 4000,
+    // Plan 239 F6 — solo sondea cuando la sección es la visible. `visible` ausente
+    // (shells que no lo propaguen) ⇒ se trata como visible: comportamiento de hoy.
+    refetchInterval: ctx.visible === false ? false : 4000,
   });
 
   const [selectedAppId, setSelectedAppId] = useState<string | null>(
@@ -280,7 +282,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
 
   return (
     <div className={styles.panel}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+      <div className={styles.deployments__toolbar}>
         {apps.map((a) => (
           <button
             key={a.id}
@@ -308,7 +310,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
 
       {app && (
         <>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div className={styles.deployments__kpiRow}>
             {doraChips.map((chip) => (
               <div key={chip.label} className={styles.healthChip}>
                 <strong>{chip.value}</strong> {chip.label}
@@ -320,14 +322,14 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
           {evidenceError && <div className={styles.alertError}>{evidenceError}</div>}
           {simError && <div className={styles.alertError}>{simError}</div>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+          <div className={styles.deployments__grid}>
             {cards.map((card) => {
               // Plan 189 — badge de reversibilidad (degrada a nada si no hay readiness).
               const readiness = app ? readinessMap[`${app.id}|${card.key}`] : undefined;
               const badge = readinessBadge(readiness);
               return (
               <div key={card.key} className={styles.panelMuted}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div className={styles.deployments__cardHead}>
                   <strong>{card.label}</strong>
                   {card.protected && <span title="Destino protegido">🔒</span>}
                 </div>
@@ -343,7 +345,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                     {badge.text}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                <div className={styles.deployments__cardActions}>
                   <label>
                     <input
                       type="checkbox"
@@ -373,7 +375,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
           </div>
 
           {selectedTargets.length > 0 && (
-            <div style={{ marginTop: 16 }}>
+            <div className={styles.deployments__block}>
               <button type="button" className={styles.btnPrimary} onClick={() => void handlePlan()}>
                 Desplegar ({selectedTargets.length})
               </button>
@@ -417,7 +419,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
                     <input value={confirmTextInput} onChange={(e) => setConfirmTextInput(e.target.value)} />
                   </label>
                 )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <div className={styles.deployments__actions}>
                   <button type="button" className={styles.btnSuccess} disabled={!canConfirmExecute || busy} onClick={() => void handleExecute()}>
                     Confirmar
                   </button>
@@ -523,7 +525,7 @@ const NewAppForm: React.FC<{ onCreated: (id: string) => void; onCancel: () => vo
         Carpeta del build <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="C:\build\miapp\out" />
       </label>
       <label>Install path (Local) <input value={installPath} onChange={(e) => setInstallPath(e.target.value)} placeholder="D:\apps\miapp" /></label>
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+      <div className={styles.deployments__actions}>
         <button type="button" className={styles.btnPrimary} onClick={() => void submit()}>Crear</button>
         <button type="button" onClick={onCancel}>Cancelar</button>
       </div>

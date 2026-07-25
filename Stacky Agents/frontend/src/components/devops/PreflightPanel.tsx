@@ -77,23 +77,22 @@ export const PreflightPanel: React.FC<PreflightPanelProps> = ({ ctx, spec, proje
   const overall = result ? overallStatus(result.checks) : null;
 
   return (
-    <div className={styles.panelMuted} style={{ marginTop: '16px' }}>
-      <h3 style={{ marginTop: 0 }}>¿Va a funcionar?</h3>
-      <p className={styles.textMuted} style={{ marginTop: 0, fontSize: '0.9em' }}>
+    <div className={`${styles.panelMuted} ${styles.preflight__root}`}>
+      <h3 className={styles.preflight__title}>¿Va a funcionar?</h3>
+      <p className={`${styles.textMuted} ${styles.preflight__desc}`}>
         Chequeo solo-lectura: no commitea ni dispara nada. Vos decidís si seguís, aunque haya avisos.
       </p>
 
       <button
         onClick={() => void handleCheck()}
         disabled={loading || !project}
-        className={styles.btnPrimary}
-        style={{ padding: '8px 16px' }}
+        className={`${styles.btnPrimary} ${styles.preflight__btn}`}
       >
         {loading ? 'Chequeando…' : '¿Va a funcionar?'}
       </button>
 
       {overall && (
-        <div style={{ marginTop: '12px' }}>
+        <div className={styles.preflight__mt}>
           <strong className={STATUS_CLASS[overall]}>
             {STATUS_LABEL[overall]} {summaryLine(result!.checks)}
           </strong>
@@ -101,17 +100,17 @@ export const PreflightPanel: React.FC<PreflightPanelProps> = ({ ctx, spec, proje
       )}
 
       {sortedChecks.length > 0 && (
-        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className={styles.preflight__list}>
           {sortedChecks.map((check) => (
-            <div key={check.id} className={styles.panel} style={{ padding: '8px' }}>
+            <div key={check.id} className={`${styles.panel} ${styles.preflight__item}`}>
               <div className={STATUS_CLASS[check.status]}>
                 <strong>{STATUS_LABEL[check.status]} {check.title}</strong>
               </div>
               {check.detail && (
-                <div style={{ fontSize: '0.85em', marginTop: '4px' }}>{check.detail}</div>
+                <div className={styles.preflight__detail}>{check.detail}</div>
               )}
               {check.fix_hint && (
-                <div className={styles.textMuted} style={{ fontSize: '0.85em', marginTop: '4px' }}>
+                <div className={`${styles.textMuted} ${styles.preflight__detail}`}>
                   Sugerencia: {check.fix_hint}
                 </div>
               )}
@@ -121,7 +120,7 @@ export const PreflightPanel: React.FC<PreflightPanelProps> = ({ ctx, spec, proje
       )}
 
       {error && (
-        <div className={styles.alertError} style={{ marginTop: '12px' }}>
+        <div className={`${styles.alertError} ${styles.preflight__mt}`}>
           {error}
         </div>
       )}

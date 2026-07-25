@@ -36,6 +36,18 @@ _SCREEN_HINTS = {
     "agenda judicial": "FrmAgendaJudicial.aspx",
     "busqueda judicial": "FrmBusquedaJudicial.aspx",
     "administrador": "FrmAdministrador.aspx",
+    # Sinonimos funcionales adicionales verificados contra los tickets reales
+    # (RF-001/RF-003/EP-01/EP-08 hablan del "Filtro de Agenda", no de la pantalla).
+    "filtro de agenda": "FrmAgenda.aspx",
+    "resumen de agenda": "FrmAgenda.aspx",
+    "agenda web": "FrmAgenda.aspx",
+    "busqueda avanzada": "FrmAgenda.aspx",
+    "grilla de agenda": "FrmAgenda.aspx",
+    "ficha del cliente": "FrmDetalleClie.aspx",
+    "detalle del cliente": "FrmDetalleClie.aspx",
+    "gestiones": "FrmDetalleClie.aspx",
+    "telefonos": "FrmDetalleClie.aspx",
+    "contactos": "FrmDetalleClie.aspx",
 }
 
 # Tipos de criterio reconocidos, en orden de precedencia.

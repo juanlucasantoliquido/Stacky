@@ -281,6 +281,18 @@ def run(
     if candidate_screens:
         logger.info("[ticket_reader] pantalla primaria=%s; candidatas=%s (Plan 240 H12)",
                     navigation_path, candidate_screens)
+        # Propagar la pantalla a los items del plan que no la declaran. Sin esto el
+        # compilador heuristico corta con UNKNOWN_TARGET_SCREEN (verificado: ticket
+        # 65, 8 items del plan sin pantalla => NO_EXECUTABLE_SCENARIOS). Solo rellena
+        # huecos: jamas pisa una pantalla ya declarada por el item.
+        _filled = 0
+        for _item in plan_pruebas:
+            if isinstance(_item, dict) and not _item.get("pantalla"):
+                _item["pantalla"] = navigation_path[0]
+                _filled += 1
+        if _filled:
+            logger.info("[ticket_reader] pantalla propagada a %d items del plan "
+                        "(Plan 240 H12)", _filled)
 
     result: dict = {
         "ok": True,

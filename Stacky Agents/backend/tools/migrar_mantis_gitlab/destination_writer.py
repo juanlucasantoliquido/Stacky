@@ -126,20 +126,26 @@ class GitLabDestinationWriter(DestinationWriter):
     """Único punto del tool que instancia `GitLabTrackerProvider` (C1)."""
 
     def __init__(self, destination_config, token: str) -> None:
-        # 1. Fijar el destino en el proceso CLI aislado (sin Flask/estado
-        #    compartido vivo — mutar el módulo config acá es local y seguro).
-        config.GITLAB_URL = destination_config.base_url
-        config.GITLAB_PROJECT = destination_config.project_path  # echo-back/prolijidad, no necesario funcionalmente
-
-        # 2. Token vía variable de entorno DEL PROCESO, ANTES de instanciar
+        # 1. Token vía variable de entorno DEL PROCESO, ANTES de instanciar
         #    nada — GitLabClient lee os.getenv("GITLAB_TOKEN") en vivo en su
         #    __init__ (gitlab_client.py:62), nunca vía el módulo config.
         os.environ["GITLAB_TOKEN"] = token
 
+        # 2. Destino EXPLÍCITO por parámetro. El Plan 218 F0/F4 amplió la
+        #    firma del provider con `base_url=`/`group=` y corrigió sus
+        #    lecturas para que vayan a `config.config` (la INSTANCIA) en vez
+        #    del módulo. Mutar `config.GITLAB_URL` (el módulo) dejó de tener
+        #    efecto: el provider resolvía base_url='' y el gate
+        #    anti-destino-equivocado abortaba la corrida. Pasar el destino
+        #    por parámetro es además más robusto que depender de cualquier
+        #    global — no vuelve a romperse si el seam cambia otra vez.
         self._destination_config = destination_config
         # 3. Instanciar DIRECTO (no vía tracker_provider.get_tracker_provider,
-        #    que exige STACKY_GITLAB_ENABLED) con project= explícito.
-        self._provider = GitLabTrackerProvider(project=destination_config.project_path)
+        #    que exige STACKY_GITLAB_ENABLED).
+        self._provider = GitLabTrackerProvider(
+            project=destination_config.project_path,
+            base_url=destination_config.base_url,
+        )
 
     # ── DestinationWriter ───────────────────────────────────────────────
 

@@ -51,14 +51,18 @@ class _FakeGitLabClient:
 
 
 class _FakeGitLabTrackerProvider:
-    """Stub fiel al `__init__` REAL (`gitlab_provider.py:33-39`): resuelve
-    `base_url` de `config.GITLAB_URL` y `project` del parámetro explícito
-    (o `config.GITLAB_PROJECT` si no se pasa) — así el test de (a)/(b)
-    verifica el cableado real, no un mock que ignora el config."""
+    """Stub fiel al `__init__` REAL (`gitlab_provider.py:33-51`, ampliado por
+    el Plan 218 F0/F4): acepta `base_url`/`group`/`auth_path` por keyword y
+    cae a `config.config` (la INSTANCIA, no el módulo) cuando no se pasan.
 
-    def __init__(self, project=None):
-        base_url = getattr(_config, "GITLAB_URL", "") or ""
-        proj = project or getattr(_config, "GITLAB_PROJECT", "") or ""
+    Que el destino viaje por PARÁMETRO es justamente lo que blinda el
+    cableado: cuando el Plan 218 cambió esas lecturas de módulo a instancia,
+    el writer —que mutaba el módulo— resolvió base_url='' y el gate
+    anti-destino-equivocado abortó la migración en vez de escribir mal."""
+
+    def __init__(self, project=None, *, base_url=None, group=None, auth_path=None):
+        base_url = base_url or (getattr(getattr(_config, "config", _config), "GITLAB_URL", "") or "")
+        proj = project or (getattr(getattr(_config, "config", _config), "GITLAB_PROJECT", "") or "")
         self._client = _FakeGitLabClient(base_url, proj)
         self._project = proj
         self.created_items: list = []
@@ -93,7 +97,7 @@ class _FakeProviderIgnoresConfig:
     writer y resuelve un destino viejo/vacío hardcodeado (como si el
     provider hubiera leído un `config` global stale)."""
 
-    def __init__(self, project=None):
+    def __init__(self, project=None, *, base_url=None, group=None, auth_path=None):
         self._client = _FakeGitLabClient("https://old-stale-gitlab.local", "old/stale-project")
         self._project = "old/stale-project"
 
@@ -127,13 +131,22 @@ def _patch_provider(monkeypatch):
     yield
 
 
-# ── (a) config.GITLAB_URL + os.environ["GITLAB_TOKEN"] ────────────────────
+# ── (a) destino por PARÁMETRO + os.environ["GITLAB_TOKEN"] ───────────────
 
 
-def test_writer_fija_config_gitlab_url_al_destino_del_config():
-    dest = _make_destination_config(base_url="https://gitlab.acme.local")
-    dw.GitLabDestinationWriter(dest, token="tok-123")
-    assert _config.GITLAB_URL == "https://gitlab.acme.local"
+def test_writer_pasa_el_destino_del_config_al_provider():
+    """El destino viaja por PARÁMETRO al provider, no por un global.
+
+    Antes se mutaba `config.GITLAB_URL` (el módulo) y se confiaba en que el
+    provider lo leyera de ahí. El Plan 218 F0 cambió esas lecturas a
+    `config.config` (la instancia) y el writer pasó a resolver base_url=''
+    — la migración se abortó por el gate anti-destino-equivocado. Pasarlo
+    explícito no depende de qué global lea el provider."""
+    dest = _make_destination_config(
+        base_url="https://gitlab.acme.local", project_path="grupo/proyecto"
+    )
+    writer = dw.GitLabDestinationWriter(dest, token="tok-123")
+    assert writer.effective_target() == ("https://gitlab.acme.local", "grupo/proyecto")
 
 
 def test_writer_fija_env_gitlab_token_al_token_pasado():

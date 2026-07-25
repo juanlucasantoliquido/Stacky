@@ -1,9 +1,11 @@
 # Plan 218 — Paridad total Azure DevOps ↔ GitLab: plan ORQUESTADOR de la serie multi-proveedor
 
-**Estado:** v1 — PROPUESTO (pasar por `criticar-y-mejorar-plan` antes de implementar)
-**Autor:** generado con Claude Code (Opus 5) a pedido del operador (Juan Luca Santoliquido), 2026-07-25
+**Estado:** **v2 — CRITICADO (v1 RECHAZADO) → APROBADO-CON-CAMBIOS, listo para `implementar-plan-stacky`**
+**Autor:** generado con Claude Code (Opus 5) a pedido del operador (Juan Luca Santoliquido), 2026-07-25 · **criticado y reescrito a v2 el 2026-07-25** (`criticar-y-mejorar-plan`)
 **Tipo:** plan orquestador (hoja de ruta ejecutable) — define el sustrato técnico + los 18 subplanes 219..236
 **Precedentes directos:** 65, 70, 71, 72, 73, 74, 75, 95 (serie GitLab) · 184, 195, 197 (planes hoja-de-ruta previos, cuyo formato se reusa) · 217 (migrador Mantis→GitLab, adyacente)
+
+> **Nota de versión (v1 → v2).** El v1 fue **RECHAZADO** por 5 hallazgos BLOQUEANTES: tres criterios de aceptación **imposibles de cumplir** (F0, F3, F6), una **inversión de dependencia** (F3 usaba una clase creada en F6) y una **contradicción interna** (el ratchet de F1 se rompía al implementar F2). El más grave: el centinela de F0 exigía 0 coincidencias de `getattr(config,` con allowlist vacía, cuando hay **69 coincidencias reales** y **~65 son correctas** (esos módulos bindean `config` a la *instancia* vía `from config import config`); aplicar el "fix" que el centinela exigía habría introducido ~65 defectos nuevos y roto el motor de flags. El v2 corrige los 12 hallazgos accionables y agrega 2 mecanismos nuevos marcados **[ADICIÓN ARQUITECTO]**. Detalle en el Changelog (§14).
 
 ---
 
@@ -37,13 +39,15 @@ Por eso este plan hace dos cosas, en este orden:
 | # | KPI | Línea base (medida 2026-07-25) | Meta al cierre de la serie | Cómo se mide |
 |---|---|---|---|---|
 | K1 | Proyecto GitLab operable de punta a punta (crear proyecto → sync → lanzar agente → publicar) | **0 %** (la fábrica levanta excepción; §2.1) | 100 % | `test_plan218_gitlab_reachable.py` + smoke del subplan 233 |
-| K2 | Módulos no-test que importan `services.ado_*` directo | **36 archivos / 64 ocurrencias** | ≤ 6 (los 5 adaptadores + `project_context`) | `provider_coupling_audit.scan_backend_coupling()` |
-| K3 | Líneas con `_ado_client_for_ticket(` en `api/tickets.py` | **20** (24 menciones totales del símbolo; frente a 25 de `_provider_for_ticket`) | 1 (solo la línea de la definición) | `grep -c "_ado_client_for_ticket(" "Stacky Agents/backend/api/tickets.py"` |
-| K4 | Literales `"azure_devops"` en backend no-test | **85 en 33 archivos** | ≤ 20 (adaptadores + factories + defaults) | censo F1 |
+| K2 | Módulos no-test que importan `services.ado_*` directo | **36 archivos** (64 ocurrencias) | ≤ 6 archivos (los 5 adaptadores + `project_context`) | `provider_coupling_audit.scan_backend_coupling()["ado_importer_files"]` |
+| K3 | Líneas con `_ado_client_for_ticket(` en `api/tickets.py` | **20** (verificado 2026-07-25) | 1 (solo la línea de la definición) | `(Select-String -Path "Stacky Agents/backend/api/tickets.py" -Pattern "_ado_client_for_ticket\(" -AllMatches).Count` |
+| K4 | Líneas con el literal `"azure_devops"` en backend no-test | **82 líneas en ~33 archivos** (re-medido en la crítica v2; el v1 decía 85) | ≤ 20 (adaptadores + factories + defaults) | censo F1, clave `tracker_literal_occurrences` |
 | K5 | Capacidades del puerto verificadas por contrato conductual en AMBOS proveedores | **0** (la "conformance" actual solo hace `hasattr`/`callable`; §2.3) | ≥ 40 capacidades | `test_plan218_tracker_contract.py` |
 | K6 | Dominios funcionales sin puerto formal | **10** (sync, publicación, contexto, outbox, identidad, edit-learning, read-cache, feedback, definiciones CI, PM/sprints) | 0 | matriz §6 |
 | K7 | Defectos vivos del camino GitLab | **4 probados** (§2.1) | 0 | F0 |
 | K8 | Tests que mockean el seam que deberían ejercitar | **3 identificados** (`test_tracker_factory.py:44-47`, `test_gitlab_provider.py:16`, `test_plan94_variables_providers.py:20`) | 0 | F0 + F3 |
+| K9 | **Módulos que leen una flag del MÓDULO `config` (rama muerta garantizada)** — [ADICIÓN ARQUITECTO 1] | **2 archivos / 5 sitios** (`gitlab_provider.py:34,35,38,39` + `tracker_provider.py:111`), medidos con resolución de binding por AST sobre 69 candidatos textuales | 0, congelado por ratchet | `flag_binding_audit.scan()` (F0) |
+| K10 | **Gaps de paridad con dueño declarado y test que se rompe si alguien los arregla en silencio** — [ADICIÓN ARQUITECTO 2] | **0** (hoy los gaps viven en prosa) | = nº de capacidades `absent`/`partial` de §6 | `KNOWN_GAPS` + `xfail(strict=True)` (F3) |
 
 ---
 
@@ -57,6 +61,8 @@ Por eso este plan hace dos cosas, en este orden:
 | **D2** | `gitlab_provider.py:34,35,38,39` leen `GITLAB_URL`, `GITLAB_PROJECT`, `STACKY_GITLAB_GROUP`, `STACKY_GITLAB_EPICS_NATIVE` del **módulo** `config`. Verificado: `hasattr(config,'GITLAB_URL')` → `False`. En el mismo archivo, `:174,184,194,205` sí usan `config.config`. | Ejecución de esta sesión. | `self._group` y `self._epics_native` quedan **permanentemente** `""`/`False`: épicas nativas y `epic_url` (`gitlab_provider.py:199-209`) están muertas. `GITLAB_URL`/`GITLAB_PROJECT` sobreviven solo porque `gitlab_client.py:56,59` cae a `os.getenv`. |
 | **D3** | `GitLabTrackerProvider.__init__` tiene firma `(self, project=None)` (`gitlab_provider.py:33`), pero se construye con el kwarg inexistente `project_name=` en `gitlab_ci_provider.py:30` y `gitlab_variables.py:13`. | Verificado con `inspect.signature` en esta sesión. | **`TypeError` en construcción**: el proveedor CI de GitLab y el de variables de GitLab están muertos al instante. |
 | **D4** | `gitlab_variables.py:28` llama `_request_paginated("GET", path)` (2 posicionales) contra `(self, path, *, params, page_cap)`; `:80,:90` pasan `json=` contra el kwarg real `json_body=`. | Verificado con `inspect.signature` en esta sesión. | `list_variables` y `set_variable` de GitLab levantan `TypeError`. |
+
+> **Corrección de la crítica v2 — alcance REAL de la clase de defecto (medido, no estimado).** El v1 daba por hecho que "leer del módulo `config`" se podía cazar con el texto `getattr(config,`. **Falso, y peligrosamente falso:** hay **69 coincidencias** de `getattr(config,`/`getattr(_config,` en `backend/services` + `backend/api`, y **~65 son CORRECTAS**, porque en esos módulos el nombre `config` está bindeado a la **instancia** (`from config import config`) — verificado en `claude_code_cli_runner.py:49`, `context_enrichment.py:282`, `agent_contract.py:102`, `harness_flags.py:4077`, `harness_profiles.py:162`, `run_slots.py:21`, `doc_documenter.py:79`, `ado_context.py:235`. Reescribirlas a `config.config` (lo que exigía el centinela del v1) **rompería el motor de flags**: `Config` no tiene atributo `.config`. Lo que define el defecto **no es el texto, es el binding**: solo son bugs los módulos que hacen `import config` (el módulo) y leen la flag del nombre pelado — hoy exactamente **2**: `gitlab_provider.py` (`import config` en `:25`) y `tracker_provider.py` (`import config` en `:102`). El mismo `gitlab_provider.py` convive con lecturas correctas (`config.config` en `:174,184,194,205`), lo que prueba que ningún centinela textual puede decidir esto. De ahí el rediseño de F0 y la **[ADICIÓN ARQUITECTO 1]**.
 
 **Por qué la suite está verde:** `tests/test_tracker_factory.py:44-47` parchea el **módulo `config` entero** con un `MagicMock` (así D1 nunca se ve); `tests/test_gitlab_provider.py:16` parchea `services.gitlab_provider.config` (así D2 nunca se ve); `tests/test_plan94_variables_providers.py:20` mockea `GitLabTrackerProvider` completo (así D3 y D4 nunca se ven). Es exactamente el antipatrón que ya combatieron el Plan 154 ("arnés veraz") y el Plan 210 ("fin del falso Build OK") — pero aplicado al eje multi-proveedor.
 
@@ -136,10 +142,14 @@ Capa 3 — REGISTRO DE CAPACIDADES + DEGRADACIÓN DECLARADA   ← LO QUE FALTA, 
 |---|---|---|
 | `CAPABILITY_KEYS` (tupla de claves de capacidad) | 218 F2 | `backend/services/provider_capabilities.py` |
 | Estados de capacidad: `"full" \| "partial" \| "absent" \| "n/a"` | 218 F2 | idem |
-| `CapabilityUnavailable(TrackerError)` y su payload HTTP | 218 F6 | `backend/services/tracker_provider.py` |
+| `CapabilityUnavailable(TrackerError)` y su payload | **218 F2** (v2: era F6; F3 lo necesita y F3 corre ANTES que F6 — ver C4) | `backend/services/tracker_provider.py` |
+| Traducción HTTP de `CapabilityUnavailable` (200 + `available:false`) | 218 F6 | `backend/api/errors.py` |
 | `TrackerTarget` (dataclass de destino resuelto por proyecto) | 218 F4 | `backend/services/project_context.py` |
 | `CANONICAL_FIELDS` y el mapa de alias legacy | 218 F5 | `backend/services/tracker_vocabulary.py` |
-| Firma de la suite de contrato `run_tracker_contract(make_provider, capabilities)` | 218 F3 | `backend/tests/contract/provider_contract.py` |
+| Firma de la suite de contrato `run_tracker_contract(make_provider, provider_name, fake)` | 218 F3 | `backend/tests/contract/provider_contract.py` |
+| **`KNOWN_GAPS`** (capacidad → dueño + motivo del xfail) — [ADICIÓN ARQUITECTO 2] | 218 F3 | `backend/tests/contract/known_gaps.py` |
+| **Regla de binding de flags** (`import config` ⇒ prohibido leer flags del nombre pelado) — [ADICIÓN ARQUITECTO 1] | 218 F0 | `backend/services/flag_binding_audit.py` |
+| **Categoría de flags `paridad_proveedores`** (las 4 flags del plan viven ahí) | 218 F2 | `backend/services/harness_flags.py` |
 
 ---
 
@@ -148,7 +158,20 @@ Capa 3 — REGISTRO DE CAPACIDADES + DEGRADACIÓN DECLARADA   ← LO QUE FALTA, 
 > **Comando backend** (desde la raíz del repo, PowerShell): `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/<archivo>" -q` — **SIEMPRE por archivo**, nunca la suite completa (contaminación cross-run conocida; memorias `gotcha-config-reload-harness-flags-contamina` y `gotcha-vitest-test-order-pollution-frontend`). Variante equivalente usada por los planes 210/212/213/215/216: `cd "Stacky Agents/backend"` y luego `& ".venv\Scripts\python.exe" -m pytest tests\<archivo> -q`.
 > **Comando frontend** (desde `Stacky Agents/frontend`): `npx vitest run <archivo>` + `npx tsc --noEmit`.
 > **Registro obligatorio:** todo `backend/tests/test_*.py` nuevo se agrega como línea `  tests/<archivo>.py` (dos espacios de indentación, sin comentario en la misma línea) dentro de `HARNESS_TEST_FILES=(` en `backend/scripts/run_harness_tests.sh:20` **y** en `$HarnessTestFiles = @(` de `backend/scripts/run_harness_tests.ps1:13`, o `tests/test_harness_ratchet_meta.py:43` queda rojo.
-> **Receta de flag default ON = 5 lugares:** (1) `FlagSpec(...)` en `services/harness_flags.py:379`; (2) la clave en la tupla correspondiente de `_CATEGORY_KEYS` (`harness_flags.py:117`); (3) la clave en `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`); (4) el atributo en `class Config` (`config.py`); (5) el read-site, **siempre** `config.config.<FLAG>`.
+> **Receta de flag default ON = 7 lugares** (v2: el v1 decía 5 y nombraba una categoría **inexistente**, ver C6). Las 20 categorías reales son `runtimes_cli`, `contexto_memoria`, `calidad_verificacion`, `integridad_grounding`, `epicas_ado`, `flujo_funcional`, `routing_costo`, `fiabilidad_ciclo_vida`, `observabilidad_notif`, `aprendizaje`, `preflight_intencion`, `base_datos`, `avanzado`, `migrador_ado_gitlab`, `gitlab_deep_links`, `devops`, `capacidades_optin`, `comparador_bd`, `interfaz_ui`, `otros` — **`integraciones` NO existe**. Este plan crea una categoría nueva:
+> 1. **Crear la categoría** — `CategorySpec("paridad_proveedores", "Paridad de proveedores (ADO ↔ GitLab)", "Plan 218 — registro de capacidades, destino por proyecto, vocabulario canónico y degradación declarada del eje multi-proveedor.", tier="advanced", intent="Ver y controlar la paridad entre Azure DevOps y GitLab")` dentro de la tupla de `CategorySpec` de `services/harness_flags.py` (bloque `:55-115`), **antes** de la entrada `otros` (que es el fallback).
+> 2. **Registrar la tupla de claves** — `"paridad_proveedores": ("STACKY_PROVIDER_PARITY_ENABLED", "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED", "STACKY_CANONICAL_VOCABULARY_ENABLED", "STACKY_CAPABILITY_DEGRADATION_ENABLED"),` en `_CATEGORY_KEYS` (`harness_flags.py:117`). **Obligatorio:** `tests/test_harness_flags.py:739` (`test_every_registry_flag_is_categorized`) exige **biyección** registry ↔ `_CATEGORY_KEYS`; una flag sin categoría deja el test ROJO.
+> 3. `FlagSpec(...)` en el registry de `services/harness_flags.py` (~`:379`).
+> 4. La clave en `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`) — obligatorio para **toda** flag con `default=True`.
+> 5. El atributo en `class Config` (`config.py`, leyendo de `os.getenv` con default `"true"`).
+> 6. El read-site, **siempre** `config.config.<FLAG>` (o `from config import config` + `config.<FLAG>`; ver la regla de binding de F0).
+> 7. Verificación: `& ".venv\Scripts\python.exe" -m pytest tests\test_harness_flags.py -q` verde.
+>
+> **Regla de comandos (v2, C9):** el shell primario del repo es **PowerShell**, donde `grep`/`wc` no existen como cmdlets y el backtick `` ` `` es el carácter de escape. Todo criterio binario de este plan se expresa con `Select-String` / `Test-Path`. Equivalencias canónicas:
+> - contar coincidencias → `(Select-String -Path "<ruta>" -Pattern "<regex>" -AllMatches | Measure-Object).Count`
+> - contar en un árbol → `(Get-ChildItem "<dir>" -Filter *.py -Recurse | Select-String -Pattern "<regex>" | Measure-Object).Count`
+> - "devuelve 0 líneas" → la expresión anterior `-eq 0`.
+> Si el implementador prefiere Bash, el repo tiene Git Bash disponible y `grep -c` es válido allí — pero **el criterio de aceptación se declara en PowerShell** para que sea ejecutable en el shell por defecto.
 
 ---
 
@@ -194,6 +217,43 @@ Capa 3 — REGISTRO DE CAPACIDADES + DEGRADACIÓN DECLARADA   ← LO QUE FALTA, 
 6. `backend/services/gitlab_variables.py` — líneas 80 y 90: `json=body` → `json_body=body`.
 7. `backend/services/ci_preflight.py` — línea 35: agregar el gate `STACKY_GITLAB_ENABLED` leído de `config.config`, para que las 6 fábricas seleccionen de forma idéntica (hoy es la única sin gate).
 
+8. **[ADICIÓN ARQUITECTO 1] `backend/services/flag_binding_audit.py` — crear.** Auditoría **AST** (no textual) que resuelve, por módulo, a qué está bindeado el nombre `config` y solo entonces decide si una lectura de flag es un defecto. Es la generalización permanente de la memoria `gotcha-config-config-vs-modulo-tickets`, y la única forma correcta de impedir que D1/D2 vuelvan (ver la corrección de §2.1 y C1).
+
+```python
+"""Auditoría de binding del nombre `config`. PURA (solo lee y parsea archivos, sin ejecutarlos)."""
+from __future__ import annotations
+import ast
+from pathlib import Path
+
+_BACKEND = Path(__file__).resolve().parents[1]
+_SCAN_DIRS = ("services", "api", "harness")
+
+# Prefijos de atributos que son FLAGS/CONFIG de la instancia (no submódulos ni helpers).
+_FLAG_PREFIXES = ("STACKY_", "GITLAB_", "ADO_", "CLAUDE_CODE_CLI_", "CODEX_CLI_", "COPILOT_", "LLM_")
+
+def scan() -> dict:
+    """Devuelve {"violations": [ {"file","line","name","attr","binding"} ], "violation_count": int,
+                 "module_bound_files": [rutas que hacen `import config`]}
+
+    Un sitio es VIOLACIÓN si y solo si:
+      1) el nombre base (`config`, `_config`, `_cfg`, o el alias de `import config as X`)
+         está bindeado en ese módulo por un `import config` / `import config as X`
+         —es decir, apunta al MÓDULO—, y
+      2) se lee de él un atributo que empieza con uno de _FLAG_PREFIXES,
+         sea por `getattr(<name>, "FLAG", ...)` o por acceso directo `<name>.FLAG`,
+      3) y el atributo leído NO es `config` (leer `config.config.FLAG` es CORRECTO).
+
+    Un módulo que hace `from config import config` bindea la INSTANCIA: sus lecturas
+    `config.FLAG` / `getattr(config, "FLAG", ...)` son CORRECTAS y NO se reportan.
+    Ignora strings y docstrings por construcción (se camina el AST, no el texto).
+    Salida ordenada por (file, line) — determinista."""
+
+def render_report(scan_result: dict) -> str:
+    """Reporte legible con archivo:línea y el binding detectado. PURA."""
+```
+
+**Por qué es una adición de alto valor y no scope creep:** el v1 ya quería este control (su `test_centinela_no_getattr_sobre_modulo_config`), pero lo especificó como regex, lo que lo hacía **inservible y destructivo** (69 candidatos, ~65 correctos). Esta versión (a) es correcta por construcción, (b) cubre también el acceso directo `config.FLAG` que el regex del v1 dejaba pasar, (c) barre `harness/` además de `services/` y `api/`, y (d) **puede descubrir ramas muertas más allá de GitLab** — cualquier flag leída del módulo es una rama que nunca se ejecuta. Si el barrido encuentra violaciones fuera de los 5 sitios conocidos, el implementador **NO las arregla en esta fase**: las deja registradas en el baseline y las reporta como hallazgo para un subplan propio (arreglar una flag muerta cambia comportamiento y necesita su propio análisis). Esto respeta P11 (no degradar) y evita que F0 se convierta en un refactor masivo.
+
 **Tests PRIMERO — `backend/tests/test_plan218_gitlab_reachable.py`:**
 - `test_config_module_no_expone_flags_de_instancia` — afirma `not hasattr(config, "STACKY_GITLAB_ENABLED")` y `hasattr(config.config, "STACKY_GITLAB_ENABLED")`. Documenta la causa raíz; **no** parchea nada.
 - `test_factory_devuelve_gitlab_con_flag_on` — `monkeypatch.setattr(config.config, "STACKY_GITLAB_ENABLED", True)` (instancia, nunca el módulo), stub de `resolve_project_context` que devuelve `tracker_type="gitlab"`, y afirma `get_tracker_provider("DEMO").name == "gitlab"`. **Con el código actual este test es ROJO.**
@@ -203,12 +263,26 @@ Capa 3 — REGISTRO DE CAPACIDADES + DEGRADACIÓN DECLARADA   ← LO QUE FALTA, 
 - `test_gitlab_variables_provider_construye` — idem `GitLabVariablesProvider`.
 - `test_gitlab_variables_list_usa_firma_real` — con un doble de `GitLabClient` que **valida la firma real** (`_request_paginated(path, *, params, page_cap)`), `list_variables()` no levanta `TypeError`.
 - `test_gitlab_variables_set_usa_json_body` — el doble afirma que se recibió `json_body=` y no `json=`.
-- `test_centinela_no_getattr_sobre_modulo_config` — **centinela AST/regex sobre todo `backend/services/*.py` y `backend/api/*.py`**: cero coincidencias de `getattr(config,` y de `getattr(_config,` (debe ser `getattr(config.config,` o `getattr(_config.config,`), con una allowlist literal vacía. Este control es el que impide que D1/D2 vuelvan.
+- ~~`test_centinela_no_getattr_sobre_modulo_config`~~ — **ELIMINADO en v2 (C1): era incorrecto y su "fix" habría roto el motor de flags.** Lo reemplazan los 5 tests siguientes, sobre `flag_binding_audit`:
+- `test_audit_no_marca_binding_de_instancia` — un módulo sintético (escrito en `tmp_path`) con `from config import config` + `getattr(config, "STACKY_X", False)` produce **cero** violaciones. **Este test es el que impide que el centinela vuelva a ser destructivo.**
+- `test_audit_marca_binding_de_modulo` — un módulo sintético con `import config` + `getattr(config, "STACKY_X", False)` produce **una** violación, con `file`/`line`/`attr` correctos.
+- `test_audit_marca_acceso_directo` — `import config` + `if config.STACKY_X:` también se reporta (cobertura que el regex del v1 no tenía).
+- `test_audit_no_marca_config_config` — `import config` + `getattr(config.config, "STACKY_X", False)` produce **cero** violaciones.
+- `test_audit_del_repo_real_esta_en_cero_para_los_5_sitios_conocidos` — tras aplicar los fixes 1-6 de esta fase, `scan()` **no reporta** ningún sitio en `services/tracker_provider.py` ni en `services/gitlab_provider.py`. El resto del repo se congela en `backend/tests/flag_binding_baseline.json` (generado, ver criterio) con la regla `violation_count <= baseline` — ratchet, **no** exigencia de cero global.
 
 **Comando exacto:**
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_gitlab_reachable.py" -q`
 
-**Criterio de aceptación (binario):** el comando anterior verde con 9 tests; además, desde `Stacky Agents/backend`, `& ".venv\Scripts\python.exe" -c "import config, services.tracker_provider as tp; print(hasattr(config,'STACKY_GITLAB_ENABLED'))"` imprime `False` (la causa sigue documentada) y `grep -rn "getattr(config, \"STACKY" "Stacky Agents/backend/services" "Stacky Agents/backend/api"` devuelve **0 líneas**.
+**Generar el baseline del audit (una sola vez, ANTES de correr el ratchet):**
+`cd "Stacky Agents/backend"; & ".venv\Scripts\python.exe" -c "import json,sys; sys.path.insert(0,'.'); from services.flag_binding_audit import scan; s=scan(); json.dump({'violation_count': s['violation_count']}, open('tests/flag_binding_baseline.json','w'), indent=2)"`
+Y **dejar el reporte completo en el mensaje del commit** (`render_report`), para que quede la evidencia de qué flags muertas existen fuera del alcance de este plan.
+
+**Criterio de aceptación (binario):** el comando de pytest verde con **13 tests** (8 de defectos + 5 del audit); `hasattr(config,'STACKY_GITLAB_ENABLED')` sigue siendo `False` (la causa raíz sigue documentada, no parcheada); y **cero violaciones del audit en los 2 archivos del seam**:
+`cd "Stacky Agents/backend"; & ".venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'.'); from services.flag_binding_audit import scan; v=[x for x in scan()['violations'] if 'tracker_provider' in x['file'] or 'gitlab_provider' in x['file']]; print(len(v)); sys.exit(0 if not v else 1)"` imprime `0` y sale con código 0.
+
+**Huella de regresión (v2, C14 — convención de la casa):** esta fase mata 2 clases de error, así que registra sus huellas en `Stacky Agents/docs/sistema/error_fingerprints.json` (una entrada por clase, no una por defecto):
+- `flag-leida-del-modulo-config` — patrón: módulo con `import config` que lee un atributo `STACKY_*`/`GITLAB_*` del nombre pelado ⇒ rama muerta silenciosa. `plan: 218 F0`, `guard_test: tests/test_plan218_gitlab_reachable.py::test_audit_marca_binding_de_modulo`, fecha `2026-07-25`.
+- `kwarg-inexistente-en-constructor-de-provider` — patrón: construir un provider con un kwarg que su `__init__` no declara (D3/D4) ⇒ `TypeError` en el primer uso real, invisible si el test mockea el provider. `plan: 218 F0`, `guard_test: tests/test_plan218_gitlab_reachable.py::test_gitlab_ci_provider_construye`.
 
 **Flag:** ninguna flag nueva. El kill-switch es la ya existente `STACKY_GITLAB_ENABLED` (default **OFF**, **excepción dura 3 — prerequisito no garantizado en instalación default**: exige instancia GitLab + token). Gatear una corrección de defecto detrás de una flag nueva conservaría el defecto; el rollback correcto es apagar GitLab entero, que ya es el default.
 
@@ -241,48 +315,62 @@ ADAPTER_ALLOWLIST: frozenset[str] = frozenset({
     "services/ci_variables.py", "services/project_context.py",
 })
 
+# v2 (C5): archivos NEUTRALES del sustrato 218 que nombran a los DOS proveedores por
+# definición (son el registro, no un acoplamiento). Sin esto, implementar F2 después de
+# F1 rompe el ratchet de literales: CAPABILITY_MATRIX tiene "azure_devops" como CLAVE.
+NEUTRAL_REGISTRY_ALLOWLIST: frozenset[str] = frozenset({
+    "services/provider_capabilities.py",   # F2 — la matriz
+    "services/provider_coupling_audit.py", # F1 — este mismo censo
+    "services/flag_binding_audit.py",      # F0 — el audit de binding
+    "services/tracker_vocabulary.py",      # F5 — vocabulario canónico
+    "services/parity_rollout.py",          # F8 — evaluación de capacidades
+    "api/parity.py",                       # F8 — endpoint de solo lectura
+})
+
 def scan_backend_coupling() -> dict:
-    """Devuelve:
+    """Devuelve (v2: nombres con UNIDAD explícita, C8):
     {
-      "ado_importers": {"<ruta relativa>": <n ocurrencias>},   # no-test, fuera de services/ado_*
-      "ado_importers_count": int,
-      "tracker_literals": {"<ruta>": <n>},                     # literal "azure_devops"
-      "tracker_literals_count": int,
-      "ado_client_sites_in_tickets": int,                      # LÍNEAS con '_ado_client_for_ticket(' en api/tickets.py
-      "ado_routes": int,                                       # rutas con 'by-ado'|'publish-to-ado'|'/ado-'
+      "ado_importer_files": {"<ruta relativa>": <n ocurrencias en ese archivo>},
+      "ado_importer_file_count": int,        # nº de ARCHIVOS (baseline 36)
+      "ado_importer_occurrences": int,       # suma de ocurrencias (baseline 64)
+      "tracker_literal_files": {"<ruta>": <n>},   # literal "azure_devops"
+      "tracker_literal_file_count": int,     # nº de ARCHIVOS
+      "tracker_literal_occurrences": int,    # nº de LÍNEAS con el literal (baseline 82)
+      "ado_client_lines_in_tickets": int,    # LÍNEAS con '_ado_client_for_ticket(' en api/tickets.py
+      "ado_route_count": int,                # rutas con 'by-ado'|'publish-to-ado'|'/ado-'
     }
-    Excluye: backend/tests/**, backend/.venv/**, backend/venv/**, backend/services/ado_*.py.
+    Excluye: backend/tests/**, backend/.venv/**, backend/venv/**, backend/services/ado_*.py,
+    y —solo para `tracker_literal_*`— los archivos de NEUTRAL_REGISTRY_ALLOWLIST.
     Ordena las claves alfabéticamente (salida determinista)."""
 
 def render_report_markdown(scan: dict) -> str:
     """Tabla Markdown del censo. PURA."""
 ```
 
-2. `backend/tests/provider_coupling_baseline.json` — línea base congelada, generada por el implementador con el censo real del día. Valores medidos hoy 2026-07-25 (deben coincidir salvo drift del árbol):
-```json
-{
-  "ado_importers_count": 36,
-  "tracker_literals_count": 85,
-  "ado_client_sites_in_tickets": 20,
-  "ado_routes": 19
-}
+2. `backend/tests/provider_coupling_baseline.json` — línea base congelada. **v2 (C8): se GENERA, no se transcribe** — los números del v1 ya estaban desactualizados (decía 85 literales; medido 2026-07-25: **82**). Comando de generación, a correr **una sola vez** antes de escribir el ratchet:
 ```
+cd "Stacky Agents/backend"; & ".venv\Scripts\python.exe" -c "import json,sys; sys.path.insert(0,'.'); from services.provider_coupling_audit import scan_backend_coupling as s; d=s(); json.dump({k:v for k,v in d.items() if isinstance(v,int)}, open('tests/provider_coupling_baseline.json','w'), indent=2, sort_keys=True)"
+```
+Valores esperados al 2026-07-25 (referencia, **no** para hardcodear): `ado_importer_file_count` 36, `ado_importer_occurrences` 64, `tracker_literal_occurrences` 82, `ado_client_lines_in_tickets` 20, `ado_route_count` 19. Si el generado difiere en más de ±10 %, el implementador **para** y reporta: significa que el árbol cambió y el relevamiento de §2 necesita re-medirse.
 
 **Tests PRIMERO — `backend/tests/test_plan218_coupling_ratchet.py`:**
 - `test_scan_es_determinista` — dos llamadas consecutivas devuelven el mismo dict.
 - `test_scan_excluye_tests_y_venv` — ninguna clave contiene `tests/`, `.venv/`, `venv/`.
 - `test_scan_excluye_familia_ado` — ninguna clave empieza con `services/ado_`.
-- `test_ratchet_importers_no_crece` — `scan["ado_importers_count"] <= baseline["ado_importers_count"]`, con mensaje que lista los archivos nuevos.
-- `test_ratchet_literales_no_crece` — idem para `tracker_literals_count`.
-- `test_ratchet_sitios_adoclient_no_crece` — idem para `ado_client_sites_in_tickets`.
-- `test_ratchet_rutas_ado_no_crece` — idem para `ado_routes`.
+- `test_ratchet_importers_no_crece` — `scan["ado_importer_file_count"] <= baseline[...]`, con mensaje que lista los archivos nuevos.
+- `test_ratchet_literales_no_crece` — idem para `tracker_literal_occurrences`.
+- `test_ratchet_sitios_adoclient_no_crece` — idem para `ado_client_lines_in_tickets`.
+- `test_ratchet_rutas_ado_no_crece` — idem para `ado_route_count`.
 - `test_allowlist_de_adaptadores_es_exacta` — cada ruta de `ADAPTER_ALLOWLIST` existe en disco (no hay entradas fantasma).
-- `test_reporte_markdown_tiene_todas_las_secciones` — `render_report_markdown` incluye las 4 métricas.
+- `test_allowlist_neutral_no_se_usa_para_esconder_acoplamiento` — **v2 (C5):** cada ruta de `NEUTRAL_REGISTRY_ALLOWLIST` (a) existe en disco **o** todavía no fue creada por su fase, y (b) **no** importa `services.ado_*` — la exención vale solo para el literal, nunca para el import. Un archivo "neutral" que importa el cliente de ADO deja el test ROJO.
+- `test_reporte_markdown_tiene_todas_las_secciones` — `render_report_markdown` incluye las 5 métricas enteras.
 
 **Comando exacto:**
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_coupling_ratchet.py" -q`
 
-**Criterio de aceptación (binario):** comando verde con 9 tests; y agregar a mano un `from services.ado_client import AdoClient` en cualquier archivo no-allowlisteado hace **rojo** `test_ratchet_importers_no_crece` (verificación manual del implementador, documentada en el commit).
+**Criterio de aceptación (binario):** comando verde con **10 tests**; el baseline existe y fue **generado** por el comando de arriba (no transcrito); y agregar a mano un `from services.ado_client import AdoClient` en cualquier archivo no-allowlisteado hace **rojo** `test_ratchet_importers_no_crece` (verificación manual del implementador, documentada en el commit y **revertida** antes de commitear).
+
+**Orden dentro de la serie (v2, C5):** F1 congela el baseline **antes** de que F2/F4/F5/F8 creen sus archivos. Cada una de esas fases, al crear un archivo que nombra a los dos proveedores, **debe** agregarlo a `NEUTRAL_REGISTRY_ALLOWLIST` en el mismo commit. Si una fase omite ese paso, `test_ratchet_literales_no_crece` queda rojo — que es el comportamiento deseado (fuerza la decisión explícita: ¿es registro neutral o es acoplamiento nuevo?).
 
 **Flag:** ninguna — es un módulo puro + tests, sin superficie de runtime (no se importa desde `app.py` ni desde ningún blueprint). No hay comportamiento que apagar.
 
@@ -318,6 +406,9 @@ CAPABILITY_KEYS: tuple[str, ...] = (
     "tracker.updates.history", "tracker.sync.full", "tracker.sync.incremental",
     "tracker.epics.list", "tracker.epics.create_native",
     "tracker.iterations.list", "tracker.milestones.list", "tracker.labels.ensure",
+    # transporte del tracker (v2, C3): transversales, no métodos del puerto, pero
+    # sí comportamiento que el contrato de F3 exige y que hoy divergen entre proveedores.
+    "tracker.rate_limit.clamp", "tracker.auth.html_redirect",
     # repo
     "repo.file.read", "repo.file.commit", "repo.branch.list", "repo.branch.create",
     "repo.commit.list", "repo.tag.create",
@@ -356,7 +447,26 @@ def render_markdown_matrix() -> str:
     """Documento de paridad completo. PURA y DETERMINISTA (orden = CAPABILITY_KEYS)."""
 ```
 
-2. `docs/_roadmap/PARIDAD_ADO_GITLAB.md` — **generado** por `render_markdown_matrix()`, nunca editado a mano.
+2. `docs/_roadmap/PARIDAD_ADO_GITLAB.md` — **generado** por `render_markdown_matrix()`, nunca editado a mano. **v2 (C16):** escribirlo con `newline="\n"` explícito y comparar **normalizando** los saltos de línea (`content.replace("\r\n", "\n")`), porque en Windows `core.autocrlf` puede reescribir el archivo al checkout y una comparación byte-a-byte cruda quedaría intermitentemente roja.
+
+3. **`backend/services/tracker_provider.py` — agregar `CapabilityUnavailable` en esta fase (v2, C4: el v1 la creaba en F6, pero F3 la necesita y F3 corre antes).** Es una clase de error pura, sin dependencias, ~12 líneas:
+```python
+class CapabilityUnavailable(TrackerError):
+    """La capacidad no existe (o es parcial) en el proveedor activo. NO es un bug."""
+    def __init__(self, capability: str, provider: str, *, reason: str, workaround: str = ""):
+        super().__init__(f"'{capability}' no disponible en {provider}: {reason}")
+        self.capability = capability
+        self.provider = provider
+        self.reason = reason
+        self.workaround = workaround
+    def to_payload(self) -> dict:
+        return {"available": False, "capability": self.capability,
+                "provider": self.provider, "reason": self.reason,
+                "workaround": self.workaround}
+```
+F6 conserva **solo** la traducción HTTP (`api/errors.py`) y el cambio del call-site de sync. Definir la clase acá no cambia ningún comportamiento (nadie la levanta todavía), así que no necesita flag.
+
+4. **`backend/services/harness_flags.py`** — crear la categoría `paridad_proveedores` (2 sitios: tupla de `CategorySpec` y `_CATEGORY_KEYS`) según la receta de 7 pasos de §4. Las 4 flags del plan se registran ahí.
 
 **Valores iniciales verificados** (el implementador los carga tal cual; §6 tiene la tabla completa): `mr.approve` → ADO `absent` (`ado_provider.py:476` no lo define), GitLab `full` (`gitlab_provider.py:777`). `mr.diff` → ADO `partial`, `loss="diff_available=False; el operador abre la PR en el navegador"` (`ado_provider.py:455-457`), GitLab `full` (`gitlab_provider.py:733`). `tracker.sync.full` → ADO `full` (`ado_sync.py:102`), GitLab `absent` (`api/tickets.py:692`). `ci.pipeline.definition.ensure` → ADO `full` (`ado_pipeline_definitions.py:125`), GitLab `n/a` (GitLab no tiene objeto "definition": commitea `.gitlab-ci.yml`, `gitlab_provider.py:590`). `ci.variables.masked` → ADO `absent` (`ado_variables.py:44` lo declara), GitLab `full`. `tracker.epics.create_native` → ADO `full`, GitLab `partial` (requiere licencia Premium; fallback issue-links en `gitlab_provider.py:102-128`).
 
@@ -367,15 +477,21 @@ def render_markdown_matrix() -> str:
 - `test_full_y_partial_exigen_evidencia` — si `status` ∈ {`full`,`partial`}, `evidence` matchea `^[\w/\.]+\.py:\d+$`.
 - `test_supports_es_consistente` — `supports()` es `True` exactamente para `full`/`partial`.
 - `test_render_es_determinista` — dos renders idénticos byte a byte.
-- `test_doc_de_paridad_esta_sincronizado` — `docs/_roadmap/PARIDAD_ADO_GITLAB.md` es **exactamente** `render_markdown_matrix()`. **Este test es el que impide que la matriz se pudra.**
+- `test_doc_de_paridad_esta_sincronizado` — `docs/_roadmap/PARIDAD_ADO_GITLAB.md`, **normalizado a `\n`**, es exactamente `render_markdown_matrix()` normalizado. **Este test es el que impide que la matriz se pudra.**
 - `test_claves_congeladas_no_se_renombran` — hash SHA-256 de `"\n".join(CAPABILITY_KEYS)` igual a la constante congelada `_KEYS_SHA` del propio test (renombrar una clave rompe a propósito).
+- **`test_matriz_no_miente_estructuralmente`** — **[ADICIÓN ARQUITECTO 2, parte a]** detector de mentiras de la matriz en el eje **estructural** (el conductual lo cubre F3): para cada capacidad del dominio `tracker.*` que la matriz marca `full`/`partial`, el método correspondiente del puerto **existe y es callable** en ese adaptador; y para cada una marcada `absent`, **no existe** o `supports()` es `False`. El mapa capacidad→método vive en una constante `_CAPABILITY_TO_PORT_METHOD` del propio módulo, y un test verifica que todo valor de ese mapa esté en `PORT_METHODS` (`tracker_provider.py:56-98`). **Por qué importa:** sin esto la matriz se puede podrir en el sentido contrario al que cubre F3 — un subplan implementa `mr.approve` en ADO y nadie actualiza la matriz, así que la UI sigue ocultando una acción que ya funciona. Barato (puro `hasattr`, sin red) y cierra el lazo en los dos sentidos.
+- `test_capability_unavailable_existe_y_es_subclase` — `issubclass(CapabilityUnavailable, TrackerError)` y `to_payload()` trae las 5 claves (movido desde F6, C4).
 
 **Comando exacto:**
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_capability_matrix.py" -q`
+Y, por la categoría nueva de flags: `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags.py" -q`
 
-**Criterio de aceptación (binario):** comando verde con 8 tests; `docs/_roadmap/PARIDAD_ADO_GITLAB.md` existe y contiene exactamente `len(CAPABILITY_KEYS)` filas de datos (verificable con `grep -c "^| \`" "Stacky Agents/docs/_roadmap/PARIDAD_ADO_GITLAB.md"`).
+**Criterio de aceptación (binario):** ambos comandos verdes, el primero con **10 tests**; y el documento generado tiene una fila por capacidad — verificable **en PowerShell** (v2, C9: el criterio del v1 usaba un backtick dentro de comillas dobles, que en PowerShell es el carácter de escape y no parsea):
+```
+cd "Stacky Agents"; $m = (Select-String -Path "docs/_roadmap/PARIDAD_ADO_GITLAB.md" -Pattern '^\| `' | Measure-Object).Count; $k = & "backend/.venv/Scripts/python.exe" -c "import sys; sys.path.insert(0,'backend'); from services.provider_capabilities import CAPABILITY_KEYS; print(len(CAPABILITY_KEYS))"; if ([int]$m -eq [int]$k) { "OK $m" } else { "FALLA: $m filas vs $k claves" }
+```
 
-**Flag:** `STACKY_PROVIDER_PARITY_ENABLED` (bool, default **True**, categoría `integraciones`). Default ON porque es un registro puro leído en proceso: no agrega red, ni prerequisitos, ni reduce seguridad, ni bypasea revisión humana. Con OFF, `supports()` devuelve `True` para todo (comportamiento pre-plan, byte-idéntico).
+**Flag:** `STACKY_PROVIDER_PARITY_ENABLED` (bool, default **True**, categoría **`paridad_proveedores`** — v2, C6: `integraciones` no existe). Default ON porque es un registro puro leído en proceso: no agrega red, ni prerequisitos, ni reduce seguridad, ni bypasea revisión humana. Con OFF, `supports()` devuelve `True` para todo (comportamiento pre-plan, byte-idéntico).
 
 **Impacto por runtime:** Codex / Claude Code / Copilot **idéntico** — módulo puro consultado por el backend antes de cualquier runtime. Fallback de los tres: flag OFF ⇒ nadie consulta la matriz y todo se comporta como hoy.
 
@@ -401,20 +517,72 @@ class FakeHttp:
     def calls(self) -> list[dict]:
         """[{'method','url','headers','body'}] — permite asertar la forma real del request."""
 def install_for_ado(monkeypatch, fake: FakeHttp) -> None:
-    """Parchea SOLO urllib.request.urlopen usado por services/ado_client.py:271,537."""
+    """Parchea el ATRIBUTO urllib.request.urlopen (no un call-site).
+    v2 (C13): el v1 decía 'ado_client.py:271,537'; los sitios reales son 4
+    —273, 499, 539, 717— y enumerarlos es frágil. Parchear el atributo del
+    módulo cubre los 4 y sobrevive a cualquier renumeración."""
 def install_for_gitlab(monkeypatch, fake: FakeHttp) -> None:
-    """Parchea SOLO requests.request usado por services/gitlab_client.py:135."""
+    """Parchea el ATRIBUTO requests.request (usado en gitlab_client.py:135)."""
 ```
 3. `backend/tests/contract/provider_contract.py`
 ```python
 def run_tracker_contract(make_provider, provider_name: str, fake: FakeHttp) -> list[str]:
     """Ejecuta el contrato conductual del puerto contra un provider REAL.
     Devuelve la lista de capacidades verificadas (claves de CAPABILITY_KEYS).
-    Para cada capacidad con status 'full' o 'partial' en la matriz, ejecuta su
-    escenario; si la matriz dice 'absent'/'n/a', afirma que se levanta
-    CapabilityUnavailable (F6) y NO un error genérico."""
+
+    v2 (C4) — reglas por status, corregidas:
+      * 'full'    → ejecuta su escenario y EXIGE el comportamiento neutral.
+      * 'partial' → ejecuta su escenario; si la capacidad está en KNOWN_GAPS,
+                    el escenario corre bajo xfail(strict=True) (ver known_gaps.py).
+      * 'absent'  → afirma que la capacidad NO está disponible por la vía
+                    consultiva: `supports(provider, cap) is False` y, si la
+                    capacidad mapea a un método del puerto, `not hasattr(provider, m)`
+                    o que el método declare su indisponibilidad.
+                    NO se afirma que se levante CapabilityUnavailable: NINGÚN
+                    adaptador la levanta (p.ej. `mr.approve` ausente en ADO es
+                    simplemente un método que no existe, detectado hoy por
+                    `hasattr` en api/pr_review.py:368). Exigirlo, como hacía el
+                    v1, era pedir un cambio en los 2 adaptadores que el plan
+                    nunca especificó.
+      * 'n/a'     → se saltea con `pytest.skip` y motivo (no es un gap: el
+                    proveedor no tiene ese concepto).
+    """
 ```
-4. `backend/tests/fixtures/provider_contract/azure_devops/*.json` y `backend/tests/fixtures/provider_contract/gitlab/*.json` — respuestas grabadas, **anonimizadas** (sin emails, sin tokens, sin nombres reales).
+4. **`backend/tests/contract/known_gaps.py`** — **[ADICIÓN ARQUITECTO 2, parte b] — el ratchet inverso de paridad.** Registro congelado de los gaps conductuales conocidos, con dueño. Resuelve C3: sin esto, F3 es **imposible de poner en verde**, porque ≥6 de sus escenarios describen comportamiento que GitLab hoy NO cumple y cuyo arreglo pertenece a subplanes posteriores.
+```python
+"""Gaps conductuales conocidos del contrato. CONGELADO por el Plan 218 (§3.1).
+Cada entrada es una PROMESA con dueño: el subplan que la cierra la BORRA de acá."""
+KNOWN_GAPS: dict[tuple[str, str], dict] = {
+    # (provider, capability): {"owner_plan": int, "reason": str, "evidence": "archivo:línea"}
+    ("gitlab", "tracker.items.url"): {
+        "owner_plan": 232, "reason": "item_url devuelve None con deep links OFF, violando '-> str'",
+        "evidence": "services/gitlab_provider.py:174"},
+    ("gitlab", "tracker.comments.list_all"): {
+        "owner_plan": 222, "reason": "fetch_all_comments es idéntico a fetch_comments y no acepta marker",
+        "evidence": "services/gitlab_provider.py:291"},
+    ("gitlab", "tracker.states.list"): {
+        "owner_plan": 224, "reason": "devuelve 4 claves lógicas hardcodeadas, no estados reales",
+        "evidence": "services/gitlab_provider.py:82"},
+    ("gitlab", "tracker.hierarchy.find_child"): {
+        "owner_plan": 224, "reason": "devuelve el padre como proxy del hijo",
+        "evidence": "services/gitlab_provider.py:403"},
+    ("gitlab", "tracker.items.update_assignee"): {
+        "owner_plan": 223, "reason": "silencia el usuario inexistente y BORRA el asignado",
+        "evidence": "services/gitlab_provider.py:368"},
+    ("gitlab", "tracker.rate_limit.clamp"): {
+        "owner_plan": 231, "reason": "no clampea Retry-After hostil (ADO clampea a 30 s)",
+        "evidence": "services/gitlab_client.py:146"},
+    ("gitlab", "tracker.auth.html_redirect"): {
+        "owner_plan": 231, "reason": "devuelve texto crudo ante HTML de login en vez de error de auth",
+        "evidence": "services/gitlab_client.py:164"},
+}
+```
+**Cómo funciona el ratchet inverso:** cada escenario cuyo `(provider, capability)` está en `KNOWN_GAPS` corre con `pytest.mark.xfail(strict=True, reason=...)`. Consecuencias, las dos deseadas:
+- Si el gap **sigue** roto → `xfail` → la suite queda **verde** y F3 es implementable hoy.
+- Si un subplan lo **arregla** → `XPASS` → con `strict=True` eso es **FALLO**, y el único modo de volver al verde es **borrar la entrada de `KNOWN_GAPS`**. Es decir: es imposible arreglar un gap sin actualizar el registro, e imposible dejar el registro mintiendo.
+Las dos claves `tracker.rate_limit.clamp` y `tracker.auth.html_redirect` son **transversales del transporte**, no del puerto: se agregan a `CAPABILITY_KEYS` en F2 con status `partial` para GitLab y `full` para ADO (así el registro las cubre y F7 les exige dueño).
+
+5. `backend/tests/fixtures/provider_contract/azure_devops/*.json` y `backend/tests/fixtures/provider_contract/gitlab/*.json` — respuestas grabadas, **anonimizadas** (sin emails, sin tokens, sin nombres reales).
 
 **Escenarios conductuales mínimos del contrato (idénticos para los dos proveedores):**
 
@@ -432,9 +600,13 @@ def run_tracker_contract(make_provider, provider_name: str, fake: FakeHttp) -> l
 | Rate limit 429 con `Retry-After: 2` | Reintenta y devuelve 200. Con `Retry-After: 99999`, **no** bloquea el hilo (ADO lo clampea a 30 s en `ado_client.py:49`; **GitLab hoy no clampea**, `gitlab_client.py:146-147`). |
 | Respuesta no-JSON (HTML de login) | Ambos levantan error tipado de auth. **Hoy divergen**: ADO detecta el redirect HTML (`ado_client.py:88,277-285`), GitLab devuelve texto crudo (`gitlab_client.py:164-175`). |
 
+> **Lectura obligatoria de la tabla (v2, C3).** Las 7 filas marcadas "**Hoy GitLab falla / divergen**" describen comportamiento que **hoy no se cumple** y cuyo arreglo pertenece a los subplanes 222/223/224/231/232, **no a F3**. En el v1 esto hacía que el criterio "ambos comandos verdes" fuese **inalcanzable**. En v2 cada una de esas filas corre bajo `xfail(strict=True)` con su entrada en `KNOWN_GAPS`, de modo que F3 cierra en verde **sin ocultar un solo gap** y sin que ningún subplan pueda arreglarlos en silencio.
+
 **Tests PRIMERO — `backend/tests/test_plan218_tracker_contract.py`:**
 - `@pytest.mark.parametrize("provider_name", ["azure_devops", "gitlab"])` sobre `test_contrato_del_puerto_tracker` — corre `run_tracker_contract` y afirma que devolvió ≥ 1 capacidad verificada.
-- `test_contrato_cubre_toda_capacidad_full_o_partial` — para cada proveedor, el conjunto de capacidades ejercitadas ⊇ las marcadas `full`/`partial` en `CAPABILITY_MATRIX`. **Este test hace imposible marcar `full` sin probarlo.**
+- `test_contrato_cubre_toda_capacidad_full_o_partial` — **v2 (C3): acotado al dominio `tracker.*`** (el puerto que F3 ejercita). Para cada proveedor, las capacidades `tracker.*` ejercitadas ⊇ las marcadas `full`/`partial` en `CAPABILITY_MATRIX`. Los dominios `repo.*`, `mr.*`, `ci.*`, `identity.*`, `events.*`, `links.*` **no** se exigen acá: sus puertos los ejercitan los subplanes 226/227/228/223/229/232, cada uno extendiendo esta misma suite. Un `_DOMINIOS_CUBIERTOS: frozenset = {"tracker"}` en el archivo de test declara el alcance, y **cada subplan que cierra un puerto agrega su dominio a ese set en el mismo commit** — así el alcance crece de forma explícita y auditable en vez de ser una promesa global imposible. *Motivo del cambio:* §6 marca ~40 capacidades `full`/`partial` en dominios cuyos escenarios F3 nunca especificó; el test global habría quedado rojo con los 11 escenarios que F3 sí define.
+- `test_known_gaps_bien_formado` — cada clave de `KNOWN_GAPS` es una tupla `(provider, capability)` con `provider ∈ {"azure_devops","gitlab"}` y `capability ∈ CAPABILITY_KEYS`; cada valor trae `owner_plan ∈ 219..236`, `reason` de ≥ 20 caracteres y `evidence` que matchea `^[\w/\.]+\.py:\d+$`.
+- *(El cruce `KNOWN_GAPS` ↔ catálogo de la serie vive en **F7**, no acá: `serie_paridad_218.json` se crea en F7, que corre después. Poner ese test en F3 repetiría la inversión de dependencia del C4.)*
 - `test_ningun_test_de_contrato_parchea_config_ni_provider` — centinela textual sobre `backend/tests/contract/**` y sobre `test_plan218_tracker_contract.py`: cero coincidencias de `patch("services.gitlab_provider.config`, `patch("config`, `MagicMock(spec=GitLabTrackerProvider`, `patch(...GitLabTrackerProvider`. Codifica P4.
 - `test_fixtures_sin_pii` — ningún fixture contiene `@` seguido de dominio, ni `PRIVATE-TOKEN`, ni cadenas de ≥ 20 caracteres alfanuméricos que parezcan token (mismo patrón que el Plan 217 §15).
 - `test_conformance_legacy_deja_de_mentir` — afirma que `tests/test_tracker_provider_conformance.py` ya **no** contiene la cadena `"no que esté hardcoded NotImplementedError"` (obliga a corregir el test mentiroso en esta misma fase).
@@ -445,7 +617,8 @@ def run_tracker_contract(make_provider, provider_name: str, fake: FakeHttp) -> l
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_tracker_contract.py" -q`
 y luego `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_tracker_provider_conformance.py" -q`
 
-**Criterio de aceptación (binario):** ambos comandos verdes; `grep -c "no que esté hardcoded" "Stacky Agents/backend/tests/test_tracker_provider_conformance.py"` devuelve **0**; y el parametrize corre exactamente 2 veces (un proveedor cada vez), verificable con `-v`.
+**Criterio de aceptación (binario):** ambos comandos verdes (los `xfail` de `KNOWN_GAPS` cuentan como verde; un `XPASS` es **fallo** por `strict=True`); el parametrize corre exactamente 2 veces (un proveedor cada vez), verificable con `-v`; y la cadena engañosa desapareció — **en PowerShell** (v2, C9):
+`(Select-String -Path "Stacky Agents/backend/tests/test_tracker_provider_conformance.py" -Pattern "no que esté hardcoded" | Measure-Object).Count` → **0**.
 
 **Flag:** ninguna — son tests. No hay superficie de runtime.
 
@@ -552,9 +725,11 @@ def __init__(self, project=None, *, base_url=None, group=None, auth_path=None):
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_tracker_target.py" -q`
 Regresión obligatoria en la misma fase: `... -m pytest "Stacky Agents/backend/tests/test_ado_client_stacky_name_resolution.py" -q` y `... "Stacky Agents/backend/tests/test_tracker_factory.py" -q`.
 
-**Criterio de aceptación (binario):** los 3 comandos verdes; `Test-Path "Stacky Agents/backend/services/client_profile_defaults/gitlab.json"` devuelve `True`; `grep -c "gitlab" "Stacky Agents/backend/services/project_context.py"` ≥ 1.
+**Criterio de aceptación (binario):** los 3 comandos verdes; `Test-Path "Stacky Agents/backend/services/client_profile_defaults/gitlab.json"` devuelve `True`; y `(Select-String -Path "Stacky Agents/backend/services/project_context.py" -Pattern "gitlab" | Measure-Object).Count` ≥ 1.
 
-**Flag:** `STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED` (bool, default **True**, categoría `integraciones`). Default ON: es corrección de resolución interna, no agrega prerequisitos (si el proyecto no declara nada, cae a la config global de hoy), no bypasea revisión humana, no es destructiva, no reduce seguridad. OFF ⇒ ruta legacy byte-idéntica.
+> **Verificado en la crítica v2:** las claves de primer nivel de `client_profile_defaults/azure_devops.json` son exactamente `schema_version, code_layout, language, database, build, conventions, docs_indexes, tracker_state_machine, terminology, extensions` — así que `tracker_state_machine` **sí** existe y el `gitlab.json` nuevo debe traer esas 10 claves. Y en `_auth_path_for` (`project_context.py:88-103`) se confirmó que hay rama `jira` (`:93`) y `mantis` (`:95`) y **no** `gitlab`: el `else` manda todo proyecto GitLab a `auth/ado_auth.json`.
+
+**Flag:** `STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED` (bool, default **True**, categoría **`paridad_proveedores`** — v2, C6). Default ON: es corrección de resolución interna, no agrega prerequisitos (si el proyecto no declara nada, cae a la config global de hoy), no bypasea revisión humana, no es destructiva, no reduce seguridad. OFF ⇒ ruta legacy byte-idéntica.
 
 **Impacto por runtime:** Codex / Claude Code / Copilot **idéntico** — los 3 obtienen su provider por la misma fábrica (`claude_code_cli_runner.py:146`, `codex_cli_runner.py:125`, y el resto del backend para Copilot). Fallback de los tres: flag OFF.
 
@@ -592,6 +767,11 @@ def to_canonical(payload: dict) -> dict:
 
 2. `backend/models.py` — `Ticket.to_dict()` (`:80-98`) pasa a devolver `with_legacy_aliases({...canónico...})`. **Ninguna columna se renombra** en esta serie: `ado_id` (`:42`), `ado_state` (`:52`), `ado_url` (`:53`), `parent_ado_id` (`:56`), `assigned_to_ado` (`:64`) quedan intactas. Solo cambia el payload emitido, que pasa a ser un superconjunto del actual.
 
+> **Corrección de la crítica v2 (C7) — el payload de HOY, leído del código, no de la memoria.** `Ticket.to_dict()` emite **16** claves (el v1 decía 14) y **ya emite 2 canónicas**: `external_id` y `tracker_type`. Lista literal verificada en `models.py:80-98`, en orden: `id`, `ado_id`, `external_id`, `project`, `stacky_project_name`, `tracker_type`, `title`, `description`, `ado_state`, `ado_url`, `priority`, `work_item_type`, `parent_ado_id`, `last_synced_at`, `stacky_status`, `assigned_to_ado`. Consecuencias para esta fase:
+> - El test de no-regresión afirma la presencia de esas **16**, no de 14 (con 14 el test queda rojo o, peor, pasa dejando 2 claves sin cubrir).
+> - Las claves canónicas que esta fase **agrega** son **5**: `tracker_state`, `item_url`, `parent_external_id`, `assignee`, `item_type`. `external_id` y `tracker_type` ya están; `title`, `description` y `priority` ya son canónicas y **no** llevan alias.
+> - `CANONICAL_FIELDS` incluye `tracker_project`, que **no tiene correlato** en `to_dict()` (hoy hay `project` = proyecto del tracker y `stacky_project_name` = proyecto de Stacky, que son cosas distintas). Decisión congelada: `tracker_project` **mapea a `project`** y se agrega `LEGACY_ALIASES["tracker_project"] = "project"`; `stacky_project_name` **no es canónico** (es identidad interna de Stacky, no del tracker) y queda fuera de `CANONICAL_FIELDS`.
+
 3. `frontend/src/types.ts` — agregar a `interface Ticket` los campos canónicos como **opcionales** (`external_id?: number; tracker_state?: string; item_url?: string; parent_external_id?: number; assignee?: string; item_type?: string;`). No se toca ningún campo existente.
 
 4. `frontend/src/services/trackerVocabulary.ts` (nuevo, puro) — `pickExternalId(t)`, `pickState(t)`, `pickUrl(t)`, `pickItemType(t)`: leen el canónico y caen al legacy. Es la función que los subplanes de UI van adoptando gradualmente.
@@ -602,8 +782,9 @@ def to_canonical(payload: dict) -> dict:
   - `test_with_legacy_aliases_es_idempotente` — aplicarlo dos veces da lo mismo.
   - `test_to_canonical_acepta_legacy` — `to_canonical({"ado_id": 5})["external_id"] == 5`.
   - `test_to_canonical_prefiere_canonico` — con ambas claves presentes y distintas, gana la canónica.
-  - `test_ticket_to_dict_mantiene_todas_las_claves_legacy` — el `to_dict()` nuevo contiene las 14 claves que devolvía antes (lista literal en el test).
-  - `test_ticket_to_dict_agrega_canonicas` — contiene además las 6 canónicas.
+  - `test_ticket_to_dict_mantiene_las_16_claves_legacy` — el `to_dict()` nuevo contiene las **16** claves verificadas arriba (lista literal en el test, en ese orden).
+  - `test_ticket_to_dict_agrega_las_5_canonicas_nuevas` — contiene además `tracker_state`, `item_url`, `parent_external_id`, `assignee`, `item_type`.
+  - `test_tracker_project_mapea_a_project` — `to_canonical({"project": "X"})["tracker_project"] == "X"` y `stacky_project_name` **no** aparece en `CANONICAL_FIELDS`.
   - `test_flag_off_devuelve_payload_original` — con la flag en `False`, `to_dict()` devuelve exactamente el dict legacy.
 - `frontend/src/services/__tests__/trackerVocabulary.test.ts`:
   - `pickExternalId` prefiere `external_id`, cae a `ado_id`, devuelve `null` si no hay ninguno.
@@ -614,9 +795,10 @@ def to_canonical(payload: dict) -> dict:
 `cd "Stacky Agents/frontend"; npx vitest run src/services/__tests__/trackerVocabulary.test.ts`
 `cd "Stacky Agents/frontend"; npx tsc --noEmit`
 
-**Criterio de aceptación (binario):** los 3 comandos verdes; `grep -c "ado_id" "Stacky Agents/backend/models.py"` **no disminuye** respecto del valor previo (prueba de que no hubo renombre destructivo).
+**Criterio de aceptación (binario):** los 3 comandos verdes; y el conteo de `ado_id` en `models.py` **no disminuye** respecto del valor previo — prueba de que no hubo renombre destructivo. En PowerShell (v2, C9), medir **antes** y **después**:
+`(Select-String -Path "Stacky Agents/backend/models.py" -Pattern "ado_id" -AllMatches | Measure-Object).Count`
 
-**Flag:** `STACKY_CANONICAL_VOCABULARY_ENABLED` (bool, default **True**, categoría `integraciones`). Default ON: el cambio es puramente aditivo (agrega claves al JSON), por lo que no puede romper un consumidor existente. OFF ⇒ payload idéntico al de hoy.
+**Flag:** `STACKY_CANONICAL_VOCABULARY_ENABLED` (bool, default **True**, categoría **`paridad_proveedores`** — v2, C6). Default ON: el cambio es puramente aditivo (agrega claves al JSON), por lo que no puede romper un consumidor existente. OFF ⇒ payload idéntico al de hoy.
 
 **Impacto por runtime:** Codex / Claude Code / Copilot **idéntico** — los 3 reciben el contexto del ticket por la misma serialización (`Ticket.to_dict()` alimenta la inyección de contexto de los tres). Fallback de los tres: flag OFF ⇒ payload legacy.
 
@@ -632,23 +814,9 @@ def to_canonical(payload: dict) -> dict:
 
 **Archivos a editar/crear:**
 
-1. `backend/services/tracker_provider.py` — agregar al final de la sección de errores:
-```python
-class CapabilityUnavailable(TrackerError):
-    """La capacidad no existe (o es parcial) en el proveedor activo. NO es un bug."""
-    def __init__(self, capability: str, provider: str, *, reason: str, workaround: str = ""):
-        super().__init__(f"'{capability}' no disponible en {provider}: {reason}")
-        self.capability = capability
-        self.provider = provider
-        self.reason = reason
-        self.workaround = workaround
-    def to_payload(self) -> dict:
-        return {"available": False, "capability": self.capability,
-                "provider": self.provider, "reason": self.reason,
-                "workaround": self.workaround}
-```
+1. ~~Definir `CapabilityUnavailable`~~ — **movido a F2 en v2 (C4)**: F3 la necesita y corre antes. Esta fase la **consume**, no la crea.
 
-2. `backend/api/errors.py` — registrar el handler que traduce `CapabilityUnavailable` a **HTTP 200** con `to_payload()`, siguiendo el patrón ya establecido por el Plan 148 (`200 + available:false` en vez de 502).
+2. `backend/api/errors.py` — registrar el handler que traduce `CapabilityUnavailable` a **HTTP 200** con `to_payload()`, siguiendo el patrón ya establecido por el Plan 148 (`200 + available:false` en vez de 502). *(Verificado en la crítica v2: `backend/api/errors.py` existe; los `errorhandler` del app se registran desde `app.py`, así que el handler nuevo debe quedar alcanzado por la misma vía que usan los actuales — el implementador confirma leyendo `api/errors.py` completo antes de editar.)*
 
 3. `backend/api/tickets.py:677-695` — reemplazar el `NotImplementedError` por:
 ```diff
@@ -665,20 +833,22 @@ class CapabilityUnavailable(TrackerError):
 (F6 **no** implementa el sync de GitLab — eso es el subplan 220. F6 solo hace que el hueco sea visible y no rompa el proceso.)
 
 **Tests PRIMERO — `backend/tests/test_plan218_capability_unavailable.py`:**
-- `test_payload_tiene_las_5_claves` — `available`, `capability`, `provider`, `reason`, `workaround`.
-- `test_es_subclase_de_tracker_error` — `issubclass(CapabilityUnavailable, TrackerError)`.
-- `test_endpoint_de_sync_devuelve_200_con_available_false` — con un provider falso llamado `gitlab`, `POST /api/tickets/sync` responde **200** y `body["available"] is False` y `body["capability"] == "tracker.sync.full"`.
+- `test_endpoint_de_sync_devuelve_200_con_available_false` — con un provider falso llamado `gitlab`, `POST /api/tickets/sync` (ruta real: `@bp.post("/sync")`, `api/tickets.py:700`) responde **200** y `body["available"] is False` y `body["capability"] == "tracker.sync.full"`.
 - `test_endpoint_de_sync_ado_no_cambia` — con provider `azure_devops`, el endpoint se comporta exactamente igual que antes (regresión).
-- `test_no_quedan_notimplementederror_en_api` — centinela: `grep` de `NotImplementedError` en `backend/api/*.py` devuelve 0 (con allowlist literal vacía).
+- `test_no_quedan_RAISE_notimplementederror_en_api` — **v2 (C2): el centinela caza `raise\s+NotImplementedError`, NO la mención del símbolo.** Con allowlist vacía sobre `backend/api/*.py`. **Motivo del cambio:** el criterio del v1 (`grep "NotImplementedError"` = 0) exigía borrar **4 `except NotImplementedError` legítimos** — `api/agents.py:1952`, `api/ci.py:124`, `api/ci.py:223`, `api/pipeline_generator.py:86` —, es decir, degradar el manejo de errores de endpoints ajenos al plan (viola P11) para satisfacer un grep. Medición real 2026-07-25: `raise NotImplementedError` en `backend/api/` = **1** (solo `tickets.py:692`), menciones totales = 6. El objetivo correcto es **0 raises**, no 0 menciones.
+- `test_los_4_except_legitimos_siguen_en_pie` — afirma explícitamente que los 4 `except NotImplementedError` de arriba **siguen existiendo**. Es el guard que impide que un implementador celoso los borre "para poner el grep en cero".
 - `test_flag_off_restaura_excepcion_legacy` — con `STACKY_CAPABILITY_DEGRADATION_ENABLED=False`, vuelve el comportamiento anterior.
+*(`test_payload_tiene_las_5_claves` y `test_es_subclase_de_tracker_error` se movieron a F2 junto con la clase.)*
 
 **Comando exacto:**
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_capability_unavailable.py" -q`
 Regresión: `... -m pytest "Stacky Agents/backend/tests/test_plan70_group_sync.py" -q`
 
-**Criterio de aceptación (binario):** ambos comandos verdes; `grep -c "NotImplementedError" "Stacky Agents/backend/api/tickets.py"` devuelve **0**.
+**Criterio de aceptación (binario):** ambos comandos verdes; y en PowerShell (v2, C9 + C2):
+- `(Get-ChildItem "Stacky Agents/backend/api" -Filter *.py | Select-String -Pattern "raise\s+NotImplementedError" | Measure-Object).Count` → **0**
+- `(Get-ChildItem "Stacky Agents/backend/api" -Filter *.py | Select-String -Pattern "except NotImplementedError" | Measure-Object).Count` → **4** (sigue siendo 4: no se tocaron)
 
-**Flag:** `STACKY_CAPABILITY_DEGRADATION_ENABLED` (bool, default **True**, categoría `integraciones`). Default ON: convertir un 500 mudo en un 200 accionable **mejora** estabilidad y DX; no agrega prerequisitos ni reduce seguridad. OFF ⇒ excepción legacy.
+**Flag:** `STACKY_CAPABILITY_DEGRADATION_ENABLED` (bool, default **True**, categoría **`paridad_proveedores`** — v2, C6). Default ON: convertir un 500 mudo en un 200 accionable **mejora** estabilidad y DX; no agrega prerequisitos ni reduce seguridad. OFF ⇒ excepción legacy.
 
 **Impacto por runtime:** Codex / Claude Code / Copilot **idéntico** — la degradación ocurre en el backend, antes de invocar cualquier runtime; los 3 ven el mismo `available:false`. Fallback de los tres: flag OFF.
 
@@ -709,6 +879,32 @@ Regresión: `... -m pytest "Stacky Agents/backend/tests/test_plan70_group_sync.p
   ],
   "subplans": [
     {
+      "//": "v2 (C11): el ORQUESTADOR también declara sus archivos, o sus 12 archivos",
+      "//2": "quedan fuera del test de colisiones y un subplan puede reclamarlos.",
+      "number": 218,
+      "slug": "PARIDAD_TOTAL_ADO_GITLAB_ORQUESTADOR_SERIE_MULTIPROVEEDOR",
+      "title": "Sustrato multi-proveedor (F0..F8)",
+      "priority": "P0",
+      "milestone": "M0",
+      "depends_on": [],
+      "owns_files": [
+        "backend/services/flag_binding_audit.py",
+        "backend/services/provider_coupling_audit.py",
+        "backend/services/provider_capabilities.py",
+        "backend/services/tracker_vocabulary.py",
+        "backend/services/parity_series.py",
+        "backend/services/parity_rollout.py",
+        "backend/api/parity.py",
+        "backend/services/client_profile_defaults/gitlab.json",
+        "frontend/src/services/trackerVocabulary.ts",
+        "frontend/src/services/parityMatrixModel.ts",
+        "frontend/src/components/ParityMatrixPanel.tsx",
+        "frontend/src/pages/DiagnosticsPage.tsx"
+      ],
+      "capabilities": [],
+      "acceptance": "Ver §13 (DoD global del Plan 218)."
+    },
+    {
       "number": 219,
       "slug": "ONBOARDING_Y_CREDENCIALES_GITLAB_POR_PROYECTO",
       "title": "...",
@@ -725,12 +921,16 @@ Regresión: `... -m pytest "Stacky Agents/backend/tests/test_plan70_group_sync.p
 
 2. `backend/services/parity_series.py` (nuevo, puro) — `load_series() -> dict`, `validate_series(series) -> list[str]` (devuelve lista de violaciones), `topological_order(series) -> list[int]`.
 
+2b. `docs/_roadmap/estado_real_serie_gitlab.json` — **v2 (C12): el artefacto que de verdad resuelve §2.4.** El v1 prometía "F7 congela el estado real medido contra el código" pero ninguno de sus 8 tests lo hacía (`test_docs_existentes_coinciden` solo compara el **nombre** del archivo). Este JSON registra, por cada plan previo de la serie GitLab (65, 70, 71, 72, 73, 74, 75, 95), su estado **medido**: `{"plan": 70, "doc_dice": "PROPUESTO", "estado_real": "IMPLEMENTADO_PARCIAL", "evidencia": [{"file": "backend/api/tickets.py", "symbol": "_provider_for_ticket"}], "nota": "flag STACKY_TICKETS_PROVIDER_ENABLED en OFF ⇒ inactivo en producción"}`. Los `estado_real` válidos: `IMPLEMENTADO`, `IMPLEMENTADO_PARCIAL`, `IMPLEMENTADO_INALCANZABLE` (el código existe pero la fábrica nunca lo devuelve — caso 65/71/72/73/75/95 antes de F0), `NO_IMPLEMENTADO`.
+
 **Tests PRIMERO — `backend/tests/test_plan218_serie_integridad.py`:**
-- `test_numeros_unicos_y_consecutivos` — los `number` son únicos y forman el rango 219..236 sin huecos.
-- `test_toda_dependencia_existe` — cada valor de `depends_on` está en la serie o es 218.
+- `test_numeros_unicos_y_consecutivos` — los `number` son únicos y forman el rango **218**..236 sin huecos (v2, C11: incluye al orquestador).
+- `test_toda_dependencia_existe` — cada valor de `depends_on` está en la serie.
 - `test_sin_ciclos` — `topological_order` no levanta.
-- `test_sin_colision_de_propiedad` — **ningún archivo aparece en `owns_files` de dos subplanes**. Esta es la garantía ejecutable del "mapa de colisiones".
+- `test_sin_colision_de_propiedad` — **ningún archivo aparece en `owns_files` de dos entradas, incluida la 218**. Esta es la garantía ejecutable del "mapa de colisiones". *Motivo (C11): F8 edita `frontend/src/pages/DiagnosticsPage.tsx`, que ningún subplan reclamaba y que el 232 podía tomar sin conflicto detectado.*
 - `test_toda_capacidad_declarada_existe` — cada valor de `capabilities` ∈ `CAPABILITY_KEYS` (§F2).
+- `test_known_gaps_tiene_dueno_en_la_serie` — **v2 (C3/C4):** todo `owner_plan` de `KNOWN_GAPS` (F3) existe en la serie **y** esa capacidad figura en el `capabilities` del subplan dueño. Cierra el lazo del ratchet inverso: un gap sin dueño en el catálogo deja el test rojo. Vive acá (no en F3) porque el catálogo se crea acá.
+- `test_estado_real_de_planes_previos_esta_verificado` — para cada entrada de `estado_real_serie_gitlab.json` con `estado_real ≠ NO_IMPLEMENTADO`, **cada `evidencia[].symbol` existe de verdad** en su `evidencia[].file` (búsqueda textual del nombre del símbolo en el archivo, que debe existir en disco). Un plan declarado implementado sin símbolo verificable deja el test rojo.
 - `test_toda_capacidad_no_full_tiene_dueño` — cada capacidad con status `absent`/`partial` en `CAPABILITY_MATRIX` para algún proveedor aparece en `capabilities` de **al menos un** subplan, **o** está listada en la constante literal `FUERA_DE_SCOPE_218` del propio test. **Este test hace imposible olvidarse de un gap.**
 - `test_prioridad_y_hito_validos` — `priority` ∈ {`P0`,`P1`,`P2`}; `milestone` ∈ los ids declarados.
 - `test_docs_existentes_coinciden` — si `Stacky Agents/docs/<number>_PLAN_*.md` existe, su nombre empieza con `<number>_PLAN_<slug>`.
@@ -738,7 +938,8 @@ Regresión: `... -m pytest "Stacky Agents/backend/tests/test_plan70_group_sync.p
 **Comando exacto:**
 `& "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_serie_integridad.py" -q`
 
-**Criterio de aceptación (binario):** comando verde con 8 tests; `Test-Path "Stacky Agents/docs/_roadmap/serie_paridad_218.json"` → `True`; el JSON tiene exactamente 18 entradas en `subplans` (`(Get-Content ... | ConvertFrom-Json).subplans.Count` = 18).
+**Criterio de aceptación (binario):** comando verde con **10 tests**; `Test-Path "Stacky Agents/docs/_roadmap/serie_paridad_218.json"` → `True`; `Test-Path "Stacky Agents/docs/_roadmap/estado_real_serie_gitlab.json"` → `True`; y el JSON tiene **19** entradas en `subplans` — los 18 subplanes **más** el orquestador 218 (v2, C11):
+`(Get-Content "Stacky Agents/docs/_roadmap/serie_paridad_218.json" -Raw | ConvertFrom-Json).subplans.Count` = **19**
 
 **Flag:** ninguna — artefacto de datos + módulo puro + tests, sin superficie de runtime.
 
@@ -773,13 +974,15 @@ def parity_report(project: str | None = None) -> dict:
 
 3. `frontend/src/services/parityMatrixModel.ts` (nuevo, puro) — `groupByDomain(caps)`, `summarize(caps) -> {full, partial, absent, na}`, `statusLabel(status)`.
 
-4. `frontend/src/components/ParityMatrixPanel.tsx` + `ParityMatrixPanel.module.css` (nuevos) — tabla agrupada por dominio con el estado por capacidad, renderizada dentro de `frontend/src/pages/DiagnosticsPage.tsx`. **Sin `style={{`, sin `confirm(`/`alert(`/`prompt(`** (ratchet `frontend/src/__tests__/uiDebtRatchet.test.ts:22,27`); todos los colores por tokens del `*.module.css`.
+4. `frontend/src/components/ParityMatrixPanel.tsx` + `ParityMatrixPanel.module.css` (nuevos) — tabla agrupada por dominio con el estado por capacidad, renderizada dentro de `frontend/src/pages/DiagnosticsPage.tsx`. **Sin `style={{`, sin `confirm(`/`alert(`/`prompt(`** (ratchet `frontend/src/__tests__/uiDebtRatchet.test.ts:22,27`).
+> **v2 (C10) — el ratchet de UI tiene TRES reglas, no dos.** Verificado en `uiDebtRatchet.test.ts:21`: además de `INLINE_STYLE_RE` y `NATIVE_DIALOG_RE`, hay **`HEX_RE = /#[0-9a-fA-F]{3,8}\b/g`** con baseline **por archivo** en `frontend/src/__tests__/uiDebtBaseline.json`. Un `.module.css` nuevo con colores hex crudos rompe el ratchet (y la memoria `gotcha-ratchet-nuevo-archivo-cero-inline-style` dice que el alcance de un archivo nuevo es **0**). Por lo tanto: **cero literales hex** en `ParityMatrixPanel.module.css` y `.tsx` — todos los colores por `var(--…)` de los tokens ya existentes; los 4 estados (`full`/`partial`/`absent`/`n/a`) se distinguen con tokens semánticos existentes **más** una marca no-cromática (texto/ícono), para no depender solo del color.
 
 **Tests PRIMERO:**
 - `backend/tests/test_plan218_parity_endpoint.py`:
   - `test_matrix_devuelve_todas_las_capacidades` — el endpoint responde 200 con `len(body["capabilities"]) == len(CAPABILITY_KEYS)`.
   - `test_override_por_proyecto_apaga_una_capacidad` — con `parity_overrides: {"mr.approve": false}`, esa capacidad viene `enabled=false` aunque el status sea `full`.
-  - `test_flag_maestra_off_habilita_todo` — con `STACKY_PROVIDER_PARITY_ENABLED=False`, todas vienen `enabled=true` (comportamiento pre-plan).
+  - `test_flag_maestra_off_capability_enabled_es_true_para_todo` — **v2: el test llama a `parity_rollout.capability_enabled()` directamente, NO al endpoint.** Con `STACKY_PROVIDER_PARITY_ENABLED=False` devuelve `True` para toda capacidad (comportamiento pre-plan). *Motivo: el v1 ponía este test en el archivo del endpoint mientras la misma fase declaraba que con la flag OFF el endpoint responde **404** — dos afirmaciones incompatibles sobre el mismo escenario.*
+  - `test_flag_maestra_off_el_endpoint_no_existe` — con la flag OFF, `GET /api/parity/matrix` devuelve **404** (el blueprint no se registra). Este es el rollback completo del 218.
   - `test_endpoint_es_solo_lectura` — `POST /api/parity/matrix` devuelve 405.
   - `test_ruta_registrada_sin_doble_prefijo` — la URL map contiene `/api/parity/matrix` y **no** `/api/api/parity/matrix`.
   - `test_no_filtra_secretos` — la respuesta no contiene `token`, `pat`, `PRIVATE-TOKEN` en ninguna clave ni valor.
@@ -791,7 +994,13 @@ def parity_report(project: str | None = None) -> dict:
 `cd "Stacky Agents/frontend"; npx vitest run src/__tests__/uiDebtRatchet.test.ts`
 `cd "Stacky Agents/frontend"; npx tsc --noEmit`
 
-**Criterio de aceptación (binario):** los 4 comandos verdes; `grep -c "style={{" "Stacky Agents/frontend/src/components/ParityMatrixPanel.tsx"` devuelve **0**.
+**Criterio de aceptación (binario):** los 4 comandos verdes; y en PowerShell (v2, C9 + C10) las tres reglas del ratchet en cero para los archivos nuevos:
+```
+cd "Stacky Agents/frontend/src"
+(Select-String -Path "components/ParityMatrixPanel.tsx" -Pattern 'style=\{\{' -AllMatches | Measure-Object).Count      # 0
+(Select-String -Path "components/ParityMatrixPanel.tsx","components/ParityMatrixPanel.module.css" -Pattern '#[0-9a-fA-F]{3,8}\b' -AllMatches | Measure-Object).Count   # 0
+(Select-String -Path "components/ParityMatrixPanel.tsx" -Pattern '(?<![.\w])(?:window\.)?(?:confirm|alert|prompt)\s*\(' -AllMatches | Measure-Object).Count            # 0
+```
 
 **Flag:** `STACKY_PROVIDER_PARITY_ENABLED` (la misma de F2, default **True**). Con OFF: el endpoint devuelve 404, el panel no se monta y `capability_enabled` devuelve `True` para todo ⇒ comportamiento byte-idéntico al de hoy. **Ese es el rollback completo del plan 218 en un click.**
 
@@ -1006,7 +1215,9 @@ Cada subplan se genera con `/proponer-plan-stacky` usando el objetivo textual de
 | `backend/api/__init__.py` | **218 F8** fija el patrón | Todo subplan que registre blueprint usa `url_prefix="/api"` + ruta sin `/api` (evita el `/api/api/` que hizo rechazar a los planes 72, 73 y 74). |
 | `backend/services/client_profile.py` / `state_flow` | **Plan 216** (externo a esta serie) | 224 lo **consume**, no lo modifica. |
 | `backend/services/integration_breaker.py` | **231** | 218 F6 lo reusa sin editarlo. |
-| `frontend/src/pages/TicketBoard.tsx`, `UnblockerPage.tsx` | **232** | Advertencia: hay cambios sin commitear de una sesión paralela sobre estos archivos (ver `git status`); coordinar antes de tocar. |
+| `frontend/src/pages/TicketBoard.tsx`, `UnblockerPage.tsx`, **`SprintBoardPage.tsx`** | **232** | Advertencia: hay cambios sin commitear de una sesión paralela sobre estos archivos (ver `git status`); coordinar antes de tocar. |
+| **`frontend/src/utils/workItemTypeColor.ts`** (+ su test nuevo sin trackear `src/utils/__tests__/workItemTypeColor.test.ts`) | **224** | **v2 (C15):** también tiene cambios sin commitear de la sesión paralela — verificado en `git status` al momento de la crítica. El v1 solo advertía por TicketBoard/UnblockerPage. Releer el archivo en frío antes de editar; **jamás** `git stash`/`reset`/`amend` (memoria `feedback_concurrent-branch-git-amend-hazard`). |
+| `frontend/src/pages/DiagnosticsPage.tsx` | **218 F8** | v2 (C11): ahora declarado en `owns_files` de la entrada 218 del catálogo, así que el test de colisiones lo protege. |
 
 ### 5.4 Hitos y orden canónico
 
@@ -1077,6 +1288,10 @@ Esta es la carga inicial de `CAPABILITY_MATRIX` (218 F2). Se muestra condensada 
 
 **Regla de oro de esta estrategia (P4):** un test que parchea `config`, `services.gitlab_provider.config` o `GitLabTrackerProvider` **no cuenta** como evidencia de paridad. El centinela `test_ningun_test_de_contrato_parchea_config_ni_provider` (F3) lo hace cumplir.
 
+**Segunda regla de oro (v2, C3/C14) — un gap no se esconde: se firma.** Todo comportamiento que este plan sabe que hoy no se cumple vive en `KNOWN_GAPS` con `owner_plan`, `reason` y `evidence`, y corre bajo `xfail(strict=True)`. Consecuencia deliberada: **la suite puede estar verde con gaps abiertos, pero no puede estar verde con gaps mentidos.** Si alguien arregla uno sin borrar su entrada, el `XPASS` rompe el build; si alguien lo declara arreglado sin arreglarlo, el `xfail` no pasa a `XPASS` y la entrada sigue ahí, visible en el catálogo de F7. Esto también aplica al **alcance del contrato**: `_DOMINIOS_CUBIERTOS` empieza en `{"tracker"}` y cada subplan que cierra un puerto agrega su dominio en el mismo commit — nada de "cobertura total" declarada de entrada y nunca alcanzada.
+
+> **Nota de registro en el ratchet de tests (verificado en la crítica v2):** `tests/test_harness_ratchet_meta.py` usa `_TESTS_DIR.rglob("test_*.py")` — es **recursivo**. Los archivos nuevos de `backend/tests/contract/` (`fake_transport.py`, `provider_contract.py`, `known_gaps.py`) **no** matchean `test_*.py` y por lo tanto no requieren registro; pero cualquier `test_*.py` dentro de un subdirectorio nuevo (p. ej. el `backend/tests/e2e/` del subplan 233) **sí** debe registrarse con su ruta relativa completa (`tests/e2e/test_x.py`) en `run_harness_tests.sh` **y** `.ps1`, o el meta-test queda rojo. Precedente en el árbol: `backend/tests/conformance/`.
+
 ---
 
 ## 8. Observabilidad, errores, seguridad, despliegue gradual y rollback
@@ -1114,7 +1329,10 @@ Las correcciones de F0 **no tienen rollback por flag y no deben tenerlo**: rever
 | **R9** | Encender `STACKY_TICKETS_PROVIDER_ENABLED` (hoy OFF) destapa regresiones ADO latentes | Media | Alto | 221 lo enciende **después** de que el contrato de F3 esté verde con la flag ON, y con la batería `test_plan70_group_*.py` completa como gate. |
 | **R10** | `id` vs `iid` de GitLab mal normalizado ⇒ enlaces rotos o duplicados | Media | Alto | Decisión congelada en la ficha 220: `external_id` = `iid`; el `id` global va en `fields`. El contrato de F3 lo verifica en `create_item` + `item_url`. |
 | **R11** | El operador enciende GitLab sin token válido y ve errores confusos | Media | Bajo | `CapabilityUnavailable` + el panel de paridad de F8 + el doctor de conexiones (subplan 230) le dicen exactamente qué falta antes de intentar. |
-| **R12** | La matriz se marca `full` por optimismo y la paridad vuelve a ser una promesa | Media | Muy alto | `test_contrato_cubre_toda_capacidad_full_o_partial` (F3): marcar `full` sin escenario de contrato deja el test **rojo**. |
+| **R12** | La matriz se marca `full` por optimismo y la paridad vuelve a ser una promesa | Media | Muy alto | `test_contrato_cubre_toda_capacidad_full_o_partial` (F3, acotado a `tracker.*` + extensión por subplan): marcar `full` sin escenario de contrato deja el test **rojo**. Y en el sentido inverso, `test_matriz_no_miente_estructuralmente` (F2) caza la capacidad ya implementada que la matriz sigue declarando `absent`. |
+| **R13** | **Un centinela textual "arregla" código correcto.** Un implementador (o un modelo menor) aplica mecánicamente `getattr(config,` → `getattr(config.config,` en los ~65 sitios donde `config` **ya es la instancia**, rompiendo el motor de flags de todo el repo | **Alta** (era exactamente lo que pedía el v1) | **Muy alto** | El centinela de F0 es **AST con resolución de binding**, nunca regex; `test_audit_no_marca_binding_de_instancia` falla si alguien lo vuelve textual; y el criterio de aceptación se acota a los **2 archivos del seam**, con el resto del repo en **ratchet**, no en cero. |
+| **R14** | **Un criterio de aceptación imposible bloquea la fase y empuja a bajar la vara.** Ocurría en 3 fases del v1 (F0, F3, F6): el implementador honesto se traba, el apurado borra tests/handlers legítimos para "poner el grep en cero" | **Alta** | Alto | Todo criterio del v2 fue **ejecutado o medido** contra el árbol real durante la crítica (69 sitios de binding, 1 raise vs 4 except, 16 claves de `to_dict`, 82 literales, 20 líneas de `_ado_client_for_ticket`, 3 reglas del ratchet de UI, 20 categorías de flags). Los gaps que no se pueden cerrar en la fase viven en `KNOWN_GAPS` con `xfail(strict=True)` y dueño, no en un criterio inalcanzable. |
+| **R15** | Un subplan arregla un gap de GitLab y nadie actualiza la matriz ni el registro ⇒ la UI sigue ocultando algo que ya funciona | Media | Medio | `xfail(strict=True)` sobre `KNOWN_GAPS`: arreglar el gap produce **XPASS = fallo**, y el único camino al verde es borrar la entrada. Es un ratchet que aprieta en los dos sentidos. |
 
 ---
 
@@ -1156,11 +1374,11 @@ Las correcciones de F0 **no tienen rollback por flag y no deben tenerlo**: rever
 
 1. **218 F0** — Prueba de vida (los 4 defectos + centinela `getattr(config,`). *Sin esto nada de lo demás corre.*
 2. **218 F1** — Censo + ratchet de acoplamiento (congela la deuda antes de empezar).
-3. **218 F2** — Registro de capacidades + matriz generada.
-4. **218 F3** — Suite de contrato conductual (y corregir el test mentiroso de conformance).
+3. **218 F2** — Registro de capacidades + matriz generada + **`CapabilityUnavailable`** (v2, C4) + **categoría de flags `paridad_proveedores`** (v2, C6).
+4. **218 F3** — Suite de contrato conductual + **`KNOWN_GAPS`** (v2, C3) y corregir el test mentiroso de conformance.
 5. **218 F4** — Destino por proyecto + `client_profile_defaults/gitlab.json`.
 6. **218 F5** — Vocabulario canónico con alias.
-7. **218 F6** — `CapabilityUnavailable` + degradación en el endpoint de sync.
+7. **218 F6** — Traducción HTTP de `CapabilityUnavailable` (200 + `available:false`) + degradación en el endpoint de sync. *(La clase ya existe desde F2.)*
 8. **218 F7** — Catálogo de la serie + tests de integridad y colisiones.
 9. **218 F8** — Rollout por capacidad, endpoint y panel de paridad.
 10. **219** → **220** → **221** (hito M1: GitLab usable de punta a punta). *Aquí se mide K1 = 100 %.*
@@ -1173,22 +1391,42 @@ Las correcciones de F0 **no tienen rollback por flag y no deben tenerlo**: rever
 
 ## 13. Definición de Hecho (DoD) global del Plan 218
 
-- [ ] Los 4 defectos D1..D4 corregidos; `test_plan218_gitlab_reachable.py` verde con 9 tests; `grep -rn "getattr(config, \"STACKY" backend/services backend/api` devuelve 0 líneas.
-- [ ] `provider_coupling_audit.scan_backend_coupling()` corre y `test_plan218_coupling_ratchet.py` está verde con la línea base congelada en `backend/tests/provider_coupling_baseline.json`.
-- [ ] `provider_capabilities.CAPABILITY_MATRIX` cargada con las 2 columnas completas; `docs/_roadmap/PARIDAD_ADO_GITLAB.md` **generado** y sincronizado (test de sincronía verde).
-- [ ] La suite de contrato corre contra los 2 adaptadores reales; ninguna capacidad marcada `full`/`partial` queda sin escenario; el centinela anti-mock está verde; `test_tracker_provider_conformance.py` ya no contiene la cadena `"no que esté hardcoded NotImplementedError"`.
+- [ ] Los 4 defectos D1..D4 corregidos; `test_plan218_gitlab_reachable.py` verde con **13 tests**; **cero violaciones de `flag_binding_audit.scan()` en `tracker_provider.py` y `gitlab_provider.py`**, y el resto del repo congelado en `backend/tests/flag_binding_baseline.json` (ratchet, no cero global); las 2 huellas de regresión registradas en `docs/sistema/error_fingerprints.json`.
+- [ ] `provider_coupling_audit.scan_backend_coupling()` corre y `test_plan218_coupling_ratchet.py` está verde con **10 tests** y la línea base **generada** (no transcrita) en `backend/tests/provider_coupling_baseline.json`; `NEUTRAL_REGISTRY_ALLOWLIST` cubre los 6 archivos neutrales del sustrato.
+- [ ] `provider_capabilities.CAPABILITY_MATRIX` cargada con las 2 columnas completas; `docs/_roadmap/PARIDAD_ADO_GITLAB.md` **generado** y sincronizado (comparación normalizada a `\n`); `CapabilityUnavailable` definida; categoría `paridad_proveedores` creada y `test_harness_flags.py` verde.
+- [ ] La suite de contrato corre contra los 2 adaptadores reales; ninguna capacidad `tracker.*` marcada `full`/`partial` queda sin escenario; los 7 gaps conocidos están en `KNOWN_GAPS` con dueño y corren bajo `xfail(strict=True)`; el centinela anti-mock está verde; `test_tracker_provider_conformance.py` ya no contiene la cadena `"no que esté hardcoded NotImplementedError"`.
 - [ ] `build_tracker_target()` resuelve destino por proyecto; existe `backend/services/client_profile_defaults/gitlab.json`; dos proyectos GitLab distintos conviven en una misma corrida de test.
-- [ ] `Ticket.to_dict()` emite claves canónicas **y** las 14 legacy; `npx tsc --noEmit` limpio.
-- [ ] `CapabilityUnavailable` existe, se traduce a HTTP 200 con `available:false`, y `grep -c "NotImplementedError" backend/api/tickets.py` = 0.
-- [ ] `docs/_roadmap/serie_paridad_218.json` con 18 subplanes; `test_plan218_serie_integridad.py` verde (sin ciclos, sin colisiones de propiedad, sin capacidad huérfana).
-- [ ] `GET /api/parity/matrix` responde 200 con todas las capacidades; el panel se ve en Diagnósticos; `uiDebtRatchet` verde; 0 ocurrencias de `style={{` en el componente nuevo.
-- [ ] Las 4 flags nuevas están en los 5 lugares de la receta y `test_harness_flags.py` verde; con `STACKY_PROVIDER_PARITY_ENABLED=false` el comportamiento es byte-idéntico al previo.
+- [ ] `Ticket.to_dict()` emite las **16** claves previas **más** las 5 canónicas nuevas; `npx tsc --noEmit` limpio.
+- [ ] `CapabilityUnavailable` se traduce a HTTP 200 con `available:false`; **`raise NotImplementedError` en `backend/api/` = 0** y los **4 `except NotImplementedError` legítimos siguen en pie**.
+- [ ] `docs/_roadmap/serie_paridad_218.json` con **19** entradas (18 subplanes + el orquestador 218 con sus 12 archivos); `docs/_roadmap/estado_real_serie_gitlab.json` con los 8 planes previos medidos contra símbolos verificables; `test_plan218_serie_integridad.py` verde con 10 tests (sin ciclos, sin colisiones de propiedad, sin capacidad huérfana, sin gap sin dueño).
+- [ ] `GET /api/parity/matrix` responde 200 con todas las capacidades; el panel se ve en Diagnósticos; `uiDebtRatchet` verde; **0** ocurrencias de `style={{`, **0** literales hex y **0** diálogos nativos en los archivos nuevos.
+- [ ] Las 4 flags nuevas están en los **7** lugares de la receta (incluida la `CategorySpec` `paridad_proveedores`) y `test_harness_flags.py` verde; con `STACKY_PROVIDER_PARITY_ENABLED=false` el comportamiento es byte-idéntico al previo.
 - [ ] Todos los `test_plan218_*.py` registrados en `HARNESS_TEST_FILES` de `run_harness_tests.sh` **y** `run_harness_tests.ps1`; `test_harness_ratchet_meta.py` verde.
 - [ ] Regresión ADO verde por archivo: `test_ado_provider.py`, `test_ado_client_stacky_name_resolution.py`, `test_tracker_factory.py`, `test_plan70_group_sync.py`, `test_plan95_mr_providers.py`.
 - [ ] Ningún criterio binario de F0–F8 en rojo; el encabezado de este documento actualizado a IMPLEMENTADO.
 
 ---
 
-## Changelog de este documento
+## 14. Changelog de este documento
+
+- **v2 (2026-07-25) — CRITICADO (`criticar-y-mejorar-plan`). Veredicto sobre el v1: RECHAZADO → v2 APROBADO-CON-CAMBIOS.** 5 BLOQUEANTES, 8 IMPORTANTES y 3 MENORES resueltos; todo hallazgo fue **medido contra el árbol real**, no inferido.
+  - **C1 (BLOQ, F0) — el centinela `getattr(config,` era incorrecto y destructivo.** Hay **69** coincidencias en `services`+`api` y **~65 son correctas** (binding a la instancia vía `from config import config`); el "fix" que exigía el v1 habría roto el motor de flags (`Config` no tiene `.config`). Los defectos reales son **2 archivos / 5 sitios**. Reemplazado por **[ADICIÓN ARQUITECTO 1]**: `flag_binding_audit.py`, auditoría **AST con resolución de binding por módulo**, que además caza el acceso directo `config.FLAG` que el regex no veía, barre `harness/`, y congela el resto del repo en ratchet en vez de exigir cero global. F0 pasa de 9 a 13 tests.
+  - **C2 (BLOQ, F6) — "0 `NotImplementedError` en `backend/api/*.py` con allowlist vacía" exigía borrar 4 `except` legítimos** (`agent.py:1952`, `ci.py:124,223`, `pipeline_generator.py:86`), degradando endpoints ajenos al plan. Medido: `raise NotImplementedError` en `api/` = **1**. Centinela reescrito a `raise\s+NotImplementedError` + `test_los_4_except_legitimos_siguen_en_pie` como guard anti-celo.
+  - **C3 (BLOQ, F3) — criterio de aceptación imposible:** ≥7 escenarios del contrato describen comportamiento hoy roto en GitLab cuyo arreglo pertenece a 222/223/224/231/232, y `test_contrato_cubre_toda_capacidad_full_o_partial` exigía escenario para ~40 capacidades de 6 dominios que F3 nunca especificó. Resuelto con **[ADICIÓN ARQUITECTO 2]**: `KNOWN_GAPS` + `xfail(strict=True)` (ratchet **inverso**: arreglar un gap sin actualizar el registro produce XPASS = fallo) + alcance del test acotado a `tracker.*` con `_DOMINIOS_CUBIERTOS` que cada subplan amplía en su commit.
+  - **C4 (BLOQ, F3→F6) — inversión de dependencia:** F3 (paso 4) usaba `CapabilityUnavailable`, creada en F6 (paso 7). La clase se movió a **F2**; F6 conserva solo la traducción HTTP. Y se corrigió la aserción para capacidades `absent`: se verifica por `supports()`/`hasattr` (como ya hace `api/pr_review.py:368`), no por una excepción que **ningún adaptador levanta**.
+  - **C5 (BLOQ, F1↔F2) — contradicción interna:** el ratchet "solo baja" de F1 se rompía al implementar F2, porque `CAPABILITY_MATRIX` tiene `"azure_devops"` como **clave**. Agregada `NEUTRAL_REGISTRY_ALLOWLIST` (6 archivos) + test que impide usarla para esconder acoplamiento real (la exención vale para el literal, nunca para el import).
+  - **C6 (IMP) — la categoría de flags `integraciones` NO EXISTE.** Las 20 reales están enumeradas en §4; `test_harness_flags.py:739` exige biyección registry↔`_CATEGORY_KEYS`, así que las 4 flags habrían dejado el test rojo. Se crea la categoría `paridad_proveedores` y la receta pasa de **5 a 7 pasos**.
+  - **C7 (IMP, F5) — `Ticket.to_dict()` emite 16 claves, no 14, y ya emite `external_id` y `tracker_type`.** Lista literal verificada en `models.py:80-98`; las canónicas **nuevas** son 5, no 6. Congelado además el mapeo `tracker_project → project` y la exclusión de `stacky_project_name` del vocabulario canónico.
+  - **C8 (IMP, F1) — unidades inconsistentes:** `ado_importers_count`=36 eran **archivos** y `tracker_literals_count`=85 **ocurrencias**, con el mismo sufijo `_count`. Renombradas a `*_file_count`/`*_occurrences`; y el baseline **se genera con un comando** en vez de transcribirse (el número del v1 ya estaba desactualizado: medido **82**, no 85).
+  - **C9 (IMP) — criterios en sintaxis Bash en un repo con PowerShell primario**, incluyendo uno que no parsea: `grep -c "^| \`"` (el backtick es el escape de PowerShell). Todos los criterios binarios reescritos con `Select-String`/`Measure-Object`, con la tabla de equivalencias en §4.
+  - **C10 (IMP, F8) — el ratchet de UI tiene 3 reglas, no 2:** faltaba `HEX_RE` con baseline por archivo (`uiDebtRatchet.test.ts:21`). Exigido cero hex en los archivos nuevos + marca no-cromática por estado.
+  - **C11 (IMP, F7) — los 12 archivos de 218 no estaban en el mapa de colisiones** ni en `test_sin_colision_de_propiedad` (que solo miraba 219..236); `DiagnosticsPage.tsx` quedaba reclamable por el 232. El orquestador ahora es la entrada `218` del catálogo (19 entradas) y el test lo cubre.
+  - **C12 (IMP, F7) — F7 prometía resolver la divergencia doc↔código de §2.4 y ninguno de sus tests lo hacía.** Agregado `docs/_roadmap/estado_real_serie_gitlab.json` (estado **medido** de los planes 65/70-75/95, con estado nuevo `IMPLEMENTADO_INALCANZABLE`) + test que verifica que cada símbolo declarado exista de verdad.
+  - **C13 (IMP, F3) — `urlopen` está en 4 sitios de `ado_client.py` (273, 499, 539, 717), no en los 2 que decía el v1.** Se parchea el **atributo del módulo**, sin enumerar líneas.
+  - **C14 (MEN, F0) — faltaba la huella de regresión.** Registradas 2 clases en `error_fingerprints.json`: `flag-leida-del-modulo-config` y `kwarg-inexistente-en-constructor-de-provider`, cada una con su `guard_test`.
+  - **C15 (MEN, §5.3) — `workItemTypeColor.ts` (dueño 224) también tiene cambios sin commitear de la sesión paralela**, igual que `SprintBoardPage.tsx`; el v1 solo advertía por 2 archivos.
+  - **C16 (MEN, F2) — comparación byte-a-byte de un `.md` generado es intermitente en Windows** (`core.autocrlf`). Escritura con `newline="\n"` y comparación normalizada.
+  - **Adiciones proactivas:** **[ADICIÓN ARQUITECTO 1]** `flag_binding_audit` (K9) — generaliza el gotcha de `config` a TODO el repo por AST y puede descubrir ramas muertas más allá de GitLab; **[ADICIÓN ARQUITECTO 2]** `KNOWN_GAPS` + `xfail(strict=True)` + `test_matriz_no_miente_estructuralmente` (K10) — la paridad queda apretada en los **dos** sentidos: no se puede declarar `full` sin probarlo (F3) ni dejar la matriz declarando `absent` algo ya implementado (F2), ni arreglar un gap en silencio (XPASS = fallo).
+  - **Sin cambios:** los 3 rieles duros quedaron intactos — paridad de 3 runtimes (todas las fases son backend puro o UI ajena al motor de agentes, con fallback por flag), cero trabajo extra al operador (las 4 flags nacen ON; la única OFF es la preexistente `STACKY_GITLAB_ENABLED`, excepción dura 3 citada), human-in-the-loop (ninguna adición introduce autonomía; el ratchet inverso **exige** decisión humana explícita para borrar una entrada de `KNOWN_GAPS`), mono-operador sin RBAC (P9 verificado en 223/230), y backward-compatibilidad (P6: cero renombres).
 
 - **v1 (2026-07-25)** — Versión inicial. Relevamiento con evidencia `archivo:línea` de todo el acoplamiento ADO del backend y del frontend; **4 defectos del camino GitLab reproducidos por ejecución** (D1..D4, §2.1); 3 bloqueos estructurales (§2.2); doctrina de normalización en 3 capas (§3.1); 9 fases de sustrato (F0..F8); catálogo de 18 subplanes 219..236 con mapa de colisiones ejecutable (§5); matriz de paridad inicial verificada (§6). Pendiente: pasar por `criticar-y-mejorar-plan`.

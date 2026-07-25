@@ -1,7 +1,15 @@
 # Plan 241 — Cero falso verde: aserciones discriminantes, control negativo obligatorio y cierre total de los pendientes del QAUAT E2E
 
-> Estado: **v1 · PROPUESTO**. Pipeline: **proponer ✓ [este paso]** → criticar (`criticar-y-mejorar-plan`) → implementar → supervisar.
-> Autor: Claude Opus 5 (1M context) en rol StackyArchitectaUltraEficientCode.
+> Estado: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-25). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor: Claude Opus 5 (1M context) en rol StackyArchitectaUltraEficientCode. Juez v2: el mismo agente en rol adversarial, verificando cada anclaje contra el código real.
+
+**CHANGELOG v1 → v2 (6 hallazgos, todos verificados leyendo el código):**
+- **C1 (IMPORTANTE, resuelto):** el oráculo `attribute_equals` **no era emitible**. El tipo `OracleProbe` del template tiene exactamente 5 campos (`oracle_id, target, tipo, expected, selector` — `templates/playwright_test.spec.ts.j2:71-80`) y **no hay campo para el nombre del atributo**. F1 ahora especifica extender el tipo con `atributo?: string | null` y el emisor con `{{ oracle.atributo | tojson }}`.
+- **C2 (IMPORTANTE, resuelto):** el `target` de un oráculo **no es un selector CSS**: el template lo resuelve con `ui_map[oracle.target]` (`:78`), o sea que debe ser una **clave del dict `ui_map`** que recibe la plantilla. Un alias inexistente emite `selector: undefined`, el probe captura `actual = null` y el evaluador devuelve `"review"` — un criterio que **se pierde en silencio**. F1 ahora obliga a validar la pertenencia del alias a las claves del ui_map y a devolver `[]` si no pertenece, con test propio.
+- **C3 (IMPORTANTE, resuelto):** F6 atacaba `NO_TESTS_FOUND` sin anclarlo. El sitio real es el **guard estructural `if total == 0`** de `uat_test_runner.py:761-766`. Además `playwright_result_classifier.py:25,34` documenta *"total=0 ALWAYS maps to BLOCKED PIP NO_TESTS_FOUND — never PASS"*, regla que es **correcta y no se toca**: el fix va **antes** de ese guard, en el runner, distinguiendo la causa (crash de `globalSetup`) sin permitir jamás que 0 tests sea PASS.
+- **C4 (IMPORTANTE, resuelto):** F0 podía volver `MIXED` runs legítimamente `BLOCKED`. Si el evaluador se salta (`stages["evaluator"].skipped` con `reason == "all_scenarios_blocked"`, `qa_uat_pipeline.py:3090`), `_criteria_results` queda vacío y `functional_verdict` devolvería `MIXED/NO_FUNCTIONAL_ASSERTION` tapando un `BLOCKED` honesto. F0 ahora exige: **si el evaluador se saltó, el veredicto del run sigue siendo el del runner**; el gate funcional solo manda cuando el evaluador efectivamente corrió.
+- **C5 (MENOR, resuelto):** el DoD declaraba "60 casos"; la suma de las fases da 7+8+8+5+4+11+6+6+5 = **60** ✓ (verificado, se deja anotado para que el supervisor no lo recuente).
+- **C6 (IMPORTANTE, resuelto) — [ADICIÓN ARQUITECTO]:** faltaba el destino de `DISCRIMINATION_FAILED`. Un test que no discrimina es un **bug del arnés, no del desarrollo**, y sin separarlo se leería como si el desarrollo estuviera mal. F2 ahora emite esos casos en una sección propia `test_quality_issues` del dossier, que **no** contamina el veredicto del desarrollo (el criterio cae a `not_verifiable` ⇒ `MIXED`) y queda como backlog accionable del arnés.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
 > Origen: **pedido textual del operador** — *"Propone un plan para resolver todo lo pendiente con un nivel de eficacia enorme, debe ser super robusto y asertivo por todas las cosas"*, tras la implementación del Plan 240 y el hallazgo de un falso positivo en la corrida real del ticket 366.
 
@@ -147,6 +155,19 @@ def verify_screen(page_state: dict, expected_screen: str) -> dict:
    stages["functional_verdict"] = {"ok": True, "skipped": False, **_fv}
    ```
    Y en `_build_output`, el `verdict`/`reason` del run salen de `stages["functional_verdict"]` cuando existe; si no, del runner (degradación). **Regla dura:** con `verified == 0` el run **no puede** salir `PASS`.
+
+   **(C4) Guarda obligatoria — el gate funcional NO puede tapar un BLOCKED honesto.** Si el evaluador se saltó (`stages["evaluator"].get("skipped") is True`, p. ej. con `reason == "all_scenarios_blocked"`, `qa_uat_pipeline.py:3090`), entonces `_criteria_results` está vacío **no porque no se verificara nada, sino porque no se llegó a ejecutar**. En ese caso:
+   ```python
+   _evaluator_ran = not stages.get("evaluator", {}).get("skipped", False)
+   if _evaluator_ran:
+       stages["functional_verdict"] = {"ok": True, "skipped": False, **_fv}
+       _final_verdict, _final_reason = _fv["verdict"], _fv["reason"]
+   else:
+       stages["functional_verdict"] = {"ok": True, "skipped": True,
+                                       "reason": "evaluator_did_not_run"}
+       _final_verdict, _final_reason = _runner_verdict, _runner_reason   # BLOCKED honesto
+   ```
+   Sin esta guarda, todo run bloqueado por entorno saldría `MIXED/NO_FUNCTIONAL_ASSERTION`, que es **menos** honesto que el `BLOCKED` actual.
 2. `templates/playwright_test.spec.ts.j2` — en el `afterEach` que ya escribe `assertions_<sid>.json`, agregar el bloque `screen_verified`:
    ```ts
    screen_verified: {
@@ -224,10 +245,15 @@ def build_assertions(criterion: dict, ui_map: dict, screen: str) -> list:
        return "pass" if not actual else "fail"     # actual = significativos
    ```
    **Regla dura:** ninguna rama nueva puede devolver `"pass"` cuando `actual is None` (el guard de `:245-247` ya lo cubre: NO tocarlo).
-2. `templates/playwright_test.spec.ts.j2` — el emisor de `ORACLE_PROBES` debe saber capturar el `actual` de los tipos nuevos:
-   - `attribute_equals` → `await page.locator(sel).first.getAttribute(probe.atributo)`
-   - `ordered_by` → `await page.locator(sel + ' tbody tr td:nth-child(N)').allInnerTexts()`
-   - `no_console_error` → los mensajes acumulados por el listener de consola, filtrados con la política del 240.
+2. `templates/playwright_test.spec.ts.j2` — **(C1) el tipo `OracleProbe` NO tiene campo para el atributo**: hoy son exactamente 5 (`oracle_id, target, tipo, expected, selector`, `:71-80`). Hay que:
+   - extender el type con `atributo?: string | null;`
+   - emitirlo en el bucle: `atributo: {{ (oracle.atributo if oracle.atributo is defined else None) | tojson }},`
+   - y capturar el `actual` de los tipos nuevos en el `afterEach`:
+     - `attribute_equals` → `await page.locator(probe.selector).first.getAttribute(probe.atributo)`
+     - `ordered_by` → `await page.locator(probe.selector + ' tbody tr td:nth-child(N)').allInnerTexts()`
+     - `no_console_error` → los mensajes del listener de consola, filtrados con `console_noise_policy` (Plan 240).
+
+   **(C2) REGLA DURA sobre `target`.** El template resuelve el selector con `ui_map[oracle.target]` (`:78`): el `target` **no es un selector CSS, es una CLAVE del dict `ui_map`** que recibe la plantilla. Si el alias no existe, se emite `selector: undefined`, el probe captura `actual = null` y el evaluador devuelve `"review"` ⇒ **el criterio se pierde en silencio**. Por eso `build_assertions` recibe el ui_map y **verifica que el alias esté en sus claves**; si no está, devuelve `[]` y el criterio queda `not_verifiable` de forma visible.
 3. `uat_scenario_compiler.py` — cuando el ítem del plan trae `kind` (lo pone `acceptance_extractor` del 240), pedir los oráculos a `assertion_catalog.build_assertions` **antes** de caer en la heurística de texto. Los oráculos del catálogo **reemplazan** a los heurísticos, no se suman.
 
 **Tests (TDD): `tests/unit/test_plan241_assertion_catalog.py`**
@@ -296,6 +322,12 @@ if strict and c.get("status") == "verified" and not (c.get("discrimination") or 
     c["downgrade_reason"] = "NO_DISCRIMINATION"
 ```
 
+**[ADICIÓN ARQUITECTO — C6] El fallo del test no se disfraza de fallo del desarrollo.** Un `DISCRIMINATION_FAILED` significa *"esta aserción no sabe fallar"*: es un **bug del arnés**, no del desarrollo. Si se mezclara con el veredicto, un arnés flojo se leería como software roto. Regla:
+- el criterio afectado cae a `not_verifiable` ⇒ el run sale `MIXED/PARTIAL_COVERAGE` (nunca `FAIL`);
+- el caso se emite en una sección **propia** del dossier, `test_quality_issues: [{"criterio_id", "kind", "code", "detail", "fix_sugerido"}]`, que `qa_dossier_builder` renderiza aparte de los hallazgos del desarrollo;
+- esa lista es el backlog accionable para mejorar el catálogo (F1) y la forja (F3).
+Test dedicado: `test_discrimination_failed_no_es_fail_del_desarrollo` — un criterio con `DISCRIMINATION_FAILED` produce `MIXED`, **no** `FAIL`, y aparece en `test_quality_issues`.
+
 **Tests (TDD): `tests/unit/test_plan241_discrimination.py`**
 - `test_maxlength_367_discrimina` (**el test insignia**): aserción `attribute_equals maxlength=50` + control negativo `"20"` → `proven True`.
 - `test_maxlength_con_dato_de_20_no_discrimina`: aserción `equals` con valor de 20 chars y control negativo de 20 chars → `proven False`, `code == "DISCRIMINATION_FAILED"`.
@@ -305,8 +337,9 @@ if strict and c.get("status") == "verified" and not (c.get("discrimination") or 
 - `test_kinds_que_no_requieren`: `presence` y `no_error` → `requires_discrimination` False.
 - `test_verdict_degrada_sin_discriminacion`: criterio `verified` sin `discrimination` + strict ON → cuenta como `not_verifiable` ⇒ veredicto `MIXED`.
 - `test_flag_off_no_degrada`: strict OFF → cuenta como `verified` (compatibilidad).
+- `test_discrimination_failed_no_es_fail_del_desarrollo` (**C6**): → `MIXED` (no `FAIL`) y el caso aparece en `test_quality_issues`.
 
-**Aceptación:** `pytest tests\unit\test_plan241_discrimination.py -q` → **8/8**; `grep -c "DISCRIMINATION_FAILED" discrimination_prover.py` → ≥1.
+**Aceptación:** `pytest tests\unit\test_plan241_discrimination.py -q` → **9/9**; `grep -c "DISCRIMINATION_FAILED" discrimination_prover.py` → ≥1; `grep -c "test_quality_issues" functional_verdict.py qa_dossier_builder.py` → ≥1 en cada uno.
 **Flag:** `STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED` default **ON**. Ninguna excepción dura aplica: es determinista, local y solo endurece el veredicto. Justificación de ON: el default laxo **es** el bug que este plan mata.
 **Runtimes:** los 3 idéntico. **Operador:** ninguno.
 
@@ -411,7 +444,7 @@ Selector de fila por default (verificado en vivo): `#__gvc_GridAgendaAut__div ta
 **Valor:** cada diagnóstico falso costó tiempo real de depuración en la corrida del 240.
 
 **Tres correcciones exactas:**
-1. **`NO_TESTS_FOUND` que en realidad es un crash del `globalSetup`** (`uat_test_runner.py`): si la salida de Playwright contiene `globalSetup` **y** `Error:`, el reason es `GLOBAL_SETUP_FAILED` con las 3 primeras líneas del error en `detail`, jamás `NO_TESTS_FOUND`. Test: fixture con la salida real capturada (`Executable doesn't exist at ...chromium_headless_shell-1217...`) → `GLOBAL_SETUP_FAILED`.
+1. **`NO_TESTS_FOUND` que en realidad es un crash del `globalSetup`.** **(C3) Anclaje exacto:** el sitio es el **guard estructural** `if total == 0:` de `uat_test_runner.py:761-766`. El fix va **inmediatamente ANTES** de ese guard: si la salida de Playwright contiene `globalSetup` **y** `Error:`, el reason pasa a `GLOBAL_SETUP_FAILED` (categoría `ENV`) con las 3 primeras líneas del error en `detail`. **Prohibido tocar `playwright_result_classifier.py`**: su regla *"total=0 ALWAYS maps to BLOCKED PIP NO_TESTS_FOUND — never PASS"* (`:25,34`) es **correcta** y debe seguir valiendo — lo que cambia es la **causa reportada**, nunca el hecho de que 0 tests jamás es PASS. Test: fixture con la salida real capturada (`Executable doesn't exist at ...chromium_headless_shell-1217...`) → `GLOBAL_SETUP_FAILED`, y un segundo test que verifica que un `total == 0` sin rastro de globalSetup sigue dando `NO_TESTS_FOUND`.
 2. **`NameError: name '_run_id' is not defined`** (`qa_uat_pipeline.py`, call site del `data_readiness_check` cerca de `:2271-2276`): la variable existe como `_run_id` (`:359`) pero no está en el scope del bloque; pasarla explícitamente. Test: el stage `data_readiness_check` deja de aparecer con `reason` que empieza con `error:name`.
 3. **Deriva de versiones Node↔Python** (`browser_runtime_guard.py`, del 240): función nueva `check_node_browser_drift() -> dict` que lee la versión de `node_modules/.bin/playwright --version` y la revisión que exige, y la compara con la del binding Python; si difieren, `code == "BROWSER_VERSION_DRIFT"` con el comando de remediación **de ambos lados**. Se expone en el endpoint `runtime-doctor`. Test: fixture con 1.59.1 vs 1.61.0 → drift detectado con las 2 remediaciones.
 
@@ -531,7 +564,10 @@ CLI: `python golden_suite.py --record 367 65 70` / `--verify` (default: los ids 
 
 ## 10. Definición de Hecho (DoD)
 
-- [ ] **9 archivos de test nuevos** verdes, corridos **POR ARCHIVO**, con la salida real pegada: `test_plan241_screen_guard` **7**, `assertion_catalog` **8**, `discrimination` **8**, `test_data_forge` **5**, `context_playbook` **4**, `menu_resolver` **11**, `diagnostics` **6**, `epic_rollup` **6**, `golden_suite` **5** → **60 casos**. Más `backend/tests/test_plan241_qa_uat.py` registrado en `HARNESS_TEST_FILES` (`.sh` y `.ps1`).
+- [ ] **9 archivos de test nuevos** verdes, corridos **POR ARCHIVO**, con la salida real pegada: `test_plan241_screen_guard` **7**, `assertion_catalog` **9** (8 + el de alias inexistente, C2), `discrimination` **9** (8 + C6), `test_data_forge` **5**, `context_playbook` **4**, `menu_resolver` **11**, `diagnostics` **7** (6 + el de `total==0` sin globalSetup, C3), `epic_rollup` **6**, `golden_suite` **5** → **63 casos** (C5: recuento verificado). Más `backend/tests/test_plan241_qa_uat.py` registrado en `HARNESS_TEST_FILES` (`.sh` y `.ps1`).
+- [ ] **(C1/C2) Contrato del template intacto:** `grep -c "atributo" templates/playwright_test.spec.ts.j2` → ≥2 (tipo + emisión); y un test verifica que un `target` que NO es clave del ui_map produce `[]` en el catálogo, jamás un probe con `selector: undefined`.
+- [ ] **(C3)** `playwright_result_classifier.py` **sin modificar** (`git diff --stat` no lo lista): su regla "0 tests nunca es PASS" sigue vigente.
+- [ ] **(C4)** Un run bloqueado por entorno sigue reportando `BLOCKED`, no `MIXED`.
 - [ ] Regresiones verdes (por archivo): `test_uat_ticket_reader`, `test_navigation_driver`, `test_navigation_plan_gate`, `test_replan_engine`, `test_plan240_*` (los 3), `test_qa_uat_endpoint`, `test_harness_flags`.
 - [ ] **KPI-1 probado:** un run con 0 criterios verificados devuelve `MIXED/NO_FUNCTIONAL_ASSERTION`, nunca PASS.
 - [ ] **KPI-2 probado:** un escenario que aterriza en pantalla distinta a la del criterio devuelve `NAV_WRONG_SCREEN` (reproducir el caso del ADO-366).

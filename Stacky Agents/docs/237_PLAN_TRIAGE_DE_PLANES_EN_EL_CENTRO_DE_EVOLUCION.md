@@ -1832,8 +1832,59 @@ categoría y ayuda llana registradas.
    shape aproximado del plan (`patron`/`causa_raiz`/`plan`/`fecha`), que habría puesto rojo
    `test_error_fingerprints_catalog.py`. Verificado: 8 passed.
 
+### Smoke ejecutado 2026-07-25 (instancia AISLADA, no la del operador)
+
+El backend del operador (puerto 5050) corre código previo a estos planes y **no** se reinició: reiniciarlo
+dispara `_startup_sync` (egress a ADO + purga) y es decisión del operador. En su lugar se levantó una
+instancia desechable con los seams del repo — `PORT=5099`, `STACKY_TEST_MODE=1` (sin egress) y
+`STACKY_DATA_DIR` a un temporal — y Vite en `5199` con un config **fuera del repo** (`--config`) que
+proxya `/api` a 5099. Cero archivos del repo tocados, cero contacto con la DB real.
+
+**24 asserts binarios del DoD, todos PASS** contra el `docs/` real:
+
+| Criterio del DoD | Resultado real |
+|---|---|
+| `GET /api/evolution/plans` → 200 con `triage_order`/`triage_totals`/`census`/`numbering` | 200, las 4 presentes |
+| `triage_bucket` en **todos** los `plans` | 212/212 planes |
+| Primer bucket del orden = sin implementar | `["SIN_IMPLEMENTAR", "SIN_CRITICAR", …]` |
+| Censo cierra `parsed + skipped_* == files_seen` | **199 == 199** (`plans_parsed=194`, `skipped_not_a_plan=5`) |
+| `skipped_subdirs >= 3` | 3 |
+| `numbering.duplicates == []` sobre el `docs/` real | `[]` |
+| `next_free_number` > max, no reservado, sin documento | **240** (max con doc = 239; el 239 ya existe, así que el criterio relativo del DoD da 240, no el literal 239 del reporte anterior) |
+| Los 18 subplanes 219..236 en `SIN_DOCUMENTO` | **18/18** |
+| El 218 **no** en `SIN_DOCUMENTO` | 218 → `SIN_CRITICAR` |
+| 404 con `STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED=false` | 404 |
+| 404 con `STACKY_EVOLUTION_CENTER_ENABLED=false` | 404 `evolution_disabled` |
+| El Centro NO se cae por apagar solo el triage | `/api/evolution/health` sigue 200 `flag_enabled:true` |
+
+Los 237 y 238 caen en `SIN_SUPERVISAR`, que es **correcto**: `_ESTADO_A_BUCKET` mapea
+`"IMPLEMENTADO" → "SIN_SUPERVISAR"` (`services/plans_board.py:58`) — implementados, falta el cierre del
+supervisor. El triage se está describiendo bien a sí mismo.
+
+**Compilación real de la UI (más fuerte que `tsc`):** los 8 módulos nuevos/tocados de ambos planes se
+pidieron a través del pipeline de transformación de Vite y volvieron **200 sin un solo error**
+(`App.tsx`, `PlansSection.tsx`, `EvolutionCenterPage.tsx`, `plansTriageModel.ts`, `IncidentInboxPage.tsx`,
+`IncidentInboxEntryButton.tsx`, `incidentInboxModel.ts`, `TicketBoard.tsx` — este último con la línea de
+F8 **más** el trabajo ajeno sin commitear, sin conflicto).
+
+### [FUERA DEL DoD — corrección hallada por el smoke] El 404 culpaba a la flag equivocada
+
+`_plans_triage_enabled()` (`api/evolution.py:221`) es una conjunción de dos flags, pero F4 devolvía el
+`_disabled_resp()` compartido, cuyo mensaje nombra `STACKY_EVOLUTION_CENTER_ENABLED`. Con el Centro
+**encendido** y solo el triage abajo, el operador salía a apagar/prender la flag equivocada. Corregido
+test-first (rojo → verde) con `_plans_disabled_resp()`, que solo delega en la maestra cuando la maestra es
+la culpable:
+
+- `STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED=false` → 404 `plans_triage_disabled`, mensaje que nombra **esa** flag.
+- `STACKY_EVOLUTION_CENTER_ENABLED=false` → 404 `evolution_disabled` (sin cambios).
+- Verificado en vivo, no solo en test. `test_plan237_plans_triage_endpoint.py` → **8 passed**;
+  `test_evolution_endpoints.py` → **11 passed**. Los tests existentes solo asertaban el status code, así
+  que nada se rompió.
+
 ### Pendiente
 
-- **Smoke manual** del DoD (abrir el tab Evolución con configuración de fábrica y confirmar que el primer
-  grupo no vacío es "Sin implementar"). No se ejecutó: requiere levantar backend + frontend.
+- **Confirmación VISUAL del tab Evolución.** Los endpoints y la compilación están verificados, pero nadie
+  vio la sección renderizada: la extensión de Chrome no está conectada y el repo no tiene Playwright ni
+  jsdom/RTL, así que no hay forma de automatizarlo desde acá. Queda listo para mirar en
+  **http://localhost:5199/** (backend aislado 5099 + Vite 5199, ambos en pie).
 - Adoptar `claim_plan_path` en las skills del pipeline (explícitamente fuera de alcance, §7).

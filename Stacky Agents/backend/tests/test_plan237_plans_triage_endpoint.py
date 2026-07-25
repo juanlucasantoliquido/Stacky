@@ -55,7 +55,15 @@ def test_plans_404_con_su_flag_off(client):
     from config import config as cfg
     cfg.STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED = False
     try:
-        assert client.get("/api/evolution/plans").status_code == 404
+        r = client.get("/api/evolution/plans")
+        assert r.status_code == 404
+        # El 404 tiene que nombrar la flag que REALMENTE lo apagó. Si el Centro sigue
+        # encendido y solo cayó el triage, culpar a la flag maestra manda al operador a
+        # buscar la flag equivocada.
+        body = r.get_json()
+        assert body["error"] == "plans_triage_disabled"
+        assert "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED" in body["message"]
+        assert "STACKY_EVOLUTION_CENTER_ENABLED" not in body["message"]
         assert client.get("/api/evolution/plans/health").get_json()["flag_enabled"] is False
     finally:
         cfg.STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED = True
@@ -65,7 +73,12 @@ def test_plans_404_con_la_flag_maestra_off(client):
     from config import config as cfg
     cfg.STACKY_EVOLUTION_CENTER_ENABLED = False
     try:
-        assert client.get("/api/evolution/plans").status_code == 404
+        r = client.get("/api/evolution/plans")
+        assert r.status_code == 404
+        # Con la maestra abajo, el diagnóstico correcto SÍ es el del Centro entero.
+        body = r.get_json()
+        assert body["error"] == "evolution_disabled"
+        assert "STACKY_EVOLUTION_CENTER_ENABLED" in body["message"]
     finally:
         cfg.STACKY_EVOLUTION_CENTER_ENABLED = True
 

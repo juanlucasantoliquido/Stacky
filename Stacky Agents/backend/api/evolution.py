@@ -227,10 +227,28 @@ def plans_health():
     return jsonify({"ok": True, "flag_enabled": _plans_triage_enabled()})
 
 
+def _plans_disabled_resp():
+    """404 del triage con el diagnóstico CORRECTO de qué flag lo apagó.
+
+    `_plans_triage_enabled()` es una conjunción de dos flags, así que reusar
+    `_disabled_resp()` a secas culpaba siempre a la maestra: con el Centro encendido y
+    solo el triage abajo, el operador salía a buscar la flag equivocada.
+    """
+    if not _enabled():
+        return _disabled_resp()
+    return (
+        jsonify({
+            "ok": False, "error": "plans_triage_disabled",
+            "message": "El triage de planes está deshabilitado (STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED).",
+        }),
+        404,
+    )
+
+
 @bp.get("/plans")
 def plans_triage():
     if not _plans_triage_enabled():
-        return _disabled_resp()
+        return _plans_disabled_resp()
     from services import plans_board  # lazy (patrón del módulo)
 
     refresh = request.args.get("refresh", "").strip() == "1"

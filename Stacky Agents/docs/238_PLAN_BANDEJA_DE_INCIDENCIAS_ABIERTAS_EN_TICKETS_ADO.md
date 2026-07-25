@@ -2005,10 +2005,37 @@ ratchets base:  uiDebtRatchet 3 passed · copyDebtRatchet 3 passed
 
 ### Pendiente
 
-- **Smoke manual de 7 pasos (§F9): NO ejecutado.** Requiere levantar backend + frontend. En particular el
-  paso 6 (apagar la flag y verificar que desaparecen las 4 superficies) y el paso 7 (proyecto GitLab real);
-  este último queda cubierto por el test `test_gitlab_sin_tipo_reporta_untyped_count`.
-- **La edición de `TicketBoard.tsx` (F8) quedó SIN COMMITEAR**: ese archivo tiene cambios sin commitear de
-  una sesión paralela viva (14 inserciones ajenas). Commitearlo se llevaría trabajo ajeno a este commit. El
-  cambio está aplicado y verificado en el árbol de trabajo (+2/−0); lo commitea el operador cuando la otra
-  sesión cierre.
+- **Smoke de 7 pasos (§F9): PARCIALMENTE EJECUTADO 2026-07-25** — la mitad de API está verificada contra
+  una instancia real; falta la confirmación visual.
+
+  Se levantó una instancia **aislada** (`PORT=5099`, `STACKY_TEST_MODE=1` sin egress, `STACKY_DATA_DIR` a
+  un temporal) en vez de reiniciar el backend del operador (5050), que corre código previo a este plan:
+  reiniciarlo dispara `_startup_sync` (egress a ADO + purga) y es decisión del operador. Vite quedó en
+  5199 con un config **fuera del repo**, proxyando `/api` a 5099. Cero archivos del repo tocados.
+
+  | Paso del DoD | Resultado real |
+  |---|---|
+  | `GET /status` → 200 con `enabled` (contrato §4.2) | 200, `enabled: true` |
+  | Alias aditivo `flag_enabled` (desvío 1, lo exige `probeFlagHealth`) | `flag_enabled: true` — presente |
+  | Flag default **ON** de fábrica (cero trabajo al operador) | `enabled: true` sin setear nada |
+  | `GET /items` → 200 con `items` / `counts` / `untyped_count` | 200; `counts={open:0,closed:0,total:0}`, `untyped_count=0` (DB temporal vacía) |
+  | **D9** — con la flag OFF, `GET /items` → 404 `feature_disabled` | **404 `feature_disabled`** |
+  | Con la flag OFF, `GET /status` sigue **200** con `enabled:false` | 200, `enabled:false` — correcto: es el endpoint que `probeFlagHealth` sondea; si diera 404 el gate quedaría en "desconocido" y el tab no podría apagarse nunca |
+
+  **Compilación real de la UI (más fuerte que `tsc`):** `IncidentInboxPage.tsx`,
+  `IncidentInboxEntryButton.tsx`, `incidentInboxModel.ts` y `App.tsx` se pidieron a través del pipeline de
+  transformación de Vite y volvieron **200 sin un solo error**. `TicketBoard.tsx` también compila con la
+  línea de F8 **más** las 14 inserciones ajenas sin commitear, sin conflicto.
+
+- **Pendiente: la confirmación VISUAL** (paso 6 — ver desaparecer las 4 superficies con la flag OFF, y el
+  render de la página). La extensión de Chrome no está conectada y el repo no tiene Playwright ni
+  jsdom/RTL, así que no es automatizable desde acá. Queda listo en **http://localhost:5199/**.
+  El paso 7 (proyecto GitLab real) sigue cubierto por `test_gitlab_sin_tipo_reporta_untyped_count`.
+- ~~**La edición de `TicketBoard.tsx` (F8) quedó SIN COMMITEAR**~~ → **CERRADO 2026-07-25, commit
+  `9249a504`.** Se commitearon **solo las 2 líneas del plan** sin llevarse el trabajo ajeno: el blob se
+  construyó desde `HEAD` y se stageó con `git update-index --cacheinfo`, nunca desde el árbol de trabajo.
+  Evidencia: el blob del árbol es `d578331d` **antes y después** del commit (intacto), `git diff --cached`
+  dio exactamente **+2/−0** con 1 solo archivo staged, y lo que sigue sin commitear en ese archivo son las
+  **14 inserciones ajenas** de la sesión paralela — el mismo número que la foto base de F-1.
+  Nota de método: `git commit -- <ruta>` habría commiteado el **árbol de trabajo** (llevándose lo ajeno);
+  por eso se commiteó el **índice** sin pathspec, con el índice previamente verificado vacío.

@@ -40,9 +40,13 @@ _SCREEN_HINTS = {
     # (RF-001/RF-003/EP-01/EP-08 hablan del "Filtro de Agenda", no de la pantalla).
     "filtro de agenda": "FrmAgenda.aspx",
     "resumen de agenda": "FrmAgenda.aspx",
-    "agenda web": "FrmAgenda.aspx",
     "busqueda avanzada": "FrmAgenda.aspx",
     "grilla de agenda": "FrmAgenda.aspx",
+    # OJO: "agenda web" NO va aca. Es el nombre de la APLICACION, no de una
+    # pantalla: matcheaba frases como "El combo Tipo Telefono en Agenda Web
+    # (MantenedorTelefonos.ascx)" y ruteaba el ticket 366 a FrmAgenda.aspx en vez
+    # de FrmDetalleClie.aspx => el run daba PASS habiendo probado la pantalla
+    # EQUIVOCADA (falso positivo verificado con la captura del run).
     "ficha del cliente": "FrmDetalleClie.aspx",
     "detalle del cliente": "FrmDetalleClie.aspx",
     "gestiones": "FrmDetalleClie.aspx",

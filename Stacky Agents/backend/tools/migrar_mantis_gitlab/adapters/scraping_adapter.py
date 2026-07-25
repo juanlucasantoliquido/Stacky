@@ -136,7 +136,26 @@ _LABELED_ROW_RE = re.compile(
 
 
 def _strip_tags(fragment: str) -> str:
-    return _html.unescape(_TAG_RE.sub("", fragment or "")).strip()
+    texto = _html.unescape(_TAG_RE.sub("", fragment or ""))
+    # Mantis usa `&#160;` (espacio duro) como separador visual. Si queda
+    # como \xa0 termina dentro de labels de GitLab y la API responde 500.
+    texto = texto.replace("\xa0", " ")
+    return re.sub(r"[ \t]{2,}", " ", texto).strip()
+
+
+# En la celda de categoría Mantis antepone el proyecto entre corchetes
+# (`<span class="small project">[Proyecto]</span>  Categoría`) cuando el
+# listado abarca más de un proyecto. Ese prefijo NO es la categoría: si se
+# cuela, el label queda `category::[602253 REC Banco…] General` y GitLab
+# rechaza la creación del issue con 500.
+_PROJECT_SPAN_RE = re.compile(
+    r'<span[^>]*class=["\'][^"\']*\bproject\b[^"\']*["\'][^>]*>.*?</span>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _clean_category(cell_html: str) -> str:
+    return _strip_tags(_PROJECT_SPAN_RE.sub("", cell_html or ""))
 
 
 # ── Parsing del listado real de Mantis (`view_all_bug_page.php`) ─────────
@@ -205,7 +224,7 @@ def _parse_issue_list_html(html_text: str, project_id: int) -> list[dict[str, An
                 else _strip_tags(priority_cell)
             ),
             "severity": _strip_tags(cells.get("severity", "")),
-            "category": _strip_tags(cells.get("category", "")),
+            "category": _clean_category(cells.get("category", "")),
             "project_id": project_id,
         })
     return issues

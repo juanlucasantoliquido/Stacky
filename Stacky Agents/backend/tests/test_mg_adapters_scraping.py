@@ -451,3 +451,40 @@ def test_detalle_parsea_instancia_en_espanol():
     assert detail["description"] == "Detalle del problema"
     assert detail["steps_to_reproduce"] == "1. Abrir 2. Fallar"
     assert detail["additional_information"] == "Notas extra"
+
+
+# ── Categoría sin prefijo de proyecto (bug que rompió 42 issues reales) ──
+
+
+def test_categoria_no_arrastra_el_prefijo_del_proyecto():
+    """En la celda de categoría Mantis antepone el proyecto entre corchetes
+    (`<span class="small project">[Proyecto]</span>&#160;&#160;Categoría`).
+    Si ese prefijo se cuela, el label queda
+    `category::[602253 REC Banco…]\xa0\xa0General` y GitLab responde 500 al
+    crear el issue: en la migración real así fallaron 42 de 52 issues."""
+    fila = (
+        '<html><body><a href="logout_page.php">x</a><table><tr>'
+        '<td class="column-priority"><i title="normal"></i></td>'
+        '<td class="column-id"><a href="/mantis/view.php?id=1001">0001001</a></td>'
+        '<td class="column-category"><div class="align-left">'
+        '<span class="small project">[<a href="#">602253 REC Proyecto Ejemplo</a>]</span>'
+        "&#160;&#160;Procesos de Carga</div></td>"
+        '<td class="column-status"><i class="status-10-fg"></i></td>'
+        '<td class="column-summary"><a href="view.php?id=1001">Titulo</a></td>'
+        "</tr></table></body></html>"
+    )
+    get_map, post_map = _happy_path_login_maps()
+    get_map[_SET_PROJECT_URL] = fila
+    get_map[_FILTRO_TODOS_URL] = fila
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = fila
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = _PAGINA_VACIA_HTML
+    session = _make_session(get_map, post_map)
+
+    adapter = MantisWebScrapingReadAdapter(
+        _BASE_URL, [310], "testuser", "correcthorsebattery", session=session
+    )
+    categoria = adapter.fetch_all_issues()[0]["category"]
+
+    assert categoria == "Procesos de Carga"
+    assert "[" not in categoria and "602253" not in categoria
+    assert "\xa0" not in categoria, "el espacio duro rompe los labels de GitLab"

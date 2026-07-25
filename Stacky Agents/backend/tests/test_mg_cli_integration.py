@@ -261,14 +261,14 @@ def test_execute_dry_run_produce_reporte_simulacro_en_disco(tmp_path, fake_adapt
     assert payload["summary"]["operaciones_salteadas_idempotencia"] == 0
     assert payload["summary"]["operaciones_fallidas_total"] == 0
 
-    # El mapeo quedó persistido en SQLite: los 3 issues terminaron "done"
-    # con un gitlab_iid SIMULADO (prefijo "dryrun-", nunca un ID real).
+    # El simulacro NO deja rastro en el mapeo real: trabaja sobre una copia
+    # en memoria. Si persistiera (como hacía antes, con iids falsos
+    # "dryrun-N"), la migración REAL posterior saltearía esos issues por
+    # idempotencia y el ensayo habría impedido la migración de verdad.
     conn = open_map_db(mg_main._resolve_map_db_path(config))
     try:
         rows = {r["mantis_issue_id"]: r for r in get_full_mapping(conn, config.destination.project_path)}
-        assert set(rows) == {"501", "502", "503"}
-        assert all(r["status"] == "done" for r in rows.values())
-        assert all(r["gitlab_iid"].startswith("dryrun-") for r in rows.values())
+        assert rows == {}, "un dry-run no debe persistir mapeos en la base real"
     finally:
         conn.close()
 
@@ -284,28 +284,27 @@ def test_segunda_corrida_plan_mas_execute_dry_run_es_idempotente(tmp_path, fake_
     assert mg_main.main(["execute", "--config", config_path, "--dry-run"]) == 0
     capsys.readouterr()  # descarta stdout de la 1ra corrida
 
-    # 2da corrida completa sobre el MISMO config/SQLite: 'plan' debe ver los
-    # 3 issues como ya migrados (status=done) y no generar ops nuevas.
+    # 2da corrida de 'plan': sigue planificando los 3. Es lo CORRECTO — un
+    # simulacro no migró nada de verdad, así que no puede hacer que el plan
+    # real crea que el trabajo ya está hecho (el mapeo del ensayo vive en su
+    # propia base). Si `plan` leyera la base del simulacro, un ensayo dejaría
+    # la migración real bloqueada para siempre.
     assert mg_main.main(["plan", "--config", config_path]) == 0
     plan_stdout = capsys.readouterr().out
-    assert "Saltados (ya migrados, status=done): 3" in plan_stdout
+    assert "Saltados (ya migrados, status=done): 0" in plan_stdout
 
+    # 2da corrida del EJECUTOR en simulacro: vuelve a simular las 3
+    # creaciones (el ensayo anterior no dejó estado), sin fallar ni duplicar
+    # nada real.
     assert mg_main.main(["execute", "--config", config_path, "--dry-run"]) == 0
     execute_stdout = capsys.readouterr().out
-    # plan_migration ya excluyó los 3 issues "done" ANTES de que se
-    # conviertan en ops (ver migrator_mg_core.plan_migration) — por eso acá
-    # el contador de aplicadas/salteadas del EJECUTOR es 0/0 (el plan que le
-    # llega está vacío), no "0 aplicadas / 3 salteadas". La garantía real de
-    # "no se duplica nada" está en que el mapeo sigue con exactamente 3 filas
-    # 'done' después de la 2da corrida (ver abajo), no en este contador.
-    assert "Aplicadas: 0, salteadas (idempotencia): 0, fallidas: 0" in execute_stdout
+    assert "Aplicadas: 3, salteadas (idempotencia): 0, fallidas: 0" in execute_stdout
 
     config = load_config(config_path)
     conn = open_map_db(mg_main._resolve_map_db_path(config))
     try:
-        rows = get_full_mapping(conn, config.destination.project_path)
-        assert len(rows) == 3
-        assert all(r["status"] == "done" for r in rows)
+        # Ningún ensayo tocó la base real.
+        assert get_full_mapping(conn, config.destination.project_path) == []
     finally:
         conn.close()
 

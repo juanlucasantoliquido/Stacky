@@ -26,6 +26,7 @@ import argparse
 import getpass
 import logging
 import re
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -91,14 +92,38 @@ def _slugify(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "_", (value or "").strip("/")) or "proyecto"
 
 
-def _resolve_map_db_path(config: MigrationConfig) -> str:
+def _resolve_map_db_path(config: MigrationConfig, *, dry_run: bool = False) -> str:
     """Deriva la ruta del SQLite propio del tool (§11 del plan) a partir de
     `options.incremental.checkpoint_file` (mismo directorio) o, si no está
-    seteado, `run_state/<slug>_map.sqlite3` relativo al cwd."""
+    seteado, `run_state/<slug>_map.sqlite3` relativo al cwd.
+
+    `dry_run` se acepta por compatibilidad de firma pero NO cambia la ruta:
+    el simulacro trabaja sobre una COPIA EN MEMORIA de esta misma base (ver
+    `_open_map_db_for_run`), así arranca del mismo estado real —y por lo
+    tanto calcula el mismo hash de plan— sin escribir nada a disco."""
     checkpoint_file = config.options.incremental.checkpoint_file
     slug = _slugify(config.destination.project_path)
     parent = Path(checkpoint_file).parent if checkpoint_file else Path("run_state")
     return str(parent / f"{slug}_map.sqlite3")
+
+
+def _open_map_db_for_run(map_db_path: str, *, dry_run: bool) -> sqlite3.Connection:
+    """Abre el SQLite del mapeo para una corrida.
+
+    En SIMULACRO devuelve una copia EN MEMORIA de la base real: el ensayo
+    lee el mismo estado de partida (mismo plan, mismo hash) pero sus
+    escrituras se descartan al terminar. Antes el dry-run escribía en la
+    base real y dejaba los issues marcados `done` con iids falsos
+    (`dryrun-N`), de modo que la migración REAL posterior los salteaba por
+    idempotencia: el ensayo impedía la migración de verdad."""
+    conn = open_map_db(map_db_path)
+    if not dry_run:
+        return conn
+    memoria = sqlite3.connect(":memory:")
+    memoria.row_factory = sqlite3.Row
+    conn.backup(memoria)
+    conn.close()
+    return memoria
 
 
 def _resolve_checkpoint_path(config: MigrationConfig) -> str:
@@ -484,7 +509,7 @@ def cmd_execute(args: argparse.Namespace) -> int:
     dry_run = bool(args.dry_run)
 
     map_db_path = _resolve_map_db_path(config)
-    conn = open_map_db(map_db_path)
+    conn = _open_map_db_for_run(map_db_path, dry_run=dry_run)
     try:
         if not dry_run:
             already_migrated_error = _check_already_fully_migrated(conn, config, force=args.force)

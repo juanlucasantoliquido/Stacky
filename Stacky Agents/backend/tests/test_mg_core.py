@@ -219,3 +219,66 @@ def test_plan_incluye_comentarios_y_adjuntos():
     attach_op = next(op for op in plan.ops if op.op_kind == "upload_attachment")
     # Solo metadatos serializables: el binario se descarga en ejecución.
     assert attach_op.payload["attachment_meta"]["id"] == "501"
+
+
+# ── El plan debe leer el DETALLE, no solo el listado (bug en produccion) ──
+
+
+class _FakeAdapterListadoYDetalle(_FakeMantisReadAdapter):
+    """El listado de Mantis NO trae descripción/reporter/handler: viven en la
+    página de detalle. Este fake reproduce esa asimetría real."""
+
+    def fetch_issue_detail(self, issue_id: int) -> dict:
+        return {
+            "id": issue_id,
+            "description": "Cuerpo real del ticket.",
+            "steps_to_reproduce": "1. Abrir. 2. Fallar.",
+            "reporter": "Xavier Torres",
+            "handler": "otro.usuario",
+            "date_submitted": "10/01/2026 09:15",
+            "notes": [],
+            "attachments": [],
+            "relationships": [],
+        }
+
+    def fetch_comments(self, issue_id: int) -> list[dict]:
+        return [{"id": "1", "reporter": "a", "date": "d", "text": "publica", "private": False},
+                {"id": "2", "reporter": "b", "date": "d", "text": "interna", "private": True}]
+
+
+def test_plan_toma_descripcion_y_autoria_del_detalle():
+    """La migración real de Ripley creó 52 issues con el CUERPO VACÍO: el
+    plan armaba el payload solo con la fila del listado (id/título/estado/
+    prioridad/severidad/categoría) y nunca consultaba `fetch_issue_detail`,
+    donde viven descripción, reporter, handler y pasos."""
+    adapter = _FakeAdapterListadoYDetalle(
+        [{"id": 1001, "project_id": 310, "summary": "Titulo", "status": "new", "priority": "normal"}],
+        {},
+    )
+
+    plan = plan_migration(adapter, {}, _FIELD_MAPPING, _USER_MAPPING)
+    create = next(op for op in plan.ops if op.op_kind == "create_item")
+    desc = create.payload["description"]
+
+    assert "Cuerpo real del ticket." in desc
+    assert "1. Abrir. 2. Fallar." in desc
+    # Autoría preservada: GitLab atribuye el issue al dueño del token.
+    assert "Xavier Torres" in desc
+    assert "10/01/2026" in desc
+    # El título sigue viniendo del listado.
+    assert create.payload["title"] == "Titulo"
+
+
+def test_notas_privadas_de_mantis_quedan_marcadas():
+    """GitLab no tiene equivalente de 'nota privada' en issues: si se migran
+    sin marca, notas internas quedan indistinguibles de las públicas."""
+    adapter = _FakeAdapterListadoYDetalle(
+        [{"id": 1001, "project_id": 310, "summary": "T", "status": "new", "priority": "normal"}],
+        {},
+    )
+
+    plan = plan_migration(adapter, {}, _FIELD_MAPPING, _USER_MAPPING)
+    cuerpos = [op.payload["body"] for op in plan.ops if op.op_kind == "post_comment"]
+
+    assert any("NOTA PRIVADA" in c and "interna" in c for c in cuerpos)
+    assert all("NOTA PRIVADA" not in c for c in cuerpos if "publica" in c)

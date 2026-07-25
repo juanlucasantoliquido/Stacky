@@ -62,13 +62,22 @@ def _build_comment_body(comment: dict) -> str:
     reporter = str(comment.get("reporter") or "").strip()
     date = str(comment.get("date") or "").strip()
     text = str(comment.get("text") or "").strip()
+    partes: list[str] = []
     if reporter or date:
-        cabecera = "> **{}**{}".format(
-            reporter or "(autor desconocido)",
-            f" — {date}" if date else "",
+        partes.append(
+            "> **{}**{}".format(
+                reporter or "(autor desconocido)",
+                f" — {date}" if date else "",
+            )
         )
-        return f"{cabecera}\n\n{text}"
-    return text
+    # Mantis distingue notas privadas; GitLab no tiene equivalente en las
+    # notas de issue. Se marcan de forma inequívoca para que nadie las lea
+    # como si hubieran sido públicas en el origen (§6: lo que se degrada
+    # queda declarado, nunca en silencio).
+    if comment.get("private"):
+        partes.append("> 🔒 **NOTA PRIVADA en Mantis** — no era visible para todos los usuarios del origen.")
+    partes.append(text)
+    return "\n\n".join(p for p in partes if p)
 
 # Orden topológico propio de Mantis — 2 niveles (sin padre / con padre),
 # NO el `_TYPE_ORDER` de migrator_core.py (ver docstring del módulo).
@@ -123,11 +132,39 @@ def _extract_parent_id(relationships: list[dict[str, Any]]) -> Optional[str]:
     return None
 
 
+def _build_authorship_block(issue: dict) -> str:
+    """§6 del plan: GitLab atribuye todo issue al dueño del token y no deja
+    setear `created_at` sin admin de instancia, así que el autor original,
+    el asignado y las fechas de Mantis se conservan como bloque de metadata
+    al inicio de la descripción. Sin esto se pierde QUIÉN reportó cada
+    ticket y CUÁNDO."""
+    reporter = str(issue.get("reporter") or "").strip()
+    handler = str(issue.get("handler") or "").strip()
+    submitted = str(issue.get("date_submitted") or "").strip()
+    updated = str(issue.get("last_modified") or issue.get("last_updated") or "").strip()
+
+    lineas: list[str] = []
+    if reporter:
+        lineas.append(f"**Autor original (Mantis):** {reporter}")
+    if handler:
+        lineas.append(f"**Asignado en Mantis:** {handler}")
+    if submitted:
+        lineas.append(f"**Fecha de creación (Mantis):** {submitted}")
+    if updated:
+        lineas.append(f"**Última modificación (Mantis):** {updated}")
+    if not lineas:
+        return ""
+    return "\n".join(f"> {linea}" for linea in lineas)
+
+
 def _build_description(issue: dict, custom_fields_mode: str) -> str:
     """§5 del plan: description + steps_to_reproduce + additional_information
     concatenados con encabezados Markdown, más el bloque de custom_fields si
     `custom_fields.mode == "metadata_block"`."""
     parts: list[str] = []
+    autoria = _build_authorship_block(issue)
+    if autoria:
+        parts.append(autoria)
     description = (issue.get("description") or "").strip()
     if description:
         parts.append(f"## Descripción\n\n{description}")
@@ -268,14 +305,33 @@ def plan_migration(
             skipped_at_plan += 1
             continue
 
+        # El LISTADO de Mantis solo trae id/título/estado/prioridad/severidad/
+        # categoría — la descripción, el reporter, el asignado y los pasos
+        # viven en la PÁGINA DE DETALLE. Sin esta fusión los issues se
+        # migraban con el cuerpo VACÍO y sin autoría (así se migraron los 52
+        # primeros de Ripley). El detalle manda; la fila del listado aporta
+        # lo que el detalle no tenga.
         try:
-            relationships = origin_adapter.fetch_relationships(issue.get("id"))
+            detalle = origin_adapter.fetch_issue_detail(issue.get("id"))
+        except Exception:
+            detalle = {}
+            warnings.append(
+                f"issue {issue_id}: no se pudo leer el detalle; se migra solo con "
+                "los campos del listado (sin descripción ni autoría)"
+            )
+        issue_completo = dict(issue)
+        issue_completo.update({k: v for k, v in (detalle or {}).items() if v not in (None, "", [])})
+
+        try:
+            relationships = detalle.get("relationships") if detalle else None
+            if relationships is None:
+                relationships = origin_adapter.fetch_relationships(issue.get("id"))
         except Exception:
             relationships = []
             warnings.append(f"issue {issue_id}: no se pudieron obtener relaciones")
 
         parent_id = _extract_parent_id(relationships)
-        payload = _build_payload(issue, field_mapping, user_mapping, warnings)
+        payload = _build_payload(issue_completo, field_mapping, user_mapping, warnings)
         marker = _MG_MARKER_TEMPLATE.format(project_id=_get_project_id(issue), issue_id=issue_id)
 
         ops.append(

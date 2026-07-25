@@ -158,6 +158,23 @@ def _clean_category(cell_html: str) -> str:
     return _strip_tags(_PROJECT_SPAN_RE.sub("", cell_html or ""))
 
 
+# Texto que Mantis muestra cuando el issue NO tiene etiquetas (varía con el
+# idioma de la instancia): no es una etiqueta, es la ausencia de ellas.
+_SIN_TAGS_RE = re.compile(r"^(sin etiquetas|no tags)\b", re.IGNORECASE)
+
+
+def _split_tags(raw: "str | list | None") -> list[str]:
+    """Normaliza la celda de etiquetas a una LISTA de strings."""
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(t).strip() for t in raw if str(t).strip()]
+    texto = str(raw).strip()
+    if not texto or _SIN_TAGS_RE.match(texto):
+        return []
+    return [t.strip() for t in re.split(r"[,;]", texto) if t.strip()]
+
+
 # ── Parsing del listado real de Mantis (`view_all_bug_page.php`) ─────────
 #
 # Estructura REAL verificada en vivo contra la instancia de referencia: la
@@ -335,6 +352,12 @@ def _parse_issue_detail_html(html_text: str, issue_id: int) -> dict[str, Any]:
     }
     for canonical in _LABEL_ALIASES:
         detail[canonical] = pick(canonical)
+
+    # `tags` debe ser una LISTA. Mantis renderiza esa celda como texto y,
+    # cuando no hay etiquetas, un literal tipo "Sin etiquetas adjuntas." —
+    # devolverlo como str hacía que el mapper lo iterara CARÁCTER a carácter
+    # y generara labels basura (`tag::S`, `tag::i`, `tag::n`, …).
+    detail["tags"] = _split_tags(detail.get("tags"))
 
     # El estado se normaliza al nombre canónico en inglés vía el ID numérico
     # de la clase CSS (`status-NN-fg`), igual que en el listado: el texto

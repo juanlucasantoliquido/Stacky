@@ -42,6 +42,33 @@ from .mapping.version_map import map_version
 
 # Marker de idempotencia propio (§5 del plan, fila `id`; NO el de ADO).
 _MG_MARKER_TEMPLATE = "<!-- stacky-migrated:mantis:{project_id}:{issue_id} -->"
+# Markers propios de comentarios y adjuntos: la idempotencia de cada op se
+# resuelve por marker (§11), así que cada nota/adjunto necesita el suyo —
+# si no, re-ejecutar duplicaría comentarios en los issues ya migrados.
+_MG_NOTE_MARKER_TEMPLATE = (
+    "<!-- stacky-migrated:mantis-note:{project_id}:{issue_id}:{note_id} -->"
+)
+_MG_ATTACH_MARKER_TEMPLATE = (
+    "<!-- stacky-migrated:mantis-file:{project_id}:{issue_id}:{file_id} -->"
+)
+
+
+def _build_comment_body(comment: dict) -> str:
+    """Cuerpo de la nota en GitLab preservando la autoría original de Mantis.
+
+    GitLab atribuye toda nota al dueño del token (salvo modo `sudo`, que
+    exige PAT admin), así que el autor y la fecha reales de Mantis se
+    conservan como encabezado del cuerpo (§6 del plan)."""
+    reporter = str(comment.get("reporter") or "").strip()
+    date = str(comment.get("date") or "").strip()
+    text = str(comment.get("text") or "").strip()
+    if reporter or date:
+        cabecera = "> **{}**{}".format(
+            reporter or "(autor desconocido)",
+            f" — {date}" if date else "",
+        )
+        return f"{cabecera}\n\n{text}"
+    return text
 
 # Orden topológico propio de Mantis — 2 niveles (sin padre / con padre),
 # NO el `_TYPE_ORDER` de migrator_core.py (ver docstring del módulo).
@@ -261,8 +288,66 @@ def plan_migration(
             )
         )
 
-    # Orden topológico estable: sin padre primero, con padre después.
-    ops.sort(key=lambda op: _MG_TYPE_ORDER["has_parent" if op.dest_parent_mantis_id else "no_parent"])
+        # Comentarios (§5: notes -> notas GitLab con autoría en el cuerpo).
+        try:
+            comments = origin_adapter.fetch_comments(issue.get("id"))
+        except Exception:
+            comments = []
+            warnings.append(f"issue {issue_id}: no se pudieron obtener comentarios")
+        for index, comment in enumerate(comments):
+            ops.append(
+                MgMigrationOp(
+                    op_kind="post_comment",
+                    mantis_issue_id=issue_id,
+                    dest_parent_mantis_id=None,
+                    payload={
+                        "body": _build_comment_body(comment),
+                        "private": bool(comment.get("private")),
+                    },
+                    marker=_MG_NOTE_MARKER_TEMPLATE.format(
+                        project_id=_get_project_id(issue),
+                        issue_id=issue_id,
+                        note_id=str(comment.get("id") or index),
+                    ),
+                )
+            )
+
+        # Adjuntos (§5: descarga binaria Mantis -> upload/link en GitLab).
+        try:
+            attachments = origin_adapter.fetch_attachments(issue.get("id"))
+        except Exception:
+            attachments = []
+            warnings.append(f"issue {issue_id}: no se pudieron obtener adjuntos")
+        for attachment in attachments:
+            ops.append(
+                MgMigrationOp(
+                    op_kind="upload_attachment",
+                    mantis_issue_id=issue_id,
+                    dest_parent_mantis_id=None,
+                    # Solo METADATOS (serializables): el binario se descarga
+                    # en la ejecución, y el `origin_adapter` se inyecta ahí
+                    # (no puede viajar en el plan, que se hashea/persiste).
+                    payload={"attachment_meta": dict(attachment)},
+                    marker=_MG_ATTACH_MARKER_TEMPLATE.format(
+                        project_id=_get_project_id(issue),
+                        issue_id=issue_id,
+                        file_id=str(attachment.get("id") or attachment.get("name") or ""),
+                    ),
+                )
+            )
+
+    # Orden topológico estable: sin padre primero, con padre después. Los
+    # comentarios/adjuntos van SIEMPRE después de todos los create_item, ya
+    # que necesitan el issue destino ya creado para resolver su iid.
+    def _orden(op: MgMigrationOp) -> tuple[int, int]:
+        if op.op_kind != "create_item":
+            return (2, 0)
+        return (
+            _MG_TYPE_ORDER["has_parent" if op.dest_parent_mantis_id else "no_parent"],
+            0,
+        )
+
+    ops.sort(key=_orden)
 
     counts_by_type: dict[str, int] = {}
     for op in ops:

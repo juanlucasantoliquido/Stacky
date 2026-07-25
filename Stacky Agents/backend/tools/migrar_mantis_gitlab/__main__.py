@@ -243,8 +243,11 @@ def _check_unmapped_field_values(issues: "list[dict]", field_mapping: FieldMappi
         raw_priority = issue.get("priority")
         if raw_priority not in (None, ""):
             try:
+                # Sin `int()`: el scraping entrega el NOMBRE de la prioridad
+                # ("alta"/"high"), no el ID numérico de la API REST.
+                # `map_priority` resuelve ambos (ver `resolve_priority_id`).
                 map_priority(
-                    int(raw_priority), field_mapping.priority.scale, field_mapping.priority.label_prefix
+                    raw_priority, field_mapping.priority.scale, field_mapping.priority.label_prefix
                 )
             except (TypeError, ValueError, UnmappedPriorityError):
                 seen_priority_unmapped.add(str(raw_priority))
@@ -555,6 +558,14 @@ def cmd_execute(args: argparse.Namespace) -> int:
             mantis_project_id=mantis_project_id,
             checkpoint_path=checkpoint_path,
             checkpoint_every=config.options.batch_size,
+            # Los adjuntos se descargan del origen EN EJECUCIÓN (el binario
+            # no viaja en el plan): el adapter y los límites de tamaño se
+            # inyectan acá, no en el payload serializado.
+            origin_adapter=origin_adapter,
+            attachment_options={
+                "max_size_mb": config.options.attachments.max_size_mb,
+                "skip_if_over_limit": config.options.attachments.skip_if_over_limit,
+            },
         )
 
         mapping_lookup = {

@@ -167,3 +167,55 @@ def test_plan_migration_marker_contiene_project_id_e_issue_id():
     op_101 = next(op for op in plan.ops if op.mantis_issue_id == "101")
     assert op_101.marker == "<!-- stacky-migrated:mantis:310:101 -->"
     assert op_101.marker in op_101.payload["description"]
+
+
+# ── Comentarios y adjuntos en el plan (regresión: faltaban por completo) ──
+
+
+class _FakeAdapterConNotasYAdjuntos(_FakeMantisReadAdapter):
+    """Adapter con notas/adjuntos, para verificar que el plan los incluye."""
+
+    def fetch_comments(self, issue_id: int) -> list[dict]:
+        return [
+            {"id": "9001", "reporter": "Usuario Ejemplo",
+             "date": "13/01/2026 10:00", "text": "Primera nota.", "private": False},
+            {"id": "9002", "reporter": "otro.demo",
+             "date": "14/01/2026 11:30", "text": "Segunda nota.", "private": False},
+        ]
+
+    def fetch_attachments(self, issue_id: int) -> list[dict]:
+        return [{"id": "501", "name": "captura.png", "size": 1024, "url": "file_download.php?file_id=501"}]
+
+
+def test_plan_incluye_comentarios_y_adjuntos():
+    """El plan generaba SOLO create_item: los comentarios y adjuntos no se
+    migraban en absoluto, pese a ser criterio de aceptación (§18). Peor: al
+    quedar el issue marcado `done` por su marker, una corrida posterior lo
+    salteaba por idempotencia y ya no había forma de rellenarlos."""
+    adapter = _FakeAdapterConNotasYAdjuntos(
+        [{"id": 1001, "project_id": 310, "summary": "Uno", "status": "new", "priority": "normal"}],
+        {},
+    )
+
+    plan = plan_migration(adapter, {}, _FIELD_MAPPING, _USER_MAPPING)
+
+    assert plan.counts_by_type["create_item"] == 1
+    assert plan.counts_by_type["post_comment"] == 2
+    assert plan.counts_by_type["upload_attachment"] == 1
+
+    kinds = [op.op_kind for op in plan.ops]
+    assert kinds[0] == "create_item", "el issue debe crearse ANTES de sus notas/adjuntos"
+
+    # Cada nota/adjunto lleva marker PROPIO: si compartieran el del issue,
+    # re-ejecutar duplicaría comentarios en los issues ya migrados.
+    markers = [op.marker for op in plan.ops]
+    assert len(set(markers)) == len(markers), "markers duplicados entre ops"
+
+    comment_op = next(op for op in plan.ops if op.op_kind == "post_comment")
+    # La autoría original de Mantis se preserva en el cuerpo (§6).
+    assert "Usuario Ejemplo" in comment_op.payload["body"]
+    assert "Primera nota." in comment_op.payload["body"]
+
+    attach_op = next(op for op in plan.ops if op.op_kind == "upload_attachment")
+    # Solo metadatos serializables: el binario se descarga en ejecución.
+    assert attach_op.payload["attachment_meta"]["id"] == "501"

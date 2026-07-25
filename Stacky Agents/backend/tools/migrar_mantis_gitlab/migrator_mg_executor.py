@@ -195,6 +195,8 @@ def _apply_upload_attachment(
     project_path: str,
     mantis_project_id: str,
     result: MgExecutionResult,
+    origin_adapter=None,
+    attachment_options: "dict | None" = None,
 ) -> None:
     # Import perezoso: `migrator_mg_attachments.py` (F6a, mismo batch)
     # importa `destination_writer` — evita cualquier ciclo de import y
@@ -214,14 +216,27 @@ def _apply_upload_attachment(
         )
 
     payload = op.payload or {}
-    migrator_mg_attachments.migrate_attachment_mg(
+    # El adapter de origen y los límites de tamaño se INYECTAN en ejecución
+    # (no viajan en el plan: no son serializables / son config de corrida).
+    options = attachment_options or {}
+    adapter = origin_adapter if origin_adapter is not None else payload.get("origin_adapter")
+    if adapter is None:
+        raise RuntimeError(
+            "upload_attachment: falta el origin_adapter para descargar el "
+            "binario desde Mantis (se inyecta en execute_migration)."
+        )
+    outcome = migrator_mg_attachments.migrate_attachment_mg(
         payload.get("attachment_meta", {}),
         writer,
-        payload.get("origin_adapter"),
+        adapter,
         dest_iid=dest_iid,
-        max_size_mb=payload.get("max_size_mb", 50),
-        skip_if_over_limit=payload.get("skip_if_over_limit", True),
+        max_size_mb=options.get("max_size_mb", 50),
+        skip_if_over_limit=options.get("skip_if_over_limit", True),
     )
+    if isinstance(outcome, dict) and outcome.get("skipped"):
+        # Saltado por tamaño: NO cuenta como aplicado; queda declarado.
+        result.skipped += 1
+        return
     result.applied += 1
 
 
@@ -235,6 +250,8 @@ def execute_migration(
     checkpoint_path: str,
     checkpoint_every: int = 10,
     run_id: Optional[str] = None,
+    origin_adapter=None,
+    attachment_options: "dict | None" = None,
 ) -> MgExecutionResult:
     """Ejecuta el plan en orden (ya viene ordenado topológicamente por
     `plan_migration`), idempotente por marker/mapeo persistido.
@@ -289,6 +306,8 @@ def execute_migration(
                     project_path=project_path,
                     mantis_project_id=mantis_project_id,
                     result=result,
+                    origin_adapter=origin_adapter,
+                    attachment_options=attachment_options,
                 )
                 applied_this_op = result.applied > before
         except Exception as exc:

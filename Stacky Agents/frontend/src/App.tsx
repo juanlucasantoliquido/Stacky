@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
+import IncidentInboxPage from "./pages/IncidentInboxPage"; // Plan 238
+import { INCIDENT_ICON } from "./utils/workItemTypeColor"; // Plan 238 (reuso)
 import UnblockerPage from "./pages/UnblockerPage";
 import SystemLogsPage from "./pages/SystemLogsPage";
 import PMCommandCenter from "./pages/PMCommandCenter";
@@ -88,6 +90,7 @@ export default function App() {
   const [planesEnabled, setPlanesEnabled] = useState(false);
   // Plan 167: tab Evolución visible solo si el flag está ON en el backend
   const [evolutionEnabled, setEvolutionEnabled] = useState(false);
+  const [incidentInboxEnabled, setIncidentInboxEnabled] = useState(false); // Plan 238
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
@@ -147,6 +150,10 @@ export default function App() {
     });
     void probeFlagHealth("/api/evolution/health").then((v) => {
       if (alive) setEvolutionEnabled((prev) => nextEnabledState(prev, v));
+    });
+    // Plan 238 — gate de la bandeja de incidencias (default ON del lado backend).
+    void probeFlagHealth("/api/incident-inbox/status").then((v) => {
+      if (alive) setIncidentInboxEnabled((prev) => nextEnabledState(prev, v));
     });
     void probeFlagHealth("/api/search/health").then((v) => {
       if (alive) setDeepSearchEnabled((prev) => nextEnabledState(prev, v));
@@ -259,7 +266,8 @@ export default function App() {
     else if (tab === "costcenter" && !costCenterEnabled) selectTab("tickets");
     else if (tab === "planes" && !planesEnabled) selectTab("tickets");
     else if (tab === "evolution" && !evolutionEnabled) selectTab("tickets");
-  }, [tab, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled, evolutionEnabled]);
+    else if (tab === "incidencias" && !incidentInboxEnabled) selectTab("tickets"); // Plan 238
+  }, [tab, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled, evolutionEnabled, incidentInboxEnabled]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
@@ -268,6 +276,7 @@ export default function App() {
     },
     migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled,
     evolutionEnabled,
+    incidentInboxEnabled, // Plan 238
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -300,6 +309,7 @@ export default function App() {
       {tab === "costcenter"  && costCenterEnabled && <CostCenterPage />} {/* Plan 142 */}
       {tab === "planes"      && planesEnabled && <PlansBoardPage />} {/* Plan 128 */}
       {tab === "evolution"   && evolutionEnabled && <EvolutionCenterPage />} {/* Plan 167 */}
+      {tab === "incidencias" && incidentInboxEnabled && <IncidentInboxPage />} {/* Plan 238 */}
     </>
   );
 
@@ -347,6 +357,14 @@ export default function App() {
             >
               📋 Tickets ADO
             </button>
+            {incidentInboxEnabled && (
+              <button
+                className={`${styles.navTab} ${tab === "incidencias" ? styles.active : ""}`}
+                onClick={() => selectTab("incidencias")}
+              >
+                {INCIDENT_ICON} Incidencias
+              </button>
+            )}
             <button
               className={`${styles.navTab} ${tab === "review" ? styles.active : ""}`}
               onClick={() => selectTab("review")}
@@ -476,6 +494,7 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         onNavigate={navigateTo}
         deepSearchEnabled={deepSearchEnabled}
+        incidentInboxEnabled={incidentInboxEnabled}
       />
       <ShortcutsCheatsheet
         open={cheatsheetOpen}

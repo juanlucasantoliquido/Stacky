@@ -88,6 +88,15 @@ def test_refresh_invalida_cache(app_flag_on, monkeypatch):
     client.get("/api/plans-board/list")
     assert counter["n"] == 1
 
+    # Plan 237 F2: ?refresh=1 tiene un piso anti-ráfaga de _BOARD_MIN_REFRESH_SEC
+    # (el botón "Refrescar" no puede martillar el disco). Dentro de ese piso el
+    # refresh devuelve el cache; pasado el piso, reconstruye. Se envejece el cache
+    # a mano en vez de dormir 2s.
+    client.get("/api/plans-board/list?refresh=1")
+    assert counter["n"] == 1, "dentro del piso anti-ráfaga, refresh NO reconstruye"
+
+    ts, board = plans_board._BOARD_CACHE
+    plans_board._BOARD_CACHE = (ts - (plans_board._BOARD_MIN_REFRESH_SEC + 1.0), board)
     client.get("/api/plans-board/list?refresh=1")
     assert counter["n"] == 2
 

@@ -723,6 +723,12 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 192 — Resiliencia de conexión: bool default ON; solo observa y
     # re-fetchea lecturas, ninguna de las 4 excepciones duras aplica. ──
     "STACKY_CONNECTION_RESILIENCE_ENABLED",
+    # ── Plan 237 — inventario de planes visible de fábrica ──
+    "STACKY_PLANS_BOARD_ENABLED",
+    "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED",
+    # ── Plan 238 — Bandeja de incidencias: bool default ON; solo lectura,
+    # ninguna de las 4 excepciones duras aplica. ──
+    "STACKY_INCIDENT_INBOX_ENABLED",
     # ── Plan 190 — Equipaje DevOps en export/import (bool default ON; exportar
     # NUNCA incluye secretos e importar NUNCA toca el keyring; ninguna de las 4
     # excepciones duras aplica). ──

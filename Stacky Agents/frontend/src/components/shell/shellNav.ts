@@ -6,7 +6,7 @@ export type ShellTab =
   | "team" | "tickets" | "review" | "unblocker" | "pm" | "logs"
   | "settings" | "docs" | "memory" | "diagnostics" | "history"
   | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes"
-  | "evolution";
+  | "evolution" | "incidencias";
 
 export interface ShellTabMeta {
   label: string;
@@ -16,6 +16,7 @@ export interface ShellTabMeta {
 export const TAB_META: Record<ShellTab, ShellTabMeta> = {
   team:        { label: "Mi Equipo",     iconName: "Zap" },
   tickets:     { label: "Tickets ADO",   iconName: "ClipboardList" },
+  incidencias: { label: "Incidencias",   iconName: "Ambulance" },
   review:      { label: "Revisión",      iconName: "Inbox" },
   unblocker:   { label: "Desatascador",  iconName: "Wrench" },
   pm:          { label: "PM",            iconName: "LayoutDashboard" },
@@ -40,7 +41,7 @@ export interface ShellNavGroup {
 }
 
 export const SHELL_NAV_GROUPS: ShellNavGroup[] = [
-  { id: "trabajo",        label: "Trabajo",        tabs: ["team", "tickets", "review", "unblocker"] },
+  { id: "trabajo",        label: "Trabajo",        tabs: ["team", "tickets", "incidencias", "review", "unblocker"] },
   { id: "observabilidad", label: "Observabilidad", tabs: ["pm", "logs", "history", "diagnostics", "costcenter", "planes", "evolution"] },
   { id: "conocimiento",   label: "Conocimiento",   tabs: ["docs", "memory"] },
   { id: "plataforma",     label: "Plataforma",     tabs: ["devops", "migrador", "dbcompare"] },
@@ -55,6 +56,7 @@ export interface VisibilityInput {
   costCenterEnabled: boolean;
   planesEnabled: boolean;
   evolutionEnabled: boolean;
+  incidentInboxEnabled?: boolean;   // Plan 238 — undefined => oculto
 }
 
 // Tabs SIEMPRE visibles (espejo del render actual de App.tsx: no dependen de gate).
@@ -76,6 +78,7 @@ export function computeVisibleTabs(input: VisibilityInput): Set<ShellTab> {
   if (input.costCenterEnabled) v.add("costcenter");
   if (input.planesEnabled) v.add("planes");
   if (input.evolutionEnabled) v.add("evolution");
+  if (input.incidentInboxEnabled) v.add("incidencias");   // Plan 238 — NO va a ALWAYS_VISIBLE
   return v;
 }
 

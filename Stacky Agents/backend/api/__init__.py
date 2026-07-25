@@ -3,6 +3,7 @@ from flask import Blueprint
 from .ado_manager import bp as ado_manager_bp
 from .docs_rag import bp as docs_rag_bp
 from .adoption import bp as adoption_bp
+from .incident_inbox import bp as incident_inbox_bp  # Plan 238 - bandeja de incidencias
 from .agent_roles import bp as agent_roles_bp
 from .agents import bp as agents_bp
 from .chat import bp as chat_bp
@@ -146,6 +147,7 @@ api_bp.register_blueprint(evolution_knowledge_bp)  # Plan 170 — /api/evolution
 # se evalúa una sola vez al importar el módulo, así que gatearlo acá obligaría a
 # reiniciar el backend para que el operador viera el efecto de tocar la flag.
 api_bp.register_blueprint(parity_bp)  # Plan 218 — /api/parity/matrix
+api_bp.register_blueprint(incident_inbox_bp)  # Plan 238 - url_prefix="/incident-inbox"
 
 
 @api_bp.get("/health")

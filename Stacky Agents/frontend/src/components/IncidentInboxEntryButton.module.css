@@ -1,0 +1,40 @@
+/* Plan 238 F8 — estilos del punto de entrada a la bandeja desde el tablero.
+   Calcados de .syncBtn (TicketBoard.module.css, leido SIN editarlo) y de
+   .navBadge (App.module.css). Los literales hexadecimales de .navBadge se
+   sustituyen por tokens: fondo var(--danger) y texto var(--bg-base) (no hay
+   token de "texto sobre color de estado" en el theme; queda constancia). */
+
+.entryBtn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border);
+}
+
+.entryBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.entryBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  min-width: 16px;
+  border-radius: 8px;
+  background: var(--danger);
+  color: var(--bg-base);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}

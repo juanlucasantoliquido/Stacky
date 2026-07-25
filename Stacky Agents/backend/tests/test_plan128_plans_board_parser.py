@@ -259,7 +259,9 @@ def test_build_board_orden_y_totales(tmp_path):
 
     board = build_board(docs, unpushed_paths=None)
     numbers = [c["number"] for c in board["plans"]]
-    assert numbers == [30, 20, 10]
+    # Plan 237: el orden es por bucket de triage, no por número.
+    # 30=CRITICADO -> SIN_IMPLEMENTAR; 10=PROPUESTO -> SIN_CRITICAR; 20=IMPLEMENTADO -> SIN_SUPERVISAR.
+    assert numbers == [30, 10, 20]
     assert board["totals"]["total"] == 3
     assert board["docs_dir_found"] is True
     assert "generated_at" in board and "T" in board["generated_at"]

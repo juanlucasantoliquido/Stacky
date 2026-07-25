@@ -31,6 +31,25 @@ const ESTADOS: (EstadoPlan | "TODOS")[] = [
   "SIN_ESTADO",
 ];
 
+// Plan 237 — etapas de triage. El ORDEN lo fija el backend (triage_order); acá
+// solo se ofrece el filtro y la etiqueta legible.
+const ETAPAS: string[] = [
+  "TODOS",
+  "SIN_IMPLEMENTAR",
+  "SIN_CRITICAR",
+  "SIN_DOCUMENTO",
+  "SIN_SUPERVISAR",
+  "COMPLETADO",
+];
+
+const ETAPA_LABEL: Record<string, string> = {
+  SIN_IMPLEMENTAR: "Sin implementar",
+  SIN_CRITICAR: "Sin criticar",
+  SIN_DOCUMENTO: "Sin documento",
+  SIN_SUPERVISAR: "Sin supervisar",
+  COMPLETADO: "Completado",
+};
+
 function CopyButton({
   action,
   variant,
@@ -66,6 +85,7 @@ export default function PlansBoardPage() {
   const [estado, setEstado] = useState<EstadoPlan | "TODOS">("TODOS");
   const [soloPendientesPush, setSoloPendientesPush] = useState(false);
   const [soloSinSupervisar, setSoloSinSupervisar] = useState(false);
+  const [bucket, setBucket] = useState<string>("TODOS"); // Plan 237 — filtro por etapa
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
@@ -113,8 +133,8 @@ export default function PlansBoardPage() {
   }, []);
 
   const board = boardQuery.data;
-  const filters: BoardFilters = { texto, estado, soloPendientesPush, soloSinSupervisar };
-  const filtered = useMemo(() => (board ? filterPlans(board.plans, filters) : []), [board, texto, estado, soloPendientesPush, soloSinSupervisar]);
+  const filters: BoardFilters = { texto, estado, soloPendientesPush, soloSinSupervisar, bucket };
+  const filtered = useMemo(() => (board ? filterPlans(board.plans, filters) : []), [board, texto, estado, soloPendientesPush, soloSinSupervisar, bucket]);
 
   if (boardQuery.isLoading) {
     return (
@@ -193,6 +213,14 @@ export default function PlansBoardPage() {
             </option>
           ))}
         </select>
+        {/* Plan 237 — filtro por etapa de triage (el orden lo fija el backend) */}
+        <select className={styles.filterSelect} value={bucket} onChange={(ev) => setBucket(ev.target.value)}>
+          {ETAPAS.map((b) => (
+            <option key={b} value={b}>
+              {b === "TODOS" ? "Todas las etapas" : ETAPA_LABEL[b]}
+            </option>
+          ))}
+        </select>
         <label className={styles.filterCheck} title={gitAvailable ? undefined : "sin datos de git"}>
           <input
             type="checkbox"
@@ -218,6 +246,7 @@ export default function PlansBoardPage() {
               <tr>
                 <th>Nº</th>
                 <th>Título</th>
+                <th>Etapa</th>
                 <th>Estado</th>
                 <th>Juez</th>
                 <th>Supervisión</th>
@@ -240,6 +269,8 @@ export default function PlansBoardPage() {
                         {[card.version ? `v${card.version}` : null, card.fecha].filter(Boolean).join(" · ")}
                       </div>
                     </td>
+                    {/* Plan 237 — etapa de triage calculada por el backend */}
+                    <td>{ETAPA_LABEL[card.triage_bucket] ?? card.triage_bucket}</td>
                     <td>
                       <span className={styles.stateChip} style={{ background: chip.color }}>
                         {chip.label}

@@ -1,0 +1,170 @@
+/* Plan 238 F6 — Bandeja de incidencias. CERO literales hexadecimales:
+   todo color por tokens del theme (lo exige el ratchet de deuda de interfaz).
+   El color por tipo de item llega por la variable --incident-type-color, que
+   se setea desde el componente con setProperty (nunca con estilos en linea). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.count {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.scopeToggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.scopeBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-3);
+}
+
+.scopeActive {
+  background: var(--bg-elev);
+  color: var(--text-primary);
+}
+
+.search {
+  min-width: 220px;
+}
+
+.copyBtn {
+  white-space: nowrap;
+}
+
+.banner {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  border-left: 3px solid var(--warn);
+  padding-left: var(--space-2);
+}
+
+.chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.typeDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--incident-type-color, var(--text-muted));
+}
+
+.adoId {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.rowTitle {
+  flex: 1 1 260px;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.stateBadge {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+}
+
+.openBadge {
+  font-size: var(--text-xs);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+}
+
+.closedBadge {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+}
+
+.runningDot {
+  font-size: var(--text-xs);
+  color: var(--accent);
+}
+
+.assignee {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.link {
+  font-size: var(--text-xs);
+  color: var(--accent);
+}

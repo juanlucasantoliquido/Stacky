@@ -36,8 +36,18 @@ def plans_board_health():
     from services import plans_board  # import lazy (patrón Plan 109, api/docs.py:224)
 
     docs_dir = plans_board.docs_dir_default()
-    next_n = plans_board.next_free_number(docs_dir) if docs_dir.exists() else None
-    return jsonify({"ok": True, "flag_enabled": _enabled(), "next_free_number": next_n})
+    # Plan 237 F3: el número propuesto saltea los reservados por docs/_roadmap/.
+    next_n = plans_board.next_free_number_effective(docs_dir) if docs_dir.exists() else None
+    # Plan 237 F7: los duplicados llegan AUNQUE el tablero esté apagado.
+    dups = plans_board.plan_number_duplicates(docs_dir) if docs_dir.exists() else []
+    return jsonify(
+        {
+            "ok": True,
+            "flag_enabled": _enabled(),
+            "next_free_number": next_n,
+            "duplicates": dups,
+        }
+    )
 
 
 @bp.get("/list")

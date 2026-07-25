@@ -58,6 +58,9 @@ interface NavCommandSpec {
 /** Una entrada por cada uno de los 13 tabs de App.tsx:30 (TAB_PATHS, App.tsx:32-46). */
 export const NAV_COMMANDS: NavCommandSpec[] = [
   { id: "nav-tickets", path: "/", label: "Ir a Tickets ADO", icon: "📋" },
+  // Plan 238 — el emoji va literal: NAV_COMMANDS es data pura sin imports de
+  // utilidades. Es el mismo valor que INCIDENT_ICON (utils/workItemTypeColor).
+  { id: "nav-incidencias", path: "/incidencias", label: "Ir a Incidencias", icon: "🚑" },
   { id: "nav-team", path: "/team", label: "Ir a Mi Equipo", icon: "⚡" },
   { id: "nav-review", path: "/review", label: "Ir a Revisión", icon: "🧭" },
   { id: "nav-unblocker", path: "/unblocker", label: "Ir a Desatascador", icon: "🧹" },

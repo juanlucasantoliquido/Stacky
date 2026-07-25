@@ -246,6 +246,9 @@ HARNESS_TEST_FILES=(
   tests/test_plan128_plans_board_parser.py
   tests/test_plan128_plans_board_git.py
   tests/test_plan128_plans_board_endpoints.py
+  # — Plan 237 · Triage de planes en el Centro de Evolución —
+  tests/test_plan237_plans_triage.py
+  tests/test_plan237_plans_triage_endpoint.py
   # — Plan 129 · Paleta global: búsqueda profunda multi-fuente —
   tests/test_plan129_flag.py
   tests/test_plan129_global_search_service.py
@@ -654,6 +657,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan218_capability_unavailable.py
   tests/test_plan218_serie_integridad.py
   tests/test_plan218_parity_endpoint.py
+  # -- Plan 238 - Bandeja de incidencias abiertas --
+  tests/test_plan238_inbox_flag.py
+  tests/test_plan238_incident_inbox_core.py
+  tests/test_plan238_incident_inbox_api.py
 )
 
 pass=0

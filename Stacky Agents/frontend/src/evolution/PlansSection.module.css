@@ -1,0 +1,143 @@
+/* Plan 237 F5 — estilos de la sección "Planes" del Centro de Evolución.
+   CERO literales hexadecimales: todo color por tokens del theme (G6 —
+   uiDebtRatchet cuenta hex en *.module.css y cero inline-style en *.tsx). */
+
+.section {
+  margin-top: var(--space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.resumenRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.proximo {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.reservados {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.alerta {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  border-left: 3px solid var(--danger);
+  padding-left: var(--space-2);
+}
+
+.census {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.filtro {
+  max-width: 360px;
+}
+
+.grupo {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.resumen {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.hint {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.tabla th {
+  text-align: left;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.tabla td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.subtitulo {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.badgeDup {
+  margin-left: var(--space-1);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.acciones {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Tonos por bucket — nombres usados desde BUCKET_META.tone (sin hex). */
+.toneUrgent {
+  color: var(--danger);
+}
+
+.toneWarn {
+  color: var(--warn);
+}
+
+.toneInfo {
+  color: var(--accent);
+}
+
+.tonePending {
+  color: var(--text-muted);
+}
+
+.toneDone {
+  color: var(--text-faint);
+}

@@ -1,4 +1,10 @@
-import { api, apiBase, rawPost, type RawResponse, type GatewayErrorBody } from "./client";
+import { api, apiBase, rawPost, rawGet, type RawResponse, type GatewayErrorBody } from "./client";
+// Plan 238 — Bandeja de incidencias abiertas (los import type van AL TOPE).
+import type {
+  IncidentInboxResponse,
+  IncidentInboxStatus,
+  IncidentScope,
+} from "../incidents/incidentInboxModel";
 export type { RawResponse, GatewayErrorBody };
 import type {
   CostBreakdownResponse,
@@ -2768,6 +2774,12 @@ export const PublishLedger = {
 // ── Plan 167 — Centro de Evolución ────────────────────────────────────────────
 export const Evolution = {
   health: () => fetch("/api/evolution/health").then((r) => r.json()),
+  // Plan 237 — sección "Planes" del Centro de Evolución (solo lectura).
+  plansHealth: () => fetch("/api/evolution/plans/health").then((r) => r.json()),
+  plans: (refresh = false) =>
+    fetch(`/api/evolution/plans${refresh ? "?refresh=1" : ""}`).then((r) =>
+      r.json().then((d) => ({ ok: r.ok, status: r.status, data: d })),
+    ),
   overview: () =>
     fetch("/api/evolution/overview").then((r) => {
       if (!r.ok) throw new Error(`evolution overview ${r.status}`);
@@ -4703,4 +4715,22 @@ export const DbCompareRepo = {
     api.get<{ ok: boolean; coverage: RepoCoverage | null; workspace: string | null }>(
       `/api/db-compare/runs/${encodeURIComponent(runId)}/repo-coverage`,
     ),
+};
+
+// ─── Plan 238 — Bandeja de incidencias abiertas ────────────────────────────
+export const IncidentInbox = {
+  /** Nunca lanza por status: 200 siempre (enabled:false con la flag OFF). */
+  status: (project?: string | null) => {
+    const qs = project ? `?project=${encodeURIComponent(project)}` : "";
+    return rawGet<IncidentInboxStatus>(`/api/incident-inbox/status${qs}`);
+  },
+  /** 404 feature_disabled llega como errorBody, NO como excepcion. */
+  items: (project?: string | null, scope: IncidentScope = "open") => {
+    const params = new URLSearchParams();
+    if (project) params.set("project", project);
+    params.set("scope", scope);
+    return rawGet<IncidentInboxResponse>(
+      `/api/incident-inbox/items?${params.toString()}`
+    );
+  },
 };

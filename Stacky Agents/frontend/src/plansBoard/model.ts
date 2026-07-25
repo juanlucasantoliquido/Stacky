@@ -31,6 +31,8 @@ export interface PlanCardDto {
   ledger: { veredicto: string; fecha: string | null; doc_drift: boolean | null } | null;
   unpushed: boolean | null;
   suggested_action: SuggestedAction;
+  /** Plan 237 — etapa de triage que calcula el backend. */
+  triage_bucket: string;
 }
 
 export interface BoardDto {
@@ -40,6 +42,9 @@ export interface BoardDto {
   git_available: boolean;
   next_free_number: number;
   totals: Record<string, number>;
+  /** Plan 237 — opcionales: un deploy viejo puede responder sin ellas. */
+  triage_order?: string[];
+  triage_totals?: Record<string, number>;
   plans: PlanCardDto[];
 }
 
@@ -57,6 +62,8 @@ export interface BoardFilters {
   estado: EstadoPlan | "TODOS";
   soloPendientesPush: boolean;
   soloSinSupervisar: boolean;
+  /** Plan 237 — filtro por etapa de triage. "TODOS" = sin filtrar. */
+  bucket: string | "TODOS";
 }
 
 export function estadoChip(card: PlanCardDto): { label: string; color: string } {
@@ -77,6 +84,7 @@ export function filterPlans(plans: PlanCardDto[], f: BoardFilters): PlanCardDto[
     if (f.estado !== "TODOS" && card.estado_efectivo !== f.estado) return false;
     if (f.soloPendientesPush && card.unpushed !== true) return false;
     if (f.soloSinSupervisar && !sinSupervisar(card)) return false;
+    if (f.bucket !== "TODOS" && card.triage_bucket !== f.bucket) return false;
     return true;
   });
 }

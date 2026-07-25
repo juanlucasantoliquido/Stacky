@@ -215,6 +215,72 @@
           "DEBUG GitLabTrackerProvider(project='grupo/proyecto') construido"
         ]
       }
+    },
+    {
+      "id": "plan-number-collision-2026-07-25",
+      "title": "Dos documentos distintos NN_PLAN_*.md con el mismo NN en Stacky Agents/docs/",
+      "class": "plan-numbering",
+      "status": "resolved",
+      "log_pattern": "n[uuú]meros de plan duplicados en docs/",
+      "log_guarded": false,
+      "killed_by": "plan 237 F7 (guardia de numeracion anti-colision)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan237_plans_triage.py::test_docs_reales_sin_numeros_duplicados",
+      "evidence": "backend/services/plans_board.py (all_claimed_numbers, plan_number_duplicates, claim_plan_path); docs/237_PLAN_TRIAGE_DE_PLANES_EN_EL_CENTRO_DE_EVOLUCION.md seccion 2.3",
+      "note": "Causa raiz: next_free_number solo miraba el directorio raiz y era un read puro: entre el calculo del numero y la escritura del .md, una sesion paralela podia tomar el mismo numero. El fix tiene tres partes: universo completo de numeros (raiz + subdirectorios + roadmaps + ledger), creacion EXCLUSIVA del archivo con open(..., 'x') (atomica en el filesystem) y duplicados ruidosos en el board + guard test.",
+      "self_test": {
+        "matches": [
+          "AssertionError: numeros de plan duplicados en docs/: [{'number': 237, 'filenames': ['237_PLAN_A.md', '237_PLAN_B.md']}]"
+        ],
+        "clean": [
+          "DEBUG plans_board: numbering.duplicates=[] next_free_number=239"
+        ]
+      }
+    },
+    {
+      "id": "PLAN238-INBOX-CIEGA-SIN-TIPO",
+      "title": "La bandeja de incidencias devuelve lista vacia en un proyecto que si tiene tickets",
+      "class": "provider-degradation",
+      "status": "resolved",
+      "log_pattern": "incident-inbox[^\\n]*untyped_count[\"']?\\s*[:=]\\s*[1-9]",
+      "log_guarded": false,
+      "killed_by": "plan 238 F2 (untyped_count + provider + estado vacio explicativo)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan238_incident_inbox_api.py::test_gitlab_sin_tipo_reporta_untyped_count",
+      "evidence": "backend/services/gitlab_provider.py:55-56,74-91 (el tipo viaja como label type::<x>); backend/services/ado_sync.py:174,307 (unico que persiste work_item_type)",
+      "note": "Sintoma: pantalla vacia sin explicacion. Causa raiz: con un tracker que no es Azure DevOps, Ticket.work_item_type queda NULL y en SQL 'NULL IN (...)' evalua a NULL, asi que la fila se descarta en silencio. La mitigacion NO arregla el sync (fuera de alcance): cuenta esos tickets en untyped_count y la vista explica el motivo en vez de decir 'no hay incidencias'.",
+      "self_test": {
+        "matches": [
+          "GET /api/incident-inbox/items -> items=[] untyped_count: 14 provider=gitlab"
+        ],
+        "clean": [
+          "GET /api/incident-inbox/items -> items=[7] untyped_count: 0 provider=ado"
+        ]
+      }
+    },
+    {
+      "id": "PLAN238-SHELL-ICONO-INEXISTENTE",
+      "title": "Un iconName de TAB_META que no existe en ICON_BY_NAME rompe la barra lateral entera",
+      "class": "shell-navigation",
+      "status": "resolved",
+      "log_pattern": "Element type is invalid[^\\n]*got: undefined|ICON_BY_NAME\\[[^\\]]+\\] is undefined",
+      "log_guarded": false,
+      "killed_by": "plan 238 F7 (test permanente de cobertura de iconos)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-25",
+      "guard_test": "src/components/shell/__tests__/shellIconsCoverage.test.ts",
+      "evidence": "frontend/src/components/shell/AppSidebar.tsx:34 resuelve ICON_BY_NAME[meta.iconName] en runtime; frontend/src/components/shell/shellIcons.ts",
+      "note": "Agregar un tab nuevo con un iconName mal escrito (o no importado de lucide-react) devuelve undefined y React revienta al renderizar, tumbando TODA la barra lateral, no solo ese item. Hasta el plan 238 solo se descubria abriendo el navegador; ahora es un rojo determinista para este tab y para todos los futuros.",
+      "self_test": {
+        "matches": [
+          "Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined."
+        ],
+        "clean": [
+          "DEBUG AppSidebar: 18 tabs renderizados con icono valido"
+        ]
+      }
     }
   ]
 }

@@ -8,11 +8,13 @@ import { NAV_COMMANDS, mergeDeepResults, fuzzyScore } from "../commandPaletteDat
 import type { RemoteGroup } from "../commandPaletteData";
 
 describe("NAV_COMMANDS", () => {
-  it("cubre los 13 tabs con paths unicos no vacios", () => {
-    expect(NAV_COMMANDS.length).toBe(13);
+  it("cubre los 14 tabs con paths unicos no vacios", () => {
+    // Plan 238: +1 entrada (nav-incidencias). El consumidor la filtra con el
+    // gate de la bandeja, pero el catalogo la declara siempre.
+    expect(NAV_COMMANDS.length).toBe(14);
     const paths = NAV_COMMANDS.map((c) => c.path);
     expect(paths.every((p) => typeof p === "string" && p.length > 0)).toBe(true);
-    expect(new Set(paths).size).toBe(13);
+    expect(new Set(paths).size).toBe(14);
   });
 });
 

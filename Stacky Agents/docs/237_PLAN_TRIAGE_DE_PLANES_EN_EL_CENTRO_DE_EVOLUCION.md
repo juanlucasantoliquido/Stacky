@@ -1,6 +1,8 @@
 # Plan 237 — Triage de planes en el Centro de Evolución: qué falta primero, sin abrir un solo `.md`
 
-**Estado:** CRITICADO v2 — RECHAZADO(v1) → corregido — 2026-07-25
+**Estado:** IMPLEMENTADO — F0..F7 (2026-07-25)
+**Implementación:** F0, F1, F2, F3, F7, F4, F5, F6 completas. Ver §11.
+**Estado previo:** CRITICADO v2 — RECHAZADO(v1) → corregido — 2026-07-25
 **Versión:** v1 → **v2** (juez adversarial: `StackyArchitectaUltraEficientCode`)
 **Tipo:** plan de superficie + censo honesto + guardia de numeración (backend read-only + una sección nueva del Centro de Evolución)
 **Depende de:** Plan 128 (tablero de planes, implementado), Plan 167 (Centro de Evolución, implementado)
@@ -1777,3 +1779,61 @@ escribe contenido: crea el archivo vacío que el operador/agente ya iba a crear.
 - [ ] Post-merge con el plan 238: cada key nueva aparece **exactamente una vez** por estructura compartida
       (§3.1) y `pytest tests\test_harness_flags.py -q` da `0 failed`.
 - [ ] Commit con pathspec explícito de los archivos de este plan; **sin `git push`** salvo pedido del operador.
+
+---
+
+## 11. Reporte de implementación (2026-07-25)
+
+**Rama:** `feat/plan-217-migrador-mantis-gitlab` (rama de trabajo activa; no se creó una nueva).
+
+| Fase | Estado | Comando corrido | Resultado real |
+|------|--------|-----------------|----------------|
+| F0 | IMPLEMENTADA | `pytest tests\test_plan237_plans_triage.py -q` | 27 passed |
+| F0 | IMPLEMENTADA | `pytest tests\test_plan128_plans_board_flag.py -q` | **6 passed** (antes: 1 failed, 5 passed) |
+| F1 | IMPLEMENTADA | `pytest tests\test_plan128_plans_board_parser.py -q` | 25 passed |
+| F2 | IMPLEMENTADA | `pytest tests\test_plan128_plans_board_endpoints.py -q` | 8 passed |
+| F3 | IMPLEMENTADA | `pytest tests\test_plan218_serie_integridad.py -q` | 10 passed |
+| F7 | IMPLEMENTADA | `plan_number_duplicates(docs/)` | `[]`; `next_free_number_effective` = **239** |
+| F4 | IMPLEMENTADA | `pytest tests\test_plan237_plans_triage_endpoint.py -q` | 8 passed |
+| F4 | IMPLEMENTADA | `pytest tests\test_harness_flags.py -q` / `test_flag_wiring.py` / `test_harness_ratchet_meta.py` / `test_evolution_endpoints.py` | 56 / 5 / 4 / 11 passed |
+| F5 | IMPLEMENTADA | `npx vitest run src/evolution/plansTriageModel.test.ts` | 10 passed |
+| F6 | IMPLEMENTADA | `npx vitest run src/plansBoard/model.test.ts` | 11 passed |
+| F5+F6 | IMPLEMENTADA | `npx tsc --noEmit` + `uiDebtRatchet` + `copyDebtRatchet` | 0 errores; 3 + 3 passed **sin regenerar baseline** |
+
+**Flags (ambas default ON, ninguna de las 4 excepciones duras aplica):**
+`STACKY_PLANS_BOARD_ENABLED` (promovida de opt-in a ON) y `STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED` (nueva,
+`requires=STACKY_EVOLUTION_CENTER_ENABLED`). Ambas UI-editables desde el panel de flags del arnés, con
+categoría y ayuda llana registradas.
+
+### Desvíos respecto del plan (declarados, no maquillados)
+
+1. **`test_harness_flags_help.py` NO puede quedar en `0 failed`** (criterio 3 de F0). Estaba **rojo antes**
+   de este plan con **3 tests fallando** por deuda ajena masiva: 44 flags sin ayuda llana (no solo la del
+   192), `STACKY_EGRESS_SENTINEL_MAX_CHARS` con `off_effect` que no empieza con `"Si "`, y 15 violaciones de
+   jerga. **Verificado que este plan no agrega ni una**: `STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED` no aparece
+   en ninguna de las tres listas de faltantes. La violación preexistente
+   `STACKY_PLANS_BOARD_ENABLED: cita una key SCREAMING_SNAKE` vive en su campo `what` (la cadena `NN_PLAN`),
+   que este plan **no** toca; arreglarla queda fuera de alcance.
+2. **F2 rompió un segundo test del Plan 128 que el plan no enumeró** (§6 R4 afirmaba "es exactamente uno").
+   El piso anti-ráfaga `_BOARD_MIN_REFRESH_SEC` contradice `test_refresh_invalida_cache`
+   (`test_plan128_plans_board_endpoints.py`), que exige que `?refresh=1` reconstruya de inmediato. Se
+   **conservó el piso** (instrucción literal de F2 + G8) y se adaptó ese test para que pruebe las dos mitades
+   del contrato nuevo: dentro del piso devuelve cache, pasado el piso reconstruye.
+3. **F5 usa `copyText` (services/copyService), no `navigator.clipboard.writeText`.** El plan pedía
+   `navigator.clipboard` en un `try/catch`, pero eso viola `copyDebtRatchet.test.ts` (Plan 194), que congela
+   las escrituras directas al portapapeles fuera del servicio canónico. Con `copyText` el ratchet queda
+   verde y el comportamiento (incluido el fallback) es el de la casa.
+4. **Tokens de CSS corregidos.** El plan mandaba copiar las variables de `KnowledgeSection.module.css`, pero
+   ese archivo usa `var(--text)` y `var(--surface-2)`, que **no existen** en `theme.css` (bug preexistente
+   del Plan 170: esos colores caen a herencia). `PlansSection.module.css` usa los tokens reales
+   (`--text-primary`, `--bg-elev`, `--warn` en vez del inexistente `--warning`). Cero hex igualmente.
+5. **La huella de regresión usa el esquema real de `error_fingerprints.json`**
+   (`id`/`title`/`class`/`status`/`log_pattern`/`log_guarded`/`killed_by`/`guard_test`/`self_test`), no el
+   shape aproximado del plan (`patron`/`causa_raiz`/`plan`/`fecha`), que habría puesto rojo
+   `test_error_fingerprints_catalog.py`. Verificado: 8 passed.
+
+### Pendiente
+
+- **Smoke manual** del DoD (abrir el tab Evolución con configuración de fábrica y confirmar que el primer
+  grupo no vacío es "Sin implementar"). No se ejecutó: requiere levantar backend + frontend.
+- Adoptar `claim_plan_path` en las skills del pipeline (explícitamente fuera de alcance, §7).

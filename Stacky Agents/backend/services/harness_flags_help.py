@@ -1360,9 +1360,23 @@ PLAIN_HELP: dict[str, PlainHelp] = {
     ),
     "STACKY_PLANS_BOARD_ENABLED": PlainHelp(
         what="Muestra un tablero de solo lectura con todos los planes NN_PLAN de docs/ y en qué paso del pipeline está cada uno (propuesto, criticado, implementado, supervisado), más si sus commits ya se pushearon.",
-        on_effect="Si la activás: aparece el tab 'Planes' con el tablero, el próximo número libre y una acción sugerida copiable por plan. No ejecuta nada por sí solo.",
+        on_effect="Si la activás (viene así de fábrica): aparece el tab 'Planes' y la sección 'Planes' del Centro de Evolución, con el próximo número libre y una acción copiable por plan. No ejecuta nada por sí solo.",
         off_effect="Si la apagás: el tab desaparece y /api/plans-board devuelve 404. Todo lo demás sigue exactamente igual.",
         example="Como un tablero kanban de la evolución de Stacky, pero automático: lee los docs, el ledger de supervisión y git, y te dice qué sigue.",
+    ),
+    # ── Plan 238 — Bandeja de incidencias abiertas ───────────────────────────
+    "STACKY_INCIDENT_INBOX_ENABLED": PlainHelp(
+        what="Una vista aparte que junta solo las incidencias (los tickets de tipo Issue y Bug) y pone primero las que siguen abiertas.",
+        on_effect="Si la activás: aparece la sección Incidencias en el menú y un botón en el tablero de tickets que te lleva directo a la lista de abiertas.",
+        off_effect="Si la apagás: desaparecen el botón del tablero y esa sección del menú, y todo queda igual que antes de tener la bandeja.",
+        example="Como la bandeja de entrada del correo: en vez de buscar los reclamos sueltos entre todos los mensajes, los ves juntos y sabés cuántos siguen sin resolver.",
+    ),
+    # ── Plan 237 — Planes en el Centro de Evolución ──────────────────────────
+    "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED": PlainHelp(
+        what="Lista todos tus planes dentro del Centro de Evolución, agrupados por lo que falta: sin implementar, sin criticar, sin documento, sin supervisar y completados.",
+        on_effect="Si la activás (viene así de fábrica): al abrir Evolución ves arriba de todo qué planes faltan construir, con el próximo número libre y una acción copiable. No ejecuta nada.",
+        off_effect="Si la apagás: la sección desaparece del Centro de Evolución y /api/evolution/plans devuelve 404. El tab 'Planes' sigue funcionando aparte.",
+        example="Abrís Evolución y en dos segundos sabés que el 216 está criticado esperando implementación y que 18 subplanes del roadmap ni siquiera tienen documento.",
     ),
     "STACKY_CODE_INTEGRITY_ENABLED": PlainHelp(
         what="Verifica en segundos que TODO el código Python del backend compile (sintaxis) y que sus imports internos existan, sin ejecutar nada y sin IA.",

@@ -41,6 +41,7 @@ import {
 import FitnessSection from "../evolution/FitnessSection";
 import OptimizerSection from "../evolution/OptimizerSection";
 import KnowledgeSection from "../evolution/KnowledgeSection";
+import PlansSection from "../evolution/PlansSection"; // Plan 237
 import { canEvaluateProposal } from "../evolution/fitnessModel";
 import styles from "./EvolutionCenterPage.module.css";
 
@@ -480,6 +481,9 @@ export default function EvolutionCenterPage() {
               </table>
             </div>
           ) : null}
+
+          {/* Plan 237 — sección "Planes" (no renderiza con su flag OFF) */}
+          <PlansSection />
 
           {/* Plan 168 — sección Fitness (no renderiza con la flag del arnés OFF) */}
           <FitnessSection />

@@ -11,11 +11,11 @@ import {
 const ALL_TABS = [
   "team", "tickets", "review", "unblocker", "pm", "logs", "settings",
   "docs", "memory", "diagnostics", "history", "migrador", "devops", "dbcompare",
-  "costcenter", "planes", "evolution",
+  "costcenter", "planes", "evolution", "incidencias",
 ] as const;
 
 describe("shellNav — modelo de navegación", () => {
-  it("TAB_META cubre exactamente los 17 tabs", () => {
+  it("TAB_META cubre exactamente los 18 tabs", () => {
     expect(Object.keys(TAB_META).sort()).toEqual([...ALL_TABS].sort());
   });
 
@@ -65,6 +65,7 @@ describe("shellNav — modelo de navegación", () => {
       sections: { team: true, pm: true, logs: true, docs: true, memory: true },
       migradorEnabled: true, devopsEnabled: true, dbCompareEnabled: true,
       costCenterEnabled: true, planesEnabled: true, evolutionEnabled: true,
+      incidentInboxEnabled: true,
     });
     expect([...v].sort()).toEqual([...ALL_TABS].sort());
   });

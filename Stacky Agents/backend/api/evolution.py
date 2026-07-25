@@ -213,3 +213,26 @@ def ledger():
     from services import evolution_store as st
 
     return jsonify({"ok": True, "events": st.read_ledger_tail(_clamp(request.args.get("limit"), 50))})
+
+
+# ── Plan 237 — Triage de planes (bloque appendeado al FINAL del archivo) ──
+# Solo lectura. Debajo de este centinela NO puede haber ninguna ruta de escritura.
+def _plans_triage_enabled() -> bool:
+    return _enabled() and bool(getattr(_cfg, "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED", False))
+
+
+@bp.get("/plans/health")
+def plans_health():
+    # Siempre 200 (patrón del /health de este mismo módulo, :46): la UI lo usa para gatear la sección.
+    return jsonify({"ok": True, "flag_enabled": _plans_triage_enabled()})
+
+
+@bp.get("/plans")
+def plans_triage():
+    if not _plans_triage_enabled():
+        return _disabled_resp()
+    from services import plans_board  # lazy (patrón del módulo)
+
+    refresh = request.args.get("refresh", "").strip() == "1"
+    board = plans_board.get_board_cached(refresh=refresh)
+    return jsonify(board)

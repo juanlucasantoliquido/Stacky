@@ -32,6 +32,7 @@ function card(overrides: Partial<PlanCardDto> = {}): PlanCardDto {
       command: "/criticar-y-mejorar-plan 128",
       natural_language: "Pedile al agente criticar y mejorar el plan 128.",
     },
+    triage_bucket: "SIN_CRITICAR",
     ...overrides,
   };
 }
@@ -41,6 +42,7 @@ const baseFilters: BoardFilters = {
   estado: "TODOS",
   soloPendientesPush: false,
   soloSinSupervisar: false,
+  bucket: "TODOS",
 };
 
 describe("estadoChip", () => {
@@ -97,6 +99,18 @@ describe("filterPlans", () => {
     const before = JSON.parse(JSON.stringify(plans));
     filterPlans(plans, { ...baseFilters, texto: "x" });
     expect(plans).toEqual(before);
+  });
+
+  // Plan 237 F6 — el tab "Planes" hereda el triage del backend.
+  it("filtra por etapa de triage", () => {
+    const conBucket = [
+      card({ number: 1, triage_bucket: "SIN_IMPLEMENTAR" }),
+      card({ number: 2, triage_bucket: "COMPLETADO" }),
+    ];
+    expect(
+      filterPlans(conBucket, { ...baseFilters, bucket: "SIN_IMPLEMENTAR" }).map((p) => p.number),
+    ).toEqual([1]);
+    expect(filterPlans(conBucket, { ...baseFilters, bucket: "TODOS" }).length).toBe(2);
   });
 });
 

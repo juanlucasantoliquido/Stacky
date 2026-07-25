@@ -85,6 +85,53 @@ export async function rawPost<T>(
   return { status: res.status, ok: res.ok, data, errorBody };
 }
 
+/**
+ * Plan 238 F3 — gemelo de lectura de rawPost: fetch GET que NO lanza en 4xx/5xx
+ * y devuelve el cuerpo parseado. Necesario para distinguir 404 feature_disabled
+ * de un backend caido (api.get lanza en todo non-2xx).
+ */
+export async function rawGet<T>(
+  path: string,
+  extraHeaders: Record<string, string> = {}
+): Promise<RawResponse<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Email": "dev@local",
+        ...extraHeaders,
+      },
+    });
+  } catch (e) {
+    if (!isAbortError(e)) reportConnectionFailure();
+    throw e; // semantica intacta: el caller ve el mismo error de red
+  }
+  reportOutcome(res);
+
+  let data: T | null = null;
+  let errorBody: GatewayErrorBody | null = null;
+
+  const text = await res.text().catch(() => "");
+  if (text) {
+    try {
+      const parsed = JSON.parse(text);
+      if (res.ok) {
+        data = parsed as T;
+      } else {
+        errorBody = parsed as GatewayErrorBody;
+      }
+    } catch {
+      if (!res.ok) {
+        errorBody = { message: text };
+      }
+    }
+  }
+
+  return { status: res.status, ok: res.ok, data, errorBody };
+}
+
 export const apiBase = BASE;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

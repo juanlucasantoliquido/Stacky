@@ -1,6 +1,8 @@
 # Plan 238 — Bandeja de Incidencias Abiertas dentro de Tickets ADO
 
-**Estado:** CRITICADO v2 — RECHAZADO en v1, corregido (2026-07-25)
+**Estado:** IMPLEMENTADO — F-1..F9 (2026-07-25)
+**Implementación:** F-1, F0, F1, F2, F3, F4, F5, F6, F7, F8, F9 completas. Ver §12.
+**Estado previo:** CRITICADO v2 — RECHAZADO en v1, corregido (2026-07-25)
 **Fecha:** 2026-07-25
 **Autor:** StackyArchitectaUltraEficientCode
 **Numeración:** **238**. Los números **219..236 están RESERVADOS** por el catálogo del plan 218 (`Stacky Agents/docs/_roadmap/serie_paridad_218.json`, verificado que existe). El número **237 pertenece al plan hermano** `237_PLAN_TRIAGE_DE_PLANES_EN_EL_CENTRO_DE_EVOLUCION.md` (mismo día). Este plan nació como 237, colisionó, y el operador resolvió que el triage conserva el 237 y la bandeja pasa a 238. **Todo símbolo, test, comentario e id de este plan usa `238` / `plan238`.**
@@ -1913,3 +1915,100 @@ Este plan **NO** hace nada de lo siguiente:
 - [ ] **D14** — El encabezado de este documento se actualizó a `**Estado:** IMPLEMENTADO` con fecha y fases completadas.
 - [ ] **D15** — El reporte final declara explícitamente qué quedó **rojo preexistente** (`shellIntegration.test.ts:8`, `test_harness_flags_help.py` por deuda del 192, y `uiDebtRatchet` si falla solo por deuda ajena) para que nadie lo confunda con una regresión de este plan.
 - [ ] **D16** — **No** se ejecutó ningún `git add`, `commit`, `stash`, `reset`, `rebase` ni `checkout`.
+
+---
+
+## 12. Reporte de implementación (2026-07-25)
+
+**Rama:** `feat/plan-217-migrador-mantis-gitlab` (rama de trabajo activa; no se creó una nueva).
+
+### D0 — Foto de F-1 (pre-flight, solo lectura)
+
+```
+git status --short  (antes de tocar nada)
+ M frontend/src/components/TicketGraphView.jsx
+ M frontend/src/components/TicketGraphView.module.css
+ M frontend/src/incidents/devResolverModel.ts
+ M frontend/src/pages/SprintBoardPage.tsx
+ M frontend/src/pages/TicketBoard.module.css
+ M frontend/src/pages/TicketBoard.tsx
+ M frontend/src/pages/UnblockerPage.tsx
+ M frontend/src/utils/workItemTypeColor.ts
+?? frontend/src/utils/__tests__/workItemTypeColor.test.ts
+
+git diff --stat  (base de los archivos disputados)
+ TicketBoard.module.css | 28 ++++    TicketBoard.tsx | 16 +++++++++++--
+
+anclas textuales:  {/* Toggle vista */} -> :1018    styles.headerActions -> :999
+                   ^const CLOSED_STATES -> :82      IncidentResolverModal -> :21
+
+ratchets base:  uiDebtRatchet 3 passed · copyDebtRatchet 3 passed
+                shellIntegration 1 FAILED | 2 passed  (rojo PREEXISTENTE)
+```
+
+### D1..D6 — Fases y resultados reales
+
+| Fase | Estado | Comando corrido | Resultado real |
+|------|--------|-----------------|----------------|
+| F-1 | IMPLEMENTADA | (solo lectura) | anclas ≥1 cada una; ningún comando git de escritura |
+| F0 | IMPLEMENTADA | `pytest tests\test_plan238_inbox_flag.py -q` | **5 passed** |
+| F1 | IMPLEMENTADA | `pytest tests\test_plan238_incident_inbox_core.py -q` | **13 passed + 1 skipped** (el guard del 216, como contrata el plan) |
+| F2 | IMPLEMENTADA | `pytest tests\test_plan238_incident_inbox_api.py -q` | **12 passed** |
+| F2 | IMPLEMENTADA | `compileall -q api services` | exit 0 |
+| F3 | IMPLEMENTADA | `npx vitest run src/api/__tests__/rawGet.test.ts` | 5 passed |
+| F4 | IMPLEMENTADA | `npx vitest run src/incidents/incidentInboxModel.test.ts` | **17 passed** |
+| F5 | IMPLEMENTADA | `npx tsc --noEmit` | 0 errores |
+| F6 | IMPLEMENTADA | `uiDebtRatchet` / `copyDebtRatchet` / `adhocModalRatchet` | 3 / 3 / 4 passed, **sin regenerar baseline** |
+| F7 | IMPLEMENTADA | `shellNav.test.ts` / `shellIconsCoverage.test.ts` / `routes.test.ts` / `routesDeepLink.test.ts` / `commandPaletteData.test.ts` | 9 / 1 / 17 / 6 / 7 passed |
+| F8 | IMPLEMENTADA | `git diff --stat -- src/pages/TicketBoard.tsx` | **+2 / −0** sobre la base de F-1 (14→16 inserciones) |
+| F9 | IMPLEMENTADA | `pytest tests\test_error_fingerprints_catalog.py` + `_scan.py` | 8 + 9 passed (las 2 huellas registradas) |
+
+**Conteos exigidos:** `harness_flags.py` key = 2 · `config.py` key = 2 · `test_harness_flags.py` key = 1 ·
+`api/__init__.py incident_inbox_bp` = 2 · `endpoints.ts incident-inbox` = 2 · `App.tsx IncidentInboxPage` = 2 ·
+`getattr(config,` en `api/incident_inbox.py` = 0 · `style={{` en los 2 `.tsx` nuevos = 0 · hex en el
+`.module.css` nuevo = 0 · `navigator.clipboard` = 0 · `export const navigateToRoute` = 0 ·
+`harness_ratchet_allowlist.txt` sin cambios.
+
+**Rojos preexistentes declarados (NO causados por este plan):**
+- `shellIntegration.test.ts`: **1 failed | 2 passed**, idéntico a F-1. El test busca la cadena literal
+  `<nav className={styles.nav}>` y el markup real trae `data-tour="nav"`, así que el `indexOf` falla y vuelca
+  el archivo entero. Fuera de alcance (§7.7).
+- `test_harness_flags_help.py`: 3 tests rojos por deuda ajena (44 flags sin ayuda llana, jerga, un
+  `off_effect` sin `"Si "`). **`STACKY_INCIDENT_INBOX_ENABLED` no aparece en ninguna lista de faltantes.**
+
+### Desvíos respecto del plan (declarados)
+
+1. **El gate del tab NO usa `useQuery`.** §F7-e mandaba un `useQuery` en `App.tsx`, pero `App.tsx` **no usa
+   react-query en absoluto** (0 ocurrencias): su mecanismo canónico de gates es
+   `probeFlagHealth` + `nextEnabledState` (`utils/flagHealth.ts`), que es sticky ante respuestas desconocidas
+   y reintenta. Se usó ese patrón. Como `probeFlagHealth` **solo** entiende la clave `flag_enabled`, se
+   agregó `flag_enabled` como **alias ADITIVO** en `GET /api/incident-inbox/status` (la clave `enabled` del
+   contrato §4.2 sigue intacta y es la que consumen la página y el botón). Sin ese alias el tab quedaba
+   invisible para siempre.
+2. **La paleta de comandos sí necesitaba filtro.** §F7-f dejaba la rama abierta: verificado que
+   `CommandPalette.tsx` renderiza `NAV_COMMANDS` **sin** filtrar por flag, así que P9 exigía filtrar. Se
+   agregó la prop opcional `incidentInboxEnabled` (mismo patrón que `deepSearchEnabled`, ya existente) y el
+   filtro de la entrada `nav-incidencias`. Consecuencia no enumerada por el plan:
+   `commandPaletteData.test.ts` congelaba `NAV_COMMANDS.length === 13`; se actualizó a 14.
+3. **La siembra de los tests de F2 no podía usar `project="TEST"`.** El helper `_ticket_project_filter`
+   filtra por `stacky_project_name IS NULL AND project == ctx.tracker_project`, así que las filas sembradas
+   con `"TEST"` quedaban **fuera** de la consulta y 4 tests daban falso rojo. La siembra resuelve el
+   `tracker_project` del contexto activo. Rango `ado_id` 9200..9299 y `try/finally` respetados.
+4. **La docstring literal de `incident_inbox.py` chocaba con su propio gate de pureza.** El plan escribía
+   "Sin Flask, sin SQLAlchemy, sin I/O" y su criterio 2 de F1 hace `Select-String ... "sqlalchemy"` esperando
+   0 líneas. Reescrita a "Sin web, sin ORM, sin I/O" (mismo sentido, gate honesto en 0).
+5. **Las huellas usan el esquema real de `error_fingerprints.json`** (`title`/`class`/`status`/`log_pattern`/
+   `log_guarded`/`self_test` con muestras `matches`/`clean` coherentes), no el shape del plan, que habría
+   puesto rojo `test_error_fingerprints_catalog.py`.
+6. **`.badge` sustituye los hex de `.navBadge`** por `var(--danger)` / `var(--bg-base)`: el theme no tiene un
+   token de "texto sobre color de estado". Queda constancia, como pide §F8-b.
+
+### Pendiente
+
+- **Smoke manual de 7 pasos (§F9): NO ejecutado.** Requiere levantar backend + frontend. En particular el
+  paso 6 (apagar la flag y verificar que desaparecen las 4 superficies) y el paso 7 (proyecto GitLab real);
+  este último queda cubierto por el test `test_gitlab_sin_tipo_reporta_untyped_count`.
+- **La edición de `TicketBoard.tsx` (F8) quedó SIN COMMITEAR**: ese archivo tiene cambios sin commitear de
+  una sesión paralela viva (14 inserciones ajenas). Commitearlo se llevaría trabajo ajeno a este commit. El
+  cambio está aplicado y verificado en el árbol de trabajo (+2/−0); lo commitea el operador cuando la otra
+  sesión cierre.

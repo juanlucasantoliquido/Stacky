@@ -14,12 +14,14 @@ interface Props {
   /** Plan 129 — ADICIÓN ARQUITECTO: leído una vez en App.tsx (mismo patrón que
    *  migradorEnabled/devopsEnabled), no por apertura de paleta. */
   deepSearchEnabled?: boolean;
+  /** Plan 238 — con la bandeja apagada, su entrada NO aparece en la paleta (P9). */
+  incidentInboxEnabled?: boolean;
 }
 
 const DEEP_SEARCH_DEBOUNCE_MS = 250;
 const DEEP_SEARCH_MIN_CHARS = 2;
 
-export default function CommandPalette({ open, onClose, onNavigate, deepSearchEnabled = false }: Props) {
+export default function CommandPalette({ open, onClose, onNavigate, deepSearchEnabled = false, incidentInboxEnabled = false }: Props) {
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<{ id: number; ado_id: number; title: string }[]>([]);
   const [agents, setAgents] = useState<{ filename: string; name?: string }[]>([]);
@@ -84,7 +86,8 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
   const allCommands: Command[] = useMemo(() => {
     const commands: Command[] = [];
     commands.push(
-      ...NAV_COMMANDS.map((nc) => ({
+      // Plan 238 — la entrada de la bandeja se filtra con el mismo gate que el tab.
+      ...NAV_COMMANDS.filter((nc) => nc.id !== "nav-incidencias" || incidentInboxEnabled).map((nc) => ({
         id: nc.id,
         kind: "nav" as const,
         icon: nc.icon,

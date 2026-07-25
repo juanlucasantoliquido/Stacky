@@ -277,6 +277,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
         "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
         "STACKY_EVOLUTION_CENTER_ENABLED",              # Plan 167 — Centro de Evolución (panel)
+        "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED",        # Plan 237 — triage de planes en el Centro de Evolución
         "STACKY_EVOLUTION_CYCLE_ENABLED",               # Plan 167 — ciclo MAPE on-demand
         "STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED",# Plan 167 — human-on-the-loop lecciones (OFF)
         "STACKY_EVOLUTION_CYCLE_TOKEN_BUDGET",          # Plan 167 — presupuesto tokens/ciclo
@@ -373,6 +374,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UNDO_UNIVERSAL_ENABLED",  # Plan 185 — undo universal (acciones optimistas + gracia)
         "STACKY_BULK_ACTIONS_ENABLED",  # Plan 187 — selección múltiple y acciones en lote
         "STACKY_CONNECTION_RESILIENCE_ENABLED",  # Plan 192 — resiliencia de conexión (banner + re-hidratación)
+        "STACKY_INCIDENT_INBOX_ENABLED",  # Plan 238 — bandeja de incidencias abiertas
     ),
     "paridad_proveedores": (
         "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
@@ -3649,7 +3651,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "aprobación del supervisor, commits sin push y acción sugerida copiable."
         ),
         group="global",
-        # SIN default= (queda None: opt-in, no curada en _CURATED_DEFAULTS_ON).
+        default=True,   # Plan 237: promovido a ON (lectura local, sin egreso). Curado en _CURATED_DEFAULTS_ON.
         # SIN requires= (no tiene master). SIN env_only= (queda UI-editable).
     ),
     # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
@@ -3665,6 +3667,14 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         type="bool", default=True,
         label="Ciclo MAPE on-demand",
         description="Habilita el botón 'Correr ciclo': lee la telemetría existente (costos, ejecuciones, incidencias, tablero de planes) y emite borradores de propuesta. Nunca aplica nada solo.",
+        group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
+    ),
+    # ── Plan 237 — Triage de planes dentro del Centro de Evolución ──
+    FlagSpec(
+        key="STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED",
+        type="bool", default=True,
+        label="Planes en el Centro de Evolución",
+        description="Sección de solo lectura que lista TODOS los planes de docs/ agrupados por triage: primero los que faltan implementar, después los que faltan criticar, después los completados.",
         group="global", requires="STACKY_EVOLUTION_CENTER_ENABLED",
     ),
     FlagSpec(
@@ -3976,6 +3986,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "200 con {available:false, capability, reason, workaround} en vez de reventar con "
             "un 500 mudo. Mejora estabilidad y DX; no agrega prerequisitos ni reduce seguridad. "
             "Con OFF vuelve la excepción legacy."
+        ),
+        group="global",
+    ),
+    # ── Plan 238 — Bandeja de incidencias abiertas dentro de Tickets ADO ──────
+    FlagSpec(
+        key="STACKY_INCIDENT_INBOX_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica; curada en _CURATED_DEFAULTS_ON)
+        label="Bandeja de incidencias abiertas",
+        description=(
+            "Plan 238 - Vista dedicada que lista SOLO incidencias (Issue/Bug) con foco "
+            "en las abiertas, accesible desde Tickets ADO. Solo lectura: no lanza agentes "
+            "ni modifica el tracker. OFF: la vista, el tab, la entrada de la paleta y el "
+            "boton de entrada desaparecen, y el tablero general queda identico."
         ),
         group="global",
     ),

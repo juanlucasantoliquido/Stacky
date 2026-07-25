@@ -1522,6 +1522,13 @@ class Config:
         "STACKY_BULK_ACTIONS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 238 — Bandeja de incidencias abiertas (UI, solo lectura) ─────────
+    # Default ON: no publica nada, no destruye, sin prerequisitos, no reduce
+    # seguridad. OFF => el tab, la pagina y el boton de entrada desaparecen.
+    STACKY_INCIDENT_INBOX_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_INBOX_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 148 — Degradación explícita de integraciones no configuradas. Default ON
     # (kill-switch). Espejo del default=True de la FlagSpec homónima.
     STACKY_INTEGRATION_DEGRADATION_ENABLED = os.getenv(
@@ -1540,9 +1547,10 @@ class Config:
         "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
-    # ── Plan 128 — Tablero de evolución de planes (default OFF, editable por UI) ──
+    # ── Plan 128 — Tablero de evolución de planes (default ON desde el Plan 237:
+    #    solo lectura de docs/ locales, sin egreso ni escritura) ──
     STACKY_PLANS_BOARD_ENABLED: bool = os.getenv(
-        "STACKY_PLANS_BOARD_ENABLED", "false"
+        "STACKY_PLANS_BOARD_ENABLED", "true"
     ).strip().lower() == "true"
 
     # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
@@ -1556,6 +1564,11 @@ class Config:
     # corre en modo determinista puro (reglas R-A1..R-A4), costo cero.
     STACKY_EVOLUTION_CYCLE_ENABLED: bool = os.getenv(
         "STACKY_EVOLUTION_CYCLE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 237 — Sección "Planes" del Centro de Evolución (solo lectura) ──
+    STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED: bool = os.getenv(
+        "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # human-on-the-loop SOLO para lecciones de conocimiento (reversibles).

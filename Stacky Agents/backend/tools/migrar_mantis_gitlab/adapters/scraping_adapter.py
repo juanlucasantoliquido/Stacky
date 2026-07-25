@@ -30,6 +30,8 @@ from typing import Any, Optional
 
 import requests
 
+from services.mantis_client import _STANDARD_STATUS_IDS
+
 from .base import MantisReadAdapter
 
 
@@ -37,6 +39,17 @@ class MantisScrapingAuthError(RuntimeError):
     """Login Mantis (inicial o re-login tras expiración de sesión) fallido.
 
     Nunca se loguean usuario/contraseña en el mensaje de esta excepción."""
+
+
+class MantisScrapingPaginationError(RuntimeError):
+    """Se alcanzó el tope de páginas del listado y Mantis seguía devolviendo
+    issues nuevos. Se aborta en vez de truncar en silencio: migrar "una
+    parte" del proyecto creyendo que es el total es peor que fallar."""
+
+
+# Tope de seguridad del paginado del listado (anti-loop infinito). Con el
+# `page_size` default (500) cubre 100k issues por proyecto.
+_MAX_LIST_PAGES = 200
 
 
 # ── Detección de página de login (sesión no autenticada o expirada) ───────
@@ -126,21 +139,73 @@ def _strip_tags(fragment: str) -> str:
     return _html.unescape(_TAG_RE.sub("", fragment or "")).strip()
 
 
+# ── Parsing del listado real de Mantis (`view_all_bug_page.php`) ─────────
+#
+# Estructura REAL verificada en vivo contra la instancia de referencia: la
+# tabla NO usa `<tr id="row_N">` (eso era una invención del fixture original,
+# por lo que el parser devolvía 0 issues contra el servidor real). Cada fila
+# es un `<tr>` cuyas celdas se identifican por `class="column-XXX"`:
+#   column-id        -> <a href="...view.php?id=22511">0022511</a>
+#   column-summary   -> <a href="view.php?id=22511">Título…</a>
+#   column-status    -> <i class="... status-20-fg"></i><span>texto</span>
+#   column-priority  -> <i class="fa …" title="normal"></i>   (¡en el title!)
+#   column-severity  -> texto
+#   column-category  -> [proyecto] Categoría
+_ANY_ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+_COLUMN_CELL_RE = re.compile(
+    r'<td[^>]*class=["\'][^"\']*column-([a-z-]+)[^"\']*["\'][^>]*>(.*?)</td>',
+    re.IGNORECASE | re.DOTALL,
+)
+_ANY_ISSUE_LINK_RE = re.compile(r'href=["\'][^"\']*view\.php\?id=(\d+)', re.IGNORECASE)
+_TITLE_ATTR_RE = re.compile(r'title=["\']([^"\']*)["\']', re.IGNORECASE)
+# El ID numérico de estado va en la clase `status-NN-fg`: es INMUNE al idioma
+# de la instancia (a diferencia del texto visible, que está traducido).
+_STATUS_CLASS_RE = re.compile(r"status-(\d+)-", re.IGNORECASE)
+
+
+def _status_name_from_row(cell_html: str) -> str:
+    """Nombre canónico en inglés del estado (`new`, `feedback`, …), derivado
+    del ID numérico de la clase CSS. Cae al texto visible si no está."""
+    match = _STATUS_CLASS_RE.search(cell_html or "")
+    if match:
+        status_id = int(match.group(1))
+        for name, sid in _STANDARD_STATUS_IDS.items():
+            if sid == status_id:
+                return name
+    return _strip_tags(cell_html)
+
+
 def _parse_issue_list_html(html_text: str, project_id: int) -> list[dict[str, Any]]:
-    """Parsea la tabla de `view_all_bug_page.php`: al menos id/summary/status/
-    priority/link por fila. Tolerante: filas sin las 5 columnas esperadas
-    simplemente devuelven cadenas vacías en los campos faltantes."""
+    """Parsea la tabla de `view_all_bug_page.php` por CLASE de columna.
+
+    Tolerante: una fila sin `column-id` (encabezados, separadores, filtros)
+    simplemente se ignora; las columnas ausentes quedan como cadena vacía.
+    """
     issues: list[dict[str, Any]] = []
-    for row_match in _ROW_RE.finditer(html_text):
-        row_id, row_html = row_match.group(1), row_match.group(2)
-        link_match = _ISSUE_LINK_RE.search(row_html)
-        issue_id = int(link_match.group(1)) if link_match else int(row_id)
-        cells = [_strip_tags(c) for c in _CELL_RE.findall(row_html)]
+    for row_match in _ANY_ROW_RE.finditer(html_text):
+        row_html = row_match.group(1)
+        cells = {
+            name.lower(): fragment
+            for name, fragment in _COLUMN_CELL_RE.findall(row_html)
+        }
+        if "id" not in cells:
+            continue  # no es una fila de issue
+        link_match = _ANY_ISSUE_LINK_RE.search(cells["id"]) or _ANY_ISSUE_LINK_RE.search(row_html)
+        if not link_match:
+            continue
+        priority_cell = cells.get("priority", "")
+        priority_title = _TITLE_ATTR_RE.search(priority_cell)
         issues.append({
-            "id": issue_id,
-            "summary": cells[2] if len(cells) > 2 else "",
-            "status": cells[3] if len(cells) > 3 else "",
-            "priority": cells[4] if len(cells) > 4 else "",
+            "id": int(link_match.group(1)),
+            "summary": _strip_tags(cells.get("summary", "")),
+            "status": _status_name_from_row(cells.get("status", "")),
+            # La prioridad se renderiza como un icono: el valor está en `title`.
+            "priority": (
+                priority_title.group(1).strip() if priority_title
+                else _strip_tags(priority_cell)
+            ),
+            "severity": _strip_tags(cells.get("severity", "")),
+            "category": _strip_tags(cells.get("category", "")),
             "project_id": project_id,
         })
     return issues
@@ -181,20 +246,64 @@ _LABEL_ALIASES: dict[str, tuple[str, ...]] = {
     "tags": ("tags", "etiquetas"),
 }
 
+# Clases CSS reales de las celdas de `view.php` (verificadas en vivo). Este
+# es el camino PRINCIPAL de extracción del detalle: no depende del idioma
+# porque las clases son fijas, a diferencia del texto de las etiquetas.
+_BUG_FIELD_CELL_RE = re.compile(
+    r'<td[^>]*class=["\'][^"\']*\bbug-([a-z0-9-]+)\b[^"\']*["\'][^>]*>(.*?)</td>',
+    re.IGNORECASE | re.DOTALL,
+)
+_BUG_CLASS_ALIASES: dict[str, tuple[str, ...]] = {
+    "summary": ("summary",),
+    "reporter": ("reporter",),
+    "handler": ("assigned-to",),
+    "status": ("status",),
+    "priority": ("priority",),
+    "severity": ("severity",),
+    "category": ("category",),
+    "description": ("description",),
+    "steps_to_reproduce": ("steps-to-reproduce",),
+    "additional_information": ("additional-information",),
+    "target_version": ("target-version",),
+    "fixed_in_version": ("fixed-in-version",),
+    "version": ("version", "product-version"),
+    "tags": ("tags",),
+}
+# `bug-summary` viene como "0022511: Título real" — se quita el prefijo.
+_SUMMARY_ID_PREFIX_RE = re.compile(r"^\d+\s*:\s*(.+)$", re.DOTALL)
+
 
 def _parse_issue_detail_html(html_text: str, issue_id: int) -> dict[str, Any]:
     """Parsea la tabla `bug-description-table` de `view.php` a un dict plano
     `{label: valor}` más los campos estructurados (notas/adjuntos/relaciones).
 
     Tolerante al idioma de la instancia (ver `_LABEL_ALIASES`)."""
-    fields: dict[str, str] = {}
+    # 1) Camino PRINCIPAL: Mantis real marca cada celda del detalle con
+    #    `class="bug-XXX"` (verificado en vivo). El camino por etiquetas
+    #    visibles queda como respaldo para temas/versiones que no las usen.
+    raw_by_class: dict[str, str] = {}
+    by_class: dict[str, str] = {}
+    for name, fragment in _BUG_FIELD_CELL_RE.findall(html_text):
+        key = name.lower()
+        # Mantis repite algunas clases (th de etiqueta + td de valor): se
+        # conserva la primera con contenido real.
+        if by_class.get(key):
+            continue
+        raw_by_class[key] = fragment
+        by_class[key] = _strip_tags(fragment)
+
+    # 2) Respaldo: filas `label -> valor` (tolerante al idioma).
+    by_label: dict[str, str] = {}
     for label_match in _LABELED_ROW_RE.finditer(html_text):
-        label = _normalize_label(label_match.group(1))
-        fields[label] = _strip_tags(label_match.group(2))
+        by_label[_normalize_label(label_match.group(1))] = _strip_tags(label_match.group(2))
 
     def pick(canonical: str) -> str:
+        for css_name in _BUG_CLASS_ALIASES.get(canonical, ()):
+            value = by_class.get(css_name)
+            if value:
+                return value
         for alias in _LABEL_ALIASES.get(canonical, (canonical,)):
-            value = fields.get(_normalize_label(alias))
+            value = by_label.get(_normalize_label(alias))
             if value:
                 return value
         return ""
@@ -207,34 +316,102 @@ def _parse_issue_detail_html(html_text: str, issue_id: int) -> dict[str, Any]:
     }
     for canonical in _LABEL_ALIASES:
         detail[canonical] = pick(canonical)
+
+    # El estado se normaliza al nombre canónico en inglés vía el ID numérico
+    # de la clase CSS (`status-NN-fg`), igual que en el listado: el texto
+    # visible viene traducido al idioma de la instancia y `field_mapping.status`
+    # (§4 del config) se define con las claves en inglés.
+    status_raw = raw_by_class.get("status", "")
+    if _STATUS_CLASS_RE.search(status_raw):
+        detail["status"] = _status_name_from_row(status_raw)
+
+    # Mantis antepone el ID al título en `bug-summary` ("0022511: Título").
+    summary = detail.get("summary", "")
+    match = _SUMMARY_ID_PREFIX_RE.match(summary)
+    if match:
+        detail["summary"] = match.group(1).strip()
     return detail
 
 
+# Estructura REAL de una nota (verificada en vivo):
+#   <tr class="bugnote visible-on-hover-toggle" id="c52682">
+#     <td class="category">… <a href="view_user_page.php?id=200">Nombre</a>
+#         … 16/12/2024 17:44 … </td>
+#     <td class="bugnote-note bugnote-public">texto de la nota</td>
+#   </tr>
+_REAL_BUGNOTE_ROW_RE = re.compile(
+    r'<tr[^>]*class=["\'][^"\']*\bbugnote\b[^"\']*["\'][^>]*id=["\']c(\d+)["\'][^>]*>(.*?)</tr>',
+    re.IGNORECASE | re.DOTALL,
+)
+_BUGNOTE_TEXT_RE = re.compile(
+    r'<td[^>]*class=["\'][^"\']*\bbugnote-note\b[^"\']*["\'][^>]*>(.*?)</td>',
+    re.IGNORECASE | re.DOTALL,
+)
+_BUGNOTE_USER_RE = re.compile(
+    r'<a[^>]*view_user_page\.php\?id=\d+["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
+)
+_BUGNOTE_DATE_RE = re.compile(r"(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})")
+_BUGNOTE_PRIVATE_RE = re.compile(r"bugnote-private", re.IGNORECASE)
+
+
 def _parse_bugnotes_html(html_text: str) -> list[dict[str, Any]]:
+    """Extrae las notas/bugnotes de `view.php`.
+
+    El patrón anterior (`<tr class="bugnote">` exacto + 3 celdas
+    posicionales) NO existe en Mantis real: la clase trae sufijos
+    (`bugnote visible-on-hover-toggle`) y el texto vive en una celda
+    `bugnote-note`. Contra el servidor real devolvía 0 notas siempre.
+    """
     notes: list[dict[str, Any]] = []
-    for row_match in _BUGNOTE_ROW_RE.finditer(html_text):
-        cells = [_strip_tags(c) for c in _CELL_RE.findall(row_match.group(1))]
-        if len(cells) < 3:
-            continue
-        notes.append({"reporter": cells[0], "date": cells[1], "text": cells[2]})
+    for row_match in _REAL_BUGNOTE_ROW_RE.finditer(html_text):
+        note_id, row_html = row_match.group(1), row_match.group(2)
+        text_match = _BUGNOTE_TEXT_RE.search(row_html)
+        user_match = _BUGNOTE_USER_RE.search(row_html)
+        date_match = _BUGNOTE_DATE_RE.search(_strip_tags(row_html))
+        notes.append({
+            "id": note_id,
+            "reporter": _strip_tags(user_match.group(1)) if user_match else "",
+            "date": date_match.group(1) if date_match else "",
+            "text": _strip_tags(text_match.group(1)) if text_match else "",
+            # Las notas privadas de Mantis no deben publicarse sin querer.
+            "private": bool(_BUGNOTE_PRIVATE_RE.search(row_html)),
+        })
     return notes
 
 
+# Estructura REAL de los adjuntos (verificada en vivo): viven en la celda
+# `bug-attach-tags`, como pares de links a `file_download.php?file_id=N`
+# (uno para el icono, otro para el nombre) seguidos del tamaño entre
+# paréntesis: `…>GAP Mensajeria.docx</a>&#32;(1,882,466&#32;bytes)`.
+_ATTACH_LINK_RE = re.compile(
+    r'<a[^>]+href=["\']([^"\']*file_download\.php\?file_id=(\d+)[^"\']*)["\'][^>]*>(.*?)</a>'
+    r"(?:[^<]*\(([\d.,\s&#;]+?)\s*bytes\))?",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 def _parse_attachments_html(html_text: str) -> list[dict[str, Any]]:
+    """Extrae los adjuntos de `view.php`.
+
+    El patrón anterior (`<tr class="attachment-row">`) era inventado: Mantis
+    no genera esa clase, así que contra el servidor real devolvía siempre 0
+    adjuntos. Se deduplica por `file_id` porque cada adjunto aparece dos
+    veces (link del icono + link del nombre).
+    """
     attachments: list[dict[str, Any]] = []
-    for row_match in _ATTACHMENT_ROW_RE.finditer(html_text):
-        cells = _CELL_RE.findall(row_match.group(1))
-        if not cells:
-            continue
-        link_cell = cells[0]
-        href_match = _HREF_RE.search(link_cell)
-        file_id_match = _FILE_ID_RE.search(link_cell)
-        size_text = _strip_tags(cells[1]) if len(cells) > 1 else ""
+    seen: set[str] = set()
+    for match in _ATTACH_LINK_RE.finditer(html_text):
+        url, file_id, label, size_text = match.groups()
+        name = _strip_tags(label)
+        if not name or file_id in seen:
+            continue  # el 1er link del par es solo el icono (sin texto)
+        seen.add(file_id)
+        digits = re.sub(r"\D", "", _html.unescape(size_text or ""))
         attachments.append({
-            "id": file_id_match.group(1) if file_id_match else "",
-            "name": _strip_tags(link_cell),
-            "size": int(size_text) if size_text.isdigit() else 0,
-            "url": href_match.group(1) if href_match else "",
+            "id": file_id,
+            "name": name,
+            "size": int(digits) if digits else 0,
+            "url": _html.unescape(url),
         })
     return attachments
 
@@ -271,6 +448,8 @@ class MantisWebScrapingReadAdapter(MantisReadAdapter):
         *,
         session: Optional[requests.Session] = None,
         timeout: int = 30,
+        include_resolved_closed: bool = True,
+        page_size: int = 500,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._project_ids = list(project_ids)
@@ -278,6 +457,11 @@ class MantisWebScrapingReadAdapter(MantisReadAdapter):
         self._password = password
         self._session = session if session is not None else requests.Session()
         self._timeout = timeout
+        # `origin.include_resolved_closed` (§4 del config): con True se fuerza
+        # el filtro "mostrar todos los estados" — imprescindible, porque el
+        # filtro por defecto de Mantis oculta resueltos/cerrados.
+        self._include_resolved_closed = include_resolved_closed
+        self._page_size = page_size
         self._authenticated = False
 
     # ── Login (2 pasos) + re-login automático (C7) ────────────────────
@@ -376,11 +560,76 @@ class MantisWebScrapingReadAdapter(MantisReadAdapter):
     # ── MantisReadAdapter ───────────────────────────────────────────────
 
     def fetch_all_issues(self) -> list[dict[str, Any]]:
+        """Lista TODOS los issues del/los proyecto(s) configurados.
+
+        CRÍTICO — `view_all_bug_page.php` a secas aplica el FILTRO GUARDADO
+        del usuario, que por defecto OCULTA los resueltos/cerrados: contra la
+        instancia real devolvía 11 de 52 issues, o sea el 79% de los tickets
+        se habría perdido en silencio. Se fuerza el filtro vía
+        `view_all_set.php?type=1` con `hide_status_id=-2` (no ocultar ningún
+        estado) y `status_id=0` (cualquier estado), que es el mecanismo
+        estándar de Mantis para "mostrar todo".
+
+        Efecto colateral declarado: esto reescribe el filtro guardado de la
+        cuenta usada para la migración (no afecta datos de tickets, solo la
+        vista por defecto de ese usuario en la UI de Mantis).
+        """
         all_issues: list[dict[str, Any]] = []
         for project_id in self._project_ids:
-            url = f"{self._base_url}/view_all_bug_page.php?project_id={project_id}"
-            html_text = self._authenticated_get(url)
-            all_issues.extend(_parse_issue_list_html(html_text, project_id))
+            # 1) Fijar el PROYECTO ACTUAL de la sesión. Imprescindible: el
+            #    alcance del listado lo define el proyecto activo de la
+            #    sesión, NO un `project_id` suelto en la URL del filtro.
+            #    Sin esto el listado devolvía issues de TODOS los proyectos
+            #    (7 clientes distintos mezclados: 583 filas en vez de las 52
+            #    del proyecto pedido) — habría migrado tickets de otros
+            #    clientes al repo destino.
+            self._authenticated_get(
+                f"{self._base_url}/set_project.php?project_id={project_id}"
+            )
+
+            # 2) Fijar el filtro de estados ("todos" si se piden los
+            #    resueltos/cerrados) + tamaño de página.
+            filter_url = (
+                f"{self._base_url}/view_all_set.php?type=1"
+                f"&project_id[]={project_id}"
+                f"&per_page={self._page_size}"
+            )
+            if self._include_resolved_closed:
+                filter_url += "&hide_status_id=-2&status_id=0"
+            self._authenticated_get(filter_url)
+
+            # 2) Paginar hasta agotar. Mantis pagina con `page_number` y el
+            #    listado NO trae el total de forma fiable, así que se avanza
+            #    hasta que una página no aporte IDs nuevos. Sin esto solo se
+            #    migraba la 1ª página (pérdida silenciosa en proyectos grandes).
+            seen_ids: set[int] = set()
+            project_issues: list[dict[str, Any]] = []
+            page_number = 1
+            while page_number <= _MAX_LIST_PAGES:
+                page_url = (
+                    f"{self._base_url}/view_all_bug_page.php"
+                    f"?page_number={page_number}"
+                )
+                page_issues = _parse_issue_list_html(
+                    self._authenticated_get(page_url), project_id
+                )
+                nuevos = [i for i in page_issues if i["id"] not in seen_ids]
+                if not nuevos:
+                    break
+                seen_ids.update(i["id"] for i in nuevos)
+                project_issues.extend(nuevos)
+                page_number += 1
+            else:
+                # Se agotó el tope de páginas: NUNCA truncar en silencio.
+                raise MantisScrapingPaginationError(
+                    f"Proyecto {project_id}: se alcanzó el tope de "
+                    f"{_MAX_LIST_PAGES} páginas ({len(project_issues)} issues "
+                    "leídos) y Mantis seguía devolviendo issues nuevos. "
+                    "Subí `_MAX_LIST_PAGES` o el `page_size`: abortar es "
+                    "preferible a migrar una parte del proyecto creyendo que "
+                    "es el total."
+                )
+            all_issues.extend(project_issues)
         return all_issues
 
     def fetch_comments(self, issue_id: int) -> list[dict[str, Any]]:

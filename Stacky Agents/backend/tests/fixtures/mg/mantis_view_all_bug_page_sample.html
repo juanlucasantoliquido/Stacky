@@ -1,40 +1,63 @@
 <!--
-  Fixture ANONIMIZADO para test_mg_adapters_scraping.py (Plan 217 F2b).
-  Estructura simplificada e inventada de view_all_bug_page.php — CERO datos
-  reales de soporte.ais-int.net. IDs/summaries/status genéricos e inventados.
+  Fixture para test_mg_adapters_scraping.py (Plan 217 F2b).
+
+  ESTRUCTURA REAL de view_all_bug_page.php, tomada de una instancia MantisBT
+  viva y luego ANONIMIZADA (IDs, títulos, categorías y proyecto reemplazados
+  por datos inventados; CERO datos reales).
+
+  IMPORTANTE: la versión anterior de este fixture usaba `<tr id="row_N">` con
+  celdas posicionales — una estructura INVENTADA que Mantis no genera. El
+  parser estaba escrito contra ella, así que los tests pasaban mientras que
+  contra el servidor real devolvía 0 issues. Mantis identifica cada celda por
+  `class="column-XXX"`, la prioridad va en el `title` de un icono, y el estado
+  se codifica en la clase `status-NN-fg` (inmune al idioma de la instancia).
 -->
 <html>
-<head><title>Proyecto Ejemplo - Ver Issues</title></head>
+<head><title>Proyecto Ejemplo - Ver Incidencias</title></head>
 <body>
-<table id="buglist" class="bug-table">
-  <tr class="bug-table-header">
-    <td>ID</td>
-    <td>Fecha</td>
-    <td>Resumen</td>
-    <td>Estado</td>
-    <td>Prioridad</td>
-  </tr>
-  <tr id="row_1">
-    <td class="small-caption"><a href="view.php?id=1001">1001</a></td>
-    <td class="small-caption">2026-01-10</td>
-    <td><a href="view.php?id=1001">Fallo al generar reporte mensual de ejemplo</a></td>
-    <td>new</td>
-    <td>high</td>
-  </tr>
-  <tr id="row_2">
-    <td class="small-caption"><a href="view.php?id=1002">1002</a></td>
-    <td class="small-caption">2026-01-11</td>
-    <td><a href="view.php?id=1002">Error de validacion en formulario de alta demo</a></td>
-    <td>resolved</td>
-    <td>normal</td>
-  </tr>
-  <tr id="row_3">
-    <td class="small-caption"><a href="view.php?id=1003">1003</a></td>
-    <td class="small-caption">2026-01-12</td>
-    <td><a href="view.php?id=1003">Reporte de demostracion numero tres</a></td>
-    <td>acknowledged</td>
-    <td>low</td>
-  </tr>
+<a href="logout_page.php">Salir</a>
+<table class="table table-bordered table-condensed">
+  <thead>
+    <tr class="buglist-headers">
+      <th class="column-id"><a href="view_all_set.php?sort=id">ID</a></th>
+      <th class="column-summary">Resumen</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="column-selection"><input type="checkbox" name="bug_arr[]" value="1001" /></td>
+      <td class="column-edit"><a href="bug_update_page.php?bug_id=1001">editar</a></td>
+      <td class="column-priority"><i class="fa fa-chevron-up fa-lg red" title="alta"></i></td>
+      <td class="column-id"><a href="/mantis/view.php?id=1001">0001001</a></td>
+      <td class="column-category"><div class="align-left">Procesos de Carga</div></td>
+      <td class="column-severity">menor</td>
+      <td class="column-status"><div class="align-left"><i class="fa fa-square fa-status-box status-10-fg"></i> <span title="abierta">nueva</span></div></td>
+      <td class="column-last-modified">10/01/26</td>
+      <td class="column-summary"><a href="view.php?id=1001">Fallo al generar reporte mensual de ejemplo</a></td>
+    </tr>
+    <tr>
+      <td class="column-selection"><input type="checkbox" name="bug_arr[]" value="1002" /></td>
+      <td class="column-edit"><a href="bug_update_page.php?bug_id=1002">editar</a></td>
+      <td class="column-priority"><i class="fa fa-minus fa-lg orange2" title="normal"></i></td>
+      <td class="column-id"><a href="/mantis/view.php?id=1002">0001002</a></td>
+      <td class="column-category"><div class="align-left">General</div></td>
+      <td class="column-severity">mayor</td>
+      <td class="column-status"><div class="align-left"><i class="fa fa-square fa-status-box status-80-fg"></i> <span title="cerrada">resuelta</span></div></td>
+      <td class="column-last-modified">11/01/26</td>
+      <td class="column-summary"><a href="view.php?id=1002">Error de validacion en formulario de alta demo</a></td>
+    </tr>
+    <tr>
+      <td class="column-selection"><input type="checkbox" name="bug_arr[]" value="1003" /></td>
+      <td class="column-edit"><a href="bug_update_page.php?bug_id=1003">editar</a></td>
+      <td class="column-priority"><i class="fa fa-chevron-down fa-lg green" title="baja"></i></td>
+      <td class="column-id"><a href="/mantis/view.php?id=1003">0001003</a></td>
+      <td class="column-category"><div class="align-left">Interfaces</div></td>
+      <td class="column-severity">funcionalidad</td>
+      <td class="column-status"><div class="align-left"><i class="fa fa-square fa-status-box status-30-fg"></i> <span title="abierta">reconocida</span></div></td>
+      <td class="column-last-modified">12/01/26</td>
+      <td class="column-summary"><a href="view.php?id=1003">Reporte de demostracion numero tres</a></td>
+    </tr>
+  </tbody>
 </table>
 </body>
 </html>

@@ -302,7 +302,15 @@ def _build_api_adapter(origin) -> MantisApiReadAdapter:
 def _build_scraping_adapter(origin) -> MantisWebScrapingReadAdapter:
     username = _prompt_and_resolve_secret(origin.auth.auth_file, "username", "auto")
     password = _prompt_and_resolve_secret(origin.auth.auth_file, "password", "auto")
-    return MantisWebScrapingReadAdapter(origin.base_url, origin.project_ids, username, password)
+    return MantisWebScrapingReadAdapter(
+        origin.base_url,
+        origin.project_ids,
+        username,
+        password,
+        # §4: sin esto Mantis aplica el filtro guardado del usuario, que
+        # oculta resueltos/cerrados (contra la instancia real: 11 de 52).
+        include_resolved_closed=origin.include_resolved_closed,
+    )
 
 
 def _build_origin_adapter(config: MigrationConfig):

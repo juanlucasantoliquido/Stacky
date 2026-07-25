@@ -153,10 +153,25 @@ def test_login_fallido_usuario_invalido_lanza_auth_error_en_paso1():
 # ── Listado parseado correctamente ───────────────────────────────────────
 
 
+_SET_PROJECT_URL = f"{_BASE_URL}/set_project.php?project_id=310"
+_FILTRO_TODOS_URL = (
+    f"{_BASE_URL}/view_all_set.php?type=1&project_id[]=310&per_page=500"
+    "&hide_status_id=-2&status_id=0"
+)
+_PAGINA_VACIA_HTML = (
+    '<html><body><a href="logout_page.php">Salir</a>'
+    "<table><tbody></tbody></table></body></html>"
+)
+
+
 def test_fetch_all_issues_parsea_listado_con_conteo_e_ids():
     list_html = _load_fixture("mantis_view_all_bug_page_sample.html")
     get_map, post_map = _happy_path_login_maps()
-    get_map[f"{_BASE_URL}/view_all_bug_page.php?project_id=310"] = list_html
+    # Fija el filtro "todos los estados" y luego pagina hasta agotar.
+    get_map[_SET_PROJECT_URL] = list_html
+    get_map[_FILTRO_TODOS_URL] = list_html
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = list_html
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = _PAGINA_VACIA_HTML
     session = _make_session(get_map, post_map)
 
     adapter = MantisWebScrapingReadAdapter(
@@ -167,10 +182,58 @@ def test_fetch_all_issues_parsea_listado_con_conteo_e_ids():
     assert len(issues) == 3
     assert [i["id"] for i in issues] == [1001, 1002, 1003]
     assert issues[0]["summary"] == "Fallo al generar reporte mensual de ejemplo"
+    # El estado sale del ID numérico de la clase CSS (`status-10-fg`), NO del
+    # texto visible ("nueva"): así el mapeo no depende del idioma.
     assert issues[0]["status"] == "new"
-    assert issues[0]["priority"] == "high"
     assert issues[1]["status"] == "resolved"
+    # La prioridad viaja en el `title` del icono, y en esta instancia está
+    # en español.
+    assert issues[0]["priority"] == "alta"
+    assert issues[1]["priority"] == "normal"
+    assert issues[0]["severity"] == "menor"
+    assert issues[0]["category"] == "Procesos de Carga"
     assert all(i["project_id"] == 310 for i in issues)
+
+
+def test_fetch_all_issues_pagina_hasta_agotar_sin_perder_issues():
+    """Regresión: el adapter leía SOLO la primera página. Contra el proyecto
+    real eso devolvía 11 de 583 issues (el filtro por defecto además ocultaba
+    los resueltos). Debe recorrer todas las páginas y deduplicar por ID."""
+    pagina1 = _load_fixture("mantis_view_all_bug_page_sample.html")
+    pagina2 = pagina1.replace("1001", "2001").replace("1002", "2002").replace("1003", "2003")
+    get_map, post_map = _happy_path_login_maps()
+    get_map[_SET_PROJECT_URL] = pagina1
+    get_map[_FILTRO_TODOS_URL] = pagina1
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = pagina1
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = pagina2
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=3"] = _PAGINA_VACIA_HTML
+    session = _make_session(get_map, post_map)
+
+    adapter = MantisWebScrapingReadAdapter(
+        _BASE_URL, [310], "testuser", "correcthorsebattery", session=session
+    )
+    issues = adapter.fetch_all_issues()
+
+    assert [i["id"] for i in issues] == [1001, 1002, 1003, 2001, 2002, 2003]
+
+
+def test_fetch_all_issues_sin_resueltos_no_fuerza_el_filtro():
+    """Con `include_resolved_closed=False` se respeta el filtro guardado del
+    usuario (no se reescribe su vista por defecto en Mantis)."""
+    list_html = _load_fixture("mantis_view_all_bug_page_sample.html")
+    get_map, post_map = _happy_path_login_maps()
+    get_map[_SET_PROJECT_URL] = list_html
+    get_map[f"{_BASE_URL}/view_all_set.php?type=1&project_id[]=310&per_page=500"] = list_html
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = list_html
+    get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = _PAGINA_VACIA_HTML
+    session = _make_session(get_map, post_map)
+
+    adapter = MantisWebScrapingReadAdapter(
+        _BASE_URL, [310], "testuser", "correcthorsebattery",
+        session=session, include_resolved_closed=False,
+    )
+
+    assert len(adapter.fetch_all_issues()) == 3
 
 
 # ── Detalle parseado correctamente ───────────────────────────────────────

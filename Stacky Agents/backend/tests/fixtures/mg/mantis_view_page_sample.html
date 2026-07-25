@@ -1,40 +1,92 @@
 <!--
-  Fixture ANONIMIZADO para test_mg_adapters_scraping.py (Plan 217 F2b).
-  Estructura simplificada e inventada de view.php (detalle de issue) — CERO
-  datos reales de soporte.ais-int.net. Nombres/usuarios placeholder.
+  Fixture para test_mg_adapters_scraping.py (Plan 217 F2b).
+
+  ESTRUCTURA REAL de view.php (detalle de incidencia), tomada de una
+  instancia MantisBT viva y luego ANONIMIZADA (IDs, nombres, textos y
+  archivos reemplazados por datos inventados; CERO datos reales).
+
+  IMPORTANTE: la versión anterior de este fixture usaba `bug-label`/
+  `bug-value`, `<tr class="bugnote">` con celdas posicionales y
+  `<tr class="attachment-row">` — estructuras INVENTADAS que Mantis no
+  genera. El parser estaba escrito contra ellas, así que los tests pasaban
+  mientras que contra el servidor real devolvía el detalle vacío y 0
+  notas/adjuntos. La estructura real usa:
+    - `<td class="bug-XXX">` para cada campo (bug-summary, bug-reporter,
+      bug-assigned-to, bug-status, bug-priority, bug-description, …)
+    - `<tr class="bugnote …" id="cNNN">` con el texto en `bugnote-note`
+    - adjuntos como links a `file_download.php?file_id=N` dentro de
+      `bug-attach-tags` (dos links por adjunto: icono + nombre)
 -->
 <html>
-<head><title>Proyecto Ejemplo - Issue 1001</title></head>
+<head><title>Proyecto Ejemplo - Incidencia 1001</title></head>
 <body>
-<table class="bug-description-table">
-  <tr><td class="bug-label">id</td><td class="bug-value">1001</td></tr>
-  <tr><td class="bug-label">summary</td><td class="bug-value">Fallo al generar reporte mensual de ejemplo</td></tr>
-  <tr><td class="bug-label">reporter</td><td class="bug-value">reportero.demo</td></tr>
-  <tr><td class="bug-label">handler</td><td class="bug-value">responsable.demo</td></tr>
-  <tr><td class="bug-label">status</td><td class="bug-value">new</td></tr>
-  <tr><td class="bug-label">priority</td><td class="bug-value">high</td></tr>
-  <tr><td class="bug-label">description</td><td class="bug-value">Descripcion de ejemplo del ticket de prueba numero uno.</td></tr>
-  <tr><td class="bug-label">steps_to_reproduce</td><td class="bug-value">1. Ingresar al sistema. 2. Generar el reporte mensual.</td></tr>
-  <tr><td class="bug-label">additional_information</td><td class="bug-value">Informacion adicional de ejemplo para pruebas.</td></tr>
+<a href="logout_page.php">Salir</a>
+
+<table class="table table-bordered table-condensed">
+  <tr>
+    <th class="bug-id category">ID</th>
+    <td class="bug-id">0001001</td>
+    <th class="bug-category category">Categoría</th>
+    <td class="bug-category">Procesos de Carga</td>
+  </tr>
+  <tr>
+    <th class="bug-reporter category">Reportador</th>
+    <td class="bug-reporter"><a href="view_user_page.php?id=101">reportero.demo</a></td>
+    <th class="bug-assigned-to category">Asignado a</th>
+    <td class="bug-assigned-to"><a href="view_user_page.php?id=102">responsable.demo</a></td>
+  </tr>
+  <tr>
+    <th class="bug-priority category">Prioridad</th>
+    <td class="bug-priority">alta</td>
+    <th class="bug-severity category">Gravedad</th>
+    <td class="bug-severity">menor</td>
+  </tr>
+  <tr>
+    <th class="bug-status category">Estado</th>
+    <td class="bug-status"><i class="fa fa-square fa-status-box status-10-fg"></i> nueva</td>
+    <th class="bug-date-submitted category">Enviado</th>
+    <td class="bug-date-submitted">10/01/2026 09:15</td>
+  </tr>
+  <tr>
+    <th class="bug-summary category">Resumen</th>
+    <td class="bug-summary" colspan="5">0001001: Fallo al generar reporte mensual de ejemplo</td>
+  </tr>
+  <tr>
+    <th class="bug-description category">Descripción</th>
+    <td class="bug-description" colspan="5">Descripcion de ejemplo del ticket de prueba numero uno.</td>
+  </tr>
+  <tr>
+    <th class="bug-steps-to-reproduce category">Pasos para reproducir</th>
+    <td class="bug-steps-to-reproduce" colspan="5">1. Ingresar al sistema. 2. Generar el reporte mensual.</td>
+  </tr>
+  <tr>
+    <th class="bug-additional-information category">Información adicional</th>
+    <td class="bug-additional-information" colspan="5">Informacion adicional de ejemplo para pruebas.</td>
+  </tr>
+  <tr class="noprint">
+    <th class="bug-attach-tags category">Archivos adjuntos</th>
+    <td class="bug-attach-tags" colspan="5">
+      <div class="well well-xs">
+        <a href="file_download.php?file_id=501&amp;type=bug"><i class="fa fa-file-image-o" title="Ícono del archivo png"></i></a>&#32;<a href="file_download.php?file_id=501&amp;type=bug">captura_pantalla_demo.png</a>&#32;(120,480&#32;bytes)
+      </div>
+    </td>
+  </tr>
 </table>
 
-<table class="bugnote-table">
-  <tr class="bugnote">
-    <td class="bugnote-reporter">Usuario Ejemplo</td>
-    <td class="bugnote-date">2026-01-13 10:00</td>
-    <td class="bugnote-text">Nota de ejemplo numero uno sobre este ticket.</td>
+<table class="table table-bordered table-condensed table-striped">
+  <tr class="bugnote visible-on-hover-toggle" id="c9001">
+    <td class="category">
+      <p class="no-margin"><a title="usuario.ejemplo" href="https://mantis.ejemplo.local/mantis/view_user_page.php?id=101">Usuario Ejemplo</a></p>
+      <p class="no-margin small lighter">13/01/2026 10:00</p>
+    </td>
+    <td class="bugnote-note bugnote-public">Nota de ejemplo numero uno sobre este ticket.</td>
   </tr>
-  <tr class="bugnote">
-    <td class="bugnote-reporter">reportero.demo</td>
-    <td class="bugnote-date">2026-01-14 11:30</td>
-    <td class="bugnote-text">Segunda nota de ejemplo confirmando el problema.</td>
-  </tr>
-</table>
-
-<table class="attachment-table">
-  <tr class="attachment-row">
-    <td><a href="file_download.php?file_id=501&amp;type=bug">captura_pantalla_demo.png</a></td>
-    <td>120480</td>
+  <tr class="bugnote visible-on-hover-toggle" id="c9002">
+    <td class="category">
+      <p class="no-margin"><a title="reportero.demo" href="https://mantis.ejemplo.local/mantis/view_user_page.php?id=102">reportero.demo</a></p>
+      <p class="no-margin small lighter">14/01/2026 11:30</p>
+    </td>
+    <td class="bugnote-note bugnote-public">Segunda nota de ejemplo confirmando el problema.</td>
   </tr>
 </table>
 

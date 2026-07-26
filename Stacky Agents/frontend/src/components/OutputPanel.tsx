@@ -15,6 +15,7 @@ import ValidationPlaybookPane, {
   readValidationPlaybook,
 } from "./ValidationPlaybookPane";
 import { readBuildVerdict, verdictBadge } from "./devBuildModel";
+import QaUatVerdictPane from "./QaUatVerdictPane";
 import {
   findingLabel,
   findingsFromVerdict,
@@ -177,6 +178,11 @@ export default function OutputPanel() {
                 )}
               </div>
             )}
+            {/* Plan 214 F4 — veredicto E2E / candidato de validación post-desarrollo */}
+            <QaUatVerdictPane
+              agentType={execution.agent_type}
+              metadata={execution.metadata}
+            />
             {/* Plan 209 F4 — guía "Cómo validar esto" para el usuario de RS */}
             {validationPlaybook && (
               <ValidationPlaybookPane playbook={validationPlaybook} />

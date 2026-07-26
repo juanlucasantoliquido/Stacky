@@ -1,0 +1,67 @@
+/* Plan 214 F4 — Veredicto QA UAT / candidato de validación. Cero estilos inline. */
+
+.pane {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) 1fr;
+  gap: 3px 12px;
+  font-size: 11px;
+}
+
+.label {
+  color: var(--text-muted);
+}
+
+.value {
+  color: var(--text);
+  word-break: break-word;
+}
+
+.weak {
+  margin: 0;
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}

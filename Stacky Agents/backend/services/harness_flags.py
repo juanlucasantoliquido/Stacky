@@ -174,6 +174,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
         # Plan 209 — guia "Como validar esto" para el usuario de RS
         "STACKY_VALIDATION_PLAYBOOK_ENABLED",
+        # Plan 214 — validacion QAUAT E2E al completar el Developer
+        "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED", "STACKY_QA_UAT_AUTORUN_ENABLED",
     ),
     "integridad_grounding": (
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
@@ -1806,6 +1808,35 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 214 — Validación QAUAT E2E al completar el Developer ───────────────
+    FlagSpec(
+        key="STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",
+        type="bool",
+        default=True,
+        label="Sugerir validación QAUAT al completar el Developer",
+        description=(
+            "Plan 214 — Al completar el Developer un ticket, deja preparado el "
+            "candidato de validación E2E (QA UAT) visible en la ejecución. No corre "
+            "nada ni publica nada por sí solo. Default ON."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_AUTORUN_ENABLED",
+        type="bool",
+        # Sin `default=` explícito a propósito: el type-zero de bool ya es False, y
+        # `default_is_known` (que exige estar en _CURATED_DEFAULTS_ON) solo aplica a
+        # los defaults ON curados.
+        label="Autorun QAUAT (dry-run) al completar el Developer",
+        description=(
+            "Plan 214 — Lanza automáticamente el pipeline QA UAT en dry-run al "
+            "completar el Developer. Requiere AgendaWeb local corriendo, credenciales "
+            "y browsers Playwright instalados. Default OFF (prerequisito no "
+            "garantizado en una instalación default)."
+        ),
+        group="global",
+        requires="STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",
     ),
     # ── Plan 211 — Inspector post-build + residuos de port entre clientes ───────
     FlagSpec(

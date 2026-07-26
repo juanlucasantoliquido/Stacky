@@ -873,6 +873,10 @@ def create_app() -> Flask:
     # evidencia del veredicto de build (Plan 210).
     from services import dev_build_contributors, dev_build_verify
     dev_build_contributors.register(dev_build_verify.register_evidence_contributor)
+    # Plan 214 — candidato de validación QAUAT E2E al completar el Developer.
+    # Va DESPUÉS del gate de build para que pueda leer su veredicto.
+    from services import qa_uat_enqueue
+    qa_uat_enqueue.register(ticket_status.register_post_hook)
 
     return app
 

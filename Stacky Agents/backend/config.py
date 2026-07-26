@@ -1230,6 +1230,16 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 214 — Validación QAUAT E2E al completar el Developer ─────────────
+    # Solo escribe metadata local (no publica, no ejecuta, no toca ADO) ⇒ ON.
+    STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # OFF por prerequisito no garantizado: AgendaWeb local, credenciales y browsers
+    # Playwright. Aun ON, corre SOLO dry-run.
+    STACKY_QA_UAT_AUTORUN_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_AUTORUN_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 211 — Inspector post-build + residuos de port entre clientes ─────
     # Ambos son read-only sobre archivos del workspace y alimentan el veredicto
     # del 210. Un hallazgo bloqueante baja el gate; los tokens dudosos solo avisan.

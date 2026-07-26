@@ -472,6 +472,9 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 211 — inspector post-build + residuos de port (read-only) ──
     "STACKY_DEV_POST_BUILD_INSPECT_ENABLED",
     "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",
+    # ── Plan 214 — candidato QAUAT al completar el Developer (solo metadata) ──
+    # (el autorun es default OFF: NO va acá)
+    "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",
     # ── Plan 171 — telemetría operativa (observabilidad read-only, on-read) ──
     "STACKY_OPS_TELEMETRY_ENABLED",
     "STACKY_OPS_BASELINE_ENABLED",

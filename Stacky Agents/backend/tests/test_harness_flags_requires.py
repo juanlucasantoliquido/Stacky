@@ -118,6 +118,9 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 214: el autorun vive DENTRO del hook gateado por la otra flag; sin la
+    # arista, autorun ON + encolado OFF sería un no-op mudo.
+    "STACKY_QA_UAT_AUTORUN_ENABLED": "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",
     # Plan 171: las 2 hijas de telemetría operativa apuntan al ROOT (profundidad 1);
     # la master STACKY_OPS_TELEMETRY_ENABLED no declara arista.
     "STACKY_OPS_BASELINE_ENABLED": "STACKY_OPS_TELEMETRY_ENABLED",

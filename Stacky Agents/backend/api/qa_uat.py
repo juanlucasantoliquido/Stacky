@@ -110,6 +110,101 @@ def _export_qa_uat_flags() -> dict:
     return exported
 
 
+def start_qa_uat_run(ticket_ado_id: int, *, mode: str = "dry-run", headed: bool = False,
+                     timeout_ms: int = 30_000, started_by: str = "qa-uat-auto") -> int:
+    """Plan 214 F3 — Crea la ejecución qa-uat y lanza el pipeline. Devuelve el id.
+
+    Extraído del route para que el disparo post-desarrollo lo reuse sin duplicar la
+    creación de la fila ni el hilo. Lanza `ValueError` si el ticket ADO no existe en
+    la DB local (el route lo traduce a 404).
+    """
+    with session_scope() as session:
+        ticket_row = session.query(Ticket).filter(Ticket.ado_id == ticket_ado_id).first()
+        if ticket_row is None:
+            raise ValueError(
+                f"Ticket {ticket_ado_id} not found in Stacky DB. "
+                "Run ADO sync first or create the ticket via the UI."
+            )
+        internal_ticket_id = ticket_row.id
+
+    with session_scope() as session:
+        exec_row = AgentExecution(
+            ticket_id=internal_ticket_id,
+            agent_type=_AGENT_TYPE,
+            status="running",
+            started_by=started_by,
+            started_at=datetime.utcnow(),
+        )
+        exec_row.input_context = [
+            {
+                "id": "pipeline_params",
+                "kind": "readonly",
+                "title": "QA UAT Pipeline params",
+                "content": json.dumps(
+                    {"ticket_id": ticket_ado_id, "mode": mode,
+                     "headed": headed, "timeout_ms": timeout_ms},
+                    ensure_ascii=False,
+                ),
+            }
+        ]
+        exec_row.chain_from = []
+        exec_row.output_format = "json"
+        exec_row.metadata_dict = {
+            "pipeline_ticket_id": ticket_ado_id,
+            "mode": mode,
+        }
+        session.add(exec_row)
+        session.flush()
+        execution_id = exec_row.id
+
+    log_streamer.open(execution_id)
+    log_streamer.push(execution_id, "info",
+                      f"▶ qa-uat pipeline started for ticket {ticket_ado_id} (mode={mode})")
+
+    thread = threading.Thread(
+        target=_run_pipeline_in_background,
+        args=(execution_id, ticket_ado_id, mode, headed, timeout_ms),
+        daemon=True,
+        name=f"qa-uat-pipeline-{ticket_ado_id}",
+    )
+    thread.start()
+    return execution_id
+
+
+def _update_dev_candidate(ticket_id, verdict, qa_execution_id) -> None:
+    """Plan 214 F4 — Cierra el loop: la tarjeta del Developer deja de decir
+    "sugerida" cuando la validación ya corrió. Best-effort, nunca lanza.
+
+    NO cambia estados ADO ni publica nada.
+    """
+    try:
+        estado = {"PASS": "validated", "FAIL": "failed", "MIXED": "failed",
+                  "BLOCKED": "blocked"}.get(str(verdict or "").upper())
+        if not estado or not ticket_id:
+            return
+        with session_scope() as session:
+            filas = (
+                session.query(AgentExecution)
+                .filter(AgentExecution.ticket_id == ticket_id)
+                .filter(AgentExecution.agent_type == "developer")
+                .order_by(AgentExecution.id.desc())
+                .all()
+            )
+            for fila in filas:
+                md = dict(fila.metadata_dict or {})
+                candidato = md.get("qa_uat_candidate")
+                if not isinstance(candidato, dict):
+                    continue
+                candidato = dict(candidato)
+                candidato["status"] = estado
+                candidato["qa_uat_execution_id"] = qa_execution_id
+                md["qa_uat_candidate"] = candidato
+                fila.metadata_dict = md
+                return
+    except Exception:  # noqa: BLE001
+        logger.debug("back-link del candidato QAUAT falló (no crítico)", exc_info=True)
+
+
 # ── Endpoint: POST /api/qa-uat/run ────────────────────────────────────────────
 
 @bp.post("/run")
@@ -149,59 +244,11 @@ def run_pipeline():
 
     user = current_user()
 
-    # Locate ticket in Stacky DB (create stub row if not synced yet)
-    with session_scope() as session:
-        ticket_row = (
-            session.query(Ticket).filter(Ticket.ado_id == ticket_id).first()
-        )
-        if ticket_row is None:
-            abort(404, f"Ticket {ticket_id} not found in Stacky DB. "
-                       "Run ADO sync first or create the ticket via the UI.")
-        internal_ticket_id = ticket_row.id
-
-    # Create execution row
-    with session_scope() as session:
-        exec_row = AgentExecution(
-            ticket_id=internal_ticket_id,
-            agent_type=_AGENT_TYPE,
-            status="running",
-            started_by=user,
-            started_at=datetime.utcnow(),
-        )
-        exec_row.input_context = [
-            {
-                "id": "pipeline_params",
-                "kind": "readonly",
-                "title": "QA UAT Pipeline params",
-                "content": json.dumps(
-                    {"ticket_id": ticket_id, "mode": mode,
-                     "headed": headed, "timeout_ms": timeout_ms},
-                    ensure_ascii=False,
-                ),
-            }
-        ]
-        exec_row.chain_from = []
-        exec_row.output_format = "json"
-        exec_row.metadata_dict = {
-            "pipeline_ticket_id": ticket_id,
-            "mode": mode,
-        }
-        session.add(exec_row)
-        session.flush()
-        execution_id = exec_row.id
-
-    log_streamer.open(execution_id)
-    log_streamer.push(execution_id, "info",
-                      f"▶ qa-uat pipeline started for ticket {ticket_id} (mode={mode})")
-
-    # Launch background thread
-    thread = threading.Thread(
-        target=_run_pipeline_in_background,
-        args=(execution_id, ticket_id, mode, headed, timeout_ms),
-        daemon=True,
-        name=f"qa-uat-pipeline-{ticket_id}",
-    )
-    thread.start()
+    try:
+        execution_id = start_qa_uat_run(ticket_id, mode=mode, headed=headed,
+                                        timeout_ms=timeout_ms, started_by=user)
+    except ValueError as exc:
+        abort(404, str(exc))
 
     return jsonify({
         "execution_id": execution_id,

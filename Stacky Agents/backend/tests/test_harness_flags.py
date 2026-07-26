@@ -476,6 +476,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
     # ── Plan 213 — analistas declaran supuestos en vez de frenar el pipeline ──
     "STACKY_ASSUMPTION_MODE_ENABLED",
+    # ── Plan 199 — cosecha histórica de telemetría (solo las 3 bools ON) ──
+    "STACKY_TELEMETRY_HARVEST_ENABLED",
+    "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED",
+    "STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY",
     # ── Plan 200 — consola por incidencia + despliegue SQL (las 3 read-only) ──
     # STACKY_SQL_EXEC_ENABLED NO va: es default OFF.
     "STACKY_INCIDENT_CONSOLE_ENABLED",

@@ -147,6 +147,7 @@ def test_read_current_unset_env_only_in_bounds_true(monkeypatch):
 #   - STACKY_TRANSIENT_RUN_RETRY_MAX — la propia label dice "G2.2 - DIFERIDO".
 #   - STACKY_ACCEPTANCE_REPAIR_MAX_RETRIES — solo mencionada en un docstring.
 _FROZEN_BOUNDS: dict[str, tuple[float | None, float | None]] = {
+    "STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS": (1, 3650),  # Plan 199
     "CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES": (0, None),
     "CODEX_CLI_AUTOCORRECT_MAX_RETRIES": (0, None),
     "STACKY_CONTEXT_BUDGET_TOKENS": (0, None),

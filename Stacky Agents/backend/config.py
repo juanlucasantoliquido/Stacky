@@ -1252,6 +1252,22 @@ class Config:
     STACKY_STATE_CONFIG_CENTRALIZED_ENABLED: bool = os.getenv(
         "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 199 — Cosecha histórica de telemetría desde disco ────────────────
+    STACKY_TELEMETRY_HARVEST_ENABLED: bool = os.getenv(
+        "STACKY_TELEMETRY_HARVEST_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED: bool = os.getenv(
+        "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY: bool = os.getenv(
+        "STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY", "true"
+    ).strip().lower() == "true"
+    STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS: int = int(
+        os.getenv("STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS", "180") or "180"
+    )
+    STACKY_TELEMETRY_HARVEST_ROOTS_JSON: str = os.getenv(
+        "STACKY_TELEMETRY_HARVEST_ROOTS_JSON", ""
+    ).strip()
     # ── Plan 200 — Consola por incidencia, despliegue SQL y ejecución HITL ────
     # Las 3 primeras son read-only (mirar, detectar, registrar) ⇒ ON.
     STACKY_INCIDENT_CONSOLE_ENABLED: bool = os.getenv(

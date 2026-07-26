@@ -1,0 +1,397 @@
+"""Plan 199 F0 — Cosecha de telemetría histórica desde los artefactos en disco.
+
+Los CLIs dejan en disco todo lo que gastaron: codex escribe `rollout-*.jsonl` en
+`~/.codex/sessions` y Claude Code sus transcripts en `~/.claude/projects`. Todo
+lo que se corrió antes de que Stacky existiera —o fuera de Stacky— está ahí y no
+figura en ningún tablero. Este módulo lo descubre y lo normaliza.
+
+Es PURO: descubre, lee y normaliza. No toca la base ni escribe nada; la ingesta
+es otra fase. Y no reimplementa la extracción de campos donde ya existe: los
+eventos de codex pasan por el MISMO `from_codex_event` que la captura en vivo,
+así una diferencia de criterio entre histórico y live es imposible por
+construcción.
+
+Reglas duras:
+- Ningún runtime ausente rompe nada: sin la carpeta, el descubridor devuelve [].
+- Nunca sale una ruta absoluta: solo el basename, y pasado por el escáner de
+  secretos (un directorio puede llamarse como un token).
+- Todo `started_at` se normaliza a naive-UTC: comparar naive contra aware es un
+  TypeError esperando a pasar.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+logger = logging.getLogger("stacky.services.telemetry_harvest")
+
+__all__ = [
+    "HarvestedRun",
+    "discover_codex_rollouts",
+    "discover_claude_transcripts",
+    "discover_copilot_sessions",
+    "parse_codex_rollout",
+    "parse_claude_transcript",
+    "harvest",
+]
+
+_HARVEST_MAX_FILES = 5000
+_HARVEST_MAX_BYTES_PER_FILE = 25 * 1024 * 1024
+_HARVEST_MAX_LINES_PER_FILE = 50000
+
+
+@dataclass
+class HarvestedRun:
+    runtime: str
+    session_id: str | None
+    model: str | None
+    tokens_in: int | None
+    tokens_out: int | None
+    cache_read_tokens: int | None
+    total_cost_usd: float | None
+    cost_estimated: bool
+    started_at: datetime | None
+    project_hint: str | None
+    cwd: str | None
+    artifact: str
+    source_format: str
+    num_events: int
+    num_turns: int | None = None
+
+    def to_harness_telemetry(self) -> dict:
+        """Las claves EXACTAS que lee `extract_cost_row` de `harness_telemetry`.
+
+        `source` marca la procedencia para que un run cosechado no se confunda
+        nunca con uno capturado en vivo.
+        """
+        return {
+            "runtime": self.runtime,
+            "session_id": self.session_id,
+            "total_cost_usd": self.total_cost_usd,
+            "input_tokens": self.tokens_in,
+            "output_tokens": self.tokens_out,
+            "cache_read_tokens": self.cache_read_tokens,
+            "cost_estimated": self.cost_estimated,
+            "num_turns": self.num_turns,
+            "source": "harvest_disk",
+        }
+
+    def dedup_key(self) -> str:
+        return f"{self.runtime}:{self.session_id or self.artifact}"
+
+
+# ---------------------------------------------------------------------------
+# Raíces
+# ---------------------------------------------------------------------------
+
+def _roots_override() -> dict:
+    from config import config as _cfg
+
+    raw = (getattr(_cfg, "STACKY_TELEMETRY_HARVEST_ROOTS_JSON", "") or "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except (ValueError, TypeError):
+        logger.warning("telemetry_harvest: ROOTS_JSON malformado, ignorado")
+        return {}
+
+
+def _codex_sessions_root() -> Path | None:
+    ov = _roots_override().get("codex_cli")
+    if ov:
+        p = Path(ov).expanduser()
+        return p if p.is_dir() else None
+    base = os.getenv("CODEX_HOME", "").strip()
+    root = (Path(base).expanduser() if base else Path.home() / ".codex") / "sessions"
+    return root if root.is_dir() else None
+
+
+def _claude_projects_root() -> Path | None:
+    ov = _roots_override().get("claude_code_cli")
+    if ov:
+        p = Path(ov).expanduser()
+        return p if p.is_dir() else None
+    root = Path.home() / ".claude" / "projects"
+    return root if root.is_dir() else None
+
+
+# ---------------------------------------------------------------------------
+# Descubridores
+# ---------------------------------------------------------------------------
+
+def _iter_jsonl(root: Path, pattern: str, since: datetime, limit: int) -> list:
+    """rglob capado y filtrado por mtime. Nunca lanza: un permiso denegado en una
+    carpeta cualquiera no puede voltear la cosecha entera."""
+    out: list = []
+    try:
+        for p in root.rglob(pattern):
+            if len(out) >= limit:
+                break
+            try:
+                if datetime.utcfromtimestamp(p.stat().st_mtime) >= since:
+                    out.append(p)
+            except OSError:
+                continue
+    except OSError:
+        return []
+    try:
+        return sorted(out, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
+    except OSError:
+        return out[:limit]
+
+
+def discover_codex_rollouts(since: datetime, limit: int = _HARVEST_MAX_FILES) -> list:
+    root = _codex_sessions_root()
+    return _iter_jsonl(root, "rollout-*.jsonl", since, limit) if root else []
+
+
+def discover_claude_transcripts(since: datetime, limit: int = _HARVEST_MAX_FILES) -> list:
+    root = _claude_projects_root()
+    return _iter_jsonl(root, "*.jsonl", since, limit) if root else []
+
+
+def discover_copilot_sessions(since: datetime, limit: int = _HARVEST_MAX_FILES) -> list:
+    """FALLBACK EXPLÍCITO: Copilot corre por un bridge HTTP y no deja sesión local.
+
+    Devuelve [] a propósito y lo dice en el log. No es un olvido de paridad: no
+    hay artefacto que cosechar. Si algún día aparece un log local, se agrega acá.
+    """
+    logger.info("telemetry_harvest: github_copilot no persiste sesiones locales "
+                "(bridge HTTP); nada que cosechar")
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Normalización
+# ---------------------------------------------------------------------------
+
+def _to_naive_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _parse_ts(value):
+    if value is None:
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            return datetime.utcfromtimestamp(float(value))
+        s = str(value).strip().replace("Z", "+00:00")
+        return _to_naive_utc(datetime.fromisoformat(s))
+    except (ValueError, TypeError, OSError):
+        return None
+
+
+def _mask_path(raw: str | None) -> str | None:
+    """Solo el basename, y redactado si parece un secreto.
+
+    Una ruta absoluta en un tablero filtra la estructura del disco del operador;
+    y un directorio puede llamarse como una credencial.
+    """
+    if not raw:
+        return None
+    try:
+        from services.secret_scanner import scan_secrets
+
+        base = os.path.basename(str(raw).rstrip("/\\")) or str(raw)
+        return "<redacted>" if scan_secrets(base) else base
+    except Exception:  # noqa: BLE001 — enmascarar nunca puede romper la cosecha
+        return "<redacted>"
+
+
+def _finalize_cost(run: HarvestedRun, model: str | None) -> None:
+    """Estima el costo solo si el artefacto no lo trae. Lo reportado siempre gana."""
+    if run.total_cost_usd is not None:
+        return
+    if run.tokens_in is None and run.tokens_out is None:
+        return
+    try:
+        from harness.pricing import estimate_cost
+
+        est = estimate_cost(model, run.tokens_in, run.tokens_out)
+    except Exception:  # noqa: BLE001
+        est = None
+    if est is not None:
+        run.total_cost_usd = est
+        run.cost_estimated = True
+
+
+def _mtime_naive(path: Path):
+    try:
+        return datetime.utcfromtimestamp(path.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _oversize(path: Path, etiqueta: str) -> bool:
+    try:
+        if path.stat().st_size > _HARVEST_MAX_BYTES_PER_FILE:
+            logger.warning("telemetry_harvest: %s oversize, skip %s", etiqueta, path.name)
+            return True
+    except OSError:
+        return True
+    return False
+
+
+def _iter_eventos(path: Path):
+    """Líneas JSON del artefacto, tolerando parciales y corruptas.
+
+    El CLI puede estar escribiendo el archivo mientras se lee: una línea a medias
+    es normal, no un error.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for i, line in enumerate(fh):
+            if i >= _HARVEST_MAX_LINES_PER_FILE:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if isinstance(ev, dict):
+                yield ev
+
+
+def parse_codex_rollout(path: Path) -> HarvestedRun | None:
+    """Agrega un rollout de codex reusando el extractor de la captura en vivo."""
+    from harness.telemetry import from_codex_event
+
+    if _oversize(path, "codex rollout"):
+        return None
+
+    tin = tout = tcache = 0
+    saw_usage = False
+    session_id = model = total_cost = num_turns = started = cwd_raw = None
+    n = 0
+    try:
+        for ev in _iter_eventos(path):
+            n += 1
+            t = from_codex_event(ev)
+            if t.input_tokens or t.output_tokens or t.cache_read_tokens:
+                saw_usage = True
+                tin += t.input_tokens or 0
+                tout += t.output_tokens or 0
+                tcache += t.cache_read_tokens or 0
+            if session_id is None and t.session_id:
+                session_id = t.session_id
+            if num_turns is None and t.num_turns:
+                num_turns = t.num_turns
+            if t.total_cost_usd is not None:
+                total_cost = t.total_cost_usd   # el acumulado del CLI: gana el último
+            m = ev.get("model") or (ev.get("item") or {}).get("model")
+            if model is None and m:
+                model = m
+            if started is None:
+                started = _parse_ts(ev.get("timestamp") or ev.get("ts") or ev.get("time"))
+            if cwd_raw is None:
+                cwd_raw = ev.get("cwd") or (ev.get("item") or {}).get("cwd")
+    except OSError:
+        return None
+
+    run = HarvestedRun(
+        runtime="codex_cli", session_id=session_id, model=model,
+        tokens_in=(tin if saw_usage else None),
+        tokens_out=(tout if saw_usage else None),
+        cache_read_tokens=(tcache if saw_usage else None),
+        total_cost_usd=total_cost, cost_estimated=False,
+        started_at=started or _mtime_naive(path),
+        project_hint=_mask_path(cwd_raw), cwd=_mask_path(cwd_raw),
+        artifact=_mask_path(path.name) or "<artifact>",
+        source_format="codex_rollout", num_events=n, num_turns=num_turns,
+    )
+    _finalize_cost(run, model)
+    return run
+
+
+def parse_claude_transcript(path: Path) -> HarvestedRun | None:
+    """Agrega el uso de un transcript de Claude Code.
+
+    OJO: el transcript NO tiene la forma que espera `from_claude_stream` (ese lee
+    `usage` en el tope). Acá el uso vive por línea, dentro de
+    `message.usage` de los eventos `type == "assistant"`. Reusar el extractor de
+    live sobre este formato devolvería ceros en silencio.
+    """
+    if _oversize(path, "claude transcript"):
+        return None
+
+    tin = tout = tcache = 0
+    saw_usage = False
+    session_id = model = started = cwd_raw = None
+    n = 0
+    try:
+        for ev in _iter_eventos(path):
+            n += 1
+            if session_id is None and ev.get("sessionId"):
+                session_id = ev.get("sessionId")
+            if cwd_raw is None and ev.get("cwd"):
+                cwd_raw = ev.get("cwd")
+            if started is None:
+                started = _parse_ts(ev.get("timestamp"))
+            if ev.get("type") != "assistant":
+                continue
+            msg = ev.get("message") or {}
+            usage = msg.get("usage") or {}
+            if model is None and msg.get("model"):
+                model = msg.get("model")
+            itok, otok = usage.get("input_tokens"), usage.get("output_tokens")
+            ctok = usage.get("cache_read_input_tokens")
+            if itok or otok or ctok:
+                saw_usage = True
+                tin += itok or 0
+                tout += otok or 0
+                tcache += ctok or 0
+    except OSError:
+        return None
+
+    run = HarvestedRun(
+        runtime="claude_code_cli", session_id=session_id or (path.stem or None),
+        model=model,
+        tokens_in=(tin if saw_usage else None),
+        tokens_out=(tout if saw_usage else None),
+        cache_read_tokens=(tcache if saw_usage else None),
+        # El transcript no trae un costo confiable: se estima aguas abajo.
+        total_cost_usd=None, cost_estimated=False,
+        started_at=started or _mtime_naive(path),
+        project_hint=_mask_path(cwd_raw), cwd=_mask_path(cwd_raw),
+        artifact=_mask_path(path.name) or "<artifact>",
+        source_format="claude_transcript", num_events=n, num_turns=None,
+    )
+    _finalize_cost(run, model)
+    return run
+
+
+def harvest(since: datetime, limit: int = _HARVEST_MAX_FILES) -> list:
+    """Cosecha los 3 runtimes y devuelve los runs deduplicados, más nuevos primero."""
+    runs: list = []
+    for path in discover_codex_rollouts(since, limit):
+        run = parse_codex_rollout(path)
+        if run is not None:
+            runs.append(run)
+    for path in discover_claude_transcripts(since, limit):
+        run = parse_claude_transcript(path)
+        if run is not None:
+            runs.append(run)
+    discover_copilot_sessions(since, limit)   # deja constancia del fallback
+
+    vistos: set = set()
+    unicos: list = []
+    for run in runs:
+        clave = run.dedup_key()
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        unicos.append(run)
+
+    unicos.sort(key=lambda r: r.started_at or datetime.min, reverse=True)
+    return unicos

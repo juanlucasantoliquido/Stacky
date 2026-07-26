@@ -290,6 +290,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_EXECUTION_TRACE_ENABLED", "STACKY_TRACE_PROMPT_TEXT_ENABLED",
         "STACKY_DIGEST_INTERVAL_HOURS", "STACKY_ADO_FAILURE_COMMENT_ENABLED",
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
+        "STACKY_TELEMETRY_HARVEST_ENABLED",           # Plan 199
+        "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED",  # Plan 199
+        "STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY",   # Plan 199
+        "STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS",     # Plan 199
+        "STACKY_TELEMETRY_HARVEST_ROOTS_JSON",        # Plan 199
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -1786,6 +1791,69 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="observability",
         default=True,  # Grupo A — endpoint de lectura; observabilidad sin costo de tokens.
+    ),
+    # ── Plan 199 — Cosecha histórica de telemetría desde disco ─────────────────
+    FlagSpec(
+        key="STACKY_TELEMETRY_HARVEST_ENABLED",
+        type="bool",
+        default=True,
+        label="Cosecha histórica de telemetría (desde disco)",
+        description=(
+            "Plan 199 — Descubre en disco los artefactos de sesión de los CLIs "
+            "(rollouts de codex, transcripts de Claude Code) y trae al Centro de "
+            "Costos lo que se gastó fuera de Stacky. Read-only: sin las carpetas, "
+            "degrada a vacío."
+        ),
+        group="observabilidad",
+    ),
+    FlagSpec(
+        key="STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED",
+        type="bool",
+        default=True,
+        label="Escanear la telemetría histórica al arrancar",
+        description=(
+            "Plan 199 — Corre la cosecha en segundo plano al iniciar, sin bloquear "
+            "el arranque. Excepción #3 citada: depende de carpetas de disco que una "
+            "instalación default puede no tener; si faltan, no hace nada y lo dice."
+        ),
+        group="observabilidad",
+        requires="STACKY_TELEMETRY_HARVEST_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY",
+        type="bool",
+        default=True,
+        label="Solo sesiones atribuibles a una ejecución",
+        description=(
+            "Plan 199 — Ingesta únicamente las sesiones que matchean una ejecución "
+            "conocida. Privacidad por default: lo no atribuible queda en la bitácora "
+            "para que el operador decida, no entra solo."
+        ),
+        group="observabilidad",
+        requires="STACKY_TELEMETRY_HARVEST_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS",
+        type="int",
+        # SIN default=: un default declarado la trata como "curada" y ese set es
+        # solo para bools ON. El valor efectivo (180) vive en config.py.
+        label="Cuántos días hacia atrás cosechar",
+        description="Plan 199 — Ventana del escaneo en disco. Default 180 días.",
+        group="observabilidad",
+        requires="STACKY_TELEMETRY_HARVEST_ENABLED",
+        min_value=1,
+        max_value=3650,
+    ),
+    FlagSpec(
+        key="STACKY_TELEMETRY_HARVEST_ROOTS_JSON",
+        type="str",
+        label="Raíces de artefactos por runtime (JSON)",
+        description=(
+            "Plan 199 — Override de dónde buscar los artefactos, p.ej. "
+            '{"codex_cli": "D:/codex/sessions"}. Vacío = rutas por defecto del CLI.'
+        ),
+        group="observabilidad",
+        requires="STACKY_TELEMETRY_HARVEST_ENABLED",
     ),
     # ── Plan 142 — Centro de Costos + Codeburn ─────────────────────────────────
     FlagSpec(

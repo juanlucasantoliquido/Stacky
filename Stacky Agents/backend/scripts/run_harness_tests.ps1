@@ -594,6 +594,8 @@ $HarnessTestFiles = @(
   "tests/test_plan216_migration.py",
   # Plan 214 - Validacion QAUAT E2E al completar el Developer
   "tests/test_plan214_qa_uat_enqueue.py",
+  # Plan 199 - Cosecha historica de telemetria desde disco
+  "tests/test_plan199_telemetry_harvest.py",
   # Plan 200 - Consola por incidencia + marcado de despliegue SQL
   "tests/test_plan200_flags.py",
   "tests/test_plan200_incident_console.py",

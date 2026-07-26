@@ -628,6 +628,7 @@ $HarnessTestFiles = @(
   "tests/test_plan212_effort_channel.py",
   "tests/test_plan212_effort_matrix_parity.py",
   "tests/test_plan212_requested_vs_effective.py",
+  "tests/test_plan212_model_probe.py",
   # Plan 211 - Inspector post-build + residuos de port entre clientes
   "tests/test_plan211_flags.py",
   "tests/test_plan211_inspector.py",

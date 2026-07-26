@@ -487,6 +487,8 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_INCIDENT_CONSOLE_ENABLED",
     "STACKY_SQL_DEPLOY_DETECT_ENABLED",
     "STACKY_SQL_EXEC_LEDGER_ENABLED",
+    # ── Plan 212 F6 — probe vivo del CLI (costo de tokens cero) ──
+    "STACKY_MODEL_PROBE_ENABLED",
     # ── Plan 176 — triage curado + gates read-only del comparador de BD ──
     "STACKY_DB_COMPARE_TRIAGE_ENABLED",
     "STACKY_DB_COMPARE_GATES_ENABLED",

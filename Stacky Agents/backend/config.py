@@ -1252,6 +1252,12 @@ class Config:
     STACKY_STATE_CONFIG_CENTRALIZED_ENABLED: bool = os.getenv(
         "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 212 F6 — Probe vivo de modelos del CLI ───────────────────────────
+    # Costo de tokens CERO (solo subcomandos de listado) y degrada a "solo
+    # archivo" ante cualquier problema ⇒ default ON.
+    STACKY_MODEL_PROBE_ENABLED: bool = os.getenv(
+        "STACKY_MODEL_PROBE_ENABLED", "true"
+    ).strip().lower() == "true"
     # ── Plan 199 — Cosecha histórica de telemetría desde disco ────────────────
     STACKY_TELEMETRY_HARVEST_ENABLED: bool = os.getenv(
         "STACKY_TELEMETRY_HARVEST_ENABLED", "true"

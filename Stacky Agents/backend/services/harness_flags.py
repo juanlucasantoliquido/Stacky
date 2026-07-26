@@ -399,6 +399,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",  # Plan 180 — puente diff→repo (índice read-only de scripts ticketeados)
         "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",    # Plan 180 — globs de scripts del repo (CSV)
         "STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",  # Plan 180 — cap de archivos escaneados por refresh
+        "STACKY_MODEL_PROBE_ENABLED",  # Plan 212 F6 — probe vivo del CLI
         "STACKY_DB_COMPARE_TRIAGE_ENABLED",  # Plan 176
         "STACKY_DB_COMPARE_GATES_ENABLED",  # Plan 176
         "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED",  # Plan 176
@@ -3942,6 +3943,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=100,
         max_value=50000,
+    ),
+    # ── Plan 212 F6 — Descubrimiento vivo de modelos del CLI ──────────────────
+    FlagSpec(
+        key="STACKY_MODEL_PROBE_ENABLED",
+        type="bool",
+        default=True,
+        label="Descubrir modelos preguntándole al CLI instalado",
+        description=(
+            "Plan 212 — Completa el catálogo de Claude Code con lo que el CLI "
+            "realmente instalado declara, en vez de depender solo de un archivo "
+            "fechado. Costo de tokens CERO: solo usa subcomandos de listado, "
+            "nunca invoca un modelo. Corre una vez cada 5 minutos y, ante "
+            "cualquier problema, deja el catálogo del archivo intacto."
+        ),
+        group="global",
     ),
     # ── Plan 176 — Triage curado, gates read-only y UX v2 del comparador ──────
     FlagSpec(

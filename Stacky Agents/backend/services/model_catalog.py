@@ -103,8 +103,72 @@ def load_model_catalog(force_refresh: bool = False) -> dict:
         result = {"fallback_used": True, "error": str(e), "loaded_at": now,
                   "runtimes": _EMERGENCY_FALLBACK["runtimes"]}
 
+    result = _merge_probe(result)
     _cache.update(data=result, loaded_at=now, mtime=current_mtime)
     return result
+
+
+def _merge_probe(catalog: dict) -> dict:
+    """Plan 212 F6 — Suma al catálogo lo que el CLI instalado declara tener.
+
+    UNION, nunca resta: un modelo del archivo que el probe no liste se conserva.
+    El probe puede ser incompleto (formato desconocido, versión vieja del CLI) y
+    restar rompería una selección que el operador ya venía usando.
+
+    Corre una vez por refresco de caché (TTL 300s), no por request.
+    """
+    try:
+        import config as _config
+
+        if not getattr(_config.config, "STACKY_MODEL_PROBE_ENABLED", False):
+            return catalog
+        # Bajo pytest no se spawnean procesos: un test del catálogo no tiene por
+        # qué depender de si hay un CLI instalado en la máquina, ni pagar su
+        # timeout. Mismo criterio que los otros daemons del arranque.
+        if os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
+            return catalog
+
+        cli = (catalog.get("runtimes") or {}).get("claude_code_cli")
+        if not isinstance(cli, dict):
+            return catalog
+
+        from services.claude_code_cli_runner import _resolve_claude_code_cli_bin
+        from services.model_probe import probe_claude_models
+
+        try:
+            binario = _resolve_claude_code_cli_bin()
+        except Exception:  # noqa: BLE001 — sin CLI no hay nada que descubrir
+            binario = ""
+
+        resultado = probe_claude_models(cli_bin=binario)
+
+        conocidos = {m.get("id") for m in (cli.get("models") or [])}
+        agregados: list = []
+        for mid in resultado.models:
+            if mid in conocidos:
+                continue
+            cli.setdefault("models", []).append({
+                "id": mid,
+                "label": f"{mid} (detectado en el CLI)",
+                "recommended": False,
+            })
+            conocidos.add(mid)
+            agregados.append(mid)
+
+        if agregados:
+            # Sin effort_support propio: el clamp decide por familia del nombre,
+            # así que un modelo descubierto degrada coherente sin config extra.
+            cli["source"] = "static_config_file+live_probe"
+        cli["probe"] = {
+            "ok": resultado.ok,
+            "command": resultado.command,
+            "reason": resultado.reason,
+            "added": agregados,
+        }
+        return catalog
+    except Exception:  # noqa: BLE001 — el catálogo nunca cae por el probe
+        logger.debug("model_catalog: probe falló (no crítico)", exc_info=True)
+        return catalog
 
 
 def get_copilot_models_cached(force_refresh: bool = False) -> dict:

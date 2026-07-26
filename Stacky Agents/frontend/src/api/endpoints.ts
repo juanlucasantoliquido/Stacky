@@ -1401,6 +1401,9 @@ export const Executions = {
     days?: number;
     limit?: number;
     offset?: number;
+    // Plan 173 F5 — ADITIVOS. Sin `sort` el backend usa su orden de siempre.
+    sort?: string;
+    dir?: "asc" | "desc";
   } = {}) => {
     const params = new URLSearchParams();
     if (q.project) params.set("project", q.project);
@@ -1410,6 +1413,8 @@ export const Executions = {
     if (q.days) params.set("days", String(q.days));
     if (q.limit) params.set("limit", String(q.limit));
     if (q.offset) params.set("offset", String(q.offset));
+    if (q.sort) params.set("sort", q.sort);
+    if (q.dir) params.set("dir", q.dir);
     const qs = params.toString();
     return api.get<ExecutionHistoryItem[]>(`/api/executions/history${qs ? `?${qs}` : ""}`);
   },

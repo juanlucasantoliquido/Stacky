@@ -1,0 +1,25 @@
+/* Plan 173 F3 — Barra de vistas guardadas. Sin colores propios: todo sale de
+   los tokens del tema para que no desentone con la pantalla que la hospeda. */
+
+.bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.select {
+  min-width: 180px;
+}
+
+.editRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hint {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}

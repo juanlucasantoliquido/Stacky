@@ -11,6 +11,8 @@ import {
 import styles from "./SystemLogsPage.module.css";
 import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
 import { QUERY_TUNING } from "../services/queryTuning";
+import SavedViewsBar from "../components/SavedViewsBar";
+import { normalizeFilters } from "../services/savedViews";
 
 const PAGE_SIZE = 100;
 
@@ -319,6 +321,26 @@ export default function SystemLogsPage() {
         />
 
         <button className={styles.clearBtn} onClick={clearFilters}>Clear</button>
+        {/* Plan 173 F3 — presets de estos 8 filtros. La paginación NO entra. */}
+        <SavedViewsBar
+          screenId="syslogs"
+          currentFilters={normalizeFilters(filters)}
+          onApply={(f) => {
+            setFilters({
+              level: f.level ?? "",
+              source: f.source ?? "",
+              action: f.action ?? "",
+              q: f.q ?? "",
+              execution_id: f.execution_id ?? "",
+              ticket_id: f.ticket_id ?? "",
+              from: f.from ?? "",
+              to: f.to ?? "",
+            });
+            // Volver a la primera página: quedarse en la 5 de un filtro que ya
+            // no existe muestra una tabla vacía.
+            setOffset(0);
+          }}
+        />
       </div>
 
       {/* Table */}

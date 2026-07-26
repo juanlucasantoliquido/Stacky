@@ -1,0 +1,28 @@
+/* Plan 173 F4 — Selector de columnas visibles. */
+
+.wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 200px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.25));
+}
+
+.footer {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-muted);
+}

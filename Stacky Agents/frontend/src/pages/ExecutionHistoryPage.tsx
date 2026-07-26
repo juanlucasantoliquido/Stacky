@@ -40,6 +40,19 @@ import {
 import styles from "./ExecutionHistoryPage.module.css";
 import { useRovingFocus } from "../hooks/useRovingFocus";
 import { usePrefetchExecutionDetail } from "../hooks/usePrefetchExecutionDetail";
+import SavedViewsBar from "../components/SavedViewsBar";
+import TableColumnsMenu from "../components/TableColumnsMenu";
+import { hydrateUiPref, loadUiPrefLocal, saveUiPref } from "../services/uiPrefs";
+import {
+  cycleSort,
+  EMPTY_TABLE_PREFS,
+  HISTORY_COLUMNS,
+  isColVisible,
+  sanitizeTablePrefs,
+  sortToQuery,
+  type TablePrefs,
+} from "../services/tablePrefs";
+import { normalizeFilters } from "../services/savedViews";
 import { combinarProps } from "../utils/combinarProps";
 import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
 import { QUERY_TUNING } from "../services/queryTuning";
@@ -77,6 +90,11 @@ const STATUSES = ["", "completed", "error", "needs_review", "running", "cancelle
 
 export default function ExecutionHistoryPage({ exec }: { exec?: number | null }) {
   const { instantNav } = useUiPerfFlags();
+  // Plan 173 F4 — columnas visibles, orden y anchos, por operador.
+  const [tablePrefs, setTablePrefs] = useState<TablePrefs>(() =>
+    sanitizeTablePrefs(loadUiPrefLocal("table.history", EMPTY_TABLE_PREFS), HISTORY_COLUMNS),
+  );
+  const tableRef = useRef<HTMLTableElement>(null);
   // Plan 165 F2 — los filtros sobreviven F5 y el cambio de tab vía localStorage.
   const [filters, setFilters] = useLocalStorageState<Filters>("stacky.ui.history.filters", DEFAULT_FILTERS);
   // Plan 165 F3 — el drawer arranca abierto si la ruta trae exec (deep-link / Slack).
@@ -134,7 +152,9 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
   }, [filters]);
 
   const historyQ = useQuery({
-    queryKey: ["execution-history", filters, activeProject?.name],
+    // El sort va en la key: sin él, cambiar el orden serviría la página cacheada
+    // con el orden viejo y parecería que el click no hizo nada.
+    queryKey: ["execution-history", filters, activeProject?.name, tablePrefs.sort],
     queryFn: () =>
       Executions.history({
         project: activeProject?.name,
@@ -144,6 +164,9 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
         days: filters.days ? Number(filters.days) : undefined,
         limit: filters.limit,
         offset: filters.offset,
+        // Plan 173 F4/F5 — el orden elegido se resuelve en el servidor: ordenar
+        // solo la página traída daría un orden que cambia al paginar.
+        ...sortToQuery(tablePrefs, HISTORY_COLUMNS),
       }),
     ...QUERY_TUNING.history,
     // Plan 174 F4 — mantener la tabla anterior mientras llega la página nueva.
@@ -153,6 +176,42 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
   });
 
   const items: ExecutionHistoryItem[] = historyQ.data ?? [];
+
+  // Lo local pinta ya; el backend gana cuando llega.
+  useEffect(() => {
+    let vivo = true;
+    void hydrateUiPref("table.history", (raw) =>
+      sanitizeTablePrefs(raw, HISTORY_COLUMNS),
+    ).then((remoto) => {
+      if (vivo && remoto) setTablePrefs(remoto);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // Los anchos se aplican imperativamente: el ratchet del plan 138 no admite
+  // estilos inline en el JSX, y acá además cambian al arrastrar.
+  useEffect(() => {
+    const tabla = tableRef.current;
+    if (!tabla) return;
+    for (const th of Array.from(tabla.querySelectorAll<HTMLElement>("th[data-col]"))) {
+      const ancho = tablePrefs.widths[th.dataset.col ?? ""];
+      th.style.width = ancho ? `${ancho}px` : "";
+    }
+  }, [tablePrefs.widths, items.length]);
+
+  function cambiarPrefs(next: TablePrefs) {
+    setTablePrefs(next);
+    saveUiPref("table.history", next);
+  }
+
+  /** Flecha del encabezado. Solo aparece en la columna que ordena de verdad. */
+  function sortMarca(colId: string): string {
+    const s = tablePrefs.sort;
+    if (!s || s.column !== colId) return "";
+    return s.dir === "asc" ? " ▲" : " ▼";
+  }
   // Plan 174 F3 — precargar el detalle mientras el operador decide si abrirlo.
   const { getPrefetchProps } = usePrefetchExecutionDetail();
   // Plan 172 F4 — foco roving: j/k o flechas para recorrer, Enter para abrir.
@@ -306,6 +365,35 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
           <option value="30">Últimos 30 días</option>
           <option value="90">Últimos 90 días</option>
         </select>
+        {/* Plan 173 F3 — guardar estos filtros con nombre y volver de un click.
+            `limit`/`offset` JAMÁS entran a un preset: son paginación, no filtro. */}
+        <SavedViewsBar
+          screenId="history"
+          currentFilters={normalizeFilters({
+            agent_type: filters.agent_type,
+            runtime: filters.runtime,
+            status: filters.status,
+            days: filters.days,
+          })}
+          onApply={(f) =>
+            setFilters((prev) => ({
+              ...prev,
+              agent_type: f.agent_type ?? "",
+              runtime: f.runtime ?? "",
+              status: f.status ?? "",
+              days: f.days ?? "",
+              // Aplicar un preset siempre vuelve a la primera página: quedarse en
+              // la 5 de un filtro que ya no existe muestra una tabla vacía.
+              offset: 0,
+            }))
+          }
+        />
+        {/* Plan 173 F4 — qué columnas ve este operador. */}
+        <TableColumnsMenu
+          columns={HISTORY_COLUMNS}
+          prefs={tablePrefs}
+          onChange={cambiarPrefs}
+        />
       </div>
 
       {/* Plan 194 F4.b — Copiar tabla como CSV / Markdown / Tabla (ADO) */}
@@ -373,16 +461,56 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                     </span>
                   </th>
                 )}
-                <th>Inicio</th>
-                <th>Agente</th>
-                <th>Runtime</th>
-                <th>Modelo</th>
-                <th>Estado</th>
-                <th>Duración</th>
-                <th>Costo</th>
-                <th>Prompt</th>
-                <th>Archivos</th>
-                <th>Ticket</th>
+                {isColVisible(tablePrefs, "inicio") && (
+                  <th data-col="inicio" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "inicio", HISTORY_COLUMNS))}>
+                    Inicio{sortMarca("inicio")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "agente") && (
+                  <th data-col="agente" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "agente", HISTORY_COLUMNS))}>
+                    Agente{sortMarca("agente")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "runtime") && (
+                  <th data-col="runtime" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "runtime", HISTORY_COLUMNS))}>
+                    Runtime{sortMarca("runtime")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "modelo") && (
+                  <th data-col="modelo" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "modelo", HISTORY_COLUMNS))}>
+                    Modelo{sortMarca("modelo")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "estado") && (
+                  <th data-col="estado" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "estado", HISTORY_COLUMNS))}>
+                    Estado{sortMarca("estado")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "duracion") && (
+                  <th data-col="duracion" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "duracion", HISTORY_COLUMNS))}>
+                    Duración{sortMarca("duracion")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "costo") && (
+                  <th data-col="costo" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "costo", HISTORY_COLUMNS))}>
+                    Costo{sortMarca("costo")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "prompt") && (
+                  <th data-col="prompt" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "prompt", HISTORY_COLUMNS))}>
+                    Prompt{sortMarca("prompt")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "archivos") && (
+                  <th data-col="archivos" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "archivos", HISTORY_COLUMNS))}>
+                    Archivos{sortMarca("archivos")}
+                  </th>
+                )}
+                {isColVisible(tablePrefs, "ticket") && (
+                  <th data-col="ticket" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "ticket", HISTORY_COLUMNS))}>
+                    Ticket{sortMarca("ticket")}
+                  </th>
+                )}
               </tr>
             </thead>
             {/* Plan 172 F4 — recorrer con j/k o flechas y abrir con Enter, sin mouse. */}
@@ -410,43 +538,63 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                       />
                     </td>
                   )}
+                  {isColVisible(tablePrefs, "inicio") && (
                   <td className={styles.dateCell}>{formatRelativeTime(item.started_at)}</td>
+                  )}
+                  {isColVisible(tablePrefs, "agente") && (
                   <td>{item.agent_type}</td>
+                  )}
+                  {isColVisible(tablePrefs, "runtime") && (
                   <td className={styles.mono}>{item.runtime ?? "—"}</td>
+                  )}
+                  {isColVisible(tablePrefs, "modelo") && (
                   <td className={styles.mono}>{item.model ?? "—"}</td>
+                  )}
+                  {isColVisible(tablePrefs, "estado") && (
                   <td><StatusChip tone={runStatusTone(item.status)} size="sm">{runStatusLabel(item.status)}</StatusChip></td>
+                  )}
+                  {isColVisible(tablePrefs, "duracion") && (
                   <td className={styles.numCell}>{formatDuration(item.duration_ms)}</td>
+                  )}
+                  {isColVisible(tablePrefs, "costo") && (
                   <td className={styles.numCell}>{formatCostUsd(item.cost_usd)}</td>
-                  <td className={styles.mono}>
-                    {item.prompt_sha
-                      ? <span title={item.prompt_sha}>{item.prompt_sha.slice(0, 7)}</span>
-                      : "—"}
-                  </td>
+                  )}
+                  {isColVisible(tablePrefs, "prompt") && (
+                    <td className={styles.mono}>
+                      {item.prompt_sha
+                        ? <span title={item.prompt_sha}>{item.prompt_sha.slice(0, 7)}</span>
+                        : "—"}
+                    </td>
+                  )}
+                  {isColVisible(tablePrefs, "archivos") && (
                   <td className={styles.numCell}>{item.produced_files_count}</td>
-                  <td className={styles.ticketCell}>
-                    {item.ticket_title
-                      ? <span title={item.ticket_title}>{item.ticket_title.slice(0, 40)}{item.ticket_title.length > 40 ? "…" : ""}</span>
-                      : `#${item.ticket_id}`}
-                    {/* Plan 117 — TL;DR + chip de riesgo (A2) */}
-                    {item.local_insight?.tldr ? (
-                      <div className={styles.insightTldr} title={item.local_insight.tldr}>
-                        {item.local_insight.state === "done" && item.local_insight.risk ? (
-                          <span
-                            className={
-                              item.local_insight.risk === "high"
-                                ? styles.riskHigh
-                                : item.local_insight.risk === "medium"
-                                  ? styles.riskMedium
-                                  : styles.riskLow
-                            }
-                          >
-                            {item.local_insight.risk}
-                          </span>
-                        ) : null}
-                        {item.local_insight.tldr}
-                      </div>
-                    ) : null}
-                  </td>
+                  )}
+                  {isColVisible(tablePrefs, "ticket") && (
+                    <td className={styles.ticketCell}>
+                      {item.ticket_title
+                        ? <span title={item.ticket_title}>{item.ticket_title.slice(0, 40)}{item.ticket_title.length > 40 ? "…" : ""}</span>
+                        : `#${item.ticket_id}`}
+                      {/* Plan 117 — TL;DR + chip de riesgo (A2) */}
+                      {item.local_insight?.tldr ? (
+                        <div className={styles.insightTldr} title={item.local_insight.tldr}>
+                          {item.local_insight.state === "done" && item.local_insight.risk ? (
+                            <span
+                              className={
+                                item.local_insight.risk === "high"
+                                  ? styles.riskHigh
+                                  : item.local_insight.risk === "medium"
+                                    ? styles.riskMedium
+                                    : styles.riskLow
+                              }
+                            >
+                              {item.local_insight.risk}
+                            </span>
+                          ) : null}
+                          {item.local_insight.tldr}
+                        </div>
+                      ) : null}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

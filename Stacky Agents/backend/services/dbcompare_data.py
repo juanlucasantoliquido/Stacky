@@ -92,6 +92,7 @@ def diff_table_data(
     *,
     engines: tuple | None = None,
     max_rows: int | None = None,
+    key_cols: list | None = None,
 ) -> dict:
     if max_rows is None:
         max_rows = Config.STACKY_DB_COMPARE_DATA_MAX_ROWS
@@ -113,7 +114,22 @@ def diff_table_data(
         raise DbCompareDataError(f"la tabla {schema}.{table} no existe en '{target_alias}'; no comparable")
 
     # [FIX C3] paso 4: PK del ORIGEN es la fuente de verdad.
+    # [Plan 176 F6] ...salvo que el operador haya declarado una clave natural.
+    # Una tabla sin PK no es necesariamente incomparable: muchas tienen una clave
+    # que el operador conoce y que hoy no tiene dónde declarar.
+    key_source = "pk"
     pk_cols = list(src_table["primary_key"].get("columns") or [])
+    if key_cols:
+        _src_nombres = {c["name"] for c in src_table["columns"]}
+        _tgt_nombres = {c["name"] for c in tgt_table["columns"]}
+        _faltantes = [c for c in key_cols
+                      if c not in _src_nombres or c not in _tgt_nombres]
+        if _faltantes:
+            raise DbCompareDataError(
+                f"la clave natural de {schema}.{table} usa columnas que no existen "
+                f"en ambos lados: {', '.join(_faltantes)}")
+        pk_cols = list(key_cols)
+        key_source = "natural"
     if not pk_cols:
         raise DbCompareDataError(f"la tabla {schema}.{table} no tiene PK; no comparable")
 
@@ -199,6 +215,9 @@ def diff_table_data(
         "schema": schema,
         "table": table,
         "pk_cols": pk_cols,
+        # Plan 176 F6 — aditivo: `pk_cols` conserva su semántica congelada
+        # ("columnas usadas como clave"); esto dice de dónde salieron.
+        "key_source": key_source,
         "columns": columns,
         "column_types": column_types,
         "columns_skipped": columns_skipped,

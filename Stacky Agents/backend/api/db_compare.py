@@ -574,6 +574,61 @@ def get_triage_exclusions_route(run_id):
 
 
 # --------------------------------------------------------------------------
+# Plan 176 F6 — Tablas de parámetro y claves naturales. Globales, no por
+# ambiente: es el mismo producto en todos los ambientes del cliente.
+# --------------------------------------------------------------------------
+
+def _require_table_prefs_enabled():
+    if not getattr(_config.config, "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED", False):
+        return jsonify({
+            "ok": False,
+            "error": "Preferencias de tabla deshabilitadas "
+                     "(STACKY_DB_COMPARE_TABLE_PREFS_ENABLED).",
+        }), 403
+    return None
+
+
+@bp.get("/table-prefs")
+def get_table_prefs_route():
+    from services import dbcompare_table_prefs
+
+    for gate in (_require_enabled(), _require_table_prefs_enabled()):
+        if gate:
+            return gate
+    return jsonify({"ok": True, **dbcompare_table_prefs.load_prefs()})
+
+
+@bp.put("/table-prefs")
+def put_table_prefs_route():
+    from services import dbcompare_table_prefs
+
+    for gate in (_require_enabled(), _require_table_prefs_enabled()):
+        if gate:
+            return gate
+
+    body = request.get_json(silent=True) or {}
+    schema = (body.get("schema") or "").strip()
+    tabla = (body.get("table") or "").strip()
+    if not schema or not tabla:
+        return jsonify({"ok": False, "error": "schema y table son requeridos"}), 400
+
+    kwargs = {}
+    # Presencia, no verdad: mandar natural_key=null borra la clave; omitirla la
+    # deja como estaba. Sin esa distinción no se podría tocar solo el flag.
+    if "natural_key" in body:
+        kwargs["natural_key"] = body.get("natural_key")
+    if "param_table" in body:
+        kwargs["param_table"] = body.get("param_table")
+
+    try:
+        doc = dbcompare_table_prefs.set_pref(schema, tabla, **kwargs)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": "natural_key_invalida",
+                        "message": str(exc)}), 400
+    return jsonify({"ok": True, **doc})
+
+
+# --------------------------------------------------------------------------
 # Plan 176 F7 — Verificación de cierre: ¿se aplicó lo confirmado y sigue intacto
 # lo excluido? Pertenece a la capacidad de triage, así que comparte su flag.
 # --------------------------------------------------------------------------

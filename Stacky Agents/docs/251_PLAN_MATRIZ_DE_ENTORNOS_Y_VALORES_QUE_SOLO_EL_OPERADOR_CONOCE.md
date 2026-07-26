@@ -1,20 +1,95 @@
 # Plan 251 — Matriz de entornos: los valores que sólo el operador conoce
 
-> ## ESTADO REAL AL 2026-07-26: **NO IMPLEMENTADO**
+> ## ESTADO REAL AL 2026-07-26: **IMPLEMENTADO — F0..F5 COMPLETAS**
 >
-> La corrida que implementó la serie "Mago de las Pipelines" llegó hasta el **249** y **se detuvo
-> acá por presupuesto de contexto, a propósito**: el operador pidió explícitamente "prefiero 'el
-> 250 quedó a medias por X' que un verde inventado". **No hay una sola línea de código de este
-> plan en el árbol.** Verificable: ninguno de los archivos que este plan manda CREAR existe.
+> Implementado y commiteado en `feat/plan-217-migrador-mantis-gitlab`. **Backend 81 tests verdes
+> corridos por archivo con `backend/.venv` (py3.13.5); frontend 10 verdes + `npx tsc --noEmit`
+> en 0 errores.**
+>
+> | Fase | Estado | Archivo de test | Resultado real |
+> |---|---|---|---|
+> | F0 flag en sus 7 patas | IMPLEMENTADA | `test_plan251_env_matrix_flag.py` | **7 passed** |
+> | F1 núcleo puro de detección | IMPLEMENTADA | `test_plan251_env_matrix_extract.py` | **29 passed** |
+> | F2 entornos derivados + matriz | IMPLEMENTADA | `test_plan251_env_matrix_build.py` | **14 passed** |
+> | F3 resolución solo-lectura | IMPLEMENTADA | `test_plan251_env_matrix_resolve.py` | **15 passed** |
+> | F4 endpoint `/analyze` | IMPLEMENTADA | `test_plan251_env_matrix_endpoints.py` | **16 passed** |
+> | F5 modelo puro + panel | IMPLEMENTADA | `pipelineEnvMatrixModel.test.ts` | **10 passed**, `tsc` 0 errores |
+>
+> No-regresión verde: `test_harness_flags.py` **56**, `test_harness_flags_requires.py` **9**,
+> `test_harness_ratchet_meta.py` **4**, `test_plan94_variables_providers.py` **13** y
+> `test_plan94_variables_endpoints.py` **14** — los dos últimos **sin tocar ni una línea**
+> (el agregado a los adapters fue aditivo y `VARIABLES_PORT_METHODS` quedó intacta).
+>
+> **Medición real del KPI-6 sobre los 9 goldens** (no los 3 que el plan abrió a mano):
+> `agendaweb-ci` 5 · `bootstrap-server-environment` 12 · `cd-deploy-test` 5 · `ci-batch` 4 ·
+> `ci-cd-online` 4 · `ci-dacpac` 2 · `nightly-build-online` 3 · `pr-validation-online` 4 ·
+> `security-scan-online` 2. **Ninguno pasa de 12; el techo del KPI era 40.**
+>
+> ### Los 4 bugs del PROPIO PLAN que sólo aparecieron al construirlo
+>
+> 1. **El `Requirement` del §4.2 no tiene campo `note`, pero su propio test lo exige.**
+>    `test_f1_bootstrap_servidor_desde_parametro` pide *"una `note` que contiene la palabra
+>    `default`"* (C13: el pool sale del default de un parámetro y eso es una **suposición**, no un
+>    hecho). El dataclass del §4.2 no la declara y la `note` del §4.3 vive en la `Cell`, que se
+>    construye en F2 y no tiene de dónde sacarla. Corregido: `Requirement.note: str = ""`, aditivo,
+>    y `build_matrix` la propaga a todas las celdas del requirement.
+> 2. **`test_f1_modulo_puro` era IMPOSIBLE por construcción — el mismo gotcha que el plan
+>    corrigió en C1 y se olvidó de aplicar acá.** El test prohíbe la subcadena `print(` en
+>    `services/pipeline_environments.py`, y ese módulo **debe** definir `pending_fingerprint(`
+>    (§4.2-bis), que la contiene literalmente. Igual que `Blueprint(`. Corregido: el gate va con
+>    `\bprint\(` y `\blogger\.`, y el test **verifica el propio gate** contra la cadena
+>    `pending_fingerprint(cells)`.
+> 3. **`_ABS_PATH_EMBEDDED_RE` tal como está escrita produce exactamente el ruido que el plan
+>    dice temer.** La rama unix `(?<=\s)/[^\s"'\)\],]{2,}` matchea, dentro de un `msbuildArgs: >-`
+>    multilínea, `/p:WebPublishMethod=Package`, `/p:PackageAsSingleFile=true`,
+>    `/p:SkipInvalidConfigurations=true`, `/p:PackageLocation=` y
+>    `/p:AutoParameterizationWebConfigConnectionStrings=false`: **5 "rutas de despliegue" falsas en
+>    4 de los 9 goldens** (medido). Eso es el riesgo nº1 declarado en el propio plan. Corregido:
+>    la rama unix exige **dos segmentos** (`/a/b`); la de Windows queda igual. Test de regresión:
+>    `test_f1_corpus_dorado_no_inventa_rutas_de_msbuild`.
+> 4. **`resolve()` no puede cumplir su propia regla de precedencia 3.** La firma del §F3 es
+>    `resolve(requirements, environments, provider, project, use_provider)` pero la regla 3 es
+>    *"`name` en `declared_variables`"*, y `declared_variables` sale del YAML, que la función no
+>    recibe. Sin eso, `test_f3_no_pide_lo_que_ya_existe` (KPI-2) no puede dar `pending_count == 0`.
+>    Corregido: kwarg `yaml_text: str = ""` (opcional, retrocompatible).
+>
+> ### El peligro nº1 de este plan (fuga de secretos), verificado de verdad
+>
+> El v1 filtraba secretos y la v2 lo corrigió **a medias**. Medido leyendo `secret_masking.py`:
+> `mask_token_values` reconoce **7 prefijos** y `looks_secret` decide **sólo por nombre**. Por lo
+> tanto **el caso `SONAR_HOST: 'Xk7#pQ2mZr9Lw4Tv'` —un password real que no es un token conocido,
+> bajo un nombre que no suena a secreto— pasaba por las DOS redes de la v2 y salía verbatim.** Los
+> centinelas de la v2 usan `glpat-...`, que **sí** matchea la red A: probaban el caso que ya
+> funcionaba, un escalón más arriba que la v1 pero con el mismo vicio.
+>
+> Se agregó una **red A' por forma genérica** (`looks_like_credential_value`): ≥16 chars, sin
+> espacios, sin `$(`/`${{`, sin `/` ni `\`, y con **≥3 clases de caracteres**. Con:
+>
+> - `test_f1_password_arbitrario_bajo_nombre_inocente_tampoco_sale` y
+>   `test_f4_password_arbitrario_bajo_nombre_inocente_no_sale` (el caso adversarial), y
+> - **`test_f1_la_red_de_forma_no_tapa_valores_legitimos`, el control negativo**: `Release`,
+>   `Any CPU`, `windows-2022`, `AgendaWeb-drop`, `trunk/OnLine/.../AgendaWeb.sln`, `us-east-1`,
+>   `$(Build.ArtifactStagingDirectory)`, `C:\AIS\AgendaWeb\Web`, `succeededOrFailed()`, `6.x` y
+>   `High` **NO** se enmascaran. Una red que tapa medio corpus es peor que el problema.
+>
+> Las otras dos garantías siguen firmes y probadas: el `value` del proveedor **nunca** entra al
+> payload (`test_f3_ningun_value_en_el_retorno` + `test_f4_ningun_valor_en_la_respuesta`), y el
+> `str(e)` de una excepción desconocida **nunca** se propaga (`test_f3_error_inesperado_mensaje_fijo`).
+>
+> ### Lo que queda pendiente (declarado)
+>
+> - **Smoke visual del operador** (no automatizable: sin `jsdom`): abrir DevOps → *Matriz de
+>   entornos*, pegar una pipeline real, ver el titular *"Te faltan N valores"* y los CTA.
+> - La **vía B** (elegir de la lista del inventario del Plan 246) está cableada por `readInventory`
+>   pero el 246 no expone `pipelineInventory` en el `ctx`: el panel degrada con la nota explícita y
+>   la vía "pegar el YAML" funciona sola, como manda §2.3.
+> - **Ratchets rojos AJENOS** (no crecidos por este plan): `formDebtRatchet` (7 ofensores, ninguno
+>   de este plan) y `devopsPollingRatchet` (BuildWorkshopSection.tsx:93).
+>
+> ---
 >
 > Implementados y commiteados en esta misma rama, en orden: **246** (`f2e63e77`), **247**
-> (`d006e406`), **248** (`ed9a1942`), **249** (`7fc345d8`). Los cuatro tienen su estado real
-> escrito en su propio encabezado, con los números de tests y los bugs de plan que aparecieron.
->
-> **Antes de implementar este plan, leé el encabezado del 246, 247, 248 y 249**: los cuatro
-> descubrieron contradicciones internas de sus propios documentos (una flag con 5 patas que en
-> realidad son 6, un `LLMCallSpec` sin sus campos obligatorios, un `RULES_VERSION` que no se puede
-> subir sin romper el gate que el mismo plan exige). Este plan no fue revisado con ese ojo todavía.
+> (`d006e406`), **248** (`ed9a1942`), **249** (`7fc345d8`), **250** (`98ee7d15`).
 
 ---
 

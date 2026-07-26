@@ -1,0 +1,129 @@
+/* Plan 251 F5 — matriz de entornos. Sin literales HEX: tokens del theme.
+   Sin style={{...}} inline en el .tsx: el uiDebtRatchet tiene alcance 0 en archivos
+   nuevos, asi que TODO el estilado vive aca. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.editor {
+  flex: 1;
+  min-width: 320px;
+  min-height: 150px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.control {
+  min-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.headline {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.delta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.chipPending {
+  border-color: var(--danger, var(--border));
+  color: var(--danger, var(--text));
+}
+
+.banner {
+  font-size: 12px;
+  border: 1px solid var(--warning, var(--border));
+  color: var(--warning, var(--text));
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.error {
+  font-size: 12px;
+  color: var(--danger, var(--text));
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.name {
+  font-family: var(--font-mono, monospace);
+  color: var(--text);
+}
+
+.kind {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.evidence {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+  padding-left: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}

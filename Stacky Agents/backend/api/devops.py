@@ -94,6 +94,9 @@ def _health_payload() -> dict:
         "pipeline_nl_edit_commit_enabled": bool(
             getattr(cfg, "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED", False)
         ),  # Plan 250 — commit al repo REAL (default OFF)
+        "env_matrix_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_ENV_MATRIX_ENABLED", False)
+        ),  # Plan 251 — matriz de entornos (solo lectura)
     }
 
 

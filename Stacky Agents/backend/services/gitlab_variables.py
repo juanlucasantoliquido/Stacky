@@ -43,6 +43,22 @@ class GitLabVariablesProvider:
             })
         return result
 
+    def list_variables_scoped(self) -> list[dict]:
+        """Plan 251 F3 - como list_variables() pero conservando environment_scope.
+
+        ADITIVO: list_variables() (:22) queda BYTE-IDENTICA y VARIABLES_PORT_METHODS
+        no se toca. El value se descarta igual (write-only, riel del plan 94).
+        """
+        proj = self._project_path()
+        items = self._client._request_paginated(f"/projects/{proj}/variables")
+        return [{
+            "key": v.get("key"),
+            "is_secret": bool(v.get("masked") or v.get("protected")),
+            "has_value": True,
+            "masked": v.get("masked"),
+            "environment_scope": v.get("environment_scope") or "*",
+        } for v in items]
+
     def set_variable(self, key: str, value: str, secret: bool) -> dict:
         """Crea o actualiza una variable (POST si no existe, PUT si existe).
 

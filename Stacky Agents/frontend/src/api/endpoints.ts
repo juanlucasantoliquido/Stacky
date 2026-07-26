@@ -5122,6 +5122,39 @@ export interface PipelineEditInterpretDto {
   questions: string[];
 }
 
+/** Plan 251 — matriz de entornos. SOLO LECTURA: no escribe en ningun lado.
+ *  Gotcha: `api.post` LANZA en cualquier non-2xx; el panel envuelve en try/catch. */
+export const PipelineEnvironments = {
+  analyze: (body: { yaml_text: string; provider: string; project?: string; resolve?: boolean }) =>
+    api.post<EnvMatrixResponseDto>("/api/pipeline-environments/analyze", body),
+};
+
+export interface EnvMatrixResponseDto {
+  environments: string[];
+  requirements: Array<{
+    name: string;
+    kind: "variable" | "secret" | "service_connection" | "server" | "deploy_path" | "parameter";
+    provider: string;
+    is_secret: boolean;
+    declared_default: string | null;
+    per_environment: boolean;
+    confidence: "alta" | "baja";
+    note?: string | null;
+    evidence: Array<{ path: string; excerpt: string }>;
+  }>;
+  cells: Array<{
+    requirement: string;
+    environment: string;
+    state: "definido" | "default" | "falta" | "manual";
+    source: string;
+    note: string | null;
+  }>;
+  pending_count: number;
+  pending_fingerprint: string;
+  degraded: string[];
+  provider: string;
+}
+
 export interface PipelineEditCommitDto {
   sha?: string;
   branch?: string;

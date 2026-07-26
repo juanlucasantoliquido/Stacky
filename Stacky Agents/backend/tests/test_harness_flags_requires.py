@@ -282,6 +282,8 @@ _REQUIRES_MAP_FROZEN = {
     # madre no declara `requires`). La arista es INFORMATIVA para la UI — el candado 0
     # de api/pipeline_editor.py chequea las dos flags por su cuenta.
     "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED": "STACKY_PIPELINE_NL_EDIT_ENABLED",
+    # Plan 251: la matriz de entornos cuelga del master del panel DevOps (profundidad 1).
+    "STACKY_PIPELINE_ENV_MATRIX_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",
 }
 
 

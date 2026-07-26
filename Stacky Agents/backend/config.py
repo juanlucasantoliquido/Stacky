@@ -1422,6 +1422,13 @@ class Config:
         "STACKY_PIPELINE_AUDIT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 251 — Matriz de entornos: qué valores exige una pipeline y cuáles faltan.
+    # SOLO LECTURA: no escribe en el repo, ni en el proveedor, ni en el servidor.
+    # Default ON. Editable por UI (HarnessFlagsPanel, categoría DevOps).
+    STACKY_PIPELINE_ENV_MATRIX_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_ENV_MATRIX_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 250 — Edición quirúrgica de pipelines existentes. Default ON.
     # ANALIZA y muestra el diff; NO escribe en ningún lado. Editable por UI.
     STACKY_PIPELINE_NL_EDIT_ENABLED: bool = os.getenv(

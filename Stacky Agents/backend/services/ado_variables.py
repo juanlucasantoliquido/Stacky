@@ -44,6 +44,12 @@ class AdoVariablesProvider:
             })
         return result
 
+    def list_variables_scoped(self) -> list[dict]:
+        """Plan 251 F3 - ADO no tiene scope por entorno en el modelo del plan 94: las
+        variables viven en la DEFINITION. Devuelve lo mismo que list_variables() (:25)
+        con environment_scope='*' fijo. Honestidad, no magia."""
+        return [{**v, "environment_scope": "*"} for v in self.list_variables()]
+
     def set_variable(self, key: str, value: str, secret: bool) -> dict:
         """Crea o actualiza una variable en la definition.
 

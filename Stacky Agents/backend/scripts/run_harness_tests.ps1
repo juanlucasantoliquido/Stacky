@@ -713,7 +713,14 @@ $HarnessTestFiles = @(
   "tests/test_plan250_gates_delta.py",
   "tests/test_plan250_api.py",
   "tests/test_plan250_flag.py",
-  "tests/test_plan250_edit_intent.py"
+  "tests/test_plan250_edit_intent.py",
+
+  # Plan 251 - matriz de entornos y valores que solo el operador conoce
+  "tests/test_plan251_env_matrix_flag.py",
+  "tests/test_plan251_env_matrix_extract.py",
+  "tests/test_plan251_env_matrix_build.py",
+  "tests/test_plan251_env_matrix_resolve.py",
+  "tests/test_plan251_env_matrix_endpoints.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

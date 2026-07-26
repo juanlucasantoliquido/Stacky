@@ -209,6 +209,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_AUDIT_ENABLED",     # Plan 248 — auditoria de pipelines
         "STACKY_PIPELINE_NL_EDIT_ENABLED",   # Plan 250 — edicion quirurgica (analiza)
         "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED",  # Plan 250 — commit al repo REAL (OFF)
+        "STACKY_PIPELINE_ENV_MATRIX_ENABLED",  # Plan 251 — matriz de entornos (read-only)
     ),
     "migrador_ado_gitlab": (
         # NOTA: el master STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (feature opt-in) → "capacidades_optin".
@@ -2982,6 +2983,31 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    # ── Plan 251 — Matriz de entornos y valores que solo el operador conoce ───
+    FlagSpec(
+        key="STACKY_PIPELINE_ENV_MATRIX_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA de las 4 excepciones duras aplica — es de
+                        # SOLO LECTURA (no escribe ni en el repo, ni en el proveedor, ni
+                        # en el servidor), no bypasea revision humana, no agrega
+                        # prerequisitos y SUBE la seguridad (enumera que credenciales
+                        # hacen falta). Curada en _CURATED_DEFAULTS_ON.
+        label="Matriz de entornos (Plan 251)",
+        description=(
+            "Plan 251 - Detecta que valores exige una pipeline (variables, secretos, "
+            "servidores, rutas de despliegue, parametros) y los cruza contra los "
+            "entornos reales de esa pipeline, resolviendo primero contra la caja fuerte "
+            "(94) y el registro de servidores (91) para pedir SOLO lo que falta. Solo "
+            "lectura: no escribe nada. OFF: /api/pipeline-environments da 404 y la "
+            "seccion no se muestra."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        # R4 profundidad 1: cuelga del master del panel, NUNCA de
+        # STACKY_DEVOPS_VARIABLES_ENABLED (esa ya declara requires y encadenar rompe
+        # validate_requires_graph).
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
     ),
     # ── Plan 250 — Edicion quirurgica de pipelines existentes ─────────────────
     FlagSpec(

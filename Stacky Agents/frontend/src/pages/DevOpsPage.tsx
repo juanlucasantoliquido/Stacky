@@ -55,6 +55,7 @@ export interface DevOpsHealth {
   pipeline_audit_enabled?: boolean; // Plan 248 — Auditoría de pipelines
   pipeline_nl_edit_enabled?: boolean; // Plan 250 — Edición quirúrgica de pipelines
   pipeline_nl_edit_commit_enabled?: boolean; // Plan 250 — commit al repo real (default OFF)
+  env_matrix_enabled?: boolean; // Plan 251 — Matriz de entornos
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -117,6 +118,8 @@ import { PipelineInventorySection } from '../components/devops/PipelineInventory
 import { PipelineAuditPanel } from '../components/devops/PipelineAuditPanel';
 // Importar PipelineEditNlPanel (Plan 250 F4)
 import { PipelineEditNlPanel } from '../components/devops/PipelineEditNlPanel';
+// Importar PipelineEnvMatrixPanel (Plan 251 F5)
+import { PipelineEnvMatrixPanel } from '../components/devops/PipelineEnvMatrixPanel';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -269,6 +272,18 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_PIPELINE_NL_EDIT_ENABLED',
     gateMessage: 'La seccion Editar pipeline necesita la flag STACKY_PIPELINE_NL_EDIT_ENABLED (Configuracion → Arnes, categoria Epicas/ADO).',
     render: (ctx) => <PipelineEditNlPanel ctx={ctx} />,
+  },
+  // Plan 251 — Matriz de entornos: los valores que solo el operador conoce
+  {
+    id: 'matriz-entornos',
+    label: 'Matriz de entornos',
+    group: 'construir',
+    icon: '🧭',
+    summary: 'Que valores exige esta pipeline en cada entorno y cuales todavia faltan.',
+    healthKey: 'env_matrix_enabled',
+    gateFlagKey: 'STACKY_PIPELINE_ENV_MATRIX_ENABLED',
+    gateMessage: 'La seccion Matriz de entornos necesita la flag STACKY_PIPELINE_ENV_MATRIX_ENABLED (Configuracion → Arnes, categoria DevOps).',
+    render: (ctx) => <PipelineEnvMatrixPanel ctx={ctx} />,
   },
 ];
 

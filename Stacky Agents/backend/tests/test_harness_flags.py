@@ -477,6 +477,8 @@ _CURATED_DEFAULTS_ON = {
     # Su hermana STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED (la que SÍ pushea al ADO real)
     # es default OFF por la excepción dura (2) y por eso NO figura acá.
     "STACKY_PIPELINE_NL_EDIT_ENABLED",
+    # ── Plan 251 — Matriz de entornos (SOLO LECTURA: no escribe en ningun lado) ──
+    "STACKY_PIPELINE_ENV_MATRIX_ENABLED",
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
     # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──

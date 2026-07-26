@@ -712,6 +712,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa lista de avisos no se calcula ni se muestra, y las validaciones que ya existían siguen igual.",
         example="Te avisa que la canalización publica un paquete con la clave de la base adentro, y que el chequeo de seguridad no puede frenar la compilación.",
     ),
+    "STACKY_PIPELINE_ENV_MATRIX_ENABLED": PlainHelp(
+        what="Arma una tabla con todo lo que una canalizacion necesita para poder correr (claves, contrasenas, servidores, carpetas de destino) y te marca que falta en cada ambiente.",
+        on_effect="Si la activas: antes de correr nada ves un titular del tipo 'Te faltan 4 valores' y la lista exacta, con lo que Stacky ya encontro solo marcado como listo.",
+        off_effect="Si la apagas: esa tabla no se calcula ni se muestra, y seguis descubriendo lo que falta cuando la corrida se cae.",
+        example="Te dice que para el ambiente de pruebas ya estan los 6 valores, y que para produccion faltan la contrasena de la base y la carpeta donde se copia la aplicacion.",
+    ),
     "STACKY_PIPELINE_NL_EDIT_ENABLED": PlainHelp(
         what="Te deja cambiar una canalizacion que ya existe describiendo el cambio, y te muestra exactamente que lineas se tocan antes de decidir nada.",
         on_effect="Si la activas: aparece el panel para editar una canalizacion, con el detalle de las lineas que cambian y un aviso de si algo se perderia.",

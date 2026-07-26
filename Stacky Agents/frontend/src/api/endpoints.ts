@@ -1501,7 +1501,7 @@ export const Metrics = {
 
 // Plan 142 — Centro de Costos + Codeburn: cliente API de los 4 endpoints read-only
 // (gated por STACKY_COST_CENTER_ENABLED). Mismo patrón que `Metrics` arriba.
-function costFiltersToQuery(params?: CostFiltersParams): URLSearchParams {
+export function costFiltersToQuery(params?: CostFiltersParams): URLSearchParams {
   const p = new URLSearchParams();
   if (!params) return p;
   if (params.from) p.set("from", params.from);
@@ -1515,6 +1515,17 @@ function costFiltersToQuery(params?: CostFiltersParams): URLSearchParams {
   if (params.status) p.set("status", params.status);
   if (params.cost_kind) p.set("cost_kind", params.cost_kind);
   if (params.top_n) p.set("top_n", String(params.top_n));
+  // Plan 199 F4 — aditivos. `min_cost`/`max_cost` se comparan contra undefined/null
+  // a propósito: 0 es un umbral válido y un `if (params.min_cost)` lo descartaría.
+  if (params.runtimes) p.set("runtimes", params.runtimes);
+  if (params.models) p.set("models", params.models);
+  if (params.min_cost !== undefined && params.min_cost !== null) {
+    p.set("min_cost", String(params.min_cost));
+  }
+  if (params.max_cost !== undefined && params.max_cost !== null) {
+    p.set("max_cost", String(params.max_cost));
+  }
+  // `source` NO se serializa: elige la fuente en la UI (F6), no filtra en el backend.
   return p;
 }
 
@@ -1560,6 +1571,33 @@ export const CostCenter = {
     const qs = costFiltersToQuery(params).toString();
     return api.get<CostReconciliationAuditResponse>(
       `/api/metrics/cost-reconciliation-audit${qs ? `?${qs}` : ""}`,
+    );
+  },
+};
+
+/** Plan 199 F6 — cosecha histórica de telemetría desde disco.
+ *
+ * Los 3 endpoints devuelven SIEMPRE 200 (incluso con la flag apagada, en cuyo
+ * caso el cuerpo es `{enabled:false}`), así que `api.get`/`api.post` son
+ * correctos acá: no hay non-2xx esperable que haga falta capturar con raw*. */
+export const TelemetryHarvest = {
+  health: () =>
+    api.get<import("../lib/costCenterTypes").HarvestHealth>(
+      "/api/metrics/telemetry-harvest/health",
+    ),
+  /** `apply` es HITL: el default DRY-RUN sólo reporta qué haría. */
+  scan: (apply = false) =>
+    api.post<import("../lib/costCenterTypes").HarvestScanResponse>(
+      `/api/metrics/telemetry-harvest/scan${apply ? "?apply=1" : ""}`,
+      {},
+    ),
+  summary: (opts?: { attributed?: boolean; dimension?: BreakdownDimension }) => {
+    const p = new URLSearchParams();
+    if (opts?.attributed === false) p.set("attributed", "0");
+    if (opts?.dimension) p.set("dimension", opts.dimension);
+    const qs = p.toString();
+    return api.get<import("../lib/costCenterTypes").HarvestSummaryResponse>(
+      `/api/metrics/telemetry-harvest/summary${qs ? `?${qs}` : ""}`,
     );
   },
 };

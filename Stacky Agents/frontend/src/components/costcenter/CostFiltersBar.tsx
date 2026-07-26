@@ -1,5 +1,5 @@
-import { Card } from "../ui";
-import type { CostFiltersParams, CostKind } from "../../lib/costCenterTypes";
+import { Card, Input, Select } from "../ui";
+import type { CostFiltersParams, CostKind, CostSource } from "../../lib/costCenterTypes";
 import styles from "./CostFiltersBar.module.css";
 
 export interface CostFiltersBarProps {
@@ -13,6 +13,19 @@ export interface CostFiltersBarProps {
 export default function CostFiltersBar({ value, onChange }: CostFiltersBarProps) {
   const setField = <K extends keyof CostFiltersParams>(key: K, next: CostFiltersParams[K]) => {
     onChange({ ...value, [key]: next || undefined });
+  };
+
+  /* Plan 199 F4 — los umbrales de costo aceptan 0 como valor legítimo, así que
+   * NO se puede usar `setField` (su `next || undefined` colapsaría el 0 a "sin
+   * filtro"). Un input vacío sí borra el filtro. */
+  const setCostBound = (key: "min_cost" | "max_cost", raw: string) => {
+    const limpio = raw.trim();
+    if (limpio === "") {
+      onChange({ ...value, [key]: undefined });
+      return;
+    }
+    const num = Number(limpio);
+    onChange({ ...value, [key]: Number.isFinite(num) ? num : undefined });
   };
 
   return (
@@ -78,6 +91,51 @@ export default function CostFiltersBar({ value, onChange }: CostFiltersBarProps)
             <option value="nominal">Nominal</option>
             <option value="unknown">n/d</option>
           </select>
+        </label>
+        {/* Plan 199 F4 — multi-valor (OR) y rango de costo. Conviven con los
+            singulares de arriba: el backend aplica ambos. */}
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Runtimes (csv)</span>
+          <Input
+            type="text" placeholder="codex_cli,claude_code_cli"
+            value={value.runtimes ?? ""}
+            onChange={(e) => setField("runtimes", e.target.value)}
+          />
+        </label>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Modelos (csv)</span>
+          <Input
+            type="text" placeholder="gpt-5,claude-opus-5"
+            value={value.models ?? ""}
+            onChange={(e) => setField("models", e.target.value)}
+          />
+        </label>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Costo min (USD)</span>
+          <Input
+            type="number" min={0} step="0.01" placeholder="0.00"
+            value={value.min_cost ?? ""}
+            onChange={(e) => setCostBound("min_cost", e.target.value)}
+          />
+        </label>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Costo max (USD)</span>
+          <Input
+            type="number" min={0} step="0.01" placeholder="sin tope"
+            value={value.max_cost ?? ""}
+            onChange={(e) => setCostBound("max_cost", e.target.value)}
+          />
+        </label>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Fuente</span>
+          <Select
+            value={value.source ?? "live"}
+            onChange={(e) => setField("source", e.target.value as CostSource)}
+          >
+            <option value="live">En vivo</option>
+            <option value="harvest">Cosecha histórica</option>
+            <option value="all">Ambas</option>
+          </Select>
         </label>
       </div>
     </Card>

@@ -148,7 +148,17 @@ export interface CostFiltersParams {
   status?: string; // csv
   cost_kind?: CostKind;
   top_n?: number;  // sólo cost-summary
+  /* Plan 199 F4 — aditivos. Coexisten con los singulares de arriba (OR entre varios). */
+  runtimes?: string;   // csv
+  models?: string;     // csv
+  min_cost?: number;
+  max_cost?: number;
+  /** Elige la FUENTE de datos en la UI (F6). NO viaja a los endpoints del 142. */
+  source?: CostSource;
 }
+
+/** Plan 199 F6 — de dónde sale la data que muestra el Centro de Costos. */
+export type CostSource = "live" | "harvest" | "all";
 
 /** Narrowing helper: `enabled` es un discriminante literal (true/false) en los 4
  * contratos de respuesta, así que un simple `if (resp?.enabled)` ya narrowea en
@@ -179,3 +189,60 @@ export interface CostDistribution {
   min: number | null;
   max: number | null;
 }
+
+/* ─── Plan 199 F6 — cosecha histórica de telemetría desde disco ─────────────
+ * Los 3 endpoints devuelven SIEMPRE 200 (incluso deshabilitados), así que se
+ * consumen con `api.get`/`api.post`; el discriminante `enabled`/`flag_enabled`
+ * narrowea en el call-site. */
+
+/** `GET /api/metrics/telemetry-harvest/health` — siempre 200. */
+export interface HarvestHealth {
+  ok: true;
+  flag_enabled: boolean;
+}
+
+/** Cuántas filas de la BD rellenaría (o rellenó) el backfill. */
+export interface HarvestBackfill {
+  scanned: number;
+  matched: number;
+  backfilled: number;
+  skipped_billable: number;
+  dry_run: boolean;
+}
+
+/** Cuántas corridas huérfanas se anexarían (o anexaron) a la bitácora. */
+export interface HarvestLedger {
+  appended: number;
+  skipped_dup: number;
+  skipped_unattributed: number;
+  dry_run: boolean;
+}
+
+export interface HarvestScanOk {
+  ok: true;
+  enabled: true;
+  /** false = DRY-RUN (el default). true sólo si se pidió `apply=1`. */
+  applied: boolean;
+  generated_at: string;
+  discovered: number;
+  backfill: HarvestBackfill;
+  ledger: HarvestLedger;
+}
+
+/** Un artefacto corrupto no devuelve 500: devuelve 200 con `ok:false`. */
+export interface HarvestScanError {
+  ok: false;
+  enabled: true;
+  error: string;
+}
+
+export type HarvestScanResponse = CostCenterDisabled | HarvestScanError | HarvestScanOk;
+
+/** `GET /telemetry-harvest/summary` — mismos agregados del 142 sobre la bitácora. */
+export interface HarvestSummary extends Omit<CostSummary, "filters_echo" | "capped"> {
+  attributed_only: boolean;
+  /** `ca.breakdown` devuelve `{dimension, groups}`, NO una lista pelada. */
+  breakdown: Pick<CostBreakdown, "dimension" | "groups">;
+}
+
+export type HarvestSummaryResponse = CostCenterDisabled | HarvestSummary;

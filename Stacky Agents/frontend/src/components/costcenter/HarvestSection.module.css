@@ -1,0 +1,138 @@
+/* Plan 199 F6 — Cosecha histórica. Cero estilos inline: todo por tokens. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 104px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+
+.statLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.statValue {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.notice {
+  padding: 8px 10px;
+  border: 1px solid var(--border-muted);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--bg-elev);
+}
+
+.noticePreview {
+  border-left-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.noticeApplied {
+  border-left-color: var(--success, var(--accent));
+  color: var(--text-strong);
+}
+
+.noticeError {
+  border-left-color: var(--danger, var(--accent));
+  color: var(--text-strong);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border-muted);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-strong);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

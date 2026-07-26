@@ -13,6 +13,7 @@ import CostTable from "../components/costcenter/CostTable";
 import CostFiltersBar from "../components/costcenter/CostFiltersBar";
 import OpsHealthSection from "../components/costcenter/OpsHealthSection";
 import OpsTrendsSection from "../components/costcenter/OpsTrendsSection";
+import HarvestSection from "../components/costcenter/HarvestSection";
 import OpsThresholdsForm from "../components/costcenter/OpsThresholdsForm";
 import { Skeleton } from "../components/ui";
 import LoadErrorState from "../components/LoadErrorState";
@@ -150,6 +151,8 @@ export default function CostCenterPage() {
         error={summaryQ.error}
         onRetry={() => summaryQ.refetch()}
       />
+      {/* Plan 199 F6 — se auto-oculta si STACKY_TELEMETRY_HARVEST_ENABLED está OFF. */}
+      <HarvestSection />
       <OpsHealthSection
         data={opsQ.data ?? null}
         isLoading={opsQ.isLoading}

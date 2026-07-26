@@ -1,6 +1,14 @@
 # Plan 199 — Cosecha histórica de telemetría desde disco por runtime + más filtros + más gráficos
 
-- **Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-18)
+- **Estado:** **IMPLEMENTADO** (2026-07-26) — F0..F3 + F5 + F7 backend ya estaban; **F4 (mitad frontend) y F6 cerradas en esta pasada**. CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-18).
+
+> **CIERRE 2026-07-26 (F4-frontend + F6).** El backend estaba 100% verde desde julio pero **el operador no tenía forma de usarlo**: no existía `HarvestSection.tsx` ni el namespace `TelemetryHarvest` en `endpoints.ts`, así que el botón HITL de scan no estaba en ninguna parte de la UI (0 hits de `telemetry-harvest` en todo `frontend/src`). Lo que se hizo:
+> - **F4 (frontend):** `CostFiltersParams` extendido (`runtimes`, `models`, `min_cost`, `max_cost`, `source`); `costFiltersToQuery` **exportada** y ampliada; 5 controles nuevos en `CostFiltersBar.tsx`. `source` NO viaja al backend (lo consume la UI), tal cual §F4.
+> - **F6:** namespace `TelemetryHarvest` (`health`/`scan`/`summary`), tipos de respuesta anclados al contrato REAL del backend, `HarvestSection.tsx` + `.module.css` nuevos, montada en `CostCenterPage.tsx` (se auto-oculta si la flag está OFF).
+> - **HITL reforzado:** el scan es dry-run y el botón **"Aplicar cambios" sólo aparece si el preview encontró algo que escribir**. El operador ve los números antes de que se toque una fila.
+> - **Bugs propios del plan corregidos al implementar:** (a) el plan tipaba `breakdown` como lista, pero `ca.breakdown` (`cost_analytics.py:403`) devuelve `{dimension, groups}`; (b) el patrón `if (params.min_cost)` que sugería el plan **descarta el 0**, que es un umbral válido — se usa comparación contra `undefined`/`null` y hay un test que lo fija.
+> - **Validación real:** `npx tsc --noEmit` exit 0; vitest por archivo `costFiltersQuery` 7/7, `costCenter.logic` 12/12, `costCharts.logic` 21/21; ratchets `uiDebt` 3/3, `copyDebt` 3/3, `a11yCss` 3/3 y **cero regresiones propias** en `formDebt`/`formatDebt` (las que quedan rojas son deuda AJENA preexistente: dbcompare, DensityToggle, PlansBoardPage, TicketBoard).
+> - **Pendiente:** smoke visual manual en `/costcenter` (RTL/jsdom no están instalados; no es automatizable).
 - **Autor:** StackyArchitectaUltraEficientCode (perfil normal, Opus 4.8)
 - **Numeración:** 199 (máximo en `docs/` = 198; libre)
 - **Runtimes:** Codex CLI · Claude Code CLI · GitHub Copilot Pro (paridad con fallback explícito)

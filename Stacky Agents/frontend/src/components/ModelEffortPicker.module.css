@@ -1,0 +1,28 @@
+/* Plan 212 F4 — Selector de modelo y effort al lanzar un agente. */
+
+.picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.block {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* La nota de degradación tiene que leerse como aviso, no como error: el effort
+   igual se aplica, solo que con otro valor. */
+.note {
+  color: var(--warn);
+  font-size: 0.78rem;
+}

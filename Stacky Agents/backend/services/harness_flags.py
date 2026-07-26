@@ -407,6 +407,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "interfaz_ui": (
         "STACKY_UI_SHORTCUTS_ENABLED",  # Plan 172 — registro de atajos + overlay ?
+        "STACKY_MODEL_PICKER_IN_BOARD_ENABLED",  # Plan 212 — selector de modelo/effort en el tablero
         "STACKY_UI_SAVED_VIEWS_ENABLED",  # Plan 173
         "STACKY_UI_VIRTUALIZATION_ENABLED",  # Plan 174
         "STACKY_UI_PREFETCH_ENABLED",  # Plan 174
@@ -4031,6 +4032,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "funciona y lo que muestra el overlay de ayuda (?), sin listas escritas a "
             "mano que mientan. Agrega navegación de listas con j/k y foco roving. "
             "Default ON. Apagala y quedan solo los 3 atajos de siempre."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_MODEL_PICKER_IN_BOARD_ENABLED",
+        type="bool",
+        default=True,
+        label="Selector de modelo/effort en el tablero de tickets",
+        description=(
+            "Plan 212 — muestra el selector de modelo y effort al lanzar agentes sobre "
+            "tickets ADO. OFF = el tablero lanza con el default del backend "
+            "(comportamiento pre-212)."
         ),
         group="global",
     ),

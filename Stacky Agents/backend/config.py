@@ -1689,6 +1689,11 @@ class Config:
         "STACKY_UI_SHORTCUTS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # Plan 212 — selector de modelo/effort en el tablero. Solo UX ⇒ default ON.
+    STACKY_MODEL_PICKER_IN_BOARD_ENABLED: bool = os.getenv(
+        "STACKY_MODEL_PICKER_IN_BOARD_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # Plan 173 — solo UX, sin costo de tokens ⇒ default ON.
     STACKY_UI_SAVED_VIEWS_ENABLED: bool = os.getenv(
         "STACKY_UI_SAVED_VIEWS_ENABLED", "true"

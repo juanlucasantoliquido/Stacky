@@ -4,6 +4,9 @@ import { Tickets, Agents, FlowConfig, Executions, Memory, Incidents, type Stacky
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
+import ModelEffortPicker from "../components/ModelEffortPicker";
+import { useModelCatalog } from "../hooks/useModelCatalog";
+import { useModelPickerEnabled } from "../hooks/useModelPickerEnabled";
 import { useTicketSync, DEFAULT_INTERVAL_MS as TICKET_SYNC_INTERVAL_MS } from "../hooks/useTicketSync";
 import { SyncStatusBar } from "../components/SyncStatusBar";
 import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
@@ -111,7 +114,12 @@ interface RunModalProps {
   vsCodeAgents: VsCodeAgent[];
   isLaunching: boolean;
   errorMessage?: string | null;
-  onConfirm: (note: string, filename: string | null) => void;
+  onConfirm: (
+    note: string,
+    filename: string | null,
+    /** Plan 212 F4 — overrides por corrida elegidos en el propio modal. */
+    overrides?: { model: string | null; effort: string | null },
+  ) => void;
   onClose: () => void;
 }
 
@@ -129,6 +137,11 @@ function RunModal({
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const [note, setNote] = useState("");
+  // Plan 212 F4 — modelo/effort por corrida, elegidos donde se lanza el trabajo.
+  const [pickerModel, setPickerModel] = useState<string | null>(null);
+  const [pickerEffort, setPickerEffort] = useState<string | null>(null);
+  const modelCatalog = useModelCatalog();
+  const pickerEnabled = useModelPickerEnabled();
   const [selectedFilename, setSelectedFilename] = useState<string>(vsCodeAgents[0]?.filename ?? "");
   const resolvedFilename = mode === "custom" ? (selectedFilename || null) : suggestedFilename;
 
@@ -201,6 +214,21 @@ function RunModal({
           <p className={styles.runtimeBadge}>
             Lanzará con: <strong>{runtimeDisplayLabel(agentRuntime)}</strong>
           </p>
+          {/* Plan 212 F4 — TODOS los efforts, los no soportados anotados con a
+              qué degradan. Nada se esconde ni se deshabilita. */}
+          {pickerEnabled && (
+            <ModelEffortPicker
+              variant="block"
+              catalog={modelCatalog.catalog?.[agentRuntime]}
+              model={pickerModel}
+              effort={pickerEffort}
+              disabled={isLaunching}
+              onChange={(n) => {
+                setPickerModel(n.model);
+                setPickerEffort(n.effort);
+              }}
+            />
+          )}
           {runtimeRequiresVsCodeAgent(agentRuntime) && !resolvedFilename && (
             <p className={styles.modalEmpty}>
               Este runtime necesita un agente VS Code asignado para el ticket seleccionado.
@@ -234,7 +262,12 @@ function RunModal({
           </button>
           <button
             className={styles.modalConfirm}
-            onClick={() => onConfirm(note.trim(), mode === "custom" ? selectedFilename || null : suggestedFilename)}
+            onClick={() =>
+              onConfirm(note.trim(), mode === "custom" ? selectedFilename || null : suggestedFilename, {
+                model: pickerModel,
+                effort: pickerEffort,
+              })
+            }
             disabled={isLaunching || !canConfirm}
           >
             {isLaunching ? launchInProgressLabel(agentRuntime) : "▶ Ejecutar"}
@@ -316,7 +349,11 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
   // Detección de estado INCONSISTENTE: stacky_status=completed + ejecución huérfana activa
   const inconsistency = detectInconsistencyFromRunning(ticket.stacky_status, runningExecution ?? null);
 
-  const handleRunConfirm = useCallback(async (note: string, filename: string | null) => {
+  const handleRunConfirm = useCallback(async (
+    note: string,
+    filename: string | null,
+    overrides?: { model: string | null; effort: string | null },
+  ) => {
     setIsLaunching(true);
     setLaunchError(null);
     try {
@@ -329,6 +366,10 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
         runtime: agentRuntime,
         contextBlocks,
         vscodeAgent: findVsCodeAgent(vsCodeAgents, filename),
+        // Plan 212 F4 — lo que el operador eligió en el modal manda; sin
+        // elección explícita el backend usa su default de siempre.
+        modelOverride: overrides?.model ?? null,
+        effort: overrides?.effort ?? null,
       });
       // Runtimes CLI (Codex / Claude): abrir la consola in-page con el
       // execution_id para ver el streaming en vivo y poder responderle al agente.
@@ -394,9 +435,9 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     setIsResolvingIncident(true);
     setLaunchError(null);
     try {
-      // Sin selector de modelo/effort por-run en el board (mismo patrón que
-      // handleRunConfirm arriba, que tampoco pasa model_override): el
-      // backend usa su default/selector adaptativo.
+      // El resolutor no abre el modal de run, así que no hay elección por
+      // corrida que propagar: el backend usa su default/selector adaptativo.
+      // (El selector del plan 212 F4 vive en RunModal, donde sí se elige.)
       const result = await Incidents.runDevResolver({
         ticket_id: ticket.id,
         runtime: agentRuntime,

@@ -414,6 +414,7 @@ def health():
         "local_llm_enabled": bool(getattr(_config.config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
         "shell_v2_enabled": bool(getattr(_config.config, "STACKY_UI_SHELL_V2_ENABLED", False)),  # Plan 139
         "ui_shortcuts_enabled": bool(getattr(_config.config, "STACKY_UI_SHORTCUTS_ENABLED", False)),  # Plan 172
+        "model_picker_in_board_enabled": bool(getattr(_config.config, "STACKY_MODEL_PICKER_IN_BOARD_ENABLED", False)),  # Plan 212
         "ui_saved_views_enabled": bool(getattr(_config.config, "STACKY_UI_SAVED_VIEWS_ENABLED", False)),  # Plan 173
         "ui_virtualization_enabled": bool(getattr(_config.config, "STACKY_UI_VIRTUALIZATION_ENABLED", False)),  # Plan 174
         "ui_prefetch_enabled": bool(getattr(_config.config, "STACKY_UI_PREFETCH_ENABLED", False)),  # Plan 174

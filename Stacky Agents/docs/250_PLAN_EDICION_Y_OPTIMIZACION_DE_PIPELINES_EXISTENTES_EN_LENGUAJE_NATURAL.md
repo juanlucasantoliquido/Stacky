@@ -1,10 +1,38 @@
 # Plan 250 — Editar y optimizar una pipeline que ya existe, describiendo el cambio en lenguaje natural
 
-> Estado: **v1 · PROPUESTO** (2026-07-26). Pipeline: **proponer ✓ [este paso]** → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
-> Autor: Claude Opus 5 (1M context).
+> Estado: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor v1: Claude Opus 5 (1M context). Crítica v1→v2: juez **independiente** (no escribió el v1), veredicto **RECHAZADO** con 4 bloqueantes, corregidos abajo.
 > Serie: **"Mago de las Pipelines"** (246–252). Este es el **250**. Contrato compartido: dossier de la serie §1.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro — **paridad obligatoria**. **F0–F4 no usan LLM**; sólo F5 lo usa, con una única llamada acotada y mockeable.
-> Flag: `STACKY_PIPELINE_NL_EDIT_ENABLED`, default **ON** (el commit sigue exigiendo confirmación explícita).
+> Flags: `STACKY_PIPELINE_NL_EDIT_ENABLED` default **ON** (analizar/diff, **cero escritura**) +
+> `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` default **OFF** (única ruta que escribe en el repo real del operador; excepción dura (2), §3).
+
+---
+
+## Changelog v1 → v2 (qué corrigió la crítica)
+
+La v1 fue **RECHAZADA** por 4 hallazgos bloqueantes. Todo lo demás del v1 se conservó: se
+re-verificaron **69 anclajes** (65 exactos) y **se re-corrieron las mediciones**, que dieron
+**idénticas** (round-trip 1138→588 líneas y **337→0 comentarios**; `end_mark` 112 vs fin efectivo
+109; las 4 filas de indentación de §2.4; `scan_unsupported` de §F0 test 6). La tesis del plan es
+correcta y está medida.
+
+| # | Sev. | Qué estaba mal en v1 | Dónde se corrigió |
+|---|---|---|---|
+| **C1** | BLOQUEANTE | **Colisión de superficie**: F5 creaba `services/pipeline_edit_intent.py` y F4 editaba `components/devops/PipelineBuilderSection.tsx` — **ninguno reservado al 250** (frontera §0.3 del 246) | §3.1 (frontera), F4 (monta por `DEVOPS_SECTIONS`), F5 (capa de intent dentro de la superficie reservada) |
+| **C2** | BLOQUEANTE | **La flag que escribe en el repo del operador quedaba default ON**, justificada con una premisa **falsa** (que ADO no sabe commitear) | §3 (flag partida en dos: análisis ON / commit OFF), F3 |
+| **C3** | BLOQUEANTE | **Candado 3 inimplementable**: `RepoWriter` es **write-only** (`repo_writer.py:27`), no existe seam para releer el archivo y comparar `before_sha256` | §2.8 (nueva) y F3 (candados re-especificados + honestidad declarada) |
+| **C4** | BLOQUEANTE | **`_finding_key` no compila contra los dataclasses reales**: `LintFinding` **no tiene `location`** (`AttributeError`) y su `line` entero se desplaza ⇒ el gate de lint marcaría como "nuevos" TODOS los findings posteriores a una inserción | §F2 (dos claves distintas, `_sem_key` / `_lint_key`) |
+| C5 | IMPORTANTE | F4 no decía **de dónde sale el YAML** ⇒ el "punto de corte seguro en F4" era falso: el panel no tenía entrada | §F4 (contrato de entrada) |
+| C6 | IMPORTANTE | `STACKY_PIPELINE_NL_EDIT_MAX_LLM_CALLS` era una **flag sin consumidor** y con `max_value=3` invitaba al bucle de reintentos que el propio plan prohíbe | §F3 (flag eliminada; el techo es constante del módulo) |
+| C7 | IMPORTANTE | `/interpret` — el **único endpoint que gasta tokens** — no tenía test de flag-off | §F5 (test 10) |
+| C8 | IMPORTANTE | `build_anchor_index` no declaraba **qué paths** debe indexar | §F0 (cobertura enumerada + test 13) |
+| C9 | IMPORTANTE | `get_repo_writer` lanza **`RuntimeError`** (`repo_writer.py:38`) y el plan sólo mapeaba `NotImplementedError` y `TrackerApiError` ⇒ 500 mudo | §F3 candado 0 y §4 |
+| C10 | MENOR | §2.7 daba por no verificado algo verificable en 30 s, y repetía copy **stale** ("Render-only v1") | §2.7 reescrita |
+| C11 | MENOR | El glosario decía "`EditIntent` = 8 campos"; el dataclass tiene **9** | §7.1 |
+| C12 | MENOR | 3 anclajes off-by-1/-6 | §2.1 |
+| C13 | MENOR | No registraba la **huella de regresión** de la clase de error que mata | §7.5 (nueva) |
+| **+** | **[ADICIÓN ARQUITECTO]** | El invariante que define el plan (preservación) vivía **sólo en tests que el operador nunca ve** | §F2 **Sello de preservación** + gate `G-PRESERVACION` |
 
 ---
 
@@ -65,7 +93,9 @@ rama con confirmación — sin que se toque ni una coma del resto del archivo.
 | **KPI-2 · Cirugía** | n/a (no existe la capacidad) | 0 líneas modificadas fuera de los hunks declarados | `test_el_diff_real_no_sale_de_los_hunks_declarados` (F0) |
 | **KPI-3 · No romper** | n/a | 0 patches ofrecidos que introduzcan un error nuevo de lint o de semántica | `test_patch_que_introduce_error_nuevo_no_se_ofrece` (F2) |
 | **KPI-4 · HITL** | n/a | 0 escrituras sin `confirm=True` | `test_commit_sin_confirm_es_400` (F3) |
-| **KPI-5 · Costo** | n/a | ≤ **1** llamada LLM por pedido de edición | `test_una_sola_llamada_llm_por_pedido` (F5) |
+| **KPI-5 · Costo** | n/a | ≤ **1** llamada LLM por pedido de edición | `test_una_sola_llamada_llm_por_pedido` (F5) + `test_interpret_404_con_flag_off` (F5) |
+| **KPI-6 · Default seguro** *(v2, C2)* | n/a | **0** escrituras en el repo del operador con la instalación de fábrica | `test_commit_404_con_flag_de_commit_off` (F3) |
+| **KPI-7 · Preservación en vivo** *(v2, ADICIÓN)* | el invariante sólo vive en un test que el operador no ve | el sello se calcula y **bloquea** en cada `/plan`, sobre el archivo real | `test_gate_preservacion_bloquea_si_desaparece_un_comentario` (F2) |
 
 **Valor cualitativo:** hoy, modificar una pipeline de 130 líneas con 47 comentarios significa
 abrir el YAML a mano. Con esto, significa **leer un diff de 8 líneas y apretar Confirmar**.
@@ -84,15 +114,23 @@ abrir el YAML a mano. Con esto, significa **leer un diff de 8 líneas y apretar 
 | Parser ADO tolerante | `backend/services/pipeline_renderers.py:453 (parse_ado_yaml)` | Se usa **sólo para entender la estructura**, jamás para reescribir el archivo |
 | Emisor de un paso `task:` | `backend/services/pipeline_renderers.py:110 (_task_step_doc)` | Renderiza el bloque **nuevo** que se inserta (sólo ese bloque) |
 | Declaración de lo no modelado | `backend/services/pipeline_renderers.py:28 (UNSUPPORTED_CONSTRUCTS)`, `:51 (scan_unsupported)` | Invariante de preservación: lo no modelado no puede desaparecer |
-| Lint estructural | `backend/services/pipeline_lint.py:791 (lint_yaml)`, `:33 (LintFinding)`, `:43 (LintReport)`, `:18-20 (SEV_ERROR/SEV_WARNING/SEV_INFO)` | Gate G-LINT por delta |
+| Lint estructural | `backend/services/pipeline_lint.py:791 (lint_yaml(yaml_text, provider, known_variables=None))`, `:33 (LintFinding)`, `:43 (LintReport)`, `:18-20 (SEV_ERROR/SEV_WARNING/SEV_INFO)` | Gate G-LINT por delta |
+| **⚠ Forma REAL de los dos findings (C4)** | `pipeline_lint.py:33 (LintFinding)` → campos `code, severity, message, line:int\|None, node:str\|None, fix` — **NO tiene `location`**. `cicd_semantic_rules.py:63 (SemanticFinding)` → campos `code, severity, message, location:str, evidence` — **NO tiene `line`** | **Son dataclasses DISTINTOS con campos DISJUNTOS.** Una sola función de identidad para los dos revienta con `AttributeError` (§F2) |
 | **Doctrina de cirugía de líneas (precedente de la casa)** | `backend/services/pipeline_lint.py:29` — comentario literal del campo `LintFix.new_yaml`: *"YAML COMPLETO corregido (cirugía de líneas, nunca re-dump)"* | **El Plan 186 ya decidió esto para los autofixes.** El 250 generaliza la misma doctrina |
 | Helpers de splice ya probados | `pipeline_lint.py:218 (_rebuild)`, `:225 (_fix_replace_on_line)`, `:236 (_fix_delete_line)`, `:244 (_fix_insert_after)`, `:252 (_key_indent)` | Convención de reconstrucción y de newline final |
-| Reglas semánticas por perfil | `backend/services/cicd_semantic_rules.py:497 (check_semantics)`, `:43 (MODE_AUDIT)`, `:44 (MODE_NL_STRICT)`, `:48 (_NL_STRICT_ONLY)`, `:62 (SemanticFinding)`, `:51 (MAX_YAML_BYTES = 512*1024)` | Gate G-SEM por delta. **La elección de modo es la decisión sutil de §F2** |
+| Reglas semánticas por perfil | `backend/services/cicd_semantic_rules.py:497 (check_semantics(yaml_text, *, profile, repo_root=None, mode=MODE_AUDIT))`, `:43 (MODE_AUDIT)`, `:44 (MODE_NL_STRICT)`, `:48 (_NL_STRICT_ONLY)`, **`:63 (SemanticFinding)`** *(v1 decía `:62`; ahí está el `@dataclass` — C12)*, `:51 (MAX_YAML_BYTES = 512*1024)` | Gate G-SEM por delta. **La elección de modo es la decisión sutil de §F2**. Ojo: `mode` inválido **lanza `ValueError`** (`:503-504`) |
+| **`check_semantics` NO tiene ningún consumidor en producción hoy** | verificado: `grep -rn "check_semantics" backend --include=*.py` fuera de su módulo y de los tests ⇒ **0 hits** | **F2 es su PRIMER call-site real.** Su tasa de falsos positivos sobre pipelines de producción nunca se midió en vivo — que es exactamente por qué el gate va **por delta** y no por valor absoluto (§F2) |
 | Catálogo cerrado de tareas | `backend/services/cicd_task_catalog.py:199 (get_task)`, `:204 (is_allowed)`, `:209 (validate_inputs)`, `:43 (TaskSpec)`, `:30 (PROFILE_DOTNET_FRAMEWORK)`, `:268 (extract_task_dicts)` | El LLM elige **dentro** del catálogo; nunca inventa una tarea |
-| Escritura al repo | `backend/services/repo_writer.py:30 (get_repo_writer)`, `:17 (RepoWriter.commit_file(path, content, branch, message))` | **Acepta contenido literal y ruta arbitraria** ⇒ sirve para commitear el archivo parcheado tal cual |
-| Ritual HITL del commit | `backend/api/pipeline_generator.py:59` (`if body.get("confirm") is not True: → 400 "confirm=True requerido (HITL)"`) | Se copia **el mismo ritual**, palabra por palabra |
+| Escritura al repo | `backend/services/repo_writer.py:30 (get_repo_writer(project=None))`, `:17 (RepoWriter.commit_file(path, content, branch, message))` | **Acepta contenido literal y ruta arbitraria** ⇒ sirve para commitear el archivo parcheado tal cual |
+| **El puerto es SOLO-ESCRITURA (C3)** | `repo_writer.py:27 (REPO_WRITER_METHODS = ("commit_file",))` | **No hay `get_file`/`read_file` en el puerto.** Consecuencia dura en §2.8 |
+| **`get_repo_writer` lanza `RuntimeError` (C9)** | `repo_writer.py:37-41` (`if not isinstance(provider, RepoWriter): raise RuntimeError(...)`) | El precedente lo mapea a **400**, no lo deja escapar: `pipeline_generator.py:71-73` (`except Exception as e: return jsonify({"error": str(e)}), 400`) |
+| **ADO SÍ commitea de verdad (C10 — corrige §2.7 del v1)** | `backend/services/ado_provider.py:146 (commit_file)` — *"Plan 95 F1.a — commit real vía Git Pushes API (**cierra el TODO del plan 73 C12**)"*; crea la rama desde la default si no existe (`:168-191`), y devuelve `status='unchanged'` sin pushear si el contenido ya es idéntico (`:199-221`) | **El 250 escribe en el repo REAL del operador.** Es la premisa que obliga a partir la flag (§3) |
+| Rama por defecto del repo (candado 2) | `backend/services/ado_pipeline_definitions.py:64 (_default_branch(provider, project))` — *"GET .../repositories/{id} → campo `defaultBranch`, STRIP del prefijo `refs/heads/`"* | Seam real para rechazar el commit sobre la rama por defecto |
+| Ritual HITL del commit | `backend/api/pipeline_generator.py:53 (commit_route)` *(v1 decía `:52`; ahí está el decorador `@bp.post("/commit")` — C12)*, `:59` (`if body.get("confirm") is not True: → 400 "confirm=True requerido (HITL)"`) | Se copia **el mismo ritual**, palabra por palabra |
 | Modal de commit con confirm | `frontend/src/components/devops/CommitPipelineModal.tsx:41 (confirmChecked)`, `:145` (texto del checkbox), `:163` (botón deshabilitado sin confirm) | Lenguaje UX del commit ya establecido |
-| **Diff con LCS ya en el panel** | `frontend/src/components/devops/pipelineLint.ts:91 (buildDiffLines)`, `:79 (DiffRow)`, `:87 (DiffResult.rows)`; consumido en `PipelineLintPanel.tsx:13` (import) y `:190` (render) | **No se escribe ni una línea de diff nueva en el frontend**: ya existe y ya se usa para previsualizar autofixes |
+| **Diff con LCS ya en el panel** | `frontend/src/components/devops/pipelineLint.ts:91 (buildDiffLines(oldYaml, newYaml) → DiffResult)`, `:79 (DiffRow)`, `:87 (DiffResult.rows)`; consumido en `PipelineLintPanel.tsx:13-19` (import) y `:190` (render) | **No se escribe ni una línea de diff nueva en el frontend**: ya existe y ya se usa para previsualizar autofixes. **`buildDiffLines` NO tiene cap** (matriz LCS `O(n·m)` cruda, `pipelineLint.ts:94-96`) ⇒ el cap lo pone `canRenderDiff` de F4, y es obligatorio |
+| **Punto de montaje del panel (C1)** | `frontend/src/pages/DevOpsPage.tsx:112-113` — comentario literal: *"Los planes 88/89 y features futuras agregan entradas aquí SIN refactor"* + `DEVOPS_SECTIONS`; gate declarativo por `healthKey`/`gateFlagKey`/`gateMessage` (`:79-81`, ejemplo `:136-138`) | **Extensión documentada de la casa.** El 250 agrega **una entrada**; **NO** toca `PipelineBuilderSection.tsx` |
+| Llaves de salud que alimentan ese gate | `backend/api/devops.py:42` (`"publications_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PUBLICATIONS_ENABLED", False))`), `:72` (`"cockpit_enabled"`, Plan 239) | Patrón literal para publicar la llave del 250 |
 | Segundo diff (referencia) | `frontend/src/components/dbcompare/lineDiff.ts:22 (diffLines)`, `:12 (MAX_LINES = 3000)` | Precedente del cap duro para no colgar la UI con un LCS O(n·m) |
 | Contrato UX de IA del panel | `frontend/src/components/devops/PipelineBuilderSection.tsx:382-383` (Plan 106 F5, literal: *"pide sugerencias al modelo local y PRE-RELLENA solo lo que está vacío (KPI-5, HITL): nunca pisa lo que el operador ya escribió"*), `:384 (handleSuggestWithLocalLlm)`, `:403-408` (patrón "sólo si está vacío") | **Este plan entra por ese mismo lenguaje** |
 | Seam de LLM | `backend/services/pm/pm_llm_client.py:278 (call_llm)`, `:90 (LLMCallSpec)`, `:98 (temperature=0.0)`, `:99 (fixture_id)`, `:101 (expect_json)` — docstring `:281-283`: *"Nunca lanza excepción al caller por fallas de red/SDK: devuelve `success=False`"* | Única llamada LLM, mockeable por `fixture_id` |
@@ -217,14 +255,45 @@ acá para que quien implemente no crea que el 243 se equivocó ni "corrija" nada
 - **`services/pipeline_recommendations.py` y `cicd_security_rules.py` (Plan 248) NO existen hoy**
   — están reservados en el dossier §3. El puente `OPT*` de F5 se implementa con **import blando**
   y degradación declarada (§F5), no asumiendo que estén.
-- **No se verificó** que el `RepoWriter` concreto de ADO soporte `commit_file` (el
-  `/commit` existente devuelve **501** para `target="ado"` vía `NotImplementedError`,
-  `pipeline_generator.py:86-88`, y `CommitPipelineModal.tsx:90-92` lo muestra como *"Render-only
-  v1"* salvo que la capability `adoCommitSupported` esté presente). **F3 declara este camino como
-  degradación honesta**: si el writer no soporta escritura, el endpoint devuelve 501 con el patch
-  y el diff intactos, y la UI ofrece **copiar el YAML parcheado al portapapeles**. Nunca se
-  presenta como "commiteado".
+- ~~No se verificó que el `RepoWriter` concreto de ADO soporte `commit_file`~~ → **CORREGIDO EN v2
+  (C10): SÍ lo soporta y escribe de verdad.** `ado_provider.py:146 (commit_file)` implementa un
+  push real por la Git Pushes API desde el **Plan 95 F1.a**, cuyo docstring dice literalmente que
+  *"cierra el TODO del plan 73 C12"*. El `NotImplementedError → 501` de
+  `pipeline_generator.py:86-88` y el copy *"Render-only v1 (commit devuelve 501)"* de
+  `CommitPipelineModal.tsx:91` son **restos stale del Plan 73**, no el estado actual.
+  **Consecuencia:** el 250 **no es una feature de sólo-lectura con un final teórico**; su
+  `/commit` empuja commits al repo real del operador. Por eso la ruta de escritura tiene **su
+  propia flag, default OFF** (§3). El camino 501 se conserva igual en §4 como degradación honesta
+  para cualquier provider que no implemente el puerto — pero **no es el caso de ADO**.
+- **No se abrió** el resto de `ado_provider.commit_file` más allá de `:146-221` (resolución de
+  ref, creación de rama y detección `create/update/unchanged`). Lo que hay debajo de `:221` (el
+  push propiamente dicho) **no se verificó línea por línea**; se asume el contrato declarado en
+  `repo_writer.py:17-22` (`{sha, branch, path, web_url, status}` + `TrackerApiError`).
 - Este plan **no toca ninguna tabla de base de datos**.
+
+### 2.8 El puerto de repo es SOLO-ESCRITURA: qué se puede y qué NO se puede prometer (C3)
+
+`REPO_WRITER_METHODS = ("commit_file",)` (`repo_writer.py:27`). **No existe ningún método de
+lectura de archivos del repo en el puerto**, y el único lector de contenido que existe está
+*enterrado adentro* de `ado_provider.commit_file` (`:200-211`: `GET .../items?path=...&
+versionDescriptor.version={branch}` + `base64.b64decode`), sin exponerse. Verificado además que
+`ado_pipeline_definitions.py:82 (find_yaml_definition)` devuelve la **definición de pipeline**, no
+el contenido del archivo en una rama.
+
+**Por lo tanto el candado "releo el archivo y comparo el sha" del v1 era inimplementable.** Lo que
+se puede prometer de verdad, y lo que no:
+
+| Promesa | ¿Se puede? | Cómo |
+|---|---|---|
+| "Lo que se commitea es lo que el operador aprobó" | **SÍ, duro** | El servidor **recompila** el patch desde el `intent` y compara con `approved_after_sha256`; **nunca** acepta el YAML del cliente (F3 candado 4) |
+| "El `before` que se parcheó es el que el operador vio" | **SÍ, duro** | El servidor rehashea el `before` recibido y lo compara con `before_sha256` (auto-consistencia del request) |
+| "El archivo no cambió **en el repo** desde que viste el diff" | **NO con el puerto actual** | Se **declara** `stale_check: "no_verificable"` en la respuesta y en la UI. **Jamás se reporta como validado** — misma doctrina que `repo_root=None` ⇒ RS006 `skipped` |
+| "Dos commits concurrentes no se pisan" | **SÍ, pero lo garantiza ADO, no Stacky** | `ado_provider.py:161-191` resuelve el `old_object_id` del ref y pushea contra él; un push concurrente sobre la misma rama lo **rechaza ADO** con `TrackerApiError`, que se propaga con su status real |
+
+**Esto NO se resuelve agregando un método al puerto**: `RepoWriter` es superficie del Plan 73/95 y
+está **fuera de la frontera del 250** (§3.1). Si algún día se agrega `get_file` al puerto, este
+candado pasa de "declarado" a "verificado" **sin tocar nada más** que la función que hoy devuelve
+`"no_verificable"`. Queda anotado como deuda nombrada, no como hueco silencioso.
 
 ---
 
@@ -239,10 +308,22 @@ recomendaciones del 248.
 1. **Human-in-the-loop, y acá es el corazón.** Nada se escribe ni se commitea sin `confirm=True`
    explícito. El operador **siempre ve el diff antes**. El sistema no aplica un patch por su
    cuenta ni siquiera cuando el gate está verde. F3 lo prueba con `test_commit_sin_confirm_es_400`.
-2. **Cero trabajo extra al operador.** Flag `STACKY_PIPELINE_NL_EDIT_ENABLED` default **ON**
-   (ninguna de las 4 excepciones duras aplica: no bypasea revisión humana —al contrario, la
-   exige—, no es destructiva —escribe sólo en rama y previa confirmación—, no agrega prerequisitos
-   —PyYAML ya está—, y no reduce la seguridad por default —agrega gates).
+2. **Cero trabajo extra al operador — con la escritura separada de la lectura (C2).** El v1 tenía
+   **una sola flag default ON** que habilitaba también el `/commit`, y lo justificaba diciendo que
+   el commit "no es destructivo". Esa justificación se apoyaba además en una premisa **falsa**
+   (§2.7: se creía que ADO no sabía commitear). Con ADO commiteando de verdad
+   (`ado_provider.py:146`), **la superficie de análisis y la superficie de escritura no pueden
+   compartir interruptor**. Quedan dos:
+
+   | Flag | Default | Qué habilita | Por qué ese default |
+   |---|---|---|---|
+   | `STACKY_PIPELINE_NL_EDIT_ENABLED` | **ON** | `/plan`, `/verbs`, `/interpret` y el panel. **Cero escritura**: analiza, parchea en memoria y muestra el diff | **Ninguna de las 4 excepciones duras aplica**: no bypasea revisión humana (la exige), **no escribe nada en ningún lado**, no agrega prerequisitos (PyYAML ya está: `requirements.txt`), no reduce la seguridad (agrega gates) |
+   | `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` | **OFF** | **Sólo** `/commit` | **Excepción dura (2): escribe en un sistema externo real del operador** (push a su Azure DevOps). Que sea reversible (borrar la rama) no lo hace no-escritura. Encender esto es una decisión consciente del operador, una vez, desde la UI |
+
+   **Esto NO agrega trabajo al operador para el 95 % del valor**: con la instalación default puede
+   describir el cambio, ver el diff exacto y copiarlo. Lo único que pide un clic previo es el
+   push. Y el panel **lo dice**: con la flag de commit en OFF el botón muestra
+   *"Activar el commit desde Configuración → Arnés"* con el deep-link, en vez de esconderse.
 3. **Paridad de 3 runtimes.** F0–F4 **no invocan LLM ni red**: paridad trivial. F5 usa una única
    llamada por `pm_llm_client.call_llm` (`:278`), que **nunca lanza** (`:281-283`), y tiene
    fallback declarado (§F5).
@@ -253,6 +334,48 @@ recomendaciones del 248.
 
 **Fuera de alcance (§6 lo detalla plan por plan):** crear pipelines desde cero, descubrir,
 perfilar, definir reglas nuevas, GitLab, entornos, bundle.
+
+### 3.1 Frontera de superficie: los archivos que este plan puede tocar (C1 — BLOQUEANTE en v1)
+
+El dossier §0.3 del **Plan 246** reserva superficies por plan para que los 7 planes de la serie no
+colisionen. **El v1 se salía de la reserva en dos lugares** y eso habría pisado trabajo de otros
+planes. Lista **cerrada**; lo que no está acá, no se toca:
+
+| Puede CREAR | Puede EDITAR |
+|---|---|
+| `backend/services/pipeline_patcher.py` | `backend/services/harness_flags.py` |
+| `backend/services/pipeline_diff.py` | `backend/config.py` |
+| `backend/api/pipeline_editor.py` | `backend/tests/test_harness_flags.py` |
+| `frontend/src/devops/pipelineEditModel.ts` | `backend/scripts/run_harness_tests.sh` y `.ps1` |
+| `frontend/src/components/devops/PipelineEditNlPanel.tsx` (+ su `.module.css`) | `backend/api/__init__.py` |
+| `backend/tests/test_plan250_*.py` | `backend/api/devops.py` |
+| `backend/tests/fixtures/pipeline_edit/**` | `frontend/src/pages/DevOpsPage.tsx` |
+| `frontend/src/devops/__tests__/pipelineEditModel.test.ts` | `frontend/src/api/endpoints.ts` |
+
+**Las dos violaciones del v1 y su corrección:**
+
+1. **`backend/services/pipeline_edit_intent.py` (F5) — NO reservado.** Corrección: la capa de
+   intent se parte entre las dos superficies que **sí** son del 250: el **esquema cerrado y la
+   validación pura** (`INTENT_SCHEMA`, `validate_intent_dict`) van a
+   `services/pipeline_patcher.py`, junto a `EDIT_VERBS` que ya vive ahí (F1) y de quien son la
+   contracara; **la llamada al LLM y el armado del prompt** van a `api/pipeline_editor.py`, que es
+   su único caller. No se pierde ninguna capacidad y no se crea ningún archivo fuera de la
+   reserva. *Si el operador prefiere el módulo separado, primero hay que agregarlo a la reserva
+   §0.3 del 246 — nunca al revés.*
+2. **`frontend/src/components/devops/PipelineBuilderSection.tsx` (F4) — NO reservado**, y encima
+   es territorio de los planes 87/106/243/244 **con guardias de contenido literal sobre el
+   archivo** (`frontend/src/components/devops/__tests__/PipelineBuilderSection.test.ts:44-118`
+   lee el `.tsx` con `readFileSync` y afirma cadenas). Corrección: el panel **no se monta ahí**.
+   Se agrega **una entrada** a `DEVOPS_SECTIONS` en `DevOpsPage.tsx:113`, que es el punto de
+   extensión que la casa documenta en el comentario de `:112` (*"features futuras agregan entradas
+   aquí SIN refactor"*), con su `healthKey` publicado desde `backend/api/devops.py` (patrón `:42`
+   y `:72`). Ambas superficies **están reservadas al 250**.
+
+**Prohibido explícitamente** (exclusivos de otros planes de la serie): `pipeline_renderers.py` y
+`cicd_semantic_rules.py` (**249**), `pipeline_recommendations.py` y `cicd_security_rules.py`
+(**248**), `pipeline_generator.py` y `pipeline_lint.py` (**73/186**), `repo_writer.py` y
+`ado_provider.py` (**73/95**). **De todos ellos se IMPORTA y se lee; ninguno se modifica** — lo
+verifica el gate `git diff --name-only` del DoD (§7.4).
 
 **Recorte de alcance decidido por adelantado (precedente: el 243 tuvo que partirse, su C25):**
 este plan tiene **exactamente 6 fases (F0..F5)** y **provider ADO solamente**. Se recorta a
@@ -331,6 +454,29 @@ def apply_ops(yaml_text: str, ops: tuple) -> PatchResult:
 
 1. **`build_anchor_index` usa `yaml.compose`, jamás `grep`/`re`/lectura por líneas** para
    localizar estructura (misma doctrina que el Plan 243 C20 impuso al catálogo).
+1-bis. **Cobertura EXACTA del índice (C8 — el v1 no la declaraba).** `build_anchor_index` indexa
+   **exactamente** este conjunto de paths, ni uno más ni uno menos. Un path que no esté acá **no
+   es direccionable** por un `EditOp`, y pedirlo devuelve un error accionable que **enumera los
+   paths disponibles**:
+
+   | Path | Cuándo existe |
+   |---|---|
+   | `trigger`, `pr`, `schedules`, `variables`, `pool`, `stages`, `jobs`, `steps` | si la clave existe en la **raíz** del documento |
+   | `trigger.paths`, `trigger.paths.include` | si existen |
+   | `stages[i]` | por cada item de `stages` |
+   | `stages[i].jobs`, `stages[i].jobs[j]` | idem |
+   | `stages[i].jobs[j].steps`, `stages[i].jobs[j].steps[k]` | idem |
+   | `stages[i].jobs[j].strategy`, `...runOnce`, `...runOnce.deploy`, `...runOnce.deploy.steps`, `...steps[k]` | **obligatorio**: `cd-deploy-test.yml` es un `deployment:` y sin esto no es editable (test 7 lo exige) |
+   | `jobs[j]`, `jobs[j].steps`, `jobs[j].steps[k]` | pipelines **sin** `stages` (job-level), p.ej. `pr-validation-online.yml` |
+   | `steps[k]` | pipelines **sin** `stages` ni `jobs` (step-level) |
+
+   Y **una excepción explícita hacia abajo**, porque `set_task_input` la necesita:
+   `<step>.inputs` y `<step>.inputs.<clave>` (nodos escalares, `kind="scalar"`). **Es
+   obligatoria**: sin ella `set_task_input` tendría que re-renderizar el paso entero, lo que
+   borraría los comentarios de adentro del paso y haría **imposible** el test 5
+   (`1 hunk de 1 línea`). Con ella, cambiar un input es un `replace` de la línea del escalar
+   —o un `insert_after` de `inputs:` si la clave no existía—, y todo lo demás del paso queda
+   byte-idéntico. **Nada más profundo se indexa** (no se entra en listas dentro de un input).
 2. **Fin efectivo** exactamente como §2.3. Escribirlo de otra forma rompe el test 2.
 3. **Columnas derivadas del archivo** exactamente como §2.4. Si `L[start][dash_col] != '-'`
    ⇒ `errors` con mensaje accionable y `ok=False`. **Nunca adivinar.**
@@ -359,6 +505,8 @@ def apply_ops(yaml_text: str, ops: tuple) -> PatchResult:
 | 10 | `test_yaml_gigante_rechazado` | 600 KB ⇒ `ok is False` con error; no procesa |
 | 11 | `test_item_con_dash_en_linea_propia_no_soportado` | `- \n  task: X` ⇒ `ok is False` con error accionable. **No adivina** |
 | 12 | `test_ops_solapadas_rechazadas` | Dos ops sobre rangos que se cruzan ⇒ `ok is False` y `text == entrada` |
+| 13 | `test_cobertura_del_indice_es_la_declarada` | **C8.** Para los 9 goldens: el conjunto de claves de `build_anchor_index` es **exactamente** el de la tabla de la regla 1-bis (ni de más ni de menos). En particular `cd-deploy-test.yml` expone `...strategy.runOnce.deploy.steps` y `pr-validation-online.yml` expone `jobs[0].steps` **sin** `stages` |
+| 14 | `test_path_inexistente_enumera_los_disponibles` | Pedir `stages[9].jobs[0].steps` ⇒ `ok is False` y el mensaje **lista los paths que sí existen**. No "no encontrado" a secas |
 
 **Comando exacto (dossier §4):**
 ```powershell
@@ -371,8 +519,17 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 `backend/scripts/run_harness_tests.ps1:13 ($HarnessTestFiles = @()`, y correr
 `.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q`.
 
-**Criterio de aceptación (BINARIO):** 12/12 verdes, en particular los tests 2, 4, 5 y 6. Además
-`test_harness_ratchet_meta.py` verde.
+**Criterio de aceptación (BINARIO):** **14/14** verdes, en particular los tests 2, 4, 5, 6 y 13.
+Además `test_harness_ratchet_meta.py` verde.
+
+> **Anclajes de los tests, RE-VERIFICADOS por la crítica v2 corriendo el código** (no copiados del
+> v1): `stages[0].jobs[0].steps` de `ci-cd-online.yml` da `key_col=6`, `dash_col=4` y **6** items
+> (test 1); el item 3 va de `start_mark.line=100` a `end_mark.line=112` con **fin efectivo 109**, y
+> las líneas 110/111 son la vacía y `'    # 4. Publicar resultados de tests en ADO'` (test 2);
+> `ci-cd-online.yml` tiene **47** comentarios y el corpus **337** (tests 3 y 5);
+> `scan_unsupported` da `('matrix',)` en `ci-batch.yml`, `('compile_time_expression',)` en
+> `bootstrap-server-environment.yml` y `()` en `ci-cd-online.yml` (test 6). **Los cuatro números
+> del v1 eran correctos.**
 
 **Flag:** ninguna (módulo puro sin consumidor todavía; se cablea en F3).
 **Impacto por runtime:** idéntico en los 3 — no hay LLM, red ni I/O. **Fallback: no aplica,
@@ -503,17 +660,33 @@ C5/C7). Si Stacky escribe, Stacky se somete al estándar estricto.
 | `lint_yaml(after, "ado")` vs `lint_yaml(before, "ado")` (`pipeline_lint.py:791`) | — | Sólo los findings **nuevos** con `SEV_ERROR` |
 
 **El delta se calcula por identidad de finding, no por conteo**: dos findings son "el mismo" si
-coinciden `(code, message)` **normalizando** el índice numérico de `location`/`line` (porque un
-paso insertado corre los índices de todos los siguientes y un conteo ingenuo daría falsos
-positivos en masa). Esta normalización es la parte que un modelo menor haría mal, así que se
-especifica:
+coinciden `(code, message)` **normalizando la parte posicional**, porque un paso insertado corre
+la posición de todos los siguientes y un conteo ingenuo daría falsos positivos en masa.
+
+> **C4 — BLOQUEANTE del v1, corregido acá.** El v1 daba **una sola** `_finding_key(code, message,
+> location)`. **No compila contra los dataclasses reales**, verificado abriéndolos:
+> `SemanticFinding` (`cicd_semantic_rules.py:63`) tiene `location: str` y **no** `line`;
+> `LintFinding` (`pipeline_lint.py:33`) tiene `line: int|None` y `node: str|None` y **NO tiene
+> `location`** ⇒ pasarle un `LintFinding` es un **`AttributeError`**. Y aunque se le pasara
+> `str(f.line)`, `re.sub(r"\[\d+\]", "[]", ...)` **no normaliza un entero suelto**: insertar 8
+> líneas convierte el finding de la línea 40 en el de la 48, y **todos** los findings posteriores
+> al hunk se contarían como nuevos. Es decir: el v1 declaraba en R4 que mitigaba exactamente el
+> falso positivo que su propio código habría producido, y su test 4 lo habría puesto rojo sin
+> decir por qué. **Son dos claves distintas porque son dos formas distintas:**
 
 ```python
-def _finding_key(code: str, message: str, location: str) -> tuple:
-    """`stages[1].jobs[0].steps[4]` → `stages[].jobs[].steps[]`. Un paso insertado
-    desplaza los índices de los siguientes: comparar índices crudos produciría
-    decenas de findings 'nuevos' que en realidad son los mismos de antes."""
-    return (code, message, re.sub(r"\[\d+\]", "[]", location or ""))
+def _sem_key(f) -> tuple:
+    """SemanticFinding: la posición es un PATH.
+    `stages[1].jobs[0].steps[4]` → `stages[].jobs[].steps[]`."""
+    return (f.code, f.message, re.sub(r"\[\d+\]", "[]", f.location or ""))
+
+def _lint_key(f) -> tuple:
+    """LintFinding: NO tiene `location`. Tiene `node` ("stage:Build", "var:MY_TOKEN"),
+    que es ESTABLE ante una inserción, y `line`, que NO lo es.
+    REGLA DURA: `f.line` NUNCA entra en la clave. Si `node` es None, la identidad
+    queda (code, message) y punto: perder granularidad es infinitamente preferible
+    a inventar 30 findings nuevos que no lo son."""
+    return (f.code, f.message, f.node or "")
 ```
 
 ```python
@@ -530,15 +703,56 @@ class GateDelta:
 
 @dataclass(frozen=True)
 class EditReview:
-    ok: bool             # True ⇔ ningún gate con new_errors
+    ok: bool             # True ⇔ ningún gate con new_errors Y preservation.ok
     gates: tuple
     hunks: tuple
     summary: str         # español, derivado (NO redactado por un LLM)
     unsupported: tuple   # scan_unsupported(after) — se informa, no bloquea
+    preservation: "Preservation"   # [ADICIÓN ARQUITECTO] — ver abajo
 
 def review_patch(before: str, after: str, hunks: tuple, *, profile: str,
                  repo_root: str|None = None) -> EditReview
 ```
+
+### [ADICIÓN ARQUITECTO] Sello de preservación: el invariante deja de vivir sólo en los tests
+
+El v1 tenía un problema silencioso: **el invariante que justifica el plan entero — "no se pierde
+nada" — sólo se comprueba en `test_los_337_comentarios_del_corpus_sobreviven`, que el operador
+nunca ve.** El día que una `EditOp` nueva rompa la preservación sobre un archivo que no está en el
+corpus, el operador se entera **después**, leyendo su repo. Eso es exactamente el fracaso que el §0
+promete evitar, movido un escalón más adelante.
+
+Se calcula sobre `(before, after)` **con lo que ya existe** —el conteo de líneas-comentario que los
+tests de F0 ya hacen y `scan_unsupported` (`pipeline_renderers.py:51`)— y se devuelve en cada
+`/plan`:
+
+```python
+@dataclass(frozen=True)
+class Preservation:
+    ok: bool                  # False si se perdió un comentario o una construcción no modelada
+    comments_before: int
+    comments_after: int
+    unsupported_lost: tuple   # construcciones que estaban y ya no
+    lines_untouched: int      # líneas byte-idénticas entre before y after
+    lines_total_before: int
+```
+
+**Es un GATE, no un adorno**: `G-PRESERVACION` es el cuarto gate y **bloquea igual que los otros**
+(`comments_after < comments_before` ⇒ `ok=False`), con **una sola excepción legítima y acotada**:
+el verbo `remove_step`, donde los comentarios que vivían *dentro del rango del paso borrado* se van
+con él a propósito. En ese caso el gate compara contra
+`comments_before − comentarios_dentro_del_rango_borrado` y, si sobra alguno, **avisa cuáles**.
+
+La UI lo muestra en **una línea** al lado del semáforo, antes del botón:
+
+> *"Se preservan 47/47 comentarios y 0 construcciones no modeladas; 119 de 127 líneas quedan
+> byte-idénticas."*
+
+**Por qué es alto valor y no cuesta nada:** convierte el KPI-1 en evidencia **en el momento de
+decidir** en vez de en un test que corre en otra máquina; reusa código existente; es puro (sin LLM,
+sin red) ⇒ **idéntico en los 3 runtimes**; no agrega ni un paso al operador (aparece solo); y es la
+única defensa que funciona sobre los pipelines del operador que **no** están en el corpus dorado —
+que son todos los que le importan.
 
 **Reglas duras:**
 - **`resolved` se muestra**: si el patch arregla algo (por ejemplo agrega el `PublishBuildArtifacts@1`
@@ -570,12 +784,23 @@ def review_patch(before: str, after: str, hunks: tuple, *, profile: str,
 8. `test_after_no_parsea_bloquea` — `after` corrupto ⇒ `ok is False`.
 9. `test_unsupported_se_informa_y_no_bloquea` — editar `ci-batch.yml` (que tiene `matrix:` en
    `:60`) ⇒ `unsupported` contiene `"matrix"` y `ok is True`.
+10. `test_lint_delta_no_usa_line_como_identidad` — **C4.** Insertar un paso al principio de un job
+    y afirmar que `_lint_key` de un finding preexistente es **igual** antes y después, aunque su
+    `f.line` haya cambiado. Y que `_lint_key(LintFinding(...))` **no lanza `AttributeError`**
+    (el v1 le habría pedido `.location`, que ese dataclass no tiene).
+11. `test_gate_preservacion_bloquea_si_desaparece_un_comentario` — **[ADICIÓN ARQUITECTO].** Con
+    una `EditOp` fabricada a mano que pisa un rango con comentarios ⇒ `preservation.ok is False`
+    y `review.ok is False`.
+12. `test_remove_step_no_dispara_falso_positivo_de_preservacion` — la excepción acotada:
+    `remove_step` de `PublishTestResults@2` en `ci-cd-online.yml` ⇒ `preservation.ok is True`
+    (los 2 comentarios propios del paso se van con él, y **sólo** esos).
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan250_gates_delta.py -q`
 (+ las dos listas del ratchet).
 
-**Criterio de aceptación (BINARIO):** 9/9 verdes, en particular 1, 2, 3 y 4. Además, sin regresión:
-`.venv\Scripts\python.exe -m pytest tests/test_plan243_reglas_semanticas.py -q` verde.
+**Criterio de aceptación (BINARIO):** **12/12** verdes, en particular 1, 2, 3, 4, 10 y 11. Además,
+sin regresión: `.venv\Scripts\python.exe -m pytest tests/test_plan243_reglas_semanticas.py -q`
+verde.
 
 **Flag:** ninguna todavía.
 **Impacto por runtime:** idéntico en los 3, sin LLM. **Fallback: no aplica.**
@@ -622,24 +847,43 @@ if not getattr(_config.config, "STACKY_PIPELINE_NL_EDIT_ENABLED", False):
 > módulo. `getattr` del módulo devuelve el default y **mata el branch OFF** (el test flag-off
 > pasaría en falso).
 
-**Candados de `/commit`, en este orden exacto:**
+**Candados de `/commit`, en este orden exacto** (re-especificados en v2 por C3 y C9):
 
+0. **`STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (flag PROPIA, default OFF)** ⇒ si está OFF, **404**.
+   Los otros 3 endpoints siguen vivos con la flag de análisis en ON: **se puede ver el diff sin
+   poder pushear**, que es exactamente el default seguro que se busca (§3, C2).
 1. `body.get("confirm") is not True` ⇒ **400** `{"error": "confirm=True requerido (HITL)"}`
    — literal copiado de `pipeline_generator.py:59-60`.
-2. `branch` vacío o igual a la rama por defecto del repo ⇒ **400**. **Nunca se commitea sobre la
-   rama por defecto.**
-3. Se **relee el archivo actual** y se compara su sha256 con `before_sha256`. Si difiere ⇒
-   **409** `{"error": "el archivo cambió desde que viste el diff", "before_sha256": <nuevo>}`.
-   *El operador aprobó un diff contra una versión; escribir contra otra sería escribir a ciegas.*
+2. `branch` vacío ⇒ **400**. `branch == _default_branch(None, project)`
+   (`ado_pipeline_definitions.py:64`) ⇒ **400**. **Nunca se commitea sobre la rama por defecto.**
+   Si `_default_branch` lanza (red/auth), ⇒ **400** con su mensaje: **no se sigue**; no poder
+   saber cuál es la rama por defecto no habilita a escribir en ella.
+3. **Auto-consistencia del `before`** (C3 — el v1 pedía releer el archivo, y **el puerto no sabe
+   leer**, §2.8): se rehashea el `before` recibido y se compara con `before_sha256`; si difiere ⇒
+   **400** (request incoherente). La respuesta **siempre** incluye
+   `"stale_check": "no_verificable"` con el motivo literal *"el puerto RepoWriter no expone
+   lectura; si el archivo cambió en el repo desde que viste el diff, Stacky no puede saberlo — el
+   push contra `old_object_id` lo rechazaría ADO"*. **Jamás se reporta como validado.**
 4. Se **recompila el patch en el servidor** desde `intent` (F1) y se aplica (F0). Si el sha256 del
    resultado ≠ `approved_after_sha256` ⇒ **409** con el diff nuevo.
    **El servidor NUNCA acepta el YAML final que manda el cliente.**
-5. `review_patch(...)` (F2). Si `ok is False` ⇒ **422** con los `new_errors`.
-6. Recién ahí: `get_repo_writer(project).commit_file(path=path, content=after, branch=branch,
-   message=message)` (`repo_writer.py:30`, `:17`).
-7. `NotImplementedError` ⇒ **501** con `{"yaml": after, "hunks": [...]}` intactos (§2.7): la UI
-   ofrece copiar el YAML parcheado. **Nunca se presenta como "commiteado".**
-   `TrackerApiError` ⇒ su `status` real (patrón de `pipeline_generator.py:83-85`).
+5. `review_patch(...)` (F2). Si `ok is False` ⇒ **422** con los `new_errors` **y** con
+   `preservation` (si lo que falló fue el gate de preservación, el operador tiene que ver
+   **qué se perdía**, no un "no").
+6. `get_repo_writer(project)` (`repo_writer.py:30`) **dentro de su propio `try`**: lanza
+   **`RuntimeError`** si el provider activo no implementa el puerto (`:37-41`) ⇒ **400** con el
+   mensaje, igual que hace el precedente en `pipeline_generator.py:71-73` (C9). **Sin este `try`
+   es un 500 mudo.**
+7. Recién ahí: `writer.commit_file(path=path, content=after, branch=branch, message=message)`
+   (`repo_writer.py:17`). En ADO esto **empuja de verdad** (`ado_provider.py:146`), crea la rama
+   desde la default si no existe (`:168-191`) y devuelve `status='unchanged'` sin pushear si el
+   contenido ya era idéntico (`:199-221`) — ese `unchanged` **se muestra tal cual**, nunca como
+   "commiteado".
+8. `TrackerApiError` ⇒ su `status` real (patrón de `pipeline_generator.py:83-85`).
+   `NotImplementedError` ⇒ **501** con `{"yaml": after, "hunks": [...]}` intactos: la UI ofrece
+   copiar el YAML parcheado. **Nunca se presenta como "commiteado".** *Nota v2: este camino
+   **ya no es el de ADO** (§2.7 del v1 estaba mal); queda para cualquier otro provider que no
+   implemente escritura.*
 
 **Flags** (`services/harness_flags.py`, patrón de `:21 (FlagSpec)`):
 
@@ -658,19 +902,31 @@ FlagSpec(
     group="global",
 ),
 FlagSpec(
-    key="STACKY_PIPELINE_NL_EDIT_MAX_LLM_CALLS",
-    type="int",
-    default=1, min_value=1, max_value=3,
-    label="Llamadas al modelo por pedido de edición",
+    key="STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED",
+    type="bool",
+    default=False,  # C2 — EXCEPCION DURA (2): esta es la unica ruta que ESCRIBE en un
+                    # sistema externo real del operador (push a su Azure DevOps via
+                    # ado_provider.commit_file). Al ser default OFF, NO va en
+                    # _CURATED_DEFAULTS_ON y por eso tampoco declara default=True.
+    label="Permitir commitear la pipeline editada",
     description=(
-        "Plan 250 - Techo duro de invocaciones al LLM para interpretar UN pedido. "
-        "Default 1: sin reintentos automáticos; si el pedido es ambiguo se le pregunta "
-        "al operador, que sale más barato y más honesto que adivinar."
+        "Plan 250 - Habilita SOLO el commit del YAML parcheado a una rama del repo real. "
+        "Ver el cambio y el diff NO necesita esta flag. OFF: el boton de commit explica "
+        "como activarla y ofrece copiar el YAML; los otros 3 endpoints siguen funcionando."
     ),
     group="global",
     requires="STACKY_PIPELINE_NL_EDIT_ENABLED",
 ),
 ```
+
+> **C6 — la flag `STACKY_PIPELINE_NL_EDIT_MAX_LLM_CALLS` del v1 se ELIMINA.** Era una flag **sin
+> consumidor**: el diseño hace exactamente 1 llamada y prohíbe los reintentos (§F5), así que
+> ponerla en 2 o 3 no cambiaba nada — y su `max_value=3` **invitaba explícitamente** al bucle de
+> auto-reparación que el propio plan declara prohibido citando el C10 del 243. La casa ya tiene el
+> mecanismo para flags sin consumidor (`FlagSpec.reserved`, `harness_flags.py:40`, Plan 85), pero
+> acá ni eso hace falta: **el techo es una constante del módulo**,
+> `MAX_LLM_CALLS_PER_REQUEST = 1` en `api/pipeline_editor.py`. Menos superficie, misma garantía,
+> y el KPI-5 se sigue probando igual (test 5 de F5).
 
 > **Gotchas obligatorias:** (a) una `FlagSpec` con `default=True` **debe** estar además en
 > `_CURATED_DEFAULTS_ON` (`backend/tests/test_harness_flags.py:467`) o
@@ -681,22 +937,37 @@ FlagSpec(
 
 **Tests PRIMERO (8 + 4):**
 
-`backend/tests/test_plan250_api.py` (8):
-1. `test_endpoints_404_con_flag_off` — los 3 endpoints con la flag OFF.
+`backend/tests/test_plan250_api.py` (**11**):
+1. `test_endpoints_404_con_flag_off` — los 4 endpoints con `STACKY_PIPELINE_NL_EDIT_ENABLED` OFF.
 2. `test_plan_devuelve_hunks_y_review` — 200 con `hunks` no vacío.
 3. `test_plan_no_escribe_nada` — el fixture en disco queda byte-idéntico tras `/plan`.
 4. `test_commit_sin_confirm_es_400` — **KPI-4.**
 5. `test_commit_sobre_rama_default_es_400`.
-6. `test_commit_con_before_sha_desactualizado_es_409`.
+6. `test_commit_con_before_sha_incoherente_es_400` — C3: el `before` recibido no hashea a
+   `before_sha256`.
 7. `test_commit_ignora_el_yaml_del_cliente` — se manda un `yaml` malicioso en el body y se afirma
    que lo commiteado es el recompilado del servidor.
 8. `test_commit_con_review_en_rojo_es_422`.
+9. `test_commit_404_con_flag_de_commit_off` — **C2, el candado 0.** Con
+   `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` OFF: `/commit` da **404** y `/plan` sigue dando
+   **200**. *Es el test que prueba que el default de fábrica ve pero no escribe.*
+10. `test_stale_check_se_declara_no_verificable` — C3: toda respuesta de `/commit` trae
+    `stale_check == "no_verificable"`; **ninguna** dice que se validó contra el repo.
+11. `test_provider_sin_repo_writer_es_400` — C9: `get_repo_writer` que lanza `RuntimeError` ⇒
+    **400** con el mensaje, **no** 500.
 
-`backend/tests/test_plan250_flag.py` (4):
-1. Ambas flags aparecen en el catálogo que consume la UI.
-2. `STACKY_PIPELINE_NL_EDIT_MAX_LLM_CALLS = 0` y `= 4` son rechazadas por `apply_updates`.
-3. `test_default_known_only_for_curated` verde.
-4. La flag nueva tiene categoría en `_CATEGORY_KEYS`.
+`backend/tests/test_plan250_flag.py` (**4**):
+1. Las **dos** flags aparecen en el catálogo que consume la UI y son editables desde ahí.
+2. `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` **NO** está en `_CURATED_DEFAULTS_ON`
+   (`test_harness_flags.py:467`) — es la contracara de ser default OFF.
+3. `test_default_known_only_for_curated` verde (`STACKY_PIPELINE_NL_EDIT_ENABLED` **sí** curada).
+4. Las **dos** flags tienen categoría en `_CATEGORY_KEYS` (`harness_flags.py:120`).
+
+> **Verificado por la crítica v2 (para que nadie pierda una tarde buscándolos):** en este árbol
+> **NO existen** `_REQUIRES_MAP_FROZEN` ni `_FROZEN_BOUNDS` (`grep -rn` sobre `backend/` ⇒ 0
+> hits). El `requires` de `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` **no necesita** registrarse en
+> ningún mapa congelado; es un campo informativo de la `FlagSpec` (`harness_flags.py:30-32`) y
+> **ningún runner lo evalúa** ⇒ el candado 0 de F3 chequea la flag **por su cuenta**.
 
 **Comandos:**
 ```powershell
@@ -708,15 +979,17 @@ FlagSpec(
 > **Rojo ajeno conocido (dossier §4):** `test_harness_flags_help` tiene **4 fallos preexistentes
 > que NO son tuyos**. Validá tus 4 tests de forma aislada; no "arregles" los ajenos.
 
-**Criterio de aceptación (BINARIO):** 12/12 verdes (8+4), ratchet meta verde con los 5 archivos de
-test registrados en **las dos** listas, y `tests/test_plan73_generator_endpoint.py` verde
-(prueba de que `pipeline_generator.py` no se tocó).
+**Criterio de aceptación (BINARIO):** **15/15** verdes (11+4), ratchet meta verde con los 5
+archivos de test registrados en **las dos** listas, y `tests/test_plan73_generator_endpoint.py`
+verde (prueba de que `pipeline_generator.py` no se tocó).
 
-**Flag:** `STACKY_PIPELINE_NL_EDIT_ENABLED`, default **ON**.
+**Flags:** `STACKY_PIPELINE_NL_EDIT_ENABLED` default **ON** (analizar/diff) +
+`STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` default **OFF** (escribir).
 **Impacto por runtime:** idéntico en los 3 — el blueprint no invoca LLM.
-**Fallback:** flag OFF ⇒ 404 en los 3 endpoints y el panel no se renderiza; el builder gráfico
-queda **exactamente como hoy**.
-`Trabajo del operador: opt-in, default ON`
+**Fallback:** flag de análisis OFF ⇒ 404 en los 4 endpoints y el panel no se renderiza. Flag de
+commit OFF (**el default**) ⇒ todo funciona menos el push, y el botón **explica cómo activarlo**.
+En los dos casos el builder gráfico queda **exactamente como hoy**.
+`Trabajo del operador: análisis sin trabajo (ON); el commit exige UN clic consciente, una vez`
 
 ---
 
@@ -731,7 +1004,53 @@ diff y commitee — todo sin modelo. Si la corrida de implementación muere desp
 `frontend/src/components/devops/PipelineEditNlPanel.tsx`,
 `frontend/src/components/devops/PipelineEditNlPanel.module.css`.
 **Editar:** `frontend/src/api/endpoints.ts` (objeto `PipelineEditor` con `plan`, `commit`,
-`verbs`), `frontend/src/components/devops/PipelineBuilderSection.tsx` (montar el panel).
+`verbs`, `interpret`), `frontend/src/pages/DevOpsPage.tsx`, `backend/api/devops.py`.
+
+> **C1 — corrección del montaje (BLOQUEANTE en v1).** El v1 decía *"Editar
+> `PipelineBuilderSection.tsx` (montar el panel)"*. Ese archivo **no está reservado al 250**
+> (§3.1), es territorio de los planes 87/106/243/244, tiene 852 líneas y está **custodiado por
+> guardias de contenido literal** que lo leen con `readFileSync`
+> (`frontend/src/components/devops/__tests__/PipelineBuilderSection.test.ts:44-118`). No se toca.
+
+**Montaje correcto, literal (las dos superficies SON del 250):**
+
+1. `backend/api/devops.py` — publicar la llave de salud, con el patrón exacto de `:42`:
+   ```python
+   "pipeline_nl_edit_enabled": bool(getattr(cfg, "STACKY_PIPELINE_NL_EDIT_ENABLED", False)),
+   "pipeline_nl_edit_commit_enabled": bool(getattr(cfg, "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED", False)),
+   ```
+2. `frontend/src/pages/DevOpsPage.tsx:113 (DEVOPS_SECTIONS)` — **una entrada nueva**, en el punto
+   de extensión que la casa documenta en `:112` (*"features futuras agregan entradas aquí SIN
+   refactor"*), con el mismo gate declarativo que ya usan Publicaciones y Ambientes (`:79-81`):
+   ```tsx
+   {
+     id: 'editar-pipeline',
+     label: 'Editar pipeline',
+     group: 'construir',
+     healthKey: 'pipeline_nl_edit_enabled',
+     gateFlagKey: 'STACKY_PIPELINE_NL_EDIT_ENABLED',
+     gateMessage: 'La edición de pipelines existentes necesita la flag STACKY_PIPELINE_NL_EDIT_ENABLED (Configuración → Arnés).',
+     render: (ctx) => <PipelineEditNlPanel ctx={ctx} />,
+   },
+   ```
+   **El gate de flag-off lo hace el shell**, no el componente — el panel **no hand-rollea** su
+   propio banner (misma nota que llevan `PublicationsSection.tsx:7` y `ServersSection.tsx:9`).
+
+### C5 — De dónde sale el YAML: el contrato de entrada que el v1 no tenía
+
+El v1 declaraba que *"al terminar F4 la feature está completa y usable"* pero **nunca dijo cómo
+entra el pipeline al panel**. El §6 delega el descubrimiento en el **Plan 246**, que **no está
+implementado** (verificado: `services/pipeline_patcher.py` y toda la serie 246-252 no existen aún).
+Sin entrada, el punto de corte seguro era falso. Se cierra con un contrato de **dos vías**, y la
+segunda **no depende de ningún otro plan**:
+
+| Vía | Requisito | Estado hoy |
+|---|---|---|
+| **A — Pegar** (siempre disponible) | Un `<textarea>` "Pegá el YAML de la pipeline" + un campo "Ruta en el repo" (p. ej. `pipelines/ci-cd-online.yml`, usada tal cual en `/commit`) | **Es la vía que se implementa en F4.** Cero dependencias |
+| **B — Elegir de la lista** | El registro del Plan 246 | **Cuando el 246 exista.** F4 deja el hueco: si `verbs.discovery_available` es `false`, la vía B **no se muestra** y no hay error |
+
+`EditFormState` gana por lo tanto dos campos: `beforeYaml: string` y `repoPath: string`, y
+`isPlanRequestReady` exige **los dos** no vacíos además de lo del verbo.
 
 ```ts
 // frontend/src/devops/pipelineEditModel.ts — PURO, sin React, sin fetch
@@ -780,9 +1099,18 @@ export function canRenderDiff(before: string, after: string): boolean
 4. `prefillOnlyEmpty` **sí** rellena un `displayName` vacío.
 5. `summarizeHunks` con 1 hunk de inserción dice "1 bloque agregado" y con 0 hunks dice
    "sin cambios".
-6. `canRenderDiff` es `false` por encima de `MAX_EDIT_LINES`.
+6. `canRenderDiff` es `false` por encima de `MAX_EDIT_LINES`. **Es obligatorio**: `buildDiffLines`
+   (`pipelineLint.ts:91`) arma una matriz LCS `O(n·m)` **sin cap propio** (`:94-96`), a diferencia
+   de `lineDiff.ts:22`, que devuelve `null` por encima de `MAX_LINES` (`:12`).
 7. `summarizeHunks` es puro: 2 llamadas ⇒ el mismo string.
 8. El estado inicial del formulario no habilita el commit.
+9. **C5.** `isPlanRequestReady` es `false` con `beforeYaml` vacío y `false` con `repoPath` vacío,
+   aunque el resto del formulario esté completo.
+10. **C2.** `canCommit(state, health)` es `false` cuando `health.pipeline_nl_edit_commit_enabled`
+    es `false`, **aunque** `review.ok` sea `true` y el checkbox esté marcado; y el modelo devuelve
+    el motivo `'flag_commit_off'` para que la UI muestre cómo activarla en vez de un botón muerto.
+11. **[ADICIÓN ARQUITECTO].** `formatPreservation(p)` con `47/47` y `0` perdidas devuelve la línea
+    en español esperada; con una construcción perdida el string **nombra cuál**.
 
 > **No hay tests de render:** `@testing-library/react` y `jsdom` **no están instalados** en este
 > frontend. Por eso **toda la lógica vive en el modelo puro** y el `.tsx` es sólo cableado. El
@@ -796,14 +1124,17 @@ npx tsc --noEmit
 ```
 > `npm test` **falla**: no hay script `test` en `package.json`. Se usa `npx vitest`.
 
-**Criterio de aceptación (BINARIO):** 8/8 verdes, `npx tsc --noEmit` sin errores nuevos, y el
-ratchet de deuda de UI **no crece**.
+**Criterio de aceptación (BINARIO):** **11/11** verdes, `npx tsc --noEmit` sin errores nuevos, el
+ratchet de deuda de UI **no crece**, y `npx vitest run
+src/components/devops/__tests__/PipelineBuilderSection.test.ts` **sigue verde** (prueba de que no
+se tocó el archivo ajeno, C1).
 
-**Flag:** `STACKY_PIPELINE_NL_EDIT_ENABLED` (el panel no se monta si la flag está OFF; se lee del
-health, como el resto de las flags de UI).
+**Flag:** `STACKY_PIPELINE_NL_EDIT_ENABLED` — el gate lo aplica el shell por `healthKey`
+(`DevOpsPage.tsx:79-81`), **no el componente**.
 **Impacto por runtime:** idéntico en los 3 — el panel no llama a ningún modelo en esta fase.
-**Fallback:** flag OFF ⇒ el panel no existe y `PipelineBuilderSection` queda **idéntico a hoy**.
-`Trabajo del operador: opt-in, default ON`
+**Fallback:** flag OFF ⇒ la sección muestra el `FlagGateBanner` estándar y
+`PipelineBuilderSection` queda **idéntico a hoy** (ni siquiera se importa desde el panel nuevo).
+`Trabajo del operador: opt-in, default ON (ver y diffear); el commit, aparte y OFF`
 
 ---
 
@@ -812,20 +1143,36 @@ health, como el resto de las flags de UI).
 **Objetivo:** que el operador escriba *"agregale un stage de tests antes del deploy"* y eso se
 convierta en **un `EditIntent` validado**, que entra por el mismo camino de F1→F0→F2→F4.
 
-**Crear:** `backend/services/pipeline_edit_intent.py`,
-`backend/tests/test_plan250_edit_intent.py`,
+> **C1 — el v1 creaba `backend/services/pipeline_edit_intent.py`, que NO está reservado al 250**
+> (§3.1). Se parte en dos, **sin perder nada**, entre las superficies que sí lo están:
+>
+> | Qué | Dónde va en v2 | Por qué ahí |
+> |---|---|---|
+> | `INTENT_SCHEMA`, `validate_intent_dict(d, *, profile) -> (EditIntent\|None, errores)` — **puro, sin red, sin LLM** | `backend/services/pipeline_patcher.py` | Es la contracara exacta de `EDIT_VERBS`, que **ya vive ahí** (F1), y comparte el catálogo y el índice de anclajes |
+> | `PROMPT_TYPE`, armado del prompt, `interpret_edit(...)`, `recommendation_to_intent(...)`, `MAX_LLM_CALLS_PER_REQUEST = 1` | `backend/api/pipeline_editor.py` | Es el **único caller**; el adaptador de LLM vive con su endpoint |
+>
+> *Si se prefiere el módulo separado, primero se agrega a la reserva §0.3 del 246; nunca al revés.*
+
+**Crear:** `backend/tests/test_plan250_edit_intent.py`,
 `backend/tests/fixtures/pipeline_edit/intents/*.json` (**≥6**).
-**Editar:** `backend/api/pipeline_editor.py` (endpoint `POST /interpret`),
+**Editar:** `backend/services/pipeline_patcher.py` (esquema + validación pura),
+`backend/api/pipeline_editor.py` (endpoint `POST /interpret` + la llamada al LLM),
 `frontend/src/components/devops/PipelineEditNlPanel.tsx` (caja de texto),
 `frontend/src/devops/pipelineEditModel.ts` (sin lógica nueva de negocio: sólo el estado de la caja).
 
 ```python
-PROMPT_TYPE = "pipeline_edit_intent_v1"
+# services/pipeline_patcher.py — PURO
 INTENT_SCHEMA: dict          # cerrado; verbo ∈ EDIT_VERBS, task_ref ∈ catálogo del perfil
+def validate_intent_dict(d: dict, *, profile: str) -> tuple:
+    """→ (EditIntent|None, errores). Sin red, sin LLM, sin I/O. Nunca lanza."""
+
+# api/pipeline_editor.py — adaptador
+PROMPT_TYPE = "pipeline_edit_intent_v1"
+MAX_LLM_CALLS_PER_REQUEST = 1    # C6: constante, NO flag. Sin reintentos, nunca.
 
 def interpret_edit(text: str, *, yaml_text: str, profile: str,
-                   fixture_id: str|None = None) -> tuple[EditIntent|None, tuple]:
-    """→ (intent, preguntas). UNA sola llamada a call_llm. Nunca lanza."""
+                   fixture_id: str|None = None) -> tuple:
+    """→ (EditIntent|None, preguntas). UNA sola llamada a call_llm. Nunca lanza."""
 ```
 
 **El LLM NO escribe YAML. Nunca. Bajo ninguna condición.** Recibe:
@@ -846,8 +1193,10 @@ en ninguno de los 7 verbos, devuelve `(None, (preguntas,))` **nombrando el dato 
 
 ### Techo de costo y de reintentos (numérico y duro)
 
-- **Máximo 1 llamada LLM por pedido** (`STACKY_PIPELINE_NL_EDIT_MAX_LLM_CALLS`, default **1**,
-  `min_value=1`, `max_value=3`).
+- **Máximo 1 llamada LLM por pedido**, y es **`MAX_LLM_CALLS_PER_REQUEST = 1`, una constante del
+  módulo, no una flag** (C6). El v1 la había hecho configurable hasta 3 — una perilla **sin
+  consumidor** que sólo servía para habilitar el bucle de reintentos que el propio plan prohíbe.
+  El techo no se negocia desde la UI.
 - **Cero reintentos automáticos.** Si el JSON no valida contra `INTENT_SCHEMA`, o el `task_ref`
   no está en el catálogo, **se devuelve la pregunta al operador**; no se reinvoca al modelo.
   *Justificación explícita: el 243 documentó en su C10 que el bucle de auto-reparación sin techo
@@ -917,16 +1266,22 @@ error**: la edición NL pura funciona igual. Verificado en §2.7: hoy ese módul
 9. `test_intent_se_muestra_antes_del_diff` — el endpoint `/interpret` devuelve `intent` **y**
    `notes`, y **no** devuelve `yaml` ni `hunks` (el diff exige el paso `/plan` aparte, que es
    donde el operador confirma el intent).
+10. `test_interpret_404_con_flag_off` — **C7.** `/interpret` es el **único endpoint que gasta
+    tokens**; con `STACKY_PIPELINE_NL_EDIT_ENABLED` OFF debe dar **404 sin llamar a `call_llm`**
+    (doble de `call_llm` que cuenta invocaciones: **0**). *Un endpoint de LLM sin test de flag-off
+    es una fuga de tokens esperando a que alguien lo llame.*
+11. `test_validate_intent_dict_es_puro` — la validación vive en `pipeline_patcher.py` (C1) y
+    **no importa nada de `api/`**: se la invoca con un dict crudo, sin app Flask ni red.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan250_edit_intent.py -q`
 (+ las dos listas del ratchet).
 
-**Criterio de aceptación (BINARIO):** 9/9 verdes, **cero acceso a red** (guard de red del arnés
-verde), y el KPI-5 probado por el test 5.
+**Criterio de aceptación (BINARIO):** **11/11** verdes, **cero acceso a red** (guard de red del
+arnés verde), y el KPI-5 probado por los tests 5 y 10.
 
-**Flag:** `STACKY_PIPELINE_NL_EDIT_ENABLED` (default ON) +
-`STACKY_PIPELINE_NL_EDIT_MAX_LLM_CALLS` (default 1). **F5 chequea la primera por su cuenta**: el
-`requires` es informativo (`harness_flags.py:30-32`).
+**Flag:** `STACKY_PIPELINE_NL_EDIT_ENABLED` (default ON). **F5 la chequea por su cuenta** en cada
+handler: el `requires` de la `FlagSpec` es **informativo y ningún runner lo evalúa**
+(`harness_flags.py:30-32`).
 **Impacto por runtime:** ver la tabla de fallback de arriba. En tests, `fixture_id` ⇒ cero red en
 los 3 runtimes.
 `Trabajo del operador: opt-in, default ON`
@@ -948,13 +1303,20 @@ los 3 runtimes.
 | > 12 ops en un plan | Rechazo con "partilo en dos ediciones" |
 | Ops solapadas | Rechazo **total**; nunca se aplica media edición |
 | Item con `-` en línea propia | Error accionable; **nunca se adivina la indentación** |
-| El archivo cambió desde el diff | **409** con el sha nuevo; el operador vuelve a ver el diff |
+| `before` recibido no hashea a `before_sha256` | **400** (request incoherente) |
+| **El archivo cambió en el repo desde el diff** | **No es detectable** con el puerto actual (§2.8, C3): se devuelve `stale_check: "no_verificable"`. **Jamás se dice "validado"**. Un push concurrente sobre la misma rama lo rechaza **ADO** contra el `old_object_id` (`ado_provider.py:161-191`) |
 | El cliente manda un YAML final | **Se ignora**: el servidor recompila desde el `intent` |
 | Rama = rama por defecto | **400.** Nunca se commitea sobre la rama por defecto |
-| Writer sin soporte de escritura | **501** con el YAML parcheado y los hunks intactos; la UI ofrece copiar. **Nunca se dice "commiteado"** |
+| `_default_branch` no se puede resolver | **400.** No saber cuál es la rama por defecto **no habilita** a escribir en ella |
+| Contenido idéntico al que ya está en la rama | `status='unchanged'` de `ado_provider.py:199-221`; se muestra **tal cual**, nunca como "commiteado" |
+| **El provider no implementa `RepoWriter`** | `get_repo_writer` lanza `RuntimeError` (`repo_writer.py:37-41`) ⇒ **400** con su mensaje (C9). **Nunca un 500 mudo** |
+| Writer sin soporte de escritura | **501** con el YAML parcheado y los hunks intactos; la UI ofrece copiar. **Nunca se dice "commiteado"**. *No es el caso de ADO (§2.7)* |
+| **Se perdería un comentario o una construcción no modelada** | `preservation.ok is False` ⇒ `review.ok is False` ⇒ **422**, y el operador ve **qué** se perdía. [ADICIÓN ARQUITECTO] |
 | Plan 248 ausente | El botón de recomendaciones **no se muestra**; la edición NL funciona igual |
+| Plan 246 ausente (hoy) | La vía "elegir de la lista" no se muestra; **la vía "pegar el YAML" funciona sola** (C5) |
 | `repo_root` ausente | RS006 no se evalúa y se declara `skipped`; **nunca** "validado" por omisión |
-| Flag OFF | 404 en los 4 endpoints; el panel no se renderiza; **el builder gráfico queda idéntico a hoy** |
+| Flag de análisis OFF | 404 en los 4 endpoints; la sección muestra el `FlagGateBanner`; **el builder gráfico queda idéntico a hoy** |
+| **Flag de commit OFF (el DEFAULT)** | 404 sólo en `/commit`. Se puede planificar, diffear e interpretar; el botón **explica cómo activarla** y ofrece copiar el YAML (C2) |
 
 ## 5. Riesgos y mitigaciones
 
@@ -963,22 +1325,28 @@ los 3 runtimes.
 | R1 | **Pérdida silenciosa de comentarios o de construcciones no modeladas** | Media | **Crítico** | Tests 3, 5 y 6 de F0 sobre los 9 goldens: 337 comentarios y `scan_unsupported` invariante. Es el riesgo que define el plan |
 | R2 | El `end_mark` mal interpretado huerfana comentarios en el paso equivocado | **Alta** | Alto | §2.3 escrito como fórmula + `test_fin_efectivo_excluye_comentario_del_siguiente_item` |
 | R3 | Gates demasiado estrictos vuelven ineditables los pipelines reales | **Alta** | Alto | Delta en vez de valor absoluto + `test_error_preexistente_no_bloquea_la_edicion` (F2) |
-| R4 | Corrimiento de índices produce decenas de findings "nuevos" falsos | Alta | Medio | `_finding_key` normaliza `[\d+]` → `[]` + test 4 de F2 |
+| R4 | Corrimiento de índices/líneas produce decenas de findings "nuevos" falsos | Alta | Medio | **Dos** claves de identidad, no una (C4): `_sem_key` normaliza `[\d+]` → `[]` sobre `location`; `_lint_key` usa `node` y **nunca** `line`. Tests 4 y 10 de F2 |
 | R5 | El LLM inventa una tarea o un input | Media | Alto | Catálogo cerrado (`is_allowed`, `validate_inputs`) + RS008 en `nl_strict` sobre los bloques insertados |
 | R6 | Inyección hacia agentes self-hosted vía el pedido NL | Baja | **Crítico** | El NL nunca llega al YAML (test 7 de F5); `display_name`/`inputs` de 1 línea, ≤200 chars, emitidos por `yaml.safe_dump`; RS004 bloquea `PowerShell@2` inline |
 | R7 | El operador aprueba un diff y se escribe otro archivo | Baja | Alto | Doble sha256 (`before_sha256` + `approved_after_sha256`) ⇒ 409 |
 | R8 | No determinismo del LLM confunde al operador | Media | Medio | El `EditIntent` (8 campos) se muestra **antes** del diff; el tramo intent→patch es determinista |
 | R9 | El alcance no entra en una corrida | Media | Alto | **6 fases**, provider ADO solo, 7 verbos, sin bucle de reparación (§3), y F0–F4 entregan la feature completa sin LLM |
-| R10 | Costo de LLM | Baja | Bajo | 1 llamada por pedido, tope por flag, 0 reintentos |
+| R10 | Costo de LLM | Baja | Bajo | 1 llamada por pedido (**constante del módulo**, no flag), 0 reintentos, y `/interpret` con test de flag-off (C7) |
+| **R11** | **Se pushea al repo real del operador con la feature recién instalada, sin que él haya decidido habilitarlo** | Media | **Alto** | **C2:** la escritura tiene **flag propia default OFF**; el análisis (ON) **no escribe nada**. Test 9 de F3 |
+| **R12** | **El invariante de preservación se rompe sobre un pipeline que NO está en el corpus dorado y nadie se entera** | Media | **Crítico** | **[ADICIÓN ARQUITECTO]:** `G-PRESERVACION` corre en cada `/plan` sobre el archivo real del operador y **bloquea**; el sello se muestra antes de confirmar. Tests 11 y 12 de F2 |
+| **R13** | **Colisión de superficie con los otros 6 planes de la serie** | **Alta** (materializada en el v1) | Alto | **C1:** frontera cerrada §3.1 + gate `git diff --name-only` en el DoD + el test del archivo ajeno (`PipelineBuilderSection.test.ts`) corriendo verde |
 
 **Reversibilidad (explícita, como pide el alcance):**
 
+0. **De fábrica no se escribe en ningún lado**: `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` viene
+   **OFF** (C2). Hay que encenderla a mano, una vez, desde la UI.
 1. **Nada se escribe sin `confirm=True`.** El estado por defecto es "no escrito".
 2. **Todo commit va a una rama**, nunca a la rama por defecto (candado 2 de F3). Descartar la
    rama restaura el estado anterior **byte por byte** — y esto es cierto *porque* el patch es un
    splice sobre el original, no una regeneración: no hay ruido de reformateo que sobreviva.
 3. `git revert` del commit funciona limpio por la misma razón.
-4. `STACKY_PIPELINE_NL_EDIT_ENABLED=false` **desde la UI** apaga la feature entera.
+4. `STACKY_PIPELINE_NL_EDIT_ENABLED=false` **desde la UI** apaga la feature entera; apagar sólo
+   la de commit deja el análisis vivo.
 5. Las 6 fases son **aditivas**: no se modifica ningún módulo existente de pipelines
    (`pipeline_generator.py`, `pipeline_renderers.py`, `pipeline_lint.py`,
    `cicd_semantic_rules.py` quedan intactos), así que revertir el plan es borrar archivos nuevos
@@ -1018,7 +1386,9 @@ los 3 runtimes.
 | **Fin efectivo** | Última línea con contenido real de un nodo, excluyendo blancos y comentarios que pertenecen al siguiente (§2.3) |
 | **Hunk** | Rango del original + sus líneas antes/después + el motivo. Es **la verdad** del cambio, no una reconstrucción por LCS |
 | **Gate por delta** | Un hallazgo bloquea sólo si **no estaba antes** del patch |
-| **`EditIntent`** | Estructura cerrada de 8 campos: lo único que produce el LLM |
+| **`EditIntent`** | Estructura cerrada de **9** campos (`verb`, `target_path`, `anchor_ref`, `position`, `task_ref`, `inputs`, `display_name`, `values`, `notes`): lo único que produce el LLM. *(v1 decía "8" — C11)* |
+| **Sello de preservación** | `Preservation` de §F2: comentarios antes/después, construcciones no modeladas perdidas y líneas byte-idénticas. **Es un gate, no un adorno** |
+| **`stale_check`** | `"no_verificable"`: Stacky **no puede** saber si el archivo cambió en el repo desde que se mostró el diff, porque el puerto no lee (§2.8). Se declara, no se disimula |
 | **`EditPlan`** | Tupla de `EditOp` derivada del intent de forma 100 % determinista |
 
 ### 7.2 Orden de implementación (obligatorio)
@@ -1031,6 +1401,14 @@ catálogo del 243 F0.
 > (edición quirúrgica por controles, diff visible, commit HITL, sin ningún modelo). **F5 sólo
 > agrega la puerta de entrada en prosa.** Si la corrida se queda sin sesión, se corta acá y se
 > declara; no se entrega media F5.
+>
+> **v2 (C5): ese corte ahora es cierto.** En el v1 no lo era, porque el panel **no tenía de dónde
+> sacar el YAML** (dependía del Plan 246, que no existe). Con la vía "pegar el YAML + ruta" de
+> §F4, F0–F4 se sostienen **solas**.
+>
+> **Segundo punto de corte, aún más barato:** al terminar **F2** ya existe el valor central del
+> plan sin una línea de UI — patch quirúrgico verificado sobre 9 pipelines de producción, gates
+> por delta y sello de preservación. Si algo se cae, se corta ahí y **nada de lo hecho se tira**.
 
 ### 7.3 Comandos exactos (dossier §4, verificados el 2026-07-26)
 
@@ -1068,10 +1446,10 @@ npx tsc --noEmit
 ### 7.4 Definición de Hecho (BINARIA)
 
 - [ ] **6** archivos de test backend verdes, corridos **por archivo**: `test_plan250_patcher.py`
-      (12), `test_plan250_verbos.py` (10), `test_plan250_gates_delta.py` (9),
-      `test_plan250_api.py` (8), `test_plan250_flag.py` (4), `test_plan250_edit_intent.py` (9)
-      = **52 casos**.
-- [ ] **1** archivo de test frontend verde: `pipelineEditModel.test.ts` (8).
+      (**14**), `test_plan250_verbos.py` (10), `test_plan250_gates_delta.py` (**12**),
+      `test_plan250_api.py` (**11**), `test_plan250_flag.py` (4), `test_plan250_edit_intent.py`
+      (**11**) = **62 casos**.
+- [ ] **1** archivo de test frontend verde: `pipelineEditModel.test.ts` (**11**).
 - [ ] **KPI-1:** `test_los_337_comentarios_del_corpus_sobreviven` verde — **337/337** sobre los 9
       goldens.
 - [ ] **KPI-2:** `test_el_diff_real_no_sale_de_los_hunks_declarados` verde sobre los 9 goldens.
@@ -1090,14 +1468,31 @@ npx tsc --noEmit
       inválido.
 - [ ] `test_el_texto_nl_no_llega_al_yaml` verde.
 - [ ] `test_recomendacion_sin_plan_248_degrada` verde — **sin `ImportError`**.
+- [ ] **KPI-4 bis (C2):** `test_commit_404_con_flag_de_commit_off` verde — **de fábrica el
+      sistema ve y diffea pero NO escribe** en el repo del operador.
+- [ ] **[ADICIÓN ARQUITECTO]:** `test_gate_preservacion_bloquea_si_desaparece_un_comentario` y
+      `test_remove_step_no_dispara_falso_positivo_de_preservacion` verdes, y el sello visible en
+      el panel antes del botón de commit.
+- [ ] **C4:** `test_lint_delta_no_usa_line_como_identidad` verde — dos claves distintas, y
+      `_lint_key` **no** toca `f.line` ni `f.location`.
+- [ ] **C3:** `test_stale_check_se_declara_no_verificable` verde — **nunca** se afirma haber
+      validado contra el repo.
+- [ ] **C1 — FRONTERA (gate binario):** `git diff --name-only` **no** lista ningún archivo fuera
+      de la tabla de §3.1. En particular **NO** aparecen `PipelineBuilderSection.tsx`,
+      `pipeline_renderers.py`, `cicd_semantic_rules.py`, `pipeline_generator.py`,
+      `pipeline_lint.py`, `repo_writer.py` ni `ado_provider.py`. Y
+      `npx vitest run src/components/devops/__tests__/PipelineBuilderSection.test.ts` verde.
 - [ ] **No regresión:** `test_plan73_round_trip.py`, `test_plan73_render_ado.py`,
       `test_plan73_generator_endpoint.py`, `test_plan243_reglas_semanticas.py`,
-      `test_plan243_renderer_ado.py` verdes. **`pipeline_generator.py`,
-      `pipeline_renderers.py`, `pipeline_lint.py` y `cicd_semantic_rules.py` sin modificar**
-      (verificable con `git diff --name-only`).
+      `test_plan243_renderer_ado.py` verdes.
 - [ ] `test_harness_ratchet_meta.py` verde con los **6** archivos registrados en **las DOS**
       listas (`run_harness_tests.sh:20` y `run_harness_tests.ps1:13`).
-- [ ] `test_default_known_only_for_curated` verde; ambas flags visibles y editables **desde la UI**.
+- [ ] `test_default_known_only_for_curated` verde; **`STACKY_PIPELINE_NL_EDIT_ENABLED` en
+      `_CURATED_DEFAULTS_ON` y `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` FUERA** de esa lista
+      (es default OFF); ambas visibles y editables **desde la UI**.
+      *Baseline verde de referencia antes de tocar nada: `test_harness_flags.py` = **56 passed**,
+      `test_harness_ratchet_meta.py` = **4 passed**. Ojo con el rojo ajeno de
+      `test_harness_flags_help` (4 fallos preexistentes que **no son tuyos**).*
 - [ ] `npx tsc --noEmit` sin errores nuevos; ratchet de deuda de UI **sin crecer**; **cero
       `style={{...}}` inline** en el `.tsx` nuevo.
 - [ ] **Paridad de runtimes:** F0–F4 no invocan LLM ni red ⇒ corren igual en Codex CLI, Claude
@@ -1105,5 +1500,23 @@ npx tsc --noEmit
       por `call_llm`, que **nunca lanza**; **fallback explícito**: sin modelo, la caja NL informa
       el error y **el formulario de verbos de F4 sigue 100 % operativo**.
 - [ ] **Smoke visual del operador** (no automatizable: no hay `jsdom` ni
-      `@testing-library/react`): abrir una pipeline real, pedir un cambio, **ver el diff**,
-      confirmar, y verificar en la rama que **los comentarios siguen ahí**.
+      `@testing-library/react`): pegar una pipeline real, pedir un cambio, **ver el diff y el
+      sello de preservación**, **encender la flag de commit desde la UI**, confirmar, y verificar
+      en la rama que **los comentarios siguen ahí**. *El paso de encender la flag es parte del
+      smoke a propósito: prueba que el default de fábrica no escribía.*
+
+### 7.5 Huella de regresión (C13 — convención de la casa)
+
+Este plan mata una clase de error concreta y medida, así que la registra en
+`Stacky Agents/docs/sistema/error_fingerprints.json` (mismo formato que el resto de las entradas):
+
+| Campo | Valor |
+|---|---|
+| `id` | `PIPE-ROUNDTRIP-DESTRUCTIVO` |
+| `patron` | Editar un pipeline existente por `parse → modelo → render`, que borra el **100 %** de los comentarios y el **48 %** de las líneas sin avisar (medido dos veces: v1 y crítica v2, sobre los 9 goldens: 1138→588 líneas, 337→0 comentarios) |
+| `plan` | 250 |
+| `fecha` | 2026-07-26 |
+| `guard_test` | `backend/tests/test_plan250_patcher.py::test_los_337_comentarios_del_corpus_sobreviven` **+** el gate en vivo `G-PRESERVACION` de `services/pipeline_diff.py` |
+
+**El guard es doble a propósito:** el test cubre el corpus dorado; el gate cubre **los pipelines
+del operador**, que son los que no están en ningún corpus.

@@ -669,6 +669,14 @@ HARNESS_TEST_FILES=(
   tests/test_incident_inbox_actions.py
   # -- Plan 241 - Cero falso verde del agente QA UAT E2E (flags + doctor) --
   tests/test_plan241_qa_uat.py
+  # -- Plan 209 - Guia "Como validar esto" en el entregable --
+  tests/test_plan209_playbook_schema.py
+  tests/test_plan209_flag.py
+  tests/test_plan209_prompt_contract.py
+  tests/test_plan209_gate_detect_assess.py
+  tests/test_plan209_build_rag_fallback.py
+  tests/test_plan209_compute_attach.py
+  tests/test_plan209_anti_hallucination_sentinel.py
   # -- Plan 208 - Auto-sync al completar + matriz de estados por tipo de ticket --
   tests/test_plan208_dispatcher.py
   tests/test_plan208_matrix_resolver.py

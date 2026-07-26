@@ -866,6 +866,9 @@ def create_app() -> Flask:
     from services import completion_dispatcher
     completion_dispatcher.register(ticket_status.register_post_hook)
     completion_dispatcher.start(app.logger)
+    # Plan 209 F3 — guía "Cómo validar esto" (advisory, no bloquea; 3 runtimes).
+    from services import validation_playbook as _vp
+    _vp.register(ticket_status.register_post_hook)
 
     return app
 

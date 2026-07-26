@@ -371,7 +371,7 @@
 }
 
 .matrixWarn {
-  color: var(--warn, var(--danger));
+  color: var(--warn);
 }
 
 /* ─── Buttons / actions ───────────────────────────────────────── */

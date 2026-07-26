@@ -193,6 +193,18 @@ class BaseAgent(ABC):
         except Exception as exc:  # noqa: BLE001
             meta["skills_error"] = str(exc)
 
+        # Plan 209 F1 — instrucción de "Cómo validar" (enfoque A), gateada por
+        # flag + allowlist de agentes user-facing (el gate vive adentro).
+        try:
+            from services import validation_playbook as _vp  # noqa: PLC0415
+
+            _vp_block = _vp.validation_prompt_block(self.type)
+            if _vp_block:
+                prefix_parts.append(_vp_block)
+                meta["validation_playbook_prompt"] = True
+        except Exception as exc:  # noqa: BLE001
+            meta["validation_playbook_prompt_error"] = str(exc)
+
         if prefix_parts:
             full = "\n\n".join(prefix_parts) + "\n\n# Instrucciones del agente\n\n" + base
         else:

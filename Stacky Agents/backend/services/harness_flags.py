@@ -172,6 +172,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
         # Plan 241 F2/F7 — cero falso verde: discriminacion estricta y roll-up de epicas
         "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+        # Plan 209 — guia "Como validar esto" para el usuario de RS
+        "STACKY_VALIDATION_PLAYBOOK_ENABLED",
     ),
     "integridad_grounding": (
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
@@ -2366,6 +2368,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "estado-final (al completar) desde la config del proyecto "
             "(tracker_state_machine por agente), ignorando el estado que "
             "proponga el agente. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 209 — Guía "Cómo validar esto" en el entregable ──────────────────
+    FlagSpec(
+        key="STACKY_VALIDATION_PLAYBOOK_ENABLED",
+        type="bool",
+        default=True,
+        label="Guía 'Cómo validar' en el entregable",
+        description=(
+            "Plan 209 — Anexa al deliverable pasos de validación para el usuario "
+            "de RS, grounded en la documentación del cliente y citando la fuente; "
+            "degrada honestamente si no hay evidencia. Solo agentes de producto. "
+            "Sin llamadas LLM extra. Default ON."
         ),
         group="global",
         env_only=False,

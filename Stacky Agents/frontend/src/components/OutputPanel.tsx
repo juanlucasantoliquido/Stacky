@@ -11,6 +11,9 @@ import EpicChildrenPanel from "./EpicChildrenPanel";
 import NextAgentSuggestion from "./NextAgentSuggestion";
 import OutputTools from "./OutputTools";
 import StructuredOutput from "./StructuredOutput";
+import ValidationPlaybookPane, {
+  readValidationPlaybook,
+} from "./ValidationPlaybookPane";
 import styles from "./OutputPanel.module.css";
 
 export default function OutputPanel() {
@@ -36,6 +39,10 @@ export default function OutputPanel() {
       return status === "preparing" || status === "running" ? 1500 : false;
     },
   });
+
+  // Plan 209 — el playbook viene en la metadata; null si la flag está OFF, si el
+  // agente no es user-facing, o si es una ejecución vieja (backward-compatible).
+  const validationPlaybook = readValidationPlaybook(execution?.metadata);
 
   const approve = useMutation({
     mutationFn: (id: number) => Executions.approve(id),
@@ -141,6 +148,10 @@ export default function OutputPanel() {
               output={execution.output}
               agentType={execution.agent_type}
             />
+            {/* Plan 209 F4 — guía "Cómo validar esto" para el usuario de RS */}
+            {validationPlaybook && (
+              <ValidationPlaybookPane playbook={validationPlaybook} />
+            )}
           </>
         )}
       </div>

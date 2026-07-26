@@ -1230,6 +1230,13 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 209 — Guía "Cómo validar" en el entregable ──────────────────────
+    # Anexa la sección de pasos de validación para el usuario de RS, grounded en
+    # docs del cliente. Texto, sin red, sin LLM extra; degrada honestamente si no
+    # hay evidencia. Acotada a agentes user-facing. Editable por UI.
+    STACKY_VALIDATION_PLAYBOOK_ENABLED: bool = os.getenv(
+        "STACKY_VALIDATION_PLAYBOOK_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
     # ── Plan 208 — Sincronización ADO al completar + matriz de estados ───────
     # R2: al terminar CUALQUIER agente (los 3 runtimes pasan por
     # ticket_status.on_execution_end), refresca los tickets del proyecto desde

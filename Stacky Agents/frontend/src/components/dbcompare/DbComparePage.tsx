@@ -11,6 +11,7 @@ import { ScriptsPanel } from "./ScriptsPanel";
 import { CompareWizard } from "./CompareWizard";
 import { RunProgress } from "./RunProgress";
 import { SummaryHero } from "./SummaryHero";
+import GatesPanel from "./GatesPanel";
 import { FiltersBar } from "./FiltersBar";
 import { DiffTreemap } from "./DiffTreemap";
 import { DiffList } from "./DiffList";
@@ -222,6 +223,14 @@ export function DbComparePage() {
             onToggleSeverity={toggleSeverity}
             onToggleAction={toggleAction}
             onNewComparison={handleNewComparison}
+          />
+          {/* Plan 176 F5 — inmediatamente despues del hero, como manda el plan:
+              lo primero que hay que saber antes de generar scripts es si algo
+              bloquea la migracion. Se auto-oculta con la flag OFF. */}
+          <GatesPanel
+            runId={activeRun.run_id}
+            runStatus={activeRun.status}
+            enabled={health?.gates_enabled ?? false}
           />
           <FiltersBar filters={filters} onChange={setFilters} filteredCount={filteredItems.length} totalCount={diff.items.length} />
           <div>

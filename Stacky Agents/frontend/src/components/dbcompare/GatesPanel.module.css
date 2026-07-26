@@ -1,0 +1,87 @@
+/* Plan 176 F5 — Panel de precondiciones read-only. */
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.headline {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.headlineFail {
+  color: var(--danger);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+}
+
+.itemFail {
+  border-left: 3px solid var(--danger);
+}
+
+.desc {
+  font-size: 12px;
+  margin: 0;
+}
+
+.detail {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.sql {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--muted);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.gatePass { color: var(--ok); }
+.gateFail { color: var(--danger); }
+.gateError { color: var(--warn); }
+.gateInfo { color: var(--muted); }
+.gatePending { color: var(--muted); }
+
+.status {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}

@@ -1230,6 +1230,13 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 210 — Gate de build determinista del Developer ───────────────────
+    # El "Build OK" deja de ser prosa del LLM: lo produce la máquina. Ausencia de
+    # veredicto = NO verificado (jamás OK). Default ON: el gate degrada el estado
+    # a revisión con la razón exacta, nunca fuerza un bloqueo duro.
+    STACKY_DEV_BUILD_VERIFY_ENABLED: bool = os.getenv(
+        "STACKY_DEV_BUILD_VERIFY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 201 — Taller de Compilación (.sln + build Release + artefactos) ──
     # Detección/catálogo/UI son read-only y seguros ⇒ default ON. La EJECUCIÓN del
     # build se auto-gatea con la detección de toolchain: si falta MSBuild/dotnet,

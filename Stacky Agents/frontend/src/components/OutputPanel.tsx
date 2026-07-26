@@ -14,6 +14,11 @@ import StructuredOutput from "./StructuredOutput";
 import ValidationPlaybookPane, {
   readValidationPlaybook,
 } from "./ValidationPlaybookPane";
+import {
+  orderedFindings,
+  readBuildVerdict,
+  verdictBadge,
+} from "./devBuildModel";
 import styles from "./OutputPanel.module.css";
 
 export default function OutputPanel() {
@@ -43,6 +48,9 @@ export default function OutputPanel() {
   // Plan 209 — el playbook viene en la metadata; null si la flag está OFF, si el
   // agente no es user-facing, o si es una ejecución vieja (backward-compatible).
   const validationPlaybook = readValidationPlaybook(execution?.metadata);
+  // Plan 210 — el "Build OK" que ve el operador sale del veredicto de máquina.
+  const buildVerdict = readBuildVerdict(execution?.metadata);
+  const buildVerdictBadge = verdictBadge(buildVerdict);
 
   const approve = useMutation({
     mutationFn: (id: number) => Executions.approve(id),
@@ -148,6 +156,22 @@ export default function OutputPanel() {
               output={execution.output}
               agentType={execution.agent_type}
             />
+            {/* Plan 210 F7 — veredicto de build verificado por máquina */}
+            {buildVerdict && execution.agent_type === "developer" && (
+              <div className={styles.buildVerdict} data-color={buildVerdictBadge.color}>
+                <strong>{buildVerdictBadge.text}</strong>
+                {buildVerdict.solution && <span> · {buildVerdict.solution}</span>}
+                {orderedFindings(buildVerdict).length > 0 && (
+                  <ul>
+                    {orderedFindings(buildVerdict).map((f, i) => (
+                      <li key={`${f.kind}-${i}`}>
+                        {f.kind}: {f.detail}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {/* Plan 209 F4 — guía "Cómo validar esto" para el usuario de RS */}
             {validationPlaybook && (
               <ValidationPlaybookPane playbook={validationPlaybook} />

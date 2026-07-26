@@ -552,6 +552,26 @@ def _apply_task_state(*, ticket, agent_type, phase, correlation_id, publish_ok=T
         return {"skipped": True, "reason": "no_ado_id"}
     if phase == "final" and not publish_ok:
         return {"skipped": True, "reason": "publish_not_ok"}
+    # Plan 210 — gate de build del Developer: no avanzar a final_ok sin veredicto de
+    # máquina FRESCO. Va después del centinela a propósito: el estado de revisión al
+    # que degrada es legítimo del rol aunque no esté en el conjunto cerrado del plan.
+    if phase == "final":
+        from services import dev_build_verify as _dbv
+
+        _ws = _dbv.workspace_root_for_ado(int(ado_id))
+        _exec_id = _dbv.latest_execution_id_for_ado(int(ado_id))
+        target, _gate_meta = _dbv.gate_final_state(
+            project_name=getattr(ticket, "stacky_project_name", None),
+            agent_type=agent_type, ado_id=int(ado_id), workspace_root=_ws,
+            proposed_state=target, execution_id=_exec_id,
+        )
+        if _gate_meta.get("applied"):
+            logger.info("dev_build_gate: ADO-%s agent=%s gate_ok=%s reason=%s target=%s",
+                        ado_id, agent_type, _gate_meta.get("gate_ok"),
+                        _gate_meta.get("reason"), target)
+        if target is None:
+            return {"skipped": True, "reason": "dev_build_gate_no_state",
+                    "gate_reason": _gate_meta.get("reason")}
     prov = _provider_for_ticket(ticket=ticket)
     return _safe_transition(
         prov, ado_id, target, phase=phase,
@@ -1384,6 +1404,28 @@ def set_stacky_status_by_ado(ado_id: int):
             # Forzar el estado de revisión si lo conocemos; si no, cancelar la
             # transición por completo (mejor dejar el ticket donde está que bloquearlo).
             target_ado_state = review_state or None
+
+    # Plan 210 — gate de build del Developer. Se aplica ANTES de bifurcar para que la
+    # rama legacy (que sí usa el target propuesto por el agente) tampoco pueda avanzar
+    # sin veredicto de máquina. En la rama determinista el target se ignora igual (usa
+    # _apply_task_state, ya gateado adentro) ⇒ sin doble efecto.
+    # OJO: en este módulo `config` es el MÓDULO; la instancia de flags es
+    # `config.config` (getattr sobre el módulo devolvería siempre el default).
+    if agent_type == "developer" and bool(
+        getattr(config.config, "STACKY_DEV_BUILD_VERIFY_ENABLED", False)
+    ):
+        from services import dev_build_verify as _dbv
+
+        _lg_ado = int(ado_id) if ado_id else 0
+        target_ado_state, _lg_meta = _dbv.gate_final_state(
+            project_name=t.stacky_project_name, agent_type=agent_type,
+            ado_id=_lg_ado, workspace_root=_dbv.workspace_root_for_ado(_lg_ado),
+            proposed_state=target_ado_state,
+            execution_id=_dbv.latest_execution_id_for_ado(_lg_ado),
+        )
+        if _lg_meta.get("applied") and not _lg_meta.get("gate_ok"):
+            logger.info("dev_build_gate(legacy): ADO-%s reason=%s target=%s",
+                        ado_id, _lg_meta.get("reason"), target_ado_state)
 
     # ── Transición de System.State en ADO (opcional, Fase TA-migration) ──────
     # Solo si: target_ado_state explícito + publish ok + ado_id presente.

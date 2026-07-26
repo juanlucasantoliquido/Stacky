@@ -234,6 +234,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC",  # Plan 120 — timeout del smoke post-deploy
         "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",  # Plan 127 — doctor local DevOps (IA local)
         "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",  # Plan 201 — Taller de Compilación (.sln + build Release)
+        "STACKY_DEV_BUILD_VERIFY_ENABLED",  # Plan 210 — gate de build determinista del Developer
         "STACKY_PR_REVIEWER_ENABLED",       # Plan 110 — revisor de PRs
         "STACKY_PR_REVIEW_HAIKU_MODEL",     # Plan 110 — modelo Haiku para la revisión
         "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
@@ -1803,6 +1804,20 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 210 — Gate de build determinista del Developer ─────────────────────
+    FlagSpec(
+        key="STACKY_DEV_BUILD_VERIFY_ENABLED",
+        type="bool",
+        default=True,
+        label="Verificación de build del Developer",
+        description=(
+            "Plan 210 — Verifica de forma determinista que el Developer compiló "
+            "(.sln real, build de máquina) antes de permitir el 'Build OK' del "
+            "entregable y la transición de estado. La AUSENCIA de veredicto se "
+            "trata como 'no verificado', nunca como OK. Default ON."
+        ),
+        group="global",
     ),
     # ── Plan 201 — Taller de Compilación ────────────────────────────────────────
     FlagSpec(

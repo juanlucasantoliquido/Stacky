@@ -467,6 +467,8 @@ def test_ado_service_identity_is_env_only_csv():
 _CURATED_DEFAULTS_ON = {
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
+    # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──
+    "STACKY_DEV_BUILD_VERIFY_ENABLED",
     # ── Plan 171 — telemetría operativa (observabilidad read-only, on-read) ──
     "STACKY_OPS_TELEMETRY_ENABLED",
     "STACKY_OPS_BASELINE_ENABLED",

@@ -589,6 +589,15 @@ $HarnessTestFiles = @(
   "tests/test_plan208_auto_sync.py",
   "tests/test_plan208_profile_schema.py",
   "tests/test_plan208_observability.py",
+  # Plan 210 - Gate de build determinista del Developer
+  "tests/test_plan210_flag.py",
+  "tests/test_plan210_resolve_entry.py",
+  "tests/test_plan210_verify_build.py",
+  "tests/test_plan210_api.py",
+  "tests/test_plan210_state_gate.py",
+  "tests/test_plan210_gate_coverage.py",
+  "tests/test_plan210_annotate.py",
+  "tests/test_plan210_prompt.py",
   # Plan 201 - Taller de Compilacion (.sln + build Release + artefactos)
   "tests/test_plan201_flag.py",
   "tests/test_plan201_solution_scanner.py",

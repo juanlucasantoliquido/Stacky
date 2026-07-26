@@ -351,6 +351,20 @@
       "guard_test": "tests/unit/test_plan241_screen_guard.py",
       "evidence": "Stacky tools/QA UAT Agent/screen_guard.py; navigation_driver.py",
       "note": "FrmJDemanda.aspx devuelve HTTP 200 con un cuerpo '500-Error interno del servidor'. Un waitFor de URL lo daba por llegada valida => FALSO PASS. La llegada se verifica por URL + ancla de contenido, no solo por status."
+    },
+    {
+      "id": "dev_build_ok_narrated_unverified",
+      "title": "\"Build OK\" narrado por el LLM sin que ninguna maquina haya compilado",
+      "class": "false-green-narrated",
+      "status": "resolved",
+      "log_pattern": "dev_build_gate\\.claim_vs_machine_mismatch",
+      "log_guarded": true,
+      "killed_by": "plan 210 (gate de build determinista del Developer)",
+      "killed_commit": "(pendiente al mergear)",
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan210_gate_coverage.py::test_developer_transition_sites_pass_through_gate",
+      "evidence": "backend/services/dev_build_verify.py (gate_final_state/annotate_build_evidence); backend/api/tickets.py (_apply_task_state + rama legacy)",
+      "note": "El deliverable declaraba 'Build OK' en verde y esa prosa disparaba la transicion de estado. Ahora el hecho lo produce la maquina: sin veredicto fresco (ligado a execution_id) el estado degrada a revision y el bloque verde del LLM queda tachado."
     }
   ]
 }

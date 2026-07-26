@@ -37,6 +37,7 @@
     "msbuild_path": "C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe",
     "configuration": "Release",
     "online_solutions": [],
+    "allow_csproj_entry": false,
     "batch_proj_glob": "Batch/*/*.csproj"
   },
   "conventions": {

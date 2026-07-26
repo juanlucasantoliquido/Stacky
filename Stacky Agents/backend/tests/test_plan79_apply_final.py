@@ -19,6 +19,21 @@ def _ticket(ado_id=555, project_name="demo"):
     return SimpleNamespace(ado_id=ado_id, stacky_project_name=project_name)
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _sin_gate_de_build(monkeypatch):
+    """Plan 210 — este archivo prueba el contrato del Plan 79 (la config manda sobre
+    el estado que propone el agente), NO el gate de build que se sumó después. Con el
+    gate ON y sin veredicto de máquina, el developer degrada al estado de revisión
+    (comportamiento correcto del 210, cubierto por test_plan210_state_gate.py). Acá
+    se apaga para aislar el contrato bajo prueba."""
+    from config import config as cfg
+
+    monkeypatch.setattr(cfg, "STACKY_DEV_BUILD_VERIFY_ENABLED", False, raising=False)
+
+
 def _profile(next_state_ok="Done", in_progress=None, agent_type="developer"):
     machine = {}
     if in_progress is not None:

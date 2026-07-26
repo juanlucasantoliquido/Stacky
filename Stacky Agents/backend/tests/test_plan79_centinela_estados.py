@@ -28,6 +28,17 @@ os.environ.setdefault("LLM_BACKEND", "mock")
 from harness.task_states import _APPLICABLE_KEYS, apply_task_start_state  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _sin_gate_de_build(monkeypatch):
+    """Plan 210 — este archivo prueba el centinela del Plan 79 (solo estados de la
+    config llegan al provider), NO el gate de build posterior. Con el gate ON y sin
+    veredicto de máquina el developer degrada al estado de revisión (correcto del
+    210, cubierto por test_plan210_state_gate.py); acá se apaga para aislar."""
+    from config import config as cfg
+
+    monkeypatch.setattr(cfg, "STACKY_DEV_BUILD_VERIFY_ENABLED", False, raising=False)
+
+
 def _ticket(ado_id=777, project_name="demo"):
     return SimpleNamespace(ado_id=ado_id, stacky_project_name=project_name)
 

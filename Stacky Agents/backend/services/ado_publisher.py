@@ -206,6 +206,22 @@ class AttachmentPublishError(RuntimeError):
     """Raised when inline artifacts cannot be uploaded safely."""
 
 
+def _agent_type_for_execution(execution_id):
+    """Plan 210 — `agent_type` de la ejecución, o None (la anotación hace passthrough)."""
+    if not execution_id:
+        return None
+    try:
+        from db import session_scope
+        from models import AgentExecution
+
+        with session_scope() as s:
+            row = s.get(AgentExecution, execution_id)
+            return row.agent_type if row else None
+    except Exception:  # noqa: BLE001
+        logger.debug("no se pudo resolver el agent_type de la ejecución", exc_info=True)
+        return None
+
+
 # ── API pública ───────────────────────────────────────────────────────────────
 
 
@@ -321,6 +337,30 @@ def publish_from_execution(
             html_path=str(html_io.default_html_path(ado_id)),
             triggered_by=triggered_by,
         )
+
+    # Plan 210 — anotar el deliverable con el veredicto de build de MÁQUINA antes de
+    # calcular el fingerprint, para que el sha/dedupe cubran lo que realmente se
+    # publica. Si algo falla acá, se publica el original: la anotación nunca puede
+    # romper la publicación.
+    try:
+        import dataclasses as _dc
+
+        from services import dev_build_verify as _dbv
+
+        _agent_type = _agent_type_for_execution(execution_id)
+        _annotated = _dbv.annotate_build_evidence(
+            ado_id=ado_id, agent_type=_agent_type,
+            workspace_root=_dbv.workspace_root_for_ado(ado_id), html=output.html,
+        )
+        if _annotated != output.html:
+            output = _dc.replace(output, html=_annotated,
+                                 size_bytes=len(_annotated.encode("utf-8")))
+        if _agent_type == "developer":
+            # Resumen para la UI (pane de evidencia). Best-effort.
+            _dbv.persist_verdict_summary(execution_id, ado_id,
+                                         _dbv.workspace_root_for_ado(ado_id))
+    except Exception:  # noqa: BLE001
+        logger.exception("dev_build_verify: anotación falló (se publica el original)")
 
     html_sha = _output_publish_fingerprint(output)
     # Fase 1 + P0 Inc.2: marcador Stacky invisible estable por contenido

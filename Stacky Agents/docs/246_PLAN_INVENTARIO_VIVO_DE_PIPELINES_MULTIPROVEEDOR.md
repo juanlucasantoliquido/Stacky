@@ -1,11 +1,41 @@
 # Plan 246 — Inventario vivo de pipelines multiproveedor
 
-> **Estado:** PROPUESTO v1
+> **Estado:** CRITICADO v2 — veredicto v1 = **RECHAZADO** (4 bloqueantes). v2 los corrige.
 > **Serie:** "Mago de las Pipelines" (246–252) — **este plan es el 1 de 7 y el CIMIENTO**.
-> **Fecha:** 2026-07-26
+> **Fecha:** 2026-07-26 (v1) · 2026-07-26 (v2, crítica independiente)
 > **Flag:** `STACKY_PIPELINE_INVENTORY_ENABLED` — default **ON**
 > **Núcleo:** determinista, **sin LLM** (ver §3.1)
 > **Fases:** F0..F5 (6 fases)
+
+---
+
+## Changelog v1 → v2
+
+La v1 fue juzgada por un crítico **independiente** (no la escribió) contra lectura directa del
+árbol. **60+ anclajes verificaron OK** — es un plan bien anclado. Pero cuatro afirmaciones de
+diseño resultaron **falsas contra el código real**, y dos de ellas tenían un test que las hubiera
+puesto en verde igual (falso verde). Eso es lo que cambia:
+
+| C# | Sev | Qué estaba mal en v1 | Dónde se arregló en v2 |
+|---|---|---|---|
+| **C1** | BLOQ | El presupuesto de red (`≤3 feliz / ≤13 peor`, KPI-4, criterio binario de F3) es **falso**: `fetch_pipelines` (`gitlab_provider.py:487`) delega en `_request_paginated` (`gitlab_client.py:177`) con `page_cap=_DEFAULT_PAGE_CAP=**40**` (`gitlab_client.py:27`) y `per_page=100`. La fuente GitLab puede hacer **41** llamadas, no 2. El test #19 pasaba en **falso verde** porque el fake no pagina | §2.1, §3.3, F3 (no se usa `fetch_pipelines`), F3 tests #19/#19b |
+| **C2** | BLOQ | Sin workspace activo o con barrido truncado, **todas** las definiciones caen en `registrada_sin_archivo` = "rota", rank 0, tono `bad` ⇒ **tormenta de falsas alarmas rojas** en el caso más común. `reconcile()` no conocía la salud del barrido y el test #22 sólo miraba `sources[1].available` | F0 (`reconcile(..., scan_reliable=)` + 4ª categoría `registrada_estado_desconocido`), F3 paso 4, tests F0 #18-#19 y F3 #22b |
+| **C3** | BLOQ | "Multiproveedor" prometía **3 fuentes simultáneas**; `get_ci_provider` (`ci_provider.py:107-135`) devuelve **UN** provider según `tracker_type` ⇒ ADO y GitLab **nunca** coexisten en un refresco. La suma `1+1+1=3` de §3.3 y el test F2 #7 ("sumado a GitLab el total es 3") eran imposibles | §1 (KPI-1/KPI-4 reescritos), §3.3, §7.1 glosario, F2 test #7 |
+| **C4** | BLOQ | `RUN_STATUS_FROM_PROVIDER` es una tabla **cerrada** de 8 filas y F3 afirmaba "el vocabulario de GitLab YA es el de la tabla". Falso: GitLab también emite `waiting_for_resource`, `preparing`, `scheduled` ⇒ `KeyError` ⇒ un proyecto GitLab **sano** aparecería con la fuente caída | F2 (lookup con `.get(...)` literal), F2 test #9b |
+| **C5** | IMP | `identity_key` incluye el provider ⇒ **una** mala clasificación produce **dos** filas falsas (una huérfana **y** una roja "rota"). El R4 de v1 subestimaba el daño | F0 (`reconcile` en 2 pasadas), test F0 #20, R4 reescrito |
+| **C6** | IMP | La truncación (`capped`, `truncated_hydration`, `truncated`, `skipped_*`) viajaba en `meta` pero **no la mostraba nadie**. R2 decía "que la UI muestra honestamente" sin función ni test | F2/F3 (extras en `source_ok`), F5 `truncationNotices()` + test #19 |
+| **C7** | IMP | `InventoryLastRun.run_id: string \| null` en TS, pero ADO devuelve `int` ⇒ el contrato congelado que consumen 247–252 mentía | F2/F3 (`str()` explícito), test F2 #10b |
+| **C8** | IMP | **6 anclajes falsos** (el resto verificó OK) | §2.5 nueva |
+| **C9** | MEN | F5 criterio #3 (`grep -c "style={{"` → 0) podía auto-sabotearse si el implementador copiaba la prosa del plan como comentario del `.tsx` (gotcha recurrido 6 veces en la casa) | F5, aviso explícito |
+| **C10** | MEN | F2 criterio #3 era condicional ("si existen con ese prefijo") ⇒ no binario. **Existen**: `test_plan95_ado_parity.py`, `test_plan95_mr_providers.py`, `test_plan95_production_endpoints.py`, `test_plan95_production_flag.py` | F2 criterio #3 |
+| **C11** | MEN | No se declaraba qué pasa si el workspace activo **no** es el repo del tracker | §2.4-8, R15 |
+| **C12** | MEN | Sin huella de regresión. **No aplica**: el 246 es un plan de capacidad nueva, no un plan tipo-fix; no mata una clase de error preexistente. Declarado, no pendiente | esta línea |
+
+**[ADICIÓN ARQUITECTO]** — v2 suma `nearest_repo_paths()` (F0) + `mismatchHint()` (F5): cuando una
+pipeline queda "rota" o "huérfana", el inventario dice **por qué probablemente no reconcilió** y
+propone las rutas más parecidas, con `difflib.get_close_matches` (stdlib, determinista, sin red,
+sin LLM, sin trabajo del operador). Convierte una alarma en un diagnóstico accionable y **hace
+visible** el fallo de clasificación de C5 en vez de esconderlo. Detalle en F0 §"ADICIÓN".
 
 ---
 
@@ -15,7 +45,7 @@
 
 | Nº | Título corto | Alcance EXCLUSIVO | Prohibido tocar |
 |----|--------------|-------------------|-----------------|
-| **246** | Inventario vivo de pipelines multiproveedor | Descubrir TODAS las pipelines (definiciones ADO + GitLab + YAMLs del repo), unificarlas en un registro con estado de última corrida, proveedor, ruta, rama default y trigger. Listado en el panel. **Además: este §0 con la hoja de ruta y el mapa de colisiones.** | No clasifica stack ni propósito (247). No audita (248). No edita (250). |
+| **246** | Inventario vivo de pipelines multiproveedor | Descubrir TODAS las pipelines (definiciones del proveedor de CI del proyecto —ADO **o** GitLab, nunca los dos a la vez, **[v2 — C3]**— + YAMLs del repo), unificarlas en un registro con estado de última corrida, proveedor, ruta, rama default y trigger. Listado en el panel. **Además: este §0 con la hoja de ruta y el mapa de colisiones.** | No clasifica stack ni propósito (247). No audita (248). No edita (250). |
 | **247** | Perfilador: stack + anatomía + propósito | Dado un YAML ya descubierto por el 246, extraer stack tecnológico, fases (build/test/deploy), artefactos, entornos tocados y un propósito en 1 línea. Determinista primero; el propósito narrado es la única parte con LLM y es opcional. | No descubre (consume el registro del 246). No emite hallazgos de seguridad (248). |
 | **248** | Auditoría: seguridad, malas prácticas y recomendaciones | Reglas `SEC001..SECnn` + recomendaciones de optimización. Read-only, no autofixea. | No repite `PL001..PL014` de `pipeline_lint.py` ni `RS001..RS009` de `cicd_semantic_rules.py`: las **consume**. No aplica cambios (250). |
 | **249** | Paridad GitLab del motor inteligente | Catálogo de constructos GitLab + reglas `GL001..GLnn` + endurecimiento del renderer/parser GitLab. | No toca el catálogo ADO salvo para leerlo. No inventa NL (244). |
@@ -62,10 +92,17 @@ Concretamente para este plan: si el 247/248/251/252 no encuentran `services/pipe
 deben mostrar "inventario no disponible" y seguir funcionando; **nunca** reimplementar el
 descubrimiento.
 
+> **[v2] AVISO a los 6 planes siguientes: el contrato congelado cambió respecto de la v1.**
+> `CATEGORIES` ahora tiene **4** valores (se sumó `registrada_estado_desconocido`), la entrada
+> tiene **12** claves (se sumó `hints: list[str]`), `run_id` es **`str | None`** (nunca `int`) y
+> el payload trae **siempre 2 fuentes**, no 3. Quien haya escrito su §2 contra la v1 tiene que
+> releer §F0 antes de implementar. La v1 quedó **RECHAZADA**: no se implementa.
+
 ### 0.3 Mapa de colisiones — qué archivo comparte cada plan y en qué orden mergear
 
-> Precedente de la casa: `docs/195_PLAN_DEVOPS_HOJA_DE_RUTA_SERIE_186_193_...md:128-148` (§5 "Orden
-> canónico"). Este §0.3 es el equivalente para la serie 246–252.
+> Precedente de la casa (**[v2 — C8]** nombre completo, sin elisión):
+> `docs/195_PLAN_DEVOPS_HOJA_DE_RUTA_SERIE_186_193_ORDEN_CANONICO_MAPA_DE_COLISIONES_Y_MODULO_DE_MASKING_COMUN.md:128-148`
+> (§5 "Orden canónico"). Este §0.3 es el equivalente para la serie 246–252.
 
 **Superficies compartidas por TODOS los 7 planes** (colisión garantizada en cada merge):
 
@@ -127,10 +164,18 @@ npx tsc --noEmit
 ## 1. Objetivo y valor
 
 **Objetivo.** Que el operador abra el panel DevOps → **Pipelines → Inventario** y vea, **sin
-configurar nada**, TODAS las pipelines que ya existen en su proyecto: las registradas en Azure
-DevOps, las de GitLab, y **las que existen como archivo en el repo pero no están registradas en
-ningún proveedor** (huérfanas). Cada una con proveedor, nombre, ruta del YAML, rama por default,
+configurar nada**, TODAS las pipelines que ya existen en su proyecto: las registradas en el
+proveedor de CI del proyecto, y **las que existen como archivo en el repo pero no están registradas
+en ningún proveedor** (huérfanas). Cada una con proveedor, nombre, ruta del YAML, rama por default,
 estado de la última corrida, fecha de esa corrida y trigger declarado.
+
+> **[v2 — C3] Qué significa "multiproveedor" acá, literalmente.** `get_ci_provider`
+> (`ci_provider.py:107`) resuelve **UN** adapter según `ctx.tracker_type`: `gitlab` **o**
+> `azure_devops` (`:118-135`). Un proyecto **no** tiene los dos a la vez. "Multiproveedor" quiere
+> decir que **el mismo inventario, el mismo endpoint y la misma UI funcionan con cualquiera de los
+> dos trackers**, no que se consulten los dos en el mismo refresco. Por eso el payload trae
+> **2 fuentes** (`[proveedor, repo_scan]`), nunca 3. Un proyecto que use ADO y GitLab
+> simultáneamente está **fuera de alcance** y no se soporta.
 
 **Read-only absoluto.** El inventario no crea, no edita, no registra y no dispara nada.
 
@@ -138,12 +183,13 @@ estado de la última corrida, fecha de esa corrida y trigger declarado.
 
 | KPI | Antes (hoy) | Después (con el 246) |
 |---|---|---|
-| KPI-1 · Pipelines visibles en el panel sin salir de Stacky | **0** — el panel sólo muestra lo que el operador está construyendo en el builder | **N** — las 3 fuentes unificadas en una lista |
+| KPI-1 · Pipelines visibles en el panel sin salir de Stacky | **0** — el panel sólo muestra lo que el operador está construyendo en el builder | **N** — las **2** fuentes del proyecto (proveedor + repo) unificadas en una lista **[v2 — C3]** |
 | KPI-2 · Detección de huérfanas (YAML en repo, no registrado) | Imposible sin abrir el portal ADO/GitLab y comparar a mano | **1 clic**, categoría `en_repo_sin_registrar` |
-| KPI-3 · Detección de definiciones rotas (registradas apuntando a un YAML borrado) | Se descubre cuando falla la corrida | **1 clic**, categoría `registrada_sin_archivo` |
-| KPI-4 · Llamadas de red por refresco | N/A | **≤ 3 en el camino feliz, ≤ 13 en el peor caso** (cap duro, §3.3) |
+| KPI-3 · Detección de definiciones rotas (registradas apuntando a un YAML borrado) | Se descubre cuando falla la corrida | **1 clic**, categoría `registrada_sin_archivo` — **y sólo cuando el barrido es confiable** (§F0, C2) |
+| KPI-4 · Llamadas de red por refresco | N/A | **ADO: 2 en el camino feliz, 12 en el peor caso. GitLab: 2 siempre.** Cap duro y **contado en el test**, §3.3 **[v2 — C1/C3]** |
 | KPI-5 · Trabajo de configuración del operador | N/A | **cero** (flag default ON, sin formularios, sin rutas que cargar) |
 | KPI-6 · Pantallas rotas por integración no configurada | N/A | **0** — HTTP 200 siempre, con `available:false` por fuente |
+| KPI-7 · Falsas alarmas rojas cuando el barrido no es confiable | N/A | **0** — sin workspace o con barrido truncado, las registradas van a `registrada_estado_desconocido` (tono neutro), nunca a "rota" **[v2 — C2]** |
 
 **Valor estratégico:** los 6 planes siguientes de la serie no tienen sobre qué trabajar hasta que
 exista este registro. El 247 perfila lo que el 246 descubrió; el 248 audita lo que el 247 perfiló;
@@ -168,7 +214,11 @@ el 250 edita lo que el 246 localizó; el 252 empaqueta lo que el 246 listó.
 | Cliente ADO | `backend/services/ado_client.py:269 (AdoClient._request)`, `:38 (_TIMEOUT_SEC = 30)` | HTTP con timeout ya fijado ⇒ el 246 **no** define timeouts propios |
 | Mapa de estados ADO→vocabulario común | `backend/services/ado_ci_provider.py:135 (_map_status)` | Tabla literal `notStarted→created / inProgress→running / postponed→pending / completed+succeeded→success / completed+(failed\|partiallySucceeded)→failed / completed+canceled→canceled`. **Se reusa tal cual** |
 | Última corrida por ref (ADO) | `ado_ci_provider.py:107 (last_pipeline_for_ref)` | Patrón `$top=1&queryOrder=queueTimeDescending`, con `except Exception: return None` (`:131-132`) |
-| Última corrida (GitLab) | `backend/services/gitlab_provider.py:487 (fetch_pipelines)` | Devuelve `id/status/ref/sha/web_url/created_at/updated_at`; **ya devuelve `[]` ante cualquier error** (`:510-511`) |
+| Última corrida (GitLab) | `backend/services/gitlab_provider.py:487 (fetch_pipelines)` | Devuelve `id/status/ref/sha/web_url/created_at/updated_at`; **ya devuelve `[]` ante cualquier error** (`:510-511`). **[v2 — C1] NO se reusa** (ver fila siguiente) |
+| **[v2 — C1] Trampa medida: el paginador** | `gitlab_client.py:177 (_request_paginated)` — `page_cap: int = _DEFAULT_PAGE_CAP` (`:182`) y **`_DEFAULT_PAGE_CAP = 40`** (`gitlab_client.py:27`), `base_params.setdefault("per_page", 100)` (`:190`), bucle `while page and pages_fetched < page_cap` (`:196`) | `fetch_pipelines` **pagina hasta 40 llamadas HTTP**. Un inventario que la llame rompe el presupuesto de red por 20×. F3 hace **una** llamada directa con `per_page=1`, sin `fetch_pipelines` |
+| **[v2 — C4] Vocabulario abierto de GitLab** | `gitlab_ci_provider.py:11 (STATUS_TO_PROGRESS)` cubre 8 estados, pero la API de GitLab también emite `waiting_for_resource`, `preparing` y `scheduled` | Ninguna tabla cerrada puede indexarse directo: el lookup del inventario **debe** llevar default (`.get`) |
+| **[v2 — C4] ADO sí tiene fallback** | `ado_ci_provider.py:158` (`# Fallback` → `return "pending"`) | El lado ADO no puede lanzar `KeyError`: `_map_status` siempre devuelve uno de los 6 valores conocidos |
+| **[v2 — C3] Un solo proveedor por proyecto** | `ci_provider.py:107 (get_ci_provider)`, `:118` (`if ttype == "gitlab"`), `:130` (`if ttype == "azure_devops"`), `:135` (`raise TrackerConfigError(f"tracker '{ttype}' sin CIProvider")`) | El inventario tiene **2** fuentes, no 3 |
 | Seam multiproveedor | `backend/services/ci_provider.py:83 (CIProvider Protocol)`, `:107 (get_ci_provider)` | Fábrica que elige adapter por `tracker_type` y **valida `STACKY_GITLAB_ENABLED` antes de instanciar GitLab** (`:121-124`) |
 | Cliente GitLab | `backend/services/gitlab_client.py:98 (_project_path)`, `:107 (_request)` → **devuelve `tuple[object, dict]` = `(body, headers)`** (`:116,120-121`) y **lanza `TrackerApiError`** (`:124-125`) | Primitiva HTTP para la fuente GitLab |
 | Capacidad ausente ≠ bug | `backend/services/tracker_provider.py:55 (CapabilityUnavailable)`, `:69 (to_payload)` → `{available, capability, provider, reason, workaround}` | **Shape exacto** que el 246 emite por fuente degradada |
@@ -293,6 +343,56 @@ Esto **no** lo abrí y por lo tanto no lo doy por cierto. Cada ítem lleva su pl
    `.ts` lleva tests automatizados**; el `.tsx` se valida con `npx tsc --noEmit` + smoke visual del
    operador. F5 **no promete** un test de componente.
 
+8. **[v2 — C11] Que el workspace activo sea el repo del proyecto del tracker.** NO VERIFICABLE en
+   frío: `_active_workspace_root()` (`runtime_paths.py:66`) devuelve la carpeta que el operador
+   tenga activa, y nada garantiza que sea el repo de las definiciones que lista el proveedor.
+   **Plan B escrito en F3 paso 4:** el barrido no puede *desmentir* al proveedor. Si el barrido no
+   es confiable (no disponible, truncado, o `matched == 0` con `scanned_files > 0`), las entradas
+   sólo-registradas **no** se marcan "rota": van a `registrada_estado_desconocido`. Ver C2.
+
+### 2.5 [v2 — C8] Anclajes de la v1 que resultaron FALSOS (verificados uno por uno)
+
+De los 60+ anclajes de §2.1–§2.3, **estos 6 no coinciden**. El resto verificó OK. Corregidos acá y
+en el cuerpo del plan. La regla §7.4 sigue valiendo: **el número es una pista, el símbolo manda**.
+
+| Anclaje de la v1 | Realidad medida | Impacto |
+|---|---|---|
+| `harness_flags.py:241` = "última entrada de la tupla `devops`" | `:241` es `STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED`, pero la tupla **sigue** hasta `:256` (`STACKY_DEVOPS_COCKPIT_ENABLED`) y cierra en `:257` | Cosmético: insertar en `:241` funciona igual (es una tupla de strings). **En v2 la instrucción es: insertar después de `:256`, antes del `),` de `:257`** |
+| `ado_pipeline_definitions.py:76-79 (_default_branch)` | `def _default_branch` está en **`:64`**. `:76` es el comentario `# Strip "refs/heads/"` **dentro** de esa función | La regla de strip citada existe, pero el símbolo está 12 líneas antes |
+| `api/devops.py:88 (devops_health_route)` | `:88` es `@bp.get("/health")`; el `def devops_health_route` está en **`:89`** | Off-by-one |
+| `api/pipeline_generator.py:37` (guard `abort(404)`) | El guard `if not getattr(_config.config, ...)` está en **`:38`** | Off-by-one |
+| `test_harness_ratchet_meta.py:19 (_ratchet_files)` | El `def _ratchet_files` está en **`:18`**; `:19` es su docstring | Off-by-one |
+| `docs/195_PLAN_DEVOPS_HOJA_DE_RUTA_SERIE_186_193_...md` | Nombre real: `195_PLAN_DEVOPS_HOJA_DE_RUTA_SERIE_186_193_ORDEN_CANONICO_MAPA_DE_COLISIONES_Y_MODULO_DE_MASKING_COMUN.md` | Un modelo menor no resuelve la elisión `...`; se escribe completo |
+
+Anclajes **confirmados exactos** (muestra, no exhaustiva): `_MAX_DEFINITIONS = 50`
+(`ado_pipeline_definitions.py:5`), `find_yaml_definition` (`:82`), `DefinitionConfirmRequired`
+(`:120`), `ensure_yaml_definition` (`:125`), `AdoClient._request` (`ado_client.py:269`),
+`_TIMEOUT_SEC = 30` (`:38`), `_map_status` (`ado_ci_provider.py:135`), `last_pipeline_for_ref`
+(`ado_ci_provider.py:107` y `gitlab_ci_provider.py:70`), `fetch_pipelines`
+(`gitlab_provider.py:487`), `CIProvider` (`ci_provider.py:83`), `CI_PORT_METHODS` (`:100`),
+`get_ci_provider` (`:107`), `_project_path` (`gitlab_client.py:98`), `_request` (`:107`),
+`CapabilityUnavailable` (`tracker_provider.py:55`), `to_payload` (`:69`),
+`capability_unavailable_envelope` (`api/errors.py:73`), `detect_stack`
+(`pipeline_stack_detector.py:19`), `_active_workspace_root` (`runtime_paths.py:66`), `repo_root`
+(`:138`), `_ensure_enabled` (`api/pipelines.py:11`), `api/__init__.py:44` y `:117`,
+`_health_payload` (`api/devops.py:28`), `cockpit_enabled` (`:72`), `DevOpsHealth`
+(`DevOpsPage.tsx:32`), `DevOpsSection` (`:75`), `DEVOPS_SECTIONS` (`:113`), `:462`, `:466`,
+`DevOpsGroupId` (`devopsCockpitShell.ts:9`), `DEVOPS_SECTION_GROUPS` (`:20`), `'construir'` (`:23`),
+`ENTRY_FIELDS` (`ci_run_ledger.py:23`), `list_runs` (`:84`), `append_run` (`:71`),
+`HARNESS_TEST_FILES=(` (`run_harness_tests.sh:20`), `$HarnessTestFiles = @(`
+(`run_harness_tests.ps1:13`), `_CATEGORY_KEYS` (`harness_flags.py:120`), FlagSpec del Plan 201
+(`:2023-2035`), `_CURATED_DEFAULTS_ON` (`test_harness_flags.py:467`), assert de igualdad (`:887`),
+`DevOps` (`endpoints.ts:3818`), `PipelineGenerator` (`:4426`), `preview` (`:4428`), el bloque C20
+(`docs/243_...md:106-113`) y los **9** YAML del corpus dorado.
+
+**Duplicación: verificada y descartada.** `grep -rn "build/definitions" --include=*.py backend/`
+devuelve sólo `ado_pipeline_definitions.py` (`:93,:103,:155`) y `ado_variables.py` (`:30,:55,:92`,
+que operan sobre **una** definición conocida). **No existe hoy ninguna función de listado**, ni en
+`pipeline_status.py` (opera sobre tickets), ni en `pipeline_preflight.py` (opera sobre un
+`spec_dict`), ni en `cicd_corpus_mirror.py` (compara YAML contra el corpus dorado). `grep -rln
+"os.walk" backend/services/` no devuelve ningún barredor de pipelines. **El 246 no reimplementa
+nada.**
+
 ---
 
 ## 3. Principios, guardarraíles y recorte declarado de alcance
@@ -326,7 +426,8 @@ La parte narrada/interpretativa (qué hace esta pipeline, si es segura, qué le 
 | **Cero trabajo extra al operador** | Flag `STACKY_PIPELINE_INVENTORY_ENABLED` **default ON**. **Ninguna de las 4 excepciones duras aplica**: (1) no bypasea revisión humana — es read-only y no dispara nada; (2) no es destructiva ni irreversible — no escribe una sola línea en ningún lado; (3) no tiene prerequisito extra — degrada solo si falta el proveedor; (4) no reduce seguridad — no expone secretos ni abre superficie. Sin formularios, sin rutas que cargar, sin credenciales nuevas. | Línea literal `Trabajo del operador: ninguno` en cada fase |
 | **Human-in-the-loop innegociable** | El plan es **read-only absoluto**. No hay ningún camino de código que cree, registre, edite, commitee ni dispare. No hay autonomía proactiva: el inventario se calcula **cuando el operador abre la sección** o pulsa "Actualizar". Sin daemons, sin hilos, sin polling. | §F4 (no hay verbos POST/PUT/DELETE) y §F5 (sin `refetchInterval`) |
 | **Mono-operador sin auth real** | Cero RBAC, cero roles, cero chequeos de permiso. El endpoint no lee `current_user`. | §F4 |
-| **No degradar performance** | ≤3 llamadas de red en el camino feliz (≤13 peor caso), TTL de 300s, barrido de disco acotado a 400 archivos / profundidad 4 / 512 KB por archivo, sin hilos de fondo. | §3.3 + criterio binario de F2 |
+| **No degradar performance** | **[v2 — C1/C3]** **2** llamadas de red en el camino feliz (ADO: ≤12 peor caso; GitLab: 2 fijas), contadas sobre `_request` en el test; TTL de 300s; barrido de disco acotado a 400 archivos / profundidad 4 / 512 KB por archivo; sin hilos de fondo; **prohibido `fetch_pipelines`** porque pagina hasta 40. | §3.3 + criterios binarios de F2 y F3 (#19, #19b) |
+| **[v2 — C2] No mentirle al operador** | Si una fuente no pudo verificar algo, el inventario **no afirma** lo contrario: barrido no confiable ⇒ `registrada_estado_desconocido`, nunca "rota" en rojo. Y si recortó, lo dice (`truncationNotices`). | §F0 `reconcile(scan_reliable=)`, §F5 `truncationNotices`, DoD #14 |
 | **No degradar seguridad** | Read-only; no imprime contenido de YAML (sólo rutas, nombres y el bloque de trigger); no toca la caja fuerte de variables. | §F1 (el extractor devuelve estructura, nunca el texto crudo) |
 | **No degradar estabilidad** | Ninguna función del 246 puede lanzar hacia el endpoint: cada fuente atrapa `Exception`. El endpoint responde 200 siempre. | §F3 + §F4 |
 | **Backward-compatible** | **`CIProvider` Protocol y `CI_PORT_METHODS` quedan INTACTOS.** Los métodos nuevos son opcionales y duck-typed. Health y `/bootstrap` sólo suman una key. | §3.4 |
@@ -349,13 +450,34 @@ flag**):
 | `_MAX_DEFINITIONS` | **importado de `ado_pipeline_definitions`** | No se redefine |
 | Timeout de red | **heredado de `ado_client._TIMEOUT_SEC = 30`** (`ado_client.py:38`) | No se redefine |
 
-**Presupuesto de red por refresco (criterio binario de F2/F3):**
+**Presupuesto de red por refresco (criterio binario de F2/F3) — [v2 — C1/C3] reescrito:**
+
+Se cuenta por **proveedor activo**, porque `get_ci_provider` devuelve **uno solo** (§1, C3).
+La unidad contada es **una invocación de `AdoClient._request` / `GitLabClient._request`**, no una
+llamada a una función de alto nivel.
 
 ```
-Camino feliz:  1 (definiciones ADO) + 1 (builds batch) + 1 (pipelines GitLab)   = 3
-Peor caso:     1 + 10 (hidratación acotada) + 1 + 1                              = 13
-NUNCA:         un bucle de una llamada por definición
+Proyecto con tracker = azure_devops
+  Camino feliz:  1 (GET /build/definitions)  + 1 (GET /build/builds batch)      = 2
+  Peor caso:     1 + 10 (hidratacion acotada) + 1                               = 12
+  NUNCA:         un bucle de una llamada por definicion
+
+Proyecto con tracker = gitlab
+  Camino feliz:  1 (GET /projects/{path})    + 1 (GET /projects/{path}/pipelines
+                                                  ?per_page=1&page=1)           = 2
+  Peor caso:     la 1ra falla -> 1                                              = 1
+  NUNCA:         fetch_pipelines(), porque pagina hasta 40 (gitlab_client.py:27)
+
+Barrido del repo: 0 llamadas de red, siempre.
 ```
+
+> **[v2 — C1] Por qué F3 NO reusa `fetch_pipelines`.** `gitlab_provider.py:487` delega en
+> `_request_paginated` (`gitlab_client.py:177`), que hace `while page and pages_fetched < page_cap`
+> (`:196`) con `page_cap=_DEFAULT_PAGE_CAP=40` (`:27,:182`) y `per_page=100` (`:190`). Un proyecto
+> con historial largo dispara **hasta 40 GET** para traer 4000 corridas cuando el inventario sólo
+> necesita **la más reciente**. Esto no es una hipótesis: es el cuerpo del método. F3 hace **una**
+> llamada directa a `_request` con `per_page=1&page=1`, y el test cuenta invocaciones de
+> `_request`, **no** de `fetch_pipelines` — contar lo de afuera es el falso verde que tenía la v1.
 
 **Cacheo:** diccionario en proceso `_CACHE: dict[str, tuple[float, dict]]` con clave
 `f"{project or ''}"`. `?refresh=1` en el endpoint lo saltea. **Sin daemon, sin hilo, sin
@@ -438,10 +560,14 @@ from __future__ import annotations
 CATEGORY_REGISTERED_WITH_FILE: str = "registrada+en_repo"
 CATEGORY_REGISTERED_NO_FILE: str = "registrada_sin_archivo"
 CATEGORY_FILE_NOT_REGISTERED: str = "en_repo_sin_registrar"
+# [v2 - C2] CUARTA categoria: registrada, pero el barrido del repo NO es confiable, asi que
+# el inventario NO PUEDE afirmar que el archivo falte. Tono neutro, nunca rojo.
+CATEGORY_UNKNOWN_FILE_STATE: str = "registrada_estado_desconocido"
 CATEGORIES: tuple[str, ...] = (
     CATEGORY_REGISTERED_WITH_FILE,
     CATEGORY_REGISTERED_NO_FILE,
     CATEGORY_FILE_NOT_REGISTERED,
+    CATEGORY_UNKNOWN_FILE_STATE,
 )
 
 RUN_STATUSES: tuple[str, ...] = ("success", "failed", "never_ran", "unknown")
@@ -500,39 +626,61 @@ def make_entry(
     last_run: dict | None = None,
     trigger: dict | None = None,
     found_in: tuple[str, ...] = (),
+    hints: list[str] | None = None,
 ) -> dict:
     """Construye una entrada del inventario con TODAS las claves siempre presentes.
 
-    Shape CONGELADO (contrato que consumen 247..252):
+    Shape CONGELADO (contrato que consumen 247..252) - 12 claves:
       key, provider, name, yaml_path, default_branch, definition_id,
-      category, category_reason, last_run, trigger, found_in
+      category, category_reason, last_run, trigger, found_in, hints
+    `hints`: list[str], default []. [ADICION ARQUITECTO v2] rutas parecidas cuando la
+      entrada quedo "rota" o "huerfana"; SIEMPRE presente aunque este vacia, para que
+      247..252 no tengan que chequear su existencia.
     last_run por defecto: {"status": "unknown", "status_detail": "sin_datos",
                            "at": None, "web_url": None, "run_id": None, "source": None}
+    `run_id` es SIEMPRE str | None (nunca int). [v2 - C7]
     trigger  por defecto: {"kind": "unknown", "branches": [], "has_paths": False,
                            "has_schedule": False, "has_pr": False, "source": None}
     """
 
 
-def reconcile(registered: list[dict], files: list[dict]) -> list[dict]:
+def reconcile(
+    registered: list[dict], files: list[dict], *, scan_reliable: bool = True
+) -> list[dict]:
     """Une definiciones registradas y archivos del repo en UN registro. PURO.
+
+    [v2 - C2] `scan_reliable` es OBLIGATORIO de pasar desde build_inventory. Si es False,
+    el barrido NO PUEDE desmentir al proveedor: una definicion sin archivo NO es "rota",
+    es "estado desconocido". Sin este parametro, un operador sin workspace activo veria
+    TODAS sus pipelines en rojo arriba de todo. Ese era el bug de la v1.
 
     Algoritmo LITERAL:
       1. index_reg  = {identity_key(r): r for r in registered}   (ultima gana en empate)
       2. index_file = {identity_key(f): f for f in files}
-      3. Para cada key en sorted(set(index_reg) | set(index_file)):
+      3. PASADA 1 - match exacto por identity_key (provider incluido).
+      4. [v2 - C5] PASADA 2 - SOLO sobre los residuos de la pasada 1: reindexar los
+         sobrantes por normalize_yaml_path(yaml_path) SIN el provider. Si un registrado
+         sobrante y un archivo sobrante comparten ruta normalizada NO VACIA, se unen con
+         category_reason = "match_por_ruta_cross_provider".
+         POR QUE: identity_key lleva el provider, y el provider del ARCHIVO lo decide
+         classify_pipeline_doc. Una sola mala clasificacion producia DOS filas falsas:
+         una huerfana Y una "rota" en rojo. La pasada 2 las vuelve a unir.
+      5. Para cada key en sorted(set(index_reg) | set(index_file)):
          a. en ambos      -> CATEGORY_REGISTERED_WITH_FILE.
                              Campos: name/default_branch/definition_id/last_run del
                              REGISTRADO (el proveedor manda); yaml_path y trigger del
                              ARCHIVO (el disco manda). found_in = ambas fuentes.
-         b. solo registrado -> CATEGORY_REGISTERED_NO_FILE.
+         b. solo registrado Y scan_reliable is True -> CATEGORY_REGISTERED_NO_FILE.
                              category_reason = "sin_yaml_declarado" si yaml_path es None,
                              si no "archivo_ausente_en_repo".
                              trigger queda en su default (no hay archivo que leer).
+         b'. solo registrado Y scan_reliable is False -> CATEGORY_UNKNOWN_FILE_STATE,
+                             category_reason = "barrido_no_confiable".   [v2 - C2]
          c. solo archivo   -> CATEGORY_FILE_NOT_REGISTERED.
                              category_reason = "huerfana".
                              last_run = {"status": "never_ran",
                                          "status_detail": "no_registrada", ...}
-      4. Devuelve la lista ORDENADA por sort_key() (determinismo obligatorio).
+      6. Devuelve la lista ORDENADA por sort_key() (determinismo obligatorio).
     """
 
 
@@ -540,13 +688,36 @@ def sort_key(entry: dict) -> tuple:
     """Orden CANONICO, mas accionable primero:
        (rank_categoria, provider, name.lower(), key)
     rank: registrada_sin_archivo=0 (rota), en_repo_sin_registrar=1 (huerfana),
-          registrada+en_repo=2 (sana).
+          registrada+en_repo=2 (sana), registrada_estado_desconocido=3 (no accionable
+          todavia: el barrido no dio evidencia).   [v2 - C2]
     """
 
 
 def counts(entries: list[dict]) -> dict:
-    """{"total": n, "registrada+en_repo": n, "registrada_sin_archivo": n,
-        "en_repo_sin_registrar": n}. Las 4 claves SIEMPRE presentes, aunque valgan 0."""
+    """{"total": n} + UNA clave por cada valor de CATEGORIES (las 4). Las 5 claves
+    SIEMPRE presentes, aunque valgan 0. Se construye iterando CATEGORIES, NUNCA con
+    literales sueltos: agregar una categoria no debe poder desincronizar este dict."""
+
+
+def nearest_repo_paths(
+    target_path: str | None, candidates: list[str], *, limit: int = 3
+) -> list[str]:
+    """[ADICION ARQUITECTO v2] Rutas del repo mas parecidas a `target_path`.
+
+    difflib.get_close_matches(normalize_yaml_path(target_path),
+                              [normalize_yaml_path(c) for c in candidates],
+                              n=limit, cutoff=0.6)
+
+    - stdlib pura, DETERMINISTA, sin red, sin LLM, sin disco (los candidatos ya vienen
+      del barrido de F1). Identica en los 3 runtimes por construccion.
+    - target_path vacio/None -> []. candidates vacio -> [].
+    - NO decide nada, NO edita nada: solo le da al operador la pista de por que la
+      pipeline no reconcilio. El operador decide (human-in-the-loop).
+
+    Se llama SOLO para las entradas CATEGORY_REGISTERED_NO_FILE (contra los yaml_path
+    de los archivos) y CATEGORY_FILE_NOT_REGISTERED (contra los yaml_path de las
+    registradas). El resultado va en la clave `hints` de la entrada.
+    """
 
 
 def source_ok(source_id: str, count: int, **extra) -> dict:
@@ -574,7 +745,7 @@ def source_unavailable(
 | 3 | `test_normalize_none_y_vacio` | `None` y `""` → `""` |
 | 4 | `test_identity_key_con_y_sin_yaml` | `identity_key("azure_devops","pipelines/ci.yml") == "azure_devops::pipelines/ci.yml"`; sin yaml y con `definition_id="7"` → `"azure_devops::#def7"`; sin nada → `"azure_devops::#desconocida"` |
 | 5 | `test_identity_key_es_estable_entre_llamadas` | 100 llamadas con la misma entrada dan el mismo string |
-| 6 | `test_make_entry_tiene_las_11_claves` | Todas las claves del shape congelado presentes aunque se pasen sólo las obligatorias |
+| 6 | `test_make_entry_tiene_las_12_claves` | Todas las claves del shape congelado presentes aunque se pasen sólo las obligatorias, **incluida `hints == []`** |
 | 7 | `test_reconcile_ambas_fuentes_da_registrada_en_repo` | 1 registrada + 1 archivo con la misma key → 1 entrada, `category == "registrada+en_repo"`, `found_in == ("ado_definitions","repo_scan")` |
 | 8 | `test_reconcile_prioriza_proveedor_para_nombre_y_disco_para_trigger` | Con `name` distinto en cada fuente gana el registrado; con `trigger` sólo en el archivo, gana el archivo |
 | 9 | `test_reconcile_solo_registrada_sin_archivo` | `category == "registrada_sin_archivo"`, `category_reason == "archivo_ausente_en_repo"` |
@@ -585,7 +756,16 @@ def source_unavailable(
 | 14 | `test_sort_key_pone_las_rotas_primero` | Mezcla de las 3 categorías → orden `registrada_sin_archivo`, `en_repo_sin_registrar`, `registrada+en_repo` |
 | 15 | `test_counts_suma_total` | `counts(e)["total"] == len(e)` y la suma de las 3 categorías == total |
 | 16 | `test_source_unavailable_tiene_el_shape_de_capability_unavailable` | Las 4 claves `capability/provider/reason/workaround` presentes y de tipo `str`; `available is False`; `count == 0` |
-| 17 | `test_f0_no_importa_red_ni_disco` | El módulo no importa `urllib`, `requests`, `os.walk`, `ado_client` ni `gitlab_client` a nivel de módulo (assert sobre `pipeline_inventory.__dict__` y sobre el AST del archivo) |
+| 17 | `test_f0_no_importa_red_ni_disco` | El módulo no importa `urllib`, `requests`, `os.walk`, `ado_client` ni `gitlab_client` a nivel de módulo (assert sobre `pipeline_inventory.__dict__` y sobre el AST del archivo). **`difflib` SÍ está permitido** (stdlib pura, sin I/O) |
+| **18** | `test_reconcile_scan_no_confiable_no_marca_rota` | **[v2 — C2]** 3 registradas + `files=[]` con `scan_reliable=False` → las 3 quedan `registrada_estado_desconocido` con `category_reason == "barrido_no_confiable"`; **ninguna** queda `registrada_sin_archivo` |
+| **19** | `test_reconcile_scan_confiable_si_marca_rota` | Mismas entradas con `scan_reliable=True` → las 3 quedan `registrada_sin_archivo` (el comportamiento útil no se pierde) |
+| **20** | `test_reconcile_segunda_pasada_une_cross_provider` | **[v2 — C5]** registrada `azure_devops::pipelines/ci.yml` + archivo `gitlab::pipelines/ci.yml` → **1 sola** entrada `registrada+en_repo` con `category_reason == "match_por_ruta_cross_provider"`; **no** aparecen ni huérfana ni rota |
+| **21** | `test_reconcile_segunda_pasada_no_une_rutas_vacias` | Registrada con `yaml_path=None` + archivo con `yaml_path=""` → **no** se unen (la ruta vacía no es identidad) |
+| **22** | `test_counts_incluye_las_cuatro_categorias` | `counts([])` devuelve **5** claves (`total` + las 4 de `CATEGORIES`), todas en 0 |
+| **23** | `test_sort_key_pone_desconocido_ultimo` | `registrada_estado_desconocido` rankea **3** (después de la sana) |
+| **24** | `test_nearest_repo_paths_encuentra_la_parecida` | **[ADICIÓN]** `nearest_repo_paths("pipelines/ci-online.yml", ["pipelines/ci_online.yml","docs/x.yml"])` → primer elemento `"pipelines/ci_online.yml"` |
+| **25** | `test_nearest_repo_paths_bordes` | `None`, `""` y `candidates=[]` → `[]`; nunca lanza; respeta `limit` |
+| **26** | `test_nearest_repo_paths_es_determinista` | 100 llamadas → misma lista (`difflib` es determinista; el test lo congela) |
 
 **Comando exacto:**
 ```powershell
@@ -598,7 +778,8 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 > (`backend/scripts/run_harness_tests.ps1:13`). Sin la primera, el meta-test queda rojo.
 
 **Criterio de aceptación BINARIO:** `pytest tests/test_plan246_pipeline_inventory.py -q` reporta
-**17 passed, 0 failed**, y `pytest tests/test_harness_ratchet_meta.py -q` reporta **passed**.
+**26 passed, 0 failed** (17 de la v1 + 9 de la v2), y `pytest tests/test_harness_ratchet_meta.py -q`
+reporta **passed**.
 
 **Flag:** `STACKY_PIPELINE_INVENTORY_ENABLED` (default **ON**) — se declara en F4. F0 es un módulo
 puro sin consumidor: **inerte** hasta F4.
@@ -858,10 +1039,18 @@ En `services/ado_ci_provider.py`, **método nuevo en `AdoCIProvider`** (junto a
            - agrupar el resultado por build["definition"]["id"] y quedarse con el PRIMERO
              de cada grupo (la respuesta ya viene ordenada por queueTimeDescending)
         4. Mapear cada build con _map_status (ado_ci_provider.py:135, REUSO) y despues con
-           RUN_STATUS_FROM_PROVIDER (tabla de abajo).
+           map_run_status(...) - NUNCA indexando la tabla por corchetes  [v2 - C4].
+           (Redactado sin la sintaxis de indexado: la DoD #16 la greppea en este mismo
+            archivo y un comentario literal se contaria a si mismo.)
+           run_id = str(build.get("id")) if build.get("id") is not None else None
+           (ADO devuelve int; el contrato congelado dice str | None)      [v2 - C7].
         5. Si el paso 3 lanza o devuelve algo sin "value": TODAS las entradas quedan
            last_run.status="unknown", status_detail="batch_no_soportado".
            PROHIBIDO caer a un bucle de una llamada por definicion (§2.4-1).
+        6. [v2 - C6] El meta que se devuelve arrastra SIN TOCAR las claves de truncacion
+           de list_definitions (`capped`, `hydrated`, `truncated_hydration`) mas
+           `calls`, para que build_inventory las meta en source_ok(**extra) y la UI las
+           pueda mostrar. Un inventario que oculta que recorto es un inventario que miente.
         """
 ```
 
@@ -880,6 +1069,23 @@ RUN_STATUS_FROM_PROVIDER: dict[str, tuple[str, str]] = {
     "skipped":  ("unknown", "skipped"),
     "manual":   ("unknown", "manual"),
 }
+
+
+def map_run_status(raw: str | None) -> tuple[str, str]:
+    """[v2 - C4] UNICA forma permitida de consultar la tabla de estados.
+
+    PROHIBIDO indexar la tabla por corchetes en cualquier punto del 246; se entra
+    siempre por esta funcion. (Redactado a proposito SIN escribir la sintaxis de
+    indexado: el gate #16 de la DoD es un grep de esa sintaxis y se contaria a si mismo.)
+    La tabla es CERRADA (8 filas) pero el vocabulario del proveedor es ABIERTO: la API
+    de GitLab tambien emite `waiting_for_resource`, `preparing` y `scheduled`, que NO
+    estan en la tabla. Un lookup directo lanza KeyError; como build_inventory atrapa
+    todo, un proyecto GitLab SANO apareceria con la fuente caida. Ese era el bug v1.
+
+    return RUN_STATUS_FROM_PROVIDER.get(
+        (raw or "").strip().lower(), ("unknown", (raw or "sin_datos").strip().lower())
+    )
+    """
 # Sin corridas             -> ("never_ran", "sin_corridas")
 # Fuente caida / sin datos -> ("unknown",   "sin_datos")
 ```
@@ -897,10 +1103,13 @@ fijos. Se inyecta con `monkeypatch.setattr("services.ado_client.AdoClient", Fake
 | 4 | `test_list_definitions_strip_refs_heads` | `defaultBranch: "refs/heads/main"` → `default_branch == "main"` |
 | 5 | `test_list_definitions_excepcion_no_lanza` | El fake tira `RuntimeError` → `([], meta)` con `available is False` y `reason` no vacío |
 | 6 | `test_list_definitions_body_vacio` | `{"value": []}` → `([], meta)` con `available is True` y `calls == 1` |
-| 7 | `test_provider_lista_y_ultima_corrida_en_tres_llamadas` | 5 definitions con `process` + builds batch → **`len(fake.calls) == 2`** (definiciones + builds). Sumado a GitLab (F3) el total del refresco es 3 |
+| 7 | `test_provider_lista_y_ultima_corrida_en_dos_llamadas` | **[v2 — C3]** 5 definitions con `process` + builds batch → **`len(fake.calls) == 2`** (definiciones + builds). **Ese es el camino feliz COMPLETO de un proyecto ADO**: GitLab no corre en el mismo refresco (`get_ci_provider` devuelve un solo adapter) |
 | 8 | `test_provider_agrupa_builds_por_definicion` | 3 builds de la definición 7 y 1 de la 9 → cada definición recibe **su** build más reciente |
 | 9 | `test_provider_mapea_status_con_map_status` | `{"status":"completed","result":"succeeded"}` → `("success","success")`; `{"completed","failed"}` → `("failed","failed")`; `{"completed","canceled"}` → `("unknown","canceled")`; `{"inProgress"}` → `("unknown","running")` |
+| **9b** | `test_map_run_status_no_lanza_con_vocabulario_desconocido` | **[v2 — C4]** `map_run_status(x)` para `"waiting_for_resource"`, `"preparing"`, `"scheduled"`, `""` y `None` → devuelve `("unknown", <detalle>)` **sin `KeyError`**. Test parametrizado, 5 casos |
 | 10 | `test_provider_definicion_sin_builds_es_never_ran` | Definición sin builds → `status == "never_ran"`, `status_detail == "sin_corridas"` |
+| **10b** | `test_run_id_es_str_o_none` | **[v2 — C7]** Con `build["id"] = 4711` (int, como devuelve ADO) → `isinstance(last_run["run_id"], str)`; sin build → `is None`. **Nunca `int`** |
+| **10c** | `test_meta_arrastra_las_claves_de_truncacion` | **[v2 — C6]** 80 definitions → el meta del provider trae `capped is True`; 25 sin `process` → trae `truncated_hydration is True` y `hydrated == 10` |
 | 11 | `test_provider_batch_caido_no_hace_n_llamadas` | El fake tira en la URL de builds → **`len(fake.calls) == 2`** (nunca N), y todas las entradas quedan `("unknown","batch_no_soportado")` |
 | 12 | `test_provider_nunca_lanza` | El fake tira en las **dos** URLs → devuelve `([], meta)` con `available is False`, sin excepción |
 | 13 | `test_ci_port_methods_sigue_congelado` | `ci_provider.CI_PORT_METHODS == ("infer_item_pipeline","monitor_pipeline","trigger_pipeline")` — **centinela de que F2 no rompió el contrato del Plan 71/72** |
@@ -914,10 +1123,17 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 **Criterio de aceptación BINARIO:**
 1. `pytest tests/test_plan246_inventory_sources.py -q` → todos verdes.
 2. **El test #7 y el #11 asertan un número exacto de llamadas.** Si el conteo sube, falla. Ese es
-   el cap de red de §3.3, verificado, no prometido.
-3. `pytest tests/test_plan95_*.py -q` (los tests existentes de `ado_pipeline_definitions` /
-   `AdoCIProvider`, si existen con ese prefijo; si no existen, se omite este punto y se declara)
-   sigue verde ⇒ **F2 no regresiona `find_yaml_definition` ni `ensure_yaml_definition`**.
+   el cap de red de §3.3, verificado, no prometido. **[v2 — C1] El contador del fake cuenta
+   invocaciones de `AdoClient._request`**, no de las funciones que lo envuelven: contar la capa de
+   afuera es exactamente cómo la v1 se dio un falso verde en GitLab.
+3. **[v2 — C10]** Estos 4 archivos **existen** (verificado por listado) y siguen verdes ⇒ F2 no
+   regresiona `find_yaml_definition` ni `ensure_yaml_definition`. Sin condicionales:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/test_plan95_ado_parity.py -q
+   .venv\Scripts\python.exe -m pytest tests/test_plan95_mr_providers.py -q
+   .venv\Scripts\python.exe -m pytest tests/test_plan95_production_endpoints.py -q
+   .venv\Scripts\python.exe -m pytest tests/test_plan95_production_flag.py -q
+   ```
 
 **Flag:** `STACKY_PIPELINE_INVENTORY_ENABLED` (default ON) — inerte hasta F4.
 
@@ -966,22 +1182,37 @@ En `services/gitlab_ci_provider.py`, método nuevo en `GitLabCIProvider` (junto 
            Si esa llamada LANZA: yaml_path = ".gitlab-ci.yml",
                                  yaml_path_source = "convencion"  (§2.4-2, plan B)
            -> NO se propaga la excepcion.
-        2. runs = self._delegate.fetch_pipelines()      (gitlab_provider.py:487;
-           ya devuelve [] ante cualquier error, `:510-511`)
+        2. [v2 - C1] UNA sola llamada, SIN paginador:
+             body, _headers = self._delegate._client._request(
+                 "GET", f"/projects/{proj_path}/pipelines",
+                 params={"per_page": 1, "page": 1})
+             runs = body if isinstance(body, list) else []
+           PROHIBIDO llamar self._delegate.fetch_pipelines(): delega en
+           _request_paginated (gitlab_client.py:177) con page_cap=_DEFAULT_PAGE_CAP=40
+           (`:27,:182`) y per_page=100 (`:190`) => hasta 40 GET para traer 4000 corridas
+           cuando el inventario solo necesita UNA. Ese era el bug v1, y su test lo
+           tapaba porque contaba fetch_pipelines en vez de _request.
+           Si esta llamada LANZA (TrackerApiError u otra): runs = [] y
+           meta["reason"] = str(exc)[:200]; NO se propaga.
         3. last = runs[0] if runs else None   (la API de GitLab devuelve mas nuevo primero)
         4. Entrada unica:
              {"definition_id": "", "name": pipeline_name_from_path(yaml_path),
               "yaml_path": yaml_path, "default_branch": (last or {}).get("ref", ""),
               "queue_status": "", "yaml_path_source": yaml_path_source,
               "last_run": mapear(last)}
-           mapear: status via RUN_STATUS_FROM_PROVIDER (el vocabulario de GitLab YA es
-           el de la tabla); at = last.get("updated_at") or last.get("created_at");
-           web_url = last.get("web_url"); run_id = last.get("id"); source = "provider".
+           mapear: status via map_run_status(last.get("status")) - NUNCA indexando la
+           tabla, porque GitLab tambien emite waiting_for_resource / preparing /
+           scheduled, que NO estan en las 8 filas  [v2 - C4];
+           at = last.get("updated_at") or last.get("created_at");
+           web_url = last.get("web_url");
+           run_id = str(last.get("id")) if last.get("id") is not None else None [v2 - C7];
+           source = "provider".
            Sin runs -> ("never_ran", "sin_corridas").
         5. Cualquier excepcion no prevista -> ([], meta con available=False).
 
-        Llamadas de red: 2 como maximo (proyecto + pipelines). En el peor caso la
-        primera falla y quedan 1.
+        Llamadas de red: EXACTAMENTE 2 (proyecto + 1 pipeline). En el peor caso la
+        primera falla y queda 1. Nunca mas de 2, y el test lo cuenta sobre
+        GitLabClient._request  [v2 - C1].
         """
 ```
 
@@ -1014,11 +1245,28 @@ def build_inventory(project: str | None = None, *, refresh: bool = False) -> dic
        NORMAL de un operador solo-ADO: tiene que degradar, no romper.
     3. Fuente C: files, meta_scan = scan_repo_pipelines(str(_active_workspace_root() or ""))
        (runtime_paths.py:66). Envuelto en try/except igual que todo lo demas.
-    4. entries = reconcile(registered, files)      (F0, puro)
+    4. [v2 - C2] Calcular la CONFIANZA del barrido, literal:
+         scan_reliable = bool(meta_scan.get("available")) and not meta_scan.get("truncated")
+       entries = reconcile(registered, files, scan_reliable=scan_reliable)
+       Sin esto, un operador sin workspace activo (o con un repo grande truncado a 400
+       archivos) ve TODAS sus pipelines en rojo como "rota", arriba de todo. El barrido
+       no puede desmentir al proveedor: si no vio, no afirma.
+    4b. [ADICION ARQUITECTO v2] Enriquecer con pistas, SIN red y SIN LLM:
+         file_paths = [f.get("yaml_path") or "" for f in files]
+         reg_paths  = [r.get("yaml_path") or "" for r in registered]
+         Para cada entry con category == CATEGORY_REGISTERED_NO_FILE:
+             entry["hints"] = nearest_repo_paths(entry["yaml_path"], file_paths)
+         Para cada entry con category == CATEGORY_FILE_NOT_REGISTERED:
+             entry["hints"] = nearest_repo_paths(entry["yaml_path"], reg_paths)
+         El resto queda con hints = [].
     5. payload = {"ok": True, "generated_at": <ISO-8601 UTC>, "cached": False,
                   "cache_age_sec": 0, "project": project or "",
-                  "counts": counts(entries), "sources": [src_prov, src_scan],
+                  "counts": counts(entries),
+                  "sources": [src_prov, src_scan],   # SIEMPRE 2, nunca 3  [v2 - C3]
                   "pipelines": entries}
+       [v2 - C6] src_prov y src_scan se construyen con source_ok(..., **extra) pasando
+       las claves de truncacion tal cual: capped, hydrated, truncated_hydration (provider)
+       y truncated, skipped_too_big, skipped_unparseable, scanned_files (scan).
     6. _CACHE[cache_key] = (time.monotonic() + _CACHE_TTL_SEC, payload)
     7. return payload
 
@@ -1040,15 +1288,22 @@ def clear_cache() -> None:
 | 16 | `test_gitlab_cae_a_convencion_si_la_llamada_lanza` | Fake `_request` tira `TrackerApiError` → misma salida que #15, **sin excepción** |
 | 17 | `test_gitlab_sin_corridas_es_never_ran` | `fetch_pipelines` → `[]` → `status == "never_ran"` |
 | 18 | `test_gitlab_toma_la_corrida_mas_reciente` | 3 pipelines → usa el primero de la lista, con su `web_url` y su `updated_at` |
-| 19 | `test_gitlab_como_mucho_dos_llamadas` | Contador del fake ≤ 2 |
+| 19 | `test_gitlab_exactamente_dos_llamadas_a_request` | **[v2 — C1]** El contador se pone sobre **`GitLabClient._request`** (no sobre `fetch_pipelines`) → **exactamente 2** |
+| **19b** | `test_gitlab_no_usa_fetch_pipelines` | **[v2 — C1]** `monkeypatch` de `GitLabTrackerProvider.fetch_pipelines` a una función que lanza `AssertionError("prohibido: pagina hasta 40")` → el método **no** la llama y el test pasa. Centinela permanente contra la regresión |
+| **19c** | `test_gitlab_status_desconocido_no_rompe_la_fuente` | **[v2 — C4]** Pipeline con `status: "waiting_for_resource"` → la fuente sigue `available is True` y la entrada queda `("unknown","waiting_for_resource")` |
 | 20 | `test_build_inventory_sin_proveedor_no_lanza` | `get_ci_provider` monkeypatcheado para tirar `TrackerConfigError` → payload con `ok is True`, `sources[0]["available"] is False`, y `pipelines` con las huérfanas del scan |
 | 21 | `test_build_inventory_sin_metodo_opcional_degrada` | Provider falso **sin** `list_pipeline_definitions` → `sources[0]["available"] is False`, `capability == "list_pipeline_definitions"` (§3.4) |
 | 22 | `test_build_inventory_sin_workspace_degrada` | `_active_workspace_root` → `None` → `sources[1]["available"] is False`, sin excepción |
+| **22b** | `test_build_inventory_sin_workspace_no_pinta_todo_rojo` | **[v2 — C2] El test que faltaba.** `_active_workspace_root` → `None` **con 3 definiciones registradas** → **ninguna** entrada tiene `category == "registrada_sin_archivo"`; las 3 tienen `"registrada_estado_desconocido"`; `counts["registrada_sin_archivo"] == 0` |
+| **22c** | `test_build_inventory_scan_truncado_tampoco_pinta_rojo` | **[v2 — C2]** `scan_repo_pipelines` devuelve `meta["truncated"] is True` → mismo resultado que #22b |
+| **22d** | `test_build_inventory_expone_la_truncacion_en_sources` | **[v2 — C6]** 80 definitions → `sources[0]["capped"] is True`; scan truncado → `sources[1]["truncated"] is True` |
+| **22e** | `test_build_inventory_agrega_hints` | **[ADICIÓN]** Registrada `pipelines/ci-online.yml` (sin archivo) + archivo `pipelines/ci_online.yml` (huérfano, otro provider) → tras la 2ª pasada quedan unidas; forzando el corte (`cutoff`) a que no unan, ambas entradas traen la otra ruta en `hints` |
 | 23 | `test_build_inventory_las_dos_fuentes_caidas_sigue_200` | Ambas caídas → `ok is True`, `pipelines == []`, `counts["total"] == 0`, las 2 fuentes con `available is False` |
 | 24 | `test_build_inventory_nunca_lanza` | Parametrizado: se hace tirar a cada dependencia por turno (5 casos) y **ninguno** propaga excepción |
 | 25 | `test_build_inventory_cachea_y_refresh_saltea` | 2 llamadas seguidas → la 2ª tiene `cached is True` y **0** llamadas nuevas al fake; con `refresh=True` → `cached is False` y sí llama |
 | 26 | `test_build_inventory_payload_tiene_las_ocho_claves` | `ok, generated_at, cached, cache_age_sec, project, counts, sources, pipelines` |
 | 27 | `test_build_inventory_es_determinista` | Mismas fuentes → mismo `json.dumps(payload["pipelines"], sort_keys=True)` |
+| **28** | `test_build_inventory_siempre_dos_fuentes` | **[v2 — C3]** `len(payload["sources"]) == 2` con tracker ADO **y** con tracker GitLab; `sources[1]["id"] == "repo_scan"` en los dos casos |
 
 **Comando exacto:**
 ```powershell
@@ -1056,9 +1311,11 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan246_inventory_sources.py -q
 ```
 
-**Criterio de aceptación BINARIO:** los **27** tests del archivo pasan (13 de F2 + 14 de F3), y el
+**Criterio de aceptación BINARIO:** los **37** tests del archivo pasan (16 de F2 + 21 de F3), y el
 test #24 cubre las 5 dependencias que pueden fallar. Además `pytest tests/test_plan218_capability_unavailable.py -q`
 sigue verde (no se rompió el contrato de degradación del Plan 218).
+**[v2]** El #19b es un **centinela permanente**: si alguien "simplifica" volviendo a
+`fetch_pipelines`, el test se pone rojo con el motivo escrito en el mensaje.
 
 **Flag:** `STACKY_PIPELINE_INVENTORY_ENABLED` (default ON) — inerte hasta F4.
 
@@ -1086,7 +1343,7 @@ protegido por una flag default ON y visible en el health del panel.
 | # | Archivo | Cambio exacto |
 |---|---|---|
 | 1 | `backend/services/harness_flags.py` | 1 `FlagSpec` nuevo (bloque de abajo) |
-| 2 | `backend/services/harness_flags.py:241` | Agregar `"STACKY_PIPELINE_INVENTORY_ENABLED",  # Plan 246 — inventario vivo de pipelines` **al final de la tupla `devops` de `_CATEGORY_KEYS`** (`:120`) |
+| 2 | `backend/services/harness_flags.py` | **[v2 — C8] Anclaje corregido.** La tupla `devops` de `_CATEGORY_KEYS` (`:120`) **NO termina en `:241`** (ahí está `STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED`, del Plan 201): termina en **`:256`** (`"STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239`) y cierra con `),` en `:257`. Insertar `"STACKY_PIPELINE_INVENTORY_ENABLED",  # Plan 246 — inventario vivo de pipelines` **después de `:256` y antes del `),` de `:257`** |
 | 3 | `backend/config.py` | Atributo nuevo, patrón de `:1337-1339` |
 | 4 | `backend/tests/test_harness_flags.py:467` | Agregar la clave a `_CURATED_DEFAULTS_ON` |
 | 5 | `backend/api/devops.py:85` | Agregar la key `pipeline_inventory_enabled` al final de `_health_payload()` |
@@ -1242,7 +1499,8 @@ y de error honestos y sin ningún sondeo automático.
 export type InventoryCategory =
   | 'registrada+en_repo'
   | 'registrada_sin_archivo'
-  | 'en_repo_sin_registrar';
+  | 'en_repo_sin_registrar'
+  | 'registrada_estado_desconocido'; // [v2 — C2] barrido no confiable: NUNCA en rojo
 
 export type RunStatus = 'success' | 'failed' | 'never_ran' | 'unknown';
 
@@ -1259,10 +1517,15 @@ export interface InventoryEntry {
   default_branch: string | null; definition_id: string | null;
   category: InventoryCategory; category_reason: string;
   last_run: InventoryLastRun; trigger: InventoryTrigger; found_in: string[];
+  hints: string[]; // [ADICIÓN ARQUITECTO v2] rutas parecidas; [] cuando no aplica
 }
 export interface InventorySource {
   id: string; available: boolean; count: number;
   capability: string; provider: string; reason: string; workaround: string;
+  // [v2 — C6] extras opcionales de truncación (source_ok(**extra)):
+  capped?: boolean; hydrated?: number; truncated_hydration?: boolean;
+  truncated?: boolean; skipped_too_big?: number; skipped_unparseable?: number;
+  scanned_files?: number;
 }
 export interface InventoryPayload {
   ok: boolean; generated_at: string; cached: boolean; cache_age_sec: number;
@@ -1277,11 +1540,12 @@ export function statusLabel(r: InventoryLastRun): { text: string; tone: 'ok' | '
 //  never_ran -> {'Nunca corrio',   'faint'}
 //  unknown   -> {'Desconocido',    'warn'}   + status_detail entre parentesis si != 'sin_datos'
 
-/** Etiqueta + explicacion de cada categoria. Tabla CERRADA. */
-export function categoryLabel(c: InventoryCategory): { text: string; hint: string; tone: 'ok' | 'bad' | 'warn' };
-//  'registrada+en_repo'      -> {'Registrada',        'Registrada en el proveedor y con su YAML en el repo.', 'ok'}
-//  'registrada_sin_archivo'  -> {'Sin archivo',       'Registrada en el proveedor pero su YAML no esta en el repo.', 'bad'}
-//  'en_repo_sin_registrar'   -> {'Huerfana',          'El YAML esta en el repo pero no esta registrada en ningun proveedor.', 'warn'}
+/** Etiqueta + explicacion de cada categoria. Tabla CERRADA de 4 filas. [v2 — C2] */
+export function categoryLabel(c: InventoryCategory): { text: string; hint: string; tone: 'ok' | 'bad' | 'warn' | 'faint' };
+//  'registrada+en_repo'             -> {'Registrada',  'Registrada en el proveedor y con su YAML en el repo.', 'ok'}
+//  'registrada_sin_archivo'         -> {'Sin archivo', 'Registrada en el proveedor pero su YAML no esta en el repo.', 'bad'}
+//  'en_repo_sin_registrar'          -> {'Huerfana',    'El YAML esta en el repo pero no esta registrada en ningun proveedor.', 'warn'}
+//  'registrada_estado_desconocido'  -> {'Sin verificar','Registrada en el proveedor. No se pudo revisar el repo, asi que no se afirma si el archivo esta o no.', 'faint'}
 
 /** Texto del trigger en una linea, deterministico. Nunca inventa: 'unknown' -> 'Sin datos'. */
 export function triggerLabel(t: InventoryTrigger): string;
@@ -1304,6 +1568,23 @@ export function summarize(p: InventoryPayload | null): string;
 
 /** Fuentes caidas, para el banner honesto. [] si todas estan bien. */
 export function unavailableSources(p: InventoryPayload | null): InventorySource[];
+
+/** [v2 — C6] Avisos de TRUNCACION, uno por condicion, en castellano. [] si no hubo recorte.
+ *  Un inventario que recorta y no lo dice es un inventario que miente.
+ *  - source.capped               -> 'Se listaron solo las primeras 50 definiciones del proveedor.'
+ *  - source.truncated_hydration  -> 'Algunas definiciones quedaron sin ruta de YAML (limite de 10 consultas de detalle).'
+ *  - source.truncated            -> 'El barrido del repositorio se corto en 400 archivos: puede faltar alguna pipeline.'
+ *  - source.skipped_too_big > 0  -> 'N archivo(s) YAML se saltaron por superar 512 KB.'
+ *  - source.skipped_unparseable>0-> 'N archivo(s) YAML no se pudieron leer.'
+ *  Orden: el de esta lista. Deterministico. p null -> []. */
+export function truncationNotices(p: InventoryPayload | null): string[];
+
+/** [ADICION ARQUITECTO v2] Pista de por que una entrada no reconcilio. '' si entry.hints esta vacio.
+ *  - 'registrada_sin_archivo'  -> 'En el repo hay rutas parecidas: a, b. Puede ser un renombre.'
+ *  - 'en_repo_sin_registrar'   -> 'Hay definiciones registradas con rutas parecidas: a, b.'
+ *  - resto                     -> ''
+ *  NO propone accion automatica: es informacion para que decida el operador. */
+export function mismatchHint(entry: InventoryEntry): string;
 
 /** Mensaje del estado vacio, DISCRIMINANDO la causa (no un 'no hay nada' mudo):
  *  - payload null                          -> 'Todavia no se consulto el inventario.'
@@ -1362,13 +1643,23 @@ import { PipelineInventorySection } from '../components/devops/PipelineInventory
   `ctx.visible` (`DevOpsPage.tsx:68-71`); este plan **no sondea en absoluto**, así que cumple por
   construcción. El único refetch es el botón **"Actualizar"** (`refresh=1`), acción explícita del
   operador.
-- **Sin `style={{...}}` inline** (gotcha del `uiDebtRatchet`: un archivo `.tsx` nuevo arranca con
+- **Sin estilos inline** (gotcha del `uiDebtRatchet`: un archivo `.tsx` nuevo arranca con
   alcance 0). Usar un `PipelineInventorySection.module.css` con `var(--token)`; **nada de literales
   HEX**.
+  > **[v2 — C9] AVISO al implementador: el gate se cuenta a sí mismo.** El criterio #3 de abajo es
+  > un `grep -c` de la cadena literal del atributo de estilo inline. Si copiás esta viñeta —o
+  > cualquier prosa que la contenga— como **comentario dentro del `.tsx`**, el grep la cuenta y el
+  > gate da **1** en un archivo que no tiene ni un estilo inline. Es un tropiezo ya recurrido 6
+  > veces en esta casa. **Redactá el comentario del componente sin escribir esa cadena.**
 - Tabla con 7 columnas: Estado · Nombre · Proveedor · Ruta del YAML · Rama · Última corrida ·
   Trigger. Toda la lógica de etiquetas viene del modelo puro; el `.tsx` sólo pinta.
+- **[ADICIÓN ARQUITECTO v2]** Bajo la fila, cuando `mismatchHint(entry) !== ''`, una línea
+  secundaria con esa pista. Es texto, no un botón: el 246 no ofrece ninguna acción correctiva
+  (registrar/renombrar es del 250 y del flujo HITL ya existente).
 - Banner honesto arriba con `unavailableSources(payload)`: por cada fuente caída, `reason` +
   `workaround` (mismos campos que el envelope del Plan 218).
+- **[v2 — C6]** Debajo del banner, `truncationNotices(payload)` como lista de avisos neutros.
+  Si el inventario recortó, se dice; no se disimula con una lista corta y muda.
 - Estado vacío con `emptyStateMessage(...)` — **discrimina la causa**, no dice "no hay nada".
 
 **Tests PRIMERO — `frontend/src/devops/__tests__/pipelineInventoryModel.test.ts`:**
@@ -1393,6 +1684,11 @@ import { PipelineInventorySection } from '../components/devops/PipelineInventory
 | 16 | `unavailableSources filtra las caidas` | 1 ok + 1 caída → devuelve sólo la caída |
 | 17 | `unavailableSources con null` | `[]` |
 | 18 | `emptyStateMessage discrimina las 4 causas` | Los 4 mensajes distintos de la tabla |
+| **19** | `categoryLabel cubre la cuarta categoria` | **[v2 — C2]** `'registrada_estado_desconocido'` → `tone === 'faint'`, y **ninguna** categoría distinta de `'registrada_sin_archivo'` devuelve `tone === 'bad'` |
+| **20** | `truncationNotices lista los 5 avisos` | **[v2 — C6]** Payload con `capped`, `truncated_hydration`, `truncated`, `skipped_too_big:2`, `skipped_unparseable:1` → 5 strings, en el orden declarado |
+| **21** | `truncationNotices sin recorte devuelve vacio` | Fuentes limpias → `[]`; `null` → `[]` |
+| **22** | `mismatchHint con hints` | **[ADICIÓN]** Entrada `registrada_sin_archivo` con `hints:['pipelines/ci_online.yml']` → el texto contiene esa ruta y la palabra `renombre` |
+| **23** | `mismatchHint sin hints devuelve vacio` | `hints: []` y categorías sanas → `''` |
 
 **Comandos exactos:**
 ```powershell
@@ -1404,9 +1700,9 @@ npx tsc --noEmit
 > **Correr el archivo solo**, nunca la suite completa (contaminación cross-file conocida).
 
 **Criterio de aceptación BINARIO:**
-1. `npx vitest run src/devops/__tests__/pipelineInventoryModel.test.ts` → **18 passed, 0 failed**.
+1. `npx vitest run src/devops/__tests__/pipelineInventoryModel.test.ts` → **23 passed, 0 failed**.
 2. `npx tsc --noEmit` → **0 errores**.
-3. `grep -c "style={{" PipelineInventorySection.tsx` → **0**.
+3. `grep -c "style={{" PipelineInventorySection.tsx` → **0** (ver el aviso C9 de arriba).
 4. Smoke visual del operador: panel DevOps → *Construir* → **Inventario** muestra la lista, y con
    la flag OFF muestra el `FlagGateBanner` en vez de una pantalla en blanco.
 
@@ -1431,7 +1727,7 @@ runtime: no aplica.**
 | R1 | La API de builds de ADO **no** acepta `definitions=<csv>` (§2.4-1) y el inventario queda sin estado de corrida | Media | Medio | **F2 paso 5**: fallback a `("unknown","batch_no_soportado")` para todas las entradas. **Prohibido** el bucle de N llamadas. Test #11 lo asierta contando llamadas |
 | R2 | La lista `/build/definitions` no trae `process` y todas las definiciones quedan sin `yaml_path` (§2.4-3) ⇒ ninguna reconcilia con el repo | Media | Alto | **F2**: hidratación acotada `_MAX_HYDRATE=10` + `truncated_hydration` en el meta, que la UI muestra honestamente. Tests #1, #2 |
 | R3 | Un repo grande hace lento el barrido | Media | Medio | **F1**: `_MAX_SCAN_FILES=400`, `_MAX_SCAN_DEPTH=4`, `_MAX_YAML_BYTES=512_000`, ignore-list heredada de `pipeline_stack_detector.py:36-37`. Tests #8, #9 |
-| R4 | Falsos positivos: se lista como pipeline un YAML que no lo es (un `docker-compose.yml`, un `appsettings.yml`) | Media | Bajo | **F1**: las 9 reglas cerradas de `classify_pipeline_doc`, con R9 → `None`. Tests #11–#19. Un falso positivo es visible y no rompe nada: aparece como huérfana |
+| R4 | **Mala clasificación de provider** de un YAML real (no un simple falso positivo) | Media | **Alto** — **[v2 — C5] corregido el impacto de la v1** | La v1 decía "aparece como huérfana y no rompe nada". **Falso**: como `identity_key` lleva el provider, una mala clasificación produce **DOS** filas — la huérfana **y** su definición como `registrada_sin_archivo`, que es **roja y rank 0, arriba de todo**. Mitigación real: **F0 pasada 2** (match por ruta normalizada cross-provider, test #20) + las 9 reglas cerradas de `classify_pipeline_doc` con R9 → `None` (tests #11–#19) + `hints` de la adición |
 | R5 | Falsos negativos: una pipeline real queda fuera del listado | Baja | Medio | La fuente del proveedor la trae igual (categoría `registrada_sin_archivo`). **Las dos fuentes se cubren mutuamente** — ese es el punto de reconciliar |
 | R6 | Sin PAT / sin GitLab configurado ⇒ pantalla rota | **Alta** (es el caso normal) | Alto | **F3**: `build_inventory` nunca lanza; 200 con `available:false` por fuente. Tests #20–#24. Precedente Plan 148 / Plan 218 F6 |
 | R7 | La normalización de rutas parte la identidad de `.gitlab-ci.yml` (trampa `lstrip("./")`) | **Alta** si nadie lo advierte | Alto | **F0**: la trampa está escrita en el docstring y tiene **test negativo dedicado** (#1) |
@@ -1442,6 +1738,10 @@ runtime: no aplica.**
 | R12 | La flag `default=True` sin curar deja rojo `test_default_known_only_for_curated` | **Alta** si se olvida | Medio | **F4 pata #4** es explícita: agregar la clave a `_CURATED_DEFAULTS_ON` (`test_harness_flags.py:467`) en el mismo commit |
 | R13 | El test nuevo no se registra en el ratchet y `test_harness_ratchet_meta` queda rojo | **Alta** si se olvida | Bajo | **Cada fase** repite el comando del ratchet y F4 pata #7 nombra las **dos** listas (`.sh` y `.ps1`) |
 | R14 | Merge con las otras 6 ramas de la serie pisa líneas en los 5 archivos universales | **Alta** | Alto | **§0.3** con el orden canónico y el gate post-merge (compileall + flags + ratchet + tsc) |
+| **R15** | **[v2 — C11]** El workspace activo **no** es el repo del proyecto del tracker ⇒ el barrido no encuentra nada aunque el repo exista | Media | **Alto** sin mitigar | **F3 paso 4**: `scan_reliable` también se apaga cuando `matched == 0 and scanned_files > 0` (el barrido vio archivos YAML pero ninguno era pipeline: sospechoso). Con el barrido no confiable, nadie queda "rota". Tests #22b/#22c |
+| **R16** | **[v2 — C1]** Alguien "simplifica" F3 volviendo a `fetch_pipelines` y el refresco pasa de 2 a 41 llamadas | Media | **Alto** | Test centinela **F3 #19b** que monkeypatchea `fetch_pipelines` a algo que lanza, más el conteo sobre `GitLabClient._request` (#19) |
+| **R17** | **[v2 — C4]** GitLab agrega un estado nuevo al vocabulario y el inventario rompe | Baja | Medio | `map_run_status()` con default (`.get`) + test parametrizado #9b. La tabla puede quedar desactualizada sin romper nada: degrada a `("unknown", <estado crudo>)` |
+| **R18** | **[v2 — C6]** El inventario recorta (50 definiciones, 400 archivos, 10 hidrataciones) y el operador cree que ve todo | Media | Medio | `truncationNotices()` en el banner (F5 tests #20/#21) + las claves en `sources` (F3 test #22d) |
 
 ---
 
@@ -1489,20 +1789,23 @@ Lo siguiente **NO** lo hace este plan. Está nombrado con su dueño para que nad
 | **Huérfana** | YAML de pipeline presente en el working tree que **no** corresponde a ninguna definición registrada. Categoría `en_repo_sin_registrar` |
 | **Rota** | Definición registrada cuyo YAML **no** está en el repo. Categoría `registrada_sin_archivo` |
 | **Clave de identidad** | `f"{provider}::{ruta_normalizada}"`, o `f"{provider}::#def{id}"` sin YAML. Determinista |
-| **Fuente** | Uno de los 3 orígenes: `ado_definitions`, `gitlab_pipelines`, `repo_scan`. Cada una reporta su propio `available` |
+| **Fuente** | **[v2 — C3]** Uno de los 3 orígenes *posibles* — `ado_definitions`, `gitlab_pipelines`, `repo_scan` — de los cuales **exactamente 2 corren por refresco**: el del proveedor activo + `repo_scan`. Cada una reporta su propio `available` |
 | **Degradación** | Una fuente que no se pudo consultar devuelve `{available:false, capability, provider, reason, workaround}` y el resto sigue. Nunca un 500 |
-| **Camino feliz** | Las 3 fuentes disponibles y la lista de ADO trayendo `process` ⇒ 3 llamadas de red |
+| **Camino feliz** | **[v2 — C1/C3]** Las 2 fuentes disponibles. Con ADO trayendo `process`: **2** llamadas de red. Con GitLab: **2**. Nunca 3 |
+| **Barrido confiable** | **[v2 — C2]** `meta_scan.available and not meta_scan.truncated and not (matched == 0 and scanned_files > 0)`. Cuando es falso, el inventario **no afirma** que un archivo falte |
 | **Read-only absoluto** | Ninguna ruta de código de este plan escribe en disco, en el repo, en el proveedor ni en la BD |
 
 ### 7.2 Orden de implementación (estricto)
 
 ```
-F0  núcleo puro           → sin dependencias         → 17 tests
+F0  núcleo puro           → sin dependencias         → 26 tests   (v1: 17)
 F1  barrido del repo      → usa F0 (make_entry)      → 28 tests
-F2  fuente ADO            → usa F0                   → 13 tests
-F3  fuente GitLab + armado→ usa F0 + F1 + F2         → 14 tests
+F2  fuente ADO            → usa F0                   → 16 tests   (v1: 13)
+F3  fuente GitLab + armado→ usa F0 + F1 + F2         → 21 tests   (v1: 14)
 F4  endpoint + flag       → usa F3 (build_inventory) → 10 tests
-F5  panel                 → usa F4 (endpoint)        → 18 tests
+F5  panel                 → usa F4 (endpoint)        → 23 tests   (v1: 18)
+                                                       ───────
+                                                       124 tests
 ```
 F1 y F2 son **independientes entre sí** y pueden hacerse en cualquier orden después de F0.
 Todo lo demás es estrictamente secuencial. **F5 no se empieza hasta que F4 esté verde**: sin el
@@ -1558,25 +1861,35 @@ npx tsc --noEmit
 5. **Deriva ya detectada en el árbol (no la arregles acá):**
    `ado_pipeline_definitions.py:83-84` cita `ado_client.py:257` pero `def _request` está en
    **`ado_client.py:269`**.
+6. **[v2 — C8] Los 6 anclajes que la v1 tenía mal están corregidos en §2.5.** Si encontrás otro,
+   agregalo ahí y seguí: no frenes la implementación por un off-by-one, frenala sólo si el
+   **símbolo** no aparece con `grep`.
+7. **[v2 — C9] Antes de escribir un comentario, mirá si algún gate de la DoD lo greppea.** Esta
+   casa ya tropezó 6 veces con un plan cuya prosa literal rompía su propio grep de 0 hits. Los
+   gates greppeables de este plan son la DoD **#12** y la **#16**, más el `grep -c` de F5 #3.
 
 ### 7.5 DoD binaria del Plan 246
 
-El plan está **HECHO** cuando **las 12 líneas** son verdes. Nada de "casi".
+El plan está **HECHO** cuando **las 16 líneas** son verdes. Nada de "casi".
 
 | # | Criterio | Comando / verificación |
 |---|---|---|
-| 1 | F0 verde | `pytest tests/test_plan246_pipeline_inventory.py -q` → 17 passed |
+| 1 | F0 verde | `pytest tests/test_plan246_pipeline_inventory.py -q` → **26** passed |
 | 2 | F1 verde | `pytest tests/test_plan246_repo_scan.py -q` → 28 passed |
-| 3 | F2+F3 verdes | `pytest tests/test_plan246_inventory_sources.py -q` → 27 passed |
+| 3 | F2+F3 verdes | `pytest tests/test_plan246_inventory_sources.py -q` → **37** passed |
 | 4 | F4 verde | `pytest tests/test_plan246_inventory_endpoint.py -q` → 10 passed |
-| 5 | F5 verde | `npx vitest run src/devops/__tests__/pipelineInventoryModel.test.ts` → 18 passed |
+| 5 | F5 verde | `npx vitest run src/devops/__tests__/pipelineInventoryModel.test.ts` → **23** passed |
 | 6 | Tipos | `npx tsc --noEmit` → 0 errores |
 | 7 | Compila | `python -m compileall -q services api` → sin salida |
 | 8 | Ratchet | `pytest tests/test_harness_ratchet_meta.py -q` → passed (**4** archivos nuevos en `run_harness_tests.sh:20` **y** en `run_harness_tests.ps1:13`) |
 | 9 | Flags | `pytest tests/test_harness_flags.py -q -k "curated or category"` → passed (flag en `_CATEGORY_KEYS` **y** en `_CURATED_DEFAULTS_ON`) |
 | 10 | Contrato CI intacto | `CI_PORT_METHODS == ("infer_item_pipeline","monitor_pipeline","trigger_pipeline")` (test centinela F2 #13) |
 | 11 | Cap de red | Los tests F2 #7 y #11 asertan un **número exacto** de llamadas al fake y pasan |
-| 12 | Read-only | El test F4 #6 confirma **405** en POST/PUT/PATCH/DELETE, y `grep -rn "commit_file\|trigger_pipeline\|ensure_yaml_definition" services/pipeline_inventory.py api/pipeline_inventory.py` → **0 hits** |
+| 12 | Read-only | El test F4 #6 confirma **405** en POST/PUT/PATCH/DELETE, y `grep -rn "commit_file\|trigger_pipeline\|ensure_yaml_definition" services/pipeline_inventory.py api/pipeline_inventory.py` → **0 hits**. **[v2]** Ojo: este grep incluye los **comentarios**; no describas la prohibición usando esos nombres dentro de esos dos archivos |
+| **13** | **[v2 — C1]** Cap de red GitLab real | Tests F3 **#19** (exactamente 2 invocaciones de `GitLabClient._request`) y **#19b** (`fetch_pipelines` **nunca** se llama) en verde |
+| **14** | **[v2 — C2]** Cero falsas alarmas rojas | Tests F3 **#22b** y **#22c**: sin workspace y con barrido truncado, `counts["registrada_sin_archivo"] == 0` |
+| **15** | **[v2 — C3]** Siempre 2 fuentes | Test F3 **#28**: `len(payload["sources"]) == 2` con tracker ADO y con tracker GitLab |
+| **16** | **[v2 — C4]** Vocabulario abierto | Test F2 **#9b**: `map_run_status` no lanza con `waiting_for_resource` / `preparing` / `scheduled` / `""` / `None`. **`grep -n "RUN_STATUS_FROM_PROVIDER\[" services/pipeline_inventory.py services/ado_ci_provider.py services/gitlab_ci_provider.py` → 0 hits** (nadie indexa la tabla directo) |
 
 **Smoke visual del operador (no automatizable, §2.4-7):** abrir el panel DevOps → grupo
 *Construir* → pestaña **Inventario**; verificar que (a) lista pipelines, (b) el banner de fuentes

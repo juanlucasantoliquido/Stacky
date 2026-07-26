@@ -12,6 +12,11 @@ import { CompareWizard } from "./CompareWizard";
 import { RunProgress } from "./RunProgress";
 import { SummaryHero } from "./SummaryHero";
 import GatesPanel from "./GatesPanel";
+import {
+  summarizeTriage,
+  type TriageDecision,
+  type TriageDoc,
+} from "./triageLogic";
 import { FiltersBar } from "./FiltersBar";
 import { DiffTreemap } from "./DiffTreemap";
 import { DiffList } from "./DiffList";
@@ -126,6 +131,46 @@ export function DbComparePage() {
   const configInPlace = health?.config_in_place_enabled ?? false;
   const webconfigImport = health?.webconfig_import_enabled ?? false;
   const migrationPanel = health?.migration_panel_enabled ?? false;
+  // Plan 176 F2 — curación del diff. Se carga al entrar en resultados de una
+  // corrida `done`; con la flag OFF no se pide nada y la vista queda igual.
+  const triageEnabled = health?.triage_enabled ?? false;
+  const [triage, setTriage] = useState<TriageDoc | null>(null);
+
+  useEffect(() => {
+    if (!triageEnabled || view !== "results" || !activeRun || activeRun.status !== "done") {
+      setTriage(null);
+      return;
+    }
+    let vigente = true;
+    DbCompare.getTriage(activeRun.run_id)
+      .then((doc) => {
+        if (vigente) setTriage(doc as TriageDoc);
+      })
+      .catch(() => {
+        // Sin triage la lista sigue siendo usable: no se rompe la vista.
+        if (vigente) setTriage(null);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [triageEnabled, view, activeRun]);
+
+  async function decidirItem(itemKey: string, decision: TriageDecision) {
+    if (!activeRun) return;
+    try {
+      const doc = await DbCompare.putTriageItem(activeRun.run_id, {
+        item_key: itemKey,
+        decision,
+      });
+      setTriage(doc as TriageDoc);
+    } catch {
+      // Una decisión que no se pudo guardar no puede dejar la UI mintiendo:
+      // se relee el estado real del servidor.
+      DbCompare.getTriage(activeRun.run_id)
+        .then((doc) => setTriage(doc as TriageDoc))
+        .catch(() => setTriage(null));
+    }
+  }
 
   const handleEnvCreated = () => {
     reloadEnvironments();
@@ -224,6 +269,27 @@ export function DbComparePage() {
             onToggleAction={toggleAction}
             onNewComparison={handleNewComparison}
           />
+          {/* Plan 176 F2 — resumen de curacion: cuanto falta decidir de un
+              vistazo. Informativo; decidir se hace en cada fila. */}
+          {triageEnabled && (
+            <div className={styles.triageSummary}>
+              {(() => {
+                const r = summarizeTriage(triage, diff.items.length);
+                return (
+                  <>
+                    <span>{r.confirmado} confirmados</span>
+                    <span>{r.excluido} excluidos</span>
+                    <span>{r.pendiente} sin decidir</span>
+                    {r.excluido > 0 && (
+                      <a href={DbCompare.triageExclusionsUrl(activeRun.run_id)} download>
+                        Descargar exclusiones
+                      </a>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
           {/* Plan 176 F5 — inmediatamente despues del hero, como manda el plan:
               lo primero que hay que saber antes de generar scripts es si algo
               bloquea la migracion. Se auto-oculta con la flag OFF. */}
@@ -244,7 +310,13 @@ export function DbComparePage() {
           {displayMode === "map" ? (
             <DiffTreemap diff={diff} snapshotCounts={snapshotCounts} onSelectItem={setSelectedItem} />
           ) : (
-            <DiffList items={filteredItems} onSelectItem={setSelectedItem} />
+            <DiffList
+              items={filteredItems}
+              onSelectItem={setSelectedItem}
+              triage={triage}
+              triageEnabled={triageEnabled}
+              onDecide={decidirItem}
+            />
           )}
           {health?.data_diff_enabled && <DataParitySection run={activeRun} onRunUpdate={setActiveRun} />}
           <RepoCoveragePanel runId={activeRun.run_id} />

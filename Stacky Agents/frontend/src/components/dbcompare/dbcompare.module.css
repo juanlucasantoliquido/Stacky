@@ -1155,3 +1155,38 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
+
+/* ── Plan 176 F2 — celda de decisión del triage en cada fila del diff ── */
+
+.triageBtn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.triage_confirmado {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.triage_excluido {
+  color: var(--muted);
+  border-color: var(--border-muted);
+  text-decoration: line-through;
+}
+
+.triage_pendiente {
+  color: var(--muted);
+}
+
+.triageSummary {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}

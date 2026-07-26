@@ -16,12 +16,14 @@ interface Props {
   deepSearchEnabled?: boolean;
   /** Plan 238 — con la bandeja apagada, su entrada NO aparece en la paleta (P9). */
   incidentInboxEnabled?: boolean;
+  /** Plan 172 F6 — los atajos se descubren donde el operador ya mira. */
+  onOpenShortcuts?: () => void;
 }
 
 const DEEP_SEARCH_DEBOUNCE_MS = 250;
 const DEEP_SEARCH_MIN_CHARS = 2;
 
-export default function CommandPalette({ open, onClose, onNavigate, deepSearchEnabled = false, incidentInboxEnabled = false }: Props) {
+export default function CommandPalette({ open, onClose, onNavigate, deepSearchEnabled = false, incidentInboxEnabled = false, onOpenShortcuts }: Props) {
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<{ id: number; ado_id: number; title: string }[]>([]);
   const [agents, setAgents] = useState<{ filename: string; name?: string }[]>([]);
@@ -95,6 +97,18 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
         run: () => onNavigate(nc.path),
       })),
     );
+    // Plan 172 F6 — nadie descubre un atajo leyendo el código: el comando vive
+    // donde el operador ya busca cosas.
+    if (onOpenShortcuts) {
+      commands.push({
+        id: "action-shortcuts-overlay",
+        kind: "nav" as const,
+        icon: "⌨️",
+        label: "Ver atajos de teclado",
+        hint: "?",
+        run: () => onOpenShortcuts(),
+      });
+    }
     // Plan 151 F4b: segundo punto de entrada al tour desde la paleta (reuso 129).
     commands.push({
       id: "nav-help-tour",
@@ -141,7 +155,7 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
       });
     }
     return commands;
-  }, [tickets, agents, packs, projects, onNavigate]);
+  }, [tickets, agents, packs, projects, onNavigate, onOpenShortcuts]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) {

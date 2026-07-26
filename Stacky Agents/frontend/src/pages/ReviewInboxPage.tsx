@@ -16,6 +16,7 @@ import { capExecutionBatch, createBulkRunner, summarizeBulk, type BulkWorker } f
 import { runStatusTone, runStatusLabel } from "../utils/runStatus";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import styles from "./ReviewInboxPage.module.css";
+import { useRovingFocus } from "../hooks/useRovingFocus";
 
 function summarizeCause(exec: { error_message?: string | null; metadata?: Record<string, unknown>; contract_result?: { passed?: boolean; failures?: Array<{ message?: string }> } | null }): string {
   const metadata = (exec.metadata ?? {}) as Record<string, unknown>;
@@ -61,6 +62,12 @@ export default function ReviewInboxPage() {
   }, [rows]);
 
   const visibleIds = useMemo(() => sortedRows.map((r) => r.id), [sortedRows]);
+  // Plan 172 F4 — foco roving: j/k o flechas para recorrer, Enter para abrir.
+  const roving = useRovingFocus({
+    itemCount: sortedRows.length,
+    onOpen: (i) => sortedRows[i] && setDetailExecutionId(sortedRows[i].id),
+    onEscape: () => setDetailExecutionId(null),
+  });
   const sel = useRowSelection({
     visibleIds,
     enabled: bulkEnabled,
@@ -193,9 +200,10 @@ export default function ReviewInboxPage() {
               <th>Acciones</th>
             </tr>
           </thead>
-          <tbody>
-            {sortedRows.map((row) => (
-              <tr key={row.id}>
+          {/* Plan 172 F4 — recorrer con j/k o flechas y abrir con Enter, sin mouse. */}
+          <tbody {...roving.containerProps}>
+            {sortedRows.map((row, idx) => (
+              <tr key={row.id} {...roving.rowProps(idx)}>
                 {bulkEnabled && (
                   <td className={styles.selectCell}>
                     <Checkbox

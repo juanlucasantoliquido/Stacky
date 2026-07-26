@@ -209,10 +209,12 @@ export const CORE_SHORTCUT_DEFS: CoreShortcutSpec[] = [
   },
   {
     id: "nav.toggle-board",
-    combo: "Ctrl+B",
+    // Ctrl+/ es el binding REAL desde el plan 136: cambiarlo acá al migrar
+    // habría rebindeado en silencio una tecla que el operador ya usa.
+    combo: "Ctrl+/",
     scope: "global",
     category: "navegacion",
-    description: "Mostrar u ocultar el tablero",
+    description: "Alternar entre Mi Equipo y Tickets",
     core: true,
     allowInDialog: true,
   },

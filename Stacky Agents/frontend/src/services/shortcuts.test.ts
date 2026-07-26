@@ -172,6 +172,19 @@ describe("colisiones y defs estáticos", () => {
     }
   });
 
+  it("los combos core son los REALES, no unos parecidos", () => {
+    // Estos tres bindings ya existían antes del registro. Migrarlos con un
+    // combo distinto rebindearía en silencio una tecla que el operador usa
+    // todos los días — y el shape del def se vería perfectamente sano.
+    const porId = Object.fromEntries(CORE_SHORTCUT_DEFS.map((d) => [d.id, d.combo]));
+
+    expect(porId).toEqual({
+      "palette.toggle": "Ctrl+K",
+      "help.shortcuts": "?",
+      "nav.toggle-board": "Ctrl+/",
+    });
+  });
+
   it("los defs de lista son todos display-only", () => {
     expect(LIST_NAV_DISPLAY_DEFS).toHaveLength(6);
     for (const d of LIST_NAV_DISPLAY_DEFS) {

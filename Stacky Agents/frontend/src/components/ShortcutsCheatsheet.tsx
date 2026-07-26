@@ -1,4 +1,11 @@
-import { DEFAULT_SHORTCUTS } from "../hooks/useKeyboardShortcuts";
+import {
+  groupForOverlay,
+  isUiShortcutsEnabled,
+  LIST_NAV_DISPLAY_DEFS,
+  shortcutRegistry,
+  visibleShortcuts,
+} from "../services/shortcuts";
+import { Dialog } from "./ui";
 import styles from "./ShortcutsCheatsheet.module.css";
 
 interface Props {
@@ -6,63 +13,61 @@ interface Props {
   onClose: () => void;
 }
 
-const CATEGORY_LABEL = {
-  global: "Global",
-  execution: "Ejecución",
-  navigation: "Navegación",
-} as const;
-
+/**
+ * Plan 172 F3 — La ayuda de atajos se AUTOGENERA del registro.
+ *
+ * Antes esto renderizaba una lista hardcodeada de 8 atajos de los cuales 5 no
+ * existían en ninguna parte del código: el operador probaba Ctrl+R "re-ejecutar
+ * último agente" y no pasaba nada. Una ayuda que miente es peor que no tener
+ * ayuda, porque hace dudar de todo lo demás que dice la app.
+ *
+ * Ahora sale de lo que está REGISTRADO, así que no puede volver a mentir: si un
+ * atajo no está en el registro, no se muestra; si está, funciona.
+ *
+ * Con la flag apagada se listan solo los 3 core — que es exactamente todo lo que
+ * anda en ese estado. Veracidad en los dos estados, no solo en el bueno.
+ */
 export default function ShortcutsCheatsheet({ open, onClose }: Props) {
   if (!open) return null;
 
-  const byCategory: Record<string, typeof DEFAULT_SHORTCUTS> = {};
-  for (const sc of DEFAULT_SHORTCUTS) {
-    (byCategory[sc.category] ||= [] as never).push(sc as never);
-  }
+  const enabled = isUiShortcutsEnabled();
+  const defs = visibleShortcuts(
+    [...shortcutRegistry.getAll(), ...(enabled ? LIST_NAV_DISPLAY_DEFS : [])],
+    enabled,
+  );
+  const groups = groupForOverlay(defs);
 
+  // El Dialog del plan 164 ya trae Escape, focus-trap y restauración de foco:
+  // repetirlo acá a mano duplicaría (y desincronizaría) ese comportamiento.
   return (
-    <div
-      className={styles.backdrop}
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className={styles.modal}>
-        <header className={styles.header}>
-          <h2>Atajos de teclado</h2>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">
-            ×
-          </button>
-        </header>
-        <div className={styles.body}>
-          {Object.entries(byCategory).map(([cat, items]) => (
-            <section key={cat} className={styles.section}>
-              <h3 className={styles.sectionTitle}>
-                {CATEGORY_LABEL[cat as keyof typeof CATEGORY_LABEL] ?? cat}
-              </h3>
-              <table className={styles.table}>
-                <tbody>
-                  {items.map((sc) => (
-                    <tr key={sc.combo}>
-                      <td className={styles.label}>{sc.label}</td>
-                      <td className={styles.combo}>
-                        {sc.combo.split("+").map((part, idx, arr) => (
-                          <span key={idx}>
-                            <kbd className={styles.kbd}>{part}</kbd>
-                            {idx < arr.length - 1 && <span className={styles.plus}>+</span>}
-                          </span>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          ))}
-        </div>
+    <Dialog open={open} onClose={onClose} title="Atajos de teclado" ariaLabel="Atajos de teclado">
+      <div className={styles.body}>
+        {groups.length === 0 && (
+          <p className={styles.label}>No hay atajos disponibles en este momento.</p>
+        )}
+        {groups.map((g) => (
+          <section key={g.category} className={styles.section}>
+            <h3 className={styles.sectionTitle}>{g.label}</h3>
+            <table className={styles.table}>
+              <tbody>
+                {g.items.map((item) => (
+                  <tr key={`${g.category}-${item.comboLabel}-${item.description}`}>
+                    <td className={styles.label}>{item.description}</td>
+                    <td className={styles.combo}>
+                      {item.comboLabel.split("+").map((part, idx, arr) => (
+                        <span key={idx}>
+                          <kbd className={styles.kbd}>{part}</kbd>
+                          {idx < arr.length - 1 && <span className={styles.plus}>+</span>}
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))}
       </div>
-    </div>
+    </Dialog>
   );
 }

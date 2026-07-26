@@ -38,6 +38,8 @@ import {
   omitKeys, HISTORY_FILTER_QUERY_KEYS, resolveMountFilters,
 } from "../services/routeFilters";
 import styles from "./ExecutionHistoryPage.module.css";
+import { useRovingFocus } from "../hooks/useRovingFocus";
+import { isUiShortcutsEnabled, withShortcutHint } from "../services/shortcuts";
 
 // ---------------------------------------------------------------------------
 // Filtros
@@ -142,6 +144,12 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
   });
 
   const items: ExecutionHistoryItem[] = historyQ.data ?? [];
+  // Plan 172 F4 — foco roving: j/k o flechas para recorrer, Enter para abrir.
+  const roving = useRovingFocus({
+    itemCount: items.length,
+    onOpen: (i) => items[i] && setDetailId(items[i].id),
+    onEscape: () => setDetailId(null),
+  });
   const isLoading = historyQ.isLoading;
 
   // ── Plan 187 — selección múltiple y acciones en lote ─────────────────────────
@@ -366,13 +374,19 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                 <th>Ticket</th>
               </tr>
             </thead>
-            <tbody>
-              {items.map((item) => (
+            {/* Plan 172 F4 — recorrer con j/k o flechas y abrir con Enter, sin mouse. */}
+            <tbody {...roving.containerProps}>
+              {items.map((item, idx) => (
                 <tr
                   key={item.id}
                   className={styles.row}
                   onClick={() => setDetailId(item.id)}
-                  title="Click para ver detalle"
+                  title={withShortcutHint(
+                    "Click para ver detalle",
+                    "Enter abre · j/k navega",
+                    isUiShortcutsEnabled(),
+                  )}
+                  {...roving.rowProps(idx)}
                 >
                   {bulkEnabled && (
                     <td className={styles.selectCell}>

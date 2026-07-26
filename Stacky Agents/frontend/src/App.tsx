@@ -39,6 +39,13 @@ import { safeStorage, migrateLegacy, shouldAutoShow } from "./services/onboardin
 import { useOnboardingStore } from "./store/onboardingStore";
 import { useUiSectionsStore } from "./store/uiSectionsStore";
 import { useGlobalExecutionNotifier } from "./hooks/useGlobalExecutionNotifier";
+import { useGlobalShortcutListener } from "./hooks/useGlobalShortcutListener";
+import { useShortcut } from "./hooks/useShortcut";
+import {
+  assertNoRuntimeCollisions,
+  CORE_SHORTCUT_DEFS,
+  setUiShortcutsEnabled,
+} from "./services/shortcuts";
 import { useRunActivityCapture } from "./hooks/useRunActivityCapture"; // Plan 152
 import { HarnessFlags } from "./api/endpoints"; // Plan 152 — lectura del flag del centro de actividad
 import { useReviewInboxCount } from "./hooks/useReviewInboxCount";
@@ -162,8 +169,11 @@ export default function App() {
     // página para ver el efecto de un toggle; no hay re-montaje en caliente).
     fetch("/api/diag/health")
       .then((r) => r.json())
-      .then((d: { shell_v2_enabled?: boolean }) => {
+      .then((d: { shell_v2_enabled?: boolean; ui_shortcuts_enabled?: boolean }) => {
         if (alive) setShellV2Enabled(d.shell_v2_enabled === true);
+        // Plan 172 F2 — default ON: una falla de red NO puede degradar el
+        // teclado, así que la flag solo se toca cuando el health respondió.
+        if (alive) setUiShortcutsEnabled(d.ui_shortcuts_enabled !== false);
       })
       .catch(() => {
         if (alive) setShellV2Enabled(false);
@@ -221,33 +231,30 @@ export default function App() {
     }
   }, []);
 
+  // Plan 172 F2 — los 3 atajos de siempre, ahora servidos por el registro.
+  // Los combos y descripciones viven en CORE_SHORTCUT_DEFS (fuente única): acá
+  // solo se adjunta el handler por id, así el overlay y el test de colisiones
+  // miran el MISMO array que el runtime.
+  const CORE_HANDLERS: Record<string, () => void> = {
+    "palette.toggle": () => setPaletteOpen((v) => !v),
+    "help.shortcuts": () => setCheatsheetOpen((v) => !v),
+    // Plan 136 F7 — usar el tab ACTUAL (tabRef) y reusar selectTab, que ya
+    // hace pushState con guard de pathname. PROHIBIDO meter pushState dentro
+    // del updater de setTab: la app monta en <React.StrictMode> (main.tsx:13)
+    // y en dev los updaters se invocan DOS veces (duplicaría el historial).
+    "nav.toggle-board": () => selectTab(toggleNavTab(tabRef.current)),
+  };
+
+  useGlobalShortcutListener();
+  // CORE_SHORTCUT_DEFS es una constante de módulo de longitud fija (3): la
+  // cantidad de hooks no varía entre renders, así que el forEach cumple las
+  // reglas de hooks. NO derivar este array de props/estado.
+  CORE_SHORTCUT_DEFS.forEach((spec) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useShortcut({ ...spec, handler: CORE_HANDLERS[spec.id] }),
+  );
   useEffect(() => {
-    const onKeyDown = (ev: KeyboardEvent) => {
-      const target = ev.target as HTMLElement | null;
-      const editable =
-        target &&
-        (["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable);
-      const isPaletteShortcut =
-        (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k";
-      const isCheatsheet = !editable && ev.key === "?" && !ev.ctrlKey && !ev.metaKey;
-      const isToggleNav = (ev.ctrlKey || ev.metaKey) && ev.key === "/";
-      if (isPaletteShortcut) {
-        ev.preventDefault();
-        setPaletteOpen((v) => !v);
-      } else if (isCheatsheet) {
-        ev.preventDefault();
-        setCheatsheetOpen((v) => !v);
-      } else if (isToggleNav) {
-        ev.preventDefault();
-        // Plan 136 F7 — usar el tab ACTUAL (tabRef) y reusar selectTab, que ya
-        // hace pushState con guard de pathname. PROHIBIDO meter pushState dentro
-        // del updater de setTab: la app monta en <React.StrictMode> (main.tsx:13)
-        // y en dev los updaters se invocan DOS veces (duplicaría el historial).
-        selectTab(toggleNavTab(tabRef.current));
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    assertNoRuntimeCollisions();
   }, []);
 
   // Si el usuario tenía seleccionado un tab opcional que acaba de ocultarse,
@@ -495,6 +502,7 @@ export default function App() {
         onNavigate={navigateTo}
         deepSearchEnabled={deepSearchEnabled}
         incidentInboxEnabled={incidentInboxEnabled}
+        onOpenShortcuts={() => setCheatsheetOpen(true)}
       />
       <ShortcutsCheatsheet
         open={cheatsheetOpen}

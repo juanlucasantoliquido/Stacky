@@ -1,10 +1,71 @@
 # Plan 247 — Perfilador de pipelines: qué es, qué hace y con qué está hecha cada pipeline
 
-> Estado: **v1 · PROPUESTO** (2026-07-26). Pipeline: **proponer ✓ [este paso]** → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
-> Autor: Claude Opus 5 (1M context), rol `StackyArchitectaUltraEficientCode`. **Ningún anclaje de este documento está escrito de memoria: cada `archivo:símbolo` fue abierto el 2026-07-26** (tabla en §2.5; lo no verificado, en §2.6).
+> Estado: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor v1: Claude Opus 5 (1M context), rol `StackyArchitectaUltraEficientCode`. **Crítica v1→v2 por juez INDEPENDIENTE** (no escribió el v1), misma corrida del 2026-07-26, con **medición real contra el árbol** (pytest corrido, corpus parseado), no relectura de memoria.
 > Serie: **"Mago de las Pipelines" (246–252)**. Este es el **247**. Dependencia: `246 → **247** → {248, 250, 251} → 252`.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro. **El perfil completo es 100% determinista y NO usa LLM** — la paridad de runtimes es trivial por construcción (§3.1).
 > Flag: **`STACKY_PIPELINE_PROFILER_ENABLED`, default ON**. Fases: **6 (F0..F5)**.
+
+---
+
+## VEREDICTO DE LA CRÍTICA v1 → v2
+
+**Veredicto sobre el v1: RECHAZADO** (4 hallazgos BLOQUEANTES). El v2 los corrige; con los
+fixes aplicados el plan queda **APROBADO-CON-CAMBIOS** y es implementable.
+
+Criterios binarios que sustentan el rechazo del v1 (los 4 medidos, no opinados):
+
+| # | Bloqueante del v1 | Evidencia medida |
+|---|---|---|
+| **C1** | F0 editaba `services/cicd_semantic_rules.py`, **superficie EXCLUSIVA del plan 249** ("único plan que lo edita", §0.3 del 246). | `246_PLAN_*.md` §0.3, tabla "Superficies EXCLUSIVAS", fila 249 |
+| **C2** | El plan afirmaba **4 fallos ajenos preexistentes en `test_harness_flags.py`** y ponía eso en la DoD. **Falso: ese archivo está 56 passed / 0 failed.** Los 4 fallos viven en **OTRO archivo** (`tests/test_harness_flags_help.py`: 4 failed / 4 passed) que el plan **nunca corre**. La DoD licenciaba hasta 4 rojos nuevos como "ajenos". | `pytest tests/test_harness_flags.py -q` → `56 passed`; `pytest tests/test_harness_flags_help.py -q` → `4 failed, 4 passed` |
+| **C3** | Faltaba una pata obligatoria de la flag: **`services/harness_flags_help.py` (`PLAIN_HELP`)**. `test_plain_help_covers_all_registry_keys` exige cobertura del **100%** de `FLAG_REGISTRY`; agregar el `FlagSpec` sin su entrada suma un ofensor **atribuible al 247**. | `tests/test_harness_flags_help.py:32-35`; `services/harness_flags_help.py:25` |
+| **C4** | **La tabla capstone era inalcanzable con la regla escrita.** `cd-deploy-test.yml` tiene **dos** jobs `- deployment:` con `environment: 'Test'` (`:123/:125` y `:162/:164`); la regla de F2 no declaraba deduplicación (sí la declara para artefactos y agentes) ⇒ produce `("Test","Test")` y la tabla exige `("Test",)`. | Corpus perfilado con las reglas literales del v1: **1 mismatch / 99 comparaciones**, exactamente ése |
+
+**Lo que la crítica CONFIRMÓ como correcto del v1** (no se toca): los anclajes de
+`cicd_semantic_rules.py`, `cicd_task_catalog.py`, `pipeline_renderers.py`,
+`pipeline_stack_detector.py`, `harness_flags.py`, `config.py`, `api/__init__.py`, los dos
+ratchets y los 29 anclajes de fixture citados están **todos verificados y correctos**; y las
+**98 comparaciones restantes** de la tabla capstone (de 99) reproducen el corpus real.
+**El plan NO duplica `pipeline_stack_detector.py`**: lo complementa con una decisión de
+arquitectura escrita y no lo toca (§2.1) — eso se confirma y se mantiene.
+
+### Changelog v1 → v2
+
+- **C1 (BLOQ.)** — F0 ya **no edita** `cicd_semantic_rules.py`. El alias vive en el módulo propio
+  del 247. Riesgo R5 eliminado; colisión con el 249 eliminada.
+- **C2 (BLOQ.)** — §2.6.5, F4 y DoD #5 corregidos con los números medidos; se agrega la corrida
+  de `test_harness_flags_help.py` con **presupuesto de deuda ajena 4↔4**. **[ADICIÓN ARQUITECTO 2]**
+- **C3 (BLOQ.)** — la flag pasa de **4 a 5 ubicaciones**: se agrega la entrada `PLAIN_HELP` con
+  sus 5 restricciones duras (longitudes, `"Si "`, denylist de jerga, sin claves en mayúsculas,
+  sin `F<n>`), redactada y verificada contra el test.
+- **C4 (BLOQ.)** — regla de **deduplicación de entornos** explícita + test.
+- **C5 (IMP.)** — `profile_pipeline` ahora **rellena `purpose`** con la plantilla determinista
+  (sin esto, el capstone `test_proposito_es_determinista_y_acotado` era rojo garantizado).
+- **C6 (IMP.)** — `test_perfil_no_llama_al_llm` (K4) era un **gate vacío** (monkeypatcheaba un
+  módulo que el perfilador nunca importa: pasaba aunque el archivo estuviera vacío). Reescrito
+  con 3 aserciones que sí pueden fallar.
+- **C7 (IMP.)** — aritmética del criterio binario: **99 aserciones exactas (11 campos × 9)**,
+  no 72. Corregido en K1, §F5 y DoD #7.
+- **C8 (IMP.)** — conteo de casos de F2: **19**, no 16 (dos filas declaran dos tests cada una y
+  faltaba nombrar el negativo de `package`).
+- **C9 (IMP.)** — `test_task_comentada_no_entra_al_perfil` (la mitigación de la causa raíz de
+  ADO-369) estaba **prometido en R3 y en ninguna fase**: ahora está en F5 y en la DoD.
+- **C10 (IMP.)** — **enmienda declarada al §0.3 del 246**: el 247 suma `api/pipeline_profiler.py`
+  (nuevo, de nadie), `api/__init__.py`, `endpoints.ts` y `PipelineYamlPreview.tsx` a su huella.
+- **C11 (IMP.)** — se fija **con qué recorrido** se detecta cada cosa (`extract_task_dicts` vs
+  `iter_step_contexts`): sin esto, dos modelos menores producían dos perfiles distintos.
+- **C12..C21 (MEN.)** — `rawGet` **sí existe** (`client.ts:93`, Plan 238 F3): la justificación del
+  POST se corrige; `bp = Blueprint` está en `:24` (no `:25`); `MAX_YAML_BYTES` se **reusa** de
+  `cicd_semantic_rules.py:51` en vez de redefinirse; se elimina la tautología
+  `return not field.evidence or True`; `detect_stacks` → **`detect_pipeline_stacks`** (a una letra
+  de `detect_stack` del Plan 97); un solo nombre para el test K6; `container:` se define "en
+  cualquier nivel"; anclaje `security-scan-online.yml:58-59`; se declara por qué la flag cae en
+  `epicas_ado` y no en `devops` como la del 246; el `501` tiene copy en el modelo del frontend.
+- **[ADICIÓN ARQUITECTO 1]** — `test_toda_evidencia_apunta_a_un_lugar_real`: convierte el
+  invariante "hay evidencia" en **"la evidencia es verificable"**. Ver §F5.
+- **[ADICIÓN ARQUITECTO 2]** — **presupuesto de deuda ajena medido** en la DoD (números antes y
+  después, adjuntos al cerrar), en vez de la frase "hay 4 rojos ajenos" escrita de memoria.
 
 ---
 
@@ -45,12 +106,12 @@ confianza; lo que no se puede determinar vale `desconocido`, nunca una suposici�
 
 | # | KPI | Medición binaria | Hoy |
 |---|---|---|---|
-| K1 | **Anatomía de fases** de una pipeline sin leer el YAML | El perfil de los 9 golden reproduce la tabla de expectativas de §F5 (72 aserciones exactas) | 0 — no existe el concepto |
+| K1 | **Anatomía de fases** de una pipeline sin leer el YAML | El perfil de los 9 golden reproduce la tabla de expectativas de §F5 (**99 aserciones exactas = 11 campos × 9 pipelines**; C7) | 0 — no existe el concepto |
 | K2 | **Ausencias detectadas** | `cd-deploy-test.yml` → `phases["test"].value is False`; `ci-batch.yml` → `phases["publish_artifact"].value is False` | 0 — el lint sólo mira lo presente |
 | K3 | **Cero alucinación** | Ningún campo del perfil de los 9 golden tiene `value` no vacío con `confidence == "desconocido"` (test `test_sin_valor_sin_confianza`) | N/A |
-| K4 | **Cero tokens en el camino default** | `test_perfil_no_llama_al_llm` monkeypatchea `call_llm` para que explote y perfila los 9 golden | N/A |
+| K4 | **Cero tokens en el camino default** | `test_perfil_no_llama_al_llm` (**3 aserciones, C6**): el fuente de `pipeline_profiler.py` no menciona `pm_llm_client`; perfilar los 9 golden no deja `services.pm.pm_llm_client` en `sys.modules`; y el endpoint sin `narrate` responde 200 con `purpose_source == "plantilla"` **con el `call_llm` monkeypatcheado a una función que lanza** | N/A |
 | K5 | **Perfilar lo que no se entiende** | `ci-batch.yml` (matrix) y `bootstrap-server-environment.yml` (17 `${{ }}`) devuelven perfil completo + `not_understood` poblado, sin excepción | Hoy `parse_ado_yaml` los tolera pero no declara nada al operador |
-| K6 | **Latencia** | Perfilar los 9 golden < 1 s en total (`test_perfil_los_nueve_en_menos_de_un_segundo`) | N/A |
+| K6 | **Latencia** | Perfilar los 9 golden < 1 s en total (`test_los_nueve_en_menos_de_un_segundo` — **nombre único, C17**) | N/A |
 
 **Valor concreto para el operador:** pasar de *"acá hay 40 pipelines, andá leyéndolas"* a
 *"estas 12 compilan sin testear, estas 3 despliegan a prod, estas 5 corren en el self-hosted"*.
@@ -102,11 +163,19 @@ ADO-369 (`VSBuild@1` de .NET **Framework** sobre un pool hosted efímero).
 | `_pool_is_hosted(pool)` / `_pool_os_is_windows(pool)` | `backend/services/cicd_semantic_rules.py:141` / `:145` | `hosted` ⇔ tiene `vmImage`. El SO devuelve **`True`/`False`/`None`**, y `None` está documentado como *"un pool self-hosted no declara su SO: afirmar algo sobre él sería inventar"* (`:146-147`) — la misma doctrina anti-alucinación de este plan. |
 | `_task_inputs(step)` | `cicd_semantic_rules.py:158` | `inputs` como dict, tolerante a `None`. |
 
-**SÍ se reusa, pero requiere una promoción de visibilidad (2 líneas, retro-compatible):**
+**SÍ se reusa, IMPORTÁNDOLO — sin editar el archivo ajeno (C1, cambio del v2):**
 
 | Símbolo | Anclaje | Por qué es indispensable |
 |---|---|---|
-| `_iter_steps(doc) -> list[_StepCtx]` | `cicd_semantic_rules.py:105` | Recorre **las tres raíces de ADO** (`steps:` en `:125-126`, `jobs:` en `:128`, `stages:` en `:130-134`) **y** los jobs `- deployment:` (`:116-119`), resolviendo el **pool efectivo** con la precedencia job > stage > raíz (`:115`) y emitiendo un `location` estable (`"stages[1].jobs[0].steps[2]"`). Reescribirlo sería duplicar ~30 líneas de traversal sutil. `_StepCtx` (`:74-82`) ya trae `step`, `location`, `pool`, `stage_doc`, `in_deployment`. |
+| `_iter_steps(doc) -> list[_StepCtx]` | `cicd_semantic_rules.py:105` | Recorre **las tres raíces de ADO** (`steps:` en `:125-126`, `jobs:` en `:128`, `stages:` en `:130-134`) **y** los jobs `- deployment:` (`:116-119`), resolviendo el **pool efectivo** con la precedencia job > stage > raíz (`:115`) y emitiendo un `location` estable (`"stages[1].jobs[0].steps[2]"`). Reescribirlo sería duplicar ~30 líneas de traversal sutil. `_StepCtx` (`:74-82`, campo `pool` en `:80`) ya trae `step`, `location`, `pool`, `stage_doc`, `in_deployment`. |
+| `MAX_YAML_BYTES` | `cicd_semantic_rules.py:51` (`512 * 1024`) | **C14:** el tope de tamaño **ya existe** con ese valor exacto y su comentario (*"por encima de esto no se procesa"*). El perfilador lo **importa**; redefinirlo sería dos verdades para el mismo límite. |
+
+> **⚠ CORRECCIÓN BLOQUEANTE DEL v1 (C1).** El v1 pedía insertar 2 líneas de alias
+> **dentro de `services/cicd_semantic_rules.py`**. Ese archivo es **superficie EXCLUSIVA del
+> plan 249** según el §0.3 del Plan 246 (*"249 … `services/cicd_semantic_rules.py` (**único plan
+> que lo edita**)"*). **El 247 NO lo toca.** Los alias públicos viven en el módulo propio del 247
+> (`services/pipeline_profiler.py`, F0), que es superficie exclusiva del 247. El reuso es
+> idéntico, la colisión desaparece y el riesgo R5 del v1 se elimina entero.
 
 **NO se reusa (y el motivo importa):**
 
@@ -179,12 +248,14 @@ marcados con la ruta completa `backend/tests/fixtures/cicd_nl/golden/…`.
 | `backend/services/pm/pm_llm_client.py:90,98,99,101,105,278,281-283` | `LLMCallSpec`, `.temperature`, `.fixture_id`, `.expect_json`, `LLMCallResult`, `call_llm`, docstring *"Nunca lanza excepción al caller"* | rangos leídos |
 | `backend/services/harness_flags.py:21,67,120,191,207,2911` | `FlagSpec`, `CategorySpec("epicas_ado", …)`, `_CATEGORY_KEYS`, clave `"epicas_ado"`, entrada `STACKY_PIPELINE_GENERATOR_ENABLED`, `FlagSpec(key="STACKY_PIPELINE_GENERATOR_ENABLED")` | rangos leídos |
 | `backend/tests/test_harness_flags.py:467` | `_CURATED_DEFAULTS_ON` | rango `:460-475` leído |
+| `backend/services/harness_flags_help.py:18,25,691-696` | `class PlainHelp`, `PLAIN_HELP`, entrada de `STACKY_PIPELINE_GENERATOR_ENABLED` (patrón a copiar) | **agregado en v2 (C3)** — `grep -n` + rango leído |
+| `backend/tests/test_harness_flags_help.py:17-23,32,44,56,63` | `JARGON_DENYLIST`, `_KEY_RE`, `_PHASE_RE`, `test_plain_help_covers_all_registry_keys`, `test_plain_help_fields_non_empty_and_bounded`, `test_plain_help_on_off_start_with_si`, `test_plain_help_avoids_jargon_denylist` | **agregado en v2 (C2/C3)** — archivo leído entero (115 líneas) **y corrido**: `4 failed, 4 passed` |
 | `backend/config.py:516,1399` | `STACKY_PIPELINES_ENABLED`, `STACKY_PIPELINE_GENERATOR_ENABLED` | rango `:1395-1405` leído |
-| `backend/api/pipeline_generator.py:1-10,25,34,36` | docstring del patrón de blueprint, `bp = Blueprint(...)`, `preview_route`, guard `abort(404)` per-request | rango `:1-40` leído |
+| `backend/api/pipeline_generator.py:1-10,**24**,**35**,**38**` | docstring del patrón de blueprint, `bp = Blueprint(...)`, `def preview_route`, guard `abort(404)` per-request | rango `:1-40` leído. **C13: el v1 decía `:25,34,36`; los reales son `:24,35,38`** (corregido en v2) |
 | `backend/api/__init__.py:44,117` | `from .pipeline_generator import bp`, `api_bp.register_blueprint(pipeline_generator_bp)` | `grep -n` |
 | `backend/scripts/run_harness_tests.sh:20,766-770` | `HARNESS_TEST_FILES=(`, bloque `test_plan243_*` | `grep -n` |
 | `backend/scripts/run_harness_tests.ps1:13,679-683` | `$HarnessTestFiles = @(`, bloque `test_plan243_*` (**`:683` sin coma final**) | `grep -n` |
-| `frontend/src/api/client.ts:44,155,160,162` | `rawPost`, `throw new Error` en non-2xx, `api`, `api.post` | rango `:155-177` leído + `grep -n` |
+| `frontend/src/api/client.ts:44,**93**,155,160,162` | `rawPost`, **`rawGet`**, `throw new Error` en non-2xx, `api`, `api.post` | `grep -n`. **C12: el v1 afirmaba que `rawGet` NO existe. SÍ existe** desde el Plan 238 F3 (`:89-93`, *"gemelo de lectura de rawPost"*). La decisión de usar POST sigue siendo correcta (el request lleva cuerpo), pero **la justificación del v1 era falsa** y se reemplazó |
 | `frontend/src/api/endpoints.ts:4426,4428,4434` | `PipelineGenerator`, `.preview`, `.commit` | `grep -n` |
 | `frontend/src/components/devops/PipelineYamlPreview.tsx:12,20,57` (154 líneas) | `PipelineYamlPreviewProps`, `PipelineYamlPreview`, `PipelineGenerator.preview(...)` | primeras 70 líneas leídas + `wc -l` |
 | `frontend/src/pages/DevOpsPage.tsx:58,75,113,130` | `DevOpsSectionContext`, `DevOpsSection`, `DEVOPS_SECTIONS`, entrada de `PipelineBuilderSection` | `grep -n` |
@@ -210,8 +281,21 @@ marcados con la ruta completa `backend/tests/fixtures/cicd_nl/golden/…`.
    nunca degrada el perfil**.
 4. **Este plan no toca ninguna tabla de base de datos.** No hay persistencia nueva: el perfil se
    calcula en el momento y se devuelve. (Cachear es del 246, que es quien tiene el registro.)
-5. **`test_harness_flags_help` tiene 4 fallos ajenos preexistentes** (dossier §4). No son de este
-   plan y no se "arreglan": la entrada nueva se valida de forma aislada (§F4).
+5. **Deuda ajena de flags — números MEDIDOS el 2026-07-26, no citados de memoria (C2).**
+   El v1 decía *"`test_harness_flags.py` trae 4 fallos preexistentes en `test_harness_flags_help`"*.
+   **Es falso y mezcla dos archivos distintos.** Medición real con
+   `.venv\Scripts\python.exe -m pytest <archivo> -q`:
+
+   | Archivo | Estado HOY (baseline) | Qué significa para el 247 |
+   |---|---|---|
+   | `backend/tests/test_harness_flags.py` | **56 passed, 0 failed** — VERDE | **Cualquier rojo acá lo causó el 247.** No hay "4 ajenos" que lo tapen |
+   | `backend/tests/test_harness_flags_help.py` | **4 failed, 4 passed** | Deuda ajena REAL. Los 4 fallos son `test_plain_help_covers_all_registry_keys`, `test_plain_help_fields_non_empty_and_bounded`, `test_plain_help_on_off_start_with_si`, `test_plain_help_avoids_jargon_denylist`. **El 247 no los arregla, pero tampoco puede sumar un ofensor propio** (§F4, pata 5 de la flag) |
+   | `backend/tests/test_harness_ratchet_meta.py` | **4 passed** — VERDE | Cualquier rojo acá lo causó el 247 |
+
+   > **Por qué esto era BLOQUEANTE:** la DoD del v1 pedía *"el mismo número de fallos que antes
+   > (los 4 ajenos), ni uno más"* sobre un archivo que está en **cero**. Eso **autoriza hasta 4
+   > rojos nuevos del propio plan** disfrazados de deuda ajena. Es exactamente la clase de falso
+   > verde que esta casa no acepta.
 
 ---
 
@@ -226,8 +310,8 @@ marcados con la ruta completa `backend/tests/fixtures/cicd_nl/golden/…`.
 | **Cero tokens ociosos** | **El perfil default hace 0 llamadas a LLM.** La narración se pide explícitamente con `narrate: true` (un botón, una pipeline, un click). Perfilar 40 pipelines del inventario del 246 cuesta **0 tokens**. |
 | **Human-in-the-loop** | El perfil **describe, no decide y no actúa**. No dispara corridas, no edita YAML, no crea tickets. La narración con IA la pide el operador. |
 | **Mono-operador sin auth** | Ni RBAC ni roles: guard de flag `abort(404)` per-request, igual que `pipeline_generator.py:36`. |
-| **No degradar** | Módulo nuevo + 2 líneas retro-compatibles en `cicd_semantic_rules.py` (alias preservado) + 1 componente montado adicionalmente. **Comando de no-regresión obligatorio en cada fase.** |
-| **Reusar lo existente** | 6 símbolos reusados sin tocar + 1 promovido (§2.2). Cero re-parsers, cero catálogo nuevo, cero infra de flags nueva. |
+| **No degradar** | Módulo nuevo + 1 componente montado adicionalmente. **Cero ediciones a módulos de servicio ajenos** (C1: el v1 editaba `cicd_semantic_rules.py`; el v2 **no toca un solo archivo de `services/` que no sea el propio**). **Comando de no-regresión obligatorio en cada fase.** |
+| **Reusar lo existente** | **8 símbolos reusados sin tocar nada** (§2.2), importados. Cero re-parsers, cero catálogo nuevo, cero infra de flags nueva, cero constantes duplicadas. |
 
 ### 3.2 Los dos principios anti-alucinación (son de diseño, no de estilo)
 
@@ -257,6 +341,16 @@ devuelve **`501` con `{"error":"inventory_unavailable", "detail":"el registro de
 nivel de módulo**: un `ImportError` en el import del blueprint tumbaría el arranque de
 `api/__init__.py`.
 
+> **C21 (v2) — la degradación también tiene copy en la UI.** El §0.2 del Plan 246 exige que los
+> consumidores muestren *"inventario no disponible"* y sigan funcionando. `api.post` **lanza** en
+> non-2xx (`client.ts:155`), así que el `501` llega al `catch` como un `Error` con el texto crudo.
+> `pipelineProfileModel.ts` (F5) expone
+> `export function profileErrorCopy(message: string): string` que, si el mensaje contiene
+> `"inventory_unavailable"`, devuelve **`"Inventario de pipelines no disponible (plan 246): pegá el YAML"`**,
+> y en cualquier otro caso devuelve el mensaje tal cual. Un test del modelo lo fija
+> (`test_copy_de_inventario_no_disponible`). **La UI del 247 nunca manda `pipeline_id`** (siempre
+> tiene el YAML en la mano), así que este camino sólo se activa cuando lo consume el 246.
+
 ### 3.4 Desviación declarada respecto del dossier (leerla, es deliberada)
 
 El dossier §3 sugiere para el 247, en la columna `api/`: *"(extiende el blueprint del 246)"*.
@@ -274,6 +368,30 @@ El dossier §3 sugiere para el 247, en la columna `api/`: *"(extiende el bluepri
 `services/pipeline_profiler.py`, `frontend/src/devops/pipelineProfileModel.ts`,
 `frontend/src/components/devops/PipelineProfileCard.tsx`, flag
 `STACKY_PIPELINE_PROFILER_ENABLED`.
+
+### 3.4-bis Huella REAL del plan y enmienda declarada al §0.3 del 246 (C10, v2)
+
+El §0.3 del Plan 246 lista para el 247 sólo 3 archivos exclusivos + "extiende
+`api/pipeline_inventory.py`". **La huella real de este plan es más ancha y el v1 no la declaraba.**
+Ésta es la lista COMPLETA y auditada, con el dueño de cada archivo:
+
+| Archivo | Quién lo reserva | Veredicto de colisión |
+|---|---|---|
+| `backend/services/pipeline_profiler.py` (crear) | **247** (§0.3) | Exclusivo. Sin colisión |
+| `frontend/src/devops/pipelineProfileModel.ts` (crear) | **247** (§0.3) | Exclusivo. Sin colisión |
+| `frontend/src/components/devops/PipelineProfileCard.tsx` (crear) | **247** (§0.3) | Exclusivo. Sin colisión |
+| `backend/api/pipeline_profiler.py` (crear) | **nadie** | **Nombre libre**: no figura en ninguna fila del §0.3. Es la desviación deliberada de §3.4 |
+| `backend/api/__init__.py` (2 líneas) | compartido 246/248/250/251/252 | **El 247 se SUMA a esa lista.** Aditivo (2 líneas en 2 bloques). Enmienda declarada |
+| `frontend/src/api/endpoints.ts` (1 `export const`) | compartido | Aditivo al final del bloque. Enmienda declarada |
+| `frontend/src/components/devops/PipelineYamlPreview.tsx` (montaje) | **nadie** | No aparece en ninguna fila del §0.3. **No es** `PipelineBuilderSection.tsx` (244/250) ni `PipelineInventorySection.tsx` (246) |
+| Las 5 superficies universales + **`services/harness_flags_help.py`** | compartidas por los 7 | Aditivas. La 6ª es el hallazgo C3 del v2 |
+| ~~`backend/services/cicd_semantic_rules.py`~~ | **249 (EXCLUSIVO)** | **PROHIBIDO. El v1 lo editaba: era la colisión C1. El v2 NO lo toca.** |
+
+**Consecuencia en el orden de merge:** el 247 deja de ser un plan "sin blueprint". Sigue valiendo
+la secuencia dura **246 → 247**, y se agrega: el 247 debe rebasarse antes que 248/250/251 porque
+ahora comparte `api/__init__.py` y `endpoints.ts` con ellos. **Gate post-merge obligatorio** (el
+del §0.3 del 246): `compileall -q services api` + `test_harness_flags.py` + `test_harness_flags_help.py`
++ `test_harness_ratchet_meta.py` + `npx tsc --noEmit`.
 
 ### 3.5 Fuera de alcance de este plan (corte propio, §3 del dossier)
 
@@ -305,7 +423,8 @@ decisión mía**, no por olvido:
 ## F0 — Contrato del perfil + promoción del recorredor de pasos
 
 **Objetivo (1 frase):** dejar escrito y testeado el **contrato de datos** del perfil —con su
-invariante anti-alucinación— y hacer público el recorredor de pasos que ya existe, sin duplicarlo.
+invariante anti-alucinación— y **reusar por import** el recorredor de pasos que ya existe, sin
+duplicarlo y **sin editar el archivo que lo contiene**.
 
 **Valor entregado:** a partir de acá, cualquier campo que agregue F1/F2 es incapaz de existir sin
 evidencia; y el perfilador no reimplementa el traversal de las 3 raíces de ADO.
@@ -315,13 +434,28 @@ evidencia; y el perfilador no reimplementa el traversal de las 3 raíces de ADO.
 | Acción | Ruta completa |
 |---|---|
 | **CREAR** | `Stacky Agents/backend/services/pipeline_profiler.py` |
-| **EDITAR** | `Stacky Agents/backend/services/cicd_semantic_rules.py` (+2 líneas, retro-compatible) |
 | **CREAR** | `Stacky Agents/backend/tests/test_plan247_profiler_core.py` |
+
+> **C1 (v2): la fila `EDITAR cicd_semantic_rules.py` del v1 fue ELIMINADA.** Ese archivo es
+> exclusivo del plan 249. F0 **no edita ningún archivo existente**: sólo crea dos.
 
 ### Símbolos EXACTOS a crear
 
 ```python
 # services/pipeline_profiler.py — Plan 247 F0
+# C1/C14 (v2) — REUSO POR IMPORT. `cicd_semantic_rules.py` es superficie exclusiva del plan 249:
+# NO se edita. Los nombres privados se importan con alias público EN ESTE módulo. Si el 249
+# los renombra, rompe `test_iter_step_contexts_es_el_mismo_objeto` con un mensaje claro,
+# nunca el arranque del backend.
+from services.cicd_semantic_rules import (
+    _iter_steps as iter_step_contexts,     # recorre las 3 raíces de ADO + jobs `- deployment:`
+    _StepCtx as StepContext,               # .step .location .pool .stage_doc .in_deployment
+    _pool_is_hosted, _pool_os_is_windows, _task_inputs,
+    MAX_YAML_BYTES,                        # 512 * 1024 — ya definido en :51, NO se redefine
+)
+from services.cicd_task_catalog import extract_task_dicts, is_deploy_step
+from services.pipeline_renderers import scan_unsupported
+
 CONTRACT_VERSION = "247.1"
 
 CONF_HIGH    = "alta"          # evidencia directa e inequívoca (ref de tarea, clave del YAML)
@@ -382,36 +516,41 @@ STACK_TO_DETECTOR_ID: dict = {          # puente informativo hacia el Plan 97, s
 }
 ```
 
-### Diff exacto en `cicd_semantic_rules.py` (retro-compatible, 2 líneas)
+### Reuso sin editar el archivo ajeno (C1 — reemplaza el "diff de 2 líneas" del v1)
 
-Inmediatamente **después** del cierre de la función `_iter_steps` (hoy `:136`, `return out`) y
-**antes** del comentario `# ── Helpers de dominio ──` (hoy `:139`), insertar:
+**No se abre `services/cicd_semantic_rules.py` para escribir. Ni una línea.** El bloque `import`
+de arriba es todo lo que hace falta: en Python el guion bajo inicial es convención, no acceso
+restringido, y el alias público queda del lado del 247 (su propia superficie), no del 249.
 
-```python
-# Plan 247 F0 — alias públicos. `_iter_steps` y `_StepCtx` resuelven las 3 raíces de ADO y el
-# pool efectivo; el perfilador los reusa en vez de duplicar el traversal. El nombre privado se
-# conserva: los call-sites internos (check_semantics:527) NO se tocan.
-iter_step_contexts = _iter_steps
-StepContext = _StepCtx
-```
+Ventajas frente al v1, todas verificables:
 
-> **Prohibido** renombrar `_iter_steps` o `_StepCtx`, y **prohibido** cambiar una sola línea de
-> su cuerpo. Si el bloque `return out` no aparece en `:136`, **greppeá `def _iter_steps`** (regla
-> de anclajes §2.5).
+1. **Cero colisión** con la superficie exclusiva del plan 249.
+2. **Cero riesgo de regresión** en el Plan 243: el archivo queda byte-idéntico (el riesgo R5 del
+   v1 desaparece; el comando de no-regresión se conserva igual, como seguro barato).
+3. **Mismo reuso, mismo objeto**: `iter_step_contexts is cicd_semantic_rules._iter_steps` sigue
+   siendo `True` y el test que lo fija sigue existiendo.
+
+> **Prohibido** copiar el cuerpo de `_iter_steps` al perfilador (sería duplicar ~30 líneas de
+> traversal sutil: precedencia de pool job > stage > raíz en `:115`, jobs `- deployment:` en
+> `:116-119`, `location` estable). Si el import falla, **greppeá `def _iter_steps`** y arreglá el
+> import — nunca reimplementes (regla de anclajes §2.5).
 
 ### Pseudocódigo clave
 
 ```python
 def field_is_coherent(field) -> bool:
     """Invariante anti-alucinación (§3.2.1). Un campo con valor DEBE tener evidencia
-    y no puede declararse desconocido; un campo desconocido DEBE estar vacío."""
-    tiene_valor = bool(field.value) if not isinstance(field.value, bool) else field.value
+    y no puede declararse desconocido. Un campo SIN valor es siempre coherente:
+    puede o no traer evidencia de POR QUÉ no se pudo determinar."""
+    tiene_valor = field.value if isinstance(field.value, bool) else bool(field.value)
     if tiene_valor:
         return bool(field.evidence) and field.confidence != CONF_UNKNOWN
-    if field.confidence == CONF_UNKNOWN:
-        return not field.evidence or True   # un campo desconocido PUEDE traer evidencia de por qué
     return True
 ```
+
+> **C15 (v2):** el v1 traía `return not field.evidence or True`, que es la constante `True`
+> escrita como si fuera una condición. Un modelo menor la copia tal cual y deja una tautología en
+> producción. El v2 la elimina: el comportamiento es idéntico y ahora se lee.
 
 `profile_to_dict` serializa: `ProfileField → {"value":…, "confidence":…, "evidence":[{"location","detail"}]}`,
 `EnvironmentRef → {"name","kind","resolved","possible_values"}`,
@@ -428,21 +567,25 @@ def field_is_coherent(field) -> bool:
 | `test_field_vacio_desconocido_es_coherente` | `field_is_coherent(ProfileField((), CONF_UNKNOWN, ()))` es `True` |
 | `test_empty_profile_es_serializable` | `json.dumps(profile_to_dict(empty_profile("x.yml", "boom")))` no lanza |
 | `test_profile_to_dict_claves_estables` | el dict tiene exactamente las 13 claves del contrato |
-| `test_iter_step_contexts_es_el_mismo_objeto` | `cicd_semantic_rules.iter_step_contexts is cicd_semantic_rules._iter_steps` |
+| `test_iter_step_contexts_es_el_mismo_objeto` | **(C1 v2)** `pipeline_profiler.iter_step_contexts is cicd_semantic_rules._iter_steps` **Y** `pipeline_profiler.StepContext is cicd_semantic_rules._StepCtx`. Es el centinela de que el 249 no renombró nada bajo los pies del 247 |
+| `test_no_se_edito_cicd_semantic_rules` | **(C1 v2)** `"iter_step_contexts" not in Path("services/cicd_semantic_rules.py").read_text(encoding="utf-8")` — fija por escrito que el 247 **no** dejó alias en la superficie del 249 |
+| `test_max_yaml_bytes_es_el_del_motor` | **(C14 v2)** `pipeline_profiler.MAX_YAML_BYTES is cicd_semantic_rules.MAX_YAML_BYTES` — un solo tope, no dos verdades |
 | `test_iter_step_contexts_cubre_las_tres_raices` | sobre 3 docs sintéticos (`steps:`, `jobs:`, `stages:`) devuelve 1 ctx cada uno con el `location` esperado |
 | `test_stack_to_detector_id_no_inventa` | todos los valores de `STACK_TO_DETECTOR_ID` están en `{"dotnet","node","python",None}` |
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan247_profiler_core.py -q
-# NO REGRESIÓN (obligatorio, porque F0 edita cicd_semantic_rules.py):
+# NO REGRESIÓN (seguro barato: F0 ya NO edita cicd_semantic_rules.py, pero lo importa):
 .venv\Scripts\python.exe -m pytest tests/test_plan243_reglas_semanticas.py -q
 ```
 
 ### Criterio de aceptación BINARIO
 
-`test_plan247_profiler_core.py` verde **Y** `test_plan243_reglas_semanticas.py` verde con el
-**mismo número de tests pasados que antes del cambio** (anotar el número antes de editar).
+`test_plan247_profiler_core.py` verde con sus **12 casos** (9 del v1 + los 3 agregados en v2)
+**Y** `test_plan243_reglas_semanticas.py` verde con el **mismo número de tests pasados que antes**
+(anotar el número antes de empezar) **Y** `git diff --stat -- "Stacky Agents/backend/services/cicd_semantic_rules.py"`
+**sin salida** (C1: el archivo del 249 queda intacto).
 
 **Flag:** `STACKY_PIPELINE_PROFILER_ENABLED` (default **ON**). F0 no la consume: es un módulo
 puro sin call-site. **No se declara todavía** (la declara F4, junto con su consumidor — evita
@@ -477,12 +620,35 @@ STACK_IDS = ("dotnet_framework", "dotnet_core", "sql_dacpac", "node", "python", 
 
 TRIGGER_KINDS = ("push", "pr", "scheduled", "manual")
 
-def detect_stacks(doc: dict) -> ProfileField: ...
+SUPPORTED_PROVIDERS = ("ado",)   # el 249 agrega "gitlab" a ESTA tupla, no a un `if`
+
+def detect_pipeline_stacks(doc: dict) -> ProfileField: ...   # C16: NO `detect_stacks`
 def detect_agents(doc: dict) -> ProfileField: ...
 def detect_triggers(doc: dict) -> ProfileField: ...
 def profile_pipeline(yaml_text: str, *, provider: str = "ado",
                      source_path: str = "") -> PipelineProfile: ...
 ```
+
+> **C16 (v2) — el nombre importa.** El v1 la llamaba `detect_stacks`, a **una letra** de
+> `detect_stack` del Plan 97 (`pipeline_stack_detector.py:19`), que hace algo **distinto** (perfila
+> repos, no pipelines — §2.1). Dos funciones casi homónimas con semánticas incompatibles en el
+> mismo `services/` es una trampa garantizada para el próximo que lea. Se llama
+> **`detect_pipeline_stacks`** y punto.
+
+### C11 (v2) — Con qué recorrido se detecta cada cosa (antes quedaba a criterio del implementador)
+
+El v1 nunca decía si una señal se busca con `extract_task_dicts` o con `iter_step_contexts`. Son
+recorridos distintos y dan resultados distintos. **Tabla cerrada, sin excepciones:**
+
+| Detector | Recorrido OBLIGATORIO | Por qué |
+|---|---|---|
+| `detect_pipeline_stacks` | `extract_task_dicts(doc)` (`cicd_task_catalog.py:268`) | Sólo mira `task:` vivos; los comentados no existen por construcción (R3 / ADO-369) |
+| `detect_phases` — build/test/package/publish_artifact/deploy | `extract_task_dicts(doc)` | Ídem. `is_deploy_step(ref, _task_inputs(t))` sobre cada dict |
+| `detect_agents` | `iter_step_contexts(doc)` → `ctx.pool` | El **pool efectivo** (job > stage > raíz) sólo lo resuelve el recorrido con contexto |
+| `detect_artifacts` — publicados | `extract_task_dicts(doc)` | Se busca la ref de la tarea publicadora |
+| `detect_artifacts` — consumidos | `iter_step_contexts(doc)` → `ctx.step` | Los `- download:` viven **dentro de los jobs `- deployment:`**, y `extract_task_dicts` no los ve (no tienen clave `task`) |
+| `detect_environments` | recorrido propio sobre `doc["jobs"]` + `doc["stages"][i]["jobs"]` | El `environment:` está en el **job**, no en el paso |
+| `not_understood` | `scan_unsupported(yaml_text)` sobre el TEXTO | Reuso literal; re-parsea por su cuenta y está bien así (K6 lo tolera de sobra) |
 
 ### Tabla de detección de stack (CERRADA — cada fila con su procedencia)
 
@@ -493,12 +659,14 @@ def profile_pipeline(yaml_text: str, *, provider: str = "ado",
 | `sql_dacpac` | algún **valor de input** (str) contiene `".sqlproj"` o `".dacpac"` | `alta` | `ci-dacpac.yml:33` (`SQL_PROJECT`), `:71` (`Contents`) |
 | `node` | `task in ("Npm@1", "NodeTool@0")` | `alta` | **0 usos en el corpus** — declarada, testeada sólo con fixture sintética (§2.6.2) |
 | `python` | `task == "UsePythonVersion@0"` | `alta` | **0 usos** — ídem |
-| `container` | `task == "Docker@2"` **o** existe la clave `container:` en el doc | `alta` | **0 usos** — ídem |
+| `container` | `task == "Docker@2"` **o** aparece una clave `container` en **cualquier nivel** del doc parseado (**C18 v2**: se resuelve recorriendo el doc, igual que hace `scan_unsupported` con `_walk`; el v1 decía "en el doc" y no se sabía si era sólo la raíz) | `alta` | **0 usos** — ídem |
 
 > **REGLA DURA (evidenciada en §2.3):** `DotNetCoreCLI@2` con `command in ("test","custom","run","pack","push")`
-> **NO** es señal de `dotnet_core`. `agendaweb-ci.yml:70-72` documenta *"net48 con dotnet test"* y
-> `security-scan-online.yml:59` usa `command: 'custom'` sobre un proyecto Framework. Un test
-> negativo lo fija: `test_dotnet_test_no_implica_dotnet_core`.
+> **NO** es señal de `dotnet_core`. `agendaweb-ci.yml:71` documenta *"net48 con dotnet test"* (el
+> comentario está en `:71`; la tarea, en `:73`) y `security-scan-online.yml:58-59` usa
+> `command: 'custom'` / `custom: 'list'` sobre un proyecto Framework (**C19 v2**: el v1 citaba sólo
+> `:59`, que es la línea del `custom:`). Un test negativo lo fija:
+> `test_dotnet_test_no_implica_dotnet_core`.
 
 Si no hay ninguna señal → `ProfileField(value=(), confidence=CONF_UNKNOWN, evidence=())`.
 **No se cae en `dotnet` por defecto.**
@@ -536,9 +704,10 @@ def detect_triggers(doc):
 
 ```python
 def profile_pipeline(yaml_text, *, provider="ado", source_path=""):
-    if provider != "ado":
-        raise ValueError("provider %r no soportado por el perfilador v1 (GitLab = plan 249)" % provider)
-    if len(yaml_text or "") > MAX_YAML_BYTES:          # MAX_YAML_BYTES = 512 * 1024
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError("provider %r no soportado por el perfilador v1 (soportados: %s; GitLab = plan 249)"
+                         % (provider, ", ".join(SUPPORTED_PROVIDERS)))
+    if len(yaml_text or "") > MAX_YAML_BYTES:      # importado de cicd_semantic_rules:51 (C14)
         return empty_profile(source_path, "el YAML supera 512 KB: fuera del rango soportado")
     try:
         doc = yaml.safe_load(yaml_text)
@@ -546,19 +715,31 @@ def profile_pipeline(yaml_text, *, provider="ado", source_path=""):
         return empty_profile(source_path, "el YAML no se pudo parsear: %s" % str(exc).splitlines()[0])
     if not isinstance(doc, dict):
         return empty_profile(source_path, "el YAML no es un documento de pipeline (no es un mapa)")
-    return PipelineProfile(
+    profile = PipelineProfile(
         contract_version=CONTRACT_VERSION, source_path=source_path,
-        stack=detect_stacks(doc), agents=detect_agents(doc), triggers=detect_triggers(doc),
+        stack=detect_pipeline_stacks(doc), agents=detect_agents(doc),
+        triggers=detect_triggers(doc),
         phases={}, artifacts_published=ProfileField((), CONF_UNKNOWN),   # ← F2 los llena
         artifacts_consumed=ProfileField((), CONF_UNKNOWN),
         environments=ProfileField((), CONF_UNKNOWN),
         not_understood=scan_unsupported(yaml_text),                      # reuso literal, §2.2
         parse_error=None,
     )
+    # C5 (v2) — el propósito de PLANTILLA se rellena ACÁ, siempre, sin LLM. F3 sólo define
+    # build_purpose_template(); esta línea es la que la conecta. Sin ella, `purpose` quedaba ""
+    # y el capstone `test_proposito_es_determinista_y_acotado` era ROJO GARANTIZADO.
+    return replace(profile, purpose=build_purpose_template(profile))     # dataclasses.replace
 ```
 
 **`profile_pipeline` NUNCA lanza** salvo por `provider` inválido (falla ruidosa y deliberada,
 misma doctrina que `check_semantics` con `mode` inválido, `cicd_semantic_rules.py:503-504`).
+
+> **C5 — orden de implementación con esta corrección.** `build_purpose_template` se define en F3.
+> Durante F1/F2 la última línea se escribe como `return profile` y en **F3 se cambia por el
+> `replace(...)`**. F3 declara ese cambio de una línea en su tabla de archivos. Alternativa
+> igualmente válida y explícitamente permitida: escribir el `replace(...)` desde F1 con un
+> `build_purpose_template` que en F1/F2 devuelve `""`. **Lo que NO se acepta es que `purpose`
+> llegue vacío a F5**: el capstone lo exige no vacío para los 9.
 
 ### Tests PRIMERO — se agregan a `test_plan247_profiler_core.py`
 
@@ -587,7 +768,9 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 ### Criterio de aceptación BINARIO
 
-`test_plan247_profiler_core.py` verde con **los 24 casos de F0+F1**.
+`test_plan247_profiler_core.py` verde con **los 27 casos de F0+F1** (**12 de F0** — los 9 del v1
+más los 3 agregados por C1/C14 — **+ 15 de F1**). El v1 decía 24 contando 9+15: el número se
+corrige junto con los tests nuevos.
 
 **Flag:** `STACKY_PIPELINE_PROFILER_ENABLED` (default **ON**) — se cablea en F4.
 **Impacto por runtime:** idéntico en los 3 (funciones puras). **Fallback:** ninguno necesario.
@@ -693,9 +876,26 @@ exactamente la alucinación que este plan prohíbe. La resolución de valores po
 
 ### Entornos
 
+> ### ⚠ C4 (BLOQUEANTE del v1, corregido) — deduplicación de entornos
+>
+> **Medido, no supuesto.** `cd-deploy-test.yml` tiene **dos** jobs `- deployment:`
+> (`:123 DeployAgendaWeb` y `:162 DeployBatch`) y **ambos** declaran `environment: 'Test'`
+> (`:125` y `:164`). El v1 declaraba deduplicación **explícita** para artefactos
+> (*"deduplicado por orden de aparición"*) y para agentes (*"deduplica por `(kind, name)`"*),
+> pero **para entornos no decía nada** — mientras su propia tabla capstone exigía `("Test",)`.
+> Perfilando el corpus con las reglas literales del v1 el resultado es `("Test","Test")`:
+> **1 mismatch sobre 99 comparaciones, y era el criterio binario del plan.**
+>
+> **REGLA DEL v2:** `detect_environments` **deduplica por `EnvironmentRef.name`**, conservando el
+> **orden de primera aparición** (misma doctrina que artefactos y agentes). Dos jobs que despliegan
+> al mismo entorno son **un** entorno tocado. La evidencia del `EnvironmentRef` deduplicado es la
+> de su **primera** aparición. Test que lo fija: `test_dos_deployments_al_mismo_entorno_dedup`
+> (`environments.value` tiene **1** elemento con `name == "Test"`).
+
 Por cada job `- deployment:` (los `ctx.in_deployment == True` dan el paso; el `environment:` se
 lee del `jb_doc`, así que `detect_environments` recorre `doc["stages"][i]["jobs"]` y `doc["jobs"]`
-buscando la clave `deployment`), construir un `EnvironmentRef`:
+buscando la clave `deployment`), construir un `EnvironmentRef` **y agregarlo sólo si su `name` no
+está ya en la lista**:
 
 ```python
 name = str(jb_doc.get("environment") or "")
@@ -738,6 +938,8 @@ Evidencia: `Evidence("stages[0].jobs[0].environment", "environment: '${{ paramet
 | `test_entorno_parametrizado_no_se_adivina` | `environment: '${{ parameters.targetEnvironment }}'` con `values: [Test, Production]` → `resolved is False`, `kind == "desconocido"`, `possible_values == ("Test","Production")` |
 | `test_entorno_expresion_rara_no_resuelve` | `environment: '${{ variables.foo }}'` → `possible_values == ()` |
 | `test_sin_deployment_no_hay_entornos` | doc de sólo `steps:` → `environments.value == ()` |
+| `test_dos_deployments_al_mismo_entorno_dedup` | **(C4 v2)** 2 jobs `- deployment:` con `environment: 'Test'` → `environments.value` tiene **1** elemento. **Es el test que hace alcanzable la tabla capstone** |
+| `test_copyfiles_sin_staging_no_es_package` | **(C8 v2)** `CopyFiles@2` cuyos inputs **no** mencionan `ArtifactStagingDirectory` ni `WebPublishMethod=Package` → `phases["package"].value is False`. Es el negativo que el v1 prometía en la tabla de campos excluidos y **nunca nombraba** |
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
@@ -746,7 +948,15 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 ### Criterio de aceptación BINARIO
 
-`test_plan247_anatomia.py` verde (16 casos) **Y** `test_plan247_profiler_core.py` sigue verde.
+`test_plan247_anatomia.py` verde con **20 funciones de test** **Y** `test_plan247_profiler_core.py`
+sigue verde.
+
+> **C8 (v2) — de dónde sale el 20.** El v1 decía "16 casos" contando **filas de la tabla**, pero
+> dos filas declaran **dos** tests cada una (`test_build_por_vsbuild` / `test_build_por_dotnet_build`
+> y `test_test_por_dotnet_test` / `test_test_por_publish_test_results`), y además prometía un
+> negativo de `package` sin nombre. Cuenta real: 16 filas → 18 funciones, + `test_dedup` (C4)
+> + `test_copyfiles_sin_staging_no_es_package` (C8) = **20**. Un criterio binario con el número
+> mal es un criterio que no se puede verificar.
 
 **Flag:** `STACKY_PIPELINE_PROFILER_ENABLED` (default **ON**) — se cablea en F4.
 **Impacto por runtime:** idéntico en los 3 (puro). **Fallback:** ninguno necesario.
@@ -767,7 +977,7 @@ sigue completo y útil**.
 
 | Acción | Ruta completa |
 |---|---|
-| **EDITAR** | `Stacky Agents/backend/services/pipeline_profiler.py` |
+| **EDITAR** | `Stacky Agents/backend/services/pipeline_profiler.py` — **incluye el cambio de UNA línea del final de `profile_pipeline`: `return profile` → `return replace(profile, purpose=build_purpose_template(profile))` (C5)** |
 | **CREAR** | `Stacky Agents/backend/tests/test_plan247_proposito.py` |
 
 ### Símbolos EXACTOS
@@ -862,7 +1072,14 @@ def narrate_purpose(profile, *, llm_caller=None):
 | `test_narrate_descarta_texto_largo` | doble que devuelve 500 chars → `"plantilla"` |
 | `test_narrate_colapsa_multilinea` | doble que devuelve `"a\nb"` → `"a b"` con fuente `"llm"` |
 | `test_narrate_recibe_el_perfil_no_el_yaml` | el doble captura el `spec` y se asserta que `spec.user` es JSON parseable con la clave `"contract_version"` |
-| `test_perfil_no_llama_al_llm` (**K4**) | `monkeypatch` de `services.pm.pm_llm_client.call_llm` a una función que lanza; se perfilan los 9 golden → ninguno lanza |
+| `test_profile_pipeline_rellena_purpose` | **(C5 v2)** `profile_pipeline(<agendaweb-ci.yml>).purpose` es **no vacío**, sin `\n`, y `purpose_source == "plantilla"`. Es el test que faltaba para que el capstone sea alcanzable |
+| `test_perfil_no_llama_al_llm` (**K4**) | **(C6 v2 — reescrito: el del v1 era un gate VACÍO)** 3 aserciones: (a) `"pm_llm_client" not in Path("services/pipeline_profiler.py").read_text(encoding="utf-8")` — el módulo no lo nombra ni en un comentario de import; (b) con `sys.modules.pop("services.pm.pm_llm_client", None)` antes, perfilar los 9 golden **no** vuelve a dejar la clave en `sys.modules`; (c) con `monkeypatch.setattr("services.pm.pm_llm_client.call_llm", <lanza RuntimeError>)`, `POST /api/pipeline-profiler/profile` **sin** `narrate` devuelve **200** con `purpose_source == "plantilla"` |
+
+> **Por qué el K4 del v1 no probaba nada.** Monkeypatcheaba `call_llm` y perfilaba los 9 golden.
+> Pero `pipeline_profiler.py` —por diseño del propio plan— **nunca importa `pm_llm_client`**: el
+> test pasaba aunque el módulo estuviera vacío, aunque el perfilador narrase con otro cliente, o
+> aunque alguien cableara el LLM en el endpoint. Un gate que no puede ponerse rojo no es un gate.
+> Las 3 aserciones del v2 sí fallan si alguien mete un LLM en el camino default.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
@@ -871,7 +1088,11 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 ### Criterio de aceptación BINARIO
 
-`test_plan247_proposito.py` verde (14 casos), **incluido `test_perfil_no_llama_al_llm`**.
+`test_plan247_proposito.py` verde (**15 casos**: los 13 del v1 + `test_profile_pipeline_rellena_purpose`
++ el `test_perfil_no_llama_al_llm` reescrito), **incluido `test_perfil_no_llama_al_llm` con sus
+3 aserciones**. La aserción (c) necesita el `client` de Flask, así que **si F3 se implementa antes
+que F4** se marca `@pytest.mark.skipif(<blueprint no registrado>)` y se **des-skipea en F4**;
+la DoD exige que en el cierre esté **corriendo, no skipeada**.
 
 **Flag:** `STACKY_PIPELINE_PROFILER_ENABLED` (default **ON**). **No hay flag nueva para el LLM**:
 la narración es un parámetro per-request (§3.1, "cero tokens ociosos"), no una configuración.
@@ -901,6 +1122,7 @@ consumible por el frontend (F5), por el 246 y por el 248.
 | **CREAR** | `Stacky Agents/backend/api/pipeline_profiler.py` |
 | **EDITAR** | `Stacky Agents/backend/api/__init__.py` |
 | **EDITAR** | `Stacky Agents/backend/services/harness_flags.py` |
+| **EDITAR** | `Stacky Agents/backend/services/harness_flags_help.py` — **pata 5, agregada en v2 (C3)** |
 | **EDITAR** | `Stacky Agents/backend/config.py` |
 | **EDITAR** | `Stacky Agents/backend/tests/test_harness_flags.py` |
 | **EDITAR** | `Stacky Agents/backend/scripts/run_harness_tests.sh` |
@@ -975,7 +1197,14 @@ def profile_route():
   (hoy `:117`), agregar:
   `api_bp.register_blueprint(pipeline_profiler_bp)  # Plan 247 — url_prefix="/pipeline-profiler" → /api/pipeline-profiler/...`
 
-### Flag — las **4** ubicaciones exactas (ninguna es opcional)
+### Flag — las **5** ubicaciones exactas (ninguna es opcional)
+
+> **C3 (BLOQUEANTE del v1, corregido).** El v1 declaraba **4** patas. Falta una **quinta,
+> obligatoria y verificada**: `services/harness_flags_help.py`. El test
+> `test_plain_help_covers_all_registry_keys` (`tests/test_harness_flags_help.py:32-35`) exige que
+> `PLAIN_HELP` cubra el **100%** de `FLAG_REGISTRY`. Agregar el `FlagSpec` sin su entrada de ayuda
+> **suma un ofensor nuevo atribuible al 247** a un archivo que ya arrastra 4 fallos ajenos — y
+> como el v1 nunca corría ese archivo, el defecto se habría descubierto en el merge de otro plan.
 
 > **CORRECCIÓN AL DOSSIER.** El §3 del dossier dice *"agregala también a `_CURATED_DEFAULTS_ON`
 > en el mismo archivo"* — **es incorrecto**: `_CURATED_DEFAULTS_ON` **no está en
@@ -1032,8 +1261,46 @@ def profile_route():
    `_CURATED_DEFAULTS_ON` (con su comentario `# ── Plan 247 — perfilador de pipelines ──`).
    **Sin esto, `test_default_known_only_for_curated` queda ROJO.**
 
+5. **`services/harness_flags_help.py`** (**pata nueva del v2 — C3**) — agregar la entrada a
+   `PLAIN_HELP` (`:25`), **inmediatamente después** de la de `STACKY_PIPELINE_GENERATOR_ENABLED`
+   (hoy `:691-696`, **buscar por símbolo**). El texto de abajo **ya fue verificado contra las 5
+   restricciones** del centinela y las pasa:
+
+```python
+    "STACKY_PIPELINE_PROFILER_ENABLED": PlainHelp(
+        what="Lee la definición de una canalización de integración continua y describe qué hace: con qué tecnología compila, si corre pruebas, qué publica y a qué ambiente llega.",
+        on_effect="Si la activás: cada canalización muestra una ficha con su tecnología, sus etapas presentes y ausentes, sus artefactos, sus ambientes y una frase que la resume.",
+        off_effect="Si la apagás: el panel de canalizaciones se ve exactamente como hoy y esa ficha no se pide ni se muestra.",
+        example="Abrís una canalización de despliegue y la ficha te dice: compila .NET Framework, publica 4 artefactos, despliega al ambiente de pruebas y no corre ni una prueba.",
+    ),
+```
+
+   **Las 5 restricciones que ese texto tiene que cumplir** (`tests/test_harness_flags_help.py`):
+
+   | Restricción | Anclaje | Cómo lo cumple el texto de arriba |
+   |---|---|---|
+   | `what` entre 10 y 200 caracteres | `:47-48` | 160 |
+   | `on_effect` / `off_effect` ≤ 240, `example` ≤ 300 | `:49-51` | 157 / 103 / 158 |
+   | `on_effect` y `off_effect` empiezan con `"Si "` | `:56-60` | sí, las dos |
+   | Sin jerga de `JARGON_DENYLIST` (`:17-20`, incluye plural) | `:63-76` | **ni una**: no dice modelo de lenguaje, ni interfaz, ni servidor, ni ruta de servicio, ni las otras 16 palabras vetadas |
+   | Sin claves en mayúsculas (`_KEY_RE`, `:22`) ni referencias a fases (`_PHASE_RE`, `:23`) | `:72-75` | ninguna de las dos (`.NET Framework` no matchea `[A-Z]+_[A-Z0-9_]+` ni `F\d`) |
+
+   > **Escribí el texto vos mismo si querés, pero corré el archivo antes y después.** Si no
+   > cumple, `test_plain_help_fields_non_empty_and_bounded` o
+   > `test_plain_help_avoids_jargon_denylist` pasan de **4 fallos a 4 fallos con un ofensor más
+   > adentro** — y ese ofensor lleva tu nombre de flag en el mensaje.
+
 > **No se toca `_REQUIRES_MAP_FROZEN`**: la flag **no declara `requires`** (no depende de otra).
 > **No se regenera `harness_defaults.env` a mano** (su generador vive en `deployment/`).
+>
+> **C20 (v2) — por qué esta flag NO cae en la misma categoría que la del 246.** El Plan 246 pone
+> la suya en el bucket `devops` (`harness_flags.py:241`) y el 247 la pone en `epicas_ado`
+> (`:191`, entrada en `:207`). **Es deliberado y se declara acá para que nadie lo "arregle"**:
+> `epicas_ado` es donde ya viven `STACKY_PIPELINE_PROVIDER_ENABLED`,
+> `STACKY_PIPELINE_TRIGGER_ENABLED`, `STACKY_CI_RUN_LEDGER_ENABLED`,
+> `STACKY_CI_FAILURE_TRIAGE_ENABLED` y `STACKY_PIPELINE_GENERATOR_ENABLED`. Consecuencia visible:
+> las flags de la serie 246–252 van a quedar repartidas en **dos** categorías del panel.
+> Unificarlas es una decisión de UX que **no le corresponde al 247** y que rompería tests ajenos.
 
 ### Ratchet — las **DOS** listas (obligatorio)
 
@@ -1067,20 +1334,41 @@ Plan 73).
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan247_endpoint.py -q
-# OBLIGATORIOS tras tocar harness_flags.py y crear tests nuevos:
-.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
-.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
+# OBLIGATORIOS tras tocar harness_flags.py / harness_flags_help.py y crear tests nuevos.
+# Los 3 con su BASELINE MEDIDO el 2026-07-26 (§2.6.5) — anotá el tuyo ANTES de tocar nada:
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q        # baseline: 56 passed, 0 failed
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q   # baseline: 4 failed, 4 passed
+.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q # baseline: 4 passed
 ```
 
-> **Rojos ajenos:** `test_harness_flags.py` trae **4 fallos preexistentes** en
-> `test_harness_flags_help` (dossier §4). **Verificá TU entrada de forma aislada** con
-> `-k "curated or category or STACKY_PIPELINE_PROFILER"` y compará el conteo de fallos **antes y
-> después** de tu cambio: tiene que ser **el mismo**. No los "arregles".
+> ### ⚠ C2 (BLOQUEANTE del v1, corregido) — el "hay 4 rojos ajenos" era falso
+>
+> El v1 decía: *"`test_harness_flags.py` trae 4 fallos preexistentes en `test_harness_flags_help`"*.
+> **Son dos archivos distintos y los números están al revés de como los usaba la DoD:**
+>
+> - `tests/test_harness_flags.py` → **56 passed, 0 failed. VERDE.** Correr ese archivo **jamás**
+>   muestra los 4 fallos, porque no están ahí. **Cualquier rojo que aparezca acá es TUYO.**
+> - `tests/test_harness_flags_help.py` → **4 failed, 4 passed.** Ésa es la deuda ajena real, y es
+>   un archivo que el v1 **nunca mandaba a correr** (aunque **sí** está en los dos ratchets:
+>   `run_harness_tests.sh:380` y `run_harness_tests.ps1:329`).
+>
+> **Por qué era bloqueante:** la DoD del v1 aceptaba *"el mismo número de fallos (los 4 ajenos)"*
+> sobre el archivo que está en cero ⇒ **autorizaba hasta 4 rojos propios disfrazados de ajenos**.
+> Eso es un falso verde con permiso escrito.
+>
+> **Regla del v2 — presupuesto de deuda ajena, con números:** anotá el conteo de los 3 archivos
+> ANTES de tocar nada y pegá el `-q` de los 3 DESPUÉS. **`test_harness_flags.py` y
+> `test_harness_ratchet_meta.py` deben quedar en 0 fallos** (no hay deuda que los tape) y
+> **`test_harness_flags_help.py` debe quedar en exactamente 4**, ni uno más — y con los **mismos
+> 4 nombres**, no otros cuatro. Verificá tu entrada aislada con
+> `-k "curated or category or STACKY_PIPELINE_PROFILER"`. **No arregles los 4 ajenos.**
 
 ### Criterio de aceptación BINARIO
 
-`test_plan247_endpoint.py` verde (9 casos) **Y** `test_harness_ratchet_meta.py` verde **Y**
-`test_harness_flags.py` con **exactamente el mismo número de fallos que antes** del cambio.
+`test_plan247_endpoint.py` verde (9 casos) **Y** `test_harness_ratchet_meta.py` **4 passed, 0 failed**
+**Y** `test_harness_flags.py` **0 failed** (baseline 56 passed; si tu cambio suma tests, el número
+de `passed` sube, el de `failed` NO) **Y** `test_harness_flags_help.py` con **exactamente 4 failed
+y los mismos 4 nombres del baseline**.
 
 **Flag:** `STACKY_PIPELINE_PROFILER_ENABLED`, default **ON** (justificación de las 4 excepciones
 duras en el propio `description` del `FlagSpec`).
@@ -1137,6 +1425,7 @@ export function phaseRows(p: PipelineProfileDto): ProfileRow[];
 export function summaryRows(p: PipelineProfileDto): ProfileRow[];
 export function gapHeadline(p: PipelineProfileDto): string | null;   // "No corre tests" | null
 export function confidenceLabel(c: Confidence): string;
+export function profileErrorCopy(message: string): string;          // C21 — 501 → copy accionable
 ```
 
 Reglas del modelo (todas testeadas):
@@ -1150,6 +1439,10 @@ Reglas del modelo (todas testeadas):
   funciones propias, testeadas.
 - **`parse_error` no nulo ⇒ todas las funciones devuelven `[]` / `null`** (nada de renderizar
   medio perfil de un YAML roto).
+- **`profileErrorCopy(msg)`** (C21): si `msg` contiene `"inventory_unavailable"` devuelve
+  `"Inventario de pipelines no disponible (plan 246): pegá el YAML"`; en cualquier otro caso
+  devuelve `msg` sin tocarlo. Test: `test_copy_de_inventario_no_disponible` (2 casos: el que
+  matchea y el que no).
 
 ### Cliente HTTP — `frontend/src/api/endpoints.ts`
 
@@ -1167,8 +1460,16 @@ export const PipelineProfiler = {
 
 > **Gotcha verificado:** `api.post` **lanza** en cualquier respuesta non-2xx
 > (`frontend/src/api/client.ts:155`, `throw new Error(...)`). El componente **debe** envolver la
-> llamada en `try/catch` y mostrar el error; **no existe `rawGet`** en `client.ts` (sólo
-> `rawPost`, `:44`), por eso el endpoint es POST.
+> llamada en `try/catch`, pasar el mensaje por `profileErrorCopy()` (C21) y mostrarlo.
+>
+> **C12 (v2) — corrección de un dato falso del v1.** El v1 justificaba el POST diciendo que
+> *"no existe `rawGet` en `client.ts`"*. **Existe**: `export async function rawGet<T>` en
+> `client.ts:93`, agregado por el **Plan 238 F3** como *"gemelo de lectura de `rawPost`"* — y
+> justamente para *"distinguir 404 feature_disabled de un backend caído"*, que es exactamente el
+> caso de este plan con la flag OFF. **La decisión de usar POST se mantiene** (el request lleva un
+> YAML entero en el cuerpo; un GET no puede), pero la razón es ésa y no la inexistente. Si alguna
+> vez se quiere distinguir "flag apagada" de "backend caído" sin `try/catch`, la herramienta
+> **ya está** y se llama `rawGet` / `rawPost`.
 
 ### Componente — `frontend/src/components/devops/PipelineProfileCard.tsx`
 
@@ -1234,6 +1535,13 @@ Diff conceptual (aditivo; el render actual queda intacto si el fetch falla):
 **Este es el criterio binario del plan.** La tabla está escrita a mano acá abajo, derivada de
 parsear los 9 golden con `yaml.safe_load` el 2026-07-26. Se copia **tal cual** al test.
 
+> **La crítica v1→v2 EJECUTÓ esta tabla.** Se implementaron las reglas literales de F1/F2 en un
+> script de verificación y se compararon los 11 campos × 9 pipelines contra el corpus real:
+> **98 de 99 comparaciones dieron exacto**. La única que falló fue `cd-deploy-test.yml /
+> entornos` (`("Test","Test")` vs `("Test",)`), y **no era un error de la tabla sino de la regla**:
+> faltaba la deduplicación de entornos. Se corrigió la **regla** (C4, §F2), **no la tabla** —
+> exactamente la doctrina que exige R1. **La tabla de abajo queda intacta.**
+
 ```python
 # Plan 247 F5 — expectativas escritas a mano contra los 9 pipelines REALES.
 # Formato: nombre -> (stack, build, test, publish_artifact, deploy, publicados, consumidos,
@@ -1283,9 +1591,14 @@ EXPECTATIVAS = {
 }
 ```
 
-**Campos EXIGIDOS EXACTOS (8 por pipeline × 9 = 72 aserciones):** `stack`, `phases["build"]`,
-`phases["test"]`, `phases["publish_artifact"]`, `phases["deploy"]`, `artifacts_published`,
-`artifacts_consumed` + `environments` (literales), `agents`, `triggers`, `not_understood`.
+**Campos EXIGIDOS EXACTOS — 11 por pipeline × 9 pipelines = 99 aserciones (C7):** `stack`,
+`phases["build"]`, `phases["test"]`, `phases["publish_artifact"]`, `phases["deploy"]`,
+`artifacts_published`, `artifacts_consumed`, `environments` (literales), `agents`, `triggers`,
+`not_understood`.
+
+> **C7 (v2):** el v1 decía *"8 por pipeline × 9 = 72"* y a continuación **enumeraba 11 campos**
+> (y sus tuplas tienen 11 elementos). El número aparecía además en K1 y en la DoD #7. Un criterio
+> binario cuyo propio conteo no cierra no se puede verificar: **son 99**.
 
 **Campos que NO se exigen exactos, y por qué (esto es deliberado — ver R1):**
 
@@ -1302,13 +1615,43 @@ EXPECTATIVAS = {
 |---|---|
 | `test_los_nueve_golden_estan` | `len(list(GOLDEN.glob("*.yml"))) == 9` — si alguien agrega uno, el capstone avisa en vez de ignorarlo |
 | `test_expectativas_cubren_los_nueve` | `set(EXPECTATIVAS) == {p.name for p in GOLDEN.glob("*.yml")}` |
-| `test_perfil_por_pipeline[<nombre>]` (parametrizado ×9) | las 8 aserciones exactas de la tabla |
+| `test_perfil_por_pipeline[<nombre>]` (parametrizado ×9) | las **11** aserciones exactas de la tabla (C7) |
 | `test_ningun_perfil_lanza` | los 9 perfilan sin excepción y con `parse_error is None` |
 | `test_sin_valor_sin_confianza` (**K3**) | para los 9, **todos** los `ProfileField` cumplen `field_is_coherent` |
 | `test_proposito_es_determinista_y_acotado` | los 9: `purpose` no vacío, sin `\n`, ≤200 chars, `purpose_source == "plantilla"`, e idéntico al perfilar dos veces |
 | `test_ausencia_de_tests_declarada` (**K2**) | `cd-deploy-test.yml`, `ci-batch.yml`, `ci-dacpac.yml`, `bootstrap-…`, `security-scan-…` → `phases["test"] == (False, CONF_HIGH)` |
 | `test_perfila_lo_que_no_entiende` (**K5**) | `ci-batch.yml` y `bootstrap-…` tienen `not_understood` no vacío **Y** `stack`/`phases`/`agents` completos |
 | `test_los_nueve_en_menos_de_un_segundo` (**K6**) | `time.monotonic()` alrededor del bucle < 1.0 s |
+| `test_task_comentada_no_entra_al_perfil` (**R3 / ADO-369**) | **(C9 v2 — el v1 lo prometía en R3 y no lo agendaba en ninguna fase)** sobre `agendaweb-ci.yml`: `"IISWebAppDeploymentOnMachineGroup@0"` **no** aparece en ningún `Evidence.detail` de ningún campo, y `phases["deploy"].value is False`. Ídem `ci-dacpac.yml` con `"SqlAzureDacpacDeployment@1"`. **Es la protección contra la causa raíz del incidente que originó media serie** |
+| `test_toda_evidencia_apunta_a_un_lugar_real` | **[ADICIÓN ARQUITECTO 1]** — ver abajo |
+
+### [ADICIÓN ARQUITECTO 1] — de "hay evidencia" a "la evidencia es verificable"
+
+El invariante §3.2.1 del v1 exige que un campo con valor **traiga** evidencia. Pero nada impide
+que esa evidencia sea `Evidence("inventado", "porque sí")`: **un perfilador que alucinara la
+`location` pasaría los 9 golden, `field_is_coherent`, K3 y las 99 aserciones sin despeinarse.**
+El anti-alucinación del v1 es, en ese punto, de papel.
+
+`test_toda_evidencia_apunta_a_un_lugar_real` lo cierra, sin costo y sin ampliar el alcance:
+para los 9 golden, **cada `Evidence.location` de cada campo** debe cumplir **una** de estas tres,
+o el test es rojo:
+
+1. es exactamente `"(documento)"` (afirmación sobre el documento entero: ausencias, `not_understood`);
+2. es igual a algún `ctx.location` de `iter_step_contexts(doc)` (o sea: **existe ese paso**); o
+3. es una clave de primer nivel presente en el doc (`"pool"`, `"trigger"`, `"pr"`, `"schedules"`)
+   o un `location` de entorno con la forma `stages[i].jobs[j].environment` **cuyos índices existen**.
+
+Por qué califica como adición de alto valor y no como scope creep:
+
+- **Cero archivos nuevos** (vive en el capstone que el plan ya crea), cero I/O, cero LLM, 0 tokens.
+- **Idéntico en los 3 runtimes** (Python puro sobre dataclasses).
+- **Cero trabajo al operador** y read-only.
+- **Es lo que hace verdadero al eslogan del plan.** El 248 va a emitir hallazgos de seguridad
+  citando estas `location`: si apuntan a un lugar que no existe, el 248 hereda una mentira con
+  formato de evidencia. Este test lo impide **antes** de que el 248 exista.
+
+**Fixes que dispara si sale rojo:** corregir el `location` que se emite. **Prohibido** relajar el
+test agregando excepciones por campo — sería reabrir la puerta que cierra.
 
 ```powershell
 # BACKEND — capstone
@@ -1327,8 +1670,10 @@ npx tsc --noEmit
 
 ### Criterio de aceptación BINARIO
 
-`test_plan247_corpus_expectations.py` verde con las **72 aserciones exactas** de la tabla
-**Y** `pipelineProfileModel.test.ts` verde **Y** `npx tsc --noEmit` sin errores nuevos.
+`test_plan247_corpus_expectations.py` verde con las **99 aserciones exactas** de la tabla (C7)
+**Y** `test_task_comentada_no_entra_al_perfil` verde (C9) **Y**
+`test_toda_evidencia_apunta_a_un_lugar_real` verde ([ADICIÓN ARQUITECTO 1]) **Y**
+`pipelineProfileModel.test.ts` verde **Y** `npx tsc --noEmit` sin errores nuevos.
 
 **Flag:** `STACKY_PIPELINE_PROFILER_ENABLED` (default **ON**). Con la flag OFF el endpoint da
 404, el `catch` deja `profile = null` y `PipelineYamlPreview` renderiza **exactamente como hoy**.
@@ -1362,12 +1707,14 @@ npx tsc --noEmit
 | # | Riesgo | Severidad | Mitigación (concreta, dentro del plan) |
 |---|---|---|---|
 | **R1** | **La trampa C14 del 243:** un capstone "9/9 perfecto" que en realidad exige alcance ilimitado. | **ALTA** | La tabla de §F5 **declara exactamente qué 8 campos se exigen exactos y cuáles no**, con la razón de cada exclusión. Ningún campo excluido queda sin cobertura: se cubre con tests sintéticos. **No hay ninguna frase del tipo "se agrega la construcción faltante"**. Si el perfilador no reproduce la tabla, se **corrige el perfilador o se corrige la tabla con evidencia** — nunca se amplía el alcance. |
-| **R2** | Un pipeline con `template:`/`extends:` hace que el perfilador declare ausencias falsas ("no corre tests" cuando los tests están en el template). | **ALTA** | Regla `_HIDES_STEPS` (F2): esas dos construcciones degradan **toda** ausencia a `desconocido`. `test_template_degrada_toda_ausencia`. **0 usos en el corpus** ⇒ no afecta las 72 aserciones, pero protege al primer pipeline real que las use. |
-| **R3** | Alguien "mejora" el perfilador leyendo el YAML con regex y vuelve a meter las 2 tareas comentadas (`agendaweb-ci.yml:143`, `ci-dacpac.yml:103` — la causa raíz de ADO-369). | **ALTA** | El perfilador **sólo** consume `yaml.safe_load` + `extract_task_dicts` (`cicd_task_catalog.py:268`), donde los comentarios no existen por construcción. Test explícito: `test_task_comentada_no_entra_al_perfil` sobre `agendaweb-ci.yml` → `IISWebAppDeploymentOnMachineGroup@0` **no** aparece en ninguna evidencia y `phases["deploy"] is False`. |
+| **R2** | Un pipeline con `template:`/`extends:` hace que el perfilador declare ausencias falsas ("no corre tests" cuando los tests están en el template). | **ALTA** | Regla `_HIDES_STEPS` (F2): esas dos construcciones degradan **toda** ausencia a `desconocido`. `test_template_degrada_toda_ausencia`. **0 usos en el corpus** ⇒ no afecta las 99 aserciones, pero protege al primer pipeline real que las use. |
+| **R3** | Alguien "mejora" el perfilador leyendo el YAML con regex y vuelve a meter las 2 tareas comentadas (`agendaweb-ci.yml:143`, `ci-dacpac.yml:103` — la causa raíz de ADO-369). | **ALTA** | El perfilador **sólo** consume `yaml.safe_load` + `extract_task_dicts` (`cicd_task_catalog.py:268`), donde los comentarios no existen por construcción (§C11 fija el recorrido por escrito). Test explícito `test_task_comentada_no_entra_al_perfil`, **ahora sí agendado en F5 y en la DoD #7** (C9: el v1 lo prometía acá y no lo ponía en ninguna fase, así que la mitigación no existía). |
 | **R4** | **RTL/jsdom no están instalados** en este repo ⇒ el render de `PipelineProfileCard.tsx` no es testeable automáticamente. | MEDIA | **Toda** la lógica vive en `pipelineProfileModel.ts` (testeado con vitest). El `.tsx` es una proyección sin ramas de negocio. Gate real del componente: `npx tsc --noEmit` + smoke visual manual. **Declarado, no disimulado.** |
-| **R5** | Editar `cicd_semantic_rules.py` (F0) rompe el Plan 243. | MEDIA | El cambio son **2 líneas de alias** después de `_iter_steps`; los nombres privados y sus cuerpos no se tocan. Comando de no-regresión obligatorio en el criterio de F0, con conteo de tests antes/después. |
+| **R5** | ~~Editar `cicd_semantic_rules.py` (F0) rompe el Plan 243.~~ **ELIMINADO en v2 (C1): el plan ya no lo edita.** Riesgo residual: el **plan 249** —dueño exclusivo de ese archivo— renombra `_iter_steps` o `_StepCtx` y el 247 deja de importar. | BAJA | El import está en **una** línea del módulo propio; `test_iter_step_contexts_es_el_mismo_objeto` + `test_max_yaml_bytes_es_el_del_motor` (F0) se ponen rojos con mensaje claro **en el gate post-merge de la serie**, nunca en el arranque del backend. `test_no_se_edito_cicd_semantic_rules` impide que alguien "resuelva" el problema volviendo a escribir en la superficie del 249. |
 | **R6** | `endpoints.ts` vuelve a desfasar anclajes (ya pasó 2 veces: 243 dijo `:4368`, hoy es `:4426`). | MEDIA | F5 instruye **buscar por símbolo** `PipelineGenerator` y da un fallback explícito ("si no aparece, agregar al final del archivo"). Aviso destacado en §2.5. |
-| **R7** | Olvidar una de las 4 ubicaciones de la flag ⇒ meta-tests rojos y culpar al plan. | MEDIA | F4 enumera las 4 con archivo y línea, **corrige el error del dossier** sobre dónde vive `_CURATED_DEFAULTS_ON`, y da el comando de verificación aislada frente a los 4 rojos ajenos. |
+| **R7** | Olvidar una de las **5** ubicaciones de la flag ⇒ meta-tests rojos y culpar al plan. | MEDIA | F4 enumera las **5** con archivo y línea (**la 5ª, `harness_flags_help.py`, es el hallazgo C3 del v2**), **corrige el error del dossier** sobre dónde vive `_CURATED_DEFAULTS_ON`, y da el **presupuesto de deuda ajena con números medidos** (C2) en vez de una frase de memoria. |
+| **R11** | **(v2)** Alguien "arregla" los 4 fallos de `test_harness_flags_help.py` creyendo que son del 247, o al revés: acepta rojos propios creyendo que son ajenos. | MEDIA | §2.6.5 fija el baseline de los **3** archivos con números medidos y los **nombres** de los 4 fallos ajenos; la DoD exige pegar el `-q` de los 3 antes y después. **[ADICIÓN ARQUITECTO 2]** |
+| **R12** | **(v2)** El perfilador emite una `Evidence.location` que no corresponde a ningún lugar real del YAML; el 248 la hereda y publica un hallazgo de seguridad apuntando a la nada. | MEDIA | `test_toda_evidencia_apunta_a_un_lugar_real` sobre los 9 golden. **[ADICIÓN ARQUITECTO 1]**, §F5 |
 | **R8** | El Plan 246 llega después y ambos definen `get_pipeline_yaml` con firmas distintas. | BAJA | El import es **perezoso y dentro de un `try/except ImportError`**, y la firma esperada está escrita literalmente en F4 (`get_pipeline_yaml(pipeline_id) -> (yaml_text, source_path)`). Si el 246 usa otra firma, falla **un** test del 247 con mensaje claro, no el arranque del backend. |
 | **R9** | Perfilar 40 pipelines del inventario cuesta 40 llamadas a LLM. | BAJA | **Imposible por diseño:** `narrate` es per-request y default `false`; `pipeline_profiler.py` no importa `pm_llm_client` a nivel de módulo. `test_perfil_no_llama_al_llm` (K4) lo fija con un `call_llm` que explota. |
 | **R10** | El operador confunde una frase de plantilla con una redactada por IA. | BAJA | `purpose_source` viaja en el DTO y la tarjeta muestra la etiqueta `plantilla` / `IA` (F5). |
@@ -1422,7 +1769,7 @@ Este plan **no hace** nada de lo siguiente. Cada ítem tiene dueño:
 ### 7.2 Orden de implementación (estricto — cada fase depende de la anterior)
 
 ```
-F0 (contrato + alias)  →  F1 (stack/agentes/triggers)  →  F2 (anatomía/artefactos/entornos)
+F0 (contrato + imports)  →  F1 (stack/agentes/triggers)  →  F2 (anatomía/artefactos/entornos)
                        →  F3 (propósito)  →  F4 (endpoint/flag/ratchet)  →  F5 (UI + capstone)
 ```
 
@@ -1431,7 +1778,7 @@ UI). F4 hace la capacidad consumible. F5 la hace visible y la blinda.
 
 ### 7.3 Definición de Hecho (DoD) — **binaria**
 
-Se marca HECHO **si y sólo si** las 10 casillas dan verde:
+Se marca HECHO **si y sólo si** las **12** casillas dan verde (el v2 agrega la #11 y la #12):
 
 - [ ] **1.** Existen exactamente **5 archivos de test backend nuevos**:
       `test_plan247_profiler_core.py`, `test_plan247_anatomia.py`, `test_plan247_proposito.py`,
@@ -1457,23 +1804,48 @@ Se marca HECHO **si y sólo si** las 10 casillas dan verde:
       .venv\Scripts\python.exe -m pytest tests/test_plan243_reglas_semanticas.py -q
       ```
       Los 4 verdes, **con el mismo número de tests pasados que antes** de tocar nada.
-- [ ] **5.** `.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` tiene
-      **exactamente el mismo número de fallos que antes** del cambio (los 4 ajenos de
-      `test_harness_flags_help`, ni uno más).
+- [ ] **5. (REESCRITA en v2 — C2: la del v1 autorizaba hasta 4 rojos propios)** Los **tres**
+      archivos de flags, con sus baselines **medidos** (§2.6.5) y su `-q` **pegado** al cerrar:
+      ```powershell
+      .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q        # DEBE: 0 failed (baseline 56 passed)
+      .venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q   # DEBE: exactamente 4 failed, los MISMOS 4 nombres
+      .venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q # DEBE: 0 failed (baseline 4 passed)
+      ```
+      **Un solo fallo nuevo en cualquiera de los tres = NO HECHO.** No se arreglan los 4 ajenos.
 - [ ] **6.** Frontend verde: `npx vitest run src/devops/__tests__/pipelineProfileModel.test.ts`
       **y** `npx tsc --noEmit` sin errores nuevos.
-- [ ] **7.** **Las 72 aserciones exactas** de la tabla de §F5 pasan sobre los 9 golden.
-- [ ] **8.** `test_perfil_no_llama_al_llm` (K4) y `test_sin_valor_sin_confianza` (K3) están
-      verdes: **cero LLM en el camino default, cero campos sin evidencia**.
-- [ ] **9.** La flag `STACKY_PIPELINE_PROFILER_ENABLED` está en las **4** ubicaciones
+- [ ] **7.** **Las 99 aserciones exactas** (11 campos × 9 golden, C7) de la tabla de §F5 pasan
+      **Y** `test_task_comentada_no_entra_al_perfil` (C9 / R3 / ADO-369) está verde.
+- [ ] **8.** `test_perfil_no_llama_al_llm` (K4, **con sus 3 aserciones y sin `skipif` activo**),
+      `test_sin_valor_sin_confianza` (K3) y `test_toda_evidencia_apunta_a_un_lugar_real`
+      ([ADICIÓN ARQUITECTO 1]) están verdes: **cero LLM en el camino default, cero campos sin
+      evidencia, y cero evidencia que apunte a un lugar inexistente**.
+- [ ] **9.** La flag `STACKY_PIPELINE_PROFILER_ENABLED` está en las **5** ubicaciones (C3)
       (`harness_flags.py` FlagSpec, `harness_flags.py` `_CATEGORY_KEYS["epicas_ado"]`,
-      `config.py`, `tests/test_harness_flags.py` `_CURATED_DEFAULTS_ON`) con `default=True`,
+      **`harness_flags_help.py` `PLAIN_HELP`**, `config.py`,
+      `tests/test_harness_flags.py` `_CURATED_DEFAULTS_ON`) con `default=True`,
       **es editable desde la UI** (`env_only=False`), y con la flag en `False` el panel de
       pipelines renderiza **exactamente como hoy**.
 - [ ] **10.** **Smoke visual manual** (no automatizable, R4): abrir el panel DevOps → sección
       Pipelines → armar cualquier spec → el preview ADO muestra debajo la tarjeta con el
       propósito, las 5 filas de fases (distinguiendo ausencia verificada de ausencia dudosa) y
       la etiqueta `plantilla`. **Adjuntar el resultado al cerrar el plan.**
+- [ ] **11. (v2 — C1, frontera de la serie)** El plan **no dejó una sola línea** en superficie
+      ajena reservada. Verificación binaria, sin salida = OK:
+      ```powershell
+      cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents"
+      git diff --stat -- "Stacky Agents/backend/services/cicd_semantic_rules.py"
+      git diff --stat -- "Stacky Agents/backend/services/pipeline_renderers.py"
+      git diff --stat -- "Stacky Agents/backend/services/cicd_task_catalog.py"
+      git diff --stat -- "Stacky Agents/backend/services/pipeline_stack_detector.py"
+      ```
+      Las 4 **sin salida**. (Las tres primeras son del **249**; la cuarta es del Plan 97 y §2.1
+      decidió no tocarla.) Y el `git status` del plan no incluye **ninguno** de los archivos de
+      trabajo ajeno vivo del árbol.
+- [ ] **12. (v2 — C5)** `purpose` **no viene vacío** para los 9 golden llamando **sólo** a
+      `profile_pipeline(...)` (sin pasar por el endpoint ni por `narrate_purpose`):
+      `test_profile_pipeline_rellena_purpose` verde. Sin esta casilla, el plan podía cerrarse
+      "verde" con el capstone rojo por una línea que ninguna fase pedía escribir.
 
 > **Recordatorio de la casa (§4 del dossier):** los tests de backend se corren **por archivo**
 > (la suite completa se contamina) y con **`.venv`** (Python 3.13.5), **no** con `venv`

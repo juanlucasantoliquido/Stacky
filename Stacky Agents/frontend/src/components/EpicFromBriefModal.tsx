@@ -15,6 +15,7 @@ import {
   runtimeDisplayLabel,
 } from "../services/agentLaunch";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
+import ModelEffortPicker from "./ModelEffortPicker";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import IntentPreflightModal from "./IntentPreflightModal";
 import { canGenerateEpic } from "../services/uiGuards";
@@ -84,6 +85,7 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
     catalog.claude_code_cli?.effort_support?.[modelId]?.includes(effort) ?? true;
   const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5");
   const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
+  const modelCatalog = useModelCatalog();
   // Plan 45 F3 — selector de tipo de work item (Epic | Issue).
   const [workItemType, setWorkItemType] = useState<"Epic" | "Issue">("Epic");
   const [issueEnabled, setIssueEnabled] = useState(false);
@@ -480,39 +482,21 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
               </div>
             )}
 
-            {/* Plan 42 F3 — Selector de modelo (solo claude_code_cli) y esfuerzo */}
+            {/* Plan 212 F5 — el selector canónico reemplaza al artesanal.
+                Cambio de comportamiento DELIBERADO: antes los efforts que el
+                modelo no soporta salían `disabled` ("no disponible para este
+                modelo"), y eso hacía creer que estaban rotos. Ahora se ofrecen
+                TODOS, anotados con a qué degradan. */}
             <div className={styles.runtimeSection}>
-              <label className={styles.label}>
-                Modelo
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={agentRuntime !== "claude_code_cli"}
-                  title={agentRuntime !== "claude_code_cli" ? "El selector de modelo solo aplica a Claude Code CLI" : undefined}
-                >
-                  {claudeModels.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.label}>
-                Esfuerzo
-                <select
-                  value={selectedEffort}
-                  onChange={(e) => setSelectedEffort(e.target.value as EffortLevel)}
-                  disabled={agentRuntime !== "claude_code_cli"}
-                  title={agentRuntime !== "claude_code_cli" ? "El selector de esfuerzo solo aplica a Claude Code CLI" : undefined}
-                >
-                  {claudeEfforts.map((eff) => {
-                    const valid = isEffortValidForModel(eff.id, selectedModel);
-                    return (
-                      <option key={eff.id} value={eff.id} disabled={!valid}>
-                        {eff.label}{!valid ? " (no disponible para este modelo)" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
+              <ModelEffortPicker
+                catalog={modelCatalog.catalog?.[agentRuntime]}
+                model={selectedModel}
+                effort={selectedEffort}
+                onChange={(n) => {
+                  if (n.model) setSelectedModel(n.model);
+                  if (n.effort) setSelectedEffort(n.effort as EffortLevel);
+                }}
+              />
               {issueEnabled && (
                 <label className={styles.label}>
                   Tipo de work item

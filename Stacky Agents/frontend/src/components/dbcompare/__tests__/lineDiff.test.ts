@@ -1,104 +1,75 @@
 // Plan 176 F8 — Diff por líneas de definiciones de vistas.
 import { describe, it, expect } from "vitest";
-import {
-  collapseUnchanged,
-  countChanges,
-  diffLines,
-  lineClass,
-} from "../lineDiff";
+import { countChanges, diffLines, lineClass, type LineOp } from "../lineDiff";
+
+function ops(lines: LineOp[] | null): string {
+  return (lines ?? []).map((l) => `${l.op}:${l.text}`).join(" ");
+}
 
 describe("diffLines", () => {
-  it("dos textos iguales no tienen cambios", () => {
-    const d = diffLines("a\nb\nc", "a\nb\nc");
+  it("dos textos iguales son todo equal", () => {
+    const d = diffLines("a\nb\nc", "a\nb\nc")!;
 
     expect(d.every((l) => l.op === "equal")).toBe(true);
     expect(countChanges(d)).toEqual({ added: 0, removed: 0 });
   });
 
-  it("detecta una línea agregada", () => {
-    const d = diffLines("a\nc", "a\nb\nc");
+  it("una línea cambiada es del + add", () => {
+    const d = diffLines("SELECT 1", "SELECT 2")!;
+
+    expect(ops(d)).toBe("del:SELECT 1 add:SELECT 2");
+  });
+
+  it("inserción pura: el resto queda equal", () => {
+    const d = diffLines("a\nc", "a\nb\nc")!;
 
     expect(countChanges(d)).toEqual({ added: 1, removed: 0 });
-    expect(d.find((l) => l.op === "added")?.text).toBe("b");
+    expect(d.find((l) => l.op === "add")?.text).toBe("b");
+    expect(d.filter((l) => l.op === "equal")).toHaveLength(2);
   });
 
-  it("detecta una línea borrada", () => {
-    const d = diffLines("a\nb\nc", "a\nc");
+  it("borrado puro: el resto queda equal", () => {
+    const d = diffLines("a\nb\nc", "a\nc")!;
 
     expect(countChanges(d)).toEqual({ added: 0, removed: 1 });
-    expect(d.find((l) => l.op === "removed")?.text).toBe("b");
+    expect(d.find((l) => l.op === "del")?.text).toBe("b");
+    expect(d.filter((l) => l.op === "equal")).toHaveLength(2);
   });
 
-  it("una línea modificada es un borrado más un agregado", () => {
-    const d = diffLines("SELECT 1", "SELECT 2");
-
-    expect(countChanges(d)).toEqual({ added: 1, removed: 1 });
+  it("no normaliza espacios: una sangría distinta ES un cambio", () => {
+    // Dos definiciones que difieren en espacios difieren de verdad; ocultarlo
+    // haría que el operador no entienda por qué el hash no coincide.
+    expect(countChanges(diffLines("  SELECT 1", "SELECT 1")!)).toEqual({ added: 1, removed: 1 });
   });
 
-  it("numera las líneas de cada lado", () => {
-    const d = diffLines("a\nb", "a\nX\nb");
-
-    const igualA = d.find((l) => l.text === "a")!;
-    expect(igualA.sourceNo).toBe(1);
-    expect(igualA.targetNo).toBe(1);
-
-    const agregada = d.find((l) => l.text === "X")!;
-    expect(agregada.sourceNo).toBeNull();
-    expect(agregada.targetNo).toBe(2);
+  it("un lado vacío es todo agregado, y al revés", () => {
+    // Un texto vacío ES una línea vacía al splitear por `\n`, así que además de
+    // las 2 agregadas aparece esa línea como borrada. El drill-down no llega a
+    // este caso: si un lado falta cae al render de dos bloques.
+    expect(countChanges(diffLines("", "a\nb")!)).toEqual({ added: 2, removed: 1 });
+    expect(countChanges(diffLines("a\nb", "")!)).toEqual({ added: 1, removed: 2 });
   });
 
-  it("normaliza CRLF: un cambio de fin de línea no es un cambio real", () => {
-    expect(countChanges(diffLines("a\r\nb", "a\nb"))).toEqual({ added: 0, removed: 0 });
+  it("por encima del cap devuelve null en vez de colgar el navegador", () => {
+    // El LCS es O(n·m): 3001×3001 son 9 millones de celdas.
+    const gigante = Array.from({ length: 3001 }, (_, i) => `l${i}`).join("\n");
+
+    expect(diffLines(gigante, "a")).toBeNull();
+    expect(diffLines("a", gigante)).toBeNull();
   });
 
-  it("origen vacío es todo agregado, y al revés", () => {
-    expect(countChanges(diffLines("", "a\nb"))).toEqual({ added: 2, removed: 0 });
-    expect(countChanges(diffLines("a\nb", ""))).toEqual({ added: 0, removed: 2 });
-  });
+  it("justo en el cap todavía diffea", () => {
+    // El límite es exclusivo: 3000 líneas entran.
+    const alLimite = Array.from({ length: 3000 }, (_, i) => `l${i}`).join("\n");
 
-  it("ambos vacíos no devuelve nada", () => {
-    expect(diffLines(null, undefined)).toEqual([]);
-  });
-
-  it("degrada honesto con entradas gigantes en vez de colgar", () => {
-    // El LCS es O(n·m): 5000×5000 colgaría el navegador.
-    const gigante = Array.from({ length: 2500 }, (_, i) => `l${i}`).join("\n");
-    const otro = Array.from({ length: 2500 }, (_, i) => `x${i}`).join("\n");
-
-    const d = diffLines(gigante, otro);
-
-    expect(d.every((l) => l.op !== "equal")).toBe(true);
-    expect(countChanges(d)).toEqual({ added: 2500, removed: 2500 });
-  });
-});
-
-describe("collapseUnchanged", () => {
-  it("deja solo el entorno de los cambios", () => {
-    const texto = Array.from({ length: 20 }, (_, i) => `l${i}`).join("\n");
-    const modificado = texto.replace("l10", "CAMBIADA");
-
-    const colapsado = collapseUnchanged(diffLines(texto, modificado), 2);
-
-    expect(colapsado.length).toBeLessThan(20);
-    expect(colapsado.some((l) => l.text === "CAMBIADA")).toBe(true);
-    expect(colapsado.some((l) => l.text === "l0")).toBe(false);
-  });
-
-  it("sin cambios no muestra nada", () => {
-    expect(collapseUnchanged(diffLines("a\nb", "a\nb"))).toEqual([]);
-  });
-
-  it("no se pasa de los bordes del array", () => {
-    const d = diffLines("a", "b");
-
-    expect(() => collapseUnchanged(d, 10)).not.toThrow();
+    expect(diffLines(alLimite, alLimite)).not.toBeNull();
   });
 });
 
 describe("lineClass", () => {
-  it("una clase por operación", () => {
-    expect(lineClass("added")).toBe("lineAdded");
-    expect(lineClass("removed")).toBe("lineRemoved");
-    expect(lineClass("equal")).toBe("lineEqual");
+  it("una clase por operación y ninguna para las iguales", () => {
+    expect(lineClass("add")).toBe("lineAdd");
+    expect(lineClass("del")).toBe("lineDel");
+    expect(lineClass("equal")).toBe("");
   });
 });

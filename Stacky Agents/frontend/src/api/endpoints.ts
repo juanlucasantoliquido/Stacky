@@ -4657,7 +4657,15 @@ export const DbCompare = {
   // Plan 124 F1 — corridas comparativas (doc 123 §F3). NOTA de contrato verificada contra
   // api/db_compare.py: POST /compare devuelve {ok, run} (202); GET /runs devuelve {ok, runs}
   // (metadatos SIN "diff"); GET /runs/<id> devuelve el CompareRun DIRECTO, sin wrapper {ok,run}.
-  compare: (body: { source_alias: string; target_alias: string; mode?: "fresh" | "cached" }) =>
+  // Plan 176 F8 — los dos snapshot_id son ADITIVOS: mandarlos activa el modo
+  // histórico (comparar dos fotos ya tomadas, sin tocar la base).
+  compare: (body: {
+    source_alias: string;
+    target_alias: string;
+    mode?: "fresh" | "cached";
+    source_snapshot_id?: string;
+    target_snapshot_id?: string;
+  }) =>
     api.post<{ ok: boolean; run: CompareRun }>("/api/db-compare/compare", body),
   listRuns: (limit?: number) =>
     api.get<{ ok: boolean; runs: CompareRun[] }>(

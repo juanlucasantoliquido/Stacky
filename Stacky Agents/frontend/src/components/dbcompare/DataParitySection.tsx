@@ -155,7 +155,13 @@ export function DataParitySection({ run, onRunUpdate }: Props) {
       {dataDiff && dataDiff.status === "done" && (
         <DataMaskingBar
           tables={dataDiff.tables}
-          onChanged={() => DbCompare.getRun(run.run_id).then(onRunUpdate).catch(() => undefined)}
+          onChanged={() =>
+            DbCompare.getRun(run.run_id)
+              .then(onRunUpdate)
+              // Plan 176 F8 — antes se tragaba: la tabla quedaba con el
+              // enmascarado viejo y nada decía que no se había actualizado.
+              .catch(() => setError("No se pudo actualizar la corrida"))
+          }
         />
       )}
       {dataDiff && dataDiff.status === "done" && <DataDiffTables tables={dataDiff.tables} />}

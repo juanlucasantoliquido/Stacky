@@ -1,12 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DbCompare } from "../../api/endpoints";
-import type { CompareRun, DbEnvironment } from "./dbcompareTypes";
+import Select from "../ui/Select";
+import type { CompareRun, DbEnvironment, SnapshotMeta } from "./dbcompareTypes";
 import { selectableTargets, canLaunch } from "./wizardLogic";
 import styles from "./dbcompare.module.css";
+
+/** Plan 176 F8 — el histórico se suma acá; los dos primeros no cambian. */
+const MODES: { value: "fresh" | "cached" | "snapshot"; label: string }[] = [
+  { value: "fresh", label: "Fresco (toma snapshots ahora)" },
+  { value: "cached", label: "Cacheado (usa el último snapshot)" },
+  { value: "snapshot", label: "Histórico (compara dos snapshots ya tomados)" },
+];
 
 interface Props {
   environments: DbEnvironment[];
   onLaunched: (run: CompareRun) => void;
+  /** Plan 176 F8 — gate del modo histórico (UX v2 del diff). */
+  diffUxV2?: boolean;
 }
 
 function engineLabel(engine: string): string {
@@ -24,12 +34,23 @@ function isBusyError(err: unknown): boolean {
  * Plan 124 F2 — wizard de comparación: elegir origen/destino como cards, modo fresco/cacheado,
  * validación de mismo motor (wizardLogic.ts, ya testeado), y lanzar `DbCompare.compare`.
  */
-export function CompareWizard({ environments, onLaunched }: Props) {
+export function CompareWizard({ environments, onLaunched, diffUxV2 }: Props) {
   const [source, setSource] = useState<DbEnvironment | null>(null);
   const [target, setTarget] = useState<DbEnvironment | null>(null);
-  const [mode, setMode] = useState<"fresh" | "cached">("fresh");
+  const [mode, setMode] = useState<"fresh" | "cached" | "snapshot">("fresh");
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Plan 176 F8 — modo histórico: los snapshots disponibles de cada lado.
+  const [sourceSnaps, setSourceSnaps] = useState<SnapshotMeta[]>([]);
+  const [targetSnaps, setTargetSnaps] = useState<SnapshotMeta[]>([]);
+  const [sourceSnapId, setSourceSnapId] = useState("");
+  const [targetSnapId, setTargetSnapId] = useState("");
+
+  useEffect(() => {
+    if (mode !== "snapshot") return;
+    cargarSnapshots(source?.alias, setSourceSnaps, setSourceSnapId, setError);
+    cargarSnapshots(target?.alias, setTargetSnaps, setTargetSnapId, setError);
+  }, [mode, source?.alias, target?.alias]);
 
   const targets = selectableTargets(environments, source);
   const targetByAlias = new Map(targets.map((t) => [t.alias, t]));
@@ -49,12 +70,25 @@ export function CompareWizard({ environments, onLaunched }: Props) {
     setTarget(env);
   };
 
+  // En histórico hace falta elegir las dos fotos: con una sola el backend
+  // rechaza, y es mejor no dejar apretar el botón que explicar un 400.
+  const faltanSnapshots = mode === "snapshot" && (!sourceSnapId || !targetSnapId);
+
   const handleLaunch = async () => {
-    if (!launch.ok || !source || !target) return;
+    if (!launch.ok || !source || !target || faltanSnapshots) return;
     setLaunching(true);
     setError(null);
     try {
-      const res = await DbCompare.compare({ source_alias: source.alias, target_alias: target.alias, mode });
+      const res = await DbCompare.compare(
+        mode === "snapshot"
+          ? {
+              source_alias: source.alias,
+              target_alias: target.alias,
+              source_snapshot_id: sourceSnapId,
+              target_snapshot_id: targetSnapId,
+            }
+          : { source_alias: source.alias, target_alias: target.alias, mode },
+      );
       onLaunched(res.run);
     } catch (err) {
       setError(
@@ -136,24 +170,99 @@ export function CompareWizard({ environments, onLaunched }: Props) {
       </div>
 
       <div className={styles.modeRow}>
-        <label>
-          <input type="radio" name="dbc-mode" checked={mode === "fresh"} onChange={() => setMode("fresh")} />
-          Fresco (toma snapshots ahora)
-        </label>
-        <label>
-          <input type="radio" name="dbc-mode" checked={mode === "cached"} onChange={() => setMode("cached")} />
-          Cacheado (usa el último snapshot)
-        </label>
+        {MODES.filter((m) => m.value !== "snapshot" || diffUxV2).map((m) => (
+          <label key={m.value}>
+            <input
+              type="radio"
+              name="dbc-mode"
+              checked={mode === m.value}
+              onChange={() => setMode(m.value)}
+            />
+            {m.label}
+          </label>
+        ))}
       </div>
 
+      {mode === "snapshot" && (
+        <div className={styles.modeRow}>
+          <SnapshotPicker
+            titulo={`Snapshot de ${source?.alias ?? "origen"}`}
+            snapshots={sourceSnaps}
+            value={sourceSnapId}
+            onChange={setSourceSnapId}
+          />
+          <SnapshotPicker
+            titulo={`Snapshot de ${target?.alias ?? "destino"}`}
+            snapshots={targetSnaps}
+            value={targetSnapId}
+            onChange={setTargetSnapId}
+          />
+        </div>
+      )}
+
       <div className={styles.launchRow}>
-        <button onClick={handleLaunch} disabled={!launch.ok || launching}>
+        <button onClick={handleLaunch} disabled={!launch.ok || launching || faltanSnapshots}>
           {launching ? "Lanzando…" : "Comparar ambientes"}
         </button>
         {!launch.ok && <span className={styles.recency}>{launch.reason}</span>}
       </div>
     </div>
   );
+}
+
+/**
+ * Plan 176 F8 — elegir una foto vieja.
+ *
+ * Se muestra la fecha Y el hash corto: dos snapshots del mismo día son
+ * indistinguibles por fecha sola, y elegir el equivocado da un diff que no
+ * corresponde a nada.
+ */
+function SnapshotPicker({
+  titulo,
+  snapshots,
+  value,
+  onChange,
+}: {
+  titulo: string;
+  snapshots: SnapshotMeta[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <label>
+      {titulo}
+      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Elegí un snapshot…</option>
+        {snapshots.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.taken_at} · {s.content_hash.slice(0, 8)}
+          </option>
+        ))}
+      </Select>
+      {snapshots.length === 0 && (
+        <span className={styles.recency}>Sin snapshots guardados para este ambiente.</span>
+      )}
+    </label>
+  );
+}
+
+function cargarSnapshots(
+  alias: string | undefined,
+  setSnaps: (s: SnapshotMeta[]) => void,
+  setElegido: (id: string) => void,
+  setError: (m: string | null) => void,
+) {
+  if (!alias) {
+    setSnaps([]);
+    setElegido("");
+    return;
+  }
+  DbCompare.listSnapshots(alias)
+    .then((r) => setSnaps(r.snapshots))
+    .catch(() => {
+      setSnaps([]);
+      setError("No se pudieron cargar los snapshots");
+    });
 }
 
 export default CompareWizard;

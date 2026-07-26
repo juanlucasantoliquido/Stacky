@@ -48,6 +48,13 @@ describe("Plan 124 F5 — filterLogic (pure)", () => {
     expect(out).toEqual([V_CLIENTES]);
   });
 
+  it("[F8] varios tipos a la vez se suman, no se pisan", () => {
+    // Los chips de tipo combinan: elegir tabla Y vista trae las dos, no la última.
+    const out = filterDiffItems(FIXTURE, { ...EMPTY_FILTERS, objectTypes: ["table", "view"] });
+
+    expect(out).toEqual([CLIENTES, PRODUCTOS, V_CLIENTES]);
+  });
+
   it("filtra por texto sobre el nombre", () => {
     const out = filterDiffItems(FIXTURE, { ...EMPTY_FILTERS, text: "produc" });
     expect(out).toEqual([PRODUCTOS]);

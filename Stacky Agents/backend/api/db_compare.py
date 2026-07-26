@@ -395,8 +395,18 @@ def create_compare_run_route():
     mode = body.get("mode") or "fresh"
     if not source_alias or not target_alias:
         return jsonify({"ok": False, "error": "source_alias y target_alias son requeridos"}), 400
+    # Plan 176 F8 — modo histórico: comparar dos snapshots YA tomados, sin tocar
+    # la base. Campos ADITIVOS; sin ellos la ruta se comporta igual que siempre.
+    source_snapshot_id = (body.get("source_snapshot_id") or "").strip() or None
+    target_snapshot_id = (body.get("target_snapshot_id") or "").strip() or None
     try:
-        run = dbcompare_runs.create_run(source_alias, target_alias, mode=mode)
+        run = dbcompare_runs.create_run(
+            source_alias,
+            target_alias,
+            mode=mode,
+            source_snapshot_id=source_snapshot_id,
+            target_snapshot_id=target_snapshot_id,
+        )
     except dbcompare_runs.DbCompareBusyError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 409
     except (dbcompare_runs.DbCompareRunError, ValueError) as exc:

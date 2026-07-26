@@ -12,6 +12,9 @@ interface Props {
   onChange: (f: DiffFilters) => void;
   filteredCount: number;
   totalCount: number;
+  /** Plan 176 F8 — con la UX v2, los tipos son chips y se combinan. Sin ella,
+   *  sigue el select de un solo tipo. */
+  multiTipo?: boolean;
 }
 
 function toggle<T>(list: T[], value: T): T[] {
@@ -20,7 +23,7 @@ function toggle<T>(list: T[], value: T): T[] {
 
 /** Plan 124 F5 — barra de filtros: chips de severidad, select de tipo, texto con debounce
  * 250ms. Toda la evaluación real vive en filterLogic.ts (ya testeado, KPI-2). */
-export function FiltersBar({ filters, onChange, filteredCount, totalCount }: Props) {
+export function FiltersBar({ filters, onChange, filteredCount, totalCount, multiTipo }: Props) {
   const [textDraft, setTextDraft] = useState(filters.text);
 
   useEffect(() => {
@@ -44,19 +47,33 @@ export function FiltersBar({ filters, onChange, filteredCount, totalCount }: Pro
           {s}
         </button>
       ))}
-      <select
-        value={filters.objectTypes[0] ?? ""}
-        onChange={(e) =>
-          onChange({ ...filters, objectTypes: e.target.value ? [e.target.value as ObjectType] : [] })
-        }
-      >
-        <option value="">Todos los tipos</option>
-        {OBJECT_TYPES.map((t) => (
-          <option key={t} value={t}>
+      {multiTipo ? (
+        OBJECT_TYPES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={styles.chip}
+            aria-pressed={filters.objectTypes.includes(t)}
+            onClick={() => onChange({ ...filters, objectTypes: toggle(filters.objectTypes, t) })}
+          >
             {OBJECT_TYPE_LABEL[t]}
-          </option>
-        ))}
-      </select>
+          </button>
+        ))
+      ) : (
+        <select
+          value={filters.objectTypes[0] ?? ""}
+          onChange={(e) =>
+            onChange({ ...filters, objectTypes: e.target.value ? [e.target.value as ObjectType] : [] })
+          }
+        >
+          <option value="">Todos los tipos</option>
+          {OBJECT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {OBJECT_TYPE_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      )}
       <input
         type="text"
         placeholder="Buscar por nombre o tipo de cambio…"

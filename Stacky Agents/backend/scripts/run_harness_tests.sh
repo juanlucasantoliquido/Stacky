@@ -691,6 +691,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan176_dbcompare_triage.py
   tests/test_plan176_dbcompare_triage_api.py
   tests/test_plan176_dbcompare_triage_bundle.py
+  tests/test_plan176_dbcompare_snapshot_mode.py
   tests/test_plan176_dbcompare_gates.py
   tests/test_plan176_dbcompare_gates_api.py
   tests/test_plan176_dbcompare_closure.py

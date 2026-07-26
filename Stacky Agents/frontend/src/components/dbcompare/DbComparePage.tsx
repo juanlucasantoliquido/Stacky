@@ -52,22 +52,36 @@ export function DbComparePage() {
   // Plan 157 F5/F6 — wizard de alta en contexto + remount de la lista tras crear.
   const [showWizard, setShowWizard] = useState(false);
   const [envRefreshToken, setEnvRefreshToken] = useState(0);
+  /** Plan 176 F8 — hasta ahora estos fallos se tragaban: la pantalla quedaba
+   *  vacía y el operador no sabía si no había datos o si el backend se cayó. */
+  const [avisos, setAvisos] = useState<string[]>([]);
+  const avisar = (texto: string) =>
+    setAvisos((previos) => (previos.includes(texto) ? previos : [...previos, texto]));
 
   useEffect(() => {
     DbCompare.health()
       .then(setHealth)
-      .catch(() => setHealth(null));
+      .catch(() => {
+        setHealth(null);
+        avisar("No se pudo consultar el estado del comparador");
+      });
   }, []);
 
   const reloadEnvironments = () => {
     DbCompare.listEnvironments()
       .then((r) => setEnvironments(r.environments))
-      .catch(() => setEnvironments([]));
+      .catch(() => {
+        setEnvironments([]);
+        avisar("No se pudieron cargar los ambientes");
+      });
   };
   const reloadRuns = () => {
     DbCompare.listRuns(20)
       .then((r) => setRuns(r.runs))
-      .catch(() => setRuns([]));
+      .catch(() => {
+        setRuns([]);
+        avisar("No se pudieron cargar las corridas");
+      });
   };
 
   useEffect(() => {
@@ -84,12 +98,18 @@ export function DbComparePage() {
     if (activeRun.source_snapshot_id) {
       DbCompare.getSnapshot(activeRun.source_snapshot_id)
         .then(setSourceSnapshot)
-        .catch(() => setSourceSnapshot(null));
+        .catch(() => {
+          setSourceSnapshot(null);
+          avisar("No se pudieron cargar los snapshots");
+        });
     }
     if (activeRun.target_snapshot_id) {
       DbCompare.getSnapshot(activeRun.target_snapshot_id)
         .then(setTargetSnapshot)
-        .catch(() => setTargetSnapshot(null));
+        .catch(() => {
+          setTargetSnapshot(null);
+          avisar("No se pudieron cargar los snapshots");
+        });
     }
   }, [activeRun?.run_id, activeRun?.status]);
 
@@ -134,6 +154,7 @@ export function DbComparePage() {
   // Plan 176 F2 — curación del diff. Se carga al entrar en resultados de una
   // corrida `done`; con la flag OFF no se pide nada y la vista queda igual.
   const triageEnabled = health?.triage_enabled ?? false;
+  const diffUxV2 = health?.diff_ux_v2_enabled ?? false;
   const [triage, setTriage] = useState<TriageDoc | null>(null);
 
   useEffect(() => {
@@ -194,6 +215,12 @@ export function DbComparePage() {
         </p>
       </header>
 
+      {avisos.map((texto) => (
+        <div key={texto} className={styles.errorBanner}>
+          {texto}
+        </div>
+      ))}
+
       {missingDrivers.length > 0 && (
         <div className={styles.driverWarning}>
           {missingDrivers.map(([engine, info]) => (
@@ -248,7 +275,7 @@ export function DbComparePage() {
 
       <RunsTimeline runs={runs} activeRunId={activeRun?.run_id ?? null} onSelectRun={handleSelectHistoricalRun} />
 
-      {view === "wizard" && <CompareWizard environments={environments} onLaunched={handleLaunched} />}
+      {view === "wizard" && <CompareWizard environments={environments} onLaunched={handleLaunched} diffUxV2={diffUxV2} />}
 
       {view === "progress" && activeRun && (
         <RunProgress
@@ -270,7 +297,7 @@ export function DbComparePage() {
             onToggleAction={toggleAction}
             onNewComparison={handleNewComparison}
             filteredItems={filteredItems}
-            triage={triage}
+            diffUxV2={diffUxV2}
           />
           {/* Plan 176 F2 — resumen de curacion: cuanto falta decidir de un
               vistazo. Informativo; decidir se hace en cada fila. */}
@@ -301,7 +328,13 @@ export function DbComparePage() {
             runStatus={activeRun.status}
             enabled={health?.gates_enabled ?? false}
           />
-          <FiltersBar filters={filters} onChange={setFilters} filteredCount={filteredItems.length} totalCount={diff.items.length} />
+          <FiltersBar
+            filters={filters}
+            onChange={setFilters}
+            filteredCount={filteredItems.length}
+            totalCount={diff.items.length}
+            multiTipo={diffUxV2}
+          />
           <div>
             <button onClick={() => setDisplayMode("map")} aria-pressed={displayMode === "map"}>
               Mapa

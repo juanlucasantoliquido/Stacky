@@ -127,12 +127,51 @@ def _resolve_snapshot(alias: str, mode: str) -> dict:
     return snap
 
 
-def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh", initiated_by: str = "operator") -> dict:
+def _resolver_historico(source_alias: str, target_alias: str, source_snapshot_id, target_snapshot_id):
+    """Plan 176 F8 — valida el par de snapshots del modo histórico.
+
+    Devuelve (snap_origen, snap_destino) o lanza ValueError. Se valida ANTES de
+    tomar el par activo: un rechazo no puede dejar el par bloqueado, porque el
+    operador corrige el id, reintenta y se come un 409 fantasma.
+    """
+    if bool(source_snapshot_id) != bool(target_snapshot_id):
+        raise ValueError(
+            "el modo histórico necesita los dos snapshots: mandá source_snapshot_id y target_snapshot_id"
+        )
+
+    snaps = []
+    for snapshot_id, alias in ((source_snapshot_id, source_alias), (target_snapshot_id, target_alias)):
+        snap = dbcompare_snapshot.load_snapshot(snapshot_id)
+        if snap is None:
+            raise ValueError(f"snapshot '{snapshot_id}' no existe")
+        # Cruzar los aliases compararía PROD contra sí mismo creyendo que es DEV:
+        # el resultado daría "sin diferencias" y sería mentira.
+        if snap.get("alias") != alias:
+            raise ValueError(
+                f"el snapshot '{snapshot_id}' es del ambiente '{snap.get('alias')}', no de '{alias}'"
+            )
+        snaps.append(snap)
+    return snaps[0], snaps[1]
+
+
+def create_run(
+    source_alias: str,
+    target_alias: str,
+    *,
+    mode: str = "fresh",
+    initiated_by: str = "operator",
+    source_snapshot_id: str | None = None,
+    target_snapshot_id: str | None = None,
+) -> dict:
     # Plan 178: initiated_by ("operator" manual | "watch" vigía) es aditivo opcional
     # (NO contrato congelado). Compat: runs viejos se leen con run.get("initiated_by",
     # "operator"). RECORDATORIO de merge (§2bis, fix C3): el plan 176 también agrega
     # kwargs keyword-only a ESTA firma; quien mergea segundo combina ambos sets.
-    if mode not in ("fresh", "cached"):
+    # Plan 176 F8 — el modo "snapshot" no se pide por el campo `mode`: se deduce
+    # de que vengan los dos ids. Así un cliente viejo que manda mode="fresh" con
+    # ids nuevos no termina tomando fotos frescas sin querer.
+    historico = bool(source_snapshot_id or target_snapshot_id)
+    if not historico and mode not in ("fresh", "cached"):
         raise DbCompareRunError(f"modo desconocido: '{mode}' (fresh|cached)")
 
     source_env = dbcompare_registry.get_environment(source_alias)
@@ -145,6 +184,13 @@ def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh", ini
         raise DbCompareRunError(
             f"los ambientes tienen motores distintos: {source_env['engine']} vs {target_env['engine']}."
         )
+
+    snaps_historicos = None
+    if historico:
+        snaps_historicos = _resolver_historico(
+            source_alias, target_alias, source_snapshot_id, target_snapshot_id
+        )
+        mode = "snapshot"
 
     pair = frozenset({source_alias, target_alias})
     # [FIX C2] registro atómico bajo lock, ANTES de escribir el run o lanzar el thread.
@@ -162,14 +208,17 @@ def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh", ini
         "initiated_by": initiated_by,  # Plan 178 — "operator" | "watch" (aditivo)
         "mode": mode, "status": "running", "phase": "queued",
         "started_at": _iso(started), "finished_at": None, "duration_ms": 0,
-        "source_snapshot_id": None, "target_snapshot_id": None,
+        # En histórico se conocen de entrada; la UI los necesita para rotular la
+        # corrida desde el primer render, no recién al terminar.
+        "source_snapshot_id": source_snapshot_id if historico else None,
+        "target_snapshot_id": target_snapshot_id if historico else None,
         "summary": None, "diff": None, "error": None,
     }
     try:
         _write_run(run)
         threading.Thread(
             target=_execute_run,
-            args=(run_id, source_alias, target_alias, mode, pair),
+            args=(run_id, source_alias, target_alias, mode, pair, snaps_historicos),
             daemon=True,
         ).start()
     except Exception:
@@ -181,16 +230,21 @@ def create_run(source_alias: str, target_alias: str, *, mode: str = "fresh", ini
     return run
 
 
-def _execute_run(run_id, source_alias, target_alias, mode, pair) -> None:
+def _execute_run(run_id, source_alias, target_alias, mode, pair, snaps_historicos=None) -> None:
     start_monotonic = time.monotonic()
     try:
-        _update(run_id, phase="snapshot_source")
-        snap_s = _resolve_snapshot(source_alias, mode)
-        _update(run_id, source_snapshot_id=snap_s.get("id"))
+        if snaps_historicos is not None:
+            # Plan 176 F8 — el punto del modo es reconstruir el pasado SIN tocar
+            # la base: acá no se toma ninguna foto nueva.
+            snap_s, snap_t = snaps_historicos
+        else:
+            _update(run_id, phase="snapshot_source")
+            snap_s = _resolve_snapshot(source_alias, mode)
+            _update(run_id, source_snapshot_id=snap_s.get("id"))
 
-        _update(run_id, phase="snapshot_target")
-        snap_t = _resolve_snapshot(target_alias, mode)
-        _update(run_id, target_snapshot_id=snap_t.get("id"))
+            _update(run_id, phase="snapshot_target")
+            snap_t = _resolve_snapshot(target_alias, mode)
+            _update(run_id, target_snapshot_id=snap_t.get("id"))
 
         _update(run_id, phase="diff")
         diff = dbcompare_diff.diff_snapshots(snap_s, snap_t)

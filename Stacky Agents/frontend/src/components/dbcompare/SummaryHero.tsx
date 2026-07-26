@@ -1,7 +1,6 @@
 import { DbCompare } from "../../api/endpoints";
 import type { CompareRun, DiffItem, Severity, DiffAction } from "./dbcompareTypes";
 import { exportFilename, mimeFor, toCsv, toJson } from "./diffExport";
-import type { TriageDoc } from "./triageLogic";
 import type { DiffFilters } from "./filterLogic";
 import { arcPath, gaugeSweep, severityCounters, actionCounters } from "./svgMath";
 import { previousRunDelta } from "./runHistory";
@@ -28,7 +27,8 @@ interface Props {
   /** Plan 176 F8 — los ítems que el operador está VIENDO (ya filtrados) y su
    *  curación, para que el export coincida con la pantalla. */
   filteredItems?: DiffItem[];
-  triage?: TriageDoc | null;
+  /** Plan 176 F8 — gate de la UX v2 del diff. */
+  diffUxV2?: boolean;
 }
 
 /**
@@ -44,7 +44,7 @@ export function SummaryHero({
   onToggleAction,
   onNewComparison,
   filteredItems,
-  triage,
+  diffUxV2,
 }: Props) {
   const diff = run.diff;
   const summary = run.summary;
@@ -53,7 +53,7 @@ export function SummaryHero({
    *  con la pantalla, el operador deja de confiar en los dos. */
   function descargar(ext: "csv" | "json") {
     const items = filteredItems ?? [];
-    const contenido = ext === "csv" ? toCsv(items, triage) : toJson(items, triage);
+    const contenido = ext === "csv" ? toCsv(items) : toJson(items);
     const url = URL.createObjectURL(new Blob([contenido], { type: mimeFor(ext) }));
     const a = document.createElement("a");
     a.href = url;
@@ -150,7 +150,7 @@ export function SummaryHero({
           <a href={DbCompare.exportUrl(run.run_id)} download className={styles.chip}>
             Exportar .md
           </a>
-          {filteredItems && (
+          {diffUxV2 && filteredItems && (
             <>
               <button onClick={() => descargar("csv")}>CSV</button>
               <button onClick={() => descargar("json")}>JSON</button>

@@ -1235,25 +1235,17 @@
   font-size: 11px;
   line-height: 1.5;
   max-height: 420px;
-  overflow: auto;
+  /* Una definición con líneas largas no puede envolver: envolver mueve todo lo
+     de abajo y el diff deja de leerse por columna. */
+  overflow-x: auto;
+  overflow-y: auto;
   margin: 6px 0 0;
 }
 
-.lineNo {
-  display: inline-block;
-  min-width: 34px;
-  color: var(--muted);
-  user-select: none;
+.lineAdd {
+  background: color-mix(in srgb, var(--dbc-added) 14%, transparent);
 }
 
-.lineAdded {
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-}
-
-.lineRemoved {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-
-.lineEqual {
-  color: var(--muted);
+.lineDel {
+  background: color-mix(in srgb, var(--dbc-removed) 14%, transparent);
 }

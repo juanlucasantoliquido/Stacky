@@ -41,7 +41,7 @@
     "components/costcenter/CostBurnChart.tsx": 1,
     "components/costcenter/CostFiltersBar.tsx": 7,
     "components/costcenter/CostTable.tsx": 2,
-    "components/dbcompare/CompareWizard.tsx": 2,
+    "components/dbcompare/CompareWizard.tsx": 1,
     "components/dbcompare/DataParitySection.tsx": 2,
     "components/dbcompare/DbComparePage.tsx": 1,
     "components/dbcompare/DbCompareSettingsSection.tsx": 2,

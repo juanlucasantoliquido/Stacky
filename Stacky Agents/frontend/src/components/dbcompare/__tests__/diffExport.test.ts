@@ -2,7 +2,6 @@
 import { describe, it, expect } from "vitest";
 import { csvEscape, exportFilename, mimeFor, toCsv, toJson } from "../diffExport";
 import type { DiffItem } from "../dbcompareTypes";
-import type { TriageDoc } from "../triageLogic";
 
 function item(over: Partial<DiffItem> = {}): DiffItem {
   return {
@@ -17,12 +16,8 @@ function item(over: Partial<DiffItem> = {}): DiffItem {
   } as DiffItem;
 }
 
-const triage: TriageDoc = {
-  items: { "table:dbo.CLIENTES": { decision: "excluido", note: "ya migrada" } },
-};
-
 describe("csvEscape", () => {
-  it("escapa comas, comillas y saltos", () => {
+  it("envuelve comas, comillas y saltos, y duplica la comilla interna", () => {
     // Los nombres de objeto de BD pueden traer cualquiera de los tres.
     expect(csvEscape("a,b")).toBe('"a,b"');
     expect(csvEscape('di "hola"')).toBe('"di ""hola"""');
@@ -40,53 +35,72 @@ describe("csvEscape", () => {
 });
 
 describe("toCsv", () => {
-  it("tiene encabezado y una fila por ítem", () => {
-    const csv = toCsv([item(), item({ name: "OTRA", item_key: "table:dbo.OTRA" })]);
-    const lineas = csv.trim().split("\n");
-
-    expect(lineas[0]).toContain("object_type");
-    expect(lineas).toHaveLength(3);
+  it("el orden de columnas es literal", () => {
+    // Cambiarlo rompe las planillas armadas sobre exports anteriores.
+    expect(toCsv([]).split("\r\n")[0]).toBe("object_type,schema,name,action,severity,kinds");
   });
 
-  it("incluye la decisión del triage", () => {
-    expect(toCsv([item()], triage)).toContain("excluido");
+  it("golden: una fila con coma, comilla y salto de línea", () => {
+    const csv = toCsv([
+      item({
+        schema: 'es"quema',
+        name: "TABLA, RARA",
+        changes: [
+          { kind: "dos\nlineas", severity: "warn", detail: {} },
+          { kind: "column_added", severity: "info", detail: {} },
+        ],
+      } as Partial<DiffItem>),
+    ]);
+
+    expect(csv).toBe(
+      "object_type,schema,name,action,severity,kinds\r\n" +
+        'table,"es""quema","TABLA, RARA",changed,danger,"dos\nlineas|column_added"\r\n'
+    );
   });
 
-  it("sin triage, la decisión es pendiente", () => {
-    expect(toCsv([item()])).toContain("pendiente");
+  it("los kinds van unidos por barra", () => {
+    const csv = toCsv([
+      item({
+        changes: [
+          { kind: "a", severity: "info", detail: {} },
+          { kind: "b", severity: "info", detail: {} },
+        ],
+      } as Partial<DiffItem>),
+    ]);
+
+    expect(csv.split("\r\n")[1]).toContain("a|b");
   });
 
-  it("termina en salto de línea", () => {
-    // Varias herramientas ignoran la última fila si falta.
-    expect(toCsv([item()]).endsWith("\n")).toBe(true);
+  it("separa filas con CRLF y termina en CRLF", () => {
+    // Varias herramientas ignoran la última fila si falta el cierre.
+    const csv = toCsv([item(), item({ name: "OTRA" })]);
+
+    expect(csv.split("\r\n").filter(Boolean)).toHaveLength(3);
+    expect(csv.endsWith("\r\n")).toBe(true);
+  });
+
+  it("no lleva BOM", () => {
+    // Un BOM invisible hace que la primera columna no matchee en un import.
+    expect(toCsv([item()]).charCodeAt(0)).not.toBe(0xfeff);
   });
 
   it("sin ítems deja solo el encabezado", () => {
-    expect(toCsv([]).trim().split("\n")).toHaveLength(1);
+    expect(toCsv([]).split("\r\n").filter(Boolean)).toHaveLength(1);
   });
 
   it("un nombre con coma no corre las columnas", () => {
     const csv = toCsv([item({ name: "TABLA, RARA" })]);
 
-    expect(csv).toContain('"TABLA, RARA"');
-    expect(csv.trim().split("\n")).toHaveLength(2);
+    expect(csv.split("\r\n").filter(Boolean)).toHaveLength(2);
   });
 });
 
 describe("toJson", () => {
-  it("exporta los campos y la decisión", () => {
-    const doc = JSON.parse(toJson([item()], triage));
+  it("exporta los mismos ítems, sin recortar campos", () => {
+    const items = [item(), item({ name: "OTRA" })];
+    const doc = JSON.parse(toJson(items));
 
-    expect(doc).toHaveLength(1);
-    expect(doc[0].name).toBe("CLIENTES");
-    expect(doc[0].changes).toEqual(["column_removed"]);
-    expect(doc[0].decision).toBe("excluido");
-  });
-
-  it("item_key ausente sale como null, no se inventa", () => {
-    const doc = JSON.parse(toJson([item({ item_key: undefined })]));
-
-    expect(doc[0].item_key).toBeNull();
+    expect(doc).toEqual(items);
   });
 
   it("sin ítems es un array vacío válido", () => {
@@ -97,15 +111,16 @@ describe("toJson", () => {
 describe("nombre y mime", () => {
   it("el run_id va en el nombre", () => {
     // Dos exports de corridas distintas no pueden llamarse igual.
-    expect(exportFilename("run_a_vs_b", "csv")).toBe("run_a_vs_b-diff.csv");
+    expect(exportFilename("run_a_vs_b", "csv")).toBe("diff_run_a_vs_b.csv");
+    expect(exportFilename("run_a_vs_b", "json")).toBe("diff_run_a_vs_b.json");
   });
 
   it("sanea caracteres que no van en un nombre de archivo", () => {
-    expect(exportFilename("run/../x", "json")).toBe("run_.._x-diff.json");
+    expect(exportFilename("run/../x", "json")).toBe("diff_run_.._x.json");
   });
 
   it("sin run_id no genera un nombre vacío", () => {
-    expect(exportFilename("", "csv")).toBe("run-diff.csv");
+    expect(exportFilename("", "csv")).toBe("diff_run.csv");
   });
 
   it("mime por extensión", () => {

@@ -5,27 +5,21 @@
 // pantalla y ahí empieza la desconfianza.
 
 import type { DiffItem } from "./dbcompareTypes";
-import { decisionFor, type TriageDoc } from "./triageLogic";
 
-const COLUMNS = [
-  "object_type",
-  "schema",
-  "name",
-  "action",
-  "severity",
-  "changes",
-  "decision",
-] as const;
+/** Orden literal de columnas. Cambiarlo rompe las planillas que ya armó el
+ *  operador sobre exports anteriores. */
+const COLUMNS = ["object_type", "schema", "name", "action", "severity", "kinds"] as const;
 
-/** Un campo con coma, comilla o salto de línea rompe el CSV si no se escapa.
- *  Los nombres de objeto de BD pueden traer cualquiera de los tres. */
+/** Quoting RFC 4180: un campo con coma, comilla o salto de línea rompe el CSV si
+ *  no se envuelve. Los nombres de objeto de BD pueden traer los tres. */
 export function csvEscape(value: unknown): string {
   const s = value == null ? "" : String(value);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
 
-export function toCsv(items: DiffItem[], triage?: TriageDoc | null): string {
+/** CSV RFC 4180: separador de filas CRLF, sin BOM. */
+export function toCsv(items: DiffItem[]): string {
   const filas = [COLUMNS.join(",")];
   for (const item of items ?? []) {
     filas.push(
@@ -35,39 +29,26 @@ export function toCsv(items: DiffItem[], triage?: TriageDoc | null): string {
         item.name,
         item.action,
         item.severity,
-        (item.changes ?? []).map((c) => c.kind).join(" | "),
-        decisionFor(triage, item.item_key),
+        (item.changes ?? []).map((c) => c.kind).join("|"),
       ]
         .map(csvEscape)
         .join(",")
     );
   }
-  // Terminar en salto: varias herramientas ignoran la última línea sin él.
-  return filas.join("\n") + "\n";
+  return filas.join("\r\n") + "\r\n";
 }
 
-export function toJson(items: DiffItem[], triage?: TriageDoc | null): string {
-  return JSON.stringify(
-    (items ?? []).map((item) => ({
-      object_type: item.object_type,
-      schema: item.schema,
-      name: item.name,
-      action: item.action,
-      severity: item.severity,
-      changes: (item.changes ?? []).map((c) => c.kind),
-      item_key: item.item_key ?? null,
-      decision: decisionFor(triage, item.item_key),
-    })),
-    null,
-    2
-  );
+/** Los ítems tal cual: el JSON es para reprocesar, no para leer a ojo, así que
+ *  no se recorta ningún campo. */
+export function toJson(items: DiffItem[]): string {
+  return JSON.stringify(items ?? [], null, 2);
 }
 
 /** Nombre con el run_id adentro: dos exports de corridas distintas no pueden
  *  llamarse igual en la carpeta de descargas. */
 export function exportFilename(runId: string, ext: "csv" | "json"): string {
   const limpio = String(runId || "run").replace(/[^A-Za-z0-9._-]/g, "_");
-  return `${limpio}-diff.${ext}`;
+  return `diff_${limpio}.${ext}`;
 }
 
 export function mimeFor(ext: "csv" | "json"): string {

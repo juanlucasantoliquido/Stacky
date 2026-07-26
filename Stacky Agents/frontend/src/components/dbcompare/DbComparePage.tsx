@@ -155,12 +155,13 @@ export function DbComparePage() {
     };
   }, [triageEnabled, view, activeRun]);
 
-  async function decidirItem(itemKey: string, decision: TriageDecision) {
+  async function decidirItem(itemKey: string, decision: TriageDecision, note?: string) {
     if (!activeRun) return;
     try {
       const doc = await DbCompare.putTriageItem(activeRun.run_id, {
         item_key: itemKey,
         decision,
+        note,
       });
       setTriage(doc as TriageDoc);
     } catch {
@@ -335,6 +336,9 @@ export function DbComparePage() {
           sourceSnapshot={sourceSnapshot}
           targetSnapshot={targetSnapshot}
           onClose={() => setSelectedItem(null)}
+          triage={triage}
+          triageEnabled={triageEnabled}
+          onDecide={decidirItem}
         />
       )}
 

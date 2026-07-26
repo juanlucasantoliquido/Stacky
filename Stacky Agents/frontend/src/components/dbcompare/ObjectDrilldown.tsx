@@ -1,6 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { DbSnapshot, DiffItem, ForeignKeyInfo, IndexInfo, UniqueConstraintInfo, CheckConstraintInfo } from "./dbcompareTypes";
+import { Textarea } from "../ui";
 import { buildColumnRows, buildSectionRows, type SectionRow } from "./sideBySide";
+import {
+  decisionFor,
+  decisionHelp,
+  noteFor,
+  type TriageDecision,
+  type TriageDoc,
+} from "./triageLogic";
 import styles from "./dbcompare.module.css";
 
 interface Props {
@@ -8,6 +16,10 @@ interface Props {
   sourceSnapshot: DbSnapshot | null;
   targetSnapshot: DbSnapshot | null;
   onClose: () => void;
+  /** Plan 176 F2 — decisión + nota. Sin la flag, el bloque no aparece. */
+  triage?: TriageDoc | null;
+  triageEnabled?: boolean;
+  onDecide?: (itemKey: string, decision: TriageDecision, note?: string) => void;
 }
 
 function fkKey(fk: ForeignKeyInfo): string {
@@ -55,7 +67,15 @@ function SectionTable<T>({ title, rows, render }: { title: string; rows: Section
  * viene de sideBySide.ts (ya testeado). `sourceSnapshot`/`targetSnapshot` los cachea
  * DbComparePage (1 fetch por run, al abrir el primer drill-down).
  */
-export function ObjectDrilldown({ item, sourceSnapshot, targetSnapshot, onClose }: Props) {
+export function ObjectDrilldown({
+  item,
+  sourceSnapshot,
+  targetSnapshot,
+  onClose,
+  triage,
+  triageEnabled,
+  onDecide,
+}: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -90,6 +110,14 @@ export function ObjectDrilldown({ item, sourceSnapshot, targetSnapshot, onClose 
           </span>
         </div>
         <button onClick={onClose}>Cerrar</button>
+
+        {triageEnabled && onDecide && item.item_key && (
+          <TriageBlock
+            itemKey={item.item_key}
+            triage={triage}
+            onDecide={onDecide}
+          />
+        )}
 
         {item.object_type === "table" && (
           <>
@@ -164,3 +192,58 @@ export function ObjectDrilldown({ item, sourceSnapshot, targetSnapshot, onClose 
 }
 
 export default ObjectDrilldown;
+
+
+/**
+ * Plan 176 F2 — Decidir con nota, desde el detalle.
+ *
+ * La nota es lo que hace útil una exclusión seis meses después: "no se migra"
+ * sin decir por qué obliga a re-investigar el mismo caso. Se guarda al salir
+ * del campo (blur), no en cada tecla.
+ */
+function TriageBlock({
+  itemKey,
+  triage,
+  onDecide,
+}: {
+  itemKey: string;
+  triage: TriageDoc | null | undefined;
+  onDecide: (itemKey: string, decision: TriageDecision, note?: string) => void;
+}) {
+  const actual = decisionFor(triage, itemKey);
+  const [nota, setNota] = useState(noteFor(triage, itemKey));
+
+  return (
+    <div className={styles.triageBlock}>
+      {/* Control segmentado con aria-pressed, el mismo patron que ya usa la
+          vista para Mapa/Lista. No hay primitiva de radio en el repo, y un
+          control de formulario crudo sumaria deuda que el ratchet no permite
+          en este archivo. */}
+      <div className={styles.triageOptions} role="group" aria-label="Decision del triage">
+        {(["confirmado", "excluido", "pendiente"] as TriageDecision[]).map((d) => (
+          <button
+            key={d}
+            type="button"
+            className={`${styles.triageOption} ${styles[`triage_${d}`] ?? ""}`}
+            title={decisionHelp(d)}
+            aria-pressed={actual === d}
+            onClick={() => onDecide(itemKey, d, nota)}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+      <Textarea
+        className={styles.triageNote}
+        value={nota}
+        placeholder="Por qué (queda en el archivo de exclusiones)"
+        rows={2}
+        onChange={(e) => setNota(e.target.value)}
+        onBlur={() => {
+          if (nota !== noteFor(triage, itemKey)) onDecide(itemKey, actual, nota);
+        }}
+      />
+      <p className={styles.triageHelp}>{decisionHelp(actual)}</p>
+    </div>
+  );
+}

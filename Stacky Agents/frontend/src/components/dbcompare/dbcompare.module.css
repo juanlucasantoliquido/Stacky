@@ -1190,3 +1190,41 @@
   color: var(--muted);
   flex-wrap: wrap;
 }
+
+/* Plan 176 F2 — bloque de decisión + nota en el drill-down. */
+
+.triageBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.triageOptions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.triageOption {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.triageNote {
+  font-size: 12px;
+  width: 100%;
+  resize: vertical;
+}
+
+.triageHelp {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}

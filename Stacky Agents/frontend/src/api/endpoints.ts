@@ -4502,6 +4502,56 @@ export const LocalLlmApi = {
 export const DbCompare = {
   /** GET /api/db-compare/health — SIEMPRE 200, incluso con la flag OFF. */
   health: () => api.get<DbCompareHealth>("/api/db-compare/health"),
+
+  // ── Plan 176 — triage curado, gates read-only y verificación de cierre ──
+  getTriage: (runId: string) =>
+    api.get<import("../components/dbcompare/triageLogic").TriageDoc & { ok: boolean }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/triage`,
+    ),
+  putTriageItem: (
+    runId: string,
+    body: { item_key: string; decision: string; note?: string },
+  ) =>
+    api.put<import("../components/dbcompare/triageLogic").TriageDoc & { ok: boolean }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/triage/item`,
+      body,
+    ),
+  triageExclusionsUrl: (runId: string) =>
+    `/api/db-compare/runs/${encodeURIComponent(runId)}/triage/exclusions.md`,
+  getGates: (runId: string) =>
+    api.get<{ ok: boolean; gates: unknown[]; results: Record<string, unknown> }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/gates`,
+    ),
+  evaluateGates: (runId: string, gateIds?: string[]) =>
+    api.post<{ ok: boolean; results: Record<string, unknown> }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/gates/evaluate`,
+      gateIds ? { gate_ids: gateIds } : {},
+    ),
+  gatesExportUrl: (runId: string) =>
+    `/api/db-compare/runs/${encodeURIComponent(runId)}/gates/export.sql`,
+  verifyClosure: (runId: string) =>
+    api.post<{ ok: boolean; verification_run_id: string }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/verify-closure`,
+      {},
+    ),
+  getClosure: (runId: string) =>
+    api.get<import("../components/dbcompare/closureLogic").ClosureReport & { ok: boolean }>(
+      `/api/db-compare/runs/${encodeURIComponent(runId)}/closure`,
+    ),
+  getTablePrefs: () =>
+    api.get<{ ok: boolean; version: number; tables: Record<string, unknown> }>(
+      "/api/db-compare/table-prefs",
+    ),
+  putTablePref: (body: {
+    schema: string;
+    table: string;
+    natural_key?: string[] | null;
+    param_table?: boolean;
+  }) =>
+    api.put<{ ok: boolean; tables: Record<string, unknown> }>(
+      "/api/db-compare/table-prefs",
+      body,
+    ),
   listEnvironments: () =>
     api.get<{ ok: boolean; environments: DbEnvironment[]; keyring_available: boolean }>(
       "/api/db-compare/environments",

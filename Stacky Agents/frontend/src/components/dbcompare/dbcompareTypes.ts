@@ -66,6 +66,11 @@ export interface DbCompareHealth {
   config_in_place_enabled?: boolean;
   webconfig_import_enabled?: boolean;
   migration_panel_enabled?: boolean;
+  // Plan 176 — triage curado, gates read-only, prefs de tabla y UX v2 del diff.
+  triage_enabled?: boolean;
+  gates_enabled?: boolean;
+  table_prefs_enabled?: boolean;
+  diff_ux_v2_enabled?: boolean;
   keyring_available: boolean;
   drivers: DriverStatus;
 }
@@ -92,6 +97,9 @@ export interface DiffItem {
   action: DiffAction;
   severity: Severity;
   changes: DiffChange[];
+  /** Plan 176 — la emite el BACKEND (attach_item_keys). La UI nunca la deriva:
+   *  el enmascarado del 181 tapa las PK de las filas de datos. Aditivo. */
+  item_key?: string;
 }
 
 export interface DiffSummary {

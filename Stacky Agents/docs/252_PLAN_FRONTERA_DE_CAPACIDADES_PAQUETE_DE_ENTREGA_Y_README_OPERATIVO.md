@@ -34,6 +34,7 @@ los tres dentro de los propios bloques de código del plan. La v2 los resuelve.
 | C9 | MEN | 3 anclajes desviados de 66 verificados (ver §2.5) | §2.1, R2 |
 | C10 | MEN | `test_zip_es_byte_identico_en_dos_corridas` no podía fallar (el `os.utime` era decorativo: `zip_bytes` no toca el disco) | F3 |
 | C11 | MEN | `test_readme_no_tiene_placeholders_sin_sustituir` era frágil ante cualquier `{` legítimo | F2 |
+| **C12** | **IMP** | **Faltaba el 5º lugar del cableado de la flag: `services/harness_flags_help.py`.** `test_harness_flags_help.py:32-35` exige `REGISTRY_KEYS - set(PLAIN_HELP) == []`. El v1 mencionaba el rojo preexistente de ese archivo pero nunca mandaba agregar la entrada, así que iba a sumar su propio fallo y confundirlo con deuda ajena. Se agrega la entrada **literal** ya validada contra la `JARGON_DENYLIST` congelada | F0 GOTCHA DURA 4, §4.7, §12 |
 
 **[ADICIÓN ARQUITECTO] — `evidence`: la frontera deja de ser una lista de afirmaciones tipeadas
 a mano.** Ver §5.1 y los 2 tests nuevos de F0. Es la corrección de fondo del plan: el v1 denunciaba
@@ -322,6 +323,7 @@ se cortó a propósito, con su motivo:
    | `backend/services/harness_flags.py` | 1 `FlagSpec` + 1 key en `_CATEGORY_KEYS["devops"]` | universal |
    | `backend/config.py` | 1 constante espejo | universal |
    | `backend/tests/test_harness_flags.py` | 1 key en `_CURATED_DEFAULTS_ON` (`:467`) | universal |
+   | `backend/services/harness_flags_help.py` | 1 entrada en `PLAIN_HELP` (**C12** — el v1 lo olvidaba) | universal |
    | `backend/scripts/run_harness_tests.sh` (`:20`) | 4 archivos de test | universal |
    | `backend/scripts/run_harness_tests.ps1` (`:13`) | 4 archivos de test | universal |
    | `backend/api/__init__.py` | 1 `import` + 1 `register_blueprint` | blueprint |
@@ -566,6 +568,7 @@ sin F1..F5.
 - EDITAR `Stacky Agents/backend/services/harness_flags.py`
 - EDITAR `Stacky Agents/backend/config.py`
 - EDITAR `Stacky Agents/backend/tests/test_harness_flags.py` (agregar la key a `_CURATED_DEFAULTS_ON`, **línea 467**)
+- EDITAR `Stacky Agents/backend/services/harness_flags_help.py` (agregar la entrada a `PLAIN_HELP` — **C12**, obligatorio, ver GOTCHA DURA 4)
 - CREAR `Stacky Agents/backend/tests/test_plan252_capability_frontier.py`
 - EDITAR `Stacky Agents/backend/scripts/run_harness_tests.sh` (**:20**, `HARNESS_TEST_FILES=(`)
 - EDITAR `Stacky Agents/backend/scripts/run_harness_tests.ps1` (**:13**, `$HarnessTestFiles = @(`)
@@ -695,14 +698,41 @@ STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED: bool = os.getenv(
 > **GOTCHA DURA 2:** el consumidor lee **la instancia**: `getattr(_config.config, "STACKY_…", False)`.
 > `getattr` del **módulo** devuelve el default y mata el branch OFF (el test flag-off pasa en falso).
 > **GOTCHA DURA 3:** una flag nueva sin entrada en `_CATEGORY_KEYS` rompe el meta-test de categorías.
-> **VERIFICADO POR EL JUEZ — son 4 lugares, no 5.** Circula en el equipo una receta de "5 lugares"
-> que incluye `_REQUIRES_MAP_FROZEN`. **No aplica a esta flag.** El test que lo congela construye
-> `actual = {s.key: s.requires for s in FLAG_REGISTRY if s.requires}`
+> **GOTCHA DURA 4 (C12) — el v1 olvidó el 5º lugar: `services/harness_flags_help.py`.**
+> `tests/test_harness_flags_help.py:32-35` exige `REGISTRY_KEYS - set(PLAIN_HELP) == []`. Una
+> `FlagSpec` nueva **sin** entrada en `PLAIN_HELP` deja ese test rojo con tu key en la lista de
+> faltantes. El v1 mencionaba el rojo preexistente de ese archivo pero **nunca mandaba agregar la
+> entrada**, así que iba a sumar un 5º fallo y atribuirlo a deuda ajena.
+>
+> **Entrada literal a agregar** (ya validada contra las 4 restricciones del test — copiala tal
+> cual, no la reescribas "mejorándola"):
+>
+> ```python
+> "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED": PlainHelp(
+>     what="Arma un paquete descargable con los archivos del pipeline y una guia de pasos para dejarlo funcionando en el servidor.",
+>     on_effect="Si esta activada, aparece el boton Descargar paquete de entrega en la seccion Pipelines: junta los archivos generados, agrega una guia con los pasos manuales y su verificacion, y baja todo en un solo archivo comprimido.",
+>     off_effect="Si esta apagada, el boton no aparece y el resto del panel queda igual que antes; podes seguir copiando los archivos a mano.",
+>     example="Generaste el pipeline y ahora hay que registrarlo y preparar el servidor. Con esto activado bajas un solo archivo con todo adentro y una guia que dice, paso a paso, que hacer, con que comando y como darte cuenta de que salio bien.",
+> ),
+> ```
+>
+> **Las 4 restricciones que ese texto respeta** (`test_harness_flags_help.py:17-23,44-73`):
+> `what` entre 10 y 200 chars · `on_effect`/`off_effect` **empiezan literalmente con `"Si "`** y
+> ≤240 · `example` ≤300 · **prohibida** la `JARGON_DENYLIST` congelada
+> (`MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend,
+> frontend, gate, hook, runtime` — case-insensitive, palabra completa **y su plural**) · prohibido
+> citar keys `SCREAMING_SNAKE` y referencias de fase tipo `F1`. Por eso el texto dice *"archivo
+> comprimido"* y no *"zip con el endpoint"*, y *"clave"* y nunca *"token"*.
+>
+> **VERIFICADO POR EL JUEZ — `_REQUIRES_MAP_FROZEN` NO es uno de los lugares, para esta flag.**
+> El test construye `actual = {s.key: s.requires for s in FLAG_REGISTRY if s.requires}`
 > (`tests/test_harness_flags_requires.py:287`): una `FlagSpec` **sin** `requires` no entra en el
-> mapa y **no** hay que registrarla ahí. Como esta flag es deliberadamente `SIN requires`, tocar
-> `_REQUIRES_MAP_FROZEN` **pondría en rojo** `test_requires_map_is_frozen` (aparecería como
-> "Faltantes"). Los 4 lugares son: `FlagSpec` · `_CATEGORY_KEYS["devops"]` · `config.py` ·
-> `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`). Nada más.
+> mapa. Como esta flag es deliberadamente SIN `requires`, agregarla ahí **pondría en rojo**
+> `test_requires_map_is_frozen` (aparecería como "Faltantes"). No la agregues.
+>
+> **Los 5 lugares, entonces:** `FlagSpec` · `_CATEGORY_KEYS["devops"]` · `config.py` ·
+> `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`) · `PLAIN_HELP`
+> (`services/harness_flags_help.py`).
 
 **Tests PRIMERO — `tests/test_plan252_capability_frontier.py` (12 casos):**
 
@@ -736,7 +766,14 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan252_capability_frontier.py -q
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
 .venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q   # C12
 ```
+
+> **Cómo leer `test_harness_flags_help.py` (C12).** Ese archivo arrastra **4 fallos ajenos
+> preexistentes**. Procedimiento obligatorio, para no confundir tu fallo con la deuda de otro:
+> correlo **ANTES** de tocar nada y guardar la salida; correrlo **DESPUÉS**; y verificar que tu key
+> **no** aparezca en la lista de "Flags sin ayuda llana" de
+> `test_plain_help_covers_all_registry_keys`. Prohibido "arreglar" los 4 ajenos.
 
 **Criterio de aceptación BINARIO:** los 12 tests pasan **y** `test_harness_flags.py` y
 `test_harness_ratchet_meta.py` quedan verdes.
@@ -1666,6 +1703,11 @@ de la siguiente. TDD estricto, cero falsos verdes.
       (`run_harness_tests.sh:20` y `run_harness_tests.ps1:13`) y `test_harness_ratchet_meta.py` queda verde.
 - [ ] `test_harness_flags.py` verde con la key nueva en `_CURATED_DEFAULTS_ON` (**:467**) y en
       `_CATEGORY_KEYS["devops"]` (`harness_flags.py:217`).
+- [ ] **C12:** la key tiene entrada en `PLAIN_HELP` (`services/harness_flags_help.py`) y **no**
+      aparece en la lista de faltantes de `test_plain_help_covers_all_registry_keys`. Los 4 fallos
+      ajenos preexistentes de ese archivo siguen igual que antes del cambio (salida guardada).
+- [ ] **NO** se agregó la key a `_REQUIRES_MAP_FROZEN` (la flag no declara `requires`; agregarla
+      pondría rojo `test_requires_map_is_frozen`). `tests/test_harness_flags_requires.py` verde.
 - [ ] **KPI-1:** `test_zip_es_byte_identico_en_dos_corridas` + `test_build_es_idempotente` verdes; y
       `grep -c "zf.write(" services/pipeline_handoff_bundle.py` → **0**.
 - [ ] **KPI-2:** `test_secreto_sembrado_aborta_el_bundle` + `test_build_con_secreto_devuelve_409`

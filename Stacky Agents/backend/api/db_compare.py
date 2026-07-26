@@ -1027,3 +1027,125 @@ def start_data_diff_route(run_id):
         return jsonify({"ok": False, "error": str(exc)}), 409
 
     return jsonify({"ok": True}), 202
+
+
+# --------------------------------------------------------------------------
+# Plan 200 R3/R4 — Ejecución HITL de un script contra un ambiente + bitácora.
+#
+# Es lo único del producto que ESCRIBE en una base del operador. Cuatro candados
+# en serie: flag master OFF por default, opt-in por ambiente, confirmación con
+# fingerprint del texto exacto, e idempotencia. Nada de esto se dispara solo.
+# --------------------------------------------------------------------------
+
+@bp.post("/environments/<alias>/exec-allowed")
+def db_compare_set_exec_allowed(alias: str):
+    """Opt-in de ESCRITURA de un ambiente.
+
+    Se puede togglear aunque el master `STACKY_SQL_EXEC_ENABLED` esté apagado:
+    así el operador prepara el ambiente y recién después habilita la capacidad.
+    """
+    from flask import abort
+
+    if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
+        abort(404)
+
+    body = request.get_json(silent=True) or {}
+    if "allowed" not in body:
+        return jsonify({"ok": False, "error": "allowed es requerido"}), 400
+    try:
+        valor = dbcompare_registry.set_exec_allowed(alias, bool(body.get("allowed")))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    return jsonify({"ok": True, "alias": alias, "exec_allowed": valor})
+
+
+@bp.post("/environments/<alias>/execute-script")
+def db_compare_execute_script(alias: str):
+    from flask import abort
+
+    from api._helpers import current_user
+
+    if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
+        abort(404)
+    # Con el master apagado la feature no existe: 404, no 403. Un 403 confirmaría
+    # que la capacidad está ahí, apagada.
+    if not getattr(_config.config, "STACKY_SQL_EXEC_ENABLED", False):
+        abort(404)
+
+    body = request.get_json(silent=True) or {}
+    if body.get("confirm") is not True:
+        return jsonify({"error": "confirm=True requerido (HITL)"}), 400
+
+    ref = body.get("script_ref") or {}
+    fp = body.get("fingerprint") or ""
+    if not ref or not fp:
+        return jsonify({"error": "script_ref y fingerprint son obligatorios"}), 400
+
+    # El front NO manda SQL crudo: manda una referencia y el backend RE-LEE el
+    # .sql del disco. Es lo que hace que el fingerprint signifique algo — si no,
+    # se estaría confirmando un texto y ejecutando otro.
+    from services import sql_deploy_detector
+
+    resuelto = sql_deploy_detector.read_script(ref)
+    if resuelto is None:
+        return jsonify({"error": "script_not_found", "kind": "script_not_found"}), 404
+
+    sha_real = resuelto["sha256"]
+    if sha_real != fp or sha_real != (ref.get("sha256") or ""):
+        return jsonify({"error": "el script cambió desde que se mostró; refrescá el preview",
+                        "kind": "script_stale"}), 409
+
+    from services import sql_exec_engine
+
+    try:
+        res = sql_exec_engine.execute_script(
+            alias=alias,
+            sql_text=resuelto["sql_text"],
+            dry_run=bool(body.get("dry_run", False)),
+            ticket_ref=body.get("ticket_ref"),
+            incident_id=body.get("incident_id"),
+            confirm_fingerprint=fp,
+            executed_by=current_user() or "operator",
+            split_statements=bool(body.get("split_statements", True)),
+            force=bool(body.get("force", False)),
+        )
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), (404 if str(exc) == "sql_exec_disabled" else 403)
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "kind": "fingerprint_mismatch"}), 409
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc), "kind": "already_executed"}), 409
+
+    from dataclasses import asdict
+
+    return jsonify(asdict(res))
+
+
+@bp.get("/sql-exec-ledger")
+def db_compare_sql_exec_ledger():
+    """Traza read-only. `chain_ok` en False significa que el archivo fue editado."""
+    from flask import abort
+
+    if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
+        abort(404)
+    if not getattr(_config.config, "STACKY_SQL_EXEC_LEDGER_ENABLED", True):
+        abort(404)
+
+    from services import sql_exec_ledger
+
+    try:
+        limite = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "limit debe ser un entero"}), 400
+
+    filas = sql_exec_ledger.list_execs(
+        alias=request.args.get("alias"),
+        ticket_ref=request.args.get("ticket_ref"),
+        script_sha256=request.args.get("script_sha256"),
+        limit=limite,
+    )
+    return jsonify({
+        "ok": True,
+        "entries": filas,
+        "chain_ok": sql_exec_ledger.verify_chain(),
+    })

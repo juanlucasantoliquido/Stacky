@@ -31,6 +31,8 @@ _LOCK = threading.Lock()
 _PUBLIC_KEYS = (
     "alias", "engine", "host", "port", "database", "username", "odbc_driver",
     "schema_filter", "notes", "created_at", "last_used_at",
+    # Plan 200 R3 — opt-in de ESCRITURA, separado del de lectura.
+    "exec_allowed",
 )
 
 
@@ -74,6 +76,10 @@ def _save(environments: list[dict]) -> None:
 def _public(env: dict) -> dict:
     out = {k: env.get(k) for k in _PUBLIC_KEYS if k in env}
     out["has_password"] = has_password(env.get("alias", ""))
+    # Un ambiente registrado antes del Plan 200 no tiene la clave: sale False.
+    # Que un env legacy apareciera sin el campo lo dejaría "indefinido" en la UI,
+    # y lo indefinido en un permiso de escritura se lee como habilitado.
+    out["exec_allowed"] = bool(env.get("exec_allowed", False))
     return out
 
 
@@ -155,6 +161,10 @@ def upsert_environment(
             "notes": notes,
             "created_at": existing.get("created_at") if existing else _now_iso(),
             "last_used_at": existing.get("last_used_at") if existing else None,
+            # Plan 200 R3 — registrar un ambiente para COMPARARLO no habilita
+            # ESCRIBIRLE. Editar el ambiente tampoco puede revocar el permiso en
+            # silencio, así que se conserva el valor existente.
+            "exec_allowed": bool(existing.get("exec_allowed", False)) if existing else False,
         }
         if existing is not None:
             envs = [record if e.get("alias") == alias else e for e in envs]
@@ -162,6 +172,24 @@ def upsert_environment(
             envs.append(record)
         _save(envs)
     return _public(record)
+
+
+def exec_allowed(alias: str) -> bool:
+    """Plan 200 R3 — ¿este ambiente acepta ESCRITURA? Default False siempre."""
+    env = get_environment(alias)
+    return bool((env or {}).get("exec_allowed", False))
+
+
+def set_exec_allowed(alias: str, allowed: bool) -> bool:
+    """Enciende/apaga el opt-in de escritura de UN ambiente. Devuelve el valor final."""
+    with _LOCK:
+        envs = _load()
+        objetivo = next((e for e in envs if e.get("alias") == alias), None)
+        if objetivo is None:
+            raise ValueError(f"ambiente desconocido: '{alias}'")
+        objetivo["exec_allowed"] = bool(allowed)
+        _save(envs)
+    return bool(allowed)
 
 
 def delete_environment(alias: str) -> bool:

@@ -502,7 +502,7 @@ cambiar la tesis**, que es lo que hace esta v3.
 
 ## F0 — Catálogo de tareas ADO por perfil + corpus dorado
 
-> Estado fase: PENDIENTE
+> Estado fase: **IMPLEMENTADA** (2026-07-26, commit d1d40521) - 9 tests verdes
 
 **Objetivo:** codificar como dato el conocimiento real del dominio, sin LLM.
 
@@ -581,7 +581,7 @@ YAML: se documenta en el propio header por qué es infra y no credencial.
 
 ## F1 — `TaskStep` y `DeploymentJob` en el modelo (backend + builder)
 
-> Estado fase: PENDIENTE
+> Estado fase: **IMPLEMENTADA** (2026-07-26, commit d1d40521) - 12 backend + 6 vitest verdes
 
 **Objetivo:** que el panel entero pueda representar pipelines ADO reales. **Aditivo y
 retrocompatible**: `Step`/`StepDraft` no se tocan.
@@ -663,7 +663,7 @@ descarta; con `null` devuelve `emptySpec()` en vez de romper.
 
 ## F2 — Renderer ADO + round-trip contra el corpus
 
-> Estado fase: PENDIENTE
+> Estado fase: **IMPLEMENTADA** (2026-07-26, commit d1d40521) - 19 tests verdes (Gate A 3/3, Gate B 9/9)
 
 **Editar:** `backend/services/pipeline_renderers.py` (`_spec_to_ado_doc`, `:35`;
 `parse_ado_yaml`). **Crear:** `backend/tests/test_plan243_renderer_ado.py`.
@@ -715,7 +715,7 @@ def scan_unsupported(yaml_text: str) -> tuple[str, ...]   # puro, sin I/O
 
 ## F3 — Reglas semánticas por perfil (RS001..RS009)
 
-> Estado fase: PENDIENTE
+> Estado fase: **IMPLEMENTADA** (2026-07-26, commit d1d40521) - 27 tests verdes
 
 **Objetivo:** convertir en gate el conocimiento que ADO-369 costó un incidente.
 
@@ -807,7 +807,7 @@ JSON sigue parseando (`python -c "import json;json.load(open(...))"`).
 
 ## F3.5 — [ADICIÓN ARQUITECTO v3] Espejo contra el corpus: "¿en qué se diferencia de uno que YA funciona?"
 
-> Estado fase: PENDIENTE · **Determinista, sin LLM, sin red. Cierra el hueco de R4.**
+> Estado fase: **IMPLEMENTADA** (2026-07-26, commit d1d40521) - 8 tests verdes · **Determinista, sin LLM, sin red. Cierra el hueco de R4.**
 
 **El problema que resuelve.** Los gates G1–G3 responden *"¿está bien formado y no viola ninguna
 regla conocida?"*. Ninguno responde la pregunta que de verdad se hace el operador frente a un
@@ -874,7 +874,7 @@ def nearest_golden(yaml_text: str, *, profile: str) -> SpineDiff | None
 
 ## F4 — NL → `IntentSpec` (única llamada LLM)
 
-> Estado fase: PENDIENTE
+> Estado fase: PENDIENTE — se implementa en el **plan 244** (corte C25 confirmado por el operador el 2026-07-26)
 
 **Objetivo:** texto libre → estructura chica, cerrada y validable. **El LLM no escribe YAML.**
 
@@ -919,7 +919,7 @@ no lanza aunque `call_llm` devuelva `success=False`; determinismo con el mismo `
 
 ## F5 — `IntentSpec` → `PipelineSpecDraft` (determinista, sin LLM)
 
-> Estado fase: PENDIENTE
+> Estado fase: PENDIENTE — se implementa en el **plan 244** (corte C25 confirmado por el operador el 2026-07-26)
 
 **Objetivo:** generación reproducible: mismo intent ⇒ mismo draft, siempre.
 
@@ -965,7 +965,7 @@ sin errores.
 
 ## F6 — Escalera de gates G1..G5 + auto-reparación acotada
 
-> Estado fase: PENDIENTE
+> Estado fase: PENDIENTE — se implementa en el **plan 244** (corte C25 confirmado por el operador el 2026-07-26)
 
 **Crear:** `backend/services/cicd_gates.py`, `backend/tests/test_plan243_gates.py`.
 
@@ -1013,7 +1013,7 @@ se detiene exacto en `max_repairs` (contando llamadas con un doble de `parse_int
 
 ## F7 — Entrada NL dentro del panel (reusando preview/lint/commit)
 
-> Estado fase: PENDIENTE
+> Estado fase: PENDIENTE — se implementa en el **plan 244** (corte C25 confirmado por el operador el 2026-07-26)
 
 **Objetivo:** que el operador escriba en el builder y el draft se cargue ahí mismo, **sin
 página nueva** y respetando el contrato UX del Plan 106 F5.
@@ -1063,7 +1063,7 @@ deuda de UI no crece.
 
 ## F8 — Activación HITL: registrar definición y primera corrida (G5)
 
-> Estado fase: PENDIENTE
+> Estado fase: PENDIENTE — se implementa en el **plan 244** (corte C25 confirmado por el operador el 2026-07-26)
 
 **Crear:** `backend/services/cicd_nl_activation.py`, `backend/tests/test_plan243_activacion.py`.
 
@@ -1108,7 +1108,7 @@ igual exige token de `first_run_trigger`); **`test_deploy_stage_siempre_pide_con
 
 ## F9 — Ledger, métricas y flag por UI
 
-> Estado fase: PENDIENTE
+> Estado fase: PENDIENTE — se implementa en el **plan 244** (corte C25 confirmado por el operador el 2026-07-26)
 
 **Crear:** `backend/services/cicd_nl_ledger.py`, `backend/tests/test_plan243_ledger.py`,
 `backend/tests/test_plan243_flag.py`.

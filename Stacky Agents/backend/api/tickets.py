@@ -2692,6 +2692,27 @@ def _detect_stale_consumed(
     return [entry for _, entry in best_by_rf.values()]
 
 
+def _supuestos_altos_sin_confirmar(execution) -> int:
+    """Plan 213 F7 — cuántos supuestos de alto impacto siguen sin decidir.
+
+    Solo cuenta los que el operador todavía no miró. Es visibilidad pura: el
+    ticket avanza igual, y por eso vive en `blockers` como aviso y no como gate.
+    """
+    if execution is None:
+        return 0
+    try:
+        from harness.run_contract import applies_to
+
+        if not applies_to(getattr(execution, "agent_type", "") or ""):
+            return 0
+        items = ((execution.metadata_dict or {}).get("assumptions") or {}).get("items") or []
+        return sum(1 for i in items
+                   if (i or {}).get("impact") == "high"
+                   and (i or {}).get("status", "pending") == "pending")
+    except Exception:  # noqa: BLE001 — el board nunca puede romperse por esto
+        return 0
+
+
 @bp.get("/unblocker-board")
 def unblocker_board():
     """Vista 'Desatascador': tickets en ejecución + readiness de artifacts.
@@ -2882,6 +2903,17 @@ def unblocker_board():
                     readiness = "completed_ok"
                 else:
                     readiness = "artifacts_idle"
+
+            # Plan 213 F7 — supuestos de alto impacto esperando confirmación.
+            # INFORMATIVO, no bloqueante: no cambia el estado del ticket, no
+            # frena al Developer y no dispara needs_review. Todo el plan existe
+            # para dejar de frenar; reintroducir el freno acá lo anularía.
+            _n_supuestos = _supuestos_altos_sin_confirmar(last_exec_by_ticket.get(t.id))
+            if _n_supuestos:
+                blockers.append(
+                    f"supuesto_alto_sin_confirmar: {_n_supuestos} supuesto(s) de alto "
+                    f"impacto esperando tu confirmación"
+                )
 
             if running:
                 counts["running"] += 1

@@ -699,6 +699,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan213_post_run_assumptions.py
   tests/test_plan213_analyst_prompts.py
   tests/test_plan213_corrections_loop.py
+  tests/test_plan213_unblocker_assumptions.py
   # -- Plan 212 - Selector vivo de modelo/effort y cumplimiento real de la eleccion --
   tests/test_plan212_characterization.py
   tests/test_plan212_opus_end_to_end.py

@@ -4776,6 +4776,12 @@ export type { IncidentDTO, IncidentPreviewDTO, IncidentStatusDTO };
 export const Incidents = {
   status: () => api.get<IncidentStatusDTO>("/api/incidents/status"),
 
+  /** Plan 200 F4 — ¿esta incidencia trae scripts para desplegar? 404 con la flag OFF. */
+  sqlDeploy: (incidentId: string) =>
+    api.get<import("../components/sqlDeployBadge").DeployNeed & { ok: boolean }>(
+      `/api/incidents/${encodeURIComponent(incidentId)}/sql-deploy`,
+    ),
+
   /** Plan 200 F2 — qué ejecuciones tiene esta incidencia. 404 con la flag OFF. */
   console: (incidentId: string) =>
     api.get<import("../components/incidentConsole").ConsoleResponse>(

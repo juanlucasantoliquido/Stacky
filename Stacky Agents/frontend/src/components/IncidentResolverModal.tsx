@@ -29,6 +29,7 @@ import { EMERGENCY_MODEL_CATALOG } from "../services/modelCatalogFallback";
 import { Dialog } from "./ui";
 import { resolveModalInit } from "./incidentModalInit";
 import { AgentConsole } from "./IncidentAgentConsole";
+import { IncidentSqlDeploySection } from "./IncidentSqlDeploySection";
 import styles from "./IncidentResolverModal.module.css";
 
 const QUEUE_POLL_INTERVAL_MS = 3000; // Plan 166 F3/C8 — coherente con el latido único (plan 156)
@@ -560,6 +561,10 @@ export default function IncidentResolverModal({ onClose, initialText, initialFil
                 salir del detalle y buscar la ejecución por id en otra pantalla,
                 justo cuando se está por decidir si publicar lo que produjo. */}
             {incidentId && <AgentConsole incidentId={incidentId} />}
+            {/* Plan 200 F4/F7 — si la incidencia trae scripts SQL, se avisa acá
+                y se pueden desplegar por ambiente (con la ejecucion apagada,
+                igual se ve DONDE ya corrio cada uno). */}
+            {incidentId && <IncidentSqlDeploySection incidentId={incidentId} />}
 
             <label className={styles.label}>
               <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} />

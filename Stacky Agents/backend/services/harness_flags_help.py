@@ -694,6 +694,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa generación automática de configuración no está disponible.",
         example="Como un generador de contratos que te muestra el borrador antes de firmarlo.",
     ),
+    "STACKY_PIPELINE_PROFILER_ENABLED": PlainHelp(
+        what="Lee la definición de una canalización de integración continua y describe qué hace: con qué tecnología compila, si corre pruebas, qué publica y a qué ambiente llega.",
+        on_effect="Si la activás: cada canalización muestra una ficha con su tecnología, sus etapas presentes y ausentes, sus artefactos, sus ambientes y una frase que la resume.",
+        off_effect="Si la apagás: el panel de canalizaciones se ve exactamente como hoy y esa ficha no se pide ni se muestra.",
+        example="Abrís una canalización de despliegue y la ficha te dice: compila .NET Framework, publica 4 artefactos, despliega al ambiente de pruebas y no corre ni una prueba.",
+    ),
+    "STACKY_PIPELINE_INVENTORY_ENABLED": PlainHelp(
+        what="Arma la lista completa de las canalizaciones que ya existen en tu proyecto: las registradas en el proveedor y los archivos que están en el repositorio sin registrar.",
+        on_effect="Si la activás: el panel muestra una sección con todas las canalizaciones, su última corrida, su rama y si el archivo existe o falta.",
+        off_effect="Si la apagás: esa sección desaparece del panel y todo lo demás queda igual.",
+        example="Ves de una que tenés 12 canalizaciones, que 2 apuntan a un archivo borrado y que 3 están en el repositorio sin registrar en el proveedor.",
+    ),
     # ── devops ────────────────────────────────────────────────────────────────
     "STACKY_DEVOPS_PANEL_ENABLED": PlainHelp(
         what="Un editor visual para crear y modificar pipelines de integración continua, sin escribir YAML a mano.",

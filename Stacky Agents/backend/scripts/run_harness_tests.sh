@@ -773,6 +773,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan246_repo_scan.py
   tests/test_plan246_inventory_sources.py
   tests/test_plan246_inventory_endpoint.py
+  # -- Plan 247 - Perfilador de pipelines (stack + anatomia + proposito) --
+  tests/test_plan247_profiler_core.py
+  tests/test_plan247_anatomia.py
+  tests/test_plan247_proposito.py
+  tests/test_plan247_endpoint.py
+  tests/test_plan247_corpus_expectations.py
 )
 
 pass=0

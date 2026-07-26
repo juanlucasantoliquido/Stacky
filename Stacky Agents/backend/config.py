@@ -1404,6 +1404,12 @@ class Config:
         "STACKY_PIPELINE_GENERATOR_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 247 — Perfilador de pipelines (stack + anatomía + propósito). Default ON.
+    # Editable por UI (HarnessFlagsPanel, categoría "Épicas, briefs y publicación en ADO").
+    STACKY_PIPELINE_PROFILER_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_PROFILER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 87 — Panel DevOps (creador gráfico de pipelines). Default ON
     # (activado 2026-07-05, decisión explícita del operador).
     # Editable por UI (HarnessFlagsPanel, categoría "DevOps").

@@ -205,6 +205,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CI_RUN_LEDGER_ENABLED",      # Plan 191 — bitácora durable de corridas CI
         "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
+        "STACKY_PIPELINE_PROFILER_ENABLED",  # Plan 247 — perfilador de pipelines
     ),
     "migrador_ado_gitlab": (
         # NOTA: el master STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (feature opt-in) → "capacidades_optin".
@@ -2922,6 +2923,25 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui, C9)
+        default=True,
+    ),
+    # ── Plan 247 — Perfilador de pipelines (stack + anatomía + propósito) ──────
+    FlagSpec(
+        key="STACKY_PIPELINE_PROFILER_ENABLED",
+        type="bool",
+        label="Perfilador de pipelines (Plan 247)",
+        description=(
+            "Plan 247 — Si ON, habilita POST /api/pipeline-profiler/profile: dado un YAML de "
+            "pipeline ADO devuelve stack, fases presentes y AUSENTES, artefactos, entornos, "
+            "agentes y un propósito en 1 línea. 100% determinista y sin LLM en el camino default. "
+            "Default ON (ninguna de las 4 excepciones duras aplica: read-only, no destructivo, "
+            "sin prerequisitos nuevos, no reduce seguridad; curada en _CURATED_DEFAULTS_ON de "
+            "tests/test_harness_flags.py). "
+            "OFF: guard 404 per-request; el blueprint sigue registrado y el resto del panel "
+            "queda byte-idéntico."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         default=True,
     ),
     # ── Plan 87 — Panel DevOps ─────────────────────────────────────────────────

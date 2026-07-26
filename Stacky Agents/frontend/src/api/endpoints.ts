@@ -7,6 +7,8 @@ import type {
 } from "../incidents/incidentInboxModel";
 // Plan 246 — Inventario vivo de pipelines (contrato congelado del backend F0).
 import type { InventoryPayload } from "../devops/pipelineInventoryModel";
+// Plan 247 — Perfilador de pipelines (contrato congelado 247.1).
+import type { PipelineProfileDto } from "../devops/pipelineProfileModel";
 export type { RawResponse, GatewayErrorBody };
 import type {
   CostBreakdownResponse,
@@ -5011,4 +5013,15 @@ export const PipelineInventory = {
         ...(refresh ? { refresh: "1" } : {}),
       }).toString()}`,
     ),
+};
+
+/** Plan 247 — perfilador de pipelines (determinista; `narrate` es opt-in y usa modelo). */
+export const PipelineProfiler = {
+  profile: (body: {
+    yaml_text?: string;
+    pipeline_id?: string;
+    source_path?: string;
+    provider?: string;
+    narrate?: boolean;
+  }) => api.post<PipelineProfileDto>("/api/pipeline-profiler/profile", body),
 };

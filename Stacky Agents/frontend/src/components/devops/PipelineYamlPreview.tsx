@@ -3,7 +3,10 @@
  * Preview vivo de YAML ADO y GitLab con FlagGateBanner (C14) y auto-refresh (C17)
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { PipelineGenerator } from '../../api/endpoints';
+import { PipelineGenerator, PipelineProfiler } from '../../api/endpoints';
+// Plan 247 F5 — ficha del perfil debajo del preview ADO (aditivo: si falla, no se renderiza).
+import { PipelineProfileCard } from './PipelineProfileCard';
+import type { PipelineProfileDto } from '../../devops/pipelineProfileModel';
 import { FlagGateBanner } from './FlagGateBanner';
 import { toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
@@ -47,6 +50,9 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
   const [preview, setPreview] = useState<{ ado: string; gitlab: string } | null>(null);
   const [previewErrors, setPreviewErrors] = useState<Array<{ field: string; message: string }>>([]);
   const [loading, setLoading] = useState(false);
+  // Plan 247 F5
+  const [profile, setProfile] = useState<PipelineProfileDto | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // Refrescar preview manual o auto
   const refreshPreview = async () => {
@@ -56,6 +62,14 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
     try {
       const result = await PipelineGenerator.preview(toSpecDict(spec));
       setPreview(result);
+      // Plan 247 F5 — el perfil es aditivo: su fallo NUNCA degrada el preview.
+      try {
+        setProfile(await PipelineProfiler.profile({ yaml_text: result.ado }));
+        setProfileError(null);
+      } catch (pe: unknown) {
+        setProfile(null);
+        setProfileError(pe instanceof Error ? pe.message : 'perfil no disponible');
+      }
     } catch (e: unknown) {
       // 400 con errors
       if (e && typeof e === 'object' && 'errors' in e) {
@@ -148,6 +162,11 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
             </pre>
           </div>
         </div>
+      )}
+
+      {/* Plan 247 F5 — ficha del perfil (qué hace la pipeline y qué NO hace) */}
+      {preview && (
+        <PipelineProfileCard profile={profile} loading={loading} error={profileError} />
       )}
     </div>
   );

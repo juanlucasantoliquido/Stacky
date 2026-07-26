@@ -467,6 +467,8 @@ def test_ado_service_identity_is_env_only_csv():
 _CURATED_DEFAULTS_ON = {
     # ── Plan 246 — Inventario vivo de pipelines (read-only absoluto) ──
     "STACKY_PIPELINE_INVENTORY_ENABLED",
+    # ── Plan 247 — Perfilador de pipelines (determinista, sin modelo) ──
+    "STACKY_PIPELINE_PROFILER_ENABLED",
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
     # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──

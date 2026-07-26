@@ -1,6 +1,42 @@
 # Plan 247 — Perfilador de pipelines: qué es, qué hace y con qué está hecha cada pipeline
 
-> Estado: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **IMPLEMENTADO F0..F5** (2026-07-26). Resultados REALES por archivo:
+> `test_plan247_profiler_core.py` **27 passed**, `test_plan247_anatomia.py` **20 passed**,
+> `test_plan247_proposito.py` **16 passed** (15 del plan + 1 centinela nuevo, ver abajo),
+> `test_plan247_endpoint.py` **9 passed**, `test_plan247_corpus_expectations.py` **19 passed**
+> (11 funciones; `test_perfil_por_pipeline` está parametrizada ×9 y ahí viven las **99 aserciones
+> exactas**). Frontend: `pipelineProfileModel.test.ts` **17 passed**, `npx tsc --noEmit` **0 errores**.
+> Deuda ajena RESPETADA y medida: `test_harness_flags.py` **56 passed / 0 failed**,
+> `test_harness_flags_help.py` **exactamente 4 failed / 4 passed con los MISMOS 4 nombres**
+> (y verificado que ninguna de las flags nuevas aparece en las listas de ofensores),
+> `test_harness_ratchet_meta.py` **4 passed**. No regresión: 73-spec 8, 73-round-trip 5,
+> 243-task-catalog 9, 243-reglas-semánticas 27. DoD #11: `git diff --stat` **sin salida** en
+> `cicd_semantic_rules.py`, `pipeline_renderers.py`, `cicd_task_catalog.py` y
+> `pipeline_stack_detector.py`.
+>
+> **La tabla capstone dio 99/99 EXACTO en la primera corrida** — no se tocó ni la tabla ni las
+> reglas para hacerla cerrar.
+>
+> **BUG REAL DEL PLAN encontrado al implementar (F3):** el `LLMCallSpec(...)` del §F3 está
+> **incompleto**. El dataclass real (`services/pm/pm_llm_client.py:90`) exige además
+> `project`, `agent_kind`, `prompt_type` y `model`, **los cuatro sin default**. Escrito como lo
+> dice el plan, la construcción levanta `TypeError`, el `try/except` de `narrate_purpose` lo traga
+> y la narración **cae siempre a plantilla en silencio** — un falso verde perfecto: los tests de
+> "cae a plantilla" pasan y los de "narra con IA" fallan sin explicar por qué.
+> Corrección aplicada: el perfilador define su **propio** `PurposeCallSpec` (que además es lo
+> único que hace verdadera la aserción (a) de K4: `"pm_llm_client" not in
+> services/pipeline_profiler.py`, imposible si hubiera que importar `LLMCallSpec`), más un
+> centinela nuevo `test_purpose_call_spec_no_derivo_del_contrato` que se pone rojo si el contrato
+> del cliente deriva. De ahí los **16** casos de `test_plan247_proposito.py` en vez de 15.
+>
+> **Hallazgo C3 aplicado también hacia atrás:** el plan 246 (ya implementado) tampoco declaraba la
+> pata `harness_flags_help.py`. Se agregó la entrada `PLAIN_HELP` de **las dos** flags
+> (`STACKY_PIPELINE_PROFILER_ENABLED` y `STACKY_PIPELINE_INVENTORY_ENABLED`) para no sumar
+> ofensores nuevos a un archivo que ya arrastra deuda ajena. Los 4 fallos ajenos **no se tocaron**.
+>
+> **Pendiente:** sólo la casilla **#10 — smoke visual manual** del operador.
+>
+> Estado previo: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor v1: Claude Opus 5 (1M context), rol `StackyArchitectaUltraEficientCode`. **Crítica v1→v2 por juez INDEPENDIENTE** (no escribió el v1), misma corrida del 2026-07-26, con **medición real contra el árbol** (pytest corrido, corpus parseado), no relectura de memoria.
 > Serie: **"Mago de las Pipelines" (246–252)**. Este es el **247**. Dependencia: `246 → **247** → {248, 250, 251} → 252`.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro. **El perfil completo es 100% determinista y NO usa LLM** — la paridad de runtimes es trivial por construcción (§3.1).

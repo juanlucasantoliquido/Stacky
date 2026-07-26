@@ -279,6 +279,19 @@ def run_data_diff(run_id: str, tables: list[dict]) -> None:
         raise
 
 
+def _clave_natural_declarada(schema: str, table: str) -> list | None:
+    """Plan 176 F6 — la clave que el operador declaró para una tabla sin PK.
+
+    Gateado por su flag: apagada, el diff se comporta exactamente como antes.
+    """
+    import config as _config
+    from services import dbcompare_table_prefs
+
+    if not getattr(_config.config, "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED", False):
+        return None
+    return dbcompare_table_prefs.natural_key_for(schema, table)
+
+
 def _execute_data_diff(
     run_id: str, tables: list[dict], source_alias: str, target_alias: str, data_diff: dict
 ) -> None:
@@ -288,7 +301,10 @@ def _execute_data_diff(
             data_diff["phase"] = f"tabla {i}/{len(tables)}: {key}"
             dbcompare_runs._update(run_id, data_diff=dict(data_diff))
             try:
-                data_diff["tables"][key] = diff_table_data(source_alias, target_alias, t["schema"], t["table"])
+                data_diff["tables"][key] = diff_table_data(
+                    source_alias, target_alias, t["schema"], t["table"],
+                    key_cols=_clave_natural_declarada(t["schema"], t["table"]),
+                )
             except DbCompareDataError as exc:
                 data_diff["tables"][key] = {"error": str(exc)}
             dbcompare_runs._update(run_id, data_diff=dict(data_diff))

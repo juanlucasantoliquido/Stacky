@@ -118,6 +118,22 @@ def _scrub(text_: str, source_alias: str, target_alias: str) -> str:
 # Corridas
 # --------------------------------------------------------------------------
 
+def _run_id_libre(base: str) -> str:
+    """El id tiene resolución de SEGUNDO: dos corridas del mismo par dentro del
+    mismo segundo colisionarían y la segunda pisaría el archivo de la primera.
+
+    No es teórico: el cierre del Plan 176 compara y verifica una atrás de la otra,
+    y pisar la corrida vieja borra justo el diff que se está verificando.
+    """
+    if not _run_path(base).exists():
+        return base
+    for sufijo in range(2, 100):
+        candidato = f"{base}_{sufijo}"
+        if not _run_path(candidato).exists():
+            return candidato
+    return base
+
+
 def _resolve_snapshot(alias: str, mode: str) -> dict:
     if mode == "fresh":
         return dbcompare_snapshot.take_snapshot(alias)
@@ -200,7 +216,7 @@ def create_run(
         _ACTIVE_PAIRS.add(pair)
 
     started = _now()
-    run_id = f"run_{started:%Y%m%dT%H%M%SZ}_{source_alias}_vs_{target_alias}"
+    run_id = _run_id_libre(f"run_{started:%Y%m%dT%H%M%SZ}_{source_alias}_vs_{target_alias}")
     run = {
         "run_id": run_id,
         "source_alias": source_alias, "target_alias": target_alias,

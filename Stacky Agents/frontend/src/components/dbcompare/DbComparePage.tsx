@@ -354,7 +354,11 @@ export function DbComparePage() {
               onDecide={decidirItem}
             />
           )}
-          {health?.data_diff_enabled && <DataParitySection run={activeRun} onRunUpdate={setActiveRun} />}
+          {health?.data_diff_enabled && <DataParitySection
+              run={activeRun}
+              onRunUpdate={setActiveRun}
+              tablePrefs={health?.table_prefs_enabled ?? false}
+            />}
           <RepoCoveragePanel runId={activeRun.run_id} />
         </>
       )}

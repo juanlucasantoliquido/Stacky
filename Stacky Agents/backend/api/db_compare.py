@@ -930,6 +930,10 @@ def data_candidates_route(run_id):
 
     dialect = run["engine"]
     src_snap = dbcompare_snapshot.latest_snapshot(run["source_alias"])
+    # Plan 176 F6 — las preferencias del operador (tabla de parámetro + clave
+    # natural) entran ACÁ o no entran en ningún lado: guardarlas y no
+    # consultarlas dejaría la tabla sin PK marcada "no comparable" para siempre.
+    prefs_on = bool(getattr(_config.config, "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED", False))
     candidates: list[dict] = []
     if src_snap is not None:
         for schema in sorted(src_snap.get("schemas", {})):
@@ -937,18 +941,59 @@ def data_candidates_route(run_id):
             for tname in sorted(tables):
                 table = tables[tname]
                 pk_cols = table.get("primary_key", {}).get("columns") or []
-                comparable = bool(pk_cols)
+                has_pk = bool(pk_cols)
+                comparable = has_pk
+                reason = "" if comparable else "la tabla no tiene PK en el snapshot de origen"
+                extra: dict = {}
+                if prefs_on:
+                    extra = _prefs_de_candidata(schema, tname, table, has_pk)
+                    comparable = extra.pop("_comparable", comparable)
+                    reason = extra.pop("_reason", reason)
                 candidates.append({
                     "schema": schema,
                     "table": tname,
-                    "has_pk": comparable,
+                    "has_pk": has_pk,
                     "estimated_columns": len(table.get("columns") or []),
                     "comparable": comparable,
-                    "reason": "" if comparable else "la tabla no tiene PK en el snapshot de origen",
+                    "reason": reason,
                     "row_count_source": _best_effort_row_count(run["source_alias"], schema, tname, dialect),
                     "row_count_target": _best_effort_row_count(run["target_alias"], schema, tname, dialect),
+                    **extra,
                 })
     return jsonify({"ok": True, "candidates": candidates})
+
+
+def _prefs_de_candidata(schema: str, tabla: str, table_doc: dict, has_pk: bool) -> dict:
+    """Plan 176 F6 — qué aporta la preferencia del operador a una candidata.
+
+    Las claves con guion bajo son señales internas para el caller; el resto son
+    campos ADITIVOS de la respuesta (con la flag OFF no aparece ninguno).
+    """
+    from services import dbcompare_table_prefs
+
+    # Toda candidata gana `param_table`: la UI necesita el bool, no su ausencia.
+    salida: dict = {"param_table": dbcompare_table_prefs.is_param_table(schema, tabla)}
+
+    natural = dbcompare_table_prefs.natural_key_for(schema, tabla)
+    if not natural:
+        if has_pk:
+            salida["key_source"] = "pk"
+        return salida
+
+    columnas = {c["name"] for c in (table_doc.get("columns") or [])}
+    if not set(natural).issubset(columnas):
+        # Una clave que apunta a columnas inexistentes produciría un diff que
+        # parece correcto y no lo es: se marca como no comparable, no se ignora.
+        salida["_comparable"] = False
+        salida["_reason"] = "natural_key_invalid"
+        return salida
+
+    salida["key_source"] = "natural"
+    salida["key_cols"] = list(natural)
+    if not has_pk:
+        salida["_comparable"] = True
+        salida["_reason"] = ""
+    return salida
 
 
 @bp.post("/runs/<run_id>/data-diff")

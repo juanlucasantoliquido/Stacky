@@ -21,6 +21,8 @@ import {
   type DataCandidate,
   type DataDiff,
 } from "./dataDiffLogic";
+import { canDefineKey, parseNaturalKeyInput, preselect } from "./tablePrefsLogic";
+import Input from "../ui/Input";
 import { isTerminal, nextPollDelayMs } from "./useCompareRun";
 import { DataMaskingBar } from "./DataMaskingBar";
 import styles from "./dbcompare.module.css";
@@ -30,9 +32,11 @@ const MAX_TABLES = 20;
 interface Props {
   run: CompareRun;
   onRunUpdate: (run: CompareRun) => void;
+  /** Plan 176 F6 — preferencias de tabla (estrella de parámetro + clave natural). */
+  tablePrefs?: boolean;
 }
 
-export function DataParitySection({ run, onRunUpdate }: Props) {
+export function DataParitySection({ run, onRunUpdate, tablePrefs }: Props) {
   const [open, setOpen] = useState(false);
   const [candidates, setCandidates] = useState<DataCandidate[] | null>(null);
   const [search, setSearch] = useState("");
@@ -46,7 +50,13 @@ export function DataParitySection({ run, onRunUpdate }: Props) {
   useEffect(() => {
     if (!open || candidates || dataDiff) return;
     DbCompare.dataCandidates(run.run_id)
-      .then((r) => setCandidates(r.candidates))
+      .then((r) => {
+        setCandidates(r.candidates);
+        // Plan 176 F6 — lo marcado como "de parámetro" arranca tildado: volver a
+        // elegir las mismas 20 tablas en cada corrida es la razón por la que el
+        // diff de datos se deja de usar.
+        if (tablePrefs) setSelected(new Set(preselect(r.candidates, MAX_TABLES)));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, [open, run.run_id, candidates, dataDiff]);
 
@@ -133,6 +143,13 @@ export function DataParitySection({ run, onRunUpdate }: Props) {
                     />
                     {c.schema}.{c.table}
                     {!c.comparable && <em> — {c.reason}</em>}
+                    {tablePrefs && (
+                      <PrefsControls
+                        candidate={c}
+                        onGuardado={() => setCandidates(null)}
+                        onError={setError}
+                      />
+                    )}
                     {c.row_count_source != null && c.row_count_target != null && (
                       <span>
                         {" "}
@@ -224,6 +241,87 @@ function DataDiffTable({ diff }: { diff: DataDiff }) {
           )}
         </tbody>
       </table>
+    </>
+  );
+}
+
+/**
+ * Plan 176 F6 — estrella de "tabla de parámetro" y definición de clave natural.
+ *
+ * Tras guardar se limpia la lista de candidatas para que se vuelvan a pedir: la
+ * preferencia cambia qué es comparable, así que una lista vieja mostraría la
+ * tabla todavía en gris.
+ */
+function PrefsControls({
+  candidate,
+  onGuardado,
+  onError,
+}: {
+  candidate: DataCandidate;
+  onGuardado: () => void;
+  onError: (m: string | null) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [texto, setTexto] = useState("");
+
+  const guardar = (body: { natural_key?: string[] | null; param_table?: boolean }) => {
+    DbCompare.putTablePref({ schema: candidate.schema, table: candidate.table, ...body })
+      .then(() => {
+        setEditando(false);
+        onGuardado();
+      })
+      .catch(() => onError("No se pudo guardar la preferencia de la tabla"));
+  };
+
+  const columnas = parseNaturalKeyInput(texto);
+
+  return (
+    <>
+      <button
+        type="button"
+        title={candidate.param_table ? "Es tabla de parámetro" : "Marcar como tabla de parámetro"}
+        onClick={(e) => {
+          e.preventDefault();
+          guardar({ param_table: !candidate.param_table });
+        }}
+      >
+        {candidate.param_table ? "★" : "☆"}
+      </button>
+      {canDefineKey(candidate) && !editando && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            setTexto((candidate.key_cols ?? []).join(", "));
+            setEditando(true);
+          }}
+        >
+          Definir clave…
+        </button>
+      )}
+      {editando && (
+        <>
+          <Input
+            value={texto}
+            placeholder="MODULO, CODIGO"
+            onChange={(e) => setTexto(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={columnas === null}
+            title={columnas === null ? "Escribí al menos un nombre de columna válido" : undefined}
+            onClick={(e) => {
+              e.preventDefault();
+              if (columnas) guardar({ natural_key: columnas });
+            }}
+          >
+            Guardar
+          </button>
+          <button type="button" onClick={(e) => { e.preventDefault(); setEditando(false); }}>
+            Cancelar
+          </button>
+        </>
+      )}
     </>
   );
 }

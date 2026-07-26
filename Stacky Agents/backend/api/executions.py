@@ -350,12 +350,32 @@ def human_review_route(execution_id: int):
     return jsonify(result)
 
 
+# Plan 173 F5 — SOLO columnas reales de agent_executions. `duration_ms` se
+# calcula por fila y `cost_usd`/`runtime` viven en metadata_json: ordenar por
+# ellas en SQL es imposible, y ofrecerlo sería prometer un orden que no llega.
+_HISTORY_SORT_COLUMNS = {
+    "started_at": AgentExecution.started_at,
+    "id": AgentExecution.id,
+    "status": AgentExecution.status,
+    "agent_type": AgentExecution.agent_type,
+}
+
+
 @bp.get("/history")
 def executions_history():
     """Plan 39 A1 — Historial completo de ejecuciones con métricas del arnés.
 
     Gated por STACKY_EXECUTION_HISTORY_ENABLED. Si OFF → 404 feature_disabled.
     Soporta filtros: project, agent_type, runtime, status (csv), days, limit (max 500), offset.
+
+    Plan 173 F5 — ADITIVO: `sort`/`dir` (allowlist de columnas REALES) e
+    `include_total=1`, que envuelve la respuesta en {items, total}. Sin
+    `include_total` devuelve la lista pelada de siempre.
+
+    LIMITACIÓN del total: el filtro `runtime` NO vive en una columna sino en
+    metadata_json, así que se aplica en Python DESPUÉS de paginar. El `total` es
+    el COUNT SQL previo y NO lo descuenta: con filtro de runtime activo, la UI
+    debe ignorarlo (ver `historyPaginationView` en el frontend).
     """
     from config import config as _cfg
     if not getattr(_cfg, "STACKY_EXECUTION_HISTORY_ENABLED", True):
@@ -367,6 +387,10 @@ def executions_history():
     days = request.args.get("days", type=int)
     limit = min(request.args.get("limit", default=100, type=int), 500)
     offset = request.args.get("offset", default=0, type=int)
+    # Plan 173 F5 — orden y total, los dos opt-in y aditivos.
+    sort_key = request.args.get("sort", default="started_at")
+    sort_dir = request.args.get("dir", default="desc")
+    include_total = (request.args.get("include_total") or "").strip().lower() in ("1", "true", "yes")
 
     # status puede ser CSV o múltiples ?status=
     status_values: list[str] = []
@@ -404,8 +428,17 @@ def executions_history():
                 AgentExecution.started_at >= (datetime.utcnow() - timedelta(days=days))
             )
 
+        # El total se cuenta DESPUÉS de los filtros SQL y ANTES de paginar.
+        total = q.count() if include_total else None
+
+        # Allowlist: una columna fuera de la lista cae al orden de siempre en vez
+        # de reventar. Un `sort` desconocido es un cliente viejo o un typo, no
+        # motivo para devolverle un 400 al operador.
+        columna = _HISTORY_SORT_COLUMNS.get(sort_key, AgentExecution.started_at)
+        orden = columna.asc() if str(sort_dir).lower() == "asc" else columna.desc()
+
         rows = (
-            q.order_by(AgentExecution.started_at.desc())
+            q.order_by(orden)
             .offset(offset)
             .limit(limit)
             .all()
@@ -447,6 +480,9 @@ def executions_history():
                 "local_insight": meta.get("local_insight") or None,  # Plan 117 (aditivo)
             })
 
+    if include_total:
+        return jsonify({"items": items, "total": total})
+    # Contrato legacy INTACTO: sin include_total sigue siendo una lista pelada.
     return jsonify(items)
 
 

@@ -1,7 +1,9 @@
 # Plan 252 — La frontera de capacidades: qué hace Stacky, qué te toca a vos, y el paquete de entrega que lo cierra
 
-> Estado: **v1 · PROPUESTO** — pendiente de `criticar-y-mejorar-plan` (juez independiente).
-> Autor: StackyArchitectaUltraEficientCode (Claude Opus 5, 1M context).
+> Estado: **v2 · CRITICADO** — juez independiente (`criticar-y-mejorar-plan`, 2026-07-26).
+> Veredicto sobre el v1: **RECHAZADO** — 3 bloqueantes. Esta v2 los corrige. Ver §0.0.
+> Autor del v1: StackyArchitectaUltraEficientCode (Claude Opus 5, 1M context).
+> Crítica y reescritura a v2: juez independiente (NO el autor del v1).
 > Serie: **"Mago de las Pipelines" (246–252)**. Este es el **7º y último**: cierra el círculo.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro. **Este plan no usa LLM en
 > ningún camino**: la frontera es un catálogo de datos y el README sale de una plantilla. La
@@ -11,6 +13,33 @@
 > (3) incluir un README claro y detallado con los pasos a realizar en el servidor; (4) especificar
 > requisitos previos, comandos, variables y validaciones; (5) limitar la intervención manual
 > exclusivamente a lo que el agente no pueda hacer por sí mismo."*
+
+---
+
+## 0.0 Changelog v1 → v2 (qué corrigió el juez)
+
+Veredicto del v1: **RECHAZADO**. Tres bloqueantes, los tres verificados contra el código real,
+los tres dentro de los propios bloques de código del plan. La v2 los resuelve.
+
+| # | Sev | Hallazgo | Dónde se corrigió |
+|---|-----|----------|-------------------|
+| **C1** | **BLOQ** | **El gate anti-secreto NO fallaba cerrado: `scrub_files` se comía el secreto antes de que `assert_no_secrets` lo viera.** `secret_masking.TOKEN_VALUE_PREFIXES` (`secret_masking.py:11`) incluye `glpat-` y `_TOKEN_RE` (`:15-17`) lo reemplaza por `MASK_PLACEHOLDER`; después `detect_classes` no encuentra nada y el bundle **se produce**. Los dos tests de KPI-2 fallaban por construcción, y §4.5 ("no enmascara y sigue") quedaba contradicha por el propio código: enmascaraba y seguía para **todo formato conocido**, y solo fallaba cerrado para los **desconocidos** — exactamente al revés | §4.5, F3 `build_bundle`, KPI-2 |
+| **C2** | **BLOQ** | **Dos gates del plan eran imposibles de pasar el día 1, por la misma causa: la prosa choca con su propio grep.** (a) `test_modulos_sin_ejecucion_remota` asertaba que el **texto fuente** no contiene `subprocess`/`paramiko`/`winrm`/`socket`/`requests`, y el plan mandaba escribir esas 5 palabras en el docstring de **ambos** módulos. (b) El criterio binario de F3 exige `grep -c "zf.write(" … → 0`, y el docstring de `zip_bytes` que el plan mandaba escribir contenía esa llamada **literal** para prohibirla. Gotcha recurrente de la casa | (a) F0 y F2 docstrings + test migrado a **AST**; (b) docstring de `zip_bytes` reescrito en prosa (F3) |
+| **C3** | **BLOQ** | **F5 mandaba editar `backend/api/diag.py`, fuera de la superficie reservada al 252**, y ese mismo dict lo reclaman el 246 (`pipeline_inventory_enabled`) y el 251 (`env_matrix_enabled`) → merge silencioso entre hermanos. Además contradecía §4.7 | F5 (se elimina `healthKey`), §4.7, R10 |
+| C4 | IMP | `bundle_id` era la huella del contenido **pre-scrub**, no del que va al zip; el README afirmaba lo contrario | §2.3, F3 (resuelto por C1) |
+| C5 | IMP | El orden de `degraded` que produce `collect_inputs` contradecía el orden que exigía su propio test | F2 |
+| C6 | IMP | `test_bundle_sin_246_247_251_igual_se_arma` pasaba trivialmente hoy (los módulos ya no existen) y **se volvía mudo** el día que aterrice el 246 | F2 |
+| C7 | IMP | `except ImportError` era muy angosto: un módulo hermano que rompa al importarse tumbaba el bundle en vez de degradarlo | F2 |
+| C8 | IMP | Falso positivo NO contemplado: la clase `secrets` incluye `password\s*[=:]` (`egress_policies.py:89-90`); un `format_hint` con forma de connection string dejaba el bundle **inconstruible** con un 409 confuso | F2 (`__post_init__`), F3, R2 |
+| C9 | MEN | 3 anclajes desviados de 66 verificados (ver §2.5) | §2.1, R2 |
+| C10 | MEN | `test_zip_es_byte_identico_en_dos_corridas` no podía fallar (el `os.utime` era decorativo: `zip_bytes` no toca el disco) | F3 |
+| C11 | MEN | `test_readme_no_tiene_placeholders_sin_sustituir` era frágil ante cualquier `{` legítimo | F2 |
+
+**[ADICIÓN ARQUITECTO] — `evidence`: la frontera deja de ser una lista de afirmaciones tipeadas
+a mano.** Ver §5.1 y los 2 tests nuevos de F0. Es la corrección de fondo del plan: el v1 denunciaba
+que la frontera escrita a mano en `bootstrap-server-environment.yml:28-32` "no es verificable" — y
+después proponía una tabla de 14 filas escrita a mano, igual de no verificable, solo que mudada de
+un comentario YAML a un `tuple` de Python.
 
 ---
 
@@ -90,7 +119,7 @@ Dos piezas, y la primera le da sentido a la segunda:
 | KPI | Métrica | Criterio binario |
 |-----|---------|------------------|
 | **KPI-1** | Reproducibilidad | `zip_bytes(files)` llamado dos veces, con archivos cuyo mtime en disco difiere, devuelve **bytes idénticos**; `sha256` estable. `test_zip_es_byte_identico_en_dos_corridas` |
-| **KPI-2** | Cero secretos | Con un token sembrado en cualquier archivo de entrada, `build_bundle` **lanza `HandoffSecretError` y NO produce zip** (falla cerrado, no enmascara y sigue). `test_secreto_sembrado_aborta_el_bundle` |
+| **KPI-2** | Cero secretos | Con un token sembrado en cualquier archivo de entrada, `build_bundle` **lanza `HandoffSecretError` y NO produce zip** (falla cerrado, no enmascara y sigue). **El gate corre sobre el texto CRUDO, ANTES del masking (C1)**; el masking queda como red de seguridad que, si llega a cambiar algo, **también aborta**. `test_secreto_sembrado_aborta_el_bundle` + `test_masking_que_cambia_algo_tambien_aborta` |
 | **KPI-3** | Frontera verificable (punto 5 del operador) | Las **14** acciones del catálogo tienen veredicto ∈ `{CAN, DEPENDS, CANNOT}` y `reason` no vacío; y **ninguna acción resuelta `CAN` aparece en la lista de pasos manuales del README**. `test_toda_accion_tiene_veredicto_y_motivo` + `test_ninguna_accion_can_es_paso_manual` |
 | **KPI-4** | README accionable (punto 4 del operador) | **Todo** `HandoffStep` del manifest tiene `command`, `expected_result` y `on_failure` no vacíos — imposible construir uno sin ellos. `test_paso_sin_validacion_es_rechazado` |
 | **KPI-5** | Degradación honesta | Sin los módulos de los planes 246/247/251 instalados, `build_bundle` produce un zip **válido** y `manifest["degraded"]` lista **exactamente** los módulos ausentes. `test_bundle_sin_246_247_251_igual_se_arma` |
@@ -111,7 +140,7 @@ Nada que configurar.
 | Pieza | Anclaje (símbolo verificado) | Qué me aporta |
 |---|---|---|
 | **Zip en memoria + `send_file`** | `backend/api/devops_servers.py:181` (`download_setup_route`), `:212-216` (`io.BytesIO()` + `zipfile.ZipFile(..., "w", ZIP_DEFLATED)` + `zf.write(..., arcname=...)`), `:218-223` (`send_file(..., as_attachment=True, download_name=...)`) | **El precedente exacto de mi endpoint.** Y su docstring `:183-187` ya escribe un mini-README de 3 pasos: es literalmente la versión artesanal de este plan |
-| **Bundle a disco + manifest + README** | `backend/services/dbcompare_scripts.py:1234` (`bundle_zip_bytes`), `:1180-1195` (arma `MANIFEST.json` con `json.dumps(..., sort_keys=True)` y `files["README.md"] = _render_readme(manifest, warnings)`), `_render_readme` (`:1155`, verificado por lectura), `_write_bundle_atomic` (`:1207`+, escribe a `<id>.tmp/` y recién ahí `os.replace`) | El patrón `dict[str, str]` → archivos → zip, con **README por plantilla determinista** y escritura atómica. Lo copio tal cual |
+| **Bundle a disco + manifest + README** | `backend/services/dbcompare_scripts.py:1234` (`bundle_zip_bytes`), `:1180-1195` (arma `MANIFEST.json` con `json.dumps(..., sort_keys=True)` y `files["README.md"] = _render_readme(manifest, warnings)`), `_render_readme` (**`:950`** — el v1 decía `:1155`, FALSO, corregido C9), `_write_bundle_atomic` (**`:975`** — el v1 decía `:1207`, FALSO, corregido C9; escribe a `<run_id>.tmp` en `:982` y en `:992` usa el alias `_os_replace`, importado como `from os import replace as _os_replace` en `:14` — **no** el literal `os.replace`) | El patrón `dict[str, str]` → archivos → zip, con **README por plantilla determinista** y escritura atómica. Lo copio tal cual |
 | **Zip ordenado** | `dbcompare_scripts.py:1238` — `for path in sorted(base.rglob("*"))` y `arcname=...replace("\\", "/")` | Orden estable de entradas + separador POSIX. **Falta el `date_time`** (ver §2.3) |
 | **Descarga con guard anti path-traversal** | `docs/201_PLAN_...ARTEFACTOS_DESCARGABLES.md:806-819` (F7) — `commonpath` + *"`build_id` NUNCA se interpola en una ruta de filesystem; solo se usa como **clave**"*; implementado en `backend/services/solution_builder.py:410` (`artifact_zip_path`, docstring literal: *"`build_id` es una CLAVE, jamás parte de una ruta"*) y `backend/api/devops_build_workshop.py:175` (`send_file`) | **El guard exacto que copio en F4.** No lo reinvento: lo espejo |
 | **Zip como respuesta sin archivo temporal** | `backend/api/db_compare.py:871` (`get_scripts_zip_route`), `:883-885` (`current_app.response_class(zip_bytes, mimetype="application/zip")` + `Content-Disposition`) | Alternativa a `send_file` cuando los bytes ya están en memoria |
@@ -162,6 +191,14 @@ El "cuándo" vive **fuera** del zip: en el nombre del archivo descargado y en el
 README dice `id: <bundle_id>` y explica en una línea que es la huella del contenido, no una fecha.
 Ese es el trade-off, es deliberado, y está congelado por `test_manifest_no_tiene_timestamp`.
 
+> **Corrección C4 (juez).** El v1 calculaba el `bundle_id` en `build_files` y **después** pasaba
+> todo por `scrub_files`. Resultado: el id era la huella del contenido **pre-scrub**, mientras que
+> el zip llevaba el contenido **post-scrub** — y el README afirmaba, literalmente, que el id es
+> *"la huella SHA-256 del contenido de este paquete"*. Con el orden nuevo de F3 (gate sobre el
+> texto crudo, y el masking obligado a ser un **no-op**), el contenido hasheado y el contenido
+> empaquetado son el mismo por construcción, y la frase del README vuelve a ser cierta.
+> Congelado por `test_bundle_id_es_hash_del_contenido_del_zip`.
+
 ### 2.4 Lo NO verificado (declarado)
 
 - **`services/devops_variables.py` NO EXISTE.** El dossier de la serie lo lista en su §2.1 junto a
@@ -182,6 +219,34 @@ Ese es el trade-off, es deliberado, y está congelado por `test_manifest_no_tien
   lo declara igualmente como no verificado). Este plan **no lo necesita**: no valida contra ADO.
 - Este plan **no toca ninguna tabla**: la persistencia nueva es un directorio de bundles + un
   JSONL, ambos bajo `data_dir()`.
+
+### 2.5 Verificación independiente de anclajes (juez, 2026-07-26)
+
+Se abrieron y verificaron **66 anclajes** citados por el v1. **63 correctos, 3 desviados.** Los
+desviados están corregidos arriba; se listan acá para que nadie los reintroduzca:
+
+| Anclaje del v1 | Realidad | Dónde estaba |
+|---|---|---|
+| `dbcompare_scripts._render_readme:1155` | **`:950`** | §2.1 |
+| `dbcompare_scripts._write_bundle_atomic:1207` | **`:975`** (y usa el alias `_os_replace` de `:14`, no `os.replace`) | §2.1 |
+| `egress_policies` `\b\d{7,8}\b` en `:67` | **`:66`** (la clase `"pii"` abre en `:65`) | R2 |
+
+**Confirmado, no desmentido** (los dos puntos que el juez recibió como "posiblemente stale"):
+
+1. **`zf.write()` toma el `mtime` del disco ⇒ el zip no es reproducible.** Verificado en el prior
+   art: `dbcompare_scripts.py:1234-1241` es literalmente
+   `zf.write(path, arcname=str(path.relative_to(base)).replace("\\", "/"))` dentro de un
+   `for path in sorted(base.rglob("*"))` — ordena las entradas pero **no fija la fecha**. El
+   diagnóstico de §2.3 y la solución `ZipInfo(date_time=_ZIP_EPOCH)` son correctos.
+2. **`detect_classes` dispara con `"produccion"` y con 8 dígitos** —
+   `egress_policies.py:75` (`\b(producci[oó]n|PROD|data\s+real|prod-db)\b`, IGNORECASE) y `:66`
+   (`\b\d{7,8}\b`). **Matiz importante:** esos patrones **no pertenecen a la clase `secrets`** sino
+   a `"production"` y `"pii"`. `detect_classes` **detecta**, no bloquea: quien bloquea es el
+   llamador. Por eso la mitigación del plan (mirar **solo** la clase `secrets`) es correcta. Las 5
+   clases son `pii`, `financial`, `production`, `regulatory`, `secrets` (`_DETECTORS:64-93`).
+   Lo que el v1 **no** vio es que la clase `secrets` **sí** trae dos patrones que un README de
+   deploy puede disparar legítimamente (`:89` `password\s*[=:]\s*\S{4,}` y `:90` `;password=…`):
+   ver C8.
 
 ---
 
@@ -231,15 +296,46 @@ se cortó a propósito, con su motivo:
    endpoint de este plan muta el repo, el tracker, un servidor ni una pipeline.
 4. **Mono-operador sin auth.** Cero RBAC, cero roles, cero `403`. El `bundle_id` no es un secreto
    ni un token de autorización: es una clave de búsqueda local.
-5. **Falla cerrado en secretos.** Si el gate detecta un secreto, **el bundle no se produce**. No se
-   enmascara-y-sigue: enmascarar y seguir enseñaría al operador que el paquete "limpia solo", y la
-   primera vez que el masking no cubra un formato nuevo, el secreto viaja.
+5. **Falla cerrado en secretos — y el ORDEN es la mitad de la regla (C1).** Si el gate detecta un
+   secreto, **el bundle no se produce**. No se enmascara-y-sigue: enmascarar y seguir enseñaría al
+   operador que el paquete "limpia solo", y la primera vez que el masking no cubra un formato
+   nuevo, el secreto viaja.
+   **El v1 escribía esta regla y después hacía lo contrario**: su `build_bundle` corría
+   `scrub_files` **antes** de `assert_no_secrets`, así que el masking canónico (que conoce
+   `ghp_`, `github_pat_`, `glpat-`, `xoxb-`, `xoxp-`, `AKIA`, `eyJhbGciOi` —
+   `secret_masking.py:11`) borraba el secreto y el gate no encontraba nada: el paquete **salía**.
+   La consecuencia es perversa: fallaba cerrado **solo** para los formatos que el masking
+   desconoce, y fallaba abierto justo para los que sabe reconocer.
+   **Orden obligatorio, no negociable:**
+   `build_files` → `assert_no_secrets(crudo)` → `scrub_files` → **si el scrub cambió un solo byte,
+   también aborta** → `zip_bytes`. El masking pasa de ser un filtro a ser un **testigo**: si tuvo
+   algo que hacer, es que el gate se le escapó algo, y eso es un fallo, no una limpieza.
 6. **Determinismo o no es un artefacto.** Mismas entradas → mismos bytes. Sin esto, no se puede
    comparar dos paquetes, ni cachear, ni auditar qué se le entregó a quién.
-7. **No degradar / backward-compatible.** Todo lo nuevo es aditivo: 2 módulos de servicio, 1
-   blueprint, 1 modelo puro, 1 componente, 1 entrada en `DevOpsPage.tsx`. **Cero ediciones a
-   módulos existentes** fuera del registro de la flag, el registro del blueprint y el array de
-   secciones. Con la flag OFF, todo queda **exactamente** como hoy.
+7. **No degradar / backward-compatible — y la lista EXACTA de archivos ajenos que se tocan (C3).**
+   Todo lo nuevo es aditivo. El v1 afirmaba "cero ediciones a módulos existentes fuera de 3
+   lugares" y después editaba 8, incluido uno **fuera de la superficie reservada al 252**. Lista
+   cerrada y auditable de **todo** lo que este plan edita de archivos que ya existen:
+
+   | Archivo existente | Qué se le agrega | Superficie |
+   |---|---|---|
+   | `backend/services/harness_flags.py` | 1 `FlagSpec` + 1 key en `_CATEGORY_KEYS["devops"]` | universal |
+   | `backend/config.py` | 1 constante espejo | universal |
+   | `backend/tests/test_harness_flags.py` | 1 key en `_CURATED_DEFAULTS_ON` (`:467`) | universal |
+   | `backend/scripts/run_harness_tests.sh` (`:20`) | 4 archivos de test | universal |
+   | `backend/scripts/run_harness_tests.ps1` (`:13`) | 4 archivos de test | universal |
+   | `backend/api/__init__.py` | 1 `import` + 1 `register_blueprint` | blueprint |
+   | `frontend/src/api/endpoints.ts` | 1 objeto `PipelineHandoff` | panel |
+   | `frontend/src/pages/DevOpsPage.tsx` | 1 objeto en el array de secciones | panel |
+
+   **`backend/api/diag.py` NO se toca** (era la 9ª edición del v1, y está fuera de la frontera
+   del 252): ver F5. **Cero archivos fuera de esta tabla.** Con la flag OFF, todo queda
+   **exactamente** como hoy.
+   *Nota de merge (R9):* `harness_flags.py`, `endpoints.ts` y `DevOpsPage.tsx` los tocan también
+   los planes hermanos de la serie. Git **no marca conflicto** cuando dos ramas agregan
+   independientemente la misma línea de cierre a un objeto ya existente: tras cada merge, correr
+   `python -m compileall backend`, `npx tsc --noEmit` y un `grep -c` de la key nueva (debe dar
+   exactamente 1 por archivo).
 8. **Reusar, no reinventar.** `secret_masking` (195), `egress_policies.detect_classes` (154), el
    guard `commonpath` (201 F7), el patrón de blueprint (`pipeline_generator.py:24`), el patrón de
    descarga del frontend (`endpoints.ts:4039-4048`), el vocabulario de validación (209).
@@ -286,6 +382,64 @@ resuelve a `CAN`; si evalúa `False` resuelve a `CANNOT_NOW` (distinto de `CANNO
 y el README lo dice con otras palabras). Una sonda que **no se pudo evaluar** (excepción,
 módulo ausente) resuelve a `UNKNOWN`, y `UNKNOWN` **se trata como `CANNOT_NOW`** — nunca como
 `CAN`. Falla cerrado también acá.
+
+### 5.1 [ADICIÓN ARQUITECTO] — `evidence`: la frontera tiene que poder mentir en rojo
+
+**El problema que el v1 no vio en sí mismo.** §0 abre denunciando que la frontera escrita a mano en
+`bootstrap-server-environment.yml:28-32` *"no es verificable, no es consultable, no se actualiza
+cuando cambia el entorno"*. Y a continuación propone… una tabla de 14 filas escrita a mano. Mudarla
+de un comentario YAML a un `tuple` de Python la hace **consultable**, sí — pero **no** verificable
+y **no** auto-actualizable. Un catálogo que afirma `CAN` sobre algo que Stacky no sabe hacer es
+peor que no tener catálogo: el README le promete al operador que ya está resuelto, el operador no
+lo hace, y el pipeline no anda. **Una frontera que promete de más es un bug de producto disfrazado
+de documentación.**
+
+**La corrección: cada acción que se declara ejecutable debe nombrar el símbolo que la ejecuta, y
+ese símbolo tiene que existir.**
+
+`CapabilityAction` suma **un campo obligatorio**:
+
+```python
+    evidence: str = ""   # "modulo.simbolo" del ejecutor real; "" SOLO si verdict == CANNOT
+```
+
+**Regla binaria (congelada por test, no por buena voluntad):**
+
+- `verdict in (CAN, DEPENDS)` ⟹ `evidence != ""` **y** `importlib.import_module(mod)` +
+  `getattr(mod, simbolo)` **resuelven**. Si no resuelve, el test es rojo.
+- `verdict == CANNOT` ⟹ `evidence == ""`. Y el test verifica la recíproca: **ninguna** acción
+  `CANNOT` tiene un ejecutor importable. El día que alguien implemente ejecución remota, el
+  catálogo se pone **rojo** en vez de seguir mintiendo en silencio.
+- **Corolario duro, y es el punto entero:** si al implementar no existe ningún símbolo que haga la
+  acción, **la fila no puede quedar `CAN` ni `DEPENDS`**. Se baja a `CANNOT` con el `reason`
+  honesto *"Stacky todavía no tiene un ejecutor para esto"*. Prohibido inventar un símbolo para
+  que el test pase: eso es exactamente el fraude que este campo existe para impedir.
+
+**Semilla verificada por el juez** (estos 5 símbolos se abrieron y existen; el resto los resuelve el
+implementador con `grep -rn "def <lo-que-busque>" backend/services/` **antes** de elegir el
+veredicto):
+
+| `id` | `evidence` | Verificado en |
+|---|---|---|
+| `generate_yaml` | `services.pipeline_renderers.to_ado_yaml` | `pipeline_renderers.py:79` (y `:277` para GitLab) |
+| `generate_helper_scripts` | `services.pipeline_handoff_bundle.build_files` | módulo propio de este plan (F2) |
+| `commit_yaml_to_repo` | `services.repo_writer.get_repo_writer` | `repo_writer.py:30` |
+| `register_pipeline_definition` | `services.ado_pipeline_definitions.ensure_yaml_definition` | `ado_pipeline_definitions.py:125` |
+| `set_pipeline_variables` | `services.ci_variables.get_variables_provider` | `ci_variables.py:66` |
+
+**Los 7 restantes (`open_pull_request`, `create_variable_group`,
+`create_environment_and_approvals`, `create_agent_pool`, `run_pipeline_first_time`, y las 2 filas
+`CANNOT` de infraestructura) NO fueron verificados por el juez.** El implementador **debe**
+grepear el ejecutor de cada uno y, si no aparece, **bajar la fila a `CANNOT`** y ajustar el
+`reason`. Es un cambio de dato en el catálogo, no un cambio de diseño: el conteo de 14 no se toca,
+solo puede moverse la columna *Veredicto declarado*. Los tests que dependen del reparto
+(`test_frontier_devuelve_14_acciones`, `test_frontier_sin_deploys_devuelve_12`) cuentan filas, no
+veredictos, así que siguen valiendo.
+
+**Por qué esta adición respeta todos los rieles:** cero LLM (es `importlib`, stdlib), idéntica en
+los 3 runtimes, cero trabajo del operador, cero config nueva, no toca ningún archivo fuera de la
+frontera del 252, y no saca al humano de ningún lazo — **al contrario: impide que el README le
+prometa al humano trabajo ya hecho que no está hecho.**
 
 ---
 
@@ -425,8 +579,9 @@ Declara, COMO DATO, qué acciones del dominio de pipelines puede ejecutar Stacky
 mismo y cuáles no, con el motivo. PURO en F0 (cero I/O, cero red, cero config): las
 sondas de estado real viven en F1 y se inyectan.
 
-PROHIBIDO en este módulo (y congelado por test): subprocess, paramiko, winrm, requests,
-socket. Este módulo describe la frontera; jamás la cruza.
+Este módulo describe la frontera; jamás la cruza: no importa ningún módulo de ejecución
+remota ni de red. La lista negra vive en UN solo lugar — _MODULOS_PROHIBIDOS en
+tests/test_plan252_capability_frontier.py — y se verifica por AST, no por texto (C2).
 """
 from __future__ import annotations
 
@@ -456,6 +611,8 @@ class CapabilityAction:
     probes: tuple = ()         # tuple[str, ...] de probe_id; OR entre ellas. Solo si DEPENDS
     manual_instruction: str = ""   # qué hace el operador si no resuelve a CAN
     needs_deploy: bool = False     # True = solo aplica si el pipeline despliega
+    evidence: str = ""             # §5.1 — "modulo.simbolo" del ejecutor REAL.
+                                   # OBLIGATORIO si verdict in (CAN, DEPENDS); "" si CANNOT.
 
 
 @dataclass(frozen=True)
@@ -538,8 +695,25 @@ STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED: bool = os.getenv(
 > **GOTCHA DURA 2:** el consumidor lee **la instancia**: `getattr(_config.config, "STACKY_…", False)`.
 > `getattr` del **módulo** devuelve el default y mata el branch OFF (el test flag-off pasa en falso).
 > **GOTCHA DURA 3:** una flag nueva sin entrada en `_CATEGORY_KEYS` rompe el meta-test de categorías.
+> **VERIFICADO POR EL JUEZ — son 4 lugares, no 5.** Circula en el equipo una receta de "5 lugares"
+> que incluye `_REQUIRES_MAP_FROZEN`. **No aplica a esta flag.** El test que lo congela construye
+> `actual = {s.key: s.requires for s in FLAG_REGISTRY if s.requires}`
+> (`tests/test_harness_flags_requires.py:287`): una `FlagSpec` **sin** `requires` no entra en el
+> mapa y **no** hay que registrarla ahí. Como esta flag es deliberadamente `SIN requires`, tocar
+> `_REQUIRES_MAP_FROZEN` **pondría en rojo** `test_requires_map_is_frozen` (aparecería como
+> "Faltantes"). Los 4 lugares son: `FlagSpec` · `_CATEGORY_KEYS["devops"]` · `config.py` ·
+> `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`). Nada más.
 
-**Tests PRIMERO — `tests/test_plan252_capability_frontier.py` (10 casos):**
+**Tests PRIMERO — `tests/test_plan252_capability_frontier.py` (12 casos):**
+
+> **Por qué el test de la lista negra es por AST y no por `in` sobre el texto (C2).** El v1
+> asertaba que *"el texto fuente no contiene `subprocess`, `paramiko`, `winrm`, `socket` ni
+> `requests`"* — y al mismo tiempo mandaba escribir, en el docstring de los **dos** módulos, la
+> línea *"PROHIBIDO … subprocess, paramiko, winrm, requests, socket"*. El test se detectaba a sí
+> mismo: **rojo el día 1, sin una sola línea de código malo**. Es el gotcha recurrente de esta casa
+> (la prosa del plan choca con su propio grep-gate) y ya mordió antes con el centinela textual de
+> flags, que hubo que migrar a AST por lo mismo. Regla general: **una lista negra de imports se
+> verifica sobre el árbol sintáctico, jamás sobre la cadena de caracteres.**
 
 | Test | Qué congela |
 |---|---|
@@ -552,7 +726,9 @@ STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED: bool = os.getenv(
 | `test_depends_con_una_sonda_true_resuelve_can` | `resolve_frontier({"ado_pat": True, "gitlab_token": False, "repo_writer": True})` → `register_pipeline_definition` es `CAN` |
 | `test_needs_deploy_filtra_acciones` | `pipeline_deploys=False` → 12 acciones; `True` → 14 |
 | `test_manual_y_automatic_son_particion` | `set(manual) ∩ set(automatic) == ∅` y `len(manual) + len(automatic) == len(resolved)` |
-| `test_modulos_sin_ejecucion_remota` (**§3, fuera de scope duro**) | el **texto fuente** de `pipeline_capability_frontier.py` **y** de `pipeline_handoff_bundle.py` no contiene `subprocess`, `paramiko`, `winrm`, `socket` ni `requests` |
+| `test_modulos_sin_ejecucion_remota` (**§3, fuera de scope duro**) | **por AST, NO por texto (C2).** `ast.parse(fuente)` de `pipeline_capability_frontier.py` **y** de `pipeline_handoff_bundle.py`; se recorren los nodos `ast.Import` / `ast.ImportFrom` y se toma la **raíz** de cada módulo importado (`nombre.split(".")[0]`); ninguna puede estar en `_MODULOS_PROHIBIDOS = {"subprocess", "paramiko", "winrm", "pywinrm", "socket", "requests", "httpx", "urllib", "urllib3", "telnetlib", "ftplib", "asyncssh"}`. Además: **cero nodos `ast.Call` a `__import__` o `importlib.import_module`** en ambos módulos (los imports dinámicos quedan prohibidos justamente para que este test sea decidible — ver F2) |
+| `test_toda_accion_ejecutable_cita_un_simbolo_que_existe` (**§5.1, [ADICIÓN ARQUITECTO]**) | para toda acción con `verdict in (CAN, DEPENDS)`: `a.evidence != ""`, tiene exactamente un `.` separando módulo y símbolo, y `getattr(importlib.import_module(mod), sym)` **no lanza**. Mensaje de fallo: el `id` de la acción y el `evidence` que no resolvió |
+| `test_cannot_no_tiene_ejecutor` (**§5.1**) | para toda acción con `verdict == CANNOT`: `a.evidence == ""`. Recíproca: el día que aparezca un ejecutor, la fila deja de ser `CANNOT` **o el test se pone rojo** |
 
 **Comando:**
 ```powershell
@@ -562,7 +738,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
 ```
 
-**Criterio de aceptación BINARIO:** los 10 tests pasan **y** `test_harness_flags.py` y
+**Criterio de aceptación BINARIO:** los 12 tests pasan **y** `test_harness_flags.py` y
 `test_harness_ratchet_meta.py` quedan verdes.
 *(Nota: `test_modulos_sin_ejecucion_remota` referencia `pipeline_handoff_bundle.py`, que nace en
 F2. En F0 el test debe **saltear** el archivo que aún no existe con `pytest.skip` explícito por
@@ -658,7 +834,7 @@ cerrado.** `GITLAB_TOKEN=""` (string vacío) → `False`, no `True`. Excepción 
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan252_capability_frontier.py -q`
 
-**Criterio BINARIO:** los 15 tests del archivo (10 de F0 + 5 de F1) pasan.
+**Criterio BINARIO:** los 17 tests del archivo (12 de F0 + 5 de F1) pasan.
 
 **Flag:** la de F0 (el módulo sigue sin leerla).
 **Impacto por runtime:** ninguno; cero LLM, cero red. **Fallback:** sonda no evaluable → `UNKNOWN`
@@ -685,8 +861,9 @@ los archivos del paquete, incluido el `README.md` renderizado por plantilla.
 PURO salvo `persist_bundle` (F3). El README sale de PLANTILLA, jamás de un LLM:
 por eso la paridad de los 3 runtimes es trivial.
 
-PROHIBIDO (congelado por test_modulos_sin_ejecucion_remota): subprocess, paramiko,
-winrm, socket, requests.
+Este módulo no cruza la frontera: no importa nada de ejecución remota ni de red, y no
+usa imports dinamicos. La lista negra y su verificacion por AST viven en
+tests/test_plan252_capability_frontier.py::test_modulos_sin_ejecucion_remota (C2).
 """
 MANIFEST_VERSION = 1
 BUNDLE_ID_LEN = 16
@@ -729,6 +906,39 @@ class HandoffVariable:
     secret: bool          # de services.ci_variables.looks_secret(name) (:31)
     # INVARIANTE: NO existe un campo `value`. No se puede filtrar lo que no se modela.
 
+    def __post_init__(self):
+        _assert_campo_limpio(self, "format_hint")   # C8
+
+
+def _assert_campo_limpio(obj, campo: str) -> None:
+    """C8 — falso positivo del gate, atajado EN EL ORIGEN.
+
+    La clase `secrets` de egress_policies incluye dos patrones que un texto
+    INSTRUCTIVO legitimo dispara sin tener un secreto adentro:
+        egress_policies.py:89  (?i)\\b(password|passwd|pwd|contrase[nñ]a)\\s*[=:]\\s*\\S{4,}
+        egress_policies.py:90  (?i);\\s*password\\s*=\\s*[^;\\s]{4,}
+    Un `format_hint` con forma de connection string
+    ("Server=...;Database=...;Password=<tu-clave>") los dispara. El v1 solo habia
+    previsto los falsos positivos de las clases `pii` y `production`, que no bloquean.
+
+    Consecuencia si no se ataja aca: `assert_no_secrets` (F3) aborta el bundle entero con
+    un 409 que le dice al operador "hay material sensible en README.md" — cuando el
+    problema es UN campo de UNA variable, y el operador no tiene forma de saber cual.
+
+    Regla: el campo se valida en su constructor y el error NOMBRA el campo y la variable.
+    Fallar temprano y preciso, no tarde y generico. Sigue siendo falla cerrado.
+    """
+    from services.egress_policies import detect_classes
+    texto = str(getattr(obj, campo) or "")
+    if "secrets" in detect_classes(texto):
+        raise HandoffSecretError(
+            f"{type(obj).__name__}.{campo} parece contener un valor sensible "
+            f"(o una plantilla con forma de credencial): {getattr(obj, 'name', '?')!r}. "
+            f"Describi el FORMATO sin escribir un valor de ejemplo con forma de clave "
+            f"(ej.: 'connection string de SQL Server, sin la clave' en vez de "
+            f"'Server=..;Password=..')."
+        )
+
 
 @dataclass(frozen=True)
 class BundleInputs:
@@ -763,23 +973,48 @@ def compute_bundle_id(files: dict) -> str: ...
 
 ```python
 def collect_inputs(spec_dict, *, pipeline_name, provider, yaml_files, script_files=None):
-    degraded = []
-    variables = []
-    # 251 — matriz de entornos. Si no está, se degrada al preflight que YA existe.
+    """Degradacion honesta. Tres correcciones del juez respecto del v1:
+      C5 — `degraded` se devuelve SIEMPRE ordenado alfabeticamente. El v1 lo armaba en
+           orden de aparicion (environments primero) pero su test exigia otro orden:
+           se contradecian entre si.
+      C6 — el test que prueba esto NO puede depender de que los modulos no existan hoy:
+           debe forzar la ausencia (ver la tabla de tests).
+      C7 — `except Exception`, no `except ImportError`. Un modulo hermano que exista pero
+           reviente al importarse (SyntaxError, dependencia rota, side effect) tiene que
+           DEGRADAR el paquete, no tumbarlo. Degradar es el trabajo de esta funcion.
+    Sin imports dinamicos (`__import__` / `importlib`): tres bloques explicitos, para que
+    test_modulos_sin_ejecucion_remota pueda decidir por AST (C2).
+    """
+    degraded: list[str] = []
+
+    # 251 — matriz de entornos. Si no esta, se degrada al preflight que YA existe.
     try:
         from services import pipeline_environments          # plan 251 — HOY NO EXISTE (§2.4)
         variables = _variables_from_env_matrix(pipeline_environments, spec_dict)
-    except ImportError:
+    except Exception:                                       # noqa: BLE001 — C7
         degraded.append("pipeline_environments")
         variables = _variables_from_preflight(spec_dict)    # fallback determinista
-    for mod, key in (("pipeline_inventory", "pipeline_inventory"),
-                     ("pipeline_profiler", "pipeline_profiler")):
-        try:
-            __import__(f"services.{mod}")
-        except ImportError:
-            degraded.append(key)
+
+    try:
+        from services import pipeline_inventory             # plan 246 — HOY NO EXISTE
+        _ = pipeline_inventory
+    except Exception:                                       # noqa: BLE001
+        degraded.append("pipeline_inventory")
+
+    try:
+        from services import pipeline_profiler              # plan 247 — HOY NO EXISTE
+        _ = pipeline_profiler
+    except Exception:                                       # noqa: BLE001
+        degraded.append("pipeline_profiler")
+
+    degraded_t = tuple(sorted(set(degraded)))               # C5 — orden canonico y estable
     ...
 ```
+
+> **Nota de determinismo (C5):** `degraded` entra al `MANIFEST.json` y al README. Si su orden
+> dependiera del orden de los `try`, dos corridas equivalentes podrían diferir tras cualquier
+> refactor de este bloque, y el `bundle_id` con ellas. `sorted(set(...))` lo vuelve una propiedad
+> del **conjunto de módulos ausentes**, no del orden en que se los preguntó.
 
 `_variables_from_preflight(spec_dict)` **no inventa nada**: usa
 `pipeline_preflight.referenced_variables(spec_dict, target)` (`:79`) para las variables
@@ -874,7 +1109,7 @@ Se serializa con `json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=T
 el mapa SIN `MANIFEST.json` ni `README.md`** (que lo contienen) y recién después se inyecta: si no,
 es una referencia circular. Congelado por `test_bundle_id_no_es_circular`.
 
-**Tests PRIMERO — `tests/test_plan252_handoff_bundle.py` (13 casos):**
+**Tests PRIMERO — `tests/test_plan252_handoff_bundle.py` (17 casos):**
 
 | Test | Qué congela |
 |---|---|
@@ -883,10 +1118,13 @@ es una referencia circular. Congelado por `test_bundle_id_no_es_circular`.
 | `test_ninguna_accion_can_es_paso_manual` (**KPI-3**) | con `probes` todo `True`, `build_steps` no emite ningún paso cuyo `source` apunte a una acción `CAN` |
 | `test_todo_id_manual_tiene_plantilla` | para cada acción del catálogo que pueda quedar manual, `_STEP_TEMPLATES` la cubre; si no, `HandoffError` con el id |
 | `test_pasos_numerados_sin_huecos` | `[s.n for s in steps] == list(range(1, len(steps)+1))` |
-| `test_bundle_sin_246_247_251_igual_se_arma` (**KPI-5**) | con los 3 módulos ausentes, `build_files` devuelve un dict con `README.md` y `MANIFEST.json`, y `manifest["degraded"] == ["pipeline_inventory","pipeline_profiler","pipeline_environments"]` (ordenado) |
+| `test_bundle_sin_246_247_251_igual_se_arma` (**KPI-5**) | **La ausencia se FUERZA, no se asume (C6).** Los 3 módulos no existen hoy, así que el test del v1 pasaba trivialmente **y se volvía mudo el día que aterrice el 246** sin que nadie se entere. Obligatorio: `for m in ("pipeline_environments","pipeline_inventory","pipeline_profiler"): monkeypatch.setitem(sys.modules, f"services.{m}", None)` — poner `None` en `sys.modules` hace que el `import` lance `ImportError`, así que el test prueba **la rama de degradación** hoy y dentro de un año igual. Assert: `build_files` devuelve un dict con `README.md` y `MANIFEST.json`, y `manifest["degraded"] == ["pipeline_environments","pipeline_inventory","pipeline_profiler"]` — **orden alfabético (C5)**, que es el que produce `tuple(sorted(set(...)))`. El v1 exigía `["pipeline_inventory","pipeline_profiler","pipeline_environments"]`, que su propio código no podía producir |
+| `test_bundle_con_251_presente_no_degrada` (**C6, la mitad que faltaba**) | con un módulo stub inyectado en `sys.modules["services.pipeline_environments"]`, `manifest["degraded"]` **no** contiene `"pipeline_environments"`. Sin este test, KPI-5 solo prueba una de las dos ramas |
+| `test_modulo_que_revienta_al_importar_degrada_no_tumba` (**C7**) | un stub cuyo import lanza `RuntimeError` (no `ImportError`) → el bundle **se arma igual** y el módulo aparece en `degraded`. Con el `except ImportError` del v1, esto tumbaba `build_bundle` entero |
+| `test_format_hint_con_connection_string_falla_temprano_y_preciso` (**C8**) | `HandoffVariable(name="DB_CONN", ..., format_hint="Server=x;Database=y;Password=abcd")` lanza `HandoffSecretError` **en el constructor**, y el mensaje contiene `"format_hint"` y `"DB_CONN"`. Congela que el fallo es del CAMPO, no un 409 genérico sobre `README.md` |
 | `test_degraded_aparece_en_el_readme` | el README contiene el texto de `DEGRADED_CONSEQUENCE["pipeline_environments"]` |
 | `test_readme_tiene_las_8_secciones` | los 8 encabezados `## N.` de §6, en orden |
-| `test_readme_no_tiene_placeholders_sin_sustituir` | `"{" not in readme.replace("${{", "")` (las expresiones ADO del YAML no cuentan; el README no las lleva) |
+| `test_readme_no_tiene_placeholders_sin_sustituir` | **C11 — se asserta sobre los placeholders de ESTA plantilla, no sobre cualquier `{`.** El check del v1 (`"{" not in readme.replace("${{", "")`) reventaba ante cualquier llave legítima venida del operador — un `format_hint` de GitLab como `${CI_COMMIT_SHA}`, un bloque `@{...}` de PowerShell, un JSON de ejemplo. Correcto: `re.findall(r"\{[a-z_]+\}", readme) == []`, que solo caza los nombres de sustitución de §6 (`{bundle_id}`, `{pipeline_name}`, `{reason}`, …) |
 | `test_manifest_no_tiene_timestamp` (**§2.3**) | `"generated_at" not in manifest` y ninguna clave del manifest matchea `r"(_at|timestamp|date)$"` |
 | `test_bundle_id_estable` (**KPI-1, mitad pura**) | `compute_bundle_id(files) == compute_bundle_id(dict(reversed(list(files.items()))))` — el orden de inserción **no** afecta |
 | `test_bundle_id_no_es_circular` | `build_files` no lanza `RecursionError` y `manifest["bundle_id"]` tiene 16 chars hex |
@@ -896,7 +1134,7 @@ es una referencia circular. Congelado por `test_bundle_id_no_es_circular`.
 Y re-correr `tests/test_plan252_capability_frontier.py` (el `skip` de
 `test_modulos_sin_ejecucion_remota` ahora **debe dejar de saltear** y pasar).
 
-**Criterio BINARIO:** los 13 tests pasan **y** `test_modulos_sin_ejecucion_remota` deja de estar
+**Criterio BINARIO:** los 17 tests pasan **y** `test_modulos_sin_ejecucion_remota` deja de estar
 en `skipped` y queda `passed`.
 
 **Flag:** la de F0 (el módulo no la lee; la gatea el endpoint).
@@ -924,21 +1162,33 @@ _SECRET_CLASS = "secrets"
 
 
 def scrub_files(files: dict) -> dict:
-    """Capa 1 (preventiva): masking canónico del Plan 195 sobre TODO texto.
-    Reusa services.secret_masking.mask_token_values (secret_masking.py:20)."""
+    """Capa 2 (TESTIGO, ya no filtro): masking canónico del Plan 195 sobre TODO texto.
+    Reusa services.secret_masking.mask_token_values (secret_masking.py:20).
+
+    C1 — En el v1 esta funcion corria ANTES del gate y lo desarmaba. Ahora corre DESPUES,
+    y su unico proposito es delatar lo que el gate no vio: si cambia un solo byte,
+    `build_bundle` aborta. No limpia: acusa."""
     from services.secret_masking import mask_token_values
     return {path: mask_token_values(text) for path, text in files.items()}
 
 
 def assert_no_secrets(files: dict) -> None:
-    """Capa 2 (gate): si QUEDA un secreto tras el scrub, LANZA HandoffSecretError.
-    Falla cerrado (§4.5): no enmascara y sigue.
+    """Capa 1 (gate): corre sobre el texto CRUDO. Si detecta un secreto, LANZA
+    HandoffSecretError. Falla cerrado (§4.5): no enmascara y sigue.
 
     Usa egress_policies.detect_classes (egress_policies.py:96) pero SOLO mira la
-    clase "secrets" (:81-92). TRAMPA VERIFICADA: detect_classes también devuelve
-    "pii" ante \\b\\d{7,8}\\b — un build number como 20260726 la dispara — y
-    "production" ante la palabra "produccion", que un README de deploy va a tener
-    sí o sí. Bloquear por el set completo dejaría el bundle inconstruible."""
+    clase "secrets" (:81-92). TRAMPA VERIFICADA POR EL JUEZ: detect_classes devuelve
+    5 clases (pii/financial/production/regulatory/secrets) y dos de ellas se disparan
+    con texto perfectamente legitimo de un README de deploy:
+        :66  \\b\\d{7,8}\\b      -> clase "pii"        (un build number 20260726 la dispara)
+        :75  producci[oó]n|PROD -> clase "production" (un README de deploy la tiene si o si)
+    Bloquear por el set completo dejaria el bundle inconstruible. Por eso: SOLO "secrets".
+
+    CONTRACARA (C8), que el v1 no vio: la clase "secrets" TAMBIEN tiene dos patrones
+    que texto instructivo legitimo dispara -- :89 password[=:]valor y :90 ;password=valor.
+    Esos NO se relajan aca (son justamente lo que hay que bloquear): se atajan en el
+    origen, validando HandoffVariable.format_hint en su constructor (F2), para que el
+    error nombre el campo culpable en vez de abortar todo el paquete sin decir cual."""
     from services.secret_masking import MASK_PLACEHOLDER
     from services.egress_policies import detect_classes
     ofensores = []
@@ -955,9 +1205,16 @@ def assert_no_secrets(files: dict) -> None:
 
 
 def zip_bytes(files: dict) -> bytes:
-    """Zip REPRODUCIBLE (§2.3). Mismas entradas → mismos bytes, siempre.
-    NUNCA usa zf.write(ruta) (tomaría el mtime del disco) ni zf.writestr(str, ...)
-    (usaría time.localtime()): siempre ZipInfo explícito con _ZIP_EPOCH."""
+    """Zip REPRODUCIBLE (§2.3). Mismas entradas -> mismos bytes, siempre.
+
+    Regla: una entrada NUNCA se escribe desde una ruta del filesystem (tomaria el mtime
+    del disco), ni pasando un str desnudo como nombre (usaria time.localtime()). Siempre
+    ZipInfo explicito con _ZIP_EPOCH.
+
+    OJO AL REDACTAR (C2): este docstring NO puede contener la llamada literal que el
+    criterio binario de F3 prohibe -- el grep de 0 hits se detectaria a si mismo. En el
+    v1 la prohibicion estaba escrita con la sintaxis exacta y ponia el gate en rojo el
+    dia 1. Se describe la regla en prosa; el codigo de abajo es la unica fuente."""
     import io, zipfile
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -971,12 +1228,30 @@ def zip_bytes(files: dict) -> bytes:
 
 
 def build_bundle(inputs: BundleInputs, resolved_frontier: list) -> tuple:
-    """Camino ÚNICO de generación. Devuelve (bundle_id, zip_bytes_, manifest).
-    Orden NO negociable: build_files → scrub → assert_no_secrets → tope → zip."""
+    """Camino UNICO de generacion. Devuelve (bundle_id, zip_bytes_, manifest).
+
+    ORDEN NO NEGOCIABLE (C1 — el v1 lo tenia INVERTIDO y por eso su KPI-2 era falso):
+        build_files -> assert_no_secrets(CRUDO) -> scrub_files -> scrub fue no-op? -> zip
+
+    Por que este orden y no el otro: `mask_token_values` conoce ghp_/github_pat_/glpat-/
+    xoxb-/xoxp-/AKIA/eyJhbGciOi (secret_masking.py:11). Si corre primero, BORRA el secreto
+    y el gate no encuentra nada -> el paquete SALE. Es decir: el v1 fallaba abierto
+    justo para los formatos que sabe reconocer, y cerrado solo para los que no conoce.
+
+    El scrub queda como segunda capa con semantica invertida: si TUVO algo que hacer,
+    es que el gate se le escapo un formato, y eso es un fallo -> tambien aborta.
+    """
     files = build_files(inputs, resolved_frontier)
-    files = scrub_files(files)
-    assert_no_secrets(files)                    # ← si hay secreto, NO hay zip
-    data = zip_bytes(files)
+    assert_no_secrets(files)                    # ← C1: gate sobre el texto CRUDO
+    scrubbed = scrub_files(files)
+    if scrubbed != files:                       # ← C1: el masking debe ser un NO-OP
+        culpables = sorted(p for p in files if scrubbed[p] != files[p])
+        raise HandoffSecretError(
+            "El paquete NO se genero: el masking canonico encontro material sensible que "
+            "el gate no reconocio, en " + ", ".join(culpables) + ". Es un formato de "
+            "credencial nuevo: quitalo del origen y reportalo para sumarlo al detector."
+        )
+    data = zip_bytes(files)                     # ← se empaqueta el MISMO texto que se hasheo (C4)
     if len(data) > MAX_BUNDLE_BYTES:
         raise HandoffTooLargeError(f"el paquete pesa {len(data)} bytes (tope {MAX_BUNDLE_BYTES})")
     return json.loads(files["MANIFEST.json"])["bundle_id"], data, json.loads(files["MANIFEST.json"])
@@ -1007,11 +1282,13 @@ Un archivo con `\r\n` → se escribe tal cual (el contenido es responsabilidad d
 normaliza, porque normalizar rompería un `.ps1` que necesita CRLF). `bundle_id` con `../` o
 mayúsculas → no matchea `^[0-9a-f]{16}$` → `bundle_path` devuelve `None` **sin tocar el disco**.
 
-**Tests PRIMERO — `tests/test_plan252_zip_determinismo.py` (9 casos):**
+**Tests PRIMERO — `tests/test_plan252_zip_determinismo.py` (11 casos):**
 
 | Test | Qué congela |
 |---|---|
-| `test_zip_es_byte_identico_en_dos_corridas` (**KPI-1**) | `zip_bytes(f) == zip_bytes(f)` y ambos `sha256` iguales, con un `os.utime` de por medio sobre un archivo homónimo en `tmp_path` (prueba que el mtime del disco es irrelevante) |
+| `test_zip_es_byte_identico_en_dos_corridas` (**KPI-1**) | **C10 — sin el teatro del `os.utime`.** `zip_bytes(files: dict)` **no toca el disco**, así que tocarle el mtime a un archivo homónimo en `tmp_path` no podía hacer fallar el test: era una aserción que no podía fallar. Assert real: `zip_bytes(f) == zip_bytes(f)`, `sha256` iguales, **y** para **todas** las entradas de `infolist()`: `date_time == (1980,1,1,0,0,0)`, `external_attr == 0o644 << 16`, `create_system == 0` y `compress_type == ZIP_DEFLATED`. Esos 4 campos son los únicos que un refactor puede volver dependientes del entorno; el guard contra la regresión a `zf.write(ruta)` es el `grep` del criterio binario |
+| `test_masking_que_cambia_algo_tambien_aborta` (**C1, KPI-2**) | con un archivo cuyo texto el gate no reconoce pero `mask_token_values` sí (formato conocido por `secret_masking` y no por `egress_policies`), `build_bundle` lanza `HandoffSecretError` y el mensaje **nombra el archivo culpable**. Congela que el scrub es testigo y no filtro |
+| `test_bundle_id_es_hash_del_contenido_del_zip` (**C4**) | `manifest["bundle_id"]` recomputado desde los archivos **efectivamente empaquetados** (leídos del zip, sin `MANIFEST.json` ni `README.md`) coincide con el del manifest. Congela que el README no miente al decir *"el id es la huella del contenido de este paquete"* |
 | `test_zip_ignora_el_orden_de_insercion` | `zip_bytes(f) == zip_bytes(dict(reversed(list(f.items()))))` |
 | `test_zip_usa_epoch_fijo` | `zipfile.ZipFile(BytesIO(data)).infolist()[0].date_time == (1980, 1, 1, 0, 0, 0)` para **todas** las entradas |
 | `test_zip_arcnames_con_barra_posix` | ninguna entrada de `namelist()` contiene `\\` |
@@ -1023,7 +1300,7 @@ mayúsculas → no matchea `^[0-9a-f]{16}$` → `bundle_path` devuelve `None` **
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan252_zip_determinismo.py -q`
 
-**Criterio BINARIO:** los 9 tests pasan **y**
+**Criterio BINARIO:** los 11 tests pasan **y**
 `grep -n "date_time=_ZIP_EPOCH" "Stacky Agents/backend/services/pipeline_handoff_bundle.py"` → ≥1 match
 **y** `grep -cn "zf.write(" "Stacky Agents/backend/services/pipeline_handoff_bundle.py"` → **0**.
 
@@ -1225,20 +1502,39 @@ export const PipelineHandoff = {
     label: 'Paquete de entrega',
     group: 'construir',
     summary: 'Qué hace Stacky, qué te toca a vos, y el .zip con el README',
-    healthKey: 'pipeline_handoff_bundle_enabled',
-    gateFlagKey: 'STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED',
-    gateMessage: 'La sección Paquete de entrega necesita la flag STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED (Configuración → Arnés, categoría DevOps).',
+    // SIN healthKey / gateFlagKey / gateMessage — a proposito (C3). Ver abajo.
     render: (ctx) => <PipelineHandoffPanel ctx={ctx} />,
   },
 ```
 
-> **Instrucción ejecutable (no inferir):** `healthKey` debe existir en el payload de
-> `/api/diag/health`. Correr
-> `grep -n "publications_enabled\|environments_enabled" "Stacky Agents/backend/api/diag.py"`,
-> leer cómo se arma ese dict, y agregar `"pipeline_handoff_bundle_enabled"` **de la misma forma**.
-> Si el health no expone la flag, el `FlagGateBanner` mostraría el gate **siempre**.
+> **C3 — Por qué esta sección NO lleva `healthKey` (cambio del juez).**
+> El v1 traía una *"instrucción ejecutable"* para agregar `pipeline_handoff_bundle_enabled` al
+> payload de `/api/diag/health`, es decir **editar `backend/api/diag.py`**. Eso está **fuera de la
+> superficie reservada al plan 252**, y no es un tecnicismo: ese mismo dict
+> (`diag.py:411-423`) lo reclaman al menos dos planes hermanos de la serie — el **246**
+> (`healthKey: 'pipeline_inventory_enabled'`) y el **251** (`healthKey: 'env_matrix_enabled'`) —
+> más varios de la serie 253-257. Tres ramas agregando una línea al final del mismo `dict` es el
+> escenario exacto del merge silencioso: git no marca conflicto y quedan claves duplicadas o
+> perdidas.
+>
+> **`healthKey` es opcional.** `DevOpsPage.tsx:79` lo declara `healthKey?: string` y el gate es
+> `const isGated = s.healthKey && ctx.health[s.healthKey] !== true` (`:463`): **sin `healthKey`,
+> la sección simplemente no se gatea por health**. Precedente en el mismo archivo: la sección
+> `id: 'pipelines'` (`:126-131`), que es justo donde vive esta serie, **tampoco lo tiene**.
+>
+> **Y la UX con la flag OFF no se pierde** — se resuelve dentro de la frontera del 252:
+> `PipelineHandoffPanel.tsx` ya envuelve la llamada a `frontier` en `try/catch` (gotcha del Plan
+> 196: `api.get` lanza en non-2xx). Con la flag OFF el endpoint responde `404`, el `catch` lo
+> distingue por status y renderiza **inline** el texto de
+> `blockedReason({ flagOn: false, yamlCount })`, que ya está en el modelo puro y ya está testeado.
+> Resultado: mismo mensaje para el operador, **cero archivos tocados fuera de la frontera**, y el
+> riesgo R10 deja de existir.
+>
+> **Si el dueño de la serie decide igual centralizar los `healthKey` en `diag.py`**, es una tarea
+> de la serie (246 o un plan de cierre), no de este plan: una sola rama agrega las N claves de una
+> vez. Este plan no la asume.
 
-**Tests PRIMERO — `src/devops/__tests__/pipelineHandoffModel.test.ts` (6 casos, vitest;
+**Tests PRIMERO — `src/devops/__tests__/pipelineHandoffModel.test.ts` (7 casos, vitest;
 **sin** `@testing-library/react` — no está instalado, gap conocido):**
 
 | Test | Qué congela |
@@ -1249,6 +1545,7 @@ export const PipelineHandoff = {
 | `verdictLabel cubre los 4 veredictos` | los 4 textos exactos; ningún `undefined` |
 | `blockedReason sin yaml` | `{flagOn: true, yamlCount: 0}` → string no vacío |
 | `blockedReason feliz` | `{flagOn: true, yamlCount: 1}` → `null` |
+| `blockedReason con la flag OFF` (**C3**) | `{flagOn: false, yamlCount: 3}` → string no vacío que menciona la flag. Es el texto que el panel renderiza **inline** cuando el endpoint contesta `404`, ahora que la sección no usa `FlagGateBanner` |
 
 **Comando:**
 ```powershell
@@ -1257,14 +1554,15 @@ npx vitest run src/devops/__tests__/pipelineHandoffModel.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio BINARIO:** los 6 tests pasan **y** `npx tsc --noEmit` sin errores nuevos **y**
+**Criterio BINARIO:** los 7 tests pasan **y** `npx tsc --noEmit` sin errores nuevos **y**
 `grep -c "style={{" "Stacky Agents/frontend/src/components/devops/PipelineHandoffPanel.tsx"` → **0**.
 
 **Smoke manual (1 paso, no automatizable — gap RTL/jsdom conocido):** panel DevOps → Construir →
 Paquete de entrega → el botón baja un `.zip`; abrirlo y confirmar que el `README.md` tiene sus 8
 secciones y que **ninguna** contiene un valor secreto.
 
-**Flag:** la de F0. OFF → la sección muestra el `FlagGateBanner` y el endpoint responde `404`.
+**Flag:** la de F0. OFF → el endpoint responde `404` y el panel renderiza **inline** el texto de
+`blockedReason({flagOn:false, …})` (C3: sin `FlagGateBanner`, para no tocar `api/diag.py`).
 **Impacto por runtime:** ninguno (UI pura). **Fallback:** no aplica.
 **Trabajo del operador: ninguno** (un click opcional, default ON).
 
@@ -1275,7 +1573,7 @@ secciones y que **ninguna** contiene un valor secreto.
 | # | Riesgo | Severidad | Mitigación (verificable) |
 |---|--------|-----------|--------------------------|
 | R1 | **Un secreto viaja en el `.zip`** | Crítica | Cuatro capas: (a) `HandoffVariable` **no modela** un campo `value` — no se puede filtrar lo que no existe; (b) `scrub_files` con el masking canónico del 195; (c) `assert_no_secrets` que **lanza** (falla cerrado); (d) `test_secreto_sembrado_aborta_el_bundle` con literal partido. Además el `POST /build` responde `409`, no `200` con un zip "limpio" |
-| R2 | El gate anti-secreto bloquea paquetes legítimos (falso positivo) | Alta | **Solo se mira la clase `secrets`**, jamás el set completo de `detect_classes`. Congelado por `test_build_number_de_8_digitos_no_bloquea` y `test_palabra_produccion_no_bloquea`, que existen precisamente porque `\b\d{7,8}\b` (`egress_policies.py:67`) y `producci[oó]n` (`:75`) están en el detector |
+| R2 | El gate anti-secreto bloquea paquetes legítimos (falso positivo) | Alta | **Solo se mira la clase `secrets`**, jamás el set completo de `detect_classes`. Congelado por `test_build_number_de_8_digitos_no_bloquea` y `test_palabra_produccion_no_bloquea`, que existen precisamente porque `\b\d{7,8}\b` (`egress_policies.py:`**`66`** — el v1 decía `:67`, C9) cae en la clase `pii` y `producci[oó]n` (`:75`) en la clase `production`. **C8:** el falso positivo que el v1 NO previó vive dentro de la clase `secrets` (`:89` `password[=:]valor`, `:90` `;password=valor`): un `format_hint` con forma de connection string. Se ataja en el constructor de `HandoffVariable` (F2), con error que nombra el campo |
 | R3 | El zip no es reproducible por el `mtime` (el bug silencioso del prior art) | Alta | `ZipInfo(date_time=_ZIP_EPOCH)` en **todas** las entradas; prohibido `zf.write(ruta)` (verificado por `grep` en el criterio binario de F3); `MANIFEST.json` sin `generated_at` |
 | R4 | El endpoint de descarga se vuelve una lectura arbitraria del disco | Crítica | `bundle_id` validado contra `^[0-9a-f]{16}$` **antes** de tocar el filesystem + `commonpath` como defensa en profundidad + tope de tamaño. 4 tests de descarga (KPI-6) |
 | R5 | El README miente: dice que Stacky no puede algo que sí puede (o al revés) | Alta | El README **no se escribe**: se **deriva** de `resolve_frontier`. `test_ninguna_accion_can_es_paso_manual` hace imposible que una acción resuelta `CAN` aparezca como trabajo del operador |
@@ -1283,7 +1581,8 @@ secciones y que **ninguna** contiene un valor secreto.
 | R7 | Los comandos del README están mal para el entorno del cliente | Media | Todos los comandos son PowerShell/Windows, que es el entorno real del corpus (`cd-deploy-test.yml:120-121` usa `pool: name: 'TEST-Server'` self-hosted Windows). Cada paso trae `on_failure`. **Ningún comando del README lo ejecuta Stacky**: los ejecuta un humano que puede frenar |
 | R8 | Los bundles llenan el disco | Baja | `prune_bundles(max_age_hours=72, keep_last=20)` tras cada `build`; best-effort, nunca lanza |
 | R9 | Sesión paralela viva toca `harness_flags.py` / `DevOpsPage.tsx` | Media | Los cambios son **aditivos** (1 `FlagSpec`, 1 entrada en `_CATEGORY_KEYS`, 1 objeto en el array de secciones). Tras el merge: `python -m compileall backend` + `npx tsc --noEmit` + `grep` de la key duplicada (gotcha del merge silencioso: git no marca conflicto si dos ramas agregan la misma línea de cierre) |
-| R10 | El `healthKey` no existe en `/api/diag/health` y el gate queda pegado | Media | F5 lleva una **instrucción ejecutable** (grep + leer + espejar), no una suposición |
+| R10 | ~~El `healthKey` no existe en `/api/diag/health` y el gate queda pegado~~ | — | **ELIMINADO (C3).** La sección ya no usa `healthKey`, así que no hay nada que sincronizar con `api/diag.py` ni riesgo de gate pegado. Ver F5 |
+| R11 | **El catálogo promete de más: una fila dice `CAN` sobre algo que Stacky no sabe hacer** | **Alta** | Riesgo NUEVO, identificado por el juez. Es el fallo de producto más grave posible en este plan: el README le dice al operador *"esto ya está hecho"*, el operador no lo hace, y el pipeline no anda — y el artefacto que existía para eliminar la ambigüedad la multiplica. Mitigación: el campo obligatorio `evidence` de §5.1 + `test_toda_accion_ejecutable_cita_un_simbolo_que_existe` + `test_cannot_no_tiene_ejecutor`. Una fila sin ejecutor importable **no puede** quedar `CAN`/`DEPENDS` |
 
 ---
 
@@ -1330,14 +1629,17 @@ secciones y que **ninguna** contiene un valor secreto.
 
 ## 11. Orden de implementación
 
-1. **F0** — catálogo de 14 acciones + `resolve_frontier` puro + flag en los 4 lugares + 10 tests.
+1. **F0** — catálogo de 14 acciones (con `evidence`, §5.1) + `resolve_frontier` puro + flag en los
+   4 lugares + 12 tests.
 2. **F1** — 3 sondas + `probe_environment` + `evaluate_frontier` + 5 tests.
 3. **F2** — `HandoffStep`/`HandoffVariable`/`BundleInputs` + `collect_inputs` degradado +
-   `build_steps` + `build_manifest` + `render_readme` (plantilla de §6) + 13 tests.
-4. **F3** — `scrub_files` + `assert_no_secrets` + `zip_bytes` determinista + `build_bundle` +
-   `persist_bundle` atómico + `bundle_path` + `prune_bundles` + `append_ledger` + 9 tests.
+   `build_steps` + `build_manifest` + `render_readme` (plantilla de §6) + 17 tests.
+4. **F3** — `assert_no_secrets` (gate, **primero**) + `scrub_files` (testigo, **después**) +
+   `zip_bytes` determinista + `build_bundle` + `persist_bundle` atómico + `bundle_path` +
+   `prune_bundles` + `append_ledger` + 11 tests.
 5. **F4** — blueprint con 3 endpoints + guard de flag per-request + guard `commonpath` + 10 tests.
-6. **F5** — modelo puro + panel + `endpoints.ts` + sección en `DevOpsPage.tsx` + 6 tests + `tsc`.
+6. **F5** — modelo puro + panel + `endpoints.ts` + sección **sin `healthKey`** en `DevOpsPage.tsx`
+   + 7 tests + `tsc`.
 
 Cada fase se commitea sola, con **sus tests verdes corridos de verdad** (output pegado) **antes**
 de la siguiente. TDD estricto, cero falsos verdes.
@@ -1347,9 +1649,19 @@ de la siguiente. TDD estricto, cero falsos verdes.
 ## 12. Definición de Hecho (DoD) — binaria
 
 - [ ] Los **5** archivos de test nuevos pasan **por archivo** con `backend\.venv\Scripts\python.exe`
-      (no `venv`): `test_plan252_capability_frontier.py` (15), `test_plan252_handoff_bundle.py` (13),
-      `test_plan252_zip_determinismo.py` (9), `test_plan252_handoff_api.py` (10),
-      `pipelineHandoffModel.test.ts` (6). **Total: 53 casos.**
+      (no `venv`): `test_plan252_capability_frontier.py` (**17**), `test_plan252_handoff_bundle.py` (**17**),
+      `test_plan252_zip_determinismo.py` (**11**), `test_plan252_handoff_api.py` (10),
+      `pipelineHandoffModel.test.ts` (**7**). **Total: 62 casos** (v1: 53; +9 de la crítica).
+- [ ] **C1 (bloqueante del v1):** en `services/pipeline_handoff_bundle.py`, `assert_no_secrets`
+      aparece **antes** que `scrub_files` dentro de `build_bundle`, y existe la comparación
+      `scrubbed != files` que aborta. `test_masking_que_cambia_algo_tambien_aborta` verde.
+- [ ] **C2 (bloqueante del v1):** `test_modulos_sin_ejecucion_remota` usa `ast.parse` y **no**
+      contiene ningún `in` / `assert ... not in <fuente>` sobre el texto del módulo.
+- [ ] **C3 (bloqueante del v1):** `git diff --name-only` de la rama **no** incluye
+      `backend/api/diag.py` ni ningún archivo fuera de la tabla de §4.7.
+- [ ] **[ADICIÓN ARQUITECTO] §5.1:** `test_toda_accion_ejecutable_cita_un_simbolo_que_existe` y
+      `test_cannot_no_tiene_ejecutor` verdes; toda fila `CAN`/`DEPENDS` del catálogo resuelve su
+      `evidence` con `importlib`, y ninguna fila quedó `CAN`/`DEPENDS` "de palabra".
 - [ ] Los **4** archivos de test backend están registrados en **las dos** listas del ratchet
       (`run_harness_tests.sh:20` y `run_harness_tests.ps1:13`) y `test_harness_ratchet_meta.py` queda verde.
 - [ ] `test_harness_flags.py` verde con la key nueva en `_CURATED_DEFAULTS_ON` (**:467**) y en

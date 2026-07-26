@@ -340,6 +340,9 @@ export default function SystemLogsPage() {
             // no existe muestra una tabla vacía.
             setOffset(0);
           }}
+          // Plan 173 F6 — solo se restaura si NADA más restauró los filtros.
+          defaultFilters={SYSLOG_DEFAULTS}
+          urlFilterKeys={Object.keys(SYSLOG_DEFAULTS)}
         />
       </div>
 

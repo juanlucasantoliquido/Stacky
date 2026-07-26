@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   applyView,
   computeActiveView,
   deleteView,
+  normalizeFilters,
   EMPTY_SAVED_VIEWS,
   renameView,
   sanitizeSavedViews,
@@ -25,6 +26,15 @@ export interface SavedViewsBarProps {
   /** Ya normalizados por el caller. */
   currentFilters: Record<string, string>;
   onApply: (filters: Record<string, string>) => void;
+  /**
+   * Plan 173 F6 — los filtros por default de la pantalla. Solo se re-aplica el
+   * último preset si al montar los filtros SIGUEN en su default: si algo ya los
+   * restauró (la URL, o el estado persistido del 165), ese algo manda.
+   * Sin este dato no se auto-aplica nada.
+   */
+  defaultFilters?: Record<string, string>;
+  /** Claves de filtro de la pantalla en la URL. Si hay alguna, la URL gana. */
+  urlFilterKeys?: string[];
 }
 
 type Modo = null | "guardar" | "renombrar";
@@ -37,7 +47,13 @@ type Modo = null | "guardar" | "renombrar";
  *
  * Nada destructivo pasa sin confirmar — ni borrar ni sobrescribir un preset.
  */
-export function SavedViewsBar({ screenId, currentFilters, onApply }: SavedViewsBarProps) {
+export function SavedViewsBar({
+  screenId,
+  currentFilters,
+  onApply,
+  defaultFilters,
+  urlFilterKeys,
+}: SavedViewsBarProps) {
   const enabled = useSavedViewsEnabled();
   const storeKey = `views.${screenId}`;
 
@@ -49,6 +65,7 @@ export function SavedViewsBar({ screenId, currentFilters, onApply }: SavedViewsB
   const [nombre, setNombre] = useState("");
   const [porBorrar, setPorBorrar] = useState<string | null>(null);
   const [porSobrescribir, setPorSobrescribir] = useState<string | null>(null);
+  const yaRestauro = useRef(false);
 
   // Lo local pinta YA; el backend gana cuando llega. Así la barra no espera a la
   // red para aparecer, pero las vistas de otra máquina terminan mandando.
@@ -61,6 +78,31 @@ export function SavedViewsBar({ screenId, currentFilters, onApply }: SavedViewsB
       vivo = false;
     };
   }, [storeKey]);
+
+  // Plan 173 F6 — re-aplicar el último preset al volver a la pantalla.
+  // Corre UNA sola vez y cede ante todo lo demás: la URL primero, y cualquier
+  // filtro ya restaurado después. Pisar filtros que el operador (o un
+  // deep-link) puso a propósito sería peor que no restaurar nada.
+  useEffect(() => {
+    if (!enabled || yaRestauro.current) return;
+    if (!defaultFilters || !state.lastApplied) return;
+    yaRestauro.current = true;
+
+    const enUrl = new URLSearchParams(window.location.search);
+    if ((urlFilterKeys ?? []).some((k) => enUrl.has(k))) return;
+
+    // Si los filtros ya no son los del default, algo los restauró: no se pisa.
+    if (
+      JSON.stringify(normalizeFilters(currentFilters)) !==
+      JSON.stringify(normalizeFilters(defaultFilters))
+    ) {
+      return;
+    }
+
+    const r = applyView(state, state.lastApplied);
+    if (r) onApply(r.filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, state.lastApplied, defaultFilters]);
 
   if (!enabled) return null;
 

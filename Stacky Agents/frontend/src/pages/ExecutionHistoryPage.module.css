@@ -170,3 +170,21 @@
   width: 2.25rem;
   user-select: none;
 }
+
+/* Plan 175 F4 — acciones rápidas: aparecen al apuntar la fila. `focus-within`
+   las deja alcanzables por teclado con el foco roving del plan 172. */
+.actionsCell {
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.row:hover .rowActions,
+.row:focus-within .rowActions {
+  opacity: 1;
+}

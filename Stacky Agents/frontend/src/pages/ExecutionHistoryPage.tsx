@@ -26,7 +26,7 @@ import {
 import GroundingObservatoryCard from "../components/GroundingObservatoryCard";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
-import { StatusChip, Checkbox } from "../components/ui";
+import { StatusChip, Checkbox, IconButton } from "../components/ui";
 import { runStatusTone, runStatusLabel } from "../utils/runStatus";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import { formatDuration, formatCostUsd } from "../services/format";
@@ -46,7 +46,7 @@ import usePeek from "../components/peek/usePeek";
 import PeekCard from "../components/peek/PeekCard";
 import useEntityContextMenu from "../components/contextmenu/useEntityContextMenu";
 import ContextMenu from "../components/contextmenu/ContextMenu";
-import { actionsForExecution, type EntityActionContext } from "../services/entityActions";
+import { actionsForExecution, quickActions, type EntityActionContext } from "../services/entityActions";
 import { copyText as copiarTexto } from "../services/clipboard";
 import { buildExecutionPeek } from "../services/peekModel";
 import { hydrateUiPref, loadUiPrefLocal, saveUiPref } from "../services/uiPrefs";
@@ -106,6 +106,8 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
   const [peekEnabled, setPeekEnabled] = useState(false);
   const [ctxMenuEnabled, setCtxMenuEnabled] = useState(false);
   const peek = usePeek(peekEnabled);
+  // Feedback de copiado sin toast: un ✓ transitorio en el propio icono.
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const ctxMenu = useEntityContextMenu(ctxMenuEnabled);
   // Plan 165 F2 — los filtros sobreviven F5 y el cambio de tab vía localStorage.
   const [filters, setFilters] = useLocalStorageState<Filters>("stacky.ui.history.filters", DEFAULT_FILTERS);
@@ -204,6 +206,14 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
       vivo = false;
     };
   }, []);
+
+  /** Solo se marca el ✓ si el copiado SALIÓ BIEN: decir "copiado" cuando no se
+   *  copió hace que el operador pegue lo que tenía antes. */
+  function marcarHecho(actionId: string, itemId: number, ok: boolean) {
+    if (!ok) return;
+    setCopiedId(`${actionId}-${itemId}`);
+    setTimeout(() => setCopiedId(null), 1200);
+  }
 
   /** Contexto de ejecución de las acciones. La confirmación es el armado en dos
    *  pasos del propio menú (plan 175 F3), así que acá ya viene resuelta. */
@@ -430,6 +440,14 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
               offset: 0,
             }))
           }
+          // Plan 173 F6 — solo se restaura si NADA más restauró los filtros.
+          defaultFilters={{
+            agent_type: DEFAULT_FILTERS.agent_type,
+            runtime: DEFAULT_FILTERS.runtime,
+            status: DEFAULT_FILTERS.status,
+            days: DEFAULT_FILTERS.days,
+          }}
+          urlFilterKeys={["agent_type", "runtime", "status", "days"]}
         />
         {/* Plan 173 F4 — qué columnas ve este operador. */}
         <TableColumnsMenu
@@ -554,6 +572,9 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                     Ticket{sortMarca("ticket")}
                   </th>
                 )}
+                {/* Plan 175 F4 — acciones rápidas al hover. Solo las seguras:
+                    el registro las filtra con doble cerrojo (quick Y safe). */}
+                {ctxMenuEnabled && <th aria-label="Acciones rápidas" />}
               </tr>
             </thead>
             {/* Plan 172 F4 — recorrer con j/k o flechas y abrir con Enter, sin mouse. */}
@@ -651,6 +672,27 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                           {item.local_insight.tldr}
                         </div>
                       ) : null}
+                    </td>
+                  )}
+                  {ctxMenuEnabled && (
+                    <td className={styles.actionsCell}>
+                      {/* stopPropagation: clickear un icono no puede abrir el drawer. */}
+                      <span className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
+                        {quickActions(actionsForExecution(item, window.location.origin)).map((a) => (
+                          <IconButton
+                            key={a.id}
+                            size="sm"
+                            label={a.label}
+                            icon={copiedId === `${a.id}-${item.id}` ? "✓" : a.icon}
+                            onClick={() =>
+                              void a.run({
+                                ...accionCtx,
+                                onDone: (id, ok) => marcarHecho(id, item.id, ok),
+                              })
+                            }
+                          />
+                        ))}
+                      </span>
                     </td>
                   )}
                 </tr>

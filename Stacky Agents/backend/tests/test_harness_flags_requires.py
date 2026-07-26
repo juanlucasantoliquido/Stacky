@@ -121,6 +121,10 @@ _REQUIRES_MAP_FROZEN = {
     # Plan 214: el autorun vive DENTRO del hook gateado por la otra flag; sin la
     # arista, autorun ON + encolado OFF sería un no-op mudo.
     "STACKY_QA_UAT_AUTORUN_ENABLED": "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",
+    # Plan 213: la allowlist y el techo solo se leen desde el camino que abre la
+    # flag madre; sin la arista, tocarlos con el modo OFF no haría nada.
+    "STACKY_ASSUMPTION_MODE_AGENT_TYPES": "STACKY_ASSUMPTION_MODE_ENABLED",
+    "STACKY_ASSUMPTION_MAX_PER_RUN": "STACKY_ASSUMPTION_MODE_ENABLED",
     # Plan 171: las 2 hijas de telemetría operativa apuntan al ROOT (profundidad 1);
     # la master STACKY_OPS_TELEMETRY_ENABLED no declara arista.
     "STACKY_OPS_BASELINE_ENABLED": "STACKY_OPS_TELEMETRY_ENABLED",

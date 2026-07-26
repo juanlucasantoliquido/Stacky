@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { SystemLogs, type SystemLogEntry } from "../api/endpoints";
 import { formatDate, formatTime, formatDuration, formatInt } from "../services/format";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
@@ -9,6 +9,8 @@ import {
   omitKeys, SYSLOG_FILTER_QUERY_KEYS, resolveMountFilters,
 } from "../services/routeFilters";
 import styles from "./SystemLogsPage.module.css";
+import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
+import { QUERY_TUNING } from "../services/queryTuning";
 
 const PAGE_SIZE = 100;
 
@@ -175,11 +177,14 @@ export default function SystemLogsPage() {
     offset,
   };
 
+  const { instantNav } = useUiPerfFlags();
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["system-logs", queryParams],
     queryFn: () => SystemLogs.list(queryParams),
-    staleTime: 10_000,
+    ...QUERY_TUNING.systemLogs,
     refetchInterval: 30_000,
+    // Plan 174 F4 — la tabla no se vacía al cambiar de página o de filtro.
+    placeholderData: instantNav ? keepPreviousData : undefined,
   });
 
   const { data: stats } = useQuery({

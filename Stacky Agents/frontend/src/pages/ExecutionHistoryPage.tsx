@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Executions, type ExecutionHistoryItem } from "../api/endpoints";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import CopyAsButton from "../components/CopyAsButton";
@@ -39,6 +39,9 @@ import {
 } from "../services/routeFilters";
 import styles from "./ExecutionHistoryPage.module.css";
 import { useRovingFocus } from "../hooks/useRovingFocus";
+import { usePrefetchExecutionDetail } from "../hooks/usePrefetchExecutionDetail";
+import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
+import { QUERY_TUNING } from "../services/queryTuning";
 import { isUiShortcutsEnabled, withShortcutHint } from "../services/shortcuts";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +75,7 @@ const STATUSES = ["", "completed", "error", "needs_review", "running", "cancelle
 // ---------------------------------------------------------------------------
 
 export default function ExecutionHistoryPage({ exec }: { exec?: number | null }) {
+  const { instantNav } = useUiPerfFlags();
   // Plan 165 F2 — los filtros sobreviven F5 y el cambio de tab vía localStorage.
   const [filters, setFilters] = useLocalStorageState<Filters>("stacky.ui.history.filters", DEFAULT_FILTERS);
   // Plan 165 F3 — el drawer arranca abierto si la ruta trae exec (deep-link / Slack).
@@ -140,10 +144,16 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
         limit: filters.limit,
         offset: filters.offset,
       }),
-    staleTime: 30_000,
+    ...QUERY_TUNING.history,
+    // Plan 174 F4 — mantener la tabla anterior mientras llega la página nueva.
+    // Vaciarla en cada filtro/paginado es el flash de vacío más visible del
+    // cockpit, y además hace perder la referencia de lo que se estaba leyendo.
+    placeholderData: instantNav ? keepPreviousData : undefined,
   });
 
   const items: ExecutionHistoryItem[] = historyQ.data ?? [];
+  // Plan 174 F3 — precargar el detalle mientras el operador decide si abrirlo.
+  const { getPrefetchProps } = usePrefetchExecutionDetail();
   // Plan 172 F4 — foco roving: j/k o flechas para recorrer, Enter para abrir.
   const roving = useRovingFocus({
     itemCount: items.length,
@@ -386,7 +396,7 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                     "Enter abre · j/k navega",
                     isUiShortcutsEnabled(),
                   )}
-                  {...roving.rowProps(idx)}
+                  {...combinarProps(roving.rowProps(idx), getPrefetchProps(item.id))}
                 >
                   {bulkEnabled && (
                     <td className={styles.selectCell}>
@@ -499,4 +509,29 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
       />
     </div>
   );
+}
+
+/**
+ * Plan 174 F3 — Une los props de la fila sin que uno pise al otro.
+ *
+ * Roving y prefetch declaran los dos un `onFocus`. Con un spread crudo el
+ * segundo gana y el primero desaparece EN SILENCIO: el foco dejaría de
+ * sincronizar el índice y nadie se enteraría hasta usar j/k.
+ */
+function combinarProps(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): Record<string, unknown> {
+  const salida: Record<string, unknown> = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    const previo = salida[k];
+    salida[k] =
+      typeof previo === "function" && typeof v === "function"
+        ? (...args: unknown[]) => {
+            (previo as (...a: unknown[]) => void)(...args);
+            (v as (...a: unknown[]) => void)(...args);
+          }
+        : v;
+  }
+  return salida;
 }

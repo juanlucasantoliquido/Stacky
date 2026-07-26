@@ -1689,6 +1689,36 @@ class Config:
         "STACKY_UI_SHORTCUTS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # Plan 173 — solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_SAVED_VIEWS_ENABLED: bool = os.getenv(
+        "STACKY_UI_SAVED_VIEWS_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # Plan 174 — solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_VIRTUALIZATION_ENABLED: bool = os.getenv(
+        "STACKY_UI_VIRTUALIZATION_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # Plan 174 — solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_PREFETCH_ENABLED: bool = os.getenv(
+        "STACKY_UI_PREFETCH_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # Plan 174 — solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_INSTANT_NAV_ENABLED: bool = os.getenv(
+        "STACKY_UI_INSTANT_NAV_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # Plan 175 — solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_PEEK_ENABLED: bool = os.getenv(
+        "STACKY_UI_PEEK_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # Plan 175 — solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_CONTEXT_MENU_ENABLED: bool = os.getenv(
+        "STACKY_UI_CONTEXT_MENU_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # ── Plan 192 — Resiliencia de conexión dashboard-backend (UI) ──────────────
     # Monitor pasivo + banner global + re-hidratación al recuperar. Default ON;
     # editable por UI (HarnessFlagsPanel). OFF => comportamiento actual intacto.

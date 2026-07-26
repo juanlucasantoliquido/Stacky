@@ -57,3 +57,13 @@
 .warn  .msg { color: var(--warn); }
 .error .msg { color: var(--danger); }
 .debug .msg { color: var(--text-muted); }
+
+/* Plan 174 F2 — altura fija: el motor de virtualización calcula la ventana con
+   ella, así que una línea que envuelve desalinearía todo el scroll. */
+.virtualLine {
+  height: 20px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

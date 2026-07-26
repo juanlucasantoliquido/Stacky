@@ -407,6 +407,12 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "interfaz_ui": (
         "STACKY_UI_SHORTCUTS_ENABLED",  # Plan 172 — registro de atajos + overlay ?
+        "STACKY_UI_SAVED_VIEWS_ENABLED",  # Plan 173
+        "STACKY_UI_VIRTUALIZATION_ENABLED",  # Plan 174
+        "STACKY_UI_PREFETCH_ENABLED",  # Plan 174
+        "STACKY_UI_INSTANT_NAV_ENABLED",  # Plan 174
+        "STACKY_UI_PEEK_ENABLED",  # Plan 175
+        "STACKY_UI_CONTEXT_MENU_ENABLED",  # Plan 175
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
         "STACKY_COPY_EXPORT_ENABLED",  # Plan 194 — portapapeles universal ("Copiar como…")
         "STACKY_UNDO_UNIVERSAL_ENABLED",  # Plan 185 — undo universal (acciones optimistas + gracia)
@@ -4025,6 +4031,66 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "funciona y lo que muestra el overlay de ayuda (?), sin listas escritas a "
             "mano que mientan. Agrega navegación de listas con j/k y foco roving. "
             "Default ON. Apagala y quedan solo los 3 atajos de siempre."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_UI_SAVED_VIEWS_ENABLED",
+        type="bool",
+        default=True,
+        label="Vistas guardadas y preferencias de tabla",
+        description=(
+            "Plan 173 — Presets nombrados de filtros por pantalla y preferencias de columnas persistidas en el backend. Default ON. Apagala y cada pantalla vuelve a arrancar con sus filtros por defecto, como antes."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_UI_VIRTUALIZATION_ENABLED",
+        type="bool",
+        default=True,
+        label="Virtualización de listas largas",
+        description=(
+            "Plan 174 — Renderiza solo las filas visibles en las listas largas (logs y diff). Default ON. Apagala y se vuelve a renderizar la lista entera."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_UI_PREFETCH_ENABLED",
+        type="bool",
+        default=True,
+        label="Prefetch del detalle al pasar el mouse",
+        description=(
+            "Plan 174 — Precarga el detalle de una ejecución al hacer hover o foco, con presupuesto acotado. Default ON. Apagala y el detalle se pide recién al abrir."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_UI_INSTANT_NAV_ENABLED",
+        type="bool",
+        default=True,
+        label="Navegación sin parpadeo",
+        description=(
+            "Plan 174 — Mantiene los datos anteriores mientras llega la página nueva, en vez de vaciar la tabla. Default ON."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_UI_PEEK_ENABLED",
+        type="bool",
+        default=True,
+        label="Vista previa al hover sostenido",
+        description=(
+            "Plan 175 — Tarjeta flotante con lo esencial de una ejecución o ticket sin abrir el detalle. Default ON."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_UI_CONTEXT_MENU_ENABLED",
+        type="bool",
+        default=True,
+        label="Menú contextual y acciones rápidas",
+        description=(
+            "Plan 175 — Clic derecho sobre una fila abre las acciones de esa entidad, y las seguras aparecen inline al hover. Default ON. Nada destructivo sin confirmar."
         ),
         group="global",
     ),

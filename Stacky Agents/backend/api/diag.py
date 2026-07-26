@@ -414,6 +414,12 @@ def health():
         "local_llm_enabled": bool(getattr(_config.config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
         "shell_v2_enabled": bool(getattr(_config.config, "STACKY_UI_SHELL_V2_ENABLED", False)),  # Plan 139
         "ui_shortcuts_enabled": bool(getattr(_config.config, "STACKY_UI_SHORTCUTS_ENABLED", False)),  # Plan 172
+        "ui_saved_views_enabled": bool(getattr(_config.config, "STACKY_UI_SAVED_VIEWS_ENABLED", False)),  # Plan 173
+        "ui_virtualization_enabled": bool(getattr(_config.config, "STACKY_UI_VIRTUALIZATION_ENABLED", False)),  # Plan 174
+        "ui_prefetch_enabled": bool(getattr(_config.config, "STACKY_UI_PREFETCH_ENABLED", False)),  # Plan 174
+        "ui_instant_nav_enabled": bool(getattr(_config.config, "STACKY_UI_INSTANT_NAV_ENABLED", False)),  # Plan 174
+        "ui_peek_enabled": bool(getattr(_config.config, "STACKY_UI_PEEK_ENABLED", False)),  # Plan 175
+        "ui_context_menu_enabled": bool(getattr(_config.config, "STACKY_UI_CONTEXT_MENU_ENABLED", False)),  # Plan 175
         "watchers": {"output_watcher": output_watcher_info},
         "warnings": warnings,
     })

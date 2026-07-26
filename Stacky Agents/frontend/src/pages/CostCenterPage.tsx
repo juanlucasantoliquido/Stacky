@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CostCenter } from "../api/endpoints";
+import { CostCenter, Ops } from "../api/endpoints";
 import type { BreakdownDimension, CostFiltersParams } from "../lib/costCenterTypes";
 import CostKpiCards from "../components/costcenter/CostKpiCards";
 import CostBurnChart from "../components/costcenter/CostBurnChart";
@@ -8,6 +8,9 @@ import type { BurnBucket } from "../components/costcenter/CostBurnChart";
 import CostBreakdownBars from "../components/costcenter/CostBreakdownBars";
 import CostTable from "../components/costcenter/CostTable";
 import CostFiltersBar from "../components/costcenter/CostFiltersBar";
+import OpsHealthSection from "../components/costcenter/OpsHealthSection";
+import OpsTrendsSection from "../components/costcenter/OpsTrendsSection";
+import OpsThresholdsForm from "../components/costcenter/OpsThresholdsForm";
 import { Skeleton } from "../components/ui";
 import LoadErrorState from "../components/LoadErrorState";
 import EmptyState from "../components/EmptyState";
@@ -34,6 +37,16 @@ export default function CostCenterPage() {
   const breakdownQ = useQuery({
     queryKey: ["cost-center", "breakdown", filters, dimension],
     queryFn: () => CostCenter.breakdown(dimension, filters),
+  });
+  // Plan 171 — salud operativa y tendencia. Carga on-mount + botón Refrescar:
+  // sin pollers nuevos (el latido único del Plan 156 sigue siendo el único).
+  const opsQ = useQuery({
+    queryKey: ["ops", "summary", filters],
+    queryFn: () => Ops.summary(filters),
+  });
+  const trendsQ = useQuery({
+    queryKey: ["ops", "trends", filters],
+    queryFn: () => Ops.trends(filters),
   });
 
   const summary = summaryQ.data;
@@ -96,6 +109,26 @@ export default function CostCenterPage() {
         error={summaryQ.error}
         onRetry={() => summaryQ.refetch()}
       />
+      <OpsHealthSection
+        data={opsQ.data ?? null}
+        isLoading={opsQ.isLoading}
+        error={opsQ.error}
+        onRetry={() => opsQ.refetch()}
+      />
+      <OpsTrendsSection
+        data={trendsQ.data ?? null}
+        isLoading={trendsQ.isLoading}
+        error={trendsQ.error}
+        onRetry={() => trendsQ.refetch()}
+      />
+      {opsQ.data?.enabled && opsQ.data.thresholds ? (
+        <OpsThresholdsForm
+          initial={opsQ.data.thresholds}
+          onSaved={() => {
+            void opsQ.refetch();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

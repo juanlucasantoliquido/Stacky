@@ -669,6 +669,11 @@ HARNESS_TEST_FILES=(
   tests/test_incident_inbox_actions.py
   # -- Plan 241 - Cero falso verde del agente QA UAT E2E (flags + doctor) --
   tests/test_plan241_qa_uat.py
+  # -- Plan 171 - Telemetria operativa (salud/tendencias/baselines/traza) --
+  tests/test_ops_telemetry_flags.py
+  tests/test_run_signals.py
+  tests/test_run_trace.py
+  tests/test_ops_telemetry_api.py
   # -- Plan 209 - Guia "Como validar esto" en el entregable --
   tests/test_plan209_playbook_schema.py
   tests/test_plan209_flag.py

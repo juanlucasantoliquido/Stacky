@@ -131,6 +131,19 @@ def collect_signals() -> dict:
     except Exception as exc:  # noqa: BLE001
         signals["plans"] = {"error": str(exc)}
 
+    # Plan 171 — señal operativa (salud/regresiones/stalls). Aislada: si falla,
+    # el ciclo sigue con el resto de las señales. Con la flag OFF la clave "ops"
+    # NO se agrega y el shape previo queda byte-idéntico.
+    try:
+        import config as _cfg_mod
+
+        if getattr(_cfg_mod.config, "STACKY_OPS_TELEMETRY_ENABLED", False):
+            from services import ops_telemetry
+
+            signals["ops"] = ops_telemetry.evolution_signals()
+    except Exception as exc:  # noqa: BLE001 — espejo de las claves vecinas
+        signals["ops"] = {"error": str(exc)}
+
     return signals
 
 

@@ -14,6 +14,14 @@ import type {
   CostSummaryResponse,
   BreakdownDimension,
 } from "../lib/costCenterTypes";
+// Plan 171 — telemetría operativa (contratos read-only).
+import type {
+  OpsSummaryResponse,
+  OpsThresholds,
+  OpsThresholdsResponse,
+  OpsTrendsResponse,
+  RunTraceResponse,
+} from "../lib/opsTelemetryTypes";
 import type { EnvironmentPlanResponse, EnvironmentApplyResponse, EnvAppliesResponse } from "../devops/environmentModel";
 import type { OverviewPayload } from "../components/devops/overviewModel"; // Plan 239
 import type { PreflightCheck } from "../devops/preflightModel";
@@ -1490,6 +1498,24 @@ export const CostCenter = {
       `/api/metrics/cost-reconciliation-audit${qs ? `?${qs}` : ""}`,
     );
   },
+};
+
+// Plan 171 — Telemetría operativa (reusa costFiltersToQuery del Plan 142).
+export const Ops = {
+  health: () => api.get<{ ok: boolean; flag_enabled: boolean }>("/api/metrics/ops/health"),
+  summary: (params?: CostFiltersParams) => {
+    const qs = costFiltersToQuery(params).toString();
+    return api.get<OpsSummaryResponse>(`/api/metrics/ops-summary${qs ? `?${qs}` : ""}`);
+  },
+  trends: (params?: CostFiltersParams) => {
+    const qs = costFiltersToQuery(params).toString();
+    return api.get<OpsTrendsResponse>(`/api/metrics/ops-trends${qs ? `?${qs}` : ""}`);
+  },
+  thresholds: () => api.get<OpsThresholdsResponse>("/api/metrics/ops-thresholds"),
+  saveThresholds: (body: Partial<OpsThresholds>) =>
+    api.post<{ ok: boolean; thresholds: OpsThresholds }>("/api/metrics/ops-thresholds", body),
+  runTrace: (executionId: number) =>
+    api.get<RunTraceResponse>(`/api/metrics/run-trace/${executionId}`),
 };
 
 // U1.5 — Digest de valor para management (doc 23)

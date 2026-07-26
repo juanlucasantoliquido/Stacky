@@ -1,0 +1,73 @@
+/* Plan 171 F6 — Tendencia diaria. Alturas por ref imperativo (ratchet: cero style inline). */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 120px;
+  padding: 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  overflow-x: auto;
+}
+
+.day {
+  flex: 1 1 0;
+  min-width: 10px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.track {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.barFill {
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  min-height: 1px;
+}
+
+.barErrors {
+  background: var(--danger);
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  background: var(--accent);
+}
+
+.swatchErrors {
+  background: var(--danger);
+}
+
+.empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}

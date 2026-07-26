@@ -589,6 +589,11 @@ $HarnessTestFiles = @(
   "tests/test_plan208_auto_sync.py",
   "tests/test_plan208_profile_schema.py",
   "tests/test_plan208_observability.py",
+  # Plan 171 - Telemetria operativa (salud/tendencias/baselines/traza)
+  "tests/test_ops_telemetry_flags.py",
+  "tests/test_run_signals.py",
+  "tests/test_run_trace.py",
+  "tests/test_ops_telemetry_api.py",
   # Plan 209 - Guia "Como validar esto" en el entregable
   "tests/test_plan209_playbook_schema.py",
   "tests/test_plan209_flag.py",

@@ -118,6 +118,10 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 171: las 2 hijas de telemetría operativa apuntan al ROOT (profundidad 1);
+    # la master STACKY_OPS_TELEMETRY_ENABLED no declara arista.
+    "STACKY_OPS_BASELINE_ENABLED": "STACKY_OPS_TELEMETRY_ENABLED",
+    "STACKY_OPS_TRACE_ENABLED": "STACKY_OPS_TELEMETRY_ENABLED",
     "CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES": "CLAUDE_CODE_CLI_AUTOCORRECT_ENABLED",
     "CODEX_CLI_AUTOCORRECT_MAX_RETRIES": "CODEX_CLI_AUTOCORRECT_ENABLED",
     "STACKY_CONTEXT_BUDGET_TOKENS": "STACKY_CONTEXT_BUDGET_ENABLED",

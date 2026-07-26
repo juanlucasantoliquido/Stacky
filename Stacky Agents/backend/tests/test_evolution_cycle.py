@@ -50,9 +50,16 @@ def _set_board(monkeypatch, board):
     monkeypatch.setattr(plans_board, "get_board_cached", lambda *a, **k: board)
 
 
+_BASE_KEYS = {"generated_at", "window_days", "executions", "costs", "incidents", "plans"}
+
+
 def test_collect_signals_shape():
     s = cyc.collect_signals()
-    assert set(s.keys()) == {"generated_at", "window_days", "executions", "costs", "incidents", "plans"}
+    # Plan 171 F2b — "ops" (señal operativa) se suma cuando
+    # STACKY_OPS_TELEMETRY_ENABLED está ON (default). Con la flag OFF el shape
+    # vuelve a ser byte-idéntico al previo; eso lo cubre
+    # test_ops_telemetry_api::test_evolution_collect_signals_flag_off_sin_ops.
+    assert set(s.keys()) - {"ops"} == _BASE_KEYS
     assert set(s["executions"].keys()) == {"total", "by_agent_type"}
     assert set(s["costs"].keys()) == {"total_usd", "by_model", "top_model", "top_model_share"}
     assert set(s["incidents"].keys()) == {"total", "non_terminal", "stale_48h"}

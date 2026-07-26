@@ -1,0 +1,47 @@
+/* Plan 171 F7 — Traza de la corrida en el drawer de detalle. */
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+.rows {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.label {
+  color: var(--text-muted);
+}
+
+.value {
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.phaseName {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sinDato {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

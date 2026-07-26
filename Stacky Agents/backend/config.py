@@ -1230,6 +1230,20 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 171 — Telemetría operativa (salud/tendencias/baselines/traza) ──
+    # Observabilidad read-only computada on-read. Default ON: no agrega daemons,
+    # ni polling, ni escrituras (salvo el JSON de umbrales editado por el operador).
+    STACKY_OPS_TELEMETRY_ENABLED: bool = os.getenv(
+        "STACKY_OPS_TELEMETRY_ENABLED", "true"
+    ).strip().lower() == "true"
+    # Comparación ventana actual (7d) vs baseline (28d previos): reglas R-O2/R-O3.
+    STACKY_OPS_BASELINE_ENABLED: bool = os.getenv(
+        "STACKY_OPS_BASELINE_ENABLED", "true"
+    ).strip().lower() == "true"
+    # Traza estructurada por corrida en el drawer de detalle.
+    STACKY_OPS_TRACE_ENABLED: bool = os.getenv(
+        "STACKY_OPS_TRACE_ENABLED", "true"
+    ).strip().lower() == "true"
     # ── Plan 209 — Guía "Cómo validar" en el entregable ──────────────────────
     # Anexa la sección de pasos de validación para el usuario de RS, grounded en
     # docs del cliente. Texto, sin red, sin LLM extra; degrada honestamente si no

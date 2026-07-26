@@ -1588,6 +1588,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: un ticket que agrupa a otros queda siempre trabado, porque él solo no tiene pasos para probar.",
         example="Como la nota final de una materia: sale del promedio de los parciales, no de un examen que nunca se tomó.",
     ),
+    # ── Plan 171 — Telemetría operativa ───────────────────────────────────
+    "STACKY_OPS_TELEMETRY_ENABLED": PlainHelp(
+        what="Muestra, dentro del Centro de Costos, cómo viene funcionando cada agente: cuántas corridas fallaron, cuánto tardaron y cuánto costaron.",
+        on_effect="Si la activás: al abrir el Centro de Costos ves una sección de salud con tasas de error, tiempos y avisos por umbral.",
+        off_effect="Si la apagás: la página queda igual que antes, sin la sección de salud ni los avisos.",
+        example="Como el tablero del auto: no maneja por vos, pero te muestra la temperatura y el nivel de nafta.",
+    ),
+    "STACKY_OPS_BASELINE_ENABLED": PlainHelp(
+        what="Compara la última semana contra las cuatro semanas anteriores y avisa si algo empeoró.",
+        on_effect="Si la activás: aparece un aviso cuando un agente falla más seguido o tarda mucho más que antes.",
+        off_effect="Si la apagás: seguís viendo los números de la semana, pero nadie te dice si empeoraron respecto del historial.",
+        example="Como comparar la factura de luz de este mes con la del mes pasado: el número solo no dice nada; la comparación sí.",
+    ),
+    "STACKY_OPS_TRACE_ENABLED": PlainHelp(
+        what="Agrega, en el detalle de una corrida, un resumen ordenado de qué pasó: cuándo arrancó, cuánto duró, qué costó y qué datos faltaron.",
+        on_effect="Si la activás: al abrir una ejecución ves su ficha completa en vez de tener que leer datos crudos.",
+        off_effect="Si la apagás: el detalle de la ejecución queda como está hoy, sin la ficha de traza.",
+        example="Como el resumen de un viaje: hora de salida, hora de llegada, cuánto costó y qué tramos no quedaron registrados.",
+    ),
 }
 
 

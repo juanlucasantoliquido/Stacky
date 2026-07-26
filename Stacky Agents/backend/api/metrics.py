@@ -720,3 +720,70 @@ def cost_reconciliation_audit():
         "codex_invisible_usd": codex_invisible,
         "runs_audited": len(records),
     })
+
+
+# ── Plan 171 — Telemetría operativa (read-only, on-read; espejo patrones Plan 142) ──
+
+def _ops_enabled() -> bool:
+    return bool(getattr(_cfg, "STACKY_OPS_TELEMETRY_ENABLED", False))
+
+
+@bp.get("/ops/health")
+def ops_health():
+    """SIEMPRE 200 (patrón /cost-center/health: la UI decide con esto)."""
+    return jsonify({"ok": True, "flag_enabled": _ops_enabled()})
+
+
+@bp.get("/ops-summary")
+def ops_summary_route():
+    if not _ops_enabled():
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    from services import ops_telemetry as ot
+    baseline_on = bool(getattr(_cfg, "STACKY_OPS_BASELINE_ENABLED", False))
+    return jsonify(ot.ops_summary(f, baseline_enabled=baseline_on))
+
+
+@bp.get("/ops-trends")
+def ops_trends_route():
+    if not _ops_enabled():
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    from services import ops_telemetry as ot
+    return jsonify(ot.ops_trends(f))
+
+
+@bp.get("/ops-thresholds")
+def ops_thresholds_get():
+    if not _ops_enabled():
+        return jsonify({"enabled": False}), 200
+    from services import ops_telemetry as ot
+    return jsonify({"enabled": True, "thresholds": ot.load_thresholds()})
+
+
+@bp.post("/ops-thresholds")
+def ops_thresholds_post():
+    if not _ops_enabled():
+        return jsonify({"enabled": False}), 200
+    from services import ops_telemetry as ot
+    body = request.get_json(silent=True) or {}
+    try:
+        effective = ot.save_thresholds(body)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "thresholds": effective})
+
+
+@bp.get("/run-trace/<int:execution_id>")
+def run_trace_route(execution_id: int):
+    if not _ops_enabled() or not bool(getattr(_cfg, "STACKY_OPS_TRACE_ENABLED", False)):
+        return jsonify({"enabled": False}), 200
+    from services import run_trace as rt
+    trace = rt.build_run_trace(execution_id)
+    if trace is None:
+        return jsonify({"ok": False, "error": "execution_not_found"}), 404
+    return jsonify({"enabled": True, "trace": trace})

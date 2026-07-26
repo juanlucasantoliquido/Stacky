@@ -148,6 +148,9 @@ class ExecRecord:
     # reconciliación SIN una segunda query. Default None: 100% aditivo/retrocompatible
     # (F0/F1 no lo usan; F1 sigue construyendo ExecRecord sin pasar este campo).
     raw_metadata: dict | None = None
+    # Plan 171 (aditivo, default None = 100% retrocompatible): fin de la corrida,
+    # para duraciones/percentiles en services/run_signals.py.
+    completed_at: datetime | None = None
 
 
 @dataclass
@@ -206,7 +209,7 @@ def load_records(f: CostFilters) -> list[ExecRecord]:
                 ado_id=getattr(tk, "ado_id", None) if tk else None,
                 project=(tk.stacky_project_name or tk.project) if tk else None,
                 agent_type=ex.agent_type, status=ex.status, started_at=ex.started_at, row=cr,
-                raw_metadata=md))
+                raw_metadata=md, completed_at=ex.completed_at))
     return out
 
 

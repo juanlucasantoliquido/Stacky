@@ -4,6 +4,7 @@ import { X, Copy } from "lucide-react";
 import { Executions } from "../api/endpoints";
 import type { ExecutionLocalInsight } from "../api/endpoints";
 import ExecutionInsightBlock from "./ExecutionInsightBlock";
+import RunTraceBlock from "./RunTraceBlock";
 import EgressSentinelBlock from "./EgressSentinelBlock";
 import type { EgressSentinelData } from "./EgressSentinelBlock";
 import ExecutionErrorAnalysisBlock from "./ExecutionErrorAnalysisBlock";
@@ -110,6 +111,9 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
               insight={(metadata.local_insight ?? null) as ExecutionLocalInsight | null}
               onRegenerated={() => execQ.refetch()}
             />
+
+            {/* Plan 171 — traza estructurada de la corrida */}
+            <RunTraceBlock executionId={executionId} />
 
             {/* Plan 121 — hallazgos del centinela local de egreso */}
             <EgressSentinelBlock

@@ -465,6 +465,10 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 171 — telemetría operativa (observabilidad read-only, on-read) ──
+    "STACKY_OPS_TELEMETRY_ENABLED",
+    "STACKY_OPS_BASELINE_ENABLED",
+    "STACKY_OPS_TRACE_ENABLED",
     # ── Plan 209 — guía "Cómo validar" (texto grounded; sin LLM extra) ──
     "STACKY_VALIDATION_PLAYBOOK_ENABLED",
     # ── Plan 208 — auto-sync al completar + matriz de estados por tipo ──

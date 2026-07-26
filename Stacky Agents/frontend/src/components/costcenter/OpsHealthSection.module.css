@@ -1,0 +1,72 @@
+/* Plan 171 F6 — Salud operativa. Cero estilos inline: todo por tokens. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border-muted);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.models {
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.stalls {
+  margin: 0;
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}

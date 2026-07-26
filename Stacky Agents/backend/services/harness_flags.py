@@ -282,6 +282,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UNBLOCKER_COMPLETED_CAP",   # Plan 66 C4 v4.1
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
+        "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
+        "STACKY_OPS_BASELINE_ENABLED",    # Plan 171 — baselines y regresiones deterministas
+        "STACKY_OPS_TRACE_ENABLED",       # Plan 171 — traza estructurada por corrida
         "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
         "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
@@ -1799,6 +1802,42 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 171 — Telemetría operativa ─────────────────────────────────────────
+    FlagSpec(
+        key="STACKY_OPS_TELEMETRY_ENABLED",
+        type="bool", default=True,
+        label="Telemetría operativa",
+        description=(
+            "Salud y tendencias por agente/runtime/modelo dentro del Centro de Costos: "
+            "tasas de fallo, percentiles de duración, series diarias y avisos por umbral. "
+            "Solo lectura, calculado al abrir la página. (Distinta de 'Telemetría en vivo' "
+            "STACKY_LIVE_TELEMETRY_ENABLED, que emite eventos durante la corrida.)"
+        ),
+        group="observabilidad",
+    ),
+    FlagSpec(
+        key="STACKY_OPS_BASELINE_ENABLED",
+        type="bool", default=True,
+        label="Regresiones vs baseline",
+        description=(
+            "Compara la última semana contra las 4 semanas previas por agente y runtime, "
+            "y avisa (solo avisa) si la tasa de error o la latencia p90 empeoraron más "
+            "allá del umbral."
+        ),
+        group="observabilidad", requires="STACKY_OPS_TELEMETRY_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_OPS_TRACE_ENABLED",
+        type="bool", default=True,
+        label="Traza por corrida",
+        description=(
+            "Vista estructurada de una ejecución en su panel de detalle: fases, duración, "
+            "costo clasificado, fuente de telemetría, incidente enlazado y campos sin dato "
+            "explícitos. (Distinta de 'Traza de ejecución' STACKY_EXECUTION_TRACE_ENABLED, "
+            "que es la CAPTURA runner-side de prompt_sha/agent_name; esta flag solo LEE.)"
+        ),
+        group="observabilidad", requires="STACKY_OPS_TELEMETRY_ENABLED",
     ),
     # ── Plan 158 — Fix telemetría de costo claude_code_cli ─────────────────────
     FlagSpec(

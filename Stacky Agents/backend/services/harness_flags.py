@@ -256,6 +256,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
         "STACKY_ADO_STATE_MATRIX_ENABLED",  # Plan 208 — matriz (tipo de ticket x agente)
+        "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",  # Plan 216 — estados en el perfil
     ),
     "routing_costo": (
         "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "STACKY_DIFFICULTY_ROUTING_ENABLED",
@@ -1808,6 +1809,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 216 — Config de estados centralizada en el perfil del cliente ─────
+    FlagSpec(
+        key="STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
+        type="bool",
+        default=True,
+        label="Config de estados centralizada en el perfil del cliente",
+        description=(
+            "Plan 216 — Las reglas estado→agente (Flujo) se leen y escriben en "
+            "client_profile.state_flow, con migración automática desde "
+            "flow_config.json (que NO se borra). Así la config de flujo viaja en los "
+            "backups y transfers del proyecto. OFF: comportamiento legacy "
+            "byte-idéntico. Default ON."
+        ),
+        group="global",
     ),
     # ── Plan 214 — Validación QAUAT E2E al completar el Developer ───────────────
     FlagSpec(

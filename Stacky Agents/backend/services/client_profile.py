@@ -211,6 +211,66 @@ def _contains_secret_keys(value: Any) -> list[str]:
     return hits
 
 
+def _check_state_flow(value: Any) -> list[str]:
+    """Plan 216 — valida `client_profile.state_flow` (reglas estado→agente).
+
+    Ausente ⇒ sin errores (retrocompatible). Presente ⇒
+    `{"version": str, "rules": [{"id", "ado_state", "agent_type", ...}]}`.
+    Un `ado_state` duplicado es un error: dos reglas para el mismo estado harían
+    ambiguo qué agente corresponde.
+    """
+    errors: list[str] = []
+    if value is None:
+        return errors
+    if not isinstance(value, dict):
+        errors.append("client_profile.state_flow debe ser un objeto.")
+        return errors
+    rules = value.get("rules")
+    if rules is None:
+        return errors
+    if not isinstance(rules, list):
+        errors.append("client_profile.state_flow.rules debe ser una lista.")
+        return errors
+
+    try:
+        from services.flow_config_store import VALID_AGENT_TYPES
+    except Exception:  # noqa: BLE001
+        VALID_AGENT_TYPES = frozenset()  # noqa: N806
+
+    vistos: set = set()
+    for i, rule in enumerate(rules):
+        base = f"client_profile.state_flow.rules[{i}]"
+        if not isinstance(rule, dict):
+            errors.append(f"{base} debe ser un objeto.")
+            continue
+        ado_state = rule.get("ado_state")
+        if not isinstance(ado_state, str) or not ado_state.strip():
+            errors.append(f"{base}.ado_state es requerido (string no vacío).")
+        else:
+            clave = ado_state.strip().lower()
+            if clave in vistos:
+                errors.append(f"{base}.ado_state duplicado: {ado_state!r}.")
+            vistos.add(clave)
+        agent_type = rule.get("agent_type")
+        if VALID_AGENT_TYPES and agent_type not in VALID_AGENT_TYPES:
+            errors.append(
+                f"{base}.agent_type inválido: {agent_type!r}. "
+                f"Permitidos: {sorted(VALID_AGENT_TYPES)}."
+            )
+    return errors
+
+
+def set_client_profile_state_flow(project_name: str, state_flow: dict) -> dict:
+    """Plan 216 — persiste SOLO `state_flow` en el perfil, preservando el resto."""
+    errors = _check_state_flow(state_flow)
+    if errors:
+        raise ClientProfileError("; ".join(errors))
+    profile = load_client_profile(project_name) or {}
+    profile = dict(profile)
+    profile["state_flow"] = state_flow
+    return save_client_profile(project_name, profile)
+
+
 def validate_client_profile(profile: Any) -> ValidationResult:
     """Valida el client_profile. Devuelve el bundle normalizado (con defaults
     semánticos para campos opcionales). Nunca lanza."""
@@ -257,6 +317,9 @@ def validate_client_profile(profile: Any) -> ValidationResult:
         err = _check_section_type(profile, section, expected_type)
         if err:
             errors.append(err)
+
+    # Plan 216 — reglas estado→agente centralizadas en el perfil.
+    errors.extend(_check_state_flow(profile.get("state_flow")))
 
     if "tracker_state_machine" in profile:
         sub_errs, sub_warns = _check_tracker_state_machine(profile["tracker_state_machine"])
@@ -492,5 +555,6 @@ __all__ = [
     "merge_with_defaults",
     "resolve_layout_paths",
     "save_client_profile",
+    "set_client_profile_state_flow",
     "validate_client_profile",
 ]

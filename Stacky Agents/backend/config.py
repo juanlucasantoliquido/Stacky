@@ -1230,6 +1230,13 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 216 — Config de estados centralizada en el perfil del cliente ────
+    # ON: flow_config_store lee/escribe client_profile.state_flow (con migración
+    # lazy desde flow_config.json, que NUNCA se borra). OFF: byte-idéntico al
+    # legacy ⇒ el rollback es trivial.
+    STACKY_STATE_CONFIG_CENTRALIZED_ENABLED: bool = os.getenv(
+        "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 214 — Validación QAUAT E2E al completar el Developer ─────────────
     # Solo escribe metadata local (no publica, no ejecuta, no toca ADO) ⇒ ON.
     STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED: bool = os.getenv(

@@ -472,6 +472,8 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 211 — inspector post-build + residuos de port (read-only) ──
     "STACKY_DEV_POST_BUILD_INSPECT_ENABLED",
     "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",
+    # ── Plan 216 — config de estados centralizada (migración no destructiva) ──
+    "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
     # ── Plan 214 — candidato QAUAT al completar el Developer (solo metadata) ──
     # (el autorun es default OFF: NO va acá)
     "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",

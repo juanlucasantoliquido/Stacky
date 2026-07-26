@@ -589,6 +589,9 @@ $HarnessTestFiles = @(
   "tests/test_plan208_auto_sync.py",
   "tests/test_plan208_profile_schema.py",
   "tests/test_plan208_observability.py",
+  # Plan 216 - Config de estados centralizada en el perfil del cliente
+  "tests/test_plan216_profile_schema.py",
+  "tests/test_plan216_migration.py",
   # Plan 214 - Validacion QAUAT E2E al completar el Developer
   "tests/test_plan214_qa_uat_enqueue.py",
   # Plan 211 - Inspector post-build + residuos de port entre clientes

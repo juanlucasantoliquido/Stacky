@@ -669,6 +669,9 @@ HARNESS_TEST_FILES=(
   tests/test_incident_inbox_actions.py
   # -- Plan 241 - Cero falso verde del agente QA UAT E2E (flags + doctor) --
   tests/test_plan241_qa_uat.py
+  # -- Plan 216 - Config de estados centralizada en el perfil del cliente --
+  tests/test_plan216_profile_schema.py
+  tests/test_plan216_migration.py
   # -- Plan 214 - Validacion QAUAT E2E al completar el Developer --
   tests/test_plan214_qa_uat_enqueue.py
   # -- Plan 211 - Inspector post-build + residuos de port entre clientes --

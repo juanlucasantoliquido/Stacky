@@ -129,8 +129,177 @@ def _read_json_file(config_file: Path) -> dict:
     return data
 
 
+# ── Plan 216 — fuente única en client_profile.state_flow ─────────────────────
+
+# Snapshot del default al importar. Cualquier test que parchee `_CONFIG_FILE` o
+# `_DEFAULT_CONFIG_FILE` queda FUERA del camino centralizado: el override de tests
+# tiene prioridad absoluta y así ninguna suite puede escribir en el perfil real.
+_PRISTINE_CONFIG_FILE = _DEFAULT_CONFIG_FILE
+
+
+def _paths_are_pristine() -> bool:
+    return (_CONFIG_FILE == _DEFAULT_CONFIG_FILE == _PRISTINE_CONFIG_FILE)
+
+
+def state_flow_centralized_enabled() -> bool:
+    # INSTANCIA config.config: el módulo devolvería el default y mataría el OFF.
+    try:
+        from config import config as _cfg
+
+        return bool(getattr(_cfg, "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _resolve_project(project_name: str | None) -> str | None:
+    """Proyecto efectivo, o None ⇒ path legacy global (aunque la flag esté ON)."""
+    normalized = _normalize_project_name(project_name)
+    if normalized and get_project_config(normalized):
+        return normalized
+    active = _normalize_project_name(get_active_project())
+    if active and get_project_config(active):
+        return active
+    return None
+
+
+def _read_state_flow_from_profile(project_name: str) -> dict | None:
+    try:
+        from services.client_profile import load_client_profile
+
+        profile = load_client_profile(project_name) or {}
+        sf = profile.get("state_flow")
+        if isinstance(sf, dict) and isinstance(sf.get("rules"), list):
+            return sf
+    except Exception:  # noqa: BLE001
+        _log.debug("no se pudo leer state_flow del perfil", exc_info=True)
+    return None
+
+
+def _write_state_flow_to_profile(project_name: str, data: dict) -> None:
+    from services.client_profile import set_client_profile_state_flow
+
+    data["updated_at"] = _now_iso()
+    set_client_profile_state_flow(project_name, data)
+
+
+def _sanitize_rules(data: dict) -> dict:
+    """Deja SOLO reglas válidas. Un legacy editado a mano no puede romper la
+    migración ni la validación del perfil. Nunca lanza."""
+    rules = (data or {}).get("rules")
+    limpias: list = []
+    vistos: set = set()
+    for rule in rules if isinstance(rules, list) else []:
+        if not isinstance(rule, dict):
+            _log.warning("flow_config: regla descartada (no es un objeto)")
+            continue
+        ado_state = rule.get("ado_state")
+        if not isinstance(ado_state, str) or not ado_state.strip():
+            _log.warning("flow_config: regla descartada (ado_state vacío)")
+            continue
+        if rule.get("agent_type") not in VALID_AGENT_TYPES:
+            _log.warning("flow_config: regla descartada (agent_type %r inválido)",
+                         rule.get("agent_type"))
+            continue
+        clave = ado_state.strip().lower()
+        if clave in vistos:
+            _log.warning("flow_config: regla duplicada descartada (%s)", ado_state)
+            continue
+        vistos.add(clave)
+        limpias.append(rule)
+    return {"version": (data or {}).get("version") or "1.0",
+            "updated_at": (data or {}).get("updated_at") or _now_iso(),
+            "rules": limpias}
+
+
+def _read_legacy_raw(project_name: str | None) -> dict:
+    """Lectura legacy pura (archivo), sin pasar por el perfil."""
+    config_file = _config_file_for(project_name)
+    return _read_raw_from_file(config_file)
+
+
+def _has_legacy_file(project_name: str | None) -> bool:
+    config_file = _config_file_for(project_name)
+    return config_file.exists() or _legacy_fallback_file_for(config_file) is not None
+
+
+def _should_use_profile(project_name: str) -> bool:
+    """El perfil es la fuente solo si YA tiene `state_flow`, o si el proyecto YA
+    tiene un perfil al que migrar.
+
+    Nunca se crea un perfil de la nada: si el proyecto no tiene ninguno, la UI diría
+    "perfil configurado" sin que el operador haya configurado nada. Esos proyectos
+    siguen por el camino legacy y migran solo, sin perder nada, en cuanto el operador
+    cree su perfil.
+    """
+    if _read_state_flow_from_profile(project_name) is not None:
+        return True
+    try:
+        from services.client_profile import has_client_profile
+
+        return bool(has_client_profile(project_name))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def migrate_legacy_flow_config(project_name: str) -> dict:
+    """Copia el JSON legacy al perfil la primera vez. Idempotente y NO destructiva:
+    el archivo legacy no se borra ni se renombra, y si el perfil no se puede
+    escribir se devuelve el legacy saneado (se reintenta en el próximo acceso)."""
+    existente = _read_state_flow_from_profile(project_name)
+    if existente is not None:
+        return existente
+
+    saneado = _sanitize_rules(_read_legacy_raw(project_name))
+    try:
+        _write_state_flow_to_profile(project_name, saneado)
+        _log.info("flow_config migrado a client_profile.state_flow (%d reglas)",
+                  len(saneado["rules"]))
+    except Exception as exc:  # noqa: BLE001 — la LECTURA nunca puede romper
+        _log.warning("no se pudo migrar flow_config al perfil (%s); se usa el legacy",
+                     type(exc).__name__)
+    return saneado
+
+
+def _read_raw_from_file(config_file: Path) -> dict:
+    """Cuerpo legacy de lectura por archivo (con fallback global)."""
+    try:
+        return _read_json_file(config_file)
+    except FileNotFoundError:
+        legacy_file = _legacy_fallback_file_for(config_file)
+        if legacy_file is not None:
+            try:
+                data = _read_json_file(legacy_file)
+                _log.info(
+                    "flow_config.json no encontrado en %s — usando fallback legacy %s",
+                    config_file, legacy_file,
+                )
+                return data
+            except FileNotFoundError:
+                pass
+            except (json.JSONDecodeError, ValueError) as exc:
+                _log.warning(
+                    "flow_config legacy inválido en %s (%s) — iniciando con reglas vacías",
+                    legacy_file, exc,
+                )
+                return _empty_config()
+        _log.warning("flow_config.json no encontrado en %s — iniciando con reglas vacías",
+                     config_file)
+        return _empty_config()
+    except (json.JSONDecodeError, ValueError) as exc:
+        _log.warning("flow_config.json inválido en %s (%s) — iniciando con reglas vacías",
+                     config_file, exc)
+        return _empty_config()
+
+
 def _read_raw(project_name: str | None = None) -> dict:
     """Lee el archivo JSON. Ante cualquier error devuelve estructura vacía y loguea."""
+    # Plan 216 — con la flag ON y proyecto resuelto, la fuente es el perfil.
+    # El override de tests (_CONFIG_FILE) conserva prioridad ABSOLUTA.
+    if _paths_are_pristine() and state_flow_centralized_enabled():
+        proyecto = _resolve_project(project_name)
+        if proyecto and _should_use_profile(proyecto):
+            return migrate_legacy_flow_config(proyecto)
+
     config_file = _config_file_for(project_name)
     try:
         return _read_json_file(config_file)
@@ -161,13 +330,28 @@ def _read_raw(project_name: str | None = None) -> dict:
         return _empty_config()
 
 
-def _write(data: dict, project_name: str | None = None) -> None:
+def _write_legacy_file(data: dict, project_name: str | None = None) -> None:
     config_file = _config_file_for(project_name)
     config_file.parent.mkdir(parents=True, exist_ok=True)
     data["updated_at"] = _now_iso()
     config_file.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def _write(data: dict, project_name: str | None = None) -> None:
+    # Plan 216 — con la flag ON el perfil manda; además se espeja el archivo
+    # legacy best-effort para que apagar la flag no pierda las ediciones.
+    if _paths_are_pristine() and state_flow_centralized_enabled():
+        proyecto = _resolve_project(project_name)
+        if proyecto and _should_use_profile(proyecto):
+            _write_state_flow_to_profile(proyecto, data)
+            try:
+                _write_legacy_file(dict(data), project_name)
+            except Exception:  # noqa: BLE001 — el espejo jamás rompe el guardado
+                _log.debug("mirror legacy falló (best-effort)", exc_info=True)
+            return
+    _write_legacy_file(data, project_name)
 
 
 def _validate_fields(ado_state: Any, agent_type: Any, on_failure_state: Any | None = None) -> None:
@@ -315,6 +499,14 @@ def seed_defaults_if_empty(project_name: str | None = None) -> int:
 
     Returns el número de reglas creadas (0 si ya había archivo).
     """
+    # Plan 216 — con la flag ON, la migración lazy ya cubre el seed.
+    if _paths_are_pristine() and state_flow_centralized_enabled():
+        proyecto = _resolve_project(project_name)
+        if proyecto and _should_use_profile(proyecto):
+            ya_estaba = _read_state_flow_from_profile(proyecto) is not None
+            migrado = migrate_legacy_flow_config(proyecto)
+            return 0 if ya_estaba else len(migrado.get("rules") or [])
+
     config_file = _config_file_for(project_name)
     if config_file.exists():
         return 0

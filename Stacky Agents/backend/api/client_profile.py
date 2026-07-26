@@ -256,6 +256,18 @@ def put_client_profile(project_name: str):
 
     previous = load_client_profile(project_name)
 
+    # Plan 216 — un PUT full-object que NO trae `state_flow` jamás borra las reglas
+    # de flujo: el editor de perfil trabaja sobre un snapshot local que puede estar
+    # stale. Borrar reglas se hace SOLO desde la pestaña de estados (/api/flow-config).
+    try:
+        from services.flow_config_store import state_flow_centralized_enabled
+
+        if state_flow_centralized_enabled() and "state_flow" not in profile:
+            if isinstance(previous, dict) and "state_flow" in previous:
+                profile["state_flow"] = previous["state_flow"]
+    except Exception:  # noqa: BLE001
+        logger.debug("no se pudo preservar state_flow en el PUT", exc_info=True)
+
     try:
         normalized = save_client_profile(project_name, profile)
     except ClientProfileError as exc:

@@ -16,6 +16,7 @@ import ValidationPlaybookPane, {
 } from "./ValidationPlaybookPane";
 import { readBuildVerdict, verdictBadge } from "./devBuildModel";
 import QaUatVerdictPane from "./QaUatVerdictPane";
+import AssumptionsPanel from "./AssumptionsPanel";
 import {
   findingLabel,
   findingsFromVerdict,
@@ -192,6 +193,12 @@ export default function OutputPanel() {
       </div>
       {(execution.status === "completed" || execution.status === "needs_review") && (
         <>
+          {/* Plan 213 F5 — los supuestos del analista, con confirmar/corregir.
+              No renderiza nada si el agente no declaró ninguno. */}
+          <AssumptionsPanel
+            executionId={execution.id}
+            metadata={execution.metadata as Record<string, unknown> | null}
+          />
           {execution.metadata?.human_review && (
             <div style={{ padding: 12, borderTop: "1px solid var(--border)", backgroundColor: "var(--bg-elev)", fontSize: 12 }}>
               <div style={{ color: "var(--text-muted)" }}>

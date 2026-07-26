@@ -1304,6 +1304,16 @@ export interface ExecutionHistoryItem {
 }
 
 export const Executions = {
+  /** Plan 213 F5 — confirmar o corregir los supuestos de un análisis.
+   *  El `index` es la posición REAL dentro de `metadata.assumptions.items`. */
+  patchAssumptions: (
+    executionId: number,
+    updates: { index: number; status: string; correction?: string }[]
+  ) =>
+    api.patch<{ ok: boolean; assumptions: Record<string, unknown> }>(
+      `/api/executions/${executionId}/assumptions`,
+      { updates }
+    ),
   list: (q: {
     ticket_id?: number;
     agent_type?: AgentType;

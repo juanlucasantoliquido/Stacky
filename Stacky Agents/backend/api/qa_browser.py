@@ -32,8 +32,21 @@ logger = logging.getLogger("stacky_agents.api.qa_browser")
 
 bp = Blueprint("qa_browser", __name__, url_prefix="/qa-browser")
 
+# Plan 214 F5 — se reusa el _PIPELINE_ROOT de qa_uat en vez de duplicar la
+# constante; import perezoso dentro del handler para no acoplar los módulos.
 _AGENT_TYPE = "qa-browser"
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _pipeline_root():
+    """El mismo root que usa el pipeline determinista. Import perezoso: si el
+    módulo no está disponible, el spec sale como antes en vez de romper."""
+    try:
+        from api.qa_uat import _PIPELINE_ROOT
+
+        return _PIPELINE_ROOT
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @bp.post("/runs")
@@ -75,7 +88,10 @@ def create_run():
                 context=context,
                 operator_note=operator_note,
                 max_scenarios=max_scenarios,
-            )
+            ),
+            # Plan 214 F5 — mismo root que el pipeline determinista, importado
+            # de donde ya vive (no se duplica la constante).
+            pipeline_root=_pipeline_root(),
         )
         context_markdown = render_context_markdown(context)
 

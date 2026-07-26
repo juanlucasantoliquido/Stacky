@@ -674,6 +674,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan216_migration.py
   # -- Plan 214 - Validacion QAUAT E2E al completar el Developer --
   tests/test_plan214_qa_uat_enqueue.py
+  tests/test_plan214_qa_browser_playbooks.py
   # -- Plan 172 - Teclado primero: registro de atajos + overlay de ayuda --
   tests/test_plan172_shortcuts_flag.py
   # -- Plan 199 - Cosecha historica de telemetria desde disco --

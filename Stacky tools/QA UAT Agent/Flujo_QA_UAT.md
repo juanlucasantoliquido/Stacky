@@ -380,3 +380,41 @@ CLI
       ├─ Stage 8: dossier          LLM [dossier.html+md+json]
       └─ Stage 9: publisher            [ADO comment o dry-run]
 ```
+
+---
+
+## Smoke E2E de reactivación (Plan 214)
+
+**Es manual y opt-in.** Requiere prerequisitos que una instalación default no
+garantiza (excepción dura #3): AgendaWeb levantada en
+`http://localhost:35017/AgendaWeb/`, el archivo `agenda_web.env` con
+credenciales, y el chromium de Playwright instalado. Nada de esto se
+auto-instala ni se corre solo.
+
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent"
+
+# 1) Baseline de la KB de navegación (cuántos playbooks y ui_maps hay hoy):
+& "..\..\Stacky Agents\backend\.venv\Scripts\python.exe" navigation_kb.py --report
+
+# 2) Pipeline completo en dry-run sobre un ticket real ya desarrollado
+#    (por ejemplo, el último que cerró el Developer):
+& "..\..\Stacky Agents\backend\.venv\Scripts\python.exe" qa_uat_pipeline.py --ticket <ADO_ID> --mode dry-run
+
+# 3) Correr un spec suelto con el runner (ya no tiene rutas hardcodeadas):
+& "..\..\Stacky Agents\backend\.venv\Scripts\python.exe" run_tests.py "evidence\116\tests\p01_counter_positive.spec.ts"
+```
+
+**Qué mirar en la salida** (esto es lo que distingue un smoke de un "corrió sin
+error"):
+
+1. `stages.runner.nav_deviations` — si hay desvíos, el agente no siguió el
+   playbook y conviene saber por qué antes de creerle el veredicto.
+2. El `verdict` y su **categoría**. Una falla de categoría `NAV` no es un bug del
+   ticket: es que no supimos llegar a la pantalla.
+3. En la UI de Stacky: la ejecución del Developer muestra la tarjeta
+   "Validación E2E sugerida", y el run `qa-uat` muestra su pane de veredicto.
+
+**Estado: PENDIENTE de corrida.** Igual que los smokes E2E de los planes 153,
+166 y 177, queda documentado para que lo corra el operador contra un ambiente
+vivo; no se declara verde hasta que se corra de verdad.

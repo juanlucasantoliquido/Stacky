@@ -24,8 +24,77 @@ class BrowserRunInput:
     max_scenarios: int = 16
 
 
-def build_guarded_browser_spec(data: BrowserRunInput) -> dict[str, Any]:
+def playbook_candidates(pipeline_root) -> list:
+    """Plan 214 F5 — Los playbooks ya aprendidos, como candidatos de plan.
+
+    Sin esto, el camino del Codex Browser improvisa la navegación mientras el
+    pipeline determinista ya sabe cómo llegar a la pantalla. Paridad real, no
+    declarada.
+
+    Un JSON corrupto se saltea; un directorio ausente devuelve []. NUNCA lanza:
+    enriquecer el plan no puede impedir que la corrida arranque.
+    """
+    from pathlib import Path as _Path
+
+    if not pipeline_root:
+        return []
+    carpeta = _Path(pipeline_root) / "cache" / "playbooks"
+    if not carpeta.is_dir():
+        return []
+
+    salida: list = []
+    try:
+        archivos = sorted(carpeta.glob("*.json"))
+    except OSError:
+        return []
+
+    for archivo in archivos:
+        try:
+            doc = json.loads(archivo.read_text(encoding="utf-8"))
+        except (ValueError, TypeError, OSError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        pasos = doc.get("steps") if isinstance(doc.get("steps"), list) else []
+        titulo = doc.get("goal") or archivo.stem
+        # OJO: el consumidor (`_extract_scenarios_from_candidates`) lee `text` y
+        # `kind`/`source_id`/`confidence`. Un candidato con solo id/title/source
+        # entraría a la lista y NO produciría ningún escenario: un no-op mudo.
+        # Por eso el playbook se materializa como plan numerado ("P1: …"), que
+        # es el formato que el extractor ya sabe leer.
+        lineas = []
+        for i, paso in enumerate(pasos, start=1):
+            if isinstance(paso, dict):
+                detalle = paso.get("action") or paso.get("description") or paso.get("selector")
+            else:
+                detalle = paso
+            detalle = str(detalle or "").strip()
+            if detalle:
+                lineas.append(f"P{i}: {detalle}")
+
+        salida.append({
+            "id": archivo.stem,
+            "title": titulo,
+            "source": "playbook",
+            "steps": len(pasos),
+            # Campos que el extractor consume de verdad:
+            "kind": "playbook",
+            "source_id": f"playbook:{archivo.stem}",
+            "confidence": 0.9,   # aprendido y verificado: pesa más que una heurística
+            "reason": f"playbook aprendido: {titulo}",
+            "text": "\n".join(lineas),
+        })
+    return salida
+
+
+def build_guarded_browser_spec(
+    data: BrowserRunInput, *, pipeline_root=None
+) -> dict[str, Any]:
     candidates = list(data.context.get("plan_candidates") or [])
+    # Plan 214 F5 — los playbooks se AGREGAN, nunca reemplazan lo que ya venía.
+    # Con pipeline_root=None (todos los callers previos) esto es un no-op y el
+    # spec sale byte-idéntico al de antes.
+    candidates.extend(playbook_candidates(pipeline_root))
     scenarios, used_sources = _extract_scenarios_from_candidates(
         candidates,
         max_scenarios=max(1, min(data.max_scenarios, 30)),

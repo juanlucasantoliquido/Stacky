@@ -14,6 +14,12 @@ import type {
   CostSummaryResponse,
   BreakdownDimension,
 } from "../lib/costCenterTypes";
+// Plan 201 — Taller de Compilación (contratos del backend).
+import type {
+  BuildStatus as BuildWorkshopStatus,
+  Catalog as BuildWorkshopCatalog,
+  Toolchain as BuildWorkshopToolchain,
+} from "../components/devops/buildWorkshopModel";
 // Plan 171 — telemetría operativa (contratos read-only).
 import type {
   OpsSummaryResponse,
@@ -4121,6 +4127,52 @@ export const DevOpsDeployments = {
       { app_id: appId, target, ...(toVersion ? { to_version: toVersion } : {}) },
     ),
 };
+
+// Plan 201 — Taller de Compilación (detección .sln + build Release + artefactos).
+// OJO: `api.*` LANZA en non-2xx. `/compile` sin toolchain responde 200 con el
+// doctor a propósito, así que `api.post` sirve. La descarga es un <a download>
+// (GET directo del navegador), nunca `api.get`.
+export const DevOpsBuildWorkshop = {
+  scan: (enrich = false) =>
+    api.post<BuildWorkshopCatalogResponse>("/api/devops/build/scan", { enrich }),
+  catalog: () => api.get<BuildWorkshopCatalogResponse>("/api/devops/build/catalog"),
+  track: (slug: string, tracked: boolean) =>
+    api.post<{ catalog: BuildWorkshopCatalog }>("/api/devops/build/track", { slug, tracked }),
+  doctor: () => api.get<{ toolchain: BuildWorkshopToolchain }>("/api/devops/build/doctor"),
+  compile: (slugs: string[], unified: boolean) =>
+    api.post<BuildWorkshopCompileResponse>("/api/devops/build/compile", {
+      slugs,
+      unified,
+      confirm: true,
+    }),
+  status: (buildId: string) =>
+    api.get<BuildWorkshopStatus>(`/api/devops/build/status/${encodeURIComponent(buildId)}`),
+  cancel: (buildId: string) =>
+    api.post<{ cancelled: boolean }>(
+      `/api/devops/build/cancel/${encodeURIComponent(buildId)}`,
+      { confirm: true },
+    ),
+  registerDeployApp: (buildId: string, slug: string, targets?: Record<string, unknown>) =>
+    api.post<{ app: DeployApp }>("/api/devops/build/register-deploy-app", {
+      build_id: buildId,
+      slug,
+      confirm: true,
+      ...(targets ? { targets } : {}),
+    }),
+  artifactDownloadUrl: (buildId: string) =>
+    `/api/devops/build/artifact/${encodeURIComponent(buildId)}/download`,
+};
+
+export interface BuildWorkshopCatalogResponse {
+  workspace_root: string | null;
+  catalog: BuildWorkshopCatalog;
+  toolchain: BuildWorkshopToolchain;
+  warning?: string;
+}
+
+export type BuildWorkshopCompileResponse =
+  | { build_id: string; status?: undefined; toolchain?: undefined }
+  | { status: "toolchain_missing"; toolchain: BuildWorkshopToolchain; build_id?: undefined };
 
 /** Plan 188 — paquete de evidencia de un run fallido (contrato congelado F2). */
 export interface DeployEvidenceBundle {

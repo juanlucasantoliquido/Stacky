@@ -1230,6 +1230,13 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 201 — Taller de Compilación (.sln + build Release + artefactos) ──
+    # Detección/catálogo/UI son read-only y seguros ⇒ default ON. La EJECUCIÓN del
+    # build se auto-gatea con la detección de toolchain: si falta MSBuild/dotnet,
+    # muestra el doctor y NO hace nada (nunca auto-instala).
+    STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED", "true"
+    ).lower() == "true"
     # ── Plan 171 — Telemetría operativa (salud/tendencias/baselines/traza) ──
     # Observabilidad read-only computada on-read. Default ON: no agrega daemons,
     # ni polling, ni escrituras (salvo el JSON de umbrales editado por el operador).

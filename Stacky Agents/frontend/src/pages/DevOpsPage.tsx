@@ -103,6 +103,8 @@ import { RemoteConsoleSection } from '../components/devops/RemoteConsoleSection'
 import { PrReviewerSection } from '../components/devops/PrReviewerSection';
 // Importar DeploymentsSection (Plan 120 F7)
 import { DeploymentsSection } from '../components/devops/DeploymentsSection';
+// Plan 201 — Taller de Compilación (.sln + build Release + artefactos descargables)
+import { BuildWorkshopSection } from '../components/devops/BuildWorkshopSection';
 // Importar DevOpsOverviewSection (Plan 239 F3)
 import { DevOpsOverviewSection } from '../components/devops/DevOpsOverviewSection';
 
@@ -210,6 +212,17 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEPLOYMENTS_ENABLED',
     gateMessage: 'La sección Despliegues necesita la flag STACKY_DEPLOYMENTS_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <DeploymentsSection ctx={ctx} />,
+  },
+  // Plan 201 — Taller de Compilación (detección .sln + build Release + artefactos)
+  {
+    id: 'taller-compilacion',
+    label: 'Compilar',
+    group: 'operar',
+    icon: '🔨',
+    healthKey: 'build_workshop_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED',
+    gateMessage: 'La sección Compilar necesita la flag STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <BuildWorkshopSection ctx={ctx} />,
   },
 ];
 

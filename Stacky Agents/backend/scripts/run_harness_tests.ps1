@@ -589,6 +589,14 @@ $HarnessTestFiles = @(
   "tests/test_plan208_auto_sync.py",
   "tests/test_plan208_profile_schema.py",
   "tests/test_plan208_observability.py",
+  # Plan 201 - Taller de Compilacion (.sln + build Release + artefactos)
+  "tests/test_plan201_flag.py",
+  "tests/test_plan201_solution_scanner.py",
+  "tests/test_plan201_solution_store.py",
+  "tests/test_plan201_build_toolchain.py",
+  "tests/test_plan201_solution_builder.py",
+  "tests/test_plan201_api.py",
+  "tests/test_plan201_bridge.py",
   # Plan 171 - Telemetria operativa (salud/tendencias/baselines/traza)
   "tests/test_ops_telemetry_flags.py",
   "tests/test_run_signals.py",

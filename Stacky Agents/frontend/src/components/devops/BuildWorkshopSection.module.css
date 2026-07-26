@@ -1,0 +1,172 @@
+/* Plan 201 F10 — Taller de Compilación. Archivo propio (no se toca el
+   devops.module.css compartido, que edita otra sesión en paralelo).
+   Cero estilos inline: todo por tokens del theme. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.summary {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.banner {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--bg-elev);
+}
+
+.doctor {
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doctorTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.doctorText {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  word-break: break-all;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg-elev);
+}
+
+.itemBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.itemPath {
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  font-size: 10px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+}
+
+.buildBox {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.buildHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.log {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.evidence {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger);
+}

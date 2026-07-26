@@ -70,6 +70,9 @@ def _health_payload() -> dict:
             and getattr(cfg, "LOCAL_LLM_ENABLED", False)
         ),  # Plan 127 — CONJUNCIÓN: la UI solo ofrece el botón si el camino completo sirve
         "cockpit_enabled": bool(getattr(cfg, "STACKY_DEVOPS_COCKPIT_ENABLED", False)),  # Plan 239
+        "build_workshop_enabled": bool(
+            getattr(cfg, "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED", False)
+        ),  # Plan 201 — Taller de Compilación
     }
 
 

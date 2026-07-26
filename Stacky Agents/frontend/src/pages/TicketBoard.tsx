@@ -39,6 +39,7 @@ import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
 import SavedViewsBar from "../components/SavedViewsBar";
+import TicketSqlDeployBadge from "../components/TicketSqlDeployBadge";
 import { filtersToTicketBoardState, ticketBoardStateToFilters } from "../services/savedViews";
 import { actionsForTicket, quickActions } from "../services/entityActions";
 import { copyText as copiarTexto } from "../services/clipboard";
@@ -447,6 +448,8 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
             >
               {ticket.ado_state ?? "—"}
             </span>
+            {/* Plan 200 F4 — hay SQL para desplegar en este ticket. */}
+            <TicketSqlDeployBadge ticketId={ticket.id} className={styles.priority} />
             {ticket.priority != null && (
               <span className={styles.priority}>P{ticket.priority}</span>
             )}

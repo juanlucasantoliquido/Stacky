@@ -150,6 +150,11 @@ export interface FrontendConfig {
 }
 
 export const Tickets = {
+  /** Plan 200 F4 — ¿este ticket trae scripts SQL para desplegar? 404 con la flag OFF. */
+  sqlDeploy: (ticketId: number) =>
+    api.get<import("../components/sqlDeployBadge").DeployNeed & { ok: boolean }>(
+      `/api/tickets/${ticketId}/sql-deploy`,
+    ),
   list: (project?: string | null, assignedTo?: string | null) => {
     const params = new URLSearchParams();
     if (project) params.set("project", project);

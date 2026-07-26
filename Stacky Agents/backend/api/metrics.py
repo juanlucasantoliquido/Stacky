@@ -787,3 +787,81 @@ def run_trace_route(execution_id: int):
     if trace is None:
         return jsonify({"ok": False, "error": "execution_not_found"}), 404
     return jsonify({"enabled": True, "trace": trace})
+
+
+# --------------------------------------------------------------------------
+# Plan 199 F3 — Cosecha histórica de telemetría (HITL).
+# El scan es SIEMPRE read-only sobre los artefactos; escribir en la base o en
+# la bitácora exige apply=1 explícito. El default es preview.
+# --------------------------------------------------------------------------
+
+def _harvest_enabled() -> bool:
+    return bool(getattr(_cfg, "STACKY_TELEMETRY_HARVEST_ENABLED", False))
+
+
+@bp.get("/telemetry-harvest/health")
+def telemetry_harvest_health():
+    """Siempre 200: la UI decide si muestra la sección."""
+    return jsonify({"ok": True, "flag_enabled": _harvest_enabled()})
+
+
+@bp.post("/telemetry-harvest/scan")
+def telemetry_harvest_scan():
+    """Descubre en disco y reporta qué haría. Con apply=1, lo hace.
+
+    El default es DRY-RUN a propósito: esto toca filas históricas del operador,
+    y tiene que poder ver los números antes de decidir.
+    """
+    if not _harvest_enabled():
+        return jsonify({"enabled": False}), 200
+
+    from services import telemetry_harvest as th
+
+    aplicar = request.args.get("apply", "0") == "1"
+    try:
+        lookback = int(getattr(_cfg, "STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS", 180) or 180)
+    except (TypeError, ValueError):
+        lookback = 180
+    solo_atribuidas = bool(getattr(_cfg, "STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY", True))
+
+    try:
+        runs = th.harvest_runs(lookback_days=lookback)
+        backfill = th.backfill_from_harvest(runs, lookback_days=lookback,
+                                            dry_run=not aplicar)
+        bitacora = th.append_to_ledger(runs, backfill["matched_ids"],
+                                       attributed_only=solo_atribuidas,
+                                       dry_run=not aplicar)
+    except Exception as exc:  # noqa: BLE001 — un artefacto raro no puede dar 500
+        logger.warning("telemetry-harvest scan falló", exc_info=True)
+        return jsonify({"ok": False, "enabled": True, "error": str(exc)}), 200
+
+    return jsonify({
+        "ok": True, "enabled": True, "applied": aplicar,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "discovered": len(runs),
+        "backfill": {k: v for k, v in backfill.items() if k != "matched_ids"},
+        "ledger": bitacora,
+    })
+
+
+@bp.get("/telemetry-harvest/summary")
+def telemetry_harvest_summary():
+    """Agrega la bitácora como fuente separada, reusando los agregadores del 142."""
+    if not _harvest_enabled():
+        return jsonify({"enabled": False}), 200
+
+    from services import telemetry_harvest as th
+
+    solo_atribuidas = request.args.get("attributed", "1") != "0"
+    dim = (request.args.get("dimension") or "runtime").lower()
+    if dim not in ("runtime", "model", "agent_type", "ticket", "project", "day"):
+        return jsonify({"ok": False, "error": "invalid_dimension"}), 400
+
+    records = th.load_ledger_records(source_attributed_only=solo_atribuidas)
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "attributed_only": solo_atribuidas,
+        **ca.summarize(records, top_n=10),
+        "breakdown": ca.breakdown(records, dim),
+    })

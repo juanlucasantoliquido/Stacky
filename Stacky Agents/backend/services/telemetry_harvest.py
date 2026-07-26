@@ -493,3 +493,158 @@ def backfill_from_harvest(runs: list, *, lookback_days: int,
         "scanned": scanned, "matched": matched, "backfilled": backfilled,
         "skipped_billable": skipped, "dry_run": dry_run, "matched_ids": matched_ids,
     }
+
+
+# ---------------------------------------------------------------------------
+# Bitácora de lo NO matcheado
+# ---------------------------------------------------------------------------
+
+def _ledger_path() -> Path:
+    return Path(data_dir()) / "telemetry_harvest.jsonl"
+
+
+def read_ledger_keys() -> set:
+    """dedup_keys ya presentes. Tolerante: una línea corrupta no invalida el resto."""
+    path = _ledger_path()
+    keys: set = set()
+    if not path.is_file():
+        return keys
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    clave = json.loads(line).get("dedup_key")
+                except (ValueError, TypeError):
+                    continue
+                if clave:
+                    keys.add(clave)
+    except OSError:
+        return keys
+    return keys
+
+
+def _is_attributed(cwd: str | None, project_hint: str | None) -> bool:
+    """¿Esta sesión salió de un workspace que Stacky conoce?
+
+    Conservador a propósito: sin señal clara devuelve False. Marcar como propia
+    una sesión ajena metería gasto de otro proyecto en los números del operador.
+    """
+    if not project_hint:
+        return False
+    try:
+        from runtime_paths import projects_dir, repo_root
+
+        conocidos = set()
+        carpeta = projects_dir()
+        if carpeta.is_dir():
+            conocidos = {d.name for d in carpeta.iterdir()}
+        conocidos.add(repo_root().name)
+    except Exception:  # noqa: BLE001
+        return False
+    return project_hint in conocidos
+
+
+def append_to_ledger(runs: list, matched_ids: dict, *, attributed_only: bool,
+                     dry_run: bool = False) -> dict:
+    """Agrega a la bitácora lo que NO matcheó ninguna ejecución.
+
+    Es una fuente SEPARADA a propósito: son sesiones que no pertenecen a ningún
+    ticket, y mezclarlas con los números por ticket los volvería mentira.
+    Idempotente por dedup_key.
+    """
+    existentes = read_ledger_keys()
+    agregadas = dup = sin_atribuir = 0
+    lineas: list = []
+
+    for run in runs or []:
+        clave = run.dedup_key()
+        if clave in (matched_ids or {}):
+            continue          # ya se rellenó en la base (F1): no va a la bitácora
+        if clave in existentes:
+            dup += 1
+            continue
+        atribuida = _is_attributed(run.cwd, run.project_hint)
+        if attributed_only and not atribuida:
+            sin_atribuir += 1
+            continue
+
+        existentes.add(clave)
+        lineas.append(json.dumps({
+            "dedup_key": clave, "runtime": run.runtime, "session_id": run.session_id,
+            "model": run.model, "tokens_in": run.tokens_in, "tokens_out": run.tokens_out,
+            "cache_read_tokens": run.cache_read_tokens,
+            "total_cost_usd": run.total_cost_usd, "cost_estimated": run.cost_estimated,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "project_hint": run.project_hint, "attributed": atribuida,
+            "artifact": run.artifact, "source_format": run.source_format,
+            "harvested_at": datetime.utcnow().isoformat() + "Z",
+        }, ensure_ascii=False))
+        agregadas += 1
+
+    if lineas and not dry_run:
+        path = _ledger_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lineas) + "\n")
+
+    return {"appended": agregadas, "skipped_dup": dup,
+            "skipped_unattributed": sin_atribuir, "dry_run": dry_run}
+
+
+def load_ledger_records(*, source_attributed_only: bool = True) -> list:
+    """La bitácora como `ExecRecord` sintéticos, para reusar los agregadores del 142.
+
+    El `execution_id` es negativo: son sesiones sin ejecución, y un id positivo
+    chocaría con una real. Así `summarize`/`breakdown`/`burn` funcionan sin
+    tocarles una línea.
+    """
+    from services.cost_analytics import CostRow, ExecRecord
+
+    path = _ledger_path()
+    salida: list = []
+    if not path.is_file():
+        return salida
+
+    sentinela = -1
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(e, dict):
+                    continue
+                if source_attributed_only and not e.get("attributed"):
+                    continue
+                costo = e.get("total_cost_usd")
+                clase = ("estimated" if e.get("cost_estimated")
+                         else ("reported" if costo is not None else "unknown"))
+                salida.append(ExecRecord(
+                    execution_id=sentinela, ticket_id=None, ado_id=None,
+                    project=e.get("project_hint"), agent_type=None, status=None,
+                    started_at=_parse_ts(e.get("started_at")),
+                    row=CostRow(
+                        runtime=e.get("runtime"), model=e.get("model"),
+                        tokens_in=e.get("tokens_in"), tokens_out=e.get("tokens_out"),
+                        cache_read_tokens=e.get("cache_read_tokens"),
+                        cost_usd=costo, cost_kind=clase, cache_savings_usd=None),
+                ))
+                sentinela -= 1
+    except OSError:
+        return salida
+    return salida
+
+
+def harvest_runs(*, lookback_days: int) -> list:
+    """Atajo del call-site: cosecha la ventana configurada."""
+    from datetime import timedelta
+
+    since = datetime.utcnow() - timedelta(days=max(1, min(int(lookback_days or 1), 3650)))
+    return harvest(since)

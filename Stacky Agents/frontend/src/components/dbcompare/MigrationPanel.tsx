@@ -8,14 +8,17 @@ import { DbCompare } from "../../api/endpoints";
 import type { CompareRun } from "./dbcompareTypes";
 import { selectableRuns } from "./migrationPanelLogic";
 import { relativeTimeEs } from "./relativeTime";
+import ClosurePanel from "./ClosurePanel";
 import { ScriptsPanel } from "./ScriptsPanel";
 import styles from "./dbcompare.module.css";
 
 interface Props {
   runs: CompareRun[];
+  /** Plan 176 F7 — verificar el cierre desde donde se generaron los scripts. */
+  triageEnabled?: boolean;
 }
 
-export function MigrationPanel({ runs }: Props) {
+export function MigrationPanel({ runs, triageEnabled }: Props) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const done = selectableRuns(runs);
   const nowIso = new Date().toISOString();
@@ -47,8 +50,29 @@ export function MigrationPanel({ runs }: Props) {
         </div>
       ))}
       {selectedRunId && <ScriptsPanel key={selectedRunId} runId={selectedRunId} />}
+      {/* Plan 176 F7 — el cierre se verifica acá también: es el mismo lugar
+          donde el operador bajó los scripts que después ejecutó. */}
+      {selectedRunId && (
+        <ClosurePanel
+          key={`closure-${selectedRunId}`}
+          runId={selectedRunId}
+          runStatus="done"
+          summary={triageSummaryFor(done, selectedRunId)}
+          enabled={Boolean(triageEnabled)}
+        />
+      )}
     </section>
   );
+}
+
+/**
+ * El panel de migración solo tiene metadatos de las corridas (sin `diff`), así
+ * que no puede contar decisiones. Se habilita el botón y que el backend decida:
+ * mentir "no hay nada que verificar" sería peor que un 404 explicado.
+ */
+function triageSummaryFor(runs: CompareRun[], runId: string) {
+  const run = runs.find((r) => r.run_id === runId);
+  return run ? { confirmado: 1, excluido: 0 } : null;
 }
 
 export default MigrationPanel;

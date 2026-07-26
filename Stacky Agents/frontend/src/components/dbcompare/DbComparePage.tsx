@@ -12,6 +12,7 @@ import { CompareWizard } from "./CompareWizard";
 import { RunProgress } from "./RunProgress";
 import { SummaryHero } from "./SummaryHero";
 import GatesPanel from "./GatesPanel";
+import ClosurePanel from "./ClosurePanel";
 import {
   summarizeTriage,
   type TriageDecision,
@@ -328,6 +329,14 @@ export function DbComparePage() {
             runStatus={activeRun.status}
             enabled={health?.gates_enabled ?? false}
           />
+          {/* Plan 176 F7 — despues de las precondiciones: primero se verifica que
+              se PUEDA migrar, despues que se HAYA migrado como se decidio. */}
+          <ClosurePanel
+            runId={activeRun.run_id}
+            runStatus={activeRun.status}
+            summary={summarizeTriage(triage, diff.items.length)}
+            enabled={triageEnabled}
+          />
           <FiltersBar
             filters={filters}
             onChange={setFilters}
@@ -388,7 +397,7 @@ export function DbComparePage() {
       {/* Plan 157 F6 — Panel de Migración persistente (flag ON) vs. bloque legacy de
           "pegá el run_id" (flag OFF, backward-compatible con main). */}
       {migrationPanel ? (
-        <MigrationPanel runs={runs} />
+        <MigrationPanel runs={runs} triageEnabled={triageEnabled} />
       ) : (
         <section className={styles.scriptsSection}>
           <h2>Scripts de paridad (Plan 125)</h2>

@@ -67,9 +67,43 @@ def _iso(dt: datetime) -> str:
 
 def _write_run(run: dict) -> None:
     path = _run_path(run["run_id"])
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(run, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    # El temporal lleva pid+hilo: con un nombre compartido, dos escritores
+    # concurrentes del MISMO run (el hilo de la corrida actualizando fases y el
+    # del diff de datos) pisan el mismo archivo y en Windows el os.replace se
+    # cae con "Acceso denegado", dejando la corrida en error por un choque de
+    # escritura que no tiene nada que ver con la comparación.
+    tmp = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.json.tmp")
+    try:
+        tmp.write_text(json.dumps(run, indent=2, ensure_ascii=False), encoding="utf-8")
+        _replace_con_reintento(tmp, path)
+    finally:
+        # Si el replace falló, el temporal no puede quedar tirado en la carpeta.
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _replace_con_reintento(tmp, path, intentos: int = 20, espera: float = 0.02) -> None:
+    """En Windows, os.replace falla con "Acceso denegado" si el DESTINO está
+    abierto por otro lector en ese instante.
+
+    Y hay un lector permanente: la UI poléa GET /runs/<id> cada ~500 ms mientras
+    el hilo de la corrida actualiza fases. Sin reintento, ese choque termina la
+    comparación en error por un motivo que no tiene nada que ver con las bases —
+    y el operador ve "error" en una corrida que estaba andando bien.
+
+    La ventana es de milisegundos: reintentar un rato corto la cierra.
+    """
+    ultimo = None
+    for intento in range(intentos):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:  # WinError 5 / 32
+            ultimo = exc
+            time.sleep(espera * (1 + intento * 0.5))
+    raise ultimo
 
 
 def _read_run(run_id: str) -> dict | None:

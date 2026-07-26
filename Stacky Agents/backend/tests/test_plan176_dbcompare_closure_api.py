@@ -121,6 +121,22 @@ def client(entorno, monkeypatch):
     stop_manifest_watcher()
 
 
+@pytest.fixture(autouse=True)
+def sin_hilos_colgados():
+    """Ningún hilo de corrida puede sobrevivir al test que lo lanzó.
+
+    Si sobrevive, sigue escribiendo en el tmp_path del test anterior y hace
+    fallar a otro test por un motivo que no tiene nada que ver con él — el peor
+    tipo de rojo, porque manda a investigar el archivo equivocado.
+    """
+    yield
+    import services.dbcompare_runs as runs
+
+    limite = time.monotonic() + 10
+    while time.monotonic() < limite and runs._ACTIVE_PAIRS:
+        time.sleep(0.05)
+
+
 def _esperar(run_id, timeout=6.0):
     import services.dbcompare_runs as runs
 
@@ -128,6 +144,10 @@ def _esperar(run_id, timeout=6.0):
     while time.monotonic() < limite:
         actual = runs.get_run(run_id)
         if actual and actual["status"] in ("done", "error"):
+            # Terminar en error y seguir sería leer el reporte de una
+            # verificación que no ocurrió: el KeyError posterior mandaría a
+            # investigar el endpoint en vez del motor.
+            assert actual["status"] == "done", actual.get("error")
             return actual
         time.sleep(0.05)
     raise AssertionError(f"la corrida {run_id} no terminó")

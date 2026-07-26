@@ -1,5 +1,23 @@
 # Plan 251 — Matriz de entornos: los valores que sólo el operador conoce
 
+> ## ESTADO REAL AL 2026-07-26: **NO IMPLEMENTADO**
+>
+> La corrida que implementó la serie "Mago de las Pipelines" llegó hasta el **249** y **se detuvo
+> acá por presupuesto de contexto, a propósito**: el operador pidió explícitamente "prefiero 'el
+> 250 quedó a medias por X' que un verde inventado". **No hay una sola línea de código de este
+> plan en el árbol.** Verificable: ninguno de los archivos que este plan manda CREAR existe.
+>
+> Implementados y commiteados en esta misma rama, en orden: **246** (`f2e63e77`), **247**
+> (`d006e406`), **248** (`ed9a1942`), **249** (`7fc345d8`). Los cuatro tienen su estado real
+> escrito en su propio encabezado, con los números de tests y los bugs de plan que aparecieron.
+>
+> **Antes de implementar este plan, leé el encabezado del 246, 247, 248 y 249**: los cuatro
+> descubrieron contradicciones internas de sus propios documentos (una flag con 5 patas que en
+> realidad son 6, un `LLMCallSpec` sin sus campos obligatorios, un `RULES_VERSION` que no se puede
+> subir sin romper el gate que el mismo plan exige). Este plan no fue revisado con ese ojo todavía.
+
+---
+
 **Estado:** CRITICADO v2 (v1 → v2)
 **Veredicto del juez:** **RECHAZADO en v1** por 5 bloqueantes → **APROBADO-CON-CAMBIOS en v2**
 (los 5 bloqueantes están corregidos abajo; ver §11).

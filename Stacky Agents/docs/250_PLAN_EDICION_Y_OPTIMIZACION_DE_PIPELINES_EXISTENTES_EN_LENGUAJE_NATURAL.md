@@ -1,5 +1,45 @@
 # Plan 250 — Editar y optimizar una pipeline que ya existe, describiendo el cambio en lenguaje natural
 
+> ## ESTADO REAL AL 2026-07-26: **NO IMPLEMENTADO**
+>
+> La corrida que implementó la serie "Mago de las Pipelines" llegó hasta el **249** y **se detuvo
+> acá por presupuesto de contexto, a propósito**: el operador pidió explícitamente "prefiero 'el
+> 250 quedó a medias por X' que un verde inventado". **No hay una sola línea de código de este
+> plan en el árbol.** Verificable: ninguno de los archivos que este plan manda CREAR existe.
+>
+> Implementados y commiteados en esta misma rama, en orden: **246** (`f2e63e77`), **247**
+> (`d006e406`), **248** (`ed9a1942`), **249** (`7fc345d8`). Los cuatro tienen su estado real
+> escrito en su propio encabezado, con los números de tests y los bugs de plan que aparecieron.
+>
+> **Antes de implementar este plan, leé el encabezado del 246, 247, 248 y 249**: los cuatro
+> descubrieron contradicciones internas de sus propios documentos (una flag con 5 patas que en
+> realidad son 6, un `LLMCallSpec` sin sus campos obligatorios, un `RULES_VERSION` que no se puede
+> subir sin romper el gate que el mismo plan exige). Este plan no fue revisado con ese ojo todavía.
+>
+> ### Mediciones de F0 ya verificadas EJECUTANDO el código (2026-07-26) — no las re-derives
+>
+> Corridas contra el árbol real con `backend/.venv/Scripts/python.exe`; los cuatro números del
+> plan dieron **exacto**, así que F0 puede arrancar confiando en ellos:
+>
+> | Dato | Valor medido | Dónde |
+> |---|---|---|
+> | Comentarios totales del corpus dorado | **337** | 81+44+31+36+47+57+18+11+12 |
+> | Comentarios de `ci-cd-online.yml` | **47** | test 3 y test 5 de F0 |
+> | `stages[0].jobs[0].steps` de `ci-cd-online.yml` | `start_mark.line=70`, **6 items** | test 1 |
+> | `key_col` de sus hijos | **6** | `steps.value[0].value[0][0].start_mark.column` |
+> | `dash_col` | **4** | **NO sale de `start_mark.column` (que da 6): sale de buscar el `-` en la línea cruda.** `L[70].find("-") == 4`. Es la regla §2.4 "columnas derivadas del archivo", y si se toma del `start_mark` el test 1 falla |
+> | Item `steps[3]` | `start_mark.line=100`, `end_mark.line=112`, **fin efectivo 109** | test 2. Las líneas 110 y 111 son la vacía y `'    # 4. Publicar resultados de tests en ADO'`, que pertenecen al item SIGUIENTE |
+> | `dash_col` del deployment de `cd-deploy-test.yml` | **16** | línea 129 (`- checkout: self`), test 7 |
+> | `scan_unsupported` | `('matrix',)` en `ci-batch.yml`, `('compile_time_expression',)` en `bootstrap-server-environment.yml`, `()` en `ci-cd-online.yml` | test 6 |
+>
+> **Cambio del árbol que este plan todavía no contempla:** el **249** ya mergeó y le agregó a
+> `scan_unsupported` un kwarg `provider="ado"` (`services/pipeline_renderers.py`). El test 6 de F0
+> (`scan_unsupported(after) == scan_unsupported(before)`) **sigue valiendo sin tocarlo**, porque el
+> default conserva el comportamiento ADO byte-idéntico — pero conviene saberlo antes de leer ese
+> archivo y encontrarlo distinto de como lo describe §2.
+
+---
+
 > Estado: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor v1: Claude Opus 5 (1M context). Crítica v1→v2: juez **independiente** (no escribió el v1), veredicto **RECHAZADO** con 4 bloqueantes, corregidos abajo.
 > Serie: **"Mago de las Pipelines"** (246–252). Este es el **250**. Contrato compartido: dossier de la serie §1.

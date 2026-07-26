@@ -1,0 +1,44 @@
+/* Plan 175 F3 — Menú contextual. Un solo componente para todas las entidades. */
+
+.menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 210px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.25));
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.active {
+  background: var(--bg-elev);
+}
+
+/* Armada: el próximo click SÍ ejecuta. Tiene que verse distinto o el aviso no
+   sirve de nada. */
+.armed {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.icon {
+  width: 1.2em;
+  text-align: center;
+}

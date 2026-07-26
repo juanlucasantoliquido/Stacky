@@ -42,6 +42,13 @@ import { useRovingFocus } from "../hooks/useRovingFocus";
 import { usePrefetchExecutionDetail } from "../hooks/usePrefetchExecutionDetail";
 import SavedViewsBar from "../components/SavedViewsBar";
 import TableColumnsMenu from "../components/TableColumnsMenu";
+import usePeek from "../components/peek/usePeek";
+import PeekCard from "../components/peek/PeekCard";
+import useEntityContextMenu from "../components/contextmenu/useEntityContextMenu";
+import ContextMenu from "../components/contextmenu/ContextMenu";
+import { actionsForExecution, type EntityActionContext } from "../services/entityActions";
+import { copyText as copiarTexto } from "../services/clipboard";
+import { buildExecutionPeek } from "../services/peekModel";
 import { hydrateUiPref, loadUiPrefLocal, saveUiPref } from "../services/uiPrefs";
 import {
   cycleSort,
@@ -95,6 +102,11 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
     sanitizeTablePrefs(loadUiPrefLocal("table.history", EMPTY_TABLE_PREFS), HISTORY_COLUMNS),
   );
   const tableRef = useRef<HTMLTableElement>(null);
+  // Plan 175 — vista previa al hover y menú contextual, cada uno con su flag.
+  const [peekEnabled, setPeekEnabled] = useState(false);
+  const [ctxMenuEnabled, setCtxMenuEnabled] = useState(false);
+  const peek = usePeek(peekEnabled);
+  const ctxMenu = useEntityContextMenu(ctxMenuEnabled);
   // Plan 165 F2 — los filtros sobreviven F5 y el cambio de tab vía localStorage.
   const [filters, setFilters] = useLocalStorageState<Filters>("stacky.ui.history.filters", DEFAULT_FILTERS);
   // Plan 165 F3 — el drawer arranca abierto si la ruta trae exec (deep-link / Slack).
@@ -176,6 +188,37 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
   });
 
   const items: ExecutionHistoryItem[] = historyQ.data ?? [];
+
+  useEffect(() => {
+    let vivo = true;
+    void fetch("/api/diag/health")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!vivo || !d) return;
+        // Solo un false EXPLÍCITO apaga: las dos son default ON.
+        setPeekEnabled(d.ui_peek_enabled !== false);
+        setCtxMenuEnabled(d.ui_context_menu_enabled !== false);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  /** Contexto de ejecución de las acciones. La confirmación es el armado en dos
+   *  pasos del propio menú (plan 175 F3), así que acá ya viene resuelta. */
+  const accionCtx: EntityActionContext = {
+    copyText: copiarTexto,
+    openExternal: (url: string) => window.open(url, "_blank", "noopener"),
+    openDetail: (id: number) => setDetailId(id),
+    navigate: (path: string) => window.history.pushState({}, "", path),
+    askConfirm: async () => true,
+    api: {
+      cancelExecution: (id: number) => Executions.cancel(id),
+      deleteExecution: (id: number) => Executions.deleteOne(id),
+      publishExecution: (id: number) => Executions.publish(id),
+    },
+  };
 
   // Lo local pinta ya; el backend gana cuando llega.
   useEffect(() => {
@@ -525,7 +568,22 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                     "Enter abre · j/k navega",
                     isUiShortcutsEnabled(),
                   )}
-                  {...combinarProps(roving.rowProps(idx), getPrefetchProps(item.id))}
+                  {...combinarProps(
+                    combinarProps(roving.rowProps(idx), getPrefetchProps(item.id)),
+                    combinarProps(
+                      ctxMenu.rowProps(actionsForExecution(item, window.location.origin)),
+                      peekEnabled
+                        ? {
+                            onMouseEnter: (ev: React.MouseEvent) =>
+                              peek.hoverStart(
+                                { kind: "execution", id: item.id },
+                                (ev.currentTarget as HTMLElement).getBoundingClientRect(),
+                              ),
+                            onMouseLeave: () => peek.hoverEnd(),
+                          }
+                        : {},
+                    ),
+                  )}
                 >
                   {bulkEnabled && (
                     <td className={styles.selectCell}>
@@ -652,6 +710,32 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
       {bulkToast && <Toast toast={bulkToast} onClose={() => setBulkToast(null)} />}
 
       {/* Drawer de detalle (Plan 38 C2) */}
+      {/* Plan 175 F2/F3 — la vista previa y el menú viven fuera de la tabla
+          (portal), así que no pueden romper su layout ni su scroll. */}
+      <PeekCard
+        state={peek.state}
+        content={
+          peek.state.target
+            ? (() => {
+                const it = items.find((i) => i.id === peek.state.target?.id);
+                return it ? buildExecutionPeek(it) : null;
+              })()
+            : null
+        }
+        anchorRect={peek.anchorRect}
+        onCardHover={peek.cardHover}
+        onCardLeave={peek.cardLeave}
+      />
+      <ContextMenu
+        open={ctxMenu.menu !== null}
+        x={ctxMenu.menu?.x ?? 0}
+        y={ctxMenu.menu?.y ?? 0}
+        actions={ctxMenu.menu?.actions ?? []}
+        ctx={accionCtx}
+        openedByKeyboard={ctxMenu.menu?.byKeyboard ?? false}
+        onClose={ctxMenu.cerrar}
+      />
+
       <ExecutionDetailDrawer
         executionId={detailId}
         onClose={() => setDetailId(null)}

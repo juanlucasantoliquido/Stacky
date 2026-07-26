@@ -1,0 +1,40 @@
+/* Plan 175 F2 — Tarjeta de vista previa. Todo con tokens del tema. */
+
+.card {
+  position: fixed;
+  z-index: 60;
+  max-width: 380px;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.25));
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.label {
+  color: var(--text-faint);
+  min-width: 92px;
+}
+
+.value {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}

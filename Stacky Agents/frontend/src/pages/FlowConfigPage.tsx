@@ -330,7 +330,7 @@ function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: Ru
 
 // ── main page ─────────────────────────────────────────────────────────────────
 
-export default function FlowConfigPage() {
+export default function FlowConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const activeProject = useWorkbench((s) => s.activeProject);
   const activeProjectName = activeProject?.name ?? null;
 
@@ -354,7 +354,9 @@ export default function FlowConfigPage() {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <h2 className={styles.title}>Config de Flujo</h2>
+        {/* Plan 216 F2 — embebido dentro de la pestaña Estados, que ya pone su
+            propio encabezado; standalone conserva el suyo. */}
+        {!embedded && <h2 className={styles.title}>Reglas de flujo</h2>}
         <p className={styles.subtitle}>
           Mapeo determinístico: estado ADO → tipo de agente sugerido.
           Clave usada: <code>agent_type</code>.

@@ -188,7 +188,7 @@ export default function EmployeeEditDrawer({ filename, agent, onClose, onRemoved
               ))}
             </select>
             <span style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4, display: "block" }}>
-              Usado por "Config de Flujo" para resolver el agente sugerido por estado ADO.
+              Usado por Configuración → Estados para resolver el agente sugerido por estado ADO.
             </span>
           </div>
 

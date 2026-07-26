@@ -72,8 +72,11 @@ vi.mock("../../services/uiSections", () => ({
   OPTIONAL_SECTIONS: ["team", "pm", "logs", "docs", "memory"],
 }));
 
-// FlowConfigPage y otros sub-panels pesados → stub liviano
-vi.mock("../FlowConfigPage", () => ({ default: () => <div>FlowPanel</div> }));
+// StatesConfigPage y otros sub-panels pesados → stub liviano.
+// OJO: este archivo NO CORRE hoy — @testing-library/react no está instalado en
+// el frontend (vitest sí). Se mantiene consistente para que sirva el día que se
+// instale, pero no cuenta como verificación de nada.
+vi.mock("../StatesConfigPage", () => ({ default: () => <div>StatesPanel</div> }));
 vi.mock("../../components/ConfigTransferPanel", () => ({ default: () => <div>Transfer</div> }));
 vi.mock("../../components/ClientProfileEditor", () => ({ default: () => <div>ClientProfile</div> }));
 
@@ -115,8 +118,8 @@ describe("SettingsPage — sub-tab Arnes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Arnes" }));
     await waitFor(() => screen.getByText("Gate de contrato (claude)"));
 
-    // Volver a Flujo
-    fireEvent.click(screen.getByRole("button", { name: "Flujo" }));
+    // Volver a Estados
+    fireEvent.click(screen.getByRole("button", { name: "Estados" }));
 
     // El label del panel de arnés ya no debe estar en el DOM
     expect(screen.queryByText("Gate de contrato (claude)")).toBeNull();

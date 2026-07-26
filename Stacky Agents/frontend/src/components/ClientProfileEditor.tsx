@@ -650,7 +650,13 @@ export default function ClientProfileEditor() {
       (profileQuery.data.has_profile
         ? profileQuery.data.profile
         : profileQuery.data.default_template);
-    setBaseProfile((initial ?? {}) as ClientProfile);
+    // Plan 216 F2/C2 — `state_flow` NUNCA entra al editor de perfil: se edita
+    // solo en la pestaña Estados. Si viajara en este snapshot, un PUT desde acá
+    // (con el snapshot posiblemente stale) pisaría reglas que el operador tocó
+    // allá. El backend la preserva cuando el payload no la trae.
+    const { state_flow: _stateFlowFueraDelEditor, ...sinStateFlow } =
+      (initial ?? {}) as ClientProfile & { state_flow?: unknown };
+    setBaseProfile(sinStateFlow as ClientProfile);
     setWarnings(profileQuery.data.validation?.warnings ?? []);
     setAdvancedJson(null); // al (re)cargar, volver a la vista de formulario
   }, [profileQuery.data]);
@@ -1158,20 +1164,13 @@ export default function ClientProfileEditor() {
             )}
           </Section>
 
-          {/* ── Máquina de estados ── */}
-          <Section title="Máquina de estados del tracker" required>
-            <div className={styles.roleGrid}>
-              {(["functional", "technical", "developer"] as const).map((role) => (
-                <TrackerRoleField
-                  key={role}
-                  role={role}
-                  value={asObj(g(["tracker_state_machine", role]))}
-                  onChange={(next) => set(["tracker_state_machine", role], next)}
-                  workItemTypes={workItemTypes}
-                  validStates={validStates}
-                />
-              ))}
-            </div>
+          {/* ── Máquina de estados (Plan 216 F2: se edita en su propia pestana) ── */}
+          <Section title="Máquina de estados del tracker">
+            <p className={styles.hint}>
+              Se movió a Configuración → Estados, para tener una sola fuente de
+              todos los estados del tracker. El JSON avanzado de acá abajo sigue
+              permitiendo editarla a mano.
+            </p>
           </Section>
 
           {/* ── Plan 211 — allowlist de residuos de port ── */}

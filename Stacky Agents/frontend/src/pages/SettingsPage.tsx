@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import FlowConfigPage from "./FlowConfigPage";
+import StatesConfigPage from "./StatesConfigPage";
 import ConfigTransferPanel from "../components/ConfigTransferPanel";
 import ClientProfileEditor from "../components/ClientProfileEditor";
 import HarnessFlagsPanel from "../components/HarnessFlagsPanel";
@@ -190,7 +190,7 @@ export default function SettingsPage({ subTab }: { subTab?: string | null }) {
           className={`${styles.subTab} ${sub === "flow" ? styles.active : ""}`}
           onClick={() => setSub("flow")}
         >
-          Flujo
+          Estados
         </button>
         <button
           className={`${styles.subTab} ${sub === "sections" ? styles.active : ""}`}
@@ -243,7 +243,7 @@ export default function SettingsPage({ subTab }: { subTab?: string | null }) {
       </div>
 
       <div className={styles.content}>
-        {sub === "flow" && <FlowConfigPage />}
+        {sub === "flow" && <StatesConfigPage />}
         {sub === "sections" && <SectionsVisibilityPanel />}
         {sub === "client-profile" && <ClientProfileEditor />}
         {sub === "transfer" && <ConfigTransferPanel />}

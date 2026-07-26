@@ -69,7 +69,7 @@ export default function PipelineStatus({ result, compact = false }: Props) {
           <span>{pct}% completado</span>
           {/* Feature #4: sección "Próximo:" eliminada — next_suggested del LLM
               ya no determina la recomendación. El operador configura el flujo
-              explícitamente en la pestaña Config de Flujo (FlowConfig). */}
+              explícitamente en la pestaña Estados (StatesConfig). */}
           <span className={styles.source}>
             {result.source === "cache" ? "⚡ cache" : "🤖 LLM"}
             {" · "}

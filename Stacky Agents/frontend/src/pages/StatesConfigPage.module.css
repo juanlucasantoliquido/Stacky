@@ -1,0 +1,98 @@
+/* Plan 216 F2 — Pestaña Estados: reglas de flujo + máquina de estados. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--bg-elev);
+}
+
+.cardTitle {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.cardSubtitle {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.roles {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.role {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.roleTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Aviso de incoherencia: se ve, no bloquea. */
+.warning {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--warn);
+  border-left: 2px solid var(--warn);
+  padding-left: 8px;
+}
+
+.warningActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.missing {
+  font-size: 12px;
+  color: var(--warn);
+  margin: 6px 0 0;
+}

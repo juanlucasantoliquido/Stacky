@@ -768,6 +768,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan243_renderer_ado.py
   tests/test_plan243_reglas_semanticas.py
   tests/test_plan243_corpus_mirror.py
+  # -- Plan 246 - Inventario vivo de pipelines multiproveedor (F0..F4) --
+  tests/test_plan246_pipeline_inventory.py
+  tests/test_plan246_repo_scan.py
+  tests/test_plan246_inventory_sources.py
+  tests/test_plan246_inventory_endpoint.py
 )
 
 pass=0

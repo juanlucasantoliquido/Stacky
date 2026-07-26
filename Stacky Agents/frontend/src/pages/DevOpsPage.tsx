@@ -51,6 +51,7 @@ export interface DevOpsHealth {
   deployments_ai_enabled?: boolean; // Plan 120 — diagnóstico IA de deploys fallidos
   local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
   cockpit_enabled?: boolean; // Plan 239 — cockpit DevOps
+  pipeline_inventory_enabled?: boolean; // Plan 246 — Inventario de pipelines
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -107,6 +108,8 @@ import { DeploymentsSection } from '../components/devops/DeploymentsSection';
 import { BuildWorkshopSection } from '../components/devops/BuildWorkshopSection';
 // Importar DevOpsOverviewSection (Plan 239 F3)
 import { DevOpsOverviewSection } from '../components/devops/DevOpsOverviewSection';
+// Plan 246 — Inventario vivo de pipelines (read-only, multiproveedor)
+import { PipelineInventorySection } from '../components/devops/PipelineInventorySection';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -223,6 +226,18 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED',
     gateMessage: 'La sección Compilar necesita la flag STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <BuildWorkshopSection ctx={ctx} />,
+  },
+  // Plan 246 — Inventario vivo de pipelines (read-only, multiproveedor)
+  {
+    id: 'inventario-pipelines',
+    label: 'Inventario',
+    group: 'construir',
+    icon: '📋',
+    summary: 'Todas las pipelines del proyecto: registradas, huerfanas y sin archivo.',
+    healthKey: 'pipeline_inventory_enabled',
+    gateFlagKey: 'STACKY_PIPELINE_INVENTORY_ENABLED',
+    gateMessage: 'La seccion Inventario necesita la flag STACKY_PIPELINE_INVENTORY_ENABLED (Configuracion → Arnes, categoria DevOps).',
+    render: (ctx) => <PipelineInventorySection ctx={ctx} />,
   },
 ];
 

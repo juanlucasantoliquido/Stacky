@@ -1,0 +1,132 @@
+/* Plan 246 F5 — Inventario vivo de pipelines. Archivo propio de la seccion.
+   Cero literales HEX: todo por tokens del theme. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.filter {
+  min-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.summary {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.banner {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bannerTitle {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.bannerLine {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.notices {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.noticeItem {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.mono {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.hintRow td {
+  border-bottom: 1px solid var(--border);
+  padding-top: 0;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.toneOk {
+  color: var(--success);
+}
+
+.toneBad {
+  color: var(--danger);
+}
+
+.toneWarn {
+  color: var(--warning);
+}
+
+.toneFaint {
+  color: var(--text-muted);
+}

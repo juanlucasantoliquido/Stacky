@@ -1337,6 +1337,10 @@ class Config:
     STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED: bool = os.getenv(
         "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED", "true"
     ).lower() == "true"
+    # ── Plan 246 — Inventario vivo de pipelines (read-only, default ON) ──
+    STACKY_PIPELINE_INVENTORY_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_INVENTORY_ENABLED", "true"
+    ).strip().lower() == "true"
     # ── Plan 171 — Telemetría operativa (salud/tendencias/baselines/traza) ──
     # Observabilidad read-only computada on-read. Default ON: no agrega daemons,
     # ni polling, ni escrituras (salvo el JSON de umbrales editado por el operador).

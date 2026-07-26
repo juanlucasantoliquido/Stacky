@@ -131,6 +131,100 @@ class AdoCIProvider:
         except Exception:
             return None
 
+    def list_pipeline_definitions(self) -> tuple[list[dict], dict]:
+        """Plan 246 F2 — inventario de definiciones ADO + ultima corrida por definicion.
+
+        METODO OPCIONAL: NO esta en el Protocol CIProvider (ci_provider.py:83-95) ni en
+        CI_PORT_METHODS (:100, contrato CONGELADO). Mismo patron que
+        last_pipeline_for_ref (:107). Se consume duck-typed con getattr.
+
+        Presupuesto de red: 1 (definiciones) + <=10 (hidratacion) + 1 (builds batch).
+        PROHIBIDO caer a un bucle de una llamada por definicion.
+        """
+        from services.ado_pipeline_definitions import list_definitions  # noqa: PLC0415
+        from services.pipeline_inventory import (  # noqa: PLC0415
+            SOURCE_ADO_DEFINITIONS,
+            _MAX_BUILDS_SCAN,
+            map_run_status,
+        )
+
+        defs, meta = list_definitions(self._project)
+        if not defs:
+            return [], meta
+
+        def _sin_corridas() -> dict:
+            return {
+                "status": "never_ran",
+                "status_detail": "sin_corridas",
+                "at": None,
+                "web_url": None,
+                "run_id": None,
+                "source": "provider",
+            }
+
+        latest: dict[str, dict] = {}
+        batch_ok = True
+        try:
+            from services.ado_client import AdoClient  # noqa: PLC0415
+
+            client = AdoClient(project=self._project)
+            ids_csv = ",".join(d["definition_id"] for d in defs)
+            url = (
+                f"{client._base_proj}/_apis/build/builds?definitions={ids_csv}"
+                f"&$top={_MAX_BUILDS_SCAN}&queryOrder=queueTimeDescending&api-version=7.1"
+            )
+            body = client._request("GET", url)
+            builds = (body or {}).get("value")
+            if not isinstance(builds, list):
+                raise ValueError("respuesta batch sin 'value'")
+            for build in builds:
+                def_id = str(((build.get("definition") or {}).get("id")) or "")
+                if def_id and def_id not in latest:
+                    latest[def_id] = build
+        except Exception:
+            batch_ok = False
+
+        out: list[dict] = []
+        for definition in defs:
+            build = latest.get(definition["definition_id"])
+            if not batch_ok:
+                last_run = {
+                    "status": "unknown",
+                    "status_detail": "batch_no_soportado",
+                    "at": None,
+                    "web_url": None,
+                    "run_id": None,
+                    "source": "provider",
+                }
+            elif build is None:
+                last_run = _sin_corridas()
+            else:
+                status, detail = map_run_status(_map_status(build))
+                raw_id = build.get("id")
+                last_run = {
+                    "status": status,
+                    "status_detail": detail,
+                    "at": build.get("finishTime") or build.get("queueTime"),
+                    "web_url": (build.get("_links") or {}).get("web", {}).get("href") or None,
+                    "run_id": str(raw_id) if raw_id is not None else None,
+                    "source": "provider",
+                }
+            out.append(
+                {
+                    "provider": "azure_devops",
+                    "name": definition["name"],
+                    "yaml_path": definition["yaml_path"],
+                    "default_branch": definition["default_branch"] or None,
+                    "definition_id": definition["definition_id"],
+                    "last_run": last_run,
+                    "source": SOURCE_ADO_DEFINITIONS,
+                }
+            )
+
+        meta = dict(meta)
+        meta["batch_ok"] = batch_ok
+        return out, meta
+
 
 def _map_status(build: dict) -> str:
     """Plan 95 F1.c — ADO (status, result) → vocabulario GitLab:

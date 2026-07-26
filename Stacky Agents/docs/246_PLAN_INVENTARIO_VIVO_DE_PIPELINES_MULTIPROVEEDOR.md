@@ -1,6 +1,36 @@
 # Plan 246 — Inventario vivo de pipelines multiproveedor
 
-> **Estado:** CRITICADO v2 — veredicto v1 = **RECHAZADO** (4 bloqueantes). v2 los corrige.
+> **Estado:** **IMPLEMENTADO F0..F5** (2026-07-26). Resultados REALES por archivo:
+> `test_plan246_pipeline_inventory.py` **27 passed** (26 funciones; una parametrizada suma un ítem),
+> `test_plan246_repo_scan.py` **28 passed**, `test_plan246_inventory_sources.py` **49 passed**
+> (37 funciones + parametrizaciones), `test_plan246_inventory_endpoint.py` **13 passed**
+> (10 funciones; `test_endpoint_no_expone_verbos_de_escritura` está parametrizada ×4),
+> `pipelineInventoryModel.test.ts` **23 passed**, `tsc --noEmit` **0 errores**,
+> `test_harness_flags.py` **56 passed**, `test_harness_ratchet_meta.py` **4 passed**,
+> `compileall services api` limpio. Gates de la DoD #12/#16 y `grep -c "style={{"` → **0 hits**.
+>
+> **Dos correcciones al plan hechas al implementar (no eran errores de código, eran del plan):**
+> 1. **F0 test #17 vs F1 (contradicción del propio plan).** F0 exige que el módulo "no importe
+>    `os.walk`" y F1 manda agregar el barrido de disco **al mismo archivo**. Es imposible cumplir
+>    las dos cosas en su lectura amplia. Se implementó la lectura literal y verificable: el test
+>    asierta que no hay import de `urllib`/`requests`/`ado_client`/`gitlab_client` a nivel de módulo
+>    ni `from os import walk`; `os`, `yaml` y `difflib` sí están permitidos.
+> 2. **F4 test #9 (`/bootstrap`) estaba mal especificado.** `api/devops.py` exige el query param
+>    `project` y la flag `STACKY_DEVOPS_BOOTSTRAP_ENABLED`; sin eso devuelve 400, no el health.
+>    El test los pasa.
+>
+> **Bug REAL del plan encontrado corriendo:** el invariante "`build_inventory` no puede lanzar"
+> **era falso tal como estaba escrito el paso 2**: leer `getattr(provider, "name")` sobre un adapter
+> roto propagaba la excepción y tumbaba el inventario entero. Detectado por el test #24
+> (`provider_name`) y corregido envolviendo la lectura de `name`/`list_pipeline_definitions`.
+>
+> **Rojo AJENO preexistente (NO de este plan):** `test_plan95_production_flag.py::test_f0_harness_defaults_contains_flag`
+> falla porque `backend/harness_defaults.env` (último commit `c86b5cb9`, sin cambios pendientes)
+> no contiene `STACKY_DEVOPS_PRODUCTION_ENABLED`. Ese archivo no se toca acá.
+>
+> **Pendiente:** solo el **smoke visual** del operador (§7.5).
+>
+> **Estado previo:** CRITICADO v2 — veredicto v1 = **RECHAZADO** (4 bloqueantes). v2 los corrige.
 > **Serie:** "Mago de las Pipelines" (246–252) — **este plan es el 1 de 7 y el CIMIENTO**.
 > **Fecha:** 2026-07-26 (v1) · 2026-07-26 (v2, crítica independiente)
 > **Flag:** `STACKY_PIPELINE_INVENTORY_ENABLED` — default **ON**

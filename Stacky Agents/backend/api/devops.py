@@ -82,6 +82,9 @@ def _health_payload() -> dict:
         "port_residue_scan_enabled": bool(
             getattr(cfg, "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED", False)
         ),  # Plan 211 — residuos de port entre clientes
+        "pipeline_inventory_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_INVENTORY_ENABLED", False)
+        ),  # Plan 246 — Inventario de pipelines
     }
 
 

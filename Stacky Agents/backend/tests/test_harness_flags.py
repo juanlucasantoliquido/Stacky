@@ -465,6 +465,8 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 246 — Inventario vivo de pipelines (read-only absoluto) ──
+    "STACKY_PIPELINE_INVENTORY_ENABLED",
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
     # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──

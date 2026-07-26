@@ -5,6 +5,8 @@ import type {
   IncidentInboxStatus,
   IncidentScope,
 } from "../incidents/incidentInboxModel";
+// Plan 246 — Inventario vivo de pipelines (contrato congelado del backend F0).
+import type { InventoryPayload } from "../devops/pipelineInventoryModel";
 export type { RawResponse, GatewayErrorBody };
 import type {
   CostBreakdownResponse,
@@ -4995,4 +4997,18 @@ export const IncidentInbox = {
       `/api/incident-inbox/items?${params.toString()}`
     );
   },
+};
+
+// ─── Plan 246 — Inventario vivo de pipelines multiproveedor ────────────────
+export const PipelineInventory = {
+  /** GET /api/pipeline-inventory/list — inventario multiproveedor. SIEMPRE 200 con la flag ON.
+   *  Con la flag OFF la seccion ni se renderiza (la gatea `healthKey`), asi que
+   *  `api.get` (que lanza ante non-2xx) es correcto aca: no hace falta rawGet. */
+  list: (project?: string | null, refresh = false) =>
+    api.get<InventoryPayload>(
+      `/api/pipeline-inventory/list?${new URLSearchParams({
+        ...(project ? { project } : {}),
+        ...(refresh ? { refresh: "1" } : {}),
+      }).toString()}`,
+    ),
 };

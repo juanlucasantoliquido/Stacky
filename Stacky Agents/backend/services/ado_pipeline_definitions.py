@@ -181,3 +181,81 @@ def ensure_yaml_definition(project: str | None, yaml_path: str = "azure-pipeline
             kind="ado_definition_create_failed",
             message=f"Error creando pipeline definition: {e}",
         ) from e
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Plan 246 F2 — listado READ-ONLY de definiciones (inventario vivo de pipelines)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _strip_refs_heads(ref: str | None) -> str:
+    """'refs/heads/main' -> 'main'. None/'' -> ''. Misma regla que _default_branch."""
+    value = (ref or "").strip()
+    if value.startswith("refs/heads/"):
+        return value[len("refs/heads/"):]
+    return value
+
+
+def list_definitions(project: str | None, *, hydrate_missing: int = 10) -> tuple[list[dict], dict]:
+    """Plan 246 F2 — LISTA las definitions de ADO. SOLO LECTURA. Nunca lanza.
+
+    Por que NO se reusa find_yaml_definition: esa funcion hidrata SIN TOPE — con 50
+    definitions sin `process` son 51 llamadas de red para resolver UNA pipeline. Aca la
+    hidratacion tiene tope duro y `meta["calls"]` es el contador REAL que asierta el test.
+    """
+    meta: dict = {
+        "available": False,
+        "reason": "",
+        "calls": 0,
+        "hydrated": 0,
+        "truncated_hydration": False,
+        "capped": False,
+    }
+    try:
+        from services.ado_client import AdoClient  # noqa: PLC0415
+
+        client = AdoClient(project=project)
+        url = f"{client._base_proj}/_apis/build/definitions?api-version=7.1"
+        body = client._request("GET", url)
+        meta["calls"] += 1
+        raw = (body or {}).get("value") or []
+        meta["capped"] = len(raw) > _MAX_DEFINITIONS
+        definitions = raw[:_MAX_DEFINITIONS]
+
+        out: list[dict] = []
+        hydrated = 0
+        for definition in definitions:
+            process = definition.get("process") or {}
+            yaml_path = process.get("yamlFilename")
+            if yaml_path is None:
+                if hydrated < hydrate_missing:
+                    detail_url = (
+                        f"{client._base_proj}/_apis/build/definitions/"
+                        f"{definition.get('id')}?api-version=7.1"
+                    )
+                    try:
+                        detail = client._request("GET", detail_url)
+                        meta["calls"] += 1
+                        hydrated += 1
+                        yaml_path = (detail.get("process") or {}).get("yamlFilename")
+                    except Exception:
+                        meta["calls"] += 1
+                        hydrated += 1
+                else:
+                    meta["truncated_hydration"] = True
+            repository = definition.get("repository") or {}
+            out.append(
+                {
+                    "definition_id": str(definition.get("id")),
+                    "name": definition.get("name") or "",
+                    "yaml_path": yaml_path,
+                    "default_branch": _strip_refs_heads(repository.get("defaultBranch")),
+                    "queue_status": definition.get("queueStatus") or "",
+                }
+            )
+        meta["hydrated"] = hydrated
+        meta["available"] = True
+        return out, meta
+    except Exception as exc:
+        meta["available"] = False
+        meta["reason"] = str(exc)[:200]
+        return [], meta

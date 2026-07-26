@@ -75,6 +75,94 @@ class GitLabCIProvider:
         pipelines = self._delegate.fetch_pipelines(ref=ref)
         return pipelines[0] if pipelines else None
 
+    def list_pipeline_definitions(self) -> tuple[list[dict], dict]:
+        """Plan 246 F3 — inventario GitLab. Metodo OPCIONAL (fuera del Protocol).
+
+        DIFERENCIA CONCEPTUAL con ADO: GitLab NO tiene "definitions". Un proyecto tiene
+        UN archivo de CI (por default `.gitlab-ci.yml`, o el `ci_config_path` del
+        proyecto) y muchas CORRIDAS. Devuelve COMO MUCHO UNA entrada por proyecto.
+
+        Llamadas de red: EXACTAMENTE 2 (proyecto + 1 pipeline). [v2 - C1] PROHIBIDO
+        usar el listado paginado del delegate: pagina hasta 40 GET (page_cap=40,
+        per_page=100) cuando el inventario solo necesita la corrida mas reciente.
+        """
+        from services.pipeline_inventory import (  # noqa: PLC0415
+            SOURCE_GITLAB_PIPELINES,
+            map_run_status,
+            pipeline_name_from_path,
+        )
+
+        meta: dict = {"available": False, "reason": "", "calls": 0}
+        try:
+            client = self._delegate._client
+            proj_path = client._project_path()
+
+            yaml_path = ".gitlab-ci.yml"
+            yaml_path_source = "convencion"
+            try:
+                body, _headers = client._request("GET", f"/projects/{proj_path}")
+                meta["calls"] += 1
+                configured = (body or {}).get("ci_config_path") if isinstance(body, dict) else None
+                if configured:
+                    yaml_path = str(configured)
+                    yaml_path_source = "proyecto"
+            except Exception as exc:
+                meta["calls"] += 1
+                meta["reason"] = str(exc)[:200]
+
+            runs: list = []
+            try:
+                body, _headers = client._request(
+                    "GET",
+                    f"/projects/{proj_path}/pipelines",
+                    params={"per_page": 1, "page": 1},
+                )
+                meta["calls"] += 1
+                runs = body if isinstance(body, list) else []
+            except Exception as exc:
+                meta["calls"] += 1
+                meta["reason"] = str(exc)[:200]
+
+            last = runs[0] if runs else None
+            if last:
+                status, detail = map_run_status(last.get("status"))
+                raw_id = last.get("id")
+                last_run = {
+                    "status": status,
+                    "status_detail": detail,
+                    "at": last.get("updated_at") or last.get("created_at"),
+                    "web_url": last.get("web_url"),
+                    "run_id": str(raw_id) if raw_id is not None else None,
+                    "source": "provider",
+                }
+            else:
+                last_run = {
+                    "status": "never_ran",
+                    "status_detail": "sin_corridas",
+                    "at": None,
+                    "web_url": None,
+                    "run_id": None,
+                    "source": "provider",
+                }
+
+            entry = {
+                "provider": "gitlab",
+                "definition_id": "",
+                "name": pipeline_name_from_path(yaml_path),
+                "yaml_path": yaml_path,
+                "default_branch": (last or {}).get("ref") or "",
+                "queue_status": "",
+                "yaml_path_source": yaml_path_source,
+                "last_run": last_run,
+                "source": SOURCE_GITLAB_PIPELINES,
+            }
+            meta["available"] = True
+            return [entry], meta
+        except Exception as exc:
+            meta["available"] = False
+            meta["reason"] = str(exc)[:200]
+            return [], meta
+
 
 def _pipelines_to_result(pipelines: list[dict], item_ref: ItemRef) -> ItemPipelineResult:
     """Convierte lista de dicts GitLab al contrato ItemPipelineResult.

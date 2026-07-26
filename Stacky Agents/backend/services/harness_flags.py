@@ -254,6 +254,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_ROLLBACK_READINESS_ENABLED",  # Plan 189 — semáforo de rollback + simulacro
         "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
         "STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239 — cockpit DevOps (Resumen + nav agrupada)
+        "STACKY_PIPELINE_INVENTORY_ENABLED",  # Plan 246 — inventario vivo de pipelines
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -4633,6 +4634,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         requires="STACKY_INCIDENT_INBOX_ENABLED",
+    ),
+    # ── Plan 246 — Inventario vivo de pipelines ─────────────────────────────────
+    FlagSpec(
+        key="STACKY_PIPELINE_INVENTORY_ENABLED",
+        type="bool",
+        default=True,  # default ON: NINGUNA de las 4 excepciones duras aplica (read-only,
+                       # no destructivo, sin prerequisito extra, no reduce seguridad).
+                       # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        label="Inventario de pipelines",
+        description=(
+            "Plan 246 - Lista TODAS las pipelines del proyecto: las registradas en Azure "
+            "DevOps, las de GitLab y los YAML que existen en el repo sin estar registrados "
+            "(huerfanas). Solo lectura: no crea, no edita y no dispara nada. Si falta el PAT "
+            "o el proveedor no responde, muestra lo que si pudo descubrir. "
+            "OFF: desaparece la seccion Inventario del panel DevOps y el endpoint responde "
+            "404; todo lo demas queda identico."
+        ),
+        group="global",
     ),
 )
 

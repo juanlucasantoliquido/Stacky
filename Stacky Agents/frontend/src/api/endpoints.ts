@@ -1504,18 +1504,27 @@ function costFiltersToQuery(params?: CostFiltersParams): URLSearchParams {
 
 export const CostCenter = {
   /** Plan 199 F5/F6 — tres vistas nuevas sobre los MISMOS filtros del 142. */
-  burnStacked: (q: string, bucket: string, groupBy: string) =>
-    api.get<import("../lib/costCenterTypes").CostBurnStacked & { enabled: boolean }>(
-      `/api/metrics/cost-burn-stacked?bucket=${encodeURIComponent(bucket)}&group_by=${encodeURIComponent(groupBy)}${q ? `&${q}` : ""}`,
-    ),
-  heatmap: (q: string) =>
-    api.get<import("../lib/costCenterTypes").CostHeatmap & { enabled: boolean }>(
-      `/api/metrics/cost-heatmap${q ? `?${q}` : ""}`,
-    ),
-  distribution: (q: string, bins = 20) =>
-    api.get<import("../lib/costCenterTypes").CostDistribution & { enabled: boolean }>(
-      `/api/metrics/cost-distribution?bins=${bins}${q ? `&${q}` : ""}`,
-    ),
+  burnStacked: (params?: CostFiltersParams & { bucket?: string; group_by?: string }) => {
+    const p = costFiltersToQuery(params);
+    p.set("bucket", params?.bucket || "day");
+    p.set("group_by", params?.group_by || "runtime");
+    return api.get<import("../lib/costCenterTypes").CostBurnStacked & { enabled: boolean }>(
+      `/api/metrics/cost-burn-stacked?${p.toString()}`,
+    );
+  },
+  heatmap: (params?: CostFiltersParams) => {
+    const qs = costFiltersToQuery(params).toString();
+    return api.get<import("../lib/costCenterTypes").CostHeatmap & { enabled: boolean }>(
+      `/api/metrics/cost-heatmap${qs ? `?${qs}` : ""}`,
+    );
+  },
+  distribution: (params?: CostFiltersParams & { bins?: number }) => {
+    const p = costFiltersToQuery(params);
+    p.set("bins", String(params?.bins ?? 20));
+    return api.get<import("../lib/costCenterTypes").CostDistribution & { enabled: boolean }>(
+      `/api/metrics/cost-distribution?${p.toString()}`,
+    );
+  },
   summary: (params?: CostFiltersParams) => {
     const qs = costFiltersToQuery(params).toString();
     return api.get<CostSummaryResponse>(`/api/metrics/cost-summary${qs ? `?${qs}` : ""}`);

@@ -1,5 +1,7 @@
 import { DbCompare } from "../../api/endpoints";
-import type { CompareRun, Severity, DiffAction } from "./dbcompareTypes";
+import type { CompareRun, DiffItem, Severity, DiffAction } from "./dbcompareTypes";
+import { exportFilename, mimeFor, toCsv, toJson } from "./diffExport";
+import type { TriageDoc } from "./triageLogic";
 import type { DiffFilters } from "./filterLogic";
 import { arcPath, gaugeSweep, severityCounters, actionCounters } from "./svgMath";
 import { previousRunDelta } from "./runHistory";
@@ -23,6 +25,10 @@ interface Props {
   onToggleSeverity: (s: Severity) => void;
   onToggleAction: (a: DiffAction) => void;
   onNewComparison: () => void;
+  /** Plan 176 F8 — los ítems que el operador está VIENDO (ya filtrados) y su
+   *  curación, para que el export coincida con la pantalla. */
+  filteredItems?: DiffItem[];
+  triage?: TriageDoc | null;
 }
 
 /**
@@ -30,9 +36,32 @@ interface Props {
  * Toda la geometría del SVG y los contadores vienen de svgMath.ts (ya testeado); el delta vs.
  * la corrida anterior de runHistory.ts (ADICIÓN ARQUITECTO, ya testeado).
  */
-export function SummaryHero({ run, historicalRuns, filters, onToggleSeverity, onToggleAction, onNewComparison }: Props) {
+export function SummaryHero({
+  run,
+  historicalRuns,
+  filters,
+  onToggleSeverity,
+  onToggleAction,
+  onNewComparison,
+  filteredItems,
+  triage,
+}: Props) {
   const diff = run.diff;
   const summary = run.summary;
+
+  /** Exporta lo que se está VIENDO, no el diff entero: si el archivo no coincide
+   *  con la pantalla, el operador deja de confiar en los dos. */
+  function descargar(ext: "csv" | "json") {
+    const items = filteredItems ?? [];
+    const contenido = ext === "csv" ? toCsv(items, triage) : toJson(items, triage);
+    const url = URL.createObjectURL(new Blob([contenido], { type: mimeFor(ext) }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportFilename(run.run_id, ext);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!diff || !summary) return null;
 
   const score = summary.parity_score;
@@ -121,6 +150,12 @@ export function SummaryHero({ run, historicalRuns, filters, onToggleSeverity, on
           <a href={DbCompare.exportUrl(run.run_id)} download className={styles.chip}>
             Exportar .md
           </a>
+          {filteredItems && (
+            <>
+              <button onClick={() => descargar("csv")}>CSV</button>
+              <button onClick={() => descargar("json")}>JSON</button>
+            </>
+          )}
           <button onClick={copySummary}>Copiar resumen</button>
           <button onClick={onNewComparison}>Nueva comparación</button>
         </div>

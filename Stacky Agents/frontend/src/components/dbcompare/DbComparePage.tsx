@@ -269,6 +269,8 @@ export function DbComparePage() {
             onToggleSeverity={toggleSeverity}
             onToggleAction={toggleAction}
             onNewComparison={handleNewComparison}
+            filteredItems={filteredItems}
+            triage={triage}
           />
           {/* Plan 176 F2 — resumen de curacion: cuanto falta decidir de un
               vistazo. Informativo; decidir se hace en cada fila. */}

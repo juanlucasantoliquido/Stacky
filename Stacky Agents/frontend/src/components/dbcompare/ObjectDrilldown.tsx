@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DbSnapshot, DiffItem, ForeignKeyInfo, IndexInfo, UniqueConstraintInfo, CheckConstraintInfo } from "./dbcompareTypes";
 import { Textarea } from "../ui";
 import { buildColumnRows, buildSectionRows, type SectionRow } from "./sideBySide";
+import { collapseUnchanged, countChanges, diffLines, lineClass } from "./lineDiff";
 import {
   decisionFor,
   decisionHelp,
@@ -174,10 +175,10 @@ export function ObjectDrilldown({
             {(sourceView?.definition_sha256 == null || targetView?.definition_sha256 == null) && (
               <div className={styles.recency}>Definición no verificable en uno de los dos lados.</div>
             )}
-            <div className={styles.wizard}>
-              <pre>{sourceView?.definition ?? "—"}</pre>
-              <pre>{targetView?.definition ?? "—"}</pre>
-            </div>
+            <ViewLineDiff
+              source={sourceView?.definition ?? null}
+              target={targetView?.definition ?? null}
+            />
           </details>
         )}
 
@@ -244,6 +245,55 @@ function TriageBlock({
         }}
       />
       <p className={styles.triageHelp}>{decisionHelp(actual)}</p>
+    </div>
+  );
+}
+
+
+/**
+ * Plan 176 F8 — Diff por líneas de la definición de una vista.
+ *
+ * Antes eran dos bloques lado a lado y el operador tenía que encontrar a ojo
+ * qué cambió en 200 líneas. Se colapsa lo que no cambió: mostrar la vista
+ * entera para señalar dos líneas es hacerle buscar de nuevo.
+ */
+function ViewLineDiff({
+  source,
+  target,
+}: {
+  source: string | null;
+  target: string | null;
+}) {
+  const [completo, setCompleto] = useState(false);
+
+  const todas = diffLines(source, target);
+  const conteo = countChanges(todas);
+  const visibles = completo ? todas : collapseUnchanged(todas);
+
+  if (!todas.length) {
+    return <div className={styles.recency}>Sin definición capturada en ningún lado.</div>;
+  }
+  if (!conteo.added && !conteo.removed) {
+    return <div className={styles.recency}>Las dos definiciones son idénticas.</div>;
+  }
+
+  return (
+    <div>
+      <div className={styles.recency}>
+        {conteo.added} línea(s) agregada(s) · {conteo.removed} quitada(s)
+        <button type="button" onClick={() => setCompleto((v) => !v)}>
+          {completo ? "Solo los cambios" : "Ver definición completa"}
+        </button>
+      </div>
+      <pre className={styles.lineDiff}>
+        {visibles.map((l, i) => (
+          <div key={i} className={styles[lineClass(l.op)]}>
+            <span className={styles.lineNo}>{l.sourceNo ?? ""}</span>
+            <span className={styles.lineNo}>{l.targetNo ?? ""}</span>
+            {l.op === "added" ? "+" : l.op === "removed" ? "-" : " "} {l.text}
+          </div>
+        ))}
+      </pre>
     </div>
   );
 }

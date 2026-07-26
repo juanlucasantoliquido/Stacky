@@ -1228,3 +1228,32 @@
   color: var(--muted);
   margin: 0;
 }
+
+/* Plan 176 F8 — diff por líneas de definiciones de vistas. */
+
+.lineDiff {
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 420px;
+  overflow: auto;
+  margin: 6px 0 0;
+}
+
+.lineNo {
+  display: inline-block;
+  min-width: 34px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.lineAdded {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.lineRemoved {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.lineEqual {
+  color: var(--muted);
+}

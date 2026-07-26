@@ -1,6 +1,44 @@
 # Plan 248 — Auditoría de pipelines: riesgos de seguridad, malas prácticas y recomendaciones
 
-> Estado: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **IMPLEMENTADO F0..F6** (2026-07-26) — **F6 se hizo entera**, con sus tres ediciones de
+> montaje (C3): nada de módulo sin call site. Resultados REALES por archivo:
+> `test_plan248_audit_core.py` **10 passed**, `test_plan248_security_rules.py` **29 passed**,
+> `test_plan248_recommendations.py` **15 passed**, `test_plan248_audit_baseline.py`
+> **12 passed + 1 skipped** (el `test_emit_baseline`, que sólo corre con la env var),
+> `test_plan248_suppressions.py` **7 passed**, `test_plan248_api.py` **7 passed**.
+> Frontend: `pipelineAuditModel.test.ts` **8 passed**, `npx tsc --noEmit` **0 errores**.
+> Gates: `test_harness_flags.py` **56 passed / 0 failed** (número exacto de C7),
+> `test_harness_ratchet_meta.py` **4 passed**, `test_plan243_reglas_semanticas.py` **27 passed**,
+> `test_plan243_corpus_mirror.py` **8 passed**, `compileall services api` limpio.
+> **Frontera con el 249 verificada mecánicamente:** `git diff --stat --
+> backend/services/cicd_semantic_rules.py` → **sin salida**.
+>
+> **El baseline dio EXACTAMENTE lo que el plan predijo, sin retocar ninguna regla:**
+> **17 hallazgos, 0 de severidad `error`, 17/17 con veredicto `REAL`** —
+> SEC003 ×1 (`ci-dacpac.yml:38`), SEC005 ×4 (`:112`, `:99`, `:122`, `:102`),
+> SEC006 ×1 (`security-scan-online.yml:56`), OPT001 ×3, OPT002 ×3,
+> OPT003 ×2 (`cd-deploy-test.yml:123` y `:162`) y OPT004 ×3.
+> `test_ley_de_severidad` y `test_toda_regla_dispara_sobre_su_repro` (las dos casillas que
+> definen si el plan cumplió su tesis) están **verdes**.
+>
+> **Bug REAL encontrado al implementar (no del plan, sino del corpus):** el ancla de línea por
+> primera ocurrencia textual caía en un **comentario**. `line_of(lines, "ubuntu-latest")` daba
+> `ci-dacpac.yml:12` (un comentario que justifica la decisión) en vez del `vmImage:` de `:38`;
+> lo mismo `"TEST-Server"` → `cd-deploy-test.yml:12` en vez de `:123`/`:162`. Los criterios
+> binarios de F1 (`line == 38`) y F2 (`[123, 162]`) lo detectaron. Fix: `line_of_pair(lines, a, b)`
+> en `cicd_audit_core.py` — la evidencia se sigue confirmando **en el árbol**, esto sólo la ancla
+> bien. Es la misma trampa del comentario de §2.3, pero por el lado del ancla en vez del de la
+> detección.
+>
+> **Desvío declarado:** `test_plan248_recommendations.py` tiene **15 funciones** en vez de las 22
+> que decía el criterio de F2. El plan nombraba 8 positivo/negativo + 6 recuentos = **14**, y el
+> "22" no cierra con su propia enumeración (mismo defecto de conteo que C8 corrigió para F1).
+> Se implementaron las **14 nombradas** más `test_recuentos_exactos_del_corpus`, que asierta el
+> diccionario completo `{OPT001:3, OPT002:3, OPT003:2, OPT004:3}` de una.
+>
+> **Pendiente:** sólo el **smoke visual manual** del panel.
+>
+> Estado previo: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor v1: Claude Opus 5 (1M context). Crítica v2: juez **independiente** (no escribió la v1).
 > **Veredicto de la v1: RECHAZADO** — 4 bloqueantes (C1 colisión de superficie con el 249, C2 bug de agrupación que produce un falso verde en el test capstone de F2, C3 panel sin punto de montaje, C4 cinco reglas sin gate que pruebe que disparan). Los 4 quedan corregidos en esta v2.
 > Serie **"Mago de las Pipelines"** (246–252), plan **3 de 7**.

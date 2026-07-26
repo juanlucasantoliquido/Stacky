@@ -779,6 +779,13 @@ HARNESS_TEST_FILES=(
   tests/test_plan247_proposito.py
   tests/test_plan247_endpoint.py
   tests/test_plan247_corpus_expectations.py
+  # -- Plan 248 - Auditoria de pipelines (seguridad + optimizacion) --
+  tests/test_plan248_audit_core.py
+  tests/test_plan248_security_rules.py
+  tests/test_plan248_recommendations.py
+  tests/test_plan248_audit_baseline.py
+  tests/test_plan248_suppressions.py
+  tests/test_plan248_api.py
 )
 
 pass=0

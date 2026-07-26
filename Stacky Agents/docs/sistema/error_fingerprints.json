@@ -435,6 +435,23 @@
       "guard_test": "tests/test_plan243_reglas_semanticas.py::test_ado369_seria_detectado",
       "evidence": "RSPACIFICO/pipelines/ci-cd-online.yml:9-29; backend/services/cicd_semantic_rules.py",
       "note": "El YAML era sintacticamente perfecto y habria pasado el lint PL001..PL014 sin una sola marca. La variante machine-group no tiene input de servidor: publica contra el IIS LOCAL del agente, asi que sobre un pool hosted apuntaba a la VM efimera de Microsoft."
+    },
+    {
+      "id": "AUD-REGLA-INERTE",
+      "title": "Regla de auditoria con 0 hits sobre el corpus y sin repro que la dispare",
+      "class": "regla-muda",
+      "status": "guarded",
+      "log_pattern": "",
+      "log_guarded": false,
+      "killed_by": "plan 248 (auditoria de pipelines: repro obligatorio por regla)",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/test_plan248_audit_baseline.py::test_toda_regla_dispara_sobre_su_repro",
+      "evidence": "backend/services/cicd_audit_core.py (audit_rule exige repro); backend/tests/fixtures/cicd_nl/audit_baseline.json",
+      "note": "El baseline congelado no puede distinguir una regla que vale 0 porque el corpus esta limpio de una que vale 0 porque esta rota. 5 de las 8 reglas SEC valen 0 por diseno. Sin el repro obligatorio, un typo las deja mudas y el panel muestra verde falso: es el falso verde del plan 241 trasplantado a la seguridad.",
+      "self_test": {
+        "matches": [],
+        "clean": []
+      }
     }
   ]
 }

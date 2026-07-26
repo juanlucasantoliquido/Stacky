@@ -206,6 +206,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CI_FAILURE_TRIAGE_ENABLED",  # Plan 193 — triage de fallos CI (logs inline)
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
         "STACKY_PIPELINE_PROFILER_ENABLED",  # Plan 247 — perfilador de pipelines
+        "STACKY_PIPELINE_AUDIT_ENABLED",     # Plan 248 — auditoria de pipelines
     ),
     "migrador_ado_gitlab": (
         # NOTA: el master STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (feature opt-in) → "capacidades_optin".
@@ -2943,6 +2944,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         default=True,
+    ),
+    # ── Plan 248 — Auditoría de pipelines (seguridad + optimización) ──────────
+    FlagSpec(
+        key="STACKY_PIPELINE_AUDIT_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA de las 4 excepciones duras aplica — es read-only,
+                        # sin red, sin LLM, no publica nada y no reduce la seguridad por default.
+                        # Curada en _CURATED_DEFAULTS_ON (test_harness_flags.py).
+        label="Auditoría de pipelines",
+        description=(
+            "Plan 248 - audita pipelines existentes: riesgos de seguridad (SEC001..SEC008) y "
+            "recomendaciones de optimización (OPT001..OPT004). Read-only: detecta y explica, "
+            "nunca aplica cambios. OFF: el panel de auditoría desaparece y /api/pipeline-audit/* "
+            "devuelve 404; el lint PL001..PL014 y las reglas RS001..RS009 siguen idénticos."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
     ),
     # ── Plan 87 — Panel DevOps ─────────────────────────────────────────────────
     FlagSpec(

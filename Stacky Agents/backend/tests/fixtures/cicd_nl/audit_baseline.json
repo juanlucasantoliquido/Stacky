@@ -1,0 +1,155 @@
+[
+  {
+    "file": "agendaweb-ci.yml",
+    "code": "SEC005",
+    "location": "steps[6]",
+    "line": 112,
+    "severity": "warning",
+    "evidence_fingerprint": "be5060f8ac80483c",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "bootstrap-server-environment.yml",
+    "code": "OPT004",
+    "location": "stages[0].deployments[0].steps[0]",
+    "line": 123,
+    "severity": "info",
+    "evidence_fingerprint": "a8d7902e8239192d",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "cd-deploy-test.yml",
+    "code": "SEC005",
+    "location": "stages[0].jobs[0].steps[5]",
+    "line": 99,
+    "severity": "warning",
+    "evidence_fingerprint": "c9bcedd35cf05642",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "cd-deploy-test.yml",
+    "code": "OPT003",
+    "location": "stages[1].deployments[0].steps[0]",
+    "line": 123,
+    "severity": "warning",
+    "evidence_fingerprint": "862fc243b413c9eb",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "cd-deploy-test.yml",
+    "code": "OPT004",
+    "location": "stages[1].deployments[0].steps[0]",
+    "line": 130,
+    "severity": "info",
+    "evidence_fingerprint": "42943b27eaa66988",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "cd-deploy-test.yml",
+    "code": "OPT003",
+    "location": "stages[2].deployments[0].steps[0]",
+    "line": 162,
+    "severity": "warning",
+    "evidence_fingerprint": "d901ab6237551232",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "cd-deploy-test.yml",
+    "code": "OPT004",
+    "location": "stages[2].deployments[0].steps[0]",
+    "line": 169,
+    "severity": "info",
+    "evidence_fingerprint": "ff62ec2f6b2ac75f",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "ci-batch.yml",
+    "code": "OPT001",
+    "location": "steps[1]",
+    "line": 88,
+    "severity": "info",
+    "evidence_fingerprint": "58d6f1be0d5143ca",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "ci-cd-online.yml",
+    "code": "OPT002",
+    "location": "stages[0].jobs[0].steps[3]",
+    "line": 104,
+    "severity": "info",
+    "evidence_fingerprint": "b61511ab3d64daa2",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "ci-cd-online.yml",
+    "code": "SEC005",
+    "location": "stages[0].jobs[0].steps[5]",
+    "line": 122,
+    "severity": "warning",
+    "evidence_fingerprint": "c9bcedd35cf05642",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "ci-dacpac.yml",
+    "code": "SEC003",
+    "location": "steps[0]",
+    "line": 38,
+    "severity": "warning",
+    "evidence_fingerprint": "8af32c7b2ffadd54",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "ci-dacpac.yml",
+    "code": "OPT001",
+    "location": "steps[1]",
+    "line": 53,
+    "severity": "info",
+    "evidence_fingerprint": "58d6f1be0d5143ca",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "nightly-build-online.yml",
+    "code": "OPT002",
+    "location": "jobs[0].steps[4]",
+    "line": 75,
+    "severity": "info",
+    "evidence_fingerprint": "fffe534ab8951da2",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "nightly-build-online.yml",
+    "code": "SEC005",
+    "location": "jobs[0].steps[7]",
+    "line": 102,
+    "severity": "warning",
+    "evidence_fingerprint": "8f13acdc6697bc7d",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "pr-validation-online.yml",
+    "code": "OPT001",
+    "location": "steps[1]",
+    "line": 47,
+    "severity": "info",
+    "evidence_fingerprint": "58d6f1be0d5143ca",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "pr-validation-online.yml",
+    "code": "OPT002",
+    "location": "steps[3]",
+    "line": 64,
+    "severity": "info",
+    "evidence_fingerprint": "08f463e152c905f4",
+    "veredicto": "REAL"
+  },
+  {
+    "file": "security-scan-online.yml",
+    "code": "SEC006",
+    "location": "steps[1]",
+    "line": 56,
+    "severity": "warning",
+    "evidence_fingerprint": "b4b2e7ff36ff8786",
+    "veredicto": "REAL"
+  }
+]

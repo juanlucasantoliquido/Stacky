@@ -85,6 +85,9 @@ def _health_payload() -> dict:
         "pipeline_inventory_enabled": bool(
             getattr(cfg, "STACKY_PIPELINE_INVENTORY_ENABLED", False)
         ),  # Plan 246 — Inventario de pipelines
+        "pipeline_audit_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_AUDIT_ENABLED", False)
+        ),  # Plan 248 — auditoría de pipelines (read-only)
     }
 
 

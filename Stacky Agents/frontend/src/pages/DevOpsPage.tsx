@@ -52,6 +52,7 @@ export interface DevOpsHealth {
   local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
   cockpit_enabled?: boolean; // Plan 239 — cockpit DevOps
   pipeline_inventory_enabled?: boolean; // Plan 246 — Inventario de pipelines
+  pipeline_audit_enabled?: boolean; // Plan 248 — Auditoría de pipelines
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -110,6 +111,8 @@ import { BuildWorkshopSection } from '../components/devops/BuildWorkshopSection'
 import { DevOpsOverviewSection } from '../components/devops/DevOpsOverviewSection';
 // Plan 246 — Inventario vivo de pipelines (read-only, multiproveedor)
 import { PipelineInventorySection } from '../components/devops/PipelineInventorySection';
+// Plan 248 — Auditoría de pipelines (read-only, SEC + OPT)
+import { PipelineAuditPanel } from '../components/devops/PipelineAuditPanel';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -238,6 +241,18 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_PIPELINE_INVENTORY_ENABLED',
     gateMessage: 'La seccion Inventario necesita la flag STACKY_PIPELINE_INVENTORY_ENABLED (Configuracion → Arnes, categoria DevOps).',
     render: (ctx) => <PipelineInventorySection ctx={ctx} />,
+  },
+  // Plan 248 — Auditoría de pipelines: riesgos de seguridad y recomendaciones
+  {
+    id: 'pipeline-audit',
+    label: 'Auditoría',
+    group: 'construir',
+    icon: '🛡️',
+    summary: 'Riesgos de seguridad y malas prácticas de una pipeline que ya existe.',
+    healthKey: 'pipeline_audit_enabled',
+    gateFlagKey: 'STACKY_PIPELINE_AUDIT_ENABLED',
+    gateMessage: 'La sección Auditoría necesita la flag STACKY_PIPELINE_AUDIT_ENABLED (Configuración → Arnés, categoría Épicas/ADO).',
+    render: (ctx) => <PipelineAuditPanel ctx={ctx} />,
   },
 ];
 

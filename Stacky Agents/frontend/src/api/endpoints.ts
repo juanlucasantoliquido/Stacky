@@ -9,6 +9,8 @@ import type {
 import type { InventoryPayload } from "../devops/pipelineInventoryModel";
 // Plan 247 — Perfilador de pipelines (contrato congelado 247.1).
 import type { PipelineProfileDto } from "../devops/pipelineProfileModel";
+// Plan 248 — Auditoria de pipelines (SEC/OPT).
+import type { AuditReport } from "../devops/pipelineAuditModel";
 export type { RawResponse, GatewayErrorBody };
 import type {
   CostBreakdownResponse,
@@ -5024,4 +5026,23 @@ export const PipelineProfiler = {
     provider?: string;
     narrate?: boolean;
   }) => api.post<PipelineProfileDto>("/api/pipeline-profiler/profile", body),
+};
+
+/** Plan 248 — auditoria de pipelines (read-only; la unica escritura es suprimir con motivo). */
+export const PipelineAudit = {
+  scan: (body: { yaml: string; provider?: string; profile?: string; mode?: string; pipeline_key?: string }) =>
+    api.post<AuditReport>("/api/pipeline-audit/scan", body),
+  suppressions: (pipelineKey?: string | null) =>
+    api.get<{ items: Array<Record<string, unknown>> }>(
+      `/api/pipeline-audit/suppressions${pipelineKey ? `?pipeline_key=${encodeURIComponent(pipelineKey)}` : ""}`,
+    ),
+  suppress: (body: {
+    pipeline_key: string;
+    code: string;
+    location: string;
+    evidence_fingerprint: string;
+    reason: string;
+  }) => api.post<{ ok: boolean }>("/api/pipeline-audit/suppress", body),
+  unsuppress: (body: { pipeline_key: string; code: string; location: string }) =>
+    api.delete<{ removed: boolean }>("/api/pipeline-audit/suppress", body),
 };

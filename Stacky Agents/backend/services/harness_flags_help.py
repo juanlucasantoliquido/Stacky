@@ -706,6 +706,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa sección desaparece del panel y todo lo demás queda igual.",
         example="Ves de una que tenés 12 canalizaciones, que 2 apuntan a un archivo borrado y que 3 están en el repositorio sin registrar en el proveedor.",
     ),
+    "STACKY_PIPELINE_AUDIT_ENABLED": PlainHelp(
+        what="Revisa una canalización que ya existe y avisa qué cosas pueden ser riesgosas o ineficientes, con la línea exacta y cómo se corrige.",
+        on_effect="Si la activás: cada canalización muestra una lista corta de avisos, cada uno con su línea, por qué importa y qué hacer para resolverlo.",
+        off_effect="Si la apagás: esa lista de avisos no se calcula ni se muestra, y las validaciones que ya existían siguen igual.",
+        example="Te avisa que la canalización publica un paquete con la clave de la base adentro, y que el chequeo de seguridad no puede frenar la compilación.",
+    ),
     # ── devops ────────────────────────────────────────────────────────────────
     "STACKY_DEVOPS_PANEL_ENABLED": PlainHelp(
         what="Un editor visual para crear y modificar pipelines de integración continua, sin escribir YAML a mano.",

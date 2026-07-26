@@ -118,6 +118,27 @@ REASON_CODES: dict[str, ReasonCodeMeta] = {
     "MIXED":                           ReasonCodeMeta("MIXED", "APP", "Some passed, some failed", publish_allowed=True),
     "FAIL":                            ReasonCodeMeta("FAIL", "APP", "One or more scenarios failed", publish_allowed=True),
     "PARTIAL_PASS":                    ReasonCodeMeta("PARTIAL_PASS", "APP", "Partial scenarios passed", publish_allowed=True),
+    # ── Plan 241 — veredicto funcional, discriminacion y roll-up de epicas ──
+    # Sin registrarlos, cada run emitia "unknown reason code" y quedaba a un paso
+    # de normalizar a UNKNOWN, que es un BLOQUEO DURO de publicacion
+    # (_run_dossier_and_publisher: "UNKNOWN reason code — open bug P0").
+    "ACCEPTANCE_MET":                  ReasonCodeMeta("ACCEPTANCE_MET", "APP", "Todos los criterios de aceptacion verificados", publish_allowed=True),
+    "ACCEPTANCE_VIOLATED":             ReasonCodeMeta("ACCEPTANCE_VIOLATED", "APP", "Un criterio de aceptacion resulto violado", publish_allowed=True),
+    "NO_FUNCTIONAL_ASSERTION":         ReasonCodeMeta("NO_FUNCTIONAL_ASSERTION", "APP", "Ningun criterio funcional verificado: prohibido el PASS vacio", publish_allowed=True),
+    "PARTIAL_COVERAGE":                ReasonCodeMeta("PARTIAL_COVERAGE", "APP", "Cobertura parcial: hay criterios no verificables", publish_allowed=True),
+    "TECHNICAL_FAILURE":               ReasonCodeMeta("TECHNICAL_FAILURE", "APP", "Fallo tecnico del run", publish_allowed=True),
+    "ENVIRONMENT_BLOCKED":             ReasonCodeMeta("ENVIRONMENT_BLOCKED", "ENV", "Entorno bloqueado: no se juzga lo funcional"),
+    "NAV_WRONG_SCREEN":                ReasonCodeMeta("NAV_WRONG_SCREEN", "NAV", "El escenario aterrizo en una pantalla distinta a la del criterio"),
+    "NAV_SESSION_LOST":                ReasonCodeMeta("NAV_SESSION_LOST", "NAV", "La app expulso al login por navegar mal (recuperable con re-auth)"),
+    "MENU_LABEL_NOT_FOUND":            ReasonCodeMeta("MENU_LABEL_NOT_FOUND", "NAV", "La etiqueta buscada no existe en el menu vivo"),
+    "APP_ERROR_PAGE":                  ReasonCodeMeta("APP_ERROR_PAGE", "APP", "HTTP 200 con cuerpo de pagina de error", publish_allowed=True),
+    "GLOBAL_SETUP_FAILED":             ReasonCodeMeta("GLOBAL_SETUP_FAILED", "ENV", "Playwright murio en el globalSetup: 0 tests por causa de entorno"),
+    "BROWSER_VERSION_DRIFT":           ReasonCodeMeta("BROWSER_VERSION_DRIFT", "ENV", "Node y Python usan versiones distintas de Playwright"),
+    "EPIC_ACCEPTANCE_MET":             ReasonCodeMeta("EPIC_ACCEPTANCE_MET", "APP", "Todas las hijas de la epica en verde", publish_allowed=True),
+    "CHILD_ACCEPTANCE_VIOLATED":       ReasonCodeMeta("CHILD_ACCEPTANCE_VIOLATED", "APP", "Una hija de la epica fallo", publish_allowed=True),
+    "PARTIAL_EPIC_COVERAGE":           ReasonCodeMeta("PARTIAL_EPIC_COVERAGE", "APP", "La epica tiene hijas sin ejecutar", publish_allowed=True),
+    "NO_EXECUTABLE_CHILDREN":          ReasonCodeMeta("NO_EXECUTABLE_CHILDREN", "PIP", "La epica no tiene hijas ejecutables"),
+    "EPIC_ROLLUP_ERROR":               ReasonCodeMeta("EPIC_ROLLUP_ERROR", "PIP", "Fallo el calculo agregado de la epica"),
 }
 
 # Aliases from legacy/raw error strings to canonical codes

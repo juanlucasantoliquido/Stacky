@@ -1,0 +1,11 @@
+{
+  "367": {
+    "scenarios": {
+      "P01": "verified",
+      "P02": "not_verifiable",
+      "P03": "not_verifiable"
+    },
+    "verdict": "MIXED",
+    "verified": 1
+  }
+}

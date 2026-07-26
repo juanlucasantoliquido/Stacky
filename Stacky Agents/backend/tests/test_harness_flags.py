@@ -748,6 +748,14 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 239 — Cockpit DevOps ──
     "STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239 — cockpit DevOps (solo lectura)
     "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 239 F0 — promovida a ON (shell v2 del plan 119)
+    # ── Plan 240 F8 / Plan 241 F8 — Agente QA UAT E2E ──
+    # NOTA: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED NO va acá: nace OFF por
+    # EXCEPCIÓN DURA #3 (IIS Express + applicationhost.config + solución compilada
+    # no están garantizados en una instalación default).
+    "STACKY_QA_UAT_ADO_BRIDGE_ENABLED",            # Plan 240 — PAT cifrado, solo lectura
+    "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",    # Plan 240 — prohibido el PASS vacío
+    "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", # Plan 241 — aserciones que saben fallar
+    "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",           # Plan 241 — épicas por agregación
 }
 
 

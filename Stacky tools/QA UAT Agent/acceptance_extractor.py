@@ -227,6 +227,23 @@ def extract_acceptance(work_item: dict) -> dict:
         return out
 
 
+def _forge_datos(criterion: dict) -> Optional[dict]:
+    """Plan 241 F3 — dato ejecutable derivado del criterio. NUNCA lanza."""
+    try:
+        from test_data_forge import forge
+        res = forge(criterion)
+        positivo = res.get("positivo")
+        if not positivo:
+            return None
+        return {
+            "datos": f"VALOR={positivo}",
+            "rationale": res.get("rationale", ""),
+            "negativo": res.get("negativo"),
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_plan_from_description(work_item: dict, primary_screen: Optional[str] = None) -> list:
     """Convierte los criterios en items de 'plan de pruebas' del reader existente.
 
@@ -241,7 +258,6 @@ def build_plan_from_description(work_item: dict, primary_screen: Optional[str] =
     """
     acc = extract_acceptance(work_item)
     steps = acc.get("repro_steps") or []
-    datos = " | ".join(steps[:3])[:400] if steps else None
     criteria = acc.get("criteria") or []
     if primary_screen:
         in_scope = [c for c in criteria
@@ -263,8 +279,20 @@ def build_plan_from_description(work_item: dict, primary_screen: Optional[str] =
             item["esperado"] = str(concrete)[:120]
         else:
             item["verificable"] = False
-        if datos:
-            item["datos"] = datos
+        # ── Plan 241 F3: `datos` es un DATO EJECUTABLE, no la prosa del ticket ──
+        # Antes se volcaban los pasos de reproduccion crudos en `datos`, y el
+        # compilador terminaba tipeando el valor TRUNCADO del ticket (ADO-367:
+        # 20 chars contra un bug de 20 chars). Ahora el valor lo forja el arnes
+        # desde el propio criterio, garantizando que cruza el umbral. Los pasos de
+        # reproduccion siguen yendo a `repro_steps` (contexto), no a `datos`.
+        _forged = _forge_datos(c)
+        if _forged:
+            item["datos"] = _forged["datos"]
+            item["dato_rationale"] = _forged["rationale"]
+            if _forged.get("negativo"):
+                item["dato_negativo"] = _forged["negativo"]
+        if c.get("tokens"):
+            item["tokens"] = c["tokens"]
         if c.get("screen_hint"):
             item["pantalla"] = c["screen_hint"]
         if c.get("kind"):

@@ -1557,6 +1557,37 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si bajás el número: se te sugiere revisar y retirar lecciones antes.",
         example="Con el valor en 200, al pasar de 200 lecciones activas el panel te marca las más viejas y menos usadas para que decidas.",
     ),
+    # ── Plan 240 / Plan 241 — pruebas automáticas sobre la pantalla ────────
+    "STACKY_QA_UAT_ADO_BRIDGE_ENABLED": PlainHelp(
+        what="Permite que las pruebas automáticas lean el ticket usando la misma clave guardada que ya usa la app, sin pedirte otra copia.",
+        on_effect="Si la activás: las pruebas leen el ticket con la clave que ya cargaste una vez; no hay que dejarla escrita en otro archivo.",
+        off_effect="Si la apagás: las pruebas vuelven a exigir un archivo aparte con la clave escrita a mano, y sin él no arrancan.",
+        example="Como usar la misma llave de la casa para el garaje, en vez de tener que dejar una copia bajo el felpudo.",
+    ),
+    "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED": PlainHelp(
+        what="Exige que las pruebas comprueben de verdad lo que el ticket pedía, y no solo que la pantalla haya abierto.",
+        on_effect="Si la activás: una corrida que no comprobó ni una sola condición del ticket nunca sale en verde; queda como parcial.",
+        off_effect="Si la apagás: alcanza con que la pantalla abra para que la corrida figure en verde, aunque no se haya comprobado nada.",
+        example="Es la diferencia entre 'llegué al taller' y 'revisé que el auto frene': solo lo segundo aprueba la revisión.",
+    ),
+    "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED": PlainHelp(
+        what="Deja que las pruebas enciendan la aplicación en tu propia máquina si la encuentran apagada, y la apaguen al terminar.",
+        on_effect="Si la activás: cuando la aplicación está apagada, se intenta encenderla una vez; hace falta tenerla instalada y compilada.",
+        off_effect="Si la apagás: con la aplicación apagada la corrida se detiene y te avisa que la levantes vos.",
+        example="Como un lavarropas con arranque diferido: si no está enchufado no sirve de nada, por eso viene desactivado.",
+    ),
+    "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED": PlainHelp(
+        what="Exige que cada comprobación demuestre que sabría detectar el problema, antes de contarla como aprobada.",
+        on_effect="Si la activás: una comprobación que aprobaría igual con la falla presente no cuenta, y la corrida queda como parcial.",
+        off_effect="Si la apagás: esas comprobaciones flojas cuentan como buenas y la corrida puede salir en verde sin haber probado nada.",
+        example="Como un detector de humo: si suena igual con o sin humo, no sirve para avisarte de un incendio.",
+    ),
+    "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED": PlainHelp(
+        what="Calcula el resultado de un ticket grande sumando el de los tickets chicos que dependen de él.",
+        on_effect="Si la activás: un ticket que agrupa a otros recibe un resultado real, armado con el de cada uno de sus hijos.",
+        off_effect="Si la apagás: un ticket que agrupa a otros queda siempre trabado, porque él solo no tiene pasos para probar.",
+        example="Como la nota final de una materia: sale del promedio de los parciales, no de un examen que nunca se tomó.",
+    ),
 }
 
 

@@ -667,6 +667,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan238_incident_inbox_api.py
   # -- Acciones desde la bandeja de incidencias (cerrar / resolver+PR / lote) --
   tests/test_incident_inbox_actions.py
+  # -- Plan 241 - Cero falso verde del agente QA UAT E2E (flags + doctor) --
+  tests/test_plan241_qa_uat.py
 )
 
 pass=0

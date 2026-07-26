@@ -101,6 +101,10 @@ _DEFAULT_TIMEOUT_MS = int(os.environ.get("QA_NAV_TIMEOUT_MS", "45000"))
 # Backoff delays por intento (segundos)
 _RETRY_BACKOFF_S = [1, 2, 4, 8]
 
+# Plan 241 F5 — cota de re-autenticaciones por paso. Sin ella, un bucle de
+# expulsión (la app echa al login una y otra vez) reintentaría indefinidamente.
+_MAX_REAUTH_PER_STEP = 1
+
 # Pantallas hijas conocidas que requieren form.submit() en vez de goto()
 # Cualquier pantalla que no esté en este set puede usar goto() directo.
 # Extender esta lista cuando se descubran nuevas pantallas hijas.
@@ -337,6 +341,143 @@ class NavigationDriver:
             error_code="NAV_TIMEOUT", screenshots=screenshots,
         )
 
+    async def via_menu(
+        self,
+        wanted: str,
+        timeout_ms: int = _DEFAULT_TIMEOUT_MS,
+        retries: int = _DEFAULT_RETRIES,
+        screenshot_prefix: str = "menu",
+    ) -> NavigationResult:
+        """Navega resolviendo el ancla REAL del menú vivo (Plan 240 F3 / 241 F5).
+
+        1) menu = menu_resolver.harvest_menu_sync(self.page)
+        2) target = menu_resolver.resolve_target(menu, wanted)
+           None => NavigationResult(ok=False, error_code="MENU_LABEL_NOT_FOUND", ...)
+        3) locator por id si target['id'], si no por texto exacto del ancla
+        4) click(no_wait_after=True) + espera de aterrizaje
+        5) si is_login_redirect(self.page.url) => "NAV_SESSION_LOST"
+           (NO NAV_AUTH_EXPIRED) + re-auth UNA vez y reintento del paso
+        NUNCA sintetiza URL. NUNCA usa el href del menú para un page.goto.
+        """
+        from menu_resolver import (harvest_menu_sync, resolve_target,
+                                   is_login_redirect)
+
+        started = time.time()
+        url_before = await self._current_url()
+        screenshots: list[str] = []
+        reauths = 0
+
+        for attempt in range(1, retries + 1):
+            try:
+                menu = harvest_menu_sync(self.page)
+                target = resolve_target(menu, wanted)
+                if target is None:
+                    candidates = [m.get("label_norm") for m in menu][:20]
+                    return NavigationResult(
+                        ok=False, method="menu", attempts=attempt,
+                        elapsed_ms=int((time.time() - started) * 1000),
+                        error_code="MENU_LABEL_NOT_FOUND",
+                        error_detail=f"wanted={wanted} candidatos={candidates}",
+                        screenshots=screenshots, url_before=url_before,
+                        url_after=url_before,
+                    )
+
+                if target.get("id"):
+                    locator = self.page.locator(f"#{target['id']}")
+                else:
+                    locator = self.page.get_by_text(target.get("label") or wanted,
+                                                    exact=True)
+                await locator.first.click(no_wait_after=True, timeout=timeout_ms)
+                await self._wait_settled(min(timeout_ms, 5000))
+
+                current = await self._current_url()
+                if is_login_redirect(current):
+                    # La app nos EXPULSÓ por navegar mal: recuperable con re-auth.
+                    if reauths < _MAX_REAUTH_PER_STEP and attempt < retries:
+                        reauths += 1
+                        if await self._reauth_and_return_to_shell():
+                            continue
+                    return NavigationResult(
+                        ok=False, method="menu", attempts=attempt,
+                        elapsed_ms=int((time.time() - started) * 1000),
+                        error_code="NAV_SESSION_LOST",
+                        error_detail=(
+                            "NAV_SESSION_LOST: la app redirigió al login durante el "
+                            f"paso (wanted={wanted}); no es una sesión vencida"),
+                        screenshots=screenshots, url_before=url_before,
+                        url_after=current,
+                    )
+
+                expected = target.get("screen") or wanted
+                token = str(expected).replace(".aspx", "").lower()
+                if token and token not in current.lower():
+                    if attempt < retries:
+                        await asyncio.sleep(
+                            _RETRY_BACKOFF_S[min(attempt - 1, len(_RETRY_BACKOFF_S) - 1)])
+                        continue
+                    return NavigationResult(
+                        ok=False, method="menu", attempts=attempt,
+                        elapsed_ms=int((time.time() - started) * 1000),
+                        error_code="NAV_WRONG_SCREEN",
+                        error_detail=f"esperada={expected} url_real={current}",
+                        screenshots=screenshots, url_before=url_before,
+                        url_after=current,
+                    )
+
+                return NavigationResult(
+                    ok=True, method="menu", attempts=attempt,
+                    elapsed_ms=int((time.time() - started) * 1000),
+                    url_before=url_before, url_after=current,
+                )
+            except Exception as exc:  # noqa: BLE001
+                scr = await self._screenshot(f"{screenshot_prefix}_attempt_{attempt}")
+                if scr:
+                    screenshots.append(scr)
+                error_code = _classify_error(str(exc), await self._current_url())
+                if attempt == retries:
+                    return NavigationResult(
+                        ok=False, method="menu", attempts=attempt,
+                        elapsed_ms=int((time.time() - started) * 1000),
+                        error_code=error_code, error_detail=str(exc)[:500],
+                        screenshots=screenshots, url_before=url_before,
+                        url_after=await self._current_url(),
+                    )
+                await asyncio.sleep(
+                    _RETRY_BACKOFF_S[min(attempt - 1, len(_RETRY_BACKOFF_S) - 1)])
+
+        return NavigationResult(
+            ok=False, method="menu", attempts=retries,
+            elapsed_ms=int((time.time() - started) * 1000),
+            error_code="NAV_TIMEOUT", screenshots=screenshots,
+        )
+
+    async def _wait_settled(self, timeout_ms: int) -> None:
+        """Espera best-effort a que la página deje de navegar. NUNCA lanza."""
+        try:
+            await self.page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _reauth_and_return_to_shell(self) -> bool:
+        """Re-login ASYNC sobre la página en curso y vuelta a la shell (Plan 240 C1).
+
+        PROHIBIDO llamar `run_auth_session` desde acá: usa sync_playwright y
+        Playwright LANZA si se invoca la Sync API dentro del event loop asyncio.
+        Se usa el helper async `reauth_in_page`. NUNCA lanza.
+        """
+        try:
+            from auth_session_factory import reauth_in_page
+            from environment_preflight import get_agenda_base_url
+            base = get_agenda_base_url()
+            res = await reauth_in_page(self.page, base_url=base)
+            if not res.get("ok"):
+                return False
+            await self.page.goto(base, wait_until="domcontentloaded")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("via_menu: re-auth falló: %s", exc)
+            return False
+
     # ── Internals ─────────────────────────────────────────────────────────────
 
     async def _execute_nav(
@@ -497,6 +638,17 @@ def _classify_error(exc_str: str, current_url: str) -> str:
     """Clasifica el tipo de error de navegación a partir del mensaje de excepción."""
     exc_lower = exc_str.lower()
     url_lower = current_url.lower()
+
+    # ── Plan 241 F5: códigos explícitos ANTES de las ramas genéricas ─────────
+    # Diferencia semántica OBLIGATORIA: NAV_AUTH_EXPIRED = la sesión venció por
+    # tiempo; NAV_SESSION_LOST = la app nos expulsó POR NAVEGAR MAL (deep-link sin
+    # el payload de sesión) y es RECUPERABLE con re-auth + reintento del paso.
+    if "nav_session_lost" in exc_lower:
+        return "NAV_SESSION_LOST"
+    if "menu_label_not_found" in exc_lower:
+        return "MENU_LABEL_NOT_FOUND"
+    if "app_error_page" in exc_lower:
+        return "APP_ERROR_PAGE"
 
     if "frmlogin" in url_lower or "login" in url_lower:
         return "NAV_AUTH_EXPIRED"

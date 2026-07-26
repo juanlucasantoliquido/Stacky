@@ -65,6 +65,8 @@ _DETERMINISTIC_TYPES = frozenset({
     "count_lt", "visible", "invisible", "state",
     "page_contains_text", "page_not_contains_text", "select_value_is",
     "field_ais_state",  # Fase 4: AIS FieldState multi-signal readonly detection
+    # Plan 241 F1 — aserciones concretas por tipo de criterio.
+    "attribute_equals", "ordered_by", "no_console_error",
 })
 
 # Oracle types that may use LLM fallback
@@ -293,6 +295,21 @@ def _evaluate_deterministic(tipo: str, expected, actual) -> str:
         # OR actual = raw AIS signals dict (fallback path).
         return _evaluate_ais_state(expected, actual)
 
+    elif tipo == "attribute_equals":
+        # Plan 241 F1 — asercion EXACTA sobre un atributo del DOM (maxlength,
+        # class, ...). Infalsificable: no depende del largo del dato tipeado.
+        return "pass" if str(actual).strip() == str(expected).strip() else "fail"
+
+    elif tipo == "ordered_by":
+        # Plan 241 F1 — actual: lista de valores de la columna en el orden del DOM.
+        vals = actual if isinstance(actual, list) else []
+        ok = vals == sorted(vals, reverse=(str(expected).lower() == "desc"))
+        return "pass" if ok else "fail"
+
+    elif tipo == "no_console_error":
+        # Plan 241 F1 — actual: los mensajes de consola SIGNIFICATIVOS.
+        return "pass" if not actual else "fail"
+
     elif tipo in ("page_contains_text", "page_not_contains_text", "select_value_is"):
         # Playwright validates these natively in the spec.
         # actual == "__playwright_verified__" when the test PASSED.
@@ -349,24 +366,63 @@ def _load_assertions_evidence(run_result: dict) -> dict:
     """
     Try to load assertions_<scenario_id>.json from the evidence directory.
     Returns empty dict if not found (graceful degradation).
+
+    (Plan 241 F1) BUG DE FONDO QUE ESTO ARREGLA — medido en vivo el 2026-07-25:
+    la unica ruta que se probaba se derivaba de artifacts["trace"], y con
+    `trace: on-first-retry` un test que PASA no deja trace. Resultado: en TODA
+    corrida verde la evidencia de aserciones no se leia nunca, cada `actual`
+    quedaba en None (o en el heuristico "1" de _get_actual_value) y NINGUN
+    criterio podia llegar a `verified`. O sea: el camino feliz era justo el que
+    no podia verificar nada.
+
+    Rutas probadas, en orden: la del trace, la de cualquier otro artefacto, y la
+    ruta CANONICA que escribe el propio spec:
+    <tool>/evidence/<ticket>/<scenario_id>/assertions_<scenario_id>.json
     """
     scenario_id = run_result.get("scenario_id", "")
     artifacts = run_result.get("artifacts") or {}
+    candidates: list = []
 
-    # Try evidence path derived from artifacts
-    # Convention: artifacts live in evidence/<ticket>/<scenario_id>/
     trace_path = artifacts.get("trace", "")
     if trace_path:
-        scenario_dir = Path(trace_path).parent
-        assertions_file = scenario_dir / f"assertions_{scenario_id}.json"
-        if assertions_file.is_file():
-            try:
-                return json.loads(assertions_file.read_text(encoding="utf-8"))
-            except Exception as exc:
-                logger.warning(
-                    "Could not parse assertions evidence %s: %s",
-                    assertions_file, exc,
-                )
+        candidates.append(Path(trace_path).parent / f"assertions_{scenario_id}.json")
+
+    for _key, _val in artifacts.items():
+        if _key == "trace" or not isinstance(_val, str) or not _val:
+            continue
+        candidates.append(Path(_val).parent / f"assertions_{scenario_id}.json")
+
+    # Ruta canonica del template: ASSERTIONS_OUT_PATH es
+    # 'evidence/<ticket_id>/<sid>/assertions_<sid>.json' relativo al cwd del runner.
+    spec_file = run_result.get("spec_file") or ""
+    if spec_file:
+        try:
+            parts = Path(spec_file).resolve().parts
+            if "evidence" in parts:
+                _i = parts.index("evidence")
+                _evidence_root = Path(*parts[: _i + 1])
+                _ticket = parts[_i + 1] if len(parts) > _i + 1 else ""
+                if _ticket:
+                    candidates.append(
+                        _evidence_root / _ticket / str(scenario_id)
+                        / f"assertions_{scenario_id}.json")
+        except Exception:  # noqa: BLE001
+            pass
+
+    seen: set = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not path.is_file():
+            continue
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not parse assertions evidence %s: %s", path, exc)
+    logger.debug("assertions evidence no encontrada para %s (probadas: %d rutas)",
+                 scenario_id, len(seen))
     return {}
 
 
@@ -397,6 +453,9 @@ def _get_actual_value(evidence: dict, target: str, tipo: str, run_result: dict):
                 return assertion.get("state")
             if tipo in ("count_eq", "count_gt", "count_lt"):
                 return assertion.get("count")
+            if tipo in ("ordered_by", "no_console_error"):
+                # Plan 241 F1 — el afterEach persiste una LISTA para estos tipos.
+                return assertion.get("actual_list")
             return assertion.get("actual_text")
 
     # Check assertion_failures from runner output (for failed assertions)

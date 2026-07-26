@@ -277,7 +277,9 @@ def run(
                 "playwright_test_generator: using playbook %r for scenario %s",
                 playbook.get("goal_slug"), sid,
             )
-            pb_result = _render_from_playbook(playbook, scenario, out_dir, template_path, template)
+            pb_result = _render_from_playbook(playbook, scenario, out_dir,
+                                              template_path, template,
+                                              ui_maps_dir=ui_maps_dir)
             results.append(pb_result)
             if pb_result.get("status") == "generated":
                 generated_count += 1
@@ -770,6 +772,7 @@ def _render_from_playbook(
     out_dir: Path,
     template_path: Path,
     template,  # Jinja2 Template object
+    ui_maps_dir: Optional[Path] = None,   # Plan 241 F1 — alias reales de la pantalla
 ) -> dict:
     """Generate a .spec.ts from a playbook, bypassing UI-map lookup.
 
@@ -878,13 +881,41 @@ def _render_from_playbook(
     filename = f"{sid}_{sid_slug}.spec.ts"
     spec_path = out_dir / filename
 
+    # ── Plan 241 F1: los oráculos del CATÁLOGO no se pierden en el camino ────
+    # El synthetic_ui_map solo tiene los targets de los PASOS del playbook, así
+    # que un oráculo del catálogo (p.ej. attribute_equals sobre el campo Póliza)
+    # quedaba filtrado EN SILENCIO: el spec salía sin ORACLE_PROBES, el probe no
+    # capturaba nada, el evaluador devolvía "review" y el criterio moría como
+    # not_verifiable sin que nadie supiera por qué. Se suma el ui_map REAL de la
+    # pantalla para que esos alias resuelvan.
+    _real_map: dict = {}
+    if ui_maps_dir is not None:
+        try:
+            _ui_file = Path(ui_maps_dir) / f"{pantalla}.json"
+            if _ui_file.is_file():
+                _real_map = _build_selector_map(
+                    json.loads(_ui_file.read_text(encoding="utf-8")))
+        except Exception as _um_exc:  # noqa: BLE001
+            logger.debug("%s: no se pudo leer el ui_map de %s: %s", sid, pantalla, _um_exc)
+    for _alias, _sel in _real_map.items():
+        synthetic_ui_map.setdefault(_alias, str(_sel).replace('"', "'"))
+
     # Oracles: keep only those whose target resolves in synthetic_ui_map,
     # OR those that don't need a selector (page_contains_text / page_not_contains_text).
-    _selector_free_types = ("page_contains_text", "page_not_contains_text")
+    _selector_free_types = ("page_contains_text", "page_not_contains_text",
+                            "no_console_error")
     filtered_oraculos = [
         o for o in (scenario.get("oraculos") or [])
         if o.get("tipo") in _selector_free_types or o.get("target") in synthetic_ui_map
     ]
+    # G6 — fallar RUIDOSO: un oráculo descartado se registra, jamás desaparece.
+    _dropped = [o.get("target") for o in (scenario.get("oraculos") or [])
+                if o not in filtered_oraculos]
+    if _dropped:
+        logger.warning(
+            "%s: %d oraculo(s) descartado(s) por alias fuera del ui_map: %s",
+            sid, len(_dropped), _dropped,
+        )
 
     # Entry screen — first screen the test lands on. For human-path playbooks
     # (e.g. open_detalle_cliente_from_busqueda) this is FrmBusqueda.aspx, NOT

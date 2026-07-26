@@ -394,9 +394,21 @@ def run(
     # QA UAT Agent NEVER manages AgendaWeb's runtime.  If the app is not
     # running, we return BLOCKED immediately (< 15s, no browser opened).
     _t0_preflight = time.time()
+    _agenda_handle: dict = {"started_by_us": False}
     try:
         from environment_preflight import run_environment_preflight
         preflight = run_environment_preflight()
+        # ── Plan 240 F2 (cerrado por el 241 F8): UN intento de autostart ─────
+        # Solo cuando la app NO responde y la flag esta ON. UN arranque y UN
+        # re-preflight: cero polling eterno, cero reintentos infinitos.
+        if not preflight.ok and preflight.reason == "APP_NOT_RUNNING":
+            try:
+                from agenda_web_launcher import ensure_agenda_web
+                _agenda_handle = ensure_agenda_web(base_url=preflight.base_url)
+                if _agenda_handle.get("ok") and _agenda_handle.get("started_by_us"):
+                    preflight = run_environment_preflight()   # UN re-preflight
+            except Exception:  # noqa: BLE001
+                logger.debug("autostart AgendaWeb no disponible", exc_info=True)
         _exec_log_stage_end(
             _exec_log, "environment_preflight", _t0_preflight, ok=preflight.ok,
             summary={"verdict": preflight.verdict, "reason": preflight.reason,
@@ -411,7 +423,12 @@ def run(
                 "category": "ENV",
                 "reason": preflight.reason,
                 "failed_stage": "environment_preflight",
-                "stages": {"environment_preflight": preflight.to_dict()},
+                "stages": {"environment_preflight": {
+                    **preflight.to_dict(),
+                    # Plan 240 F2: queda registrado si se intento el autostart.
+                    "autostart": {k: _agenda_handle.get(k) for k in
+                                  ("ok", "already_running", "started_by_us", "code")},
+                }},
                 "elapsed_s": round(time.time() - started, 2),
             }
             if _exec_log is not None:
@@ -630,6 +647,22 @@ def run(
         except Exception as _tj_err:  # noqa: BLE001
             logger.warning("Could not persist ticket.json in run dir: %s", _tj_err)
 
+        # ── Plan 241 F7: epica => veredicto por agregacion de hijas ──────────
+        # Una epica no tiene pasos de reproduccion propios: no hay nada que
+        # compilar ni que correr. Su veredicto es el de sus tasks hijas.
+        if ticket_result.get("epic_rollup_required"):
+            _epic_out = _run_epic_rollup(
+                ticket_id=ticket_id, ticket_result=ticket_result,
+                stages=stages, evidence_dir=evidence_dir, started=started,
+            )
+            if _exec_log is not None:
+                try:
+                    _exec_log.session_end(_epic_out)
+                    _exec_log.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            return _epic_out
+
     # Delegate stages 2-11 to shared implementation (also used by _run_freeform)
     # Sprint 1 — wrap in try/finally to guarantee session_end on crash.
     pipeline_result: dict = {}
@@ -650,12 +683,17 @@ def run(
             verbose=verbose,
             started=started,
             exec_log=_exec_log,
+            run_id=_run_id,
         )
         if isinstance(pipeline_result.get("stages"), dict):
             pipeline_result["stages"] = {**stages, **pipeline_result["stages"]}
     except Exception as _pipeline_crash:  # noqa: BLE001
         import traceback as _tb
-        logger.error("Sprint 1: pipeline crashed unexpectedly: %s", _pipeline_crash)
+        # Plan 241 F6 — un crash que esconde SU PROPIA ubicacion es un diagnostico
+        # mentiroso: obliga a adivinar. El traceback va al log y a la evidencia.
+        _crash_tb = _tb.format_exc()
+        logger.error("Sprint 1: pipeline crashed unexpectedly: %s\n%s",
+                     _pipeline_crash, _crash_tb)
         pipeline_result = {
             "ok": False,
             "ticket_id": ticket_id,
@@ -665,6 +703,7 @@ def run(
             "failed_stage": "pipeline",
             "error": "pipeline_crash",
             "message": str(_pipeline_crash),
+            "traceback": _crash_tb[-2000:],   # Plan 241 F6: dónde pasó, no solo qué
             "stages": stages,
             "elapsed_s": round(time.time() - started, 2),
         }
@@ -680,6 +719,28 @@ def run(
             except Exception:  # noqa: BLE001
                 pass
     finally:
+        # ── Plan 240 F2 (cerrado por el 241 F8): apagar SOLO lo que arrancamos ──
+        try:
+            from agenda_web_launcher import stop_agenda_web
+            stop_agenda_web(_agenda_handle)
+        except Exception:  # noqa: BLE001
+            logger.debug("stop_agenda_web no disponible", exc_info=True)
+
+        # ── Plan 240 F7 (cerrado por el 241 F8): manifiesto de evidencia ───────
+        # Best-effort: su fallo JAMAS afecta el veredicto.
+        try:
+            from evidence_manifest import build_evidence_manifest
+            _man = build_evidence_manifest(evidence_dir)
+            stages["evidence"] = {
+                "ok": bool(_man.get("ok")),
+                "files": (_man.get("counts") or {}).get("total", 0),
+                "manifest": "evidence_manifest.json",
+            }
+            if isinstance(pipeline_result.get("stages"), dict):
+                pipeline_result["stages"]["evidence"] = stages["evidence"]
+        except Exception:  # noqa: BLE001
+            logger.debug("evidence manifest no disponible", exc_info=True)
+
         # Sprint 1 — session_end garantizado en TODOS los exit paths (incluyendo crashes).
         # Nota: los early exits (preflight, fingerprint, smoke) ya llaman session_end
         # antes de retornar, por lo que el ExecutionLogger ya está cerrado cuando
@@ -854,6 +915,19 @@ def _run_dossier_and_publisher(
     _runner_summary = runner_result.get("runner_summary") or {}
     category = _runner_summary.get("category") or ("APP" if verdict in ("FAIL", "PASS", "MIXED") else "PIP")
     reason   = _runner_summary.get("reason") or verdict  # dossier verdict string is self-describing
+
+    # ── Plan 241 F0 — GATE TERMINAL: el veredicto funcional manda ────────────
+    # Un PASS tecnico con 0 criterios funcionales verificados es un FALSO VERDE.
+    # (C4) Solo manda cuando el evaluador EFECTIVAMENTE corrio: si se salto, el
+    # veredicto del runner (BLOCKED honesto) se conserva intacto.
+    _fv_stage = stages.get("functional_verdict") or {}
+    if _fv_stage.get("skipped") is False and _fv_stage.get("verdict"):
+        verdict  = _fv_stage["verdict"]
+        reason   = _fv_stage.get("reason") or reason
+        category = _fv_stage.get("category") or category
+    # Regla dura: con 0 criterios verificados el run NO puede salir PASS.
+    if verdict == "PASS" and _fv_stage.get("skipped") is False and not _fv_stage.get("verified"):
+        verdict, reason = "MIXED", "NO_FUNCTIONAL_ASSERTION"
 
     # P0/OBS: emit complete pipeline_verdict_decision event before returning (roadmap Cambio 1.3)
     _active_log = _get_active_exec_logger()
@@ -1067,6 +1141,7 @@ def _run_freeform(
         verbose=verbose,
         started=started,
         exec_log=_exec_log,
+        run_id=run_id,
     )
     # Merge freeform-specific stages into the result
     if isinstance(pipeline_result.get("stages"), dict):
@@ -1262,6 +1337,9 @@ def _run_pipeline_stages(
     detect_screen_errors_vision: bool = False,
     replan: bool = False,
     exec_log=None,   # ExecutionLogger | None  — inyectado desde run() / _run_freeform()
+    run_id: str = "",  # Plan 241 F6 — identidad del run; ANTES se leia `_run_id`,
+                       # que NO existe en este scope (se define en run(), otra
+                       # funcion) => NameError real en data_readiness_check.
 ) -> dict:
     """
     Run stages 2-11 (ui_map through publisher) given an already-loaded ticket_result.
@@ -1269,6 +1347,8 @@ def _run_pipeline_stages(
     """
     stages: dict = {}
     ui_maps_dir = _TOOL_ROOT / "cache" / "ui_maps"
+    # Plan 241 F6 — identidad del run, ahora SI en scope.
+    _run_id = run_id or str(ticket_id)
 
     # ── Effective config freeze ───────────────────────────────────────────────
     # Read all guardrail env vars ONCE at the start and freeze them.
@@ -1603,7 +1683,7 @@ def _run_pipeline_stages(
             _umr = _resolve_ui_maps(
                 screens=screens,
                 evidence_dir=evidence_dir,
-                run_id=_run_id if "_run_id" in dir() else str(ticket_id),
+                run_id=_run_id,
                 exec_logger=exec_log,
                 verbose=verbose,
             )
@@ -1871,7 +1951,7 @@ def _run_pipeline_stages(
             _cc_result = _validate_compiler_contract(
                 output=compiler_result,
                 evidence_dir=evidence_dir,
-                run_id=_run_id if "_run_id" in dir() else str(ticket_id),
+                run_id=_run_id,
                 exec_logger=exec_log,
             )
             stages["compiler_contract"] = {
@@ -3035,7 +3115,7 @@ def _run_pipeline_stages(
             _gc_result = _validate_generator_contract(
                 output=generator_result,
                 evidence_dir=evidence_dir,
-                run_id=_run_id if "_run_id" in dir() else str(ticket_id),
+                run_id=_run_id,
                 exec_logger=exec_log,
             )
             stages["generator_contract"] = {
@@ -3668,6 +3748,17 @@ def _run_pipeline_stages(
         if not evaluations_result.get("ok"):
             return _build_output(ticket_id, stages, evaluations_result, started)
 
+    # ── Stage 6b: functional_verdict — GATE TERMINAL (Plan 241 F0) ───────────
+    # El veredicto del run lo produce functional_verdict, NO el runner: un PASS
+    # tecnico con 0 criterios funcionales verificados es un FALSO VERDE.
+    _apply_functional_verdict_gate(
+        stages=stages,
+        evidence_dir=evidence_dir,
+        evaluations_result=evaluations_result,
+        runner_result=runner_result,
+        exec_log=exec_log,
+    )
+
     # ── Stage 7: failure_analyzer ────────────────────────────────────────────
     stage = "failure_analyzer"
     has_failures = bool(
@@ -4003,6 +4094,252 @@ def _log_stage(name: str) -> None:
 
 def _fail(stage: str, error: str, message: str) -> dict:
     return {"ok": False, "stage": stage, "error": error, "message": message}
+
+
+def _last_result_of(child_id) -> dict:
+    """Ultimo result.json conocido de un ticket hijo. NUNCA lanza (Plan 241 F7)."""
+    out = {"ado_id": child_id, "verdict": "", "verified": 0, "reason": None,
+           "run_id": None}
+    try:
+        base = _TOOL_ROOT / "evidence" / str(child_id)
+        if not base.is_dir():
+            return out
+        candidates = sorted(
+            (p for p in base.glob("*/result.json") if p.is_file()),
+            key=lambda p: p.stat().st_mtime, reverse=True,
+        )
+        if not candidates:
+            return out
+        data = json.loads(candidates[0].read_text(encoding="utf-8"))
+        _fv = ((data.get("stages") or {}).get("functional_verdict") or {}) \
+            if isinstance(data.get("stages"), dict) else {}
+        out.update({
+            "verdict": str(data.get("verdict") or "").strip().upper(),
+            "verified": int(_fv.get("verified") or 0),
+            "reason": data.get("reason"),
+            "run_id": data.get("run_id"),
+        })
+        return out
+    except Exception:  # noqa: BLE001
+        return out
+
+
+def _run_epic_rollup(ticket_id, ticket_result: dict, stages: dict,
+                     evidence_dir: Path, started: float) -> dict:
+    """Plan 241 F7 — veredicto de una epica agregando el de sus hijas. NUNCA lanza."""
+    try:
+        from epic_rollup import rollup
+        children = ticket_result.get("children") or []
+        child_results = [_last_result_of(c.get("ado_id")) for c in children
+                         if isinstance(c, dict) and c.get("ado_id")]
+        res = rollup(ticket_id, child_results)
+        stages["epic_rollup"] = {"ok": True, "skipped": False, **res}
+        out = {
+            "ok": res.get("verdict") in ("PASS", "MIXED"),
+            "ticket_id": ticket_id,
+            "verdict": res.get("verdict"),
+            "category": res.get("category"),
+            "reason": res.get("reason"),
+            "epic_rollup": res,
+            "stages": stages,
+            "elapsed_s": round(time.time() - started, 2),
+        }
+        try:
+            _persist_json(evidence_dir / "epic_rollup.json", res)
+            _persist_json(evidence_dir / "result.json", out)
+        except Exception:  # noqa: BLE001
+            pass
+        return out
+    except Exception as exc:  # noqa: BLE001
+        stages["epic_rollup"] = {"ok": True, "skipped": True, "reason": f"error:{exc}"}
+        return _build_output(ticket_id, stages, {
+            "ok": False, "verdict": "BLOCKED", "category": "PIP",
+            "reason": "EPIC_ROLLUP_ERROR", "failed_stage": "epic_rollup",
+            "message": f"{type(exc).__name__}: {exc}",
+        }, started)
+
+
+def _screen_guard_results(evidence_dir: Path, evaluations: list) -> dict:
+    """Plan 241 F0 — verifica que CADA escenario haya probado SU pantalla.
+
+    Lee el bloque `screen_verified` que el spec de Playwright escribe en
+    assertions_<sid>.json y lo pasa por screen_guard.verify_screen.
+    Un escenario que no probo su pantalla NO puede aportar un `verified`.
+    NUNCA lanza: sin evidencia de pantalla, no hay veredicto de pantalla.
+    """
+    out: dict = {}
+    try:
+        from screen_guard import verify_screen
+    except Exception:  # noqa: BLE001
+        return out
+    for ev in (evaluations or []):
+        if not isinstance(ev, dict):
+            continue
+        sid = ev.get("scenario_id")
+        if not sid:
+            continue
+        # El spec escribe en evidence/<ticket>/<sid>/assertions_<sid>.json (ruta
+        # relativa al cwd del runner), NO dentro del directorio del run: hay que
+        # mirar los dos lugares o el bloque screen_verified se pierde en silencio.
+        _data = None
+        for _f in (evidence_dir / str(sid) / f"assertions_{sid}.json",
+                   evidence_dir.parent / str(sid) / f"assertions_{sid}.json"):
+            try:
+                if _f.is_file():
+                    _data = json.loads(_f.read_text(encoding="utf-8"))
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        if not isinstance(_data, dict):
+            continue
+        _sv = _data.get("screen_verified")
+        if not isinstance(_sv, dict):
+            continue
+        _res = verify_screen(_sv, _sv.get("expected") or "")
+        out[str(sid)] = {**_res, "screen_verified": _sv}
+    return out
+
+
+def _scenario_discrimination(evidence_dir: Path) -> tuple:
+    """Plan 241 F2 — agrega la prueba de discriminacion por escenario.
+
+    Lee scenarios.json y colapsa los `discrimination` de los oraculos de cada
+    escenario. Retorna (por_escenario, incidencias_de_calidad_del_test).
+
+    Regla EXACTA: un escenario discrimina si al menos UNO de sus oraculos trae
+    discrimination.proven True y NINGUNO trae code DISCRIMINATION_FAILED (una
+    asercion que no sabe fallar contamina el escenario entero).
+    """
+    per_scenario: dict = {}
+    quality_issues: list = []
+    try:
+        _sp = evidence_dir / "scenarios.json"
+        if not _sp.is_file():
+            return per_scenario, quality_issues
+        _data = json.loads(_sp.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return per_scenario, quality_issues
+    for _sc in (_data.get("scenarios") or []):
+        if not isinstance(_sc, dict):
+            continue
+        _sid = str(_sc.get("scenario_id") or _sc.get("id") or "")
+        if not _sid:
+            continue
+        _proven = False
+        _failed = False
+        _control = None
+        _code = "NO_DISCRIMINATION"
+        for _orc in (_sc.get("oraculos") or []):
+            _disc = (_orc or {}).get("discrimination") if isinstance(_orc, dict) else None
+            if not isinstance(_disc, dict):
+                continue
+            if _disc.get("code") == "DISCRIMINATION_FAILED":
+                _failed = True
+                _code = "DISCRIMINATION_FAILED"
+                quality_issues.append({
+                    "criterio_id": _sc.get("criterio_id") or _sid,
+                    "scenario_id": _sid,
+                    "kind": _sc.get("kind") or _orc.get("tipo"),
+                    "code": "DISCRIMINATION_FAILED",
+                    "detail": _disc.get("detail", ""),
+                    "fix_sugerido": (
+                        "La asercion pasa igual contra el estado pre-fix: elegi un "
+                        "oraculo exacto (attribute_equals) o un dato que cruce el umbral."
+                    ),
+                })
+            elif _disc.get("proven") is True:
+                _proven = True
+                if _control is None:
+                    _control = _disc.get("negative_control")
+                _code = ""
+        per_scenario[_sid] = {
+            "proven": bool(_proven and not _failed),
+            "negative_control": _control,
+            "code": _code if not (_proven and not _failed) else "",
+        }
+    return per_scenario, quality_issues
+
+
+def _apply_functional_verdict_gate(
+    stages: dict,
+    evidence_dir: Path,
+    evaluations_result,
+    runner_result: dict,
+    exec_log=None,
+) -> None:
+    """Plan 241 F0 — el veredicto FUNCIONAL manda; el tecnico ya no basta.
+
+    (C4) GUARDA OBLIGATORIA: si el evaluador se SALTO (p.ej. all_scenarios_blocked),
+    `criteria_results` esta vacio NO porque no se verificara nada sino porque no se
+    llego a ejecutar. En ese caso el veredicto del run sigue siendo el del runner
+    (un BLOCKED honesto es MAS veraz que un MIXED/NO_FUNCTIONAL_ASSERTION).
+    NUNCA lanza: ante cualquier error deja el stage saltado y el runner manda.
+    """
+    try:
+        _evaluator_ran = not bool((stages.get("evaluator") or {}).get("skipped", False))
+        if not _evaluator_ran:
+            stages["functional_verdict"] = {
+                "ok": True, "skipped": True, "reason": "evaluator_did_not_run",
+            }
+            return
+
+        from functional_verdict import build_functional_verdict
+
+        _evaluations = (evaluations_result or {}).get("evaluations") or []
+        _guard = _screen_guard_results(evidence_dir, _evaluations)
+        _disc, _quality_issues = _scenario_discrimination(evidence_dir)
+
+        _criteria_results = []
+        for _e in _evaluations:
+            if not isinstance(_e, dict):
+                continue
+            _sid = str(_e.get("scenario_id") or "")
+            _raw = str(_e.get("status") or "").strip().lower()
+            _status = ("verified" if _raw == "pass"
+                       else "violated" if _raw == "fail"
+                       else "not_verifiable")
+            _item = {
+                "id": _sid,
+                "kind": _e.get("kind"),
+                "status": _status,
+                "evidence": _e.get("evidence_path") or str(evidence_dir / _sid),
+                "detail": _e.get("detail") or _e.get("reason"),
+            }
+            _g = _guard.get(_sid)
+            if _g is not None:
+                _item["screen_verified"] = _g.get("screen_verified")
+                if _g.get("ok") is False:
+                    # Un escenario que no probo SU pantalla no aporta un `verified`.
+                    _item["status"] = "violated"
+                    _item["code"] = _g.get("code")
+                    _item["detail"] = _g.get("detail")
+            if _sid in _disc:
+                _item["discrimination"] = _disc[_sid]
+            _criteria_results.append(_item)
+
+        _tech = {
+            "verdict": (runner_result or {}).get("verdict"),
+            "category": (runner_result or {}).get("category"),
+            "reason": (runner_result or {}).get("reason"),
+        }
+        _fv = build_functional_verdict(_criteria_results, _tech)
+        if _quality_issues:
+            _fv.setdefault("test_quality_issues", [])
+            _fv["test_quality_issues"] = list(_fv["test_quality_issues"]) + _quality_issues
+        stages["functional_verdict"] = {"ok": True, "skipped": False, **_fv}
+        _exec_log_event(exec_log, "functional_verdict", {
+            "verdict": _fv.get("verdict"),
+            "reason": _fv.get("reason"),
+            "verified": _fv.get("verified"),
+            "violated": _fv.get("violated"),
+            "not_verifiable": _fv.get("not_verifiable"),
+            "test_quality_issues": len(_fv.get("test_quality_issues") or []),
+        })
+    except Exception as _fv_exc:  # noqa: BLE001
+        logger.warning("functional_verdict gate failed (non-fatal): %s", _fv_exc)
+        stages["functional_verdict"] = {
+            "ok": True, "skipped": True, "reason": f"error:{_fv_exc}",
+        }
 
 
 def _build_output(ticket_id: int, stages: dict, failed_result: dict, started: float) -> dict:
@@ -4434,9 +4771,16 @@ def _parse_args() -> argparse.Namespace:
         "--answer", default=None,
         help="[Fase 4b] Respuesta del operador para --resolve-blocker.",
     )
+    p.add_argument("--autostart", action="store_true",
+                   help="Intenta arrancar AgendaWeb local si no responde (Plan 240 F2). "
+                        "Equivale a la flag STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED de la UI.")
     args = p.parse_args()
     if args.detect_screen_errors_vision:
         args.detect_screen_errors = True
+    # El flag de CLI SOLO puede ACTIVAR: sin --autostart la variable no se toca, asi
+    # que el valor que exporto la UI manda (Plan 240 F2, C13).
+    if getattr(args, "autostart", False):
+        os.environ["STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED"] = "true"
     return args
 
 

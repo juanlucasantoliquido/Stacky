@@ -239,6 +239,25 @@ def build_dossier(
         "elapsed_build_ms": round((time.monotonic() - t0) * 1000, 1),
     }
 
+    # ── Plan 241 F2 (C6): calidad del TEST, separada del veredicto del DESARROLLO ──
+    # Un DISCRIMINATION_FAILED significa "esta asercion no sabe fallar": es un bug
+    # del ARNES. Si se mezclara con los hallazgos del desarrollo, un arnes flojo se
+    # leeria como software roto. Va en su propia seccion, como backlog accionable.
+    _fv_stage = ((result.get("stages") or {}).get("functional_verdict") or {}) \
+        if isinstance(result.get("stages"), dict) else {}
+    _quality_issues = _fv_stage.get("test_quality_issues") or []
+    if _quality_issues:
+        dossier["test_quality_issues"] = _quality_issues
+    if _fv_stage and _fv_stage.get("skipped") is False:
+        dossier["functional_verdict"] = {
+            "verdict": _fv_stage.get("verdict"),
+            "reason": _fv_stage.get("reason"),
+            "verified": _fv_stage.get("verified"),
+            "violated": _fv_stage.get("violated"),
+            "not_verifiable": _fv_stage.get("not_verifiable"),
+            "strict_discrimination": _fv_stage.get("strict_discrimination"),
+        }
+
     # ── Write dossier.json ────────────────────────────────────────────────────
     dossier_path = evidence_dir / "dossier.json"
     try:

@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -425,6 +426,261 @@ def ensure_playbooks_live(screens: list, *, ui_maps_dir: Optional[Path] = None,
     return results
 
 
+# ── Plan 241 F4: pantallas que EXIGEN contexto previo ────────────────────────
+
+# Selector de fila por default, verificado en vivo sobre la agenda personal.
+# Selector de fila VERIFICADO EN VIVO el 2026-07-25: la grilla real es
+# `#c_GridAgendaAut` (class "aisgridview clickable") y la fila 1 es el header, asi
+# que la primera fila de datos es nth-child(2). Clickearla abre el detalle del
+# cliente en una PESTANA NUEVA.
+DEFAULT_ROW_SELECTOR = "#c_GridAgendaAut tr:nth-child(2)"
+DEFAULT_ENTRY_SCREEN = "FrmAgenda.aspx"
+
+
+def build_context_playbook(screen: str, *, anchor: str,
+                           entry_screen: str = DEFAULT_ENTRY_SCREEN,
+                           row_selector: Optional[str] = None,
+                           goal_slug: Optional[str] = None) -> dict:
+    """Playbook de una pantalla que exige contexto. Puro, sin navegador. NUNCA lanza.
+
+    El contexto se gana NAVEGANDO: goto a la pantalla de entrada -> click en la
+    primera fila de la grilla -> esperar el ancla de la pantalla de destino.
+    JAMAS un goto con ?q= (el payload esta encriptado POR SESION: reconstruirlo es
+    imposible y deep-linkearlo sin el redirige a frmLogin.aspx DESTRUYENDO la
+    sesion — Plan 240 H4).
+    """
+    row = row_selector or DEFAULT_ROW_SELECTOR
+    slug = goal_slug or f"verificar_{_slug(screen.replace('.aspx', ''))}"
+    # El wait de llegada NO puede ser el generico de 15 s: medido en vivo, la
+    # pestana del detalle pasa ~25 s en un interstitial "Loading ...". Con 15 s el
+    # spec moriria con SELECTOR_TIMEOUT sobre una pantalla que SI llega.
+    nav_steps = [
+        {"action": "goto", "screen": entry_screen,
+         "_note": "pantalla de ENTRADA; el destino no es deep-linkeable"},
+        {"action": "click", "selector": row,
+         "_note": "gana el contexto de cliente: el href real lleva un payload "
+                  "encriptado por sesion, y el detalle abre en una PESTANA NUEVA"},
+        {"action": "waitFor", "selector": anchor,
+         "timeout_ms": _CONTEXT_ARRIVAL_TIMEOUT_MS,
+         "_note": "ancla de llegada a la pantalla con contexto (interstitial ~25 s)"},
+    ]
+    return {
+        "schema_version": _SCHEMA_VERSION,
+        "tool_version": _TOOL_VERSION,
+        "goal_slug": slug,
+        "goal_label": f"verificar pantalla {screen} (con cliente en sesion)",
+        "recorded_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+        "session_source": f"synthesized_with_context:cache/ui_maps/{screen}.json",
+        "synthesized": True,
+        "requires_context": True,
+        "context_note": (
+            "Esta pantalla NO se abre por URL: exige un cliente seleccionado. El "
+            "enlace real lleva un payload de query encriptado POR SESION que no se "
+            "puede reconstruir ni persistir; por eso se navega clickeando."
+        ),
+        "source_ui_map": f"cache/ui_maps/{screen}.json",
+        "entry_screen": entry_screen,
+        "target_screen": screen,
+        "row_selector": row,
+        "navigation_path": ["FrmLogin.aspx", entry_screen, screen],
+        "navigation_steps": nav_steps,
+        "action_steps": [
+            {"action": "waitFor", "selector": anchor,
+             "timeout_ms": _CONTEXT_ARRIVAL_TIMEOUT_MS,
+             "_note": "ancla de llegada: prueba que la pantalla cargo"},
+        ],
+        "parameterizable_fields": {},
+    }
+
+
+# MEDIDO EN VIVO (2026-07-25): la pestana del detalle muestra un interstitial
+# "Loading http://.../FrmDetalleClie.aspx" y recien navega de verdad a los ~25 s.
+# Con el timeout de 20 s el harvest reportaba NAV_WRONG_SCREEN — un diagnostico
+# MENTIROSO: la pantalla si llegaba, solo que despues del plazo.
+_CONTEXT_ARRIVAL_TIMEOUT_MS = 60_000
+
+# Controles de navegacion presentes en varias pantallas: sirven de ancla solo como
+# ULTIMO recurso, porque un waitFor sobre ellos pasaria en cualquier pagina.
+_GENERIC_CHROME_RE = re.compile(r"btnback|btnnext|btnprev|btnhome|btnsalir", re.I)
+
+
+def _harvest_screen_with_context(screen: str, *, entry_screen: str,
+                                 row_selector: str,
+                                 timeout_ms: int = _CONTEXT_ARRIVAL_TIMEOUT_MS) -> dict:
+    """Navega en vivo hasta `screen` con contexto y cosecha el ui_map REAL.
+
+    Requiere AgendaWeb arriba. NUNCA lanza.
+    Retorna {"ok", "anchor", "ui_map", "landing_url", "error"}.
+    """
+    out = {"ok": False, "anchor": None, "ui_map": None, "landing_url": None,
+           "error": None}
+    try:
+        from playwright.sync_api import sync_playwright
+        from environment_preflight import get_agenda_base_url
+        from auth_session_factory import _LOGIN_BTN_SEL, _LOGIN_PASS_SEL, _LOGIN_USER_SEL
+        from ui_map_builder import build_from_live_page
+        import os as _os
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"import: {exc}"
+        return out
+
+    base = get_agenda_base_url()
+    user = _os.environ.get("AGENDA_WEB_USER", "")
+    pwd = _os.environ.get("AGENDA_WEB_PASS", "")
+    screen_token = screen.replace(".aspx", "").lower()
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            try:
+                ctx = browser.new_context()
+                page = ctx.new_page()
+                # 1. login
+                page.goto(base + "FrmLogin.aspx", wait_until="domcontentloaded",
+                          timeout=30000)
+                page.fill(_LOGIN_USER_SEL, user, timeout=10000)
+                page.fill(_LOGIN_PASS_SEL, pwd)
+                page.locator(_LOGIN_BTN_SEL).click(no_wait_after=True)
+                page.wait_for_url(lambda u: "frmlogin" not in u.lower(), timeout=25000)
+                # 2. pantalla de entrada
+                page.goto(base + entry_screen, wait_until="domcontentloaded",
+                          timeout=30000)
+                page.wait_for_load_state("domcontentloaded", timeout=15000)
+                # 3. click en la primera fila (gana el contexto de cliente)
+                row = page.locator(row_selector).first
+                if row.count() == 0:
+                    out["error"] = (
+                        f"GRID_EMPTY: la grilla de {entry_screen} no tiene filas con "
+                        f"el selector {row_selector!r}: sin un cliente cargado no se "
+                        f"puede alcanzar {screen}"
+                    )
+                    return out
+                # VERIFICADO EN VIVO (2026-07-25): la grilla de FrmAgenda abre el
+                # detalle en una PESTANA NUEVA (window.open), no navegando la actual.
+                # Sin esto, el wait_for_url sobre la pagina original expira siempre y
+                # el diagnostico sale como NAV_WRONG_SCREEN, que es MENTIRA.
+                _popups: list = []
+                ctx.on("page", lambda p: _popups.append(p))
+                row.click(no_wait_after=True, timeout=timeout_ms)
+
+                # 4. aterrizaje: en la pestana nueva si la hubo, si no en la actual
+                target_page = page
+                deadline = time.time() + (timeout_ms / 1000.0)
+                while time.time() < deadline:
+                    if _popups:
+                        target_page = _popups[0]
+                        break
+                    if screen_token in (page.url or "").lower():
+                        break
+                    page.wait_for_timeout(250)
+                if target_page is not page:
+                    try:
+                        target_page.wait_for_url(
+                            lambda u: screen_token in (u or "").lower(),
+                            timeout=timeout_ms)
+                    except Exception:  # noqa: BLE001
+                        pass
+                page = target_page
+                page.wait_for_load_state("domcontentloaded", timeout=15000)
+                landing = page.url or ""
+                out["landing_url"] = landing
+                if "frmlogin" in landing.lower():
+                    out["error"] = "NAV_SESSION_LOST: la app expulso al login"
+                    return out
+                if screen_token not in landing.lower():
+                    out["error"] = (
+                        f"NAV_WRONG_SCREEN: se esperaba {screen} y se aterrizo en {landing}")
+                    return out
+                # 5. cosechar el ui_map de la PAGINA VIVA (con contexto)
+                ui_map = build_from_live_page(page, screen)
+                out["ui_map"] = ui_map
+                if not (ui_map or {}).get("ok"):
+                    out["error"] = f"UI_MAP_EMPTY: {(ui_map or {}).get('error')}"
+                    return out
+                # 6. ancla por VISIBILIDAD real, no por ranking teorico, y
+                #    DISCRIMINATIVA: los controles de paginacion (#btnBack/#btnNext)
+                #    existen en varias pantallas, asi que un waitFor sobre ellos
+                #    pasaria en cualquier lado — justo el falso positivo que el Plan
+                #    241 mata. Se prefiere un candidato propio de la pantalla; los
+                #    genericos quedan como ultimo recurso.
+                # limit alto a proposito: los primeros candidatos de una pantalla
+                # rica son modales OCULTOS, y con el limit por default (8) el unico
+                # visible terminaba siendo #btnBack — un ancla no discriminativa.
+                _visibles: list = []
+                for sel in rank_anchor_candidates(ui_map, screen=screen, limit=30):
+                    try:
+                        loc = page.locator(sel).first
+                        if loc.count() > 0 and loc.is_visible(timeout=1500):
+                            _visibles.append(sel)
+                            if not _GENERIC_CHROME_RE.search(sel):
+                                break
+                    except Exception:  # noqa: BLE001
+                        continue
+                _specific = [s for s in _visibles if not _GENERIC_CHROME_RE.search(s)]
+                out["anchor"] = (_specific or _visibles or [None])[0]
+                if not out["anchor"]:
+                    out["error"] = "no_visible_anchor"
+                    return out
+                out["ok"] = True
+                return out
+            finally:
+                browser.close()
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}: {exc}"[:250]
+        return out
+
+
+def ensure_playbook_with_context(screen: str, *, entry_screen: str = DEFAULT_ENTRY_SCREEN,
+                                 row_selector: Optional[str] = None,
+                                 ui_maps_dir: Optional[Path] = None,
+                                 playbooks_dir: Optional[Path] = None) -> dict:
+    """Sintetiza el playbook de una pantalla que EXIGE contexto previo (Plan 241 F4).
+
+    Por que (Plan 240 H4/E9): FrmDetalleClie.aspx solo se abre con un cliente
+    seleccionado, y el enlace real lleva un ?q= ENCRIPTADO POR SESION que NO se
+    puede reconstruir. Por eso el contexto se gana NAVEGANDO, no sintetizando URLs:
+      1. login  2. goto entry_screen  3. click en la primera fila de la grilla
+      4. esperar aterrizaje en `screen`  5. recien AHI cosechar el ui_map real
+         (ui_map_builder sobre la pagina viva) y elegir el ancla por VISIBILIDAD.
+    El playbook resultante declara navigation_steps con la secuencia de CLICKS
+    (jamas un goto con ?q=) y `requires_context: true`.
+    Retorna {"ok", "anchor", "ui_map_elements", "path", "error"}. NUNCA lanza.
+    """
+    row = row_selector or DEFAULT_ROW_SELECTOR
+    try:
+        harvest = _harvest_screen_with_context(
+            screen, entry_screen=entry_screen, row_selector=row)
+        if not harvest.get("ok"):
+            return {"ok": False, "anchor": None, "ui_map_elements": 0, "path": None,
+                    "error": harvest.get("error") or "harvest_failed"}
+
+        ui_map = harvest.get("ui_map") or {}
+        # Persistir el ui_map cosechado CON contexto (pisa el de 5.7 KB sin cliente).
+        try:
+            base_maps = ui_maps_dir or _UI_MAPS
+            base_maps.mkdir(parents=True, exist_ok=True)
+            (base_maps / f"{screen}.json").write_text(
+                json.dumps(ui_map, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("no se pudo persistir el ui_map con contexto: %s", exc)
+
+        playbook = build_context_playbook(
+            screen, anchor=harvest["anchor"], entry_screen=entry_screen,
+            row_selector=row)
+        playbook["anchor_verified_live"] = True
+        playbook["query_payload_persisted"] = False   # jamas se persiste (ratchet H4)
+        wrote = write_playbook(playbook, playbooks_dir=playbooks_dir, overwrite=True)
+        return {
+            "ok": bool(wrote.get("ok")),
+            "anchor": harvest["anchor"],
+            "ui_map_elements": len(ui_map.get("elements") or []),
+            "path": wrote.get("path"),
+            "error": wrote.get("error"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "anchor": None, "ui_map_elements": 0, "path": None,
+                "error": f"{type(exc).__name__}: {exc}"[:250]}
+
+
 def main() -> None:
     import argparse
     ap = argparse.ArgumentParser(description="Sintetiza playbooks desde el ui_map (Plan 240)")
@@ -433,8 +689,16 @@ def main() -> None:
     ap.add_argument("--write", action="store_true", help="Persiste en cache/playbooks/")
     ap.add_argument("--verify-live", action="store_true",
                     help="Verifica el ancla abriendo la pantalla (requiere AgendaWeb arriba)")
+    ap.add_argument("--with-context", action="store_true",
+                    help="Plan 241 F4: navega con contexto (click en fila) antes de cosechar")
+    ap.add_argument("--entry-screen", default=DEFAULT_ENTRY_SCREEN)
+    ap.add_argument("--row-selector", default=None)
     args = ap.parse_args()
-    if args.verify_live:
+    if args.with_context:
+        print(json.dumps(ensure_playbook_with_context(
+            args.screen, entry_screen=args.entry_screen,
+            row_selector=args.row_selector), indent=2, ensure_ascii=False))
+    elif args.verify_live:
         screens = args.screens or ([args.screen] if args.screen else [])
         print(json.dumps(ensure_playbooks_live(screens), indent=2, ensure_ascii=False))
     elif args.write:

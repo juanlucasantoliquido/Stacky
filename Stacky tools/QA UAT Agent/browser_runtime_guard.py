@@ -144,12 +144,107 @@ def check_browser_runtime(probe_launch: bool = False) -> dict:
     }
 
 
+# ── Plan 241 F6: deriva de versiones Node <-> Python ─────────────────────────
+
+_NODE_HINT = "npm --prefix \"<QA UAT Agent>\" install @playwright/test@<version> && npx playwright install chromium"
+_PY_HINT = 'pip install "playwright==<version>" && python -m playwright install chromium'
+_VERSION_RE = re.compile(r"(\d+\.\d+\.\d+)")
+
+
+def _node_playwright_version() -> str | None:
+    """Version de @playwright/test declarada en node_modules. NUNCA lanza, sin red."""
+    for rel in ("node_modules/@playwright/test/package.json",
+                "node_modules/playwright/package.json",
+                "node_modules/playwright-core/package.json"):
+        try:
+            p = _TOOL_ROOT / rel
+            if p.is_file():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                v = str(data.get("version") or "").strip()
+                if v:
+                    return v
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def _python_playwright_version() -> str | None:
+    """Version del binding Python. NUNCA lanza."""
+    try:
+        import playwright as _pw
+        v = getattr(_pw, "__version__", None)
+        return str(v).strip() if v else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_node_browser_drift(node_version: str | None = None,
+                             python_version: str | None = None) -> dict:
+    """Compara la version de Playwright de Node con la del binding Python.
+
+    POR QUE (Plan 241 F6). El runner corre los specs con `npx playwright test`
+    (Node) pero los guards y las sondas usan el binding Python. Si las versiones
+    divergen, cada uno exige una REVISION DE NAVEGADOR DISTINTA: el guard de
+    Python reporta "browser OK" y el globalSetup de Node muere con
+    "Executable doesn't exist at ...chromium_headless_shell-<otra revision>".
+    Ese fue exactamente el diagnostico mentiroso de la corrida del Plan 240.
+
+    Retorna {"ok", "code", "node_version", "python_version", "remediation", "detail"}.
+    NUNCA lanza. Sin red.
+    """
+    try:
+        nv = node_version if node_version is not None else _node_playwright_version()
+        pv = python_version if python_version is not None else _python_playwright_version()
+        if not nv or not pv:
+            return {
+                "ok": True, "code": "", "node_version": nv, "python_version": pv,
+                "remediation": [],
+                "detail": ("no se pudo determinar alguna de las dos versiones: "
+                           f"node={nv!r} python={pv!r} (sin veredicto de deriva)"),
+            }
+        nm = _VERSION_RE.search(str(nv))
+        pm = _VERSION_RE.search(str(pv))
+        n_norm = nm.group(1) if nm else str(nv).strip()
+        p_norm = pm.group(1) if pm else str(pv).strip()
+        if n_norm == p_norm:
+            return {
+                "ok": True, "code": "", "node_version": nv, "python_version": pv,
+                "remediation": [],
+                "detail": f"Node y Python alineados en Playwright {n_norm}",
+            }
+        return {
+            "ok": False,
+            "code": "BROWSER_VERSION_DRIFT",
+            "node_version": nv,
+            "python_version": pv,
+            # Las DOS remediaciones: el operador elige a cual lado alinear.
+            "remediation": [
+                _NODE_HINT.replace("<version>", p_norm),
+                _PY_HINT.replace("<version>", n_norm),
+            ],
+            "detail": (
+                f"deriva de versiones: Node usa Playwright {n_norm} y el binding Python "
+                f"{p_norm}. Cada uno exige una revision de navegador distinta, asi que el "
+                "guard de Python puede decir OK mientras el globalSetup de Node muere con "
+                "'Executable doesn't exist'."
+            ),
+        }
+    except Exception as exc:  # noqa: BLE001 — NUNCA lanza
+        return {"ok": True, "code": "", "node_version": None, "python_version": None,
+                "remediation": [], "detail": f"drift_check_error:{type(exc).__name__}: {exc}"}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Guard del runtime de navegador (Plan 240 F0)")
     ap.add_argument("--report", action="store_true", help="Imprime el JSON del guard")
     ap.add_argument("--probe", action="store_true",
                     help="Lanza y cierra chromium headless (chequeo autoritativo)")
+    ap.add_argument("--drift", action="store_true",
+                    help="Reporta la deriva de versiones Node<->Python (Plan 241 F6)")
     args = ap.parse_args()
+    if args.drift:
+        print(json.dumps(check_node_browser_drift(), indent=2, ensure_ascii=False))
+        sys.exit(0)
     res = check_browser_runtime(probe_launch=args.probe)
     if args.report or args.probe or True:
         print(json.dumps(res, indent=2, ensure_ascii=False))

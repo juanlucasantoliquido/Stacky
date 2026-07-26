@@ -29,7 +29,8 @@ _TOOL_ROOT = Path(__file__).resolve().parent
 # tool = <repo>/Stacky tools/QA UAT Agent  =>  backend = <repo>/Stacky Agents/backend
 _BACKEND = _TOOL_ROOT.parent.parent / "Stacky Agents" / "backend"
 
-_READ_ONLY_METHODS = frozenset({"get_work_item", "fetch_comments", "fetch_attachments"})
+_READ_ONLY_METHODS = frozenset({"get_work_item", "fetch_comments", "fetch_attachments",
+                                "fetch_open_work_items"})  # Plan 241 F7: WIQL solo-lectura
 
 # (C14) Lista EXPLICITA de campos. get_work_item(ado_id, fields=None) usa por default
 # una lista hardcodeada de 7 campos que NO incluye System.Description. Probado: sin
@@ -93,6 +94,41 @@ def fetch_work_item(ticket_id: int) -> dict:
         logger.debug("fetch_work_item fallo: %s", exc, exc_info=True)
         return {"ok": False, "work_item": None, "source": _SOURCE,
                 "error": type(exc).__name__, "message": str(exc)[:300]}
+
+
+def fetch_children(parent_id: int) -> dict:
+    """Hijas de un work item, por System.Parent. SOLO LECTURA (Plan 241 F7).
+
+    Consulta WIQL de solo lectura: `WHERE [System.Parent] = <id>`. NUNCA lanza.
+    Retorna {"ok": bool, "children": [{"ado_id", "title", "type", "state"}],
+             "error": str|None}.
+    """
+    try:
+        if not _ensure_backend_on_path():
+            return {"ok": False, "children": [], "source": _SOURCE,
+                    "error": "backend_not_found"}
+        wiql = (
+            "SELECT [System.Id] FROM WorkItems "
+            f"WHERE [System.Parent] = {int(parent_id)} "
+            "ORDER BY [System.Id] ASC"
+        )
+        items = _client().fetch_open_work_items(wiql) or []
+        children = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            f = it.get("fields") or {}
+            children.append({
+                "ado_id": it.get("id") or f.get("System.Id"),
+                "title": f.get("System.Title") or "",
+                "type": f.get("System.WorkItemType") or "",
+                "state": f.get("System.State") or "",
+            })
+        return {"ok": True, "children": children, "source": _SOURCE, "error": None}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("fetch_children fallo: %s", exc, exc_info=True)
+        return {"ok": False, "children": [], "source": _SOURCE,
+                "error": type(exc).__name__}
 
 
 def fetch_comments(ticket_id: int, top: int = 20) -> dict:

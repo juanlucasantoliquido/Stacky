@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -70,9 +71,86 @@ def main() -> None:
     else:
         logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 
-    result = run(screen=args.screen, rebuild=args.rebuild, verbose=args.verbose)
+    if getattr(args, "from_live_page", False):
+        # Plan 241 F4 — el mapa se cosecha DESPUES de ganar el contexto navegando.
+        from playbook_synthesizer import ensure_playbook_with_context
+        result = ensure_playbook_with_context(args.screen)
+    else:
+        result = run(screen=args.screen, rebuild=args.rebuild, verbose=args.verbose)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     sys.exit(0 if result.get("ok") else 1)
+
+
+_SESSION_QUERY_RE = re.compile(r"[?&]q=[^\"'&\s]*", re.I)
+_DANGLING_SEP_RE = re.compile(r"\?&+")
+
+
+def _strip_session_query(obj):
+    """Elimina el parametro de sesion encriptado de cualquier string.
+
+    REGLA DURA (Plan 240 H4 / 241 F5): ese parametro solo vale para la sesion
+    actual. Persistirlo en un ui_map o en un playbook envenena la corrida
+    siguiente: reusarlo redirige al login Y ESE REDIRECT DESTRUYE LA SESION.
+
+    Se borra ENTERO (clave y valor), no se reemplaza por un placeholder: el ratchet
+    test_ningun_playbook_persiste_q_param verifica el literal, y dejar la clave
+    escrita seria gamear el gate en vez de cumplirlo.
+    """
+    if isinstance(obj, str):
+        if "q=" not in obj.lower():
+            return obj
+        out = _SESSION_QUERY_RE.sub(lambda m: "?" if m.group(0)[0] == "?" else "", obj)
+        out = _DANGLING_SEP_RE.sub("?", out)
+        return out[:-1] if out.endswith("?") else out
+    if isinstance(obj, dict):
+        return {k: _strip_session_query(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_strip_session_query(v) for v in obj]
+    return obj
+
+
+def build_from_live_page(page, screen: str, verbose: bool = False) -> dict:
+    """Construye el ui_map de la PAGINA ACTUAL, sin hacer goto (Plan 241 F4).
+
+    POR QUE. `run()` SIEMPRE navega por URL, y hay pantallas que por URL no se
+    alcanzan con contexto: el mapa de FrmDetalleClie salio de 5,7 KB (sin cliente
+    cargado) contra los 38 KB de FrmBusqueda. Con una sesion ya navegada — login,
+    entrada, click en la fila — esta funcion cosecha el DOM REAL de esa pagina.
+
+    Opt-in puro: `run()` queda byte-identico si no se usa. NUNCA lanza.
+    """
+    started = time.time()
+    try:
+        dom_content = page.content()
+        elements = _extract_elements(page, verbose=verbose)
+        if not elements:
+            return _err("no_elements_found", f"No accessible elements on live {screen}")
+        elements = _add_semantic_aliases(elements, verbose=verbose)
+        dom_hash = "sha256:" + hashlib.sha256(dom_content.encode("utf-8")).hexdigest()
+        warnings = []
+        low_count = sum(1 for e in elements if e.get("robustness") == "low")
+        if low_count:
+            warnings.append(
+                f"{low_count} elementos con robustness=low: requieren data-testid del dev")
+        return _strip_session_query({
+            "ok": True,
+            "schema_version": _SCHEMA_VERSION,
+            "screen": screen,
+            "hash": dom_hash,
+            "captured_at": _now_iso(),
+            "url": page.url,
+            "from_live_page": True,   # Plan 241 F4: cosechado CON contexto
+            "elements": elements,
+            "warnings": warnings,
+            "meta": {
+                "tool": "ui_map_builder",
+                "version": _TOOL_VERSION,
+                "duration_ms": int((time.time() - started) * 1000),
+                "source": "live_page",
+            },
+        })
+    except Exception as exc:  # noqa: BLE001 — NUNCA lanza
+        return _err("live_page_capture_failed", f"{type(exc).__name__}: {exc}"[:250])
 
 
 def run(screen: str, rebuild: bool = False, verbose: bool = False) -> dict:
@@ -474,6 +552,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--rebuild", action="store_true",
                         help="Ignore cache and rebuild from scratch")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--from-live-page", action="store_true",
+        help=("Plan 241 F4: construye el mapa navegando CON contexto (entrada + click "
+              "en la fila) en vez de hacer goto directo. Delega en "
+              "playbook_synthesizer.ensure_playbook_with_context, que usa "
+              "build_from_live_page sobre la pagina viva."))
     return parser.parse_args()
 
 

@@ -187,6 +187,13 @@ def run(
             except Exception:  # noqa: BLE001
                 synth = ""
         if not synth:
+            # ── Plan 241 F7: una EPICA no tiene pasos propios; sus hijas si ──
+            # Devolver BLOCKED/missing_technical_analysis para una epica es un
+            # diagnostico equivocado: la epica es un ROLL-UP. Se declara que hay
+            # que agregar el veredicto de las hijas (consulta ADO SOLO LECTURA).
+            _epic = _epic_rollup_intake(wi, ticket_id)
+            if _epic is not None:
+                return _epic
             return _err("missing_technical_analysis",
                         "No comment classified as analisis_tecnico found in ticket "
                         "and System.Description has no canonical analysis sections")
@@ -729,6 +736,57 @@ def _html_to_text(html: str) -> str:
     lines = text.split('\n')
     lines = [re.sub(r' {2,}', ' ', line).strip() for line in lines]
     return '\n'.join(lines).strip()
+
+
+def _epic_rollup_intake(wi: dict, ticket_id: int):
+    """Plan 241 F7 — intake de una EPICA sin secciones canonicas. NUNCA lanza.
+
+    Retorna un resultado ok=True con `epic_rollup_required: True` y la lista de
+    hijas, o None si el work item no es una epica / la flag esta OFF.
+    """
+    try:
+        from epic_rollup import epic_rollup_enabled
+        if not epic_rollup_enabled():
+            return None
+        fields = (wi or {}).get("fields") or {}
+        wtype = str(wi.get("type") or fields.get("System.WorkItemType") or "").strip().lower()
+        if wtype not in ("epic", "epica", "épica", "feature"):
+            return None
+        children: list = []
+        children_error = None
+        try:
+            from stacky_ado_bridge import fetch_children, bridge_available
+            if bridge_available():
+                res = fetch_children(int(ticket_id))
+                children = res.get("children") or []
+                children_error = res.get("error")
+            else:
+                children_error = "bridge_unavailable"
+        except Exception as exc:  # noqa: BLE001
+            children_error = type(exc).__name__
+        logger.info("[ticket_reader] ticket %s es %s: roll-up de %d hija(s) (Plan 241 F7)",
+                    ticket_id, wtype, len(children))
+        return {
+            "ok": True,
+            "ticket_id": ticket_id,
+            "epic_rollup_required": True,
+            "children": children,
+            "children_error": children_error,
+            "ticket": {
+                "id": ticket_id,
+                "title": fields.get("System.Title") or "",
+                "type": fields.get("System.WorkItemType") or "Epic",
+                "state": fields.get("System.State") or "",
+            },
+            "plan_pruebas": [],
+            "analisis_tecnico": "",
+            "notes": [
+                "epica sin secciones canonicas: el veredicto sale de agregar el de "
+                "sus tasks hijas (epic_rollup, Plan 241 F7)",
+            ],
+        }
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _err(code: str, message: str) -> dict:

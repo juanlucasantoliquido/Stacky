@@ -1188,6 +1188,26 @@ class Config:
     STACKY_CAPABILITY_DEGRADATION_ENABLED: bool = os.getenv(
         "STACKY_CAPABILITY_DEGRADATION_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # -- Plan 240 F8 / Plan 241 F8 - Agente QA UAT E2E ------------------------
+    # El pipeline QA UAT corre in-process y sus modulos leen por os.environ, asi
+    # que api/qa_uat.py exporta estas flags al entorno antes de lanzarlo.
+    STACKY_QA_UAT_ADO_BRIDGE_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_ADO_BRIDGE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Default OFF por EXCEPCION DURA #3 (prerequisito no garantizado: IIS Express +
+    # applicationhost.config del cliente + solucion compilada).
+    STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+    STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_QA_UAT_EPIC_ROLLUP_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 70 — Desacople consumers TrackerProvider ─────────────────────────
     # ON: api/tickets.py enruta los ~18 call sites por el puerto TrackerProvider
     # (get_tracker_provider) en vez de por _ado_client_for_ticket; cae al fallback

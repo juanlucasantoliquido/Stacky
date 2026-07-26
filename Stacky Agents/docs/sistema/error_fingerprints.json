@@ -309,6 +309,48 @@
       "guard_test": "src/__tests__/devopsPollingRatchet.test.ts",
       "evidence": "frontend/src/components/devops/TriggerPipelineSection.tsx (dos setInterval) + DeploymentsSection.tsx (refetchInterval), bajo el montaje persistente C10 de DevOpsPage.tsx",
       "note": "Un ratchet que solo mira refetchInterval declara victoria y deja viva la fuga de setInterval. Regla: el ratchet de sondeo se define por EFECTO (pedir datos periódicamente), no por API."
+    },
+    {
+      "id": "qa_uat_login_glob_false_negative",
+      "title": "Login exitoso reportado como credenciales invalidas",
+      "class": "qa-uat-false-negative",
+      "status": "resolved",
+      "log_pattern": "AUTH_CREDENTIALS_INVALID[\\s\\S]{0,400}FrmAgenda",
+      "log_guarded": true,
+      "killed_by": "plan 240 F1 (predicado de URL en vez de glob en wait_for_url)",
+      "killed_commit": "82dd14be",
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/unit/test_plan240_login_url_predicate.py",
+      "evidence": "Stacky tools/QA UAT Agent/auth_session_factory.py",
+      "note": "wait_for_url recibia un STRING que Playwright interpreta como glob, no como regex: el login era exitoso (aterrizaba en FrmAgenda.aspx) y el arnes lo reportaba como credenciales invalidas. Si la huella reaparece, el predicado volvio a ser un string."
+    },
+    {
+      "id": "qa_uat_nav_session_lost",
+      "title": "Expulsion al login por deep-link sin el payload de sesion",
+      "class": "qa-uat-navigation",
+      "status": "resolved",
+      "log_pattern": "NAV_SESSION_LOST",
+      "log_guarded": true,
+      "killed_by": "plan 241 F5 (menu_resolver + navigation_driver.via_menu)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/unit/test_plan241_menu_resolver.py",
+      "evidence": "Stacky tools/QA UAT Agent/menu_resolver.py; navigation_driver.py",
+      "note": "AgendaWeb pone un payload de query encriptado POR SESION en varios links. Deep-linkear uno de esos sin el payload redirige al login Y ESE REDIRECT DESTRUYE LA SESION, cascando falsos NAV_AUTH_EXPIRED en todos los pasos siguientes. NAV_SESSION_LOST es recuperable con re-auth + reintento; NAV_AUTH_EXPIRED no."
+    },
+    {
+      "id": "qa_uat_app_error_page",
+      "title": "HTTP 200 con cuerpo de error 500 tomado como llegada valida",
+      "class": "qa-uat-false-positive",
+      "status": "resolved",
+      "log_pattern": "APP_ERROR_PAGE",
+      "log_guarded": true,
+      "killed_by": "plan 241 F0 (screen_guard) + F5 (_classify_error)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/unit/test_plan241_screen_guard.py",
+      "evidence": "Stacky tools/QA UAT Agent/screen_guard.py; navigation_driver.py",
+      "note": "FrmJDemanda.aspx devuelve HTTP 200 con un cuerpo '500-Error interno del servidor'. Un waitFor de URL lo daba por llegada valida => FALSO PASS. La llegada se verifica por URL + ancla de contenido, no solo por status."
     }
   ]
 }

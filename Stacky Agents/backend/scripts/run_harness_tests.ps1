@@ -579,7 +579,9 @@ $HarnessTestFiles = @(
   "tests/test_plan218_vocabulary_aliases.py"
   "tests/test_plan218_capability_unavailable.py"
   "tests/test_plan218_serie_integridad.py"
-  "tests/test_plan218_parity_endpoint.py"
+  "tests/test_plan218_parity_endpoint.py",
+  # Plan 241 - Cero falso verde del agente QA UAT E2E (flags + doctor)
+  "tests/test_plan241_qa_uat.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

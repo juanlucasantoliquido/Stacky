@@ -167,6 +167,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_ACCEPTANCE_VERDICT_CARD_ENABLED", "STACKY_QUALITY_CONVERGENCE_ENABLED",
         "STACKY_QUALITY_CONVERGENCE_MAX_ITERATIONS", "STACKY_ADAPTIVE_EFFORT_ENABLED",
         "STACKY_EFFORT_FLOOR",
+        # Plan 240 F8 — runtime veraz del agente QA UAT E2E
+        "STACKY_QA_UAT_ADO_BRIDGE_ENABLED", "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",
+        "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
+        # Plan 241 F2/F7 — cero falso verde: discriminacion estricta y roll-up de epicas
+        "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
     ),
     "integridad_grounding": (
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
@@ -390,6 +395,82 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
 # NOTA: toda flag nueva debe agregarse también a _CATEGORY_KEYS (arriba) o el test
 # test_every_registry_flag_is_categorized rompe CI a propósito (Plan 63).
 FLAG_REGISTRY: tuple[FlagSpec, ...] = (
+    # -- Plan 240 F8 / Plan 241 F8 - Agente QA UAT E2E -----------------------
+    FlagSpec(
+        key="STACKY_QA_UAT_ADO_BRIDGE_ENABLED",
+        type="bool",
+        label="Leer tickets de QA UAT con las credenciales de Stacky",
+        description=(
+            "Plan 240 — El pipeline QA UAT lee el work item con el PAT cifrado que ya "
+            "usa Stacky, en vez de exigir un ado-config.json con el PAT en texto plano. "
+            "Solo lectura. Si falla, cae al CLI legacy."
+        ),
+        group="global",
+        env_only=False,
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",
+        type="bool",
+        label="Veredicto funcional por criterios de aceptacion",
+        description=(
+            "Plan 240 — Extrae los criterios de aceptacion del ticket y exige "
+            "verificarlos: un run sin ninguna asercion funcional verificada nunca da "
+            "PASS (queda MIXED). Determinista, sin LLM."
+        ),
+        group="global",
+        env_only=False,
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
+        type="bool",
+        label="Arrancar AgendaWeb local para validar (opt-in)",
+        description=(
+            "Plan 240 — Si AgendaWeb no responde, el pipeline intenta UN arranque local "
+            "con IIS Express y lo apaga al terminar. Requiere IIS Express instalado, el "
+            "applicationhost.config del cliente y la solucion compilada. Solo localhost."
+        ),
+        group="global",
+        env_only=False,
+        # Default OFF por EXCEPCION DURA #3: prerequisito NO garantizado en una
+        # instalacion default. NO va en _CURATED_DEFAULTS_ON, y por eso NO declara
+        # `default=`: default_is_known() es `spec.default is not None`, asi que un
+        # `default=False` explicito tambien la marcaria como curada y dejaria rojo
+        # test_default_known_only_for_curated. El OFF efectivo lo da el type-zero
+        # del bool + el getenv("...", "false") de config.py.
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED",
+        type="bool",
+        label="Exigir aserciones que sepan fallar (control negativo)",
+        description=(
+            "Plan 241 — Un criterio solo cuenta como verificado si su asercion viene "
+            "con un control negativo probado: el valor pre-fix contra el cual la MISMA "
+            "asercion da fail. Sin esa prueba el criterio queda not_verifiable y el run "
+            "no puede ser PASS. Determinista, sin LLM y sin abrir el navegador."
+        ),
+        group="global",
+        env_only=False,
+        # Curada en _CURATED_DEFAULTS_ON: el default laxo ES el bug que el plan mata.
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+        type="bool",
+        label="Veredicto de epicas por agregacion de sus hijas",
+        description=(
+            "Plan 241 — Una epica no tiene pasos de reproduccion propios: en vez de "
+            "BLOCKED/missing_technical_analysis, su veredicto se calcula agregando el de "
+            "sus tasks hijas. Consulta ADO de SOLO LECTURA."
+        ),
+        group="global",
+        env_only=False,
+        # Curada en _CURATED_DEFAULTS_ON (aditivo y solo lectura).
+        default=True,
+    ),
     FlagSpec(
         key="CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED",
         type="bool",

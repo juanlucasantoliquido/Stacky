@@ -14,3 +14,9 @@ sys.path.insert(0, str(TOOL_ROOT))
 
 # Use mock LLM for all tests unless explicitly overridden
 os.environ.setdefault("STACKY_LLM_BACKEND", "mock")
+
+
+def pytest_configure(config):
+    """Plan 241 F5 — marker `e2e`: tests que exigen AgendaWeb arriba."""
+    config.addinivalue_line(
+        "markers", "e2e: requiere AgendaWeb corriendo (no se ejecuta en CI)")

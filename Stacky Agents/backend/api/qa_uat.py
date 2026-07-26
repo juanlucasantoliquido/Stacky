@@ -70,6 +70,46 @@ def _ensure_pipeline_on_path() -> None:
         sys.path.insert(0, root)
 
 
+# ── Plan 240 F8 / Plan 241 F8 — flags de la UI al entorno del pipeline ───────
+# El pipeline corre IN-PROCESS (_ensure_pipeline_on_path inserta el tool en
+# sys.path; no hay subprocess para el pipeline), así que sus módulos ven el mismo
+# os.environ; y el runner de specs sí lanza un subprocess (`npx playwright test`)
+# que HEREDA el entorno del padre. Sin esta exportación el toggle de la UI no
+# tendría ningún efecto sobre el tool.
+_FLAG_EXPORT_LOCK = threading.Lock()
+
+_QA_UAT_FLAG_KEYS = (
+    "STACKY_QA_UAT_ADO_BRIDGE_ENABLED",
+    "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",
+    "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
+    "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED",
+    "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+)
+
+
+def _export_qa_uat_flags() -> dict:
+    """Exporta las flags del arnés a os.environ leyéndolas de la INSTANCIA config.config.
+
+    LIMITACIÓN DOCUMENTADA (Plan 240 C5): os.environ es global al proceso y esta
+    función corre desde un threading.Thread. El candado evita que dos exportaciones
+    se interleaven, pero DOS RUNS CONCURRENTES COMPARTEN los valores del último
+    export. Es aceptable para el modelo mono-operador. Prohibido "arreglarlo" con
+    setdefault: eso volvería inefectivo el toggle de la UI, que es justamente el
+    bug que esta función corrige.
+    """
+    import os
+
+    from config import config as _cfg
+
+    exported: dict = {}
+    with _FLAG_EXPORT_LOCK:
+        for _k in _QA_UAT_FLAG_KEYS:
+            val = "true" if bool(getattr(_cfg, _k, False)) else "false"
+            os.environ[_k] = val
+            exported[_k] = val
+    return exported
+
+
 # ── Endpoint: POST /api/qa-uat/run ────────────────────────────────────────────
 
 @bp.post("/run")
@@ -219,6 +259,13 @@ def _run_pipeline_in_background(
         sys.path.insert(0, str(_PIPELINE_ROOT))
 
     try:
+        # Plan 240 F8 / 241 F8 — las flags de la UI mandan sobre el tool.
+        try:
+            _flags = _export_qa_uat_flags()
+            log("info", f"flags QA UAT exportadas: {_flags}")
+        except Exception as _flag_exc:  # noqa: BLE001
+            log("warn", f"no se pudieron exportar las flags QA UAT: {_flag_exc}")
+
         import qa_uat_pipeline
 
         log("info", f"pipeline root: {_PIPELINE_ROOT}")
@@ -1872,3 +1919,46 @@ def trigger_data_lineage_build():
     except Exception as exc:
         return jsonify({"ok": False, "error": "lineage_build_error",
                         "message": str(exc)}), 500
+
+
+# ── Endpoint: GET /api/qa-uat/runtime-doctor (Plan 240 F8 / Plan 241 F6+F8) ───
+
+@bp.get("/runtime-doctor")
+def get_runtime_doctor():
+    """Doctor del runtime QA UAT. Read-only, best-effort, SIEMPRE 200.
+
+    Cualquier import roto responde con el sub-objeto en ok:false, nunca 5xx: el
+    punto del doctor es diagnosticar un entorno roto, así que no puede depender de
+    que el entorno esté sano.
+    """
+    _ensure_pipeline_on_path()
+    out = {"ok": True, "browser": None, "agenda": None, "ado_bridge": None,
+           "version_drift": None}
+    try:
+        from browser_runtime_guard import check_browser_runtime
+        out["browser"] = check_browser_runtime(probe_launch=False)
+    except Exception as exc:  # noqa: BLE001
+        out["browser"] = {"ok": False, "code": "GUARD_UNAVAILABLE", "detail": str(exc)}
+    try:
+        # Plan 241 F6 — deriva de versiones Node↔Python: el guard de Python puede
+        # decir "browser OK" mientras el globalSetup de Node muere porque cada uno
+        # exige una revisión de navegador distinta.
+        from browser_runtime_guard import check_node_browser_drift
+        out["version_drift"] = check_node_browser_drift()
+    except Exception as exc:  # noqa: BLE001
+        out["version_drift"] = {"ok": True, "code": "", "detail": str(exc)}
+    try:
+        from environment_preflight import run_environment_preflight
+        pre = run_environment_preflight()
+        out["agenda"] = {"ok": pre.ok, "reason": pre.reason, "message": pre.message,
+                         "base_url": pre.base_url}
+    except Exception as exc:  # noqa: BLE001
+        out["agenda"] = {"ok": False, "reason": "PREFLIGHT_UNAVAILABLE",
+                         "message": str(exc)}
+    try:
+        from stacky_ado_bridge import bridge_available
+        out["ado_bridge"] = {"ok": bool(bridge_available())}
+    except Exception as exc:  # noqa: BLE001
+        out["ado_bridge"] = {"ok": False, "detail": str(exc)}
+    out["ok"] = bool((out["browser"] or {}).get("ok"))
+    return jsonify(out)

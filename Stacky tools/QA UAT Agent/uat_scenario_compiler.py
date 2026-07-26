@@ -214,6 +214,17 @@ def run(
 
         spec = _postprocess_compiled_spec(spec, desc, esperado)
 
+        # ── Plan 241 F1/F2/F3: catalogo de aserciones + control negativo ──────
+        # Cuando el item del plan trae `kind` (lo pone acceptance_extractor del
+        # Plan 240), los oraculos del CATALOGO reemplazan a los heuristicos: una
+        # asercion exacta (attribute_equals maxlength=50) discrimina; un oraculo
+        # de texto generico no. Si el catalogo no puede resolver el target contra
+        # el ui_map, NO se inventa nada: se dejan los heuristicos de hoy.
+        _catalog_oracles = _catalog_assertions_for_item(item, ui_elements, spec)
+        if _catalog_oracles:
+            spec["oraculos"] = _catalog_oracles
+            spec["assertion_source"] = "assertion_catalog"
+
         # Guard against placeholders leaking from LLM output (e.g.
         # "<expected_count>") which later produce invalid TypeScript tests.
         serialized_spec = json.dumps(spec, ensure_ascii=False)
@@ -555,6 +566,63 @@ def _find_decorative_oracle_targets(spec: dict, ui_elements: list) -> Optional[d
                 "label": el.get("label"),
             }
     return None
+
+
+def _ui_map_from_elements(ui_elements) -> dict:
+    """alias_semantic -> {selector, label} con la MISMA forma de claves que el
+    selector_map que arma playwright_test_generator (Plan 241 F1, C2).
+
+    Es indispensable que las claves coincidan: el template resuelve el selector
+    con ui_map[oracle.target]; un alias que no sea clave emite
+    `selector: undefined` y el criterio se pierde en silencio.
+    """
+    out: dict = {}
+    for el in (ui_elements or []):
+        if not isinstance(el, dict):
+            continue
+        alias = el.get("alias_semantic")
+        if not alias:
+            continue
+        out[alias] = {
+            "selector": el.get("selector_recommended") or "",
+            "label": el.get("label") or "",
+        }
+    return out
+
+
+def _catalog_assertions_for_item(item: dict, ui_elements, spec: dict) -> list:
+    """Oraculos del catalogo (F1) + control negativo probado (F2). NUNCA lanza.
+
+    Devuelve [] cuando no aplica (sin `kind`, sin ui_elements, target no
+    resoluble): el compilador conserva entonces sus oraculos heuristicos.
+    """
+    try:
+        kind = str((item or {}).get("kind") or "").strip()
+        if not kind or not ui_elements:
+            return []
+        from assertion_catalog import build_assertions
+        criterion = {
+            "id": item.get("criterio_id") or item.get("id"),
+            "kind": kind,
+            "text": item.get("descripcion") or "",
+            "expected": item.get("esperado"),
+            "tokens": item.get("tokens") or [],
+            "target_alias": item.get("target_alias"),
+        }
+        ui_map = _ui_map_from_elements(ui_elements)
+        oracles = build_assertions(criterion, ui_map, spec.get("pantalla") or "")
+        if not oracles:
+            return []
+        try:
+            from discrimination_prover import prove
+            for orc in oracles:
+                orc["discrimination"] = prove(orc, criterion)
+        except Exception as _dp_exc:  # noqa: BLE001
+            logger.debug("discrimination_prover no disponible (%s)", _dp_exc)
+        return oracles
+    except Exception as _cat_exc:  # noqa: BLE001
+        logger.debug("assertion_catalog no aplicado (%s)", _cat_exc)
+        return []
 
 
 def _compile_via_heuristic(

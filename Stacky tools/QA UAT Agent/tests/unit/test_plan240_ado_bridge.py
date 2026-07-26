@@ -16,8 +16,17 @@ def test_bridge_available_true_aqui():
 
 
 def test_bridge_solo_lectura():
-    """Guardian de HITL: ningun metodo de escritura, ni en el set ni en el texto."""
-    assert _READ_ONLY_METHODS == {"get_work_item", "fetch_comments", "fetch_attachments"}
+    """Guardian de HITL: ningun metodo de escritura, ni en el set ni en el texto.
+
+    El set es un RATCHET de superficie: crece SOLO con metodos de LECTURA y con
+    justificacion explicita. `fetch_open_work_items` entra con el Plan 241 F7
+    (roll-up de epicas): es una consulta WIQL `SELECT [System.Id] ... WHERE
+    [System.Parent] = <id>`, sin escritura de ningun tipo.
+    """
+    assert _READ_ONLY_METHODS == {
+        "get_work_item", "fetch_comments", "fetch_attachments",
+        "fetch_open_work_items",   # Plan 241 F7 — WIQL de solo lectura
+    }
     src = Path(bridge.__file__).read_text(encoding="utf-8")
     # (C11) nombres construidos por concatenacion para no introducirlos como
     # literales en este archivo y colisionar con el mismo gate.

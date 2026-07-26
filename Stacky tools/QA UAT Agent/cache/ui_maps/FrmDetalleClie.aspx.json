@@ -2,187 +2,7246 @@
   "ok": true,
   "schema_version": "ui_map/1.1",
   "screen": "FrmDetalleClie.aspx",
-  "built_at": "2026-05-09T00:00:00Z",
-  "builder_version": "ui_map_builder/next",
-  "dom_hash": "sha256:fixture",
-  "hash": "sha256:fixture",
-  "captured_at": "2026-05-09T00:00:00Z",
-  "url": "http://localhost/AgendaWeb/FrmDetalleClie.aspx",
+  "hash": "sha256:870f39f5a73e1f67743c03daef94a16be11755d5a3d91ffcda5b9bf16b8b8cc6",
+  "captured_at": "2026-07-25T23:17:33Z",
+  "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx",
+  "from_live_page": true,
   "elements": [
     {
-      "alias_semantic": "cmbProvincia",
-      "kind": "select",
-      "role": "combobox",
-      "label": "Provincia",
-      "asp_id": "cmbProvincia",
-      "input_type": null,
-      "data_testid": null,
-      "class_list": [],
-      "selector_recommended": "#cmbProvincia",
-      "selector": "#cmbProvincia",
-      "robustness": "high",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": true,
-      "is_decorative": false,
-      "confidence": 0.96,
-      "fallback_selectors": ["select[name*='cmbProvincia']"],
-      "position": {"x": 120, "y": 200},
-      "text": "Provincia",
-      "warning": null
-    },
-    {
-      "alias_semantic": "cmbDepartamento",
-      "kind": "select",
-      "role": "combobox",
-      "label": "Departamento",
-      "asp_id": "cmbDepartamento",
-      "input_type": null,
-      "data_testid": null,
-      "class_list": [],
-      "selector_recommended": "#cmbDepartamento",
-      "selector": "#cmbDepartamento",
-      "robustness": "high",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": true,
-      "is_decorative": false,
-      "confidence": 0.96,
-      "fallback_selectors": ["select[name*='cmbDepartamento']"],
-      "position": {"x": 280, "y": 200},
-      "text": "Departamento",
-      "warning": null
-    },
-    {
-      "alias_semantic": "btnGuardar",
-      "kind": "button",
-      "role": "button",
-      "label": "Guardar",
-      "asp_id": "btnGuardar",
-      "input_type": "submit",
-      "data_testid": null,
-      "class_list": ["btn", "btn-primary"],
-      "selector_recommended": "#btnGuardar",
-      "selector": "#btnGuardar",
-      "robustness": "high",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": true,
-      "is_decorative": false,
-      "confidence": 0.99,
-      "fallback_selectors": ["input[value='Guardar']", "button:has-text('Guardar')"],
-      "position": {"x": 460, "y": 480},
-      "text": "Guardar",
-      "warning": null
-    },
-    {
-      "alias_semantic": "input_nombre",
       "kind": "input",
-      "role": "textbox",
-      "label": "Nombre",
-      "asp_id": "txtNombre",
+      "role": "input",
+      "label": "Nombre del Cliente",
+      "accessible_name": null,
+      "asp_id": "c_abfApellidoNombre",
       "input_type": "text",
       "data_testid": null,
-      "class_list": [],
-      "selector_recommended": "#txtNombre",
-      "selector": "#txtNombre",
-      "robustness": "high",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": true,
+      "class_list": [
+        "readonly"
+      ],
       "is_decorative": false,
-      "confidence": 0.95,
-      "fallback_selectors": ["input[name*='txtNombre']"],
-      "position": {"x": 120, "y": 100},
-      "text": null,
+      "selector_recommended": "getByRole('input', {name: 'Nombre del Cliente'})",
+      "robustness": "high",
+      "alias_semantic": "input_nombre_del_cliente",
+      "fallback_selectors": [
+        "getByLabel('Nombre del Cliente')",
+        "#c_abfApellidoNombre",
+        "[id$='c_abfApellidoNombre']"
+      ],
+      "position": {
+        "x": 38,
+        "y": 165
+      },
       "warning": null
     },
     {
-      "alias_semantic": "input_apellido",
       "kind": "input",
-      "role": "textbox",
-      "label": "Apellido",
-      "asp_id": "txtApellido",
+      "role": "input",
+      "label": "Usuario",
+      "accessible_name": null,
+      "asp_id": "c_abfUsuario",
       "input_type": "text",
       "data_testid": null,
-      "class_list": [],
-      "selector_recommended": "#txtApellido",
-      "selector": "#txtApellido",
-      "robustness": "high",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": true,
+      "class_list": [
+        "readonly"
+      ],
       "is_decorative": false,
-      "confidence": 0.95,
-      "fallback_selectors": ["input[name*='txtApellido']"],
-      "position": {"x": 280, "y": 100},
-      "text": null,
+      "selector_recommended": "getByRole('input', {name: 'Usuario'})",
+      "robustness": "high",
+      "alias_semantic": "input_usuario",
+      "fallback_selectors": [
+        "getByLabel('Usuario')",
+        "#c_abfUsuario",
+        "[id$='c_abfUsuario']"
+      ],
+      "position": {
+        "x": 644,
+        "y": 165
+      },
       "warning": null
     },
     {
-      "alias_semantic": "link_agregar_domicilio",
-      "kind": "a",
-      "role": "link",
-      "label": "Agregar Domicilio",
-      "asp_id": "lnkAgregarDomicilio",
+      "kind": "input",
+      "role": "input",
+      "label": "Nro Documento",
+      "accessible_name": null,
+      "asp_id": "c_abfDocumento",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Nro Documento'})",
+      "robustness": "high",
+      "alias_semantic": "input_nro_documento",
+      "fallback_selectors": [
+        "getByLabel('Nro Documento')",
+        "#c_abfDocumento",
+        "[id$='c_abfDocumento']"
+      ],
+      "position": {
+        "x": 38,
+        "y": 201
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Perfil",
+      "accessible_name": null,
+      "asp_id": "c_abfPerfil",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Perfil'})",
+      "robustness": "high",
+      "alias_semantic": "input_perfil",
+      "fallback_selectors": [
+        "getByLabel('Perfil')",
+        "#c_abfPerfil",
+        "[id$='c_abfPerfil']"
+      ],
+      "position": {
+        "x": 644,
+        "y": 201
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Núm. Cliente",
+      "accessible_name": null,
+      "asp_id": "c_abfNumCliente",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Núm. Cliente'})",
+      "robustness": "high",
+      "alias_semantic": "input_n_m_cliente",
+      "fallback_selectors": [
+        "getByLabel('Núm. Cliente')",
+        "#c_abfNumCliente",
+        "[id$='c_abfNumCliente']"
+      ],
+      "position": {
+        "x": 38,
+        "y": 237
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Nivel de Mora",
+      "accessible_name": null,
+      "asp_id": "c_abfNivelMora",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Nivel de Mora'})",
+      "robustness": "high",
+      "alias_semantic": "input_nivel_de_mora",
+      "fallback_selectors": [
+        "getByLabel('Nivel de Mora')",
+        "#c_abfNivelMora",
+        "[id$='c_abfNivelMora']"
+      ],
+      "position": {
+        "x": 644,
+        "y": 237
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Tipo Cliente",
+      "accessible_name": null,
+      "asp_id": "c_abfTipoCliente",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Tipo Cliente'})",
+      "robustness": "high",
+      "alias_semantic": "input_tipo_cliente",
+      "fallback_selectors": [
+        "getByLabel('Tipo Cliente')",
+        "#c_abfTipoCliente",
+        "[id$='c_abfTipoCliente']"
+      ],
+      "position": {
+        "x": 38,
+        "y": 273
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Agente",
+      "accessible_name": null,
+      "asp_id": "c_abfCorredorPrincipal",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Agente'})",
+      "robustness": "high",
+      "alias_semantic": "input_agente",
+      "fallback_selectors": [
+        "getByLabel('Agente')",
+        "#c_abfCorredorPrincipal",
+        "[id$='c_abfCorredorPrincipal']"
+      ],
+      "position": {
+        "x": 240,
+        "y": 273
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Riesgo de Cliente:",
+      "accessible_name": null,
+      "asp_id": "c_abfRiesgoCliente",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Riesgo de Cliente:'})",
+      "robustness": "high",
+      "alias_semantic": "input_riesgo_de_cliente",
+      "fallback_selectors": [
+        "getByLabel('Riesgo de Cliente:')",
+        "#c_abfRiesgoCliente",
+        "[id$='c_abfRiesgoCliente']"
+      ],
+      "position": {
+        "x": 38,
+        "y": 309
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "FAD",
+      "accessible_name": null,
+      "asp_id": "c_abfFAD",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'FAD'})",
+      "robustness": "high",
+      "alias_semantic": "input_fad",
+      "fallback_selectors": [
+        "getByLabel('FAD')",
+        "#c_abfFAD",
+        "[id$='c_abfFAD']"
+      ],
+      "position": {
+        "x": 240,
+        "y": 309
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Atraso Total Dolarizado",
+      "accessible_name": null,
+      "asp_id": "c_abfAtrasoTotal",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Atraso Total Dolarizado'})",
+      "robustness": "high",
+      "alias_semantic": "input_atraso_total_dolarizado",
+      "fallback_selectors": [
+        "getByLabel('Atraso Total Dolarizado')",
+        "#c_abfAtrasoTotal",
+        "[id$='c_abfAtrasoTotal']"
+      ],
+      "position": {
+        "x": 865,
+        "y": 165
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Act. Económica",
+      "accessible_name": null,
+      "asp_id": "c_abfActEconomicoRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Act. Económica'})",
+      "robustness": "high",
+      "alias_semantic": "input_act_econ_mica",
+      "fallback_selectors": [
+        "getByLabel('Act. Económica')",
+        "#c_abfActEconomicoRelacion",
+        "[id$='c_abfActEconomicoRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Sit. Laboral",
+      "accessible_name": null,
+      "asp_id": "c_abfSitLaboralRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Sit. Laboral'})",
+      "robustness": "high",
+      "alias_semantic": "input_sit_laboral",
+      "fallback_selectors": [
+        "getByLabel('Sit. Laboral')",
+        "#c_abfSitLaboralRelacion",
+        "[id$='c_abfSitLaboralRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Cargo",
+      "accessible_name": null,
+      "asp_id": "c_abfCargoRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Cargo'})",
+      "robustness": "high",
+      "alias_semantic": "input_cargo",
+      "fallback_selectors": [
+        "getByLabel('Cargo')",
+        "#c_abfCargoRelacion",
+        "[id$='c_abfCargoRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Profesión",
+      "accessible_name": null,
+      "asp_id": "c_abfProfesionRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Profesión'})",
+      "robustness": "high",
+      "alias_semantic": "input_profesi_n",
+      "fallback_selectors": [
+        "getByLabel('Profesión')",
+        "#c_abfProfesionRelacion",
+        "[id$='c_abfProfesionRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Ingreso",
+      "accessible_name": null,
+      "asp_id": "c_abfIngresoRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "importe",
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Ingreso'})",
+      "robustness": "high",
+      "alias_semantic": "input_ingreso",
+      "fallback_selectors": [
+        "getByLabel('Ingreso')",
+        "#c_abfIngresoRelacion",
+        "[id$='c_abfIngresoRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Ingreso",
+      "accessible_name": null,
+      "asp_id": "c_abfFechaIngresoRelacion",
+      "input_type": "date",
+      "data_testid": null,
+      "class_list": [
+        "datepicker",
+        "date",
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Ingreso'})",
+      "robustness": "high",
+      "alias_semantic": "input_ingreso",
+      "fallback_selectors": [
+        "getByLabel('Ingreso')",
+        "#c_abfFechaIngresoRelacion",
+        "[id$='c_abfFechaIngresoRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "V.I.P",
+      "accessible_name": null,
+      "asp_id": "c_abfVIPRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'V.I.P'})",
+      "robustness": "high",
+      "alias_semantic": "input_v_i_p",
+      "fallback_selectors": [
+        "getByLabel('V.I.P')",
+        "#c_abfVIPRelacion",
+        "[id$='c_abfVIPRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Mandante",
+      "accessible_name": null,
+      "asp_id": "c_abfMandanteRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Mandante'})",
+      "robustness": "high",
+      "alias_semantic": "input_mandante",
+      "fallback_selectors": [
+        "getByLabel('Mandante')",
+        "#c_abfMandanteRelacion",
+        "[id$='c_abfMandanteRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Segmento",
+      "accessible_name": null,
+      "asp_id": "c_abfSegmentoRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Segmento'})",
+      "robustness": "high",
+      "alias_semantic": "input_segmento",
+      "fallback_selectors": [
+        "getByLabel('Segmento')",
+        "#c_abfSegmentoRelacion",
+        "[id$='c_abfSegmentoRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Fecha Nac.",
+      "accessible_name": null,
+      "asp_id": "c_abfFechaNacRelacion",
+      "input_type": "date",
+      "data_testid": null,
+      "class_list": [
+        "datepicker",
+        "date",
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Fecha Nac.'})",
+      "robustness": "high",
+      "alias_semantic": "input_fecha_nac",
+      "fallback_selectors": [
+        "getByLabel('Fecha Nac.')",
+        "#c_abfFechaNacRelacion",
+        "[id$='c_abfFechaNacRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Estado Civil",
+      "accessible_name": null,
+      "asp_id": "c_abfEstadoCivilRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Estado Civil'})",
+      "robustness": "high",
+      "alias_semantic": "input_estado_civil",
+      "fallback_selectors": [
+        "getByLabel('Estado Civil')",
+        "#c_abfEstadoCivilRelacion",
+        "[id$='c_abfEstadoCivilRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Nacionalidad",
+      "accessible_name": null,
+      "asp_id": "c_abfNacionalidadRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Nacionalidad'})",
+      "robustness": "high",
+      "alias_semantic": "input_nacionalidad",
+      "fallback_selectors": [
+        "getByLabel('Nacionalidad')",
+        "#c_abfNacionalidadRelacion",
+        "[id$='c_abfNacionalidadRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "No. de Dependientes",
+      "accessible_name": null,
+      "asp_id": "c_abfNoDependientesRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "entero",
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'No. de Dependientes'})",
+      "robustness": "high",
+      "alias_semantic": "input_no_de_dependientes",
+      "fallback_selectors": [
+        "getByLabel('No. de Dependientes')",
+        "#c_abfNoDependientesRelacion",
+        "[id$='c_abfNoDependientesRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Tipo Cliente",
+      "accessible_name": null,
+      "asp_id": "c_abfTipoClienteRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Tipo Cliente'})",
+      "robustness": "high",
+      "alias_semantic": "input_tipo_cliente",
+      "fallback_selectors": [
+        "getByLabel('Tipo Cliente')",
+        "#c_abfTipoClienteRelacion",
+        "[id$='c_abfTipoClienteRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Empresa",
+      "accessible_name": null,
+      "asp_id": "c_abfEmpresaRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Empresa'})",
+      "robustness": "high",
+      "alias_semantic": "input_empresa",
+      "fallback_selectors": [
+        "getByLabel('Empresa')",
+        "#c_abfEmpresaRelacion",
+        "[id$='c_abfEmpresaRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Riesgo Sist. Finan.",
+      "accessible_name": null,
+      "asp_id": "c_abfRiesgoFinanRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Riesgo Sist. Finan.'})",
+      "robustness": "high",
+      "alias_semantic": "input_riesgo_sist_finan",
+      "fallback_selectors": [
+        "getByLabel('Riesgo Sist. Finan.')",
+        "#c_abfRiesgoFinanRelacion",
+        "[id$='c_abfRiesgoFinanRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Riesgo Entidad",
+      "accessible_name": null,
+      "asp_id": "c_abfRiesgoEntidadRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Riesgo Entidad'})",
+      "robustness": "high",
+      "alias_semantic": "input_riesgo_entidad",
+      "fallback_selectors": [
+        "getByLabel('Riesgo Entidad')",
+        "#c_abfRiesgoEntidadRelacion",
+        "[id$='c_abfRiesgoEntidadRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Fecha Ingreso Empleado",
+      "accessible_name": null,
+      "asp_id": "c_abfFecIngEmpleoRelacion",
+      "input_type": "date",
+      "data_testid": null,
+      "class_list": [
+        "datepicker",
+        "date",
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Fecha Ingreso Empleado'})",
+      "robustness": "high",
+      "alias_semantic": "input_fecha_ingreso_empleado",
+      "fallback_selectors": [
+        "getByLabel('Fecha Ingreso Empleado')",
+        "#c_abfFecIngEmpleoRelacion",
+        "[id$='c_abfFecIngEmpleoRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Acreedita Haberes",
+      "accessible_name": null,
+      "asp_id": "c_abfAcreeditaHaberesRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Acreedita Haberes'})",
+      "robustness": "high",
+      "alias_semantic": "input_acreedita_haberes",
+      "fallback_selectors": [
+        "getByLabel('Acreedita Haberes')",
+        "#c_abfAcreeditaHaberesRelacion",
+        "[id$='c_abfAcreeditaHaberesRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Sucursal",
+      "accessible_name": null,
+      "asp_id": "c_abfSucursalRelacion",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "readonly"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Sucursal'})",
+      "robustness": "high",
+      "alias_semantic": "input_sucursal",
+      "fallback_selectors": [
+        "getByLabel('Sucursal')",
+        "#c_abfSucursalRelacion",
+        "[id$='c_abfSucursalRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Fecha *",
+      "accessible_name": null,
+      "asp_id": "f_abfFecha",
+      "input_type": "date",
+      "data_testid": null,
+      "class_list": [
+        "datepicker",
+        "date"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Fecha *'})",
+      "robustness": "high",
+      "alias_semantic": "input_fecha",
+      "fallback_selectors": [
+        "getByLabel('Fecha *')",
+        "#f_abfFecha",
+        "[id$='f_abfFecha']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "input",
+      "role": "input",
+      "label": "Hora *",
+      "accessible_name": null,
+      "asp_id": "f_abfHora",
+      "input_type": "text",
+      "data_testid": null,
+      "class_list": [
+        "hora"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('input', {name: 'Hora *'})",
+      "robustness": "high",
+      "alias_semantic": "input_hora",
+      "fallback_selectors": [
+        "getByLabel('Hora *')",
+        "#f_abfHora",
+        "[id$='f_abfHora']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Acción Ejecutar *",
+      "accessible_name": null,
+      "asp_id": "f_ddlAccionEjecutar",
       "input_type": null,
       "data_testid": null,
-      "class_list": ["link-action"],
-      "selector_recommended": "#lnkAgregarDomicilio",
-      "selector": "#lnkAgregarDomicilio",
-      "robustness": "high",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": true,
+      "class_list": [
+        "col",
+        "s8"
+      ],
       "is_decorative": false,
-      "confidence": 0.93,
-      "fallback_selectors": ["a:has-text('Agregar Domicilio')"],
-      "position": {"x": 120, "y": 350},
-      "text": "Agregar Domicilio",
+      "selector_recommended": "getByRole('select', {name: 'Acción Ejecutar *'})",
+      "robustness": "high",
+      "alias_semantic": "select_acci_n_ejecutar",
+      "fallback_selectors": [
+        "getByLabel('Acción Ejecutar *')",
+        "#f_ddlAccionEjecutar",
+        "[id$='f_ddlAccionEjecutar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
       "warning": null
     },
     {
-      "alias_semantic": "msg_titulo_cliente",
-      "kind": "div",
-      "role": "heading",
+      "kind": "select",
+      "role": "select",
+      "label": "Figura *",
+      "accessible_name": null,
+      "asp_id": "f_ddlFigura",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s4"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('select', {name: 'Figura *'})",
+      "robustness": "high",
+      "alias_semantic": "select_figura",
+      "fallback_selectors": [
+        "getByLabel('Figura *')",
+        "#f_ddlFigura",
+        "[id$='f_ddlFigura']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Obligación *",
+      "accessible_name": null,
+      "asp_id": "f_ddlObligacion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s8"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('select', {name: 'Obligación *'})",
+      "robustness": "high",
+      "alias_semantic": "select_obligaci_n",
+      "fallback_selectors": [
+        "getByLabel('Obligación *')",
+        "#f_ddlObligacion",
+        "[id$='f_ddlObligacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Acción a Agendar *",
+      "accessible_name": null,
+      "asp_id": "f_ddlAccionAgendar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s7"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('select', {name: 'Acción a Agendar *'})",
+      "robustness": "high",
+      "alias_semantic": "select_acci_n_a_agendar",
+      "fallback_selectors": [
+        "getByLabel('Acción a Agendar *')",
+        "#f_ddlAccionAgendar",
+        "[id$='f_ddlAccionAgendar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Destino *",
+      "accessible_name": null,
+      "asp_id": "f_ddlDestino",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s4"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('select', {name: 'Destino *'})",
+      "robustness": "high",
+      "alias_semantic": "select_destino",
+      "fallback_selectors": [
+        "getByLabel('Destino *')",
+        "#f_ddlDestino",
+        "[id$='f_ddlDestino']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Usuarios *",
+      "accessible_name": null,
+      "asp_id": "f_ddlUsuarios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s3"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('select', {name: 'Usuarios *'})",
+      "robustness": "high",
+      "alias_semantic": "select_usuarios",
+      "fallback_selectors": [
+        "getByLabel('Usuarios *')",
+        "#f_ddlUsuarios",
+        "[id$='f_ddlUsuarios']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "select",
+      "role": "select",
+      "label": "Figura *",
+      "accessible_name": null,
+      "asp_id": "f_ddlFiguraAgendar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s3"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "getByRole('select', {name: 'Figura *'})",
+      "robustness": "high",
+      "alias_semantic": "select_figura",
+      "fallback_selectors": [
+        "getByLabel('Figura *')",
+        "#f_ddlFiguraAgendar",
+        "[id$='f_ddlFiguraAgendar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "table",
+      "role": "table",
       "label": null,
-      "asp_id": "lblTituloCliente",
+      "accessible_name": null,
+      "asp_id": "c_GridTele",
       "input_type": null,
       "data_testid": null,
-      "class_list": ["page-title"],
-      "selector_recommended": "#lblTituloCliente",
-      "selector": "#lblTituloCliente",
+      "class_list": [
+        "aisgridview"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_GridTele",
       "robustness": "medium",
-      "locator_strategy": "id",
-      "is_visible": true,
-      "is_interactive": false,
-      "is_decorative": true,
-      "confidence": 0.80,
-      "fallback_selectors": [],
-      "position": {"x": 0, "y": 20},
-      "text": "Detalle Cliente",
+      "alias_semantic": "grid_c_gridtele",
+      "fallback_selectors": [
+        "[id$='c_GridTele']"
+      ],
+      "position": {
+        "x": 1062,
+        "y": 158
+      },
       "warning": null
-    }
-  ],
-  "grids": [
-    {
-      "alias_semantic": "GridObligaciones",
-      "selector": "#GridObligaciones",
-      "row_selector": "tbody tr",
-      "empty_state_selectors": ["text=No hay datos", ".empty"]
     },
     {
-      "alias_semantic": "GridDomicilios",
-      "selector": "#GridDomicilios",
-      "row_selector": "tbody tr",
-      "empty_state_selectors": ["text=Sin domicilios registrados", ".empty-grid"]
+      "kind": "table",
+      "role": "table",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_GridObligaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview",
+        "clickable"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_GridObligaciones",
+      "robustness": "medium",
+      "alias_semantic": "grid_c_gridobligaciones",
+      "fallback_selectors": [
+        "[id$='c_GridObligaciones']"
+      ],
+      "position": {
+        "x": 29,
+        "y": 526
+      },
+      "warning": null
+    },
+    {
+      "kind": "table",
+      "role": "table",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_GridGestiones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview",
+        "clickable"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_GridGestiones",
+      "robustness": "medium",
+      "alias_semantic": "grid_c_gridgestiones",
+      "fallback_selectors": [
+        "[id$='c_GridGestiones']"
+      ],
+      "position": {
+        "x": 29,
+        "y": 733
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "updTimer",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#updTimer",
+      "robustness": "medium",
+      "alias_semantic": "panel_updtimer",
+      "fallback_selectors": [
+        "[id$='updTimer']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "TimerSession",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#TimerSession",
+      "robustness": "medium",
+      "alias_semantic": "panel_timersession",
+      "fallback_selectors": [
+        "[id$='TimerSession']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "updFinSesion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#updFinSesion",
+      "robustness": "medium",
+      "alias_semantic": "panel_updfinsesion",
+      "fallback_selectors": [
+        "[id$='updFinSesion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "dialogFinSesion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#dialogFinSesion",
+      "robustness": "medium",
+      "alias_semantic": "panel_dialogfinsesion",
+      "fallback_selectors": [
+        "[id$='dialogFinSesion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "updBotones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#updBotones",
+      "robustness": "medium",
+      "alias_semantic": "panel_updbotones",
+      "fallback_selectors": [
+        "[id$='updBotones']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updControles",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updControles",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updcontroles",
+      "fallback_selectors": [
+        "[id$='c_updControles']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 153
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdateTelefonos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdateTelefonos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatetelefonos",
+      "fallback_selectors": [
+        "[id$='c_UpdateTelefonos']"
+      ],
+      "position": {
+        "x": 1062,
+        "y": 153
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridTele__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridTele__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridtele_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridTele__div']"
+      ],
+      "position": {
+        "x": 1062,
+        "y": 158
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updAlertas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updAlertas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updalertas",
+      "fallback_selectors": [
+        "[id$='c_updAlertas']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 371
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_divAlertas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "row",
+        "section"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_divAlertas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_divalertas",
+      "fallback_selectors": [
+        "[id$='c_divAlertas']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 371
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_chipAlertas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aspNetDisabled",
+        "aischipcontainer"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_chipAlertas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_chipalertas",
+      "fallback_selectors": [
+        "[id$='c_chipAlertas']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 383
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelRecomendaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelRecomendaciones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelrecomendaciones",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelRecomendaciones']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 432
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelTabs",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelTabs",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepaneltabs",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelTabs']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_TabControl_tabcontainer",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_TabControl_tabcontainer",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabcontrol_tabcontainer",
+      "fallback_selectors": [
+        "[id$='c_TabControl_tabcontainer']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_tabGenerales",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol-tab",
+        "z-depth-1",
+        "active"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_tabGenerales",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabgenerales",
+      "fallback_selectors": [
+        "[id$='c_tabGenerales']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 474
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblObligacion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblObligacion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblobligacion",
+      "fallback_selectors": [
+        "[id$='c_lblObligacion']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 486
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridObligaciones__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridObligaciones__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridobligaciones_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridObligaciones__div']"
+      ],
+      "position": {
+        "x": 29,
+        "y": 526
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblGestiones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblGestiones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblgestiones",
+      "fallback_selectors": [
+        "[id$='c_lblGestiones']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 693
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridGestiones__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridGestiones__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridgestiones_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridGestiones__div']"
+      ],
+      "position": {
+        "x": 29,
+        "y": 733
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblDetalleDeuda",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblDetalleDeuda",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lbldetalledeuda",
+      "fallback_selectors": [
+        "[id$='c_lblDetalleDeuda']"
+      ],
+      "position": {
+        "x": 847,
+        "y": 486
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblSaldoPasivo",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblSaldoPasivo",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsaldopasivo",
+      "fallback_selectors": [
+        "[id$='c_lblSaldoPasivo']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblPasivoVista",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblPasivoVista",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblpasivovista",
+      "fallback_selectors": [
+        "[id$='c_lblPasivoVista']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsPasivoVista",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsPasivoVista",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblspasivovista",
+      "fallback_selectors": [
+        "[id$='c_lblsPasivoVista']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblPasivoNoVista",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblPasivoNoVista",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblpasivonovista",
+      "fallback_selectors": [
+        "[id$='c_lblPasivoNoVista']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsPasivoNoVista",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsPasivoNoVista",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblspasivonovista",
+      "fallback_selectors": [
+        "[id$='c_lblsPasivoNoVista']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblDeuda",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblDeuda",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lbldeuda",
+      "fallback_selectors": [
+        "[id$='c_lblDeuda']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 521
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblFecEnt",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblFecEnt",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblfecent",
+      "fallback_selectors": [
+        "[id$='c_lblFecEnt']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 545
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsFecEnt",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsFecEnt",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsfecent",
+      "fallback_selectors": [
+        "[id$='c_lblsFecEnt']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 545
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblFecMora",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblFecMora",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblfecmora",
+      "fallback_selectors": [
+        "[id$='c_lblFecMora']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 568
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsFecMora",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsFecMora",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsfecmora",
+      "fallback_selectors": [
+        "[id$='c_lblsFecMora']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 568
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblDias",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblDias",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lbldias",
+      "fallback_selectors": [
+        "[id$='c_lblDias']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 591
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsDias",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsDias",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsdias",
+      "fallback_selectors": [
+        "[id$='c_lblsDias']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 591
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblSaldoDeuda",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblSaldoDeuda",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsaldodeuda",
+      "fallback_selectors": [
+        "[id$='c_lblSaldoDeuda']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 614
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsSaldoDeuda",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsSaldoDeuda",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblssaldodeuda",
+      "fallback_selectors": [
+        "[id$='c_lblsSaldoDeuda']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 614
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblSaldoCapital",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblSaldoCapital",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsaldocapital",
+      "fallback_selectors": [
+        "[id$='c_lblSaldoCapital']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 637
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsSaldoCapital",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsSaldoCapital",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblssaldocapital",
+      "fallback_selectors": [
+        "[id$='c_lblsSaldoCapital']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 637
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoTota",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoTota",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasotota",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoTota']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 660
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoTota",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoTota",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasotota",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoTota']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 660
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoTotalConv",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoTotalConv",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasototalconv",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoTotalConv']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 683
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoTotalConv",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoTotalConv",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasototalconv",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoTotalConv']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 683
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoCapital",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoCapital",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasocapital",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoCapital']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 706
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoCapital",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoCapital",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasocapital",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoCapital']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 706
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoIntNorm",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoIntNorm",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasointnorm",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoIntNorm']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 729
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoIntNorm",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoIntNorm",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasointnorm",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoIntNorm']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 729
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoIntPuni",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoIntPuni",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasointpuni",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoIntPuni']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoIntPuni",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoIntPuni",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasointpuni",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoIntPuni']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoGtosCobr",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoGtosCobr",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasogtoscobr",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoGtosCobr']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 752
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoGtosCobr",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoGtosCobr",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasogtoscobr",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoGtosCobr']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 752
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoSeguro",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoSeguro",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasoseguro",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoSeguro']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoSeguro",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoSeguro",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasoseguro",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoSeguro']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoImpuesto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoImpuesto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasoimpuesto",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoImpuesto']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 775
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoImpuesto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoImpuesto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasoimpuesto",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoImpuesto']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 775
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblAtrasoOtros",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblAtrasoOtros",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblatrasootros",
+      "fallback_selectors": [
+        "[id$='c_lblAtrasoOtros']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsAtrasoOtros",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsAtrasoOtros",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsatrasootros",
+      "fallback_selectors": [
+        "[id$='c_lblsAtrasoOtros']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblPagoMinimo",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblPagoMinimo",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblpagominimo",
+      "fallback_selectors": [
+        "[id$='c_lblPagoMinimo']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 798
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsPagoMinimo",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsPagoMinimo",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblspagominimo",
+      "fallback_selectors": [
+        "[id$='c_lblsPagoMinimo']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 798
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblPrimaNeta",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblPrimaNeta",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblprimaneta",
+      "fallback_selectors": [
+        "[id$='c_lblPrimaNeta']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 821
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsPrimaNeta",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsPrimaNeta",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsprimaneta",
+      "fallback_selectors": [
+        "[id$='c_lblsPrimaNeta']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 821
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblIntereses",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblIntereses",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblintereses",
+      "fallback_selectors": [
+        "[id$='c_lblIntereses']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 844
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsIntereses",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsIntereses",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsintereses",
+      "fallback_selectors": [
+        "[id$='c_lblsIntereses']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 844
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblMontoCubierto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblMontoCubierto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblmontocubierto",
+      "fallback_selectors": [
+        "[id$='c_lblMontoCubierto']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 867
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsMontoCubierto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsMontoCubierto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsmontocubierto",
+      "fallback_selectors": [
+        "[id$='c_lblsMontoCubierto']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 867
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblMontoMinPagar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblMontoMinPagar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblmontominpagar",
+      "fallback_selectors": [
+        "[id$='c_lblMontoMinPagar']"
+      ],
+      "position": {
+        "x": 850,
+        "y": 890
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblsMontoMinPagar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_lblsMontoMinPagar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblsmontominpagar",
+      "fallback_selectors": [
+        "[id$='c_lblsMontoMinPagar']"
+      ],
+      "position": {
+        "x": 1057,
+        "y": 890
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_tabRelaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol-tab",
+        "z-depth-1"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_tabRelaciones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabrelaciones",
+      "fallback_selectors": [
+        "[id$='c_tabRelaciones']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblRelacion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblRelacion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblrelacion",
+      "fallback_selectors": [
+        "[id$='c_lblRelacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridRelaciones__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridRelaciones__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridrelaciones_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridRelaciones__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updTeleRelaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updTeleRelaciones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updtelerelaciones",
+      "fallback_selectors": [
+        "[id$='c_updTeleRelaciones']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblTelefonos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblTelefonos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lbltelefonos",
+      "fallback_selectors": [
+        "[id$='c_lblTelefonos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridTelefonos__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridTelefonos__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridtelefonos_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridTelefonos__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelEmails",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelEmails",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelemails",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelEmails']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblEmails",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblEmails",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblemails",
+      "fallback_selectors": [
+        "[id$='c_lblEmails']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridEmails__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridEmails__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridemails_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridEmails__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updDomicilios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updDomicilios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_upddomicilios",
+      "fallback_selectors": [
+        "[id$='c_updDomicilios']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblDomicilios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblDomicilios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lbldomicilios",
+      "fallback_selectors": [
+        "[id$='c_lblDomicilios']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridDomicilios__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridDomicilios__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_griddomicilios_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridDomicilios__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_gbDatosSociosEco",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "fieldset"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_gbDatosSociosEco",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_gbdatossocioseco",
+      "fallback_selectors": [
+        "[id$='c_gbDatosSociosEco']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_gbDatosSuplementarios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "fieldset"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_gbDatosSuplementarios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_gbdatossuplementarios",
+      "fallback_selectors": [
+        "[id$='c_gbDatosSuplementarios']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_tabContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol-tab",
+        "z-depth-1"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_tabContactos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabcontactos",
+      "fallback_selectors": [
+        "[id$='c_tabContactos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblContactos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblcontactos",
+      "fallback_selectors": [
+        "[id$='c_lblContactos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridContactos__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridContactos__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridcontactos_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridContactos__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_gbDatosLocalizacion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "fieldset"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_gbDatosLocalizacion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_gbdatoslocalizacion",
+      "fallback_selectors": [
+        "[id$='c_gbDatosLocalizacion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updTelefonosContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updTelefonosContactos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updtelefonoscontactos",
+      "fallback_selectors": [
+        "[id$='c_updTelefonosContactos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_AISLabel1",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_AISLabel1",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_aislabel1",
+      "fallback_selectors": [
+        "[id$='c_AISLabel1']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_gridTelefonosContactos__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_gridTelefonosContactos__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridtelefonoscontactos_div",
+      "fallback_selectors": [
+        "[id$='__gvc_gridTelefonosContactos__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updMailsContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updMailsContactos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updmailscontactos",
+      "fallback_selectors": [
+        "[id$='c_updMailsContactos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblMailsContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblMailsContactos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblmailscontactos",
+      "fallback_selectors": [
+        "[id$='c_lblMailsContactos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_gridMailsContactos__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_gridMailsContactos__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridmailscontactos_div",
+      "fallback_selectors": [
+        "[id$='__gvc_gridMailsContactos__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updDomiciliosContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updDomiciliosContactos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_upddomicilioscontactos",
+      "fallback_selectors": [
+        "[id$='c_updDomiciliosContactos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblDomiciliosContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblDomiciliosContacto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lbldomicilioscontacto",
+      "fallback_selectors": [
+        "[id$='c_lblDomiciliosContacto']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridDomiciliosContacto__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridDomiciliosContacto__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_griddomicilioscontacto_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridDomiciliosContacto__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_tabPagos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol-tab",
+        "z-depth-1"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_tabPagos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabpagos",
+      "fallback_selectors": [
+        "[id$='c_tabPagos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblPagos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblPagos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblpagos",
+      "fallback_selectors": [
+        "[id$='c_lblPagos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridPagos__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridPagos__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridpagos_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridPagos__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_tabScorings",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol-tab",
+        "z-depth-1"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_tabScorings",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabscorings",
+      "fallback_selectors": [
+        "[id$='c_tabScorings']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblPersonas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblPersonas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblpersonas",
+      "fallback_selectors": [
+        "[id$='c_lblPersonas']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridPersonas__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridPersonas__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridpersonas_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridPersonas__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblScoring",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s12",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblScoring",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblscoring",
+      "fallback_selectors": [
+        "[id$='c_lblScoring']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridScoRecuperacion__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridScoRecuperacion__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridscorecuperacion_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridScoRecuperacion__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_tabHistoricos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aistabcontrol-tab",
+        "z-depth-1"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_tabHistoricos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_tabhistoricos",
+      "fallback_selectors": [
+        "[id$='c_tabHistoricos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblHistoricoObligaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblHistoricoObligaciones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblhistoricoobligaciones",
+      "fallback_selectors": [
+        "[id$='c_lblHistoricoObligaciones']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridHistoricoObligaciones__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridHistoricoObligaciones__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridhistoricoobligaciones_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridHistoricoObligaciones__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblHistoricoPagos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s6",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblHistoricoPagos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblhistoricopagos",
+      "fallback_selectors": [
+        "[id$='c_lblHistoricoPagos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridHistoricoPagos__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridHistoricoPagos__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridhistoricopagos_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridHistoricoPagos__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_lblHistoricoGestiones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "col",
+        "s8",
+        "input-field-label"
+      ],
+      "is_decorative": true,
+      "selector_recommended": "#c_lblHistoricoGestiones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_lblhistoricogestiones",
+      "fallback_selectors": [
+        "[id$='c_lblHistoricoGestiones']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "__gvc_GridHistoricoGestiones__div",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aisgridview_cont"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#__gvc_GridHistoricoGestiones__div",
+      "robustness": "medium",
+      "alias_semantic": "panel_gvc_gridhistoricogestiones_div",
+      "fallback_selectors": [
+        "[id$='__gvc_GridHistoricoGestiones__div']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updNotas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updNotas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updnotas",
+      "fallback_selectors": [
+        "[id$='c_updNotas']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dialogNotas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dialogNotas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dialognotas",
+      "fallback_selectors": [
+        "[id$='c_dialogNotas']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updAddContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updAddContacto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updaddcontacto",
+      "fallback_selectors": [
+        "[id$='c_updAddContacto']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorContactos_dialogAddContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorContactos_dialogAddContacto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedorcontactos_dialogaddcontacto",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorContactos_dialogAddContacto']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelPrestamos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelPrestamos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelprestamos",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelPrestamos']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgPrestamos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgPrestamos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgprestamos",
+      "fallback_selectors": [
+        "[id$='c_dlgPrestamos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelTarjetas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelTarjetas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepaneltarjetas",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelTarjetas']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgtarjetas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgtarjetas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgtarjetas",
+      "fallback_selectors": [
+        "[id$='c_dlgtarjetas']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelCuentas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelCuentas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelcuentas",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelCuentas']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgCuentas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgCuentas",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgcuentas",
+      "fallback_selectors": [
+        "[id$='c_dlgCuentas']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelGestiones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelGestiones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelgestiones",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelGestiones']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgGestiones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgGestiones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlggestiones",
+      "fallback_selectors": [
+        "[id$='c_dlgGestiones']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelCompromisos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelCompromisos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelcompromisos",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelCompromisos']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgCompromisos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgCompromisos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgcompromisos",
+      "fallback_selectors": [
+        "[id$='c_dlgCompromisos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelMedioContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelMedioContacto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelmediocontacto",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelMedioContacto']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgMedioContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgMedioContacto",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgmediocontacto",
+      "fallback_selectors": [
+        "[id$='c_dlgMedioContacto']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelEstadosEspeciales",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelEstadosEspeciales",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelestadosespeciales",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelEstadosEspeciales']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgEstadosEspeciales",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgEstadosEspeciales",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgestadosespeciales",
+      "fallback_selectors": [
+        "[id$='c_dlgEstadosEspeciales']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelPasajeJudicial",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelPasajeJudicial",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelpasajejudicial",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelPasajeJudicial']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgPasaje",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgPasaje",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgpasaje",
+      "fallback_selectors": [
+        "[id$='c_dlgPasaje']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updJudicial",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updJudicial",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updjudicial",
+      "fallback_selectors": [
+        "[id$='c_updJudicial']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgJudicial",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgJudicial",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgjudicial",
+      "fallback_selectors": [
+        "[id$='c_dlgJudicial']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelConvenios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelConvenios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelconvenios",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelConvenios']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgConvenios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgConvenios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgconvenios",
+      "fallback_selectors": [
+        "[id$='c_dlgConvenios']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelConveniosVerTodos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelConveniosVerTodos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelconveniosvertodos",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelConveniosVerTodos']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgConveniosVerTodos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgConveniosVerTodos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgconveniosvertodos",
+      "fallback_selectors": [
+        "[id$='c_dlgConveniosVerTodos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelGarantias",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelGarantias",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelgarantias",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelGarantias']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalGestionGarantias_dlgGarantias",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalGestionGarantias_dlgGarantias",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalgestiongarantias_dlggarantias",
+      "fallback_selectors": [
+        "[id$='c_ModalGestionGarantias_dlgGarantias']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelModalRecomendaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelModalRecomendaciones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelmodalrecomendaciones",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelModalRecomendaciones']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgRecomendaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgRecomendaciones",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgrecomendaciones",
+      "fallback_selectors": [
+        "[id$='c_dlgRecomendaciones']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelMantenedorTelefonos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelMantenedorTelefonos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelmantenedortelefonos",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelMantenedorTelefonos']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorTelefonos_updEliminar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorTelefonos_updEliminar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedortelefonos_updeliminar",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorTelefonos_updEliminar']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorTelefonos_dialogEliminar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorTelefonos_dialogEliminar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedortelefonos_dialogeliminar",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorTelefonos_dialogEliminar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorTelefonos_updFormAgregarModificar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorTelefonos_updFormAgregarModificar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedortelefonos_updformagregarmod",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorTelefonos_updFormAgregarModificar']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorTelefonos_dlgFormAgregarModificar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorTelefonos_dlgFormAgregarModificar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedortelefonos_dlgformagregarmod",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorTelefonos_dlgFormAgregarModificar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelMantenedorEmails",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelMantenedorEmails",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelmantenedoremails",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelMantenedorEmails']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorEmails_updEliminarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorEmails_updEliminarEmail",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedoremails_updeliminaremail",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorEmails_updEliminarEmail']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorEmails_dialogEliminarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorEmails_dialogEliminarEmail",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedoremails_dialogeliminaremail",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorEmails_dialogEliminarEmail']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorEmails_updFormAgregarModificarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorEmails_updFormAgregarModificarEmail",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedoremails_updformagregarmodifi",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorEmails_updFormAgregarModificarEmail']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorEmails_dlgFormAgregarModificarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorEmails_dlgFormAgregarModificarEmail",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedoremails_dlgformagregarmodifi",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorEmails_dlgFormAgregarModificarEmail']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelMantenedorDomicilios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelMantenedorDomicilios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelmantenedordomicilios",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelMantenedorDomicilios']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorDomicilios_updEliminarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorDomicilios_updEliminarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedordomicilios_updeliminardirec",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorDomicilios_updEliminarDireccion']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorDomicilios_dialogEliminarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorDomicilios_dialogEliminarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedordomicilios_dialogeliminardi",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorDomicilios_dialogEliminarDireccion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorDomicilios_updFormAgregarModificarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorDomicilios_updFormAgregarModificarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedordomicilios_updformagregarmo",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorDomicilios_updFormAgregarModificarDireccion']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalMantenedorDomicilios_dlgFormAgregarModificarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalMantenedorDomicilios_dlgFormAgregarModificarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalmantenedordomicilios_dlgformagregarmo",
+      "fallback_selectors": [
+        "[id$='c_ModalMantenedorDomicilios_dlgFormAgregarModificarDireccion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelGestionDocumentos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelGestionDocumentos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelgestiondocumentos",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelGestionDocumentos']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalGestionDocumentosUpload_UpdDocumentosUpload",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalGestionDocumentosUpload_UpdDocumentosUpload",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalgestiondocumentosupload_upddocumentos",
+      "fallback_selectors": [
+        "[id$='c_ModalGestionDocumentosUpload_UpdDocumentosUpload']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalGestionDocumentosUpload_dlgModalDocumentos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalGestionDocumentosUpload_dlgModalDocumentos",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalgestiondocumentosupload_dlgmodaldocum",
+      "fallback_selectors": [
+        "[id$='c_ModalGestionDocumentosUpload_dlgModalDocumentos']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalGestionDocumentosUpload_UpdDocumentoAgregarModificar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalGestionDocumentosUpload_UpdDocumentoAgregarModificar",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalgestiondocumentosupload_upddocumentoa",
+      "fallback_selectors": [
+        "[id$='c_ModalGestionDocumentosUpload_UpdDocumentoAgregarModificar']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalGestionDocumentosUpload_dlgModalAgregarModificarDoc",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalGestionDocumentosUpload_dlgModalAgregarModificarDoc",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalgestiondocumentosupload_dlgmodalagreg",
+      "fallback_selectors": [
+        "[id$='c_ModalGestionDocumentosUpload_dlgModalAgregarModificarDoc']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_UpdatePanelGestionComentarios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_UpdatePanelGestionComentarios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updatepanelgestioncomentarios",
+      "fallback_selectors": [
+        "[id$='c_UpdatePanelGestionComentarios']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_ModalGestionoComentarios_dlgComentarios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_ModalGestionoComentarios_dlgComentarios",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_modalgestionocomentarios_dlgcomentarios",
+      "fallback_selectors": [
+        "[id$='c_ModalGestionoComentarios_dlgComentarios']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_updCheques",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#c_updCheques",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_updcheques",
+      "fallback_selectors": [
+        "[id$='c_updCheques']"
+      ],
+      "position": {
+        "x": 20,
+        "y": 870
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_dlgCheques",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "modal"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_dlgCheques",
+      "robustness": "medium",
+      "alias_semantic": "panel_c_dlgcheques",
+      "fallback_selectors": [
+        "[id$='c_dlgCheques']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "f_UpdatePanelTar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#f_UpdatePanelTar",
+      "robustness": "medium",
+      "alias_semantic": "panel_f_updatepaneltar",
+      "fallback_selectors": [
+        "[id$='f_UpdatePanelTar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 890
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "f_gbAccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "fieldset"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#f_gbAccion",
+      "robustness": "medium",
+      "alias_semantic": "panel_f_gbaccion",
+      "fallback_selectors": [
+        "[id$='f_gbAccion']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlAccionEjecutar-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlAccionEjecutar-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddlaccionejecutar_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlAccionEjecutar-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlFigura-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlFigura-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddlfigura_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlFigura-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlObligacion-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlObligacion-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddlobligacion_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlObligacion-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "f_gbAgendar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "fieldset"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#f_gbAgendar",
+      "robustness": "medium",
+      "alias_semantic": "panel_f_gbagendar",
+      "fallback_selectors": [
+        "[id$='f_gbAgendar']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlAccionAgendar-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlAccionAgendar-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddlaccionagendar_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlAccionAgendar-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlDestino-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlDestino-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddldestino_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlDestino-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlUsuarios-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlUsuarios-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddlusuarios_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlUsuarios-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "span",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "select2-f_ddlFiguraAgendar-container",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "select2-selection__rendered"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#select2-f_ddlFiguraAgendar-container",
+      "robustness": "medium",
+      "alias_semantic": "panel_select2_f_ddlfiguraagendar_container",
+      "fallback_selectors": [
+        "[id$='select2-f_ddlFiguraAgendar-container']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "loader_general",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#loader_general",
+      "robustness": "medium",
+      "alias_semantic": "panel_loader_general",
+      "fallback_selectors": [
+        "[id$='loader_general']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "div",
+      "role": "div",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "loader_general_overlay",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "#loader_general_overlay",
+      "robustness": "medium",
+      "alias_semantic": "panel_loader_general_overlay",
+      "fallback_selectors": [
+        "[id$='loader_general_overlay']"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "sidenav-trigger",
+        "show-on-large"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "text='menu'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='eventAgenda Personal'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 117
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='event_notePooles de Trabajo'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 142
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='searchBusqueda de Clientes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 166
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='date_rangeAgenda de Grupo'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 191
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='switch_accountReasignacion Manual'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardInformes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardCall Center'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardDistribución por Rol y Nivel de Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardDistribución por Tipologia de Clientes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardDistribución por Estados Especiales'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardDistribución por Estrategia'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardotros Reportes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardResumen Agenda'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardGestión Rol y N.Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardGest. Tipo Cliente y N.Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardGest. Estrategia y N.Mora'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardPromeas de Pago'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardRisk Management'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='eventAgenda De Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 309
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='searchBuscar Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 334
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='ruleValidar Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 359
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='confirmation_numberLiquidar Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 383
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='switch_accountReasignar Abogado'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 408
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardInformacion de Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardInformes'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='leaderboardInformación de Demandas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='ruleValidar Facturas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 504
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='ruleValidar Notas de Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 529
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='receiptFacturas'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 553
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='confirmation_numberNotas de Gastos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -250,
+        "y": 578
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='settingsAdministrador'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": -251,
+        "y": 621
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "btnBack",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-flat",
+        "btn-secundario",
+        "btn-atras"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#btnBack",
+      "robustness": "medium",
+      "alias_semantic": "link_btnback",
+      "fallback_selectors": [
+        "[id$='btnBack']",
+        "text='chevron_leftagenda personal'"
+      ],
+      "position": {
+        "x": 29,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "btnNext",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-flat",
+        "btn-secundario",
+        "btn-atras"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#btnNext",
+      "robustness": "medium",
+      "alias_semantic": "link_btnnext",
+      "fallback_selectors": [
+        "[id$='btnNext']",
+        "text='chevron_rightAvanzar'"
+      ],
+      "position": {
+        "x": 1131,
+        "y": 100
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnCompromisos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnCompromisos",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btncompromisos",
+      "fallback_selectors": [
+        "[id$='c_btnCompromisos']",
+        "text='COMPROMISOS'"
+      ],
+      "position": {
+        "x": 745,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnConvenios",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnConvenios",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnconvenios",
+      "fallback_selectors": [
+        "[id$='c_btnConvenios']",
+        "text='Convenios'"
+      ],
+      "position": {
+        "x": 833,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnPasajeJudicial",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnPasajeJudicial",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnpasajejudicial",
+      "fallback_selectors": [
+        "[id$='c_btnPasajeJudicial']",
+        "text='PASAR A JUDICIAL'"
+      ],
+      "position": {
+        "x": 904,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnJudicial",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aspNetDisabled",
+        "waves-effect",
+        "waves-light",
+        "disabled",
+        "tooltipped",
+        "btn",
+        "btn-medium"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnJudicial",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnjudicial",
+      "fallback_selectors": [
+        "[id$='c_btnJudicial']",
+        "text='Judicial'"
+      ],
+      "position": {
+        "x": 1007,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnDocumento",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnDocumento",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btndocumento",
+      "fallback_selectors": [
+        "[id$='c_btnDocumento']",
+        "text='Documentación'"
+      ],
+      "position": {
+        "x": 1066,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnFicha",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnFicha",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnficha",
+      "fallback_selectors": [
+        "[id$='c_btnFicha']",
+        "text='FICHA'"
+      ],
+      "position": {
+        "x": 1165,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnNotas",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnNotas",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnnotas",
+      "fallback_selectors": [
+        "[id$='c_btnNotas']",
+        "text='NOTAS'"
+      ],
+      "position": {
+        "x": 1208,
+        "y": 333
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "active"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "text='Datos Generales'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 20,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='Relaciones'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 227,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='Contactos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 433,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='Pagos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 640,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='Scoring'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 847,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [],
+      "is_decorative": false,
+      "selector_recommended": "text='Datos Historicos'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 1053,
+        "y": 444
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnExportExcelObligaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnExportExcelObligaciones",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportexcelobligaciones",
+      "fallback_selectors": [
+        "[id$='c_btnExportExcelObligaciones']",
+        "text='grid_onExportar'"
+      ],
+      "position": {
+        "x": 797,
+        "y": 480
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": null,
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-small",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "text='assignment'",
+      "robustness": "medium",
+      "alias_semantic": "link_element",
+      "fallback_selectors": [],
+      "position": {
+        "x": 68,
+        "y": 553
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnVerComentariosGestion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnVerComentariosGestion",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnvercomentariosgestion",
+      "fallback_selectors": [
+        "[id$='c_btnVerComentariosGestion']",
+        "text='event_noteVer Comentarios'"
+      ],
+      "position": {
+        "x": 797,
+        "y": 687
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnExportExcelRelaciones",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnExportExcelRelaciones",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportexcelrelaciones",
+      "fallback_selectors": [
+        "[id$='c_btnExportExcelRelaciones']",
+        "text='grid_onExportar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarTelefono",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarTelefono",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregartelefono",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarTelefono']",
+        "text='addAgregar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarTelefono",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarTelefono",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificartelefono",
+      "fallback_selectors": [
+        "[id$='c_btnModificarTelefono']",
+        "text='createModificar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarTelefono",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarTelefono",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminartelefono",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarTelefono']",
+        "text='deleteEliminar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarEmail",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregaremail",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarEmail']",
+        "text='addAgregar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarEmail",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificaremail",
+      "fallback_selectors": [
+        "[id$='c_btnModificarEmail']",
+        "text='createModificar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarEmail",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarEmail",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminaremail",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarEmail']",
+        "text='deleteEliminar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregardireccion",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarDireccion']",
+        "text='addAgregar Domicilio'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificardireccion",
+      "fallback_selectors": [
+        "[id$='c_btnModificarDireccion']",
+        "text='createModificar Domicilio'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarDireccion",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarDireccion",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminardireccion",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarDireccion']",
+        "text='deleteEliminar Domicilio'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregarcontacto",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarContacto']",
+        "text='addAgregar Contacto'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aspNetDisabled",
+        "waves-effect",
+        "waves-light",
+        "disabled",
+        "tooltipped",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificarcontacto",
+      "fallback_selectors": [
+        "[id$='c_btnModificarContacto']",
+        "text='createModificar Contacto'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "aspNetDisabled",
+        "waves-effect",
+        "waves-light",
+        "disabled",
+        "tooltipped",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminarcontacto",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarContacto']",
+        "text='deleteEliminar Contacto'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnExportExcelContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnExportExcelContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportexcelcontacto",
+      "fallback_selectors": [
+        "[id$='c_btnExportExcelContacto']",
+        "text='grid_onExportar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarTelefonoContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarTelefonoContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregartelefonocontacto",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarTelefonoContacto']",
+        "text='add'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarTelefonoContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarTelefonoContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificartelefonocontacto",
+      "fallback_selectors": [
+        "[id$='c_btnModificarTelefonoContacto']",
+        "text='create'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarTelefonoContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarTelefonoContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminartelefonocontacto",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarTelefonoContacto']",
+        "text='delete'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarEmailContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarEmailContactos",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregaremailcontactos",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarEmailContactos']",
+        "text='add'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarEmailContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarEmailContactos",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificaremailcontactos",
+      "fallback_selectors": [
+        "[id$='c_btnModificarEmailContactos']",
+        "text='create'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarEmailContactos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarEmailContactos",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminaremailcontactos",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarEmailContactos']",
+        "text='delete'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnAgregarDireccionContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnAgregarDireccionContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnagregardireccioncontacto",
+      "fallback_selectors": [
+        "[id$='c_btnAgregarDireccionContacto']",
+        "text='add'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnModificarDireccionContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnModificarDireccionContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnmodificardireccioncontacto",
+      "fallback_selectors": [
+        "[id$='c_btnModificarDireccionContacto']",
+        "text='create'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnEliminarDireccionContacto",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnEliminarDireccionContacto",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btneliminardireccioncontacto",
+      "fallback_selectors": [
+        "[id$='c_btnEliminarDireccionContacto']",
+        "text='delete'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnExportarExcelPagos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnExportarExcelPagos",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportarexcelpagos",
+      "fallback_selectors": [
+        "[id$='c_btnExportarExcelPagos']",
+        "text='grid_onExportar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnExportExcelHistoOblig",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnExportExcelHistoOblig",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportexcelhistooblig",
+      "fallback_selectors": [
+        "[id$='c_btnExportExcelHistoOblig']",
+        "text='grid_onExportar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "c_btnExportExcelHistoPagos",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#c_btnExportExcelHistoPagos",
+      "robustness": "medium",
+      "alias_semantic": "link_c_btnexportexcelhistopagos",
+      "fallback_selectors": [
+        "[id$='c_btnExportExcelHistoPagos']",
+        "text='grid_onExportar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "f_btnNotaEjecutar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#f_btnNotaEjecutar",
+      "robustness": "medium",
+      "alias_semantic": "link_f_btnnotaejecutar",
+      "fallback_selectors": [
+        "[id$='f_btnNotaEjecutar']",
+        "text='event_noteNota Ejecutar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "f_btnNotaAgendar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-floating",
+        "btn-secundario"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#f_btnNotaAgendar",
+      "robustness": "medium",
+      "alias_semantic": "link_f_btnnotaagendar",
+      "fallback_selectors": [
+        "[id$='f_btnNotaAgendar']",
+        "text='event_noteNota Agendar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
+    },
+    {
+      "kind": "a",
+      "role": "a",
+      "label": null,
+      "accessible_name": null,
+      "asp_id": "f_btnEjecutar",
+      "input_type": null,
+      "data_testid": null,
+      "class_list": [
+        "waves-effect",
+        "waves-light",
+        "tooltipped",
+        "btn",
+        "btn-medium"
+      ],
+      "is_decorative": false,
+      "selector_recommended": "#f_btnEjecutar",
+      "robustness": "medium",
+      "alias_semantic": "link_f_btnejecutar",
+      "fallback_selectors": [
+        "[id$='f_btnEjecutar']",
+        "text='Ejecutar'"
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "warning": null
     }
   ],
   "warnings": [],
   "meta": {
     "tool": "ui_map_builder",
-    "version": "fixture/1.0",
-    "duration_ms": 0,
-    "note": "Sprint-2 fixture for FrmDetalleClie.aspx — replace with real ui_map_builder output"
+    "version": "1.1.0",
+    "duration_ms": 8262,
+    "source": "live_page"
   }
 }

@@ -415,7 +415,7 @@ def _run_all_specs_once(
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
-            print(line, end="", flush=True)
+            _echo(line)
             captured_lines.append(line)
         proc.wait(timeout=total_timeout_s)
     except subprocess.TimeoutExpired:
@@ -758,12 +758,21 @@ def _classify_and_emit_runner_summary(
 
     Returns the classification dict (subset of PlaywrightClassificationResult).
     """
+    # ── Plan 241 F6: la CAUSA real de "0 tests" ──────────────────────────────
+    # (C3) La regla del clasificador — "total=0 ALWAYS maps to BLOCKED PIP
+    # NO_TESTS_FOUND — never PASS" — es CORRECTA y NO se toca: 0 tests jamas es
+    # PASS. Lo que cambia es la CAUSA reportada: si Playwright murio en el
+    # globalSetup (p.ej. el headless shell no existe), decir NO_TESTS_FOUND es
+    # un diagnostico MENTIROSO que manda a depurar el lugar equivocado.
+    _gs = detect_global_setup_failure(_read_playwright_stdout(evidence_out))
+
     # ── Structural guard: total=0 is always BLOCKED PIP NO_TESTS_FOUND ────────
     if total == 0:
         summary = {
             "verdict": "BLOCKED",
-            "category": "PIP",
-            "reason": "NO_TESTS_FOUND",
+            "category": "ENV" if _gs else "PIP",
+            "reason": "GLOBAL_SETUP_FAILED" if _gs else "NO_TESTS_FOUND",
+            "detail": _gs["detail"] if _gs else "",
             "total": 0,
             "passed": 0,
             "failed": 0,
@@ -825,6 +834,13 @@ def _classify_and_emit_runner_summary(
                 for s in result.scenario_results
             ],
         }
+        # Plan 241 F6 — el clasificador tambien emite NO_TESTS_FOUND cuando el
+        # reporte llega vacio porque Playwright murio antes de correr un test.
+        # La causa REAL es el globalSetup; el veredicto BLOCKED no cambia.
+        if _gs and summary.get("reason") == "NO_TESTS_FOUND":
+            summary["reason"] = "GLOBAL_SETUP_FAILED"
+            summary["category"] = "ENV"
+            summary["detail"] = _gs["detail"]
         _emit_runner_summary(exec_log, summary)
         return summary
 
@@ -880,6 +896,41 @@ def _classify_and_emit_runner_summary(
     }
     _emit_runner_summary(exec_log, summary)
     return summary
+
+
+def _read_playwright_stdout(evidence_out: Path) -> str:
+    """Lee el stdout completo de Playwright persistido por el runner. NUNCA lanza."""
+    try:
+        p = Path(evidence_out) / "playwright_output.txt"
+        if p.is_file():
+            return p.read_text(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def detect_global_setup_failure(stdout: str):
+    """Plan 241 F6 — ¿los 0 tests son en realidad un crash del globalSetup?
+
+    Retorna {"detail": <3 primeras lineas del error>} o None. NUNCA lanza.
+    Condicion EXACTA: la salida menciona `globalSetup` (o global.setup) Y trae un
+    `Error:`. Sin AMBAS senales no se reclasifica nada.
+    """
+    try:
+        text = str(stdout or "")
+        if not text:
+            return None
+        low = text.lower()
+        if ("globalsetup" not in low and "global.setup" not in low) or "error:" not in low:
+            return None
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        err_idx = next((i for i, ln in enumerate(lines) if "Error:" in ln), None)
+        if err_idx is None:
+            err_idx = next(i for i, ln in enumerate(lines) if "error:" in ln.lower())
+        detail = " | ".join(lines[err_idx:err_idx + 3])[:600]
+        return {"detail": detail}
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _emit_runner_summary(exec_log, summary: dict) -> None:
@@ -1091,7 +1142,7 @@ def _run_single_spec(
     try:
         assert proc.stdout is not None  # narrowing para type checkers
         for line in proc.stdout:
-            print(line, end="", flush=True)
+            _echo(line)
             captured_lines.append(line)
             # Log cada línea al execution_logger (solo si está en nivel DEBUG)
             if exec_log is not None:
@@ -1206,6 +1257,25 @@ def _run_single_spec(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _echo(line: str) -> None:
+    """Eco de una linea de Playwright a la consola, A PRUEBA DE ENCODING.
+
+    Plan 241 F6 — DIAGNOSTICO MENTIROSO REAL (medido el 2026-07-25): la salida de
+    Playwright trae caracteres como la flecha U+2192, y la consola de Windows usa
+    cp1252. Un `print` crudo lanza UnicodeEncodeError, que sube hasta el
+    orquestador y convierte una corrida con 4/4 tests VERDES en
+    BLOCKED/PIPELINE_CRASH. El eco es cosmetico: jamas puede tumbar el run.
+    """
+    try:
+        print(line, end="", flush=True)
+    except UnicodeEncodeError:
+        enc = (getattr(sys.stdout, "encoding", None) or "ascii")
+        print(line.encode(enc, errors="replace").decode(enc, errors="replace"),
+              end="", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+
 
 def _persist_playwright_stdout(scenario_dir: Path, stdout: str) -> None:
     """Guardar el stdout completo de Playwright como archivo (sin truncado).

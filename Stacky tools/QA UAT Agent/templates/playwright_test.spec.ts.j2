@@ -61,12 +61,17 @@ async function waitForAgendaStable(page: any, timeout = 10_000): Promise<void> {
 // failed, or threw. uat_assertion_evaluator.py reads this file as the
 // primary source of truth for expected/actual reconciliation; without
 // it every oracle would default to status=review.
+// Plan 241 F1 — `atributo` habilita el oraculo attribute_equals (maxlength, class,
+// ...). El tipo tenia exactamente 5 campos y NO habia donde poner el nombre del
+// atributo, asi que el oraculo era inemitible.
 type OracleProbe = {
   oracle_id: number;
   target: string;
   tipo: string;
   expected: string | number | null;
   selector: string | null;  // CSS-ish; null for whole-page oracles
+  atributo?: string | null;  // Plan 241 F1 — solo para attribute_equals
+  columna?: number | null;   // Plan 241 F1 — solo para ordered_by (1-based)
 };
 const ORACLE_PROBES: OracleProbe[] = [
 {% for oracle in oraculos %}
@@ -75,11 +80,25 @@ const ORACLE_PROBES: OracleProbe[] = [
     target: {{ oracle.target | tojson }},
     tipo: {{ oracle.tipo | tojson }},
     expected: {{ (oracle.valor if oracle.valor is not none else None) | tojson }},
-    selector: {% if oracle.tipo in ('page_contains_text', 'page_not_contains_text') %}null{% else %}{{ ui_map[oracle.target] | tojson }}{% endif %}
+    selector: {% if oracle.tipo in ('page_contains_text', 'page_not_contains_text', 'no_console_error') %}null{% else %}{{ ui_map[oracle.target] | tojson }}{% endif %},
+    atributo: {{ (oracle.atributo if oracle.atributo is defined else None) | tojson }},
+    columna: {{ (oracle.columna if oracle.columna is defined else None) | tojson }}
   },
 {% endfor %}
 ];
 const ASSERTIONS_OUT_PATH = 'evidence/{{ ticket_id }}/{{ scenario_id }}/assertions_{{ scenario_id }}.json';
+
+// Plan 241 F0 — SCREEN GUARD: la pantalla en la que se corrio el escenario se
+// registra en la evidencia. Un PASS en la pantalla equivocada (caso ADO-366,
+// PASS 3/3 sobre "Agenda Personal" para un criterio de FrmDetalleClie) deja de
+// ser posible: qa_uat_pipeline pasa este bloque por screen_guard.verify_screen.
+const EXPECTED_SCREEN: string = {{ pantalla | tojson }};
+const ANCHOR_SELECTOR: string | null =
+  (ORACLE_PROBES.find(p => p.selector) || { selector: null }).selector;
+
+// Plan 241 F1 — ruido de consola: el listener acumula los mensajes de error para
+// el oraculo no_console_error (filtrado aguas arriba por console_noise_policy).
+const CONSOLE_ERRORS: string[] = [];
 
 // STEP_BBOXES — accumulates bounding boxes of interacted elements per step.
 // Written by test.afterEach to evidence/<ticket>/<sid>/step_bboxes.json and
@@ -379,6 +398,14 @@ const ENTRY_SCREEN = '{{ entry_screen | default(pantalla, true) }}';
 test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => {
 
   test.beforeEach(async ({ page }) => {
+    // Plan 241 F1 — acumulador de errores de consola para el oraculo
+    // no_console_error. Se registra ANTES de la primera navegacion para no
+    // perder los errores del arranque de la pantalla.
+    page.on('console', (msg: any) => {
+      try {
+        if (msg.type() === 'error') CONSOLE_ERRORS.push(String(msg.text()).slice(0, 300));
+      } catch (_e) { /* nunca romper el test por el listener */ }
+    });
     // Auth is restored from storageState (written by playwright/global.setup.ts).
     // NO login here — the session is already established.
     // beforeEach navigates to the ENTRY screen (NOT the target screen directly).
@@ -711,6 +738,19 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await expect(page.locator('{{ ui_map[oracle.target] }}'), '{{ scenario_id }}: {{ oracle.target }} no debe ser visible').toBeHidden();
     {% elif oracle.tipo == 'state' %}
     await expect(page.locator('{{ ui_map[oracle.target] }}')).toHaveAttribute('{{ oracle.valor }}', '');
+    {% elif oracle.tipo == 'attribute_equals' %}
+    // Plan 241 F1 — asercion EXACTA de atributo (caso ADO-367: maxlength="50").
+    // Es infalsificable: no depende del largo del dato tipeado.
+    await expect(page.locator('{{ ui_map[oracle.target] }}').first(),
+      '{{ scenario_id }}: {{ oracle.target }}[{{ oracle.atributo }}] debe ser {{ oracle.valor }}')
+      .toHaveAttribute('{{ oracle.atributo }}', '{{ oracle.valor }}');
+    {% elif oracle.tipo == 'ordered_by' %}
+    // Plan 241 F1 — orden de la columna evaluado en uat_assertion_evaluator
+    // (actual_list capturado en el afterEach). Sin asercion nativa aqui.
+    console.log('[ORACLE {{ loop.index0 }}] ordered_by {{ oracle.target }} col={{ oracle.columna }} dir={{ oracle.valor }}');
+    {% elif oracle.tipo == 'no_console_error' %}
+    // Plan 241 F1 — ruido de consola evaluado en uat_assertion_evaluator.
+    console.log('[ORACLE {{ loop.index0 }}] no_console_error');
     {% elif oracle.tipo == 'field_ais_state' %}
     // AIS FieldState — multi-signal readonly/disabled detection.
     // No native Playwright assertion; evidence captured in afterEach (ais_state object).
@@ -748,7 +788,11 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
         expected: probe.expected,
       };
       try {
-        if (probe.selector === null) {
+        if (probe.tipo === 'no_console_error') {
+          // Plan 241 F1 — errores de consola acumulados durante el escenario.
+          entry.actual_list = CONSOLE_ERRORS.slice(0, 50);
+          entry.visible = true;
+        } else if (probe.selector === null) {
           // Whole-page oracle: capture the body text once (truncated).
           const bodyText = (await page.locator('body').innerText({ timeout: 2000 })) || '';
           entry.actual_text = bodyText.slice(0, 4000);
@@ -785,6 +829,22 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
             entry.state = null;
             entry.visible = false;
           }
+        } else if (probe.tipo === 'attribute_equals') {
+          // Plan 241 F1 — asercion EXACTA sobre un atributo del DOM (maxlength,
+          // class, ...). Infalsificable: no depende del valor tipeado.
+          entry.actual_text = await page.locator(probe.selector).first()
+            .getAttribute(probe.atributo || '').catch(() => null);
+          entry.attribute = probe.atributo || null;
+          entry.visible = await page.locator(probe.selector).first()
+            .isVisible({ timeout: 2000 }).catch(() => null);
+        } else if (probe.tipo === 'ordered_by') {
+          // Plan 241 F1 — valores de la columna en el orden del DOM.
+          const col = probe.columna || 1;
+          entry.actual_list = await page
+            .locator(probe.selector + ' tbody tr td:nth-child(' + col + ')')
+            .allInnerTexts().catch(() => []);
+          entry.visible = await page.locator(probe.selector).first()
+            .isVisible({ timeout: 2000 }).catch(() => null);
         } else {
           const loc = page.locator(probe.selector);
           // count
@@ -818,6 +878,19 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
       captured.push(entry);
     }
 
+    // Plan 241 F0 — evidencia de EN QUE PANTALLA se corrio realmente el escenario.
+    // qa_uat_pipeline la pasa por screen_guard.verify_screen: si no coincide con
+    // la pantalla del criterio, el escenario NO puede aportar un `verified`.
+    const screen_verified: any = {
+      url: page.url(),
+      title: await page.title().catch(() => ''),
+      expected: EXPECTED_SCREEN,
+      anchor_selector: ANCHOR_SELECTOR,
+      anchor_present: ANCHOR_SELECTOR
+        ? await page.locator(ANCHOR_SELECTOR).count().then(c => c > 0).catch(() => null)
+        : null,
+    };
+
     // Persist assertions_<sid>.json. mkdir is safe-recursive; failures here
     // must not break the test runner.
     try {
@@ -826,7 +899,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
       fs.writeFileSync(
         outPath,
         JSON.stringify(
-          { scenario_id: '{{ scenario_id }}', assertions: captured },
+          { scenario_id: '{{ scenario_id }}', assertions: captured, screen_verified },
           null, 2,
         ),
         'utf-8',

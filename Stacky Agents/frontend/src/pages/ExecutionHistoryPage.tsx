@@ -40,6 +40,7 @@ import {
 import styles from "./ExecutionHistoryPage.module.css";
 import { useRovingFocus } from "../hooks/useRovingFocus";
 import { usePrefetchExecutionDetail } from "../hooks/usePrefetchExecutionDetail";
+import { combinarProps } from "../utils/combinarProps";
 import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
 import { QUERY_TUNING } from "../services/queryTuning";
 import { isUiShortcutsEnabled, withShortcutHint } from "../services/shortcuts";
@@ -509,29 +510,4 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
       />
     </div>
   );
-}
-
-/**
- * Plan 174 F3 — Une los props de la fila sin que uno pise al otro.
- *
- * Roving y prefetch declaran los dos un `onFocus`. Con un spread crudo el
- * segundo gana y el primero desaparece EN SILENCIO: el foco dejaría de
- * sincronizar el índice y nadie se enteraría hasta usar j/k.
- */
-function combinarProps(
-  a: Record<string, unknown>,
-  b: Record<string, unknown>,
-): Record<string, unknown> {
-  const salida: Record<string, unknown> = { ...a };
-  for (const [k, v] of Object.entries(b)) {
-    const previo = salida[k];
-    salida[k] =
-      typeof previo === "function" && typeof v === "function"
-        ? (...args: unknown[]) => {
-            (previo as (...a: unknown[]) => void)(...args);
-            (v as (...a: unknown[]) => void)(...args);
-          }
-        : v;
-  }
-  return salida;
 }

@@ -685,6 +685,7 @@ HARNESS_TEST_FILES=(
   # -- Plan 200 - Consola por incidencia + marcado de despliegue SQL --
   tests/test_plan200_flags.py
   tests/test_plan200_sql_exec_engine.py
+  tests/test_plan174_ui_perf_flags.py
   tests/test_plan200_incident_console.py
   tests/test_plan200_sql_deploy_detector.py
   # -- Plan 176 - Triage curado del diff + gates read-only del comparador de BD --

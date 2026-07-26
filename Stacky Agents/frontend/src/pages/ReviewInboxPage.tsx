@@ -17,6 +17,8 @@ import { runStatusTone, runStatusLabel } from "../utils/runStatus";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import styles from "./ReviewInboxPage.module.css";
 import { useRovingFocus } from "../hooks/useRovingFocus";
+import { usePrefetchExecutionDetail } from "../hooks/usePrefetchExecutionDetail";
+import { combinarProps } from "../utils/combinarProps";
 
 function summarizeCause(exec: { error_message?: string | null; metadata?: Record<string, unknown>; contract_result?: { passed?: boolean; failures?: Array<{ message?: string }> } | null }): string {
   const metadata = (exec.metadata ?? {}) as Record<string, unknown>;
@@ -62,6 +64,8 @@ export default function ReviewInboxPage() {
   }, [rows]);
 
   const visibleIds = useMemo(() => sortedRows.map((r) => r.id), [sortedRows]);
+  // Plan 174 F3 — precargar el detalle mientras el operador decide si abrirlo.
+  const { getPrefetchProps } = usePrefetchExecutionDetail();
   // Plan 172 F4 — foco roving: j/k o flechas para recorrer, Enter para abrir.
   const roving = useRovingFocus({
     itemCount: sortedRows.length,
@@ -203,7 +207,7 @@ export default function ReviewInboxPage() {
           {/* Plan 172 F4 — recorrer con j/k o flechas y abrir con Enter, sin mouse. */}
           <tbody {...roving.containerProps}>
             {sortedRows.map((row, idx) => (
-              <tr key={row.id} {...roving.rowProps(idx)}>
+              <tr key={row.id} {...combinarProps(roving.rowProps(idx), getPrefetchProps(row.id))}>
                 {bulkEnabled && (
                   <td className={styles.selectCell}>
                     <Checkbox

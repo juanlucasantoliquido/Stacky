@@ -1678,6 +1678,10 @@ class Config:
     STACKY_UI_SHELL_V2_ENABLED: bool = os.getenv(
         "STACKY_UI_SHELL_V2_ENABLED", "true"
     ).strip().lower() == "true"
+    # Plan 172 — teclado primero. Solo UX, sin costo de tokens ⇒ default ON.
+    STACKY_UI_SHORTCUTS_ENABLED: bool = os.getenv(
+        "STACKY_UI_SHORTCUTS_ENABLED", "true"
+    ).strip().lower() == "true"
 
     # ── Plan 192 — Resiliencia de conexión dashboard-backend (UI) ──────────────
     # Monitor pasivo + banner global + re-hidratación al recuperar. Default ON;

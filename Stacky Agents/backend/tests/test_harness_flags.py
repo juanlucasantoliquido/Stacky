@@ -476,6 +476,8 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
     # ── Plan 213 — analistas declaran supuestos en vez de frenar el pipeline ──
     "STACKY_ASSUMPTION_MODE_ENABLED",
+    # ── Plan 172 — default ON (UX teclado, sin costo de tokens) ──
+    "STACKY_UI_SHORTCUTS_ENABLED",
     # ── Plan 199 — cosecha histórica de telemetría (solo las 3 bools ON) ──
     "STACKY_TELEMETRY_HARVEST_ENABLED",
     "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED",

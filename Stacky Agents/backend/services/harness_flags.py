@@ -405,6 +405,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED",  # Plan 176
     ),
     "interfaz_ui": (
+        "STACKY_UI_SHORTCUTS_ENABLED",  # Plan 172 — registro de atajos + overlay ?
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
         "STACKY_COPY_EXPORT_ENABLED",  # Plan 194 — portapapeles universal ("Copiar como…")
         "STACKY_UNDO_UNIVERSAL_ENABLED",  # Plan 185 — undo universal (acciones optimistas + gracia)
@@ -3998,6 +3999,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     # fábrica. Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated
     # exige la pertenencia al set); el default efectivo True vive también en
     # config.py. El operador puede volver al topnav apagando la flag por UI.
+    FlagSpec(
+        key="STACKY_UI_SHORTCUTS_ENABLED",
+        type="bool",
+        default=True,
+        label="Atajos de teclado y ayuda con ?",
+        description=(
+            "Plan 172 — Registro único de atajos: lo que está registrado es lo que "
+            "funciona y lo que muestra el overlay de ayuda (?), sin listas escritas a "
+            "mano que mientan. Agrega navegación de listas con j/k y foco roving. "
+            "Default ON. Apagala y quedan solo los 3 atajos de siempre."
+        ),
+        group="global",
+    ),
     FlagSpec(
         key="STACKY_UI_SHELL_V2_ENABLED",
         type="bool",

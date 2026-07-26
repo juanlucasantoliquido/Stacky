@@ -413,6 +413,7 @@ def health():
         "watchers_inactive_reason": watchers_inactive_reason,
         "local_llm_enabled": bool(getattr(_config.config, "LOCAL_LLM_ENABLED", False)),  # Plan 106
         "shell_v2_enabled": bool(getattr(_config.config, "STACKY_UI_SHELL_V2_ENABLED", False)),  # Plan 139
+        "ui_shortcuts_enabled": bool(getattr(_config.config, "STACKY_UI_SHORTCUTS_ENABLED", False)),  # Plan 172
         "watchers": {"output_watcher": output_watcher_info},
         "warnings": warnings,
     })

@@ -5,6 +5,7 @@ import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import type { Ticket, TicketNode, TicketHierarchy, AgentExecution, VsCodeAgent } from "../types";
 import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import ModelEffortPicker from "../components/ModelEffortPicker";
+import { useRovingFocus } from "../hooks/useRovingFocus";
 import { useModelCatalog } from "../hooks/useModelCatalog";
 import { useModelPickerEnabled } from "../hooks/useModelPickerEnabled";
 import { useTicketSync, DEFAULT_INTERVAL_MS as TICKET_SYNC_INTERVAL_MS } from "../hooks/useTicketSync";
@@ -480,7 +481,11 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
         )}
 
         {/* Header del ticket */}
-        <div className={styles.cardHeader} onClick={() => setExpanded((x) => !x)}>
+        <div
+          className={styles.cardHeader}
+          data-card-header="true"
+          onClick={() => setExpanded((x) => !x)}
+        >
           <div className={styles.cardTop}>
             <span className={styles.adoId}>ADO-{ticket.ado_id}</span>
             <span
@@ -740,6 +745,20 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
   const pinnedAgents = useWorkbench((s) => s.pinnedAgents);
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
   const [collapsed, setCollapsed] = useState(false);
+  // Plan 172 F5 — teclado en las tarjetas. El índice vive en CADA grupo de
+  // épica, que es el contenedor natural: un roving global tendría que saltar
+  // entre grupos colapsables y el operador perdería la referencia.
+  const cardRoving = useRovingFocus({
+    itemCount: epic.children.length,
+    // Enter reusa el toggle que ya existe, sin prop-drilling ni tocar el estado
+    // interno de TicketCard.
+    onOpen: (i) => {
+      const el = cardRoving.containerProps.ref.current?.querySelector(
+        `[data-roving-item="${i}"] [data-card-header]`,
+      ) as HTMLElement | null;
+      el?.click();
+    },
+  });
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
@@ -833,11 +852,16 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
 
       {/* Children */}
       {!collapsed && (
-        <div className={styles.epicChildren}>
+        <div
+          className={styles.epicChildren}
+          onKeyDown={cardRoving.containerProps.onKeyDown}
+          ref={cardRoving.containerProps.ref as unknown as React.RefObject<HTMLDivElement>}
+        >
           {epic.children.length === 0 ? (
             <div className={styles.epicNoChildren}>Sin tareas asociadas</div>
           ) : (
-            epic.children.map((child) => (
+            epic.children.map((child, idx) => (
+              <div key={child.id} {...cardRoving.rowProps(idx)}>
               <TicketCard
                 key={child.id}
                 ticket={child}
@@ -848,6 +872,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
                 indent
                 devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
               />
+              </div>
             ))
           )}
         </div>

@@ -88,6 +88,58 @@ def _tracker_type_for(project_name: str) -> str:
     return (tracker.get("type") or "azure_devops").lower()
 
 
+# ── Plan 208 F4 — fuentes para los selectores de la matriz (sin alucinar) ────
+
+# Set canónico de tipos de work item de ADO. NOTA: `ALLOWED_BRIEF_WORK_ITEM_TYPES`
+# (api/tickets.py:3219) es solo {"Epic","Issue"} — es la allowlist del pipeline
+# brief→ADO, NO el universo de tipos que un tracker puede tener. Para el selector
+# de la matriz hace falta el set completo.
+_CANONICAL_WORK_ITEM_TYPES = (
+    "Epic", "Task", "Issue", "User Story", "Bug", "Product Backlog Item", "Feature",
+)
+
+
+def _work_item_types_for(project_name: str) -> list[str]:
+    """Tipos reales ya sincronizados para el proyecto ∪ set canónico ADO.
+
+    Nunca lanza: si la consulta falla, devuelve el set canónico.
+    """
+    seen: list[str] = []
+    try:
+        from db import session_scope
+        from models import Ticket
+
+        with session_scope() as s:
+            rows = (
+                s.query(Ticket.work_item_type)
+                .filter(Ticket.stacky_project_name == project_name)
+                .distinct()
+                .all()
+            )
+        seen = [r[0].strip() for r in rows if r and isinstance(r[0], str) and r[0].strip()]
+    except Exception:  # noqa: BLE001
+        logger.debug("no se pudieron leer los work_item_type de %s", project_name, exc_info=True)
+    out: list[str] = []
+    lowered: set[str] = set()
+    for candidate in list(seen) + list(_CANONICAL_WORK_ITEM_TYPES):
+        key = candidate.casefold()
+        if key not in lowered:
+            lowered.add(key)
+            out.append(candidate)
+    return out
+
+
+def _valid_states_for(project_name: str) -> list[str]:
+    """Estados REALES del tracker (`provider.fetch_states()`). Best-effort: si el
+    tracker no responde o no está configurado, [] (la UI cae a texto libre)."""
+    try:
+        prov = get_tracker_provider(project_name)
+        return list(prov.fetch_states() or []) if prov else []
+    except Exception:  # noqa: BLE001
+        logger.debug("fetch_states falló para %s (no crítico)", project_name, exc_info=True)
+        return []
+
+
 def _build_path_check(project_name: str, profile: dict | None) -> list[dict]:
     """Llama a resolve_layout_paths con el workspace_root del proyecto."""
     if not profile:
@@ -139,6 +191,10 @@ def get_client_profile(project_name: str):
         "prefilled_profile": prefilled,
         "path_check": path_check,
         "validation": validation_dict,
+        # Plan 208 F4 — fuentes de los dropdowns de la matriz (P7: estados reales
+        # del tracker + tipos ya sincronizados; nunca texto libre alucinado).
+        "work_item_types": _work_item_types_for(project_name),
+        "valid_states": _valid_states_for(project_name),
     })
 
 

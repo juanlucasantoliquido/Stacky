@@ -1933,6 +1933,10 @@ export interface ClientProfileGetResponse {
   prefilled_profile?: ClientProfile;
   path_check?: ClientProfilePathCheck[];
   validation: ClientProfileValidation | null;
+  /** Plan 208 — tipos de work item reales del proyecto ∪ set canónico ADO. */
+  work_item_types?: string[];
+  /** Plan 208 — estados reales del tracker (provider.fetch_states()). */
+  valid_states?: string[];
   error?: string;
 }
 
@@ -1941,6 +1945,8 @@ export interface ClientProfileStateWarning {
   field: "in_progress" | "next_state_ok";
   value: string;
   reason: string;
+  /** Plan 208 — presente cuando el warning viene de un cell de la matriz. */
+  work_item_type?: string;
 }
 
 export interface ClientProfileSaveResponse {

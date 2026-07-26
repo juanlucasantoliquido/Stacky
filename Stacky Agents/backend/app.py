@@ -862,6 +862,10 @@ def create_app() -> Flask:
     incident_autopublish.register(ticket_status.register_post_hook)
     # Plan 177 F4 — auto-PR del Dev Resolutor (commit+PR de lo que tocó el agente).
     incident_dev_autocommit.register(ticket_status.register_post_hook)
+    # Plan 208 F0 — auto-sync + matriz de estados al completar (runtime-agnóstico).
+    from services import completion_dispatcher
+    completion_dispatcher.register(ticket_status.register_post_hook)
+    completion_dispatcher.start(app.logger)
 
     return app
 

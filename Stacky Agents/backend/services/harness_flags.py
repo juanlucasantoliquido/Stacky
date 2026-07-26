@@ -247,6 +247,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
+        "STACKY_ADO_STATE_MATRIX_ENABLED",  # Plan 208 — matriz (tipo de ticket x agente)
     ),
     "routing_costo": (
         "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "STACKY_DIFFICULTY_ROUTING_ENABLED",
@@ -265,6 +266,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_ARTIFACT_INTAKE_ENABLED", "STACKY_ARTIFACT_RESCUE_ENABLED",
         "STACKY_INTEGRATION_DEGRADATION_ENABLED",  # Plan 148 — degradacion de integraciones
         "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",  # Plan 149 F4 — cuarentena intake en board
+        "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED",  # Plan 208 — auto-sync al completar un agente
     ),
     "observabilidad_notif": (
         "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
@@ -2364,6 +2366,33 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "estado-final (al completar) desde la config del proyecto "
             "(tracker_state_machine por agente), ignorando el estado que "
             "proponga el agente. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 208 — Auto-sync al completar + matriz de estados por tipo ────────
+    FlagSpec(
+        key="STACKY_ADO_SYNC_ON_COMPLETION_ENABLED",
+        type="bool",
+        default=True,
+        label="Auto-sync ADO al completar",
+        description=(
+            "Plan 208 — Al terminar cualquier agente, refresca los tickets del "
+            "proyecto desde el tracker (pull read-only, coalescido, respeta el "
+            "circuit breaker). Elimina el clic manual de 'Sincronizar'. Default ON."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_ADO_STATE_MATRIX_ENABLED",
+        type="bool",
+        default=True,
+        label="Matriz de estados por tipo de ticket",
+        description=(
+            "Plan 208 — Aplica el estado ADO configurado por (tipo de work item x "
+            "tipo de agente) cuando el agente termina OK. NO-OP hasta que el "
+            "operador configure la matriz en el perfil del proyecto. Default ON."
         ),
         group="global",
         env_only=False,

@@ -1230,6 +1230,19 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 208 — Sincronización ADO al completar + matriz de estados ───────
+    # R2: al terminar CUALQUIER agente (los 3 runtimes pasan por
+    # ticket_status.on_execution_end), refresca los tickets del proyecto desde
+    # el tracker. Pull read-only, coalescido por proyecto, respeta el breaker.
+    STACKY_ADO_SYNC_ON_COMPLETION_ENABLED: bool = os.getenv(
+        "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # R3: aplica el estado ADO configurado por (tipo de work item x tipo de
+    # agente) cuando el agente termina OK. NO-OP hasta que el operador configure
+    # la matriz (tracker_state_machine.<rol>.by_work_item_type) desde la UI.
+    STACKY_ADO_STATE_MATRIX_ENABLED: bool = os.getenv(
+        "STACKY_ADO_STATE_MATRIX_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # Si true (default), infiere pipelines CI de GitLab cuando el tracker es gitlab.
     STACKY_GITLAB_CI_INFERENCE: bool = os.getenv(
         "STACKY_GITLAB_CI_INFERENCE", "true"

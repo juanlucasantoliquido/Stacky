@@ -401,14 +401,174 @@ function KeyValueField({
   );
 }
 
+// ── Plan 208 — selector de estado poblado del tracker real (P7) ─────────────
+// Si el tracker no expone estados (no configurado / caído), degrada a texto
+// libre con aviso en vez de dejar al operador con un combo vacío.
+function StateSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  if (options.length === 0) {
+    return (
+      <div className={styles.field}>
+        <label className={styles.label}>{label}</label>
+        <input
+          className={styles.input}
+          value={value}
+          placeholder="Sin estados del tracker — escribilo a mano"
+          onChange={(e) => onChange(e.target.value)}
+          spellCheck={false}
+        />
+      </div>
+    );
+  }
+  // El valor guardado siempre queda seleccionable aunque el tracker ya no lo liste
+  // (así editar el cell no lo pierde en silencio).
+  const opts = options.includes(value) || !value ? options : [value, ...options];
+  return (
+    <div className={styles.field}>
+      <label className={styles.label}>{label}</label>
+      <select
+        className={styles.select}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">— usar el estado general —</option>
+        {opts.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ── Plan 208 — matriz (tipo de work item × rol) dentro de la tarjeta del rol ──
+function WorkItemTypeMatrix({
+  value,
+  onChange,
+  workItemTypes,
+  validStates,
+}: {
+  value: Json;
+  onChange: (next: Json) => void;
+  workItemTypes: string[];
+  validStates: string[];
+}) {
+  const [newType, setNewType] = useState("");
+  const matrix = asObj(value.by_work_item_type);
+  const entries = Object.entries(matrix);
+  const available = workItemTypes.filter((t) => !(t in matrix));
+
+  const setCell = (wit: string, cell: Json) =>
+    onChange({ ...value, by_work_item_type: { ...matrix, [wit]: cell } });
+
+  const removeType = (wit: string) => {
+    const next: Json = { ...matrix };
+    delete next[wit];
+    onChange({ ...value, by_work_item_type: next });
+  };
+
+  const addType = () => {
+    if (!newType || newType in matrix) return;
+    setCell(newType, {});
+    setNewType("");
+  };
+
+  return (
+    <details className={styles.matrixBlock}>
+      <summary className={styles.matrixSummary}>
+        Estados por tipo de ticket (opcional)
+        {entries.length > 0 ? ` — ${entries.length}` : ""}
+      </summary>
+      <div className={styles.matrixBody}>
+        <p className={styles.hint}>
+          Vacío = usar el estado general del rol. Configurá solo los tipos que
+          quieras tratar distinto.
+        </p>
+        {validStates.length === 0 && (
+          <p className={`${styles.hint} ${styles.matrixWarn}`}>
+            No se pudieron leer los estados del tracker: revisá la conexión del
+            proyecto para elegirlos de una lista en vez de escribirlos.
+          </p>
+        )}
+        {entries.map(([wit, raw]) => {
+          const cell = asObj(raw);
+          return (
+            <div key={wit} className={styles.matrixCell}>
+              <div className={styles.matrixCellHead}>
+                <span className={styles.matrixType}>{wit}</span>
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  title={`Quitar ${wit}`}
+                  onClick={() => removeType(wit)}
+                >
+                  ×
+                </button>
+              </div>
+              <StateSelect
+                label="En progreso"
+                value={asStr(cell.in_progress)}
+                options={validStates}
+                onChange={(v) => setCell(wit, { ...cell, in_progress: v })}
+              />
+              <StateSelect
+                label="Próximo estado (OK)"
+                value={asStr(cell.next_state_ok)}
+                options={validStates}
+                onChange={(v) => setCell(wit, { ...cell, next_state_ok: v })}
+              />
+            </div>
+          );
+        })}
+        <div className={styles.kvRow}>
+          <select
+            className={styles.select}
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+          >
+            <option value="">Tipo de ticket…</option>
+            {available.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className={styles.addBtn}
+            disabled={!newType}
+            onClick={addType}
+          >
+            + Agregar tipo
+          </button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function TrackerRoleField({
   role,
   value,
   onChange,
+  workItemTypes = [],
+  validStates = [],
 }: {
   role: string;
   value: Json;
   onChange: (next: Json) => void;
+  workItemTypes?: string[];
+  validStates?: string[];
 }) {
   return (
     <div className={styles.roleCard}>
@@ -433,6 +593,12 @@ function TrackerRoleField({
         label="Próximo estado (OK)"
         value={asStr(value.next_state_ok)}
         onChange={(v) => onChange({ ...value, next_state_ok: v })}
+      />
+      <WorkItemTypeMatrix
+        value={value}
+        onChange={onChange}
+        workItemTypes={workItemTypes}
+        validStates={validStates}
       />
     </div>
   );
@@ -542,6 +708,9 @@ export default function ClientProfileEditor() {
   const isPrefilled = !hasProfile && !!profileQuery.data?.prefilled_profile;
   const defaultTemplate = (profileQuery.data?.default_template ?? {}) as Json;
   const pathCheck: ClientProfilePathCheck[] = profileQuery.data?.path_check ?? [];
+  // Plan 208 — fuentes reales para los dropdowns de la matriz (nunca inventadas).
+  const workItemTypes: string[] = profileQuery.data?.work_item_types ?? [];
+  const validStates: string[] = profileQuery.data?.valid_states ?? [];
 
   // Lectura/escritura sobre baseProfile.
   const g = (path: string[]) => getPath(baseProfile as Json, path);
@@ -998,6 +1167,8 @@ export default function ClientProfileEditor() {
                   role={role}
                   value={asObj(g(["tracker_state_machine", role]))}
                   onChange={(next) => set(["tracker_state_machine", role], next)}
+                  workItemTypes={workItemTypes}
+                  validStates={validStates}
                 />
               ))}
             </div>
@@ -1033,7 +1204,9 @@ export default function ClientProfileEditor() {
             <ul className={styles.warningsList}>
               {stateWarnings.map((w, i) => (
                 <li key={i}>
-                  {w.agent_type}.{w.field}: "{w.value}" no existe en el tracker
+                  {w.agent_type}
+                  {w.work_item_type ? ` [${w.work_item_type}]` : ""}.{w.field}: "
+                  {w.value}" no existe en el tracker
                 </li>
               ))}
             </ul>

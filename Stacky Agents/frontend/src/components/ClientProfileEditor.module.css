@@ -317,6 +317,63 @@
   margin: 0;
 }
 
+/* ─── Plan 208 — matriz de estados por tipo de ticket ─────────── */
+.matrixBlock {
+  border-top: 1px dashed var(--border-muted);
+  padding-top: 8px;
+}
+
+.matrixSummary {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.matrixSummary::marker,
+.matrixSummary::-webkit-details-marker {
+  display: none;
+}
+
+.matrixSummary:hover {
+  color: var(--accent-hot);
+}
+
+.matrixBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.matrixCell {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.matrixCellHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.matrixType {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+
+.matrixWarn {
+  color: var(--warn, var(--danger));
+}
+
 /* ─── Buttons / actions ───────────────────────────────────────── */
 .actions {
   display: flex;

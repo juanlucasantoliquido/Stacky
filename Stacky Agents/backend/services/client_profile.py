@@ -161,7 +161,36 @@ def _check_tracker_state_machine(machine: Any) -> tuple[list[str], list[str]]:
         next_state = sub.get("next_state_ok")
         if next_state is not None and not isinstance(next_state, str):
             errors.append(f"tracker_state_machine.{role}.next_state_ok debe ser string.")
+        # Plan 208 F4 — matriz por tipo de work item (opcional, retrocompatible).
+        errors.extend(_check_by_work_item_type(role, sub.get("by_work_item_type")))
     return errors, warnings
+
+
+def _check_by_work_item_type(role: str, by: Any) -> list[str]:
+    """Plan 208 F4 — valida `tracker_state_machine.<rol>.by_work_item_type`.
+
+    Ausente ⇒ sin errores (retrocompatible). Presente ⇒ dict de
+    {<WorkItemType>: {in_progress?: str, next_state_ok?: str}}.
+    """
+    errors: list[str] = []
+    if by is None:
+        return errors
+    base = f"tracker_state_machine.{role}.by_work_item_type"
+    if not isinstance(by, dict):
+        errors.append(f"{base} debe ser un objeto.")
+        return errors
+    for wit, cell in by.items():
+        if not isinstance(wit, str) or not wit.strip():
+            errors.append(f"{base}: el tipo de work item debe ser un string no vacío.")
+            continue
+        if not isinstance(cell, dict):
+            errors.append(f"{base}.{wit} debe ser un objeto.")
+            continue
+        for field in ("in_progress", "next_state_ok"):
+            val = cell.get(field)
+            if val is not None and not isinstance(val, str):
+                errors.append(f"{base}.{wit}.{field} debe ser string.")
+    return errors
 
 
 def _contains_secret_keys(value: Any) -> list[str]:

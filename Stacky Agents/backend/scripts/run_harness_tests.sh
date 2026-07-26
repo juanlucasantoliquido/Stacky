@@ -669,6 +669,13 @@ HARNESS_TEST_FILES=(
   tests/test_incident_inbox_actions.py
   # -- Plan 241 - Cero falso verde del agente QA UAT E2E (flags + doctor) --
   tests/test_plan241_qa_uat.py
+  # -- Plan 208 - Auto-sync al completar + matriz de estados por tipo de ticket --
+  tests/test_plan208_dispatcher.py
+  tests/test_plan208_matrix_resolver.py
+  tests/test_plan208_state_transition.py
+  tests/test_plan208_auto_sync.py
+  tests/test_plan208_profile_schema.py
+  tests/test_plan208_observability.py
 )
 
 pass=0

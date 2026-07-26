@@ -538,7 +538,9 @@ def _apply_task_state(*, ticket, agent_type, phase, correlation_id, publish_ok=T
         profile = load_effective_client_profile(getattr(ticket, "stacky_project_name", None)) or {}
     except Exception:  # noqa: BLE001
         profile = {}
-    plan = resolve_task_state_plan(profile, agent_type)
+    # Plan 208 F2 — matrix-aware: si el operador configuró un cell para el tipo de
+    # work item, manda la matriz; si no, cae al agent-level de siempre.
+    plan = resolve_task_state_plan(profile, agent_type, getattr(ticket, "work_item_type", None))
     target = plan.in_progress if phase == "start" else plan.final_ok
     if not target:
         return {"skipped": True, "reason": f"no_{phase}_state", "source": plan.source}

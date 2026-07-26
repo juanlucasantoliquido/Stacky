@@ -35,6 +35,8 @@ def deterministic_task_states_enabled() -> bool:
 # Claves del dict tracker_state_machine.<agent> que este módulo lee/aplica.
 # CONGELADO: el wiring NO puede aplicar un estado que no provenga de estas claves.
 _APPLICABLE_KEYS: frozenset[str] = frozenset({"in_progress", "next_state_ok"})
+# Mismo conjunto, con orden estable para recorrer/reportar (validación, UI).
+_APPLICABLE_KEYS_ORDER: tuple[str, ...] = ("in_progress", "next_state_ok")
 # blocked_state queda FUERA a propósito: es acción humana (Plan B7), nunca la
 # aplica este flujo.
 
@@ -42,7 +44,7 @@ _APPLICABLE_KEYS: frozenset[str] = frozenset({"in_progress", "next_state_ok"})
 class TaskStatePlan(NamedTuple):
     in_progress: Optional[str]   # estado a aplicar AL INICIAR; None = no aplicar
     final_ok: Optional[str]      # estado a aplicar al COMPLETAR OK; None = no aplicar
-    source: str                  # "config" | "absent" | "no_agent_type"
+    source: str                  # "matrix" | "config" | "absent" | "no_agent_type"
 
 
 def _machine_for(profile: dict, agent_type: Optional[str]) -> dict:
@@ -53,10 +55,45 @@ def _machine_for(profile: dict, agent_type: Optional[str]) -> dict:
     return machine if isinstance(machine, dict) else {}
 
 
-def resolve_task_state_plan(profile: dict, agent_type: Optional[str]) -> TaskStatePlan:
+# ── Plan 208 F1 — dimensión work_item_type de la matriz ──────────────────────
+
+def _normalize_wit(raw: Optional[str]) -> Optional[str]:
+    """Normaliza un WorkItemType para lookup: strip; None/'' -> None. El case se
+    compara aparte (match exacto primero, luego case-insensitive)."""
+    s = (raw or "").strip()
+    return s or None
+
+
+def _matrix_cell(machine: dict, work_item_type: Optional[str]) -> dict:
+    """Devuelve by_work_item_type[<tipo>] con match case-insensitive; {} si no hay
+    override. Pura, defensiva."""
+    wit = _normalize_wit(work_item_type)
+    if not wit or not isinstance(machine, dict):
+        return {}
+    by = machine.get("by_work_item_type")
+    if not isinstance(by, dict):
+        return {}
+    # match exacto primero; luego case-insensitive.
+    if wit in by and isinstance(by[wit], dict):
+        return by[wit]
+    low = wit.casefold()
+    for k, v in by.items():
+        if isinstance(k, str) and k.strip().casefold() == low and isinstance(v, dict):
+            return v
+    return {}
+
+
+def resolve_task_state_plan(
+    profile: dict,
+    agent_type: Optional[str],
+    work_item_type: Optional[str] = None,
+) -> TaskStatePlan:
     """Fuente ÚNICA de los estados deterministas. Pura, nunca lanza.
-    - in_progress = machine['in_progress'] (str no vacío) o None
-    - final_ok    = machine['next_state_ok'] (str no vacío) o None
+
+    Retrocompatible: `work_item_type=None` ⇒ comportamiento previo exacto.
+    - Si hay override en by_work_item_type[<tipo>] con ≥1 valor no vacío
+      ⇒ source="matrix" (el cell MANDA: lo no definido en el cell queda None).
+    - Si no ⇒ cae a machine.in_progress/next_state_ok ⇒ source="config"/"absent".
     - source: 'no_agent_type' si falta agent_type; 'absent' si la máquina no
       define ninguno; 'config' si define ≥1.
     """
@@ -64,6 +101,11 @@ def resolve_task_state_plan(profile: dict, agent_type: Optional[str]) -> TaskSta
         if not agent_type:
             return TaskStatePlan(None, None, "no_agent_type")
         m = _machine_for(profile, agent_type)
+        cell = _matrix_cell(m, work_item_type)
+        ip_m = (cell.get("in_progress") or "").strip() or None
+        fk_m = (cell.get("next_state_ok") or "").strip() or None
+        if ip_m is not None or fk_m is not None:
+            return TaskStatePlan(ip_m, fk_m, "matrix")
         ip = (m.get("in_progress") or "").strip() or None
         fk = (m.get("next_state_ok") or "").strip() or None
         if ip is None and fk is None:
@@ -171,7 +213,11 @@ def apply_task_start_state(*, project_name, agent_type, ado_id, provider) -> dic
 def validate_states_against_tracker(profile: dict, valid_states: list) -> list:
     """Devuelve warnings [{agent_type, field, value, reason:'state_not_in_tracker'}].
     valid_states vacío → no valida (devuelve []), para no romper si el tracker
-    no expone estados."""
+    no expone estados.
+
+    Plan 208 F4/F5: además del nivel agente, recorre
+    `by_work_item_type[<tipo>].{in_progress,next_state_ok}`; esos warnings traen
+    `work_item_type` para que la UI ubique el cell exacto."""
     out: list = []
     try:
         if not valid_states:
@@ -181,7 +227,7 @@ def validate_states_against_tracker(profile: dict, valid_states: list) -> list:
         for agent_type, m in machines.items():
             if not isinstance(m, dict):
                 continue
-            for field in ("in_progress", "next_state_ok"):
+            for field in _APPLICABLE_KEYS_ORDER:
                 val = (m.get(field) or "").strip()
                 if val and val.lower() not in valid:
                     out.append(
@@ -192,6 +238,24 @@ def validate_states_against_tracker(profile: dict, valid_states: list) -> list:
                             "reason": "state_not_in_tracker",
                         }
                     )
+            by = m.get("by_work_item_type")
+            if not isinstance(by, dict):
+                continue
+            for wit, cell in by.items():
+                if not isinstance(cell, dict):
+                    continue
+                for field in _APPLICABLE_KEYS_ORDER:
+                    val = (cell.get(field) or "").strip()
+                    if val and val.lower() not in valid:
+                        out.append(
+                            {
+                                "agent_type": agent_type,
+                                "work_item_type": str(wit),
+                                "field": field,
+                                "value": val,
+                                "reason": "state_not_in_tracker",
+                            }
+                        )
         return out
     except Exception:
         logger.debug("validate_states_against_tracker falló (no crítico)", exc_info=True)

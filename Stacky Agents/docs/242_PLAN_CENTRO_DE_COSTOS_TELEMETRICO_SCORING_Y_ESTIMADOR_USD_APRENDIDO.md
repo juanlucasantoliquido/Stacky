@@ -1,11 +1,105 @@
 # Plan 242 — Centro de Costos telemétrico, scoring de eficiencia y estimador de USD aprendido
 
-**Estado:** PROPUESTO v1
-**Autor:** StackyArchitectaUltraEficientCode
-**Fecha:** 2026-07-25
+**Estado:** **v2 · CRITICADO (v1 → v2)** — VEREDICTO SOBRE v1: **RECHAZADO** (3 bloqueantes). Estado de v2 tras aplicar los fixes: **APROBADO-CON-CAMBIOS**.
+**Autor v1:** StackyArchitectaUltraEficientCode · **Juez v2:** agente independiente que **abrió cada archivo y verificó cada anclaje** (tabla en §0.2).
+**Fecha v1:** 2026-07-25 · **Fecha v2:** 2026-07-26
 **Depende de:** Plan 142 (Centro de Costos, IMPLEMENTADO) · Plan 158 (paridad telemetría claude_code_cli, IMPLEMENTADO)
-**Frontera declarada con:** Plan 171 (telemetría operativa, NO implementado) · Plan 199 (cosecha histórica desde disco, NO implementado)
-**Numeración:** 242. Los números 219–236 están reservados por el Plan 218. El máximo actual en `Stacky Agents/docs/` es 241.
+**Frontera con:** Plan 171 (telemetría operativa — **IMPLEMENTADO**) · Plan 199 (cosecha histórica + agregadores del Centro de Costos — **IMPLEMENTADO parcial**). ⚠️ v1 daba los dos por pendientes y ésa fue la raíz de 5 defectos en cascada: ver **C1**.
+**Numeración:** 242. Los números 219–236 están reservados por el Plan 218. El máximo actual en `Stacky Agents/docs/` es **243**. ⚠️ El **244 ya está reservado** por el corte formal del Plan 243 (`243 = F0..F3.5` / `244 = F4..F9`), así que el corte de este plan (C13) usa el **245**.
+
+---
+
+## 0. Crítica adversarial v1 → v2
+
+> Este bloque es la crítica; el resto del documento es el plan ya corregido. Cada fix aplicado
+> aguas abajo está marcado `[v2]` en el punto exacto donde cambia.
+
+### 0.1 CHANGELOG v1 → v2 (22 hallazgos)
+
+**Los 7 bloqueantes salieron de abrir los archivos que v1 citaba de memoria.** El doc lo revisaron **dos jueces por separado**, sin verse entre sí; convergieron de forma independiente en C1, C2 y C4 (lo cual sube mucho la confianza en esos tres) y cada uno encontró bloqueantes que el otro no vio. **Toda afirmación del segundo juez fue re-verificada contra el árbol antes de entrar acá; una no sobrevivió** (ver C21).
+
+- **C1 (BLOQUEANTE, resuelto) — la premisa central del plan era falsa: el Plan 171 YA ESTÁ IMPLEMENTADO.** v1 declaraba en §4 y §2.1 que el 171 estaba *"CRITICADO pero NO implementado"* y construía sobre eso toda su sección de frontera. En el árbol de trabajo existen **`services/run_signals.py`** (16,5 KB), **`services/ops_telemetry.py`**, **`services/run_trace.py`**, **`tests/test_run_signals.py`** y **3 flags registradas** del 171 (`STACKY_OPS_TELEMETRY_ENABLED`, `STACKY_OPS_BASELINE_ENABLED`, `STACKY_OPS_TRACE_ENABLED`, `harness_flags.py:300-302`) **en la misma categoría `observabilidad_notif` donde el 242 quiere meter sus 7**. Resuelto en §2.1, §4, F0 y F1.
+- **C2 (BLOQUEANTE, resuelto) — el diff de F0.4 no aplica y rompe el archivo.** `ExecRecord` **ya tiene** `completed_at` (`cost_analytics.py:153`, puesto por el Plan 171) y `load_records` **ya lo pasa** (`:231`). El ancla del diff de v1 (`raw_metadata=md))`) **no existe**: la línea real es `raw_metadata=md, completed_at=ex.completed_at))`. Aplicado literalmente ⇒ **campo duplicado** en el dataclass y **keyword argument repetido** (`SyntaxError`). Resuelto en F0.4.
+- **C3 (BLOQUEANTE, resuelto) — dos percentiles incompatibles en el mismo producto.** v1 prometía *"una sola definición de percentil en todo el plan"* mientras el repo **ya tiene** `run_signals.percentile_nearest_rank` (`:102`, *nearest-rank*) y v1 agregaba un segundo `cost_stats.percentile` (*interpolación lineal*). Mismos datos, dos respuestas distintas. Lo mismo con la duración: `run_signals.from_exec_record` (`:64`) calcula `duration_seconds` **sólo si `status == "completed"`** (a propósito: los errores fallan rápido y falsearían la latencia), y v1 la calculaba siempre. Resuelto en F0.3 y F1.3.
+- **C4 (IMPORTANTE, resuelto) — el autotrain BLOQUEA el fin de cada 10ª ejecución.** `_run_post_hooks` (`ticket_status.py:325`) es un `for` **síncrono**: `hook(**kwargs)` inline. v1 citaba `ticket_status.py:313` como prueba de que *"los hooks nunca bloquean"*, pero ese docstring dice que **los errores no se propagan**, no que el hook sea asíncrono. Resuelto en F5.5 (thread daemon) y R4.
+- **C5 (IMPORTANTE, resuelto) — F5 reinventa un ledger que el repo ya tiene 4 veces, y sin lock.** Existen `ci_run_ledger.py` (Plan 191), `sql_exec_ledger.py`, `env_apply_ledger.py` y `ado_edit_ledger.py`, todos con el mismo patrón de la casa: `_LOCK = threading.Lock()`, `MAX_ROWS = 500` con retención por reescritura, `_read_rows`/`_write_rows` atómicos y **allowlist de campos**. v1 proponía append-only sin lock, cap de 50.000 líneas y emparejamiento en memoria. Resuelto en F5.1/F5.4.
+- **C6 (IMPORTANTE, resuelto) — KPI-7 no mide lo que F6.4 afirma que garantiza.** KPI-7 cronometra `fit_ridge` sobre filas sintéticas; F6.4 dice *"Ejecuta `cost_model.train(days)` sincrónicamente (KPI-7 garantiza < 2 s)"*. `train()` incluye además `collect_training_rows` (query de hasta 20.000 filas) y la evaluación. Resuelto en KPI-7 y F6.4.
+- **C7 (IMPORTANTE, resuelto) — pseudocódigo y test se contradicen en `_predict_log`.** El comentario y `test_predict_log_usa_la_media_para_continuos_ausentes` afirman que un continuo ausente aporta `(0 - mu[j])/sd[j] * w[j]`; el código itera **sólo** las entradas presentes, así que aporta **0**. Además `mu[j]` se calcula con `valor_en(...)` (ausente = 0,0), o sea con una imputación distinta a la que usa el Gram. Resuelto en F3.4.
+- **C8 (IMPORTANTE, resuelto) — `score_ticket` anula su propio componente de mayor peso.** Construye la cohorte con `build_cohorts(records_del_ticket)`; una cohorte de un solo ticket casi siempre tiene `n < 3`, así que `cost_position` (**peso 0,35**) da `None` para todas sus ejecuciones. Y la firma no tiene por dónde recibir la cohorte global. Resuelto en F2.5.
+- **C9 (IMPORTANTE, resuelto) — `cost_model_hooks.install()` revienta en la primera llamada.** `global _installed; if _installed:` sobre un nombre **nunca inicializado** a nivel de módulo ⇒ `NameError`. Resuelto en F5.5.
+- **C10 (MENOR, resuelto) — 7 anclajes con deriva de +10 a +22 líneas.** Todos los símbolos existen (no hay API alucinada), pero la mitad de atrás de `cost_analytics.py` está uniformemente +22 y `metrics.py` +13. Resuelto en §0.2 y con la regla de anclaje por símbolo.
+- **C11 (MENOR, resuelto) — conteos de tests que no cierran.** F3.11/DoD dicen **38** casos donde la tabla lista **37**; F8.6 titula *"los 12 archivos"* y lista **13**. Además varios casos son `parametrize` (`test_load_falta_clave_obligatoria` sobre 8 claves, `test_cost_stats_flag_off` sobre 6 endpoints), así que *"N/N verdes"* es un criterio inalcanzable por construcción. Resuelto en §10.1.
+- **C12 (MENOR, resuelto) — ancla de inserción por número de línea.** F6.1 dice *"sólo apéndice después de la línea 723"*: un número que deriva. Resuelto por ancla simbólica.
+- **C13 (IMPORTANTE, resuelto) — 10 fases no entran en una corrida.** 8 módulos backend, 13 archivos de test (~246 casos), 6 endpoints y 8 componentes de frontend. Corte formal en §0.3.
+- **C14 (BLOQUEANTE, resuelto) — «apéndice después de la línea 723» inserta código DENTRO de una función.** `metrics.py:723` es `**ca.heatmap(ca.load_records(f)),` — está **adentro** del `jsonify({...})` de `/cost-heatmap` (`:712-724`). Meter 6 endpoints ahí es `SyntaxError`. Es la instrucción más literal del plan y la más destructiva. Resuelto en F6.1 con **ancla simbólica** (el bloque nuevo va **antes** del comentario `# ── Plan 171 — Telemetría operativa`).
+- **C15 (BLOQUEANTE, resuelto) — F7.2 manda CREAR un componente que ya existe y está montado en pantalla.** `frontend/src/components/costcenter/CostDistributionChart.tsx` (+ `.module.css`) **ya existen** (Plan 199) y `CostCenterPage` los consume contra `GET /api/metrics/cost-distribution`. "CREAR" con el contrato nuevo **pisa el componente vivo y rompe la pestaña Resumen** — exactamente lo que F7.9.6 promete que no pasa. Resuelto en F7.2.
+- **C16 (BLOQUEANTE, resuelto) — la promoción del modelo es automática, silenciosa e irreversible.** `should_promote` promueve solo y `save_model` pisa el modelo anterior con `os.replace`: no queda a qué volver. Si un modelo pasa el gate pero es peor en la práctica, `calibration()` lo delata días después y **ya no hay rollback**. Es la única autonomía real del plan y estaba sin candado. Resuelto por la **[ADICIÓN ARQUITECTO] F4.5**.
+- **C17 (IMPORTANTE, resuelto) — el 199 TAMBIÉN está implementado, y el inventario de §2.1 quedó corto.** No son 5 endpoints de costo: son **8** (`/cost-burn-stacked`, `/cost-heatmap`, `/cost-distribution` son del 199). No son 6 componentes: son **12**. `CostCenterPage.tsx` no tiene 101 líneas: tiene **175**. `cost_analytics.py` ya tiene `burn_with_comparison` (`:472`), `burn_stacked` (`:615`), `heatmap` (`:653`) y `distribution` (`:681`). Resuelto en §2.1, §4 y F6.
+- **C18 (IMPORTANTE, resuelto) — `install()` es la forma equivocada de enganchar el hook.** `app.py` ya registra **5** post-hooks (`:908`, `:910`, `:913`, `:917`, `:925`) con el patrón canónico de la casa `<modulo>.register(ticket_status.register_post_hook)`. v1 decía *"si no hay ninguno registrado en `create_app`…"* — hay cinco. Resuelto en F5.5.
+- **C19 (IMPORTANTE, resuelto) — F1 reinventa el histograma que ya existe.** `cost_analytics.distribution(records, bins)` (`:681`, Plan 199) ya hace clamp de bins, "el máximo cae en el último bin" y el caso `max == min`. Resuelto en F1.2 declarando cuál es la canónica y agregando el test que fija que coinciden.
+- **C20 (IMPORTANTE, resuelto) — el plan instruye `git stash` tres veces.** §F8.2, §F8.7 y §10.3 lo proponen como "prueba de ajenidad". En este árbol hay **sesiones paralelas vivas** que comparten el índice: `git stash` puede tragarse trabajo ajeno sin commitear. Resuelto reemplazándolo por `git diff --name-only` / `git show HEAD:<archivo>`.
+- **C21 (MENOR, corregido en la propia crítica) — una acusación del segundo juez NO se sostuvo.** Afirmó que `group="observabilidad"` *"no existe"* y que las 7 flags quedarían mal agrupadas. **Falso:** `grep -oE 'group="[a-z_]+"' services/harness_flags.py` devuelve **11 usos** de `group="observabilidad"`. Lo que **sí** es cierto y queda como hallazgo MENOR real: las flags **de costo** hermanas usan `group="observabilidad_notif"` (`:2082`, `:2095`, `:2108`), así que por consistencia de agrupación en la UI las del 242 deben usar ése. Se deja registrado porque un juez que se equivoca en una evidencia puede equivocarse en otra: **verificá siempre**.
+- **C22 (MENOR, resuelto) — dos evidencias falsas y un tipo mal declarado.** (a) G1 dice *"aunque numpy 1.26.4 aparezca instalado en el venv"*: **no está instalado** (`backend\.venv\Scripts\python.exe -c "import numpy"` ⇒ `ModuleNotFoundError`) — la conclusión de prohibirlo se sostiene, la evidencia no. (b) F7.3 dice que `rawGet` *"puede no existir"*: **existe**, `frontend/src/api/client.ts:93` (Plan 238). (c) F0.4 anota `priority: str | None` pero `models.py:54` lo declara `Mapped[int | None]`.
+
+### 0.2 Anclajes verificados (los que v1 citaba de memoria)
+
+| Anclaje citado por v1 | Real | Veredicto |
+|---|---|---|
+| `_SUBSCRIPTION_RUNTIMES` `cost_analytics.py:31` | `:31` | ✓ |
+| `extract_cost_row` `:77` · `_MAX_ROWS` `:134` · `raw_metadata` `:150` · `input_price_per_mtok` `:46` | idénticos | ✓ |
+| `CostRow` `:34` · `ExecRecord` `:137` | `:35` · `:138` | ✓ (±1) |
+| `load_records` `:167` | **`:177`** | ✗ +10 |
+| `_billable` `:213` · `summarize` `:217` · `burn` `:314` · `_dim_key` `:365` · `breakdown` `:381` | **`:235` · `:239` · `:336` · `:387` · `:403`** | ✗ **+22 uniforme** |
+| `_execution_costs` `metrics.py:52` · `_cost_center_enabled` `:565` · `_parse_filters` `:584` | idénticos | ✓ |
+| `_filters_or_error` `:614` | **`:627`** | ✗ +13 |
+| `_CURATED_DEFAULTS_ON` `test_harness_flags.py:467` | `:467` | ✓ |
+| `_CATEGORY_KEYS` `harness_flags.py:120` | `:120` | ✓ |
+| categoría `observabilidad_notif` `:269` · nota `:395-396` · comentario `:410` | **`:283` · `:433` · `:448`** | ✗ +14/+38 |
+| `register_post_hook` `ticket_status.py:307` y su firma | `:307`, firma **exacta** | ✓ |
+| `_run_post_hooks` `:281` | **`:325`** (llamado en `:279`) | ✗ |
+| bloque del ratchet `run_harness_tests.sh:390-396` | `:390-396` | ✓ |
+| los 6 archivos de no-regresión del 142/158 | los 6 existen | ✓ |
+| `AgentExecution` `models.py:248` con `verdict`/`output`/`completed_at`/`completion_source` | `:255`/`:258`/`:265`/`:273` | ✓ |
+| `group="observabilidad"` en `FlagSpec` | válido, usado 11× | ✓ |
+| `agents.py:1388` `estimate_cost` · `:1405` la llamada · `:1396` `get_json` | **`:1430` · `:1441` · `:1434`** | ✗ +36/+42 |
+| `harness_flags.py:397` `FLAG_REGISTRY` | **`:435`** | ✗ +38 |
+| `harness_flags.py:1811-1824` flags del 158 | **`:2073-2090`** | ✗ **+262** |
+| `config.py:618-620` patrón OFF · `:641-650` flags 158 | **`:632-634` · `:653-664`** | ✗ +12/+14 |
+| `cost_analytics.py:182` la query · `:445/:447` `dataclasses.replace` | `:192` · **`:467/:469`** | ✗ +10/+22 |
+| `metrics.py:674` `/cost-breakdown` · `:692` `/cost-reconciliation-audit` | **`:746` · `:764`** (`:691` es `/cost-burn-stacked`) | ✗ **+72** |
+| `endpoints.ts:1471` `CostCenter` · `:1453` `costFiltersToQuery` | **`:1516` · `:1499`** | ✗ +45/+46 |
+| `CostCenterPage.tsx:60-66` EmptyState | **`:92-95`** | ✗ +32 |
+| `routes.ts:28` subtab · `:21` `TAB_PATHS` | `:26` · `:20` | ✓ |
+| `CostBadge.tsx:18` · `:6` · `CostTable.tsx:125` | idénticos | ✓ |
+| `costCenterTypes.ts:156` `isCostCenterEnabled` | `:156` | ✓ |
+| `cost_estimator.py:101/:34/:43/:16/:81` | idénticos | ✓ |
+| `harness/pricing.py:24` `DEFAULT_PRICES` | `:24` | ✓ |
+| `runtime_paths.py:48` `data_dir` · `ado_feedback.py:10` · `ado_identity.py:32` | idénticos | ✓ |
+| `requirements.txt` — 14 deps, sin numpy/sklearn | idéntico | ✓ |
+| `Ticket.priority` es `str` (anotación de F0.4) | **`Mapped[int \| None]`, `models.py:54`** | ✗ **C22** |
+| **`ExecRecord` NO tiene `completed_at`** (premisa de F0.4) | **lo tiene, `:153`** | ✗ **C2** |
+| **Plan 171 NO implementado** (premisa de §4) | **implementado** (`run_signals`/`ops_telemetry`/`run_trace` + 3 flags) | ✗ **C1** |
+| **Plan 199 NO implementado** (premisa de §4) | **implementado parcial** (`burn_stacked`/`heatmap`/`distribution` + 3 endpoints + 3 componentes) | ✗ **C1/C17** |
+| **«los 5 endpoints del 142»** | **8 endpoints de costo** | ✗ **C17** |
+| **`CostCenterPage.tsx` 101 líneas · 6 componentes** | **175 líneas · 12 componentes** | ✗ **C17** |
+| **`metrics.py:723` es el final del bloque de costo** | **está DENTRO de `cost_heatmap()`** | ✗ **C14** |
+| **`CostDistributionChart.tsx` hay que CREARLO** | **ya existe y está montado** | ✗ **C15** |
+| **«si no hay ningún post-hook en `create_app`»** | **hay 5** (`app.py:908-925`) | ✗ **C18** |
+| **«`rawGet` puede no existir»** | **existe**, `client.ts:93` | ✗ **C22** |
+| **«numpy 1.26.4 instalado en el venv»** | **NO instalado** (`ModuleNotFoundError`) | ✗ **C22** |
+| **«`group="observabilidad"` no existe»** (acusación del 2º juez) | **sí existe, 11 usos** | ✗ **la acusación, C21** |
+| **el máximo en `docs/` es 241** | **243** | ✗ |
+
+**Regla de anclaje para la implementación (nueva en v2):** todo anclaje `archivo:línea` de este documento es **orientativo**. La verdad es el **símbolo**. Antes de editar, localizalo con `grep -n "<simbolo>" <archivo>` y usá la línea que devuelva. Un número que no coincide **no** es permiso para inventar: es la señal de que el archivo se movió.
+
+### 0.3 Corte formal de alcance (C13)
+
+| | Fases | Por qué el corte cae acá |
+|---|---|---|
+| **242 (este plan)** | **F0, F1, F2, F6-parcial** (`/cost-stats`, `/cost-scores`), **F7-parcial** (sub-tabs Estadísticas y Scoring), **F8-parcial** (2 flags: `STACKY_COST_STATS_ENABLED`, `STACKY_COST_SCORING_ENABLED`) | Es la mitad **estrictamente read-only**: no escribe ni un archivo, no registra ningún hook, no toca `app.py`. Entrega valor completo por sí sola (percentiles, outliers, cache, rework, scoring explicable) y es reversible borrando nada. |
+| **245 (plan siguiente)** | **F3, F4, F5, F6-resto, F7-resto, F9** | Todo lo que **escribe en disco** (`cost_model.json`, el ledger), engancha el post-hook y entrena. Depende de F1/F2 ya verdes. **245, no 244:** el 244 ya está reservado por el corte del Plan 243. |
+
+**Regla:** no se arranca el 245 hasta que el DoD del 242 esté verde. Un modelo predictivo montado sobre un motor estadístico sin probar es exactamente el falso verde que este plan dice combatir.
 
 ---
 
@@ -25,7 +119,7 @@ Hoy el Centro de Costos responde *"gastaste X"*. Después del 242 responde *"gas
 | **KPI-4** | **Modelo sin dependencias**: cero `import numpy`, cero `import sklearn`, cero `import pandas`, cero `import scipy` en los módulos nuevos. | 0 ocurrencias (verificado por AST, no por regex) | `.venv/Scripts/python.exe -m pytest tests/test_plan242_no_new_deps.py -q` |
 | **KPI-5** | **Predicción útil**: sobre el split temporal de test, el MAE del modelo es **estrictamente ≥5 % mejor** que el baseline "mediana global"; si no lo es, el modelo NO se promueve y el sistema sigue con el fallback. | gate binario | `.venv/Scripts/python.exe -m pytest tests/test_plan242_cost_model_eval.py -q` — casos `test_promueve_cuando_gana` y `test_NO_promueve_cuando_pierde` |
 | **KPI-6** | **Honestidad del intervalo**: la cobertura empírica del intervalo P10–P90 en el set de test cae en `[0.60, 0.95]`; fuera de ese rango el modelo queda `candidate`. | gate binario | `test_plan242_cost_model_eval.py::test_cobertura_fuera_de_rango_bloquea_promocion` |
-| **KPI-7** | **Entrenamiento barato**: entrenar con 20.000 filas sintéticas tarda **< 2,0 s** de pared y no abre red ni invoca LLM. | < 2,0 s | `.venv/Scripts/python.exe -m pytest tests/test_plan242_cost_model_perf.py -q` — caso `test_entrena_20000_filas_en_menos_de_2s` |
+| **KPI-7** | **`[v2]` (C6) Entrenamiento barato, medido END-TO-END.** v1 cronometraba **sólo `fit_ridge`** sobre filas sintéticas y de ahí concluía "entrenamiento barato" — mientras F6.4 afirmaba que *"KPI-7 garantiza < 2 s"* para `train()` **completo**, que además hace `collect_training_rows` → `load_records` (query de hasta 20.000 filas con la columna `output` TEXT). Medir la parte barata y declarar barato el todo **es exactamente el falso verde que R6 dice combatir**. Ahora son **dos** mediciones separadas: (a) `cost_model.train()` completo contra una DB de test con 20.000 `AgentExecution` reales ⇒ **< 5,0 s**; (b) `fit_ridge` sobre 20.000 filas sintéticas ⇒ **< 2,0 s**. Ninguna abre red ni invoca LLM. | (a) < 5,0 s · (b) < 2,0 s | `.venv/Scripts/python.exe -m pytest tests/test_plan242_cost_model_perf.py -q` — casos `test_train_end_to_end_20000_filas_en_menos_de_5s` **y** `test_fit_ridge_20000_filas_en_menos_de_2s` |
 | **KPI-8** | **Cierre del lazo**: cada predicción mostrada queda registrada y, al terminar la ejecución, se cierra con el costo real; `/api/metrics/cost-calibration` reporta MAE/MAPE/cobertura reales del estimador. | ≥1 par abierto+cerrado por ejecución con forecast | `.venv/Scripts/python.exe -m pytest tests/test_plan242_forecast_ledger.py -q` — caso `test_par_abierto_cerrado_produce_calibracion` |
 | **KPI-9** | **Cero regresión del 142/158**: los 6 archivos de test de costo existentes siguen verdes **sin editarlos**. | 6/6 verdes | ver §5.F0 "Aceptación" |
 | **KPI-10** | **Paridad de runtimes**: `codex_cli`, `claude_code_cli` y `github_copilot` producen los tres un payload completo; Copilot aparece etiquetado `nominal` / *"no facturable (suscripción plana)"* y **nunca** entra en agregados facturables ni contamina el entrenamiento. | 3/3 | `.venv/Scripts/python.exe -m pytest tests/test_plan242_runtime_parity.py -q` |
@@ -43,6 +137,14 @@ Hoy el Centro de Costos responde *"gastaste X"*. Después del 242 responde *"gas
 - **Legacy intocable.** `metrics.py:52` `_execution_costs`, `:77` `/ticket-costs`, `:130` `/project-costs`. El Plan 142 los dejó **intactos a propósito** (R3) y sólo cuantificó su error vía `/cost-reconciliation-audit`. **El Plan 242 tampoco los toca.**
 - **Frontend delgado.** `frontend/src/pages/CostCenterPage.tsx` (101 líneas) + 6 componentes en `frontend/src/components/costcenter/` (`CostKpiCards`, `CostBurnChart`, `CostBreakdownBars`, `CostTable`, `CostFiltersBar`, `CostBadge`), tipos en `frontend/src/lib/costCenterTypes.ts`, lógica pura en `frontend/src/lib/costCenter.logic.ts`, cliente en `frontend/src/api/endpoints.ts:1471` (objeto `CostCenter`, helper `costFiltersToQuery` en `:1453`).
 - **Estimación pre-run heurística (FA-33).** `backend/services/cost_estimator.py:101` `estimate(agent_type, blocks, model)`; expuesta por `backend/api/agents.py:1388` `def estimate_cost()` (ruta `POST /api/agents/estimate`), que la llama en `agents.py:1405`.
+- **`[v2]` **Plan 171, YA IMPLEMENTADO (C1).** Esto v1 lo daba por pendiente y es la corrección más importante de la crítica. Existe y está vivo:
+  - **`backend/services/run_signals.py`** — módulo **puro** con `RunPoint` (`:50`), `from_exec_record(r)` (`:64`, duck-typing sobre `ExecRecord`), **`percentile_nearest_rank(values, q)` (`:102`)**, `summarize_groups` (`:127`), `daily_series` (`:193`), `detect_regressions` (`:276`), `evaluate_thresholds` (`:317`).
+  - **`backend/services/ops_telemetry.py`** (capa de I/O, `from services import run_signals as rs` en `:19`) y **`backend/services/run_trace.py`** (`:14`).
+  - **`backend/tests/test_run_signals.py`**.
+  - **3 flags registradas** en la **misma categoría** que quiere usar el 242: `STACKY_OPS_TELEMETRY_ENABLED`, `STACKY_OPS_BASELINE_ENABLED`, `STACKY_OPS_TRACE_ENABLED` (`harness_flags.py:300-302`, specs en `:2037`, `:2049`, `:2060`).
+  - Y dejó su huella dentro del archivo que el 242 edita: `ExecRecord.completed_at` (`cost_analytics.py:153`) con el comentario *"Plan 171 (aditivo, default None): fin de la corrida, para duraciones/percentiles en services/run_signals.py"*, ya pasado en `load_records:231`.
+
+  **Consecuencia para este plan:** el 242 **no** es el primero en calcular duraciones ni percentiles sobre `ExecRecord`. Tiene que **reconciliarse** con `run_signals`, no ignorarlo (F0.3, F1.3).
 
 ### 2.2 El gap exacto que este plan cierra
 
@@ -56,7 +158,7 @@ Hoy el Centro de Costos responde *"gastaste X"*. Después del 242 responde *"gas
 
 ## 3. Principios y guardarraíles (restricciones DURAS, no negociables)
 
-**G1 · Cero dependencias nuevas.** `backend/requirements.txt` es exactamente: Flask 3.0.3, Flask-Cors 4.0.1, SQLAlchemy 2.0.36, alembic 1.13.3, pydantic 2.9.2, python-dotenv 1.0.1, python-json-logger 2.0.7, requests 2.32.3, truststore 0.10.4, PyYAML 6.0.3, keyring 25.6.0, pytest 8.3.3, pytest-flask 1.3.0, pywin32 307. **NO hay scikit-learn.** Aunque `numpy 1.26.4` aparezca instalado en el venv, **NO está en `requirements.txt`**, por lo que un deploy limpio no lo tiene. Por lo tanto **el modelo predictivo debe ser Python puro de stdlib** (`math`, `statistics`, `json`, `uuid`, `datetime`, `dataclasses`, `logging`, `os`, `time`). Está **PROHIBIDO** escribir `import numpy`, `import sklearn`, `import scipy`, `import pandas` (o cualquier variante `from … import`) en los módulos de este plan, y hay un test que lo verifica **por AST** (§5.F8.3).
+**G1 · Cero dependencias nuevas.** `backend/requirements.txt` es exactamente: Flask 3.0.3, Flask-Cors 4.0.1, SQLAlchemy 2.0.36, alembic 1.13.3, pydantic 2.9.2, python-dotenv 1.0.1, python-json-logger 2.0.7, requests 2.32.3, truststore 0.10.4, PyYAML 6.0.3, keyring 25.6.0, pytest 8.3.3, pytest-flask 1.3.0, pywin32 307. **NO hay scikit-learn.** **`[v2]` (C22) — evidencia corregida:** v1 decía *"aunque `numpy 1.26.4` aparezca instalado en el venv"*. **numpy NO está instalado**: `backend\.venv\Scripts\python.exe -c "import numpy"` ⇒ `ModuleNotFoundError`. Tampoco está en `requirements.txt`. O sea: no está **ni en desarrollo ni en un deploy limpio** — la prohibición se sostiene con más fuerza que la que le daba v1, pero con la evidencia correcta. Por lo tanto **el modelo predictivo debe ser Python puro de stdlib** (`math`, `statistics`, `json`, `uuid`, `datetime`, `dataclasses`, `logging`, `os`, `time`). Está **PROHIBIDO** escribir `import numpy`, `import sklearn`, `import scipy`, `import pandas` (o cualquier variante `from … import`) en los módulos de este plan, y hay un test que lo verifica **por AST** (§5.F8.3).
 
 **G2 · Read-only sobre la telemetría.** Ninguna fase modifica `AgentExecution.metadata_json`, ni `Ticket`, ni los endpoints legacy `_execution_costs` / `/ticket-costs` / `/project-costs`. Las únicas escrituras del plan son **dos archivos** en el data dir del runtime (`runtime_paths.data_dir()`, definido en `backend/runtime_paths.py:48`): el modelo entrenado y el ledger de forecast. Borrar esos dos archivos revierte el plan al estado del 142 sin perder nada.
 
@@ -96,7 +198,12 @@ Hoy el Centro de Costos responde *"gastaste X"*. Después del 242 responde *"gas
 
 ## 4. Frontera con los Planes 171 y 199 (qué NO hace el 242)
 
-Los planes **171** (telemetría operativa + baselines solo-aviso) y **199** (cosecha histórica de telemetría desde disco por runtime) están **CRITICADOS pero NO implementados**. Para que los tres puedan convivir sin colisionar, el 242 se declara así:
+**`[v2]` CORRECCIÓN DE PREMISA (C1 · C17).** v1 decía aquí que *"los planes 171 y 199 están CRITICADOS pero NO implementados"*. Es **falso para los dos**:
+
+- **171 — IMPLEMENTADO.** `run_signals.py`, `ops_telemetry.py`, `run_trace.py`, `tests/test_run_signals.py` y 3 flags registradas (evidencia en §2.1).
+- **199 — IMPLEMENTADO parcial (backend).** Sus agregadores ya viven en `cost_analytics.py`: `burn_stacked` (`:615`), `heatmap` (`:653`), `distribution` (`:681`); sus 3 endpoints en `metrics.py` (`/cost-burn-stacked` `:691`, `/cost-heatmap` `:712`, `/cost-distribution` `:727`); y sus 3 componentes en el frontend (`CostStackedBurnChart`, `CostHeatmap`, `CostDistributionChart`). Además amplió `CostFilters` con `runtimes`/`models`/`min_cost_usd`/`max_cost_usd`.
+
+Por lo tanto esta sección deja de ser una declaración de intenciones a futuro y pasa a ser un **contrato de convivencia con código que ya está en el árbol**. Todo lo que sigue se lee así: *"¿quién es dueño de qué?"*, no *"¿quién lo hará?"*.
 
 | Tema | 242 (este plan) | 199 | 171 |
 |---|---|---|---|
@@ -109,7 +216,12 @@ Los planes **171** (telemetría operativa + baselines solo-aviso) y **199** (cos
 **Puntos de integración declarados (contratos que el 242 deja listos, sin implementarlos por el otro):**
 
 - **Si el 199 se implementa después:** al aumentar la cantidad y calidad de filas con `harness_telemetry`, el 242 **no necesita ningún cambio** — `load_records` ya las levanta. El único efecto es que `n_samples` sube y el modelo mejora solo en el próximo autotrain. El 199 **no debe** escribir en `cost_model.json` ni en `cost_forecast_ledger.jsonl`.
-- **Si el 171 se implementa después:** puede consumir `services/cost_stats.describe()` como motor estadístico compartido (es puro y sin estado). El 242 **no** reclama las claves `signals["ops"]` ni el grupo de flags operativas del 171. Si el 171 quiere un baseline de costo, debe pedirlo a `/api/metrics/cost-stats`, no reimplementarlo.
+- **`[v2]` El 171 YA ESTÁ (C1/C3) — reglas de convivencia, no de futuro:**
+  1. **`run_signals.py` no se toca.** Ni una línea. Es de otro plan, tiene sus tests y sus flags.
+  2. **Ninguna de las 7 flags del 242 puede llamarse `STACKY_OPS_*`** (ese prefijo es del 171, `harness_flags.py:300-302`). Las del 242 son `STACKY_COST_*`. Ambas conviven en la categoría `observabilidad_notif`, así que al agregar las del 242 hay que **insertar después** de las del 171, sin reordenar.
+  3. **Percentiles (C3):** hay dos definiciones legítimas y **distintas** conviviendo, y eso se declara en vez de ocultarse. `run_signals.percentile_nearest_rank` es **nearest-rank** (salud operativa); `cost_stats.percentile` es **interpolación lineal** (distribuciones de costo). Un mismo dataset da números distintos. Ver F1.3 para la regla de cuál usa cada uno y el test que fija la diferencia.
+  4. **Duraciones (C3):** `run_signals.from_exec_record` calcula `duration_seconds` **sólo si `status == "completed"`**; `cost_signals.duration_seconds` la calcula para **cualquier** estado terminal. Son semánticas distintas a propósito y **tienen nombres distintos** para que nadie las confunda. Ver F0.3.
+  5. Si el 171 quiere un baseline **de costo**, lo pide a `/api/metrics/cost-stats`; no lo reimplementa.
 - **Colisión de archivos a vigilar:** `backend/api/metrics.py` (los tres planes agregan endpoints ahí) y `backend/services/harness_flags.py` (los tres agregan flags). Al mergear, la resolución es **unión aditiva**, y después de CADA merge hay que correr `.venv\Scripts\python.exe -m pytest tests\test_harness_flags.py -q` y `tests\test_harness_ratchet_meta.py` para atrapar duplicados silenciosos.
 
 ---
@@ -136,6 +248,27 @@ Se evaluaron dos caminos:
 3. `CostRow` no se serializa con `dataclasses.asdict` en ningún lado (`cost_analytics.py` sólo usa `dataclasses.replace`, líneas `:445` y `:447`), pero igual **no se toca**: mantenerlo congelado hace que el diff sea trivialmente auditable.
 
 **Regla anti-ciclo:** `cost_signals.py` **NO importa** `cost_analytics`. La dirección es `cost_analytics → cost_signals`, nunca al revés.
+
+**`[v2]` Reconciliación obligatoria con `run_signals.py` del Plan 171 (C1/C3).** v1 escribió esta fase creyendo que el 171 no existía. Existe, y **ya proyecta `ExecRecord` a señales**: `run_signals.from_exec_record(r) -> RunPoint` (`run_signals.py:64`). Antes de escribir una línea de `cost_signals.py`, correr:
+
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+grep -n "def from_exec_record" -A 40 services/run_signals.py
+```
+
+Reglas de convivencia, **no negociables**:
+
+1. **`run_signals.py` no se toca.** Tiene sus tests (`tests/test_run_signals.py`) y sus flags (`STACKY_OPS_*`). Cambiarlo es alcance del 171, no de éste.
+2. **`cost_signals.py` NO reemplaza a `run_signals.py`.** Son dominios distintos: `RunPoint` es **salud operativa** (latencia, tasa de error, `billable_usd` colapsado a `0.0` cuando no es facturable); `SignalRow` es **insumo de costo** (cache de escritura, turnos, herramientas, reintentos, esfuerzo) y respeta G4 (`None`, nunca 0). **`run_signals` no tiene ninguno de los 5 campos de `SignalRow`**, así que no hay duplicación de datos: hay duplicación **sólo** en `duration`.
+3. **La duración es el punto de choque, y se resuelve nombrándolo:**
+
+| | `run_signals.from_exec_record` (171) | `cost_signals.duration_seconds` (242) |
+|---|---|---|
+| Cuándo devuelve un número | **sólo si `status == "completed"`** | cualquier par de timestamps con delta ≥ 0 |
+| Por qué | los errores fallan rápido y falsearían la latencia "sana" hacia abajo | un run que explotó **igual costó dinero**: su duración es insumo de costo |
+| Nombre | `RunPoint.duration_seconds` | `ExecRecord.duration_s` |
+
+   Los nombres son **deliberadamente distintos** (`duration_seconds` vs `duration_s`) para que nadie los tome por intercambiables. Está **PROHIBIDO** hacer que uno llame al otro: darían números distintos para el mismo run y eso es correcto.
 
 #### F0.2 Archivos
 
@@ -242,7 +375,23 @@ def output_chars(output: str | None) -> int | None:
 8. `completed_at < started_at` ⇒ `None` (nunca negativo).
 9. `output_chars(None)` ⇒ `None`; `output_chars("")` ⇒ `0`.
 
-#### F0.4 Diff ilustrativo en `cost_analytics.py`
+#### F0.4 Diff en `cost_analytics.py`
+
+> **`[v2]` ⚠️ LEER ANTES DE APLICAR (C2).** El diff de v1 **no aplicaba y rompía el archivo**.
+> `ExecRecord` **ya tiene** `completed_at` (`cost_analytics.py:153`, lo puso el **Plan 171**) y
+> `load_records` **ya lo pasa** (`:231`). La línea que v1 usaba como ancla (`raw_metadata=md))`)
+> **no existe**; la real es `raw_metadata=md, completed_at=ex.completed_at))`. Aplicar v1 literalmente
+> producía un **campo duplicado** en el dataclass y un **keyword argument repetido** (`SyntaxError:
+> keyword argument repeated`). El diff de abajo ya está corregido: **`completed_at` NO se agrega,
+> porque ya está.**
+>
+> **Verificación obligatoria antes de tocar nada:**
+> ```powershell
+> cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+> grep -n "completed_at" services/cost_analytics.py
+> ```
+> Si aparece en el bloque `class ExecRecord` **y** en el `out.append(ExecRecord(`, el diff de abajo es
+> el correcto. Si **no** apareciera (árbol distinto), entonces sí hay que agregarlo — pero **una sola vez**.
 
 ```diff
  from harness.pricing import _MTOK, _load_prices, estimate_cost
@@ -261,6 +410,7 @@ def output_chars(output: str | None) -> int | None:
      started_at: datetime | None
      row: CostRow
      raw_metadata: dict | None = None
+     completed_at: datetime | None = None   # ← YA EXISTE (Plan 171). NO agregarlo de nuevo.
 +    # ── Plan 242 F0 — señales enriquecidas. TODAS con default: 100% aditivo.
 +    # Ningún caller del Plan 142 las pasa, y todos los tests del 142 siguen verdes.
 +    signals: SignalRow | None = None
@@ -270,8 +420,8 @@ def output_chars(output: str | None) -> int | None:
 +    output_chars: int | None = None
 +    work_item_type: str | None = None      # de Ticket (ya cargado por el outerjoin)
 +    priority: str | None = None            # de Ticket
-+    completed_at: datetime | None = None
 ```
+**`[v2]`** Son **7** campos nuevos, no 8: `completed_at` ya lo puso el Plan 171.
 
 ```diff
              out.append(ExecRecord(
@@ -279,8 +429,8 @@ def output_chars(output: str | None) -> int | None:
                  ado_id=getattr(tk, "ado_id", None) if tk else None,
                  project=(tk.stacky_project_name or tk.project) if tk else None,
                  agent_type=ex.agent_type, status=ex.status, started_at=ex.started_at, row=cr,
--                raw_metadata=md))
-+                raw_metadata=md,
+-                raw_metadata=md, completed_at=ex.completed_at))
++                raw_metadata=md, completed_at=ex.completed_at,
 +                # Plan 242 F0 — sin query adicional: ex y tk ya están cargados.
 +                signals=extract_signal_row(md),
 +                duration_s=duration_seconds(ex.started_at, ex.completed_at),
@@ -288,9 +438,9 @@ def output_chars(output: str | None) -> int | None:
 +                completion_source=ex.completion_source,
 +                output_chars=output_chars(ex.output),
 +                work_item_type=getattr(tk, "work_item_type", None) if tk else None,
-+                priority=getattr(tk, "priority", None) if tk else None,
-+                completed_at=ex.completed_at))
++                priority=getattr(tk, "priority", None) if tk else None))
 ```
+**`[v2]`** La línea eliminada es `raw_metadata=md, completed_at=ex.completed_at))` — **con** `completed_at`. Ése es el texto real del archivo; el de v1 (`raw_metadata=md))`) no existe y el `Edit` habría fallado o, peor, un modelo menor habría "arreglado" el ancla duplicando el kwarg.
 
 **Nota de costo de query:** no se agrega **ninguna** query. `session.query(AgentExecution, Ticket)` (`cost_analytics.py:182`) ya carga las entidades completas, así que `ex.completed_at`, `ex.verdict`, `ex.completion_source`, `ex.output`, `tk.work_item_type` y `tk.priority` **ya están en memoria**. Las columnas existen: `AgentExecution` en `backend/models.py:248` (incluye `verdict`, `output`, `completed_at`, `completion_source`) y `Ticket` en `backend/models.py:38` (incluye `work_item_type`, `priority`).
 
@@ -312,8 +462,10 @@ def output_chars(output: str | None) -> int | None:
 | `test_duracion_negativa_devuelve_none` | `completed_at < started_at` ⇒ `None` |
 | `test_duracion_redondea_a_3_decimales` | 12,3456 s ⇒ `12.346` |
 | `test_output_chars_none_vs_cadena_vacia` | `None`⇒`None`; `""`⇒`0` |
-| `test_execrecord_se_construye_sin_los_campos_nuevos` | `ExecRecord(...)` con la firma del Plan 142 sigue funcionando y deja los 8 campos nuevos en `None` |
+| `test_execrecord_se_construye_sin_los_campos_nuevos` | `ExecRecord(...)` con la firma del Plan 142 sigue funcionando y deja los **7** campos nuevos en `None` |
 | `test_cost_signals_no_importa_cost_analytics` | AST del módulo: cero `Import`/`ImportFrom` que mencionen `cost_analytics` |
+| **`[v2]`** `test_execrecord_no_declara_completed_at_dos_veces` | **C2**: `[f.name for f in dataclasses.fields(ExecRecord)].count("completed_at") == 1`. Es el test que atrapa el bug que traía el diff de v1 |
+| **`[v2]`** `test_duracion_de_costo_difiere_de_la_operativa_en_runs_fallidos` | **C3**: para un run con `status="error"` y ambos timestamps, `cost_signals.duration_seconds(...)` devuelve un `float` y `run_signals.from_exec_record(...).duration_seconds` devuelve `None`. **Fija la divergencia a propósito**, para que nadie la "arregle" después creyendo que es un bug |
 
 **Comando:**
 ```powershell
@@ -323,8 +475,13 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 #### F0.6 Aceptación (BINARIA)
 
-1. `.venv\Scripts\python.exe -m pytest tests\test_plan242_cost_signals.py -q` ⇒ **16/16 verdes**.
-2. **Cero regresión (KPI-9)** — los 6 archivos del 142/158 verdes **sin editarlos**, uno por uno:
+1. `.venv\Scripts\python.exe -m pytest tests\test_plan242_cost_signals.py -q` ⇒ **0 failed / 0 errors**, con los **18** casos de F0.5 presentes. **`[v2]` (C11):** el criterio binario es *"0 failed"*, **no** un número exacto de tests: `parametrize` expande casos y cualquier conteo fijo queda mal el día que se parametriza uno.
+2. **`[v2]` (C1/C3) — el 171 sigue verde sin tocarlo:**
+```powershell
+.venv\Scripts\python.exe -m pytest tests\test_run_signals.py -q
+```
+   y `git diff --stat services/run_signals.py` ⇒ **vacío**.
+3. **Cero regresión (KPI-9)** — los 6 archivos del 142/158 verdes **sin editarlos**, uno por uno:
 ```powershell
 .venv\Scripts\python.exe -m pytest tests\test_cost_analytics_extract.py -q
 .venv\Scripts\python.exe -m pytest tests\test_cost_analytics_aggregate.py -q
@@ -425,6 +582,14 @@ class OutlierReport:
 def percentile(sorted_values: list[float], q: float) -> float | None: ...
 def describe(values) -> Distribution: ...
 def histogram(values, bins: int = 10) -> list[HistBin]: ...
+# [v2] C19 — REUSO: `cost_analytics.distribution(records, bins)` (cost_analytics.py:681,
+# Plan 199) YA implementa esta misma semantica (clamp de bins, "el maximo cae en el ultimo
+# bin", caso max == min). v1 la reinventaba sin saberlo, en un plan cuya §4 exige "una sola
+# definicion". Decision: `cost_stats.histogram` es la CANONICA porque opera sobre `values`
+# (cualquier metrica) y no solo sobre cost_usd. `distribution` NO se toca -- ni su firma, ni
+# su payload, ni tests/test_cost_analytics_aggregate.py -- y queda como su envoltorio de
+# compatibilidad. Un test fija que ambas coinciden:
+# `test_histogram_coincide_con_cost_analytics_distribution`.
 def tukey_outliers(values) -> OutlierReport: ...
 def mad_outliers(values, threshold: float = 3.5) -> OutlierReport: ...
 def metric_value(rec, metric: str) -> float | None: ...
@@ -449,6 +614,24 @@ frac = idx - lo
 resultado = sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * frac
 ```
 `q1 = percentile(v, 25)`, `q3 = percentile(v, 75)`, `p50 = percentile(v, 50)` (que por construcción **coincide** con `median`; se exponen los dos igual, y hay un test que verifica la coincidencia).
+
+> **`[v2]` ⚠️ YA HAY OTRO PERCENTIL EN EL REPO (C3).** v1 afirmaba *"una sola definición de percentil en
+> todo el plan"* sin saber que el **Plan 171 ya implementó `run_signals.percentile_nearest_rank(values, q)`**
+> (`run_signals.py:102`), que es **nearest-rank**, no interpolación lineal. **Dan números distintos para el
+> mismo dataset** (con `[1,2,3,4]` y `q=50`: nearest-rank ⇒ `2`, interpolación lineal ⇒ `2.5`).
+>
+> **Decisión (y su razón):** se **mantienen las dos**, con dominios separados y declarados.
+> - **Costo (este plan)** usa **interpolación lineal**: las distribuciones de costo son continuas y de cola
+>   larga; el nearest-rank sobre muestras chicas salta de escalón y hace que el p95 se mueva de golpe.
+> - **Salud operativa (Plan 171)** usa **nearest-rank**: devuelve **un valor observado real**, que es lo que
+>   corresponde cuando el número se compara contra un umbral de alerta.
+>
+> **Prohibido** hacer que una llame a la otra, y **prohibido** "unificarlas" en esta fase: sería cambiar el
+> comportamiento del 171 desde un plan ajeno. La divergencia queda **fijada por un test** (F1.5,
+> `test_percentil_de_costo_difiere_del_operativo_a_proposito`), para que nadie la tome por un bug.
+>
+> Si algún día se quiere una sola definición, es un plan propio con su propia migración — no un efecto
+> colateral de éste.
 
 **`describe(values)`:**
 ```
@@ -733,7 +916,7 @@ def build_cohorts(records) -> dict[str, CohortStats]: ...
 def percent_rank(sorted_values: list[float], x: float) -> float | None: ...
 def score_execution(record, cohorts: dict[str, CohortStats],
                     prev_runs: int = 0) -> ExecutionScore: ...
-def score_ticket(records) -> TicketScore: ...
+def score_ticket(records, cohorts: dict[str, CohortStats]) -> TicketScore: ...   # [v2] C8: cohorts es PARAMETRO
 def score_payload(records, top_n: int = 50) -> dict: ...
 ```
 
@@ -850,7 +1033,14 @@ Se emite **una razón por componente computado**, más las razones especiales. E
 ```
 records_del_ticket = todos los ExecRecord con el mismo ticket_id (el caller ya filtro)
 si esta vacio -> ValueError("score_ticket requiere al menos una ejecucion")
-cohorts = build_cohorts(records_del_ticket)     # cohorte local; la global la arma score_payload
+# [v2] C8 — la cohorte entra POR PARAMETRO, no se construye local.
+# v1 hacia `cohorts = build_cohorts(records_del_ticket)`: una cohorte armada con las
+# ejecuciones de UN SOLO ticket casi siempre tiene n < 3, y `cost_position` devuelve None
+# por debajo de 3 (§F2.3). Resultado: el componente de MAYOR PESO (0,35) quedaba en None
+# para practicamente todos los tickets, y el score del ticket se calculaba sobre los otros
+# cuatro renormalizados. El plan anulaba en silencio su propia metrica principal.
+# La firma pasa a ser score_ticket(records, cohorts) y el caller (score_payload) le pasa
+# la cohorte GLOBAL, que es la unica referencia con sentido: "caro comparado con QUE".
 scores  = [score_execution(r, cohorts, prev_runs=k).score for cada r ordenado por started_at]
 validos = [s for s in scores if s is not None]
 si validos esta vacio -> TicketScore(score=None, grade="N/D", reasons=[...])
@@ -1150,8 +1340,22 @@ def _predict_log(fila_dispersa, mu, sd, w, intercept, n_continuous) -> float:
     for (j, v) in fila_dispersa:
         z = (v - mu[j])/sd[j] if j < n_continuous else v
         acc += w[j] * z
-    # OJO: los continuos AUSENTES de la fila dispersa contribuyen (0 - mu[j])/sd[j] * w[j].
-    # Por eso build_features emite SIEMPRE los 5 continuos, incluso si valen 0.0.
+    # [v2] C7 — COMENTARIO CORREGIDO. v1 decia aca: "los continuos AUSENTES contribuyen
+    # (0 - mu[j])/sd[j] * w[j]". Es FALSO y contradecia al propio codigo: el `for` recorre
+    # SOLO las entradas presentes, asi que un continuo ausente aporta EXACTAMENTE 0.
+    # (Y v1 ademas pedia un test que afirmaba lo falso: habria quedado rojo sin arreglo posible.)
+    #
+    # Lo que SI es cierto, y por eso importa:
+    #   - En ENTRENAMIENTO, znorm() tambien mapea solo las entradas presentes => el Gram se
+    #     acumula con la misma convencion "ausente = aporte 0". Entrenamiento y prediccion
+    #     son CONSISTENTES entre si.
+    #   - Pero mu[j] se calcula con valor_en(fila, j), que devuelve 0.0 si el feature falta:
+    #     o sea la media se estima imputando 0, mientras el diseño trata al ausente como
+    #     "igual a la media". Son dos imputaciones distintas.
+    #   - Esa inconsistencia NO se manifiesta porque build_features emite SIEMPRE los 5
+    #     continuos (aunque valgan 0.0). Es un invariante del que depende la correccion del
+    #     modelo, no una comodidad: si alguien alguna vez omite un continuo, el modelo se
+    #     desalinea en silencio. Por eso el test que lo fija es OBLIGATORIO.
     return acc
 ```
 
@@ -1307,7 +1511,8 @@ def model_status() -> dict: ...
 | `test_fit_ridge_lambda_grande_encoge_pesos` | λ=1000 ⇒ `|w|` menor que con λ=1 |
 | `test_fit_ridge_columna_constante_sd_uno` | caso borde 4, sin `ZeroDivisionError` |
 | `test_fit_ridge_no_normaliza_los_onehot` | `mu[j]==0.0` y `sd[j]==1.0` para `j >= n_continuous` |
-| `test_predict_log_usa_la_media_para_continuos_ausentes` | invariante del comentario en `_predict_log` |
+| **`[v2]`** `test_continuo_ausente_aporta_cero_no_la_media` | **C7**: el caso que v1 tenía al revés. Verifica el comportamiento **real** de `_predict_log` (ausente ⇒ aporte 0), no el del comentario equivocado. El caso de v1 (`test_predict_log_usa_la_media_para_continuos_ausentes`) habría quedado **rojo sin arreglo posible** |
+| **`[v2]`** `test_build_features_emite_siempre_los_5_continuos_invariante_del_modelo` | **C7**: fija el invariante del que depende la corrección del modelo — si alguien omite un continuo, el modelo se desalinea **en silencio** |
 | `test_intervalo_conformal_ordena_p10_p50_p90` | punto 5 de §F3.6 |
 | `test_intervalo_nunca_negativo` | `max(0.0, ...)` |
 | `test_calibracion_menor_a_10_filas_usa_fallback_y_marca_candidate` | punto 6 de §F3.6 |
@@ -1356,7 +1561,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 #### F3.11 Aceptación (BINARIA)
 
-1. Los 3 archivos de test verdes (16 + 38 + 2 casos).
+1. Los 3 archivos de test en **0 failed** (**`[v2]`** cobertura: 16 + **37** + **3** casos — v1 decía 38 donde la tabla lista 37, y perf pasa de 2 a 3 casos por el desdoble del KPI-7).
 2. **KPI-7** verde (`test_entrena_20000_filas_en_menos_de_2s`).
 3. `grep -cE "^(import|from) (numpy|sklearn|scipy|pandas)" services/cost_model.py` ⇒ **0** (y el test AST de §F8.3 en verde).
 4. Los 3 archivos registrados en `run_harness_tests.sh` y `.ps1`; ratchet meta verde.
@@ -1476,7 +1681,80 @@ def should_promote(report: EvalReport) -> tuple[bool, list[str]]:
 
 **Por qué la cobertura tiene tope superior (0,95) y no sólo piso:** un intervalo que cubre el 99 % es un intervalo inútilmente ancho (`p10=0.001, p90=50`) que técnicamente "acierta siempre". El tope castiga la falsa seguridad tanto como el piso castiga la falsa precisión.
 
-#### F4.5 Casos borde enumerados
+#### F4.5 [ADICIÓN ARQUITECTO] Modelo anterior recuperable — snapshot, comparación y rollback HITL
+
+**Resuelve C16.** El gate de §F4.4 es una regla estadística, no una decisión humana. Un modelo puede pasarlo y aun así ser peor en producción (deriva de cohortes, un mes atípico, un runtime que dominó el histórico reciente). Y sin snapshot, **promover es destruir**: `save_model` pisa el vigente con `os.replace` y no queda a qué volver. Eso convierte al 242 en el único componente del sistema que **reemplaza algo sin que el operador pueda verlo, compararlo ni deshacerlo** — justo lo que G15 prohíbe en espíritu. Las tres piezas son **reuso puro** de lo que F3/F4 ya construyen: cero queries nuevas, cero álgebra nueva.
+
+**(1) Snapshot antes de pisar.** `save_model()` gana un paso previo dentro de la misma escritura atómica:
+```python
+_PREV_MODEL_FILENAME = "cost_model.prev.json"
+
+def save_model(model, *, keep_previous: bool = True) -> None:
+    ruta = data_dir() / _MODEL_FILENAME
+    if keep_previous and ruta.exists():
+        try:
+            os.replace(ruta, data_dir() / _PREV_MODEL_FILENAME)
+        except OSError:      # disco lleno / archivo abierto por el operador en Windows
+            logger.warning("cost_model: sin snapshot previo; se promueve igual")
+    # ... escritura atomica .tmp -> os.replace(tmp, ruta), EXACTAMENTE como en F3.7
+```
+**Un** nivel de historia, no N: un archivo extra de decenas de KB, y borrarlo revierte. `load_model()` no cambia; se agrega `load_previous_model()` con **las mismas 7 guardas** de §F3.7 (devuelve `None`, nunca lanza).
+
+**(2) Comparar contra el vigente, no sólo contra el baseline.** `EvalReport` gana dos campos **con default** (100 % aditivo):
+```python
+    incumbent_mae: float | None = None    # MAE del modelo VIGENTE sobre EL MISMO set de test
+    beats_incumbent: bool | None = None   # None si no habia vigente (primera promocion)
+```
+Se calcula corriendo `_predict_log` del modelo previo sobre el **mismo** `test` del split de §F4.2 — no se re-parte, no se re-entrena, no hay query nueva. `should_promote` **no cambia su regla** (sigue siendo 5 % contra el baseline + cobertura en rango), pero si `beats_incumbent is False` agrega a `reject_reasons`:
+```
+f"le gana al baseline pero PIERDE contra el modelo vigente: MAE {mae:.4f} vs {incumbent_mae:.4f}"
+```
+y **no promueve**. Un modelo que empeora respecto del que ya está no entra jamás, aunque supere al baseline trivial.
+
+**(3) La palanca del operador.** Una flag más (la **octava**) y un endpoint hermano de los 6 de §F6.2:
+
+| Key | Tipo | Default | Justificación del default |
+|---|---|---|---|
+| `STACKY_COST_MODEL_AUTOPROMOTE_ENABLED` | bool | **ON** | Read-only sobre datos ya persistidos; escribe **un** JSON reversible **con snapshot**. Ninguna de las 4 excepciones duras aplica. En **OFF**, todo entrenamiento queda en `candidate` y **promueve el operador a mano** — la variante más conservadora, disponible sin tocar código. |
+
+| Método | Ruta | Función Python | Flag |
+|---|---|---|---|
+| POST | `/api/metrics/cost-model-promote` | `def cost_model_promote()` | `STACKY_COST_FORECAST_ENABLED` |
+
+Body: `{"action": "promote"}` (fuerza `candidate` → `active`, **sólo** si el modelo existe y carga sin error) o `{"action": "rollback"}` (restaura `cost_model.prev.json`, con el mismo `.tmp` + `os.replace`). Otro `action` ⇒ `{"ok": false, "error": "invalid_action"}, 400`. Sin `.prev.json` ⇒ `{"ok": false, "error": "no_previous_model"}, 200` — no es un error HTTP, es el estado legítimo del día 1.
+
+`/api/metrics/cost-model-status` gana, aditivos: `"previous_present"`, `"previous_trained_at"`, `"previous_eval"`, `"beats_incumbent"`, `"autopromote_enabled"`.
+
+**UI — dentro de `CostForecastPanel`, sin componente nuevo:** una línea y dos botones. `"Modelo vigente: entrenado el {trained_at}, MAE {mae} USD. Anterior: {previous_trained_at}, MAE {incumbent_mae} USD."` + `[Promover el candidato]` (habilitado sólo si `status === "candidate"`) + `[Volver al anterior]` (sólo si `previous_present`). Si `beats_incumbent === false`, promover pide confirmación con el **`Dialog` canónico (Plan 164)** — nunca `window.confirm`.
+
+**Tests — +6 casos en `test_plan242_cost_model_eval.py` (22 ⇒ 28):**
+
+| Caso | Qué verifica |
+|---|---|
+| `test_save_model_guarda_snapshot_previo` | tras 2 `save_model`, existen `cost_model.json` y `cost_model.prev.json`, con contenidos distintos |
+| `test_primera_promocion_sin_previo_no_falla` | `beats_incumbent is None`; no se inventa un `.prev` |
+| `test_no_promueve_si_pierde_contra_el_vigente` | gana al baseline pero pierde al vigente ⇒ `promoted is False` y la razón menciona "modelo vigente" |
+| `test_rollback_restaura_el_anterior_byte_a_byte` | `json.load` del restaurado == `json.load` del previo |
+| `test_rollback_sin_previo_devuelve_no_previous_model` | no escribe nada |
+| `test_previous_corrupto_no_rompe_status` | `.prev.json` truncado ⇒ `previous_present: false` y `/cost-model-status` sigue 200 |
+
+**Cumplimiento de los rieles duros:**
+- **3 runtimes:** es un archivo JSON; no toca ningún runtime. Copilot sigue fuera del entrenamiento (G7) y su forecast sigue `billable=False` con cualquiera de los dos modelos. Fallback explícito: sin `.prev`, los campos van en `null` y el botón queda deshabilitado — nunca un cero disfrazado de dato.
+- **Cero trabajo del operador:** snapshot automático, flag ON, comparación calculada sola. Los dos botones son **opt-in**: si nunca los mira, el sistema se comporta igual que sin esta adición, sólo que con respaldo.
+- **Human-in-the-loop:** es justamente la pieza que le devuelve la decisión. Amplifica (le muestra una comparación que hoy no existe) sin reemplazarlo, y con la flag en OFF el humano es el **único** que promueve.
+- **Mono-operador sin auth:** ningún rol, ningún 403. Un botón, un endpoint.
+- **No degradar:** un `os.replace` extra por entrenamiento (microsegundos) y un archivo del tamaño del modelo. Con la flag en OFF, el comportamiento es el del F4 original.
+- **Backward-compatible:** los 2 campos de `EvalReport` tienen default `None`; `save_model` gana un kwarg con default; el endpoint es apéndice; `/cost-model-status` sólo agrega claves.
+- **Reuso:** `save_model` / `load_model` / `_predict_log` / `temporal_split` / `EvalReport` / `Dialog` canónico. No inventa nada.
+
+**`[ADICIÓN ARQUITECTO] bis` — brazo de control permanente (una línea, alto retorno).** En §F5.4, `calibration()` debe calcular **siempre** el nivel **L4** en paralelo, aunque se muestre el resultado de L1, y registrarlo en la línea de apertura del ledger como `"heuristic_p50_usd"`. Sin ese brazo, la calibración dice *"el modelo se equivoca 0,09 USD"* sin poder responder la única pregunta que importa: **"¿y la heurística de FA-33 que ya teníamos se equivocaba más o menos?"**. El payload de `by_source` ya tiene la clave `heuristic`; sólo falta declarar que se computa siempre. Es lo que hace que el 242 pueda **probar** que valió la pena, en vez de afirmarlo.
+
+**Huella de regresión** — se registra en `Stacky Agents/docs/sistema/error_fingerprints.json` (C19 del checklist; el archivo existe y tiene 23 entradas):
+`"modelo de costo promovido con n_test chico ⇒ MAE optimista y estimador peor que el anterior, sin forma de volver"` · **síntoma:** `calibration().by_source["model"].mae_usd` sube mientras `/cost-model-status` dice `active` · **detección:** `beats_incumbent is False` · **guard_test:** `test_no_promueve_si_pierde_contra_el_vigente` · **remedio:** `POST /api/metrics/cost-model-promote {"action":"rollback"}`.
+
+---
+
+#### F4.6 Casos borde enumerados
 
 1. `rows` con menos de `_MIN_SPLIT_ROWS * 3` filas ⇒ `temporal_split` ⇒ `None` ⇒ `train()` no promueve, razón `"histórico insuficiente para hacer un split temporal"`.
 2. Todos los `cost_usd` del test iguales a 0 ⇒ `mape` ⇒ `(None, n)` con `mape_skipped = n`; el gate **no** usa MAPE, así que no bloquea.
@@ -1484,7 +1762,9 @@ def should_promote(report: EvalReport) -> tuple[bool, list[str]]:
 4. Modelo perfecto (`mae == 0`) ⇒ `improvement == 1.0` ⇒ promueve, **si además** la cobertura cae en rango.
 5. Modelo peor que el baseline ⇒ `improvement` negativo ⇒ **no promueve** (test dedicado).
 
-#### F4.6 Tests PRIMERO — `backend/tests/test_plan242_cost_model_eval.py`
+#### F4.7 Tests PRIMERO — `backend/tests/test_plan242_cost_model_eval.py`
+
+> **`[v2]`** A los 22 casos de abajo se suman los **6** de la [ADICIÓN ARQUITECTO] §F4.5 ⇒ **28** en total.
 
 | Caso | Qué verifica |
 |---|---|
@@ -1517,9 +1797,9 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests\test_plan242_cost_model_eval.py -q
 ```
 
-#### F4.7 Aceptación (BINARIA)
+#### F4.8 Aceptación (BINARIA)
 
-1. Los 22 casos verdes.
+1. **`[v2]`** `0 failed`, con los **28** casos de cobertura (22 de v1 + 6 de la ADICIÓN §F4.5).
 2. **KPI-5** y **KPI-6** verdes por nombre de caso — en particular `test_NO_promueve_cuando_pierde`, que es el que impide el falso verde.
 3. Registrado en `run_harness_tests.sh` y `.ps1`; ratchet meta verde.
 
@@ -1545,12 +1825,31 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 | Precedente en el repo | `data_dir()` ya se usa así (`services/ado_feedback.py:10`, `services/ado_identity.py:32`) | — |
 
 **Se elige JSONL.** Ruta: `runtime_paths.data_dir() / "cost_forecast_ledger.jsonl"`.
-*A VERIFICAR EN IMPLEMENTACIÓN:* si el repo ya tiene un ledger JSONL con helpers reutilizables, conviene seguir su estilo. Comando exacto:
-```powershell
-cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-grep -rln "jsonl" services/ | head -20
-```
-Si aparece un módulo tipo `ci_run_ledger.py` o `ado_edit_ledger.py` con un escritor JSONL genérico, **reusarlo**; si no, escribir el de este plan. En ninguno de los dos casos se agrega una dependencia ni una tabla.
+
+> **`[v2]` RESUELTO (C5, verificado 2026-07-26) — hay patrón de la casa y hay que calcarlo.** v1 dejaba esto
+> como *"A VERIFICAR: … conviene seguir su estilo"*. La respuesta es **sí, y son cuatro**:
+> `services/ci_run_ledger.py` (Plan 191), `services/sql_exec_ledger.py`, `services/env_apply_ledger.py`,
+> `services/ado_edit_ledger.py` — todos declarados como *"patrón de la casa: `deploy_store.py:98-158`"*.
+> El molde es **idéntico en los cuatro** y el diseño de v1 se apartaba de él en tres puntos, los tres a peor:
+>
+> | | Patrón de la casa (`ci_run_ledger.py`) | v1 del 242 | Veredicto |
+> |---|---|---|---|
+> | Concurrencia | **`_LOCK = threading.Lock()`** (`:19`) alrededor de toda lectura y escritura | **sin lock** | ✗ `record_forecast` corre en el hilo HTTP y `close_forecast` en el del post-hook: **escriben al mismo archivo a la vez** |
+> | Retención | `MAX_ROWS = 500` (`:18`), se conservan las **más nuevas** por reescritura atómica | 50.000 líneas + rotación a `.1` | ✗ 100× más grande, y `calibration` lee **sólo** el activo ⇒ al rotar se pierde la ventana de golpe |
+> | Cerrar un registro | **`update_run_status`** (`:103`): actualiza **en su lugar** bajo `_LOCK`, con `_write_rows` atómico | segunda línea `"actual"` + emparejamiento en memoria | ✗ obliga a releer y parsear **todo** el ledger en **cada** fin de ejecución |
+> | Contra fuga de secretos | **allowlist `ENTRY_FIELDS`** (`:22-27`): las claves fuera del contrato **se descartan al escribir** | sin allowlist | ✗ |
+>
+> **Decisión: `cost_forecast_ledger.py` calca `ci_run_ledger.py`.** Mismo `_LOCK`, mismo `MAX_ROWS = 500`
+> (un mono-operador hace decenas de forecasts por día: 500 cubre semanas y hace que `calibration` sea
+> O(500) en vez de O(50.000)), mismos `_read_rows`/`_write_rows` con `tmp.replace(path)`, misma allowlist
+> `ENTRY_FIELDS`, y **una fila por forecast que se actualiza al cerrar** — no dos líneas que hay que
+> emparejar. Esto elimina de un saque la rotación, el `skipped_lines` como mecanismo de supervivencia y el
+> rescan por ejecución. Leer primero:
+> ```powershell
+> cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+> sed -n '1,130p' services/ci_run_ledger.py
+> ```
+> No se agrega ninguna dependencia ni ninguna tabla, igual que en v1.
 
 #### F5.2 Archivos
 
@@ -1586,8 +1885,19 @@ Si aparece un módulo tipo `ci_run_ledger.py` o `ado_edit_ledger.py` con un escr
 
 ```python
 _LEDGER_FILENAME = "cost_forecast_ledger.jsonl"
-_MAX_LEDGER_LINES = 50000        # cap duro
-_ROTATED_SUFFIX = ".1"
+# [v2] C5 — calca ci_run_ledger.py (patron de la casa, Plan 191):
+MAX_ROWS = 500                   # retencion dura: se conservan las 500 MAS NUEVAS
+_LOCK = threading.Lock()         # record_forecast corre en el hilo HTTP y close_forecast
+                                 # en el del post-hook: SIN esto escriben a la vez.
+ENTRY_FIELDS: tuple[str, ...] = (   # allowlist: lo que no este aca NO se persiste
+    "forecast_id", "ts", "ticket_id", "execution_id", "agent_type", "runtime", "model",
+    "p10_usd", "p50_usd", "p90_usd", "heuristic_p50_usd", "source", "confidence",
+    "n_samples", "billable", "actual_usd", "actual_cost_kind", "final_status",
+    "abs_error_usd", "inside_interval", "closed_at",
+)
+# NO hay _MAX_LEDGER_LINES ni _ROTATED_SUFFIX: v1 proponia 50.000 lineas con rotacion a
+# ".1", 100x el cap de la casa, y ademas `calibration` leia solo el archivo activo => al
+# rotar se perdia la ventana entera de golpe. Con 500 filas no hace falta rotar nada.
 
 
 def record_forecast(*, ticket_id: int | None, agent_type: str | None,
@@ -1643,7 +1953,29 @@ El punto de enganche runtime-agnóstico verificado es **`services/ticket_status.
 fn(*, ticket_id, execution_id, final_status, agent_type, error, **kwargs)
 ```
 
-**NO se usa `agent_completion.run_on`.** Los hooks nunca bloquean la ejecución principal: los errores se loguean (`ticket_status.py:313`).
+**NO se usa `agent_completion.run_on`.**
+
+> **`[v2]` ⛔ CORRECCIÓN CRÍTICA (C4) — "no bloquea" era una mala lectura del docstring.** v1 escribía acá
+> *"Los hooks nunca bloquean la ejecución principal: los errores se loguean (`ticket_status.py:313`)"*,
+> mezclando dos cosas distintas. `_run_post_hooks` (**`ticket_status.py:325`**, llamado desde `:279`) es un
+> `for` **síncrono**:
+> ```python
+> for hook in _POST_HOOKS:
+>     try:
+>         hook(**kwargs)          # ← EN LÍNEA, en el hilo del runner
+>     except Exception as exc:
+>         logger.warning(...)     # ← esto es lo ÚNICO que garantiza :313/:330
+> ```
+> O sea: **los errores no se propagan, pero el tiempo sí se paga.**
+>
+> Y la regla de la casa es explícita y está escrita — `services/completion_dispatcher.py:3-6` (Plan 208 F0):
+> > *"El post-hook que se registra en `ticket_status.register_post_hook` **SOLO encola (O(1)) y retorna**:
+> > todo el trabajo real (red, DB) corre en un daemon de fondo, para que una falla o lentitud jamás demore
+> > la completación ni la respuesta HTTP."*
+>
+> `cost_model.train()` arranca con `collect_training_rows` → `load_records(CostFilters(days=365))`, que es
+> **una query de hasta 20.000 filas de `AgentExecution` con la columna `output` (TEXT) completa**. Correrlo
+> en línea viola la regla frontalmente. Ver el fix en el código de abajo.
 
 ```python
 """Plan 242 F5 — Cierre del lazo: post-hook de fin de ejecucion."""
@@ -1659,6 +1991,9 @@ _AUTOTRAIN_MIN_INTERVAL_S = 1800.0     # debounce duro: como mucho 1 entrenamien
 _lock = threading.Lock()
 _runs_since_train = 0
 _last_train_ts = 0.0
+_installed = False        # [v2] C9 — OBLIGATORIO: register() hace `global _installed`.
+                          # v1 nunca lo inicializaba => NameError en la PRIMERA llamada.
+_training = False         # [v2] C4 — evita dos entrenamientos en paralelo.
 
 
 def _on_execution_end_cost(*, ticket_id=None, execution_id=None, final_status=None,
@@ -1689,21 +2024,59 @@ def _maybe_autotrain() -> None:
             return                    # debounce: NO se resetea el contador, se reintenta luego
         _runs_since_train = 0
         _last_train_ts = ahora
-    from services import cost_model
-    resultado = cost_model.train()
-    logger.info("cost hooks: autotrain -> trained=%s status=%s n=%s",
-                resultado.trained, resultado.status, resultado.n_samples)
+    # [v2] C4 — REGLA DE LA CASA (services/completion_dispatcher.py:3-6, Plan 208 F0):
+    # el post-hook SOLO encola (O(1)) y retorna. train() hace UNA query de hasta
+    # 20.000 filas de AgentExecution (columna `output` TEXT completa) + el ajuste.
+    # JAMAS en linea: se despacha a un daemon y el hook vuelve enseguida.
+    threading.Thread(target=_train_in_background, name="cost-autotrain",
+                     daemon=True).start()
 
 
-def install() -> None:
-    """Idempotente: registrar dos veces no debe duplicar el hook."""
+def _train_in_background() -> None:
+    """Corre FUERA del hilo del runner. Nunca propaga. Nunca se solapa consigo mismo."""
+    global _training
+    with _lock:
+        if _training:
+            logger.info("cost hooks: ya hay un autotrain en curso; se omite")
+            return
+        _training = True
+    try:
+        from services import cost_model
+        resultado = cost_model.train()
+        logger.info("cost hooks: autotrain -> trained=%s status=%s n=%s",
+                    resultado.trained, resultado.status, resultado.n_samples)
+    except Exception:
+        logger.exception("cost hooks: fallo el autotrain en background")
+    finally:
+        with _lock:
+            _training = False
+
+
+def register(register_fn) -> None:
+    """[v2] C18 — MISMA FORMA que los 5 hooks hermanos de app.py:908-925.
+    Idempotente: registrar dos veces no duplica el hook."""
     global _installed
     if _installed:
         return
-    from services import ticket_status
-    ticket_status.register_post_hook(_on_execution_end_cost)
+    register_fn(_on_execution_end_cost)
     _installed = True
 ```
+
+> **`[v2]` (C18) La forma del enganche también estaba mal.** v1 exponía `install()` y decía *"si no hay
+> ninguno registrado en `create_app`, va al final de la función"*. **Hay cinco**, todos con el mismo patrón
+> canónico (`app.py:908`, `:910`, `:913`, `:917`, `:925`):
+> ```python
+> incident_autopublish.register(ticket_status.register_post_hook)
+> incident_dev_autocommit.register(ticket_status.register_post_hook)
+> completion_dispatcher.register(ticket_status.register_post_hook)
+> _vp.register(ticket_status.register_post_hook)
+> qa_uat_enqueue.register(ticket_status.register_post_hook)
+> ```
+> Por eso `cost_model_hooks` expone **`register(register_fn)`**, no `install()`, y la línea que se agrega a
+> `app.py` va **junto a esas cinco**, no al final:
+> ```python
+>     cost_model_hooks.register(ticket_status.register_post_hook)
+> ```
 
 **Nota de concurrencia:** `_lock` protege los dos contadores; el entrenamiento en sí corre **fuera** del lock (`cost_model.train()` puede tardar ~1 s y no debe bloquear otros hooks). El doble decremento no es posible porque el contador se resetea dentro del lock antes de soltar.
 
@@ -1717,11 +2090,12 @@ grep -n "register_post_hook\|register_pre_hook" app.py api/*.py services/*.py
 ```
 La línea a agregar es:
 ```python
-from services import cost_model_hooks; cost_model_hooks.install()
+    cost_model_hooks.register(ticket_status.register_post_hook)
 ```
+**`[v2]` (C18)** Va **junto a las otras 5** (`app.py:908-925`), no al final de `create_app`. El import se agrega al bloque de imports de servicios que ya existe ahí.
 Debe ir **después** de que la DB esté inicializada y **dentro** del mismo bloque donde ya se registran otros hooks; si no hay ninguno registrado en `create_app`, va al final de la función, antes del `return app`.
 
-⚠️ **Gotcha conocido del repo:** `create_app()` fuera de pytest dispara daemons y sync reales. El test de este hook **no** debe llamar `create_app()`: debe llamar `cost_model_hooks.install()` directamente y luego `ticket_status.on_execution_end(...)` con una DB de test.
+⚠️ **Gotcha conocido del repo:** `create_app()` fuera de pytest dispara daemons y sync reales. El test de este hook **no** debe llamar `create_app()`: debe llamar **`cost_model_hooks.register(ticket_status.register_post_hook)`** directamente y luego `ticket_status.on_execution_end(...)` con una DB de test.
 
 #### F5.6 Casos borde enumerados
 
@@ -1759,7 +2133,9 @@ Debe ir **después** de que la DB esté inicializada y **dentro** del mismo bloq
 
 | Caso | Qué verifica |
 |---|---|
-| `test_install_es_idempotente` | 2 llamadas ⇒ 1 sola entrada en `ticket_status._POST_HOOKS` |
+| **`[v2]`** `test_register_es_idempotente` | **C18**: 2 llamadas a `register(...)` ⇒ 1 sola entrada en `ticket_status._POST_HOOKS` |
+| **`[v2]`** `test_autotrain_no_corre_en_el_hilo_del_hook` | **C4**: el hook retorna **antes** de que `train()` termine — se monkeypatchea `cost_model.train` con uno que duerme y se verifica que `on_execution_end` ya volvió. Es el test que impide que vuelva el `train()` en línea |
+| **`[v2]`** `test_dos_autotrains_no_se_solapan` | **C4**: con `_training` en curso, la segunda tanda no lanza un segundo entrenamiento |
 | `test_hook_cierra_el_forecast_al_terminar` | integración con el ledger |
 | `test_hook_no_propaga_excepciones` | el ledger lanza a propósito ⇒ `on_execution_end` no rompe |
 | `test_autotrain_off_no_entrena` | flag OFF ⇒ `cost_model.train` no se llama (monkeypatch contador) |
@@ -1778,7 +2154,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 #### F5.8 Aceptación (BINARIA)
 
-1. Los 16 + 9 casos verdes.
+1. **`[v2]`** `0 failed` en los dos archivos, con **16 + 12** casos de cobertura (9 de v1 + 3 nuevos de C4/C18).
 2. **KPI-8** verde (`test_par_abierto_cerrado_produce_calibracion`).
 3. `grep -c "register_post_hook" services/cost_model_hooks.py` ⇒ **≥1**; `grep -c "agent_completion" services/cost_model_hooks.py` ⇒ **0** (no se usa el chokepoint equivocado).
 4. `grep -c "cost_model_hooks" app.py` ⇒ **1**.
@@ -1805,11 +2181,39 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 | Acción | Ruta exacta |
 |---|---|
-| **EDITAR** | `Stacky Agents/backend/api/metrics.py` (**sólo apéndice** después de la línea 723) |
+| **EDITAR** | `Stacky Agents/backend/api/metrics.py` (**sólo apéndice**, ver el punto de inserción de abajo) |
+
+> **`[v2]` ⛔ PUNTO DE INSERCIÓN — NO USAR NÚMERO DE LÍNEA (C14).** v1 decía *"sólo apéndice después de la
+> línea 723"*. **`metrics.py:723` es `**ca.heatmap(ca.load_records(f)),`, que está DENTRO del `jsonify({...})`
+> de `/cost-heatmap` (`:712-724`).** Insertar 6 endpoints ahí es un `SyntaxError` inmediato. Era la
+> instrucción más literal del plan y la más destructiva.
+>
+> El bloque nuevo va **inmediatamente ANTES** de esta línea, que abre el bloque del Plan 171:
+> ```python
+> # ── Plan 171 — Telemetría operativa (read-only, on-read; espejo patrones Plan 142) ──
+> ```
+> Localizala así, y usá lo que devuelva:
+> ```powershell
+> cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+> grep -n "Plan 171 — Telemetría operativa" api/metrics.py
+> ```
 | **CREAR** | `Stacky Agents/backend/tests/test_plan242_cost_api.py` |
 | **EDITAR** | `Stacky Agents/backend/scripts/run_harness_tests.sh` y `.ps1` |
 
-**Nada de lo existente se modifica.** En particular quedan intactos `_execution_costs` (`:52`), `/ticket-costs` (`:77`), `/project-costs` (`:130`), `_cost_center_enabled` (`:565`), `_parse_date` (`:576`), `_parse_filters` (`:584`), `_filters_or_error` (`:614`) y los 5 endpoints del 142.
+**Nada de lo existente se modifica.** **`[v2]` (C17):** quedan intactos `_execution_costs` (`:52`), `/ticket-costs` (`:77`), `/project-costs` (`:130`), `_cost_center_enabled` (`:565`), `_parse_date` (`:576`), `_parse_filters` (`:584`), `_filters_or_error` (**`:627`**, no `:614`) y **los 8 endpoints de costo que ya existen** — no 5, como decía v1:
+
+| Endpoint | Línea | Plan |
+|---|---|---|
+| `/cost-center/health` | `:569` | 142 |
+| `/cost-summary` | `:635` | 142 |
+| `/cost-burn` | `:668` | 142 |
+| `/cost-burn-stacked` | `:691` | **199** |
+| `/cost-heatmap` | `:712` | **199** |
+| `/cost-distribution` | `:727` | **199** |
+| `/cost-breakdown` | `:746` | 142 |
+| `/cost-reconciliation-audit` | `:764` | 142 |
+
+Más los `/ops-*` y `/run-trace/<id>` del Plan 171. El bloque de costo **termina en `:797`**.
 
 #### F6.2 Endpoints — ruta, método y **nombre exacto de la función Python**
 
@@ -1939,7 +2343,7 @@ grep -n "def app\|@pytest.fixture" tests/test_cost_center_api.py | head
 | `test_body_no_json_no_rompe_los_post` | caso borde 6 |
 | `test_ningun_endpoint_nuevo_abre_red_ni_llm` | **G3**: monkeypatch que revienta si se llama `requests.get/post`, `socket.socket`, `subprocess.Popen` — se golpean los 6 endpoints |
 | `test_endpoints_legacy_siguen_intactos` | `/ticket-costs` y `/project-costs` responden igual que antes del plan |
-| `test_los_5_endpoints_del_142_siguen_iguales` | smoke de no-regresión |
+| **`[v2]`** `test_los_8_endpoints_de_costo_siguen_iguales` | **C17**: smoke de no-regresión **parametrizado sobre los 8** (`/cost-center/health`, `/cost-summary`, `/cost-burn`, `/cost-burn-stacked`, `/cost-heatmap`, `/cost-distribution`, `/cost-breakdown`, `/cost-reconciliation-audit`). v1 cubría 5 y dejaba afuera justo los 3 del Plan 199, que son los vecinos inmediatos del punto de inserción |
 
 **Comando:**
 ```powershell
@@ -1997,7 +2401,8 @@ Si `App.tsx` ya pasa `subtab` como prop a alguna página (patrón de Settings), 
 | **CREAR** | `Stacky Agents/frontend/src/lib/costForecast.logic.ts` |
 | **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostSubTabs.tsx` + `.module.css` |
 | **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostStatsPanel.tsx` + `.module.css` |
-| **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostDistributionChart.tsx` + `.module.css` |
+| **`[v2]` EDITAR** (⚠️ **YA EXISTE** — C15) | `Stacky Agents/frontend/src/components/costcenter/CostDistributionChart.tsx` + `.module.css`. Lo creó el **Plan 199** y `CostCenterPage` lo consume hoy contra `GET /api/metrics/cost-distribution`. **PROHIBIDO recrearlo:** "CREAR" con el contrato nuevo pisa el componente vivo y rompe la pestaña Resumen, que F7.9.6 promete dejar idéntica. Se le agrega una prop **opcional** `bins?: HistBin[]`: cuando viene, dibuja el histograma de `cost_stats`; cuando no viene, el render es **byte-idéntico** al actual. |
+| **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostBoxPlot.tsx` + `.module.css` (el box plot sí es nuevo) |
 | **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostScoreTable.tsx` + `.module.css` |
 | **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostScoreBadge.tsx` + `.module.css` |
 | **CREAR** | `Stacky Agents/frontend/src/components/costcenter/CostForecastPanel.tsx` + `.module.css` |
@@ -2032,7 +2437,7 @@ Se **agregan** al objeto existente (no se crea otro), reusando `costFiltersToQue
 ```
 
 ⚠️ **Gotcha del wrapper:** `api.get` / `api.post` **lanzan excepción** en respuestas non-2xx; leer el body del error dentro de un `.then()` es código muerto. Como **los 6 endpoints devuelven 200 incluso apagados o sin datos** (§F6.2), el flujo normal nunca necesita `rawGet`/`rawPost`. El único 4xx esperable es la validación de `cost-forecast` (400/404), y ahí se maneja con `catch` de react-query, mostrando el mensaje del error.
-*A VERIFICAR EN IMPLEMENTACIÓN:* `rawGet` puede **no existir** (sólo `rawPost`). Comando:
+**`[v2]` RESUELTO (C22, verificado 2026-07-26):** `rawGet` **SÍ existe** — `frontend/src/api/client.ts:93`, gemelo de lectura de `rawPost` que agregó el Plan 238. v1 decía que "puede no existir". Como los 6 endpoints devuelven 200 siempre, **este plan no lo usa**; se deja anotado para que nadie lo re-cree. Comando de re-verificación:
 ```powershell
 grep -n "export function rawGet\|export function rawPost\|rawGet\b" src/api/client.ts src/api/endpoints.ts
 ```
@@ -2282,7 +2687,8 @@ Usar los que existan. **Prohibido** inventar un token nuevo o escribir un HEX.
 | 4 | `STACKY_COST_MODEL_AUTOTRAIN_ENABLED` | bool | **ON** | — | El único candidato plausible a "quema tokens ocioso" (excepción #1) — pero **no consume ni un token**: es aritmética local, disparada por un evento real (fin de ejecución), con doble cota (cada N runs **y** máx. 1 cada 30 min). **No aplica.** |
 | 5 | `STACKY_COST_MODEL_MIN_SAMPLES` | int | **30** | `min_value=10`, `max_value=5000` | Umbral mínimo para que L1 se active. |
 | 6 | `STACKY_COST_MODEL_AUTOTRAIN_EVERY_N` | int | **10** | `min_value=1`, `max_value=1000` | Cada cuántas ejecuciones se evalúa reentrenar. |
-| 7 | `STACKY_COST_FORECAST_LEDGER_ENABLED` | bool | **ON** | — | Escribe un JSONL append-only y acotado en el data dir; borrarlo revierte. Read-mostly, sin red, sin LLM. |
+| 7 | `STACKY_COST_FORECAST_LEDGER_ENABLED` | bool | **ON** | — | Escribe un JSONL acotado (500 filas, patrón `ci_run_ledger`) en el data dir; borrarlo revierte. Read-mostly, sin red, sin LLM. |
+| **8 `[v2]`** | `STACKY_COST_MODEL_AUTOPROMOTE_ENABLED` | bool | **ON** | — | **[ADICIÓN ARQUITECTO] §F4.5 (C16).** Escribe **un** JSON reversible **y con snapshot del anterior**. En OFF, todo entrenamiento queda `candidate` y promueve el operador a mano. Ninguna de las 4 excepciones duras aplica. |
 
 **Ninguna flag de este plan es OFF por excepción dura.** Se revisaron las 4 y ninguna aplica: (1) no quema tokens ociosos, (2) no hace acciones irreversibles, (3) no depende de un prerequisito no garantizado en una instalación default —a diferencia de `STACKY_COST_CODEBURN_IMPORT_ENABLED` (`config.py:618`), que sí—, (4) no saltea revisión humana (G15: el modelo informa, no decide).
 
@@ -2343,7 +2749,11 @@ Usar los que existan. **Prohibido** inventar un token nuevo o escribir un HEX.
             "y sin red. OFF = el endpoint responde {\"enabled\": false} y la UI oculta "
             "el sub-tab Estadísticas."
         ),
-        group="observabilidad",
+        group="observabilidad_notif",   # [v2] C21 — usar el MISMO valor que las flags de
+                                        # costo hermanas (harness_flags.py:2082/:2095/:2108).
+                                        # OJO: group="observabilidad" a secas SÍ existe (11 usos),
+                                        # así que esto NO rompe ningún test: es consistencia de
+                                        # agrupación en la UI del Arnés, y ningún test la valida.
     ),
     FlagSpec(
         key="STACKY_COST_MODEL_MIN_SAMPLES",
@@ -2357,7 +2767,11 @@ Usar los que existan. **Prohibido** inventar un token nuevo o escribir un HEX.
             "modelo aprendido se use. Por debajo, el sistema cae a la mediana de la "
             "cohorte. Subirlo hace la estimación más conservadora."
         ),
-        group="observabilidad",
+        group="observabilidad_notif",   # [v2] C21 — usar el MISMO valor que las flags de
+                                        # costo hermanas (harness_flags.py:2082/:2095/:2108).
+                                        # OJO: group="observabilidad" a secas SÍ existe (11 usos),
+                                        # así que esto NO rompe ningún test: es consistencia de
+                                        # agrupación en la UI del Arnés, y ningún test la valida.
         requires="STACKY_COST_FORECAST_ENABLED",
     ),
 ```
@@ -2369,7 +2783,7 @@ Las otras 5 siguen el mismo molde. `STACKY_COST_MODEL_AUTOTRAIN_EVERY_N` y `STAC
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 grep -rn "_REQUIRES_MAP_FROZEN\|_FROZEN_BOUNDS" tests/ services/ | head
 ```
-Agregar **sólo** las aristas del 242. ⚠️ Esos mapas suelen estar **ya rojos por deuda ajena** (flags de otros planes sin registrar): **no** intentar arreglar las ajenas; verificar que **tu** entrada esté y que el fallo restante sea preexistente. Prueba de que es ajeno: `git stash` de tus cambios ⇒ el test sigue rojo con las mismas líneas.
+Agregar **sólo** las aristas del 242. ⚠️ Esos mapas suelen estar **ya rojos por deuda ajena** (flags de otros planes sin registrar): **no** intentar arreglar las ajenas; verificar que **tu** entrada esté y que el fallo restante sea preexistente. **`[v2]` ⛔ (C20) PROHIBIDO `git stash` / `reset` / `rebase` / `checkout` en este árbol:** hay **sesiones paralelas vivas** que comparten el índice, y un `stash` puede tragarse trabajo ajeno sin commitear. v1 lo instruía tres veces como "prueba de ajenidad". La prueba **segura** es no tocar el árbol: `git diff --name-only` ⇒ si el archivo del fallo **no** aparece en tu diff, el fallo es preexistente. Si necesitás correr el test contra la base: `git show HEAD:backend/tests/test_harness_flags.py > "$env:TEMP\base_flags.py"` y corré sobre esa copia.
 
 **(4) `backend/tests/test_harness_flags.py` → `_CURATED_DEFAULTS_ON`** (`:467`) (G11). Las **7** declaran `default=` ⇒ las **7** van acá. Sin esto, `test_default_known_only_for_curated` queda rojo.
 
@@ -2459,7 +2873,13 @@ Fixture con **3 ejecuciones sintéticas**, una por runtime, con metadata realist
 | `test_fallback_declarado_por_runtime_sin_telemetria` | un runtime sin `harness_telemetry` ⇒ señales `None`, forecast por L3/L4, **nunca** ceros inventados |
 | `test_calibracion_separa_copilot_del_mae_facturable` | F5 |
 
-#### F8.6 Ratchet — registro obligatorio de los 12 archivos de test (G9)
+#### F8.6 Ratchet — registro obligatorio de los **13** archivos de test (G9)
+
+> **`[v2]` (C11 · C13):** v1 titulaba *"los 12 archivos"* y a renglón seguido listaba **13** y exigía
+> `grep -c` ⇒ 13. Son **13**. Y con el corte de §0.3, **5** se registran en el 242
+> (`cost_signals`, `cost_stats`, `cost_scoring`, `cost_api`, `flags_off`) y los **8** restantes en el plan
+> siguiente. El `grep -c` del DoD se ajusta a la mitad que corresponda: **5** ahora, 13 cuando ambos
+> planes estén.
 
 Se agregan al bloque `HARNESS_TEST_FILES` de `backend/scripts/run_harness_tests.sh` (junto a las líneas 390–396) **y** al bloque gemelo de `backend/scripts/run_harness_tests.ps1`:
 
@@ -2498,7 +2918,7 @@ grep -c "test_plan242" scripts/run_harness_tests.ps1
 ```
 ⇒ **13 en cada uno**.
 
-⚠️ **Deuda ajena esperada:** `tests/test_harness_flags_help.py` tiene **4 fallos preexistentes ajenos**. Regla: verificá **tu** entrada por separado (las 7 flags del 242 deben pasar su validación individual de ayuda) y **no** intentes arreglar las 4 ajenas. Prueba de ajenidad: `git stash` ⇒ los 4 fallos siguen, idénticos.
+⚠️ **Deuda ajena esperada:** `tests/test_harness_flags_help.py` tiene **4 fallos preexistentes ajenos**. Regla: verificá **tu** entrada por separado (las 7 flags del 242 deben pasar su validación individual de ayuda) y **no** intentes arreglar las 4 ajenas. **`[v2]`** Prueba de ajenidad **segura** (⛔ **nunca** `git stash` acá — C20): `git diff --name-only` no incluye `tests/test_harness_flags_help.py` ⇒ los 4 fallos son preexistentes.
 
 **Flag que la protege:** las 7 se protegen a sí mismas.
 **Impacto por runtime:** ninguno (es cableado).
@@ -2577,7 +2997,7 @@ Si la respuesta de lanzamiento **no** devuelve `execution_id`, esta parte del la
 | **R6** | **Falso verde del backtesting.** El propio evaluador podría estar mal y aprobar cualquier cosa. | Es el riesgo clásico de "escribí el test y el código, los dos con el mismo error". | Test **negativo obligatorio**: `test_NO_promueve_cuando_pierde` genera datos donde `y` es **ruido puro sin relación con las features** y verifica que el gate **rechaza**. Un evaluador roto que aprueba todo hace fallar ese test. Complementado por `test_cobertura_fuera_de_rango_bloquea_promocion` (§F4.6). |
 | **R7** | **Copilot envenena las métricas.** Su costo nominal, sumado a los reales, infla los totales y sesga el modelo hacia abajo. | `github_copilot` **siempre** produce un número (`cost_analytics.py:106-108`), aunque nadie lo pague. | (a) **G7** codificado en 4 lugares: excluido de `_billable`, separado en `nominal_only` (§F6.4), excluido del entrenamiento (§F3.3), y `billable=False` en su `CostPrediction`. (b) `test_plan242_runtime_parity.py` verifica los 4. |
 | **R8** | **Colisión de merge con los planes 171/199.** Los tres tocan `api/metrics.py` y `harness_flags.py`. | Ya pasó en este repo: un merge 3-way **no marca conflicto** si dos ramas agregan la misma línea de cierre, dejando un duplicado silencioso. | (a) §4 declara la frontera. (b) Los endpoints del 242 son **apéndice puro** (criterio de aceptación: 0 líneas eliminadas en `metrics.py`, §F6.7). (c) Después de CADA merge: `pytest tests/test_harness_flags.py -q`, `tests/test_harness_ratchet_meta.py -q` y `python -m compileall backend/api/metrics.py`. |
-| **R9** | **El ledger crece sin control o se corrompe.** Un JSONL append-only sin cap es una bomba de tiempo. | Escritura en cada predicción y en cada fin de ejecución. | (a) Cap `_MAX_LEDGER_LINES = 50000` con rotación determinista a `.1`. (b) Línea corrupta ⇒ se saltea y se **reporta** en `skipped_lines` (no se oculta). (c) Fallo de disco ⇒ warning y la UI sigue funcionando. (d) Tests dedicados (§F5.7). |
+| **R9** | **`[v2]` (C5) El ledger crece sin control, se corrompe, o dos hilos escriben a la vez.** v1 no tenía lock: `record_forecast` corre en el hilo HTTP y `close_forecast` en el del post-hook. | Escritura en cada predicción y en cada fin de ejecución, desde **dos hilos distintos**. | (a) **`_LOCK = threading.Lock()`** alrededor de toda lectura/escritura, como en `ci_run_ledger.py:19`. (b) Cap **`MAX_ROWS = 500`** con reescritura atómica (`tmp.replace(path)`) conservando las más nuevas — **sin rotación**, que en v1 hacía perder la ventana de 30 días de un saque. (c) **Allowlist `ENTRY_FIELDS`**: una clave fuera del contrato no se persiste, así no se filtra un secreto por accidente. (d) Línea corrupta ⇒ se saltea y se **reporta** en `skipped_lines`. (e) Fallo de disco ⇒ warning y la UI sigue funcionando. (f) Tests dedicados (§F5.7). |
 | **R10** | **Un modelo menor implementa mal el álgebra.** Eliminación gaussiana escrita a mano es el lugar clásico de los errores silenciosos. | El plan lo pide explícitamente en Python puro. | (a) Pseudocódigo **completo**, línea por línea, con pivoteo parcial y Gauss-Jordan (§F3.4) — sin sustitución hacia atrás, que es donde más se equivoca. (b) Tests con **soluciones calculadas a mano** (`test_solve_linear_sistema_2x2_conocido`) y un caso que **exige** pivoteo. (c) `test_fit_ridge_recupera_relacion_lineal_sintetica`: si el álgebra está mal, no recupera (2, 3). (d) `SingularMatrixError` capturada ⇒ el sistema cae al fallback en vez de romper. |
 | **R11** | **Escritura del modelo interrumpida deja un JSON truncado.** | Corte de energía / kill del proceso durante `save_model`. | Escritura atómica obligatoria (`.tmp` + `os.replace`), con test que verifica que `os.replace` se llama exactamente una vez. Y `load_model` tolera JSON corrupto devolviendo `None` (§F3.7). |
 | **R12** | **El scoring se percibe como arbitrario.** Un número 0–100 sin explicación genera desconfianza y se ignora. | Es lo que le pasa a todo "health score" mal hecho. | (a) **KPI-2**: toda puntuación trae razones **con el número que la justifica**. (b) Pesos publicados, explícitos y sumando 1,00, con test. (c) `weights_used` expone la renormalización real aplicada. (d) `confidence` avisa cuando la cohorte es chica. (e) Cero LLM: la explicación es la fórmula, no una narración generada. |
@@ -2664,11 +3084,25 @@ Si la respuesta de lanzamiento **no** devuelve `execution_id`, esta parte del la
 
 ### 10.1 Tests (todos por archivo, con `backend\.venv\Scripts\python.exe`)
 
-- [ ] `tests\test_plan242_cost_signals.py` — 16/16 verdes
+> **`[v2]` DOS CORRECCIONES AL DoD (C11 · C13).**
+>
+> **(a) El criterio binario es «0 failed / 0 errors», no un conteo exacto.** Varios casos son
+> `parametrize` (`test_load_falta_clave_obligatoria` sobre 8 claves, `test_cost_stats_flag_off` sobre 6
+> endpoints, `test_los_8_endpoints_de_costo_siguen_iguales` sobre 8): pytest reporta **más** tests que
+> filas tiene la tabla, así que un `N/N` fijo es inalcanzable por construcción y se vuelve rojo el día
+> que alguien parametriza uno más. Los números de abajo son **la cantidad de casos que la tabla de la
+> fase debe listar** (cobertura), no el conteo de pytest.
+>
+> **(b) Este DoD es del plan COMPLETO (F0..F9).** Con el corte de §0.3, el DoD del **242** son
+> **sólo** las 5 primeras filas + el vitest; las 8 restantes son del plan siguiente.
+
+**DoD del 242 (tras el corte):**
+
+- [ ] `tests\test_plan242_cost_signals.py` — 18 casos (16 de v1 + 2 nuevos de C2/C3)
 - [ ] `tests\test_plan242_cost_stats.py` — 33/33 verdes
 - [ ] `tests\test_plan242_cost_scoring.py` — 34/34 verdes
 - [ ] `tests\test_plan242_cost_features.py` — 16/16 verdes
-- [ ] `tests\test_plan242_cost_model.py` — 38/38 verdes
+- [ ] `tests\test_plan242_cost_model.py` — **37** casos (**`[v2]` C11:** v1 decía 38; la tabla de §F3.10 lista 37) *(plan siguiente)*
 - [ ] `tests\test_plan242_cost_model_perf.py` — 2/2 verdes
 - [ ] `tests\test_plan242_cost_model_eval.py` — 22/22 verdes
 - [ ] `tests\test_plan242_forecast_ledger.py` — 16/16 verdes
@@ -2692,7 +3126,7 @@ Si la respuesta de lanzamiento **no** devuelve `execution_id`, esta parte del la
 
 ### 10.3 Arnés de flags y ratchet
 
-- [ ] `tests\test_harness_flags.py` verde (o el único delta rojo es deuda ajena demostrada con `git stash`)
+- [ ] `tests\test_harness_flags.py` verde (o el único delta rojo es deuda ajena demostrada con `git diff --name-only` — **`[v2]`** ⛔ **nunca** con `git stash`, C20)
 - [ ] `tests\test_harness_flags_requires.py` verde
 - [ ] `tests\test_harness_ratchet_meta.py` verde
 - [ ] `grep -c "test_plan242" scripts/run_harness_tests.sh` ⇒ **13**

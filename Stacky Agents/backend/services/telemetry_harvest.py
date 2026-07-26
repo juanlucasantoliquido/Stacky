@@ -37,6 +37,7 @@ __all__ = [
     "parse_codex_rollout",
     "parse_claude_transcript",
     "harvest",
+    "backfill_from_harvest",
 ]
 
 _HARVEST_MAX_FILES = 5000
@@ -395,3 +396,100 @@ def harvest(since: datetime, limit: int = _HARVEST_MAX_FILES) -> list:
 
     unicos.sort(key=lambda r: r.started_at or datetime.min, reverse=True)
     return unicos
+
+
+# ---------------------------------------------------------------------------
+# Backfill — la única parte que toca la base
+# ---------------------------------------------------------------------------
+
+_HARVEST_BACKFILL_MAX_ROWS = 20000   # mismo cap que cost_analytics
+
+
+def _index_executions_by_session(session, since) -> dict:
+    """Indexa las ejecuciones de la ventana por session_id, en UNA sola query.
+
+    Un run cosechado se ata a su ejecución por el id de sesión del CLI, que
+    puede estar en dos lugares según el runtime.
+    """
+    from models import AgentExecution
+
+    idx: dict = {}
+    filas = (
+        session.query(AgentExecution)
+        .filter(AgentExecution.started_at >= since)
+        .order_by(AgentExecution.id.desc())
+        .limit(_HARVEST_BACKFILL_MAX_ROWS)
+        .all()
+    )
+    for fila in filas:
+        md = fila.metadata_dict or {}
+        for sid in (md.get("codex_session_id"),
+                    (md.get("harness_telemetry") or {}).get("session_id")):
+            if sid and sid not in idx:
+                idx[sid] = fila
+    return idx
+
+
+def _already_billable(md: dict) -> bool:
+    """¿Esta fila ya tiene costo real, o ya la cosechamos antes?
+
+    Lo reportado por el CLI en vivo SIEMPRE gana sobre lo que se lea del disco:
+    pisarlo con una estimación sería degradar un dato bueno.
+    """
+    from services.cost_analytics import _billable, extract_cost_row
+
+    if (md or {}).get("telemetry_harvest_backfilled") is True:
+        return True
+    fila = extract_cost_row(md or {})
+    return fila.cost_usd is not None and _billable(fila.cost_kind)
+
+
+def backfill_from_harvest(runs: list, *, lookback_days: int,
+                          dry_run: bool = False) -> dict:
+    """Rellena la telemetría de las ejecuciones que quedaron sin costo.
+
+    Idempotente: la marca `telemetry_harvest_backfilled` hace que una segunda
+    corrida no toque nada. Con `dry_run=True` computa los MISMOS conteos sin
+    escribir — es el preview que el operador ve antes de decidir.
+    """
+    from datetime import timedelta
+
+    from db import session_scope
+
+    since = datetime.utcnow() - timedelta(days=max(1, min(int(lookback_days or 1), 3650)))
+    scanned = matched = backfilled = skipped = 0
+    matched_ids: dict = {}
+
+    with session_scope() as session:
+        idx = _index_executions_by_session(session, since)
+        for run in runs or []:
+            scanned += 1
+            if not run.session_id or run.session_id not in idx:
+                continue
+            fila = idx[run.session_id]
+            matched += 1
+            matched_ids[run.dedup_key()] = fila.id
+
+            md = fila.metadata_dict or {}
+            if _already_billable(md):
+                skipped += 1
+                continue
+
+            if not dry_run:
+                md["harness_telemetry"] = run.to_harness_telemetry()
+                if run.model and md.get("model") is None:
+                    md["model"] = run.model
+                md["telemetry_harvest_backfilled"] = True
+                md["telemetry_harvest"] = {
+                    "harvested_at": datetime.utcnow().isoformat() + "Z",
+                    "artifact": run.artifact,
+                    "source_format": run.source_format,
+                }
+                fila.metadata_dict = md
+            # Se cuenta igual en preview: es "cuántas rellenaría".
+            backfilled += 1
+
+    return {
+        "scanned": scanned, "matched": matched, "backfilled": backfilled,
+        "skipped_billable": skipped, "dry_run": dry_run, "matched_ids": matched_ids,
+    }

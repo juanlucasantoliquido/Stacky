@@ -678,6 +678,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan172_shortcuts_flag.py
   # -- Plan 199 - Cosecha historica de telemetria desde disco --
   tests/test_plan199_telemetry_harvest.py
+  tests/test_plan199_harvest_backfill.py
   # -- Plan 200 - Consola por incidencia + marcado de despliegue SQL --
   tests/test_plan200_flags.py
   tests/test_plan200_incident_console.py

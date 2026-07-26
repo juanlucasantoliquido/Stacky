@@ -280,11 +280,26 @@ def test_started_at_siempre_es_naive(raices):
     assert run.started_at == datetime(2026, 6, 30, 21, 0, 0), "convertido a UTC"
 
 
-def test_harvest_no_toca_la_base_de_datos():
-    """F0 es puro: descubre y normaliza. La ingesta es otra fase."""
-    fuente = (ROOT / "services" / "telemetry_harvest.py").read_text(encoding="utf-8")
-    codigo = "\n".join(l for l in fuente.splitlines()
-                       if not l.lstrip().startswith("#"))
+def test_descubrir_y_parsear_no_tocan_la_base_de_datos():
+    """Descubrir y normalizar es puro; la ingesta (F1) es otra función y otra fase.
 
-    for prohibido in ("session_scope", "AgentExecution", "db.session"):
-        assert prohibido not in codigo, f"F0 no puede tocar la DB ({prohibido})"
+    Se mira por AST el cuerpo de las funciones de descubrimiento y parseo, no el
+    módulo entero: `backfill_from_harvest` vive en el mismo archivo y SÍ escribe
+    en la base, que es justamente su trabajo.
+    """
+    import ast
+
+    arbol = ast.parse((ROOT / "services" / "telemetry_harvest.py").read_text(encoding="utf-8"))
+    puras = {
+        "discover_codex_rollouts", "discover_claude_transcripts",
+        "discover_copilot_sessions", "parse_codex_rollout",
+        "parse_claude_transcript", "harvest",
+    }
+    nodos = [n for n in arbol.body if isinstance(n, ast.FunctionDef) and n.name in puras]
+
+    assert len(nodos) == len(puras), "faltan funciones de la fase pura"
+    for nodo in nodos:
+        cuerpo = ast.dump(nodo)
+        for prohibido in ("session_scope", "AgentExecution", "metadata_dict"):
+            assert prohibido not in cuerpo, \
+                f"{nodo.name} no puede tocar la base ({prohibido})"

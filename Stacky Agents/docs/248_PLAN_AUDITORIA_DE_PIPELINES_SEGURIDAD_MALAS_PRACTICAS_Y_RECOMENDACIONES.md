@@ -1,10 +1,77 @@
 # Plan 248 — Auditoría de pipelines: riesgos de seguridad, malas prácticas y recomendaciones
 
-> Estado: **v1 · PROPUESTO** (2026-07-26). Pipeline: **proponer ✓ [este paso]** → criticar (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
-> Autor: Claude Opus 5 (1M context). Serie **"Mago de las Pipelines"** (246–252), plan **3 de 7**.
+> Estado: **v2 · CRITICADO** (2026-07-26). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Autor v1: Claude Opus 5 (1M context). Crítica v2: juez **independiente** (no escribió la v1).
+> **Veredicto de la v1: RECHAZADO** — 4 bloqueantes (C1 colisión de superficie con el 249, C2 bug de agrupación que produce un falso verde en el test capstone de F2, C3 panel sin punto de montaje, C4 cinco reglas sin gate que pruebe que disparan). Los 4 quedan corregidos en esta v2.
+> Serie **"Mago de las Pipelines"** (246–252), plan **3 de 7**.
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro. **Paridad trivial: este plan NO usa LLM en ningún punto** (§3.2).
 > Flag: `STACKY_PIPELINE_AUDIT_ENABLED`, default **ON**.
 > Dependencias de serie: consume **246** (inventario) y **247** (perfil). **Degrada explícitamente si no están** (§2.5). No aplica fixes: eso es el **250**.
+
+---
+
+## CHANGELOG v1 → v2
+
+Toda la evidencia de la v1 fue **re-verificada abriendo los archivos**. La tabla de anclajes de §2.1
+resultó **casi enteramente correcta** (28 de 32 anclajes exactos al número de línea) y **los 12
+recuentos del corpus de §2.2 son todos correctos**, incluidos los cuatro que un `grep` ingenuo
+reporta mal por indentación variable (`command:  'test'` con dos espacios). Eso no se toca. Lo que
+cambia:
+
+**Bloqueantes corregidos**
+
+- **C1 (BLOQUEANTE) · Colisión de superficie con el Plan 249.** F0 editaba
+  `services/cicd_semantic_rules.py` (+4 líneas). Ese archivo está declarado **exclusivo del 249**
+  en el mapa de colisiones del 246 (`246_PLAN_INVENTARIO_VIVO_DE_PIPELINES_MULTIPROVEEDOR.md:96`
+  — *"249 | … **`services/cicd_semantic_rules.py`** (único plan que lo edita)"* — y `:107-109`).
+  El orden de merge canónico (`:110`) manda que 248/250/251 vayan **en paralelo**, así que la
+  colisión es real, no teórica. **Fix:** F0 ya **no edita nada** fuera de su propia superficie;
+  importa `_iter_steps` / `_StepCtx` directamente con un alias local (§F0). Misma verdad única,
+  cero bytes escritos en archivo ajeno.
+- **C2 (BLOQUEANTE) · OPT002 no ve los pipelines de raíz, y su test negativo pasaba en verde por
+  el bug.** `_iter_steps` emite `location = "steps[%d]"` para los pasos de raíz
+  (`cicd_semantic_rules.py:126`), sin el segmento `.steps[`. El pseudocódigo v1 agrupaba con
+  `ctx.location.rsplit(".steps[", 1)[0]`, que sobre `"steps[3]"` devuelve `"steps[3]"` ⇒ **cada
+  paso de raíz queda en su propio grupo y `hubo_build` nunca se activa**. Cinco de los nueve golden
+  son de raíz (`agendaweb-ci.yml:35`, `pr-validation-online.yml:36`, `ci-batch.yml:77`,
+  `ci-dacpac.yml:40`, `security-scan-online.yml:42`). Consecuencias medidas: el recuento esperado de
+  OPT002 habría sido **2, no 3** (`pr-validation-online` desaparece), y `agendaweb-ci` —el **control
+  negativo** de la fase— habría dado 0 hallazgos **por el bug, no por su `--no-build`**. Un falso
+  verde en el test capstone de una fase, en el plan cuya tesis es matar el falso rojo. **Fix:**
+  `job_key()` explícita en F0, con su propio test sobre un fixture de raíz (§F0, §F2).
+- **C3 (BLOQUEANTE) · F6 creaba un panel sin punto de montaje.** Declaraba crear
+  `pipelineAuditModel.ts` y `PipelineAuditPanel.tsx` y **ningún** call site: ni
+  `DevOpsPage.tsx` (`DEVOPS_SECTIONS:113`, `DevOpsHealth:32`), ni `endpoints.ts` (`:3818`), ni
+  `api/devops.py` (`_health_payload:28`). Las tres superficies se las asigna el 246 §0.3 (`:80-87`).
+  Es el patrón exacto que dejó inertes dos fases del Plan 176 (módulo testeado, sin consumidor).
+  **Fix:** F5 y F6 declaran las tres ediciones, con anclaje y test de montaje.
+- **C4 (BLOQUEANTE) · 5 de las 12 reglas tienen 0 hits sobre el corpus y nada probaba que
+  disparen.** SEC001, SEC002, SEC004, SEC007 y SEC008 valen `0` en el baseline **por diseño** (la
+  Ley de severidad las habilita a `error` justamente por eso). Pero entonces el baseline congelado
+  **no las cubre**: un typo en el criterio las deja inertes y los 8 tests de F3 siguen verdes. Una
+  regla de seguridad que nunca dispara es exactamente el falso sentido de seguridad que el plan dice
+  combatir. **Fix: [ADICIÓN ARQUITECTO] contrato `repro=` obligatorio + meta-test**, reusando el
+  mecanismo que **ya existe** en `pipeline_lint.py:70-72` (*"repro: (provider, yaml_minimo_que_dispara_la_regla) — OBLIGATORIO para toda regla"*). Ver §4.5 y F3.
+
+**Importantes corregidos:** C5 duplicación parcial SEC002/PL014 en el sink `echo` · C6
+`--emit-baseline` contradecía la pureza declarada del módulo · C7 el gate de `test_harness_flags.py`
+se relajaba contra un baseline que **hoy es 56/56 verde** (medido) · C8 los 24 tests de F1/F2
+"positivo + negativo por regla" no tenían nombre · C9 `/api/diag/health` no es el camino de los
+paneles DevOps · C10 el DoD de "0 LLM / 0 red" era "por inspección", no binario · C11 SEC005
+desalineaba `location` (del walk) con `line` (primera ocurrencia **textual**; `cd-deploy-test.yml`
+tiene 4 `PublishBuildArtifacts@1`) · C12 `_SECURITY_MARKERS` sin case-folding declarado y con
+`"test"` como substring puro · C13 SEC007 declaraba en §4.1 el caso `{branches:{exclude:['*']}}` que
+su pseudocódigo no implementaba · C14 el DoD contaba 5 archivos de test y listaba 6.
+
+**Menores corregidos (anclajes falsos, todos verificados uno por uno):** C15 `_PROD_MARKERS` está en
+`cicd_semantic_rules.py:55`, no `:56` · C16 el criterio de PL012 está en `pipeline_lint.py:714`, no
+`:715` · C17 `groupFindings` está en `pipelineLint.ts:61` (no `:62`) y `commitLintSummary` en `:156`
+(no `:157`) · C18 §2.3 declaraba **1** ocurrencia de `IISWebAppDeploymentOnMachineGroup@0` y son
+**2** (`agendaweb-ci.yml:143` y `ci-cd-online.yml:17`), ambas en comentarios ⇒ los falsos positivos
+de un escáner por regex son **9**, no 8 · C19 la autorización citada como *"dossier §3: si tu plan
+necesita un módulo más, prefijalo igual"* **no existe en el 246**; los dos módulos extra se
+justifican ahora por otra vía · C20 se agrega la huella de regresión en
+`docs/sistema/error_fingerprints.json`.
 
 ---
 
@@ -75,12 +142,14 @@ no tienen timeout (OPT003), y que el único pipeline Linux corre sobre una image
 | Pieza | Anclaje (**símbolo** + línea) | Qué aporta a este plan |
 |---|---|---|
 | Severidades canónicas | `backend/services/pipeline_lint.py:18-20` (`SEV_ERROR`, `SEV_WARNING`, `SEV_INFO`) | Se **importan**, no se redefinen |
-| Detector de secretos canónico | `backend/services/pipeline_lint.py:14` (`from services.secret_masking import mask_token_values`), usado en `_rule_pl012` (`:707`, criterio en `:715`) | SEC001 usa el **mismo** criterio (prefijo conocido + ≥8), aplicado a otra zona del árbol |
+| Detector de secretos canónico | `backend/services/pipeline_lint.py:14` (`from services.secret_masking import mask_token_values`), usado en `_rule_pl012` (`:707`, criterio `if mask_token_values(val) != val:` en **`:714`** — C16: la v1 decía `:715`, que es el `findings.append`) | SEC001 usa el **mismo** criterio (prefijo conocido + ≥8), aplicado a otra zona del árbol |
+| **Contrato `repro=` de regla** | `pipeline_lint.py:70-72` (`_rule(code, severity, providers, repro)`, docstring: *"repro: (provider, yaml_minimo_que_dispara_la_regla) — **OBLIGATORIO** para toda regla"*) | **[ADICIÓN ARQUITECTO]** SEC/OPT adoptan el mismo contrato: es lo que hace imposible una regla inerte (§4.5, C4) |
 | Heurística de nombre secreto | `pipeline_lint.py:550` (`_SECRET_SUFFIXES`), `:553` (`_looks_secret`) | SEC002 la importa tal cual |
 | Whitelist de refs built-in | `pipeline_lint.py:545` (`_ADO_WL_PREFIXES`) | Evita marcar `$(Build.*)` como variable de usuario |
 | Búsqueda de línea best-effort | `pipeline_lint.py:80` (`_find_line`), `:90` (`_find_line_nth`) | Patrón que replica `line_of` (F0); no se importa porque exige un `LintContext` |
-| **Los dos modos** | `cicd_semantic_rules.py:43-45` (`MODE_AUDIT`, `MODE_NL_STRICT`, `_MODES`), `:48` (`_NL_STRICT_ONLY`), doc del contrato en `:10-23` | Se **importan**. Este plan **no** define modos propios |
-| Recorrido estructural con pool efectivo | `cicd_semantic_rules.py:73-83` (`_StepCtx`), `:105` (`_iter_steps`), `:85` (`_pool_of`), `:141` (`_pool_is_hosted`) | **Es exactamente el walk que necesito.** F0 lo publica (§F0) en vez de copiarlo |
+| **Los dos modos** | `cicd_semantic_rules.py:43-45` (`MODE_AUDIT`, `MODE_NL_STRICT`, `_MODES`), `:48` (`_NL_STRICT_ONLY`), doc del contrato en `:9-25` | Se **importan**. Este plan **no** define modos propios |
+| Recorrido estructural con pool efectivo | `cicd_semantic_rules.py:73-82` (`_StepCtx`), `:105` (`_iter_steps`), `:85` (`_pool_of`), `:141` (`_pool_is_hosted`) | **Es exactamente el walk que necesito.** F0 lo **importa con alias**, sin editar el archivo (C1) |
+| **Formato de `location` del walk** | `cicd_semantic_rules.py:122` (`"%sjobs[%d].steps[%d]"`), `:119` (`"%sdeployments[%d].steps[%d]"`), **`:126` (`"steps[%d]"` — los pasos de RAÍZ NO llevan el segmento `.steps[`)** | **C2.** Cualquier agrupación por job debe pasar por `job_key()` (F0), nunca por un `rsplit(".steps[")` crudo |
 | Formato de hallazgo semántico | `cicd_semantic_rules.py:62-69` (`SemanticFinding`: `code`, `severity`, `message`, `location`, `evidence`) | `AuditFinding` es este dataclass **+2 campos** (`line`, `remediation`). Mismo lenguaje, no otro |
 | Guardia de tamaño | `cicd_semantic_rules.py:51` (`MAX_YAML_BYTES = 512*1024`), uso en `check_semantics` (`:506-512`) | Se reusa el mismo límite y el mismo `RS000`-style de aviso |
 | Extracción SIEMPRE por parser | `cicd_task_catalog.py:268` (`extract_task_dicts`), `:287` (`extract_task_refs`), `:244` (`is_deploy_step`), `:261` (`is_machine_group_task`) | Base de SEC006/SEC008; **nunca regex** (§2.3) |
@@ -93,7 +162,9 @@ no tienen timeout (OPT003), y que el único pipeline Linux corre sobre una image
 | Curación de defaults ON | `backend/tests/test_harness_flags.py:467` (`_CURATED_DEFAULTS_ON = {`) | **La lista vive en el TEST, no en el módulo.** Toda flag con `default=True` va acá o el test queda rojo |
 | Binding real de la flag | `backend/config.py:516-517` (`STACKY_PIPELINES_ENABLED: bool = os.getenv(...)`) | Patrón del atributo de `Config` |
 | Ratchet de tests | `backend/scripts/run_harness_tests.sh:766-770` y `backend/scripts/run_harness_tests.ps1:679-683` (bloque `test_plan243_*`) | **DOS listas.** Todo `test_*.py` nuevo va en las dos |
-| Tipos espejo del lint en el front | `frontend/src/components/devops/pipelineLint.ts:13-29` (`LintFinding`, `LintReport`), `:62` (`groupFindings`), `:157` (`commitLintSummary`) | F6 espeja este archivo en estilo; **no lo modifica** |
+| Tipos espejo del lint en el front | `frontend/src/components/devops/pipelineLint.ts:13-29` (`LintFinding`, `LintReport`), **`:61`** (`groupFindings`), **`:156`** (`commitLintSummary`) — C17: la v1 decía `:62` y `:157`, que son la primera línea del cuerpo de cada función | F6 espeja este archivo en estilo; **no lo modifica** |
+| **Montaje del panel DevOps** (C3) | `frontend/src/pages/DevOpsPage.tsx:32` (`interface DevOpsHealth`), `:113` (`DEVOPS_SECTIONS: DevOpsSection[]`, registro declarativo con `id/label/healthKey/gateFlagKey/render(ctx)`), `frontend/src/api/endpoints.ts:3818` (`export const DevOps = {`) | **F5/F6 los editan.** Sin esto el panel es código muerto (patrón que dejó inertes 2 fases del Plan 176) |
+| **Health de los paneles DevOps** (C3, C9) | `backend/api/devops.py:28` (`_health_payload`), keys existentes `cockpit_enabled` (Plan 239), `build_workshop_enabled` (Plan 201), `dev_build_verify_enabled` (Plan 210) | El camino canónico es **`/api/devops/health`**, NO `/api/diag/health`. F5 agrega 1 key al final del dict |
 
 ### 2.2 El corpus dorado, leído de verdad (fundamento de todas las reglas)
 
@@ -153,9 +224,9 @@ mismo fenómeno **sobre el eje de seguridad**, y es peor:
 |---|---|---|---|
 | `environment:` con valor de producción/staging | **5** | **0** | `agendaweb-ci.yml:136`, `:154`; `ci-dacpac.yml:95`; `bootstrap-server-environment.yml:87`, `:89` — **las 5 en comentarios** |
 | `$(SQL_CONNECTION_STRING)` en un input de deploy | **2** | **0** | `ci-dacpac.yml:106`, `:114` — ambas en comentarios |
-| `IISWebAppDeploymentOnMachineGroup@0` (la tarea de ADO-369) | **1** | **0** | `agendaweb-ci.yml:143` — en comentario |
+| `IISWebAppDeploymentOnMachineGroup@0` (la tarea de ADO-369) | **2** (C18: la v1 decía 1) | **0** | `agendaweb-ci.yml:143` y `ci-cd-online.yml:17` — **las 2 en comentarios** |
 
-Un escáner de seguridad por regex reportaría **8 falsos positivos** sobre pipelines que hoy
+Un escáner de seguridad por regex reportaría **9 falsos positivos** (C18: la v1 dijo 8) sobre pipelines que hoy
 funcionan, incluida la acusación de "desplegás a Producción sin aprobación" contra un pipeline que
 está **deshabilitado** (`agendaweb-ci.yml:14-15`, `trigger: none` / `pr: none`) y cuyo bloque de
 producción es **documentación**. Por eso:
@@ -290,13 +361,13 @@ Para que esto entre en **una** corrida de implementación, recorto explícitamen
 | ID | Título | Sev. `MODE_AUDIT` | Sev. `MODE_NL_STRICT` | Providers | Evidencia exacta que la dispara (post `yaml.safe_load`) | Remediación (texto del hallazgo) | Hits corpus |
 |---|---|---|---|---|---|---|---|
 | **SEC001** | Secreto literal fuera del bloque `variables:` | `error` | `error` | ado, gitlab | Un valor **string** dentro de `inputs.*`, `arguments`, `env.*` o `parameters.*` para el que `mask_token_values(v) != v` (criterio canónico: prefijo de token conocido + ≥8 chars). **Zona que PL012 NO mira**: `_ado_declared` (`pipeline_lint.py:637`) sólo recorre `variables:` de raíz/stage/job | "Movelo a la caja fuerte de variables (Plan 94) y referencialo como `$(NOMBRE)`. Un literal en el YAML queda en el historial de git para siempre, incluso si lo borrás después." | **0** |
-| **SEC002** | Secreto impreso en el log | `error` | `error` | ado, gitlab | Una ref cuyo nombre pasa `_looks_secret` (`pipeline_lint.py:553`) aparece dentro de un string ejecutable que además contiene alguno de `Write-Host`, `Write-Output`, `Write-Debug`, `echo`, `--verbose`, `-Verbose`, `--debug`. **Gap real de PL014**: `_rule_pl014` (`:752`) exige el substring literal `"echo"` (`:758`), y **este corpus es 100% Windows/PowerShell** — `security-scan-online.yml:102` usa `Write-Host`, que PL014 no ve | "El log de una corrida es visible para cualquiera con permiso de lectura del proyecto. Marcá la variable como secreta (`##vso[task.setvariable variable=X;issecret=true]`) o no la imprimas." | **0** |
+| **SEC002** | Secreto impreso en el log por un sink que PL014 no ve | `error` | `error` | ado, gitlab | Una ref cuyo nombre pasa `_looks_secret` (`pipeline_lint.py:553`) aparece dentro de un string ejecutable que además contiene alguno de `_LOG_SINKS`. **C5 — `echo` queda EXCLUIDO de `_LOG_SINKS` a propósito**: `_rule_pl014` (`:752`) ya dispara exactamente sobre ese substring (`:758`) y emitir los dos sería reportar el mismo hallazgo con dos códigos. **El gap real de PL014** es que **este corpus es 100% Windows/PowerShell** y PL014 sólo mira `"echo"` — `security-scan-online.yml:102` usa `Write-Host` (verificado), que PL014 no ve. SEC002 cubre **sólo** los sinks de PowerShell y los flags de verbosidad | "El log de una corrida es visible para cualquiera con permiso de lectura del proyecto. Marcá la variable como secreta (`##vso[task.setvariable variable=X;issecret=true]`) o no la imprimas." | **0** |
 | **SEC003** | Imagen de agente sin versión fijada | `warning` | `error` | ado | `pool.vmImage` (efectivo: job > stage > raíz) es un string que termina en `-latest` | "`-latest` rota sin avisar y puede romper la build sin que cambies una línea. Fijá la versión (`ubuntu-24.04`), como ya hacen los otros 6 pipelines de este repo con `windows-2022`." | **1** — `ci-dacpac.yml:38` |
 | **SEC004** | Checkout con credenciales persistidas | `error` | `error` | ado, gitlab | Paso `- checkout:` (ADO) o `variables.GIT_STRATEGY`+`CI_JOB_TOKEN` explícito (GitLab) con `persistCredentials: true` | "Deja el token de la corrida escrito en `.git/config` del workspace, al alcance de cualquier paso posterior del job. Quitalo; si un paso puntual necesita el token, pasáselo explícito y acotado a ese paso." | **0** |
-| **SEC005** | Artefacto publicado con `Web.config` sin parametrizar | `warning` | `warning` | ado | En el **mismo pipeline**: (a) un `VSBuild@1` cuyo `inputs.msbuildArgs` contiene `DeployOnBuild=true` **y** `AutoParameterizationWebConfigConnectionStrings=false`, **y** (b) al menos un `PublishBuildArtifacts@1`. Se emite **una vez por pipeline** (dedup), anclada en la línea del `PublishBuildArtifacts@1` | "Con `AutoParameterizationWebConfigConnectionStrings=false` las cadenas de conexión van al paquete tal cual están en el `Web.config` del repo, y el artefacto lo descarga cualquiera con permiso de lectura del proyecto. Revisá si ese `Web.config` tiene credenciales reales; si las tiene, parametrizá (quitá el `=false`) o excluí `Web.config` del paquete." | **4** — `ci-cd-online.yml:122`, `cd-deploy-test.yml:99`, `agendaweb-ci.yml:112`, `nightly-build-online.yml:102` |
-| **SEC006** | Fallo enmascarado en un paso de seguridad o de test | `warning` | `error` | ado, gitlab | `continueOnError: true` (ADO) o `allow_failure: true` (GitLab) sobre un paso cuyo `task` está en `_SECURITY_TASKS` o cuyo `displayName`/`command` matchea `_SECURITY_MARKERS` (`vulnerab`, `security`, `scan`, `audit`, `test`, `sast`, `dependency-check`) | "Un paso de seguridad o de test que no puede fallar la build es un falso verde: reporta el problema en un log que nadie lee y la corrida sale en verde igual. Quitá el `continueOnError`, o movés el gate adentro del script y suprimís este hallazgo dejando el motivo por escrito." | **1** — `security-scan-online.yml:56` |
+| **SEC005** | Artefacto publicado con `Web.config` sin parametrizar | `warning` | `warning` | ado | En el **mismo pipeline**: (a) un `VSBuild@1` cuyo `inputs.msbuildArgs` contiene `DeployOnBuild=true` **y** `AutoParameterizationWebConfigConnectionStrings=false`, **y** (b) al menos un `PublishBuildArtifacts@1`. Se emite **una vez por pipeline** (dedup). **C11 — `location` y `line` deben apuntar al MISMO paso:** se toma el **primer** `PublishBuildArtifacts@1` del walk y su línea se resuelve con `line_of(lines, "PublishBuildArtifacts@", occurrence=n)` donde `n` es su **orden de aparición en el walk**, nunca con la primera ocurrencia textual a secas (`cd-deploy-test.yml` tiene **4**: `:99`, `:106`, `:144`, `:183`) | "Con `AutoParameterizationWebConfigConnectionStrings=false` las cadenas de conexión van al paquete tal cual están en el `Web.config` del repo, y el artefacto lo descarga cualquiera con permiso de lectura del proyecto. Revisá si ese `Web.config` tiene credenciales reales; si las tiene, parametrizá (quitá el `=false`) o excluí `Web.config` del paquete." | **4** — `ci-cd-online.yml:122`, `cd-deploy-test.yml:99`, `agendaweb-ci.yml:112`, `nightly-build-online.yml:102` |
+| **SEC006** | Fallo enmascarado en un paso de seguridad o de test | `warning` | `error` | ado, gitlab | `continueOnError: true` (ADO) o `allow_failure: true` (GitLab) sobre un paso cuyo `task` está en `_SECURITY_TASKS` o cuyo `displayName`/`command` matchea `_SECURITY_MARKERS`. **C12 — la comparación es `marker in texto.lower()`, obligatoriamente case-folded**: el único hit real del corpus es `displayName: 'dotnet list — Vulnerabilidades en proyectos SDK-style'` (`security-scan-online.yml:55`) y **sin `.lower()` la regla da 0 hits y queda inerte**. **C12 — `test` se compara como palabra, no como substring**: el marcador es `("test",)` evaluado con `re.search(r"\btest\b", texto.lower())`, para no matchear `latest` / `contest` / `testigo` | "Un paso de seguridad o de test que no puede fallar la build es un falso verde: reporta el problema en un log que nadie lee y la corrida sale en verde igual. Quitá el `continueOnError`, o movés el gate adentro del script y suprimís este hallazgo dejando el motivo por escrito." | **1** — `security-scan-online.yml:56` |
 | **SEC007** | Pool self-hosted expuesto a código de PR | `error` | `error` | ado | El pipeline tiene `pr:` **activo** (existe y no es `none`/`{branches:{exclude:['*']}}`) **y** algún job tiene pool efectivo self-hosted (`pool.name` presente, `pool.vmImage` ausente, **y el nombre NO es dinámico**, §4.4) | "Cualquiera que abra un PR ejecuta código en tu servidor. La disciplina que ya sigue este repo es separarlo: validación de PR en pool hosted (`pr-validation-online.yml:17,34`) y deploy en self-hosted con `pr: none` (`cd-deploy-test.yml:32,121`). Mantenela." | **0** |
-| **SEC008** | Deploy a producción sin gate verificable desde el YAML | `warning` | *no se evalúa* | ado | Un job `- deployment:` cuyo `environment:` es un **literal** (no dinámico) que matchea `_PROD_MARKERS` (`cicd_semantic_rules.py:56`) | "El check de aprobación de un Environment vive en la configuración de ADO, no en el YAML: desde acá no se puede verificar. Confirmá a mano que el Environment tiene aprobación manual antes de que este stage llegue a correr." | **0** |
+| **SEC008** | Deploy a producción sin gate verificable desde el YAML | `warning` | *no se evalúa* | ado | Un job `- deployment:` cuyo `environment:` es un **literal** (no dinámico) que matchea `_PROD_MARKERS` (**`cicd_semantic_rules.py:55`** — C15: la v1 decía `:56`, que es una línea en blanco) | "El check de aprobación de un Environment vive en la configuración de ADO, no en el YAML: desde acá no se puede verificar. Confirmá a mano que el Environment tiene aprobación manual antes de que este stage llegue a correr." | **0** |
 
 **Por qué SEC008 no existe en `MODE_NL_STRICT`:** porque ahí ya la cubre `RS009`
 (`cicd_semantic_rules.py:472`), que **rechaza** generar cualquier pipeline con `environment` de
@@ -352,6 +423,45 @@ explícita:
    parametrizar, pregunta si tiene credenciales reales; SEC008: afirma que no se puede verificar
    desde el YAML, pide confirmar a mano).
 
+### 4.5 [ADICIÓN ARQUITECTO] El `repro` obligatorio: la ley que mata la regla inerte (C4)
+
+La Ley de severidad de §3.1 tiene un agujero que la v1 no vio, y es grande justo donde más importa.
+De las 12 reglas, **cinco valen 0 sobre el corpus dorado**: SEC001, SEC002, SEC004, SEC007 y SEC008.
+Ese cero es **el requisito** que las habilita a `SEV_ERROR`. Pero tiene una consecuencia que se
+lee al revés:
+
+> El baseline congelado de F3 **no puede distinguir** una regla que vale 0 porque el corpus está
+> limpio, de una regla que vale 0 **porque está rota**. Un typo en `_SECRET_INPUT_KEYS`, un
+> `.lower()` olvidado en `_SECURITY_MARKERS` (C12) o un `startswith` mal escrito dejan la regla muda
+> para siempre, y **los 8 tests de F3 siguen todos verdes**. Cinco de las ocho reglas de seguridad —
+> las cinco de severidad más alta — quedarían certificadas por un test que no las mira.
+
+Una regla de seguridad que nunca dispara no es neutral: es **peor** que no tenerla, porque el
+operador ve el panel en verde y concluye que su pipeline está limpio. Es el falso verde del Plan 241
+trasplantado a la seguridad, y este plan no puede introducirlo mientras predica contra el falso rojo.
+
+**La solución no se inventa: ya está en la casa.** `pipeline_lint._rule` (`pipeline_lint.py:70-72`)
+declara en su propia docstring:
+
+> *"`repro: (provider, yaml_minimo_que_dispara_la_regla)` — **OBLIGATORIO** para toda regla"*
+
+Las 12 reglas SEC/OPT adoptan **ese mismo contrato**:
+
+| Pieza | Definición exacta |
+|---|---|
+| Registro | `_AUDIT_RULES: dict[str, RuleSpec]` en `cicd_audit_core.py`. Cada regla se registra con el decorador `@audit_rule(code, severity_audit, severity_nl, providers, modes, repro)` |
+| `repro` | `tuple[str, str]` = `(provider, yaml_minimo)`. **No puede ser `None`**: el decorador lanza `ValueError` al importar el módulo si falta |
+| Meta-test | `test_toda_regla_dispara_sobre_su_repro` (F3): para **cada** entrada de `_AUDIT_RULES`, correr `audit_yaml(spec.repro[1], provider=spec.repro[0])` y exigir **≥1 hallazgo con ese `code`** |
+| Contra-test | `test_ningun_repro_dispara_otra_regla_de_seguridad` (F3): el `repro` de una regla no puede disparar **otra** SEC — si lo hace, las dos reglas se solapan y hay que angostar una (es el gate mecánico de la no-duplicación de §4.3) |
+
+**Por qué esto vale más que cualquier regla nueva:** convierte "la regla funciona" de una afirmación
+del implementador en un hecho verificado por la máquina, y lo hace **por regla**, no por total.
+Cierra la Ley de severidad por su tercer lado: §3.1 exige que `error` ⟺ 0 hits en el corpus, F3
+exige que el total sea 0, y §4.5 exige que ese 0 sea **el silencio de un corpus limpio y no el de una
+regla muerta**. Cuesta 12 strings de YAML de 4 líneas y no agrega ni una llamada de red, ni un byte
+de trabajo al operador, ni una dependencia entre fases: es exactamente el patrón que las 14 reglas
+PL ya cumplen desde el Plan 186.
+
 ---
 
 ## 5. Fases
@@ -372,12 +482,48 @@ los tres divergen en silencio.
 **Archivos:**
 
 - **CREAR** `Stacky Agents/backend/services/cicd_audit_core.py`
-- **EDITAR** `Stacky Agents/backend/services/cicd_semantic_rules.py` (**+4 líneas, aditivo**)
+- **NADA MÁS.** F0 **no edita ningún archivo existente** (C1).
 
-> **Nota de nomenclatura (dossier §3):** el dossier reserva para el 248 los módulos
-> `cicd_security_rules.py` y `pipeline_recommendations.py`, y autoriza módulos extra con el mismo
-> prefijo (*"Si tu plan necesita un módulo más, prefijalo igual"*). `cicd_audit_core.py` y
-> `pipeline_audit_suppressions.py` (F4) usan esa autorización. **No se renombra nada reservado.**
+> ### C1 — Frontera de superficie: por qué F0 ya NO toca `cicd_semantic_rules.py`
+>
+> La v1 agregaba 4 líneas aditivas a `services/cicd_semantic_rules.py` para publicar el walk.
+> **Eso es una colisión con el Plan 249.** El mapa de colisiones de la serie
+> (`246_PLAN_INVENTARIO_VIVO_DE_PIPELINES_MULTIPROVEEDOR.md:96`) asigna ese archivo como superficie
+> **exclusiva** del 249 —*"249 | … **`services/cicd_semantic_rules.py`** (único plan que lo edita)"*—
+> y `:107-109` lo repite: *"Es el único que toca `cicd_semantic_rules.py` … no choca con nadie salvo
+> en las 5 superficies universales"*. El orden de merge canónico (`:110`) manda 248/250/251
+> **en paralelo**, así que la colisión no es hipotética.
+>
+> **Sustituto, sin perder nada:** Python no necesita que un símbolo sea público para importarlo.
+> `cicd_audit_core.py` hace el alias **de su lado**:
+>
+> ```python
+> # Import del walk canónico del Plan 243. NO se edita cicd_semantic_rules.py:
+> # ese archivo es superficie exclusiva del Plan 249 (246 §0.3). El alias vive acá.
+> from services.cicd_semantic_rules import (
+>     MODE_AUDIT, MODE_NL_STRICT, _MODES, MAX_YAML_BYTES,
+>     _iter_steps as iter_steps,      # cicd_semantic_rules.py:105
+>     _StepCtx as StepCtx,            # cicd_semantic_rules.py:73-82
+> )
+> ```
+>
+> Se conserva íntegro el objetivo original (**una sola verdad sobre pool efectivo y `location`**,
+> cero copias del walk) y se elimina el conflicto de merge. El test que lo protege también se
+> conserva, invertido: `test_walk_importado_es_el_del_243` verifica
+> `cicd_audit_core.iter_steps is cicd_semantic_rules._iter_steps`, de modo que si el 249 renombra o
+> cambia ese símbolo, **el 248 se entera con un rojo**, no con una divergencia silenciosa.
+
+> **Nota de nomenclatura (C19).** El 246 §0.3 (`:95`) reserva para el 248 exactamente cinco
+> superficies: `services/cicd_security_rules.py`, `services/pipeline_recommendations.py`,
+> `api/pipeline_audit.py`, `pipelineAuditModel.ts`, `PipelineAuditPanel.tsx`. La v1 citaba un
+> permiso —*"si tu plan necesita un módulo más, prefijalo igual"*— **que no existe en el 246**.
+> Los dos módulos extra se justifican por otra vía, verificable: `cicd_audit_core.py` y
+> `pipeline_audit_suppressions.py` son archivos **nuevos con nombre no reclamado por ningún plan
+> de la serie** (contrastado contra las 7 filas de `246:93-99`), por lo que su creación **no puede
+> colisionar con nadie**. Lo que el §0.3 prohíbe es *editar archivo ajeno*, no *crear archivo
+> propio*. Si el implementador prefiere cero módulos extra, la alternativa es fusionar
+> `cicd_audit_core.py` dentro de `cicd_security_rules.py`: es más grande pero igual de válido.
+> **Lo que está prohibido en ambos caminos es tocar `cicd_semantic_rules.py`.**
 
 **Símbolos EXACTOS a crear en `cicd_audit_core.py`:**
 
@@ -418,22 +564,35 @@ def effective_pool(ctx) -> dict: ...        # delega en el pool ya resuelto por 
 def pool_is_self_hosted(pool: dict) -> bool: ...   # name presente, vmImage ausente, name NO dinámico
 def evidence_fingerprint(code: str, location: str, evidence: str) -> str: ...  # sha256[:16]
 def finding(...) -> AuditFinding: ...       # constructor que ASSERTa location y remediation no vacíos
+
+# ── C2 — agrupación por job. NUNCA hacer rsplit(".steps[") a mano. ────────────
+def job_key(location: str) -> str:
+    """Identidad del job/contenedor de un paso, para las reglas que razonan 'por job'.
+
+    `_iter_steps` emite TRES formas de location (cicd_semantic_rules.py:119, :122, :126):
+      "stages[1].jobs[0].steps[2]"        -> "stages[1].jobs[0]"
+      "stages[1].deployments[0].steps[2]" -> "stages[1].deployments[0]"
+      "steps[2]"   (pasos de RAÍZ)        -> "(root)"     <-- el caso que rompía OPT002
+
+    Un `location.rsplit(".steps[", 1)[0]` crudo devuelve "steps[2]" para el tercer caso,
+    es decir UN GRUPO POR PASO, y toda regla 'mismo job' queda muda en los 5 golden de raíz.
+    """
+    marker = ".steps["
+    if marker in location:
+        return location.rsplit(marker, 1)[0]
+    if location.startswith("steps["):
+        return "(root)"
+    return location
 ```
 
-**Diff aditivo en `cicd_semantic_rules.py`** (al final del bloque "Recorrido estructural", después
-de `_iter_steps` que termina en `:136`):
-
-```python
-# Plan 248 F0 — el walk de F3 es el mismo que necesita la auditoría SEC/OPT.
-# Se publica en vez de copiarlo: una sola verdad sobre pool efectivo y `location`.
-iter_steps = _iter_steps
-StepCtx = _StepCtx
-```
+**El walk NO se publica editando el 243** (C1): se importa con alias desde `cicd_audit_core.py`,
+según el bloque de la nota de arriba. **Cero archivos ajenos modificados en esta fase.**
 
 **Casos borde cubiertos:** `line_of` con `needle` que no aparece → `None` (nunca lanza);
 `is_dynamic(None)` / `is_dynamic(123)` → `False`; `pool_is_self_hosted({"name": "${{ p.x }}"})` →
 `False` (dinámico ⇒ abstención, §4.4); `finding()` con `remediation=""` → `AssertionError`
-(KPI-2 se hace imposible de violar por construcción, no por revisión).
+(KPI-2 se hace imposible de violar por construcción, no por revisión);
+`job_key("steps[0]") == job_key("steps[7]") == "(root)"` (C2).
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan248_audit_core.py`
 
@@ -441,10 +600,20 @@ StepCtx = _StepCtx
 2. `test_line_of_devuelve_none_si_no_esta` y `test_line_of_respeta_occurrence`.
 3. `test_is_dynamic_reconoce_ambas_sintaxis` — `${{ }}` y `$( )`; y `False` para no-strings.
 4. `test_pool_self_hosted_se_abstiene_con_nombre_dinamico` — el caso `bootstrap-server-environment.yml:117`.
-5. `test_iter_steps_publico_es_el_privado` — `cicd_semantic_rules.iter_steps is cicd_semantic_rules._iter_steps`.
-6. `test_walk_publico_sobre_cd_deploy_test` — sobre el fixture real, `iter_steps` devuelve los pasos
+5. `test_walk_importado_es_el_del_243` (C1) — `cicd_audit_core.iter_steps is cicd_semantic_rules._iter_steps`
+   **y** `cicd_semantic_rules` no fue modificado: `"iter_steps"` **no** está en su namespace público
+   (`assert not hasattr(cicd_semantic_rules, "iter_steps")`). Este segundo assert es el que detecta
+   que alguien reintrodujo el diff de la v1 y volvió a chocar con el 249.
+6. `test_walk_sobre_cd_deploy_test` — sobre el fixture real, `iter_steps` devuelve los pasos
    de los 2 `- deployment:` con `location` que empieza en `stages[1].deployments[0].steps[` y pool
    `{"name": "TEST-Server"}`.
+7. **`test_job_key_agrupa_los_pasos_de_raiz` (C2, el que faltaba)** — los tres casos:
+   `job_key("stages[1].jobs[0].steps[2]") == "stages[1].jobs[0]"`,
+   `job_key("stages[1].deployments[0].steps[2]") == "stages[1].deployments[0]"`,
+   `job_key("steps[0]") == job_key("steps[9]") == "(root)"`.
+8. **`test_job_key_sobre_pr_validation_agrupa_todo_junto` (C2)** — sobre el fixture real
+   `pr-validation-online.yml` (pasos de raíz, `:36`): `len({job_key(c.location) for c in iter_steps(doc)}) == 1`.
+   Es el test que habría atrapado el bug de OPT002 antes de escribir OPT002.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
@@ -452,8 +621,9 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan243_reglas_semanticas.py -q   # no regresión del 243
 ```
 
-**Criterio de aceptación BINARIO:** los 6 tests pasan **y** `test_plan243_reglas_semanticas.py`
-sigue verde con el mismo número de tests que antes del cambio.
+**Criterio de aceptación BINARIO:** los **8** tests pasan **y** `test_plan243_reglas_semanticas.py`
+sigue verde con el mismo número de tests que antes (F0 ya no lo toca, así que el número **debe** ser
+idéntico: cualquier cambio ahí significa que se editó el archivo del 249).
 
 **Flag:** ninguna (módulo puro sin consumidor todavía; se cablea en F5).
 **Impacto por runtime:** Codex / Claude Code / Copilot — **idéntico**; código puro sin LLM ni red.
@@ -472,11 +642,15 @@ Fallback: no aplica (no hay dependencia externa que pueda faltar).
 **Símbolos EXACTOS:**
 
 ```python
-SECURITY_RULES_VERSION = "248.1"
+SECURITY_RULES_VERSION = "248.1"        # única fuente de versión de SEC; AuditReport.rules_version
+                                        # usa AUDIT_RULES_VERSION de cicd_audit_core (C-menor)
 
 _SECURITY_TASKS = frozenset({...})      # tasks de scan conocidas
-_SECURITY_MARKERS = ("vulnerab", "security", "scan", "audit", "test", "sast", "dependency-check")
-_LOG_SINKS = ("write-host", "write-output", "write-debug", "echo", "--verbose", "-verbose", "--debug")
+# C12 — se comparan SIEMPRE contra texto.lower(). `test` va aparte, como PALABRA.
+_SECURITY_MARKERS = ("vulnerab", "security", "scan", "audit", "sast", "dependency-check")
+_SECURITY_WORD_MARKERS = ("test",)      # re.search(r"\btest\b", texto.lower())
+# C5 — `echo` NO está: ya es PL014 (pipeline_lint.py:758). SEC002 cubre sólo lo que PL014 no ve.
+_LOG_SINKS = ("write-host", "write-output", "write-debug", "--verbose", "-verbose", "--debug")
 _SECRET_INPUT_KEYS = ("arguments", "script", "custom", "msbuildArgs", "connectionString")
 
 def _sec001_secreto_literal(ctxs, doc, lines, provider) -> list: ...
@@ -497,29 +671,53 @@ def check_security(yaml_text, *, provider, profile, mode=MODE_AUDIT) -> tuple:
 
 ```python
 # SEC005 — una vez por pipeline, anclada en el Publish
+# C11: `location` y `line` DEBEN apuntar al mismo paso. cd-deploy-test.yml tiene 4
+# `PublishBuildArtifacts@1` (:99, :106, :144, :183); `line_of(lines, needle)` sin
+# `occurrence` devuelve SIEMPRE la primera línea textual, que puede no ser el paso
+# que el walk eligió. Se lleva el ordinal del walk y se lo pasa a `occurrence`.
 def _sec005_artefacto_webconfig(doc, ctxs, lines):
-    tiene_publish = None
+    tiene_publish, ordinal = None, 0
     for ctx in ctxs:
-        if ctx.step.get("task", "").startswith("PublishBuildArtifacts@"):
-            tiene_publish = ctx; break
+        if str(ctx.step.get("task") or "").startswith("PublishBuildArtifacts@"):
+            ordinal += 1
+            if tiene_publish is None:
+                tiene_publish = ctx
+                publish_ordinal = ordinal
+                break
     if tiene_publish is None:
         return []
     for ctx in ctxs:
-        if not str(ctx.step.get("task", "")).startswith("VSBuild@"):
+        if not str(ctx.step.get("task") or "").startswith("VSBuild@"):
             continue
         args = str(_task_inputs(ctx.step).get("msbuildArgs") or "")
         if "DeployOnBuild=true" in args and \
            "AutoParameterizationWebConfigConnectionStrings=false" in args:
             return [finding(code="SEC005", severity=SEV_WARNING, ...,
                             location=tiene_publish.location,
-                            line=line_of(lines, "PublishBuildArtifacts@"),
+                            line=line_of(lines, "PublishBuildArtifacts@",
+                                         occurrence=publish_ordinal),   # C11
                             evidence="AutoParameterizationWebConfigConnectionStrings=false")]
     return []
 
+# C13 — helper único de "pr activo", usado por SEC007 y OPT001. La v1 declaraba en §4.1
+# el caso `{branches: {exclude: ['*']}}` y el pseudocódigo NO lo implementaba.
+def _pr_esta_activo(doc) -> bool:
+    pr = doc.get("pr")
+    if pr is None or pr is False:
+        return False
+    if isinstance(pr, str):
+        return pr.strip().lower() != "none"          # `pr: none` => string "none" post safe_load
+    if isinstance(pr, dict):
+        excl = ((pr.get("branches") or {}) if isinstance(pr.get("branches"), dict) else {}).get("exclude")
+        if isinstance(excl, list) and "*" in [str(x) for x in excl] and not (
+                (pr.get("branches") or {}).get("include")):
+            return False                              # exclude:['*'] sin include => apagado
+        return True
+    return bool(pr)
+
 # SEC007 — pr activo + pool self-hosted literal
 def _sec007_selfhosted_expuesto_a_pr(doc, ctxs, lines):
-    pr = doc.get("pr")
-    if pr is None or pr == "none" or pr is False:
+    if not _pr_esta_activo(doc):
         return []                                    # cd-deploy-test.yml:32 => 0 hallazgos
     out, vistos = [], set()
     for ctx in ctxs:
@@ -534,8 +732,22 @@ def _sec007_selfhosted_expuesto_a_pr(doc, ctxs, lines):
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan248_security_rules.py`
 
-Un test positivo (YAML mínimo que dispara) y uno negativo (YAML mínimo que **no** dispara) por cada
-regla — 16 —, más los **3 tests anti-regex** de §2.3, que son los que hacen el plan honesto:
+**C8 — los 16 tests positivo/negativo, NOMBRADOS uno por uno** (la v1 decía "16" sin nombrarlos, y
+un test sin nombre no es un criterio binario). El YAML positivo de cada regla **es su `repro`**
+(§4.5): se escribe una sola vez, se registra en el decorador y el test lo consume — no se duplica.
+
+| # | Test positivo (usa el `repro` de la regla) | Test negativo (mismo YAML, sin la condición) |
+|---|---|---|
+| SEC001 | `test_sec001_positivo_token_literal_en_arguments` | `test_sec001_negativo_valor_corto_no_dispara` |
+| SEC002 | `test_sec002_positivo_write_host_con_ref_secreta` | `test_sec002_negativo_echo_lo_cubre_pl014` (C5: con `echo`, SEC002 **no** emite) |
+| SEC003 | `test_sec003_positivo_vmimage_latest` | `test_sec003_negativo_vmimage_pineada` |
+| SEC004 | `test_sec004_positivo_persist_credentials_true` | `test_sec004_negativo_checkout_sin_persist` |
+| SEC005 | `test_sec005_positivo_deploy_sin_parametrizar_con_publish` | `test_sec005_negativo_sin_publish_no_dispara` |
+| SEC006 | `test_sec006_positivo_continue_on_error_en_scan` | `test_sec006_negativo_continue_on_error_en_paso_neutro` |
+| SEC007 | `test_sec007_positivo_pr_activo_con_pool_selfhosted` | `test_sec007_negativo_pr_none_con_pool_selfhosted` |
+| SEC008 | `test_sec008_positivo_environment_produccion_literal` | `test_sec008_negativo_environment_test` |
+
+Más los **3 tests anti-regex** de §2.3, que son los que hacen el plan honesto:
 
 7. `test_environment_produccion_en_comentario_no_dispara_sec008` — sobre `agendaweb-ci.yml` real:
    `SEC008` devuelve **0** pese a que `grep "environment: 'Production'"` da 1 hit (`:154`).
@@ -554,14 +766,26 @@ Más los 4 hallazgos reales, cada uno contra su fixture y su línea exacta:
 14. `test_sec008_se_abstiene_con_environment_dinamico` — `bootstrap-server-environment.yml`: 0
     hallazgos y **1** entrada en `undetermined_notes`.
 15. `test_mode_invalido_lanza_valueerror`.
+16. **`test_sec006_matchea_display_name_con_acento_y_mayuscula` (C12)** — sobre
+    `security-scan-online.yml` real, cuyo `displayName` es
+    `'dotnet list — Vulnerabilidades en proyectos SDK-style'` (`:55`): SEC006 emite **1** hallazgo.
+    Sin `.lower()` la regla da 0 y queda inerte; este test lo convierte en rojo.
+17. **`test_sec006_no_matchea_latest_como_test` (C12)** — un paso con
+    `displayName: 'Publicar imagen latest'` y `continueOnError: true` ⇒ **0** hallazgos
+    (`test` es palabra, no substring).
+18. **`test_sec005_line_y_location_apuntan_al_mismo_publish` (C11)** — sobre `cd-deploy-test.yml`
+    (4 `PublishBuildArtifacts@1`): el `line` del hallazgo cae dentro del rango de líneas del paso
+    identificado por su `location`; concretamente `line == 99` **y**
+    `location.startswith("stages[0].")`.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan248_security_rules.py -q
 ```
 
-**Criterio de aceptación BINARIO:** los 25 tests pasan. En particular, los 3 tests anti-regex
-(7, 8, 9) devuelven **0 hallazgos** sobre archivos donde `grep` da hits.
+**Criterio de aceptación BINARIO:** los **28** tests pasan (16 nombrados de la tabla + los 12
+numerados). En particular, los 3 tests anti-regex (7, 8, 9) devuelven **0 hallazgos** sobre archivos
+donde `grep` da hits, y el 16 devuelve **1** sobre un `displayName` con mayúscula y acento.
 
 **Flag:** protegida por `STACKY_PIPELINE_AUDIT_ENABLED` en el borde (F5); el servicio no lee config.
 **Impacto por runtime:** idéntico en los 3 (puro). Fallback: no aplica.
@@ -595,14 +819,25 @@ def check_recommendations(yaml_text, *, provider, mode=MODE_AUDIT) -> tuple:
     la forma buena por construcción. En MODE_NL_STRICT devuelve ((), ())."""
 ```
 
-**Pseudocódigo de OPT002 (la que exige el "mismo job"):**
+**Pseudocódigo de OPT002 (la que exige el "mismo job") — CORREGIDO (C2):**
+
+> **C2, el bloqueante que este pseudocódigo tenía.** La v1 agrupaba con
+> `ctx.location.rsplit(".steps[", 1)[0]`. `_iter_steps` emite `"steps[%d]"` para los pasos de raíz
+> (`cicd_semantic_rules.py:126`), **sin** el segmento `.steps[`, así que ese `rsplit` devuelve el
+> location entero ⇒ **un grupo por paso** ⇒ `hubo_build` nunca se activa. Cinco de los nueve golden
+> son de raíz (`agendaweb-ci.yml:35`, `pr-validation-online.yml:36`, `ci-batch.yml:77`,
+> `ci-dacpac.yml:40`, `security-scan-online.yml:42`). Efecto medido sobre el corpus: OPT002 habría
+> dado **2 hallazgos, no 3** (se perdía `pr-validation-online.yml:61`), y —peor— `agendaweb-ci`, que
+> es el **control negativo** de la fase, habría dado 0 **por el bug y no por su `--no-build`**:
+> un falso verde en el test capstone, en el plan que existe para matar los falsos. Se usa
+> `job_key()` de F0, y su test dedicado (`test_job_key_agrupa_los_pasos_de_raiz`) corre **antes**.
 
 ```python
 def _opt002_recompilacion_en_tests(ctxs, lines):
     out = []
     por_job = {}
     for ctx in ctxs:
-        por_job.setdefault(ctx.location.rsplit(".steps[", 1)[0], []).append(ctx)
+        por_job.setdefault(job_key(ctx.location), []).append(ctx)   # C2 — NUNCA rsplit crudo
     for _job, pasos in sorted(por_job.items()):
         hubo_build = False
         for ctx in pasos:
@@ -623,17 +858,35 @@ def _opt002_recompilacion_en_tests(ctxs, lines):
 
 **Tests PRIMERO:** `Stacky Agents/backend/tests/test_plan248_recommendations.py`
 
-Positivo + negativo por regla (8), más los recuentos exactos contra el corpus real:
+**C8 — los 8 tests positivo/negativo, NOMBRADOS** (el positivo consume el `repro` de la regla, §4.5):
+
+| # | Positivo | Negativo |
+|---|---|---|
+| OPT001 | `test_opt001_positivo_pr_con_restore_sin_cache` | `test_opt001_negativo_con_cache_no_dispara` |
+| OPT002 | `test_opt002_positivo_build_y_test_en_el_mismo_job` | `test_opt002_negativo_con_no_build` |
+| OPT003 | `test_opt003_positivo_selfhosted_sin_timeout` | `test_opt003_negativo_con_timeout_en_el_stage` |
+| OPT004 | `test_opt004_positivo_checkout_explicito_sin_fetchdepth` | `test_opt004_negativo_con_fetchdepth_1` |
+
+Más los recuentos exactos contra el corpus real:
 
 9. `test_opt001_dispara_en_los_3_pipelines_de_pr` — `{ci-batch, ci-dacpac, pr-validation-online}`,
    y **no** en `security-scan-online` (no tiene restore) ni en `agendaweb-ci`/`nightly` (`pr: none`).
-10. `test_opt002_no_dispara_en_agendaweb_ci` — el control positivo del corpus: tiene `--no-build`
-    (`:80`) ⇒ 0 hallazgos. Y **sí** dispara en los otros 3.
-11. `test_opt003_dispara_solo_en_cd_deploy_test` — exactamente 2 (`:123`, `:162`), y se **abstiene**
+   *(Verificado en la crítica: los tres declaran `command: 'restore'` explícito —`ci-batch.yml:88`,
+   `ci-dacpac.yml:53`, `pr-validation-online.yml:47`— así que la condición literal de §4.2 se
+   sostiene y no hace falta asumir el default de `NuGetCommand@2`.)*
+10. **`test_opt002_dispara_en_pr_validation_online` (C2, el test que la v1 no tenía)** — sobre
+    `pr-validation-online.yml`, que es de **raíz** (`:36`) con `VSBuild@1` en `:52` y
+    `DotNetCoreCLI@2 command:'test'` en `:61`: exactamente **1** hallazgo. **Con el `rsplit` de la v1
+    este test da 0.** Es el gate del bloqueante.
+11. `test_opt002_no_dispara_en_agendaweb_ci` — el control negativo del corpus: tiene `--no-build`
+    (`:80`) ⇒ 0 hallazgos. **Y para que ese 0 signifique algo** (C2), el mismo test verifica que el
+    grupo existe y contiene el build: `job_key` de todos sus pasos == `"(root)"` y el `VSBuild@1`
+    (`:56`) cae en ese grupo. Sin este segundo assert, el test pasa en verde aunque la regla esté muda.
+12. `test_opt003_dispara_solo_en_cd_deploy_test` — exactamente 2 (`:123`, `:162`), y se **abstiene**
     en `bootstrap-server-environment.yml` (pool dinámico) sumando 1 a `undetermined`.
-12. `test_opt004_ignora_el_checkout_implicito` — sobre `ci-cd-online.yml` (sin `- checkout:`
-    explícito) ⇒ **0**; sobre `cd-deploy-test.yml` ⇒ **2**.
-13. `test_recommendations_no_evalua_en_nl_strict` — `check_recommendations(..., mode=MODE_NL_STRICT)`
+13. `test_opt004_ignora_el_checkout_implicito` — sobre `ci-cd-online.yml` (sin `- checkout:`
+    explícito) ⇒ **0**; sobre `cd-deploy-test.yml` ⇒ **2** (`:130`, `:169`).
+14. `test_recommendations_no_evalua_en_nl_strict` — `check_recommendations(..., mode=MODE_NL_STRICT)`
     devuelve `((), ())` para los 9 fixtures.
 
 ```powershell
@@ -641,8 +894,9 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan248_recommendations.py -q
 ```
 
-**Criterio de aceptación BINARIO:** los 13 tests pasan, con los recuentos **exactos** de arriba
-(3, 3, 2, 3). Un recuento distinto significa que la regla se ensanchó: se corrige la regla, **no** el test.
+**Criterio de aceptación BINARIO:** los **22** tests pasan (8 nombrados + 14 numerados), con los
+recuentos **exactos** por regla: **OPT001 = 3, OPT002 = 3, OPT003 = 2, OPT004 = 3**. Un recuento
+distinto significa que la regla se ensanchó o se angostó de más: se corrige la regla, **no** el test.
 
 **Flag:** `STACKY_PIPELINE_AUDIT_ENABLED` en el borde (F5).
 **Impacto por runtime:** idéntico en los 3 (puro). Fallback: no aplica.
@@ -679,9 +933,28 @@ def audit_yaml(yaml_text: str, *, provider: str, profile: str = PROFILE_DOTNET_F
 
 **El baseline y su regla de oro.** `audit_baseline.json` es una lista de filas
 `{file, code, location, line, severity, evidence_fingerprint, veredicto}` — una por hallazgo de la
-auditoría sobre los 9 golden en `MODE_AUDIT`. Se **genera una vez** con
-`python -m services.cicd_audit_core --emit-baseline` y **se revisa a mano**, escribiendo en cada
-fila `"veredicto": "REAL"` o `"veredicto": "FALSO_POSITIVO"`.
+auditoría sobre los 9 golden en `MODE_AUDIT`.
+
+> **C6 — el generador NO va dentro de `cicd_audit_core.py`.** La v1 mandaba
+> `python -m services.cicd_audit_core --emit-baseline`, lo que contradice de frente el docstring que
+> el propio F0 le pone al módulo (*"PURO: sin red, sin disco, sin LLM, sin config"*): un `__main__`
+> que lista un directorio, abre 9 archivos y escribe un JSON **es** disco. Además la v1 no decía
+> dónde escribe ni con qué cwd. **Fix:** el generador vive en el archivo de test, que es quien ya
+> tiene permiso de tocar disco y ya sabe resolver el corpus con el patrón de
+> `cicd_corpus_mirror.py:47-52`. Comando exacto, con la ruta exacta:
+>
+> ```powershell
+> cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+> $env:STACKY_EMIT_AUDIT_BASELINE = "1"
+> .venv\Scripts\python.exe -m pytest tests/test_plan248_audit_baseline.py -q -k emit
+> Remove-Item Env:\STACKY_EMIT_AUDIT_BASELINE
+> ```
+>
+> `test_emit_baseline` hace `pytest.skip("solo con STACKY_EMIT_AUDIT_BASELINE=1")` cuando la env var
+> no está, así que en una corrida normal **no escribe nada** y el módulo de producción sigue puro.
+
+Generado el archivo, **se revisa a mano**, escribiendo en cada fila `"veredicto": "REAL"` o
+`"veredicto": "FALSO_POSITIVO"`.
 
 > **Gate binario de la fase, y el punto entero del plan:** si el baseline revisado contiene **una
 > sola** fila `FALSO_POSITIVO`, **la fase no está terminada**. La corrección es **angostar la
@@ -712,14 +985,27 @@ número distinto para los 8 archivos leídos, hay un bug en las reglas de F1/F2,
    baseline es idéntico (§2.5).
 7. `test_yaml_gigante_no_cuelga` — 600 KB ⇒ 1 warning `AUD000`, sin analizar.
 8. `test_yaml_roto_no_lanza` — YAML inválido ⇒ 1 warning `AUD000`, `ok=True`.
+9. **`test_toda_regla_dispara_sobre_su_repro` (C4, [ADICIÓN ARQUITECTO], §4.5) — el capstone que
+   faltaba.** Para **cada** entrada de `_AUDIT_RULES`: `audit_yaml(spec.repro[1], provider=spec.repro[0], mode=spec.modes[0])`
+   devuelve **≥1 hallazgo con `code == spec.code`**. Sin este test, las 5 reglas que valen 0 sobre el
+   corpus (SEC001, SEC002, SEC004, SEC007, SEC008) están certificadas por un baseline que no las mira.
+10. **`test_toda_regla_declara_repro` (C4)** — `_AUDIT_RULES` tiene exactamente **12** entradas y
+    ninguna con `repro is None`. Es el gate que impide agregar una regla 13 sin su reproductor.
+11. **`test_ningun_repro_dispara_otra_regla_de_seguridad` (C4/C5)** — el `repro` de cada regla
+    produce hallazgos de **un solo** `code` de la familia SEC. Es el gate mecánico de la
+    no-duplicación de §4.3: si el `repro` de SEC002 también dispara SEC001, las dos se solapan.
+12. **`test_sec002_no_duplica_pl014` (C5)** — el YAML `- script: echo $(API_KEY)` pasa por
+    `pipeline_lint.lint_yaml` **y** por `check_security`: PL014 emite 1 hallazgo, **SEC002 emite 0**.
+    Dos códigos para el mismo hecho es exactamente lo que §4.3 prohíbe.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan248_audit_baseline.py -q
 ```
 
-**Criterio de aceptación BINARIO:** los 8 tests pasan **y** `audit_baseline.json` tiene
-`veredicto == "REAL"` en el 100% de sus filas.
+**Criterio de aceptación BINARIO:** los **12** tests pasan **y** `audit_baseline.json` tiene
+`veredicto == "REAL"` en el 100% de sus filas. El 9 y el 10 son innegociables: sin ellos, el plan
+entrega un panel de seguridad que puede estar mudo y verde a la vez.
 
 **Flag:** `STACKY_PIPELINE_AUDIT_ENABLED` en el borde (F5).
 **Impacto por runtime:** idéntico. El baseline es un archivo versionado, no depende del runtime.
@@ -809,6 +1095,17 @@ y es la única acción del plan entero que requiere una decisión humana, por di
 - **EDITAR** `Stacky Agents/backend/tests/test_harness_flags.py` (`_CURATED_DEFAULTS_ON`, `:467`)
 - **EDITAR** `Stacky Agents/backend/config.py` (atributo, patrón de `:516-517`)
 - **EDITAR** `Stacky Agents/backend/scripts/run_harness_tests.sh` y `.ps1` (**las DOS listas**)
+- **EDITAR** `Stacky Agents/backend/api/devops.py` (**C3/C9**) — **1 key al final del dict de
+  `_health_payload`** (`:28`), junto a `cockpit_enabled` / `build_workshop_enabled` /
+  `dev_build_verify_enabled`:
+  ```python
+  "pipeline_audit_enabled": bool(
+      getattr(cfg, "STACKY_PIPELINE_AUDIT_ENABLED", False)
+  ),  # Plan 248 — auditoría de pipelines (read-only)
+  ```
+  Este es el camino canónico de los paneles DevOps (`/api/devops/health`), y es la superficie que el
+  246 §0.3 (`:85`) le asigna a este plan. **La v1 decía `/api/diag/health`, que no es donde vive
+  este contrato.**
 
 ```python
 # api/pipeline_audit.py — patrón EXACTO de api/pipeline_generator.py:1-26
@@ -857,6 +1154,8 @@ FlagSpec(
 4. `test_suppress_y_scan_devuelve_suprimido` — round-trip completo.
 5. `test_yaml_faltante_da_400`.
 6. `test_provider_invalido_da_400`.
+7. **`test_health_expone_la_flag` (C3/C9)** — `GET /api/devops/health` incluye la key
+   `pipeline_audit_enabled` con valor `True`; con la flag apagada en la **instancia**, `False`.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
@@ -865,13 +1164,27 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q # tras crear test_*.py
 ```
 
-> **Rojo preexistente ajeno (dossier §4):** `test_harness_flags_help` tiene **4 fallos ajenos**.
-> **No los arregles.** Validá TU entrada de forma aislada:
-> `.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q -k "curated or category"`.
+> **C7 — el baseline de los dos gates está MEDIDO, no supuesto.** Corridos el 2026-07-26 con
+> `backend\.venv` (Python 3.13.5), **sobre el árbol de esta rama y antes de tocar nada**:
+>
+> | Comando | Resultado medido HOY |
+> |---|---|
+> | `pytest tests/test_harness_flags.py -q` | **56 passed** (VERDE, 0 fallos) |
+> | `pytest tests/test_harness_ratchet_meta.py -q` | **4 passed** (VERDE) |
+>
+> La v1 decía *"`test_harness_flags.py` sin fallos **nuevos** respecto de los 4 ajenos conocidos"*.
+> **Eso relaja un gate que hoy está 100% verde** y habilita el peor final posible: romper
+> `test_harness_flags.py` con la flag nueva y atribuirlo a una deuda ajena que en este archivo **no
+> existe**. (Los 4 fallos ajenos son de `test_harness_flags_help`, que es **otro archivo** y **no**
+> está en la lista de comandos de esta fase.) El criterio pasa a ser un **número exacto**.
 
-**Criterio de aceptación BINARIO:** los 6 tests pasan; `test_harness_ratchet_meta.py` verde con los
-**5** archivos `test_plan248_*.py` registrados en **ambas** listas; `test_harness_flags.py` sin
-fallos **nuevos** respecto de los 4 ajenos conocidos.
+**Criterio de aceptación BINARIO:**
+- Los **7** tests de `test_plan248_api.py` pasan.
+- `pytest tests/test_harness_flags.py -q` ⇒ **56 passed, 0 failed**. La flag nueva **no agrega
+  tests**: el gate de curación es una igualdad de conjuntos, así que se valida dentro de los 56 que
+  ya existen. **Cualquier `failed`, o un `passed` menor a 56, es rojo propio.**
+- `pytest tests/test_harness_ratchet_meta.py -q` ⇒ **4 passed**, con los **6** archivos
+  `test_plan248_*.py` registrados en **ambas** listas (C14: son 6, no 5 — ver DoD).
 
 **Flag:** `STACKY_PIPELINE_AUDIT_ENABLED`, **default ON**.
 **Impacto por runtime:** idéntico en los 3 (endpoint Flask determinista). Fallback: si 246/247 no
@@ -886,7 +1199,13 @@ existen, `pipeline_key` y `profile` se resuelven por default (§2.5) y la ruta s
 > seguridad en una corrida. **F6 es la séptima y es opcional dentro de esta corrida**: si el
 > implementador llega con presupuesto, la hace; si no, **F0..F5 ya entregan valor completo por API**
 > y F6 se mueve tal cual está escrita acá. No se recorta el contenido de F6: se mueve entera o se
-> hace entera.
+> hace entera — **y "entera" ahora incluye sus tres ediciones de montaje** (C3). Lo que **no** se
+> mueve es la key de health de F5: esa va sí o sí, porque es la superficie compartida que el 246
+> §0.3 (`:85`) le asigna a este plan y postergarla sólo mueve el conflicto de merge al futuro.
+>
+> **Regla dura si F6 se mueve:** entonces **no se crean** `pipelineAuditModel.ts` ni
+> `PipelineAuditPanel.tsx`. Está prohibido dejar los dos archivos creados "listos para cablear":
+> eso es precisamente el código muerto de C3.
 
 **Objetivo:** mostrar los hallazgos agrupados por severidad, con el YAML anclado por línea y el
 botón de suprimir con motivo.
@@ -895,8 +1214,25 @@ botón de suprimir con motivo.
 
 - **CREAR** `Stacky Agents/frontend/src/devops/pipelineAuditModel.ts` (**puro**, toda la lógica)
 - **CREAR** `Stacky Agents/frontend/src/components/devops/PipelineAuditPanel.tsx` (**sólo render**)
+- **EDITAR** `Stacky Agents/frontend/src/api/endpoints.ts` (**C3**) — un `export const PipelineAudit = {...}`
+  **al final del archivo**, con los 4 métodos de la tabla de F5. Patrón y vecinos verificados:
+  `:3818` (`export const DevOps`), `:4193` (`export const DevOpsBuildWorkshop`). **Ojo con el
+  wrapper:** `api.get`/`api.post` **lanzan** en cualquier respuesta no-2xx, así que el 404 de la
+  flag apagada debe manejarse con el camino crudo, no con un `catch` mudo.
+- **EDITAR** `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` (**C3**) — tres puntos exactos:
+  1 key `pipeline_audit_enabled?: boolean` en `interface DevOpsHealth` (`:32`), 1 import del panel,
+  y **1 entrada nueva al final de `DEVOPS_SECTIONS`** (`:113`) con
+  `healthKey: 'pipeline_audit_enabled'` y `gateFlagKey: 'STACKY_PIPELINE_AUDIT_ENABLED'`.
 
-Espeja el estilo de `frontend/src/components/devops/pipelineLint.ts:13-29` (tipos) y `:62`
+> ### C3 — por qué estas dos ediciones dejaron de ser opcionales
+>
+> La v1 creaba los dos archivos del panel y **ningún call site**. Eso no es "una fase corta": es
+> código muerto que pasa sus propios tests. Es exactamente lo que dejó **inertes dos fases enteras
+> del Plan 176** (módulo testeado, sin consumidor, descubierto recién al correrlo). Además, las tres
+> superficies son las que el 246 §0.3 (`:80-87`) le asignó a este plan, así que omitirlas no evita
+> la colisión de merge: sólo la posterga.
+
+Espeja el estilo de `frontend/src/components/devops/pipelineLint.ts:13-29` (tipos) y `:61`
 (`groupFindings`), **sin modificar ese archivo**:
 
 ```ts
@@ -927,6 +1263,9 @@ no se esconde (§4.4).
 3. `auditSummary(null)` ⇒ tono `none`; con 0 hallazgos ⇒ `ok`; con warnings ⇒ `warn`.
 4. `canSuppress` es `false` con `reason` vacío o sólo espacios.
 5. `auditSummary` menciona `undetermined` cuando es > 0.
+6. **`test_seccion_registrada_en_devops_sections` (C3)** — `DEVOPS_SECTIONS` contiene exactamente
+   una entrada con `id === 'pipeline-audit'` y su `healthKey === 'pipeline_audit_enabled'`.
+   Es el test que hace imposible repetir el "módulo sin call site" del Plan 176.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
@@ -934,8 +1273,13 @@ npx vitest run src/devops/__tests__/pipelineAuditModel.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación BINARIO:** los 5 tests pasan y `npx tsc --noEmit` sale limpio.
-**Flag:** el panel se monta sólo si `/api/diag/health` reporta `STACKY_PIPELINE_AUDIT_ENABLED`.
+> **Gate real del panel (RTL/jsdom no está instalado en este repo):** el render no es automatizable.
+> El criterio verificable es `npx tsc --noEmit` limpio + el test 6 (registro declarativo) + un smoke
+> visual manual del operador. Se declara así en vez de prometer un test de render que no puede correr.
+
+**Criterio de aceptación BINARIO:** los **6** tests pasan y `npx tsc --noEmit` sale limpio.
+**Flag:** el panel se monta sólo si **`/api/devops/health`** reporta `pipeline_audit_enabled: true`
+(C9: la v1 decía `/api/diag/health`).
 **Impacto por runtime:** idéntico (frontend, sin LLM).
 **Trabajo del operador: ninguno** (opt-in, default ON).
 
@@ -955,6 +1299,11 @@ npx tsc --noEmit
 | R8 | El plan no entra en una corrida (el 243 se partió por esto, C25) | Media | 6 fases duras + F6 declarada movible **entera** (§F6) + 5 candidatas ya descartadas (§4.3) |
 | R9 | `bootstrap-server-environment.yml` produce hallazgos inesperados en el baseline | Baja | Declarado en §2.6: sus filas las genera el script y las revisa el implementador; el plan **no** afirma su recuento |
 | R10 | Un test escribe en el JSONL real del operador | Baja | F4 exige `tmp_path` + monkeypatch de `runtime_paths.data_dir` en **todos** sus tests |
+| **R11** | **Una regla de seguridad queda INERTE (0 hits por bug, no por corpus limpio) y el panel muestra verde falso** | **Alta** (C4) | `repro` obligatorio (§4.5) + `test_toda_regla_dispara_sobre_su_repro` y `test_toda_regla_declara_repro` (F3). Es el riesgo que la v1 no vio y que afecta a **5 de las 8 reglas SEC** |
+| **R12** | **Colisión de merge con el 249 sobre `cicd_semantic_rules.py`** | **Alta** (C1) | F0 ya no lo edita; `test_walk_importado_es_el_del_243` incluye `assert not hasattr(cicd_semantic_rules, "iter_steps")`, que se pone rojo si alguien reintroduce el diff |
+| **R13** | **Una regla "por job" queda muda en los 5 golden de raíz** | **Alta** (C2) | `job_key()` en F0 con 2 tests propios, y el assert de grupo dentro del control negativo de OPT002 |
+| **R14** | **El panel se construye y nunca se monta (código muerto que pasa sus tests)** | **Alta** (C3) | F5 agrega la key de health y F6 declara las 3 ediciones de montaje + `test_seccion_registrada_en_devops_sections`. Precedente real: 2 fases inertes del Plan 176 |
+| **R15** | El implementador atribuye un rojo propio a "los 4 fallos ajenos" | Media (C7) | El baseline de los dos gates está **medido y escrito** en F5: `test_harness_flags.py` = **56 passed**, `test_harness_ratchet_meta.py` = **4 passed** |
 
 ---
 
@@ -974,6 +1323,10 @@ npx tsc --noEmit
 - **Reglas estructurales PL001..PL014** (`pipeline_lint.py`) y **semánticas RS001..RS009**
   (`cicd_semantic_rules.py`): **no se tocan, no se duplican, no se reescriben.** Este plan importa
   sus severidades, sus helpers y sus modos, y agrega el eje seguridad/eficiencia que ninguna cubre.
+  **En la v1 esta frase era falsa**: F0 editaba `cicd_semantic_rules.py` (+4 líneas), contradiciendo
+  este mismo párrafo y pisando la superficie exclusiva del 249. En la v2 es literalmente cierta, y
+  hay dos gates que la sostienen: el `assert not hasattr(...)` del test 5 de F0 y el chequeo de
+  `git status` del DoD.
 - **Producción**: este plan no despliega, no dispara corridas y no escribe en ningún servidor.
 - **Tendencia histórica de hallazgos** y **auditoría por lote de todo el inventario**: recortadas
   por mí en §3.5; se pueden sumar después sin romper ningún contrato de acá.
@@ -1012,29 +1365,48 @@ F3 **no puede empezar** hasta que F1 y F2 estén verdes: su baseline es la suma 
 
 ### 8.3 Definition of Done (binaria)
 
-- [ ] **6 archivos de código creados:** `services/cicd_audit_core.py`, `services/cicd_security_rules.py`,
+- [ ] **5 archivos de código creados si F6 se mueve; 7 si F6 se hace** (C14 — la v1 se contaba mal a
+      sí misma): `services/cicd_audit_core.py`, `services/cicd_security_rules.py`,
       `services/pipeline_recommendations.py`, `services/pipeline_audit_suppressions.py`,
-      `api/pipeline_audit.py`, `frontend/src/devops/pipelineAuditModel.ts`
-      (+ `PipelineAuditPanel.tsx` si F6 se hace en esta corrida).
+      `api/pipeline_audit.py` **(+ `frontend/src/devops/pipelineAuditModel.ts` y
+      `components/devops/PipelineAuditPanel.tsx` sólo si F6 entra — nunca uno sin el otro ni sin su
+      montaje, C3)**.
 - [ ] **1 fixture creada:** `backend/tests/fixtures/cicd_nl/audit_baseline.json`, con
       `veredicto == "REAL"` en el **100%** de sus filas.
-- [ ] **6 archivos editados:** `services/cicd_semantic_rules.py` (+4 líneas aditivas),
-      `api/__init__.py` (+2), `services/harness_flags.py`, `tests/test_harness_flags.py`,
-      `config.py`, y las **dos** listas `run_harness_tests.sh` / `.ps1`.
-- [ ] **5 archivos de test backend** creados y registrados en **AMBAS** listas del ratchet:
-      `test_plan248_audit_core.py`, `test_plan248_security_rules.py`,
-      `test_plan248_recommendations.py`, `test_plan248_audit_baseline.py`,
-      `test_plan248_suppressions.py`, `test_plan248_api.py` *(son 6 con el de API)*.
+- [ ] **7 archivos editados** (C1: `cicd_semantic_rules.py` **ya NO está en esta lista**):
+      `api/__init__.py` (+2), `api/devops.py` (+1 key de health), `services/harness_flags.py`,
+      `tests/test_harness_flags.py`, `config.py`, y las **dos** listas `run_harness_tests.sh` /
+      `.ps1`. **+2 si F6 entra:** `frontend/src/api/endpoints.ts`, `frontend/src/pages/DevOpsPage.tsx`.
+- [ ] **`git status` no muestra `services/cicd_semantic_rules.py` modificado** (C1/R12 — gate
+      mecánico de la frontera con el 249).
+- [ ] **6 archivos de test backend** creados y registrados en **AMBAS** listas del ratchet
+      (C14 — son **6**, contados uno por uno): `test_plan248_audit_core.py`,
+      `test_plan248_security_rules.py`, `test_plan248_recommendations.py`,
+      `test_plan248_audit_baseline.py`, `test_plan248_suppressions.py`, `test_plan248_api.py`.
 - [ ] `.venv\Scripts\python.exe -m pytest tests/test_plan248_<cada uno>.py -q` → **verde uno por uno**.
-- [ ] `tests/test_harness_ratchet_meta.py` → **verde**.
-- [ ] `tests/test_plan243_reglas_semanticas.py` y `tests/test_plan243_corpus_mirror.py` → **verdes**
-      (no regresión del 243 tras el cambio aditivo de F0).
-- [ ] `tests/test_harness_flags.py` → sin fallos **nuevos** respecto de los 4 ajenos conocidos.
+- [ ] `tests/test_harness_ratchet_meta.py` → **4 passed** (baseline medido).
+- [ ] `tests/test_plan243_reglas_semanticas.py` y `tests/test_plan243_corpus_mirror.py` → **verdes y
+      con el MISMO número de tests que antes** (F0 ya no toca ese archivo: cualquier cambio en el
+      conteo significa que se cruzó la frontera del 249).
+- [ ] `tests/test_harness_flags.py` → **56 passed, 0 failed** (C7 — número exacto medido, no
+      "sin fallos nuevos").
 - [ ] **`test_ley_de_severidad` verde**: los 9 pipelines de producción tienen **0 hallazgos
       `SEV_ERROR`** en `MODE_AUDIT`. *(Este es el criterio que define si el plan cumplió su tesis.)*
+- [ ] **`test_toda_regla_dispara_sobre_su_repro` y `test_toda_regla_declara_repro` verdes** (C4 —
+      el otro criterio que define si el plan cumplió su tesis: sin esto, "0 errores" puede
+      significar "12 reglas mudas").
 - [ ] `npx tsc --noEmit` limpio y `npx vitest run src/devops/__tests__/pipelineAuditModel.test.ts`
       verde (si F6 se hace).
 - [ ] **12 reglas** implementadas y presentes en la tabla de §4, cada una con severidad, perfil,
-      modo, evidencia y remediación.
-- [ ] **0 llamadas a LLM y 0 llamadas de red** en todo el código del plan (verificable por
-      inspección: ningún módulo nuevo importa `requests`, `httpx`, `pm_llm_client` ni `copilot_bridge`).
+      modo, evidencia, remediación **y `repro`**.
+- [ ] **0 llamadas a LLM y 0 llamadas de red** en todo el código del plan. **C10 — esto es un test,
+      no una inspección** (`test_modulos_sin_red_ni_llm` en `test_plan248_audit_core.py`): recorre
+      con `ast.parse` los 5 módulos nuevos y falla si alguno importa `requests`, `httpx`, `urllib`,
+      `socket`, `pm_llm_client` o `copilot_bridge`. Se usa **AST, nunca regex sobre el texto**: un
+      centinela textual de este tipo ya se rompió antes en esta casa, y además la palabra
+      `copilot_bridge` aparece **en este mismo párrafo**, que es justo la clase de auto-colisión
+      que un grep-gate produce.
+- [ ] **Huella de regresión registrada** (C20): 1 entrada en `docs/sistema/error_fingerprints.json`
+      con `id: "AUD-REGLA-INERTE"`, patrón "regla de auditoría con 0 hits sobre el corpus y sin
+      `repro` que la dispare", `guard_test: "test_toda_regla_dispara_sobre_su_repro"`, plan 248,
+      fecha 2026-07-26.

@@ -364,6 +364,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_ENABLED",            # Plan 122 — comparador de BD entre ambientes (master, default OFF)
         "STACKY_CODE_INTEGRITY_ENABLED",        # Plan 130 — gate determinista sintaxis+imports (card Diagnóstico)
         "STACKY_INCIDENT_RESOLVER_ENABLED",     # Plan 131 — botón "Resolver incidencia" (default ON, promovida 08df035b)
+        "STACKY_INCIDENT_CONSOLE_ENABLED",          # Plan 200 R1 — consola por incidencia
+        "STACKY_SQL_DEPLOY_DETECT_ENABLED",         # Plan 200 R2 — marcado de despliegue SQL
+        "STACKY_SQL_EXEC_LEDGER_ENABLED",           # Plan 200 R4 — bitácora append-only
+        "STACKY_SQL_EXEC_ENABLED",                  # Plan 200 R3 — ejecución SQL (default OFF)
         "STACKY_INCIDENT_TICKET_PERSIST_ENABLED",  # Plan 166 F1 — espejo local de la Issue
         "STACKY_INCIDENT_VISION_OCR_ENABLED",      # Plan 166 F2 — OCR de capturas
         "STACKY_INCIDENT_VISION_ENDPOINT",         # Plan 166 F2 — endpoint de visión
@@ -4213,6 +4217,54 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         default=True,
         env_only=False,
+    ),
+    # ── Plan 200 — consola por incidencia, marcado de despliegue SQL y ejecución ──
+    FlagSpec(
+        key="STACKY_INCIDENT_CONSOLE_ENABLED",
+        type="bool", default=True,
+        label="Consola del agente por incidencia",
+        description=(
+            "Muestra en el detalle de cada incidencia el transcript de lo que respondió "
+            "el agente (análisis y dev-resolutor). Read-only: reusa la consola de "
+            "ejecuciones, no agrega un canal nuevo."
+        ),
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_SQL_DEPLOY_DETECT_ENABLED",
+        type="bool", default=True,
+        label="Marcado de despliegue SQL en tickets e incidencias",
+        description=(
+            "Detecta de forma determinista cuándo un ticket o incidencia implica "
+            "desplegar scripts SQL en otros ambientes y lo avisa con un badge. Read-only."
+        ),
+        group="global", requires="STACKY_INCIDENT_RESOLVER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_SQL_EXEC_LEDGER_ENABLED",
+        type="bool", default=True,
+        label="Bitácora de ejecuciones SQL por ambiente",
+        description=(
+            "Registra localmente cada ejecución SQL (qué script, en qué ambiente, "
+            "cuándo, resultado) con cadena de hash, y avisa si un script ya se ejecutó. "
+            "Solo metadata local; sin connection strings."
+        ),
+        group="global", requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_SQL_EXEC_ENABLED",
+        type="bool",
+        # SIN default= a propósito: declararlo la vuelve "conocida" y el meta-test
+        # exige que las conocidas estén en el set curado, que es sólo para bools ON.
+        # El default efectivo (False) vive en config.py.
+        label="Ejecutar scripts SQL en ambientes (PELIGROSO)",
+        description=(
+            "Habilita ejecutar DDL/DML contra una BD real desde Stacky. OFF por default: "
+            "es una acción destructiva e irreversible y requiere credenciales de "
+            "ambientes que no vienen en la instalación default. Cada ejecución exige "
+            "confirmación humana explícita."
+        ),
+        group="global", requires="STACKY_DB_COMPARE_ENABLED",
     ),
     FlagSpec(
         key="STACKY_INCIDENT_TICKET_PERSIST_ENABLED",

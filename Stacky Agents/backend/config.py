@@ -1252,6 +1252,23 @@ class Config:
     STACKY_STATE_CONFIG_CENTRALIZED_ENABLED: bool = os.getenv(
         "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 200 — Consola por incidencia, despliegue SQL y ejecución HITL ────
+    # Las 3 primeras son read-only (mirar, detectar, registrar) ⇒ ON.
+    STACKY_INCIDENT_CONSOLE_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_CONSOLE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_SQL_DEPLOY_DETECT_ENABLED: bool = os.getenv(
+        "STACKY_SQL_DEPLOY_DETECT_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_SQL_EXEC_LEDGER_ENABLED: bool = os.getenv(
+        "STACKY_SQL_EXEC_LEDGER_ENABLED", "true"
+    ).strip().lower() == "true"
+    # OFF por las excepciones duras 2 y 3: ejecutar DDL/DML contra una base real
+    # es destructivo e irreversible, y necesita credenciales de ambientes que una
+    # instalación default no tiene.
+    STACKY_SQL_EXEC_ENABLED: bool = os.getenv(
+        "STACKY_SQL_EXEC_ENABLED", "false"
+    ).strip().lower() == "true"
     # ── Plan 213 — Analistas que infieren y declaran supuestos ────────────────
     # Solo cambia el texto del análisis y deja de penalizar la honestidad; hace
     # VISIBLE lo que hoy el LLM asume en silencio ⇒ no bypasea revisión humana.

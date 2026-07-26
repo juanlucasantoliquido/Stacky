@@ -234,6 +234,46 @@ def list_incidents() -> list[dict]:
     return sorted(entries, key=lambda e: e.get("created_at") or "", reverse=True)
 
 
+def add_execution(incident_id: str, execution_id: int, kind: str) -> dict:
+    """Plan 200 R1 — linkea (idempotente) una ejecución a la incidencia.
+
+    `kind` ∈ {"analysis", "dev_resolver"}. El campo legacy `execution_id` (el del
+    análisis) queda intacto para no romper a nadie; `executions` es la lista
+    completa, que es lo que la consola necesita para mostrar TODO lo que el
+    agente respondió sobre esta incidencia y no solo el primer paso.
+    """
+    incident = get_incident(incident_id)
+    if incident is None:
+        raise ValueError(f"incident_not_found:{incident_id}")
+
+    execs = list(incident.get("executions") or [])
+    if not any(int(e.get("execution_id", -1)) == int(execution_id) for e in execs):
+        execs.append({
+            "execution_id": int(execution_id),
+            "kind": kind,
+            "linked_at": datetime.now(timezone.utc).isoformat(),
+        })
+    return update_incident(incident_id, executions=execs)
+
+
+def find_by_tracker_id(tracker_id) -> dict | None:
+    """Plan 200 R1 — localiza la incidencia por el id del ticket en el tracker.
+
+    El dev-resolutor arranca desde un ticket, no desde una incidencia: este es
+    el único puente para linkear su ejecución. O(n) sobre el ledger, igual que
+    find_by_execution; alcanza de sobra en mono-operador.
+    """
+    if tracker_id in (None, ""):
+        return None
+    objetivo = str(tracker_id)
+    for entry in list_incidents():
+        if str(entry.get("tracker_id") or "") == objetivo:
+            incidencia = get_incident(entry.get("id"))
+            if incidencia is not None:
+                return incidencia
+    return None
+
+
 def find_by_execution(execution_id: int) -> dict | None:
     """Plan 166 F3/C9 — localiza el incidente cuyo `execution_id` coincide.
 

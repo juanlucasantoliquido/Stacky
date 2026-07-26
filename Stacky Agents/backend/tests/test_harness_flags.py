@@ -476,6 +476,11 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
     # ── Plan 213 — analistas declaran supuestos en vez de frenar el pipeline ──
     "STACKY_ASSUMPTION_MODE_ENABLED",
+    # ── Plan 200 — consola por incidencia + despliegue SQL (las 3 read-only) ──
+    # STACKY_SQL_EXEC_ENABLED NO va: es default OFF.
+    "STACKY_INCIDENT_CONSOLE_ENABLED",
+    "STACKY_SQL_DEPLOY_DETECT_ENABLED",
+    "STACKY_SQL_EXEC_LEDGER_ENABLED",
     # ── Plan 176 — triage curado + gates read-only del comparador de BD ──
     "STACKY_DB_COMPARE_TRIAGE_ENABLED",
     "STACKY_DB_COMPARE_GATES_ENABLED",

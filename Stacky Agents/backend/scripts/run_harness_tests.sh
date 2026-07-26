@@ -674,6 +674,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan216_migration.py
   # -- Plan 214 - Validacion QAUAT E2E al completar el Developer --
   tests/test_plan214_qa_uat_enqueue.py
+  # -- Plan 200 - Consola por incidencia + marcado de despliegue SQL --
+  tests/test_plan200_flags.py
+  tests/test_plan200_incident_console.py
+  tests/test_plan200_sql_deploy_detector.py
   # -- Plan 176 - Triage curado del diff + gates read-only del comparador de BD --
   tests/test_plan176_dbcompare_flags.py
   tests/test_plan176_dbcompare_triage.py

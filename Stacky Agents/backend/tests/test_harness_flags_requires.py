@@ -125,6 +125,12 @@ _REQUIRES_MAP_FROZEN = {
     # flag madre; sin la arista, tocarlos con el modo OFF no haría nada.
     "STACKY_ASSUMPTION_MODE_AGENT_TYPES": "STACKY_ASSUMPTION_MODE_ENABLED",
     "STACKY_ASSUMPTION_MAX_PER_RUN": "STACKY_ASSUMPTION_MODE_ENABLED",
+    # Plan 200: consola y detector cuelgan del resolutor de incidencias; bitácora
+    # y ejecución, del master del comparador (que es quien tiene los ambientes).
+    "STACKY_INCIDENT_CONSOLE_ENABLED": "STACKY_INCIDENT_RESOLVER_ENABLED",
+    "STACKY_SQL_DEPLOY_DETECT_ENABLED": "STACKY_INCIDENT_RESOLVER_ENABLED",
+    "STACKY_SQL_EXEC_LEDGER_ENABLED": "STACKY_DB_COMPARE_ENABLED",
+    "STACKY_SQL_EXEC_ENABLED": "STACKY_DB_COMPARE_ENABLED",
     # Plan 176: las 4 capas nuevas del comparador cuelgan del master (profundidad 1).
     "STACKY_DB_COMPARE_TRIAGE_ENABLED": "STACKY_DB_COMPARE_ENABLED",
     "STACKY_DB_COMPARE_GATES_ENABLED": "STACKY_DB_COMPARE_ENABLED",

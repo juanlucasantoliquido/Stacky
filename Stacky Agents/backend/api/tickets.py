@@ -763,6 +763,37 @@ def sync_status():
     })
 
 
+@bp.get("/<int:ticket_id>/sql-deploy")
+def get_ticket_sql_deploy(ticket_id: int):
+    """Plan 200 R2 — ¿este ticket implica desplegar SQL en otro ambiente?
+
+    Determinista: mira los .sql realmente generados en la salida del ticket, y
+    solo cae al texto si co-ocurren intención de deploy y señal de SQL.
+    """
+    from dataclasses import asdict
+
+    from config import config as _cfg
+
+    if not getattr(_cfg, "STACKY_SQL_DEPLOY_DETECT_ENABLED", True):
+        return jsonify({"ok": False, "error": "feature_disabled"}), 404
+
+    from services import sql_deploy_detector
+
+    with session_scope() as session:
+        t = session.get(Ticket, ticket_id)
+        if t is None:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        try:
+            from api.executions import _resolve_ticket_output_dir_ws1
+            out_dir = _resolve_ticket_output_dir_ws1(None, t)
+        except Exception:  # noqa: BLE001 — sin carpeta de salida se cae al texto
+            out_dir = None
+        resultado = asdict(sql_deploy_detector.detect_for_ticket(t, out_dir))
+
+    resultado["ok"] = True
+    return jsonify(resultado)
+
+
 @bp.get("/<int:ticket_id>")
 def get_ticket(ticket_id: int):
     with session_scope() as session:

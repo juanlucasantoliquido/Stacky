@@ -104,6 +104,98 @@ def get_incident_endpoint(incident_id: str):
     return jsonify({"ok": True, "incident": incident})
 
 
+@bp.get("/<incident_id>/console")
+def get_incident_console(incident_id: str):
+    """Plan 200 R1 — qué ejecuciones tiene esta incidencia, para pintar su consola.
+
+    No devuelve el transcript: el frontend pide `/api/executions/<id>/logs` por
+    cada una. Reusar esa consola en vez de inventar un endpoint de transcript es
+    lo que hace que esto no agregue un canal más que mantener.
+    """
+    from config import config as _cfg
+
+    if not _cfg.STACKY_INCIDENT_RESOLVER_ENABLED:
+        return _feature_disabled_response()
+    if not getattr(_cfg, "STACKY_INCIDENT_CONSOLE_ENABLED", True):
+        return _feature_disabled_response()
+
+    from services import incident_store
+    incident = incident_store.get_incident(incident_id)
+    if incident is None:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+
+    execs = list(incident.get("executions") or [])
+    # Back-compat: las incidencias anteriores al 200 solo tienen `execution_id`.
+    if not execs and incident.get("execution_id") is not None:
+        execs = [{
+            "execution_id": int(incident["execution_id"]),
+            "kind": "analysis",
+            "linked_at": None,
+        }]
+
+    return jsonify({
+        "ok": True,
+        "incident_id": incident_id,
+        "primary_execution_id": incident.get("execution_id"),
+        "executions": execs,
+    })
+
+
+def _sql_deploy_gates(incident_id: str):
+    """Gates de las rutas R2: devuelve (respuesta_de_error, incidencia)."""
+    from config import config as _cfg
+
+    if not _cfg.STACKY_INCIDENT_RESOLVER_ENABLED:
+        return _feature_disabled_response(), None
+    if not getattr(_cfg, "STACKY_SQL_DEPLOY_DETECT_ENABLED", True):
+        return _feature_disabled_response(), None
+
+    from services import incident_store
+    incidencia = incident_store.get_incident(incident_id)
+    if incidencia is None:
+        return (jsonify({"ok": False, "error": "not_found"}), 404), None
+    return None, incidencia
+
+
+@bp.get("/<incident_id>/sql-deploy")
+def get_incident_sql_deploy(incident_id: str):
+    """Plan 200 R2 — ¿esta incidencia implica desplegar SQL en otro ambiente?"""
+    from dataclasses import asdict
+
+    error, incidencia = _sql_deploy_gates(incident_id)
+    if error:
+        return error
+
+    from services import sql_deploy_detector
+
+    resultado = asdict(sql_deploy_detector.detect_for_incident(incidencia))
+    resultado["ok"] = True
+    return jsonify(resultado)
+
+
+@bp.get("/<incident_id>/sql-script")
+def get_incident_sql_script(incident_id: str):
+    """Plan 200 R2 — el contenido del .sql, leído SERVER-SIDE por sha.
+
+    Es la misma fuente que vería una ejecución: el cliente nunca manda el SQL,
+    solo su sha. Así el preview y lo que se ejecutaría no pueden divergir.
+    """
+    error, _incidencia = _sql_deploy_gates(incident_id)
+    if error:
+        return error
+
+    from services import sql_deploy_detector
+
+    script = sql_deploy_detector.read_script({
+        "source": "incident_attachment",
+        "incident_id": incident_id,
+        "sha256": (request.args.get("sha") or "").strip(),
+    })
+    if script is None:
+        return jsonify({"ok": False, "error": "script_not_found"}), 404
+    return jsonify({"ok": True, **script})
+
+
 @bp.get("/<incident_id>/files/<stored_name>")
 def get_incident_file(incident_id: str, stored_name: str):
     from config import config as _cfg

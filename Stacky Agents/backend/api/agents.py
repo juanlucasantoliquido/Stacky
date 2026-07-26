@@ -1065,6 +1065,14 @@ def run_incident():
     )
 
     incident_store.update_incident(incident_id, status="analizando", execution_id=execution_id)
+    # Plan 200 R1 — además de `execution_id` (legacy, back-compat), sumar a la
+    # lista completa: la consola de la incidencia muestra TODO lo que el agente
+    # respondió, no solo el primer paso.
+    try:
+        incident_store.add_execution(incident_id, execution_id, kind="analysis")
+    except Exception:  # noqa: BLE001 — linkear nunca puede tumbar el lanzamiento
+        logger.warning("no se pudo linkear la ejecución %s a la incidencia %s",
+                       execution_id, incident_id, exc_info=True)
 
     from services.stacky_logger import logger as stacky_logger
     stacky_logger.info(
@@ -1233,6 +1241,21 @@ def run_incident_dev():
             })
         except Exception:  # noqa: BLE001 — best-effort; sin intent, no se abre PR
             logger.info("run_incident_dev: no se pudo registrar intent de auto-PR exec=%s", execution_id, exc_info=True)
+
+    # Plan 200 R1 — el dev-resolutor arranca desde un TICKET, así que la
+    # incidencia se resuelve por su tracker_id. Sin incidencia asociada es un
+    # no-op silencioso: correr el resolutor sobre un ticket suelto es legítimo.
+    try:
+        from services import incident_store as _istore
+
+        # `ado_id` se capturó DENTRO de la sesión; tocar `ticket` acá daría
+        # DetachedInstanceError porque la sesión ya está cerrada.
+        _inc = _istore.find_by_tracker_id(ado_id)
+        if _inc is not None:
+            _istore.add_execution(_inc["id"], execution_id, kind="dev_resolver")
+    except Exception:  # noqa: BLE001 — best-effort
+        logger.info("run_incident_dev: no se pudo linkear exec=%s a una incidencia",
+                    execution_id, exc_info=True)
 
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
 

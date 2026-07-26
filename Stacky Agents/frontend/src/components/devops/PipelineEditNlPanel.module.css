@@ -1,0 +1,165 @@
+/* Plan 250 F4 — panel de edicion quirurgica. Sin literales HEX: tokens del theme.
+   Gotcha de la casa: en un .tsx NUEVO el uiDebtRatchet tiene alcance 0, asi que
+   TODO el estilado vive aca y no hay ni un style={{...}} inline en el componente. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.editor {
+  flex: 1;
+  min-width: 320px;
+  min-height: 180px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 300px;
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 120px;
+}
+
+.control {
+  flex: 1;
+  min-width: 160px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.nlBox {
+  width: 100%;
+  min-height: 56px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.summary {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.seal {
+  font-size: 12px;
+  color: var(--text-muted);
+  border-left: 3px solid var(--border);
+  padding-left: 8px;
+}
+
+.sealBad {
+  color: var(--danger, var(--text));
+  border-left-color: var(--danger, var(--border));
+}
+
+.gate {
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.gateOk {
+  color: var(--success, var(--text));
+}
+
+.gateBad {
+  color: var(--danger, var(--text));
+}
+
+.notes {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  padding-left: 18px;
+}
+
+.hunks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hunk {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.diff {
+  max-height: 380px;
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  margin: 0;
+}
+
+.diffSame {
+  color: var(--text-muted);
+}
+
+.diffAdd {
+  color: var(--success, var(--text));
+}
+
+.diffDel {
+  color: var(--danger, var(--text));
+}
+
+.blocked {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: 12px;
+  color: var(--danger, var(--text));
+}
+
+.confirm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text);
+}

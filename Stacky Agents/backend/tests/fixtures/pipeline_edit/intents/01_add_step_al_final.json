@@ -1,0 +1,9 @@
+{
+  "verb": "add_step",
+  "target_path": "stages[0].jobs[0].steps",
+  "position": "end",
+  "task_ref": "PublishCodeCoverageResults@2",
+  "inputs": {"summaryFileLocation": "$(Agent.TempDirectory)/**/coverage.cobertura.xml"},
+  "display_name": "Publicar cobertura",
+  "notes": ["asumi que la cobertura se publica al final del job de build"]
+}

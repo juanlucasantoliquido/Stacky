@@ -1,0 +1,8 @@
+{
+  "verb": "set_task_input",
+  "target_path": "stages[0].jobs[0].steps",
+  "anchor_ref": "VSBuild@1",
+  "task_ref": "VSBuild@1",
+  "inputs": {"configuration": "Debug"},
+  "notes": []
+}

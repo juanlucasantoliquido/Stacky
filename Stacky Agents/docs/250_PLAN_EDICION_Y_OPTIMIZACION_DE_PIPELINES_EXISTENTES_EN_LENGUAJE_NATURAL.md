@@ -1,20 +1,103 @@
 # Plan 250 — Editar y optimizar una pipeline que ya existe, describiendo el cambio en lenguaje natural
 
-> ## ESTADO REAL AL 2026-07-26: **NO IMPLEMENTADO**
+> ## ESTADO REAL AL 2026-07-26: **IMPLEMENTADO — F0..F5 COMPLETAS**
 >
-> La corrida que implementó la serie "Mago de las Pipelines" llegó hasta el **249** y **se detuvo
-> acá por presupuesto de contexto, a propósito**: el operador pidió explícitamente "prefiero 'el
-> 250 quedó a medias por X' que un verde inventado". **No hay una sola línea de código de este
-> plan en el árbol.** Verificable: ninguno de los archivos que este plan manda CREAR existe.
+> Implementado y commiteado en `feat/plan-217-migrador-mantis-gitlab`. **Backend 70 tests verdes
+> corridos por archivo con `backend/.venv` (py3.13.5); frontend 12 verdes + `npx tsc --noEmit`
+> en 0 errores.**
+>
+> | Fase | Estado | Archivo de test | Resultado real |
+> |---|---|---|---|
+> | F0 motor de anclajes y splice | IMPLEMENTADA | `test_plan250_patcher.py` | **14 passed** |
+> | F1 verbos cerrados | IMPLEMENTADA | `test_plan250_verbos.py` | **11 passed** |
+> | F2 gates por delta + sello | IMPLEMENTADA | `test_plan250_gates_delta.py` | **12 passed** |
+> | F3 blueprint + 2 flags | IMPLEMENTADA | `test_plan250_api.py` (**14**) + `test_plan250_flag.py` (**7**) | **21 passed** |
+> | F4 panel + diff | IMPLEMENTADA | `pipelineEditModel.test.ts` | **12 passed**, `tsc` 0 errores |
+> | F5 puerta NL + puente 248 | IMPLEMENTADA | `test_plan250_edit_intent.py` | **12 passed** |
+>
+> **KPI-1 verificado sobre los 9 goldens: 337/337 comentarios sobreviven** (el round-trip los
+> deja en 0). KPI-2, KPI-3, KPI-4, KPI-5, KPI-6 y KPI-7 verdes con sus tests nombrados.
+>
+> ### Los 5 bugs del PROPIO PLAN que sólo aparecieron al construirlo
+>
+> Los 4 planes anteriores de la serie tuvieron cada uno una contradicción interna; este tuvo
+> cinco. Anclaje verificado ≠ plan implementable.
+>
+> 1. **§2.4 — `key_col` de una SECUENCIA.** El plan dice que `yaml.compose` da
+>    `item.start_mark.column` = columna de la primera clave. Es cierto para el **item**, pero para
+>    el nodo **secuencia** (`steps`) `start_mark.column` es la columna del **guion** (4, no 6).
+>    Tomarlo de ahí emite el bloque nuevo con las claves de continuación 2 columnas a la izquierda
+>    y produce un YAML **inválido** — que `scan_unsupported` devuelve como `()` en vez de fallar
+>    ruidosamente, así que el test 6 mentía sin decir por qué. Corregido: `_first_child_col`
+>    recursa al primer item. Además, `dash_col` NO se calcula como `start_mark.column - 2` (falla
+>    con `-   task:`): se deriva del texto crudo que precede a la primera clave, que es lo que dice
+>    el propio encabezado de mediciones.
+> 2. **§2.3 deja comentarios huérfanos al BORRAR.** La fórmula de fin efectivo le saca al item N
+>    el comentario que introduce a N+1 — pero el `start_mark` de N+1 tampoco lo incluye, así que
+>    ese comentario **no pertenece a nadie**. Al borrar `PublishTestResults@2` quedaba
+>    `# 4. Publicar resultados de tests en ADO` colgado sobre el paso equivocado: corrupción
+>    silenciosa. Corregido con `Anchor.lead_line` (el bloque de comentarios/blancos que INTRODUCE
+>    al nodo, acotado por el fin efectivo del hermano anterior); `delete`, `insert_before` y
+>    `move_step` lo usan. Consecuencia medida: el plan decía "47 menos los **2** propios de ese
+>    paso"; el bloque de ese paso no tiene **ningún** comentario adentro y el único suyo es el que
+>    lo presenta ⇒ **47 → 46**, no 45.
+> 3. **F1 — `validate_inputs` hace `set_task_input` imposible.** El plan manda
+>    `validate_inputs(profile, task_ref, inputs) != [] ⇒ error`, pero ese validador exige los
+>    inputs **requeridos**: cambiar sólo `configuration` en `VSBuild@1` daba siempre "falta el
+>    input requerido 'solution'". Las dos cosas del plan (esa validación y
+>    `test_set_task_input_cambia_una_sola_linea`) no pueden ser ciertas a la vez. Corregido:
+>    `plan_edit` valida el resultado **efectivo** (los inputs que el paso YA tiene + el nuevo), que
+>    además es más estricto; `validate_intent_dict` valida sólo las claves recibidas.
+> 4. **F3 — `default=False` en la `FlagSpec` rompe el meta-test.** El plan escribe
+>    `default=False` para la flag de commit. Declarar cualquier default la vuelve
+>    `default_is_known`, y `test_default_known_only_for_curated` exige que ese conjunto sea
+>    EXACTAMENTE `_CURATED_DEFAULTS_ON` — a la que la flag no puede entrar por ser OFF. Corregido:
+>    la `FlagSpec` **no declara** `default=`; el default OFF vive en `config.py`.
+>    **Además el plan v2 afirma que `_REQUIRES_MAP_FROZEN` no existe en este árbol: SÍ existe**
+>    (`tests/test_harness_flags_requires.py:120`) y la arista hubo que agregarla.
+> 5. **F5 — `LLMCallSpec(prompt=...)` es un `TypeError`** (el mismo bug de clase que encontró el
+>    247). El dataclass real (`pm_llm_client.py:90`) exige `project`, `agent_kind`, `prompt_type`,
+>    `model`, `system` y `user`. Y el resultado se lee por `.parsed_json`/`.text`, no `.data`.
+>    **También: el puente con el 248 importa `get_recommendation`, que no existe** — el símbolo
+>    real es `check_recommendations(yaml_text, *, provider, mode)`
+>    (`services/pipeline_recommendations.py:238`). Cableado al símbolo real: si se hubiera dejado
+>    el import del plan, el `except ImportError` habría hecho que el puente degradara **siempre**,
+>    inerte y en silencio, con el 248 instalado.
+>
+> ### Los 3 peligros del plan, verificados en el código construido
+>
+> - **¿Escribe en el ADO real?** Sí, `/commit` termina en `ado_provider.commit_file` (push real).
+>   Por eso está detrás de **8 candados en serie**: flag propia default **OFF** → `confirm=True` →
+>   `branch` no vacío y **distinto de la rama por defecto** (y si no se puede resolver cuál es,
+>   **400**, no se escribe) → sha256 del `before` → **recompilación en el servidor** (el YAML del
+>   cliente se ignora) → `approved_after_sha256` (409) → los 4 gates (422) → `get_repo_writer` en
+>   su propio `try` (400, no 500). `test_default_de_fabrica_no_escribe` prueba que el default del
+>   **código** (no el del test) es OFF, y cada test de candado afirma `writer.llamadas == []`.
+> - **¿`stale_check`?** Siempre `"no_verificable"`, con el motivo literal. **Nunca** se afirma
+>   haber validado contra el repo.
+> - **Falla CERRADO:** ante `after` que no parsea, gate roto, provider sin puerto o preservación en
+>   rojo, la respuesta es un error y **no** un commit.
+>
+> ### Lo que queda pendiente (declarado, no maquillado)
+>
+> - **Smoke visual del operador** (no automatizable: no hay `jsdom` ni `@testing-library/react`):
+>   pegar una pipeline real, ver el diff y el sello, **encender la flag de commit desde la UI** y
+>   confirmar. Ese paso es parte del smoke a propósito: prueba que el default de fábrica no escribía.
+> - **§7.5 huella de regresión** (`docs/sistema/error_fingerprints.json`): NO se escribió — ese
+>   archivo está fuera de la frontera §3.1 de este plan. El guard vive igual, doble: el test
+>   `test_los_337_comentarios_del_corpus_sobreviven` (corpus dorado) + el gate en vivo
+>   `G-PRESERVACION` de `services/pipeline_diff.py` (los pipelines del operador).
+> - **Ratchets rojos AJENOS** (no crecidos por este plan, verificado archivo por archivo):
+>   `formDebtRatchet` (7 ofensores: EnvSetupWizard, EnvironmentRadar, PipelineAuditPanel,
+>   PipelineInventorySection, DensityToggle, PlansBoardPage, TicketBoard) y `devopsPollingRatchet`
+>   (BuildWorkshopSection.tsx:93). `PipelineEditNlPanel.tsx` **no figura en ninguno**: usa las
+>   primitivas `Input/Select/Textarea/Checkbox` y no tiene ni un `style={{...}}` inline.
+>
+> ---
 >
 > Implementados y commiteados en esta misma rama, en orden: **246** (`f2e63e77`), **247**
 > (`d006e406`), **248** (`ed9a1942`), **249** (`7fc345d8`). Los cuatro tienen su estado real
 > escrito en su propio encabezado, con los números de tests y los bugs de plan que aparecieron.
->
-> **Antes de implementar este plan, leé el encabezado del 246, 247, 248 y 249**: los cuatro
-> descubrieron contradicciones internas de sus propios documentos (una flag con 5 patas que en
-> realidad son 6, un `LLMCallSpec` sin sus campos obligatorios, un `RULES_VERSION` que no se puede
-> subir sin romper el gate que el mismo plan exige). Este plan no fue revisado con ese ojo todavía.
 >
 > ### Mediciones de F0 ya verificadas EJECUTANDO el código (2026-07-26) — no las re-derives
 >

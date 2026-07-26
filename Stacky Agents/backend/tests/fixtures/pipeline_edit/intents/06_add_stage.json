@@ -1,0 +1,7 @@
+{
+  "verb": "add_stage",
+  "position": "end",
+  "display_name": "SmokeTests",
+  "values": ["Pruebas de humo"],
+  "notes": ["asumi que el stage nuevo va al final"]
+}

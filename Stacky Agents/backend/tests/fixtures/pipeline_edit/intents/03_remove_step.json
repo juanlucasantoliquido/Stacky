@@ -1,0 +1,6 @@
+{
+  "verb": "remove_step",
+  "target_path": "stages[0].jobs[0].steps",
+  "anchor_ref": "PublishTestResults@2",
+  "notes": ["asumi que te referias al paso que publica los resultados de tests"]
+}

@@ -1,0 +1,8 @@
+{
+  "verb": "move_step",
+  "target_path": "stages[0].jobs[0].steps",
+  "anchor_ref": "PublishTestResults@2",
+  "position": "after",
+  "values": ["PublishBuildArtifacts@1"],
+  "notes": []
+}

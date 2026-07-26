@@ -1,0 +1,10 @@
+{
+  "verb": "add_step",
+  "target_path": "stages[0].jobs[0].steps",
+  "position": "before",
+  "anchor_ref": "PublishBuildArtifacts@1",
+  "task_ref": "CopyFiles@2",
+  "inputs": {"SourceFolder": "$(Build.SourcesDirectory)", "Contents": "**/*.dll", "TargetFolder": "$(Build.ArtifactStagingDirectory)", "flattenFolders": "true"},
+  "display_name": "Copiar binarios",
+  "notes": []
+}

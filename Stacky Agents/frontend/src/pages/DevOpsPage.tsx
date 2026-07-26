@@ -53,6 +53,8 @@ export interface DevOpsHealth {
   cockpit_enabled?: boolean; // Plan 239 — cockpit DevOps
   pipeline_inventory_enabled?: boolean; // Plan 246 — Inventario de pipelines
   pipeline_audit_enabled?: boolean; // Plan 248 — Auditoría de pipelines
+  pipeline_nl_edit_enabled?: boolean; // Plan 250 — Edición quirúrgica de pipelines
+  pipeline_nl_edit_commit_enabled?: boolean; // Plan 250 — commit al repo real (default OFF)
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -113,6 +115,8 @@ import { DevOpsOverviewSection } from '../components/devops/DevOpsOverviewSectio
 import { PipelineInventorySection } from '../components/devops/PipelineInventorySection';
 // Plan 248 — Auditoría de pipelines (read-only, SEC + OPT)
 import { PipelineAuditPanel } from '../components/devops/PipelineAuditPanel';
+// Importar PipelineEditNlPanel (Plan 250 F4)
+import { PipelineEditNlPanel } from '../components/devops/PipelineEditNlPanel';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -253,6 +257,18 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_PIPELINE_AUDIT_ENABLED',
     gateMessage: 'La sección Auditoría necesita la flag STACKY_PIPELINE_AUDIT_ENABLED (Configuración → Arnés, categoría Épicas/ADO).',
     render: (ctx) => <PipelineAuditPanel ctx={ctx} />,
+  },
+  // Plan 250 — Editar una pipeline que YA existe (patch quirurgico, nunca re-render)
+  {
+    id: 'editar-pipeline',
+    label: 'Editar pipeline',
+    group: 'construir',
+    icon: '✏️',
+    summary: 'Cambia una pipeline existente sin perder sus comentarios: diff exacto y commit con confirmacion.',
+    healthKey: 'pipeline_nl_edit_enabled',
+    gateFlagKey: 'STACKY_PIPELINE_NL_EDIT_ENABLED',
+    gateMessage: 'La seccion Editar pipeline necesita la flag STACKY_PIPELINE_NL_EDIT_ENABLED (Configuracion → Arnes, categoria Epicas/ADO).',
+    render: (ctx) => <PipelineEditNlPanel ctx={ctx} />,
   },
 ];
 

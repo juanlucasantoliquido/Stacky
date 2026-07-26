@@ -1422,6 +1422,20 @@ class Config:
         "STACKY_PIPELINE_AUDIT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 250 — Edición quirúrgica de pipelines existentes. Default ON.
+    # ANALIZA y muestra el diff; NO escribe en ningún lado. Editable por UI.
+    STACKY_PIPELINE_NL_EDIT_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_NL_EDIT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 250 — Commit de la pipeline editada. Default OFF (EXCEPCIÓN DURA 2:
+    # es la ÚNICA ruta que escribe en un sistema externo real del operador — un push
+    # a su Azure DevOps vía ado_provider.commit_file, que desde el plan 95 F1.a
+    # empuja de verdad). Ver el diff NO necesita esta flag. Editable por UI.
+    STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 87 — Panel DevOps (creador gráfico de pipelines). Default ON
     # (activado 2026-07-05, decisión explícita del operador).
     # Editable por UI (HarnessFlagsPanel, categoría "DevOps").

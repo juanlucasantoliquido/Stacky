@@ -793,6 +793,14 @@ HARNESS_TEST_FILES=(
   tests/test_plan249_renderer_gitlab.py
   tests/test_plan249_parser_gitlab.py
   tests/test_plan249_endpoint_gitlab.py
+
+  # Plan 250 — edicion quirurgica de pipelines existentes
+  tests/test_plan250_patcher.py
+  tests/test_plan250_verbos.py
+  tests/test_plan250_gates_delta.py
+  tests/test_plan250_api.py
+  tests/test_plan250_flag.py
+  tests/test_plan250_edit_intent.py
 )
 
 pass=0

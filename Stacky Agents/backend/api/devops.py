@@ -88,6 +88,12 @@ def _health_payload() -> dict:
         "pipeline_audit_enabled": bool(
             getattr(cfg, "STACKY_PIPELINE_AUDIT_ENABLED", False)
         ),  # Plan 248 — auditoría de pipelines (read-only)
+        "pipeline_nl_edit_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_NL_EDIT_ENABLED", False)
+        ),  # Plan 250 — edición quirúrgica (analiza y diffea; NO escribe)
+        "pipeline_nl_edit_commit_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED", False)
+        ),  # Plan 250 — commit al repo REAL (default OFF)
     }
 
 

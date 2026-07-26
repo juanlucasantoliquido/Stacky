@@ -712,6 +712,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa lista de avisos no se calcula ni se muestra, y las validaciones que ya existían siguen igual.",
         example="Te avisa que la canalización publica un paquete con la clave de la base adentro, y que el chequeo de seguridad no puede frenar la compilación.",
     ),
+    "STACKY_PIPELINE_NL_EDIT_ENABLED": PlainHelp(
+        what="Te deja cambiar una canalizacion que ya existe describiendo el cambio, y te muestra exactamente que lineas se tocan antes de decidir nada.",
+        on_effect="Si la activas: aparece el panel para editar una canalizacion, con el detalle de las lineas que cambian y un aviso de si algo se perderia.",
+        off_effect="Si la apagas: ese panel no aparece y el armador de canalizaciones queda igual que hoy.",
+        example="Pedis agregar la publicacion de la cobertura y ves que se agregan 4 lineas al final y que los 47 comentarios del archivo siguen intactos.",
+    ),
+    "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED": PlainHelp(
+        what="Permite guardar la canalizacion editada en una rama del repositorio real, y no solo verla en pantalla.",
+        on_effect="Si la activas: aparece el boton para guardar el cambio en una rama nueva del repositorio, que igual te pide tildar una casilla de confirmacion.",
+        off_effect="Si la apagas: podes ver y revisar el cambio igual, pero no se guarda nada en ningun lado; el boton te explica como habilitarlo.",
+        example="Viene apagada de fabrica: primero mirás el cambio tranquilo y, recien cuando decidis que esta bien, la encendes una vez para poder guardarlo.",
+    ),
     "STACKY_GITLAB_SEMANTIC_RULES_ENABLED": PlainHelp(
         what="Revisa la definicion de una canalizacion de GitLab y avisa cuando tiene errores que esa plataforma rechaza o ejecuta mal.",
         on_effect="Si la activas: al validar una canalizacion de GitLab te aparecen avisos como una etapa no declarada o un despliegue a produccion que sale sin que nadie confirme.",

@@ -207,6 +207,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_GENERATOR_ENABLED", # Plan 73 — generador declarativo PipelineSpec→YAML
         "STACKY_PIPELINE_PROFILER_ENABLED",  # Plan 247 — perfilador de pipelines
         "STACKY_PIPELINE_AUDIT_ENABLED",     # Plan 248 — auditoria de pipelines
+        "STACKY_PIPELINE_NL_EDIT_ENABLED",   # Plan 250 — edicion quirurgica (analiza)
+        "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED",  # Plan 250 — commit al repo REAL (OFF)
     ),
     "migrador_ado_gitlab": (
         # NOTA: el master STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (feature opt-in) → "capacidades_optin".
@@ -2980,6 +2982,47 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    # ── Plan 250 — Edicion quirurgica de pipelines existentes ─────────────────
+    FlagSpec(
+        key="STACKY_PIPELINE_NL_EDIT_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA de las 4 excepciones duras aplica —
+                        # analiza y muestra el diff, NO escribe en ningun lado, no
+                        # bypasea revision humana (la exige), no agrega prerequisitos
+                        # (PyYAML ya esta) y no reduce la seguridad (agrega gates).
+                        # Curada en _CURATED_DEFAULTS_ON (test_harness_flags.py).
+        label="Edicion de pipelines existentes",
+        description=(
+            "Plan 250 - modificar una pipeline que YA existe describiendo el cambio; "
+            "patch quirurgico por splice de lineas (nunca re-render, que borraria los "
+            "comentarios) con diff visible. OFF: desaparece el panel de edicion y "
+            "/api/pipeline-editor/* devuelve 404; el builder grafico queda IDENTICO."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED",
+        type="bool",
+        # SIN `default=`: el default EFECTIVO es el de config.py ("false"). Declararlo
+        # aca —aunque sea `default=False`— la haria `default_is_known` y pondria roja a
+        # test_default_known_only_for_curated, que exige que el conjunto de flags con
+        # default declarado sea EXACTAMENTE _CURATED_DEFAULTS_ON. El plan escribia
+        # `default=False`: las dos cosas no pueden ser ciertas a la vez.
+        # EXCEPCION DURA (2): es la UNICA ruta que ESCRIBE en un sistema externo real del
+        # operador (push a su Azure DevOps via ado_provider.commit_file:146, real desde
+        # el plan 95 F1.a). Que sea reversible borrando la rama no lo hace no-escritura.
+        label="Permitir commitear la pipeline editada",
+        description=(
+            "Plan 250 - habilita SOLO el commit del YAML parcheado a una rama del repo "
+            "REAL. Ver el cambio y el diff NO necesita esta flag. OFF: el boton de "
+            "commit explica como activarla y ofrece copiar el YAML; los otros 3 "
+            "endpoints siguen funcionando."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_PIPELINE_NL_EDIT_ENABLED",
     ),
     # ── Plan 87 — Panel DevOps ─────────────────────────────────────────────────
     FlagSpec(

@@ -5046,3 +5046,88 @@ export const PipelineAudit = {
   unsuppress: (body: { pipeline_key: string; code: string; location: string }) =>
     api.delete<{ removed: boolean }>("/api/pipeline-audit/suppress", body),
 };
+
+/** Plan 250 — edicion quirurgica de una pipeline que YA existe.
+ *  `plan`, `verbs` e `interpret` NO escriben nada. `commit` es la UNICA ruta que
+ *  empuja al repo real del operador y esta detras de su propia flag, default OFF. */
+export const PipelineEditor = {
+  verbs: (profile?: string) =>
+    api.get<{
+      verbs: string[];
+      catalog: Record<string, string[]>;
+      profile: string;
+      discovery_available: boolean;
+      recommendations_available: boolean;
+      commit_enabled: boolean;
+    }>(`/api/pipeline-editor/verbs${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
+  plan: (body: { yaml: string; intent: Record<string, unknown>; profile?: string; repo_root?: string }) =>
+    api.post<PipelineEditPlanDto>("/api/pipeline-editor/plan", body),
+  interpret: (body: { text: string; yaml: string; profile?: string; fixture_id?: string }) =>
+    api.post<PipelineEditInterpretDto>("/api/pipeline-editor/interpret", body),
+  commit: (body: {
+    yaml: string;
+    intent: Record<string, unknown>;
+    path: string;
+    branch: string;
+    project?: string | null;
+    message?: string;
+    before_sha256: string;
+    approved_after_sha256?: string;
+    confirm: true;
+  }) => api.post<PipelineEditCommitDto>("/api/pipeline-editor/commit", body),
+};
+
+export interface PipelineEditPlanDto {
+  ops: number;
+  hunks: Array<{ start_line: number; end_line: number; before: string[]; after: string[]; reason: string }>;
+  review: {
+    ok: boolean;
+    summary: string;
+    unsupported: string[];
+    preservation: {
+      ok: boolean;
+      comments_before: number;
+      comments_after: number;
+      unsupported_lost: string[];
+      lines_untouched: number;
+      lines_total_before: number;
+      detail: string;
+    };
+    gates: Array<{
+      gate: string;
+      passed: boolean;
+      new_errors: Array<{ code: string; message: string }>;
+      new_warnings: Array<{ code: string; message: string }>;
+      resolved: Array<{ code: string; message: string }>;
+      skipped_reason: string;
+    }>;
+  };
+  yaml: string;
+  before_sha256: string;
+  after_sha256: string;
+}
+
+export interface PipelineEditInterpretDto {
+  intent: {
+    verb: string;
+    target_path: string;
+    anchor_ref: string | null;
+    position: string;
+    task_ref: string | null;
+    inputs: Record<string, string>;
+    display_name: string;
+    values: string[];
+  } | null;
+  notes: string[];
+  questions: string[];
+}
+
+export interface PipelineEditCommitDto {
+  sha?: string;
+  branch?: string;
+  path?: string;
+  web_url?: string;
+  status?: string;
+  stale_check: string;
+  stale_check_reason?: string;
+}

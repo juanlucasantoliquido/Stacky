@@ -278,6 +278,10 @@ _REQUIRES_MAP_FROZEN = {
     # el plan 237 declaró requires= en la FlagSpec pero nunca sumó la arista acá,
     # dejando test_requires_map_is_frozen en rojo desde su commit.
     "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED": "STACKY_EVOLUTION_CENTER_ENABLED",  # Plan 237
+    # Plan 250: el commit al repo REAL cuelga del panel de edición (profundidad 1; la
+    # madre no declara `requires`). La arista es INFORMATIVA para la UI — el candado 0
+    # de api/pipeline_editor.py chequea las dos flags por su cuenta.
+    "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED": "STACKY_PIPELINE_NL_EDIT_ENABLED",
 }
 
 

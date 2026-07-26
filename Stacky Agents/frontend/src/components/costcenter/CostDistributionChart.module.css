@@ -1,0 +1,22 @@
+/* Plan 199 F6 — Histograma del costo por corrida. */
+
+.headline {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+}
+
+.bar {
+  fill: var(--accent);
+}
+
+.axis {
+  font-size: 10px;
+  fill: var(--muted);
+}

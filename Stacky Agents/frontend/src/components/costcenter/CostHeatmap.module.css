@@ -1,0 +1,58 @@
+/* Plan 199 F6 — Heatmap día × hora del gasto. */
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.rowLabel {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 32px;
+}
+
+.cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid var(--border-muted);
+  flex: 0 0 auto;
+}
+
+.hourAxis {
+  display: flex;
+  gap: 2px;
+  margin-left: 32px;
+}
+
+.hourTick {
+  width: 14px;
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.legendSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid var(--border-muted);
+}

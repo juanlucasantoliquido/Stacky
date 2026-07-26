@@ -158,3 +158,24 @@ export function isCostCenterEnabled<T extends { enabled: true }>(
 ): resp is T {
   return resp.enabled === true;
 }
+
+// ── Plan 199 F5/F6 — respuestas de los tres gráficos nuevos ──────────────────
+
+export interface CostBurnStacked {
+  bucket: string;
+  group_by: string;
+  series: { bucket: string; groups: Record<string, number>; billable_usd: number }[];
+  groups: string[];
+}
+
+export interface CostHeatmap {
+  cells: { weekday: number; hour: number; billable_usd: number; runs: number }[];
+  max_billable_usd: number;
+}
+
+export interface CostDistribution {
+  bins: { lo: number; hi: number; count: number }[];
+  total: number;
+  min: number | null;
+  max: number | null;
+}

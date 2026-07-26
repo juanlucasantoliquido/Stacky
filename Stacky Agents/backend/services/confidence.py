@@ -79,7 +79,19 @@ def _score_section(text: str) -> tuple[int, list[str]]:
 
     score = 100
     signals: list[str] = []
-    text_lower = text.lower()
+
+    # Plan 213 — Un supuesto DECLARADO en formato canónico es rigor, no evasión.
+    # Se remueve del texto antes de contar hedge phrases; el hedge VAGO
+    # ("asumo que…" suelto en prosa) sigue penalizando igual.
+    scored_text = text
+    _asuncion_activa = False
+    from config import config as _acfg
+    if getattr(_acfg, "STACKY_ASSUMPTION_MODE_ENABLED", False):
+        from services.assumptions import strip_canonical_marks
+
+        _asuncion_activa = True
+        scored_text = strip_canonical_marks(text)
+    text_lower = scored_text.lower()
 
     # Hedge phrases (cada ocurrencia: -8)
     for phrase in _HEDGE_PHRASES:
@@ -105,6 +117,16 @@ def _score_section(text: str) -> tuple[int, list[str]]:
         score += 3  # menciona TU específico
     if re.search(r"\bADO[-\s]?\d{3,}\b", text):
         score += 2
+
+    # Plan 213 — bonus por disciplina: declarar un supuesto CON evidencia es más
+    # confiable que callarlo. Se parsea el texto ORIGINAL (el stripped ya no
+    # tiene los marcadores). Una sola vez, no por supuesto.
+    if _asuncion_activa:
+        from services.assumptions import parse as _parse_assumptions
+
+        if any(a.basis for a in _parse_assumptions(text).assumptions):
+            score += 5
+            signals.append("assumption_discipline")
 
     return max(0, min(100, score)), signals
 

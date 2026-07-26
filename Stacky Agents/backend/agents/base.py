@@ -205,6 +205,22 @@ class BaseAgent(ABC):
         except Exception as exc:  # noqa: BLE001
             meta["validation_playbook_prompt_error"] = str(exc)
 
+        # Plan 213 F2 — paridad copilot: la misma política de supuestos que
+        # reciben claude y codex vía run_contract. Mismo string, una sola fuente.
+        try:
+            from harness.run_contract import (  # noqa: PLC0415
+                applies_to as _assump_applies,
+                assumption_rules_text as _assump_text,
+            )
+
+            if _assump_applies(self.type):
+                _ar = _assump_text()
+                if _ar:
+                    prefix_parts.append(_ar)
+                    meta["assumption_policy_prompt"] = True
+        except Exception as exc:  # noqa: BLE001
+            meta["assumption_policy_prompt_error"] = str(exc)
+
         if prefix_parts:
             full = "\n\n".join(prefix_parts) + "\n\n# Instrucciones del agente\n\n" + base
         else:

@@ -674,6 +674,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan216_migration.py
   # -- Plan 214 - Validacion QAUAT E2E al completar el Developer --
   tests/test_plan214_qa_uat_enqueue.py
+  # -- Plan 213 - Analistas declaran supuestos en vez de frenar el pipeline --
+  tests/test_plan213_assumptions_parser.py
+  tests/test_plan213_scoring_and_contract.py
+  tests/test_plan213_policy_injection.py
+  tests/test_plan213_post_run_assumptions.py
+  tests/test_plan213_analyst_prompts.py
   # -- Plan 212 - Selector vivo de modelo/effort y cumplimiento real de la eleccion --
   tests/test_plan212_characterization.py
   tests/test_plan212_opus_end_to_end.py

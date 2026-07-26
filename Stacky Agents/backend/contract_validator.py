@@ -69,6 +69,7 @@ _CONTRACTS: dict[str, dict] = {
             "no puedo determinar",
         ],
         "min_word_count": 200,
+        "assumption_discipline": True,   # Plan 213
     },
     "technical": {
         "required_sections": [
@@ -88,6 +89,7 @@ _CONTRACTS: dict[str, dict] = {
             "requeriría más contexto",
         ],
         "min_word_count": 400,
+        "assumption_discipline": True,   # Plan 213
     },
     "developer": {
         "required_sections": [
@@ -194,6 +196,38 @@ def validate(agent_type: str, output: str) -> ContractResult:
                     severity="warning",
                 )
             )
+
+    # Plan 213 — disciplina de supuestos. SIEMPRE warning, nunca failure: un
+    # failure con gate_enabled manda la ejecución a needs_review, o sea que
+    # volvería a frenar el pipeline, que es justo lo que este plan combate.
+    from config import config as _acfg
+    if contract.get("assumption_discipline") and getattr(
+        _acfg, "STACKY_ASSUMPTION_MODE_ENABLED", False
+    ):
+        from services.assumptions import parse as _parse_assumptions
+
+        _rep = _parse_assumptions(output)
+        _evadio = any(p.lower() in output_lower for p in _EVASION_PHRASES) or any(
+            p.lower() in output_lower for p in contract.get("forbidden_phrases", [])
+        )
+        if _evadio and not _rep.marks_ok:
+            warnings.append(ContractFailure(
+                rule="assumption_missing",
+                message="Declara incertidumbre sin marcarla como [SUPUESTO] o [PENDIENTE]",
+                severity="warning",
+            ))
+        if _rep.overload:
+            warnings.append(ContractFailure(
+                rule="assumption_overload",
+                message=f"Demasiados supuestos en un solo análisis ({len(_rep.assumptions)})",
+                severity="warning",
+            ))
+        if _rep.unbased_count > 0:
+            warnings.append(ContractFailure(
+                rule="assumption_unbased",
+                message=f"{_rep.unbased_count} supuesto(s) sin evidencia declarada",
+                severity="warning",
+            ))
 
     # 4. Mínimo de palabras
     min_words = contract.get("min_word_count", 0)

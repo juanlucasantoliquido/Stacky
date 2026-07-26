@@ -474,6 +474,8 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",
     # ── Plan 216 — config de estados centralizada (migración no destructiva) ──
     "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
+    # ── Plan 213 — analistas declaran supuestos en vez de frenar el pipeline ──
+    "STACKY_ASSUMPTION_MODE_ENABLED",
     # ── Plan 214 — candidato QAUAT al completar el Developer (solo metadata) ──
     # (el autorun es default OFF: NO va acá)
     "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",

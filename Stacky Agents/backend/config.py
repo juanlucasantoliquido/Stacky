@@ -1237,6 +1237,19 @@ class Config:
     STACKY_STATE_CONFIG_CENTRALIZED_ENABLED: bool = os.getenv(
         "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 213 — Analistas que infieren y declaran supuestos ────────────────
+    # Solo cambia el texto del análisis y deja de penalizar la honestidad; hace
+    # VISIBLE lo que hoy el LLM asume en silencio ⇒ no bypasea revisión humana.
+    STACKY_ASSUMPTION_MODE_ENABLED: bool = os.getenv(
+        "STACKY_ASSUMPTION_MODE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # El Developer NO está: no declara supuestos, construye (protege el plan 210).
+    STACKY_ASSUMPTION_MODE_AGENT_TYPES: str = os.getenv(
+        "STACKY_ASSUMPTION_MODE_AGENT_TYPES", "technical,functional"
+    )
+    STACKY_ASSUMPTION_MAX_PER_RUN: int = int(
+        os.getenv("STACKY_ASSUMPTION_MAX_PER_RUN", "10") or 10
+    )
     # ── Plan 214 — Validación QAUAT E2E al completar el Developer ─────────────
     # Solo escribe metadata local (no publica, no ejecuta, no toca ADO) ⇒ ON.
     STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED: bool = os.getenv(

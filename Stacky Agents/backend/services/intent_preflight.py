@@ -31,6 +31,9 @@ class IntentAssumption:
     text: str
     impact: str  # "high" | "medium" | "low"
     needs_confirmation: bool
+    # Plan 213 — evidencia citada por el agente. "" = sin respaldo, y un supuesto
+    # sin respaldo es de impacto alto por regla. Default para no romper callers.
+    basis: str = ""
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,7 @@ def from_model_json(raw: str | None) -> IntentBrief:
             text=str(a.get("text", "")),
             impact=a.get("impact") if a.get("impact") in ("high", "medium", "low") else "medium",
             needs_confirmation=bool(a.get("needs_confirmation", False)),
+            basis=str(a.get("basis", "") or ""),
         )
         for a in (data.get("assumptions") or [])
         if isinstance(a, dict) and a.get("text")
@@ -117,7 +121,8 @@ def to_payload(brief: IntentBrief) -> dict:
         "objective": _r(brief.objective),
         "deliverables": [_r(d) for d in brief.deliverables],
         "assumptions": [
-            {"text": _r(a.text), "impact": a.impact, "needs_confirmation": a.needs_confirmation}
+            {"text": _r(a.text), "impact": a.impact,
+             "needs_confirmation": a.needs_confirmation, "basis": _r(a.basis)}
             for a in brief.assumptions
         ],
         "open_questions": [_r(q) for q in brief.open_questions],

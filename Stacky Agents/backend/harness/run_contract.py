@@ -74,3 +74,64 @@ def rules_text(*, runtime: str, mcp_enabled: bool) -> str:  # noqa: ARG001 — r
         String multilínea listo para embeber en un system prompt o prompt de usuario.
     """
     return _RULES_MCP if mcp_enabled else _RULES_FILEDROP
+
+
+# ── Plan 213 — Política de supuestos para agentes de análisis ────────────────
+_RULES_ASSUMPTIONS = """\
+## Política de supuestos (Stacky Agents)
+
+- **No frenás para preguntar.** Ante información faltante o ambigua, adoptás la
+  interpretación más razonable a partir de la documentación y el `client-profile`
+  que ya tenés en contexto, la dejás explícita y SEGUÍS hasta terminar el análisis.
+- **Formato obligatorio del supuesto** (una línea, dentro del contenido donde aplica):
+  `[SUPUESTO: <afirmación concreta> | base: <documento/módulo/dato que lo respalda> | impacto: alto|medio|bajo]`
+  Si no encontrás respaldo, escribí `base: sin respaldo` — se clasificará como impacto alto.
+- **`[PENDIENTE: …]` es la ÚNICA excepción**, y es para un dato DURO imposible de inferir
+  (un valor numérico que nadie dio, una decisión de negocio, una credencial):
+  `[PENDIENTE: <dato> | necesito: <qué exactamente hace falta>]`
+  Prohibido usar `[PENDIENTE]` para algo que podrías inferir con la doc que tenés.
+- **Techo:** si necesitás más de 10 supuestos para completar el análisis, es señal de que
+  falta contexto real: declaralos igual, terminá, y el operador lo revisará.
+- **Cerrá con el bloque "Supuestos asumidos"** listando todos tus supuestos, los de
+  impacto alto primero. El operador los confirma o corrige desde Stacky; sus correcciones
+  mandan sobre tus supuestos en la próxima corrida.
+- **No inventes hechos.** Un supuesto es una interpretación declarada, no un dato fabricado:
+  jamás presentes como verificado algo que asumiste.\
+"""
+
+
+def assumption_rules_text() -> str:
+    """Plan 213 — Texto canónico de la política de supuestos.
+
+    Devuelve "" si la flag está OFF (comportamiento pre-213, byte-idéntico).
+    """
+    from config import config
+
+    if not getattr(config, "STACKY_ASSUMPTION_MODE_ENABLED", False):
+        return ""
+    return _RULES_ASSUMPTIONS
+
+
+def applies_to(agent_type: str) -> bool:
+    """True si `agent_type` está en la allowlist de la política.
+
+    El Developer queda fuera a propósito: no declara supuestos, construye — y su
+    gate de build (plan 210) depende de que no empiece a hedgear.
+    """
+    from config import config
+
+    raw = getattr(config, "STACKY_ASSUMPTION_MODE_AGENT_TYPES", "") or ""
+    allowed = {a.strip().lower() for a in raw.split(",") if a.strip()}
+    return (agent_type or "").lower() in allowed
+
+
+def with_assumption_policy(rules: str, agent_type: str) -> str:
+    """Concatena la política a las reglas si corresponde. Único punto de armado.
+
+    Existe para que los 3 runtimes compartan EL MISMO string: duplicar el texto
+    es cómo los runtimes se desincronizan sin que nadie lo note.
+    """
+    if not applies_to(agent_type or ""):
+        return rules
+    extra = assumption_rules_text()
+    return f"{rules}\n\n{extra}" if extra else rules

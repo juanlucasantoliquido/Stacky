@@ -1,4 +1,4 @@
-# V1.4a — Runner curado del arnes (plan 22), version PowerShell para dev local.
+﻿# V1.4a — Runner curado del arnes (plan 22), version PowerShell para dev local.
 # Equivalente a run_harness_tests.sh: corre cada archivo del arnes UNO POR UNO
 # (esquiva la polucion de la suite completa). Exit 1 si alguno falla o falta.
 #
@@ -594,6 +594,12 @@ $HarnessTestFiles = @(
   "tests/test_plan216_migration.py",
   # Plan 214 - Validacion QAUAT E2E al completar el Developer
   "tests/test_plan214_qa_uat_enqueue.py",
+  # Plan 213 - Analistas declaran supuestos en vez de frenar el pipeline
+  "tests/test_plan213_assumptions_parser.py",
+  "tests/test_plan213_scoring_and_contract.py",
+  "tests/test_plan213_policy_injection.py",
+  "tests/test_plan213_post_run_assumptions.py",
+  "tests/test_plan213_analyst_prompts.py",
   # Plan 212 - Selector vivo de modelo/effort y cumplimiento real de la eleccion
   "tests/test_plan212_characterization.py",
   "tests/test_plan212_opus_end_to_end.py",

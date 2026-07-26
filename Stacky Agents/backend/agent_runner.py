@@ -913,6 +913,15 @@ def _run_in_background(
             md["routing_reason"] = decision.reason
             md["pii_masked"] = bool(mask_map)
             md["runtime"] = runtime
+            # Plan 213 F4 — supuestos declarados por los analistas (path copilot).
+            from services.assumptions import apply_to_metadata as _assump_apply
+
+            if _assump_apply(agent_type or "", result.output or "", md,
+                             log=log) == "needs_review":
+                _forzar_revision_por_supuestos = True
+                log("warn", "assumption_overload → needs_review")
+            else:
+                _forzar_revision_por_supuestos = False
             if ado_enrich_stats is not None:
                 md["ado_context"] = ado_enrich_stats
             # Feature C: persistir agent_filename para el comparador de agentes
@@ -942,7 +951,8 @@ def _run_in_background(
                 md["issue_phase"] = _issue_phase_meta
             row.metadata_dict = md
             row.contract_result = cv_result.to_dict()
-            row.status = "completed"
+            # Plan 213 F4 — un análisis mayormente supuesto necesita ojos humanos.
+            row.status = "needs_review" if _forzar_revision_por_supuestos else "completed"
             row.completed_at = datetime.utcnow()
         log("info", f"✓ done ({md.get('duration_ms')}ms)")
 

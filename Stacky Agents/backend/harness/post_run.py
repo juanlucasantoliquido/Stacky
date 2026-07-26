@@ -309,6 +309,14 @@ def finalize_run(
         # El contrato NUNCA bloquea el pipeline.
         _log("warn", f"acceptance_contract gate falló (no crítico): {_ac_exc}")
 
+    # ── Plan 213 F4 — Supuestos declarados por los agentes de análisis ──────────
+    from services.assumptions import apply_to_metadata as _assump_apply
+
+    if _assump_apply(agent_type, output_text or "", metadata_patch,
+                     log=_log) == "needs_review":
+        status = "needs_review"          # único caso en que los supuestos frenan
+        _log("warn", "assumption_overload → needs_review")
+
     return PostRunResult(
         status_suggestion=status,
         contract_score=cv_result.score,

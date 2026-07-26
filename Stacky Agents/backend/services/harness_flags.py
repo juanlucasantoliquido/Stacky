@@ -176,6 +176,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_VALIDATION_PLAYBOOK_ENABLED",
         # Plan 214 — validacion QAUAT E2E al completar el Developer
         "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED", "STACKY_QA_UAT_AUTORUN_ENABLED",
+        # Plan 213 — analistas declaran supuestos en vez de frenar el pipeline
+        "STACKY_ASSUMPTION_MODE_ENABLED", "STACKY_ASSUMPTION_MODE_AGENT_TYPES",
+        "STACKY_ASSUMPTION_MAX_PER_RUN",
     ),
     "integridad_grounding": (
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
@@ -1809,6 +1812,44 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 213 — Analistas que infieren y declaran supuestos ─────────────────
+    FlagSpec(
+        key="STACKY_ASSUMPTION_MODE_ENABLED",
+        type="bool",
+        default=True,
+        label="Analistas declaran supuestos en vez de frenar",
+        description=(
+            "Plan 213 — El Analista Técnico y el Funcional infieren lo que falta, lo "
+            "declaran como [SUPUESTO: … | base: … | impacto: …] y terminan el análisis, "
+            "en vez de publicar una consulta pre-bloqueo y dejar el ticket esperando. "
+            "Declarar un supuesto deja de restar confidence. OFF: comportamiento "
+            "pre-213 (consulta pre-bloqueo y espera humana). Default ON."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_ASSUMPTION_MODE_AGENT_TYPES",
+        type="csv",
+        label="Agentes que reciben la política de supuestos",
+        description=(
+            "Plan 213 — Tipos de agente a los que se les inyecta la política. El "
+            "Developer queda fuera a propósito: no declara supuestos, construye. "
+            "Vacío = ninguno."
+        ),
+        group="global",
+        requires="STACKY_ASSUMPTION_MODE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_ASSUMPTION_MAX_PER_RUN",
+        type="int",
+        label="Techo de supuestos por ejecución",
+        description=(
+            "Plan 213 — Superarlo marca la corrida como assumption_overload: un "
+            "análisis mayormente supuesto necesita ojos humanos."
+        ),
+        group="global",
+        requires="STACKY_ASSUMPTION_MODE_ENABLED",
     ),
     # ── Plan 216 — Config de estados centralizada en el perfil del cliente ─────
     FlagSpec(

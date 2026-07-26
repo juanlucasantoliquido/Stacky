@@ -271,3 +271,96 @@ def test_summary_reusa_los_agregadores(client, datos):
     assert body["ok"] is True
     assert "billable_usd" in body
     assert "groups" in body["breakdown"]
+
+
+# ---------------------------------------------------------------------------
+# F0-bis — auto-scan al arranque
+# ---------------------------------------------------------------------------
+
+def _logger():
+    """El hook recibe el logger por parámetro; no es un atributo del módulo."""
+    import logging
+
+    return logging.getLogger("test.plan199")
+
+
+def _contar_threads(monkeypatch) -> list:
+    """Cuenta los threads que el hook intentaría arrancar."""
+    import threading
+
+    arrancados: list = []
+    real = threading.Thread
+
+    class _Espia(real):
+        def start(self):
+            arrancados.append(self.name)
+
+    monkeypatch.setattr(threading, "Thread", _Espia)
+    return arrancados
+
+
+def test_autoscan_skipped_in_test_mode(monkeypatch):
+    """Un create_app() de test no puede ponerse a escanear el disco del operador."""
+    import app as app_mod
+
+    monkeypatch.setenv("STACKY_TEST_MODE", "1")
+    arrancados = _contar_threads(monkeypatch)
+
+    app_mod._plan199_maybe_autoscan_harvest(_logger())
+
+    assert arrancados == []
+
+
+def test_autoscan_gated_by_master_flag(monkeypatch):
+    import app as app_mod
+    from config import config as cfg
+
+    monkeypatch.delenv("STACKY_TEST_MODE", raising=False)
+    monkeypatch.setattr(cfg, "STACKY_TELEMETRY_HARVEST_ENABLED", False, raising=False)
+    arrancados = _contar_threads(monkeypatch)
+
+    app_mod._plan199_maybe_autoscan_harvest(_logger())
+
+    assert arrancados == []
+
+
+def test_autoscan_gated_by_autoscan_flag(monkeypatch):
+    import app as app_mod
+    from config import config as cfg
+
+    monkeypatch.delenv("STACKY_TEST_MODE", raising=False)
+    monkeypatch.setattr(cfg, "STACKY_TELEMETRY_HARVEST_ENABLED", True, raising=False)
+    monkeypatch.setattr(cfg, "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED", False,
+                        raising=False)
+    arrancados = _contar_threads(monkeypatch)
+
+    app_mod._plan199_maybe_autoscan_harvest(_logger())
+
+    assert arrancados == []
+
+
+def test_autoscan_arranca_daemon_con_flags_on(monkeypatch):
+    import app as app_mod
+    from config import config as cfg
+
+    monkeypatch.delenv("STACKY_TEST_MODE", raising=False)
+    monkeypatch.setattr(cfg, "STACKY_TELEMETRY_HARVEST_ENABLED", True, raising=False)
+    monkeypatch.setattr(cfg, "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED", True,
+                        raising=False)
+    arrancados = _contar_threads(monkeypatch)
+
+    app_mod._plan199_maybe_autoscan_harvest(_logger())
+
+    assert arrancados == ["plan199-harvest"]
+
+
+def test_autoscan_no_rompe_el_arranque_si_falla(monkeypatch):
+    """Las carpetas del CLI pueden no existir: el arranque no puede depender de eso."""
+    import app as app_mod
+
+    monkeypatch.delenv("STACKY_TEST_MODE", raising=False)
+    monkeypatch.setattr(H, "harvest_runs",
+                        lambda **kw: (_ for _ in ()).throw(RuntimeError("sin carpetas")))
+
+    # El hook corre el worker en un thread real; que no lance en el hilo principal.
+    app_mod._plan199_maybe_autoscan_harvest(_logger())

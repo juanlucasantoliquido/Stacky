@@ -221,6 +221,51 @@ def _startup_sync(logger) -> None:
                 logger.exception("sync ADO error inesperado en arranque")
 
 
+def _plan199_maybe_autoscan_harvest(logger) -> None:
+    """Plan 199 F0-bis — un scan de cosecha por arranque, en background.
+
+    El operador no tiene que hacer nada para ver lo que gastó fuera de Stacky.
+    Corre en daemon thread para no demorar el arranque, y APLICA (no preview):
+    quien prefiera revisar antes apaga esta flag y usa el botón, que previsualiza
+    por default.
+
+    Excepción dura #3: las carpetas ~/.codex y ~/.claude pueden no existir. No
+    es un problema — el descubridor degrada a cero y el thread muere solo.
+
+    Privacidad: solo se loguean CONTEOS. Nunca session_id, rutas ni proyectos.
+    """
+    import threading
+
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() in ("1", "true", "yes"):
+        return
+    if not getattr(config, "STACKY_TELEMETRY_HARVEST_ENABLED", False):
+        return
+    if not getattr(config, "STACKY_TELEMETRY_HARVEST_AUTOSCAN_ENABLED", False):
+        return
+
+    def _worker():
+        try:
+            from services import telemetry_harvest as th
+
+            try:
+                lookback = int(getattr(config, "STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS", 180) or 180)
+            except (TypeError, ValueError):
+                lookback = 180
+            solo_atribuidas = bool(
+                getattr(config, "STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY", True))
+
+            runs = th.harvest_runs(lookback_days=lookback)
+            backfill = th.backfill_from_harvest(runs, lookback_days=lookback)
+            th.append_to_ledger(runs, backfill["matched_ids"],
+                                attributed_only=solo_atribuidas)
+            logger.info("plan199 autoscan: discovered=%d backfilled=%d",
+                        len(runs), backfill["backfilled"])
+        except Exception:  # noqa: BLE001
+            logger.exception("plan199 autoscan: fallo no fatal")
+
+    threading.Thread(target=_worker, name="plan199-harvest", daemon=True).start()
+
+
 def _plan158_maybe_backfill_claude_model(logger) -> None:
     """Plan 158 F6 — corre backfill_claude_model_key() una sola vez (marker file).
 
@@ -508,6 +553,7 @@ def create_app() -> Flask:
     else:
         _startup_sync(logger)
         _plan158_maybe_backfill_claude_model(logger)
+        _plan199_maybe_autoscan_harvest(logger)
 
     # ── U2.1 — Hook de avance de pipeline por finalización de ejecución ─────
     try:

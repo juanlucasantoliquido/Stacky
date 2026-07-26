@@ -417,6 +417,28 @@ def run():
     if agent_type == "custom" and not payload.get("system_prompt_override"):
         abort(400, "system_prompt_override is required when agent_type=custom")
 
+    # Plan 212 F2 — canal de effort del flujo estándar. Opcional y backward-compatible:
+    # ausente/"" ⇒ None ⇒ el runner usa su default/adaptativo (comportamiento pre-212).
+    # Se valida ACÁ, antes de cualquier efecto secundario (auto-asignar, refresh del
+    # ticket, slot de concurrencia): un payload inválido no tiene por qué mover nada.
+    _VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+    _effort_raw = (payload.get("effort") or "").strip().lower()
+    if _effort_raw and _effort_raw not in _VALID_EFFORTS:
+        return jsonify({
+            "ok": False,
+            "error": "invalid_effort",
+            "valid": list(_VALID_EFFORTS),
+        }), 400
+    _effort_effective = (
+        _clamp_effort_for_model(_effort_raw, payload.get("model_override"))
+        if _effort_raw else None
+    )
+    if _effort_raw and _effort_effective != _effort_raw:
+        logger.info(
+            "plan212 effort degradado: solicitado=%s efectivo=%s modelo=%s",
+            _effort_raw, _effort_effective, payload.get("model_override"),
+        )
+
     # Plan 133 F1 — Refresh just-in-time del snapshot local del ticket (best-effort,
     # nunca levanta). Corre ANTES del preflight de negocio F2 para que decida sobre
     # datos frescos del tracker.
@@ -510,6 +532,7 @@ def run():
             chain_from=chain_from,
             user=current_user(),
             model_override=payload.get("model_override"),
+            effort_override=_effort_effective,                 # Plan 212 F2
             system_prompt_override=payload.get("system_prompt_override"),
             use_few_shot=payload.get("use_few_shot", True),
             use_anti_patterns=payload.get("use_anti_patterns", True),
@@ -586,23 +609,14 @@ def run():
 
 
 def _clamp_effort_for_model(effort: str, model_id: str | None) -> str:
-    """Plan 43 F0 — Degrada effort al máximo soportado por el modelo.
+    """Delegado retro-compatible — la matriz vive en llm_router (Plan 212 F2).
 
-    Matriz modelo x effort (oficial Claude CLI):
-      claude-haiku-*   : low/medium/high            → xhigh→high, max→high
-      claude-sonnet-*  : low/medium/high/max        → xhigh→high (xhigh es Opus 4.7+)
-      claude-opus-4-5+ : low/medium/high/xhigh/max  → todo
+    Se conserva el símbolo porque brief, incident y el resolutor lo llaman por
+    nombre; la implementación única está en `llm_router.clamp_effort_for_model`.
     """
-    if not model_id:
-        return effort
-    m = model_id.lower()
-    if "haiku" in m:
-        return effort if effort in ("low", "medium", "high") else "high"
-    if "sonnet" in m:
-        # sonnet no soporta xhigh (es Opus 4.7+); max sí en sonnet-4-6
-        return "high" if effort == "xhigh" else effort
-    # opus: todo soportado
-    return effort
+    from services.llm_router import clamp_effort_for_model
+
+    return clamp_effort_for_model(effort, model_id)
 
 
 @bp.post("/run-brief")

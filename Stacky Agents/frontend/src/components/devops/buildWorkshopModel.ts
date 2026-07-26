@@ -61,19 +61,9 @@ export function trackedSlugs(solutions: SolutionEntry[]): string[] {
   return (solutions || []).filter((s) => s.tracked).map((s) => s.slug);
 }
 
-const _UNITS = ["B", "KB", "MB", "GB", "TB"];
-
-export function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return "0 B";
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < _UNITS.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  const shown = unit === 0 ? String(Math.round(value)) : value.toFixed(1);
-  return `${shown} ${_UNITS[unit]}`;
-}
+/** El tamaño de un artefacto se formatea con el formateador canónico del repo
+ *  (plan 161): una sola implementación para todo lo que se muestra. */
+export { formatBytes } from "../../services/format";
 
 export function canCompile(toolchain: Toolchain, selectedCount: number): boolean {
   return Boolean(toolchain?.available) && selectedCount >= 1;

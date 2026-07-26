@@ -674,6 +674,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan216_migration.py
   # -- Plan 214 - Validacion QAUAT E2E al completar el Developer --
   tests/test_plan214_qa_uat_enqueue.py
+  # -- Plan 212 - Selector vivo de modelo/effort y cumplimiento real de la eleccion --
+  tests/test_plan212_characterization.py
+  tests/test_plan212_opus_end_to_end.py
+  tests/test_plan212_effort_channel.py
+  tests/test_plan212_effort_matrix_parity.py
+  tests/test_plan212_requested_vs_effective.py
   # -- Plan 211 - Inspector post-build + residuos de port entre clientes --
   tests/test_plan211_flags.py
   tests/test_plan211_inspector.py

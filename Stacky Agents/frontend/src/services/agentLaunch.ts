@@ -131,6 +131,7 @@ export async function launchAgentWithRuntime({
   contextBlocks,
   vscodeAgent,
   modelOverride,
+  effort,
 }: {
   ticketId: number;
   projectName?: string | null;
@@ -138,6 +139,8 @@ export async function launchAgentWithRuntime({
   contextBlocks: ContextBlock[];
   vscodeAgent?: VsCodeAgent | null;
   modelOverride?: string | null;
+  /** Plan 212 F2 — ignorado por github_copilot: ese runtime no tiene efforts. */
+  effort?: string | null;
 }) {
   if (runtime === "github_copilot") {
     return Agents.openChat({
@@ -170,6 +173,7 @@ export async function launchAgentWithRuntime({
     runtime,
     vscode_agent_filename: vscodeAgent.filename,
     model_override: modelOverride,
+    effort: effort ?? undefined,
     ...(agentType === "custom" ? { system_prompt_override: systemPrompt } : {}),
   });
 }

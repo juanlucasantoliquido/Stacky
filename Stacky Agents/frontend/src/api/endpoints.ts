@@ -1055,6 +1055,10 @@ export interface RuntimeModelCatalog {
   models: ModelCatalogEntry[];
   efforts: { id: string; label: string }[];
   effort_support: Record<string, string[]>;
+  /** Plan 212 — a qué effort real degrada cada effort NO soportado por el modelo.
+   *  Permite ofrecer todos los efforts anotados en vez de esconderlos. */
+  effort_degrade?: Record<string, Record<string, string>>;
+  effort_note?: string;
   note?: string;
   error?: string | null;
 }
@@ -1165,6 +1169,12 @@ export const Agents = {
     chain_from?: number[];
     project?: string;
     model_override?: string | null;
+    /**
+     * Plan 212 — reasoning effort para runtimes que lo soportan (hoy: claude_code_cli).
+     * Valores: "low"|"medium"|"high"|"xhigh"|"max". Omitido/null ⇒ default del backend.
+     * Un valor fuera de esa lista devuelve HTTP 400 con error=invalid_effort.
+     */
+    effort?: string | null;
     system_prompt_override?: string | null;
     use_few_shot?: boolean;
     use_anti_patterns?: boolean;

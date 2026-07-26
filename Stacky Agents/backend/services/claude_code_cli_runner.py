@@ -495,6 +495,72 @@ def _send_system_message(execution_id: int, text: str) -> bool:
     return True
 
 
+def allow_opus_for_run(model_override: str | None, agent_type: str | None) -> bool:
+    """Plan 212 F1 — ¿este run puntual puede saltarse el cap y correr Opus?
+
+    Solo si el operador eligió EXPLÍCITAMENTE un modelo de la allowlist para este
+    run, y el agente no es DevOps (guardarraíl 11: el agente que toca deploys
+    nunca escala de tier solo). El default global `CLAUDE_CODE_CLI_MODEL` no
+    entra acá a propósito — si entrara, tocar una config pondría todo el sistema
+    en Opus en silencio.
+    """
+    from services import llm_router
+
+    return (
+        llm_router.is_opus_allowlisted(model_override)
+        and (agent_type or "").strip().lower() != "devops"
+    )
+
+
+def build_model_effort_trace(
+    *,
+    requested_model: str | None,
+    effective_model: str | None,
+    requested_effort: str | None,
+    effective_effort: str | None,
+    reason: str = "",
+) -> dict:
+    """Plan 212 F7 — qué pidió el operador vs qué se ejecutó realmente.
+
+    `downgraded` solo mira lo que el operador pidió EXPLÍCITAMENTE: si no eligió
+    modelo, que el router elija no es una degradación, es su trabajo.
+    """
+    degradado = bool(
+        (requested_model and effective_model != requested_model)
+        or (requested_effort and effective_effort != requested_effort)
+    )
+    return {
+        "requested_model": requested_model or "",
+        "effective_model": effective_model or "",
+        "requested_effort": requested_effort or "",
+        "effective_effort": effective_effort or "",
+        "downgraded": degradado,
+        "reason": reason,
+    }
+
+
+def _persist_model_effort_trace(execution_id: int, trace: dict) -> None:
+    """Fusiona la traza en metadata_json. Nunca rompe el run (es informativo).
+
+    `metadata_json` es una columna Text: se lee con el accessor y se escribe con
+    json.dumps — asignarle un dict la dejaría como feature muerta silenciosa.
+    """
+    try:
+        from db import session_scope
+        from models import AgentExecution
+
+        with session_scope() as session:
+            ex = session.query(AgentExecution).filter_by(id=execution_id).first()
+            if not ex:
+                return
+            meta = dict(ex.metadata_dict or {})
+            meta["model_effort"] = trace
+            ex.metadata_json = json.dumps(meta, ensure_ascii=False, default=str)
+    except Exception:  # noqa: BLE001
+        logger.warning("no se pudo persistir model_effort (no bloquea el run)",
+                       exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Thread de background
 # ---------------------------------------------------------------------------
@@ -804,7 +870,14 @@ def _run_in_background(
         # F3.2 / §5.2 — routing de modelo OBLIGATORIO también en el CLI.
         # El runtime CLI corre SIEMPRE modelos Claude, así que routeamos con
         # backend="anthropic" sin importar LLM_BACKEND (que es del path copilot).
-        # decide() aplica el cap duro (clamp_model): jamás opus/fable, ni por override.
+        # Plan 212 F1 — decide() aplica el cap duro (clamp_model). El ÚNICO caso que
+        # se exime es un model_override EXPLÍCITO por-run cuyo id está en la
+        # allowlist de Opus Y cuyo agent_type NO es "devops" (guardarraíl 11).
+        # OJO: /api/agents/run NO clampea model_override en el endpoint (lo pasa
+        # crudo) y DevOpsAgent está en el registry genérico — este gate del runner
+        # es la defensa REAL. El default global CLAUDE_CODE_CLI_MODEL NO desbloquea
+        # Opus: si lo hiciera, cambiar una sola config pondría TODO el sistema
+        # (incluido DevOps) en Opus sin que nadie lo note.
         from services import llm_router
 
         # I0.2 — Cómputo de fingerprint_complexity en el CLI.
@@ -836,6 +909,8 @@ def _run_in_background(
                 log("warn", f"complexity estimation falló (no crítico): {_exc_c}")
 
         routed_model = model_override or config.CLAUDE_CODE_CLI_MODEL
+        _allow_opus = allow_opus_for_run(model_override, agent_type)
+        _route_reason = ""          # Plan 212 F7 — se asigna en ambas ramas
         try:
             decision = llm_router.decide(
                 agent_type=agent_type or "",
@@ -847,12 +922,15 @@ def _run_in_background(
                 override=model_override or (config.CLAUDE_CODE_CLI_MODEL or None),
                 backend="anthropic",
                 project_name=project_name,
+                allow_opus=_allow_opus,
             )
             routed_model = decision.model
+            _route_reason = decision.reason
             log("info", f"router → {decision.model} ({decision.reason})")
         except Exception as exc:  # noqa: BLE001 — el routing nunca bloquea el run
             # Fallback: cap duro igual aplicado sobre el modelo estático/override.
             routed_model = llm_router.clamp_model(routed_model)
+            _route_reason = "routing-fallback"
             log("warn", f"router falló, usando modelo {routed_model}: {exc}")
 
         # H3.3 — Egress check antes del spawn (STACKY_CLI_EGRESS_ENABLED, OFF default).
@@ -877,8 +955,36 @@ def _run_in_background(
         if _adaptive_effort:
             log("info", f"adaptive effort → {_adaptive_effort} (complexity={_cli_complexity}, Q0.2)")
         _effective_effort = effort_override or _adaptive_effort
+        if _effective_effort:
+            # Plan 212 F2 — degradar contra el modelo EFECTIVO, no contra el pedido:
+            # con selector adaptativo (model_override=None) el endpoint no puede
+            # saber que el routing terminaría en sonnet, y `--effort xhigh` sobre
+            # sonnet es una combinación que el CLI no acepta.
+            _degradado = llm_router.clamp_effort_for_model(_effective_effort, routed_model)
+            if _degradado != _effective_effort:
+                log("info",
+                    f"effort degradado por modelo: {_effective_effort} → {_degradado} "
+                    f"(modelo efectivo {routed_model})")
+            _effective_effort = _degradado
         if effort_override:
             log("info", f"effort_override explícito → {effort_override} (prioridad sobre adaptativo)")
+
+        # Plan 212 F7 — dejar por escrito qué se pidió y qué se ejecutó. Sin esto,
+        # una degradación (cap de modelo, effort no soportado) es invisible: el
+        # operador cree que corrió lo que eligió.
+        _me_trace = build_model_effort_trace(
+            requested_model=model_override,
+            effective_model=routed_model,
+            requested_effort=effort_override,
+            effective_effort=_effective_effort,
+            reason=_route_reason,
+        )
+        if _me_trace["downgraded"]:
+            log("warn",
+                f"solicitado {_me_trace['requested_model']}/{_me_trace['requested_effort']} "
+                f"→ ejecutado {_me_trace['effective_model']}/{_me_trace['effective_effort']} "
+                f"({_route_reason})")
+        _persist_model_effort_trace(execution_id, _me_trace)
 
         def _build_cli_command(model_for_attempt: str) -> list[str]:
             return _build_command(
@@ -2057,6 +2163,11 @@ def _map_effort(complexity: str | None) -> str | None:
     return mapped
 
 
+# Plan 43 F0 / Plan 212 F3 — efforts que el CLI acepta en `--effort`. Constante
+# nombrada para que el test de paridad la importe en vez de parsear el archivo.
+CLI_VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
 def _build_command(
     *,
     model_override: str | None,
@@ -2131,7 +2242,7 @@ def _build_command(
     # no se pasan para no romper el spawn.
     effort = (effort_override or getattr(config, "CLAUDE_CODE_CLI_EFFORT", "") or "").strip().lower()
     # Plan 43 F0 — set ampliado: low/medium/high/xhigh/max (oficial Claude CLI >= 2.x).
-    if effort in ("low", "medium", "high", "xhigh", "max"):
+    if effort in CLI_VALID_EFFORTS:
         cmd.extend(["--effort", effort])
 
     return cmd

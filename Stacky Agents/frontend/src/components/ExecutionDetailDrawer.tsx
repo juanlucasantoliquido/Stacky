@@ -15,6 +15,7 @@ import { formatDuration, formatCostUsd, formatInt } from "../services/format";
 import CopyAsButton, { type CopyAsOption } from "./CopyAsButton";
 import { executionToMarkdown, executionToPlainText } from "../services/copyFormats";
 import { copyText } from "../services/copyService";
+import { describeDowngrade } from "../services/modelEffortModel";
 import type { AgentExecution } from "../types";
 import styles from "./ExecutionDetailDrawer.module.css";
 
@@ -68,6 +69,8 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
     : [];
   // Plan 144 F4 — razón humana del stall (watchdog de inactividad).
   const stallReason = formatStallReason(metadata.stall as StallMeta | null | undefined);
+  // Plan 212 F7 — si lo ejecutado no fue lo elegido, el operador tiene que verlo acá.
+  const downgradeNotice = describeDowngrade(metadata);
 
   const title = useMemo(() => {
     if (!content) return "Detalle de ejecución";
@@ -167,6 +170,13 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                 </ul>
               )}
             </section>
+
+            {downgradeNotice && (
+              <section className={styles.section}>
+                <h4>Modelo y effort</h4>
+                <p className={styles.downgradeNotice}>{downgradeNotice}</p>
+              </section>
+            )}
 
             {stallReason && (
               <section className={styles.section}>

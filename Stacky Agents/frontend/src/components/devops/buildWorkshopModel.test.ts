@@ -50,7 +50,9 @@ describe("formatBytes", () => {
   it("cero", () => expect(formatBytes(0)).toBe("0 B"));
   it("KB", () => expect(formatBytes(1536)).toBe("1.5 KB"));
   it("MB", () => expect(formatBytes(1234567)).toBe("1.2 MB"));
-  it("negativo se trata como cero", () => expect(formatBytes(-5)).toBe("0 B"));
+  // Contrato del formateador canónico (services/format): un tamaño negativo no
+  // es cero, es un dato inválido, y se muestra como tal.
+  it("negativo se muestra como dato ausente", () => expect(formatBytes(-5)).toBe("—"));
 });
 
 describe("canCompile", () => {

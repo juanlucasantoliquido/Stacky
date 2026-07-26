@@ -57,6 +57,38 @@ def clamp_model(model: str | None, allow_opus: bool = False) -> str:
     return model
 
 
+def clamp_effort_for_model(effort: str, model_id: str | None) -> str:
+    """Plan 43 F0 — Degrada effort al máximo soportado por el modelo.
+
+    Matriz modelo x effort (oficial Claude CLI):
+      claude-haiku-*   : low/medium/high            → xhigh→high, max→high
+      claude-sonnet-*  : low/medium/high/max        → xhigh→high (xhigh es Opus 4.7+)
+      claude-opus-4-5+ : low/medium/high/xhigh/max  → todo
+
+    Plan 212 F2 — única implementación de la matriz. El endpoint la degrada con
+    el modelo que el operador pidió; el runner vuelve a degradarla contra el
+    modelo EFECTIVO (el ruteado), que es el que va a recibir el `--effort`.
+    """
+    if not model_id:
+        return effort
+    m = model_id.lower()
+    if "haiku" in m:
+        return effort if effort in ("low", "medium", "high") else "high"
+    if "sonnet" in m:
+        # sonnet no soporta xhigh (es Opus 4.7+); max sí en sonnet-4-6
+        return "high" if effort == "xhigh" else effort
+    # opus: todo soportado
+    return effort
+
+
+def is_opus_allowlisted(model: str | None) -> bool:
+    """Plan 212 F1 — True si `model` es EXACTAMENTE un id de _OPUS_ALLOWLIST.
+
+    Existe para que los callers (runner) no tengan que importar el set privado.
+    No amplía la política: la allowlist sigue siendo la de llm_router.
+    """
+    return bool(model) and model in _OPUS_ALLOWLIST
+
 
 _CACHE_TTL_SEC = 300
 _cache_lock = threading.Lock()
@@ -193,6 +225,7 @@ def decide(
     override: str | None = None,
     backend: str | None = None,
     project_name: str | None = None,
+    allow_opus: bool = False,          # Plan 212 F1 — default False conserva el cap global
 ) -> RoutingDecision:
     """Devuelve qué modelo usar y por qué."""
     backend = (backend or config.LLM_BACKEND or "anthropic").lower()
@@ -231,7 +264,7 @@ def decide(
 
     _had_override = bool(override)  # se usará para que I1.2 no sobreescriba overrides
     if override:
-        capped = clamp_model(override)
+        capped = clamp_model(override, allow_opus=allow_opus)
         if capped != override:
             # Override prohibido (opus/fable): se respeta la intención de forzar
             # modelo pero clampeado al tope permitido (§5.2).

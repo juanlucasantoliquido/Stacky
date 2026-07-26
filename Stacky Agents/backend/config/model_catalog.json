@@ -24,7 +24,14 @@
         "claude-sonnet-5": ["low", "medium", "high", "max"],
         "claude-sonnet-4-6": ["low", "medium", "high", "max"],
         "claude-opus-4-8": ["low", "medium", "high", "xhigh", "max"]
-      }
+      },
+      "effort_degrade": {
+        "claude-haiku-4-5": {"xhigh": "high", "max": "high"},
+        "claude-sonnet-5": {"xhigh": "high"},
+        "claude-sonnet-4-6": {"xhigh": "high"},
+        "claude-opus-4-8": {}
+      },
+      "effort_note": "Los efforts no soportados por el modelo NO se ocultan: se ofrecen anotados con el valor que se aplicará realmente (ver effort_degrade). El backend degrada con llm_router.clamp_effort_for_model."
     },
     "codex_cli": {
       "source": "static_config_file",

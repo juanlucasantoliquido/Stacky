@@ -393,6 +393,20 @@
       "guard_test": "tests/test_plan211_inspector.py::test_post_build_absolute_is_blocking",
       "evidence": "backend/services/post_build_inspector.py (inspect_projects)",
       "note": "El proyecto compila pero su evento post-build copia binarios fuera del proyecto (o a la carpeta de otro cliente). Una ruta absoluta PROPIA solo avisa; una ajena bloquea."
+    },
+    {
+      "id": "model_effort_silent_downgrade",
+      "title": "Elegir Opus/effort no se cumplia: decide() re-clampeaba sin allow_opus y el effort no se degradaba contra el modelo efectivo",
+      "class": "silent-degradation",
+      "status": "resolved",
+      "log_pattern": "solicitado .+ -> ejecutado .+",
+      "log_guarded": false,
+      "killed_by": "plan 212 (F1 allow_opus end-to-end + F2/C6 clamp contra routed_model + F7 solicitado-vs-efectivo)",
+      "killed_commit": "(pendiente al mergear)",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/test_plan212_opus_end_to_end.py::test_runner_gate_is_wired_into_decide",
+      "evidence": "backend/services/claude_code_cli_runner.py (allow_opus_for_run, build_model_effort_trace)",
+      "note": "El operador elegia claude-opus-4-8 y el runner corria sonnet-5 sin decirlo: el permiso del endpoint moria antes del router. Ahora el par solicitado/efectivo queda en metadata.model_effort y el drawer lo muestra."
     }
   ]
 }

@@ -15,7 +15,7 @@ import {
   type ClientProfileStateWarning,
 } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
-import { useConfirm } from "./ui";
+import { useConfirm, Input, Select } from "./ui";
 import styles from "./ClientProfileEditor.module.css";
 
 // ── Helpers de acceso inmutable (round-trip seguro) ──────────────────────────
@@ -419,7 +419,7 @@ function StateSelect({
     return (
       <div className={styles.field}>
         <label className={styles.label}>{label}</label>
-        <input
+        <Input
           className={styles.input}
           value={value}
           placeholder="Sin estados del tracker — escribilo a mano"
@@ -435,7 +435,7 @@ function StateSelect({
   return (
     <div className={styles.field}>
       <label className={styles.label}>{label}</label>
-      <select
+      <Select
         className={styles.select}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -446,7 +446,7 @@ function StateSelect({
             {s}
           </option>
         ))}
-      </select>
+      </Select>
     </div>
   );
 }
@@ -531,7 +531,7 @@ function WorkItemTypeMatrix({
           );
         })}
         <div className={styles.kvRow}>
-          <select
+          <Select
             className={styles.select}
             value={newType}
             onChange={(e) => setNewType(e.target.value)}
@@ -542,7 +542,7 @@ function WorkItemTypeMatrix({
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             type="button"
             className={styles.addBtn}

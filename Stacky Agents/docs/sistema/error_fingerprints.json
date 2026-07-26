@@ -407,6 +407,20 @@
       "guard_test": "tests/test_plan212_opus_end_to_end.py::test_runner_gate_is_wired_into_decide",
       "evidence": "backend/services/claude_code_cli_runner.py (allow_opus_for_run, build_model_effort_trace)",
       "note": "El operador elegia claude-opus-4-8 y el runner corria sonnet-5 sin decirlo: el permiso del endpoint moria antes del router. Ahora el par solicitado/efectivo queda en metadata.model_effort y el drawer lo muestra."
+    },
+    {
+      "id": "state_config_duplicada",
+      "title": "Config de estados duplicada: reglas de flujo en flow_config.json y tracker_state_machine en el perfil, sin nada que avisara cuando se contradecian",
+      "class": "config-drift",
+      "status": "resolved",
+      "log_pattern": "state_not_in_tracker",
+      "log_guarded": false,
+      "killed_by": "plan 216 (state_flow centralizado en el perfil + pestana Estados con chequeo de coherencia)",
+      "killed_commit": "(pendiente al mergear)",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/test_plan216_profile_schema.py",
+      "evidence": "backend/services/flow_config_store.py + frontend/src/pages/statesConfigModel.ts (incoherentStatesFor)",
+      "note": "Una regla podia mandar un estado a un rol que no lo declaraba en input_states: el agente se lanzaba sobre un estado que su propia config decia que no atendia. Ahora se avisa y se corrige en un click."
     }
   ]
 }

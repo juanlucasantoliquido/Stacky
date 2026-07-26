@@ -79,6 +79,15 @@ export default function StatesConfigPage() {
 
   return (
     <div className={styles.root}>
+      <header className={styles.pageHeader}>
+        <h2 className={styles.pageTitle}>Estados del tracker</h2>
+        <p className={styles.pageSubtitle}>
+          Una sola fuente: qué agente toma cada estado, y qué estados aplica
+          Stacky al iniciar y completar. Los cambios se guardan en el perfil del
+          cliente del proyecto activo.
+        </p>
+      </header>
+
       <section className={styles.card}>
         <h3 className={styles.cardTitle}>¿Qué agente toma cada estado?</h3>
         <p className={styles.cardSubtitle}>

@@ -6,6 +6,24 @@
   gap: 20px;
 }
 
+.pageHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pageSubtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 70ch;
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: 8px;

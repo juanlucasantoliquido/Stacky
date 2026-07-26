@@ -1,5 +1,10 @@
 # Plan 216 — Centralización de la configuración de estados en el Perfil del Cliente, dropdowns de estados reales y sección "Estados" independiente
 
+> **ESTADO 2026-07-26: IMPLEMENTADO** — F0/F1 (backend, commit `e4f45c58`), F2/F3 (pestaña Estados, `2b384667`) y F4 (pasada UX + huella, este commit). SIN push.
+>
+> Dos cosas quedaron fuera y están declaradas en los commits: (a) `grep "Config de Flujo"` deja 1 hit en `TicketBoard.tsx:546` — archivo con trabajo sin commitear de la sesión paralela; es un copy de una línea. (b) El criterio pedía 3 archivos `test_plan216_*` registrados en el arnés: existen 2, porque F2/F3 resultaron ser frontend puro (vitest) y no generaron un tercer test backend.
+
+
 **Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-23)
 **Autor:** StackyArchitectaUltraEficientCode
 **Depende de:** ninguno para implementarse. **Coordina con:** Plan 208 (matriz `by_work_item_type`) — ver §3.1 "Contrato de coherencia con 208".

@@ -12,6 +12,15 @@ import styles from "./SystemLogsPage.module.css";
 import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
 import { QUERY_TUNING } from "../services/queryTuning";
 import SavedViewsBar from "../components/SavedViewsBar";
+import TableColumnsMenu from "../components/TableColumnsMenu";
+import { hydrateUiPref, loadUiPrefLocal, saveUiPref } from "../services/uiPrefs";
+import {
+  EMPTY_TABLE_PREFS,
+  isColVisible,
+  sanitizeTablePrefs,
+  SYSLOG_COLUMNS,
+  type TablePrefs,
+} from "../services/tablePrefs";
 import { normalizeFilters } from "../services/savedViews";
 
 const PAGE_SIZE = 100;
@@ -180,6 +189,27 @@ export default function SystemLogsPage() {
   };
 
   const { instantNav } = useUiPerfFlags();
+  // Plan 173 F4 — columnas visibles de esta tabla (11), por operador.
+  const [logPrefs, setLogPrefs] = useState<TablePrefs>(() =>
+    sanitizeTablePrefs(loadUiPrefLocal("table.syslogs", EMPTY_TABLE_PREFS), SYSLOG_COLUMNS),
+  );
+
+  useEffect(() => {
+    let vivo = true;
+    void hydrateUiPref("table.syslogs", (raw) => sanitizeTablePrefs(raw, SYSLOG_COLUMNS)).then(
+      (remoto) => {
+        if (vivo && remoto) setLogPrefs(remoto);
+      },
+    );
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  function cambiarLogPrefs(next: TablePrefs) {
+    setLogPrefs(next);
+    saveUiPref("table.syslogs", next);
+  }
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["system-logs", queryParams],
     queryFn: () => SystemLogs.list(queryParams),
@@ -344,6 +374,8 @@ export default function SystemLogsPage() {
           defaultFilters={SYSLOG_DEFAULTS}
           urlFilterKeys={Object.keys(SYSLOG_DEFAULTS)}
         />
+        {/* Plan 173 F4 — qué columnas ve este operador. */}
+        <TableColumnsMenu columns={SYSLOG_COLUMNS} prefs={logPrefs} onChange={cambiarLogPrefs} />
       </div>
 
       {/* Table */}
@@ -356,39 +388,61 @@ export default function SystemLogsPage() {
           <table>
             <thead>
               <tr>
-                <th>Level</th>
-                <th>Timestamp</th>
-                <th>Source</th>
-                <th>Action</th>
-                <th>Exec ID</th>
-                <th>Ticket</th>
-                <th>User</th>
-                <th>Method</th>
-                <th>Endpoint</th>
-                <th>Status</th>
-                <th>Duration</th>
+                {isColVisible(logPrefs, "level") && <th data-col="level">Level</th>}
+                {isColVisible(logPrefs, "timestamp") && <th data-col="timestamp">Timestamp</th>}
+                {isColVisible(logPrefs, "source") && <th data-col="source">Source</th>}
+                {isColVisible(logPrefs, "action") && <th data-col="action">Action</th>}
+                {isColVisible(logPrefs, "exec_id") && <th data-col="exec_id">Exec ID</th>}
+                {isColVisible(logPrefs, "ticket") && <th data-col="ticket">Ticket</th>}
+                {isColVisible(logPrefs, "user") && <th data-col="user">User</th>}
+                {isColVisible(logPrefs, "method") && <th data-col="method">Method</th>}
+                {isColVisible(logPrefs, "endpoint") && <th data-col="endpoint">Endpoint</th>}
+                {isColVisible(logPrefs, "status") && <th data-col="status">Status</th>}
+                {isColVisible(logPrefs, "duration") && <th data-col="duration">Duration</th>}
               </tr>
             </thead>
             <tbody>
               {items.map((log) => (
                 <tr key={log.id} onClick={() => setSelected(log)}>
-                  <td>
-                    <span className={`${styles.lvl} ${levelClass(log.level)}`}>
-                      {log.level}
-                    </span>
-                  </td>
-                  <td title={log.timestamp}>{fmtTs(log.timestamp)}</td>
-                  <td title={log.source}>{log.source}</td>
-                  <td title={log.action}>{log.action}</td>
-                  <td>{log.execution_id ?? "—"}</td>
-                  <td>{log.ticket_id ?? "—"}</td>
-                  <td>{log.user ?? "—"}</td>
-                  <td>{log.method ?? "—"}</td>
-                  <td title={log.endpoint ?? ""}>{log.endpoint ?? "—"}</td>
-                  <td style={{ color: log.status_code && log.status_code >= 400 ? "#f87171" : undefined }}>
-                    {log.status_code ?? "—"}
-                  </td>
-                  <td>{formatDuration(log.duration_ms)}</td>
+                  {isColVisible(logPrefs, "level") && (
+                    <td>
+                      <span className={`${styles.lvl} ${levelClass(log.level)}`}>
+                        {log.level}
+                      </span>
+                    </td>
+                  )}
+                  {isColVisible(logPrefs, "timestamp") && (
+                    <td title={log.timestamp}>{fmtTs(log.timestamp)}</td>
+                  )}
+                  {isColVisible(logPrefs, "source") && (
+                    <td title={log.source}>{log.source}</td>
+                  )}
+                  {isColVisible(logPrefs, "action") && (
+                    <td title={log.action}>{log.action}</td>
+                  )}
+                  {isColVisible(logPrefs, "exec_id") && (
+                    <td>{log.execution_id ?? "—"}</td>
+                  )}
+                  {isColVisible(logPrefs, "ticket") && (
+                    <td>{log.ticket_id ?? "—"}</td>
+                  )}
+                  {isColVisible(logPrefs, "user") && (
+                    <td>{log.user ?? "—"}</td>
+                  )}
+                  {isColVisible(logPrefs, "method") && (
+                    <td>{log.method ?? "—"}</td>
+                  )}
+                  {isColVisible(logPrefs, "endpoint") && (
+                    <td title={log.endpoint ?? ""}>{log.endpoint ?? "—"}</td>
+                  )}
+                  {isColVisible(logPrefs, "status") && (
+                    <td style={{ color: log.status_code && log.status_code >= 400 ? "#f87171" : undefined }}>
+                      {log.status_code ?? "—"}
+                    </td>
+                  )}
+                  {isColVisible(logPrefs, "duration") && (
+                    <td>{formatDuration(log.duration_ms)}</td>
+                  )}
                 </tr>
               ))}
             </tbody>

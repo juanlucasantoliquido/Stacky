@@ -476,6 +476,11 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",
     # ── Plan 213 — analistas declaran supuestos en vez de frenar el pipeline ──
     "STACKY_ASSUMPTION_MODE_ENABLED",
+    # ── Plan 176 — triage curado + gates read-only del comparador de BD ──
+    "STACKY_DB_COMPARE_TRIAGE_ENABLED",
+    "STACKY_DB_COMPARE_GATES_ENABLED",
+    "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED",
+    "STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED",
     # ── Plan 214 — candidato QAUAT al completar el Developer (solo metadata) ──
     # (el autorun es default OFF: NO va acá)
     "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",

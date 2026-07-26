@@ -81,6 +81,11 @@ def health_route():
         "config_in_place_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_CONFIG_IN_PLACE_ENABLED", False)),
         "webconfig_import_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED", False)),
         "migration_panel_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_MIGRATION_PANEL_ENABLED", False)),
+        # [Plan 176] triage curado, gates read-only, prefs de tabla y UX v2 del diff.
+        "triage_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_TRIAGE_ENABLED", False)),
+        "gates_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_GATES_ENABLED", False)),
+        "table_prefs_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED", False)),
+        "diff_ux_v2_enabled": bool(getattr(_config.config, "STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED", False)),
         "keyring_available": dbcompare_registry.keyring_available(),
         "drivers": dbcompare_engine.driver_status(),
     })
@@ -424,6 +429,10 @@ def get_run_route(run_id):
     run = dbcompare_runs.get_run(run_id)
     if run is None:
         return jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404
+    # [Plan 176 F1] Las item_key se calculan ANTES del enmascarado: el masking
+    # tapa los valores de PK, así que el frontend no podría derivarlas nunca.
+    from services import dbcompare_triage
+    dbcompare_triage.attach_item_keys(run)
     from services import dbcompare_masking  # Plan 181 — masking de presentación del data-diff
     return jsonify(dbcompare_masking.apply_to_run_response(run))
 
@@ -448,6 +457,123 @@ def export_run_markdown_route(run_id):
 
 
 # --------------------------------------------------------------------------
+# Plan 176 F1 — Triage del diff: la decisión humana sobre cada diferencia.
+# Mismo blueprint y mismo _require_enabled; la flag hija solo agrega el 403.
+# --------------------------------------------------------------------------
+
+def _require_triage_enabled():
+    if not getattr(_config.config, "STACKY_DB_COMPARE_TRIAGE_ENABLED", False):
+        return jsonify({
+            "ok": False,
+            "error": "Triage del diff deshabilitado (STACKY_DB_COMPARE_TRIAGE_ENABLED).",
+        }), 403
+    return None
+
+
+def _triage_gates(run_id: str):
+    """Gates comunes de las 3 rutas: devuelve (respuesta_de_error, run)."""
+    for gate in (_require_enabled(), _require_triage_enabled()):
+        if gate:
+            return gate, None
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return (jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404), None
+    return None, run
+
+
+def _triage_payload(run_id: str, run: dict) -> dict:
+    from services import dbcompare_triage
+
+    doc = dbcompare_triage.load_triage(run_id)
+    total = len(((run.get("diff") or {}).get("items")) or [])
+    doc["summary"] = (
+        dbcompare_triage.triage_summary(doc, total)
+        if run.get("status") == "done" else None
+    )
+    return doc
+
+
+@bp.get("/runs/<run_id>/triage")
+def get_triage_route(run_id):
+    error, run = _triage_gates(run_id)
+    if error:
+        return error
+    return jsonify(_triage_payload(run_id, run))
+
+
+@bp.put("/runs/<run_id>/triage/item")
+def put_triage_item_route(run_id):
+    from services import dbcompare_triage
+
+    error, run = _triage_gates(run_id)
+    if error:
+        return error
+
+    body = request.get_json(silent=True) or {}
+    item_key = (body.get("item_key") or "").strip()
+    decision = (body.get("decision") or "").strip()
+
+    if decision not in dbcompare_triage.DECISIONS:
+        return jsonify({"ok": False, "error": "decision_invalida",
+                        "validas": list(dbcompare_triage.DECISIONS)}), 400
+    if run.get("status") != "done":
+        return jsonify({"ok": False, "error": "run_no_done",
+                        "status": run.get("status")}), 409
+    if not _item_key_pertenece(run, item_key):
+        return jsonify({"ok": False, "error": "item_desconocido",
+                        "item_key": item_key}), 404
+
+    doc = dbcompare_triage.set_decision(run_id, item_key, decision,
+                                        note=body.get("note") or "")
+    doc["summary"] = dbcompare_triage.triage_summary(
+        doc, len(((run.get("diff") or {}).get("items")) or []))
+    return jsonify(doc)
+
+
+def _item_key_pertenece(run: dict, item_key: str) -> bool:
+    """Una decisión sobre un ítem que no está en la corrida es un error del caller.
+
+    Sin este chequeo el archivo de triage acumularía basura de corridas viejas y
+    el resumen contaría decisiones sobre ítems que ya no existen.
+    """
+    from services import dbcompare_triage
+
+    if not item_key:
+        return False
+    if not item_key.startswith("data:"):
+        conocidas = {
+            dbcompare_triage.item_key_for_schema_item(i)
+            for i in ((run.get("diff") or {}).get("items")) or []
+        }
+        return item_key in conocidas
+
+    tablas = ((run.get("data_diff") or {}).get("tables")) or {}
+    if not tablas:
+        return False
+    # `data:<schema>.<tabla>:<pk>` — se valida la tabla, no la fila: el masking
+    # puede haber cambiado lo que el operador vio, pero no de qué tabla es.
+    resto = item_key[len("data:"):]
+    prefijo = resto.split(":", 1)[0] if ":" in resto else ""
+    return prefijo in tablas
+
+
+@bp.get("/runs/<run_id>/triage/exclusions.md")
+def get_triage_exclusions_route(run_id):
+    from services import dbcompare_triage
+
+    error, run = _triage_gates(run_id)
+    if error:
+        return error
+
+    md = dbcompare_triage.exclusions_markdown(
+        run_id, dbcompare_triage.load_triage(run_id))
+    response = current_app.response_class(md, mimetype="text/markdown; charset=utf-8")
+    response.headers["Content-Disposition"] = \
+        f'attachment; filename="{run_id}-exclusiones.md"'
+    return response
+
+
+# --------------------------------------------------------------------------
 # Plan 125 F5 — bundle de scripts de paridad + backups pareados (mismo blueprint,
 # mismo _require_enabled; Stacky GENERA, jamás ejecuta — ver doc 125 §3).
 # --------------------------------------------------------------------------
@@ -468,11 +594,22 @@ def generate_scripts_route(run_id):
             "ok": False,
             "error": f"la corrida no está 'done' (status={run.get('status')}).",
         }), 409
+    # [Plan 176 F3] La curación del operador se aplica al generar: lo excluido
+    # no emite script ni backup. Con la flag OFF, excluded=None ⇒ bundle de antes.
+    excluded = None
+    if getattr(_config.config, "STACKY_DB_COMPARE_TRIAGE_ENABLED", False):
+        from services import dbcompare_triage
+        excluded = dbcompare_triage.excluded_keys(dbcompare_triage.load_triage(run_id))
     try:
-        manifest = dbcompare_scripts.generate_parity_bundle(run_id)
+        manifest = dbcompare_scripts.generate_parity_bundle(
+            run_id, excluded_keys=excluded or None)
     except _SCRIPTS_RUN_ERRORS as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
-    return jsonify({"ok": True, "manifest": manifest})
+    return jsonify({
+        "ok": True,
+        "manifest": manifest,
+        "triage_applied": {"excluded_count": len(excluded or ())},
+    })
 
 
 @bp.get("/runs/<run_id>/scripts")
@@ -490,7 +627,9 @@ def get_scripts_manifest_route(run_id):
 
 
 def _scripts_allowlist(manifest: dict) -> set[str]:
-    allowed = {"README.md", "MANIFEST.json"}
+    # [Plan 176 F3] TRIAGE_EXCLUSIONS.md no entra al manifest (Manifest v1 está
+    # congelado), pero el visor tiene que poder servirlo.
+    allowed = {"README.md", "MANIFEST.json", "TRIAGE_EXCLUSIONS.md"}
     for entry in manifest.get("entries", []):
         allowed.add(entry["file"])
         if entry.get("backup_file"):

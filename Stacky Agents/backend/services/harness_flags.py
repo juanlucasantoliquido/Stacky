@@ -390,6 +390,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED",  # Plan 180 — puente diff→repo (índice read-only de scripts ticketeados)
         "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",    # Plan 180 — globs de scripts del repo (CSV)
         "STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",  # Plan 180 — cap de archivos escaneados por refresh
+        "STACKY_DB_COMPARE_TRIAGE_ENABLED",  # Plan 176
+        "STACKY_DB_COMPARE_GATES_ENABLED",  # Plan 176
+        "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED",  # Plan 176
+        "STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED",  # Plan 176
     ),
     "interfaz_ui": (
         "STACKY_UI_SHELL_V2_ENABLED",  # Plan 139 — shell v2 (sidebar agrupada + TopBar + iconografía)
@@ -3865,6 +3869,57 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         requires="STACKY_DB_COMPARE_ENABLED",
         min_value=100,
         max_value=50000,
+    ),
+    # ── Plan 176 — Triage curado, gates read-only y UX v2 del comparador ──────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_TRIAGE_ENABLED",
+        type="bool",
+        default=True,
+        label="Comparador BD: triage del diff (curar qué migrar)",
+        description=(
+            "Permite marcar cada diferencia como confirmada o excluida con nota; "
+            "los scripts respetan la curación y habilita la verificación de cierre "
+            "de migración."
+        ),
+        group="comparador_bd",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_GATES_ENABLED",
+        type="bool",
+        default=True,
+        label="Comparador BD: gates de precondiciones (solo lectura)",
+        description=(
+            "Deriva consultas SELECT de verificación previa para cambios riesgosos "
+            "(NOT NULL, PK, UNIQUE) y permite ejecutarlas read-only con un click "
+            "para ver pass/fail antes de migrar."
+        ),
+        group="comparador_bd",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_TABLE_PREFS_ENABLED",
+        type="bool",
+        default=True,
+        label="Comparador BD: tablas de parámetro y claves naturales",
+        description=(
+            "Permite marcar tablas de parámetro (preseleccionadas al comparar datos) "
+            "y definir una clave natural para tablas sin PK."
+        ),
+        group="comparador_bd",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED",
+        type="bool",
+        default=True,
+        label="Comparador BD: diff UX v2 (filtros múltiples, export, snapshots)",
+        description=(
+            "Filtro multi-tipo, export CSV/JSON del diff filtrado, diff por líneas "
+            "en vistas y comparación de snapshots históricos."
+        ),
+        group="comparador_bd",
+        requires="STACKY_DB_COMPARE_ENABLED",
     ),
     # ── Plan 139 — App Shell v2 (sidebar agrupada + TopBar + iconografía) ────
     # PROMOVIDA a default ON (operador 2026-07-18): es la presentación de

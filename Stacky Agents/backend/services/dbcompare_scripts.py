@@ -716,6 +716,60 @@ def _update_guard(dialect: str, cells: dict, column_types: dict) -> str:
     raise DbCompareRunError(f"dialecto desconocido: {dialect!r}")
 
 
+def filter_pieces_by_triage(pieces: list, excluded: set) -> tuple[list, list]:
+    """Plan 176 F3 — Separa las piezas de esquema según la curación del operador.
+
+    Devuelve `(mantenidas, excluidas)`. Determinista y sin I/O: la decisión ya
+    fue tomada y persistida; acá solo se aplica.
+    """
+    from services.dbcompare_triage import item_key_for_schema_item
+
+    if not excluded:
+        return list(pieces or []), []
+
+    mantenidas, fuera = [], []
+    for pieza in pieces or []:
+        destino = fuera if item_key_for_schema_item(pieza) in excluded else mantenidas
+        destino.append(pieza)
+    return mantenidas, fuera
+
+
+def filter_data_rows_by_triage(table_diff: dict, excluded: set) -> dict:
+    """Plan 176 F3 — Copia del DataDiff de una tabla sin las filas excluidas.
+
+    NO muta el original: el mismo diff se usa para mostrar en pantalla y para
+    emitir scripts, y mutarlo haría desaparecer filas de la vista del operador.
+    Si tras filtrar no queda ninguna fila, la tabla no emite DML — y por la
+    REGLA DE ORO tampoco necesita backup, porque ningún script la toca.
+    """
+    from services.dbcompare_triage import item_key_for_data_row
+
+    if not excluded or not isinstance(table_diff, dict):
+        return table_diff
+
+    schema = table_diff.get("schema") or ""
+    nombre = table_diff.get("table") or ""
+    pk_cols = table_diff.get("pk_cols") or []
+
+    def _fuera_fila(fila: dict) -> bool:
+        pk = {c: fila.get(c) for c in pk_cols if c in fila}
+        return item_key_for_data_row(schema, nombre, pk) in excluded
+
+    def _fuera_cambio(cambio: dict) -> bool:
+        return item_key_for_data_row(schema, nombre, cambio.get("pk") or {}) in excluded
+
+    copia = dict(table_diff)
+    copia["only_source"] = [r for r in table_diff.get("only_source") or []
+                            if not _fuera_fila(r)]
+    copia["only_target"] = [r for r in table_diff.get("only_target") or []
+                            if not _fuera_fila(r)]
+    copia["changed"] = [c for c in table_diff.get("changed") or []
+                        if not _fuera_cambio(c)]
+    copia["identical"] = not (copia["only_source"] or copia["only_target"]
+                              or copia["changed"])
+    return copia
+
+
 def emit_data_scripts(
     data_diff: dict, dialect: str, ts: str, target_alias: str, *, data_merge_mode: bool = False
 ) -> list["ScriptPiece"]:
@@ -947,6 +1001,7 @@ def generate_parity_bundle_from_diff(
     ts: str | None = None,
     data_diff: dict | None = None,
     data_merge_mode: bool = False,
+    excluded_keys: set | None = None,
 ) -> dict:
     """Version PURA (sin depender de services.dbcompare_runs, Plan 123 F2 —
     ver NOTA C1 en doc 125 v2 F3) de la materializacion del bundle: recibe el
@@ -966,6 +1021,11 @@ def generate_parity_bundle_from_diff(
     target_alias = target_schema_obj.get("alias") or diff.get("target", {}).get("alias", "destino")
 
     flat_items = flatten_diff(diff)
+    # Plan 176 F3 — la curación del operador se aplica ANTES de emitir: lo
+    # excluido no genera script NI backup (la REGLA DE ORO sigue valiendo sobre
+    # las piezas ya filtradas). excluded_keys=None ⇒ bundle idéntico a antes.
+    flat_items, _piezas_excluidas = filter_pieces_by_triage(
+        flat_items, set(excluded_keys or ()))
     item_groups = [(item, emit_parity(item, source_schema_obj, target_schema_obj, dialect, ts)) for item in flat_items]
 
     create_groups = [g for g in item_groups if g[0]["kind"] == "table_added"]
@@ -1066,6 +1126,10 @@ def generate_parity_bundle_from_diff(
             table_result = data_diff["tables"][table_key]
             if "error" in table_result:
                 continue  # tabla con error en el diff de datos: no emite scripts
+            # Plan 176 F3 — pre-filtrado del DataDiff: aplica igual en modo v1 y
+            # en data_merge_mode (el 182), porque se filtra ANTES de emitir.
+            table_result = filter_data_rows_by_triage(
+                table_result, set(excluded_keys or ()))
             table_pieces = emit_data_scripts(table_result, dialect, ts, target_alias, data_merge_mode=data_merge_mode)
             if not table_pieces:
                 continue
@@ -1130,8 +1194,34 @@ def generate_parity_bundle_from_diff(
     files["MANIFEST.json"] = json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True)
     files["README.md"] = _render_readme(manifest, warnings)
 
+    # Plan 176 F3 — dejar constancia de lo que NO se migró y por qué. Va al zip
+    # (se zipea el directorio entero) pero NO al manifest: Manifest v1 intacto.
+    if excluded_keys:
+        files["TRIAGE_EXCLUSIONS.md"] = _render_triage_exclusions(
+            run_id, set(excluded_keys))
+
     _write_bundle_atomic(run_id, files)
     return manifest
+
+
+def _render_triage_exclusions(run_id: str, excluded: set) -> str:
+    """Contenido determinista: qué quedó fuera del bundle por decisión humana."""
+    from services import dbcompare_triage
+
+    triage = dbcompare_triage.load_triage(run_id)
+    items = triage.get("items") or {}
+    lineas = [
+        f"# Exclusiones aplicadas al bundle — {run_id}",
+        "",
+        "Estos ítems NO generaron script porque el operador los marcó como",
+        "excluidos en el triage. Ningún archivo del bundle los toca.",
+        "",
+    ]
+    for key in sorted(excluded):
+        dato = items.get(key) or {}
+        nota = (dato.get("note") or "").replace("\n", " ").strip() or "sin nota"
+        lineas.append(f"- {key} — {nota} ({dato.get('decided_at') or 'sin fecha'})")
+    return "\n".join(lineas) + "\n"
 
 
 def load_manifest(run_id: str) -> dict | None:
@@ -1161,7 +1251,7 @@ def read_bundle_file(run_id: str, rel_path: str) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
-def generate_parity_bundle(run_id: str) -> dict:
+def generate_parity_bundle(run_id: str, *, excluded_keys: set | None = None) -> dict:
     """Wrapper por run_id real. [NOTA C1 del doc 125 v2 §F3 — CERRADA 2026-07-14]
     Cuando 125 se implementó de forma aislada, ni services.dbcompare_runs
     (Plan 123 F2) ni services.dbcompare_snapshot (Plan 122 F3) existían en ese
@@ -1196,4 +1286,5 @@ def generate_parity_bundle(run_id: str) -> dict:
         run["diff"], run_id, source_snapshot, target_snapshot, run["engine"],
         data_diff=run.get("data_diff"),
         data_merge_mode=merge_on,
+        excluded_keys=excluded_keys,   # Plan 176 F3 — None = bundle idéntico a antes
     )

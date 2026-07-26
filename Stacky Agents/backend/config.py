@@ -201,6 +201,21 @@ class Config:
     STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES: int = int(
         os.getenv("STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES", "5000")
     )
+    # Plan 176 — Triage curado, gates read-only y UX v2 del comparador. Las 4 son
+    # read-only o curación local del operador: no publican, no ejecutan DML y no
+    # tocan ningún sistema externo ⇒ default ON.
+    STACKY_DB_COMPARE_TRIAGE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_TRIAGE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_GATES_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_GATES_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_TABLE_PREFS_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_DIFF_UX_V2_ENABLED", "true"
+    ).strip().lower() == "true"
 
     # Plan 121 — Centinela local de egreso (secretos/PII semántico). Default OFF.
     STACKY_EGRESS_SENTINEL_ENABLED = os.getenv("STACKY_EGRESS_SENTINEL_ENABLED", "false").lower() in (

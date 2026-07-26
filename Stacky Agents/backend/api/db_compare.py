@@ -574,6 +574,95 @@ def get_triage_exclusions_route(run_id):
 
 
 # --------------------------------------------------------------------------
+# Plan 176 F4 — Gates de precondición read-only. Derivar y exportar son puros;
+# EJECUTAR solo pasa por el POST explícito de abajo (nunca automático).
+# --------------------------------------------------------------------------
+
+def _require_gates_enabled():
+    if not getattr(_config.config, "STACKY_DB_COMPARE_GATES_ENABLED", False):
+        return jsonify({
+            "ok": False,
+            "error": "Gates de precondición deshabilitadas (STACKY_DB_COMPARE_GATES_ENABLED).",
+        }), 403
+    return None
+
+
+def _gates_gates(run_id: str):
+    """Gates comunes de las 3 rutas: devuelve (respuesta_de_error, run)."""
+    for gate in (_require_enabled(), _require_gates_enabled()):
+        if gate:
+            return gate, None
+    run = dbcompare_runs.get_run(run_id)
+    if run is None:
+        return (jsonify({"ok": False, "error": f"corrida '{run_id}' no existe."}), 404), None
+    if run.get("status") != "done":
+        return (jsonify({
+            "ok": False,
+            "error": f"la corrida no está 'done' (status={run.get('status')}).",
+        }), 409), None
+    return None, run
+
+
+@bp.get("/runs/<run_id>/gates")
+def get_gates_route(run_id):
+    from services import dbcompare_gates
+
+    error, run = _gates_gates(run_id)
+    if error:
+        return error
+
+    return jsonify({
+        "ok": True,
+        "gates": dbcompare_gates.derive_gates(run.get("diff") or {},
+                                              run.get("target_alias") or ""),
+        "results": dbcompare_gates.load_results(run_id).get("results", {}),
+    })
+
+
+@bp.post("/runs/<run_id>/gates/evaluate")
+def evaluate_gates_route(run_id):
+    """Corre las precondiciones contra el destino. SIEMPRE a pedido del operador."""
+    from services import dbcompare_gates
+
+    error, _run = _gates_gates(run_id)
+    if error:
+        return error
+
+    body = request.get_json(silent=True) or {}
+    gate_ids = body.get("gate_ids")
+    if gate_ids is not None and not isinstance(gate_ids, list):
+        return jsonify({"ok": False, "error": "gate_ids debe ser una lista"}), 400
+
+    try:
+        doc = dbcompare_gates.evaluate_gates(run_id, gate_ids)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **doc})
+
+
+@bp.get("/runs/<run_id>/gates/export.sql")
+def get_gates_export_route(run_id):
+    """El SQL de las precondiciones, para correrlo afuera de Stacky.
+
+    NO entra al bundle del 125 a propósito: es un artefacto propio y meterlo ahí
+    tocaría el Manifest v1, que está congelado.
+    """
+    from services import dbcompare_gates
+
+    error, run = _gates_gates(run_id)
+    if error:
+        return error
+
+    sql = dbcompare_gates.gates_export_sql(
+        run.get("diff") or {}, run.get("target_alias") or "",
+        run.get("engine") or "sqlserver")
+    response = current_app.response_class(sql, mimetype="text/plain; charset=utf-8")
+    response.headers["Content-Disposition"] = \
+        f'attachment; filename="{run_id}-precondiciones.sql"'
+    return response
+
+
+# --------------------------------------------------------------------------
 # Plan 125 F5 — bundle de scripts de paridad + backups pareados (mismo blueprint,
 # mismo _require_enabled; Stacky GENERA, jamás ejecuta — ver doc 125 §3).
 # --------------------------------------------------------------------------

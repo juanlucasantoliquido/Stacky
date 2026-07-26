@@ -574,6 +574,59 @@ def get_triage_exclusions_route(run_id):
 
 
 # --------------------------------------------------------------------------
+# Plan 176 F7 — Verificación de cierre: ¿se aplicó lo confirmado y sigue intacto
+# lo excluido? Pertenece a la capacidad de triage, así que comparte su flag.
+# --------------------------------------------------------------------------
+
+@bp.post("/runs/<run_id>/verify-closure")
+def verify_closure_route(run_id):
+    from services import dbcompare_closure
+
+    error, _run = _triage_gates(run_id)
+    if error:
+        return error
+
+    try:
+        resultado = dbcompare_closure.start_closure(run_id)
+    except ValueError as exc:
+        codigo = 409 if str(exc).startswith("run_not_done") else 404
+        return jsonify({"ok": False, "error": str(exc)}), codigo
+    except dbcompare_runs.DbCompareBusyError as exc:
+        return jsonify({"ok": False, "error": "par_ocupado", "message": str(exc)}), 409
+    except _SCRIPTS_RUN_ERRORS as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    return jsonify({"ok": True, **resultado}), 202
+
+
+@bp.get("/runs/<run_id>/closure")
+def get_closure_route(run_id):
+    from services import dbcompare_closure, dbcompare_triage
+
+    error, viejo = _triage_gates(run_id)
+    if error:
+        return error
+
+    linkage = dbcompare_closure.load_linkage(run_id)
+    if linkage is None:
+        return jsonify({"ok": False, "error": "sin_verificacion"}), 404
+
+    verificacion_id = linkage.get("verification_run_id")
+    nuevo = dbcompare_runs.get_run(verificacion_id)
+    if nuevo is None:
+        return jsonify({"ok": False, "error": "verificacion_no_encontrada",
+                        "verification_run_id": verificacion_id}), 404
+    if nuevo.get("status") != "done":
+        return jsonify({"ok": False, "error": "verificacion_en_curso",
+                        "verification_run_id": verificacion_id,
+                        "status": nuevo.get("status")}), 409
+
+    reporte = dbcompare_closure.evaluate_closure(
+        viejo, nuevo, dbcompare_triage.load_triage(run_id))
+    return jsonify({"ok": True, **reporte})
+
+
+# --------------------------------------------------------------------------
 # Plan 176 F4 — Gates de precondición read-only. Derivar y exportar son puros;
 # EJECUTAR solo pasa por el POST explícito de abajo (nunca automático).
 # --------------------------------------------------------------------------

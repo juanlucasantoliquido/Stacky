@@ -611,6 +611,7 @@ $HarnessTestFiles = @(
   "tests/test_plan176_dbcompare_triage_bundle.py",
   "tests/test_plan176_dbcompare_gates.py",
   "tests/test_plan176_dbcompare_gates_api.py",
+  "tests/test_plan176_dbcompare_closure.py",
   # Plan 213 - Analistas declaran supuestos en vez de frenar el pipeline
   "tests/test_plan213_assumptions_parser.py",
   "tests/test_plan213_scoring_and_contract.py",

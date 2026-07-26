@@ -1,0 +1,19 @@
+# DERIVADO - NO EDITAR A MANO.
+# origen: backend/tests/fixtures/cicd_nl/golden/ci-batch.yml
+# generado por: backend/scripts/regen_gitlab_derived_corpus.py
+# receta: to_gitlab_yaml(parse_ado_yaml(<origen>))
+stages:
+- build
+variables:
+  BUILD_CONFIGURATION: Release
+  BUILD_PLATFORM: Any CPU
+  SOLUTIONS_DIR: trunk/Batch/Soluciones
+build:
+  stage: build
+  script:
+  - '# TODO(stacky-249): sin equivalente GitLab para NuGetToolInstaller@1 (inputs:
+    versionSpec)'
+  - '# TODO(stacky-249): sin equivalente GitLab para NuGetCommand@2 (inputs: command,
+    feedsToUse, restoreSolution)'
+  - '# TODO(stacky-249): sin equivalente GitLab para VSBuild@1 (inputs: configuration,
+    platform, solution)'

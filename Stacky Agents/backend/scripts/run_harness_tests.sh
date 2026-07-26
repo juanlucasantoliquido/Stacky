@@ -786,6 +786,13 @@ HARNESS_TEST_FILES=(
   tests/test_plan248_audit_baseline.py
   tests/test_plan248_suppressions.py
   tests/test_plan248_api.py
+  # -- Plan 249 - Paridad GitLab del motor inteligente de pipelines --
+  tests/test_plan249_corpus_gitlab.py
+  tests/test_plan249_gitlab_catalog.py
+  tests/test_plan249_reglas_gitlab.py
+  tests/test_plan249_renderer_gitlab.py
+  tests/test_plan249_parser_gitlab.py
+  tests/test_plan249_endpoint_gitlab.py
 )
 
 pass=0

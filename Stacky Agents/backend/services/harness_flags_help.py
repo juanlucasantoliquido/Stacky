@@ -712,6 +712,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa lista de avisos no se calcula ni se muestra, y las validaciones que ya existían siguen igual.",
         example="Te avisa que la canalización publica un paquete con la clave de la base adentro, y que el chequeo de seguridad no puede frenar la compilación.",
     ),
+    "STACKY_GITLAB_SEMANTIC_RULES_ENABLED": PlainHelp(
+        what="Revisa la definicion de una canalizacion de GitLab y avisa cuando tiene errores que esa plataforma rechaza o ejecuta mal.",
+        on_effect="Si la activas: al validar una canalizacion de GitLab te aparecen avisos como una etapa no declarada o un despliegue a produccion que sale sin que nadie confirme.",
+        off_effect="Si la apagas: la validacion de canalizaciones de GitLab queda exactamente como hoy y esos avisos no se calculan.",
+        example="Te avisa que un trabajo espera a otro que corre despues, algo que la plataforma no puede resolver y que hoy pasaba sin que nadie lo notara.",
+    ),
     # ── devops ────────────────────────────────────────────────────────────────
     "STACKY_DEVOPS_PANEL_ENABLED": PlainHelp(
         what="Un editor visual para crear y modificar pipelines de integración continua, sin escribir YAML a mano.",

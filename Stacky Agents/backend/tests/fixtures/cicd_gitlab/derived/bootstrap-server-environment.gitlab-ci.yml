@@ -1,0 +1,18 @@
+# DERIVADO - NO EDITAR A MANO.
+# origen: backend/tests/fixtures/cicd_nl/golden/bootstrap-server-environment.yml
+# generado por: backend/scripts/regen_gitlab_derived_corpus.py
+# receta: to_gitlab_yaml(parse_ado_yaml(<origen>))
+stages:
+- Bootstrap
+InitializeServerEnvironment:
+  stage: Bootstrap
+  environment: ${{ parameters.targetEnvironment }}
+  when: manual
+  script:
+  - pwsh -File $(Pipeline.Workspace)/s/pipelines/scripts/Initialize-ServerEnvironment.ps1
+    -Component ${{ parameters.component }} -Environment ${{ parameters.targetEnvironment
+    }} -RepoRoot "$(Pipeline.Workspace)/s" -LogDir "$(Build.ArtifactStagingDirectory)/bootstrap-logs"
+    $(skipIisArg) -IisPort ${{ parameters.iisPort }} -IisHostHeader "${{ parameters.iisHostHeader
+    }}" $(seedConfigsArg) $(whatIfArg)
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'

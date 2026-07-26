@@ -1,0 +1,21 @@
+# DERIVADO - NO EDITAR A MANO.
+# origen: backend/tests/fixtures/cicd_nl/golden/security-scan-online.yml
+# generado por: backend/scripts/regen_gitlab_derived_corpus.py
+# receta: to_gitlab_yaml(parse_ado_yaml(<origen>))
+stages:
+- build
+variables:
+  scanRoot: trunk/OnLine
+  failOnSeverity: High
+build:
+  stage: build
+  script:
+  - pwsh -File pipelines/scripts/Check-PackagesConfig-Vulnerabilities.ps1 -ScanRoot
+    "$(scanRoot)" -OutputPath "$(Build.ArtifactStagingDirectory)\vuln-packages-config.json"
+    -FailOnSeverity $(failOnSeverity)
+  - dotnet custom trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj
+    package --vulnerable --include-transitive
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'
+  - '# TODO(stacky-249): sin equivalente GitLab para PowerShell@2 (inputs: pwsh, script,
+    targetType)'

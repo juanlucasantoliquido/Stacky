@@ -471,6 +471,8 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_PIPELINE_PROFILER_ENABLED",
     # ── Plan 248 — Auditoría de pipelines (read-only, sin red) ──
     "STACKY_PIPELINE_AUDIT_ENABLED",
+    # ── Plan 249 — Reglas semánticas de GitLab CI (analiza texto, sin red) ──
+    "STACKY_GITLAB_SEMANTIC_RULES_ENABLED",
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
     # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──

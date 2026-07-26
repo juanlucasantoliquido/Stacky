@@ -39,12 +39,25 @@ from services.cicd_task_catalog import (
 from services.pipeline_lint import SEV_ERROR, SEV_WARNING, _ADO_WL_PREFIXES
 
 RULES_VERSION = "243.1"
+# [plan 249 F2] La familia GitLab lleva su PROPIA version. El plan mandaba subir
+# RULES_VERSION a "249.1", pero test_plan243_reglas_semanticas.py la pinea en "243.1" y el
+# mismo plan exige (DoD #3) que ese archivo quede verde SIN editarlo: las dos cosas no pueden
+# ser ciertas a la vez. Se versiona por familia, igual que hace el plan 248 con
+# SECURITY_RULES_VERSION / RECOMMENDATION_RULES_VERSION.
+GITLAB_RULES_VERSION = "249.1"
 
 MODE_AUDIT = "audit"
 MODE_NL_STRICT = "nl_strict"
 _MODES = (MODE_AUDIT, MODE_NL_STRICT)
 
 # Reglas que sólo aplican a lo que Stacky GENERA, nunca a lo que ya existe (C13).
+PROVIDER_ADO = "ado"
+PROVIDER_GITLAB = "gitlab"
+_PROVIDERS = (PROVIDER_ADO, PROVIDER_GITLAB)
+
+# Espejo EXACTO de _NL_STRICT_ONLY para el eje GitLab (plan 249 F2).
+_GL_NL_STRICT_ONLY = ("GL004", "GL008", "GL009", "GL010", "GL011")
+
 _NL_STRICT_ONLY = ("RS004", "RS006", "RS008")
 
 # Por encima de esto no se procesa: se devuelve un aviso en vez de colgar el request.
@@ -494,18 +507,31 @@ def _rs009(doc) -> list:
 
 # ── API pública ────────────────────────────────────────────────────────────────
 
-def check_semantics(yaml_text: str, *, profile: str, repo_root: str = None,
-                    mode: str = MODE_AUDIT) -> list:
-    """Reglas semánticas RS001..RS009 sobre un pipeline ADO. Determinista, sin LLM.
+def check_semantics(yaml_text: str, *, profile: str = "", repo_root: str = None,
+                    mode: str = MODE_AUDIT,
+                    provider: str = PROVIDER_ADO,
+                    known_runner_tags: list = None) -> list:
+    """Reglas semánticas sobre un pipeline. Determinista, sin LLM.
 
-    `mode` inválido lanza ValueError: falla ruidosa, nunca silenciosa (C13).
+    ADO: RS001..RS009. GitLab (`provider="gitlab"`, plan 249): GL000..GL011.
+
+    `mode` y `provider` inválidos lanzan ValueError: falla ruidosa, nunca silenciosa (C13).
+    `profile` pasa a opcional (plan 249 C9): con `provider="gitlab"` se IGNORA, porque en
+    GitLab no existe el concepto de perfil de agente.
     """
     if mode not in _MODES:
         raise ValueError("mode inválido: %r (esperado %s)" % (mode, " o ".join(_MODES)))
+    if provider not in _PROVIDERS:
+        raise ValueError("provider inválido: %r (esperado %s)"
+                         % (provider, " o ".join(_PROVIDERS)))
+
+    # [plan 249 C10] el código del guard depende del proveedor: un RS* dentro de un reporte
+    # GitLab es un bug de contrato (GL_RULE_TITLES no podría titularlo).
+    codigo_guard = "GL000" if provider == PROVIDER_GITLAB else "RS000"
 
     if len(yaml_text or "") > MAX_YAML_BYTES:
         return [SemanticFinding(
-            code="RS000", severity=SEV_WARNING,
+            code=codigo_guard, severity=SEV_WARNING,
             message=("el YAML supera %d KB: fuera del rango soportado, no se analizó."
                      % (MAX_YAML_BYTES // 1024)),
             location="(documento)", evidence="límite de procesamiento del plan 243 F3",
@@ -515,13 +541,16 @@ def check_semantics(yaml_text: str, *, profile: str, repo_root: str = None,
         doc = yaml.safe_load(yaml_text)
     except yaml.YAMLError as exc:
         return [SemanticFinding(
-            code="RS000", severity=SEV_WARNING,
+            code=codigo_guard, severity=SEV_WARNING,
             message="el YAML no se pudo parsear: %s" % str(exc).splitlines()[0],
             location="(documento)", evidence="yaml.safe_load",
         )]
 
     if not isinstance(doc, dict):
         return []
+
+    if provider == PROVIDER_GITLAB:
+        return _check_gitlab(doc, mode=mode, known_runner_tags=known_runner_tags)
 
     ctxs = _iter_steps(doc)
 
@@ -539,4 +568,297 @@ def check_semantics(yaml_text: str, *, profile: str, repo_root: str = None,
         findings.extend(_rs008(ctxs, profile))
 
     assert all(f.code not in _NL_STRICT_ONLY for f in findings) or mode == MODE_NL_STRICT
+    return findings
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Plan 249 F2 — Reglas semánticas de perfil GitLab: GL000..GL011
+# ══════════════════════════════════════════════════════════════════════════════
+# GL000 vive en el guard de `check_semantics` (documento fuera de rango o ilegible).
+# El resto se evalúa acá, sobre un documento GitLab ya parseado. PURAS. NUNCA lanzan.
+
+ECHO_NOOP_MARKERS = ("echo 'no-op'", 'echo "no-op"', "echo no-op")
+
+
+def _gl_script_lines(jd: dict) -> list:
+    out = []
+    for clave in ("script", "before_script", "after_script"):
+        valor = jd.get(clave)
+        if isinstance(valor, str):
+            out.append(valor)
+        elif isinstance(valor, list):
+            out.extend(str(x) for x in valor)
+    return out
+
+
+def _gl_rules_whens(jd: dict) -> list:
+    reglas = jd.get("rules")
+    if not isinstance(reglas, list):
+        return []
+    return [str(r.get("when")) for r in reglas if isinstance(r, dict) and r.get("when")]
+
+
+def _gl_needs_names(needs) -> list:
+    if isinstance(needs, str):
+        return [needs]
+    if not isinstance(needs, list):
+        return []
+    out = []
+    for item in needs:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict) and isinstance(item.get("job"), str):
+            out.append(item["job"])
+    return out
+
+
+def _gl001_stage_no_declarado(doc, jobs, indices) -> list:
+    out = []
+    validos = sorted(k for k in indices)
+    for nombre, jd in jobs.items():
+        stage = jd.get("stage")
+        if not isinstance(stage, str) or stage in indices:
+            continue
+        out.append(SemanticFinding(
+            code="GL001", severity=SEV_ERROR,
+            message=("el job %r declara stage: %s, que no esta en `stages:`. GitLab rechaza el "
+                     "pipeline. Agrega %r a `stages:` o usa uno de: %s"
+                     % (nombre, stage, stage, ", ".join(validos))),
+            location=nombre, evidence="stage: %s" % stage,
+        ))
+    return out
+
+
+def _gl002_needs_a_stage_posterior(doc, jobs, indices) -> list:
+    out = []
+    for nombre, jd in jobs.items():
+        origen = indices.get(jd.get("stage"))
+        if origen is None:
+            continue
+        for destino_nombre in _gl_needs_names(jd.get("needs")):
+            destino = jobs.get(destino_nombre)
+            if not isinstance(destino, dict):
+                continue          # PL003 ya cubre "needs a job inexistente"
+            idx_destino = indices.get(destino.get("stage"))
+            if idx_destino is None or idx_destino <= origen:
+                continue          # el caso == NUNCA se marca (§2.6)
+            out.append(SemanticFinding(
+                code="GL002", severity=SEV_ERROR,
+                message=("el job %r necesita a %r, que corre en un stage POSTERIOR (%r va "
+                         "despues de %r). Movelo o quita el `needs`"
+                         % (nombre, destino_nombre, destino.get("stage"), jd.get("stage"))),
+                location=nombre, evidence="needs: %s" % destino_nombre,
+            ))
+    return out
+
+
+def _gl003_only_mezclado_con_rules(doc, jobs) -> list:
+    out = []
+    for nombre, jd in jobs.items():
+        if "rules" not in jd:
+            continue
+        for clave in ("only", "except"):
+            if clave not in jd:
+                continue
+            out.append(SemanticFinding(
+                code="GL003", severity=SEV_ERROR,
+                message=("el job %r usa `rules` y `%s` a la vez: GitLab ignora uno de los dos y "
+                         "el resultado es indefinido. Deja solo `rules`" % (nombre, clave)),
+                location=nombre, evidence="%s + rules" % clave,
+            ))
+    return out
+
+
+def _gl004_only_legado(doc, jobs) -> list:
+    out = []
+    for nombre, jd in jobs.items():
+        if "rules" in jd:
+            continue
+        for clave in ("only", "except"):
+            if clave not in jd:
+                continue
+            out.append(SemanticFinding(
+                code="GL004", severity=SEV_WARNING,
+                message=("`%s` es la sintaxis vieja. Un pipeline generado usa `rules:`, que es "
+                         "la que GitLab documenta y la unica que soporta condiciones compuestas"
+                         % clave),
+                location=nombre, evidence="%s:" % clave,
+            ))
+    return out
+
+
+def _gl005_prod_sin_compuerta(doc, jobs) -> list:
+    from services.cicd_gitlab_catalog import PROD_ENV_MARKERS  # noqa: PLC0415
+
+    out = []
+    for nombre, jd in jobs.items():
+        env = jd.get("environment")
+        if isinstance(env, dict):
+            env = env.get("name")
+        if not isinstance(env, str) or not env.strip():
+            continue
+        bajo = env.lower()
+        if not any(m in bajo for m in PROD_ENV_MARKERS):
+            continue
+        if str(jd.get("when") or "") == "manual" or "manual" in _gl_rules_whens(jd):
+            continue
+        out.append(SemanticFinding(
+            code="GL005", severity=SEV_ERROR,
+            message=("el job %r despliega a %r sin `when: manual`: cualquier push a la rama "
+                     "publica a produccion sin que nadie confirme. Agrega `when: manual`"
+                     % (nombre, env)),
+            location=nombre, evidence="environment: %s" % env,
+        ))
+    return out
+
+
+def _gl006_extends_ausente(doc, jobs) -> list:
+    from services.cicd_gitlab_catalog import hidden_job_names  # noqa: PLC0415
+
+    if "include" in doc:
+        return []          # el template puede venir de otro archivo: no se afirma
+    universo = set(hidden_job_names(doc)) | set(jobs)
+    out = []
+    for nombre, jd in jobs.items():
+        extiende = jd.get("extends")
+        objetivos = [extiende] if isinstance(extiende, str) else (
+            [str(x) for x in extiende] if isinstance(extiende, list) else [])
+        for objetivo in objetivos:
+            if objetivo in universo:
+                continue
+            out.append(SemanticFinding(
+                code="GL006", severity=SEV_ERROR,
+                message=("el job %r extiende %r, que no esta definido en este archivo. "
+                         "Declaralo como job oculto o agrega el `include:` que lo trae"
+                         % (nombre, objetivo)),
+                location=nombre, evidence="extends: %s" % objetivo,
+            ))
+    return out
+
+
+def _gl007_tags_sin_runner(doc, jobs, known_runner_tags) -> list:
+    if known_runner_tags is None:
+        return []          # degradacion explicita, igual que PL013
+    conocidos = {str(t) for t in known_runner_tags}
+    out = []
+    for nombre, jd in jobs.items():
+        tags = jd.get("tags")
+        if not isinstance(tags, list):
+            continue
+        for tag in tags:
+            if str(tag) in conocidos:
+                continue
+            out.append(SemanticFinding(
+                code="GL007", severity=SEV_WARNING,
+                message=("el job %r pide un runner con el tag %r, que no esta registrado en el "
+                         "proyecto: el job quedaria en pending para siempre" % (nombre, tag)),
+                location=nombre, evidence="tags: %s" % tag,
+            ))
+    return out
+
+
+def _gl008_artifacts_no_producidos(doc, jobs) -> list:
+    out = []
+    for nombre, jd in jobs.items():
+        bloque = jd.get("artifacts")
+        paths = bloque.get("paths") if isinstance(bloque, dict) else None
+        if not isinstance(paths, list):
+            continue
+        cuerpo = " ".join(_gl_script_lines(jd))
+        for path in paths:
+            texto = str(path)
+            if "*" in texto or "$" in texto:
+                continue
+            primero = texto.replace("\\", "/").strip("/").split("/")[0]
+            if not primero or primero in cuerpo:
+                continue
+            out.append(SemanticFinding(
+                code="GL008", severity=SEV_WARNING,
+                message=("el job %r publica el artefacto %r, que ningun comando suyo menciona: "
+                         "el `artifacts:` saldria vacio" % (nombre, texto)),
+                location=nombre, evidence="artifacts.paths: %s" % texto,
+            ))
+    return out
+
+
+def _gl009_sin_runner_resoluble(doc, jobs) -> list:
+    default = doc.get("default") if isinstance(doc.get("default"), dict) else {}
+    if doc.get("image") or default.get("image") or default.get("tags"):
+        return []
+    out = []
+    for nombre, jd in jobs.items():
+        if jd.get("image") or jd.get("tags"):
+            continue
+        out.append(SemanticFinding(
+            code="GL009", severity=SEV_WARNING,
+            message=("el job %r no dice sobre que corre (`image:` ni `tags:`) y el archivo no "
+                     "define un `default:`. Va a caer en el runner compartido, que puede no "
+                     "existir" % nombre),
+            location=nombre, evidence="sin image ni tags",
+        ))
+    return out
+
+
+def _gl010_keyword_fuera_del_catalogo(doc, jobs) -> list:
+    from services.cicd_gitlab_catalog import (  # noqa: PLC0415
+        JOB_KEYWORDS, SCOPE_JOB, is_known_keyword,
+    )
+
+    validas = ", ".join(sorted(JOB_KEYWORDS))
+    out = []
+    for nombre, jd in jobs.items():
+        for clave in jd:
+            if is_known_keyword(clave, SCOPE_JOB):
+                continue
+            out.append(SemanticFinding(
+                code="GL010", severity=SEV_ERROR,
+                message=("%r no es una keyword de job de GitLab CI: un pipeline generado solo "
+                         "puede usar el catalogo cerrado. Validas: %s" % (clave, validas)),
+                location=nombre, evidence="clave desconocida: %s" % clave,
+            ))
+    return out
+
+
+def _gl011_pipeline_sin_comandos(doc, jobs) -> list:
+    if not jobs:
+        return []
+    for jd in jobs.values():
+        for linea in _gl_script_lines(jd):
+            limpia = linea.strip()
+            if limpia and limpia not in ECHO_NOOP_MARKERS:
+                return []
+    return [SemanticFinding(
+        code="GL011", severity=SEV_ERROR,
+        message=("este pipeline no ejecuta ningun comando real: sale valido y no hace nada. Es "
+                 "el defecto que el Plan 249 mato; revisa que la traduccion no haya perdido los "
+                 "pasos"),
+        location="(documento)", evidence="todos los jobs con script vacio o de relleno",
+    )]
+
+
+def _check_gitlab(doc: dict, *, mode: str, known_runner_tags: list = None) -> list:
+    """GL001..GL011 sobre un documento GitLab ya parseado. PURA. NUNCA lanza."""
+    from services.cicd_gitlab_catalog import job_dicts, stage_index_map  # noqa: PLC0415
+
+    jobs = job_dicts(doc)
+    indices = stage_index_map(doc)
+
+    findings: list = []
+    findings.extend(_gl001_stage_no_declarado(doc, jobs, indices))
+    findings.extend(_gl002_needs_a_stage_posterior(doc, jobs, indices))
+    findings.extend(_gl003_only_mezclado_con_rules(doc, jobs))
+    findings.extend(_gl005_prod_sin_compuerta(doc, jobs))
+    findings.extend(_gl006_extends_ausente(doc, jobs))
+    findings.extend(_gl007_tags_sin_runner(doc, jobs, known_runner_tags))
+
+    if mode == MODE_NL_STRICT:
+        findings.extend(_gl004_only_legado(doc, jobs))
+        findings.extend(_gl008_artifacts_no_producidos(doc, jobs))
+        findings.extend(_gl009_sin_runner_resoluble(doc, jobs))
+        findings.extend(_gl010_keyword_fuera_del_catalogo(doc, jobs))
+        findings.extend(_gl011_pipeline_sin_comandos(doc, jobs))
+
+    # [plan 249 C7] el invariante se enforcea EN EL CODIGO, no solo en un test: el `return`
+    # temprano de check_semantics saltea el assert del camino ADO.
+    assert all(f.code not in _GL_NL_STRICT_ONLY for f in findings) or mode == MODE_NL_STRICT
     return findings

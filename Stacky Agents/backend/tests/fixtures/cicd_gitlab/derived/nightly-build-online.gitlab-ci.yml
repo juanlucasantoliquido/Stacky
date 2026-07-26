@@ -1,0 +1,33 @@
+# DERIVADO - NO EDITAR A MANO.
+# origen: backend/tests/fixtures/cicd_nl/golden/nightly-build-online.yml
+# generado por: backend/scripts/regen_gitlab_derived_corpus.py
+# receta: to_gitlab_yaml(parse_ado_yaml(<origen>))
+stages:
+- build
+variables:
+  solution: trunk/OnLine/Soluciones/AgendaWeb.sln
+  testProject: trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj
+  buildPlatform: Any CPU
+BuildRelease:
+  stage: build
+  script:
+  - echo "##vso[task.setvariable variable=nightlyStatus]$(Agent.JobStatus)"
+  - 'echo "Nightly build $(Build.BuildNumber) — Status: $(Agent.JobStatus)"'
+  - '# TODO(stacky-249): sin equivalente GitLab para NuGetToolInstaller@1 (inputs:
+    versionSpec)'
+  - '# TODO(stacky-249): sin equivalente GitLab para NuGetCommand@2 (inputs: command,
+    feedsToUse, restoreSolution)'
+  - '# TODO(stacky-249): sin equivalente GitLab para VSBuild@1 (inputs: configuration,
+    msbuildArgs, platform, solution)'
+  - '# TODO(stacky-249): sin equivalente GitLab para VSBuild@1 (inputs: configuration,
+    platform, solution)'
+  - dotnet test $(testProject) --configuration Release --collect "Code Coverage" --logger
+    "trx;LogFileName=AgendaWebTests-nightly.trx" --results-directory "$(Agent.TempDirectory)\TestResults"
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishTestResults@2 (inputs:
+    failTaskOnFailedTests, testResultsFiles, testResultsFormat, testRunTitle)'
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishCodeCoverageResults@2
+    (inputs: summaryFileLocation)'
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'
+  rules:
+  - if: always()

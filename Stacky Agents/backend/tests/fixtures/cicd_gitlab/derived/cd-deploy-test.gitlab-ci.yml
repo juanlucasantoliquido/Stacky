@@ -1,0 +1,46 @@
+# DERIVADO - NO EDITAR A MANO.
+# origen: backend/tests/fixtures/cicd_nl/golden/cd-deploy-test.yml
+# generado por: backend/scripts/regen_gitlab_derived_corpus.py
+# receta: to_gitlab_yaml(parse_ado_yaml(<origen>))
+stages:
+- Build
+- DeployAgendaWeb
+- DeployBatch
+variables:
+  buildConfiguration: Release
+  buildPlatform: Any CPU
+BuildJob:
+  stage: Build
+  script:
+  - '# TODO(stacky-249): sin equivalente GitLab para NuGetToolInstaller@1 (inputs:
+    versionSpec)'
+  - '# TODO(stacky-249): sin equivalente GitLab para NuGetCommand@2 (inputs: command,
+    feedsToUse, restoreSolution)'
+  - '# TODO(stacky-249): sin equivalente GitLab para VSBuild@1 (inputs: configuration,
+    msbuildArgs, platform, solution)'
+  - '# TODO(stacky-249): sin equivalente GitLab para PowerShell@2 (inputs: script,
+    targetType, workingDirectory)'
+  - pwsh -File PUBLISH/Build-Release.ps1 -Configuration Release -Clean -IncludeProjects
+    Motor,Inchost,Mul2Bane,RsExtrae,RSProcOUT,RSAgExtIN,RSAgExtOUT
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'
+DeployAgendaWeb:
+  stage: DeployAgendaWeb
+  environment: Test
+  when: manual
+  script:
+  - pwsh -File $(Pipeline.Workspace)/s/pipelines/scripts/Deploy-Local.ps1 -Component
+    AgendaWeb -ArtifactPath "$(Pipeline.Workspace)/AgendaWeb" -LogDir "$(Build.ArtifactStagingDirectory)/deploy-logs"
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'
+DeployBatch:
+  stage: DeployBatch
+  environment: Test
+  when: manual
+  script:
+  - pwsh -File $(Pipeline.Workspace)/s/pipelines/scripts/Deploy-Local.ps1 -Component
+    Batch -ArtifactPath "$(Pipeline.Workspace)/Batch" -LogDir "$(Build.ArtifactStagingDirectory)/deploy-logs"
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'

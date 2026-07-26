@@ -452,6 +452,23 @@
         "matches": [],
         "clean": []
       }
+    },
+    {
+      "id": "GITLAB-EMPTY-PIPELINE",
+      "title": "Pipeline GitLab emitida cuyo unico cuerpo ejecutable es echo 'no-op'",
+      "class": "artefacto-vacio",
+      "status": "resolved",
+      "log_pattern": "",
+      "log_guarded": false,
+      "killed_by": "plan 249 (paridad GitLab del motor inteligente de pipelines)",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/test_plan249_reglas_gitlab.py::test_gl011_detecta_el_derivado_vacio",
+      "evidence": "backend/services/pipeline_renderers.py (_spec_to_gitlab_doc no leia task_steps, root_* ni deployments); backend/tests/fixtures/cicd_gitlab/derived/",
+      "note": "Medido: sobre los 9 golden ADO, to_gitlab_yaml(parse_ado_yaml(x)) emitia 0 comandos reales y 51 TaskStep se perdian en silencio. El artefacto salia sintacticamente valido y el lint respondia ok=True: una perdida disfrazada de exito. GL011 es la red permanente.",
+      "self_test": {
+        "matches": [],
+        "clean": []
+      }
     }
   ]
 }

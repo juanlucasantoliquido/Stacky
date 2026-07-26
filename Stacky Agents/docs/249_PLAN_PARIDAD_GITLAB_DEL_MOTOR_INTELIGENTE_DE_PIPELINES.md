@@ -1,6 +1,44 @@
 # Plan 249 — Paridad GitLab del motor inteligente de pipelines: catálogo de constructos, reglas `GL000..GL011` y renderer/parser que dejan de mentir
 
-> **Serie "Mago de las Pipelines" (246–252) · Plan 249 · Estado: CRITICADO v2 · 2026-07-26**
+> **Estado: IMPLEMENTADO F0..F5 (2026-07-26).** Resultados REALES, cada archivo en su propia
+> corrida: `test_plan249_corpus_gitlab.py` **6 passed**, `test_plan249_gitlab_catalog.py`
+> **11 passed**, `test_plan249_reglas_gitlab.py` **16 passed** (el número que el propio plan pide
+> al cerrar F3), `test_plan249_renderer_gitlab.py` **12 passed**,
+> `test_plan249_parser_gitlab.py` **10 passed**, `test_plan249_endpoint_gitlab.py` **6 passed**.
+> Frontend: `gitlabProfileModel.test.ts` **4 passed**, `npx tsc --noEmit` **0 errores**.
+> No regresión, **sin editar ninguno**: 73-round-trip 5, 73-spec 8, 243-renderer-ado 19,
+> 243-reglas-semánticas 27, 243-corpus-mirror 8, 243-task-catalog 9, 186-lint-catálogo 5.
+> Gates: `test_harness_flags.py` **56 passed**, `test_harness_ratchet_meta.py` **4 passed**.
+>
+> **Los 9 KPI dieron el número exacto del plan, medidos:** K1 **9/9**, **K2 51/51** (el número
+> corregido en la v2; el `51` sale de sumar las cuatro ubicaciones de `TaskStep`), K3 **3/3**,
+> K4 **3/3** (`GL001`+`GL002`+`GL005` sobre el YAML de §2.3), K5 **0**, K6 **0**, K7 **12/12**,
+> K8 **12/12**, **K9 = 0** (`test_ley_de_severidad_sobre_nivel_A` quedó **passed directo**, sin
+> pasar por `xfail`, porque F2 y F3 se implementaron en la misma corrida).
+>
+> **BUG REAL DEL PLAN encontrado al implementar (F2):** el plan manda subir
+> `RULES_VERSION` de `"243.1"` a `"249.1"` **y a la vez** exige (DoD #3) que
+> `test_plan243_reglas_semanticas.py` quede verde **sin editarlo**. Las dos cosas no pueden ser
+> ciertas: ese test **pinea** la constante (`assert RULES_VERSION == "243.1"`). Medido: con el
+> bump, 1 failed / 26 passed. **Corrección aplicada:** `RULES_VERSION` queda en `"243.1"` y la
+> familia GitLab lleva su **propia** `GITLAB_RULES_VERSION = "249.1"` — exactamente el patrón que
+> el plan 248 ya usa con `SECURITY_RULES_VERSION` / `RECOMMENDATION_RULES_VERSION`. No se pierde
+> información y el gate de no-regresión se cumple de verdad.
+>
+> **Hallazgo al cerrar F4:** el round-trip del nivel A fallaba en 1 de 9
+> (`nightly-build-online`) porque `parse_gitlab_yaml` **nunca leía `rules`**, y `rules.if` **sí**
+> está en `GITLAB_ROUNDTRIP_SUBSET`. Se recupera como la `condition` de los `Step` del job (que
+> es de donde el renderer las emite). Con eso, **9/9 idempotentes**.
+>
+> **DoD #12, matiz honesto:** `grep -c "pipeline_inventory" api/devops.py` da **1**, no 0 — pero
+> esa línea es la key de health `pipeline_inventory_enabled` que dejó el **plan 246**, no un
+> import de este plan (`grep -c "import.*pipeline_inventory"` → **0** en los cuatro archivos).
+> La independencia real del 246 se sostiene.
+>
+> **Pendiente:** el panel no monta una sección nueva (el plan lo declara así: reusa
+> `PipelineLintPanel`); falta el **smoke visual** de que los `semantic_findings` se vean.
+>
+> Estado previo: **Serie "Mago de las Pipelines" (246–252) · Plan 249 · CRITICADO v2 · 2026-07-26**
 > Dependencias: **ninguna dura de código**. El 249 **no consume ningún artefacto del 246 ni del
 > 247** — hecho verificable, no declamado: el módulo que el 246 va a crear **no existe** en el
 > árbol, y **ningún archivo de código de este plan lo importa ni lo nombra** (gate DoD #12,

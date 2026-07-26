@@ -212,7 +212,23 @@ def pipeline_lint_validate_route():
     kv = body.get("known_variables")
     kv = [str(x) for x in kv] if isinstance(kv, list) else None
     from services.pipeline_lint import lint_yaml
-    return jsonify(lint_yaml(yaml_str, source, known_variables=kv).to_dict())
+    report = lint_yaml(yaml_str, source, known_variables=kv).to_dict()
+    # Plan 249 F5 — las GL000..GL011 llegan como CLAVE NUEVA y aditiva: los 6 campos de
+    # LintReport quedan intactos y un frontend viejo la ignora sin romperse.
+    krt = body.get("known_runner_tags")
+    krt = [str(x) for x in krt] if isinstance(krt, list) else None  # None => GL007 no se evalua
+    if source == "gitlab" and getattr(
+            _config.config, "STACKY_GITLAB_SEMANTIC_RULES_ENABLED", False):
+        from services.cicd_semantic_rules import (
+            MODE_AUDIT, PROVIDER_GITLAB, check_semantics,
+        )
+        report["semantic_findings"] = [
+            asdict(f) for f in check_semantics(
+                yaml_str, profile="", provider=PROVIDER_GITLAB, mode=MODE_AUDIT,
+                known_runner_tags=krt,
+            )
+        ]
+    return jsonify(report)
 
 
 @bp.post("/pipeline-lint/explain")

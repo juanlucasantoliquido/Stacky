@@ -1410,6 +1410,12 @@ class Config:
         "STACKY_PIPELINE_PROFILER_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 249 — Reglas semánticas de GitLab CI (GL000..GL011). Default ON.
+    # Analiza TEXTO: no depende de STACKY_GITLAB_ENABLED ni de una instancia alcanzable.
+    STACKY_GITLAB_SEMANTIC_RULES_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_SEMANTIC_RULES_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 248 — Auditoría de pipelines (SEC001..SEC008 + OPT001..OPT004). Default ON.
     # Read-only: detecta y explica, nunca aplica cambios. Editable por UI.
     STACKY_PIPELINE_AUDIT_ENABLED: bool = os.getenv(

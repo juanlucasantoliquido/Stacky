@@ -1,0 +1,19 @@
+# DERIVADO - NO EDITAR A MANO.
+# origen: backend/tests/fixtures/cicd_nl/golden/ci-dacpac.yml
+# generado por: backend/scripts/regen_gitlab_derived_corpus.py
+# receta: to_gitlab_yaml(parse_ado_yaml(<origen>))
+stages:
+- build
+variables:
+  SQL_PROJECT: schema database/DB_Proj_RSPACIFICO.sqlproj
+  DACPAC_NAME: DB_Proj_RSPACIFICO
+build:
+  stage: build
+  script:
+  - '# TODO(stacky-249): sin equivalente GitLab para UseDotNet@2 (inputs: packageType,
+    version)'
+  - dotnet restore $(SQL_PROJECT)
+  - dotnet build $(SQL_PROJECT) --configuration Release --no-restore
+  - cp -r $(Build.SourcesDirectory)/schema database/**/bin/Release/**/*.dacpac $(Build.ArtifactStagingDirectory)/dacpac
+  - '# TODO(stacky-249): sin equivalente GitLab para PublishBuildArtifacts@1 (inputs:
+    ArtifactName, PathtoPublish, publishLocation)'

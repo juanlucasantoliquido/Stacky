@@ -430,6 +430,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED",  # Plan 218 F4 — destino de tracker por proyecto
         "STACKY_CANONICAL_VOCABULARY_ENABLED",        # Plan 218 F5 — alias canónicos aditivos
         "STACKY_CAPABILITY_DEGRADATION_ENABLED",      # Plan 218 F6 — 200 available:false en vez de 500 mudo
+        "STACKY_GITLAB_SEMANTIC_RULES_ENABLED",       # Plan 249 — reglas GL000..GL011 de GitLab CI
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -2944,6 +2945,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         default=True,
+    ),
+    # ── Plan 249 — Reglas semánticas de GitLab CI (GL000..GL011) ──────────────
+    FlagSpec(
+        key="STACKY_GITLAB_SEMANTIC_RULES_ENABLED",
+        type="bool",
+        default=True,  # default ON (ninguna de las 4 excepciones duras aplica; curada en
+                       # _CURATED_DEFAULTS_ON). NO declara requires="STACKY_GITLAB_ENABLED":
+                       # analizar el TEXTO de un .gitlab-ci.yml no necesita instancia GitLab,
+                       # y atarlas dejaria la capacidad muerta en una instalacion limpia.
+        label="Reglas semánticas de GitLab CI",
+        description=(
+            "Plan 249 - agrega los hallazgos GL000..GL011 (stage no declarado, needs a un stage "
+            "posterior, only/except mezclado con rules, deploy a produccion sin compuerta manual) "
+            "al validador de pipelines cuando el proveedor es GitLab. "
+            "OFF: el endpoint devuelve exactamente las PL001..PL014 de hoy, byte-identico."
+        ),
+        group="global",
+        env_only=False,
     ),
     # ── Plan 248 — Auditoría de pipelines (seguridad + optimización) ──────────
     FlagSpec(

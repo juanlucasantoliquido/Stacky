@@ -48,17 +48,48 @@ def _walk(node):
             yield from _walk(value)
 
 
-def scan_unsupported(yaml_text: str) -> tuple:
+# ── Plan 249 F4 — el eje de proveedor de `scan_unsupported` ──────────────────
+
+# Alias de compatibilidad: `UNSUPPORTED_CONSTRUCTS` sigue existiendo y sigue siendo la
+# lista ADO. Nada que la importe hoy cambia (P6).
+_ADO_UNSUPPORTED_CONSTRUCTS: tuple = UNSUPPORTED_CONSTRUCTS
+
+# Allowlist CERRADA de GitLab. Mismo contrato que la de ADO: declarar lo que NO se modela
+# en vez de prometer un round-trip universal. `extends` NO esta: en GitLab es una keyword
+# de primera clase y marcarla era un falso positivo estructural (K6).
+GITLAB_UNSUPPORTED_CONSTRUCTS: tuple = (
+    "include", "workflow", "default", "parallel", "trigger", "pages",
+    "cache", "before_script", "after_script", "secrets", "id_tokens", "release",
+)
+
+# Subset EXACTO que sobrevive round-trip. Enumerado y versionado (P5).
+GITLAB_ROUNDTRIP_SUBSET: dict = {
+    "root": ("stages", "variables"),
+    "job": ("stage", "script", "image", "tags", "variables", "services",
+            "artifacts.paths", "needs", "rules.if", "when", "environment"),
+}
+
+
+def scan_unsupported(yaml_text: str, provider: str = "ado") -> tuple:
     """Declara qué construcciones NO modeladas trae este YAML. PURA (sin I/O).
 
     Se evalúa sobre el documento PARSEADO, no sobre el texto: un `${{` dentro de un
     comentario no es una expresión de tiempo de compilación, y un pipeline no debería
     quedar marcado por lo que dice su propia documentación.
+
+    [Plan 249 F4] `provider` es kwarg con default: llamarla como hoy da el resultado de hoy.
     """
     try:
         doc = yaml.safe_load(yaml_text)
     except yaml.YAMLError:
         return ()
+
+    if provider == "gitlab":
+        # En GitLab las construcciones no modeladas son claves de PRIMER NIVEL del
+        # documento. `extends` es legitima y NO se marca (K6).
+        if not isinstance(doc, dict):
+            return ()
+        return tuple(c for c in GITLAB_UNSUPPORTED_CONSTRUCTS if c in doc)
 
     encontrados = set()
     for node in _walk(doc):
@@ -71,7 +102,7 @@ def scan_unsupported(yaml_text: str) -> tuple:
                 if clave in ("matrix", "template", "extends", "resources"):
                     encontrados.add(clave)
     # Orden determinista: el de la allowlist, nunca el de un set.
-    return tuple(c for c in UNSUPPORTED_CONSTRUCTS if c in encontrados)
+    return tuple(c for c in _ADO_UNSUPPORTED_CONSTRUCTS if c in encontrados)
 
 
 # ── ADO ────────────────────────────────────────────────────────────────────────
@@ -286,56 +317,160 @@ def to_gitlab_yaml(spec: PipelineSpec) -> str:
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
 
 
+# ── Plan 249 F3 — el renderer GitLab deja de emitir pipelines vacías ──────────
+
+GITLAB_RENDERER_VERSION = "249.1"
+
+UNTRANSLATABLE_TASK_MARKER = "# TODO(stacky-249): sin equivalente GitLab para"
+
+_ROOT_STAGE_NAME = "build"
+
+
+def _tr_dotnet(inputs: dict) -> list:
+    partes = ["dotnet", str(inputs.get("command") or "build")]
+    if inputs.get("projects"):
+        partes.append(str(inputs["projects"]))
+    if inputs.get("arguments"):
+        partes.append(str(inputs["arguments"]))
+    return [" ".join(p for p in partes if p)]
+
+
+def _tr_powershell(inputs: dict) -> list:
+    ruta = str(inputs.get("filePath") or "")
+    if not ruta:
+        return []          # inline: NO se traduce (coherente con RS004)
+    partes = ["pwsh", "-File", ruta]
+    if inputs.get("arguments"):
+        partes.append(str(inputs["arguments"]))
+    return [" ".join(partes)]
+
+
+def _tr_copyfiles(inputs: dict) -> list:
+    origen = str(inputs.get("SourceFolder") or ".")
+    contenido = str(inputs.get("Contents") or "**")
+    destino = str(inputs.get("TargetFolder") or ".")
+    return ["cp -r %s/%s %s" % (origen, contenido, destino)]
+
+
+# CERRADO y versionado. Sólo las 3 tareas cuyo equivalente en un runner de GitLab es
+# literal y no requiere inventar nada. Las otras 7 del catálogo ADO (VSBuild@1,
+# NuGetCommand@2, ...) NO tienen equivalente honesto: se emiten marcadas.
+TASK_TRANSLATION_MAP: dict = {
+    "DotNetCoreCLI@2": _tr_dotnet,
+    "PowerShell@2": _tr_powershell,
+    "CopyFiles@2": _tr_copyfiles,
+}
+
+
+def _task_step_to_script_lines(t) -> list:
+    """Paso ADO -> líneas de `script:` GitLab. PURA.
+
+    HONESTIDAD ANTES QUE MAGIA: sólo traduce lo que tiene equivalente real y verificable.
+    Lo demás NO se inventa: se emite como comentario marcado, y GL011 se encarga de que un
+    pipeline hecho sólo de eso no pase por bueno.
+
+    [C6] Acepta `Step` **y** `TaskStep`: que hoy `dp.steps` traiga sólo TaskStep es un
+    accidente de `_parse_deployment`, no un contrato del modelo.
+    """
+    if not hasattr(t, "task"):                 # es un Step: ya trae el comando literal
+        return [ln for ln in (getattr(t, "script", "") or "").split("\n") if ln.strip()]
+    ref = str(t.task)
+    inputs = dict(getattr(t, "inputs", None) or {})
+    traductor = TASK_TRANSLATION_MAP.get(ref)
+    if traductor is not None:
+        lineas = traductor(inputs)
+        if lineas:
+            return lineas
+    return ["%s %s (inputs: %s)" % (UNTRANSLATABLE_TASK_MARKER, ref, ", ".join(sorted(inputs)))]
+
+
+def _needs_value(depends_on) -> list:
+    return [str(d) for d in (depends_on or ())]
+
+
+def _job_doc_gitlab(jb, stage_name: str) -> dict:
+    job_doc: dict = {"stage": stage_name}
+    img = _image_map(jb.pool_vm_image, jb.image)
+    if img:
+        job_doc["image"] = img
+    if jb.runner_tags:
+        job_doc["tags"] = list(jb.runner_tags)
+    elif jb.pool_name:
+        job_doc["tags"] = [jb.pool_name]       # pool self-hosted -> tag de runner
+    if jb.variables:
+        job_doc["variables"] = dict(jb.variables)
+    if jb.services:
+        job_doc["services"] = list(jb.services)
+    if jb.depends_on:
+        job_doc["needs"] = _needs_value(jb.depends_on)
+
+    scripts: list = []
+    rules: list = []
+    for step in jb.steps:
+        for line in (step.script or "").split("\n"):
+            if line.strip():
+                scripts.append(line)
+        if step.condition:
+            rules.append({"if": _translate_condition_to_gitlab(step.condition)})
+    for t in jb.task_steps:                    # ← la línea que faltaba
+        scripts.extend(_task_step_to_script_lines(t))
+
+    job_doc["script"] = scripts if scripts else ["echo 'no-op'"]
+    if rules:
+        job_doc["rules"] = rules
+    if jb.artifacts:
+        job_doc["artifacts"] = {"paths": list(jb.artifacts)}
+    return job_doc
+
+
+def _deployment_doc_gitlab(dp, stage_name: str) -> dict:
+    """DeploymentJob -> job GitLab con environment y compuerta manual.
+
+    `when: manual` SIEMPRE: un deployment de ADO tiene aprobación de environment; el
+    equivalente honesto en GitLab es la compuerta manual (y si no, GL005).
+    """
+    scripts = [ln for t in dp.steps for ln in _task_step_to_script_lines(t)]
+    return {
+        "stage": stage_name,
+        "environment": dp.environment,
+        "when": "manual",
+        "script": scripts if scripts else ["echo 'no-op'"],
+    }
+
+
 def _spec_to_gitlab_doc(spec: PipelineSpec) -> dict:
     """PipelineSpec → dict YAML-ready para GitLab. PURA.
     trigger_branches se OMITE (GitLab dispara por push) — lossy-by-design (F6, C6)."""
     doc: dict = {}
 
-    # Stages list
     stage_names = [st.name for st in spec.stages]
-    doc["stages"] = stage_names
+    tiene_raiz = bool(spec.root_task_steps or spec.root_steps or spec.root_jobs)
+    if tiene_raiz and _ROOT_STAGE_NAME not in stage_names:
+        stage_names = [_ROOT_STAGE_NAME] + stage_names
+    doc["stages"] = stage_names or [_ROOT_STAGE_NAME]
 
-    # Variables globales
     if spec.variables:
         doc["variables"] = dict(spec.variables)
 
-    # Jobs al root del documento
+    # Plan 249 F3 — las TRES raíces de ADO dejan de perderse.
+    if spec.root_task_steps or spec.root_steps:
+        scripts: list = []
+        for step in spec.root_steps:
+            scripts.extend(ln for ln in (step.script or "").split("\n") if ln.strip())
+        for t in spec.root_task_steps:
+            scripts.extend(_task_step_to_script_lines(t))
+        doc[_ROOT_STAGE_NAME] = {
+            "stage": _ROOT_STAGE_NAME,
+            "script": scripts if scripts else ["echo 'no-op'"],
+        }
+    for jb in spec.root_jobs:
+        doc[jb.name] = _job_doc_gitlab(jb, _ROOT_STAGE_NAME)
+
     for st in spec.stages:
-        if st.condition:
-            # condition de stage → se aplica a todos sus jobs como regla
-            pass
         for jb in st.jobs:
-            job_doc: dict = {"stage": st.name}
-            img = _image_map(jb.pool_vm_image, jb.image)
-            if img:
-                job_doc["image"] = img
-            if jb.runner_tags:
-                job_doc["tags"] = list(jb.runner_tags)
-            if jb.variables:
-                job_doc["variables"] = dict(jb.variables)
-            if jb.services:
-                job_doc["services"] = list(jb.services)
-
-            scripts = []
-            rules = []
-            for step in jb.steps:
-                # Agregar líneas del script
-                for line in step.script.split("\n"):
-                    if line.strip():
-                        scripts.append(line)
-                # Traducir condición
-                if step.condition:
-                    gitlab_cond = _translate_condition_to_gitlab(step.condition)
-                    rules.append({"if": gitlab_cond})
-
-            job_doc["script"] = scripts if scripts else ["echo 'no-op'"]
-            if rules:
-                job_doc["rules"] = rules
-
-            if jb.artifacts:
-                job_doc["artifacts"] = {"paths": list(jb.artifacts)}
-
-            doc[jb.name] = job_doc
+            doc[jb.name] = _job_doc_gitlab(jb, st.name)
+        for dp in st.deployments:
+            doc[dp.name] = _deployment_doc_gitlab(dp, st.name)
 
     return doc
 
@@ -535,11 +670,13 @@ def parse_gitlab_yaml(yaml_str: str) -> PipelineSpec:
     raw_yaml_content: str | None = None
     raw_yaml_target: str | None = None
 
-    for key, val in doc.items():
-        if key in ("stages", "variables"):
-            continue
-        if not isinstance(val, dict):
-            continue
+    # [Plan 249 F4] Reusa el criterio YA PROBADO del catalogo (que a su vez es el del lint):
+    # los jobs ocultos `.x` son TEMPLATES y GitLab nunca los ejecuta. Promoverlos a job real
+    # inventaba un stage '' y les inyectaba un `echo 'no-op'` (K5).
+    from services.cicd_gitlab_catalog import job_dicts  # noqa: PLC0415
+
+    deployments_dict: dict = {}
+    for key, val in job_dicts(doc).items():
         stage_name = val.get("stage", "")
         img = val.get("image")
         tags = tuple(val.get("tags") or ())
@@ -550,25 +687,53 @@ def parse_gitlab_yaml(yaml_str: str) -> PipelineSpec:
         scripts = val.get("script") or []
         if isinstance(scripts, str):
             scripts = [scripts]
-        step = Step(name=key, script="\n".join(scripts))
-        job = Job(
+        needs = val.get("needs")
+        depends_on = tuple(needs) if isinstance(needs, list) else (
+            (str(needs),) if isinstance(needs, str) else ())
+
+        if stage_name not in stages_dict:
+            stages_dict[stage_name] = []
+            deployments_dict.setdefault(stage_name, [])
+            stage_names.append(stage_name)
+        deployments_dict.setdefault(stage_name, [])
+
+        entorno = val.get("environment")
+        if isinstance(entorno, dict):
+            entorno = entorno.get("name")
+        if isinstance(entorno, str) and entorno.strip():
+            # [Plan 249 F4] `environment` vuelve al spec como DeploymentJob de su stage.
+            deployments_dict[stage_name].append(DeploymentJob(
+                name=key,
+                environment=entorno,
+                # `Step` (no TaskStep): _task_step_to_script_lines acepta los dos y re-emite el
+                # comando literal, de modo que el round-trip cierra sin inventar una tarea.
+                steps=tuple(Step(name=key, script=str(ln)) for ln in scripts),
+            ))
+            continue
+
+        # [Plan 249 F4] `rules.if` esta en GITLAB_ROUNDTRIP_SUBSET: se recupera como la
+        # `condition` de los Step del job (que es de donde el renderer las emite). El
+        # primer Step lleva el script; los siguientes solo su condicion.
+        condiciones = [str(r.get("if")) for r in (val.get("rules") or [])
+                       if isinstance(r, dict) and r.get("if")]
+        steps_job = [Step(name=key, script="\n".join(scripts),
+                          condition=condiciones[0] if condiciones else None)]
+        for extra in condiciones[1:]:
+            steps_job.append(Step(name=key, script="", condition=extra))
+        stages_dict[stage_name].append(Job(
             name=key,
-            steps=(step,),
+            steps=tuple(steps_job),
             image=img,
             runner_tags=tags,
             variables=job_vars,
             services=services,
             artifacts=arts,
-        )
-        if stage_name in stages_dict:
-            stages_dict[stage_name].append(job)
-        else:
-            # stage desconocido — agregar al final
-            stages_dict[stage_name] = [job]
-            stage_names.append(stage_name)
+            depends_on=depends_on,
+        ))
 
     stages = [
-        Stage(name=s, jobs=tuple(stages_dict.get(s) or []))
+        Stage(name=s, jobs=tuple(stages_dict.get(s) or []),
+              deployments=tuple(deployments_dict.get(s) or []))
         for s in stage_names
     ]
     return PipelineSpec(

@@ -767,3 +767,66 @@ def delete_output_files(execution_id: int):
             errors.append({"rel_path": rel, "error": str(exc)})
 
     return jsonify({"deleted": deleted, "errors": errors})
+
+
+@bp.patch("/<int:execution_id>/assumptions")
+def patch_assumptions(execution_id: int):
+    """Plan 213 F5 — El operador confirma o corrige los supuestos del análisis.
+
+    NO toca el tracker, NO cambia el estado del ticket y NO relanza nada: es
+    solo la decisión humana, guardada. Lo que hace con ella el sistema es
+    devolvérsela al agente en la corrida siguiente (F6).
+    """
+    import json as _json
+
+    from db import session_scope
+    from models import AgentExecution
+
+    _VALIDOS = ("pending", "confirmed", "corrected")
+    body = request.get_json(silent=True) or {}
+    updates = body.get("updates")
+    if not isinstance(updates, list):
+        return jsonify({"ok": False, "error": "updates_required"}), 400
+
+    with session_scope() as session:
+        fila = session.get(AgentExecution, execution_id)
+        if fila is None:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        meta = dict(fila.metadata_dict or {})
+        bloque = dict(meta.get("assumptions") or {})
+        items = [dict(i) for i in (bloque.get("items") or [])]
+
+        for upd in updates:
+            if not isinstance(upd, dict):
+                return jsonify({"ok": False, "error": "invalid_update"}), 400
+            estado = (upd.get("status") or "").strip()
+            if estado not in _VALIDOS:
+                return jsonify({"ok": False, "error": "invalid_status",
+                                "validos": list(_VALIDOS)}), 400
+            try:
+                indice = int(upd.get("index"))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "invalid_index"}), 400
+            if indice < 0 or indice >= len(items):
+                return jsonify({"ok": False, "error": "invalid_index"}), 400
+            correccion = (upd.get("correction") or "").strip()
+            if estado == "corrected" and not correccion:
+                # Marcar algo como corregido sin decir cuál es la corrección
+                # dejaría al agente sabiendo que se equivocó y nada más.
+                return jsonify({"ok": False, "error": "correction_required"}), 400
+
+            items[indice]["status"] = estado
+            if estado == "corrected":
+                items[indice]["correction"] = correccion
+            else:
+                items[indice].pop("correction", None)
+
+        bloque["items"] = items
+        meta["assumptions"] = bloque
+        # metadata_json es una columna Text: asignar el dict crudo la dejaría
+        # como feature muerta silenciosa.
+        fila.metadata_json = _json.dumps(meta, ensure_ascii=False, default=str)
+        resultado = dict(bloque)
+
+    return jsonify({"ok": True, "assumptions": resultado})

@@ -125,6 +125,9 @@ def enrich_blocks(
     blocks = _inject_run_directive(
         ticket_id=ticket_id, agent_type=agent_type, blocks=blocks, log=log
     )
+    # Plan 213 F6 — lo que el operador confirmó o corrigió sobre los supuestos
+    # del análisis anterior vuelve como bloque de máxima prioridad.
+    blocks = _inject_assumption_corrections(ticket_id, agent_type, blocks, log)
     blocks = _inject_artifact_context(ticket_id, blocks, log)
 
     # I3.1 — Paralelización de injectors I/O-bound independientes.
@@ -1086,6 +1089,96 @@ def _inject_epic_structured(
         }
         log("info", f"ado-epic-structured inyectado para Epic ADO-{_epic_ticket.ado_id}")
         return list(blocks) + [_epic_block]
+
+
+def _inject_assumption_corrections(ticket_id: int, agent_type: str, blocks: list, log) -> list:
+    """Plan 213 F6 — Las decisiones del operador sobre los supuestos vuelven al agente.
+
+    Sin esto, confirmar o corregir un supuesto sería un gesto decorativo: el
+    agente volvería a asumir lo mismo en la corrida siguiente.
+
+    Acumula las ÚLTIMAS 3 ejecuciones del mismo ticket+agente, no solo la última:
+    si el operador corrigió algo en la corrida N y confirmó otra cosa en N+1,
+    las dos decisiones tienen que sobrevivir en N+2. Ante el mismo texto en dos
+    corridas, gana la más reciente.
+    """
+    try:
+        from harness.run_contract import applies_to
+
+        if not applies_to(agent_type or ""):
+            return blocks
+
+        from db import session_scope
+        from models import AgentExecution
+        from services.intent_preflight import (
+            CORRECTIONS_BLOCK_ID,
+            build_corrections_block,
+        )
+
+        with session_scope() as session:
+            filas = (
+                session.query(AgentExecution)
+                .filter(AgentExecution.ticket_id == ticket_id)
+                .filter(AgentExecution.agent_type == agent_type)
+                .order_by(AgentExecution.started_at.desc())
+                .limit(10)
+                .all()
+            )
+            # De la más VIEJA a la más nueva, así la reciente pisa a la anterior.
+            recientes = []
+            for fila in filas:
+                meta = fila.metadata_dict or {}
+                items = ((meta.get("assumptions") or {}).get("items")) or []
+                if items:
+                    recientes.append(items)
+                if len(recientes) >= 3:
+                    break
+
+        decididos: dict = {}
+        for items in reversed(recientes):
+            for item in items:
+                if (item or {}).get("status") not in ("confirmed", "corrected"):
+                    continue
+                clave = str(item.get("text") or "").strip().lower()
+                if clave:
+                    decididos[clave] = item
+
+        if not decididos:
+            return blocks
+
+        lineas = []
+        for item in decididos.values():
+            texto = str(item.get("text") or "").strip()
+            if item.get("status") == "confirmed":
+                lineas.append(f"- CONFIRMADO por el operador: {texto}")
+            else:
+                correccion = str(item.get("correction") or "").strip()
+                lineas.append(
+                    f"- CORREGIDO por el operador: {correccion} "
+                    f"(tu supuesto anterior era: {texto} — es INCORRECTO)"
+                )
+
+        nuevo = build_corrections_block("\n".join(lineas))
+        if not nuevo:
+            return blocks
+
+        # Si ya hay un bloque de correcciones (el flujo de brief lo pone), se
+        # concatena: dos bloques con el mismo id serían ambiguos.
+        for existente in blocks:
+            if existente.get("id") == CORRECTIONS_BLOCK_ID:
+                existente["content"] = (
+                    str(existente.get("content") or "").rstrip()
+                    + "\n" + str(nuevo[0].get("content") or "")
+                )
+                return blocks
+
+        return list(blocks) + nuevo
+    except Exception as exc:  # noqa: BLE001 — enriquecer nunca puede romper el run
+        try:
+            log("warn", f"supuestos: no se pudieron inyectar las correcciones ({exc})")
+        except Exception:  # noqa: BLE001
+            pass
+        return blocks
 
 
 def _inject_run_directive(

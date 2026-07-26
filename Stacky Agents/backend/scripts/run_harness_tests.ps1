@@ -615,6 +615,7 @@ $HarnessTestFiles = @(
   "tests/test_plan213_policy_injection.py",
   "tests/test_plan213_post_run_assumptions.py",
   "tests/test_plan213_analyst_prompts.py",
+  "tests/test_plan213_corrections_loop.py",
   # Plan 212 - Selector vivo de modelo/effort y cumplimiento real de la eleccion
   "tests/test_plan212_characterization.py",
   "tests/test_plan212_opus_end_to_end.py",

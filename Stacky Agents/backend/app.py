@@ -869,6 +869,10 @@ def create_app() -> Flask:
     # Plan 209 F3 — guía "Cómo validar esto" (advisory, no bloquea; 3 runtimes).
     from services import validation_playbook as _vp
     _vp.register(ticket_status.register_post_hook)
+    # Plan 211 — inspector post-build + residuos de port como contribuidores de
+    # evidencia del veredicto de build (Plan 210).
+    from services import dev_build_contributors, dev_build_verify
+    dev_build_contributors.register(dev_build_verify.register_evidence_contributor)
 
     return app
 

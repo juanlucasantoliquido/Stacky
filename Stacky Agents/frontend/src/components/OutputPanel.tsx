@@ -14,11 +14,12 @@ import StructuredOutput from "./StructuredOutput";
 import ValidationPlaybookPane, {
   readValidationPlaybook,
 } from "./ValidationPlaybookPane";
+import { readBuildVerdict, verdictBadge } from "./devBuildModel";
 import {
-  orderedFindings,
-  readBuildVerdict,
-  verdictBadge,
-} from "./devBuildModel";
+  findingLabel,
+  findingsFromVerdict,
+  paneColor,
+} from "./portFindingsModel";
 import styles from "./OutputPanel.module.css";
 
 export default function OutputPanel() {
@@ -51,6 +52,8 @@ export default function OutputPanel() {
   // Plan 210 — el "Build OK" que ve el operador sale del veredicto de máquina.
   const buildVerdict = readBuildVerdict(execution?.metadata);
   const buildVerdictBadge = verdictBadge(buildVerdict);
+  // Plan 211 — hallazgos del inspector post-build y del barrido de residuos.
+  const buildFindings = findingsFromVerdict(buildVerdict);
 
   const approve = useMutation({
     mutationFn: (id: number) => Executions.approve(id),
@@ -161,11 +164,13 @@ export default function OutputPanel() {
               <div className={styles.buildVerdict} data-color={buildVerdictBadge.color}>
                 <strong>{buildVerdictBadge.text}</strong>
                 {buildVerdict.solution && <span> · {buildVerdict.solution}</span>}
-                {orderedFindings(buildVerdict).length > 0 && (
-                  <ul>
-                    {orderedFindings(buildVerdict).map((f, i) => (
+                {/* Plan 211 — hallazgos del inspector / barrido de residuos */}
+                {buildFindings.length > 0 && (
+                  <ul data-findings={paneColor(buildFindings)}>
+                    {buildFindings.map((f, i) => (
                       <li key={`${f.kind}-${i}`}>
-                        {f.kind}: {f.detail}
+                        [{f.severity === "blocking" ? "bloquea" : "aviso"}]{" "}
+                        {findingLabel(f.kind)} — {f.file}: {f.detail}
                       </li>
                     ))}
                   </ul>

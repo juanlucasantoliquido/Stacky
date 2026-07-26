@@ -469,6 +469,9 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
     # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──
     "STACKY_DEV_BUILD_VERIFY_ENABLED",
+    # ── Plan 211 — inspector post-build + residuos de port (read-only) ──
+    "STACKY_DEV_POST_BUILD_INSPECT_ENABLED",
+    "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",
     # ── Plan 171 — telemetría operativa (observabilidad read-only, on-read) ──
     "STACKY_OPS_TELEMETRY_ENABLED",
     "STACKY_OPS_BASELINE_ENABLED",

@@ -1174,6 +1174,20 @@ export default function ClientProfileEditor() {
             </div>
           </Section>
 
+          {/* ── Plan 211 — allowlist de residuos de port ── */}
+          <Section title="Residuos de port: tokens permitidos">
+            <StringArrayField
+              label="Tokens legítimos en este cliente"
+              value={asArr(g(["port_residue", "allowlist"]))}
+              onChange={(a) => set(["port_residue", "allowlist"], a)}
+              placeholder="Añadir token…"
+            />
+            <p className={styles.hint}>
+              Si el barrido marca como "residuo de otro cliente" un nombre que acá es
+              legítimo, agregalo y deja de avisar — sin apagar toda la detección.
+            </p>
+          </Section>
+
           {/* ── Catálogo de procesos ── */}
           <Section title="Catálogo de procesos">
             <ProcessCatalogField

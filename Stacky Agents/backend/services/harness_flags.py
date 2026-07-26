@@ -235,6 +235,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",  # Plan 127 — doctor local DevOps (IA local)
         "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",  # Plan 201 — Taller de Compilación (.sln + build Release)
         "STACKY_DEV_BUILD_VERIFY_ENABLED",  # Plan 210 — gate de build determinista del Developer
+        "STACKY_DEV_POST_BUILD_INSPECT_ENABLED",  # Plan 211 — inspector post-build
+        "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",  # Plan 211 — barrido de residuos de port
         "STACKY_PR_REVIEWER_ENABLED",       # Plan 110 — revisor de PRs
         "STACKY_PR_REVIEW_HAIKU_MODEL",     # Plan 110 — modelo Haiku para la revisión
         "STACKY_PR_REVIEW_DIFF_MAX_CHARS",  # Plan 110 — tope del diff (privacidad, camino Haiku)
@@ -1804,6 +1806,31 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description="Plan 142 F7 — Ruta absoluta al export JSONL. Vacío = desactivado.",
         group="observabilidad",
         requires="STACKY_COST_CODEBURN_IMPORT_ENABLED",
+    ),
+    # ── Plan 211 — Inspector post-build + residuos de port entre clientes ───────
+    FlagSpec(
+        key="STACKY_DEV_POST_BUILD_INSPECT_ENABLED",
+        type="bool",
+        default=True,
+        label="Inspector post-build",
+        description=(
+            "Plan 211 — Detecta PostBuildEvents, tareas Copy y OutputPath con rutas "
+            "absolutas o de otros clientes en los .csproj que construyó el Developer. "
+            "Un hallazgo bloqueante baja el 'Build OK'. Default ON."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",
+        type="bool",
+        default=True,
+        label="Barrido de residuos de port",
+        description=(
+            "Plan 211 — Detecta, en los archivos que tocó el Developer, tokens "
+            "(servidores, rutas, nombres) de OTROS clientes del registro de perfiles. "
+            "Solo los tokens inequívocos bloquean; los dudosos avisan. Default ON."
+        ),
+        group="global",
     ),
     # ── Plan 210 — Gate de build determinista del Developer ─────────────────────
     FlagSpec(

@@ -365,6 +365,34 @@
       "guard_test": "tests/test_plan210_gate_coverage.py::test_developer_transition_sites_pass_through_gate",
       "evidence": "backend/services/dev_build_verify.py (gate_final_state/annotate_build_evidence); backend/api/tickets.py (_apply_task_state + rama legacy)",
       "note": "El deliverable declaraba 'Build OK' en verde y esa prosa disparaba la transicion de estado. Ahora el hecho lo produce la maquina: sin veredicto fresco (ligado a execution_id) el estado degrada a revision y el bloque verde del LLM queda tachado."
+    },
+    {
+      "id": "port_residue_foreign_token",
+      "title": "Residuo de port: token de OTRO cliente en un archivo tocado por el developer",
+      "class": "cross-client-residue",
+      "status": "resolved",
+      "log_pattern": "port_residue\\.foreign_token",
+      "log_guarded": false,
+      "killed_by": "plan 211 (barrido de residuos de port entre clientes)",
+      "killed_commit": "(pendiente al mergear)",
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan211_residue.py::test_high_confidence_server_is_blocking",
+      "evidence": "backend/services/port_residue_scanner.py (build_foreign_token_catalog/scan_files_for_foreign_tokens)",
+      "note": "Al portar trabajo entre clientes quedan el servidor, la ruta o el nombre del cliente viejo. Compila igual, asi que el build verde no lo atrapa. Solo los tokens de alta confianza bloquean; los cortos/comunes avisan, y el operador puede suprimir falsos positivos con client_profile.port_residue.allowlist."
+    },
+    {
+      "id": "build_side_effect_foreign",
+      "title": "Efecto colateral de build: PostBuildEvent/Copy/OutputPath con ruta absoluta o de otro cliente",
+      "class": "build-side-effect",
+      "status": "resolved",
+      "log_pattern": "post_build_inspector\\.(post_build_event|copy_task|foreign_output_path)",
+      "log_guarded": false,
+      "killed_by": "plan 211 (inspector post-build)",
+      "killed_commit": "(pendiente al mergear)",
+      "date_resolved": "2026-07-25",
+      "guard_test": "tests/test_plan211_inspector.py::test_post_build_absolute_is_blocking",
+      "evidence": "backend/services/post_build_inspector.py (inspect_projects)",
+      "note": "El proyecto compila pero su evento post-build copia binarios fuera del proyecto (o a la carpeta de otro cliente). Una ruta absoluta PROPIA solo avisa; una ajena bloquea."
     }
   ]
 }

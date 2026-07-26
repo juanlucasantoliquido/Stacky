@@ -1230,6 +1230,15 @@ class Config:
     STACKY_DETERMINISTIC_TASK_STATES_ENABLED: bool = os.getenv(
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 211 — Inspector post-build + residuos de port entre clientes ─────
+    # Ambos son read-only sobre archivos del workspace y alimentan el veredicto
+    # del 210. Un hallazgo bloqueante baja el gate; los tokens dudosos solo avisan.
+    STACKY_DEV_POST_BUILD_INSPECT_ENABLED: bool = os.getenv(
+        "STACKY_DEV_POST_BUILD_INSPECT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED: bool = os.getenv(
+        "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 210 — Gate de build determinista del Developer ───────────────────
     # El "Build OK" deja de ser prosa del LLM: lo produce la máquina. Ausencia de
     # veredicto = NO verificado (jamás OK). Default ON: el gate degrada el estado

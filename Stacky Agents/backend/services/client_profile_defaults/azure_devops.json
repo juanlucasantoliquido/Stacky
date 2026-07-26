@@ -11,13 +11,22 @@
       "ui_code_behind": ".aspx.cs",
       "code": ".cs"
     },
-    "architecture_layers": ["UI", "RSBus (BLL)", "RSDalc (DAL)", "BD"]
+    "architecture_layers": [
+      "UI",
+      "RSBus (BLL)",
+      "RSDalc (DAL)",
+      "BD"
+    ]
   },
   "language": {
     "primary": "csharp",
     "comment_traceability": "// {ticket_token} | {YYYY-MM-DD} | {description}",
     "ticket_token_pattern": "ADO-{id}",
-    "languages_in_ridioma": ["ESP", "ENG", "POR"]
+    "languages_in_ridioma": [
+      "ESP",
+      "ENG",
+      "POR"
+    ]
   },
   "database": {
     "type": "sqlserver",
@@ -44,7 +53,10 @@
     "ridioma_helper": "RSFac.Idioma",
     "ridioma_message_const": "coMens.m{id}",
     "string_sanitizer": "cFormat.StToBD()",
-    "error_helpers": ["Error.Agregar", "msgd.Show"]
+    "error_helpers": [
+      "Error.Agregar",
+      "msgd.Show"
+    ]
   },
   "docs_indexes": {
     "technical_master": "trunk/docs/agentic_manual/tecnica/00_INDICE_MAESTRO.md",
@@ -53,17 +65,25 @@
   },
   "tracker_state_machine": {
     "functional": {
-      "input_states": ["To Do", "New", "Active"],
+      "input_states": [
+        "To Do",
+        "New",
+        "Active"
+      ],
       "blocked_state": "Blocked",
       "next_state_ok": "Technical review"
     },
     "technical": {
-      "input_states": ["Technical review"],
+      "input_states": [
+        "Technical review"
+      ],
       "blocked_state": "Blocked",
       "next_state_ok": "To Do"
     },
     "developer": {
-      "input_states": ["To Do"],
+      "input_states": [
+        "To Do"
+      ],
       "in_progress": "Doing",
       "blocked_state": "Blocked",
       "next_state_ok": "Reviewed by Dev"
@@ -74,5 +94,8 @@
     "client_label": "",
     "domain_glossary_ref": ""
   },
-  "extensions": {}
+  "extensions": {},
+  "port_residue": {
+    "allowlist": []
+  }
 }

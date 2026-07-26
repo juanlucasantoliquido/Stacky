@@ -76,6 +76,12 @@ def _health_payload() -> dict:
         "dev_build_verify_enabled": bool(
             getattr(cfg, "STACKY_DEV_BUILD_VERIFY_ENABLED", False)
         ),  # Plan 210 — gate de build del Developer
+        "post_build_inspect_enabled": bool(
+            getattr(cfg, "STACKY_DEV_POST_BUILD_INSPECT_ENABLED", False)
+        ),  # Plan 211 — inspector post-build
+        "port_residue_scan_enabled": bool(
+            getattr(cfg, "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED", False)
+        ),  # Plan 211 — residuos de port entre clientes
     }
 
 

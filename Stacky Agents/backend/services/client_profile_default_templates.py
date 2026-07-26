@@ -63,6 +63,9 @@ AZURE_DEVOPS: dict = {
         "msbuild_path": "C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe",
         "configuration": "Release",
         "online_solutions": [],
+        # Plan 210 — default seguro: un .csproj suelto NO cuenta como entrada de
+        # build verificable salvo que el operador lo habilite explícitamente.
+        "allow_csproj_entry": False,
         "batch_proj_glob": "Batch/*/*.csproj",
     },
     "conventions": {
@@ -100,6 +103,11 @@ AZURE_DEVOPS: dict = {
         "domain_glossary_ref": "",
     },
     "extensions": {},
+    # Plan 211 — tokens que el operador declara legítimos en ESTE cliente, para
+    # suprimir un falso positivo del barrido de residuos sin apagar la detección.
+    "port_residue": {
+        "allowlist": [],
+    },
 }
 
 

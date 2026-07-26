@@ -1353,6 +1353,12 @@ export const Executions = {
     return api.get<ExecutionsSummary>(`/api/executions/summary?${qs.toString()}`);
   },
   byId: (id: number) => api.get<AgentExecution>(`/api/executions/${id}`),
+  /** Plan 200 F2 — snapshot del transcript (mismo endpoint que ya usa la consola
+   *  de ejecuciones; no hay canal nuevo que mantener). */
+  logsSnapshot: (id: number) =>
+    api.get<Array<{ timestamp?: string; level?: string; message?: string }>>(
+      `/api/executions/${id}/logs`,
+    ),
   approve: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/approve`),
   discard: (id: number) => api.post<AgentExecution>(`/api/executions/${id}/discard`),
   humanReview: (id: number, body: { verdict: "approved" | "rejected" | "approved_with_notes"; note?: string }) =>
@@ -4769,6 +4775,12 @@ export type { IncidentDTO, IncidentPreviewDTO, IncidentStatusDTO };
 
 export const Incidents = {
   status: () => api.get<IncidentStatusDTO>("/api/incidents/status"),
+
+  /** Plan 200 F2 — qué ejecuciones tiene esta incidencia. 404 con la flag OFF. */
+  console: (incidentId: string) =>
+    api.get<import("../components/incidentConsole").ConsoleResponse>(
+      `/api/incidents/${encodeURIComponent(incidentId)}/console`,
+    ),
 
   /** multipart/form-data — el cliente `api.post` fija Content-Type: application/json
    * y no sirve para subir archivos; se usa fetch directo (client.ts:85-86, apiBase).

@@ -28,6 +28,7 @@ import { useModelCatalog } from "../hooks/useModelCatalog";
 import { EMERGENCY_MODEL_CATALOG } from "../services/modelCatalogFallback";
 import { Dialog } from "./ui";
 import { resolveModalInit } from "./incidentModalInit";
+import { AgentConsole } from "./IncidentAgentConsole";
 import styles from "./IncidentResolverModal.module.css";
 
 const QUEUE_POLL_INTERVAL_MS = 3000; // Plan 166 F3/C8 — coherente con el latido único (plan 156)
@@ -554,6 +555,11 @@ export default function IncidentResolverModal({ onClose, initialText, initialFil
                 Publicar sin épica
               </label>
             </div>
+
+            {/* Plan 200 F2 — el transcript del agente, acá mismo. Antes había que
+                salir del detalle y buscar la ejecución por id en otra pantalla,
+                justo cuando se está por decidir si publicar lo que produjo. */}
+            {incidentId && <AgentConsole incidentId={incidentId} />}
 
             <label className={styles.label}>
               <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} />

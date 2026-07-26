@@ -38,6 +38,11 @@ import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incident
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
+import SavedViewsBar from "../components/SavedViewsBar";
+import { filtersToTicketBoardState, ticketBoardStateToFilters } from "../services/savedViews";
+import { actionsForTicket, quickActions } from "../services/entityActions";
+import { copyText as copiarTexto } from "../services/clipboard";
+import { IconButton } from "../components/ui";
 import { getWorkItemTypeColor } from "../utils/workItemTypeColor";
 
 // Resuelve el tipo del agente. Prioriza el override explícito que el operador
@@ -449,6 +454,30 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
           <p className={styles.cardTitle}>{ticket.title}</p>
 
           <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+            {/* Plan 175 F4 — solo las acciones SEGURAS: quickActions filtra con
+                doble cerrojo (quick Y safe), así que nada con efecto puede
+                aparecer a un click de distancia en la tarjeta. */}
+            {quickActions(actionsForTicket(ticket)).map((a) => (
+              <IconButton
+                key={a.id}
+                size="sm"
+                label={a.label}
+                icon={a.icon}
+                onClick={() =>
+                  void a.run({
+                    copyText: copiarTexto,
+                    openExternal: (url: string) => window.open(url, "_blank", "noopener"),
+                    navigate: () => {},
+                    askConfirm: async () => true,
+                    api: {
+                      cancelExecution: async () => ({}),
+                      deleteExecution: async () => ({}),
+                      publishExecution: async () => ({}),
+                    },
+                  })
+                }
+              />
+            ))}
             {nextLabel && <span className={styles.nextTag}>→ {nextLabel}</span>}
             {memoryBadge && memoryBadge.open_findings > 0 && (
               <span
@@ -531,7 +560,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                     : nextSuggested
                     ? `Correr agente sugerido: ${nextLabel}`
                     : ticket.ado_state
-                    ? `No hay agente configurado para el estado '${ticket.ado_state}'. Configurá el flujo en la pestaña Config de Flujo.`
+                    ? `No hay agente configurado para el estado '${ticket.ado_state}'. Configurá el flujo en la pestaña Estados.`
                     : "El ticket no tiene estado ADO asignado."
                 }
               >
@@ -1139,6 +1168,20 @@ export default function TicketBoard() {
           placeholder="Buscar por título o ADO-ID…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+        />
+        {/* Plan 173 F3 — presets del tablero. Sus 4 campos ya persisten solos
+            (useLocalStorageState), así que acá NO va `defaultFilters`: 173 no
+            auto-aplica nada y se limita a guardar, aplicar y resaltar. */}
+        <SavedViewsBar
+          screenId="ticketBoard"
+          currentFilters={ticketBoardStateToFilters({ search, onlyPending, showAll, viewMode })}
+          onApply={(f) => {
+            const st = filtersToTicketBoardState(f);
+            setSearch(st.search);
+            setOnlyPending(st.onlyPending);
+            setShowAll(st.showAll);
+            setViewMode(st.viewMode as ViewMode);
+          }}
         />
       </div>
 

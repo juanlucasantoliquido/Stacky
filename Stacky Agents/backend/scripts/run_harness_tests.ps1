@@ -600,6 +600,7 @@ $HarnessTestFiles = @(
   "tests/test_plan199_telemetry_harvest.py",
   "tests/test_plan199_harvest_backfill.py",
   "tests/test_plan199_harvest_ledger.py",
+  "tests/test_plan199_cost_filters_ext.py",
   # Plan 200 - Consola por incidencia + marcado de despliegue SQL
   "tests/test_plan200_flags.py",
   "tests/test_plan200_incident_console.py",

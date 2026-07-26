@@ -165,6 +165,13 @@ class CostFilters:
     project: str | None = None     # filtro SQL (stacky_project_name o project)
     statuses: tuple[str, ...] = ()  # filtro SQL (csv)
     cost_kind: str | None = None   # filtro Python: reported|estimated|nominal|unknown
+    # Plan 199 F4 — aditivos AL FINAL con default: todo caller previo sigue
+    # construyendo CostFilters igual. Los plurales COEXISTEN con los singulares
+    # (no los reemplazan): quien ya filtraba por un runtime sigue funcionando.
+    runtimes: tuple = ()           # OR entre varios runtimes
+    models: tuple = ()             # OR entre varios modelos
+    min_cost_usd: float | None = None
+    max_cost_usd: float | None = None
 
 
 def load_records(f: CostFilters) -> list[ExecRecord]:
@@ -203,6 +210,18 @@ def load_records(f: CostFilters) -> list[ExecRecord]:
             if f.model and cr.model != f.model:
                 continue
             if f.cost_kind and cr.cost_kind != f.cost_kind:
+                continue
+            # Plan 199 F4 — filtros aditivos. Una fila SIN costo no entra en un
+            # rango de costo: "no sé cuánto salió" no es "salió $0".
+            if f.runtimes and (cr.runtime or "") not in f.runtimes:
+                continue
+            if f.models and (cr.model or "") not in f.models:
+                continue
+            if f.min_cost_usd is not None and (
+                    cr.cost_usd is None or cr.cost_usd < f.min_cost_usd):
+                continue
+            if f.max_cost_usd is not None and (
+                    cr.cost_usd is None or cr.cost_usd > f.max_cost_usd):
                 continue
             out.append(ExecRecord(
                 execution_id=ex.id, ticket_id=ex.ticket_id,
@@ -586,3 +605,114 @@ def backfill_claude_model_key() -> dict:
             row.metadata_dict = md
             updated += 1
     return {"scanned": scanned, "updated": updated}
+
+
+# ---------------------------------------------------------------------------
+# Plan 199 F5 — Agregadores nuevos. Puros, append-only: ningún contrato del 142
+# se toca, y `burn`/`breakdown`/`summarize` siguen exactamente igual.
+# ---------------------------------------------------------------------------
+
+def burn_stacked(records: list, bucket: str = "day", group_by: str = "runtime") -> dict:
+    """Como `burn`, pero cada punto trae el desglose por grupo.
+
+    Sirve para ver de dónde sale el gasto en el tiempo, no solo cuánto: un pico
+    puede ser "un runtime se disparó" o "todos subieron parejo", y son problemas
+    distintos.
+    """
+    if group_by not in ("runtime", "model", "agent_type"):
+        group_by = "runtime"
+
+    dated = [r for r in records if r.started_at is not None]
+    if not dated:
+        return {"bucket": bucket, "group_by": group_by, "series": [], "groups": []}
+
+    por_bucket: dict = {}
+    grupos: set = set()
+    for r in dated:
+        inicio = _bucket_start(r.started_at, bucket)
+        clave = _dim_key(r, group_by)
+        grupos.add(clave)
+        acumulado = por_bucket.setdefault(inicio, {})
+        if r.row.cost_usd is not None and _billable(r.row.cost_kind):
+            acumulado[clave] = round(acumulado.get(clave, 0.0) + r.row.cost_usd, 6)
+        else:
+            acumulado.setdefault(clave, 0.0)
+
+    series = [
+        {
+            "bucket": _bucket_key(inicio, bucket),
+            "groups": dict(sorted(por_bucket[inicio].items())),
+            "billable_usd": round(sum(por_bucket[inicio].values()), 6),
+        }
+        for inicio in sorted(por_bucket)
+    ]
+    return {"bucket": bucket, "group_by": group_by,
+            "series": series, "groups": sorted(grupos)}
+
+
+def heatmap(records: list) -> dict:
+    """Gasto por día de semana × hora.
+
+    Responde "¿cuándo se gasta?", que es lo que permite ver si el gasto se
+    concentra en horario laboral o si hay algo corriendo de madrugada.
+    """
+    celdas: dict = {}
+    for r in records:
+        if r.started_at is None:
+            continue
+        clave = (r.started_at.weekday(), r.started_at.hour)
+        acumulado = celdas.setdefault(clave, {"billable_usd": 0.0, "runs": 0})
+        if r.row.cost_usd is not None and _billable(r.row.cost_kind):
+            acumulado["billable_usd"] = round(
+                acumulado["billable_usd"] + r.row.cost_usd, 6)
+        acumulado["runs"] += 1
+
+    salida = [
+        {"weekday": d, "hour": h,
+         "billable_usd": v["billable_usd"], "runs": v["runs"]}
+        for (d, h), v in sorted(celdas.items())
+    ]
+    return {
+        "cells": salida,
+        "max_billable_usd": max((c["billable_usd"] for c in salida), default=0.0),
+    }
+
+
+def distribution(records: list, bins: int = 20) -> dict:
+    """Histograma del costo por corrida.
+
+    Un promedio esconde la forma: 100 corridas baratas y una carísima dan el
+    mismo promedio que 101 medianas, y no son la misma situación.
+
+    Solo entran las corridas CON costo conocido: una sin costo no es una de $0.
+    """
+    bins = max(1, min(int(bins or 1), 50))
+    costos = [r.row.cost_usd for r in records
+              if r.row.cost_usd is not None]
+
+    if not costos:
+        return {"bins": [], "total": 0, "min": None, "max": None}
+
+    minimo, maximo = min(costos), max(costos)
+    if maximo == minimo:
+        # Todo el mismo valor: un solo bin, o el ancho sería cero.
+        return {"bins": [{"lo": minimo, "hi": maximo, "count": len(costos)}],
+                "total": len(costos), "min": minimo, "max": maximo}
+
+    ancho = (maximo - minimo) / bins
+    conteos = [0] * bins
+    for c in costos:
+        indice = int((c - minimo) / ancho)
+        if indice >= bins:      # el máximo exacto cae en el último bin
+            indice = bins - 1
+        conteos[indice] += 1
+
+    return {
+        "bins": [
+            {"lo": round(minimo + i * ancho, 6),
+             "hi": round(minimo + (i + 1) * ancho, 6),
+             "count": conteos[i]}
+            for i in range(bins)
+        ],
+        "total": len(costos), "min": minimo, "max": maximo,
+    }

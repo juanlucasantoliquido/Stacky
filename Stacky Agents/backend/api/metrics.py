@@ -605,10 +605,23 @@ def _parse_filters(args) -> ca.CostFilters:
         v = (args.get(k) or "").strip()
         return v or None
 
+    # Plan 199 F4 — filtros aditivos: multi-runtime, multi-modelo y rango de costo.
+    def _csv(k) -> tuple:
+        return tuple(v.strip() for v in (args.get(k) or "").split(",") if v.strip())
+
+    def _num(k):
+        try:
+            valor = args.get(k)
+            return float(valor) if valor not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
     return ca.CostFilters(date_from=date_from, date_to=date_to, days=days,
                            runtime=_s("runtime"), model=_s("model"), agent_type=_s("agent_type"),
                            ticket_id=ticket_id, project=_s("project"), statuses=statuses,
-                           cost_kind=_s("cost_kind"))
+                           cost_kind=_s("cost_kind"),
+                           runtimes=_csv("runtimes"), models=_csv("models"),
+                           min_cost_usd=_num("min_cost"), max_cost_usd=_num("max_cost"))
 
 
 def _filters_or_error(args):
@@ -668,6 +681,65 @@ def cost_burn():
         "ok": True, "enabled": True,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         **ca.burn_with_comparison(records, prev, bucket=bucket),
+    })
+
+
+# ── Plan 199 F5 — Tres vistas nuevas sobre los MISMOS records ────────────────
+# Comparten `_filters_or_error` y `load_records` con los endpoints del 142: los
+# filtros que el operador puso valen igual acá.
+
+@bp.get("/cost-burn-stacked")
+def cost_burn_stacked():
+    """De dónde sale el gasto en el tiempo, no solo cuánto."""
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    bucket = (request.args.get("bucket") or "day").lower()
+    if bucket not in ("hour", "day", "week", "month"):
+        return jsonify({"ok": False, "error": "invalid_bucket"}), 400
+    group_by = (request.args.get("group_by") or "runtime").lower()
+    if group_by not in ("runtime", "model", "agent_type"):
+        return jsonify({"ok": False, "error": "invalid_group_by"}), 400
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        **ca.burn_stacked(ca.load_records(f), bucket, group_by),
+    })
+
+
+@bp.get("/cost-heatmap")
+def cost_heatmap():
+    """Cuándo se gasta: día de semana × hora."""
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        **ca.heatmap(ca.load_records(f)),
+    })
+
+
+@bp.get("/cost-distribution")
+def cost_distribution():
+    """La forma del gasto por corrida, que un promedio esconde."""
+    if not _cost_center_enabled():
+        return jsonify({"enabled": False}), 200
+    try:
+        bins = int(request.args.get("bins", 20))
+    except (TypeError, ValueError):
+        bins = 20
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        **ca.distribution(ca.load_records(f), bins),
     })
 
 

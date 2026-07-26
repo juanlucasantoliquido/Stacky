@@ -1,0 +1,115 @@
+# fuente: RSPACIFICO/pipelines/nightly-build-online.yml - copiado 2026-07-26 (plan 243 F0)
+# Pipeline: Nightly Build + Test completo — AgendaWeb
+# Proyecto: UbimiaPacifico / Strategist_Pacifico
+# Corre: Lunes a Viernes a las 2 AM (UTC-3 = 5 AM UTC)
+# Cobertura: build Release + Debug, todos los tests con code coverage
+# ─────────────────────────────────────────────────────────────────────────────
+
+schedules:
+- cron: '0 5 * * 1-5'        # 2 AM Argentina (UTC-3) — lunes a viernes
+  displayName: 'Nightly 2 AM Argentina'
+  branches:
+    include: [ main ]
+  always: true                 # ejecuta aunque no haya commits nuevos
+
+# Sin trigger de push/PR — este pipeline es solo nightly
+trigger: none
+pr:     none
+
+variables:
+  solution:           'trunk/OnLine/Soluciones/AgendaWeb.sln'
+  testProject:        'trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj'
+  buildPlatform:      'Any CPU'
+
+pool:
+  vmImage: 'windows-2022'
+
+# ══════════════════════════════════════════════════════
+# JOB 1 — Build Release (artefacto de producción)
+# ══════════════════════════════════════════════════════
+jobs:
+- job: BuildRelease
+  displayName: 'Build Release + Tests con Coverage'
+  steps:
+
+  # 1. Restaurar NuGet
+  - task: NuGetToolInstaller@1
+    displayName: 'Instalar NuGet CLI 6.x'
+    inputs:
+      versionSpec: '6.x'
+
+  - task: NuGetCommand@2
+    displayName: 'NuGet restore'
+    inputs:
+      command:         'restore'
+      restoreSolution: '$(solution)'
+      feedsToUse:      'select'
+
+  # 2. Build Release
+  - task: VSBuild@1
+    displayName: 'Build — Release'
+    inputs:
+      solution:      '$(solution)'
+      platform:      '$(buildPlatform)'
+      configuration: 'Release'
+      msbuildArgs: >-
+        /p:DeployOnBuild=true
+        /p:WebPublishMethod=Package
+        /p:PackageAsSingleFile=true
+        /p:SkipInvalidConfigurations=true
+        /p:PackageLocation="$(Build.ArtifactStagingDirectory)\pkg-release"
+        /p:AutoParameterizationWebConfigConnectionStrings=false
+
+  # 3. Build Debug (valida que el build de desarrollo también compile)
+  - task: VSBuild@1
+    displayName: 'Build — Debug'
+    inputs:
+      solution:      '$(solution)'
+      platform:      '$(buildPlatform)'
+      configuration: 'Debug'
+
+  # 4. Tests con Code Coverage
+  - task: DotNetCoreCLI@2
+    displayName: 'dotnet test — AgendaWebTests + Code Coverage'
+    inputs:
+      command:  'test'
+      projects: '$(testProject)'
+      arguments: >-
+        --configuration Release
+        --collect "Code Coverage"
+        --logger "trx;LogFileName=AgendaWebTests-nightly.trx"
+        --results-directory "$(Agent.TempDirectory)\TestResults"
+      publishTestResults: false
+
+  # 5. Publicar resultados de tests
+  - task: PublishTestResults@2
+    displayName: 'Publicar resultados de tests'
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat:     'VSTest'
+      testResultsFiles:      '$(Agent.TempDirectory)\TestResults\*.trx'
+      failTaskOnFailedTests: true
+      testRunTitle:          'Nightly — $(Build.BuildNumber)'
+
+  # 6. Publicar código de cobertura (.coverage → ADO)
+  - task: PublishCodeCoverageResults@2
+    displayName: 'Publicar Code Coverage'
+    condition: succeededOrFailed()
+    inputs:
+      summaryFileLocation: '$(Agent.TempDirectory)\TestResults\**\*.coverage'
+
+  # 7. Publicar artefacto de build Release
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publicar artefacto Release'
+    condition: succeeded()
+    inputs:
+      PathtoPublish:  '$(Build.ArtifactStagingDirectory)\pkg-release'
+      ArtifactName:   'AgendaWeb-nightly-$(Build.BuildNumber)'
+      publishLocation: 'Container'
+
+  # 8. Notificación de resultado (usa variable de pipeline para webhook si se configura)
+  - script: |
+      echo "##vso[task.setvariable variable=nightlyStatus]$(Agent.JobStatus)"
+      echo "Nightly build $(Build.BuildNumber) — Status: $(Agent.JobStatus)"
+    displayName: 'Log resultado nightly'
+    condition: always()

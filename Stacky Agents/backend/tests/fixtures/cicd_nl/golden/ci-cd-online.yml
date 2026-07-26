@@ -1,0 +1,127 @@
+# fuente: RSPACIFICO/pipelines/ci-cd-online.yml - copiado 2026-07-26 (plan 243 F0)
+# Pipeline: CI - OnLine (AgendaWeb + Servicios)
+# Proyecto: UbimiaPacifico / Strategist_Pacifico
+# Stack: ASP.NET WebForms 4.8.1, .NET Framework 4.x
+# Cobertura: trunk/OnLine/Soluciones/AgendaWeb.sln
+# Trigger: SOLO push a main (los PRs los valida PR Validation, pipeline ID:2)
+#
+# ALCANCE: build + test + artefacto. ESTA PIPELINE NO DESPLIEGA.
+#
+# ADO-369 | 2026-07-21 | Se eliminaron los stages "Deploy → Staging" y
+# "Deploy → Producción". Motivos, para que no se reintroduzcan:
+#
+#   1. No existe servidor de Staging ni pipeline de Producción en este proyecto.
+#      ESTRUCTURA-SERVIDOR-DEPLOY-INICIAL.md solo contempla Test y Production, y
+#      no hay pool 'STG-Server'. Los dos stages apuntaban a infra inexistente.
+#   2. Estaban rotos por diseño: el stage heredaba el pool hosted 'windows-2022'
+#      y usaba IISWebAppDeploymentOnMachineGroup@0, que es la variante
+#      machine-group — no tiene input de servidor y publica contra el IIS LOCAL
+#      del agente que la corre. Resultado: msdeploy buscaba el sitio 'AgendaWeb'
+#      en la VM efímera de Microsoft -> ERROR_SITE_DOES_NOT_EXIST. Las variables
+#      iisServer / adminUser / adminPassword del variable group nunca se usaban.
+#   3. El deploy a TEST ya lo hace 'CD Deploy Test' (cd-deploy-test.yml), que
+#      corre en el pool self-hosted TEST-Server con Deploy-Local.ps1 y ademas
+#      cubre los procesos Batch. Como ambas pipelines disparan con los mismos
+#      paths sobre main, desplegar acá también significaba dos robocopy
+#      simultáneos sobre C:\AIS\AgendaWeb\Web del mismo servidor.
+#
+# Si algun dia hace falta desplegar desde acá, el patrón correcto es el de
+# cd-deploy-test.yml: pool a nivel de stage + Deploy-Local.ps1, NO un task
+# machine-group sobre un agente hosted.
+# ─────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - trunk/OnLine/**
+      - trunk/Negocio/**
+
+# Sin trigger de PR: los PRs son validados exclusivamente por
+# "PR Validation - AgendaWeb" (pipeline ID:2) con branch policy isBlocking:true.
+# Activar este pipeline en PRs seria redundante y consumiria agentes sin valor.
+pr: none
+
+# ── Variables ──────────────────────────────────────────
+variables:
+  solution:            'trunk/OnLine/Soluciones/AgendaWeb.sln'
+  testProject:         'trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj'
+  buildConfiguration:  'Release'
+  buildPlatform:       'Any CPU'
+
+# ── Pool ───────────────────────────────────────────────
+# .NET Framework 4.8.1 requiere agente Windows con Visual Studio Build Tools
+pool:
+  vmImage: 'windows-2022'
+
+# ══════════════════════════════════════════════════════
+# STAGE UNICO — BUILD + TEST
+# ══════════════════════════════════════════════════════
+stages:
+- stage: Build
+  displayName: 'Build & Test'
+  jobs:
+  - job: BuildJob
+    displayName: 'Restore → Build → Test → Package'
+    steps:
+
+    # 1. Restaurar NuGet (packages.config + SDK-style en una sola pasada)
+    - task: NuGetToolInstaller@1
+      displayName: 'Instalar NuGet CLI'
+      inputs:
+        versionSpec: '6.x'
+
+    - task: NuGetCommand@2
+      displayName: 'NuGet restore — AgendaWeb.sln'
+      inputs:
+        command: 'restore'
+        restoreSolution: '$(solution)'
+        feedsToUse: 'select'
+        # Si usás un feed privado de Azure Artifacts, habilitarlo aquí:
+        # vstsFeed: '<organization>/<feedName>'
+
+    # 2. Build — genera Web Deploy Package
+    - task: VSBuild@1
+      displayName: 'MSBuild — Release + Web Deploy Package'
+      inputs:
+        solution:      '$(solution)'
+        platform:      '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+        msbuildArgs: >-
+          /p:DeployOnBuild=true
+          /p:WebPublishMethod=Package
+          /p:PackageAsSingleFile=true
+          /p:SkipInvalidConfigurations=true
+          /p:PackageLocation="$(Build.ArtifactStagingDirectory)\pkg"
+          /p:AutoParameterizationWebConfigConnectionStrings=false
+
+    # 3. Tests unitarios (AgendaWebTests — MSTest / net48)
+    - task: DotNetCoreCLI@2
+      displayName: 'dotnet test — AgendaWebTests'
+      inputs:
+        command: 'test'
+        projects: '$(testProject)'
+        arguments: >-
+          --configuration $(buildConfiguration)
+          --logger "trx;LogFileName=AgendaWebTests.trx"
+          --results-directory "$(Agent.TempDirectory)\TestResults"
+        publishTestResults: false  # lo publicamos en el paso siguiente
+
+    # 4. Publicar resultados de tests en ADO
+    - task: PublishTestResults@2
+      displayName: 'Publicar resultados de tests'
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: 'VSTest'
+        testResultsFiles: '$(Agent.TempDirectory)\TestResults\*.trx'
+        failTaskOnFailedTests: true
+
+    # 5. Publicar artefacto de build
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publicar artefacto — AgendaWeb.zip'
+      inputs:
+        PathtoPublish:  '$(Build.ArtifactStagingDirectory)\pkg'
+        ArtifactName:   'AgendaWeb-drop'
+        publishLocation: 'Container'

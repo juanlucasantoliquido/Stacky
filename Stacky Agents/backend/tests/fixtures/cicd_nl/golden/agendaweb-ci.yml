@@ -1,0 +1,160 @@
+# fuente: RSPACIFICO/pipelines/agendaweb-ci.yml - copiado 2026-07-26 (plan 243 F0)
+# ─────────────────────────────────────────────────────────────────────────────
+# [DEPRECADO] AgendaWeb CI — pipeline ID:5
+#
+# MOTIVO: Redundante con los pipelines existentes:
+#   - En PR    → "PR Validation" (ID:2) ya compila + testea y bloquea el merge
+#   - En push  → "CI-CD OnLine" (ID:1) ya compila + testea + despliega
+#
+# ESTADO: Deshabilitado en ADO. Se conserva el YAML como referencia histórica.
+# No ejecutar manualmente salvo necesidad puntual documentada.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Todos los triggers automáticos desactivados — pipeline DEPRECADO
+trigger: none
+pr:     none
+
+# ── Variables ─────────────────────────────────────────────────────────────────
+# Ajustá estos valores si cambian las rutas o el nombre del sitio IIS.
+
+variables:
+  SOLUTION:            'trunk/OnLine/Soluciones/AgendaWeb.sln'
+  TEST_PROJECT:        'trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj'
+  BUILD_CONFIGURATION: 'Release'
+  BUILD_PLATFORM:      'Any CPU'
+  ARTIFACT_NAME:       'AgendaWeb'
+
+# ── Agente ───────────────────────────────────────────────────────────────────
+# windows-2022 incluye Visual Studio Build Tools y .NET Framework 4.8.1
+pool:
+  vmImage: 'windows-2022'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEPS
+# ─────────────────────────────────────────────────────────────────────────────
+steps:
+
+# ── 1. RESTAURAR DEPENDENCIAS ─────────────────────────────────────────────────
+# Usa NuGet CLI 6.x (compatible con packages.config + PackageReference)
+- task: NuGetToolInstaller@1
+  displayName: '📦 Instalar NuGet CLI 6.x'
+  inputs:
+    versionSpec: '6.x'
+
+- task: NuGetCommand@2
+  displayName: '📦 NuGet restore'
+  inputs:
+    command:         'restore'
+    restoreSolution: '$(SOLUTION)'
+    feedsToUse:      'select'
+    # Si usás un feed privado de Azure Artifacts, descomentar:
+    # vstsFeed: '<nombre-del-feed>'
+
+# ── 2. BUILD ──────────────────────────────────────────────────────────────────
+# Genera el paquete de deploy (.zip) listo para publicar en IIS.
+# El archivo queda en $(Build.ArtifactStagingDirectory)\drop\AgendaWeb.zip
+- task: VSBuild@1
+  displayName: '🔨 Build — $(BUILD_CONFIGURATION)'
+  inputs:
+    solution:      '$(SOLUTION)'
+    platform:      '$(BUILD_PLATFORM)'
+    configuration: '$(BUILD_CONFIGURATION)'
+    msbuildArgs: >-
+      /p:DeployOnBuild=true
+      /p:WebPublishMethod=Package
+      /p:PackageAsSingleFile=true
+      /p:SkipInvalidConfigurations=true
+      /p:PackageLocation="$(Build.ArtifactStagingDirectory)\drop"
+      /p:AutoParameterizationWebConfigConnectionStrings=false
+
+# ── 3. TESTS UNITARIOS ────────────────────────────────────────────────────────
+# net48 con dotnet test; --collect "Code Coverage" usa el colector nativo de VS
+# disponible en windows-2022.
+- task: DotNetCoreCLI@2
+  displayName: '🧪 Tests unitarios + Code Coverage'
+  inputs:
+    command:  'test'
+    projects: '$(TEST_PROJECT)'
+    arguments: >-
+      --configuration $(BUILD_CONFIGURATION)
+      --no-build
+      --collect "Code Coverage"
+      --logger "trx;LogFileName=AgendaWebTests.trx"
+      --results-directory "$(Agent.TempDirectory)\TestResults"
+    publishTestResults: false   # lo publicamos explícitamente en el paso siguiente
+
+# ── 4. PUBLICAR RESULTADOS DE TESTS ──────────────────────────────────────────
+# Muestra el resumen de tests en la pestaña "Tests" del pipeline.
+# failTaskOnFailedTests: si algún test falla → el pipeline falla aquí.
+- task: PublishTestResults@2
+  displayName: '📊 Publicar resultados de tests'
+  condition: succeededOrFailed()   # siempre publica, incluso si fallaron tests
+  inputs:
+    testResultsFormat:     'VSTest'
+    testResultsFiles:      '$(Agent.TempDirectory)\TestResults\*.trx'
+    failTaskOnFailedTests: true
+    testRunTitle:          'AgendaWeb — $(Build.SourceBranchName) #$(Build.BuildNumber)'
+
+# ── 5. PUBLICAR CODE COVERAGE ─────────────────────────────────────────────────
+# Publica el .coverage en la pestaña "Code Coverage" del pipeline.
+# Nota: el primer run puede mostrar 0% si la cobertura binaria no se convirtió;
+# para HTML coverage completo, agregar coverlet.collector al test project.
+- task: PublishCodeCoverageResults@2
+  displayName: '📈 Publicar Code Coverage'
+  condition: succeededOrFailed()
+  inputs:
+    summaryFileLocation: '$(Agent.TempDirectory)\TestResults\**\*.coverage'
+
+# ── 6. PUBLICAR ARTEFACTO ─────────────────────────────────────────────────────
+# Solo en push a main (no en PRs).
+# El .zip generado en el step de build queda disponible para descarga manual
+# o para un stage de deploy futuro (ver sección de extensiones más abajo).
+- task: PublishBuildArtifacts@1
+  displayName: '📦 Publicar artefacto — $(ARTIFACT_NAME).zip'
+  condition: and(succeeded(), eq(variables['Build.Reason'], 'IndividualCI'))
+  inputs:
+    PathtoPublish:  '$(Build.ArtifactStagingDirectory)\drop'
+    ArtifactName:   '$(ARTIFACT_NAME)'
+    publishLocation: 'Container'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CÓMO EXTENDER A DEPLOY POR AMBIENTES
+# ─────────────────────────────────────────────────────────────────────────────
+# Cuando tengas un servidor IIS, agregá un stage después del job actual:
+#
+# stages:
+# - stage: Build
+#   jobs:
+#   - job: CI
+#     steps: [ ... los steps de arriba ... ]
+#
+# - stage: DeployStaging
+#   dependsOn: Build
+#   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+#   jobs:
+#   - deployment: IIS_STG
+#     environment: 'Staging'          # Environment creado en ADO con approval opcional
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - download: current
+#             artifact: '$(ARTIFACT_NAME)'
+#           - task: IISWebAppDeploymentOnMachineGroup@0
+#             inputs:
+#               WebSiteName: 'AgendaWeb'
+#               Package:     '$(Pipeline.Workspace)/$(ARTIFACT_NAME)/AgendaWeb.zip'
+#               TakeAppOfflineFlag: true
+#               XmlTransformation:  true   # aplica Web.Release.config
+#
+# - stage: DeployProduction
+#   dependsOn: DeployStaging
+#   jobs:
+#   - deployment: IIS_PRD
+#     environment: 'Production'       # Environment con approval gate manual en ADO
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - [ igual al stage anterior ]
+# ─────────────────────────────────────────────────────────────────────────────

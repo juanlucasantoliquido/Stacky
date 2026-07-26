@@ -14,6 +14,27 @@ export interface StepDraft {
   env: Record<string, string>;
 }
 
+// Plan 243 F1 — paso `- task: X@N` con `inputs:`. Espejo de pipeline_spec.TaskStep.
+// El 100% de los pasos de los pipelines ADO reales del ecosistema se escribe así.
+export interface TaskStepDraft {
+  name: string;
+  task: string;
+  inputs: Record<string, string>;
+  condition?: string | null;
+  env: Record<string, string>;
+}
+
+// Plan 243 F1 — job `- deployment:`. Espejo de pipeline_spec.DeploymentJob.
+export interface DeploymentJobDraft {
+  name: string;
+  environment: string;
+  strategy: string;
+  steps: TaskStepDraft[];
+  checkout: boolean;
+  download_artifacts: string[];
+  display_name?: string | null;
+}
+
 export interface JobDraft {
   name: string;
   steps: StepDraft[];
@@ -23,12 +44,23 @@ export interface JobDraft {
   variables: Record<string, string>;
   artifacts: string[];
   services: string[];
+  // Plan 243 F1 (aditivo, opcional para no romper drafts del Plan 97)
+  task_steps?: TaskStepDraft[];
+  pool_name?: string | null;
+  depends_on?: string[];
+  display_name?: string | null;
 }
 
 export interface StageDraft {
   name: string;
   jobs: JobDraft[];
   condition?: string | null;
+  // Plan 243 F1 (aditivo)
+  deployments?: DeploymentJobDraft[];
+  pool_name?: string | null;
+  pool_vm_image?: string | null;
+  depends_on?: string[];
+  display_name?: string | null;
 }
 
 export interface PipelineSpecDraft {
@@ -38,6 +70,13 @@ export interface PipelineSpecDraft {
   trigger_branches: string[];
   raw_yaml?: string | null;
   raw_yaml_target?: "ado" | "gitlab" | null;
+  // Plan 243 F1 (aditivo)
+  trigger_disabled?: boolean;
+  trigger_paths?: string[];
+  pr_disabled?: boolean;
+  pool_vm_image?: string | null;
+  pool_name?: string | null;
+  root_task_steps?: TaskStepDraft[];
 }
 
 // Helpers inmutables de copia profunda
@@ -178,12 +217,148 @@ export function toSpecDict(spec: PipelineSpecDraft): object {
   return clean(spec);
 }
 
+// ====== Normalizador de specs que llegan del backend (Plan 243 F1, C21) ======
+
+function asArray(value: any): any[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asStringArray(value: any): string[] {
+  return asArray(value).filter((v) => typeof v === "string");
+}
+
+function asRecord(value: any): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (v !== null && v !== undefined && typeof v !== "object") out[k] = String(v);
+  }
+  return out;
+}
+
+function asStr(value: any, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asOptStr(value: any): string | null | undefined {
+  if (value === null || value === undefined) return undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
 /**
- * Normaliza la respuesta de /api/devops/parse-yaml
- * (las tuplas llegan como arrays por JSON)
+ * Campos NUEVOS del Plan 243: se normalizan sólo si la fuente los trae.
+ *
+ * No es un detalle estético. Si el normalizador inyectara `task_steps: []` en todo
+ * draft, un draft guardado con el formato del Plan 97 dejaría de ser igual a sí mismo
+ * al releerlo y specsEqual() encendería el badge de "cambios sin guardar" sin que el
+ * operador haya tocado nada. Presente -> se normaliza; ausente -> sigue ausente.
+ */
+function optField<T>(raw: any, key: string, map: (v: any) => T): T | undefined {
+  return raw && typeof raw === "object" && key in raw ? map(raw[key]) : undefined;
+}
+
+function normStep(raw: any): StepDraft {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    name: asStr(r.name),
+    script: asStr(r.script),
+    working_directory: asOptStr(r.working_directory),
+    condition: asOptStr(r.condition),
+    env: asRecord(r.env),
+  };
+}
+
+function normTaskStep(raw: any): TaskStepDraft {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    name: asStr(r.name),
+    task: asStr(r.task),
+    inputs: asRecord(r.inputs),
+    condition: asOptStr(r.condition),
+    env: asRecord(r.env),
+  };
+}
+
+function normJob(raw: any): JobDraft {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    name: asStr(r.name),
+    steps: asArray(r.steps).map(normStep),
+    image: asOptStr(r.image),
+    pool_vm_image: asOptStr(r.pool_vm_image),
+    runner_tags: asStringArray(r.runner_tags),
+    variables: asRecord(r.variables),
+    artifacts: asStringArray(r.artifacts),
+    services: asStringArray(r.services),
+    task_steps: optField(r, "task_steps", (v) => asArray(v).map(normTaskStep)),
+    pool_name: asOptStr(r.pool_name),
+    depends_on: optField(r, "depends_on", asStringArray),
+    display_name: asOptStr(r.display_name),
+  };
+}
+
+function normDeployment(raw: any): DeploymentJobDraft {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    name: asStr(r.name),
+    environment: asStr(r.environment),
+    strategy: asStr(r.strategy, "runOnce"),
+    steps: asArray(r.steps).map(normTaskStep),
+    checkout: r.checkout === undefined ? true : Boolean(r.checkout),
+    download_artifacts: asStringArray(r.download_artifacts),
+    display_name: asOptStr(r.display_name),
+  };
+}
+
+function normStage(raw: any): StageDraft {
+  const r = raw && typeof raw === "object" ? raw : {};
+  return {
+    name: asStr(r.name),
+    jobs: asArray(r.jobs).map(normJob),
+    condition: asOptStr(r.condition),
+    deployments: optField(r, "deployments", (v) => asArray(v).map(normDeployment)),
+    pool_name: asOptStr(r.pool_name),
+    pool_vm_image: asOptStr(r.pool_vm_image),
+    depends_on: optField(r, "depends_on", asStringArray),
+    display_name: asOptStr(r.display_name),
+  };
+}
+
+/**
+ * Normaliza la respuesta de /api/devops/parse-yaml y de cualquier generador backend
+ * (las tuplas llegan como arrays por JSON).
+ *
+ * Plan 243 F1 (C21): antes era `return dict as PipelineSpecDraft`, un cast que no
+ * validaba NADA. Ahora es un normalizador real: arrays garantizados, strings con
+ * default, records con default {}, y claves desconocidas descartadas. Un dict al que
+ * le falte stages[].jobs[].steps ya no rompe el render del builder.
+ *
+ * ADITIVO por construcción: un draft bien formado del Plan 97 sale idéntico.
  */
 export function fromParsedSpec(dict: any): PipelineSpecDraft {
-  return dict as PipelineSpecDraft;
+  if (!dict || typeof dict !== "object" || Array.isArray(dict)) {
+    return emptySpec();
+  }
+  const spec: PipelineSpecDraft = {
+    name: asStr(dict.name),
+    stages: asArray(dict.stages).map(normStage),
+    variables: asRecord(dict.variables),
+    trigger_branches: asStringArray(dict.trigger_branches),
+    raw_yaml: asOptStr(dict.raw_yaml),
+    raw_yaml_target:
+      dict.raw_yaml_target === "ado" || dict.raw_yaml_target === "gitlab"
+        ? dict.raw_yaml_target
+        : undefined,
+    trigger_disabled: optField(dict, "trigger_disabled", Boolean),
+    trigger_paths: optField(dict, "trigger_paths", asStringArray),
+    pr_disabled: optField(dict, "pr_disabled", Boolean),
+    pool_vm_image: asOptStr(dict.pool_vm_image),
+    pool_name: asOptStr(dict.pool_name),
+    root_task_steps: optField(dict, "root_task_steps", (v) => asArray(v).map(normTaskStep)),
+  };
+  // toSpecDict ya limpia los undefined al serializar; acá se devuelven tal cual para
+  // que un draft del Plan 97 (sin campos nuevos) siga siendo idéntico a sí mismo.
+  return spec;
 }
 
 /**

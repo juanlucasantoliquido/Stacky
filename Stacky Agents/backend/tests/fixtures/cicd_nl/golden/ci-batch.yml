@@ -1,0 +1,102 @@
+# fuente: RSPACIFICO/pipelines/ci-batch.yml - copiado 2026-07-26 (plan 243 F0)
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — Batch Jobs (18 soluciones)
+# Proyecto  : UbimiaPacifico / Strategist_Pacifico
+# Stack     : .NET Framework 4.7.2 (MSBuild, old-style .csproj)
+# Propósito : Compilar las 18 soluciones de Batch en paralelo.
+#             Si alguna no compila → falla el job correspondiente.
+#
+# SUPUESTOS:
+#   - Todas las soluciones están en trunk/Batch/Soluciones/
+#   - Ninguna solución de Batch tiene tests en-repo (solo build validation)
+#   - Las dependencias de cada solución están en packages.config locales
+#   - Se necesita Windows por .NET Framework 4.7.2
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - trunk/Batch/**
+      - trunk/Negocio/**    # cambios en la capa de negocio afectan Batch también
+      - trunk/lib/**        # cambios en librerías compartidas
+
+pr:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - trunk/Batch/**
+      - trunk/Negocio/**
+      - trunk/lib/**
+  autoCancel: true
+
+variables:
+  BUILD_CONFIGURATION: 'Release'
+  BUILD_PLATFORM:      'Any CPU'
+  SOLUTIONS_DIR:       'trunk/Batch/Soluciones'
+
+pool:
+  vmImage: 'windows-2022'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STRATEGY: matrix
+# Cada entrada del matrix crea un job independiente → fallos aislados.
+# Si el tier de ADO tiene 1 agente paralelo, los jobs se encolan automáticamente.
+# Con agentes adicionales se ejecutan en paralelo.
+# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# ALCANCE LIMITADO: solo se compilan estas 7 soluciones + sus dependencias.
+# Motivo: las demás soluciones arrastran proyectos de Negocio con
+# TargetFrameworkVersion antiguo (v2.0/v3.5/v4.0) — p.ej. BusIncDemaJudi (v3.5) —
+# que NO compilan con VSBuild sin override y rompían el build (CS0246).
+# Estas 7 y todas sus dependencias (BusComun, BusMotor, BusRecomendacion,
+# BusInchost, BusMul2Bane, BusRSExtrae, BusRSProcOUT, BusRSAgExtIN, BusRSAgExtOUT,
+# Comun, RSModel) ya están en v4.7.2, así que compilan limpio. Además reduce el tiempo
+# de build (7 jobs en vez de 18).
+# ─────────────────────────────────────────────────────────────────────────────
+strategy:
+  matrix:
+    Motor:
+      SLN: 'Motor.sln'        # RSCore.exe
+    Inchost:
+      SLN: 'Inchost.sln'      # RSActBD.exe
+    Mul2Bane:
+      SLN: 'Mul2Bane.sln'     # Mul2Bane.exe
+    RsExtrae:
+      SLN: 'RsExtrae.sln'     # RsExtrae.exe
+    RSProcOUT:
+      SLN: 'RSProcOUT.sln'    # RSProcOUT.exe
+    RSAgExtIN:
+      SLN: 'RSAgExtIN.sln'    # RSAgExtIN.exe
+    RSAgExtOUT:
+      SLN: 'RSAgExtOUT.sln'   # RSAgExtOUT.exe
+  maxParallel: 7   # ajustar según agentes disponibles; 1 si plan free
+
+steps:
+
+# ── 1. Restaurar NuGet por solución ──────────────────────────────────────────
+- task: NuGetToolInstaller@1
+  displayName: '📦 NuGet CLI 6.x'
+  inputs:
+    versionSpec: '6.x'
+
+- task: NuGetCommand@2
+  displayName: '📦 NuGet restore — $(SLN)'
+  inputs:
+    command:         'restore'
+    restoreSolution: '$(SOLUTIONS_DIR)/$(SLN)'
+    feedsToUse:      'select'
+
+# ── 2. Build ──────────────────────────────────────────────────────────────────
+# ci-batch es solo validacion de compilacion. No publica artefactos: el empaquetado
+# y despliegue de binarios lo hace cd-deploy-test.yml (Build-Release.ps1 -> PUBLISH/Exes).
+# (Se removio el PublishBuildArtifacts que apuntaba a 'trunk/Batch/$(SLN)/' — ruta
+#  inexistente: $(SLN) incluye '.sln' y las soluciones viven en trunk/Batch/Soluciones.)
+- task: VSBuild@1
+  displayName: '🔨 Build — $(SLN)'
+  inputs:
+    solution:      '$(SOLUTIONS_DIR)/$(SLN)'
+    platform:      '$(BUILD_PLATFORM)'
+    configuration: '$(BUILD_CONFIGURATION)'

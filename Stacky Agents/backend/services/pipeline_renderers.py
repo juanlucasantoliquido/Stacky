@@ -13,9 +13,65 @@ from __future__ import annotations
 import yaml
 
 from services.pipeline_spec import (
-    PipelineSpec, Stage, Job, Step,
+    PipelineSpec, Stage, Job, Step, TaskStep, DeploymentJob,
     ValidationError, dict_to_spec,
 )
+
+
+# ── Construcciones ADO NO modeladas (Plan 243 F2, C14) ────────────────────────
+#
+# Allowlist CERRADA y versionada. Cerrar el round-trip de los 9 pipelines reales
+# exigiría un AST completo de ADO YAML; en vez de prometerlo, se declara qué queda
+# afuera y se prueba que la lista no crece en silencio
+# (test_allowlist_no_crece_en_silencio). Agregar una entrada obliga a tocar el test
+# y a justificarlo en el documento del plan.
+UNSUPPORTED_CONSTRUCTS: tuple = (
+    "matrix",                     # ci-batch.yml:58-59 (strategy: matrix:)
+    "compile_time_expression",    # bootstrap-server-environment.yml (17 x ${{ }})
+    "template",                   # 0 usos en el corpus — no se agrega
+    "extends",                    # 0 usos en el corpus — no se agrega
+    "resources",                  # 0 usos en el corpus — no se agrega
+)
+
+_COMPILE_TIME_MARKER = "${{"
+
+
+def _walk(node):
+    """Todos los nodos dict/list de un documento, en orden de aparición. PURA."""
+    yield node
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield key
+            yield from _walk(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _walk(value)
+
+
+def scan_unsupported(yaml_text: str) -> tuple:
+    """Declara qué construcciones NO modeladas trae este YAML. PURA (sin I/O).
+
+    Se evalúa sobre el documento PARSEADO, no sobre el texto: un `${{` dentro de un
+    comentario no es una expresión de tiempo de compilación, y un pipeline no debería
+    quedar marcado por lo que dice su propia documentación.
+    """
+    try:
+        doc = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return ()
+
+    encontrados = set()
+    for node in _walk(doc):
+        if isinstance(node, str):
+            if _COMPILE_TIME_MARKER in node:
+                encontrados.add("compile_time_expression")
+            continue
+        if isinstance(node, dict):
+            for clave in node:
+                if clave in ("matrix", "template", "extends", "resources"):
+                    encontrados.add(clave)
+    # Orden determinista: el de la allowlist, nunca el de un set.
+    return tuple(c for c in UNSUPPORTED_CONSTRUCTS if c in encontrados)
 
 
 # ── ADO ────────────────────────────────────────────────────────────────────────
@@ -32,6 +88,107 @@ def to_ado_yaml(spec: PipelineSpec) -> str:
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
 
 
+def _depends_on_value(depends_on: tuple):
+    """`dependsOn` acepta escalar o lista en ADO. Una sola dependencia se emite como
+    escalar, que es como está escrito el corpus (cd-deploy-test.yml:117)."""
+    valores = list(depends_on)
+    return valores[0] if len(valores) == 1 else valores
+
+
+def _script_step_doc(step: Step) -> dict:
+    """Paso `- script:` (Plan 73). Orden de claves INTACTO: no tocar (no regresión)."""
+    step_doc: dict = {"script": step.script, "displayName": step.name}
+    if step.working_directory:
+        step_doc["workingDirectory"] = step.working_directory
+    if step.condition:
+        step_doc["condition"] = step.condition
+    if step.env:
+        step_doc["env"] = dict(step.env)
+    return step_doc
+
+
+def _task_step_doc(step: TaskStep) -> dict:
+    """Paso `- task: X@N` (Plan 243 F2). Claves en orden task → displayName → inputs;
+    `yaml.safe_dump(sort_keys=False)` lo preserva en la salida."""
+    step_doc: dict = {"task": step.task}
+    if step.name:
+        step_doc["displayName"] = step.name
+    if step.condition:
+        step_doc["condition"] = step.condition
+    if step.inputs:
+        step_doc["inputs"] = dict(step.inputs)
+    if step.env:
+        step_doc["env"] = dict(step.env)
+    return step_doc
+
+
+def _job_steps_docs(steps: tuple, task_steps: tuple) -> list:
+    return [_script_step_doc(s) for s in steps] + [_task_step_doc(t) for t in task_steps]
+
+
+def _job_doc(jb: Job) -> dict:
+    """Job clásico. El orden de claves preexistente (job → pool → variables → steps →
+    artifacts → demands) NO se altera: las claves nuevas sólo se insertan si el campo
+    está presente, así un spec del Plan 73 emite byte por byte lo mismo que antes."""
+    job_doc: dict = {"job": jb.name}
+    if jb.display_name:
+        job_doc["displayName"] = jb.display_name
+    if jb.depends_on:
+        job_doc["dependsOn"] = _depends_on_value(jb.depends_on)
+    if jb.pool_name:
+        job_doc["pool"] = {"name": jb.pool_name}
+    elif jb.pool_vm_image:
+        job_doc["pool"] = {"vmImage": jb.pool_vm_image}
+    if jb.variables:
+        job_doc["variables"] = dict(jb.variables)
+    job_doc["steps"] = _job_steps_docs(jb.steps, jb.task_steps)
+    # Artifacts como sección separada en el job (no como publish step)
+    if jb.artifacts:
+        job_doc["artifacts"] = {"publish": list(jb.artifacts)}
+    if jb.runner_tags:
+        job_doc["demands"] = list(jb.runner_tags)
+    return job_doc
+
+
+def _deployment_doc(dp: DeploymentJob) -> dict:
+    """Job `- deployment:` con `strategy.runOnce.deploy.steps`.
+    Patrón exacto de cd-deploy-test.yml:122-149: `- checkout: self` y
+    `- download: current` van al frente de los steps."""
+    steps: list = []
+    if dp.checkout:
+        steps.append({"checkout": "self"})
+    for artifact in dp.download_artifacts:
+        steps.append({"download": "current", "artifact": artifact})
+    steps.extend(_task_step_doc(t) for t in dp.steps)
+
+    doc: dict = {"deployment": dp.name}
+    if dp.display_name:
+        doc["displayName"] = dp.display_name
+    doc["environment"] = dp.environment
+    doc["strategy"] = {dp.strategy: {"deploy": {"steps": steps}}}
+    return doc
+
+
+def _stage_doc(st: Stage) -> dict:
+    """Stage. Orden preexistente (stage → condition → jobs) preservado para los specs
+    del Plan 73; las claves nuevas se insertan sólo si el campo está presente."""
+    stage_doc: dict = {"stage": st.name}
+    if st.display_name:
+        stage_doc["displayName"] = st.display_name
+    if st.depends_on:
+        stage_doc["dependsOn"] = _depends_on_value(st.depends_on)
+    if st.condition:
+        stage_doc["condition"] = st.condition
+    if st.pool_name:
+        stage_doc["pool"] = {"name": st.pool_name}
+    elif st.pool_vm_image:
+        stage_doc["pool"] = {"vmImage": st.pool_vm_image}
+    # En ADO los `- deployment:` son items de la MISMA lista `jobs:`.
+    stage_doc["jobs"] = [_job_doc(jb) for jb in st.jobs] + \
+                        [_deployment_doc(dp) for dp in st.deployments]
+    return stage_doc
+
+
 def _spec_to_ado_doc(spec: PipelineSpec) -> dict:
     """PipelineSpec → dict YAML-ready para ADO. PURA."""
     doc: dict = {}
@@ -40,47 +197,41 @@ def _spec_to_ado_doc(spec: PipelineSpec) -> dict:
     if spec.name:
         doc["name"] = spec.name
 
-    # trigger_branches → trigger: branches: include: [...]
-    if spec.trigger_branches:
-        doc["trigger"] = {"branches": {"include": list(spec.trigger_branches)}}
+    # trigger: none / trigger.branches.include / trigger.paths.include
+    if spec.trigger_disabled:
+        doc["trigger"] = "none"
+    elif spec.trigger_branches or spec.trigger_paths:
+        trigger_doc: dict = {}
+        if spec.trigger_branches:
+            trigger_doc["branches"] = {"include": list(spec.trigger_branches)}
+        if spec.trigger_paths:
+            trigger_doc["paths"] = {"include": list(spec.trigger_paths)}
+        doc["trigger"] = trigger_doc
+
+    if spec.pr_disabled:
+        doc["pr"] = "none"
+    if spec.parameters:
+        doc["parameters"] = [dict(p) for p in spec.parameters]
+    if spec.schedules:
+        doc["schedules"] = [dict(s) for s in spec.schedules]
 
     # variables globales
     if spec.variables:
         doc["variables"] = dict(spec.variables)
 
-    stages = []
-    for st in spec.stages:
-        stage_doc: dict = {"stage": st.name}
-        if st.condition:
-            stage_doc["condition"] = st.condition
-        jobs = []
-        for jb in st.jobs:
-            job_doc: dict = {"job": jb.name}
-            if jb.pool_vm_image:
-                job_doc["pool"] = {"vmImage": jb.pool_vm_image}
-            if jb.variables:
-                job_doc["variables"] = dict(jb.variables)
-            steps = []
-            for step in jb.steps:
-                step_doc: dict = {"script": step.script, "displayName": step.name}
-                if step.working_directory:
-                    step_doc["workingDirectory"] = step.working_directory
-                if step.condition:
-                    step_doc["condition"] = step.condition
-                if step.env:
-                    step_doc["env"] = dict(step.env)
-                steps.append(step_doc)
-            job_doc["steps"] = steps
-            # Artifacts como sección separada en el job (no como publish step)
-            if jb.artifacts:
-                job_doc["artifacts"] = {"publish": list(jb.artifacts)}
-            if jb.runner_tags:
-                job_doc["demands"] = list(jb.runner_tags)
-            jobs.append(job_doc)
-        stage_doc["jobs"] = jobs
-        stages.append(stage_doc)
+    if spec.pool_name:
+        doc["pool"] = {"name": spec.pool_name}
+    elif spec.pool_vm_image:
+        doc["pool"] = {"vmImage": spec.pool_vm_image}
 
-    doc["stages"] = stages
+    # ADO admite tres raíces alternativas. `stages:` es la del Plan 73 y sigue siendo
+    # la salida por defecto — incluso vacía — para no cambiar nada de lo existente.
+    if spec.root_task_steps or spec.root_steps:
+        doc["steps"] = _job_steps_docs(spec.root_steps, spec.root_task_steps)
+    elif spec.root_jobs:
+        doc["jobs"] = [_job_doc(jb) for jb in spec.root_jobs]
+    else:
+        doc["stages"] = [_stage_doc(st) for st in spec.stages]
     return doc
 
 
@@ -191,56 +342,181 @@ def _spec_to_gitlab_doc(spec: PipelineSpec) -> dict:
 
 # ── Parsers PUROS (F6 — inversos para el subset v1) ───────────────────────────
 
+def _as_tuple(value) -> tuple:
+    """`dependsOn`/`include` aceptan escalar o lista en ADO."""
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    return (value,)
+
+
+def _parse_steps(step_docs) -> tuple:
+    """Lista de steps ADO → (script_steps, task_steps, checkout, download_artifacts).
+
+    Tolerante por diseño: lo que no es `script:` ni `task:` (`checkout`, `download`,
+    `- template:`…) no rompe el parseo — se reconoce lo modelado y se ignora el resto.
+    """
+    scripts: list = []
+    tasks: list = []
+    checkout = False
+    downloads: list = []
+
+    for step_doc in (step_docs or []):
+        if not isinstance(step_doc, dict):
+            continue
+        if isinstance(step_doc.get("task"), str):
+            inputs = step_doc.get("inputs")
+            tasks.append(TaskStep(
+                name=step_doc.get("displayName", ""),
+                task=step_doc["task"],
+                inputs=dict(inputs) if isinstance(inputs, dict) else {},
+                condition=step_doc.get("condition"),
+                env=dict(step_doc.get("env") or {}),
+            ))
+        elif "script" in step_doc:
+            script_val = step_doc.get("script", "")
+            if not isinstance(script_val, str):
+                script_val = str(script_val)
+            scripts.append(Step(
+                name=step_doc.get("displayName", ""),
+                script=script_val,
+                working_directory=step_doc.get("workingDirectory"),
+                condition=step_doc.get("condition"),
+                env=dict(step_doc.get("env") or {}),
+            ))
+        elif "checkout" in step_doc:
+            checkout = True
+        elif "download" in step_doc:
+            artifact = step_doc.get("artifact")
+            if artifact is not None:
+                downloads.append(artifact)
+
+    return tuple(scripts), tuple(tasks), checkout, tuple(downloads)
+
+
+def _parse_job(jb_doc: dict) -> Job:
+    pool = jb_doc.get("pool") if isinstance(jb_doc.get("pool"), dict) else {}
+    scripts, tasks, _checkout, _downloads = _parse_steps(jb_doc.get("steps"))
+    # Artifacts como sección separada en el job (patrón to_ado_yaml)
+    arts_block = jb_doc.get("artifacts") or {}
+    arts = tuple(arts_block.get("publish") or []) if isinstance(arts_block, dict) else ()
+    return Job(
+        name=jb_doc.get("job", ""),
+        steps=scripts,
+        pool_vm_image=pool.get("vmImage"),
+        pool_name=pool.get("name"),
+        variables=dict(jb_doc.get("variables") or {}),
+        artifacts=arts,
+        runner_tags=tuple(jb_doc.get("demands") or jb_doc.get("tags") or ()),
+        task_steps=tasks,
+        depends_on=_as_tuple(jb_doc.get("dependsOn")),
+        display_name=jb_doc.get("displayName"),
+    )
+
+
+def _parse_deployment(jb_doc: dict) -> DeploymentJob:
+    strategy_doc = jb_doc.get("strategy") if isinstance(jb_doc.get("strategy"), dict) else {}
+    strategy_name = "runOnce"
+    step_docs = []
+    for key, value in strategy_doc.items():
+        if isinstance(value, dict) and isinstance(value.get("deploy"), dict):
+            strategy_name = key
+            step_docs = value["deploy"].get("steps") or []
+            break
+    _scripts, tasks, checkout, downloads = _parse_steps(step_docs)
+    return DeploymentJob(
+        name=jb_doc.get("deployment", ""),
+        environment=jb_doc.get("environment", ""),
+        strategy=strategy_name,
+        steps=tasks,
+        checkout=checkout,
+        download_artifacts=downloads,
+        display_name=jb_doc.get("displayName"),
+    )
+
+
+def _split_jobs(job_docs) -> tuple:
+    """Una lista `jobs:` de ADO mezcla `- job:` y `- deployment:`."""
+    jobs: list = []
+    deployments: list = []
+    for jb_doc in (job_docs or []):
+        if not isinstance(jb_doc, dict):
+            continue
+        if "deployment" in jb_doc:
+            deployments.append(_parse_deployment(jb_doc))
+        else:
+            jobs.append(_parse_job(jb_doc))
+    return tuple(jobs), tuple(deployments)
+
+
 def parse_ado_yaml(yaml_str: str) -> PipelineSpec:
-    """YAML ADO → PipelineSpec (subset v1). PURA. Solo cubre el subset que to_ado_yaml emite."""
+    """YAML ADO → PipelineSpec. PURA (parsea texto, no lee disco).
+
+    Plan 243 F2 — reescrito: la versión del Plan 73 sólo entendía `script`/`displayName`,
+    así que perdía el 100% de los pasos de un pipeline ADO real.
+
+    TOLERANTE POR DISEÑO (Gate B): sobre cualquiera de los 9 pipelines reales no lanza
+    y recupera la espina de `task:` completa. Lo que el modelo no cubre —`matrix`,
+    expresiones `${{ }}`, `template`/`extends`/`resources`— NO se inventa: se declara
+    con `scan_unsupported()`. Un `- script:` a nivel raíz mezclado con tareas se
+    recupera, pero al re-emitir sale agrupado antes de las tareas: el round-trip exacto
+    está garantizado sólo para los pipelines que el generador debe producir (Gate A).
+    """
     doc = yaml.safe_load(yaml_str) or {}
-    # name (emitido por to_ado_yaml como root-level name:)
-    name_from_doc = doc.get("name", "")
-    # trigger_branches
-    trigger = doc.get("trigger") or {}
-    branches_block = trigger.get("branches") or {}
-    trigger_branches = tuple(branches_block.get("include") or [])
-    variables = dict(doc.get("variables") or {})
+    if not isinstance(doc, dict):
+        return PipelineSpec(name="", stages=())
+
+    # trigger: none | {branches: {include}, paths: {include}}
+    trigger = doc.get("trigger")
+    trigger_disabled = trigger == "none"
+    trigger_block = trigger if isinstance(trigger, dict) else {}
+    branches_block = trigger_block.get("branches") or {}
+    paths_block = trigger_block.get("paths") or {}
+
+    pool = doc.get("pool") if isinstance(doc.get("pool"), dict) else {}
+
+    root_scripts, root_tasks, _checkout, _downloads = _parse_steps(doc.get("steps"))
+    root_jobs, root_deployments = _split_jobs(doc.get("jobs"))
+    # Un `- deployment:` a nivel raíz (sin stage) no aparece en el corpus; si apareciera,
+    # se conserva como job para no perder su espina de tareas.
+    root_jobs = root_jobs + tuple(
+        Job(name=d.name, steps=(), task_steps=d.steps, display_name=d.display_name)
+        for d in root_deployments
+    )
+
     stages = []
     for st_doc in (doc.get("stages") or []):
-        cond = st_doc.get("condition")
-        jobs = []
-        for jb_doc in (st_doc.get("jobs") or []):
-            pool = jb_doc.get("pool") or {}
-            steps = []
-            for step_doc in (jb_doc.get("steps") or []):
-                script_val = step_doc.get("script", "")
-                if not isinstance(script_val, str):
-                    script_val = str(script_val)
-                steps.append(Step(
-                    name=step_doc.get("displayName", ""),
-                    script=script_val,
-                    working_directory=step_doc.get("workingDirectory"),
-                    condition=step_doc.get("condition"),
-                    env=dict(step_doc.get("env") or {}),
-                ))
-            # Artifacts como sección separada en el job (patrón to_ado_yaml)
-            arts_block = jb_doc.get("artifacts") or {}
-            arts = tuple(arts_block.get("publish") or []) if isinstance(arts_block, dict) else ()
-            runner_tags = tuple(jb_doc.get("demands") or jb_doc.get("tags") or ())
-            jobs.append(Job(
-                name=jb_doc.get("job", ""),
-                steps=tuple(steps),
-                pool_vm_image=pool.get("vmImage"),
-                variables=dict(jb_doc.get("variables") or {}),
-                artifacts=arts,
-                runner_tags=runner_tags,
-            ))
+        if not isinstance(st_doc, dict):
+            continue
+        st_pool = st_doc.get("pool") if isinstance(st_doc.get("pool"), dict) else {}
+        jobs, deployments = _split_jobs(st_doc.get("jobs"))
         stages.append(Stage(
             name=st_doc.get("stage", ""),
-            jobs=tuple(jobs),
-            condition=cond,
+            jobs=jobs,
+            condition=st_doc.get("condition"),
+            deployments=deployments,
+            pool_name=st_pool.get("name"),
+            pool_vm_image=st_pool.get("vmImage"),
+            depends_on=_as_tuple(st_doc.get("dependsOn")),
+            display_name=st_doc.get("displayName"),
         ))
+
     return PipelineSpec(
-        name=name_from_doc,
+        name=doc.get("name", "") if isinstance(doc.get("name"), str) else "",
         stages=tuple(stages),
-        variables=variables,
-        trigger_branches=trigger_branches,
+        variables=dict(doc.get("variables") or {}),
+        trigger_branches=_as_tuple(branches_block.get("include")),
+        trigger_disabled=trigger_disabled,
+        trigger_paths=_as_tuple(paths_block.get("include")),
+        pr_disabled=doc.get("pr") == "none",
+        schedules=tuple(doc.get("schedules") or ()),
+        parameters=tuple(doc.get("parameters") or ()),
+        pool_vm_image=pool.get("vmImage"),
+        pool_name=pool.get("name"),
+        root_task_steps=root_tasks,
+        root_steps=root_scripts,
+        root_jobs=root_jobs,
     )
 
 

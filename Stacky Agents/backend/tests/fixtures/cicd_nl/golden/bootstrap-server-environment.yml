@@ -1,0 +1,146 @@
+# fuente: RSPACIFICO/pipelines/bootstrap-server-environment.yml - copiado 2026-07-26 (plan 243 F0)
+# =============================================================================
+# Bootstrap de Servidor Nuevo - RSPacifico
+# Proyecto : UbimiaPacifico / Strategist_Pacifico
+#
+# PROPOSITO:
+#   Preparar desde cero (estructura de carpetas + IIS + Application Pool) un
+#   servidor NUEVO (TEST o PRODUCCION) que hoy esta vacio, invocando
+#   pipelines/scripts/Initialize-ServerEnvironment.ps1. Es el paso ANTERIOR a
+#   la PRIMERA corrida de cd-deploy-test.yml / cualquier deploy de codigo en
+#   ese servidor - NO reemplaza ni modifica esos pipelines existentes.
+#
+# TRIGGER:
+#   100% MANUAL ("Run pipeline" en ADO). Nunca se dispara por push ni PR: crea
+#   estructura de infraestructura (carpetas, sitio IIS, ACLs) con estado
+#   potencialmente destructivo si se corre sobre parametros equivocados, asi
+#   que no debe correr automaticamente.
+#
+# REQUISITO PREVIO (fuera del alcance de este YAML y del script que invoca):
+#   El pool de agente self-hosted del servidor destino (parametro 'agentPool')
+#   YA debe existir y tener un agente registrado y online en ADO ANTES de
+#   correr esta pipeline. Initialize-ServerEnvironment.ps1 opera sobre el
+#   filesystem/IIS LOCAL del agente que lo ejecuta - no hay conexion remota.
+#   Si el servidor nuevo todavia no tiene agente self-hosted instalado, este
+#   YAML no resuelve ese paso (ver DECISIONES PENDIENTES en el reporte que
+#   acompana a este pipeline).
+#
+# QUE NO HACE (ver Initialize-ServerEnvironment.ps1 seccion .NOTES):
+#   No instala el agente ADO, no habilita WinRM, no instala RecBatchSvc, no
+#   siembra el almacen de claves DPAPI real, no completa ningun placeholder
+#   de credencial/connection string. Todo eso queda explicito en el log de
+#   salida del script bajo "ACCIONES PENDIENTES / DECISIONES REQUERIDAS".
+# =============================================================================
+
+trigger: none
+pr: none
+
+parameters:
+  - name: targetEnvironment
+    displayName: 'Ambiente destino'
+    type: string
+    default: 'Test'
+    values:
+      - 'Test'
+      - 'Production'
+
+  - name: agentPool
+    displayName: 'Pool de agente self-hosted del servidor destino (debe existir y estar online en ADO)'
+    type: string
+    default: 'TEST-Server'
+
+  - name: component
+    displayName: 'Componente a inicializar'
+    type: string
+    default: 'All'
+    values:
+      - 'AgendaWeb'
+      - 'Batch'
+      - 'All'
+
+  - name: skipIis
+    displayName: 'Omitir creacion de sitio IIS + Application Pool (otro equipo/proceso lo administra)'
+    type: boolean
+    default: false
+
+  - name: iisPort
+    displayName: 'Puerto HTTP del sitio IIS (0 = no crear binding, queda pendiente). SIN evidencia en el repo del puerto real - confirmar con infraestructura antes de completar.'
+    type: number
+    default: 0
+
+  - name: iisHostHeader
+    displayName: 'Host header del sitio IIS (vacio = binding solo por IP:puerto)'
+    type: string
+    default: ''
+
+  - name: seedConfigs
+    displayName: 'Copiar configs semilla (Web.config + XMLs de Batch YA versionados, con placeholders de DEV intactos)'
+    type: boolean
+    default: true
+
+  - name: whatIf
+    displayName: 'Dry-run (WhatIf): solo informar que se crearia, sin crear nada'
+    type: boolean
+    default: true
+
+# -----------------------------------------------------------------------------
+# Approval gate: Production reusa el mismo 'environment: Production' de ADO
+# que ya usa ci-cd-online.yml (approval del equipo Strategist_Pacifico Team,
+# timeout 12h). Test usa 'environment: Test' sin approval, igual que las
+# stages de deploy de cd-deploy-test.yml.
+# -----------------------------------------------------------------------------
+stages:
+  - stage: Bootstrap
+    displayName: 'Bootstrap de Servidor - ${{ parameters.targetEnvironment }}'
+    variables:
+      # Los switches booleanos del script (-SkipIis, -SeedConfigs, -WhatIf) se resuelven
+      # en variables de compile-time (${{ if }} fuera de un bloque de texto, que es donde
+      # esta expresion SI es valida) y se interpolan como texto simple mas abajo dentro
+      # del bloque 'arguments'. Insertar '${{ if }}:' directamente dentro de un bloque
+      # de string multilinea (>-) NO se expande: queda como texto literal.
+      ${{ if eq(parameters.skipIis, true) }}:
+        skipIisArg: '-SkipIis'
+      ${{ if ne(parameters.skipIis, true) }}:
+        skipIisArg: ''
+      ${{ if eq(parameters.seedConfigs, true) }}:
+        seedConfigsArg: '-SeedConfigs'
+      ${{ if ne(parameters.seedConfigs, true) }}:
+        seedConfigsArg: ''
+      ${{ if eq(parameters.whatIf, true) }}:
+        whatIfArg: '-WhatIf'
+      ${{ if ne(parameters.whatIf, true) }}:
+        whatIfArg: ''
+    jobs:
+      - deployment: InitializeServerEnvironment
+        displayName: 'Initialize-ServerEnvironment.ps1'
+        pool:
+          name: '${{ parameters.agentPool }}'
+        environment: '${{ parameters.targetEnvironment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: PowerShell@2
+                  displayName: 'Bootstrap - ${{ parameters.component }} / ${{ parameters.targetEnvironment }}'
+                  inputs:
+                    filePath: '$(Pipeline.Workspace)/s/pipelines/scripts/Initialize-ServerEnvironment.ps1'
+                    arguments: >-
+                      -Component ${{ parameters.component }}
+                      -Environment ${{ parameters.targetEnvironment }}
+                      -RepoRoot "$(Pipeline.Workspace)/s"
+                      -LogDir "$(Build.ArtifactStagingDirectory)/bootstrap-logs"
+                      $(skipIisArg)
+                      -IisPort ${{ parameters.iisPort }}
+                      -IisHostHeader "${{ parameters.iisHostHeader }}"
+                      $(seedConfigsArg)
+                      $(whatIfArg)
+
+                - task: PublishBuildArtifacts@1
+                  displayName: 'Publicar log del bootstrap'
+                  condition: always()
+                  inputs:
+                    PathtoPublish: '$(Build.ArtifactStagingDirectory)/bootstrap-logs'
+                    ArtifactName: 'BootstrapLogs-${{ parameters.targetEnvironment }}-$(Build.BuildNumber)'
+                    publishLocation: 'Container'

@@ -762,6 +762,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan208_auto_sync.py
   tests/test_plan208_profile_schema.py
   tests/test_plan208_observability.py
+  # -- Plan 243 - Generador de pipelines NL (F0..F3.5: catalogo, modelo, renderer, reglas) --
+  tests/test_plan243_task_catalog.py
+  tests/test_plan243_spec_extendido.py
+  tests/test_plan243_renderer_ado.py
+  tests/test_plan243_reglas_semanticas.py
+  tests/test_plan243_corpus_mirror.py
 )
 
 pass=0

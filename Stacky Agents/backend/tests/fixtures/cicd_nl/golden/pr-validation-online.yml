@@ -1,0 +1,80 @@
+# fuente: RSPACIFICO/pipelines/pr-validation-online.yml - copiado 2026-07-26 (plan 243 F0)
+# Pipeline: PR Validation — AgendaWeb (compilación obligatoria)
+# Proyecto: UbimiaPacifico / Strategist_Pacifico
+# Propósito: Todo PR o push a main que toque OnLine/Negocio DEBE compilar.
+#            Si no compila → el pipeline falla → el PR queda bloqueado automáticamente.
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - trunk/OnLine/**
+      - trunk/Negocio/**
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - trunk/OnLine/**
+      - trunk/Negocio/**
+  autoCancel: true   # cancela runs anteriores del mismo PR si llega un nuevo push
+
+variables:
+  solution:           'trunk/OnLine/Soluciones/AgendaWeb.sln'
+  testProject:        'trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj'
+  buildConfiguration: 'Release'
+  buildPlatform:      'Any CPU'
+
+pool:
+  vmImage: 'windows-2022'   # .NET 4.8.1 WebForms requiere Windows
+
+steps:
+
+# ── 1. Restaurar NuGet ────────────────────────────────────────────────────────
+- task: NuGetToolInstaller@1
+  displayName: 'Instalar NuGet CLI 6.x'
+  inputs:
+    versionSpec: '6.x'
+
+- task: NuGetCommand@2
+  displayName: 'NuGet restore — AgendaWeb.sln'
+  inputs:
+    command: 'restore'
+    restoreSolution: '$(solution)'
+    feedsToUse: 'select'
+
+# ── 2. Compilar — falla aquí si hay errores de compilación ───────────────────
+- task: VSBuild@1
+  displayName: 'MSBuild — Release (falla si no compila)'
+  inputs:
+    solution:      '$(solution)'
+    platform:      '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+    # Sin /p:DeployOnBuild — solo validar que compila, no generar paquete
+
+# ── 3. Tests unitarios ────────────────────────────────────────────────────────
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet test — AgendaWebTests'
+  inputs:
+    command: 'test'
+    projects: '$(testProject)'
+    arguments: >-
+      --configuration $(buildConfiguration)
+      --logger "trx;LogFileName=AgendaWebTests.trx"
+      --results-directory "$(Agent.TempDirectory)\TestResults"
+    publishTestResults: false
+
+# ── 4. Publicar resultados en la UI del PR ────────────────────────────────────
+- task: PublishTestResults@2
+  displayName: 'Publicar resultados de tests'
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFormat:        'VSTest'
+    testResultsFiles:         '$(Agent.TempDirectory)\TestResults\*.trx'
+    failTaskOnFailedTests:    true
+    testRunTitle:             'AgendaWeb — PR $(System.PullRequest.PullRequestId)'

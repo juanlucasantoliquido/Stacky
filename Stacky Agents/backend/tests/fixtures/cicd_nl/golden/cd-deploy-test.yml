@@ -1,0 +1,189 @@
+# fuente: RSPACIFICO/pipelines/cd-deploy-test.yml - copiado 2026-07-26 (plan 243 F0)
+# ═════════════════════════════════════════════════════════════════════════════
+# CD — Deploy Automatico a Servidor TEST
+# Proyecto : UbimiaPacifico / Strategist_Pacifico
+# Stack    : .NET Framework 4.8.1 (AgendaWeb) + 4.7.2 (Batch)
+#
+# TRIGGER:
+#   Se ejecuta automaticamente en cada push a main que afecte los componentes.
+#
+# ARQUITECTURA:
+#   - Build  : agente hosted windows-2022 (compila + empaqueta artefactos)
+#   - Deploy : agente self-hosted en el servidor TEST (pool: TEST-Server)
+#              Corre Deploy-Local.ps1 directamente, sin WinRM.
+#
+# DESPLIEGA:
+#   1. AgendaWeb -> C:\AIS\AgendaWeb\Web  (excluye web.config y *.xml)
+#   2. Procesos Batch -> C:\AIS\Procesos\Exes  (excluye *.xml)
+# ═════════════════════════════════════════════════════════════════════════════
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - trunk/OnLine/**
+      - trunk/Batch/**
+      - trunk/Negocio/**
+      - pipelines/**
+      - PUBLISH/**
+
+pr: none
+
+variables:
+  buildConfiguration: 'Release'
+  buildPlatform: 'Any CPU'
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STAGE 1 — BUILD + PACKAGE  (agente hosted)
+# ═════════════════════════════════════════════════════════════════════════════
+stages:
+  - stage: Build
+    displayName: 'Build & Package'
+    pool:
+      vmImage: 'windows-2022'
+    jobs:
+      - job: BuildJob
+        displayName: 'Compilar AgendaWeb + Batch'
+        steps:
+
+          - task: NuGetToolInstaller@1
+            displayName: 'Instalar NuGet CLI 6.x'
+            inputs:
+              versionSpec: '6.x'
+
+          - task: NuGetCommand@2
+            displayName: 'Restaurar paquetes — AgendaWeb'
+            inputs:
+              command: 'restore'
+              restoreSolution: 'trunk/OnLine/Soluciones/AgendaWeb.sln'
+              feedsToUse: 'select'
+
+          - task: VSBuild@1
+            displayName: 'Build — AgendaWeb'
+            inputs:
+              solution: 'trunk/OnLine/Soluciones/AgendaWeb.sln'
+              platform: '$(buildPlatform)'
+              configuration: '$(buildConfiguration)'
+              msbuildArgs: >-
+                /p:DeployOnBuild=true
+                /p:WebPublishMethod=Package
+                /p:SkipInvalidConfigurations=true
+                /p:AutoParameterizationWebConfigConnectionStrings=false
+
+          # Restaurar NuGet solo de las 7 soluciones batch en alcance (packages.config).
+          - task: PowerShell@2
+            displayName: 'Restaurar NuGet — Batch (7 soluciones)'
+            inputs:
+              targetType: 'inline'
+              workingDirectory: '$(Build.SourcesDirectory)'
+              script: |
+                $slns = 'Motor','Inchost','Mul2Bane','RsExtrae','RSProcOUT','RSAgExtIN','RSAgExtOUT'
+                foreach ($s in $slns) {
+                  Write-Host "nuget restore $s.sln"
+                  nuget restore "trunk/Batch/Soluciones/$s.sln"
+                  if ($LASTEXITCODE -ne 0) { throw "nuget restore fallo en $s.sln" }
+                }
+
+          # Compilar y empaquetar SOLO las 7 soluciones + sus dependencias.
+          # -Clean deja en PUBLISH/Exes unicamente lo recien compilado (publish acotado);
+          # robocopy en el deploy no borra del servidor lo que no venga en el artefacto.
+          - task: PowerShell@2
+            displayName: 'Compilar + empaquetar Batch (7 procesos + deps)'
+            inputs:
+              filePath: 'PUBLISH/Build-Release.ps1'
+              arguments: '-Configuration Release -Clean -IncludeProjects Motor,Inchost,Mul2Bane,RsExtrae,RSProcOUT,RSAgExtIN,RSAgExtOUT'
+              workingDirectory: '$(Build.SourcesDirectory)'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar artefacto — AgendaWeb'
+            inputs:
+              PathtoPublish: 'trunk/OnLine/AgendaWeb/obj/Release/Package/PackageTmp'
+              ArtifactName: 'AgendaWeb'
+              publishLocation: 'Container'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar artefacto — Batch'
+            inputs:
+              PathtoPublish: 'PUBLISH/Exes'
+              ArtifactName: 'Batch'
+              publishLocation: 'Container'
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # STAGE 2 — DEPLOY AGENDAWEB  (agente self-hosted en servidor TEST)
+  # ═════════════════════════════════════════════════════════════════════════════
+  - stage: DeployAgendaWeb
+    displayName: 'Deploy — AgendaWeb'
+    dependsOn: Build
+    condition: succeeded()
+    pool:
+      name: 'TEST-Server'
+    jobs:
+      - deployment: DeployAgendaWeb
+        displayName: 'Backup + Deploy local → TEST'
+        environment: 'Test'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - download: current
+                  artifact: 'AgendaWeb'
+
+                - task: PowerShell@2
+                  displayName: 'Deploy AgendaWeb → C:\AIS\AgendaWeb\Web'
+                  inputs:
+                    filePath: '$(Pipeline.Workspace)/s/pipelines/scripts/Deploy-Local.ps1'
+                    arguments: >-
+                      -Component AgendaWeb
+                      -ArtifactPath "$(Pipeline.Workspace)/AgendaWeb"
+                      -LogDir "$(Build.ArtifactStagingDirectory)/deploy-logs"
+
+                - task: PublishBuildArtifacts@1
+                  displayName: 'Publicar logs del deploy'
+                  condition: always()
+                  inputs:
+                    PathtoPublish: '$(Build.ArtifactStagingDirectory)/deploy-logs'
+                    ArtifactName: 'DeployLogs-AgendaWeb-$(Build.BuildNumber)'
+                    publishLocation: 'Container'
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # STAGE 3 — DEPLOY BATCH  (agente self-hosted en servidor TEST)
+  # ═════════════════════════════════════════════════════════════════════════════
+  - stage: DeployBatch
+    displayName: 'Deploy — Procesos Batch'
+    dependsOn: Build
+    condition: succeeded()
+    pool:
+      name: 'TEST-Server'
+    jobs:
+      - deployment: DeployBatch
+        displayName: 'Backup + Deploy local → TEST'
+        environment: 'Test'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - download: current
+                  artifact: 'Batch'
+
+                - task: PowerShell@2
+                  displayName: 'Deploy Batch → C:\AIS\Procesos\Exes'
+                  inputs:
+                    filePath: '$(Pipeline.Workspace)/s/pipelines/scripts/Deploy-Local.ps1'
+                    arguments: >-
+                      -Component Batch
+                      -ArtifactPath "$(Pipeline.Workspace)/Batch"
+                      -LogDir "$(Build.ArtifactStagingDirectory)/deploy-logs"
+
+                - task: PublishBuildArtifacts@1
+                  displayName: 'Publicar logs del deploy'
+                  condition: always()
+                  inputs:
+                    PathtoPublish: '$(Build.ArtifactStagingDirectory)/deploy-logs'
+                    ArtifactName: 'DeployLogs-Batch-$(Build.BuildNumber)'
+                    publishLocation: 'Container'

@@ -674,7 +674,13 @@ $HarnessTestFiles = @(
   "tests/test_plan209_gate_detect_assess.py",
   "tests/test_plan209_build_rag_fallback.py",
   "tests/test_plan209_compute_attach.py",
-  "tests/test_plan209_anti_hallucination_sentinel.py"
+  "tests/test_plan209_anti_hallucination_sentinel.py",
+  # Plan 243 - Generador de pipelines NL (F0..F3.5: catalogo, modelo, renderer, reglas)
+  "tests/test_plan243_task_catalog.py",
+  "tests/test_plan243_spec_extendido.py",
+  "tests/test_plan243_renderer_ado.py",
+  "tests/test_plan243_reglas_semanticas.py",
+  "tests/test_plan243_corpus_mirror.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

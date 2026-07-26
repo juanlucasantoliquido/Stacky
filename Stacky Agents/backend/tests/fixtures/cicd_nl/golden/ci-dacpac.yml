@@ -1,0 +1,116 @@
+# fuente: RSPACIFICO/pipelines/ci-dacpac.yml - copiado 2026-07-26 (plan 243 F0)
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — DACPAC Build (SQL Server Schema)
+# Proyecto  : UbimiaPacifico / Strategist_Pacifico
+# Stack     : Microsoft.Build.Sql 2.1.0 → SQL Server 2022 (Sql170)
+# Propósito : Compilar el proyecto de base de datos y publicar el .dacpac
+#             como artefacto versionado. El .dacpac es el entregable que
+#             permite desplegar o comparar el schema en cualquier ambiente.
+#
+# SUPUESTOS:
+#   - El proyecto usa Microsoft.Build.Sql SDK → compatible con dotnet CLI
+#   - dotnet build funciona en Linux (ubuntu-latest) → más rápido y barato
+#   - El .dacpac resultante queda en bin/Release/
+#   - No hay tests de schema automatizados todavía (agregar tSQLt en el futuro)
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - schema database/**
+
+pr:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - schema database/**
+  autoCancel: true
+
+variables:
+  SQL_PROJECT:  'schema database/DB_Proj_RSPACIFICO.sqlproj'
+  DACPAC_NAME:  'DB_Proj_RSPACIFICO'
+
+# Microsoft.Build.Sql es multiplataforma — ubuntu es más rápido y barato
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+
+# ── 1. Instalar .NET SDK (para dotnet build con Microsoft.Build.Sql) ──────────
+- task: UseDotNet@2
+  displayName: '⚙️ Instalar .NET SDK 8.x'
+  inputs:
+    packageType: 'sdk'
+    version:     '8.x'
+
+# ── 2. Restaurar dependencias del proyecto SQL ────────────────────────────────
+- task: DotNetCoreCLI@2
+  displayName: '📦 dotnet restore — SQL project'
+  inputs:
+    command:   'restore'
+    projects:  '$(SQL_PROJECT)'
+
+# ── 3. Compilar → genera el .dacpac ──────────────────────────────────────────
+# El .dacpac contiene el schema completo de la base de datos.
+# Falla si hay errores de sintaxis SQL o referencias rotas.
+- task: DotNetCoreCLI@2
+  displayName: '🔨 dotnet build — $(DACPAC_NAME).dacpac'
+  inputs:
+    command:   'build'
+    projects:  '$(SQL_PROJECT)'
+    arguments: '--configuration Release --no-restore'
+
+# ── 4. Copiar .dacpac al staging directory ────────────────────────────────────
+- task: CopyFiles@2
+  displayName: '📋 Copiar .dacpac a staging'
+  inputs:
+    SourceFolder: '$(Build.SourcesDirectory)/schema database'
+    Contents:     '**/bin/Release/**/*.dacpac'
+    TargetFolder: '$(Build.ArtifactStagingDirectory)/dacpac'
+    flattenFolders: true   # deja solo el .dacpac sin subcarpetas bin/Release/
+
+# ── 5. Publicar .dacpac como artefacto ───────────────────────────────────────
+# Disponible para descarga manual o para un stage de deploy futuro
+# con SqlPackage /Action:Publish o /Action:DeployReport
+- task: PublishBuildArtifacts@1
+  displayName: '📦 Publicar artefacto — $(DACPAC_NAME).dacpac'
+  inputs:
+    PathtoPublish:  '$(Build.ArtifactStagingDirectory)/dacpac'
+    ArtifactName:   'dacpac-$(Build.BuildNumber)'
+    publishLocation: 'Container'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARA EXTENDER A DEPLOY DE BASE DE DATOS
+# ─────────────────────────────────────────────────────────────────────────────
+# Cuando tengas SQL Server accesible desde el agente, agregar un stage:
+#
+# - stage: DeploySchema
+#   dependsOn: Build
+#   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+#   jobs:
+#   - deployment: SQL_STG
+#     environment: 'Staging'
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - download: current
+#             artifact: 'dacpac-$(Build.BuildNumber)'
+#
+#           - task: SqlAzureDacpacDeployment@1   # Para Azure SQL
+#             inputs:
+#               AuthenticationType: 'connectionString'
+#               ConnectionString:   '$(SQL_CONNECTION_STRING)'   # Variable Group secret
+#               DacpacFile:         '$(Pipeline.Workspace)/dacpac-$(Build.BuildNumber)/DB_Proj_RSPACIFICO.dacpac'
+#               AdditionalArguments: '/p:BlockOnPossibleDataLoss=true'
+#
+#           # Alternativa para SQL Server on-premise con SqlPackage.exe:
+#           # - script: |
+#           #     sqlpackage /Action:Publish \
+#           #       /SourceFile:"$(Pipeline.Workspace)/dacpac-$(Build.BuildNumber)/DB_Proj_RSPACIFICO.dacpac" \
+#           #       /TargetConnectionString:"$(SQL_CONNECTION_STRING)" \
+#           #       /p:BlockOnPossibleDataLoss=true
+# ─────────────────────────────────────────────────────────────────────────────

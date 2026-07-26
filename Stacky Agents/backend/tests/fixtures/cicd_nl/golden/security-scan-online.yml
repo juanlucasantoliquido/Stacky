@@ -1,0 +1,103 @@
+# fuente: RSPACIFICO/pipelines/security-scan-online.yml - copiado 2026-07-26 (plan 243 F0)
+# Pipeline: Security Scan — NuGet Vulnerabilities (AgendaWeb)
+# Proyecto: UbimiaPacifico / Strategist_Pacifico
+# Corre:
+#   - En cada PR/push a main que toque dependencias (packages.config, .csproj)
+#   - Nightly como respaldo para detectar CVEs nuevos aunque no haya cambios
+# ─────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - trunk/OnLine/**/packages.config
+      - trunk/OnLine/**/*.csproj
+      - trunk/Negocio/**/packages.config
+
+pr:
+  branches:
+    include: [ main ]
+  paths:
+    include:
+      - trunk/OnLine/**/packages.config
+      - trunk/OnLine/**/*.csproj
+      - trunk/Negocio/**/packages.config
+  autoCancel: true
+
+schedules:
+- cron: '0 6 * * 1-5'        # 3 AM Argentina — después del nightly build
+  displayName: 'Nightly Security Scan'
+  branches:
+    include: [ main ]
+  always: true                 # detecta CVEs nuevos aunque no haya cambios en el código
+
+variables:
+  scanRoot:        'trunk/OnLine'
+  failOnSeverity:  'High'      # cambiarlo a 'Moderate' para ser más estricto
+
+pool:
+  vmImage: 'windows-2022'
+
+steps:
+
+# ── 1. Escanear packages.config (old-style .NET Framework) ───────────────────
+- task: PowerShell@2
+  displayName: 'Scan packages.config — NuGet Vulnerability API'
+  inputs:
+    filePath:          'pipelines/scripts/Check-PackagesConfig-Vulnerabilities.ps1'
+    arguments:         '-ScanRoot "$(scanRoot)" -OutputPath "$(Build.ArtifactStagingDirectory)\vuln-packages-config.json" -FailOnSeverity $(failOnSeverity)'
+    failOnStderr:      false
+    pwsh:              true
+
+# ── 2. Escanear proyectos SDK-style (PackageReference) ───────────────────────
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet list — Vulnerabilidades en proyectos SDK-style'
+  continueOnError: true        # reporta pero no bloquea solo por esto (cubierto por el script)
+  inputs:
+    command:   'custom'
+    custom:    'list'
+    arguments: >-
+      trunk/OnLine/AgendaWebTests/AgendaWebTests/AgendaWebTests.csproj
+      package --vulnerable --include-transitive
+
+# ── 3. Publicar reporte JSON como artefacto ───────────────────────────────────
+- task: PublishBuildArtifacts@1
+  displayName: 'Publicar reporte de vulnerabilidades'
+  condition: always()
+  inputs:
+    PathtoPublish:  '$(Build.ArtifactStagingDirectory)'
+    ArtifactName:   'vulnerability-report-$(Build.BuildNumber)'
+    publishLocation: 'Container'
+
+# ── 4. Adjuntar reporte como summary del pipeline ────────────────────────────
+- task: PowerShell@2
+  displayName: 'Publicar resumen en pipeline summary'
+  condition: always()
+  inputs:
+    pwsh: true
+    targetType: 'inline'
+    script: |
+      $reportPath = "$(Build.ArtifactStagingDirectory)\vuln-packages-config.json"
+      if (Test-Path $reportPath) {
+          $r = Get-Content $reportPath | ConvertFrom-Json
+          $md = @"
+      ## Reporte de Vulnerabilidades NuGet
+      | Campo | Valor |
+      |---|---|
+      | Fecha de scan | $($r.scanDate) |
+      | Paquetes escaneados | $($r.totalPackages) |
+      | Paquetes vulnerables | $($r.vulnerableCount) |
+
+      "@
+          if ($r.findings.Count -gt 0) {
+              $md += "### Hallazgos`n| Paquete | Version | Severidad | Advisory |`n|---|---|---|---|`n"
+              foreach ($f in $r.findings) {
+                  $md += "| $($f.Package) | $($f.Version) | **$($f.Severity)** | $($f.AdvisoryUrl) |`n"
+              }
+          } else {
+              $md += "> No se detectaron vulnerabilidades conocidas."
+          }
+          $md | Out-File "$(Build.ArtifactStagingDirectory)\vuln-summary.md" -Encoding UTF8
+          Write-Host "##vso[task.uploadsummary]$(Build.ArtifactStagingDirectory)\vuln-summary.md"
+      }

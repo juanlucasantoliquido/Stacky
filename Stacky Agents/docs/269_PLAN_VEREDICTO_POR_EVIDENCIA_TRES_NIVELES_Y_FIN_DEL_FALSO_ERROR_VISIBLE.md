@@ -1,9 +1,41 @@
 # Plan 269 — Veredicto por evidencia: tres niveles y fin del falso error VISIBLE
 
-> **Estado:** PROPUESTO v1
+> **Estado:** CRITICADO v2
 > **Autor:** StackyArchitectaUltraEficientCode
+> **Juez:** StackyArchitectaUltraEficientCode (red-team adversarial, anclajes reabiertos uno por uno)
 > **Fecha:** 2026-07-27
 > **Depende de:** Plan 254 (IMPLEMENTADO, commit `92e593f2`). Este plan **se apoya** en 254, **no lo reemplaza** ni lo duplica.
+
+---
+
+## CHANGELOG v1 → v2
+
+**Veredicto de la crítica: RECHAZADO en v1 por 6 BLOQUEANTES.** Anclajes reverificados abriendo cada archivo: **74 de 78 correctos**. Los 4 rotos y los 6 bloqueantes se corrigen abajo. El plan v1 estaba bien anclado en lo que miró; lo que lo hundió fue lo que **no** miró.
+
+| ID | Sev | Qué estaba mal en v1 | Cómo se arregla en v2 |
+|---|---|---|---|
+| **C1** | BLOQ | **La clave `verdict` YA EXISTE en el payload.** `AgentExecution.verdict` es una columna real (`backend/models.py:255`, `String(20)`, veredicto de revisión humana) y `to_dict()` la emite (`backend/models.py:327`). El `_with_verdict` de v1 la **pisaba con un dict**, destruyendo un campo vivo (consumido vía `last_execution_verdict` en `frontend/src/components/AgentHistoryModal.tsx:127` y `DailyStandupModal.tsx:13`). La afirmación de v1 *"backward-compatible por construcción"* era FALSA. | La clave del payload pasa a llamarse **`run_verdict`** en TODAS las fases (F2, F3, F4, F5, F8, DoD y greps). Test nuevo `test_no_pisa_el_verdict_del_modelo`. |
+| **C2** | BLOQ | **F4 pintaba el chip en una página que NO consume el endpoint que F2 cablea.** `ExecutionHistoryPage` llama `Executions.history()` → `GET /api/executions/history` → `executions_history()` (`backend/api/executions.py:442`), un handler que arma `items` **a mano** (`:538-559`), no usa `to_dict()` y **no pasa por `_with_outcome`**. F2 solo tocaba `list_executions()` (`:96`). El KPI K3 y toda F4 quedaban **inertes**. | F2 cablea **los dos** handlers: `list_executions()` y `executions_history()` (respetando `include_total` y el gate `STACKY_EXECUTION_HISTORY_ENABLED`), y agrega `run_verdict?` a `ExecutionHistoryItem` (`frontend/src/api/endpoints.ts:1303`). |
+| **C3** | BLOQ | **F4 ignoraba el sistema de columnas configurables.** Cada `<th>`/`<td>` de esa tabla vive bajo `isColVisible(tablePrefs, "<id>")` contra `HISTORY_COLUMNS` (`frontend/src/services/tablePrefs.ts:27-41`), y el picker recibe `columns={HISTORY_COLUMNS}` (`ExecutionHistoryPage.tsx:454`). Un `<td>` desnudo + *"buscar el `<thead>`"* desalinea la tabla apenas el operador oculta una columna. | F4 agrega `{ id: "veredicto", label: "Veredicto" }` a `HISTORY_COLUMNS` y envuelve `<th>` y `<td>` en `isColVisible(tablePrefs, "veredicto")`, con las líneas exactas. |
+| **C4** | BLOQ | **`backend/api/incident_inbox.py` NO tiene `logger`** (0 ocurrencias; ni siquiera importa `logging`). El `except` de F5 llamaba `logger.debug(...)` → `NameError` **dentro del handler de excepción** → 500 en la bandeja: exactamente lo que el plan prometía que nunca pasa. | F5 declara el logger del módulo como paso 1, con la línea literal. |
+| **C5** | BLOQ | **`verificacion_ok` leía la clave equivocada.** El productor es `VerificationReport.to_metadata()` (`backend/services/exec_verification.py:79-96`): la clave es `exec_verification` y el campo es **`passed`** (`bool \| None`, `:70`), **no `ok`**. El pseudocódigo `v.get("ok") is True` daba **siempre False** y el test "discriminador" de H2 consagraba el bug. | La hipótesis H2 **se elimina**: se reemplaza por el hecho verificado. `passed` tri-estado mapea 1:1 a la señal (`None` = "could-not-verify" = desconocida). Confirmado en 3 consumidores: `api/exec_verification.py:43`, `harness/post_run.py:189`, `services/harness_health.py:848`. |
+| **C6** | BLOQ | **Dos fases escribían la misma clave `hitl_enabled` en lugares distintos.** F6 decía meterla en `summarize()` — que es una función **PURA** (`run_reconciliation.py:217`, recibe una lista y no lee config; su docstring `:7-13` declara el aislamiento) — y F8 la metía en `api/diag.py:1015`. | **Una sola** escritura, en `api/diag.py`, **en F6** (F8 ya no la toca). `summarize()` queda intacta y pura. |
+| **C7** | IMP | **`get_intent()` VIOLA el riel P4 ("ningún colector escribe, crea, mueve ni borra"):** `_intent_dir()` hace `d.mkdir(parents=True, exist_ok=True)` (`services/incident_dev_pr.py:192-196`). Además la afirmación de v1 *"no puede lanzar"* es falsa: el `mkdir` y el `path.is_file()` están **fuera** del `try` (`:214-220`). | F1 lee el sidecar con un helper propio de solo lectura (`_sidecar_path`) que **no** crea nada, y envuelve todo en `try/except OSError → None`. Test nuevo `test_cambio_en_repo_no_crea_directorios`. |
+| **C8** | IMP | **`cancelled` recibía una causa que MIENTE.** Base `advertencia` (el propio plan dice "el humano lo cortó, no es un fallo") pero la regla 5 le daba `cierre_sucio_pendiente_de_revision`, cuyo texto al operador es *"Entregó trabajo pero el proceso cerró mal"*. | Causa nueva **`cancelado_por_el_operador`** (nivel `advertencia`) con precedencia propia. `VERDICT_CAUSES` pasa de 8 a **9**. |
+| **C9** | IMP | **Estados NO terminales pintados como advertencia.** `_STATUS_TO_BASE` no cubre `idle` ni `running` (los 2 no-terminales de `VALID_TICKET_STATUSES`): caían al default `advertencia`, así que **toda corrida en curso** se mostraba "Con advertencias" en la lista principal. | `evaluate_verdict` devuelve **`None`** para estados no terminales: un run que no terminó **no tiene veredicto**. La UI no dibuja chip. |
+| **C10** | IMP | **F5 traía TODAS las ejecuciones de todos los tickets del lote** (`filter(ticket_id.in_(...)).all()`) para quedarse con la última de cada uno: fetch sin cota. | Subconsulta `max(started_at) GROUP BY ticket_id` + join. Sigue siendo **1 query**, ahora acotada a ≤1 fila por ticket. |
+| **C11** | IMP | Frases vagas fatales para un modelo menor: *"el `Dialog` canónico del repo"* (el repo tiene `Dialog`, `ConfirmDialog`, `AlertDialog`, `PromptDialog` y el hook `useConfirm`), *"la interfaz de la fila de ejecución"*, *"buscar el `<thead>` del mismo archivo"*. | Nombradas literalmente: `useConfirm` de `components/ui` (patrón real `ActiveRunsPanel.tsx:7,33`), `ExecutionHistoryItem` (`endpoints.ts:1303`), `<thead>` en `ExecutionHistoryPage.tsx:507` con los `<th>` en `:525-545`. |
+| **C12** | IMP | **El comando del KPI K1 era falso:** `python -c "import run_verdict_kpi"` — ese módulo no existe ni lo crea ninguna fase. | Reemplazado por el comando real de `count_by_level`. |
+| **C13** | MEN | Las ramas de flag-OFF (`api/diag.py:999-1003`) y de error (`:1011-1014`) **retornan antes** de `:1015`, así que `hitl_enabled` nunca sale por ahí; el test de F6 pasaba por casualidad. | Declarado explícitamente: **ausencia ⇒ falsy ⇒ sin botones**, y la clave se agrega también en la rama de error. |
+| **C14** | MEN | Anclaje `incident_dev_pr.py:199` para la ruta del sidecar: la ruta se arma en `:192-196` (`_intent_dir`) y `:199-200` (`_intent_path`). | Corregido. |
+| **C15** | MEN | Anclaje de la flag del guard: es `ticket_status.py:340-341`, no `:341-342`. | Corregido. |
+| **C16** | MEN | No registraba la huella de regresión. | DoD agrega la entrada en `Stacky Agents/docs/sistema/error_fingerprints.json`. |
+| **A1** | — | **[ADICIÓN ARQUITECTO] Calibración observada del veredicto.** Ver F8. | — |
+| **A2** | — | **[ADICIÓN ARQUITECTO] Test de espejo backend↔frontend.** Ver F0. | — |
+
+**Lo que la crítica CONFIRMÓ como correcto en v1 (no se toca):** la aritmética de tests de las 9 fases (contadas fila por fila: 15/12/6/11+2/6/5+6/8/15+3 — todas cuadraban); la elección del endpoint HITL (`PATCH /api/tickets/<ticket_id>/stacky-status`, `api/tickets.py:1165`, **verificado**: llama `ts.set_status` y **no** publica; el `by-ado` de `:1204` **sí** publica en `:1406` y **sí** cambia el work item en `:1495`) — por lo tanto **`STACKY_RUN_RECONCILIATION_HITL_ENABLED` default ON queda APROBADO**, no cae en la excepción (B); la regla de no declarar `requires=` (`test_harness_flags_requires.py:316` solo compara specs con `requires` truthy); los topes 200/240/240 (`test_harness_flags_help.py:47-50`); el nombre de la variable del array en cada script (`HARNESS_TEST_FILES` en el `.sh:20`, `$HarnessTestFiles` en el `.ps1:13` — v1 nunca la nombró mal); los anclajes de `agent_runner.py:1029/1055/1082` y los 0 hits de `final_status` en `copilot_bridge.py`; y que los invariantes I1 e I2 **sí** se cumplen con el código escrito (I1 estructuralmente: la única regla que produce `exito` es inalcanzable desde base `error_real`).
+
+**Corte recomendado (scope):** 9 fases / 6 archivos de test backend / 2 frontend / 5 flags / 3 `.tsx` es grande. Si hay que partirlo: **269 = F0..F5 + F7** (el veredicto y su superficie) y **270 = F6 + F8** (HITL de reconciliación y calibración). El corte es limpio porque F6 no depende de F0-F5.
 > **Numeración:** este plan nació como **267** y se **renumeró a 269** por colisión con una sesión paralela viva sobre el mismo árbol. Secuencia real verificada tras el renumerado: `267_PLAN_CATALOGO_UNICO_DE_ACCIONES_DEVOPS_...md` (sesión paralela, que a su vez renumeró de 266 a 267 en `07e3eae7`/`fc29e7cb`) y `268_PLAN_EXPLORADOR_DEL_GRAFO_DOCUMENTAL_...md` (`00704dee`). **269 es el primer número libre.** Todos los identificadores internos del plan (los 6 `test_plan269_*.py` y `plan269RunVerdict.test.ts`) se renumeraron junto con el archivo.
 
 ---
@@ -22,7 +54,8 @@ El plan 254 clasificó **por qué terminó** una corrida mirando únicamente se�
 
 | # | KPI | Hoy (medir en F0 paso 0) | Meta | Cómo se mide (comando exacto) |
 |---|---|---|---|---|
-| K1 | Corridas terminadas en `error` que SÍ tienen evidencia de entrega (el falso error visible) | `SIN MEDIR` | Visible al 100% con veredicto `advertencia` + causa `falso_rojo_probable`, y **0** de ellas presentadas al operador como un rojo plano | `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -c "import run_verdict_kpi"` — implementado en F8 como `services/run_verdict.py::count_by_level(days=30)` |
+| K1 | Corridas terminadas en `error` que SÍ tienen evidencia de entrega (el falso error visible) | `SIN MEDIR` | Visible al 100% con veredicto `advertencia` + causa `falso_rojo_probable`, y **0** de ellas presentadas al operador como un rojo plano | **(C12 v2 — el comando de v1 nombraba un módulo inexistente)** `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -c "from services.run_verdict import count_by_level; print(count_by_level(30))"` — la función se implementa en F8 |
+| K6 | **[ADICIÓN ARQUITECTO A1]** Acuerdo observado del operador con el veredicto `falso_rojo_probable` | `SIN MEDIR` | Medible (no una meta numérica: es el instrumento que dice si los pesos y el umbral están bien calibrados) | `.venv\Scripts\python.exe -c "from services.run_verdict import verdict_agreement; print(verdict_agreement(30))"` — F8 |
 | K2 | Degradaciones `completed`→`error` en 30 días (KPI heredado del 254) | `SIN MEDIR` | No sube (este plan no toca el cierre) | `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -c "from services.error_fingerprints import count_falso_rojo_downgrades; print(count_falso_rojo_downgrades(30))"` — función real en `backend/services/error_fingerprints.py:50` |
 | K3 | Niveles visibles en la **fila** de una lista de corridas | **1 dimensión** (`status` crudo vía `runStatusTone`, `frontend/src/pages/ExecutionHistoryPage.tsx:633`) | **2 dimensiones**: estado + veredicto de 3 niveles | Lectura del archivo: `grep -c "verdictTone" frontend/src/pages/ExecutionHistoryPage.tsx` ≥ 1 |
 | K4 | Items de reconciliación con camino HITL desde la UI | **0** (`RunReconciliationCard.tsx` renderiza solo contadores por `by_kind`, líneas 94-102; nunca renderiza `items`) | 100% de los items `red_with_delivered_work` con botón de corrección | `grep -c "items.map" frontend/src/components/RunReconciliationCard.tsx` ≥ 1 |
@@ -83,23 +116,58 @@ Toda ruta es relativa a `Stacky Agents/`. Todo símbolo fue abierto y leído.
 |---|---|---|
 | `entregable_presente` | Columna `AgentExecution.html_output_path` (String 500) y columna `AgentExecution.output` (Text) | `backend/models.py:272` y `backend/models.py:258` |
 | `publicado_en_tracker` | Tabla `agent_html_publish`, modelo `AgentHtmlPublish` con `execution_id` (`:135`), `status` ∈ `ok/skipped/failed` (`:144`) y `comment_id` (`:153`) | `backend/services/ado_publisher.py:122-154` |
-| `cambio_en_repo` | Sidecar JSON por ejecución leído con `get_intent(execution_id)`; campos escritos por `mark_intent(...)`: `pr_id, pr_url, branch, status, error, files_committed, origin` | `backend/services/incident_dev_pr.py:213` (lector), `:223-228` (escritor, docstring con los campos), `:199` (ruta `data_dir()/incident_dev_pr/{execution_id}.json`) |
+| `cambio_en_repo` | Sidecar JSON por ejecución; campos escritos por `mark_intent(...)`: `pr_id, pr_url, branch, status, error, files_committed, origin`. **(C7/C14 v2)** La ruta se arma en `_intent_dir()` (`:192-196`) + `_intent_path()` (`:199-200`) = `data_dir()/incident_dev_pr/{execution_id}.json`. **NO se usa `get_intent()`**: `_intent_dir()` hace `mkdir(parents=True, exist_ok=True)` y eso **crea un directorio**, violando el riel P4. F1 lee el archivo directo. | `backend/services/incident_dev_pr.py:192-196`, `:199-200`, `:223-228` (escritor) |
 | `gate_aceptacion_ok` | Columna `AgentExecution.contract_result_json` + property `contract_result` | `backend/models.py:261` y `backend/models.py:309` |
-| `verificacion_ok` | Clave dentro de `AgentExecution.metadata_json` (property `metadata_dict`) | `backend/models.py:301`; el productor es `services/exec_verification.py::verify()` (`:522`) que serializa con `_serialize_report()` (`:642`) |
+| `verificacion_ok` | **HECHO, ya no hipótesis (C5 v2).** Clave `metadata["exec_verification"]`, campo **`passed`** (`bool \| None`). Lo produce `VerificationReport.to_metadata()` en `backend/services/exec_verification.py:79-96`; el campo se declara en `:70` con el comentario literal *"None = no hay nada que verificar / could-not-verify"*. **NO es `ok`.** | Productor: `services/exec_verification.py:70,81`. Consumidores que lo confirman: `api/exec_verification.py:43`, `harness/post_run.py:189-191`, `services/harness_health.py:848`, `tests/test_exec_verification.py:330-331`. Lectura desde el modelo: `backend/models.py:301` (`metadata_dict`) |
 
 ### 3.3 Metadata de ejecución ya poblada por el 254 (se lee, no se escribe)
 
 `run_reconciliation.scan_recent()` demuestra qué claves existen en `AgentExecution.metadata_dict`: `exit_code` (`backend/services/run_reconciliation.py:195`), `finalized_after_result` (`:202`), `outcome_reason` (`:209`), `drain_timed_out` (`:212`).
 
-### 3.4 Punto de inyección del payload de ejecuciones
+### 3.4 Puntos de inyección del payload de ejecuciones — son **DOS**, no uno (C2 v2)
 
-`backend/api/executions.py:65` — `_with_outcome(d, dirty_ids)` es la función que ya promueve `outcome_reason` (`:81`) y `outcome_actionable` (`:85`) al nivel superior del payload, gateada por `_outcome_badge_enabled()` (`:28`). El patrón anti-N+1 ya existe: `_dirty_close_execution_ids(session, execution_ids)` (`:35`) resuelve **todo el lote en UNA query** (`:48-53`). **F2 sigue exactamente ese patrón.**
+Este es el error que hundió a v1. Hay **dos** rutas de ejecuciones con **dos formas distintas** de armar el payload, y la página del historial consume la SEGUNDA:
+
+| # | Ruta | Handler | Cómo arma el payload | ¿Pasa por `_with_outcome`? | Quién la consume |
+|---|---|---|---|---|---|
+| 1 | `GET /api/executions` | `list_executions()` — `backend/api/executions.py:96` | `r.to_dict(include_output=False, include_ticket_context=True)` (`:154`) | **Sí** (`:159`) | `Executions.list(...)`, drawer de detalle |
+| 2 | `GET /api/executions/history` | `executions_history()` — `backend/api/executions.py:442` | **A mano, dict por dict** (`:538-559`) | **NO** | **`ExecutionHistoryPage.tsx`** vía `Executions.history()` → `ExecutionHistoryItem` (`frontend/src/api/endpoints.ts:1303`) |
+
+Consecuencias que v2 respeta:
+- **F2 debe cablear los DOS handlers.** Cablear solo el (1) deja F4 y el KPI K3 completamente inertes.
+- El handler (2) está gateado por `STACKY_EXECUTION_HISTORY_ENABLED` (`:459-460`) y tiene **dos formas de respuesta**: lista pelada, o `{items, total}` con `?include_total=1` (`:561-564`). El veredicto se inyecta **antes** de ese `if`, sobre `items`.
+- El handler (1) hace `q.options(joinedload(AgentExecution.ticket))` (`:130`), así que `getattr(ex, "ticket", None)` **no** es N+1 ahí. El handler (2) hace `.join(Ticket, ...)` (`:481`), que **no** es eager-load: ahí `row.ticket` ya es un lazy-load preexistente (`models.py:275`, `lazy="select"` por default) y este plan **no lo empeora ni lo arregla** — usa la variable `meta` que el handler ya calculó (`:539`).
+
+**Patrón anti-N+1 a copiar:** `_with_outcome(d, dirty_ids)` (`:65`) promueve `outcome_reason` (`:81`) y `outcome_actionable` (`:85`), gateado por `_outcome_badge_enabled()` (`:28`); `_dirty_close_execution_ids(session, execution_ids)` (`:35`) resuelve **todo el lote en UNA query** (`:48-53`). **F2 sigue exactamente ese patrón.** El módulo **ya tiene** `logger` (`:25`), así que el `logger.debug` de F2 compila.
+
+### 3.4-bis La clave `verdict` YA ESTÁ OCUPADA (C1 v2) — la nueva se llama `run_verdict`
+
+`AgentExecution.verdict` es una **columna real** (`backend/models.py:255`, `Mapped[str | None] = mapped_column(String(20))`) que guarda el veredicto de **revisión humana** (`approved` / `rejected` / `discarded`), y `AgentExecution.to_dict()` la emite tal cual: `"verdict": self.verdict` (`backend/models.py:327`). En el frontend la consumen `AgentHistoryModal.tsx:127-134` (vía `last_execution_verdict`, `endpoints.ts:992`) y `DailyStandupModal.tsx:13`.
+
+**Por eso la clave nueva de este plan se llama `run_verdict`, nunca `verdict`.** Pisarla destruiría un campo vivo de otro tipo y rompería `tsc`. Gate en el DoD: `grep -c '"verdict"' backend/services/run_verdict.py` = **0**.
+
+### 3.4-ter El historial de ejecuciones es una tabla con COLUMNAS CONFIGURABLES (C3 v2)
+
+`frontend/src/pages/ExecutionHistoryPage.tsx` **no** es una tabla estática:
+- Las columnas se declaran en `frontend/src/services/tablePrefs.ts:27-41` (`HISTORY_COLUMNS: ColumnDef[]`, hoy 10 entradas: `inicio, agente, runtime, modelo, estado, duracion, costo, prompt, archivos, ticket`).
+- Cada `<th>` (`:525-545` en adelante) y cada `<td>` (`:614-645` en adelante) está envuelto en `isColVisible(tablePrefs, "<id>")`.
+- El selector de columnas recibe `columns={HISTORY_COLUMNS}` (`:454`) y las prefs se sanean con `sanitizeTablePrefs(raw, HISTORY_COLUMNS)` (`:102`, `:237`).
+
+**Un `<td>` sin su `<th>` y sin su `isColVisible` desalinea la tabla apenas el operador oculte cualquier columna.** F4 registra la columna en `HISTORY_COLUMNS` y guarda ambas celdas.
+
+### 3.4-quater `backend/api/incident_inbox.py` NO TIENE `logger` (C4 v2)
+
+`grep -c logger backend/api/incident_inbox.py` = **0**. El módulo ni siquiera importa `logging` (sus imports son `from __future__ import annotations` en `:6` y `from flask import Blueprint, jsonify, request` en `:8`). Cualquier `logger.debug(...)` en un `except` de ese archivo lanza `NameError` **desde el handler de excepción**, convirtiendo una degradación silenciosa en un 500. **F5 declara el logger como paso 1.**
 
 ### 3.5 Superficies de UI
 
 | Superficie | Archivo:línea | Qué hay hoy |
 |---|---|---|
-| Fila del historial de ejecuciones | `frontend/src/pages/ExecutionHistoryPage.tsx:633` | `<StatusChip tone={runStatusTone(item.status)}>` |
+| Fila del historial de ejecuciones | `frontend/src/pages/ExecutionHistoryPage.tsx:632-634` | `{isColVisible(tablePrefs, "estado") && (<td><StatusChip tone={runStatusTone(item.status)} size="sm">{runStatusLabel(item.status)}</StatusChip></td>)}` — **el `<td>` está envuelto en `isColVisible`** (C3) |
+| Cabecera de esa tabla | `frontend/src/pages/ExecutionHistoryPage.tsx:507` (`<thead>`), `:525-545` (los `<th>`) | Cada `<th data-col="...">` bajo `isColVisible` |
+| Declaración de columnas | `frontend/src/services/tablePrefs.ts:27-41` | `HISTORY_COLUMNS` con 10 entradas |
+| Confirmación canónica del repo | `frontend/src/components/ui/index.ts` (plan 164) | `useConfirm` / `useAlert` / `useTextPrompt` desde `DialogHost`; patrón de uso real: `ActiveRunsPanel.tsx:7,33` y `AgentHistoryPage.tsx:10,253` (`const askConfirm = useConfirm()`) |
+| Tipo de la fila del historial | `frontend/src/api/endpoints.ts:1303` | `interface ExecutionHistoryItem` (21 campos; **no** tiene `verdict`) |
 | Filtro de estado del historial | `frontend/src/pages/ExecutionHistoryPage.tsx:400-401` | select por `filters.status` |
 | Import de `runStatus` | `frontend/src/pages/ExecutionHistoryPage.tsx:30` | `runStatusTone, runStatusLabel` |
 | Fila de la bandeja de incidencias | `frontend/src/pages/IncidentInboxPage.tsx:488` | `<div className={styles.row}>`; badges en `:503-507` |
@@ -141,6 +209,9 @@ Toda flag nueva se da de alta en **5 lugares de código + 2 archivos de arnés**
 3. **Vitest se corre por archivo** con `npx vitest run <ruta>` (no hay script `test` en `frontend/package.json`; la contaminación cross-file está documentada).
 4. **Ratchet de cero inline-style en `.tsx` nuevos.** Este plan **no crea ningún `.tsx` nuevo**: edita tres `.tsx` existentes y todo estilo va por CSS Module.
 5. **Se lee la INSTANCIA `config.config`, nunca el módulo.** Patrón obligatorio: `import config as _config` + `getattr(_config.config, "STACKY_X", True)` (ver `backend/api/executions.py:30-32`).
+6. **(v2, C4) Antes de escribir `logger.` en un módulo, verificar que ese módulo TENGA logger.** `api/executions.py` lo tiene (`:25`); `api/diag.py` lo tiene; **`api/incident_inbox.py` NO** (0 ocurrencias). Un `logger` inexistente dentro de un `except` convierte una degradación silenciosa en un 500.
+7. **(v2, C7) Un lector "de solo lectura" del repo puede escribir igual.** `incident_dev_pr.get_intent()` parece un getter pero su cadena hace `mkdir` (`:192-196`). Antes de usar un helper ajeno en un colector con riel "no escribe nada", leer su cuerpo entero, no su nombre.
+8. **(v2, C1) Antes de agregar una clave a un payload, verificar que no exista.** `to_dict()` de `AgentExecution` (`models.py:315-350`) ya emite 18 claves; `verdict` es una de ellas.
 
 ---
 
@@ -150,7 +221,8 @@ Toda flag nueva se da de alta en **5 lugares de código + 2 archivos de arnés**
 - **P2 — La ignorancia nunca mejora el veredicto.** Invariante `I2`, codificado en test: una señal `None` (desconocida) produce un nivel **igual o peor** que la misma señal en `False`. Nunca mejor. Si una fuente no está disponible, el veredicto degrada; jamás fabrica confianza.
 - **P3 — Lectura, no cierre.** El veredicto se computa **en tiempo de lectura del payload**, no en el sitio de cierre. Consecuencias: (a) paridad de los 3 runtimes gratis, porque los tres escriben `AgentExecution` y de ahí lee el veredicto; (b) cero riesgo de regresión sobre el cierre que 254 acaba de estabilizar; (c) backward-compatible por construcción — nada existente cambia de forma.
 - **P4 — Solo lectura absoluta en los colectores.** Ningún colector escribe, crea, mueve ni borra. Todos tienen tope de tiempo y degradan a `None`. Un colector que falla **jamás** rompe el listado.
-- **P5 — El veredicto es una DIMENSIÓN SEPARADA, no un estado.** `status_vocabulary.py` **no se toca**: no se agrega ni un estado. El payload gana una clave nueva `verdict`; `stacky_status` sigue significando exactamente lo mismo que ayer.
+- **P5 — El veredicto es una DIMENSIÓN SEPARADA, no un estado.** `status_vocabulary.py` **no se toca**: no se agrega ni un estado. El payload gana **una** clave nueva llamada **`run_verdict`** (nunca `verdict`, que ya está ocupada — §3.4-bis); `stacky_status` sigue significando exactamente lo mismo que ayer.
+- **P9 — Un run que no terminó NO tiene veredicto (v2, C9).** Para `idle` y `running`, `evaluate_verdict` devuelve `None` y el payload no trae la clave. Juzgar algo que todavía está pasando es inventar. La ausencia de veredicto es información honesta; un "advertencia" por defecto habría pintado de amarillo toda la lista de corridas activas.
 - **P6 — Human-in-the-loop innegociable.** Stacky nunca cambia un estado terminal a partir del veredicto. La única corrección la dispara el humano con un click, contra un endpoint que **no publica en ningún sistema externo** (§3.6).
 - **P7 — Cero trabajo para el operador.** Todo es invisible y automático. Las 5 flags nacen **ON**. No hay ni una decisión nueva que tomar para que el sistema mejore.
 - **P8 — Sin autonomía proactiva.** Nada de este plan corre en un loop, daemon, barrido ni polling. Todo se computa cuando el operador ya estaba pidiendo esos datos.
@@ -194,11 +266,15 @@ from dataclasses import dataclass, field
 VERDICT_LEVELS = ("exito", "advertencia", "error_real")
 
 # Causa del veredicto. Cerrado. Toda causa mapea a exactamente un nivel.
+# v2 (C8): son NUEVE. `cancelado_por_el_operador` se separó de
+# `cierre_sucio_pendiente_de_revision` porque un run que el humano cortó a mano
+# NO cerró mal, y decirle al operador "el proceso cerró mal" es mentirle.
 VERDICT_CAUSES = (
     "cierre_limpio_con_entrega",           # exito
     "verde_sin_evidencia",                 # advertencia
     "evidencia_indeterminada",             # advertencia
     "cierre_sucio_pendiente_de_revision",  # advertencia
+    "cancelado_por_el_operador",           # advertencia  ← v2 C8
     "falso_rojo_probable",                 # advertencia  ← el caso que pidió el operador
     "espera_cuota",                        # advertencia
     "error_sin_entrega_suficiente",        # error_real
@@ -229,7 +305,10 @@ _PESO = {
 UMBRAL_ENTREGA = 2  # fuerza mínima para considerar que "produjo resultados"
 
 # Nivel base derivado del estado terminal. `cancelled` es advertencia: el humano
-# lo cortó, no es un fallo del sistema.
+# lo cortó, no es un fallo del sistema (y en v2 tiene causa propia, C8).
+# Las CLAVES son exactamente los 4 TERMINAL_STATUSES de
+# services/status_vocabulary.py:11. Los 2 NO terminales (`idle`, `running`,
+# status_vocabulary.py:14) NO están acá A PROPÓSITO: ver `_NO_TERMINALES`.
 _STATUS_TO_BASE = {
     "completed": "exito",
     "needs_review": "advertencia",
@@ -237,11 +316,16 @@ _STATUS_TO_BASE = {
     "error": "error_real",
 }
 
+# v2 (C9): un run que NO terminó no tiene veredicto. Devolver "advertencia" para
+# un run en curso pintaba "Con advertencias" TODA la lista de corridas activas.
+_NO_TERMINALES = frozenset({"idle", "running"})
+
 _CAUSE_TO_LEVEL = {
     "cierre_limpio_con_entrega": "exito",
     "verde_sin_evidencia": "advertencia",
     "evidencia_indeterminada": "advertencia",
     "cierre_sucio_pendiente_de_revision": "advertencia",
+    "cancelado_por_el_operador": "advertencia",
     "falso_rojo_probable": "advertencia",
     "espera_cuota": "advertencia",
     "error_sin_entrega_suficiente": "error_real",
@@ -300,30 +384,47 @@ def evaluate_verdict(
     ticket_status: str,
     outcome_reason: str | None = None,
     signals: EvidenceSignals | None = None,
-) -> RunVerdict:
-    """Devuelve exactamente un RunVerdict. Puro y determinístico.
+) -> RunVerdict | None:
+    """Devuelve un RunVerdict, o None si el run NO terminó. Puro y determinístico.
+
+    v2 (C9): `None` para `idle`/`running`. Un run en curso NO tiene veredicto —
+    devolverle "advertencia" pintaba de amarillo toda la lista de corridas
+    activas. `None` significa "todavía no hay nada que juzgar" y la UI no dibuja
+    chip (describeVerdict(null) → null, F3).
 
     ORDEN DE PRECEDENCIA OBLIGATORIO — se evalúa en este orden y se devuelve en
     el PRIMER match. Sin este orden, dos reglas pueden matchear y el resultado
     es ambiguo para un modelo menor.
 
+      0. ticket_status ∈ {"idle","running"}          → None (sin veredicto)   ← v2 C9
       1. outcome_reason == "preflight_blocked"        → bloqueado_antes_de_empezar (error_real)
       2. outcome_reason == "quota_exhausted"          → espera_cuota (advertencia)
       3. base == "error_real" y fuerza >= UMBRAL      → falso_rojo_probable (advertencia)
       4. base == "error_real"                         → error_sin_entrega_suficiente (error_real)
-      5. base == "advertencia"                        → cierre_sucio_pendiente_de_revision
-      6. base == "exito" y fuerza >= UMBRAL           → cierre_limpio_con_entrega (exito)
-      7. base == "exito" y hay alguna señal None      → evidencia_indeterminada (advertencia)
-      8. base == "exito" (resto)                      → verde_sin_evidencia (advertencia)
+      5. ticket_status == "cancelled"                 → cancelado_por_el_operador (advertencia)  ← v2 C8
+      6. base == "advertencia"                        → cierre_sucio_pendiente_de_revision
+      7. base == "exito" y fuerza >= UMBRAL           → cierre_limpio_con_entrega (exito)
+      8. base == "exito" y hay alguna señal None      → evidencia_indeterminada (advertencia)
+      9. base == "exito" (resto)                      → verde_sin_evidencia (advertencia)
 
-    Nota sobre 6 antes de 7: si ya hay UMBRAL de evidencia PRESENTE, una señal
+    Nota sobre 7 antes de 8: si ya hay UMBRAL de evidencia PRESENTE, una señal
     desconocida al lado no borra la evidencia que sí está. No fabrica un verde
-    porque el base ya era verde (regla 6 es inalcanzable desde un estado rojo).
+    porque el base ya era verde (la regla 7 es inalcanzable desde un estado rojo:
+    ahí está la garantía ESTRUCTURAL del invariante I1).
 
-    Un `ticket_status` desconocido cae a base "advertencia" (nunca a un verde).
+    Nota sobre 5 después de 3/4: un `cancelled` nunca llega a base "error_real",
+    así que el orden entre ellas no cambia nada; se deja explícito para que el
+    lector no tenga que razonarlo.
+
+    Un `ticket_status` desconocido (ni terminal ni no-terminal) cae a base
+    "advertencia" — nunca a un verde.
     """
+    estado = (ticket_status or "").strip()
+    if estado in _NO_TERMINALES:
+        return None
+
     sig = signals or EvidenceSignals()
-    base = _STATUS_TO_BASE.get((ticket_status or "").strip(), "advertencia")
+    base = _STATUS_TO_BASE.get(estado, "advertencia")
     fuerza = delivery_strength(sig)
 
     present = tuple(n for n in EVIDENCE_SIGNALS if sig.get(n) is True)
@@ -338,6 +439,8 @@ def evaluate_verdict(
         cause = "falso_rojo_probable"
     elif base == "error_real":
         cause = "error_sin_entrega_suficiente"
+    elif estado == "cancelled":
+        cause = "cancelado_por_el_operador"
     elif base == "advertencia":
         cause = "cierre_sucio_pendiente_de_revision"
     elif fuerza >= UMBRAL_ENTREGA:
@@ -357,13 +460,15 @@ def evaluate_verdict(
     )
 ```
 
-> **Nota de diseño para el implementador:** la regla 5 (`base == "advertencia"`) captura `needs_review` y `cancelled`. Si el `outcome_reason` era `dirty_exit_after_work` o `stall_after_work`, el 254 ya mapeó el estado a `needs_review` (`services/run_outcome.py:36,38`), así que llegan acá y reciben `cierre_sucio_pendiente_de_revision`. **No** hay que replicar esa lógica.
+> **Cambio de contrato respecto de v1 (C9), obligatorio para el implementador:** `evaluate_verdict` ahora puede devolver `None`. **Todo call-site** (F2 en los dos handlers, F5 en la bandeja) debe hacer `v = evaluate_verdict(...)` y `if v is None: continue` **antes** de llamar `.to_dict()`. Un `.to_dict()` sobre `None` es un `AttributeError` que caería en el `except` y borraría el veredicto de TODO el lote.
+
+> **Nota de diseño para el implementador (actualizada en v2):** la regla 6 (`base == "advertencia"`) ahora captura **solo `needs_review`**, porque `cancelled` sale antes por la regla 5 (C8). Si el `outcome_reason` era `dirty_exit_after_work` o `stall_after_work`, el 254 ya mapeó el estado a `needs_review` (`services/run_outcome.py:36,38`), así que llegan acá y reciben `cierre_sucio_pendiente_de_revision`. **No** hay que replicar esa lógica.
 
 **Tests PRIMERO — `backend/tests/test_plan269_run_verdict.py`**, casos exactos:
 
 | Test | Qué prueba |
 |---|---|
-| `test_todo_nivel_pertenece_al_vocabulario` | Barre `itertools.product` sobre `(True, False, None)^5` × los 4 estados de `_STATUS_TO_BASE` + `"basura"` × los 9 `OUTCOME_REASONS` + `None`; asegura `v.level in VERDICT_LEVELS` y `v.cause in VERDICT_CAUSES` **siempre**. Nunca `None`, nunca `KeyError`. |
+| `test_todo_nivel_pertenece_al_vocabulario` | Barre `itertools.product` sobre `(True, False, None)^5` × los 4 estados de `_STATUS_TO_BASE` + `"basura"` × los 9 `OUTCOME_REASONS` + `None`; asegura `v is not None`, `v.level in VERDICT_LEVELS` y `v.cause in VERDICT_CAUSES` **siempre**. Nunca `KeyError`. (v2: la grilla excluye `idle`/`running`, que tienen su test propio.) |
 | `test_I1_un_error_jamas_recibe_exito` | **INVARIANTE DURO.** Sobre la misma grilla, con `ticket_status="error"`, asegura `v.level != "exito"` en el 100% de los casos. |
 | `test_I2_desconocido_nunca_mejora` | Para cada señal `s` y cada estado base, compara `evaluate_verdict(signals=... s=None ...)` contra `... s=False ...`: el índice del nivel en `VERDICT_LEVELS` con `None` debe ser **≥** (igual o peor) que con `False`. |
 | `test_falso_rojo_probable_con_publicacion` | `ticket_status="error"`, `publicado_en_tracker=True` → `cause == "falso_rojo_probable"`, `level == "advertencia"`, `strength == 2`. |
@@ -375,16 +480,47 @@ def evaluate_verdict(
 | `test_verde_con_desconocidas_es_advertencia` | `ticket_status="completed"`, las 5 en `None` → `evidencia_indeterminada` / `advertencia`. |
 | `test_verde_con_entrega_es_exito` | `ticket_status="completed"`, `publicado_en_tracker=True` → `cierre_limpio_con_entrega` / `exito`. |
 | `test_needs_review_es_advertencia` | `ticket_status="needs_review"` con cualquier evidencia → `cierre_sucio_pendiente_de_revision` / `advertencia`. |
-| `test_listas_present_absent_unknown_particionan` | Para cualquier entrada, `set(present) | set(absent) | set(unknown) == set(EVIDENCE_SIGNALS)` y las tres son disjuntas. |
-| `test_causa_mapea_a_un_solo_nivel` | `set(_CAUSE_TO_LEVEL) == set(VERDICT_CAUSES)` y todo valor ∈ `VERDICT_LEVELS`. |
-| `test_no_agrega_estados_al_vocabulario` | Importa `status_vocabulary.VALID_TICKET_STATUSES` y asegura que **ningún** `VERDICT_LEVEL` está adentro (son dimensiones distintas y no deben confundirse). |
+| `test_cancelado_no_dice_cierre_sucio` | **v2 C8.** `ticket_status="cancelled"` con cualquier evidencia → `cause == "cancelado_por_el_operador"`, `level == "advertencia"`, y explícitamente `cause != "cierre_sucio_pendiente_de_revision"`. |
+| `test_no_terminal_no_tiene_veredicto` | **v2 C9.** `evaluate_verdict(ticket_status="running")` y `="idle"` → `None`, con **cualquier** combinación de evidencia y de `outcome_reason` (barre la grilla). |
+| `test_listas_present_absent_unknown_particionan` | Para cualquier entrada terminal, `set(present) | set(absent) | set(unknown) == set(EVIDENCE_SIGNALS)` y las tres son disjuntas. |
+| `test_causa_mapea_a_un_solo_nivel` | `set(_CAUSE_TO_LEVEL) == set(VERDICT_CAUSES)`, `len(VERDICT_CAUSES) == 9` y todo valor ∈ `VERDICT_LEVELS`. |
+| `test_no_agrega_estados_al_vocabulario` | Importa `status_vocabulary.VALID_TICKET_STATUSES` y asegura que **ningún** `VERDICT_LEVEL` está adentro (son dimensiones distintas y no deben confundirse). También asegura que `set(_STATUS_TO_BASE) | _NO_TERMINALES == VALID_TICKET_STATUSES` — es decir, que el veredicto **cubre el vocabulario completo** y no se olvida de un estado. |
+| `test_espejo_ts_no_tiene_drift` | **[ADICIÓN ARQUITECTO A2].** Ver abajo. |
+
+#### [ADICIÓN ARQUITECTO A2] — El espejo backend↔frontend se verifica, no se promete
+
+**Problema real que resuelve:** este plan mantiene **a mano** tres espejos entre Python y TypeScript: las 9 `VERDICT_CAUSES` ↔ `VERDICT_CAUSE_DETAIL` (F3), las 5 `EVIDENCE_SIGNALS` ↔ `EVIDENCE_LABELS` (F3) y los 3 `VERDICT_LEVELS` ↔ `VERDICT_LEVEL_VIEW` (F3). Los espejos a mano **derivan**: el propio 254 tiene el mismo patrón (`OUTCOME_REASONS` ↔ `OUTCOME_REASON_LABELS`) y su única defensa es un comentario que dice *"ni uno más ni uno menos"*. Un comentario no es un gate. El día que alguien agregue una causa en Python, la UI mostrará el string crudo `error_sin_entrega_suficiente` al operador y nadie se va a enterar.
+
+**Solución, costo cero:** un test **de texto** en el archivo que ya existe. No agrega archivo, no agrega flag, no agrega dependencia, no corre en producción.
+
+```python
+def test_espejo_ts_no_tiene_drift():
+    """A2 — el .ts de F3 debe nombrar TODAS las causas y señales del .py.
+
+    Se lee como TEXTO (no se ejecuta TS): mismo patrón que
+    `test_los_6_tests_estan_en_los_dos_scripts` (F7), que ya valida los
+    scripts del arnés leyéndolos como texto.
+    """
+    from pathlib import Path
+    from services.run_verdict import EVIDENCE_SIGNALS, VERDICT_CAUSES, VERDICT_LEVELS
+
+    ts = Path(__file__).resolve().parents[2] / "frontend" / "src" / "utils" / "runVerdict.ts"
+    if not ts.is_file():          # F3 todavía no implementada: no rompe F0
+        import pytest
+        pytest.skip("runVerdict.ts aún no existe (F3 pendiente)")
+    texto = ts.read_text(encoding="utf-8")
+    faltan = [n for n in (*VERDICT_CAUSES, *EVIDENCE_SIGNALS, *VERDICT_LEVELS) if n not in texto]
+    assert not faltan, f"drift Python→TS: la UI no conoce {faltan}"
+```
+
+**Por qué respeta los rieles:** solo lectura de un archivo del repo; no toca los 3 runtimes (es un test); cero trabajo del operador; reusa un patrón que el propio plan ya usa en F7; y el `skip` condicional lo hace seguro cuando F0 se implementa antes que F3.
 
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan269_run_verdict.py -v
 ```
-**Criterio:** 15/15 verdes. Cero fallos.
+**Criterio:** **18/18** verdes (v1 declaraba 15; v2 suma `test_cancelado_no_dice_cierre_sucio`, `test_no_terminal_no_tiene_veredicto` y `test_espejo_ts_no_tiene_drift`). Cero fallos. Tras F8 este mismo archivo llega a **24** (18 + 6).
 
 **Flag que la protege:** `STACKY_RUN_VERDICT_ENABLED` — **default ON**. Sin excepción: es un módulo puro que calcula en memoria y no escribe nada, no llama a ningún modelo y no corre en reposo. Alta completa según **RECETA-FLAG** (§3.7), categoría `observabilidad_notif`.
 
@@ -444,14 +580,35 @@ publicado_en_tracker:
     → None  si la query lanzó (se captura y se loguea en debug)
 
 cambio_en_repo:
-    intent = incident_dev_pr.get_intent(ex.id)      # services/incident_dev_pr.py:213
+    ⚠ v2 (C7) — PROHIBIDO usar `incident_dev_pr.get_intent()`. Ese lector llama
+    `_intent_path()` → `_intent_dir()`, que hace `d.mkdir(parents=True,
+    exist_ok=True)` (services/incident_dev_pr.py:192-196) y por lo tanto CREA UN
+    DIRECTORIO EN DISCO: viola el riel P4 ("ningún colector escribe, crea, mueve
+    ni borra"). Además el `mkdir` y el `path.is_file()` están FUERA del try de
+    `get_intent` (:214-220), así que SÍ puede lanzar — v1 afirmaba lo contrario.
+
+    Se usa un lector propio, de solo lectura, en run_evidence.py:
+
+        def _sidecar_path(execution_id: int) -> "Path":
+            """Misma ruta que services/incident_dev_pr.py:192-200, SIN mkdir."""
+            from runtime_paths import data_dir     # noqa: PLC0415
+            return data_dir() / "incident_dev_pr" / f"{int(execution_id)}.json"
+
+        def _read_sidecar(execution_id: int) -> dict | None:
+            p = _sidecar_path(execution_id)
+            try:
+                if not p.is_file():
+                    return None
+                return json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                raise _SidecarUnreadable    # → señal None, NO False
+
     → None  si el presupuesto de tiempo ya se agotó (no se lee el disco)
-    → False si get_intent devolvió None (no hay sidecar: este agente no toca repo)
+    → None  si la lectura lanzó (_SidecarUnreadable): no se pudo mirar
+    → False si el archivo NO existe (ausencia informada: este agente no toca repo)
     → True  si intent.get("pr_url") o intent.get("pr_id")
              o (intent.get("files_committed") or 0) > 0
-    → False en cualquier otro caso con sidecar presente
-    NOTA: get_intent ya captura OSError/ValueError y devuelve None (`:219-220`),
-    así que no puede lanzar. La distinción None-por-presupuesto la lleva _Budget.
+    → False en cualquier otro caso con sidecar presente y legible
 
 gate_aceptacion_ok:
     cr = ex.contract_result            # property, models.py:309
@@ -466,13 +623,32 @@ gate_aceptacion_ok:
     adivina en silencio.
 
 verificacion_ok:
+    ⚠ v2 (C5) — H2 YA NO ES UNA HIPÓTESIS. Se verificó el productor y el campo
+    NO se llama "ok": se llama "passed". El código de v1 (`v.get("ok") is True`)
+    habría devuelto SIEMPRE False y el colector nunca habría visto una sola
+    verificación.
+
+    Productor: VerificationReport.to_metadata() en
+    backend/services/exec_verification.py:79-96, que escribe:
+        metadata["exec_verification"] = {
+            "mode", "ran", "hard_failed", "soft", "could_not_verify",
+            "passed",          # ← bool | None   (declarado en :70)
+            "skipped_reason", "duration_ms", "fake_green",
+        }
+    El comentario literal de :70 dice: "None = no hay nada que verificar /
+    could-not-verify". Ese None es EXACTAMENTE la señal desconocida del 269:
+    mapea 1:1, no hay que inventar nada.
+    Consumidores que confirman la clave y el campo: api/exec_verification.py:43,
+    harness/post_run.py:189-191, services/harness_health.py:848,
+    tests/test_exec_verification.py:330-331.
+
     meta = ex.metadata_dict            # property, models.py:301
-    v = meta.get("exec_verification") or meta.get("verification")
-    → None  si v no es un dict
-    → True  si v.get("ok") is True
-    → False en el resto
-    MISMA HIPÓTESIS DECLARADA (H2), mismo tratamiento: el test prueba las 2
-    claves y prueba que una forma desconocida da None (no True).
+    v = meta.get("exec_verification")
+    → None  si v no es un dict            (no corrió la verificación)
+    → None  si v.get("passed") is None    (could-not-verify: el propio productor
+                                           declara que no pudo mirar)
+    → True  si v.get("passed") is True
+    → False si v.get("passed") is False
 
 entregable_presente:
     → True si (ex.output or "").strip() tiene más de 0 caracteres
@@ -505,10 +681,12 @@ class _Budget:
 | `test_colector_lento_degrada_a_desconocido` | `_Budget(0)` (presupuesto agotado desde el arranque) → todas las señales que requieren disco quedan `None` y la función **retorna**; nada cuelga. |
 | `test_publicado_en_una_sola_query` | Un `session` falso que cuenta invocaciones: con 50 ejecuciones se hace **exactamente 1** query a `agent_html_publish`. |
 | `test_publicado_query_que_lanza_es_desconocido` | El `session` falso lanza → todas las señales `publicado_en_tracker` quedan `None`, y las demás señales se siguen computando igual. |
-| `test_cambio_en_repo_sin_sidecar_es_false` | `get_intent` monkeypatcheado a `None` → `False` (ausencia informada, no ignorancia). |
-| `test_cambio_en_repo_con_pr_url_es_true` | `get_intent` → `{"pr_url": "https://..."}` → `True`. También con `{"files_committed": 3}`. |
-| `test_gate_lee_ambas_formas_y_desconoce_el_resto` | **Discrimina H1.** `{"passed": True}` → `True`; `{"status": "passed"}` → `True`; `{"passed": False}` → `False`; `contract_result = None` → `None`; `{"resultado": "ok"}` → `False`. |
-| `test_verificacion_lee_ambas_claves_y_desconoce_el_resto` | **Discrimina H2.** `{"exec_verification": {"ok": True}}` → `True`; `{"verification": {"ok": False}}` → `False`; metadata sin ninguna de las dos → `None`. |
+| `test_cambio_en_repo_sin_sidecar_es_false` | `_sidecar_path` monkeypatcheado a una ruta inexistente de `tmp_path` → `False` (ausencia informada, no ignorancia). |
+| `test_cambio_en_repo_con_pr_url_es_true` | Sidecar en `tmp_path` con `{"pr_url": "https://..."}` → `True`. También con `{"files_committed": 3}`. |
+| `test_cambio_en_repo_no_crea_directorios` | **v2 C7.** `_sidecar_path` apunta a `tmp_path/"no_existe"/"7.json"`; tras `collect_for_executions`, `(tmp_path/"no_existe").exists()` es **False**. Prueba que el colector **no crea el directorio** (lo que sí haría `incident_dev_pr.get_intent`). Además: `grep -c "get_intent" services/run_evidence.py` = **0**. |
+| `test_cambio_en_repo_json_roto_es_desconocido` | Sidecar con bytes que no parsean → señal `None`, **no** `False`. |
+| `test_gate_lee_ambas_formas_y_desconoce_el_resto` | **Discrimina H1** (la única hipótesis que queda). `{"passed": True}` → `True`; `{"status": "passed"}` → `True`; `{"passed": False}` → `False`; `contract_result = None` → `None`; `{"resultado": "ok"}` → `False`. Si el árbol usa otra clave, el implementador la agrega a la condición **y al test**. |
+| `test_verificacion_lee_passed_tri_estado` | **v2 C5 — ya no discrimina una hipótesis: fija el HECHO.** `{"exec_verification": {"passed": True}}` → `True`; `{"passed": False}` → `False`; `{"passed": None}` → `None`; metadata sin `exec_verification` → `None`; y **`{"exec_verification": {"ok": True}}` → `None`** (el campo `ok` no existe: leerlo era el bug de v1). |
 | `test_no_escribe_nada` | El `session` falso hace que `add`, `merge`, `delete`, `commit` y `flush` lancen `AssertionError`; la corrida completa pasa sin tocarlos. |
 
 **Comando de aceptación (BINARIO):**
@@ -516,7 +694,7 @@ class _Budget:
 cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan269_run_evidence.py -v
 ```
-**Criterio:** 12/12 verdes.
+**Criterio:** **14/14** verdes (v1 declaraba 12; v2 suma `test_cambio_en_repo_no_crea_directorios` y `test_cambio_en_repo_json_roto_es_desconocido`).
 
 **Flag:** `STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED` — **default ON**. Categoría `observabilidad_notif`. **No es excepción:** solo lee (una query local + `stat()` de archivos ya escritos), no llama a ningún modelo, no corre en reposo y no escribe nada. Es exactamente el caso que la regla de la casa manda dejar ON. Se separa de `STACKY_RUN_VERDICT_ENABLED` para que el operador pueda matar solo las lecturas de disco sin perder el veredicto (que degradaría a `evidencia_indeterminada`).
 
@@ -529,13 +707,18 @@ cd "Stacky Agents/backend"
 
 ---
 
-### F2 — Cablear el veredicto al payload de ejecuciones
+### F2 — Cablear el veredicto a los **DOS** payloads de ejecuciones
 
-**Objetivo (1 frase):** Que el payload que la UI ya consume traiga la clave `verdict` calculada en el lote, sin N+1 y sin cambiar ninguna clave existente.
+**Objetivo (1 frase):** Que los dos endpoints de ejecuciones que la UI consume traigan la clave **`run_verdict`** calculada en el lote, sin N+1 y sin pisar ninguna clave existente.
 
-**Valor:** Un solo punto de inyección alimenta el drawer, el historial y cualquier consumidor futuro.
+**Valor:** Alimenta el drawer, el historial y cualquier consumidor futuro.
+
+> **DOS correcciones de v2 que un modelo menor NO debe saltear:**
+> - **(C1) La clave se llama `run_verdict`, NUNCA `verdict`.** `verdict` ya existe en el payload: es la columna `AgentExecution.verdict` (`backend/models.py:255`) que `to_dict()` emite en `backend/models.py:327` y que el frontend consume en `AgentHistoryModal.tsx:127-134` y `DailyStandupModal.tsx:13`. Pisarla borraría un campo vivo de otro tipo. Ver §3.4-bis.
+> - **(C2) Hay DOS handlers, no uno.** `list_executions()` (`:96`, usa `to_dict`) **y** `executions_history()` (`:442`, arma los items a mano en `:538-559` y NO pasa por `_with_outcome`). La página del historial —donde vive toda F4— consume el **segundo**. Cablear solo el primero deja F4 inerte. Ver §3.4.
 
 **Archivo a editar:** `Stacky Agents/backend/api/executions.py`
+**Archivo a editar:** `Stacky Agents/frontend/src/api/endpoints.ts` (agregar `run_verdict?: RunVerdictPayload` a `ExecutionHistoryItem`, `:1303`; campo **opcional**, backward-compatible)
 **Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan269_executions_payload.py`
 
 **Diff ilustrativo (se agrega **debajo** de `_with_outcome`, sin tocar su cuerpo):**
@@ -570,33 +753,76 @@ def _verdicts_for_batch(session, executions: list) -> dict[int, dict]:
         out: dict[int, dict] = {}
         for ex in executions:
             ticket = getattr(ex, "ticket", None)
-            estado = (getattr(ticket, "stacky_status", None) or ex.status or "idle")
+            # Sin ticket cargado se usa el status del propio run. NUNCA se
+            # inventa "idle": un estado no terminal ahora devuelve None (C9) y
+            # eso significa "sin veredicto", que es la verdad.
+            estado = (getattr(ticket, "stacky_status", None) or ex.status or "")
             meta = ex.metadata_dict if isinstance(ex.metadata_dict, dict) else {}
-            out[ex.id] = evaluate_verdict(
+            v = evaluate_verdict(
                 ticket_status=estado,
                 outcome_reason=meta.get("outcome_reason"),
                 signals=signals_by_id.get(ex.id),
-            ).to_dict()
+            )
+            if v is None:          # v2 C9 — run no terminado: NO tiene veredicto
+                continue
+            out[ex.id] = v.to_dict()
         return out
     except Exception:  # noqa: BLE001 — enriquecer JAMÁS rompe el listado
-        logger.debug("verdict 269 falló", exc_info=True)
+        logger.debug("run_verdict 269 falló", exc_info=True)
         return {}
 
 
 def _with_verdict(d: dict, verdicts: dict[int, dict]) -> dict:
-    """Agrega `verdict` si hay uno. Con la flag OFF no agrega NINGUNA clave:
-    la UI simplemente no dibuja el chip (sin hueco ni error)."""
+    """Agrega `run_verdict` si hay uno. Con la flag OFF no agrega NINGUNA clave:
+    la UI simplemente no dibuja el chip (sin hueco ni error).
+
+    ⚠ La clave es `run_verdict`, NO `verdict`: `verdict` ya lo emite
+    AgentExecution.to_dict() (models.py:327) con la revisión humana.
+    """
     v = verdicts.get(d.get("id"))
     if v:
-        d["verdict"] = v
+        d["run_verdict"] = v
     return d
 ```
 
-**Puntos de llamada:** en `list_executions()` (`backend/api/executions.py:96`) y en el handler de detalle, **dentro del mismo `with session_scope()`** donde ya se calcula `dirty_ids`, agregar una línea `verdicts = _verdicts_for_batch(session, rows)` y aplicar `_with_verdict(_with_outcome(d, dirty_ids), verdicts)` en el armado de cada fila. **No se reordena ni se borra nada de lo que ya hace `_with_outcome`.**
+**Punto de llamada 1 — `list_executions()` (`backend/api/executions.py:96`) y el handler de detalle.** Dentro del mismo `with session_scope()` donde ya se calcula `dirty`, agregar `verdicts = _verdicts_for_batch(session, rows)` y cambiar el return:
 
-**Forma EXACTA de la clave nueva en el payload:**
+```diff
+-        return jsonify([_with_outcome(d, dirty) for d in payload])
++        verdicts = _verdicts_for_batch(session, rows)
++        return jsonify([_with_verdict(_with_outcome(d, dirty), verdicts) for d in payload])
+```
+`rows` ya viene con `joinedload(AgentExecution.ticket)` (`:130`), así que `getattr(ex, "ticket", None)` **no** dispara N+1. **No se reordena ni se borra nada de lo que ya hace `_with_outcome`.**
+
+**Punto de llamada 2 — `executions_history()` (`backend/api/executions.py:442`), OBLIGATORIO (C2).** Este handler arma cada item a mano (`:538-559`) y **no** usa `to_dict`. Se inyecta **dentro del mismo `with session_scope()`**, después del `for row in rows` que llena `items` y **antes** del `if include_total` (`:561`), para que las **dos** formas de respuesta lo lleven:
+
+```diff
+         # Para cada ejecución construimos el item del contrato.
+         items = []
++        rows_servidas = []            # solo las que sobrevivieron el filtro de runtime
+         for row in rows:
+             ...
+             if runtime_filter and row_runtime != runtime_filter:
+                 continue
+             ...
+             items.append({ ... })
++            rows_servidas.append(row)
++
++        # Plan 269 F2 (C2) — el historial es la superficie de F4. Misma función
++        # de lote, mismo try/except: si falla, `items` sale exactamente como hoy.
++        verdicts = _verdicts_for_batch(session, rows_servidas)
++        for d in items:
++            _with_verdict(d, verdicts)
+
+     if include_total:
+         return jsonify({"items": items, "total": total})
+     return jsonify(items)
+```
+> **Nota de performance para este handler:** `executions_history` hace `.join(Ticket, ...)` (`:481`), que **no** es eager-load, así que `row.ticket` ya era un lazy-load por fila **antes** de este plan (`models.py:275`). Este plan **no lo empeora** (`_verdicts_for_batch` toca el mismo atributo que el handler ya toca en `:534`) y **no lo arregla** (está fuera de scope). El test `test_sin_n_mas_uno` mide el **delta** de queries entre flag ON y flag OFF sobre el MISMO lote, no el absoluto — así no se atribuye a este plan una deuda ajena.
+
+**Forma EXACTA de la clave nueva en el payload (los dos endpoints):**
 ```json
-"verdict": {
+"run_verdict": {
   "level": "advertencia",
   "cause": "falso_rojo_probable",
   "strength": 2,
@@ -610,19 +836,22 @@ def _with_verdict(d: dict, verdicts: dict[int, dict]) -> dict:
 
 | Test | Qué prueba |
 |---|---|
-| `test_flag_off_no_agrega_la_clave` | Con `STACKY_UI_RUN_VERDICT_BADGE_ENABLED=False`, `"verdict" not in payload` — **no** una clave con `None`. |
+| `test_flag_off_no_agrega_la_clave` | Con `STACKY_UI_RUN_VERDICT_BADGE_ENABLED=False`, `"run_verdict" not in payload` — **no** una clave con `None`. |
 | `test_flag_nucleo_off_tambien_apaga` | Con `STACKY_RUN_VERDICT_ENABLED=False` y la de UI en ON, tampoco aparece la clave (dependencia en código). |
-| `test_flag_on_agrega_la_clave_con_las_6_subclaves` | `set(payload["verdict"]) == {"level","cause","strength","present","absent","unknown"}`. |
-| `test_colector_que_lanza_no_rompe_el_listado` | `collect_for_executions` monkeypatcheado a lanzar → la respuesta sigue siendo 200 y las claves del 254 (`outcome_reason`, `outcome_actionable`) **siguen presentes**. |
+| `test_flag_on_agrega_la_clave_con_las_6_subclaves` | `set(payload["run_verdict"]) == {"level","cause","strength","present","absent","unknown"}`. |
+| `test_no_pisa_el_verdict_del_modelo` | **v2 C1, el test que v1 no tenía.** Una ejecución con `AgentExecution.verdict = "approved"` en la base: tras el enriquecimiento, `payload["verdict"] == "approved"` (string, intacto) **y** `isinstance(payload["run_verdict"], dict)`. Las dos claves conviven. |
+| `test_history_endpoint_tambien_trae_run_verdict` | **v2 C2, el test que v1 no tenía.** `GET /api/executions/history` devuelve items con `run_verdict`; y con `?include_total=1` la clave también está dentro de `data["items"]`. Sin esto, F4 es decorado inerte. |
+| `test_colector_que_lanza_no_rompe_ninguno_de_los_dos` | `collect_for_executions` monkeypatcheado a lanzar → **ambos** endpoints siguen dando 200, y las claves del 254 (`outcome_reason`, `outcome_actionable`) siguen presentes en `/api/executions`. |
 | `test_no_pisa_claves_del_254` | `outcome_reason` y `outcome_actionable` conservan exactamente el mismo valor con la flag del 269 en ON y en OFF. |
-| `test_sin_n_mas_uno` | Con 30 ejecuciones se cuenta el número de queries emitidas; debe ser **constante** respecto a un lote de 3 (no crecer con el tamaño). |
+| `test_run_en_curso_no_trae_veredicto` | **v2 C9.** Una ejecución con ticket en `running` → `"run_verdict" not in item`. |
+| `test_sin_n_mas_uno` | Se cuenta el **delta** de queries entre la flag ON y la flag OFF sobre el MISMO lote, con 3 y con 30 ejecuciones. El delta debe ser **el mismo número** en los dos casos (no crece con el tamaño del lote). Se mide el delta y no el absoluto para no cargarle a este plan el lazy-load preexistente de `executions_history` (`:534`). |
 
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan269_executions_payload.py -v
 ```
-**Criterio:** 6/6 verdes. Y sin regresión en el 254, validado **por archivo**:
+**Criterio:** **9/9** verdes (v1 declaraba 6). Y sin regresión en el 254, validado **por archivo**:
 ```
 .venv\Scripts\python.exe -m pytest tests/test_plan254_outcome_reason.py -v
 .venv\Scripts\python.exe -m pytest tests/test_plan254_reconciliation.py -v
@@ -681,12 +910,15 @@ export const VERDICT_LEVEL_VIEW: Record<VerdictLevel, { tone: OutcomeTone; label
   error_real:  { tone: "error",    label: "Error real" },
 };
 
-/** Las 8 causas de VERDICT_CAUSES (services/run_verdict.py), ni una más ni una menos. */
+/** Las 9 causas de VERDICT_CAUSES (services/run_verdict.py), ni una más ni una
+ *  menos. El drift contra el .py lo ATRAPA `test_espejo_ts_no_tiene_drift`
+ *  (F0, ADICIÓN ARQUITECTO A2): esto ya no es un comentario de buena fe. */
 export const VERDICT_CAUSE_DETAIL: Record<string, string> = {
   cierre_limpio_con_entrega: "Terminó sin errores y dejó resultados verificables.",
   verde_sin_evidencia: "Figura como terminado, pero no se encontró ningún resultado que lo respalde.",
   evidencia_indeterminada: "Figura como terminado, pero no se pudo comprobar si dejó resultados.",
   cierre_sucio_pendiente_de_revision: "Entregó trabajo pero el proceso cerró mal: convendría mirarlo.",
+  cancelado_por_el_operador: "Lo cortaste vos. No es una falla del sistema.",   // v2 C8
   falso_rojo_probable: "Figura como fallado, pero hay resultados: probablemente NO sea un error.",
   espera_cuota: "Se agotó la cuota del plan. No es un error del trabajo: hay que reintentar más tarde.",
   error_sin_entrega_suficiente: "Falló y no se encontraron resultados: requiere atención.",
@@ -751,7 +983,7 @@ export function matchesVerdictLevel(
 
 | Test | Qué prueba |
 |---|---|
-| `las 8 causas tienen texto` | `Object.keys(VERDICT_CAUSE_DETAIL).length === 8` y ninguno vacío. |
+| `las 9 causas tienen texto` | **v2 C8.** `Object.keys(VERDICT_CAUSE_DETAIL).length === 9`, ninguno vacío, y el texto de `cancelado_por_el_operador` **no** contiene "cerró mal". |
 | `los 3 niveles tienen tono y etiqueta` | Cada `VerdictLevel` mapea a un tono ∈ `["exito","atencion","espera","error"]`. |
 | `un nivel del futuro no se presenta como exito` | `describeVerdict({level:"nivel_del_futuro", cause:"x"})?.level === "advertencia"` y `tone === "atencion"`. |
 | `una causa del futuro muestra el texto crudo` | `detail === "causa_rara"`, no `undefined`. |
@@ -783,20 +1015,44 @@ npx vitest run src/utils/__tests__/plan269RunVerdict.test.ts
 
 **Valor:** Cierra el GAP 2 en la superficie donde el operador mira las corridas. Hoy `ExecutionHistoryPage.tsx:633` pinta un solo chip.
 
-**Archivos a editar:**
-- `Stacky Agents/frontend/src/pages/ExecutionHistoryPage.tsx`
-- `Stacky Agents/frontend/src/pages/ExecutionHistoryPage.module.css` (si no existe la clase del chip secundario; **cero estilo inline** por el ratchet de deuda de UI)
-- `Stacky Agents/frontend/src/api/endpoints.ts` (agregar `verdict?: RunVerdictPayload` a la interfaz de la fila de ejecución; **campo opcional**, backward-compatible)
+**Archivos a editar (los 4, ninguno opcional):**
+- `Stacky Agents/frontend/src/services/tablePrefs.ts` — **registrar la columna** (C3)
+- `Stacky Agents/frontend/src/pages/ExecutionHistoryPage.tsx` — `<th>` + `<td>` + filtro
+- `Stacky Agents/frontend/src/pages/ExecutionHistoryPage.module.css` (ya existe; **cero estilo inline** por el ratchet de deuda de UI)
+- `Stacky Agents/frontend/src/api/endpoints.ts` — `run_verdict?: RunVerdictPayload` en **`interface ExecutionHistoryItem`** (`:1303`; **campo opcional**, backward-compatible). *(C11: v1 decía "la interfaz de la fila de ejecución" sin nombrarla.)*
 
-**Diff ilustrativo (fila, sobre `ExecutionHistoryPage.tsx:633`):**
+**Paso 1 (C3) — registrar la columna en `frontend/src/services/tablePrefs.ts:27-41`.** Esta tabla NO es estática: cada `<th>`/`<td>` vive bajo `isColVisible(tablePrefs, "<id>")`, el picker recibe `columns={HISTORY_COLUMNS}` (`ExecutionHistoryPage.tsx:454`) y las prefs se sanean con `sanitizeTablePrefs(raw, HISTORY_COLUMNS)` (`:102`, `:237`). Una columna no registrada no aparece en el selector y se pierde al sanear.
 
 ```diff
-+import { describeVerdict, matchesVerdictLevel } from "../utils/runVerdict";
+   { id: "estado", label: "Estado", sortKey: "status" },
++  // Plan 269 F4 — segunda dimensión: el veredicto por evidencia. SIN `sortKey`:
++  // el veredicto se calcula al leer y el backend no puede ordenar por él
++  // (mismo criterio que `duracion` y `costo`, líneas 33-35).
++  { id: "veredicto", label: "Veredicto" },
+   { id: "duracion", label: "Duración" },
+```
+
+**Paso 2 — el `<th>`, en el `<thead>` de `ExecutionHistoryPage.tsx:507`** (los `<th>` existentes están en `:525-545`; el de `estado` es el que precede a `duracion`). *(C11: v1 decía "buscar el `<thead>` del mismo archivo".)*
+
+```diff
++                {isColVisible(tablePrefs, "veredicto") && (
++                  <th data-col="veredicto">Veredicto</th>
++                )}
+```
+> Sin `onClick` de sort y sin `sortMarca(...)` **a propósito**: `veredicto` no tiene `sortKey`, y ofrecer un orden que el backend no puede dar sería prometer algo falso (es la misma decisión ya tomada para `duracion`/`costo`, `tablePrefs.ts:33-35`).
+
+**Paso 3 — el `<td>`, inmediatamente después del bloque `estado` de `ExecutionHistoryPage.tsx:632-634`:**
+
+```diff
++import { describeVerdict, matchesVerdictLevel, verdictChipTone } from "../utils/runVerdict";
 ...
+   {isColVisible(tablePrefs, "estado") && (
    <td><StatusChip tone={runStatusTone(item.status)} size="sm">{runStatusLabel(item.status)}</StatusChip></td>
+   )}
++  {isColVisible(tablePrefs, "veredicto") && (
 +  <td>
 +    {(() => {
-+      const v = describeVerdict(item.verdict);
++      const v = describeVerdict(item.run_verdict);   // ⚠ run_verdict, NO verdict (C1)
 +      if (!v) return null;
 +      return (
 +        <StatusChip tone={verdictChipTone(v.tone)} size="sm" title={v.detail}>
@@ -805,7 +1061,9 @@ npx vitest run src/utils/__tests__/plan269RunVerdict.test.ts
 +      );
 +    })()}
 +  </td>
++  )}
 ```
+`StatusChip` acepta `title` (`frontend/src/components/ui/StatusChip.tsx:13`), así que el diff compila. **Un run en curso no trae `run_verdict` (C9), así que la celda queda vacía en vez de decir "Con advertencias".**
 
 **Puente de tonos (va en `runVerdict.ts`, NO en el `.tsx`), para no acoplar `utils/` a `ui/`:**
 ```typescript
@@ -818,16 +1076,16 @@ export function verdictChipTone(tone: OutcomeTone): "success" | "warning" | "dan
   return "warning";
 }
 ```
-> **Importante para el implementador:** la columna nueva exige agregar también su `<th>` en la cabecera de la tabla (buscar el `<thead>` del mismo archivo). Si se agrega un `<td>` sin `<th>`, la tabla queda desalineada.
+**Paso 4 — filtro por nivel:** agregar un `<select className={styles.filterSelect}>` junto al de estado (`ExecutionHistoryPage.tsx:398-406`) con opciones `""` (Todos) / `exito` / `advertencia` / `error_real`, guardado en el mismo objeto `filters` (`interface Filters`, `:72`) bajo la clave `verdict_level`, y **filtrado en cliente** con `matchesVerdictLevel(item.run_verdict, filters.verdict_level)` justo antes del `.map` de filas. Agregar `"verdict_level"` al array `urlFilterKeys` (`ExecutionHistoryPage.tsx:450`, hoy `["agent_type", "runtime", "status", "days"]`) para que el filtro viaje en la URL como los demás. **No** se toca el backend: el filtro es de presentación.
 
-**Filtro por nivel:** agregar un `<select>` junto al de estado (`ExecutionHistoryPage.tsx:400-401`) con opciones `""` (Todos) / `exito` / `advertencia` / `error_real`, guardado en el mismo objeto `filters` bajo la clave `verdict_level`, y **filtrado en cliente** con `matchesVerdictLevel(item.verdict, filters.verdict_level)` justo antes del `.map` de filas. Agregar `"verdict_level"` al array `urlFilterKeys` (`ExecutionHistoryPage.tsx:450`) para que el filtro viaje en la URL como los demás. **No** se toca el backend: el filtro es de presentación.
+> **Interacción con la paginación, declarada:** el filtro es de cliente y la lista viene paginada del servidor (`offset`/`limit`, y `total` cuando se pide `include_total`). Filtrar en cliente puede dejar una página con menos filas que `limit`. Es **exactamente** el mismo comportamiento que ya tiene el filtro `runtime`, que el backend aplica en Python después de paginar y cuya limitación está documentada en el docstring de `executions_history` (`backend/api/executions.py:453-456`). No se introduce una anomalía nueva; se hereda una conocida.
 
 **Tests PRIMERO:** la lógica pura ya está cubierta por F3 (`matchesVerdictLevel`, `verdictChipTone`). Se **agrega** a `plan269RunVerdict.test.ts`:
 
 | Test | Qué prueba |
 |---|---|
 | `verdictChipTone cubre los 4 tonos` | `exito→success`, `error→danger`, `espera→neutral`, `atencion→warning`. |
-| `filtrar una lista por nivel` | Dado un array de 4 filas con veredictos distintos, `rows.filter(r => matchesVerdictLevel(r.verdict, "advertencia"))` devuelve exactamente las de advertencia. |
+| `filtrar una lista por nivel` | Dado un array de 4 filas con veredictos distintos, `rows.filter(r => matchesVerdictLevel(r.run_verdict, "advertencia"))` devuelve exactamente las de advertencia. |
 
 **Comando de aceptación (BINARIO):**
 ```
@@ -835,13 +1093,16 @@ cd "Stacky Agents/frontend"
 npx vitest run src/utils/__tests__/plan269RunVerdict.test.ts
 npx tsc --noEmit
 ```
-**Criterio:** 13/13 verdes y `tsc` sin errores nuevos. Además, gate de presencia:
+**Criterio:** 13/13 verdes y `tsc` sin errores nuevos. Además, gates de presencia:
 ```
-grep -c "verdictChipTone" src/pages/ExecutionHistoryPage.tsx    # >= 1
-grep -c "style={{" src/pages/ExecutionHistoryPage.tsx           # no debe AUMENTAR vs. HEAD
+grep -c "verdictChipTone" src/pages/ExecutionHistoryPage.tsx          # >= 1
+grep -c "veredicto" src/services/tablePrefs.ts                        # >= 1   (C3)
+grep -c "isColVisible(tablePrefs, \"veredicto\")" src/pages/ExecutionHistoryPage.tsx  # == 2  (th + td, C3)
+grep -c "item.verdict" src/pages/ExecutionHistoryPage.tsx             # == 0   (C1: es run_verdict)
+grep -c "style={{" src/pages/ExecutionHistoryPage.tsx                 # no debe AUMENTAR vs. HEAD
 ```
 
-**Flag:** `STACKY_UI_RUN_VERDICT_BADGE_ENABLED` (la de F2). Con la flag OFF el payload no trae `verdict`, `describeVerdict` devuelve `null` y la celda queda vacía. **La columna y el filtro se renderizan igual** (una columna vacía no rompe la tabla); si se prefiere ocultar la columna entera, condicionarla a `rows.some(r => r.verdict)`.
+**Flag:** `STACKY_UI_RUN_VERDICT_BADGE_ENABLED` (la de F2). Con la flag OFF el payload no trae `run_verdict`, `describeVerdict` devuelve `null` y la celda queda vacía. **La columna sigue registrada y el operador puede ocultarla** desde el selector de columnas que ya existe (`:454`) — ese es el mecanismo de la casa para "no la quiero ver", y por eso **no** se agrega una condición ad-hoc tipo `rows.some(...)` (v1 la sugería como alternativa: queda descartada, era una segunda forma de hacer lo mismo).
 **Impacto por runtime:** ninguno. **Fallback:** sin veredicto, la fila se ve exactamente como hoy.
 **Trabajo del operador:** ninguno (el filtro es opcional y arranca en "Todos").
 
@@ -861,28 +1122,60 @@ grep -c "style={{" src/pages/ExecutionHistoryPage.tsx           # no debe AUMENT
 
 **Restricción heredada, no negociable:** `backend/api/incident_inbox.py:149` declara textualmente *"Sin N+1: NO se consulta AgentExecution ni pipeline_summary"*. Este plan **conserva** esa propiedad: se agrega **una sola** query extra para todo el lote.
 
-**Pseudocódigo del backend (se inserta después de armar `rows`, antes del `for t in rows` de la línea 161):**
+**Paso 1 (OBLIGATORIO, C4) — el módulo NO tiene logger.** `grep -c logger backend/api/incident_inbox.py` = **0**; ni siquiera importa `logging` (sus únicos imports son `:6` y `:8`). Sin esto, el `except` de abajo lanza `NameError` **desde el handler de excepción** y devuelve un 500 en la bandeja — justo lo contrario de lo que el plan promete. Agregar arriba del archivo, junto a los imports existentes:
+
+```python
+import logging
+
+logger = logging.getLogger("stacky_agents.api.incident_inbox")
+```
+Gate: `grep -c "^logger = logging.getLogger" backend/api/incident_inbox.py` = **1**.
+
+**Paso 2 — el pseudocódigo del backend (se inserta después de armar `rows`, antes del `for t in rows` de la línea 161):**
 
 ```python
 def _last_execution_by_ticket(session, ticket_ids: list[int]) -> dict[int, "AgentExecution"]:
-    """UNA query para todo el lote. Devuelve la ejecución más reciente por ticket.
+    """UNA query ACOTADA para todo el lote: como mucho 1 fila por ticket.
 
-    Sin N+1: se traen las ejecuciones de todos los tickets del lote ordenadas por
-    started_at desc y se queda con la primera de cada ticket en memoria. El índice
-    ix_exec_ticket_started (models.py:278) cubre exactamente este acceso.
+    v2 (C10): v1 hacía `.filter(ticket_id.in_(ids)).all()` y se quedaba con la
+    primera de cada ticket EN MEMORIA. Eso no es N+1, pero trae TODAS las
+    ejecuciones históricas de todos los tickets del lote: un fetch sin cota que
+    crece con la antigüedad del proyecto, no con el tamaño de la página.
+
+    La subconsulta `max(started_at) GROUP BY ticket_id` deja el trabajo en el
+    motor y devuelve <= len(ticket_ids) filas. El índice ix_exec_ticket_started
+    (models.py:278, sobre (ticket_id, started_at)) cubre exactamente este acceso.
     """
     if not ticket_ids:
         return {}
+    from sqlalchemy import func  # noqa: PLC0415
+
     from models import AgentExecution  # noqa: PLC0415
+
+    sub = (
+        session.query(
+            AgentExecution.ticket_id.label("tid"),
+            func.max(AgentExecution.started_at).label("ult"),
+        )
+        .filter(AgentExecution.ticket_id.in_(ticket_ids))
+        .group_by(AgentExecution.ticket_id)
+        .subquery()
+    )
     filas = (
         session.query(AgentExecution)
-        .filter(AgentExecution.ticket_id.in_(ticket_ids))
-        .order_by(AgentExecution.ticket_id, AgentExecution.started_at.desc())
+        .join(
+            sub,
+            (AgentExecution.ticket_id == sub.c.tid)
+            & (AgentExecution.started_at == sub.c.ult),
+        )
         .all()
     )
     out: dict[int, AgentExecution] = {}
     for ex in filas:
-        out.setdefault(ex.ticket_id, ex)   # la primera de cada ticket es la más nueva
+        # Empate exacto de started_at (posible en SQLite): gana el id mayor.
+        prev = out.get(ex.ticket_id)
+        if prev is None or ex.id > prev.id:
+            out[ex.ticket_id] = ex
     return out
 
 
@@ -903,29 +1196,38 @@ if _inbox_verdict_enabled():
         from services.run_evidence import collect_for_executions
         from services.run_verdict import evaluate_verdict
         señales = collect_for_executions(session, list(ultimas.values()))
+        # El estado del TICKET manda (es el que el operador ve en la bandeja);
+        # `ex.status` es el respaldo. NUNCA se inventa "idle": un estado no
+        # terminal hace que evaluate_verdict devuelva None (C9) y entonces no
+        # se agrega la clave, que es la verdad ("todavía no hay veredicto").
+        by_tid = {t.id: t for t in rows}
         for tid, ex in ultimas.items():
             meta = ex.metadata_dict if isinstance(ex.metadata_dict, dict) else {}
-            verdicts[tid] = evaluate_verdict(
-                ticket_status=(getattr(ex, "ticket", None) and ex.ticket.stacky_status) or ex.status or "idle",
+            estado = getattr(by_tid.get(tid), "stacky_status", None) or ex.status or ""
+            v = evaluate_verdict(
+                ticket_status=estado,
                 outcome_reason=meta.get("outcome_reason"),
                 signals=señales.get(ex.id),
-            ).to_dict()
+            )
+            if v is not None:              # v2 C9
+                verdicts[tid] = v.to_dict()
     except Exception:  # noqa: BLE001 — la bandeja JAMÁS se rompe por el veredicto
-        logger.debug("verdict 269 en la bandeja falló", exc_info=True)
+        logger.debug("run_verdict 269 en la bandeja falló", exc_info=True)
         verdicts = {}
 
 for t in rows:
     payload = t.to_dict()
     payload["is_open"] = is_open_state(t.ado_state, closed)
     if t.id in verdicts:
-        payload["verdict"] = verdicts[t.id]      # clave OPCIONAL: nunca se agrega vacía
+        payload["run_verdict"] = verdicts[t.id]  # clave OPCIONAL: nunca se agrega vacía
     items.append(payload)
 ```
+> **Detalle de eficiencia (v2):** se usa `by_tid` armado desde `rows`, que **ya están en memoria**, en vez de `getattr(ex, "ticket", None)`. La relación `AgentExecution.ticket` es `lazy="select"` (`models.py:275`), así que tocarla por fila **sí** habría sido un N+1 encubierto — exactamente lo que el comentario `:149` del endpoint prohíbe.
 
-**Frontend:** en `IncidentInboxPage.tsx`, justo después del badge de `:504-506`, agregar:
+**Frontend:** en `IncidentInboxPage.tsx`, justo después del badge `openBadge`/`closedBadge` de `:504-506`, agregar:
 ```tsx
 {(() => {
-  const v = describeVerdict(item.verdict);
+  const v = describeVerdict(item.run_verdict);   // ⚠ run_verdict, NO verdict (C1)
   return v ? <span className={styles.verdictBadge} data-tone={v.tone} title={v.detail}>{v.label}</span> : null;
 })()}
 ```
@@ -935,11 +1237,12 @@ y en el CSS Module una regla `.verdictBadge` con selectores `[data-tone="exito"|
 
 | Test | Qué prueba |
 |---|---|
-| `test_flag_off_la_bandeja_es_identica` | Con `STACKY_INCIDENT_INBOX_VERDICT_ENABLED=False`, ningún item tiene la clave `verdict` y el resto del payload es idéntico clave por clave. |
+| `test_flag_off_la_bandeja_es_identica` | Con `STACKY_INCIDENT_INBOX_VERDICT_ENABLED=False`, ningún item tiene la clave `run_verdict` y el resto del payload es idéntico clave por clave. |
 | `test_flag_on_agrega_verdict_solo_a_los_que_tienen_ejecucion` | Un ticket sin ejecuciones **no** recibe la clave. |
-| `test_una_sola_query_extra` | Cuenta las queries del endpoint con 3 tickets y con 30: la diferencia debe ser **0** (no crece con el lote). |
-| `test_ultima_ejecucion_es_la_mas_reciente` | Ticket con 3 ejecuciones de `started_at` distintos → el veredicto corresponde a la de `started_at` mayor. |
-| `test_excepcion_en_el_veredicto_no_rompe_la_bandeja` | `evaluate_verdict` monkeypatcheado a lanzar → HTTP 200, `items` completos, sin clave `verdict`. |
+| `test_una_sola_query_extra` | Cuenta las queries del endpoint con 3 tickets y con 30: la diferencia entre ambos casos debe ser **0** (el costo extra no crece con el lote). |
+| `test_lote_acotado_no_trae_el_historico` | **v2 C10.** Un ticket con **50** ejecuciones: `_last_execution_by_ticket` devuelve **1** objeto y la query materializa **≤ len(ticket_ids)** filas (se instrumenta contando los objetos devueltos por la query, no las filas del ticket). |
+| `test_ultima_ejecucion_es_la_mas_reciente` | Ticket con 3 ejecuciones de `started_at` distintos → el veredicto corresponde a la de `started_at` mayor. Y con 2 ejecuciones de `started_at` **idéntico**, gana la de `id` mayor (empate determinista). |
+| `test_excepcion_en_el_veredicto_no_rompe_la_bandeja` | `evaluate_verdict` monkeypatcheado a lanzar → HTTP 200, `items` completos, sin clave `run_verdict`. **Este test es el que fallaba en v1 por el `logger` inexistente (C4): sin el paso 1 da 500, no 200.** |
 | `test_no_se_agregan_estados_al_ticket` | El `stacky_status` de cada item es exactamente el mismo con la flag ON y OFF. |
 
 **Comando de aceptación (BINARIO):**
@@ -948,7 +1251,7 @@ cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan269_inbox_verdict.py -v
 .venv\Scripts\python.exe -m pytest tests/test_plan238_incident_inbox_api.py -v
 ```
-**Criterio:** 6/6 verdes en el nuevo, y el del plan 238 **sin regresiones** (es el contrato de forma de la bandeja: `test_plan238_incident_inbox_api.py:147` verifica las claves obligatorias, que este plan **no quita**).
+**Criterio:** **7/7** verdes en el nuevo (v1 declaraba 6; v2 suma `test_lote_acotado_no_trae_el_historico`), y el del plan 238 **sin regresiones** (es el contrato de forma de la bandeja: `test_plan238_incident_inbox_api.py:147` verifica las 7 claves obligatorias `id, ado_id, title, work_item_type, ado_state, stacky_status, is_open`, que este plan **no quita**).
 Además: `cd "Stacky Agents/frontend" && npx tsc --noEmit` sin errores nuevos.
 
 **Flag:** `STACKY_INCIDENT_INBOX_VERDICT_ENABLED` — **default ON**, categoría `observabilidad_notif`. Solo lectura; una query indexada más por request que el operador ya estaba pidiendo.
@@ -1026,8 +1329,16 @@ export function correctionPath(ticketId: number): string {
 }
 ```
 
-**En el `.tsx`:** debajo de la lista de contadores existente (`RunReconciliationCard.tsx:94-102`), agregar una lista de items (**cap de 25 filas** para no volcar 200 líneas en una card de diagnóstico) donde cada fila muestra `#ticket_id`, el `detail` y —si `actionForItem` devuelve algo— un `<Button size="sm">` que:
-1. pide confirmación con el texto `action.confirm` (usa el `Dialog` canónico del repo; **no** `window.confirm`),
+**En el `.tsx`:** debajo de la lista de contadores existente (`RunReconciliationCard.tsx:94-102`), agregar una lista de items (**cap de 25 filas** para no volcar 200 líneas en una card de diagnóstico) donde cada fila muestra `#ticket_id`, el `detail` y —si `actionForItem` devuelve algo **y** `report.hitl_enabled` es `true`— un `<Button size="sm">` que:
+1. pide confirmación con el texto `action.confirm` usando **el hook `useConfirm`** (C11: v1 decía "el `Dialog` canónico del repo" sin nombrarlo, y el repo tiene cinco candidatos: `Dialog`, `ConfirmDialog`, `AlertDialog`, `PromptDialog`, `DialogHost`). Literal, copiado del patrón real del repo (`ActiveRunsPanel.tsx:7,33`; `AgentHistoryPage.tsx:10,253`):
+   ```tsx
+   import { useConfirm } from "./ui";          // barrel: components/ui/index.ts (plan 164)
+   ...
+   const askConfirm = useConfirm();
+   ...
+   if (!(await askConfirm({ message: action.confirm }))) return;
+   ```
+   **Nunca `window.confirm`.**
 2. hace `PATCH` a `correctionPath(item.ticket_id)` con body `{ status: action.targetStatus, reason: action.reason }`,
 3. al terminar vuelve a llamar `RunReconciliation.get()` para refrescar los contadores.
 
@@ -1042,7 +1353,8 @@ export function correctionPath(ticketId: number): string {
 | `los otros 3 kinds no ofrecen acción` | `unclassified_outcome`, `drain_timeout`, `green_self_reported_only` → `null`. |
 | `un kind del futuro no ofrece acción` | `actionForItem({kind:"kind_del_futuro",...})` → `null` (nunca un botón inventado). |
 | `correctionPath nunca usa by-ado` | `expect(correctionPath(7)).toBe("/api/tickets/7/stacky-status")` y `expect(correctionPath(7)).not.toContain("by-ado")`. |
-| `targetStatus siempre es un estado válido` | Los `targetStatus` de las 2 acciones ∈ `["completed","needs_review","error","cancelled","idle","running"]` (espejo de `VALID_TICKET_STATUSES`). |
+| `targetStatus siempre es un estado válido` | Los `targetStatus` de las 2 acciones ∈ `["completed","needs_review","error","cancelled","idle","running"]`. **Verificado en v2:** ese array es el espejo EXACTO de `VALID_TICKET_STATUSES` = `NON_TERMINAL_TICKET_STATUSES {idle, running}` ∪ `TERMINAL_STATUSES {completed, error, cancelled, needs_review}` (`backend/services/status_vocabulary.py:11,14,18`). Los 6, ni uno más. |
+| `el reason de falso rojo lleva el marcador de calibración` | **[ADICIÓN ARQUITECTO A1].** `actionForItem({kind:"red_with_delivered_work",...}).reason.startsWith("[269] corrección manual de falso rojo")` → `true`. Ese prefijo es lo que `verdict_agreement()` (F8) cuenta para saber si el veredicto está calibrado. Si alguien reescribe el texto sin el prefijo, la calibración queda muda: el test lo impide. |
 
 **Tests PRIMERO — `backend/tests/test_plan269_hitl_correccion.py`:**
 
@@ -1052,9 +1364,24 @@ export function correctionPath(ticketId: number): string {
 | `test_patch_por_ticket_id_no_corre_post_hooks` | Se registra un post-hook que marca una bandera; tras el PATCH la bandera sigue en `False` (el guard y los hooks son de `on_execution_end`, no de `set_status`). |
 | `test_correccion_queda_auditada` | Tras el PATCH existe un `TicketStatusEvent` con `changed_by` = el header `X-User-Email` (no `"system"`), lo que además hace que `run_reconciliation._self_reported_ticket_ids` lo vea como mano humana. |
 | `test_estado_invalido_devuelve_400` | `{"status":"published"}` → 400 (`services/ticket_status.set_status` valida contra `VALID_TICKET_STATUSES`). |
-| `test_flag_off_no_ofrece_hitl` | Con `STACKY_RUN_RECONCILIATION_HITL_ENABLED=False`, el payload de `/api/diag/run-reconciliation` **no** incluye la clave `hitl_enabled: true`, que es la que la card usa para decidir si dibuja botones. |
+| `test_flag_off_no_ofrece_hitl` | Con `STACKY_RUN_RECONCILIATION_HITL_ENABLED=False`, el payload de `/api/diag/run-reconciliation` trae `hitl_enabled: false`; con la flag ON trae `true`. La card usa esa clave para decidir si dibuja botones. |
+| `test_rama_de_error_no_ofrece_hitl` | **v2 C13.** Con `rr.summarize` monkeypatcheado a lanzar, el endpoint responde 200 por la rama `api/diag.py:1011-1014` y `data.get("hitl_enabled")` es **falsy** (ausente o `false`). Ausencia ⇒ sin botones: falla CERRADO, nunca abierto. |
 
-> **Nota:** F6 agrega al payload de `summarize()` una única clave nueva `"hitl_enabled": bool`. Es la forma de que la flag apague los botones **desde el backend**, sin que el frontend tenga que conocer flags.
+> **Nota de v2 (C6) — dónde vive `hitl_enabled`, de una sola vez:**
+> v1 se contradecía: F6 decía meter la clave en `summarize()` y F8 la metía en `api/diag.py:1015`. Dos fases escribiendo la misma clave en dos lugares distintos.
+> **Resolución: la clave se escribe UNA sola vez, en `api/diag.py`, y la escribe F6.** `summarize(discrepancies: list)` (`backend/services/run_reconciliation.py:217`) es una función **PURA** que recibe una lista y no lee configuración; su docstring de módulo (`:7-13`) declara ese aislamiento. Meterle un `getattr(_config.config, ...)` la ensuciaría y rompería sus tests del 254. **`summarize()` no se toca.**
+> El diff exacto, en `backend/api/diag.py` (`_config` ya está importado en `:26`):
+> ```diff
+>      result["ok"] = True
+> +    # Plan 269 F6 — la card decide si dibuja botones desde el BACKEND, sin
+> +    # que el frontend tenga que conocer flags. Escrita SOLO acá (C6).
+> +    result["hitl_enabled"] = bool(
+> +        getattr(_config.config, "STACKY_RUN_RECONCILIATION_HITL_ENABLED", True)
+> +    )
+>      return jsonify(result)
+> ```
+> Y la misma clave, en `false`, en la rama de error de `:1011-1014` (C13). La rama de flag-OFF de `:999-1003` devuelve **404** y la card ya se auto-oculta con su `catch` (`frontend/src/api/endpoints.ts:3168-3169`), así que ahí no hace falta.
+> En el frontend: agregar `hitl_enabled?: boolean` a `interface RunReconciliationResponse` (`frontend/src/api/endpoints.ts:3160-3165`).
 
 **Comando de aceptación (BINARIO):**
 ```
@@ -1066,10 +1393,16 @@ cd "Stacky Agents/frontend"
 npx vitest run src/components/reconciliationActions.test.ts
 npx tsc --noEmit
 ```
-**Criterio:** 5/5 backend + 6/6 frontend verdes; el test del 254 sin regresiones; `tsc` limpio.
+> **Sobre el test colocado:** `src/components/reconciliationActions.test.ts` vive junto al módulo, igual que `incidentConsole.test.ts`, `devBuildModel.test.ts`, `portFindingsModel.test.ts` y otros 3 que ya existen ahí. Verificado en v2: `vite.config.ts` **no** declara bloque `test`, así que vitest usa su `include` por defecto (`**/*.{test,spec}.?(c|m)[jt]s?(x)`), que cubre tanto `src/components/*.test.ts` como `src/utils/__tests__/*.test.ts`. No hay que configurar nada.
+**Criterio:** **6/6** backend (v1 declaraba 5; v2 suma `test_rama_de_error_no_ofrece_hitl`) + **7/7** frontend (v1 declaraba 6; v2 suma `el reason de falso rojo lleva el marcador de calibración`); el test del 254 sin regresiones; `tsc` limpio.
 
 **Flag:** `STACKY_RUN_RECONCILIATION_HITL_ENABLED` — **default ON**, categoría `observabilidad_notif`.
-**Justificación explícita del default ON** (porque es la única flag de este plan que habilita una escritura): la escritura la dispara **el humano** con un click y una confirmación, va a la **propia base de Stacky** (`stacky_status` + `TicketStatusEvent`), y el endpoint elegido **no publica en ADO/GitLab, no toca el repo, no corre DDL/DML en la BD del operador y no dispara post-hooks** — verificado en `backend/api/tickets.py:1188-1194`, que solo llama `ts.set_status`. Por lo tanto **no** cae en la excepción (B), que aplica a Stacky escribiendo **por su cuenta** en un sistema real del operador. Tampoco en la (A): no hay loop ni consumo de tokens. **Si el implementador se ve tentado de usar el endpoint `by-ado`, la flag pasaría a ser excepción (B) y default OFF — por eso está prohibido.**
+**Justificación del default ON — RATIFICADA por la crítica v2, con el código reabierto.** Es la única flag de este plan que habilita una escritura, así que el juez la verificó línea por línea en vez de creerle al plan:
+- El endpoint elegido, `PATCH /api/tickets/<int:ticket_id>/stacky-status` (`backend/api/tickets.py:1165`), hace exactamente tres cosas: valida que `status` no venga vacío (`:1175-1176`), verifica que el ticket exista (`:1178-1181`) y llama `ts.set_status(...)` (`:1189-1194`) con `changed_by` del header `X-User-Email` (`:1173`). **No publica, no toca ADO/GitLab, no corre DDL/DML en la BD del operador, no dispara post-hooks** (el guard y los hooks viven en `on_execution_end`, `services/ticket_status.py:293`, no en `set_status`).
+- El endpoint **prohibido**, `by-ado` (`:1204`), **sí** publica en ADO (`:1405-1407`, `publish.succeeded`) y **sí** cambia el estado del work item (`:1490-1497`, `update_item_state` / `update_work_item_state`). Confirmado.
+- La escritura la dispara **el humano** con un click y una confirmación, y va a la **propia base de Stacky** (`stacky_status` + `TicketStatusEvent`).
+
+Por lo tanto **no** cae en la excepción (B) —que aplica a Stacky escribiendo **por su cuenta** en un sistema real del operador— ni en la (A) —no hay loop ni consumo de tokens. **ON aprobado.** **Si el implementador se ve tentado de usar el endpoint `by-ado`, la flag pasaría a ser excepción (B) y default OFF — por eso está prohibido y hay un test que lo vigila.**
 
 **Impacto por runtime:** ninguno; opera sobre tickets, no sobre runners. **Fallback:** con la flag OFF la card queda exactamente como hoy (solo contadores).
 **Trabajo del operador:** ninguno obligatorio. La corrección es una **oportunidad** que aparece solo cuando hay una discrepancia real; si no hay ninguna, la card sigue diciendo "0" y no pide nada.
@@ -1213,15 +1546,60 @@ Devuelve exactamente:
 ```
 Declarando **siempre** las 4 claves aunque valgan 0 (mismo criterio que `run_reconciliation.summarize()`, `services/run_reconciliation.py:223`: *"un contador que desaparece cuando vale cero no sirve para mirar una tendencia"*).
 
-**En `api/diag.py:1015`,** justo antes de `result["ok"] = True`, agregar:
+**En `api/diag.py`,** justo antes de `result["ok"] = True` (`:1015`), agregar:
 ```python
 try:
-    from services.run_verdict import count_by_level  # noqa: PLC0415
+    from services.run_verdict import count_by_level, verdict_agreement  # noqa: PLC0415
     result["verdict_counts"] = count_by_level(days=30)
+    result["verdict_agreement"] = verdict_agreement(days=30)   # ADICIÓN ARQUITECTO A1
 except Exception:  # noqa: BLE001
     logger.debug("verdict_counts 269 falló", exc_info=True)
-result["hitl_enabled"] = bool(getattr(_config.config, "STACKY_RUN_RECONCILIATION_HITL_ENABLED", True))
 ```
+> **v2 (C6): F8 YA NO escribe `hitl_enabled`.** Esa clave la escribe **F6**, una sola vez, unas líneas más abajo. v1 la escribía en las dos fases.
+
+---
+
+#### [ADICIÓN ARQUITECTO A1] — El veredicto se calibra con lo que el operador realmente hizo
+
+**El agujero que tapa.** Todo este plan descansa en tres números **inventados**: los pesos `2/2/2/1/1` de `_PESO` y el `UMBRAL_ENTREGA = 2`. Con ellos se decide qué corrida se le presenta al operador como `falso_rojo_probable`. v1 no tiene **ninguna** forma de saber si esos números aciertan: mide *cuántos* veredictos emite (`count_by_level`), nunca *cuántos eran correctos*. Un plan que se auto-mide por volumen y no por acierto es exactamente la lección que el 254 F5 dejó escrita.
+
+**Por qué sale gratis.** El dato de verdad **ya se está escribiendo**, sin tabla nueva y sin trabajo del operador: cada corrección de F6 crea un `TicketStatusEvent` (`services/ticket_status.py:208-215`) cuyo `reason` lo controla este plan y arranca con el marcador literal `[269] corrección manual de falso rojo`. Cada vez que el operador aprieta ese botón está **votando a favor** del veredicto. No hay que pedirle nada más.
+
+**Qué se agrega — `verdict_agreement(days)` en `services/run_verdict.py`:**
+
+```python
+CORRECTION_MARKER = "[269] corrección manual de falso rojo"
+
+def verdict_agreement(days: int = 30) -> dict:
+    """Precisión OBSERVADA del veredicto `falso_rojo_probable`. READ-ONLY.
+
+    propuestos  = corridas de los últimos N días con cause == falso_rojo_probable
+    confirmados = TicketStatusEvent de esos tickets cuyo `reason` empieza con
+                  CORRECTION_MARKER (el operador apretó el botón de F6)
+    ratio       = confirmados / propuestos, o None si propuestos == 0
+
+    Bajo demanda: NO corre en loop ni en daemon. No escribe una sola fila.
+    Nunca lanza: ante cualquier fallo devuelve las 3 claves en 0/None.
+    """
+```
+Devuelve **siempre** las 3 claves, aunque valgan 0 (mismo criterio que `run_reconciliation.summarize()`, `:223`):
+```json
+{"days": 30, "propuestos": 0, "confirmados": 0, "ratio": null}
+```
+
+**En la card (`RunReconciliationCard.tsx`), una línea de texto llano y nada más:**
+> *"De los 14 casos que marqué como probable falso rojo en 30 días, corregiste 11 (79%)."*
+> Si `propuestos === 0`: *"Todavía no hay casos suficientes para saber si estoy calibrado."*
+
+**Los rieles que respeta, uno por uno:**
+- **Human-in-the-loop:** el número se **muestra**, jamás se usa para auto-ajustar `_PESO` ni `UMBRAL_ENTREGA`. Riel duro escrito en el docstring y vigilado por un test (`test_agreement_no_muta_los_pesos`). Stacky **no** se auto-tunea: le da al operador la evidencia para que **él** decida si mover el umbral en un plan futuro.
+- **Cero trabajo del operador:** no hay encuesta, no hay "¿te sirvió?", no hay ningún click nuevo. El dato es un subproducto del botón que F6 ya le da.
+- **3 runtimes:** lee `AgentExecution` + `TicketStatusEvent`, comunes a Codex CLI, Claude Code CLI y Copilot. Si un runtime no produce correcciones, `propuestos > 0` y `confirmados == 0` — un dato honesto, no un error.
+- **Sin autonomía:** bajo demanda, dentro del mismo GET que el operador ya estaba pidiendo. Cero loops, cero daemons.
+- **Reuso:** cero tablas nuevas, cero flags nuevas (va bajo `STACKY_RUN_VERDICT_ENABLED`), cero columnas nuevas. Usa el `reason` que F6 ya escribe.
+- **No degrada:** una query acotada por fecha dentro de un endpoint de diagnóstico que ya hace un `scan_recent(limit=200)`.
+
+---
 
 **Tests a agregar en `test_plan269_run_verdict.py`:**
 
@@ -1230,15 +1608,18 @@ result["hitl_enabled"] = bool(getattr(_config.config, "STACKY_RUN_RECONCILIATION
 | `test_count_by_level_declara_las_4_claves_siempre` | Con base vacía devuelve las 4 en 0, nunca un dict parcial. |
 | `test_count_by_level_nunca_lanza` | Con `session_scope` monkeypatcheado a lanzar → las 4 claves en 0. |
 | `test_count_by_level_no_escribe` | Sesión falsa cuyos `add/commit/flush` lanzan `AssertionError` → pasa. |
+| `test_agreement_declara_las_3_claves_siempre` | **A1.** Base vacía → `{"days":30,"propuestos":0,"confirmados":0,"ratio":None}`. `ratio` es `None`, **nunca 0.0** (0 de 0 no es "0% de acierto", es "no sé"). |
+| `test_agreement_cuenta_solo_el_marcador_del_269` | **A1.** Un `TicketStatusEvent` con `reason="cierre manual"` NO cuenta; uno que empieza con `CORRECTION_MARKER` sí. Evita contar correcciones ajenas como acuerdo con el veredicto. |
+| `test_agreement_no_muta_los_pesos` | **A1, riel duro.** Tras llamar `verdict_agreement()`, `_PESO` y `UMBRAL_ENTREGA` son idénticos a antes. El sistema **no se auto-calibra**: solo informa. |
 
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -m pytest tests/test_plan269_run_verdict.py -v
 ```
-**Criterio:** 18/18 verdes (15 de F0 + 3 de F8). Y la medición final de K1, anotada en §1:
+**Criterio:** **24/24** verdes (18 de F0 + 6 de F8). Y las mediciones finales de K1 y K6, anotadas en §1:
 ```
-.venv\Scripts\python.exe -c "from services.run_verdict import count_by_level; print(count_by_level(30))"
+.venv\Scripts\python.exe -c "from services.run_verdict import count_by_level, verdict_agreement; print(count_by_level(30)); print(verdict_agreement(30))"
 ```
 
 **Flag:** `STACKY_RUN_VERDICT_ENABLED` (la de F0). Con ella OFF, `count_by_level` devuelve las 4 claves en 0 y la card no muestra la línea.
@@ -1255,7 +1636,12 @@ cd "Stacky Agents/backend"
 | R3 | **Los colectores degradan la performance del listado** — lecturas de disco por fila. | `_Budget` es un presupuesto **TOTAL del lote** (`COLLECTOR_BUDGET_S = 2.0`), consultado antes de cada lectura; agotado ⇒ `None` y sigue. `publicado_en_tracker` es **1 query** para todo el lote. `test_publicado_en_una_sola_query` y `test_sin_n_mas_uno` lo prueban. La bandeja agrega **exactamente 1** query indexada (`ix_exec_ticket_started`, `models.py:278`), probado por `test_una_sola_query_extra`. |
 | R4 | **Se rompe el listado si un colector falla.** | Todo el bloque de veredicto está envuelto en `try/except Exception` que degrada a `{}` y loguea en `debug`. Probado por `test_colector_que_lanza_no_rompe_el_listado` y `test_excepcion_en_el_veredicto_no_rompe_la_bandeja`. |
 | R5 | **El implementador usa el endpoint `by-ado` y publica en el ADO real del operador.** | Prohibición escrita en 3 lugares del plan (§3.6, F6, comentario del módulo) + test `correctionPath nunca usa by-ado` + test backend `test_patch_por_ticket_id_no_publica` que cuenta filas en `agent_html_publish`. |
-| R6 | **Hipótesis no probadas sobre la forma de `contract_result` y de la verificación** (H1 y H2). | **Declaradas como hipótesis** en F1, con tests que las **DISCRIMINAN**: se prueban las 2 formas plausibles y se prueba que una tercera forma devuelve `False`/`None` (no `True`). Si el árbol usa otra clave, el implementador la agrega a la condición **y al test**. |
+| R6 | **Hipótesis no probadas sobre la forma de `contract_result`** (H1). **H2 ya no es un riesgo: se resolvió (C5).** | H1 sigue **declarada como hipótesis** en F1, con un test que la **DISCRIMINA**. H2 se convirtió en hecho verificado: clave `exec_verification`, campo `passed` tri-estado (`services/exec_verification.py:70,81`). |
+| R14 | **(v2, C1) Pisar una clave viva del payload.** `verdict` ya existe (`models.py:255,327`). | La clave nueva es `run_verdict`. Test `test_no_pisa_el_verdict_del_modelo` + gate `grep -c '"verdict"' backend/services/run_verdict.py` = 0. |
+| R15 | **(v2, C2) Que la UI nueva quede inerte** porque el backend enriquece un endpoint que esa pantalla no usa. | F2 cablea **los dos** handlers (`list_executions:96` y `executions_history:442`) y el test `test_history_endpoint_tambien_trae_run_verdict` lo prueba **en el endpoint que F4 consume**, no en el otro. |
+| R16 | **(v2, C3) Desalinear una tabla con columnas configurables.** | La columna se registra en `HISTORY_COLUMNS` y las dos celdas se guardan con `isColVisible`. Gate: el `grep` de `isColVisible(tablePrefs, "veredicto")` debe dar **exactamente 2**. |
+| R17 | **(v2, C4) Que el manejador de errores sea el que rompa.** Un `logger` inexistente convierte una degradación silenciosa en un 500. | F5 paso 1 declara el logger con gate de grep. Regla general para el implementador: **antes de escribir `logger.` en un módulo, verificá que ese módulo tenga logger.** |
+| R18 | **(v2, A1) Que la calibración se convierta en auto-tuneo.** Un número de acierto invita a "ajustar solo el umbral". | Riel duro en el docstring + `test_agreement_no_muta_los_pesos`. El número se muestra; mover `_PESO`/`UMBRAL_ENTREGA` es una decisión humana de un plan futuro. |
 | R7 | **Alta de flag incompleta** ⇒ `test_default_known_only_for_curated` rojo. | F7 lista los 7 archivos con el anclaje del patrón a copiar, y `test_plan269_flags.py` verifica los 5 lugares + los 2 scripts del arnés en 8 asserts. |
 | R8 | **Rojos preexistentes ajenos** en `test_harness_flags_help.py` se atribuyen a este plan. | F7 obliga a capturar la salida de los 4 archivos de flags **antes** de tocar nada y comparar después. Si el fallo menciona una key ajena, se documenta con el diff; no se argumenta de memoria. |
 | R9 | **Columna nueva sin `<th>`** desalinea la tabla del historial. | Nota explícita en F4 + gate `npx tsc --noEmit` y verificación visual manual (el render no es automatizable acá, ver §3.8 punto 2). |
@@ -1286,7 +1672,8 @@ cd "Stacky Agents/backend"
 | Término | Significado en este plan |
 |---|---|
 | **`outcome_reason`** | Los 9 desenlaces del 254 (`services/run_outcome.py:13`). Responde **por qué terminó**. Señales del proceso. |
-| **Veredicto** | Los 3 niveles del 269 (`exito` / `advertencia` / `error_real`). Responde **si cumplió su objetivo**. Combina el `outcome_reason` con evidencia. |
+| **Veredicto** | Los 3 niveles del 269 (`exito` / `advertencia` / `error_real`) y sus **9** causas. Responde **si cumplió su objetivo**. Combina el `outcome_reason` con evidencia. Viaja en el payload bajo la clave **`run_verdict`** (nunca `verdict`: esa ya existe y es la revisión humana, `models.py:255`). **Un run no terminado no tiene veredicto** (`None`). |
+| **Acuerdo observado** | **[A1]** Proporción de veredictos `falso_rojo_probable` que el operador **confirmó** apretando el botón de F6. Se deduce del `reason` que F6 ya escribe. Se **muestra**; nunca se usa para auto-ajustar los pesos. |
 | **Señal de evidencia** | Uno de los 5 hechos de `EVIDENCE_SIGNALS`, tri-estado: `True` presente, `False` ausente, `None` **desconocida**. |
 | **Fuerza de entrega** | Suma de pesos de las señales **presentes**. Umbral `UMBRAL_ENTREGA = 2`. |
 | **Falso rojo** | Corrida con estado `error` que sí entregó trabajo. En el 269 recibe causa `falso_rojo_probable` y nivel `advertencia` — **nunca** `exito` automático. |
@@ -1298,15 +1685,16 @@ cd "Stacky Agents/backend"
 ```
 F0 (puro, sin dependencias)
  └─ F1 (usa EvidenceSignals de F0)
-     └─ F2 (usa F0 + F1)
+     └─ F2 (usa F0 + F1; cablea los DOS handlers de executions.py — C2)
          ├─ F3 (puro frontend; solo necesita la FORMA del payload de F2)
-         │   └─ F4 (usa F3)
-         └─ F5 (usa F0 + F1; independiente de F3/F4)
-F6 (independiente de F0-F5: solo necesita el payload del 254 F5 que YA existe)
+         │   └─ F4 (usa F3 + registra la columna en tablePrefs.ts — C3)
+         └─ F5 (usa F0 + F1; independiente de F3/F4; paso 1 = declarar el logger — C4)
+F6 (independiente de F0-F5: solo necesita el `items` del 254 F5 que YA existe)
+     └─ escribe `hitl_enabled` en api/diag.py — ÚNICO lugar (C6)
 F7 (después de F0..F6: registra las 5 flags y los 6 tests)
-F8 (después de F0 y F7)
+F8 (después de F0, F6 y F7; NO vuelve a escribir `hitl_enabled` — C6)
 ```
-**F6 se puede implementar en paralelo** con F0-F5 si conviene: no depende de la capa de veredicto, solo del `items` que `run_reconciliation.summarize()` **ya** devuelve hoy.
+**F6 se puede implementar en paralelo** con F0-F5 si conviene: no depende de la capa de veredicto, solo del `items` que `run_reconciliation.summarize()` **ya** devuelve hoy. **Única atadura nueva de v2:** F8 lee el marcador de `reason` que F6 escribe (`[269] corrección manual de falso rojo`), así que la métrica de calibración A1 solo tiene datos después de F6. Si se aplica el corte sugerido (269 = F0..F5+F7 / 270 = F6+F8), F6 y F8 viajan **juntas** — es por eso que el corte es ahí y no en otro lado.
 
 ### Definición de Hecho (DoD) global
 
@@ -1316,20 +1704,30 @@ F8 (después de F0 y F7)
 - [ ] **Invariante I2 verde:** `None` nunca mejora el nivel (`test_I2_desconocido_nunca_mejora`).
 - [ ] `status_vocabulary.py` **sin cambios**. Verificable: `git diff --stat -- backend/services/status_vocabulary.py` → vacío.
 - [ ] `run_outcome.py` **sin cambios** de firma. Verificable: `git diff -- backend/services/run_outcome.py` → vacío.
-- [ ] El payload de ejecuciones trae `verdict` con sus 6 subclaves con la flag ON, y **no trae la clave** con la flag OFF.
+- [ ] **(C1)** La clave del payload es `run_verdict`, con sus 6 subclaves, con la flag ON; y **no aparece** con la flag OFF. Gates: `grep -c '"verdict"' backend/services/run_verdict.py` = **0**; `grep -c "item.verdict" frontend/src/pages/ExecutionHistoryPage.tsx` = **0**. La clave preexistente `verdict` (revisión humana, `models.py:327`) **sigue intacta**: `test_no_pisa_el_verdict_del_modelo` verde.
+- [ ] **(C2)** **Los DOS** endpoints traen `run_verdict`: `GET /api/executions` y `GET /api/executions/history` (este último también dentro de `{items,total}` con `?include_total=1`). `test_history_endpoint_tambien_trae_run_verdict` verde.
+- [ ] **(C3)** La columna está registrada: `grep -c "veredicto" frontend/src/services/tablePrefs.ts` ≥ 1, y `grep -c 'isColVisible(tablePrefs, "veredicto")' frontend/src/pages/ExecutionHistoryPage.tsx` = **2** (el `<th>` y el `<td>`).
+- [ ] **(C4)** `grep -c "^logger = logging.getLogger" backend/api/incident_inbox.py` = **1**.
+- [ ] **(C5)** `grep -c '"passed"' backend/services/run_evidence.py` ≥ 1 y `grep -c 'get("ok")' backend/services/run_evidence.py` = **0**.
+- [ ] **(C6)** `hitl_enabled` se escribe en **un solo lugar**: `grep -c "hitl_enabled" backend/services/run_reconciliation.py` = **0**; `grep -c "hitl_enabled" backend/api/diag.py` = **2** (rama normal + rama de error).
+- [ ] **(C7)** El colector no usa el lector que crea directorios: `grep -c "get_intent" backend/services/run_evidence.py` = **0**; `test_cambio_en_repo_no_crea_directorios` verde.
+- [ ] **(C9)** Un run en `running`/`idle` **no** trae la clave: `test_run_en_curso_no_trae_veredicto` y `test_no_terminal_no_tiene_veredicto` verdes.
 - [ ] La fila del historial muestra el chip de veredicto: `grep -c "verdictChipTone" frontend/src/pages/ExecutionHistoryPage.tsx` ≥ 1.
 - [ ] La bandeja de incidencias muestra el chip: `grep -c "describeVerdict" frontend/src/pages/IncidentInboxPage.tsx` ≥ 1.
+- [ ] **[ADICIÓN ARQUITECTO A1]** `verdict_agreement(30)` devuelve las 3 claves y `ratio` es `None` (no `0.0`) cuando `propuestos == 0`; `test_agreement_no_muta_los_pesos` verde.
+- [ ] **[ADICIÓN ARQUITECTO A2]** `test_espejo_ts_no_tiene_drift` verde (no `skipped`) una vez implementada F3.
 - [ ] La card de reconciliación renderiza items con acción: `grep -c "actionForItem" frontend/src/components/RunReconciliationCard.tsx` ≥ 1.
 - [ ] El HITL usa **solo** el endpoint por `ticket_id`: `grep -c "by-ado" frontend/src/components/reconciliationActions.ts` = **0**.
 - [ ] Las **5 flags** están en los 5 lugares con `default=True` (`test_plan269_flags.py` 8/8 verde).
 - [ ] Los **6 archivos de test** están registrados en `run_harness_tests.sh` **y** en `run_harness_tests.ps1`.
-- [ ] Los 6 archivos de test de backend corren **por archivo** y dan verde:
-      `test_plan269_run_verdict.py` (18) · `test_plan269_run_evidence.py` (12) · `test_plan269_executions_payload.py` (6) · `test_plan269_inbox_verdict.py` (6) · `test_plan269_hitl_correccion.py` (5) · `test_plan269_flags.py` (8).
+- [ ] Los 6 archivos de test de backend corren **por archivo** y dan verde (conteos actualizados en v2):
+      `test_plan269_run_verdict.py` (**24**) · `test_plan269_run_evidence.py` (**14**) · `test_plan269_executions_payload.py` (**9**) · `test_plan269_inbox_verdict.py` (**7**) · `test_plan269_hitl_correccion.py` (**6**) · `test_plan269_flags.py` (8).
 - [ ] Los 2 archivos de test de frontend corren **por archivo** y dan verde:
-      `plan269RunVerdict.test.ts` (13) · `reconciliationActions.test.ts` (6).
+      `plan269RunVerdict.test.ts` (13) · `reconciliationActions.test.ts` (**7**).
 - [ ] `cd "Stacky Agents/frontend" && npx tsc --noEmit` sin errores nuevos.
 - [ ] **Sin regresiones del 254**, validado por archivo: `test_plan254_outcome_reason.py`, `test_plan254_reconciliation.py`, `test_plan254_falso_rojo.py`, `test_plan254_stream_drain.py`.
 - [ ] **Sin regresiones del 238**: `test_plan238_incident_inbox_api.py` verde (contrato de forma de la bandeja).
-- [ ] Los KPI K1 y K2 están **medidos y anotados** en la tabla de §1 (no "SIN MEDIR").
+- [ ] Los KPI K1, K2 y K6 están **medidos y anotados** en la tabla de §1 (no "SIN MEDIR").
+- [ ] **(C16)** La huella de regresión está registrada en `Stacky Agents/docs/sistema/error_fingerprints.json`: una entrada para el falso rojo visible (`estado terminal 'error' + evidencia de entrega presente ⇒ cause falso_rojo_probable`) apuntando a `test_plan269_run_verdict.py::test_falso_rojo_probable_con_publicacion`. Sin esto, el bug puede volver sin que ningún gate lo note.
 - [ ] Ningún estilo inline nuevo: `grep -c "style={{"` no aumenta en los 3 `.tsx` editados respecto a HEAD.
 - [ ] **Cero autonomía nueva:** ningún loop, daemon, barrido ni polling agregado. Verificable: `git diff | grep -cE "while True|Thread\(|schedule|setInterval"` = 0.

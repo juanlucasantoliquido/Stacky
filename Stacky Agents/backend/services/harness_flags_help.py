@@ -821,6 +821,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no cambia nada de lo guardado; el panel vuelve a cargar y guardar como antes (más pedidos y más datos por viaje).",
         example="Como pedir todo el supermercado en un solo delivery en vez de un viaje por producto — y devolver solo la botella vacía en vez de re-empacar toda la compra.",
     ),
+    "STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED": PlainHelp(
+        what="Publica un preset de punta a punta desde una sola pantalla, con un resumen previo y una sola confirmacion.",
+        on_effect="Si la activás: aparece 'Publicar en un paso'. Ves el resumen y el archivo final antes de nada, confirmás una vez y se arma, se guarda en el repo y se dispara la corrida. Si algo falla, para ahí y te dice en qué paso.",
+        off_effect="Si la apagás: el botón no aparece y publicás como siempre, pantalla por pantalla, confirmando cada cosa por separado.",
+        example="Como confirmar una compra entera desde el resumen del carrito en vez de pagar producto por producto.",
+    ),
     "STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED": PlainHelp(
         what="El pipeline que disparaste queda a la vista arriba del panel, aunque cambies de pantalla o recargues.",
         on_effect="Si la activás: tras disparar un pipeline aparece un cartelito arriba con cómo va, en castellano. Te sigue por todo el panel y aguanta si recargás la página. Consulta cada vez más espaciado y para si te vas a otra pestaña.",

@@ -1,7 +1,68 @@
 # Plan 102 — Publicar en un paso: orquestador HITL materializar → commit → trigger con un solo resumen y un solo confirm
 
-**Estado:** CRITICADO (v2) — **PARCIALMENTE SUPERADO** · prioridad **BAJA**
-**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26)
+**Estado:** **IMPLEMENTADO** (F0 · F1 · F2 · F3 · F4) — 2026-07-26
+**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26 · implementado: 2026-07-26)
+
+---
+
+## §I — REGISTRO DE IMPLEMENTACIÓN (2026-07-26)
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| F0 | IMPLEMENTADA | flag **6 patas, default OFF** (excepción dura 1): `config.py`, `harness_flags.py`, `harness_flags_help.py`, `api/devops.py` (`one_click_publish_enabled`), arista `requires`, ambos ratchets del arnés |
+| F1 | IMPLEMENTADA | `frontend/src/devops/publishChain.ts` (nuevo) |
+| F2 | IMPLEMENTADA | `components/devops/OneClickPublishModal.tsx` (nuevo, **deuda UI cero**) |
+| F3 | IMPLEMENTADA | botón gateado por 3 flags en `PublicationsSection` y `EnvironmentsSection` |
+| F4 | IMPLEMENTADA | copy corregido en `CommitPipelineModal` + centinela + huella |
+
+**Tests (corridos de verdad, por archivo):**
+
+| Archivo | Resultado |
+|---|---|
+| `backend/tests/test_plan102_one_click_flag.py` | **7 passed** |
+| `backend/tests/test_harness_flags.py` / `test_harness_flags_requires.py` | **56 / 9 passed** |
+| `backend/tests/test_harness_ratchet_meta.py` | **4 passed** |
+| `src/devops/publishChain.test.ts` | **10 passed** |
+| `src/components/devops/__tests__/oneClickPublish.test.ts` | **10 passed** |
+| `src/__tests__/uiDebtRatchet.test.ts` | **3 passed** (criterio de fase de F2) |
+| `presetsModel` / `devopsPreview` / `DevOpsPage` / `PipelineBuilderSection` | **13 / 12 / 21 / 17 passed** |
+| `npx tsc --noEmit` | **0 errores** |
+
+**C1 cerrado de verdad:** no existe `adoCommitBlocked` en ninguna parte; la cadena **ni
+siquiera recibe el `target`**, así que no puede discriminar por proveedor aunque alguien
+quisiera. El caso 3 de `oneClickPublish.test.ts` lo pinea por grep negativo.
+
+### Bugs del PROPIO plan hallados al construirlo (3)
+
+1. **F1 remite a código del v1 que la reescritura in place borró.** Tercera vez en esta
+   tanda (98, 99, 103, 102). Dice *"se conserva del v1 tal cual"* nombrando `runPublishChain`,
+   `ChainDeps`, etc., pero el cuerpo **no está en el documento**. Criterio aplicado:
+   implementar desde el contrato semántico (que sí está completo) y fijarlo con 10 tests.
+2. **`PipelineCommit` no existe.** §F2 implica un objeto de commit propio; el endpoint real es
+   `PipelineGenerator.commit` y su body **spreadea el spec en la raíz**
+   (`...toSpecDict(spec), target, branch, project, confirm`), no lo anida. `tsc` lo cazó como
+   `TS2305`. Criterio aplicado: usar el body **idéntico** al del camino de siempre
+   (`CommitPipelineModal.tsx:50`) — que es justamente lo que "reuso estricto" significa.
+3. **El copy stale del 501 vive en una rama INALCANZABLE, dato que el plan no registra.**
+   §F4 lo trata como un texto visible. En realidad `api/devops.py:55` fija
+   `ado_commit_supported` en `True` de forma dura, así que la rama del `else` es código
+   muerto. **Eso no reduce la gravedad, la explica:** el texto nunca se vio en pantalla y
+   aun así indujo el bloqueante C1, porque el autor del v1 lo leyó *en el fuente* y lo tomó
+   por evidencia. Criterio aplicado: corregir el texto igual (una mentira en el código es una
+   trampa para el próximo que lea) y dejar la clase registrada como huella.
+
+**Trampa recurrente de esta corrida (4 veces):** la prosa de mis propios comentarios chocó
+con los gates que yo mismo escribía — `adoCommitBlocked`, `501`, `Render-only`, y un
+`confirm (HITL)` que matcheaba el detector de diálogos nativos del `uiDebtRatchet`
+(`/(?<![.\w])(?:window\.)?(?:confirm|alert|prompt)\s*\(/`). En los 4 casos se reescribió la
+prosa; **en ninguno se tocó el gate.**
+
+**Pendiente:** verificación manual HITL (abrir el modal, publicar de punta a punta con la flag
+ON). No automatizable: `@testing-library/react` y `jsdom` no están instalados. **La flag queda
+OFF por default**, así que el operador tiene que activarla a conciencia desde
+Configuración → Arnés antes de usarla.
+
+---
 **Veredicto del juez:** RECHAZADO (v1) → v2 re-scopeada. 3 BLOQUEANTES, 4 IMPORTANTES, 2 MENORES.
 **Autor v1:** StackyArchitectaUltraEficientCode · **Crítica v2:** StackyArchitectaUltraEficientCode (juez adversarial)
 

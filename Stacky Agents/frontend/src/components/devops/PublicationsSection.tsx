@@ -25,6 +25,7 @@ import {
   type PublishGroup,
 } from '../../devops/presetsModel';
 import { saveProfileKey } from '../../devops/profileKeys'; // Plan 98 F5
+import { OneClickPublishModal } from './OneClickPublishModal'; // Plan 102 F3
 import { fromParsedSpec, toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
@@ -80,6 +81,8 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
   // Autodetección del catálogo (1 click = catálogo + preset TODO)
   const [detecting, setDetecting] = useState(false);
   const [detectHint, setDetectHint] = useState<string | null>(null);
+  // Plan 102 — modal de publicacion en un paso (solo con la flag ON).
+  const [oneClickOpen, setOneClickOpen] = useState(false);
 
   // Plan 98 F4 — con el bootstrap ON el shell ya trajo el perfil; esta sección
   // NO hace fetch propio.
@@ -473,6 +476,33 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
         >
           Materializar
         </button>
+
+        {/* Plan 102 — Publicar en un paso. Gate triple: la flag propia + generador +
+            disparo. Con cualquiera OFF el boton NO se renderiza (cero diff de
+            comportamiento). Los caminos de siempre quedan intactos al lado. */}
+        {ctx.health.one_click_publish_enabled === true
+          && ctx.health.generator_enabled === true
+          && ctx.health.trigger_enabled === true && (
+          <button
+            onClick={() => setOneClickOpen(true)}
+            disabled={catalogEmpty || !editing.name}
+            title={catalogEmpty ? 'El catálogo de procesos está vacío' : undefined}
+            className={styles.btnSuccess}
+          >
+            Publicar en un paso…
+          </button>
+        )}
+        {oneClickOpen && (
+          <OneClickPublishModal
+            project={activeProject}
+            presetName={editing.name}
+            target={editing.target === 'ado' ? 'ado' : 'gitlab'}
+            onClose={() => setOneClickOpen(false)}
+            preflightSlot={materializedDraft
+              ? <PreflightPanel ctx={ctx} spec={toSpecDict(materializedDraft)} project={activeProject} />
+              : undefined}
+          />
+        )}
 
         {materializeResult && materializedDraft && (
           <>

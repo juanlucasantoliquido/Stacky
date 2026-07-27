@@ -547,6 +547,20 @@
       "guard_test": "frontend/src/devops/pipelineMonitor.test.ts (casos 7-10, persistencia); frontend/src/components/devops/__tests__/pipelineMonitorHook.test.ts",
       "evidence": "frontend/src/devops/pipelineMonitor.ts; frontend/src/components/devops/useDevopsPipelineMonitor.ts; frontend/src/pages/DevOpsHeaderV2.tsx",
       "note": "El estado vivia en useState de TriggerPipelineSection: al recargar la pagina o irse a otra sub-seccion se perdia el hilo del pipeline y el operador tenia que volver a buscarlo a mano en el tracker. Ahora el ultimo pipeline se persiste en localStorage y el badge del header lo sigue. Dos trampas que costaron: (a) el sondeo tuvo que gatearse por visibilityState del documento y NO por ctx.visible, porque el hook vive en el shell y no en una seccion; (b) un 429 del cap de polls del backend NO es un fallo del pipeline: se trata subiendo el backoff, nunca pintando el badge de rojo."
+    },
+    {
+      "id": "ui_claims_stale_backend_limitation",
+      "title": "La UI afirma una limitacion que el servidor ya no tiene",
+      "class": "stale-ui-copy",
+      "status": "resolved",
+      "log_pattern": "",
+      "log_guarded": false,
+      "killed_by": "plan 102 F4 (copy corregido en CommitPipelineModal + centinela por grep negativo)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "frontend/src/components/devops/__tests__/oneClickPublish.test.ts (caso 9)",
+      "evidence": "frontend/src/components/devops/CommitPipelineModal.tsx; backend/services/ado_provider.py:146; backend/api/devops.py:55",
+      "note": "CommitPipelineModal decia que el commit a Azure DevOps no estaba implementado y devolvia un error de no-implementado. Dejo de ser cierto con el plan 95 F1.a, que hace el push real. El texto quedo obsoleto y ademas en una rama inalcanzable (ado_commit_supported esta fijo en True). El dano no fue visual: el autor del plan 102 v1 LEYO ese texto, lo creyo, y diseno una bandera adoCommitBlocked que habria bloqueado todos los presets ADO del flujo nuevo mientras el flujo viejo funcionaba. Clase de bug a vigilar: una mentira en la UI se propaga a los planes que la leen como si fuera evidencia. Verificar el comportamiento contra el codigo del servidor, nunca contra un texto de la interfaz."
     }
   ]
 }

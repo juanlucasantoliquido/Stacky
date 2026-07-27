@@ -87,8 +87,14 @@ export const CommitPipelineModal: React.FC<CommitPipelineModalProps> = ({
                     Azure DevOps (azure-pipelines.yml)
                   </option>
                 ) : (
+                  // Plan 102 F4 — este texto afirmaba que el commit a Azure DevOps
+                  // no estaba implementado. Es falso desde el Plan 95 F1.a
+                  // (ado_provider.py:146 pushea de verdad). La rama es defensiva y
+                  // hoy inalcanzable (api/devops.py:55 fija ado_commit_supported en
+                  // True), pero el texto viejo ya indujo un bloqueante en el v1 de
+                  // este plan: casi se entrega una UI que bloqueaba esos presets.
                   <option value="ado" disabled>
-                    Azure DevOps (pipeline.yml) — Render-only v1 (commit devuelve 501)
+                    Azure DevOps — commit no disponible en esta conexión
                   </option>
                 )}
               </select>

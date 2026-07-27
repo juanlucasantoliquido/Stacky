@@ -56,6 +56,7 @@ def _health_payload() -> dict:
         "section_doctor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED", False)),  # Plan 104
         "bootstrap_enabled": bool(getattr(cfg, "STACKY_DEVOPS_BOOTSTRAP_ENABLED", False)),  # Plan 98
         "pipeline_monitor_enabled": bool(getattr(cfg, "STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED", False)),  # Plan 103
+        "one_click_publish_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED", False)),  # Plan 102
         "remote_console_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED", False)),  # Plan 105
         "remote_target_enabled": bool(getattr(cfg, "STACKY_DEVOPS_REMOTE_TARGET_ENABLED", False)),  # Plan 108
         "env_tree_preview_enabled": bool(getattr(cfg, "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED", False)),  # Plan 107

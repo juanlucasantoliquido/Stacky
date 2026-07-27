@@ -1566,6 +1566,14 @@ class Config:
         "STACKY_DEVOPS_BOOTSTRAP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 102 — Publicar en un paso (orquestador materializar->commit->trigger).
+    # Default OFF — EXCEPCION DURA (1): comprime DOS side effects externos reales
+    # (commit al repo + disparo de un pipeline) detras de un unico confirm. NO va
+    # en _CURATED_DEFAULTS_ON: esa lista es solo para flags con default ON.
+    STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 103 — Monitor vivo y persistente del ultimo pipeline (badge en el header
     # del panel DevOps). Default ON: es solo-lectura, sin efectos externos y sin gasto
     # de tokens de LLM, asi que NO califica para ninguna de las 4 excepciones duras.

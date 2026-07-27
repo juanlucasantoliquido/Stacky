@@ -234,6 +234,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",  # Plan 104 — doctores IA por sección
         "STACKY_DEVOPS_BOOTSTRAP_ENABLED",  # Plan 98 — bootstrap unico + PATCH por clave
         "STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED",  # Plan 103 — monitor vivo del ultimo pipeline
+        "STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED",  # Plan 102 — publicar en un paso
         "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",  # Plan 105 — consola remota
         "STACKY_DEVOPS_REMOTE_TARGET_ENABLED",  # Plan 108 — anclaje remoto agente/ambientes
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
@@ -3307,6 +3308,31 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
         # (test_default_known_only_for_curated exige la pertenencia al set).
         default=True,
+    ),
+    # ── Plan 102 — Publicar en un paso (orquestador HITL) ──────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED",
+        type="bool",
+        label="Publicar en un paso (Plan 102)",
+        description=(
+            "Plan 102 — Agrega un boton 'Publicar en un paso' en Publicaciones y "
+            "Ambientes: un solo resumen previo (preset, procesos resueltos, YAML "
+            "final, branch destino) y un solo confirm que encadena materializar -> "
+            "commit -> disparo del pipeline. Default OFF a proposito: comprime dos "
+            "efectos externos reales (escribir en el repo y disparar una corrida) "
+            "detras de una sola confirmacion. Los caminos de siempre quedan "
+            "intactos y disponibles. Necesita ademas el generador y el disparo de "
+            "pipelines activos; si falta alguno, el boton avisa cual."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
+        env_only=False,  # editable por UI (categoría 'devops')
+        # R4 (harness_flags.py, profundidad maxima 1): el master apuntado NO puede
+        # tener a su vez `requires`. STACKY_DEVOPS_PUBLICATIONS_ENABLED SI declara
+        # requires=PANEL, asi que apuntarle seria "cadena prohibida" y dejaria
+        # test_harness_flags_requires en rojo. Se apunta al PANEL, sin condicional.
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+        # SIN kwarg `default`: es default OFF. Declarar default=False rompe
+        # test_default_known_only_for_curated (esa lista es solo de flags ON).
     ),
     # ── Plan 103 — Monitor vivo del ultimo pipeline ────────────────────────────
     FlagSpec(

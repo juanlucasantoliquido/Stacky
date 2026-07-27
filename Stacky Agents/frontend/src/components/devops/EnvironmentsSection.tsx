@@ -21,6 +21,7 @@ import {
   type PublicationPreset,
 } from '../../devops/presetsModel';
 import { saveProfileKey } from '../../devops/profileKeys'; // Plan 98 F5
+import { OneClickPublishModal } from './OneClickPublishModal'; // Plan 102 F3
 import { fromParsedSpec, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { SectionDoctorButton } from './SectionDoctorButton';
 import { DirTreePreview } from './DirTreePreview';
@@ -93,6 +94,8 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
   const [presets, setPresets] = useState<PublicationPreset[]>([]);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
   const [materializeResult, setMaterializeResult] = useState<MaterializeResult | null>(null);
+  // Plan 102 — modal de publicacion en un paso (solo con la flag ON).
+  const [oneClickOpen, setOneClickOpen] = useState(false);
   const [materializedDraft, setMaterializedDraft] = useState<PipelineSpecDraft | null>(null);
   const [showCommitModal, setShowCommitModal] = useState(false);
 
@@ -571,6 +574,27 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
             >
               Materializar publicación inicial
             </button>
+
+            {/* Plan 102 — Publicar en un paso. Gate triple; con cualquier flag OFF
+                el boton no se renderiza y el paso 3 queda EXACTAMENTE como hoy. */}
+            {ctx.health.one_click_publish_enabled === true
+              && ctx.health.generator_enabled === true
+              && ctx.health.trigger_enabled === true && selectedPresetName && (
+              <button
+                onClick={() => setOneClickOpen(true)}
+                className={styles.btnSuccess}
+              >
+                Publicar en un paso…
+              </button>
+            )}
+            {oneClickOpen && (
+              <OneClickPublishModal
+                project={activeProject}
+                presetName={selectedPresetName}
+                target={(presets.find((p) => p.name === selectedPresetName)?.target === 'ado') ? 'ado' : 'gitlab'}
+                onClose={() => setOneClickOpen(false)}
+              />
+            )}
 
             {materializeResult && materializedDraft && (
               <>

@@ -867,6 +867,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan257_log_noise_api.py
   tests/test_plan257_log_level_ui.py
   tests/test_plan257_flags.py
+
+  # Plan 258 - telemetria veraz de los ledgers (procedencia, huerfanos, purga, estanqueidad)
+  tests/test_plan258_ledger_veracidad.py
+  tests/test_plan258_ledger_purge.py
+  tests/test_plan258_estanqueidad_arnes.py
 )
 
 pass=0

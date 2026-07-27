@@ -19,6 +19,7 @@ import SilentFailuresCard from "../components/SilentFailuresCard";
 import DormantCanariesCard from "../components/DormantCanariesCard";
 import IntakeQuarantineCard from "../components/IntakeQuarantineCard";
 import LogNoiseCard from "../components/LogNoiseCard";
+import LedgerHealthCard from "../components/LedgerHealthCard";
 import LogLevelPanel from "../components/LogLevelPanel";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
@@ -311,6 +312,12 @@ export default function DiagnosticsPage() {
           releer un archivo de 4 MB. READ-ONLY: mirarla NO borra los contadores.
           No se renderiza si no hay ninguna firma agrupada. */}
       <LogNoiseCard />
+
+      {/* Plan 258 F3 — qué parte de cada archivo de registro la escribió una
+          prueba, y qué corridas REALES nunca cerraron. Se midió: 8 de 8 líneas
+          de las corridas de CI y 10 de 10 de las aplicaciones de entorno eran
+          de prueba. No se renderiza si no hay nada que reportar. */}
+      <LedgerHealthCard />
 
       {/* Plan 257 F4 — el nivel de detalle del registro, en caliente y sin
           reiniciar. Era la ÚNICA configuración del operador que exigía editar un

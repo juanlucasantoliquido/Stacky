@@ -210,9 +210,14 @@ def monitor_pipeline_route(project: str, pipeline_id: str):
                 if status in ("success", "failed", "canceled", "skipped"):
                     from datetime import datetime, timezone
                     from services.ci_run_ledger import update_run_status
+                    # Plan 258 F3 — se pasa `project`: el pipeline_id se repite
+                    # entre proyectos (medido: el id 42, 6 veces), y sin este
+                    # eje el cierre de un proyecto podía escribirse sobre la
+                    # corrida de otro.
                     update_run_status(
                         str(pipeline_id), status,
                         datetime.now(timezone.utc).isoformat(),
+                        project=project,
                     )
             except Exception:  # noqa: BLE001 — el monitor nunca se degrada por el ledger
                 pass

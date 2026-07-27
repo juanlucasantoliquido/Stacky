@@ -1,8 +1,15 @@
 """Aísla el logging de pytest (Plan 145 / V7): setea STACKY_TEST_MODE antes de
 que cualquier módulo de app importe/instale el FileHandler, para que los tests
-no escriban en backend/data/logs/. También asegura backend/ en sys.path."""
+no escriban en backend/data/logs/. También asegura backend/ en sys.path.
+
+Plan 258 F5 — se SUMA (no reemplaza) un guard que falla ruidosamente si algún
+handler de logging quedó apuntando al log del operador. El `setdefault` de
+STACKY_TEST_MODE y el guard de red del plan 154 quedan exactamente como estaban.
+"""
+import logging
 import os
 import sys
+from pathlib import Path
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND not in sys.path:
@@ -44,6 +51,70 @@ def _no_network_egress(monkeypatch):
 
     monkeypatch.setattr(_socket.socket, "connect", _guarded_connect)
     yield
+
+
+# ---------------------------------------------------------------------------
+# Plan 258 F5 — guard: ningún handler de logging puede apuntar a data/logs/
+# ---------------------------------------------------------------------------
+# El agujero está CERRADO desde el 2026-07-16 (plan 145, commit f00f161f):
+# `install_file_log_handler` redirige a %TEMP%/stacky-test-logs/ en test-mode.
+# Este guard NO lo reimplementa ni cambia su firma (`local_file_logging.py` es
+# frontera del plan 257): solo impide que se reabra EN SILENCIO. Si aparece un
+# handler al log real, la corrida falla NOMBRÁNDOLO, en vez de contaminar mudo.
+
+_LOGS_DEL_OPERADOR = Path(_BACKEND) / "data" / "logs"
+
+
+def _handlers_apuntando_al_log_del_operador() -> list[str]:
+    """Rutas de los FileHandler activos que escriben bajo backend/data/logs/.
+
+    Recorre el root logger Y los loggers con nombre: un handler instalado en
+    `stacky.loquesea` no aparece en `logging.getLogger().handlers`.
+    """
+    try:
+        objetivo = _LOGS_DEL_OPERADOR.resolve()
+    except OSError:  # pragma: no cover
+        objetivo = _LOGS_DEL_OPERADOR
+
+    vistos: set[int] = set()
+    ofensores: list[str] = []
+    candidatos = [logging.getLogger()]
+    candidatos += [lg for lg in logging.Logger.manager.loggerDict.values()
+                   if isinstance(lg, logging.Logger)]
+    for lg in candidatos:
+        for h in list(getattr(lg, "handlers", []) or []):
+            if id(h) in vistos:
+                continue
+            vistos.add(id(h))
+            destino = getattr(h, "baseFilename", None)
+            if not destino:
+                continue
+            try:
+                p = Path(str(destino)).resolve()
+            except OSError:  # pragma: no cover
+                continue
+            if p.parent == objetivo:
+                ofensores.append(str(p))
+    return sorted(ofensores)
+
+
+@pytest.fixture
+def guard_log_handlers():
+    """Expone el detector a los tests (plan 258 F5). Devuelve la lista de rutas
+    ofensoras, vacía cuando el aislamiento está sano."""
+    return _handlers_apuntando_al_log_del_operador
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _guard_log_del_operador():
+    yield
+    ofensores = _handlers_apuntando_al_log_del_operador()
+    assert not ofensores, (
+        "[plan258 F5] un handler de logging quedó apuntando al log del operador "
+        f"({_LOGS_DEL_OPERADOR}): {ofensores}. El plan 145 redirige a "
+        "%TEMP%/stacky-test-logs/ bajo STACKY_TEST_MODE; si esto salta, el "
+        "aislamiento se reabrió. NO lo silencies con una allowlist."
+    )
 
 
 # Plan 154 F5.i (adicion v2) — DESVIACION DOCUMENTADA respecto del texto del plan:

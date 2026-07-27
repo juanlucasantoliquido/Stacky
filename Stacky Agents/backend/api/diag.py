@@ -1082,3 +1082,143 @@ def dormant_canaries_route():
         logger.debug("dormant-canaries falló", exc_info=True)
         return jsonify({"ok": False, "error": type(exc).__name__, "canaries": []}), 200
     return jsonify({"ok": True, "canaries": filas})
+
+
+# ---------------------------------------------------------------------------
+# Plan 258 F3/F4 — Salud de ledgers: procedencia, huerfanos y limpieza asistida
+# ---------------------------------------------------------------------------
+# Los ledgers JSONL deberian darle al operador visibilidad de lo que la UI no
+# muestra. Medido antes de este plan: `ci_runs.jsonl` tenia 8 de 8 lineas de
+# fixture de test y `env_applies.jsonl` 10 de 10 escritas por pytest. No eran
+# una fuente de verdad: eran archivos mezclados.
+#
+# READ-ONLY salvo el POST, que es la UNICA pieza destructiva del plan y esta
+# detras de flag OFF por default, `dry_run` explicito, confirmacion y copia.
+
+_LEDGER_CONFIRM_TTL_S = 120
+
+
+@bp.get("/ledgers/health")
+def ledgers_health():
+    """Plan 258 F3 — desglose por procedencia de cada archivo de registro.
+
+    Por ledger: total de lineas y cuantas son de produccion, de test o de
+    procedencia desconocida. Para `ci_runs`, ademas, las corridas REALES que
+    nunca reportaron desenlace.
+
+    `unknown` NO es `prod`: una linea historica sin marca no se puede afirmar
+    como real, y este plan no inventa datos. Tampoco se oculta.
+    """
+    from services import ledger_writer as lw  # import lazy (patron Plan 109)
+
+    purga_on = bool(getattr(_config.config, "STACKY_LEDGER_PURGE_ENABLED", False))
+    filas: list[dict] = []
+    borrables_total = 0
+    for nombre in lw.LEDGER_NAMES:
+        try:
+            desglose = lw.env_breakdown(nombre)
+        except Exception:  # noqa: BLE001 — un diagnostico jamas rompe el panel
+            logger.debug("ledgers/health: fallo el desglose de %s", nombre, exc_info=True)
+            desglose = {"total": 0, "prod": 0, "test": 0, "unknown": 0}
+
+        purgable = lw.purgeable(nombre)
+        borrables = desglose.get("test", 0) if purgable else 0
+        borrables_total += borrables
+
+        token = None
+        if purga_on and borrables > 0:
+            # El identificador transporta el conteo EXACTO que se le muestra al
+            # operador: no puede confirmar una cifra distinta de la que vio.
+            from services.confirm_token import issue_token
+            token = issue_token(lw.PURGE_ACTION,
+                                {"ledger": nombre, "deletable": borrables},
+                                ttl_s=_LEDGER_CONFIRM_TTL_S)
+
+        filas.append({
+            "name": nombre,
+            "total": desglose.get("total", 0),
+            "prod": desglose.get("prod", 0),
+            "test": desglose.get("test", 0),
+            "unknown": desglose.get("unknown", 0),
+            "purgeable": purgable,
+            "deletable": borrables,
+            "confirm_token": token,
+        })
+
+    try:
+        from services.ci_run_ledger import orphan_ci_runs
+        huerfanos = orphan_ci_runs()
+    except Exception:  # noqa: BLE001
+        logger.debug("ledgers/health: fallo el reporte de huerfanos", exc_info=True)
+        huerfanos = []
+
+    return jsonify({
+        "ok": True,
+        "ledgers": filas,
+        "orphans": huerfanos,
+        "orphans_enabled": bool(getattr(
+            _config.config, "STACKY_LEDGER_ORPHAN_REPORT_ENABLED", True)),
+        "deletable_total": borrables_total,
+        "purge_enabled": purga_on,
+        "confirm_ttl_s": _LEDGER_CONFIRM_TTL_S,
+    })
+
+
+@bp.post("/ledgers/purge-test-lines")
+def ledgers_purge_test_lines():
+    """Plan 258 F4 — borra las lineas de fixture de un archivo de registro.
+
+    LA UNICA PIEZA DESTRUCTIVA DEL PLAN, y por eso lleva cuatro candados en
+    serie: (1) la perilla nace APAGADA; (2) el cuerpo debe traer `dry_run`
+    EXPLICITO en false — ausente, de otro tipo o cuerpo vacio significan
+    `dry_run=true`, asi que un pedido mal formado NUNCA borra; (3) hace falta la
+    confirmacion emitida por `GET /ledgers/health`, que ademas transporta el
+    conteo exacto que se mostro; (4) se guarda una copia antes y, si la copia
+    falla, se aborta.
+
+    NUNCA toca lineas `prod` ni `unknown`: solo lo probadamente de test.
+    NO ES SEGURIDAD — Stacky es mono-operador sin login; es un anti-clic-accidental.
+    """
+    from services import ledger_writer as lw  # import lazy (patron Plan 109)
+
+    if not bool(getattr(_config.config, "STACKY_LEDGER_PURGE_ENABLED", False)):
+        return jsonify({"ok": False, "error": "ledger_purge_disabled",
+                        "message": "La limpieza de archivos de registro esta "
+                                   "deshabilitada (STACKY_LEDGER_PURGE_ENABLED)."}), 404
+
+    body = request.get_json(silent=True) or {}
+    nombre = str(body.get("ledger") or "")
+    if nombre not in lw.LEDGER_NAMES:
+        return jsonify({"ok": False, "error": "ledger_desconocido",
+                        "detail": f"{nombre!r} no esta en el inventario"}), 400
+
+    # C14 — en el endpoint MANDA el cuerpo. Solo un `false` booleano explicito
+    # habilita el borrado; cualquier otra cosa cae en dry-run.
+    crudo = body.get("dry_run", True)
+    dry_run = True if not isinstance(crudo, bool) else crudo
+
+    from services.confirm_token import ConfirmTokenError, issue_token
+
+    try:
+        resultado = lw.purge_test_lines(nombre, confirm_token=str(body.get("confirm_token") or ""),
+                                        dry_run=dry_run)
+    except ConfirmTokenError as exc:
+        borrables = lw.deletable_count(nombre)
+        return jsonify({
+            "ok": False,
+            "error": "confirmation_required",
+            "detail": str(exc),
+            "ledger": nombre,
+            "deletable": borrables,
+            "confirm_token": issue_token(lw.PURGE_ACTION,
+                                         {"ledger": nombre, "deletable": borrables},
+                                         ttl_s=_LEDGER_CONFIRM_TTL_S),
+            "confirm_ttl_s": _LEDGER_CONFIRM_TTL_S,
+            "message": (f"Se eliminaran {borrables} lineas de fixture de {nombre}.jsonl. "
+                        "Las de produccion y las de procedencia desconocida NO se tocan. "
+                        "Se guarda una copia antes."),
+        }), 409
+
+    if not resultado.get("ok"):
+        return jsonify(resultado), 409
+    return jsonify(resultado)

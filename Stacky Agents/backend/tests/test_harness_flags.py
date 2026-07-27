@@ -465,6 +465,18 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 258 — telemetria veraz de los archivos de registro ──
+    # Las 4 nacen ON: validar un esquema no borra nada, etiquetar procedencia
+    # solo marca EN MEMORIA al leer (no reescribe el archivo), listar corridas
+    # sin cierre es de solo lectura y el guard de estanqueidad solo huellea y
+    # compara. Ninguna cae en las 4 excepciones duras.
+    # STACKY_LEDGER_PURGE_ENABLED NO va: nace OFF por excepción dura #2
+    # (destructiva). STACKY_LEDGER_TEST_MARKERS tampoco: es csv, no declara
+    # default= (si lo declarara, default_is_known se volvería True acá).
+    "STACKY_LEDGER_STRICT_SCHEMA_ENABLED",
+    "STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
+    "STACKY_LEDGER_ORPHAN_REPORT_ENABLED",
+    "STACKY_HARNESS_AIRTIGHT_GUARD_ENABLED",
     # ── Plan 257 — observabilidad antirruido: agrupado de repetidos, rotacion
     # por tamano y tarjeta de firmas ruidosas. Las 3 nacen ON: el agrupado
     # preserva la primera aparicion y el conteo (nunca borra), rotar no borra

@@ -17,23 +17,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import runtime_paths
+from services.ledger_writer import stamp_event
 
-MAX_ROWS = 500           # C4 — calca el 191: retención dura, se conservan los 500 más nuevos
+MAX_ROWS = 500         # C4 — calca el 191: retención dura, se conservan los 500 más nuevos
 _PATHS_CAP = 200         # tope de rutas persistidas por entry (privacidad + tamaño)
 _LOCK = threading.Lock()
 
 # ALLOWLIST — los únicos campos que pueden persistirse. paths_truncated lo calcula
 # append_apply (nunca se confía en el valor del caller). ignored_count = ADICIÓN
 # ARQUITECTO (auditoría fiel de pedido vs aprobado).
+# Plan 258 F1 — `env` y `schema_version` son ADITIVOS y van acá SÍ o SÍ: la
+# allowlist es cerrada, así que un campo no declarado se DESCARTA EN SILENCIO
+# al escribir (plan 258 C4). Este es el ledger cuyas 10 de 10 líneas las
+# escribió pytest.
 ENTRY_FIELDS: tuple[str, ...] = (
     "root", "server_alias", "paths", "paths_truncated", "fingerprint",
     "sandbox_active", "result_ok", "created_count", "ignored_count",
-    "applied_at", "source",
+    "applied_at", "source", "env", "schema_version",
 )
 
 
 def _ledger_path() -> Path:
-    return Path(runtime_paths.data_dir()) / "env_applies.jsonl"
+    # Plan 258 F1 — ruta decidida por el portero (aislada en test-mode).
+    from services.ledger_writer import ledger_path
+    return ledger_path("env_applies")
 
 
 def _read_rows() -> list[dict]:
@@ -92,8 +99,14 @@ def append_apply(entry: dict) -> None:
     """Agrega un apply (best-effort desde el hook del apply). Aplica la ALLOWLIST
     ENTRY_FIELDS (claves fuera del contrato se descartan), el cap de `paths` y la
     retención MAX_ROWS en el mismo write (reescritura atómica). JAMÁS lanza al caller
-    del apply: eso lo garantiza el try/except del hook en api/devops.py."""
-    clean = _clean_entry(entry)
+    del apply: eso lo garantiza el try/except del hook en api/devops.py.
+
+    Plan 258 F1 — sellado DESPUÉS de `_clean_entry` (ver la nota de
+    `ci_run_ledger.append_run`): `_clean_entry` completa `applied_at` y
+    normaliza `paths` antes de que el portero valide."""
+    clean = stamp_event("env_applies", _clean_entry(entry))
+    if clean is None:
+        return                      # evento inválido: no se escribe, ya se logueó a error
     with _LOCK:
         rows = _read_rows()
         rows.append(clean)

@@ -52,7 +52,11 @@ def artifacts_root() -> Path:
 
 
 def _ledger_path() -> Path:
-    return data_dir() / "build_runs.jsonl"
+    # Plan 258 F1 — ruta decidida por el portero (aislada en test-mode). Este
+    # ledger es el que el v1 del plan NI SIQUIERA VIO: existía y estaba
+    # desprotegido. Por eso el guard de F7 vigila por glob, no por lista.
+    from services.ledger_writer import ledger_path
+    return ledger_path("build_runs", base=data_dir())
 
 
 # ── Registro en memoria ──────────────────────────────────────────────────────
@@ -227,9 +231,10 @@ def _append_ledger(build_id: str) -> None:
     try:
         with _LOCK:
             entry = dict(_BUILDS.get(build_id) or {})
-        path = _ledger_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps({
+        # Plan 258 F1 — sello de procedencia. La clave obligatoria de este ledger
+        # es `build_id` (NO `ts`: ese campo nunca existió acá).
+        from services.ledger_writer import stamp_event
+        sellado = stamp_event("build_runs", {
             "build_id": build_id,
             "mode": entry.get("mode"),
             "slugs": list(entry.get("slugs") or []),
@@ -237,7 +242,12 @@ def _append_ledger(build_id: str) -> None:
             "base_dir": entry.get("base_dir"),
             "zip_path": entry.get("zip_path"),
             "finished_at": entry.get("finished_at"),
-        }, ensure_ascii=False)
+        })
+        if sellado is None:
+            return
+        path = _ledger_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(sellado, ensure_ascii=False)
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(line + "\n")
     except Exception:  # noqa: BLE001

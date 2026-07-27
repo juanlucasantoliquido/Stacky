@@ -333,6 +333,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_LOG_THROTTLE_MAX_SIGNATURES", "STACKY_LOG_THROTTLE_FLUSH_S",
         "STACKY_LOG_SIZE_ROTATION_ENABLED", "STACKY_LOG_MAX_BYTES",
         "STACKY_LOG_MAX_PARTS_PER_DAY", "STACKY_LOG_RETENTION_DAYS",
+        # Plan 258 — telemetria veraz de los archivos de registro: esquema,
+        # procedencia, huerfanos de CI, limpieza asistida y estanqueidad.
+        "STACKY_LEDGER_STRICT_SCHEMA_ENABLED", "STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
+        "STACKY_LEDGER_TEST_MARKERS", "STACKY_LEDGER_ORPHAN_REPORT_ENABLED",
+        "STACKY_LEDGER_PURGE_ENABLED", "STACKY_HARNESS_AIRTIGHT_GUARD_ENABLED",
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -5357,6 +5362,86 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 257 - Tarjeta de solo lectura con las firmas que mas inundan el "
             "registro y cuantas se agruparon. Sale de memoria: no vuelve a leer ningun "
             "archivo y no borra los contadores."
+        ),
+        group="global",
+        default=True,
+    ),
+    # ── Plan 258 — telemetria veraz de los archivos de registro ──────────────
+    # 6 entradas. Medido antes del plan: 8 de 8 lineas de ci_runs.jsonl eran
+    # fixture de test y 10 de 10 de env_applies.jsonl las escribio pytest.
+    FlagSpec(
+        key="STACKY_LEDGER_STRICT_SCHEMA_ENABLED",
+        type="bool",
+        label="Rechazar los eventos incompletos de los archivos de registro",
+        description=(
+            "Plan 258 - Un evento al que le falta alguna clave obligatoria no se "
+            "escribe y queda anotado como error, en vez de entrar mutilado. Apagada, "
+            "el sello de procedencia se sigue poniendo pero no se rechaza nada."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
+        type="bool",
+        label="Deducir la procedencia de las lineas viejas sin marca",
+        description=(
+            "Plan 258 - Clasifica EN MEMORIA al leer las lineas anteriores al sello: "
+            "'test' solo si hay evidencia en un campo nombrado, si no 'unknown'. NUNCA "
+            "deduce 'prod' y NUNCA reescribe el archivo. Apagada, todo queda 'unknown'."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_LEDGER_TEST_MARKERS",
+        type="csv",
+        # SIN default= (no es booleana; el default EFECTIVO 'myproject' vive en
+        # config.py). Declararlo la meteria en el ratchet de defaults curados.
+        label="Nombres de proyecto que se consideran de prueba",
+        description=(
+            "Plan 258 - Lista separada por comas. Un proyecto REAL que se llame igual "
+            "que uno de prueba se saca de aca y deja de marcarse. Vaciarla desactiva "
+            "esa regla sin tocar codigo."
+        ),
+        group="global",
+        requires="STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_LEDGER_ORPHAN_REPORT_ENABLED",
+        type="bool",
+        label="Avisar de las corridas de CI reales que nunca cerraron",
+        description=(
+            "Plan 258 - Lista las corridas de produccion que se dispararon y jamas "
+            "reportaron desenlace. Solo cuenta 'prod': incluir las de prueba llenaria "
+            "el reporte de basura desde el minuto uno. Solo lectura."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_LEDGER_PURGE_ENABLED",
+        type="bool",
+        # SIN default=: nace APAGADA por la excepcion dura #2 (destructiva e
+        # irreversible). Por eso NO va a _CURATED_DEFAULTS_ON.
+        label="Permitir borrar las lineas de prueba de un archivo de registro",
+        description=(
+            "Plan 258 - APAGADA por default: es lo unico de este plan que borra datos. "
+            "Aun encendida exige pedirlo en modo real de forma explicita, una "
+            "confirmacion con el conteo a la vista y una copia previa. Nunca toca las "
+            "lineas de produccion ni las de procedencia desconocida."
+        ),
+        group="global",
+        requires="STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_HARNESS_AIRTIGHT_GUARD_ENABLED",
+        type="bool",
+        label="Verificar que las pruebas no toquen los archivos del operador",
+        description=(
+            "Plan 258 - Toma una huella de los archivos de datos antes y despues de "
+            "correr las pruebas y nombra cualquiera que haya cambiado. Solo compara: "
+            "no modifica nada. Cubre tambien los archivos que se agreguen en el futuro."
         ),
         group="global",
         default=True,

@@ -90,9 +90,15 @@ def test_kpi2_orden_y_limit(client, monkeypatch, _tmp_data_dir):
     from services.ci_run_ledger import append_run
 
     # Sembradas EN DESORDEN de archivo respecto a triggered_at.
-    append_run({"pipeline_id": "a", "triggered_at": "2021-01-01T00:00:00+00:00"})
-    append_run({"pipeline_id": "b", "triggered_at": "2023-01-01T00:00:00+00:00"})
-    append_run({"pipeline_id": "c", "triggered_at": "2022-01-01T00:00:00+00:00"})
+    # Plan 258 F1 — se agregan project/tracker_type: el portero de esquema los
+    # exige (el call-site real de api/ci.py:136 SIEMPRE los manda). Lo que este
+    # test verifica —el SORT descendente y el limit— no cambia.
+    append_run({"project": "P", "tracker_type": "gitlab",
+                "pipeline_id": "a", "triggered_at": "2021-01-01T00:00:00+00:00"})
+    append_run({"project": "P", "tracker_type": "gitlab",
+                "pipeline_id": "b", "triggered_at": "2023-01-01T00:00:00+00:00"})
+    append_run({"project": "P", "tracker_type": "gitlab",
+                "pipeline_id": "c", "triggered_at": "2022-01-01T00:00:00+00:00"})
 
     monkeypatch.setattr(config.config, "STACKY_CI_RUN_LEDGER_ENABLED", True)
     resp = client.get("/api/ci/runs")
@@ -109,7 +115,8 @@ def test_kpi2_orden_y_limit(client, monkeypatch, _tmp_data_dir):
 def test_limit_fuera_de_rango_clampa(_tmp_data_dir):
     from services.ci_run_ledger import append_run, list_runs, MAX_ROWS
 
-    append_run({"pipeline_id": "solo", "triggered_at": "2024-01-01T00:00:00+00:00"})
+    append_run({"project": "P", "tracker_type": "gitlab",     # plan 258 F1
+                "pipeline_id": "solo", "triggered_at": "2024-01-01T00:00:00+00:00"})
     assert len(list_runs(limit=0)) == 1        # 0 → clamp a 1
     assert len(list_runs(limit=-5)) == 1       # negativo → clamp a 1
     assert len(list_runs(limit=99999)) <= MAX_ROWS  # tope superior
@@ -126,6 +133,7 @@ def test_kpi3_retencion_500(_tmp_data_dir):
 
     for i in range(MAX_ROWS + 1):
         append_run({
+            "project": "P", "tracker_type": "gitlab",         # plan 258 F1
             "pipeline_id": str(i),
             "triggered_at": f"2024-01-01T00:00:{i % 60:02d}.{i:06d}+00:00",
         })
@@ -140,7 +148,8 @@ def test_kpi3_retencion_500(_tmp_data_dir):
 def test_allowlist_descarta_extras(_tmp_data_dir):
     from services.ci_run_ledger import append_run
 
-    append_run({"pipeline_id": "1", "password": "supersecret", "ref": "main"})
+    append_run({"project": "P", "tracker_type": "gitlab",     # plan 258 F1
+                "pipeline_id": "1", "password": "supersecret", "ref": "main"})
     text = (_tmp_data_dir / "ci_runs.jsonl").read_text(encoding="utf-8")
     assert "password" not in text
     assert "supersecret" not in text

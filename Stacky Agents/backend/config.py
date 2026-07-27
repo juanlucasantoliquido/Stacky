@@ -2101,4 +2101,37 @@ class Config:
         "STACKY_UI_LOG_NOISE_CARD_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 258 — Telemetria veraz de los ledgers JSONL ──────────────────────
+    # Los consumidores leen la INSTANCIA (`from config import config`), nunca el
+    # modulo: getattr sobre el modulo devolveria el default y mataria la rama OFF.
+    # Nunca `_env_bool`: esa funcion no existe en este archivo.
+    #
+    # Las 4 primeras nacen ON: validar un esquema no borra nada, etiquetar
+    # procedencia solo marca EN MEMORIA al leer (no reescribe el archivo),
+    # reportar huerfanos es read-only y el guard de estanqueidad solo huellea y
+    # compara. Ninguna cae en las 4 excepciones duras.
+    STACKY_LEDGER_STRICT_SCHEMA_ENABLED: bool = os.getenv(
+        "STACKY_LEDGER_STRICT_SCHEMA_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_LEDGER_LEGACY_INFERENCE_ENABLED: bool = os.getenv(
+        "STACKY_LEDGER_LEGACY_INFERENCE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_LEDGER_ORPHAN_REPORT_ENABLED: bool = os.getenv(
+        "STACKY_LEDGER_ORPHAN_REPORT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_HARNESS_AIRTIGHT_GUARD_ENABLED: bool = os.getenv(
+        "STACKY_HARNESS_AIRTIGHT_GUARD_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Proyectos que se consideran fixture de test al clasificar lineas viejas.
+    # Configurable para el caso borde de un proyecto real llamado `myproject`:
+    # vaciarla desactiva esa regla sin tocar codigo.
+    STACKY_LEDGER_TEST_MARKERS: str = os.getenv("STACKY_LEDGER_TEST_MARKERS", "myproject")
+    # Default OFF por EXCEPCION DURA #2 (destructiva/irreversible): es lo unico
+    # de este plan que borra lineas de un archivo del operador. Se prende desde
+    # la UI cuando el operador quiera limpiar, y aun encendida exige `dry_run`
+    # explicito en el cuerpo del pedido, confirmacion y copia previa.
+    STACKY_LEDGER_PURGE_ENABLED: bool = os.getenv(
+        "STACKY_LEDGER_PURGE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
 config = Config()

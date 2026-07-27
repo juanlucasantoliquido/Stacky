@@ -118,6 +118,12 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 258: la lista de nombres de prueba y la limpieza destructiva solo
+    # tienen efecto por el camino que abre la inferencia de procedencia (sin
+    # ella nada queda marcado como 'test', asi que no habria ni que filtrar ni
+    # que borrar). Profundidad 1: la madre no declara requires (R4).
+    "STACKY_LEDGER_TEST_MARKERS": "STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
+    "STACKY_LEDGER_PURGE_ENABLED": "STACKY_LEDGER_LEGACY_INFERENCE_ENABLED",
     # Plan 257: los parametros del agrupado de mensajes repetidos solo se leen
     # desde el camino que abre su master, y los de rotacion por tamano desde el
     # suyo. Profundidad 1: ninguno de los dos masters declara requires (R4).

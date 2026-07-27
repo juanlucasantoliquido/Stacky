@@ -5626,3 +5626,56 @@ export const IntakeQuarantine = {
       ...(confirmToken ? { confirm_token: confirmToken } : {}),
     }),
 };
+
+// ── Plan 258 F3/F4 — salud de los archivos de registro (READ-ONLY + limpieza) ─
+export type {
+  LedgerEnv,
+  LedgerHealthRow,
+  LedgerOrphan,
+  LedgerHealthPayload,
+} from "../components/ledgerHealthModel";
+
+export interface LedgerPurgeResult {
+  ok?: boolean;
+  ledger?: string;
+  total?: number;
+  deletable?: number;
+  kept?: number;
+  deleted?: number;
+  dry_run?: boolean;
+  backup?: string | null;
+  error?: string;
+  detail?: string;
+  message?: string;
+  confirm_token?: string | null;
+}
+
+export const Ledgers = {
+  /** Desglose por procedencia de cada archivo de registro + corridas sin cerrar.
+   *  Se usa `rawGet` porque `api.get` lanza en cualquier non-2xx y un panel de
+   *  diagnóstico no debe romperse por eso. */
+  health: async (): Promise<
+    import("../components/ledgerHealthModel").LedgerHealthPayload
+  > => {
+    const res = await rawGet<
+      import("../components/ledgerHealthModel").LedgerHealthPayload
+    >("/api/diag/ledgers/health");
+    return res.data ?? { ok: false, ledgers: [], orphans: [] };
+  },
+
+  /** Limpieza en DOS PASOS. Sin confirmación el servicio responde 409 con el
+   *  conteo exacto y una confirmación de un solo uso; recién el segundo pedido
+   *  borra. `rawPost` es obligatorio acá: ese 409 es el camino feliz del primer
+   *  paso, y `api.post` lo convertiría en excepción. */
+  purge: async (
+    ledger: string,
+    confirmToken: string | null
+  ): Promise<LedgerPurgeResult> => {
+    const res = await rawPost<LedgerPurgeResult>(
+      "/api/diag/ledgers/purge-test-lines",
+      { ledger, dry_run: false, confirm_token: confirmToken ?? "" }
+    );
+    if (res.ok && res.data) return res.data;
+    return (res.errorBody ?? {}) as LedgerPurgeResult;
+  },
+};

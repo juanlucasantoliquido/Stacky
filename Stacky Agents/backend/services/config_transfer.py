@@ -1031,7 +1031,12 @@ def _apply_ui_preferences(incoming: dict, *, overwrite: bool) -> None:
 # ── Auditoría ─────────────────────────────────────────────────────────────--
 
 def _events_path() -> Path:
-    return data_dir() / _EVENTS_FILENAME
+    # Plan 258 F1 — ruta decidida por el portero (aislada en test-mode).
+    # Este es el ledger LIMPIO de 444 líneas: migra ÚLTIMO y sirve de regresión.
+    # Si después de migrar sigue igual de limpio y sigue legible por default,
+    # la puerta está bien hecha.
+    from services.ledger_writer import ledger_path
+    return ledger_path("config_transfer_events", base=data_dir())
 
 
 def record_event(
@@ -1061,11 +1066,18 @@ def record_event(
         "sections": sections or [],
         "detail": detail or {},
     }
+    # Plan 258 F1 — sello de procedencia. OJO: este ledger YA usa
+    # `schema_version` para la versión del perfil del cliente; `stamp_event` solo
+    # la inyecta si FALTA, así que el valor del dominio nunca se pisa.
+    from services.ledger_writer import stamp_event
+    sellado = stamp_event("config_transfer_events", event)
+    if sellado is None:
+        return event
     path = _events_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event, ensure_ascii=False) + "\n")
-    return event
+        fh.write(json.dumps(sellado, ensure_ascii=False) + "\n")
+    return sellado
 
 
 def list_events(project: str | None = None, limit: int = 100) -> list[dict]:

@@ -1872,6 +1872,43 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el botón no aparece y la base nunca se comprime.",
         example="Como habilitar el botón de vaciar la papelera, que igual te pregunta antes de vaciarla.",
     ),
+    # ── Plan 258 — telemetría veraz de los archivos de registro ───────────
+    "STACKY_LEDGER_STRICT_SCHEMA_ENABLED": PlainHelp(
+        what="Revisa que cada anotación de los archivos de registro traiga los datos mínimos antes de guardarla.",
+        on_effect="Si la activás: una anotación a la que le falte un dato clave no se guarda y queda avisada como error, en vez de entrar incompleta.",
+        off_effect="Si la apagás: se guarda todo tal cual llega, aunque falten datos y después no se entienda a qué corrida corresponde.",
+        example="Como un formulario que no te deja enviarlo con el nombre vacío: mejor frenar ahí que descubrirlo seis meses después.",
+    ),
+    "STACKY_LEDGER_LEGACY_INFERENCE_ENABLED": PlainHelp(
+        what="Deduce si una anotación vieja la generó una prueba o una operación real, mirando datos que delatan una prueba.",
+        on_effect="Si la activás: al leer, cada anotación vieja queda etiquetada como de prueba o de origen desconocido. Los archivos NO se modifican.",
+        off_effect="Si la apagás: todas las anotaciones viejas quedan como de origen desconocido y nada se distingue.",
+        example="Nunca supone que algo es real sin pruebas: si no hay evidencia, dice «no sé». Inventar el origen sería el mismo problema que vino a resolver.",
+    ),
+    "STACKY_LEDGER_TEST_MARKERS": PlainHelp(
+        what="Los nombres de proyecto que se consideran de prueba, separados por comas, al clasificar anotaciones viejas.",
+        on_effect="Si agregás un nombre: las anotaciones de ese proyecto pasan a contarse como de prueba y se pueden limpiar.",
+        off_effect="Si lo dejás vacío: nadie se marca por el nombre del proyecto. Útil si tu proyecto real se llama igual que uno de ejemplo.",
+        example="Se midió un archivo con ocho anotaciones y las ocho eran de un proyecto de ejemplo llamado «myproject». Ninguna era real.",
+    ),
+    "STACKY_LEDGER_ORPHAN_REPORT_ENABLED": PlainHelp(
+        what="Avisa cuáles integraciones continuas reales se lanzaron y nunca informaron cómo terminaron.",
+        on_effect="Si la activás: el panel de diagnóstico lista esas corridas con cuántas horas llevan sin desenlace, en vez de que desaparezcan.",
+        off_effect="Si la apagás: nadie las lista y una corrida puede quedar sin cierre para siempre sin que aparezca en ningún lado.",
+        example="Solo cuenta las reales: incluir las de prueba llenaría la lista de basura desde el primer día y nadie volvería a mirarla.",
+    ),
+    "STACKY_LEDGER_PURGE_ENABLED": PlainHelp(
+        what="Habilita el botón que borra de un archivo de registro las anotaciones que dejaron las pruebas.",
+        on_effect="Si la activás: aparece el botón. Nada se borra hasta que confirmes viendo el número exacto, y siempre se guarda una copia antes.",
+        off_effect="Si la apagás: el botón no aparece y no se borra nada. Es lo que viene de fábrica, porque borrar no se deshace.",
+        example="Como el botón de vaciar la papelera: te muestra cuántos elementos son, te pregunta, y guarda una copia por las dudas.",
+    ),
+    "STACKY_HARNESS_AIRTIGHT_GUARD_ENABLED": PlainHelp(
+        what="Comprueba que correr las pruebas no cambie ni uno de tus archivos de datos reales.",
+        on_effect="Si la activás: se toma una foto de tus archivos antes y después, y si alguno cambió te dice cuál y cuánto creció.",
+        off_effect="Si la apagás: nadie comprueba nada y una prueba puede ensuciar tus datos durante meses sin que te enteres.",
+        example="Un archivo de diez anotaciones tenía las diez escritas por una prueba. Con esta comprobación se habría visto el primer día.",
+    ),
 }
 
 

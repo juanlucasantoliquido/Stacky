@@ -761,6 +761,31 @@
           "stacky-junio.log"
         ]
       }
+    },
+    {
+      "id": "ledger_del_operador_escrito_por_un_test",
+      "title": "Una corrida de tests escribio en un archivo de registro del operador",
+      "class": "test-contamination",
+      "status": "resolved",
+      "log_pattern": "\\[airtight\\] FALLA: la corrida modifico \\d+ artefacto",
+      "log_guarded": false,
+      "killed_by": "plan 258 F1 (ledger_path aisla la ruta en test-mode) + F7 (guard de estanqueidad del arnes)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan258_estanqueidad_arnes.py",
+      "evidence": "backend/services/ledger_writer.py (ledger_path devuelve stacky-test-ledgers/ cuando el data_dir resuelto es el del operador); backend/scripts/airtight_snapshot.py (--save/--verify por sha256 sobre WATCHED_GLOBS); medido antes del plan: data/ci_runs.jsonl 8 de 8 lineas con project=myproject y data/env_applies.jsonl 10 de 10 con root bajo el tmpdir de pytest",
+      "note": "log_guarded=false A PROPOSITO: la condicion es de SISTEMA DE ARCHIVOS (un .jsonl/.log/.db del operador cambio de sha256 durante una corrida de tests) y scan_text solo mira el TEXTO del log. El guard real es el ciclo airtight_snapshot --save / arnes / --verify, que sale en codigo 1 y NOMBRA cada artefacto con su delta de bytes. El log_pattern huellea la linea que ese guard emite cuando falla, para que tambien se detecte si quedo capturada en un log. Perseguir la contaminacion marcador por marcador (myproject, newsha, el tmpdir de pytest) no escala: build_runs.jsonl aparecio y estuvo desprotegido sin que nadie lo notara; el glob los cubre a todos, presentes y futuros.",
+      "self_test": {
+        "matches": [
+          "[airtight] FALLA: la corrida modifico 3 artefacto(s) del operador:",
+          "[airtight] FALLA: la corrida modifico 1 artefacto(s) del operador:"
+        ],
+        "clean": [
+          "[airtight] OK: la corrida fue ESTANCA (152 artefactos vigilados).",
+          "[airtight] huella guardada: 152 artefactos",
+          "otro-archivo.txt"
+        ]
+      }
     }
   ]
 }

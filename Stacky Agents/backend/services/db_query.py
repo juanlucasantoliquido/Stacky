@@ -159,7 +159,10 @@ def validate_select_only(sql: Any) -> QueryValidation:
 
 
 def _audit_path() -> Path:
-    return data_dir() / _AUDIT_FILENAME
+    # Plan 258 F1 — la ruta la decide el portero: en test-mode se aísla y jamás
+    # cae en backend/data/. El `open(..., "a")` de abajo NO se toca.
+    from services.ledger_writer import ledger_path
+    return ledger_path("db_query_audit", base=data_dir())
 
 
 def record_audit_event(
@@ -184,11 +187,19 @@ def record_audit_event(
         "query": query[:8192],  # nunca loggear más de 8KB para no inflar el jsonl
         "detail": detail or {},
     }
+    # Plan 258 F1 — sello de procedencia + validación de esquema. Este writer NO
+    # tiene allowlist (escribe el dict completo), así que `env` sobrevive sin
+    # tocar nada más. Si el portero rechaza, no se escribe: se devuelve el evento
+    # sin sellar para no romper al llamador, que ya lo tiene en la mano.
+    from services.ledger_writer import stamp_event
+    sellado = stamp_event("db_query_audit", event)
+    if sellado is None:
+        return event
     path = _audit_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event, ensure_ascii=False) + "\n")
-    return event
+        fh.write(json.dumps(sellado, ensure_ascii=False) + "\n")
+    return sellado
 
 
 def _resolve_db_readonly(project_name: str) -> dict:

@@ -1,6 +1,20 @@
 # Plan 119 — Rediseño visual minimalista y profesional del dashboard DevOps
 
-> **Estado:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-14
+> **Estado:** **IMPLEMENTADO** — F0..F5 (commit `9ff52c65`, mergeado en `b0c75b03` + fix `ac1f5661`).
+> Auditoría solo-lectura 2026-07-26 (supervisar-implementaciones-planes), evidencia contra código:
+> flag end-to-end `config.py:1584` → `harness_flags.py:257,3848` → `harness_flags_help.py:1390` →
+> `api/devops.py:64` (`ui_v2_enabled`) → `DevOpsPage.tsx:48,426` (`uiV2`, NO inerte);
+> `DevOpsPage.module.css`, `devops/ServersTable.module.css`, `pages/devopsShell.ts`,
+> `components/devops/serversTable.ts` existen; C1 preservado (`DevOpsPage.tsx:489` —
+> `ConnectionHealthStrip` sin gatear por `uiV2`). Tests corridos de verdad:
+> `test_plan119_devops_ui_v2_flag.py` **5 passed**; vitest `devopsShell.test.ts` +
+> `DevOpsShellV2Regression.test.ts` + `serversTable.test.ts` + `DevOpsPage.test.ts` +
+> `ServersSection.test.ts` = **5 files / 40 tests passed**; `npx tsc --noEmit` exit 0.
+> **NO quedó obsoleto por el plan 239:** el 239 (cockpit DevOps) se construyó ENCIMA de este shell —
+> su commit `511f2c87` edita `test_plan119_devops_ui_v2_flag.py`, `DevOpsHeaderV2.tsx`,
+> `DevOpsPage.module.css` y `ServersTable.module.css`. Pendiente único: el checklist visual manual de F5
+> (no automatizable: `@testing-library/react`/`jsdom` no están instalados).
+> **Estado previo:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-14
 > **Autor:** StackyArchitectaUltraEficientCode
 > **Pipeline:** `proponer` (v1, 2026-07-10) → `criticar-y-mejorar-plan` (v2, este documento, 2026-07-14) → sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Serie:** pulido profesional del dashboard DevOps. COMPLEMENTA al plan 116 (que ya proponía

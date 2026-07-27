@@ -1,7 +1,92 @@
 # Plan 265 — La consola como experiencia principal: pantalla completa sobre la MISMA sesión, con contexto de repo, diffs y auditoría
 
-**Estado:** MEJORADO **v1 -> v2** (2026-07-27) · **Autor v1:** pipeline `proponer-plan-stacky` · **Juez v2:** `criticar-y-mejorar-plan` (StackyArchitectaUltraEficientCode)
-**Veredicto del v1:** **RECHAZADO** (5 BLOQUEANTES). Este documento es el v2 con los fixes aplicados.
+**Estado:** MEJORADO **v2 -> v3** (2026-07-27) · **Autor v1:** pipeline `proponer-plan-stacky` · **Juez v2:** `criticar-y-mejorar-plan` (misma corrida que el v1) · **Juez v3:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE (StackyArchitectaUltraEficientCode)
+**Veredicto del v1:** **RECHAZADO** (5 BLOQUEANTES). **Veredicto del v2:** **RECHAZADO** (5 BLOQUEANTES nuevos).
+Este documento es el **v3** con los fixes de las dos rondas aplicados.
+
+> **Por qué hubo una tercera ronda.** El v2 lo produjo el **mismo agente y la misma corrida** que escribió el v1:
+> no fue revisión independiente. La ronda v3 abrió **cada archivo citado** y verificó línea por línea. Resultado:
+> los 16 anclajes que el v2 arregló **verifican**, pero aparecieron **5 anclajes nuevos que NO verifican**, tres de
+> ellos con consecuencia directa (cablear la consola al endpoint equivocado, un comando de aceptación que no puede
+> salir verde, y un atajo muerto). La lección operativa está escrita en §4.ter.
+
+---
+
+## CHANGELOG v2 -> v3 (ronda independiente)
+
+- **D1 (BLOQ.)** — **`Executions.cancel` NO está en `api/endpoints.ts:1135`.** Esa línea es **`Agents.cancel`**,
+  otra función, de otro objeto, que pega en **`POST /api/agents/cancel/<id>`** (`backend/api/agents.py:1434-1436`):
+  llama `agent_runner.cancel()` y devuelve `{"ok": True}` **sin gate de estado, sin 409 y sin matar el subproceso
+  de Codex ni de Claude**. El `Executions.cancel` real vive en **`api/endpoints.ts:1394`** (el objeto
+  `export const Executions = {` abre en `:1326`). Toda F3 —el reuso, el "Gotcha del 409" y `CANCELLABLE_STATUSES`
+  como "espejo exacto de `api/executions.py:616`"— colgaba del anclaje equivocado. **Fix:** F3 v3 ancla `:1394`,
+  **prohíbe** explícitamente `Agents.cancel` y agrega el test 11 que lo verifica leyendo el archivo.
+- **D2 (BLOQ.)** — **El comando "dirigido y binario" de F0.8 (y el #6 de los 19 de F8) ya sale ROJO hoy.**
+  Medido en esta ronda: `pytest backend/tests/test_harness_flags_help.py -q` ⇒ **4 failed, 4 passed**. De los 5
+  tests que selecciona el `-k` del v2, **4 fallan por deuda ajena** (`covers_all` con **79 keys** del registry sin
+  ayuda; `bounded` con `STACKY_DEVOPS_COCKPIT_ENABLED: on_effect > 240 chars` = 316; `start_with_si`; `jargon` con
+  15 violaciones). El DoD decía "**19 comandos exit 0**": **insatisfacible**. **Fix:** F0.8 v3 pega la **lista
+  medida** de fallos previos como baseline y reemplaza el gate por una comprobación que mira **sólo las 4 keys
+  nuevas**, con su propio comando y su propio exit 0.
+- **D3 (BLOQ.)** — **El atajo `Escape` del registro está MUERTO con foco en la caja de búsqueda:** es el mismo bug
+  que el v2 diagnosticó para `Enter` (C9) y dejó en pie para `Escape`. Medido: `shortcuts.ts:125`
+  (`if (ctx.editable && !comboAllowedInEditable(d.combo)) return false;`) + `comboAllowedInEditable` (`:108-111`)
+  ⇒ `parseCombo("Escape").ctrl === false`. El plan manda `Ctrl+Shift+F` a poner el foco **en ese input** y después
+  registra `Escape` global para salir. Los tests 6/7/8 del v2 prueban `shouldHandleEscape`, una función pura que
+  **nunca ve** `comboAllowedInEditable`: **verdes con el atajo muerto**. **Fix:** `Escape` baja a `onKeyDown` local
+  (como `Enter`) y nace el **ratchet de atajos muertos** (F6 test 9), que mata la clase de bug entera.
+- **D4 (BLOQ.)** — **`detectCollisions` particiona por `scope`: el "gate binario y automático" de F6 es ciego.**
+  Medido: `shortcuts.ts:143` arma la clave como `` `${parseCombo(d.combo).key}|${d.combo.toLowerCase()}|${d.scope}` ``.
+  Un `Escape` `scope:"global"` y el `Escape` de `LIST_NAV_DISPLAY_DEFS` `scope:"page"` (`:230`) **nunca colisionan**
+  para esa función, y el diálogo canónico (`components/ui/dialogKeyboard.ts`) **no está en ninguno de los 3 arrays**.
+  R5 apoyaba una mitigación de riesgo **Alto** en un gate que no puede disparar. **Fix:** test 3-bis que agrupa por
+  **combo solo** (ignorando `scope`) y exige que todo duplicado cross-scope figure en un mapa congelado con su
+  resolución escrita.
+- **D5 (BLOQ.)** — **F1 rompe `tsc` siguiendo el plan al pie de la letra.** `store/workbenchPure.ts:9-13` declara
+  `export interface WorkbenchPersistV3` con **3 campos** y `:24` la usa como **tipo de retorno** de
+  `migrateWorkbenchPersist`. El v2 mandaba agregar `codexConsolePresentation` al objeto **leído** (`prev`) y al
+  **retorno**, y **nunca** decía tocar la interfaz: un object literal con propiedad de más contra un tipo declarado
+  es **TS2353**. El criterio de F1 era "`tsc` exit 0". **Fix:** F1 v3 trae el bloque literal de
+  `WorkbenchPersistV4` y qué hacer con el nombre viejo.
+- **D6 (IMP.)** — **`GET /api/executions/history` devuelve 404 con `STACKY_EXECUTION_HISTORY_ENABLED` OFF**
+  (`api/executions.py:459-461`), y `api.get` **lanza** ante non-2xx. El v2 cuidó el 409 de F3 y olvidó este 404 en
+  F5(b), donde sólo decía "ya existente". Es una flag real y apagable (`harness_flags.py:1896`). **Fix:** F5(b) v3
+  declara la degradación, usa `rawGet` y suma el caso al test.
+- **D7 (IMP.)** — **Frontera no declarada con el Plan 267**, que crea el catálogo único de acciones DevOps sobre
+  **esta misma superficie** (su F6 se llama "la consola de acciones del agente") y dice textualmente
+  *"**Prohibido** crear un segundo mecanismo de confirmación"* usando `confirmGateway`
+  (existe hoy en `frontend/src/services/entityActions.ts`). §4.bis del v2 sólo cubría 260/263/264. **Fix:** §4.bis
+  v3 agrega la fila del 267 con el reparto explícito de contratos.
+- **D8 (IMP.)** — **`shouldHandleEscape(dialogOpen)` reinventa lo que el registro ya hace y el v2 nunca dijo de
+  dónde sale ese booleano.** Medido: `shortcuts.ts:41` (`dialogOpen: boolean` en el contexto), `:124`
+  (`if (ctx.dialogOpen && !d.allowInDialog) return false;`) y `ShortcutDef:38-39` ("Por default un atajo NO dispara
+  con un diálogo abierto"). **Fix:** la guarda de diálogo la da el registro; `shouldHandleEscape` decide **sólo**
+  por `presentation`.
+- **D9 (IMP.)** — **`Ctrl+\`` es un combo riesgoso en el teclado del operador.** `parseCombo` compara
+  `normalizeKey(ev.key)`; en layouts español (es-AR/es-ES, que es lo que corre esta máquina) la backtick es **tecla
+  muerta** y `ev.key` puede no ser `` "`" ``. **Fix:** el combo pasa a `Ctrl+Shift+Enter`, alfanumérico e
+  inequívoco en cualquier layout, y el smoke lo mide.
+- **D10 (IMP.)** — **F0.6 citaba las reglas de `PlainHelp` incompletas.** Faltaban `what >= 10`, `what <= 200` y
+  `example <= 300` (`tests/test_harness_flags_help.py:47-51`), no decía que la `JARGON_DENYLIST` vive en
+  **`backend/tests/test_harness_flags_help.py:17`** (no en el módulo de servicio) y no decía que el match es
+  `\b{term}s?\b` — **plural opcional**: "token" y "tokens" caen igual. Las 4 entradas del v2 cumplen (verificadas
+  una por una en esta ronda), pero un modelo menor que reescriba una se estrella. **Fix:** reglas completas.
+- **D11 (IMP.)** — **`_CATEGORY_KEYS["interfaz_ui"]` cierra en `:477`, y el `),` siguiente (`:484`) es de OTRA
+  categoría** (`"paridad_proveedores"`, que abre en `:478`). El v2 decía "al final, antes del `),` de cierre" sin
+  línea. Un modelo menor que scrollee de más mete las 4 keys en la categoría equivocada y
+  `test_every_registry_flag_is_categorized` **sigue verde**: falso verde de categorización. **Fix:** línea pinneada.
+- **D12 (IMP.)** — **"La MISMA sesión" es la tesis del plan y su único guardián era un humano contando líneas.**
+  KPI-2 se verificaba en el paso 2 del smoke manual. **Fix:** **[ADICIÓN ARQUITECTO] F1.5** convierte el invariante
+  en un gate automático.
+- **D13 (MENOR)** — Anclas con deriva (verificadas): `CORE_SHORTCUT_DEFS` es **`:191-221`** (el v2 decía `:191-224`);
+  `LIST_NAV_DISPLAY_DEFS` es **`:225-232`** (decía `:225-231`); el botón "Reintentar" del dock es **`:235-237`**
+  (decía `:234-237`). **Fix:** corregidas.
+- **D14 (MENOR)** — Sin frontera declarada con el **Plan 239** (Cockpit DevOps, **IMPLEMENTADO**). Verificado en
+  esta ronda: el 239 **no** construye pantalla completa de consola ⇒ **no hay scope creep**, pero la ausencia de la
+  declaración obliga a re-verificarlo. **Fix:** §4.bis lo declara con el resultado ya medido.
+- **[ADICIÓN ARQUITECTO] F1.5** — `consoleSession.ts`: la identidad de sesión como **invariante ejecutable**.
+- **[ADICIÓN ARQUITECTO] F6 test 9** — **ratchet de atajos muertos**: ningún combo de la consola puede prometer
+  funcionar con foco en un input si `comboAllowedInEditable` lo bloquea. Mata la clase de bug de C9 y D3 de raíz.
 
 ---
 
@@ -87,7 +172,7 @@ Lo que falta es que **sea una superficie de trabajo y no un cajón**:
 | Copiar comando | No hay ningún botón de copia en el dock, pese a existir `services/copyService.ts` (Plan 194). |
 | Cancelar / volver a lanzar desde la consola | El endpoint existe (`api/executions.py:603`) y `ActiveRunsPanel.tsx:57-58` ya lo llama; **el dock no**. |
 | Búsqueda en la conversación | Ninguna. |
-| Historial de sesiones | `api/executions.py:442 /history` existe; la consola no lo consume. |
+| Historial de sesiones | `api/executions.py:442 /history` existe; la consola no lo consume. **Ojo (D6): está gateado — `:459-461` devuelve 404 `feature_disabled` si `STACKY_EXECUTION_HISTORY_ENABLED` está OFF.** |
 | Archivos modificados y diffs | `api/git.py` tiene **26 líneas** y sólo expone `/file-context` y `/context-block`. **No existe `/status` ni `/diff`: este plan los CREA.** |
 | Modelo/effort activos a la vista | El trace se persiste (`claude_code_cli_runner.py:543`), la consola no lo muestra. |
 | Atajos de teclado propios | Existe el registro (`services/shortcuts.ts`, `hooks/useShortcut.ts:15`, `components/ShortcutsCheatsheet.tsx`); la consola no registra ninguno. |
@@ -131,7 +216,8 @@ Esta lista **es** el KPI-3. No hay otra. Un implementador marca 20/20 tildando e
 | 20 | Atajos propios documentados en la ayuda existente | falta | F6 |
 
 Garantías transversales (no cuentan como capacidad, pero son DoD): líneas descartadas (`dropped`) a la vista,
-bitácora de acciones (F7), enmascarado de secretos (F4.5), matriz de capacidades por runtime (F2.5).
+bitácora de acciones (F7), enmascarado de secretos (F4.5), matriz de capacidades por runtime (F2.5),
+**identidad de sesión como invariante ejecutable (F1.5)** y **ratchet de atajos muertos (F6 test 9)**.
 
 ---
 
@@ -188,8 +274,9 @@ el ring-buffer y desincronizaría el scroll.
    `frontend/package.json:14,19,20` ⇒ **cero dependencias nuevas**. Se reusan además:
    `services/copyService.ts` (194), `services/shortcuts.ts` + `hooks/useShortcut.ts` (172),
    `useConfirm()` de `components/ui/index.ts:46` (164), `components/ModelDecisionChip.tsx` (212),
-   `api/endpoints.ts:1135` `Executions.cancel`, `services/git_context.py:60` `_git()`, y el patrón de subproceso
-   de `services/plans_board.py:665-681`.
+   **`api/endpoints.ts:1394` `Executions.cancel`** (D1 — **no** el `:1135`, que es `Agents.cancel`, otra función
+   y otro endpoint: ver el aviso al principio de F3), `utils/loadError.ts` `formatLoadErrorMessage`,
+   `services/git_context.py:60` `_git()`, y el patrón de subproceso de `services/plans_board.py:665-681`.
 
 ---
 
@@ -209,7 +296,7 @@ el ring-buffer y desincronizaría el scroll.
 
 ---
 
-## 4.bis Frontera con los planes hermanos 260, 263 y 264 (C15)
+## 4.bis Frontera con los planes hermanos 239, 260, 263, 264 y 267 (C15, D7, D14)
 
 Los 4 planes de esta tanda editan los mismos archivos de registro. Git hace 3-way merge **sin marcar conflicto**
 cuando dos ramas agregan la misma línea de cierre a una estructura existente: el resultado es un duplicado
@@ -223,9 +310,33 @@ silencioso. Reglas de convivencia de **este** plan:
 | `backend/tests/test_harness_flags_requires.py` | 3 aristas en `_REQUIRES_MAP_FROZEN` | Bloque contiguo al final del dict, con comentario `# Plan 265`. |
 | `backend/services/harness_flags_help.py` | 4 entradas `PLAIN_HELP` | Bloque contiguo al final del dict. |
 | `backend/scripts/run_harness_tests.sh` **y** `.ps1` | 2 archivos de test | Al final de la lista, en el orden `git_readonly`, `console_audit`. **Sintaxis distinta en cada archivo** (array bash vs array PowerShell con comas): no copies una en la otra. |
-| `frontend/src/api/endpoints.ts` | 2 lecturas nuevas (`GitReadonly.status`, `GitReadonly.diff`) + 1 (`Console.audit`) | Objeto exportado **nuevo** (`GitReadonly`), no se toca ningún objeto existente. |
+| `frontend/src/api/endpoints.ts` | 2 lecturas nuevas (`GitReadonly.status`, `GitReadonly.diff`) + 1 (`Console.audit`) | Objeto exportado **nuevo** (`GitReadonly`), no se toca ningún objeto existente. **No se toca `Agents` (`:1120-1140`) ni `Executions` (`:1326`+)**: sólo se **consume** `Executions.cancel` (`:1394`). |
 
 **Dependencias cruzadas declaradas:**
+
+- **265 ↔ 239 — Cockpit DevOps, ya IMPLEMENTADO (D14).** Verificado en la ronda v3 abriendo el documento del 239:
+  su alcance es el **rediseño de UX/UI y arquitectura de la información del panel DevOps** (F0..F8, construidas), y
+  **no** construye una presentación a pantalla completa de la consola de corridas. **No hay solapamiento ni scope
+  creep.** Regla: el 265 **no toca ningún archivo del panel DevOps**; su superficie es `CodexConsoleDock` y los
+  servicios `.ts` nuevos. Si al implementar aparece la tentación de "aprovechar y retocar el cockpit", **rechazarla**:
+  eso es alcance del 239 y ya está hecho.
+- **265 ↔ 267 — el contrato de confirmación (D7). Frontera dura, leerla antes de escribir F3.** El 267 crea el
+  **Catálogo único de acciones DevOps** con "tres superficies y **un solo** contrato de confirmación", su F6 se
+  llama textualmente *"la consola de acciones del agente (propuesta → confirmación → recibo)"* y su §Reuso dice
+  *"**Prohibido** crear un segundo mecanismo de confirmación"*, apoyándose en `confirmGateway`, que **ya existe**
+  en `frontend/src/services/entityActions.ts`. El 265 confirma con `useConfirm()`. **No es contradicción si y sólo
+  si el reparto queda escrito, y este es el reparto acordado:**
+
+  | Eje | Quién manda | Mecanismo | Por qué |
+  |---|---|---|---|
+  | Acciones sobre **la corrida** (cancelar, volver a lanzar) | **265** | `useConfirm()` (diálogo canónico, Plan 164) | Es exactamente lo que ya hace `ActiveRunsPanel.tsx:33,:153` para la misma acción sobre la misma entidad. Usar otro mecanismo para cancelar sería **el** segundo mecanismo. |
+  | Acciones **DevOps** (deploy, rollback, variables, pipelines) | **267** | `confirmGateway` + catálogo | El 265 **no declara ni ejecuta ninguna acción DevOps**. |
+
+  Regla operativa: **el 265 no agrega ni una sola entrada al catálogo del 267 y no importa `entityActions.ts`.**
+  Si el 267 se implementa después y decide absorber "cancelar corrida" en su catálogo, el punto de absorción es
+  `services/consoleActions.ts` (F3), que es **puro y de una sola responsabilidad** justamente para que ese
+  reemplazo sea un cambio de una capa y no una cirugía. Frontera: **cero líneas de `services/entityActions.ts` en
+  el diff del 265.**
 
 - **265 ↔ 263 — `backend/services/plans_board.py`.** El 263 lo reescribe. **El 265 NO lo edita**: sólo **copia** el
   patrón de subproceso de `:665-681` y la constante `_GIT_TIMEOUT_SEC = 5` de `:644` hacia su propio módulo nuevo
@@ -248,6 +359,35 @@ silencioso. Reglas de convivencia de **este** plan:
 minimiza el rebase. Tras **cada** merge: `python -m compileall backend/api backend/services` +
 `npx tsc --noEmit` + `pytest tests/test_harness_flags.py tests/test_harness_flags_requires.py` **por archivo**,
 para atrapar el duplicado silencioso.
+
+---
+
+## 4.ter Cómo se leen los `archivo:línea` de este documento (D1..D14)
+
+Este plan pasó por **dos** rondas de crítica. La segunda encontró que **un anclaje puede estar en la línea correcta
+y aun así ser falso**, porque la línea contiene un símbolo con el **nombre correcto** y la **semántica equivocada**.
+Es lo que pasó con `Executions.cancel` (D1): en `api/endpoints.ts:1135` hay, literalmente, un `cancel:` — pero es
+`Agents.cancel`, y pega en otro endpoint sin gate de 409.
+
+**Regla para el implementador, no negociable:**
+
+1. Antes de usar un anclaje, **abrilo y leé el símbolo contenedor**, no sólo la línea. Un `cancel:` suelto no dice
+   de qué objeto es.
+2. Si el plan dice que una función pega en un endpoint, **seguí la URL literal** hasta la ruta de Flask y confirmá
+   que el `@bp.<verbo>` y el `url_prefix` del blueprint coinciden.
+3. Si un anclaje **no verifica**, **parás y lo reportás en el registro de implementación**. Está explícitamente
+   permitido y es lo esperado. **Prohibido** "arreglarlo por tu cuenta" adivinando qué quiso decir el plan: eso es
+   exactamente cómo el v2 llegó a mandar la consola al endpoint equivocado.
+4. Las líneas derivan con cada commit. Si el número no coincide pero el **símbolo** es inequívoco y único en el
+   archivo, seguí con el símbolo y anotá la deriva. Si el símbolo tampoco está, aplicá el punto 3.
+
+**Anclajes verificados en la ronda v3** (abiertos uno por uno, 2026-07-27): los seis lugares de flags, los tres
+`cancel` de runtime, `api/executions.py:603/616/628-640/442/459-461`, `api/git.py` (26 líneas, sin `/status` ni
+`/diff`), `git_context.py:60`, `plans_board.py:644/665-681`, `models.py:331`, `workbench.ts:10-11/148-152`,
+`workbenchPure.ts:7/9-13/21/41`, `shortcuts.ts:13/14/24-37/108-111/124/125/139/143/161/191/225/278`,
+`ActiveRunsPanel.tsx:33/58/153/179`, `ui/index.ts:46`, `endpoints.ts:1/1326/1394`, `package.json:14/19/20`,
+`ChatDrawer.tsx:10`, `CodexConsoleDock.tsx` (328 líneas), `App.tsx:520/254`, `useExecutionStream.ts:12/23-24`,
+`error_fingerprints.json` (`schema_version: 1`, campos `log_pattern`/`killed_by`/`guard_test`).
 
 ---
 
@@ -353,9 +493,17 @@ para atrapar el duplicado silencioso.
 > `requires`, la cadena tendría profundidad 2 y violaría **R4** (profundidad 1), que
 > `tests/test_harness_flags_requires.py` verifica. Las 3 hijas apuntan **todas al master**, nunca entre sí.
 
-#### F0.3 — `backend/services/harness_flags.py`, `_CATEGORY_KEYS` (C2)
+#### F0.3 — `backend/services/harness_flags.py`, `_CATEGORY_KEYS` (C2, D11)
 
-En la tupla `"interfaz_ui"` (abre en `:460`), **al final**, antes del `),` de cierre:
+> **Trampa medida (D11): la tupla `"interfaz_ui"` abre en `:460` y CIERRA EN `:477`.** El `),` que viene después
+> (**`:484`**) **no es el suyo**: es el de `"paridad_proveedores"`, que abre en `:478`. Si metés las 4 keys ahí,
+> `test_every_registry_flag_is_categorized` **sigue VERDE** (la key está categorizada... en la categoría
+> equivocada) y la consola aparece bajo "Paridad de proveedores" en la UI de flags. Falso verde perfecto.
+> **Confirmá antes de escribir:** la última línea de `interfaz_ui` hoy es
+> `"STACKY_UI_LOG_NOISE_CARD_ENABLED",  # Plan 257 — tarjeta de firmas de log mas repetidas` (`:476`), y la
+> siguiente es el `    ),` de `:477`. Insertá **entre esas dos**.
+
+En la tupla `"interfaz_ui"` (abre en `:460`), **al final**, inmediatamente antes del `),` de **`:477`**:
 
 ```python
         "STACKY_CONSOLE_FULLSCREEN_ENABLED",    # Plan 265 — consola en pantalla completa
@@ -406,20 +554,38 @@ Al final del dict, antes del `}`:
 > Si esto falta, `test_requires_map_is_frozen` (`:312`) sale **ROJO** con "Drift detectado en el mapa `requires` /
 > Extras: [...]". Es igualdad exacta de dicts.
 
-#### F0.6 — `backend/services/harness_flags_help.py`, `PLAIN_HELP` (C4)
+#### F0.6 — `backend/services/harness_flags_help.py`, `PLAIN_HELP` (C4, D10)
 
-**Obligatorio al 100%:** `test_plain_help_covers_all_registry_keys` exige una entrada por cada key del registry, y
-`test_plain_help_has_no_orphan_keys` exige que no sobre ninguna. Reglas del contenido, todas verificadas por test:
+`test_plain_help_covers_all_registry_keys` exige una entrada por cada key del registry, y
+`test_plain_help_has_no_orphan_keys` exige que no sobre ninguna.
 
-- `on_effect` y `off_effect` **empiezan con `"Si "`** y miden **≤ 240 caracteres**.
-- Los 4 campos (`what`, `on_effect`, `off_effect`, `example`) son **no vacíos** y **no** pueden contener ninguna
-  palabra de la `JARGON_DENYLIST` **congelada**: `MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt,
-  token, regex, backend, frontend, gate, hook, runtime`.
-- No pueden contener una key en MAYÚSCULAS-CON-GUION-BAJO (regex `\b[A-Z]+_[A-Z0-9_]+\b`) ni una referencia a fase
-  de plan (regex `\bF\d`). **Decí "Plan 265", nunca "F4"; decí "herramienta", nunca la palabra prohibida para el
-  motor que corre.**
+> **Dónde vive el contrato (D10):** las reglas y la denylist **no están en el módulo de servicio**. Viven en
+> **`Stacky Agents/backend/tests/test_harness_flags_help.py`**: `JARGON_DENYLIST` en **`:17-20`**, `_KEY_RE` en
+> **`:22`**, `_PHASE_RE` en **`:23`**, y las cotas en **`:47-51`**. Leelo antes de escribir texto.
 
-Entradas a agregar, ya validadas contra esas reglas (usalas tal cual):
+**Las reglas COMPLETAS (el v2 citaba sólo 3 de 6) — todas verificadas por test:**
+
+| Regla | Campo | Test |
+|---|---|---|
+| `len(what.strip()) >= 10` | `what` | `:47` |
+| `len(what) <= 200` | `what` | `:48` |
+| `len(on_effect) <= 240` | `on_effect` | `:49` |
+| `len(off_effect) <= 240` | `off_effect` | `:50` |
+| `len(example) <= 300` | `example` | `:51` |
+| los 4 campos **no vacíos** | todos | `:52-53` |
+| **empieza con `"Si "`** | `on_effect` **y** `off_effect` | `:59-60` |
+| sin jerga de la denylist | todos | `:63-76` |
+| sin key `SCREAMING_SNAKE` (`\b[A-Z]+_[A-Z0-9_]+\b`) | todos | `:72-73` |
+| sin referencia a fase (`\bF\d`) | todos | `:74-75` |
+
+- `JARGON_DENYLIST` **congelada**: `MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex,
+  backend, frontend, gate, hook, runtime`.
+- **El match es `\b{term}s?\b`, case-insensitive: el PLURAL cae igual (D10).** "token" **y** "tokens" están
+  prohibidos; "gate" **y** "gates"; "hook" **y** "hooks". No lo pluralices para escaparte.
+- **Decí "Plan 265", nunca "F4"; decí "herramienta", nunca la palabra prohibida para el motor que corre.**
+
+Entradas a agregar, ya validadas **una por una contra las 10 reglas de arriba en la ronda v3** (usalas tal cual;
+si las reescribís, volvé a validar las 10):
 
 ```python
     "STACKY_CONSOLE_FULLSCREEN_ENABLED": PlainHelp(
@@ -458,23 +624,80 @@ Ninguna escribe en ADO/GitLab/repo remoto/BD del operador, ni despliega, ni borr
 excepción*. La bitácora escribe **sólo** en el directorio de datos del propio Stacky.
 **Prohibido** justificar un OFF con "default seguro", "por las dudas" o "prerequisito no garantizado".
 
-#### F0.8 — Tests de F0
+#### F0.8 — Tests de F0 (D2 — leé el aviso ANTES de correr nada)
+
+> **AVISO MEDIDO (D2). `test_harness_flags_help.py` NO puede salir exit 0, ni entero ni con el `-k` del v2.**
+> Medición real de esta ronda (2026-07-27, worktree limpio, **antes** de tocar nada):
+>
+> ```
+> pytest backend/tests/test_harness_flags_help.py -q   ⇒   4 failed, 4 passed
+> ```
+>
+> **Baseline exacto de fallos ajenos — esta es la lista contra la que comparás al terminar:**
+>
+> | Test | Falla por | Deuda ajena medida |
+> |---|---|---|
+> | `test_plain_help_covers_all_registry_keys` | **79 keys** del registry sin entrada en `PLAIN_HELP` | `CLAUDE_CODE_CLI_TRUST_*`, `STACKY_DB_COMPARE_*` (19), `STACKY_UI_*` (7), `STACKY_COST_*` (5), `STACKY_TELEMETRY_HARVEST_*` (5), `STACKY_DEVOPS_*` (4), `STACKY_EVAL/EVOLUTION/SQL/QA_UAT/...` |
+> | `test_plain_help_fields_non_empty_and_bounded` | `STACKY_DEVOPS_COCKPIT_ENABLED: on_effect > 240 chars` (**316**) | Plan 239 |
+> | `test_plain_help_on_off_start_with_si` | entradas ajenas que no empiezan con `"Si "` | varias |
+> | `test_plain_help_avoids_jargon_denylist` | **15 violaciones** | `STACKY_PLANS_BOARD_ENABLED` (key SCREAMING_SNAKE), `STACKY_CODE_INTEGRITY_ENABLED` ('backend'×1, 'endpoint'×2, 'gate'×2), `STACKY_EVOLUTION_*` ('prompt'×3, 'token'×1), `STACKY_EVAL_*` ('prompt'×4, 'token'×1) |
+>
+> Pasan: `has_no_orphan_keys`, `module_is_pure`, `no_runtime_imports_plain_help`, `read_current_exposes_plain_help`.
+>
+> **Corolario duro: el `-k "covers_all or orphan or bounded or start_with_si or jargon"` del v2 selecciona 5 tests
+> de los cuales 4 fallan HOY. No es un criterio binario: es un rojo garantizado.** Este plan **no** lo usa como
+> gate y **no** arregla las 79 keys ajenas (es alcance de otro plan).
+
+**Comandos de F0 — dos con exit 0 y uno con comparación de baseline:**
 
 ```powershell
 $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
-& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q
+& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q   # NO exige exit 0: ver abajo
 ```
 
-**Criterio binario.** Los tres exit 0 — **con una excepción declarada de deuda ajena**:
-`test_harness_flags_help.py` tiene fallos **preexistentes** de otras keys. Antes de tocar nada, corré ese archivo
-y **anotá la lista exacta de fallos previos**; al final debe salir **la misma lista, sin una sola entrada nueva que
-mencione `CONSOLE`**. Comprobación dirigida y binaria de lo tuyo:
+**Gate propio de este plan — el único que SÍ es binario.** Verifica las 4 keys nuevas contra **las 10 reglas** de
+F0.6 sin depender de una sola línea de deuda ajena. Pegalo tal cual:
 
 ```powershell
-& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q -k "covers_all or orphan or bounded or start_with_si or jargon"
+& $py -c @"
+import re, sys
+sys.path.insert(0, r'Stacky Agents\backend')
+from services.harness_flags_help import PLAIN_HELP
+from tests.test_harness_flags_help import JARGON_DENYLIST, _KEY_RE, _PHASE_RE
+KEYS = ['STACKY_CONSOLE_FULLSCREEN_ENABLED','STACKY_CONSOLE_RICH_RENDER_ENABLED',
+        'STACKY_CONSOLE_REPO_PANEL_ENABLED','STACKY_CONSOLE_AUDIT_LOG_ENABLED']
+bad = []
+for k in KEYS:
+    e = PLAIN_HELP.get(k)
+    if e is None:
+        bad.append(f'{k}: SIN entrada'); continue
+    if not (10 <= len(e.what.strip()) and len(e.what) <= 200): bad.append(f'{k}: what fuera de 10..200')
+    if len(e.on_effect) > 240:  bad.append(f'{k}: on_effect > 240')
+    if len(e.off_effect) > 240: bad.append(f'{k}: off_effect > 240')
+    if len(e.example) > 300:    bad.append(f'{k}: example > 300')
+    if not e.on_effect.startswith('Si '):  bad.append(f'{k}: on_effect no empieza con Si ')
+    if not e.off_effect.startswith('Si '): bad.append(f'{k}: off_effect no empieza con Si ')
+    for f in (e.what, e.on_effect, e.off_effect, e.example):
+        if not f.strip(): bad.append(f'{k}: campo vacio')
+        for t in JARGON_DENYLIST:
+            if re.search(rf'\b{re.escape(t)}s?\b', f, re.IGNORECASE): bad.append(f'{k}: jerga {t}')
+        if _KEY_RE.search(f):   bad.append(f'{k}: key SCREAMING_SNAKE')
+        if _PHASE_RE.search(f): bad.append(f'{k}: referencia a fase')
+print('OK 4/4' if not bad else 'FALLA: ' + ' | '.join(bad))
+sys.exit(1 if bad else 0)
+"@
 ```
+
+**Criterio binario de F0:**
+
+1. `test_harness_flags.py` ⇒ **exit 0**.
+2. `test_harness_flags_requires.py` ⇒ **exit 0**.
+3. El snippet de arriba ⇒ **exit 0** e imprime `OK 4/4`.
+4. `test_harness_flags_help.py` ⇒ **exactamente `4 failed, 4 passed`, los mismos 4 nombres de la tabla de baseline,
+   y ni una sola línea del mensaje de error menciona `CONSOLE`.** Si aparece un quinto fallo, o si un mensaje dice
+   `STACKY_CONSOLE_*`, **es tuyo**: arreglalo.
 
 **Trabajo del operador: ninguno.**
 
@@ -557,11 +780,30 @@ y en el bloque `partialize` (`workbench.ts:148-152`), agregar
 `migrateWorkbenchPersist` en `:21`, y hoy devuelve exactamente
 `{ agentRuntime, codexConsoleExecutionId, codexConsoleMinimized }` en `:41`).
 
-Cambios exactos en `store/workbenchPure.ts`:
+> **BLOQUEANTE del v2 que esta versión corrige (D5) — leelo antes de tocar el archivo.** `WorkbenchPersistV3`
+> (`workbenchPure.ts:9-13`) **no es sólo el tipo de lo que se lee: es el TIPO DE RETORNO declarado** de
+> `migrateWorkbenchPersist` (`:24` → `): WorkbenchPersistV3 {`). El v2 mandaba agregar el campo al objeto leído
+> (`prev`, `:25-29`) y al `return`, y **nunca** decía tocar la interfaz. Un object literal con una propiedad de más
+> contra un tipo declarado es **TS2353 — "Object literal may only specify known properties"**: `tsc --noEmit`
+> **falla**, que es justo el criterio de esta fase. Hay que tocar **tres** cosas, no dos.
 
-1. `export const WORKBENCH_PERSIST_VERSION = 4;` (bump 3 → 4).
-2. Agregar `codexConsolePresentation?: unknown;` al tipo del objeto persistido leído.
-3. En el retorno, agregar:
+Cambios exactos en `store/workbenchPure.ts` — **los CUATRO, en este orden**:
+
+1. `export const WORKBENCH_PERSIST_VERSION = 4;` (bump 3 → 4, línea `:7`).
+2. **Nueva interfaz de retorno** (D5). Agregar debajo de `WorkbenchPersistV3`, **sin borrar la vieja** (puede
+   tener consumidores; `tsc` te dice si no):
+   ```ts
+   /** Plan 265 — v4 agrega la presentación de la consola. `codexConsoleMinimized`
+    *  se CONSERVA y se sigue escribiendo: un deploy viejo rehidrata sin romper. */
+   export interface WorkbenchPersistV4 extends WorkbenchPersistV3 {
+     codexConsolePresentation: ConsolePresentation;
+   }
+   ```
+   y cambiar la firma: `): WorkbenchPersistV4 {`.
+   > Si `tsc` reporta que `WorkbenchPersistV3` quedó sin uso, **dejala igual**: es el contrato del estado v3 que la
+   > migración sigue leyendo. No la borres para "limpiar".
+3. Agregar `codexConsolePresentation?: unknown;` al tipo inline del objeto **leído** (`prev`, `:25-29`).
+4. En el retorno:
    ```ts
    const presentation =
      fromVersion >= 4
@@ -594,13 +836,104 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 **Criterio binario.** 11 passed en el primero, el segundo **verde con sus casos previos + los 3 nuevos**,
 `tsc` exit 0.
 
-**Smoke manual obligatorio (KPI-2, no automatizable sin RTL):** lanzar una corrida, esperar ≥ 20 líneas, pasar a
+**Smoke manual (KPI-2, la parte visual):** lanzar una corrida, esperar ≥ 20 líneas, pasar a
 pantalla completa, volver a dock, y verificar que **el contador de líneas es el mismo** (la consola muestra
 `dropped` y el total; anotá **ambos** números antes y después).
+**Pero el invariante ya NO depende de ese conteo manual: lo blinda F1.5.**
 
 **Flag:** `STACKY_CONSOLE_FULLSCREEN_ENABLED` (ON).
 **Impacto por runtime:** ninguno (estado de UI).
 **Trabajo del operador: ninguno** (el dock sigue siendo el default).
+
+---
+
+### F1.5 — **[ADICIÓN ARQUITECTO]** La identidad de sesión como invariante EJECUTABLE (D12)
+
+**Por qué existe esta fase.** El título de este plan es *"pantalla completa sobre la MISMA sesión"*. Esa es la
+tesis entera. Hasta el v2, su **único guardián era un humano contando líneas en el paso 2 del smoke**. Un
+invariante central custodiado por el ojo de una persona a las 2 de la mañana no es un invariante: es una
+esperanza. Y el modo de falla es silencioso y caro — el operador pierde la conversación de una corrida larga y no
+hay forma de recuperarla, porque el ring-buffer vive en memoria.
+
+Esta fase cuesta un archivo puro y un test, y convierte KPI-2 en **binario y automático**. Además cubre los dos
+casos borde que el v2 no tenía: **abrir la pantalla completa dos veces** y **la sesión muerta**.
+
+**Archivo a crear:** `Stacky Agents/frontend/src/services/consoleSession.ts` — **lógica pura**:
+
+```ts
+import type { ConsolePresentation } from "./consolePresentation";
+
+/** El subconjunto del estado del workbench del que depende la IDENTIDAD de la sesión.
+ *  Todo lo demás es presentación. */
+export interface SessionBearingState {
+  codexConsoleExecutionId: number | null;
+  codexConsolePresentation: ConsolePresentation;
+  codexConsoleMinimized: boolean;
+}
+
+/** Token de identidad de sesión. Dos estados con el MISMO token miran la misma
+ *  conversación; el stream no se re-suscribe y el ring-buffer no se vacía.
+ *  Deliberadamente NO incluye la presentación: cambiar de presentación no puede
+ *  cambiar de sesión. */
+export function sessionIdentity(s: SessionBearingState): string;
+
+/** Aplica una transición de presentación sobre el estado. Es el ÚNICO lugar donde
+ *  se calcula el próximo estado de consola: el setter del store lo llama y no
+ *  hace aritmética propia. Nunca lanza. */
+export function applyPresentation(
+  s: SessionBearingState,
+  next: ConsolePresentation,
+): SessionBearingState;
+
+/** ¿Abrir la pantalla completa sobre este estado crea una sesión nueva?
+ *  SIEMPRE false mientras haya `codexConsoleExecutionId`. Si es `null` no hay
+ *  sesión que preservar y la consola full arranca vacía, que es lo correcto. */
+export function opensNewSession(s: SessionBearingState, next: ConsolePresentation): boolean;
+```
+
+**Test PRIMERO:** `Stacky Agents/frontend/src/services/__tests__/consoleSession.test.ts`:
+
+| # | Caso | Aserción |
+|---|---|---|
+| 1 | **Invariante central**: para **las 9 transiciones** (`dock`/`full`/`minimized` × 3 destinos) con `codexConsoleExecutionId: 4242` | `sessionIdentity(applyPresentation(s, next)) === sessionIdentity(s)` en **las 9** |
+| 2 | Mismo barrido | `applyPresentation(s, next).codexConsoleExecutionId === 4242` en las 9 (nunca `null`, nunca otro número) |
+| 3 | `opensNewSession` con `executionId: 4242` | `false` para los 3 destinos |
+| 4 | **Doble apertura** (el caso que el v2 no tenía): `applyPresentation(applyPresentation(s,"full"),"full")` | idéntico a aplicarlo una vez, **y** el token no cambió. Idempotente. |
+| 5 | **Sesión muerta**: `codexConsoleExecutionId: null` | `applyPresentation` no lanza, `opensNewSession` es `true`, y el token es estable entre llamadas |
+| 6 | Sincronía del legado | `applyPresentation(s,"minimized").codexConsoleMinimized === true`; con `"dock"` y `"full"`, `false` |
+| 7 | `sessionIdentity` **no** depende de la presentación | los 3 estados con el mismo `executionId` dan el **mismo** token |
+| 8 | `sessionIdentity` **sí** distingue sesiones | `executionId: 1` y `executionId: 2` dan tokens **distintos** |
+| 9 | Entrada degenerada (`undefined`, campos faltantes) | no lanza |
+
+> **Ojo con el falso verde del test 7 (esto es una trampa, no un adorno).** Si implementás
+> `sessionIdentity` como `() => "x"` —una constante— los tests 1, 4 y 7 salen **verdes** y el invariante no vale
+> nada. Por eso **el test 8 es obligatorio y no es opcional**: es el único que obliga a que el token dependa de
+> verdad del `executionId`. Test 7 y test 8 se escriben **juntos o ninguno**.
+
+**Cableado (una línea, y es lo que le da valor).** El setter de F1 deja de hacer aritmética propia:
+
+```diff
+   setCodexConsolePresentation: (p) =>
+-    set({
+-      codexConsolePresentation: p,
+-      codexConsoleMinimized: legacyMinimizedFrom(p),
+-    }),
++    set((state) => applyPresentation(state, p)),
+```
+
+Así el invariante que el test blinda es **el mismo código** que corre en producción, no un gemelo que se puede
+desincronizar. Un `set` que además tocara `codexConsoleExecutionId` deja de compilar contra `SessionBearingState`.
+
+**Comando:**
+```powershell
+cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleSession.test.ts
+cd "Stacky Agents\frontend"; npx tsc --noEmit
+```
+**Criterio binario.** 9 passed, `tsc` exit 0. **Este test, no el conteo manual de líneas, es el gate de KPI-2.**
+El paso 2 del smoke se conserva como confirmación visual, no como única evidencia.
+
+**Flag:** `STACKY_CONSOLE_FULLSCREEN_ENABLED` (ON). **Impacto por runtime:** ninguno (estado de UI puro).
+**Trabajo del operador: ninguno.**
 
 ---
 
@@ -754,7 +1087,30 @@ cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleCapabi
 
 ---
 
-### F3 — Cancelar y volver a lanzar, con confirmación (KPI-4) — C8, C14
+### F3 — Cancelar y volver a lanzar, con confirmación (KPI-4) — C8, C14, D1
+
+> ## ⚠ BLOQUEANTE DEL v2, CORREGIDO ACÁ (D1). ESTA ES LA TRAMPA MÁS CARA DEL PLAN. LEELA DOS VECES.
+>
+> **Hay DOS funciones llamadas `cancel` en `frontend/src/api/endpoints.ts`, en dos objetos distintos, que pegan en
+> dos endpoints distintos con semánticas distintas.** El v2 anclaba la equivocada.
+>
+> | | **`Agents.cancel`** — **PROHIBIDA acá** | **`Executions.cancel`** — **la correcta** |
+> |---|---|---|
+> | Línea | `api/endpoints.ts:1135-1136` | **`api/endpoints.ts:1394-1395`** (el objeto `export const Executions = {` abre en `:1326`) |
+> | Llama a | `POST /api/agents/cancel/<id>` | `POST /api/executions/<id>/cancel` |
+> | Backend | `backend/api/agents.py:1434-1436` | `backend/api/executions.py:603` |
+> | Qué hace | `agent_runner.cancel(id)` y `return jsonify({"ok": True})`. **Y nada más.** | Valida el estado, **409** si no es cancelable, y despacha al runner que corresponda |
+> | Gate de estado | **NINGUNO.** Devuelve `{"ok": true}` sobre una corrida ya terminada. | `:616` — sólo `vscode_chat`/`preparing`/`queued`/`running` |
+> | Mata el subproceso | **NO.** Sólo la bandera cooperativa (el camino de `github_copilot`). | **SÍ**: `codex_cli_runner.cancel` mata el subproceso; `claude_code_cli_runner.cancel` cierra ordenado |
+> | Tipo de retorno | `{ ok: true }` | `{ ok: boolean; execution_id: number }` |
+>
+> **Consecuencia de equivocarse:** la consola "cancela" una corrida de Codex y **el proceso sigue vivo**,
+> devolviendo `{"ok": true}` para que la UI muestre éxito. `CANCELLABLE_STATUSES` como "espejo del backend"
+> (test 9) quedaría verificando un contrato que ese camino **no honra**: verde en el test, mentira en producción.
+>
+> **Regla:** en este plan, `Agents.cancel` **no se importa, no se llama y no se menciona en el código**. El test 11
+> de esta fase lo verifica leyendo el archivo. `ActiveRunsPanel.tsx` ya hace lo correcto: importa `Executions`
+> (`:4`) y llama `Executions.cancel(id)` (`:58`).
 
 **Objetivo.** Cerrar el lazo de control **sin agregar un solo endpoint nuevo y sin reinventar el cableado**.
 
@@ -765,7 +1121,8 @@ queda **deshabilitado** con el hint *"No se puede volver a lanzar: esta corrida 
 adivines un endpoint.
 
 > **Rótulo (C14):** el botón nuevo se llama **"Volver a lanzar"**, **no** "Reintentar". El dock ya tiene un botón
-> "Reintentar" en `CodexConsoleDock.tsx:234-237` que reintenta **cerrar la sesión**. Dos botones con el mismo
+> "Reintentar" en `CodexConsoleDock.tsx:235-237` (dentro del bloque `closeState.error` que abre en `:231`, D13)
+> que reintenta **cerrar la sesión**. Dos botones con el mismo
 > rótulo y semánticas distintas en el mismo componente es una trampa para el operador.
 
 **Reuso obligatorio (C8) — está todo hecho en `components/ActiveRunsPanel.tsx`, copiá de ahí:**
@@ -773,15 +1130,20 @@ adivines un endpoint.
 | Qué | Dónde ya está | Regla |
 |---|---|---|
 | Confirmación | `ActiveRunsPanel.tsx:33` `const askConfirm = useConfirm();` y `:153` `await askConfirm({ … confirmLabel, cancelLabel })` | `useConfirm` se importa de `components/ui` (`components/ui/index.ts:46`). **Prohibido** `window.confirm` y **prohibido** montar `ConfirmDialog` a mano. |
-| Llamada | `ActiveRunsPanel.tsx:57-58` `mutationFn: (id) => Executions.cancel(id)` | `Executions.cancel` está en `api/endpoints.ts:1135`. **No escribas un `fetch` nuevo.** |
+| Llamada | `ActiveRunsPanel.tsx:58` `mutationFn: (id: number) => Executions.cancel(id)` (importa `Executions` en `:4`) | `Executions.cancel` está en **`api/endpoints.ts:1394`** (D1). **No escribas un `fetch` nuevo y NO uses `Agents.cancel` (`:1135`).** |
 | Error a la vista | `ActiveRunsPanel.tsx:179-187` | mismo patrón de mensaje + botón de reintento. |
 
 > **Gotcha del 409 (no negociable).** `api/executions.py:616` devuelve **409** si el estado no es cancelable
-> (`vscode_chat`, `preparing`, `queued`, `running` son los únicos cancelables). El wrapper `api.*` **lanza
-> excepción ante cualquier non-2xx**, así que un 409 tumbaría el componente en vez de mostrar el mensaje.
-> Verificá cómo lo resuelve hoy `Executions.cancel` (`api/endpoints.ts:1135`): si usa `api.post`, **envolvé la
-> llamada en try/catch y mostrá el mensaje**; si preferís leer el body del 409, usá `rawPost`, que ya está
-> importado en `api/endpoints.ts:1`. Lo que **no** se puede es dejar que la excepción suba.
+> (`vscode_chat`, `preparing`, `queued`, `running` son los únicos cancelables). **Medido:** `Executions.cancel`
+> (`api/endpoints.ts:1394-1395`) usa `api.post<{ ok: boolean; execution_id: number }>`, y el wrapper `api.*`
+> **lanza excepción ante cualquier non-2xx** ⇒ un 409 tumbaría el componente en vez de mostrar el mensaje.
+> **Las dos salidas válidas, elegí una y anotala:**
+> 1. envolver la llamada en `try/catch` y mostrar el mensaje con `formatLoadErrorMessage`
+>    (`utils/loadError.ts`, el mismo que usa `ActiveRunsPanel.tsx:183`); **o**
+> 2. usar `rawPost` (ya importado en `api/endpoints.ts:1`) para leer el body del 409.
+>
+> Lo que **no** se puede es dejar que la excepción suba. Y **no** se puede "resolverlo" cambiando a
+> `Agents.cancel` porque ese nunca devuelve 409: eso no es arreglar el error, es **borrar el gate de estado**.
 
 **Archivo a crear:** `Stacky Agents/frontend/src/services/consoleActions.ts` — **lógica pura**:
 
@@ -824,14 +1186,22 @@ export function confirmationText(id: ConsoleActionId, executionId: number): stri
 | 8 | `confirmationText("cancel", 42)` | contiene `"42"` y la palabra `"cancelar"` |
 | 9 | `CANCELLABLE_STATUSES` | exactamente `{"vscode_chat","preparing","queued","running"}` — espejo del backend |
 | 10 | sesión zombie: `status: "running"` pero el stream ya emitió `done` | `cancel` sigue `enabled` (el operador tiene que poder cerrar un colgado) |
+| 11 | **Gate de endpoint (D1)** | el test **lee** el texto de los componentes y servicios de consola nuevos y falla si aparece `Agents.cancel` o el literal `/api/agents/cancel`. Ese es el camino sin gate de 409. |
+| 12 | Sesión **muerta** sin estado: `status: "cancelled"` y el stream cerrado | `cancel` `enabled: false` con motivo, `relaunch` `enabled` si `hasOrigin`; nada lanza |
+
+> **Test 11 — cómo escribirlo sin dispararse en el pie.** Grepea el texto de los archivos **de este plan**
+> (`services/console*.ts` y el/los `.tsx` de consola nuevos), **nunca** `api/endpoints.ts` (donde `Agents.cancel`
+> vive legítimamente para otros usos) ni `ActiveRunsPanel.tsx`. Y la cadena prohibida va **construida en el test**
+> (por ejemplo `"Agents" + ".cancel"`), no escrita literal: si la escribís literal, el propio archivo de test
+> matchea su propio gate. Este error ya se cometió varias veces en este repo.
 
 **Comando de test:**
 ```powershell
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleActions.test.ts
 cd "Stacky Agents\frontend"; npx tsc --noEmit
 ```
-**Criterio binario.** 10 passed. Y `requiresConfirmation` devuelve `true` para **toda** acción destructiva
-⇒ KPI-4 = 0.
+**Criterio binario.** 12 passed. Y `requiresConfirmation` devuelve `true` para **toda** acción destructiva
+⇒ KPI-4 = 0. El test 11 verde ⇒ la consola cancela por el camino **con** gate de estado.
 
 **Flag:** `STACKY_CONSOLE_FULLSCREEN_ENABLED` (ON).
 **Impacto por runtime:** los 3 cancelan (F2.5 test 3); `github_copilot` lo hace de forma cooperativa y **lo dice**.
@@ -1027,6 +1397,22 @@ puede apagar por accidente no es una protección. **Trabajo del operador: ningun
 una corrida ⇒ `setCodexConsoleExecution(id)`. **Sin polling nuevo:** se carga al abrir el panel y con un botón
 "Actualizar".
 
+> **Gotcha del 404 que el v2 no vio (D6) — es el gemelo exacto del gotcha del 409 de F3.** Ese endpoint **está
+> gateado**: `api/executions.py:459-461` hace
+> `if not getattr(_cfg, "STACKY_EXECUTION_HISTORY_ENABLED", True): return jsonify({"error": "feature_disabled", ...}), 404`.
+> Es una flag real y apagable del registry (`services/harness_flags.py:1896`), **ajena a este plan**. Y `api.get`
+> **lanza ante non-2xx** ⇒ con esa flag OFF, el panel Historial **tumba la consola entera**, que es justo la
+> pantalla que este plan promueve a experiencia principal.
+> **Obligatorio:** leer el historial con **`rawGet`** (ya importado en `api/endpoints.ts:1`) o envolver en
+> `try/catch`, y ante 404 `feature_disabled` **degradar con motivo visible**:
+> *"Historial no disponible: la capacidad está desactivada en la configuración."* Nunca una pantalla en blanco,
+> nunca una excepción que suba. Es el mismo trato que R7 le da a la dependencia del Plan 264.
+>
+> **Lógica pura testeable de la degradación:** agregar a `services/consoleHistoryPanel.ts`
+> `historyPanelState(res: { status: number; body: unknown }): { available: boolean; reason: string | null; items: unknown[] }`,
+> con **4 casos** en `src/services/__tests__/consoleHistoryPanel.test.ts`: 200 con items; **404 `feature_disabled`
+> ⇒ `available: false` con motivo no vacío**; 500 ⇒ `available: false` con motivo; body basura ⇒ no lanza.
+
 **(c) Búsqueda en la conversación** — puramente cliente, sobre las líneas ya en memoria.
 `Stacky Agents/frontend/src/services/consoleSearch.ts`:
 
@@ -1084,29 +1470,45 @@ Lo que se evalúa es el **número impreso**, no el exit code.)
 - `ShortcutCategory = "global" | "navegacion" | "listas"` (`:14`). **Usá `"global"`**: agregar una categoría
   obliga a tocar el tipo unión y `groupForOverlay` (`:161`), que es alcance de otro plan.
 - Ya existe **`detectCollisions(defs): string[][]`** (`:139`) y `assertNoRuntimeCollisions()` (`:278`).
-  **No grepees a mano: usalos como test.**
+  **No grepees a mano: usalos como test — pero leé la limitación medida de abajo (D4).**
 - Combos ya tomados, medidos: **`Ctrl+K`** (`palette.toggle`), **`?`** (`help.shortcuts`), **`Ctrl+/`**
-  (`nav.toggle-board`) en `CORE_SHORTCUT_DEFS` (`:191-224`); y con `scope: "page"` y `displayOnly`:
-  `J`, `K`, `Home`, `End`, `Enter`, `Escape` en `LIST_NAV_DISPLAY_DEFS` (`:225-231`).
+  (`nav.toggle-board`) en `CORE_SHORTCUT_DEFS` (**`:191-221`**, D13); y con `scope: "page"` y `displayOnly`:
+  `J`, `K`, `Home`, `End`, `Enter`, `Escape` en `LIST_NAV_DISPLAY_DEFS` (**`:225-232`**, D13).
 
-> **Bug del v1 que esta fase corrige (C9).** `comboAllowedInEditable(combo)` (`shortcuts.ts:108-111`) devuelve
-> **`parseCombo(combo).ctrl`**: con foco en un campo de texto, **sólo pasan los combos con Ctrl**. Registrar
-> `Enter` / `Shift+Enter` en el registro global para navegar resultados **nunca dispararía**, porque el foco está
-> justamente en la caja de búsqueda. Es un atajo muerto que pasa todos los tests unitarios y falla en el smoke.
+> **La regla que este repo aprendió tres veces por las malas (C9 y D3).**
+> `comboAllowedInEditable(combo)` (`shortcuts.ts:108-111`) devuelve **`parseCombo(combo).ctrl`**, y
+> `shortcuts.ts:125` lo aplica: `if (ctx.editable && !comboAllowedInEditable(d.combo)) return false;`.
+> **Con foco en un `<input>` o `<textarea>`, SÓLO disparan los combos con Ctrl.** Todo lo demás está muerto ahí.
+> - El **v1** registró `Enter`/`Shift+Enter` en el registro global para navegar resultados: muerto, porque el foco
+>   está en la caja de búsqueda. Lo arregló el v2 (C9).
+> - El **v2** dejó **`Escape`** en el registro global para salir de pantalla completa: `parseCombo("Escape").ctrl`
+>   es **`false`** ⇒ **igual de muerto**, y en el escenario más probable de todos, porque el propio plan manda
+>   `Ctrl+Shift+F` a poner el foco en ese input. Lo arregla el **v3** (D3).
+> - Los tests de `shouldHandleEscape` **no pueden atrapar esto**: son de una función pura que nunca ve
+>   `comboAllowedInEditable`. Salen verdes con el atajo muerto. Por eso nace el **test 9**, que sí lo atrapa.
 
-**Atajos, con la resolución de cada colisión ya tomada:**
+**Atajos, con la resolución de cada colisión ya tomada (v3):**
 
-| `combo` | Acción | `scope` | Dónde se implementa | Colisión |
+| `combo` | Acción | `scope` | Dónde se implementa | Colisión / motivo |
 |---|---|---|---|---|
-| `Ctrl+\`` | Alternar dock ↔ pantalla completa | `global` | registro (`useShortcut`) | libre |
-| `Ctrl+Shift+F` | Foco en la búsqueda de la conversación | `global` | registro (`useShortcut`) | **`Ctrl+F` se descarta**: es la búsqueda nativa del navegador y pisarla enoja al operador |
-| `Escape` | De `"full"` a `"dock"` | `global` | registro, con guarda `shouldHandleEscape` | `Escape` lo usa el diálogo canónico (`components/ui/dialogKeyboard.ts`) y `LIST_NAV_DISPLAY_DEFS` con `scope: "page"`. **El diálogo gana siempre.** |
-| `Enter` / `Shift+Enter` | Siguiente / anterior resultado | — | **`onKeyDown` local del `<input>` de búsqueda**, con `preventDefault()`. **NO va al registro** (ver bug de arriba) | n/a |
-| `Ctrl+Shift+C` | Copiar toda la conversación | `global` | registro (`useShortcut`) | libre |
+| `Ctrl+Shift+Enter` | Alternar dock ↔ pantalla completa | `global` | registro (`useShortcut`) | libre. **`Ctrl+\`` se descarta (D9):** `parseCombo` compara `normalizeKey(ev.key)` y en layouts español (es-AR/es-ES, que es lo que corre esta máquina) la backtick es **tecla muerta** — el atajo podría no existir para el operador. Alfanumérico es inequívoco en cualquier layout. |
+| `Ctrl+Shift+F` | Foco en la búsqueda de la conversación | `global` | registro (`useShortcut`) | **`Ctrl+F` se descarta**: es la búsqueda nativa del navegador y pisarla enoja al operador. Tiene Ctrl ⇒ vive con foco en un input. |
+| `Ctrl+Shift+C` | Copiar toda la conversación | `global` | registro (`useShortcut`) | libre. Tiene Ctrl ⇒ vive con foco en un input. |
+| `Escape` | De `"full"` a `"dock"` | — | **`onKeyDown` local del contenedor de la consola full**, con guarda `shouldHandleEscape(presentation)`. **NO va al registro (D3).** | Muerto en el registro con foco en un input. Además el diálogo canónico (`components/ui/dialogKeyboard.ts`) y `LIST_NAV_DISPLAY_DEFS` (`scope:"page"`) también usan `Escape`: **el diálogo gana siempre** — si hay un diálogo abierto, su propio manejador ya consumió el evento antes de llegar al contenedor. |
+| `Enter` / `Shift+Enter` | Siguiente / anterior resultado | — | **`onKeyDown` local del `<input>` de búsqueda**, con `preventDefault()`. **NO va al registro.** | n/a |
 
-Los 4 del registro se declaran en `Stacky Agents/frontend/src/services/consoleShortcuts.ts` como
-`CONSOLE_SHORTCUT_DEFS: CoreShortcutSpec[]` (el mismo tipo que usa `App.tsx:254`), con `category: "global"`,
-`description` en español, y se registran con `useShortcut` — **nunca** con un `addEventListener` propio.
+Los **3** del registro se declaran en `Stacky Agents/frontend/src/services/consoleShortcuts.ts` como
+`CONSOLE_SHORTCUT_DEFS: CoreShortcutSpec[]` (`shortcuts.ts:45` — `Omit<ShortcutDef,"handler">`, el mismo tipo de
+`CORE_SHORTCUT_DEFS` que usa `App.tsx:254`), con `category: "global"`, `description` en español, y se registran con
+`useShortcut` — **nunca** con un `addEventListener` propio.
+
+> **No declares `allowInDialog` (D8).** El registro **ya** trae la guarda de diálogo: `shortcuts.ts:41` lleva
+> `dialogOpen` en el contexto y `:124` hace `if (ctx.dialogOpen && !d.allowInDialog) return false;`, con
+> `allowInDialog` **falsy por default** (documentado en `ShortcutDef:38-39`: *"Por default un atajo NO dispara con
+> un diálogo abierto"*). El v2 pedía una `shouldHandleEscape({presentation, dialogOpen})` **sin decir nunca de
+> dónde salía ese booleano**, cuando la respuesta es: **de ningún lado, porque el registro ya lo resuelve**.
+> En el v3, `shouldHandleEscape` recibe **sólo** `presentation`. Un segundo canal de "hay un diálogo abierto" sería
+> exactamente la clase de duplicación que este plan promete no crear.
 
 **Test PRIMERO:** `Stacky Agents/frontend/src/services/__tests__/consoleShortcuts.test.ts`:
 
@@ -1114,20 +1516,45 @@ Los 4 del registro se declaran en `Stacky Agents/frontend/src/services/consoleSh
 |---|---|---|
 | 1 | `CONSOLE_SHORTCUT_DEFS` | cada entrada tiene `id`, `combo`, `scope`, `category` y `description` no vacía (**los nombres reales del contrato**) |
 | 2 | Categoría | `category` de todas ∈ `{"global","navegacion","listas"}` (no se inventa una nueva) |
-| 3 | **Colisiones, con la función real** | `detectCollisions([...CORE_SHORTCUT_DEFS, ...LIST_NAV_DISPLAY_DEFS, ...CONSOLE_SHORTCUT_DEFS])` devuelve **`[]`** |
+| 3 | **Colisiones same-scope, con la función real** | `detectCollisions([...CORE_SHORTCUT_DEFS, ...LIST_NAV_DISPLAY_DEFS, ...CONSOLE_SHORTCUT_DEFS])` devuelve **`[]`** |
+| **3-bis** | **Colisiones CROSS-scope (D4) — el gate que faltaba** | agrupar los 3 arrays por **`combo.toLowerCase()` SOLO**, ignorando `scope`. Todo grupo con más de un `id` debe figurar en un mapa congelado `_CROSS_SCOPE_RESUELTAS` **escrito en el test**, con la resolución en prosa. Un duplicado nuevo no declarado ⇒ **ROJO**. |
 | 4 | Sin `Ctrl+F` | ningún `combo` es exactamente `"Ctrl+F"` (se reserva la búsqueda del navegador) |
-| 5 | `Enter` fuera del registro | ningún `combo` del array es `"Enter"` ni `"Shift+Enter"` (viven en el `onKeyDown` local) |
-| 6 | `shouldHandleEscape({presentation:"full", dialogOpen:false})` | `true` |
-| 7 | `shouldHandleEscape({presentation:"full", dialogOpen:true})` | `false` (el diálogo gana) |
-| 8 | `shouldHandleEscape({presentation:"dock", dialogOpen:false})` | `false` |
+| 5 | `Enter` y `Escape` fuera del registro | ningún `combo` del array es `"Enter"`, `"Shift+Enter"` ni `"Escape"` (viven en `onKeyDown` locales — D3) |
+| 6 | `shouldHandleEscape("full")` | `true` |
+| 7 | `shouldHandleEscape("dock")` y `shouldHandleEscape("minimized")` | `false` |
+| 8 | `shouldHandleEscape` con basura (`undefined`, `"otra"`) | `false`, no lanza |
+| **9** | **[ADICIÓN ARQUITECTO] Ratchet de atajos muertos (D3)** | para **cada** entrada de `CONSOLE_SHORTCUT_DEFS`: `comboAllowedInEditable(def.combo) === true`. Ninguna excepción, ninguna allowlist. |
+| 10 | Sin backtick (D9) | ningún `combo` contiene el carácter `` ` `` (tecla muerta en layouts español) |
+
+> **Por qué el test 3 SOLO no alcanza (D4) — medido, no supuesto.** `detectCollisions` (`shortcuts.ts:139`) arma su
+> clave así (`:143`):
+> ```ts
+> const clave = `${parseCombo(d.combo).key}|${d.combo.toLowerCase()}|${d.scope}`;
+> ```
+> **Incluye `scope`.** Un `Escape` con `scope:"global"` y el `Escape` de `LIST_NAV_DISPLAY_DEFS` con
+> `scope:"page"` (`:230`) caen en claves **distintas** ⇒ `detectCollisions` devuelve `[]` **con la colisión
+> presente**. Y el diálogo canónico (`components/ui/dialogKeyboard.ts`) **no está en ninguno de los tres arrays**,
+> así que esa función no puede verlo ni en principio. El v2 declaraba el test 3 "**el** gate de colisiones,
+> binario y automático" y R5 apoyaba ahí una mitigación de riesgo **Alto**: la afirmación era falsa.
+> El test **3-bis** cierra el hueco obligando a que cada duplicado cross-scope esté **escrito y justificado**,
+> no descubierto en el smoke.
+
+> **Por qué el test 9 es la adición más barata y más valiosa de esta fase.** Este repo ya perdió dos rondas de
+> crítica con el mismo bug (C9: `Enter`; D3: `Escape`). No es mala suerte: es que **un atajo muerto pasa todos los
+> tests unitarios**, porque lo que lo mata vive en el dispatcher (`shortcuts.ts:125`) y no en el atajo. El test 9
+> convierte "acordate de `comboAllowedInEditable`" en un **gate que no se puede olvidar**: si alguien agrega
+> mañana `Ctrl`-less al registro de la consola, sale rojo antes de llegar al smoke. Cuesta 3 líneas.
+> **Corolario de diseño, no de test:** en la consola, **todo lo que va al registro global lleva Ctrl; todo lo que
+> no lleva Ctrl va a un `onKeyDown` local.** Esa es la regla, y el test 9 es su guardián.
 
 **Comando:**
 ```powershell
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleShortcuts.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/shortcuts.test.ts
 ```
-**Criterio binario.** 8 passed + el test de atajos existente **sigue verde** (regresión del Plan 172).
-El test 3 es el gate de colisiones: **binario y automático**, no un grep manual.
+**Criterio binario.** **11 passed** (1, 2, 3, 3-bis, 4..10) + el test de atajos existente **sigue verde**
+(regresión del Plan 172). Los gates de colisión son el **3 (same-scope) y el 3-bis (cross-scope)**, los dos
+binarios y automáticos; el gate de atajos vivos es el **9**.
 
 **Flag:** `STACKY_CONSOLE_FULLSCREEN_ENABLED` (ON).
 **Trabajo del operador: ninguno** (los atajos se documentan solos en el cheatsheet existente).
@@ -1210,15 +1637,16 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_plan265_console_audit.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
-& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q -k "covers_all or orphan or bounded or start_with_si or jargon"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
 & $py -m compileall -q "Stacky Agents\backend\api" "Stacky Agents\backend\services"
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consolePresentation.test.ts
+cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleSession.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/store/workbenchPure.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleRender.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleCapabilities.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleActions.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleRepoPanel.test.ts
+cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleHistoryPanel.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleSearch.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleShortcuts.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/shortcuts.test.ts
@@ -1226,29 +1654,58 @@ cd "Stacky Agents\frontend"; npx vitest run src/__tests__/uiDebtRatchet.test.ts
 cd "Stacky Agents\frontend"; npx tsc --noEmit
 ```
 
-**Son 19 comandos.** Los de vitest se corren **uno por archivo** (la corrida completa contamina cross-file en
-este repo). Los de pytest, también por archivo.
+**Son 20 comandos y TODOS deben salir exit 0.** Los de vitest se corren **uno por archivo** (la corrida completa
+contamina cross-file en este repo). Los de pytest, también por archivo.
+
+**Más el gate propio de la ayuda llana (F0.8), que es el snippet de 4 keys — exit 0 e imprime `OK 4/4`.**
+
+> **Lo que se SACÓ de esta lista y por qué (D2).** El v2 incluía acá
+> `pytest test_harness_flags_help.py -q -k "covers_all or orphan or bounded or start_with_si or jargon"` y
+> declaraba "19 comandos exit 0". **Medido: 4 de los 5 tests que ese `-k` selecciona fallan HOY por deuda ajena**
+> (79 keys del registry sin ayuda, `STACKY_DEVOPS_COCKPIT_ENABLED` con `on_effect` de 316 chars, 15 violaciones de
+> jerga). Ese comando **no puede** salir exit 0 y el DoD era insatisfacible. En su lugar:
+> - el **gate binario de lo tuyo** es el snippet de F0.8 (mira sólo las 4 keys `STACKY_CONSOLE_*`);
+> - el archivo completo se corre **aparte, como comparación de baseline**, no como exit 0:
+>   ```powershell
+>   & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q
+>   ```
+>   ⇒ debe seguir dando **`4 failed, 4 passed`**, los **mismos 4 nombres** de la tabla de F0.8, y **ninguna línea
+>   de error que mencione `CONSOLE`**.
+>
+> Esta es la regla general del repo: **una deuda ajena nunca se usa como gate propio, y un plan nunca declara
+> exit 0 sobre un archivo que ya está rojo.** Si querés arreglar las 79 keys, es otro plan.
 
 **Smoke manual obligatorio (no automatizable — el repo no tiene RTL ni jsdom).** Anotá cada resultado en el
 registro de implementación al final de este documento:
 
 1. Lanzar una corrida real; esperar ≥ 20 líneas.
-2. `Ctrl+\`` ⇒ pantalla completa. **Contar las líneas y el `dropped`: mismos números.** Volver a dock: mismos
-   números. (KPI-2)
+2. `Ctrl+Shift+Enter` ⇒ pantalla completa. **Contar las líneas y el `dropped`: mismos números.** Volver a dock:
+   mismos números. (KPI-2 — confirmación visual; el gate automático es F1.5)
+2-bis. **Abrir la pantalla completa DOS veces seguidas** (atajo + botón) ⇒ nada cambia, no se duplica el stream,
+   el contador de líneas sigue igual. (F1.5 test 4)
 3. F5 con la consola en pantalla completa ⇒ rehidrata en pantalla completa, misma corrida (migración v3→v4).
 4. Buscar una palabra que aparezca 3 veces ⇒ 3 hits; `Enter` cicla con vuelta al principio **con el foco dentro
    de la caja de búsqueda** (es el caso que el v1 rompía).
+4-bis. **Con el foco TODAVÍA dentro de la caja de búsqueda, apretar `Escape`** ⇒ vuelve al dock. **Este es el paso
+   que el v2 habría fallado** (D3): con `Escape` en el registro global no pasa nada, porque
+   `comboAllowedInEditable("Escape")` es `false`. Si no vuelve al dock, F6 **no está hecha**.
 5. Panel Repositorio ⇒ archivos modificados; abrir un diff. Abrir el diff de un archivo de configuración con una
    clave ⇒ **aparece el aviso de valores ocultos y el valor no se ve**. (KPI-6)
 6. Cancelar ⇒ aparece el diálogo de confirmación; confirmar ⇒ la corrida pasa a cancelada.
 7. Cancelar una corrida **ya terminada** ⇒ mensaje de error a la vista, **la consola no se rompe** (el 409 no
    sube como excepción).
+7-bis. **Apagar `STACKY_EXECUTION_HISTORY_ENABLED`** (flag AJENA, `harness_flags.py:1896`) y abrir el panel
+   Historial ⇒ **aparece el motivo escrito y la consola NO se rompe** (D6). Volver a encenderla.
 8. `GET /api/executions/console-audit` ⇒ la acción `cancel` está registrada.
 9. **Paridad:** repetir los pasos 2, 4 y 6 con una corrida de **cada uno de los 3 runtimes**
    (`codex_cli`, `claude_code_cli`, `github_copilot`). Anotar el texto que muestra el botón Cancelar en cada uno.
+   **Y en `codex_cli`, después de cancelar, confirmar que el proceso murió de verdad** (no quedó vivo devolviendo
+   `ok: true`) — es lo que distingue el endpoint correcto del equivocado (D1).
 10. Apagar `STACKY_CONSOLE_FULLSCREEN_ENABLED` ⇒ el dock sigue funcionando **exactamente** como antes.
 
-**Criterio binario.** 19 comandos exit 0 + los 10 pasos del smoke con resultado esperado anotado.
+**Criterio binario.** **20 comandos exit 0** + el snippet de F0.8 en `OK 4/4` + `test_harness_flags_help.py` con el
+**baseline idéntico** (`4 failed, 4 passed`, sin `CONSOLE`) + los **12** pasos del smoke (1, 2, 2-bis, 3, 4, 4-bis,
+5, 6, 7, 7-bis, 8, 9, 10) con resultado esperado anotado.
 **Trabajo del operador: ninguno.**
 
 ---
@@ -1257,11 +1714,15 @@ registro de implementación al final de este documento:
 
 | # | Riesgo | Prob. | Mitigación |
 |---|---|---|---|
-| **R1** | Cambiar de presentación re-suscribe el SSE y **borra la conversación**. | **Alta** (es el fallo natural) | `codexConsoleExecutionId` **no se toca** al cambiar de presentación; el `useExecutionStream` vive en un componente que no se desmonta (dos ramas de render, no dos componentes). El paso 2 del smoke es el gate. Si el contador de líneas cambia, la fase **no está hecha**. |
+| **R1** | Cambiar de presentación re-suscribe el SSE y **borra la conversación**. | **Alta** (es el fallo natural) | `codexConsoleExecutionId` **no se toca** al cambiar de presentación; el `useExecutionStream` vive en un componente que no se desmonta (dos ramas de render, no dos componentes). **El gate ya no es un humano contando líneas (D12): es F1.5**, cuyo test 1 barre las 9 transiciones y exige token de sesión idéntico, y cuyo cableado hace que el setter del store llame a la MISMA función pura que el test blinda. El paso 2 del smoke queda como confirmación visual. |
 | **R2** | Renderizar markdown de un stream vivo re-renderiza todo en cada línea y la consola se traba. | **Alta** | El render rico es **sólo** del modo `"full"` (el dock queda crudo). `groupLinesIntoChunks` memoizado por longitud; **el último chunk, el que crece, se rendea crudo**. Tests 9 y 11 de F2 ponen la cota de 100 ms sobre 5000 líneas y sobre una línea de 200 000 caracteres. |
 | **R3** | El endpoint de git ejecuta un comando en una ruta arbitraria (inyección / traversal). | Media | Validación de `workspace` contra `project_manager`, `path` relativo sin `..` **resuelto** dentro del workspace, comando por **lista**, `shell=False`, timeout 5 s. Tests 1, 2, 3 y 9 de F4 lo cubren, y el test 1 verifica que git **no se ejecutó**. |
 | **R4** | El panel de repo cuelga la UI en un repo grande. | Media | Timeout duro de 5 s, cota de 200 KB de diff, `truncated` visible. Sin repositorio degrada a `available: False`. Sin polling: refresco sólo por acción o por fin de corrida. |
-| **R5** | Los atajos nuevos pisan atajos existentes (Plan 172) o el `Escape` del diálogo (Plan 164). | **Alta** | Colisiones resueltas **en el plan** con los combos medidos, y verificadas por `detectCollisions` como test 3 de F6 (binario). `Escape` de consola sólo actúa con `dialogOpen === false`; `Ctrl+F` descartado a favor de `Ctrl+Shift+F`; `Enter`/`Shift+Enter` fuera del registro global. `src/services/shortcuts.test.ts` corre como regresión. |
+| **R5** | Los atajos nuevos pisan atajos existentes (Plan 172) o el `Escape` del diálogo (Plan 164). | **Alta** | Colisiones resueltas **en el plan** con los combos medidos, y verificadas por **dos** gates: test 3 (same-scope, `detectCollisions`) y **test 3-bis (cross-scope, agrupando por combo solo)** — porque `detectCollisions` incluye `scope` en su clave y **no puede** ver la colisión de `Escape` global vs `page` (D4). `Ctrl+F` descartado a favor de `Ctrl+Shift+F`; `Enter`/`Shift+Enter`/`Escape` fuera del registro global. `src/services/shortcuts.test.ts` corre como regresión. |
+| **R5-bis** | **Un atajo nace muerto**: se registra un combo sin Ctrl y no dispara nunca con foco en un input. | **Alta** (pasó en el v1 con `Enter` y en el v2 con `Escape`) | **F6 test 9 (ratchet de atajos muertos)**: `comboAllowedInEditable(combo) === true` para **toda** entrada de `CONSOLE_SHORTCUT_DEFS`, sin allowlist. Regla de diseño: lo que va al registro lleva Ctrl; lo que no, va a un `onKeyDown` local. Paso 4-bis del smoke. |
+| **R15** | **La consola se cablea a `Agents.cancel` (`endpoints.ts:1135`)** y "cancela" corridas que siguen vivas, devolviendo `{"ok": true}`. | **Alta** (el v2 anclaba exactamente esa línea) | Aviso en cabecera de F3 con la tabla comparativa de los dos `cancel`; anclaje corregido a `:1394`; **F3 test 11** grepea los archivos de consola y falla si aparece `Agents.cancel` o `/api/agents/cancel`; paso 9 del smoke verifica que el proceso de Codex murió de verdad. |
+| **R16** | **Choque de contratos de confirmación con el Plan 267**, que declara "un solo contrato de confirmación" y prohíbe un segundo mecanismo. | Media | §4.bis: reparto escrito — acciones **de corrida** con `useConfirm` (265, igual que `ActiveRunsPanel`), acciones **DevOps** con `confirmGateway` (267). El 265 no importa `entityActions.ts` y `consoleActions.ts` queda puro para que el 267 lo absorba en una capa si decide hacerlo. |
+| **R17** | **Una flag ajena OFF tumba la consola entera** (`STACKY_EXECUTION_HISTORY_ENABLED` ⇒ 404 y `api.get` lanza). | Media | F5(b): `rawGet` + `historyPanelState` con degradación y motivo visible; 4 tests; paso 7-bis del smoke con la flag apagada de verdad. |
 | **R6** | La bitácora crece sin techo o rompe una acción del operador. | Media | Rotación a 5 MB con máximo 2 archivos; `record_console_action` **nunca lanza** y devuelve `False` ante cualquier error. |
 | **R7** | El panel de Contexto depende del **Plan 264** y ese plan no está implementado. | **Alta** | Degradación explícita: muestra lo que hay y `"—"` con la `note` de la matriz de capacidades. **No bloquea** este plan. Declarado en F2.5 y F5(a). |
 | **R8** | Ocultar el chrome de la app en `"full"` deja al operador sin salida si un atajo falla. | Media | Siempre hay un botón visible de "Volver al dock" en el header de la consola, además del atajo. Nunca sólo teclado. |
@@ -1287,6 +1748,12 @@ registro de implementación al final de este documento:
 - **No** se implementa el selector de modelo/effort: se deja el seam medido para el Plan 264 (§4.bis).
 - **No** se edita `backend/services/plans_board.py` (Plan 263) ni `backend/services/claude_code_cli_runner.py`
   (Plan 264): sólo se los cita y se copia el patrón.
+- **No** se toca el panel DevOps ni el cockpit (Plan **239**, ya IMPLEMENTADO): verificado que no hay solapamiento.
+- **No** se crea ni se toca el catálogo de acciones DevOps ni `services/entityActions.ts` (Plan **267**): la
+  confirmación de acciones **de corrida** usa `useConfirm`, que es lo que ya hace `ActiveRunsPanel` (§4.bis).
+- **No** se arreglan las **79 keys** del registry sin entrada en `PLAIN_HELP` ni las 15 violaciones de jerga: es
+  deuda ajena medida en F0.8, y este plan la deja **exactamente igual** (ni una entrada más, ni una menos).
+- **No** se usa `Agents.cancel` (`api/endpoints.ts:1135`) por ningún camino.
 
 ---
 
@@ -1295,7 +1762,8 @@ registro de implementación al final de este documento:
 **Orden (estricto):**
 
 1. **F0** — flags (los **seis** lugares).
-2. **F1** — store + presentación + migración v3→v4 (**gate duro**: si el smoke de KPI-2 falla, no sigas).
+2. **F1** — store + presentación + migración v3→v4 (ojo con `WorkbenchPersistV4`, D5).
+2-bis. **F1.5** — identidad de sesión (**gate duro**: si el test 1 de F1.5 falla, no sigas; es la tesis del plan).
 3. **F2** — render rico (independiente de F3-F7).
 4. **F2.5** — matriz de capacidades (**antes de F3**: F3 consume sus `note`).
 5. **F3** — cancelar / volver a lanzar con confirmación.
@@ -1309,12 +1777,17 @@ registro de implementación al final de este documento:
 
 **Definición de Hecho (DoD):**
 
-- [ ] Los **19** comandos de F8 salen **exit 0**, cero rojos nuevos (para `test_harness_flags_help.py`, la lista
-      de fallos preexistentes anotada en F0.8 es **idéntica** antes y después).
-- [ ] Los **10** pasos del smoke manual ejecutados y **anotados con su resultado real**.
+- [ ] Los **20** comandos de F8 salen **exit 0**, cero rojos nuevos.
+- [ ] El **snippet de F0.8** (4 keys `STACKY_CONSOLE_*` contra las 10 reglas) imprime **`OK 4/4`** y sale exit 0.
+- [ ] `test_harness_flags_help.py` sigue en su **baseline medido**: **`4 failed, 4 passed`**, los mismos 4 nombres
+      de la tabla de F0.8, y **ninguna línea de error menciona `CONSOLE`**. (No se exige exit 0: es deuda ajena.)
+- [ ] Los **12** pasos del smoke manual ejecutados y **anotados con su resultado real** (incluidos 2-bis, 4-bis
+      y 7-bis, que son los tres casos que el v2 no tenía).
 - [ ] **KPI-1**: `normalizePresentation` cubre los 3 estados; test verde.
-- [ ] **KPI-2**: el conteo de líneas y de `dropped` es **idéntico** antes y después de alternar presentación
-      (anotado con los dos números).
+- [ ] **KPI-2 — ahora automático (D12)**: los **9 casos de F1.5** verdes, en particular el test 1 (las 9
+      transiciones conservan el token de sesión) y el test 8 (el token **distingue** sesiones distintas — sin él,
+      el test 1 se satisface con una constante). Y el setter del store llama a `applyPresentation`, no hace
+      aritmética propia. El conteo manual de líneas del paso 2 queda como confirmación, no como evidencia única.
 - [ ] **KPI-3**: las **20** capacidades de la tabla de §1.3 tildadas una por una; las que degradan
       (modelo/effort sin Plan 264) lo declaran en la UI con motivo visible.
 - [ ] **KPI-4**: `requiresConfirmation("cancel") === true` y el diálogo canónico (`useConfirm`) se abre de verdad
@@ -1325,8 +1798,19 @@ registro de implementación al final de este documento:
 - [ ] **Paridad de los 3 runtimes**: test 3 de F2.5 verde **y** el paso 9 del smoke corrido con los 3, con el
       texto del botón Cancelar anotado para cada uno.
 - [ ] Las 4 flags declaran `default=True` **y** están en `_CURATED_DEFAULTS_ON`; las 3 hijas están en
-      `_REQUIRES_MAP_FROZEN`; las 4 están en `_CATEGORY_KEYS["interfaz_ui"]` y en `PLAIN_HELP`. **Los seis
-      lugares tildados uno por uno.**
+      `_REQUIRES_MAP_FROZEN`; las 4 están en `_CATEGORY_KEYS["interfaz_ui"]` — **verificado que quedaron ANTES del
+      `),` de `:477` y no del de `:484`, que es de `"paridad_proveedores"` (D11)** — y en `PLAIN_HELP`.
+      **Los seis lugares tildados uno por uno.**
+- [ ] **Endpoint de cancelación correcto (D1)**: `git diff` del cambio **no** contiene `Agents.cancel` ni
+      `/api/agents/cancel`; F3 test 11 verde; paso 9 del smoke confirma que el proceso de `codex_cli` murió.
+- [ ] **Cero atajos muertos (D3)**: F6 test 9 verde y paso 4-bis del smoke (`Escape` con el foco DENTRO de la caja
+      de búsqueda vuelve al dock).
+- [ ] **Colisiones cross-scope (D4)**: F6 test 3-bis verde con su mapa `_CROSS_SCOPE_RESUELTAS` escrito.
+- [ ] **`tsc` verde tras F1 (D5)**: existe `WorkbenchPersistV4` y la firma de `migrateWorkbenchPersist` la devuelve.
+- [ ] **Degradación del historial (D6)**: `consoleHistoryPanel.test.ts` verde (4 casos, incluido el 404
+      `feature_disabled`) y paso 7-bis del smoke corrido con la flag ajena realmente apagada.
+- [ ] **Fronteras 239 y 267 (D7, D14)** respetadas: `git diff --stat` **no** contiene `services/entityActions.ts`
+      ni ningún archivo del panel DevOps.
 - [ ] Los **3** archivos `tests/test_plan265_*.py` registrados en **ambas** listas `HARNESS_TEST_FILES`
       (`.sh` y `.ps1`, con su sintaxis propia); `test_harness_ratchet_meta.py` verde.
 - [ ] **Cero `style={{`** en los componentes nuevos de consola; cero literales hex nuevos; cero espaciados

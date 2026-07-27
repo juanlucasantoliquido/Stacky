@@ -210,6 +210,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_NL_EDIT_ENABLED",   # Plan 250 — edicion quirurgica (analiza)
         "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED",  # Plan 250 — commit al repo REAL (OFF)
         "STACKY_PIPELINE_ENV_MATRIX_ENABLED",  # Plan 251 — matriz de entornos (read-only)
+        "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED",  # Plan 252 — paquete de entrega
     ),
     "migrador_ado_gitlab": (
         # NOTA: el master STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED (feature opt-in) → "capacidades_optin".
@@ -2983,6 +2984,26 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    # ── Plan 252 — Paquete de entrega + frontera de capacidades ───────────────
+    FlagSpec(
+        key="STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA de las 4 excepciones duras aplica — solo
+                        # produce un archivo descargable, no ejecuta nada, no publica
+                        # nada y no reduce la seguridad. Curada en _CURATED_DEFAULTS_ON.
+        label="Paquete de entrega de pipelines",
+        description=(
+            "Plan 252 - genera un .zip unico con los YAML, los scripts y un README "
+            "operativo para lo que Stacky no puede hacer solo, mas la frontera de "
+            "capacidades (que hace Stacky y que te toca a vos). OFF: desaparece el boton "
+            "y /api/pipeline-handoff/* responde 404; todo lo demas del panel queda igual."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        # SIN `requires` a proposito: el paquete se puede armar aunque el generador
+        # este OFF (los YAML pueden venir del repo). Y agregarla a _REQUIRES_MAP_FROZEN
+        # pondria ESE test en rojo, porque el mapa solo lista las specs CON requires.
     ),
     # ── Plan 251 — Matriz de entornos y valores que solo el operador conoce ───
     FlagSpec(

@@ -1,0 +1,27 @@
+/* Plan 252 F5 — paquete de entrega. Sin literales HEX y sin style={{...}} inline. */
+
+.section { display: flex; flex-direction: column; gap: 14px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.headline { font-size: 18px; font-weight: 600; color: var(--text); }
+.columns { display: flex; flex-wrap: wrap; gap: 16px; }
+.column { flex: 1; min-width: 280px; }
+.columnTitle { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.item { border-left: 3px solid var(--border); padding-left: 8px; font-size: 12px; color: var(--text); }
+.itemOk { border-left-color: var(--success, var(--border)); }
+.itemManual { border-left-color: var(--warning, var(--border)); }
+.reason { color: var(--text-muted); }
+.verdict { font-size: 11px; color: var(--text-muted); }
+.blocked { font-size: 12px; color: var(--text-muted); }
+.error { font-size: 12px; color: var(--danger, var(--text)); }
+.ok { font-size: 12px; color: var(--success, var(--text)); }
+.editor {
+  flex: 1; min-width: 300px; min-height: 120px;
+  font-family: var(--font-mono, monospace); font-size: 12px; padding: 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-elevated); color: var(--text);
+}
+.control {
+  min-width: 200px; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg-elevated); color: var(--text); font-size: 12px;
+}

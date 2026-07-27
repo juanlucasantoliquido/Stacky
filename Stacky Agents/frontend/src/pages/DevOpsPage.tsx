@@ -56,6 +56,7 @@ export interface DevOpsHealth {
   pipeline_nl_edit_enabled?: boolean; // Plan 250 — Edición quirúrgica de pipelines
   pipeline_nl_edit_commit_enabled?: boolean; // Plan 250 — commit al repo real (default OFF)
   env_matrix_enabled?: boolean; // Plan 251 — Matriz de entornos
+  handoff_bundle_enabled?: boolean; // Plan 252 — Paquete de entrega
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 
@@ -120,6 +121,8 @@ import { PipelineAuditPanel } from '../components/devops/PipelineAuditPanel';
 import { PipelineEditNlPanel } from '../components/devops/PipelineEditNlPanel';
 // Importar PipelineEnvMatrixPanel (Plan 251 F5)
 import { PipelineEnvMatrixPanel } from '../components/devops/PipelineEnvMatrixPanel';
+// Importar PipelineHandoffPanel (Plan 252 F5)
+import { PipelineHandoffPanel } from '../components/devops/PipelineHandoffPanel';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -284,6 +287,18 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_PIPELINE_ENV_MATRIX_ENABLED',
     gateMessage: 'La seccion Matriz de entornos necesita la flag STACKY_PIPELINE_ENV_MATRIX_ENABLED (Configuracion → Arnes, categoria DevOps).',
     render: (ctx) => <PipelineEnvMatrixPanel ctx={ctx} />,
+  },
+  // Plan 252 — Frontera de capacidades + paquete de entrega
+  {
+    id: 'paquete-entrega',
+    label: 'Paquete de entrega',
+    group: 'construir',
+    icon: '📦',
+    summary: 'Que hace Stacky, que te toca a vos, y un zip con los archivos y la guia.',
+    healthKey: 'handoff_bundle_enabled',
+    gateFlagKey: 'STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED',
+    gateMessage: 'La seccion Paquete de entrega necesita la flag STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED (Configuracion → Arnes, categoria DevOps).',
+    render: (ctx) => <PipelineHandoffPanel ctx={ctx} />,
   },
 ];
 

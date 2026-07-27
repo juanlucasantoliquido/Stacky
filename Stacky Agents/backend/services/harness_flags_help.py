@@ -712,6 +712,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: esa lista de avisos no se calcula ni se muestra, y las validaciones que ya existían siguen igual.",
         example="Te avisa que la canalización publica un paquete con la clave de la base adentro, y que el chequeo de seguridad no puede frenar la compilación.",
     ),
+    "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED": PlainHelp(
+        what="Arma un paquete descargable con los archivos de la canalizacion y una guia de pasos para dejarla funcionando en el servidor.",
+        on_effect="Si la activas: aparece el boton para bajar el paquete, que junta los archivos generados, agrega una guia con los pasos manuales y su verificacion, y baja todo en un solo archivo comprimido.",
+        off_effect="Si la apagas: ese boton no aparece y el resto del panel queda igual que antes; podes seguir copiando los archivos a mano.",
+        example="Generaste la canalizacion y ahora hay que registrarla y preparar el servidor: bajas un solo archivo con todo adentro y una guia que dice, paso a paso, que hacer, con que comando y como darte cuenta de que salio bien.",
+    ),
     "STACKY_PIPELINE_ENV_MATRIX_ENABLED": PlainHelp(
         what="Arma una tabla con todo lo que una canalizacion necesita para poder correr (claves, contrasenas, servidores, carpetas de destino) y te marca que falta en cada ambiente.",
         on_effect="Si la activas: antes de correr nada ves un titular del tipo 'Te faltan 4 valores' y la lista exacta, con lo que Stacky ya encontro solo marcado como listo.",

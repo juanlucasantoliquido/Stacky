@@ -808,6 +808,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan251_env_matrix_build.py
   tests/test_plan251_env_matrix_resolve.py
   tests/test_plan251_env_matrix_endpoints.py
+
+  # Plan 252 — frontera de capacidades + paquete de entrega
+  tests/test_plan252_capability_frontier.py
+  tests/test_plan252_handoff_bundle.py
+  tests/test_plan252_zip_determinismo.py
+  tests/test_plan252_handoff_api.py
 )
 
 pass=0

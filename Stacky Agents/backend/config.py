@@ -1422,6 +1422,13 @@ class Config:
         "STACKY_PIPELINE_AUDIT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 252 — Paquete de entrega de pipelines. Genera un .zip determinista con
+    # YAML + scripts + README operativo. No ejecuta nada: solo produce un archivo
+    # descargable. Default ON. Editable por UI.
+    STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
     # Plan 251 — Matriz de entornos: qué valores exige una pipeline y cuáles faltan.
     # SOLO LECTURA: no escribe en el repo, ni en el proveedor, ni en el servidor.
     # Default ON. Editable por UI (HarnessFlagsPanel, categoría DevOps).

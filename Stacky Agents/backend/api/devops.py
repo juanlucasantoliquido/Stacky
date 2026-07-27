@@ -97,6 +97,9 @@ def _health_payload() -> dict:
         "env_matrix_enabled": bool(
             getattr(cfg, "STACKY_PIPELINE_ENV_MATRIX_ENABLED", False)
         ),  # Plan 251 — matriz de entornos (solo lectura)
+        "handoff_bundle_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED", False)
+        ),  # Plan 252 — paquete de entrega
     }
 
 

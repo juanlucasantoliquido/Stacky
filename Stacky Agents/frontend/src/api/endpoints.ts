@@ -5122,6 +5122,52 @@ export interface PipelineEditInterpretDto {
   questions: string[];
 }
 
+/** Plan 252 — frontera de capacidades + paquete de entrega.
+ *  Gotcha: api.get/api.post LANZAN en non-2xx. El 409 del gate anti-secreto es un caso
+ *  ESPERADO, no un crash: el panel lo envuelve en try/catch y lo muestra. */
+export const PipelineHandoff = {
+  frontier: (deploys: boolean) =>
+    api.get<{ catalog_version: string; actions: HandoffFrontierActionDto[] }>(
+      `/api/pipeline-handoff/frontier?deploys=${deploys ? "true" : "false"}`,
+    ),
+  build: (body: {
+    pipeline_name: string;
+    provider: string;
+    yaml_files: Record<string, string>;
+    script_files?: Record<string, string>;
+    pipeline_deploys?: boolean;
+    spec?: Record<string, unknown>;
+  }) =>
+    api.post<{ bundle_id: string; bytes: number; manifest: Record<string, unknown> }>(
+      "/api/pipeline-handoff/build",
+      body,
+    ),
+  download: async (bundleId: string) => {
+    const response = await fetch(
+      `/api/pipeline-handoff/${encodeURIComponent(bundleId)}/download`,
+    );
+    if (!response.ok) throw new Error(`Descarga fallo: ${response.statusText}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `stacky-handoff-${bundleId}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+};
+
+export interface HandoffFrontierActionDto {
+  id: string;
+  label: string;
+  effective: "CAN" | "CANNOT" | "CANNOT_NOW" | "UNKNOWN";
+  reason: string;
+  probe_detail: string;
+  manual_instruction?: string;
+}
+
 /** Plan 251 — matriz de entornos. SOLO LECTURA: no escribe en ningun lado.
  *  Gotcha: `api.post` LANZA en cualquier non-2xx; el panel envuelve en try/catch. */
 export const PipelineEnvironments = {

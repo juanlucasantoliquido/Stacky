@@ -1,6 +1,81 @@
 # Plan 252 — La frontera de capacidades: qué hace Stacky, qué te toca a vos, y el paquete de entrega que lo cierra
 
-> ## ESTADO REAL AL 2026-07-26: **NO IMPLEMENTADO**
+> ## ESTADO REAL AL 2026-07-26: **IMPLEMENTADO — F0..F5 COMPLETAS**
+>
+> Implementado y commiteado en `feat/plan-217-migrador-mantis-gitlab`. **Backend 64 tests
+> verdes corridos por archivo con `backend/.venv` (py3.13.5); frontend 8 verdes +
+> `npx tsc --noEmit` en 0 errores.**
+>
+> | Fase | Estado | Archivo de test | Resultado real |
+> |---|---|---|---|
+> | F0 catálogo + resolución pura + flag | IMPLEMENTADA | `test_plan252_capability_frontier.py` | **18 passed** (F0+F1) |
+> | F1 sondas del estado real | IMPLEMENTADA | (mismo archivo) | incluidas arriba |
+> | F2 manifest + README por plantilla | IMPLEMENTADA | `test_plan252_handoff_bundle.py` | **18 passed** |
+> | F3 zip determinista + gate anti-secreto | IMPLEMENTADA | `test_plan252_zip_determinismo.py` | **14 passed** |
+> | F4 blueprint preview/build/download | IMPLEMENTADA | `test_plan252_handoff_api.py` | **14 passed** |
+> | F5 modelo puro + panel | IMPLEMENTADA | `pipelineHandoffModel.test.ts` | **8 passed**, `tsc` 0 errores |
+>
+> ### El peligro nº1 de este plan: ¿falla abierto o cerrado? — **CERRADO, y está probado**
+>
+> - **Orden del gate:** `build_files → assert_no_secrets(CRUDO) → scrub_files → ¿el scrub
+>   cambió algo? → abortar → zip`. `test_el_gate_corre_sobre_el_texto_crudo_no_sobre_el_enmascarado`
+>   congela justamente eso: demuestra que sobre el texto YA enmascarado el gate **no
+>   encuentra nada**, que es exactamente por qué el orden invertido del v1 dejaba salir el
+>   paquete para los 7 formatos que el enmascarador sí reconoce.
+> - **El scrub es TESTIGO, no filtro:** `test_masking_que_cambia_algo_tambien_aborta` usa
+>   `ghp_` + 20 chars — que `mask_token_values` reconoce y `egress_policies` **no** (pide
+>   36) — y verifica que el bundle se cae igual, nombrando el archivo culpable.
+> - **`probes={}` (nada evaluable) ⇒ ninguna acción `DEPENDS` queda en `CAN`**: todas caen
+>   en `UNKNOWN`, y `UNKNOWN` **cuenta como trabajo manual** (`test_probes_vacio_resuelve_unknown_nunca_can`).
+>   Lo mismo en la UI: `manualActions` incluye `UNKNOWN`.
+> - **Una acción `CANNOT` no la promueve ninguna sonda**, ni con las 3 en `True`.
+> - **`bundle_path` valida `^[0-9a-f]{16}$` ANTES de tocar el disco**, y el endpoint suma
+>   `commonpath` como defensa en profundidad: traversal ⇒ 404/400, nunca 500.
+> - **Un secreto sembrado ⇒ 409 y CERO archivos en disco** (`test_build_con_secreto_devuelve_409`).
+>
+> ### Los 3 bugs del PROPIO PLAN que aparecieron al construirlo
+>
+> 1. **El catálogo del §5 promete de más, y su propio §5.1 lo prohíbe.** La regla dice que
+>    una fila solo puede ser `CAN`/`DEPENDS` si nombra un ejecutor **real e importable**, y
+>    que si no existe **hay que bajarla a `CANNOT`**. Greppeado: en este árbol NO hay ningún
+>    símbolo que cree un variable group, un environment con approvals ni un agent pool. Por
+>    lo tanto `create_variable_group`, `create_environment_and_approvals` y
+>    `create_agent_pool` **bajaron de `DEPENDS` a `CANNOT`** con el `reason` honesto
+>    *"Stacky todavía no tiene un ejecutor para esto"*. El conteo de 14 no se movió (los
+>    tests cuentan filas, no veredictos), y `test_toda_accion_ejecutable_cita_un_simbolo_que_existe`
+>    lo congela: el día que alguien implemente el ejecutor, o se sube la fila o el test se
+>    pone rojo.
+>    *También:* `commit_yaml_to_repo` figuraba **`CAN`** en la tabla y **`repo_writer`** en
+>    su columna de sonda — las dos cosas a la vez es imposible (§F0: `CAN` ⟹ `probes == ()`,
+>    congelado por `test_can_y_cannot_no_declaran_sondas`). Se resolvió como `DEPENDS`, que
+>    es lo honesto: sin provider con puerto de escritura, Stacky no commitea.
+> 2. **`from services import X` no se puede desactivar sólo con `sys.modules`.** El test
+>    obligatorio de KPI-5 manda `monkeypatch.setitem(sys.modules, "services.X", None)`. Eso
+>    funciona **sólo si nadie importó `services.X` antes**: `from package import item` usa
+>    primero el **atributo del paquete** y recién cae a `sys.modules` si no existe. Como
+>    `test_bundle_con_251_presente_no_degrada` importa los módulos de verdad, los tests
+>    posteriores del mismo archivo pasaban a probar **la rama equivocada** — y uno de ellos
+>    fallaba. Corregido con `_forzar_ausencia()`, que parchea las **dos** cosas.
+> 3. **`collect_inputs` degradaba SIEMPRE por diseño accidental.** El plan lo escribió
+>    asumiendo que 246/247/251 no existen ("HOY NO EXISTE") — hoy **sí** existen, así que la
+>    rama sana nunca se había ejercitado. Se implementó `_variables_from_env_matrix` contra
+>    la API real del 251 (`extract_requirements`), con
+>    `test_bundle_con_251_presente_no_degrada` probando esa rama.
+>
+> ### Lo que queda pendiente (declarado)
+>
+> - **Smoke visual del operador** (no automatizable: sin `jsdom`): DevOps → *Paquete de
+>   entrega*, ver las dos listas, armar el paquete y bajarlo.
+> - **Rojo ajeno conocido:** `test_harness_flags_help.py` sigue con sus **4 fallos
+>   preexistentes**. Verificado que **ninguna** de las 4 flags de esta corrida (250 x2, 251,
+>   252) figura entre las ofensoras, y que las 4 entradas de `PLAIN_HELP` cumplen las 4
+>   restricciones (longitudes, prefijo `"Si "`, jerga).
+>
+> ---
+>
+> ### Encabezado original (antes de implementar)
+>
+> ## ESTADO PREVIO: **NO IMPLEMENTADO**
 >
 > La corrida que implementó la serie "Mago de las Pipelines" llegó hasta el **249** y **se detuvo
 > acá por presupuesto de contexto, a propósito**: el operador pidió explícitamente "prefiero 'el

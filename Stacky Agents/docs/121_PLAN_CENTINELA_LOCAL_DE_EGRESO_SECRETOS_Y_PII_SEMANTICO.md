@@ -1,6 +1,24 @@
 # Plan 121 — Centinela local de egreso: detección semántica de secretos y PII con la IA local
 
-**Estado:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS en v1 (2 IMPORTANTES + 1 MENOR corregidos in place; sin bloqueantes); v2 lista para implementar.
+**Estado:** **IMPLEMENTADO** — F0..F6 (commits `89a58ba5`, `1651e961`, `6b785283`, `379825fe`,
+`85496cbc`, `4aa60894`, `af578625`, `17126296`; mergeado en `98608121`).
+Auditoría solo-lectura 2026-07-26 (supervisar-implementaciones-planes), evidencia contra código:
+4 flags en `harness_flags.py:357-358,4302-4336` (las 3 hijas con `requires` de profundidad 1);
+`services/egress_sentinel.py` + clase `secrets` en `services/egress_policies.py`; daemon cableado
+(`app.py:651-669`, `_egress_sentinel_sweep_loop`, NO inerte); endpoints
+`POST /api/llm/egress-sentinel/scan` (`api/local_llm_analysis.py:661`) y `GET .../findings` (`:706`);
+UI montada en `ExecutionDetailDrawer.tsx:122` (`<EgressSentinelBlock>`) y en
+`LocalLlmPlaygroundPanel.tsx:92` (playground on-demand). F6: los 5 `test_plan121_*` registrados en
+`run_harness_tests.sh` **y** `.ps1`. Tests corridos de verdad, por archivo: flags 6, secret_patterns 10,
+sentinel_core 10, sentinel_sweep 7, sentinel_api 7 = **40 passed, 0 failed**.
+Pendiente único: smoke manual con el modelo local levantado (no automatizable).
+**Estado previo:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS en v1 (2 IMPORTANTES + 1 MENOR corregidos in place; sin bloqueantes); v2 lista para implementar.
+
+**Nota de vigencia (auditoría 2026-07-26):** el 121 NO fue superado por los módulos de enmascarado que
+existen hoy en el repo (`services/secret_masking.py`, `services/pii_masker.py`,
+`services/dbcompare_masking.py`): esos son enmascarado de PRESENTACIÓN en otros subsistemas, mientras el
+121 es DETECCIÓN semántica de egreso con IA local sobre las ejecuciones, con su propio daemon y sus
+propios endpoints. Coexisten; ninguno vuelve redundante al otro.
 
 **v1 → v2 — CHANGELOG (crítica adversarial 2026-07-14):**
 

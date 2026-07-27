@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from services.silent_failure_counter import log_at_level  # Plan 255 F2
+
 logger = logging.getLogger("stacky_agents.services.ado_edit_learning")
 
 _MAX_LESSON_CHARS = 1500
@@ -317,8 +319,21 @@ def sweep_recent_runs(
                         ado_id, res.rev, run.id, res.negative_goldens_written,
                     )
             except Exception as exc:
-                logger.warning("sweep_recent_runs: error en WI %s (no crítico): %s", ado_id, exc)
+                # Plan 255 F2 sitio 2 — el nivel lo decide la CLASE de la
+                # excepción, no el autor del call-site.
+                log_at_level(logger,
+                             exc,
+                             "sweep_recent_runs: error en WI %s (no crítico): %s",
+                             ado_id, exc)
 
+    # Plan 255 F0(D) — un ImportError/AttributeError es un fallo ESTRUCTURAL: no
+    # se arregla solo y no es transitorio. Durante dos días este `except` se comió
+    # 1016 fallos a nivel `warning` mientras la función devolvía 0 lecciones
+    # aparentando éxito. El handler específico va ANTES del genérico o Python
+    # nunca lo alcanza.
+    except (ImportError, AttributeError) as exc:
+        logger.error("sweep_recent_runs: fallo ESTRUCTURAL (el sweep queda "
+                     "inerte hasta arreglarlo): %s", exc)
     except Exception as exc:
         logger.warning("sweep_recent_runs: error general: %s", exc)
 

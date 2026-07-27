@@ -850,6 +850,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan254_outcome_reason.py
   tests/test_plan254_stream_drain.py
   tests/test_plan254_reconciliation.py
+
+  # Plan 255 - cero fallas mudas (bugs mudos, contador de silencio, ratchet, canario)
+  tests/test_plan255_bugs_mudos.py
+  tests/test_plan255_silent_failures.py
+  tests/test_plan255_silence_ratchet.py
+  tests/test_plan255_dormant_canary.py
 )
 
 pass=0

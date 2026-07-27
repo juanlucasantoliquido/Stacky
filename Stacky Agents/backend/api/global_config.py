@@ -25,6 +25,7 @@ from flask import Blueprint, jsonify, request
 
 from runtime_paths import backend_root
 from services.gitlab_client import GitLabClient  # importado a nivel módulo para parchear en tests
+from services.silent_failure_counter import note_swallowed  # Plan 255 F1
 from services.tracker_provider import TrackerConfigError as _TrackerConfigError  # ídem
 
 logger = logging.getLogger(__name__)
@@ -571,8 +572,10 @@ def get_codex_session_status():
     try:
         env_cfg = _read_env()
         codex_bin = env_cfg.get("CODEX_CLI_BIN", "").strip()
-    except Exception:
-        pass
+    except Exception as _e255:
+        # Plan 255 F1 sitio 12 — config del operador: un fallo mudo acá hace que
+        # el panel muestre un estado que no es el real.
+        note_swallowed("global_config.get_codex_session_status.read_env", _e255)
     if not codex_bin:
         codex_bin = shutil.which("codex") or ""
     if not codex_bin:

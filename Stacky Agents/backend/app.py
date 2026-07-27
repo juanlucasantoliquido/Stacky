@@ -244,6 +244,8 @@ def _plan199_maybe_autoscan_harvest(logger) -> None:
         return
 
     def _worker():
+        from services.silent_failure_counter import log_level_for, note_swallowed  # Plan 255 F2
+
         try:
             from services import telemetry_harvest as th
 
@@ -260,8 +262,15 @@ def _plan199_maybe_autoscan_harvest(logger) -> None:
                                 attributed_only=solo_atribuidas)
             logger.info("plan199 autoscan: discovered=%d backfilled=%d",
                         len(runs), backfill["backfilled"])
-        except Exception:  # noqa: BLE001
-            logger.exception("plan199 autoscan: fallo no fatal")
+        except Exception as _exc255:  # noqa: BLE001
+            # Plan 255 F2 sitio 4 — VERIFICADO: este `except` no está anidado en
+            # otro que lo re-tragase y `logger.exception` ya sale a `error`. Por
+            # eso NO se degrada: se conserva la traza completa siempre y se
+            # agrega la clase de fallo que decide `log_level_for` (el NameError
+            # de `data_dir` que motivó el plan es estructural) más el contador.
+            note_swallowed("app.plan199_autoscan", _exc255)
+            logger.exception("plan199 autoscan: fallo no fatal (clase=%s)",
+                             log_level_for(_exc255))
 
     threading.Thread(target=_worker, name="plan199-harvest", daemon=True).start()
 

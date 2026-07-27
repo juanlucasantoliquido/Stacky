@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 
 from harness.capabilities import CAPABILITIES
+from services.silent_failure_counter import log_at_level, note_swallowed  # Plan 255 F2
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,9 @@ _SESSION_KEY: dict[str, str] = {
     "claude_code_cli": "session_id",
     "codex_cli": "codex_session_id",
 }
+
+# Plan 255 F0 rollout §3 — cota dura al prefijo de delta inyectado al prompt.
+_DELTA_PREFIX_MAX_CHARS = 20_000
 
 # Flag master + allowlist CSV por runtime (leídos de config en call-time)
 _RESUME_FLAG: dict[str, tuple[str, str]] = {
@@ -89,17 +93,20 @@ def resolve(
         prev_blocks: list[dict] = []
 
         with session_scope() as db_session:
+            # Plan 255 F0(A) — el filtro condicional va ANTES de order_by/limit.
+            # SQLAlchemy 2.0.36 prohíbe .filter() sobre un Query que ya tiene
+            # LIMIT/OFFSET; con `execution_id` (el caso NORMAL del runner) el
+            # query reventaba, lo tragaba el except final y el resume quedó
+            # muerto desde el 2026-07-17 sin más síntoma que un WARNING.
             query = (
                 db_session.query(AgentExecution)
                 .filter(AgentExecution.ticket_id == ticket_id)
                 .filter(AgentExecution.agent_type == agent_type)
                 .filter(AgentExecution.status == "completed")
-                .order_by(AgentExecution.id.desc())
-                .limit(5)
             )
             if execution_id is not None:
                 query = query.filter(AgentExecution.id != execution_id)
-            rows = query.all()
+            rows = query.order_by(AgentExecution.id.desc()).limit(5).all()
 
             for row in rows:
                 md = row.metadata_dict or {}
@@ -122,17 +129,32 @@ def resolve(
                 diff = delta_prompt.compute_diff(prev_blocks, current_blocks)
                 if diff.is_delta_eligible:
                     delta_prefix = delta_prompt.build_delta_prompt(prev_output or "", diff)
-                    logger.info(
-                        "resume %s: sesión=%s… contexto cambió %.0f%%",
-                        runtime,
-                        prev_session_id[:12],
-                        diff.change_ratio * 100,
-                    )
+                    # Plan 255 F0 rollout §3 — cota dura al delta. Un delta
+                    # gigante inyectado al prompt es PEOR que no reanudar: se
+                    # descarta y se arranca con el prompt completo.
+                    if delta_prefix and len(delta_prefix) > _DELTA_PREFIX_MAX_CHARS:
+                        logger.info(
+                            "resume %s: delta descartado por tamaño (%d chars > %d) — "
+                            "se arranca con el prompt completo",
+                            runtime, len(delta_prefix), _DELTA_PREFIX_MAX_CHARS,
+                        )
+                        delta_prefix = None
+                    else:
+                        logger.info(
+                            "resume %s: sesión=%s… contexto cambió %.0f%%",
+                            runtime,
+                            prev_session_id[:12],
+                            diff.change_ratio * 100,
+                        )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("resume: delta_prompt falló (continuando sin delta): %s", exc)
 
         return prev_session_id, delta_prefix
 
     except Exception as exc:  # noqa: BLE001 — resume nunca tumba el run
-        logger.warning("harness.resume.resolve falló (arranque en frío): %s", exc)
+        # Plan 255 F2 sitio 5 — este `warning` tapó el bug 9 días. El nivel
+        # ahora lo decide la clase de excepción, y el contador lo registra
+        # aunque el nivel bajara. El TEXTO no cambia: es la huella de F5.
+        note_swallowed("harness.resume.resolve", exc)
+        log_at_level(logger, exc, "harness.resume.resolve falló (arranque en frío): %s", exc)
         return None, None

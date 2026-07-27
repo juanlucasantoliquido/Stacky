@@ -15,6 +15,8 @@ import PublishLedgerPanel from "../components/PublishLedgerPanel";
 import OperationalHealthCard from "../components/OperationalHealthCard";
 import CodeIntegrityCard from "../components/CodeIntegrityCard";
 import RunReconciliationCard from "../components/RunReconciliationCard";
+import SilentFailuresCard from "../components/SilentFailuresCard";
+import DormantCanariesCard from "../components/DormantCanariesCard";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
@@ -286,6 +288,16 @@ export default function DiagnosticsPage() {
       {/* Plan 254 F5 — el falso ROJO, medido. READ-ONLY: lista, no cambia nada.
           No se monta si STACKY_RUN_RECONCILIATION_ENABLED está apagada (404). */}
       <RunReconciliationCard />
+
+      {/* Plan 255 F1 — el silencio, contado. READ-ONLY sobre un dict en memoria;
+          declara su ventana porque un cero NO prueba que un punto sea inerte.
+          No se monta si STACKY_SILENT_FAILURE_COUNTER_ENABLED está apagada (404). */}
+      <SilentFailuresCard />
+
+      {/* Plan 255 F6 — mecanismos caros que dejaron de dar señal de ÉXITO.
+          AVISA, nunca arregla. No se monta si STACKY_DORMANT_CANARY_ENABLED
+          está apagada (404). */}
+      <DormantCanariesCard />
 
       {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
           maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}

@@ -10,6 +10,8 @@ import queue
 import threading
 from datetime import datetime
 
+from services.silent_failure_counter import note_swallowed
+
 _install_lock = threading.Lock()
 _installed = False
 
@@ -69,8 +71,12 @@ class _SystemLogHandler(logging.Handler):
                     )
                     session.add(log)
                     session.commit()
-            except Exception:
-                pass  # No propagar errores del handler
+            except Exception as _e:
+                # Plan 255 F1 sitio 1 / F2 sitio 6 — acá el silencio es CORRECTO:
+                # este es el sink de logs de la UI, así que loguear el fallo del
+                # sink dispararía recursión. Se cuenta y nada más: `note_swallowed`
+                # nunca loguea ni levanta. No propagar errores del handler.
+                note_swallowed("console_log_handler._worker", _e)
 
 
 def install_console_log_handler() -> None:

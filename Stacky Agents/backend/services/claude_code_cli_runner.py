@@ -59,6 +59,7 @@ from services import (
     webhooks,
 )
 from services.agent_env import build_agent_env
+from services.silent_failure_counter import note_swallowed  # Plan 255 F1
 from services.project_context import resolve_project_context
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
 from services.stacky_logger import logger as stacky_logger
@@ -897,8 +898,10 @@ def _run_in_background(
                         if _tobj is not None:
                             _cli_title = _tobj.title or ""
                             _cli_desc = _tobj.description or ""
-                except Exception:
-                    pass
+                except Exception as _e255:
+                    # Plan 255 F1 sitio 4 - snapshot del ticket para el estimador
+                    # de complejidad: si falla, el runner sigue con el default.
+                    note_swallowed("claude_code_cli_runner._run_in_background.ticket_snapshot", _e255)
                 _cli_complexity = _est_c(
                     agent_type=agent_type or "",
                     ticket_title=_cli_title,
@@ -1319,8 +1322,11 @@ def _run_in_background(
                                 if _verdict.decision == GateDecision.REPAIR:
                                     _needs_repair = True
                                     _repair_reason = f"gate_repair:{_gate_defects}"
-                            except Exception:  # noqa: BLE001
-                                pass
+                            except Exception as _e255:  # noqa: BLE001
+                                # Plan 255 F1 sitio 6 - gate de contrato en el
+                                # camino caliente del stream: tragarlo apaga el
+                                # gate sin dejar rastro. Se cuenta.
+                                note_swallowed("claude_code_cli_runner._on_stream_event.contract_gate", _e255)
                         if _needs_repair:
                             _ac_used = autocorrect.attempts if autocorrect is not None else 0
                             _ac_budget = config.CLAUDE_CODE_CLI_AUTOCORRECT_MAX_RETRIES
@@ -1948,8 +1954,10 @@ def _run_in_background(
                     for k, v in _trace.items():
                         metadata.setdefault(k, v)
                     metadata.setdefault("produced_files", _collect_produced_files(None))
-                except Exception:
-                    pass
+                except Exception as _e255:
+                    # Plan 255 F1 sitio 5 - la traza es best-effort: nunca puede
+                    # tumbar el cierre de la corrida. Se cuenta.
+                    note_swallowed("claude_code_cli_runner._run_in_background.trace", _e255)
             # Plan 77 F3 (Claude CLI) — Postea análisis de fase del Issue (si aplica). No-fatal.
             try:
                 from api.tickets import publish_issue_phase_from_run as _pub_issue_phase  # noqa: PLC0415

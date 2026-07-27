@@ -805,3 +805,58 @@ def code_integrity_route():
         return jsonify(ci.run_checks())
     except Exception as exc:
         return jsonify({"ok": False, "error": type(exc).__name__}), 200
+
+
+@bp.get("/silent-failures")
+def silent_failures_route():
+    """Plan 255 F1 — cuántos fallos se tragó cada `except`, en esta ventana.
+
+    READ-ONLY y sin costo ocioso: es un GET a pedido sobre un dict en memoria.
+    La respuesta DECLARA su ventana porque el contador vive en RAM y el backend
+    reinicia varias veces por día: `count == 0` no prueba que un sitio sea
+    inerte, solo que no se disparó desde el último arranque.
+    """
+    if not bool(getattr(_config.config, "STACKY_SILENT_FAILURE_COUNTER_ENABLED", True)):
+        return jsonify({
+            "ok": False,
+            "error": "silent_failure_counter_disabled",
+            "message": "El contador de fallos silenciados está deshabilitado "
+                       "(STACKY_SILENT_FAILURE_COUNTER_ENABLED).",
+        }), 404
+    from services import silent_failure_counter as sfc  # import lazy (patrón Plan 109)
+
+    limit = request.args.get("top", default=10, type=int) or 10
+    try:
+        reporte = sfc.swallowed_report(top=limit)
+    except Exception as exc:  # noqa: BLE001 — un diagnóstico jamás rompe el panel
+        logger.debug("silent-failures falló", exc_info=True)
+        return jsonify({"ok": False, "error": type(exc).__name__,
+                        "window": None, "rows": []}), 200
+    reporte["ok"] = True
+    return jsonify(reporte)
+
+
+@bp.get("/dormant-canaries")
+def dormant_canaries_route():
+    """Plan 255 F6 — mecanismos caros que dejaron de dar señal de ÉXITO.
+
+    Lo inverso a una huella de regresión: alarma cuando un patrón BUENO deja de
+    aparecer. AVISA, NUNCA ARREGLA: no reintenta, no re-habilita y no toca
+    config. Lee bajo demanda un tail acotado del log local (sin loop, sin red,
+    sin modelo), así que la flag puede estar default ON sin quemar nada.
+    """
+    if not bool(getattr(_config.config, "STACKY_DORMANT_CANARY_ENABLED", True)):
+        return jsonify({
+            "ok": False,
+            "error": "dormant_canary_disabled",
+            "message": "El canario de mecanismos dormidos está deshabilitado "
+                       "(STACKY_DORMANT_CANARY_ENABLED).",
+        }), 404
+    from services import dormant_canary as dc  # import lazy (patrón Plan 109)
+
+    try:
+        filas = dc.check_canaries()
+    except Exception as exc:  # noqa: BLE001 — un diagnóstico jamás rompe el panel
+        logger.debug("dormant-canaries falló", exc_info=True)
+        return jsonify({"ok": False, "error": type(exc).__name__, "canaries": []}), 200
+    return jsonify({"ok": True, "canaries": filas})

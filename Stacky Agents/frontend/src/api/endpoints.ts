@@ -3172,6 +3172,54 @@ export const RunReconciliation = {
     }),
 };
 
+// ── Plan 255 F1 — fallos que el sistema se tragó, con la ventana declarada ───
+export interface SilentFailureRow {
+  site: string;
+  count: number;
+  last_exc_type: string | null;
+  last_seen: string | null;
+}
+
+export interface SilentFailuresResponse {
+  ok?: boolean;
+  window: { process_started_at: string; window_seconds: number };
+  rows: SilentFailureRow[];
+  sites_total?: number;
+  sites_cap?: number;
+}
+
+export const SilentFailures = {
+  /** READ-ONLY sobre un dict en memoria. Con la flag OFF responde 404 y la card
+   *  se auto-oculta con el catch (mismo patrón que RunReconciliation). */
+  get: (): Promise<SilentFailuresResponse> =>
+    fetch("/api/diag/silent-failures").then((r) => {
+      if (!r.ok) throw new Error(`silent failures ${r.status}`);
+      return r.json();
+    }),
+};
+
+// ── Plan 255 F6 — mecanismos caros que dejaron de dar señal de éxito ─────────
+export interface DormantCanaryRow {
+  id: string;
+  label: string;
+  /** ok | dormido | apagado | sin_datos */
+  status: string;
+  last_success_at: string | null;
+  days_silent: number | null;
+  gated_off: boolean;
+  max_silent_days: number;
+  hint: string;
+}
+
+export const DormantCanaries = {
+  /** READ-ONLY: avisa, nunca arregla. 404 con la flag OFF → la card no existe. */
+  get: (): Promise<{ ok?: boolean; canaries: DormantCanaryRow[] }> =>
+    fetch("/api/diag/dormant-canaries").then((r) => {
+      if (!r.ok) throw new Error(`dormant canaries ${r.status}`);
+      return r.json();
+    }),
+};
+
 // ── Plan 253 F7 — estado de concurrencia de la base, consultable ─────────────
 export interface DbRuntimeInfo {
   sqlite_file: string | null;

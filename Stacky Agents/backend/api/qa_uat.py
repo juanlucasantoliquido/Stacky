@@ -46,6 +46,7 @@ import log_streamer
 from db import session_scope
 from models import AgentExecution, Ticket
 from ._helpers import current_user
+from services.silent_failure_counter import note_swallowed  # Plan 255 F1
 
 bp = Blueprint("qa_uat", __name__, url_prefix="/qa-uat")
 
@@ -1280,8 +1281,10 @@ def approve_seed_proposal():
         approval_path.write_text(
             __import__("json").dumps(approval_record, indent=2), encoding="utf-8"
         )
-    except Exception:
-        pass  # Non-fatal; proceed with execution
+    except Exception as _e255:
+        # Plan 255 F1 sitio 11 - sin este archivo la aprobacion del operador no
+        # queda registrada. Non-fatal; proceed with execution.
+        note_swallowed("qa_uat.approve_seed_proposal.write_approval", _e255)
 
     try:
         result = seed_execute(

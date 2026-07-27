@@ -1773,6 +1773,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la consulta no responde y no hay forma de saber cuántos casos quedaron mal marcados.",
         example="Como el arqueo de caja: cuenta y te dice si falta o sobra, pero no mete ni saca plata.",
     ),
+    # ── Plan 255 — cero fallas mudas ──────────────────────────────────────
+    "STACKY_SILENT_FAILURE_COUNTER_ENABLED": PlainHelp(
+        what="Lleva la cuenta de cuántas veces cada punto del sistema se tragó un fallo sin dejar rastro, para saber cuáles se disparan de verdad.",
+        on_effect="Si la activás: el panel de diagnóstico muestra qué puntos silenciaron fallos y cuántas veces, desde el último arranque.",
+        off_effect="Si la apagás: nadie cuenta esos fallos silenciados y la lista queda vacía; todo lo demás se comporta exactamente igual.",
+        example="Como poner un contador en cada puerta de servicio para saber cuál se usa de verdad, sin cámaras y sin molestar a nadie.",
+    ),
+    "STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL": PlainHelp(
+        what="Decide con qué gravedad se anota un fallo según su tipo: los errores de programación quedan como graves y los pasajeros como simples avisos.",
+        on_effect="Si la activás: un error de programación queda anotado como grave y salta a la vista, en vez de perderse entre miles de avisos.",
+        off_effect="Si la apagás: esos fallos vuelven a quedar anotados como simples avisos, igual que antes.",
+        example="Es la diferencia entre anotar «se rompió el motor» y «llovió»: lo primero no se arregla solo y merece otro color.",
+    ),
+    "STACKY_DORMANT_CANARY_ENABLED": PlainHelp(
+        what="Avisa cuando un mecanismo caro dejó de dar señales de haber funcionado, aunque nadie haya reportado ni un solo error.",
+        on_effect="Si la activás: el panel de diagnóstico marca los mecanismos que llevan días sin una sola señal de éxito y te dice qué mirar.",
+        off_effect="Si la apagás: nadie vigila esas ausencias y un mecanismo puede quedar muerto durante días sin que aparezca un solo error.",
+        example="Como el canario de la mina: no grita cuando hay peligro, deja de cantar. Avisa y nada más; qué hacer con eso lo decidís vos.",
+    ),
     "STACKY_DB_COMPACT_ENABLED": PlainHelp(
         what="Habilita el botón que comprime la base para recuperar el espacio que dejaron los datos borrados.",
         on_effect="Si la activás: aparece el botón para comprimir. Nada se comprime hasta que vos lo confirmes.",

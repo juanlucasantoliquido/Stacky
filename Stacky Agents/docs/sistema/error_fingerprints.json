@@ -627,6 +627,72 @@
           "2026-07-25 11:56:03 INFO [stacky.ticket_status] ticket_id=673: 'running' -> 'error' (exec=161, by=system)"
         ]
       }
+    },
+    {
+      "id": "resume_resolve_limit_filter",
+      "title": "resume muerto: .filter() despues de .limit() reventaba el query y se tragaba a warning",
+      "class": "harness-resume",
+      "status": "resolved",
+      "log_pattern": "harness\\.resume\\.resolve falló \\(arranque en frío\\)",
+      "log_guarded": true,
+      "killed_by": "plan 255 F0(A) (filtro condicional ANTES de order_by/limit + cota al delta)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan255_bugs_mudos.py",
+      "evidence": "backend/harness/resume.py:resolve (bloque del query, ancla `.limit(5)`)",
+      "note": "50 ocurrencias entre 2026-07-17 y 2026-07-26 en los dos runtimes con supports_resume. SQLAlchemy 2.0.36 prohibe .filter() sobre un Query que ya tiene LIMIT/OFFSET; con execution_id (el caso NORMAL del runner) el query reventaba, lo tragaba el except final y el runner arrancaba en frio. El unico sintoma era un WARNING entre miles. La huella INVERSA (que el camino de exito vuelva a aparecer) la vigila el canario `resume_efectivo` de services/dormant_canary.py: un regex no puede alarmar por una AUSENCIA.",
+      "self_test": {
+        "matches": [
+          "2026-07-26 14:14:19 WARNING [harness.resume] harness.resume.resolve falló (arranque en frío): Query.filter() being called on a Query which already has LIMIT or OFFSET applied.  Call filter() before limit() or offset() are applied."
+        ],
+        "clean": [
+          "2026-07-27 09:02:11 INFO [harness.resume] resume claude_code_cli: sesión=abc123def456… contexto cambió 12%"
+        ]
+      }
+    },
+    {
+      "id": "run_incident_dev_nameerror_ado_id",
+      "title": "run_incident_dev no vinculaba la incidencia: NameError de un binding de class-body",
+      "class": "nameerror-scope",
+      "status": "resolved",
+      "log_pattern": "NameError: name 'ado_id' is not defined",
+      "log_guarded": true,
+      "killed_by": "plan 255 F0(B) (usar ticket_ado_id) + F2 sitio 3 (nivel por clase)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan255_bugs_mudos.py",
+      "evidence": "backend/api/agents.py:run_incident_dev (ancla `_istore.find_by_tracker_id`)",
+      "note": "4 ocurrencias el 2026-07-26. La unica asignacion de `ado_id` vivia en el cuerpo de la clase `_TicketSnapshot`, y los bindings de class-body NO son visibles desde la funcion que la contiene. Lo tapaba un except best-effort con logger.info y el endpoint devolvia 202: el operador veia 'aceptado' y la vinculacion con la incidencia nunca ocurria. El patron esta anclado a la firma COMPLETA a proposito: 'NameError' a secas alarmaria por cualquier cosa.",
+      "self_test": {
+        "matches": [
+          "NameError: name 'ado_id' is not defined"
+        ],
+        "clean": [
+          "NameError: name 'ticket_ado_id' is not defined"
+        ]
+      }
+    },
+    {
+      "id": "telemetry_harvest_nameerror_data_dir",
+      "title": "el ledger de cosecha nunca se escribia: faltaba el import de data_dir a nivel modulo",
+      "class": "nameerror-import",
+      "status": "resolved",
+      "log_pattern": "NameError: name 'data_dir' is not defined",
+      "log_guarded": true,
+      "killed_by": "plan 255 F0(C) (from runtime_paths import data_dir a nivel modulo)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan255_bugs_mudos.py",
+      "evidence": "backend/services/telemetry_harvest.py:_ledger_path",
+      "note": "El modulo importaba json/logging/os/dataclass/datetime/Path pero NO data_dir; el unico import de runtime_paths era local dentro de otra funcion y traia projects_dir/repo_root. Con la configuracion POR DEFECTO (las dos flags de cosecha nacen en true) el thread plan199-harvest llamaba append_to_ledger -> _ledger_path() y reventaba, tapado por un logger.exception en app.py. El contenido y la higiene del ledger son del plan 258; aca solo que SE ESCRIBE.",
+      "self_test": {
+        "matches": [
+          "NameError: name 'data_dir' is not defined"
+        ],
+        "clean": [
+          "NameError: name 'metadata_dir' is not defined"
+        ]
+      }
     }
   ]
 }

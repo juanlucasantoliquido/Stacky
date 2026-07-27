@@ -32,6 +32,7 @@ from services import (
     webhooks,
 )
 from services.agent_env import build_agent_env
+from services.silent_failure_counter import note_swallowed  # Plan 255 F1
 from services.manifest_watcher import append_event, write_heartbeat, write_manifest
 from services.project_context import resolve_project_context
 from services.stacky_logger import logger as stacky_logger
@@ -452,8 +453,10 @@ def _run_in_background(
                         if _tobj_cx is not None:
                             _cx_title = _tobj_cx.title or ""
                             _cx_desc = _tobj_cx.description or ""
-                except Exception:
-                    pass
+                except Exception as _e255:
+                    # Plan 255 F1 sitio 7 - mismo bloque de arranque donde vive
+                    # resume.resolve: si aca se traga algo, se traga en silencio.
+                    note_swallowed("codex_cli_runner._run_in_background.ticket_snapshot", _e255)
                 _codex_complexity = _est_cx(
                     agent_type=agent_type or "",
                     ticket_title=_cx_title,
@@ -847,8 +850,10 @@ def _run_in_background(
                     _row = _sess.get(AgentExecution, execution_id)
                     if _row is not None:
                         _codex_session_id = _row.metadata_dict.get("codex_session_id")
-            except Exception:
-                pass
+            except Exception as _e255:
+                # Plan 255 F1 sitio 8 - sin el session id previo el resume queda
+                # inerte: es exactamente la clase de silencio que motivo el plan.
+                note_swallowed("codex_cli_runner._run_in_background.session_id", _e255)
 
             if config.CODEX_CLI_AUTOCORRECT_ENABLED and t_ado_id is not None:
                 try:

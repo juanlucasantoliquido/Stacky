@@ -1304,6 +1304,28 @@ class Config:
     STACKY_ASSUMPTION_MAX_PER_RUN: int = int(
         os.getenv("STACKY_ASSUMPTION_MAX_PER_RUN", "10") or 10
     )
+    # ── Plan 255 — Cero fallas mudas ────────────────────────────────
+    # Las 3 nacen ON y ninguna cae en las 4 excepciones duras: son un dict en
+    # memoria, un cambio de nivel de log y una lectura bajo demanda de un tail
+    # acotado del log local. Cero red, cero modelo, cero escritura, cero tokens
+    # ociosos. Son kill-switches, no interruptores de alta.
+    STACKY_SILENT_FAILURE_COUNTER_ENABLED: bool = os.getenv(
+        "STACKY_SILENT_FAILURE_COUNTER_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL: bool = os.getenv(
+        "STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL", "true").lower() in ("1", "true", "yes")
+    STACKY_DORMANT_CANARY_ENABLED: bool = os.getenv(
+        "STACKY_DORMANT_CANARY_ENABLED", "true").lower() in ("1", "true", "yes")
+    # ── Plan 255 — Cero fallas mudas ────────────────────────────────
+    # Las 3 nacen ON y ninguna cae en las 4 excepciones duras: son un dict en
+    # memoria, un cambio de nivel de log y una lectura bajo demanda de un tail
+    # acotado del log local. Cero red, cero modelo, cero escritura, cero tokens
+    # ociosos. Son kill-switches, no interruptores de alta.
+    STACKY_SILENT_FAILURE_COUNTER_ENABLED: bool = os.getenv(
+        "STACKY_SILENT_FAILURE_COUNTER_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL: bool = os.getenv(
+        "STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL", "true").lower() in ("1", "true", "yes")
+    STACKY_DORMANT_CANARY_ENABLED: bool = os.getenv(
+        "STACKY_DORMANT_CANARY_ENABLED", "true").lower() in ("1", "true", "yes")
     # ── Plan 214 — Validación QAUAT E2E al completar el Developer ─────────────
     # Solo escribe metadata local (no publica, no ejecuta, no toca ADO) ⇒ ON.
     STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED: bool = os.getenv(

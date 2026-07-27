@@ -27,6 +27,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Plan 255 F0(C) — faltaba este import: `_ledger_path()` levantaba NameError y,
+# con la configuración por defecto, el ledger de cosecha NUNCA se escribía. Sin
+# ciclo: `runtime_paths` no importa este módulo.
+from runtime_paths import data_dir
+
 logger = logging.getLogger("stacky.services.telemetry_harvest")
 
 __all__ = [

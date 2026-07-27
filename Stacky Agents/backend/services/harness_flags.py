@@ -317,6 +317,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_SYSLOG_RETENTION_DAYS",
         # Plan 254 — lo que solo se VE: badge de causa y panel de reconciliacion.
         "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED", "STACKY_RUN_RECONCILIATION_ENABLED",
+        # Plan 255 — cero fallas mudas: contador de silencio, nivel por clase y canario.
+        "STACKY_SILENT_FAILURE_COUNTER_ENABLED",
+        "STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL",
+        "STACKY_DORMANT_CANARY_ENABLED",
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -5126,6 +5130,43 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 254 - Compara el estado de cada ticket contra lo que de verdad paso en "
             "su corrida y lista las diferencias. Solo lectura: no cambia ni un estado, no "
             "reintenta y no corre solo (se consulta a pedido)."
+        ),
+        group="global",
+        default=True,
+    ),
+    # ── Plan 255 — cero fallas mudas ───────────────────────────────
+    FlagSpec(
+        key="STACKY_SILENT_FAILURE_COUNTER_ENABLED",
+        type="bool",
+        label="Contar los fallos que el sistema se traga en silencio",
+        description=(
+            "Plan 255 - Registra cuantas veces cada punto del codigo atrapo un fallo y "
+            "no dejo rastro. Un dict en memoria: no escribe a disco, no loguea y jamas "
+            "levanta. Apagada, el contador no cuenta y el panel queda vacio."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL",
+        type="bool",
+        label="Anotar como graves los fallos que son bugs de codigo",
+        description=(
+            "Plan 255 - Un fallo de importacion, de atributo o de nombre se anota como "
+            "'error'; los transitorios (bloqueo, timeout, red) siguen como 'warning'. "
+            "TypeError queda EXCLUIDO a proposito. Apagada, todo vuelve a 'warning'."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_DORMANT_CANARY_ENABLED",
+        type="bool",
+        label="Avisar cuando un mecanismo caro dejo de dar senales de exito",
+        description=(
+            "Plan 255 - Lo inverso a una huella de regresion: alarma cuando un patron "
+            "BUENO deja de aparecer en el log. Lee un tail acotado bajo demanda, sin "
+            "loop y sin red. AVISA, nunca arregla ni re-habilita nada."
         ),
         group="global",
         default=True,

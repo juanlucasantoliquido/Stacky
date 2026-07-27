@@ -24,6 +24,7 @@ from services.ado_sync import (
     sync_tickets,
 )
 from services.pipeline_status import get_pipeline_status, get_pipeline_summary
+from services.silent_failure_counter import note_swallowed  # Plan 255 F1
 from services import next_agent
 from services.flow_config_store import resolve as resolve_flow
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
@@ -7706,8 +7707,9 @@ def _do_publish_incident(
     url = ""
     try:
         url = provider.item_url(tracker_id) or ""
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _e255:  # noqa: BLE001
+        # Plan 255 F1 sitio 9 - la URL es cosmetica; el publish ya ocurrio.
+        note_swallowed("tickets._do_publish_incident.item_url", _e255)
     if not url:
         url = (created or {}).get("web_url") or (created or {}).get("url") or ""
 
@@ -8139,8 +8141,10 @@ def publish_epic_children(
     try:
         _type_client = ado if ado is not None else build_ado_client(project_name)
         child_feature_type, type_warning = _resolve_feature_type(_type_client, project_name)
-    except Exception:  # noqa: BLE001 — tracker no-ADO o sin config => comportamiento actual
-        pass
+    except Exception as _e255:  # noqa: BLE001 — tracker no-ADO o sin config => comportamiento actual
+        # Plan 255 F1 sitio 10 - con tracker no-ADO el fallback es legitimo; lo
+        # que no era legitimo es no poder distinguirlo de un fallo real.
+        note_swallowed("tickets.publish_epic_children.feature_type", _e255)
     _warns = [type_warning] if type_warning else []
 
     # Plan 70 F8 — branch provider para publish_epic_children (GAP-E)

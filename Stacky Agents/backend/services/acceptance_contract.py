@@ -35,6 +35,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from services.silent_failure_counter import note_swallowed
+
 logger = logging.getLogger("stacky.acceptance_contract")
 
 # Tipos de chequeo soportados
@@ -300,8 +302,10 @@ def _get_criteria_text(ticket: Any) -> str:
     try:
         from services.self_review import _resolve_criteria
         return _resolve_criteria(ticket) or ""
-    except Exception:
-        pass
+    except Exception as _e:
+        # Plan 255 F1 sitio 2 — el GATE DE ACEPTACION tragando: si esto falla se
+        # evalua contra criterios vacios (riesgo de falso verde). Se cuenta.
+        note_swallowed("acceptance_contract._get_criteria_text", _e)
     return getattr(ticket, "acceptance_criteria", "") or ""
 
 

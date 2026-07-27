@@ -465,6 +465,12 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 255 — cero fallas mudas: silencio medido, nivel por clase, canario ──
+    # Las 3 nacen ON: dict en memoria, nivel de log y lectura bajo demanda de un
+    # tail acotado. Ninguna cae en las 4 excepciones duras.
+    "STACKY_SILENT_FAILURE_COUNTER_ENABLED",
+    "STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL",
+    "STACKY_DORMANT_CANARY_ENABLED",
     # ── Plan 254 — fin del falso ROJO: cierre veraz de las corridas ──
     # Las 4 booleanas nacen ON: son kill-switches, no interruptores de alta.
     # STACKY_CLI_STREAM_DRAIN_TIMEOUT_S NO va: es numérica (no default=True).

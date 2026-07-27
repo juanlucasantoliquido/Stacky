@@ -8,6 +8,7 @@ import agents
 import contract_validator
 from config import config
 from services.project_context import build_ado_client, ensure_project_vscode, resolve_project_context
+from services.silent_failure_counter import log_at_level, note_swallowed  # Plan 255 F2
 from services import (
     agent_history,
     cost_estimator,
@@ -1248,14 +1249,24 @@ def run_incident_dev():
     try:
         from services import incident_store as _istore
 
-        # `ado_id` se capturó DENTRO de la sesión; tocar `ticket` acá daría
+        # El ADO id se capturó DENTRO de la sesión; tocar `ticket` acá daría
         # DetachedInstanceError porque la sesión ya está cerrada.
-        _inc = _istore.find_by_tracker_id(ado_id)
+        # Plan 255 F0(B) — el nombre correcto es `ticket_ado_id`: la única
+        # asignación de `ado_id` vive en el cuerpo de `_TicketSnapshot`, y los
+        # bindings de class-body NO son visibles desde esta función. Eran 4
+        # NameError por día tapados por un `logger.info`, con 202 al operador.
+        _inc = _istore.find_by_tracker_id(ticket_ado_id)
         if _inc is not None:
             _istore.add_execution(_inc["id"], execution_id, kind="dev_resolver")
-    except Exception:  # noqa: BLE001 — best-effort
-        logger.info("run_incident_dev: no se pudo linkear exec=%s a una incidencia",
-                    execution_id, exc_info=True)
+    except Exception as _exc255:  # noqa: BLE001 — best-effort
+        # Plan 255 F2 sitio 3 — esto salía a `info`: un NameError rompía la
+        # vinculación con la incidencia y el operador veía 202. Ahora el nivel lo
+        # decide la clase de excepción; la traza queda en `debug`.
+        note_swallowed("agents.run_incident_dev.link_incident", _exc255)
+        log_at_level(logger, _exc255,
+                     "run_incident_dev: no se pudo linkear exec=%s a una incidencia: %s",
+                     execution_id, _exc255)
+        logger.debug("run_incident_dev: traza del link fallido", exc_info=True)
 
     return jsonify({"execution_id": execution_id, "status": "running"}), 202
 

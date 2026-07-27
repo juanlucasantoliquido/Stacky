@@ -25,6 +25,7 @@ import time
 from typing import Any, Callable
 
 from harness.capabilities import CAPABILITIES
+from services.silent_failure_counter import note_swallowed
 
 logger = logging.getLogger("stacky.acceptance_gate")
 
@@ -98,8 +99,9 @@ def _run_single_check(check: dict, workspace: str) -> tuple[str, str]:
                 try:
                     from pathlib import Path as _P
                     _P(tmp_file).unlink(missing_ok=True)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    # Plan 255 F1 sitio 3 — limpieza best-effort del temporal.
+                    note_swallowed("acceptance_gate._run_single_check.cleanup", _e)
 
     except subprocess.TimeoutExpired:
         return ("could-not-run", "timeout")

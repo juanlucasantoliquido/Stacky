@@ -1,12 +1,17 @@
-# Plan 266 — Catálogo único de acciones DevOps: una sola declaración, tres superficies, un solo contrato de confirmación
+# Plan 267 — Catálogo único de acciones DevOps: una sola declaración, tres superficies, un solo contrato de confirmación
 
 **Estado:** PROPUESTO v1 (2026-07-27) · **Autor:** pipeline proponer-plan-stacky · **Juez:** pendiente (criticar-y-mejorar-plan)
+
+> **Nota de numeración.** Este plan nació como **266** y se renumeró a **267**: mientras se escribía, una
+> sesión paralela commiteó `9281ca75 docs(plan-266): cero pantalla rota en el comparador de BD`, que tomó
+> el 266 primero. Ese plan toca `frontend/src/components/dbcompare/` y `radarLogic.ts`; **no hay
+> superposición de archivos con este**. Los números **261 y 262** siguen libres (huecos preexistentes).
 
 ---
 
 ## 1. Objetivo
 
-Hoy el panel DevOps tiene 17 secciones y decenas de acciones, y **cada acción existe una sola vez: pegada a mano en el JSX de la sección que la inventó**. No hay ninguna lista de "qué se puede hacer en DevOps". Por eso la paleta global no puede ejecutar ni una sola acción del panel (solo navega), el agente DevOps devuelve prosa en vez de una acción tipada, y cada sección se escribe su propia confirmación con su propio texto y su propio criterio de peligro. El plan 266 crea el **Catálogo de Acciones DevOps**: una declaración única y verificable de cada acción (qué es, en qué sección vive, si lee o escribe, qué impacto tiene, sobre qué entorno actúa, qué parámetros necesita, qué flag la gatea y cómo se pide en español), consumida por **las tres superficies**: los botones manuales que ya existen, la paleta de comandos, y el agente de lenguaje natural — que deja de contestar texto y pasa a devolver una **propuesta de acción tipada** (`ActionProposal`) con el molde de `IntentBrief` del plan 41: *qué acción, sobre qué entorno, qué impacto, qué va a pasar* → tarjeta de vista previa → `confirmGateway` → **recibo del resultado**. Un ratchet impide que nazca una acción nueva fuera del catálogo. Eso es lo que vuelve la coherencia de la UX **verificable por test** en vez de una promesa de checklist visual.
+Hoy el panel DevOps tiene 17 secciones y decenas de acciones, y **cada acción existe una sola vez: pegada a mano en el JSX de la sección que la inventó**. No hay ninguna lista de "qué se puede hacer en DevOps". Por eso la paleta global no puede ejecutar ni una sola acción del panel (solo navega), el agente DevOps devuelve prosa en vez de una acción tipada, y cada sección se escribe su propia confirmación con su propio texto y su propio criterio de peligro. El plan 267 crea el **Catálogo de Acciones DevOps**: una declaración única y verificable de cada acción (qué es, en qué sección vive, si lee o escribe, qué impacto tiene, sobre qué entorno actúa, qué parámetros necesita, qué flag la gatea y cómo se pide en español), consumida por **las tres superficies**: los botones manuales que ya existen, la paleta de comandos, y el agente de lenguaje natural — que deja de contestar texto y pasa a devolver una **propuesta de acción tipada** (`ActionProposal`) con el molde de `IntentBrief` del plan 41: *qué acción, sobre qué entorno, qué impacto, qué va a pasar* → tarjeta de vista previa → `confirmGateway` → **recibo del resultado**. Un ratchet impide que nazca una acción nueva fuera del catálogo. Eso es lo que vuelve la coherencia de la UX **verificable por test** en vez de una promesa de checklist visual.
 
 ## 2. KPI / impacto (Antes medido contra el árbol del 2026-07-27)
 
@@ -27,7 +32,7 @@ Cómo se obtuvo cada "Antes": KPI-1 por ausencia del archivo (`backend/services/
 
 ## 3. Por qué ahora, y por qué esto NO duplica al plan 239
 
-### 3.1 El 239 ya hizo el rediseño de shell. El 266 no lo toca.
+### 3.1 El 239 ya hizo el rediseño de shell. El 267 no lo toca.
 
 `docs/239_PLAN_COCKPIT_DEVOPS_REDISENO_INTEGRAL_UX_UI_E_INFORMACION.md` está **IMPLEMENTADO (2026-07-25, F0..F8)** y entregó exactamente la parte estructural del rediseño:
 
@@ -39,7 +44,7 @@ Cómo se obtuvo cada "Antes": KPI-1 por ausencia del archivo (`backend/services/
 
 Y declara textualmente que **falta solo lo VISUAL** (checklist de 10 puntos de F8 que requiere navegador; RTL y jsdom no están en el `package.json` del frontend).
 
-**Conclusión operativa: re-proponer navegación, grupos, tokens o barrido de inline styles sería trabajo ya hecho.** El 266 hereda ese shell tal cual y no edita `devopsCockpitShell.ts`, `DevOpsCockpitNav.tsx`, `DevOpsTabsV2.tsx` ni `DevOpsHeaderV2.tsx` (ver §8, frontera de merge). Lo único que el 266 agrega al shell es *consumir* `DevOpsSection.id`, que ya existe.
+**Conclusión operativa: re-proponer navegación, grupos, tokens o barrido de inline styles sería trabajo ya hecho.** El 267 hereda ese shell tal cual y no edita `devopsCockpitShell.ts`, `DevOpsCockpitNav.tsx`, `DevOpsTabsV2.tsx` ni `DevOpsHeaderV2.tsx` (ver §8, frontera de merge). Lo único que el 267 agrega al shell es *consumir* `DevOpsSection.id`, que ya existe.
 
 ### 3.2 El gap que el 239 dejó abierto es de **acciones**, no de layout
 
@@ -60,7 +65,7 @@ Y ya existe el molde exacto para el "esto entendí y así lo haría": **`backend
 
 ### 3.3 Lo que pidió el operador, mapeado
 
-| Pedido literal | Cómo lo cubre el 266 |
+| Pedido literal | Cómo lo cubre el 267 |
 |---|---|
 | "consultar el estado de los servicios" | acciones `devops.overview.refresh`, `devops.servers.list`, `devops.servers.doctor` (F7) |
 | "gestionar despliegues" | `devops.deployments.history` (read) + `devops.deployment.execute` (write, `impact:high`) |
@@ -139,7 +144,7 @@ Cada flag nueva de este plan toca **hasta 7 lugares**. Saltear uno deja un test 
 **Contenido exacto de `backend/services/devops_action_catalog.py`**
 
 ```python
-"""Plan 266 F0 — Catalogo unico de acciones DevOps.
+"""Plan 267 F0 — Catalogo unico de acciones DevOps.
 
 PURO: sin flask, sin config, sin IO, sin red. Solo dataclasses + datos + lookups.
 Es la fuente de VERDAD de la identidad y la seguridad de una accion; el COMO se
@@ -296,7 +301,7 @@ Todas llevan `PRJ` como primer param. `flag_key` de cada una es la flag ya exist
                       # Curada en _CURATED_DEFAULTS_ON (tests/test_harness_flags.py:467).
       label="Catalogo de acciones DevOps",
       description=(
-          "Plan 266 - declara en un solo lugar que se puede hacer en el panel DevOps "
+          "Plan 267 - declara en un solo lugar que se puede hacer en el panel DevOps "
           "(que accion, en que seccion, si lee o escribe, que impacto, sobre que "
           "entorno). Lo consumen los botones, la paleta de comandos y el asistente. "
           "OFF: /api/devops/actions/catalog devuelve 404 y las tres superficies "
@@ -362,7 +367,7 @@ Todas llevan `PRJ` como primer param. `flag_key` de cada una es la flag ya exist
 
 ```python
 # backend/api/devops_actions.py
-"""api/devops_actions.py - Catalogo de acciones DevOps (Plan 266).
+"""api/devops_actions.py - Catalogo de acciones DevOps (Plan 267).
 
 url_prefix="/devops/actions" -> rutas /api/devops/actions/... (NO poner /api/ en el
 prefix; mismo gotcha C2 del plan 73, ver api/devops_agent.py:3-4).
@@ -392,13 +397,13 @@ En `_health_payload()` (`api/devops.py`, antes del `}` de `:108`):
 ```python
 "action_catalog_enabled": bool(
     getattr(cfg, "STACKY_DEVOPS_ACTION_CATALOG_ENABLED", False)
-),  # Plan 266 - catalogo de acciones (solo lectura)
+),  # Plan 267 - catalogo de acciones (solo lectura)
 "action_nl_enabled": bool(
     getattr(cfg, "STACKY_DEVOPS_ACTION_NL_ENABLED", False)
-),  # Plan 266 - lenguaje natural -> propuesta de accion
+),  # Plan 267 - lenguaje natural -> propuesta de accion
 "agent_action_run_enabled": bool(
     getattr(cfg, "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED", False)
-),  # Plan 266 - ejecutar desde una propuesta lo que ESCRIBE (default OFF)
+),  # Plan 267 - ejecutar desde una propuesta lo que ESCRIBE (default OFF)
 ```
 
 Las tres keys se agregan **en F1** aunque las flags 2 y 3 se declaren en F3 y F6: `getattr(..., False)` tolera el atributo ausente, y `test_bootstrap_health_matches_health_endpoint` compara `/health` contra `/bootstrap`, que comparten la misma función — no hay riesgo de divergencia. Registrar en `config.py` los tres atributos en F1 (con sus defaults finales) evita tres ediciones del mismo archivo.
@@ -429,7 +434,7 @@ Las tres keys se agregan **en F1** aunque las flags 2 y 3 se declaren en F3 y F6
 - `backend/tests/test_devops_action_matcher.py`
 
 ```python
-"""Plan 266 F2 — Matcher de intencion DETERMINISTA. Sin modelo, sin red, sin IO.
+"""Plan 267 F2 — Matcher de intencion DETERMINISTA. Sin modelo, sin red, sin IO.
 
 Es el piso de paridad: con GitHub Copilot (o sin runtime disponible) este matcher
 es TODO el motor de intencion, y alcanza para proponer y previsualizar.
@@ -543,7 +548,7 @@ def is_ambiguous(matches: list[ActionMatch]) -> bool:
 - las 7 patas de la flag 2 (`config.py` ya la tiene desde F1; faltan `harness_flags.py` ×2, `harness_flags_help.py`, `test_harness_flags.py`, `test_harness_flags_requires.py`)
 
 ```python
-"""Plan 266 F3 — Contrato de propuesta de accion.
+"""Plan 267 F3 — Contrato de propuesta de accion.
 
 Calca el molde de services/intent_preflight.py:39-47 (IntentBrief) a proposito:
 mismos campos de intencion (open_questions, confidence, version) sobre un objeto
@@ -756,7 +761,7 @@ def preview_action():
 
 ```ts
 // frontend/src/services/devopsActionTypes.ts
-// Plan 266 F4 — Espejo TIPADO del catalogo backend. Sin React, sin DOM.
+// Plan 267 F4 — Espejo TIPADO del catalogo backend. Sin React, sin DOM.
 export type DevOpsActionEffect = 'read' | 'write';
 export type DevOpsActionImpact = 'none' | 'low' | 'high';
 
@@ -776,7 +781,7 @@ export interface DevOpsActionMeta {
 
 ```ts
 // frontend/src/services/devopsActionRunner.ts
-// Plan 266 F4 — Ejecutor UNICO. La confirmacion se DERIVA del catalogo, no se
+// Plan 267 F4 — Ejecutor UNICO. La confirmacion se DERIVA del catalogo, no se
 // escribe a mano. Reusa confirmGateway (services/confirmGateway.ts:10-21) tal cual.
 import type { ConfirmFn, ConfirmRequest } from './confirmGateway';
 import type { DevOpsActionMeta } from './devopsActionTypes';
@@ -848,7 +853,7 @@ export async function runDevOpsAction(
 
 ```ts
 // frontend/src/services/devopsActionBindings.ts
-// Plan 266 F4 — El COMO. Cada binding llama al MISMO endpoint que ya usa el boton
+// Plan 267 F4 — El COMO. Cada binding llama al MISMO endpoint que ya usa el boton
 // manual de su seccion. PROHIBIDO agregar endpoints nuevos aca.
 export const DEVOPS_ACTION_BINDINGS: Record<string, DevOpsActionBinding> = {
   'devops.overview.refresh': { id: 'devops.overview.refresh', run: async (p, ctx) => { ... } },
@@ -905,7 +910,7 @@ Cambios exactos en `commandPaletteData.ts`:
 2. Agregar la entrada `'devops-action': '⚡'` a `DEEP_ICONS` (`:91-97`).
 3. Función nueva, pura:
    ```ts
-   /** Plan 266 F5 — Convierte el catalogo en Command[] para la paleta.
+   /** Plan 267 F5 — Convierte el catalogo en Command[] para la paleta.
     *  - Solo entran acciones cuyo health_key esta ON (ya viene filtrado por el
     *    servidor, pero se re-filtra por defensa).
     *  - Las de effect 'write' llevan el hint con el impacto y el entorno, para que
@@ -1053,12 +1058,12 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 - Si una sección tiene una acción con efecto que **no** está en el catálogo, se agrega al catálogo en esta fase (F0 quedó con 23; F7 puede llegar a más) — **nunca** se deja fuera.
 - Si un binding no puede reproducir exactamente el comportamiento del botón, **se detiene la fase y se reporta**; no se aproxima.
 
-**Test — `frontend/src/__tests__/plan266Adoption.test.ts`** (patrón calcado de `plan175Adoption.test.ts`, que ya existe)
+**Test — `frontend/src/__tests__/plan267Adoption.test.ts`** (patrón calcado de `plan175Adoption.test.ts`, que ya existe)
 1. Los 6 archivos de la lista **importan** `runDevOpsAction` desde `../../services/devopsActionRunner`.
 2. Ninguno de los 6 contiene la cadena `askConfirm({` (construcción de `ConfirmRequest` a mano).
 3. `frontend/src/services/devopsActionRunner.ts` es el **único** archivo de `src/` (fuera de tests) que contiene `confirmRequestFor` como definición.
 
-**Comando:** desde `frontend/`: `npx vitest run src/__tests__/plan266Adoption.test.ts` + `npx tsc --noEmit`
+**Comando:** desde `frontend/`: `npx vitest run src/__tests__/plan267Adoption.test.ts` + `npx tsc --noEmit`
 **Aceptación binaria:** 3 passed, `tsc` sin errores, y `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `npx vitest run src/__tests__/undoConfirmRatchet.test.ts` siguen verdes (los ratchets de deuda del 239/175 no empeoran).
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED`. **Nota de degradación:** los bindings y `runDevOpsAction` funcionan con el catálogo **embebido en el frontend como fallback** si el `GET /catalog` falla o la flag está OFF, para que apagar la flag **nunca** rompa un botón que hoy funciona. El fallback embebido se genera copiando los metadatos de las acciones de las 6 secciones tocadas (no las 23) — se declara en `devopsActionBindings.ts` como `FALLBACK_META: Record<string, DevOpsActionMeta>` y un test verifica que sus 6+ entradas coinciden campo a campo con el catálogo backend.
@@ -1126,13 +1131,13 @@ function catalogIds(): string[] {
 
 | # | Riesgo | Probabilidad | Mitigación (concreta) |
 |---|--------|--------------|------------------------|
-| R1 | El recableado de F7 cambia el comportamiento de un botón que hoy funciona | Media | F7 se hace **un archivo por vez**; regla dura "el `tone` no puede aflojarse"; `FALLBACK_META` embebido para que la flag OFF nunca rompa un botón; `plan266Adoption.test.ts` verifica la adopción y `tsc --noEmit` la compilación |
+| R1 | El recableado de F7 cambia el comportamiento de un botón que hoy funciona | Media | F7 se hace **un archivo por vez**; regla dura "el `tone` no puede aflojarse"; `FALLBACK_META` embebido para que la flag OFF nunca rompa un botón; `plan267Adoption.test.ts` verifica la adopción y `tsc --noEmit` la compilación |
 | R2 | El ratchet frontend da **falso verde** si la regex deja de matchear (archivo movido o formato cambiado) | Alta si no se previene | Tests 4 y 5 del ratchet: existencia del archivo + mínimo de 23 ids. Dos listas vacías iguales ya no pasan |
 | R3 | El matcher determinista confunde dos acciones y propone la equivocada | Media | `is_ambiguous` + `blocked_reason == "ambiguous"` deshabilita `[Ejecutar]` y ofrece elegir. Además `MIN_SCORE = 0.6` y `needs_confirmation` obligatorio para `write` |
 | R4 | Una flag queda mal cableada y rompe tests ajenos | Alta (histórico) | §4.1: las 7 patas tabuladas, la regla "OFF no declara `default=False`", la regla R4 de la estrella, y el comando de verificación por flag |
 | R5 | `test_harness_flags_help.py` sale rojo | Certeza parcial (4 fallos ajenos preexistentes) | Verificar que las 3 keys nuevas **no** estén entre las ofensoras; los textos de `PLAIN_HELP` ya fueron chequeados contra la denylist de `:17-20` |
 | R6 | La paleta introduce un sondeo y rompe el ratchet del 239 F6 | Baja | El catálogo se pide **una vez al abrir**, nunca en intervalo; `devopsPollingRatchet.test.ts` es criterio de aceptación de F5 y F6 |
-| R7 | Colisión de merge con 264 (modelo/effort) o 265 (consola) | Media | §8 declara la frontera archivo por archivo; el 266 **no toca** `model_catalog.py`, `llm_router.py`, `ModelEffortPicker.tsx`, `CodexConsoleDock.tsx` ni `store/workbench.ts` |
+| R7 | Colisión de merge con 264 (modelo/effort) o 265 (consola) | Media | §8 declara la frontera archivo por archivo; el 267 **no toca** `model_catalog.py`, `llm_router.py`, `ModelEffortPicker.tsx`, `CodexConsoleDock.tsx` ni `store/workbench.ts` |
 | R8 | Un modelo menor implementa `runDevOpsAction` con el orden de guardas invertido y ejecuta sin confirmar | Media | El orden de los 5 pasos está escrito literalmente en el docstring de F4, y los tests 7/8/11 lo verifican con spies de 0 llamadas |
 | R9 | `sqlite` bajo pytest da `SQLITE_LOCKED` en los tests de API | Alta (conocido) | `test_devops_actions_api.py` **no escribe en la DB**: `/catalog`, `/propose` y `/preview` son de solo lectura. Si aun así aparece flaky, correr el archivo 8-12 veces y confirmar |
 | R10 | Se agrega una sección DevOps nueva y `DEVOPS_SECTION_IDS` queda stale | Alta a mediano plazo | `test_section_ids_espejan_el_tsx` (F8, test 8) lee el `.tsx` real |
@@ -1141,12 +1146,12 @@ function catalogIds(): string[] {
 
 ## 7. Fuera de scope (declarado, no escondido)
 
-1. **Rediseño de shell, navegación, grupos, tokens o barrido de estilos inline.** Es el plan 239, ya implementado. El 266 no edita `devopsCockpitShell.ts`, `DevOpsCockpitNav.tsx`, `DevOpsTabsV2.tsx` ni `DevOpsHeaderV2.tsx`.
-2. **El checklist visual de 10 puntos del 239 F8.** Sigue requiriendo navegador; RTL y jsdom no están en el `package.json` del frontend. El 266 **reduce** su superficie (la coherencia de acciones pasa a ser verificable por test) pero no lo cierra.
+1. **Rediseño de shell, navegación, grupos, tokens o barrido de estilos inline.** Es el plan 239, ya implementado. El 267 no edita `devopsCockpitShell.ts`, `DevOpsCockpitNav.tsx`, `DevOpsTabsV2.tsx` ni `DevOpsHeaderV2.tsx`.
+2. **El checklist visual de 10 puntos del 239 F8.** Sigue requiriendo navegador; RTL y jsdom no están en el `package.json` del frontend. El 267 **reduce** su superficie (la coherencia de acciones pasa a ser verificable por test) pero no lo cierra.
 3. **Eliminar el chat de texto libre de `api/devops_agent.py`.** Se deja intacto, incluido su 400 para Copilot (`:69-78`). Removerlo es un plan aparte, con su propia migración.
-4. **Endpoints de ejecución nuevos en el backend.** El 266 declara y confirma; ejecuta reusando lo que ya existe. Un endpoint `POST /devops/actions/execute` sería una segunda implementación de 23 operaciones — exactamente lo que este plan combate.
+4. **Endpoints de ejecución nuevos en el backend.** El 267 declara y confirma; ejecuta reusando lo que ya existe. Un endpoint `POST /devops/actions/execute` sería una segunda implementación de 23 operaciones — exactamente lo que este plan combate.
 5. **Ejecución multi-paso / encadenada** ("desplegá y después corré los smoke tests"). Una propuesta = una acción. El encadenamiento es un plan posterior, y necesitaría su propio contrato de HITL por paso.
-6. **Enriquecimiento por LLM de la propuesta** (mejorar `what_will_happen` o inferir parámetros con un modelo). El seam está listo (`describe()` es reemplazable y `PreflightRuntimeUnavailable` es el fallback), pero el 266 entrega **solo el camino determinista**, que es el que da paridad de 3 runtimes.
+6. **Enriquecimiento por LLM de la propuesta** (mejorar `what_will_happen` o inferir parámetros con un modelo). El seam está listo (`describe()` es reemplazable y `PreflightRuntimeUnavailable` es el fallback), pero el 267 entrega **solo el camino determinista**, que es el que da paridad de 3 runtimes.
 7. **Persistir un historial de recibos.** Los recibos se muestran en sesión. Persistirlos es del eje de telemetría (plan 171).
 8. **Traducir el catálogo a otros idiomas.** Todo en español rioplatense, como el resto del producto.
 
@@ -1154,11 +1159,11 @@ function catalogIds(): string[] {
 
 ## 8. Frontera de merge y convivencia con 239, 264 y 265
 
-| Plan | Archivos que ESE plan posee | Qué hace el 266 con ellos |
+| Plan | Archivos que ESE plan posee | Qué hace el 267 con ellos |
 |------|------------------------------|----------------------------|
-| **239** (IMPLEMENTADO) | `pages/devopsCockpitShell.ts`, `pages/DevOpsCockpitNav.tsx`, `pages/DevOpsTabsV2.tsx`, `pages/DevOpsHeaderV2.tsx`, `services/devops_overview.py`, `components/devops/DevOpsOverviewSection.tsx`, `__tests__/devopsPollingRatchet.test.ts` | **Lectura solamente.** El 266 consume `DevOpsSection.id` y `nav_path=/devops/<id>`, y agrega la acción `devops.overview.refresh` que llama al `GET /api/devops/overview` existente. **Cero ediciones.** `devopsPollingRatchet.test.ts` es criterio de aceptación de F5 y F6 |
-| **264** (CRITICADO v2, sin implementar) | `services/model_catalog.py`, `services/llm_router.py` (`clamp_model` `:38`, `clamp_effort_for_model` `:60`), `components/ModelEffortPicker.tsx`, `effort_mode:"no_aplica"` para Copilot, y el fix de `agent_runner.py:256-264` | **Cero ediciones.** El 266 **no** toca el eje modelo/effort porque su camino es determinista. Si más adelante se agrega enriquecimiento por LLM (fuera de scope, §7.6), debe usar `clamp_model`/`clamp_effort_for_model` del 264 y **nunca** el literal `_EFFORTS` de `devops_agent.py:15` |
-| **265** (PROPUESTO v1) | `components/CodexConsoleDock.tsx`, `store/workbench.ts:10-11`, `hooks/useExecutionStream.ts` | **Cero ediciones.** Único punto de contacto potencial: si el 265 agrega comandos a la paleta, ambos planes editan `commandPaletteData.ts`. **Regla de convivencia:** el 266 agrega `"devops-action"` **al final** del union `CommandKind` y una función nueva `devopsActionCommands()`; no reordena `CommandKind` ni modifica `NAV_COMMANDS`, `fuzzyScore` ni `mergeDeepResults`. Un merge posterior es aditivo por construcción. **Ojo con el duplicado silencioso**: si ambas ramas agregan una entrada a `DEEP_ICONS`, git puede fusionar sin conflicto — verificar `tsc --noEmit` después del merge |
+| **239** (IMPLEMENTADO) | `pages/devopsCockpitShell.ts`, `pages/DevOpsCockpitNav.tsx`, `pages/DevOpsTabsV2.tsx`, `pages/DevOpsHeaderV2.tsx`, `services/devops_overview.py`, `components/devops/DevOpsOverviewSection.tsx`, `__tests__/devopsPollingRatchet.test.ts` | **Lectura solamente.** El 267 consume `DevOpsSection.id` y `nav_path=/devops/<id>`, y agrega la acción `devops.overview.refresh` que llama al `GET /api/devops/overview` existente. **Cero ediciones.** `devopsPollingRatchet.test.ts` es criterio de aceptación de F5 y F6 |
+| **264** (CRITICADO v2, sin implementar) | `services/model_catalog.py`, `services/llm_router.py` (`clamp_model` `:38`, `clamp_effort_for_model` `:60`), `components/ModelEffortPicker.tsx`, `effort_mode:"no_aplica"` para Copilot, y el fix de `agent_runner.py:256-264` | **Cero ediciones.** El 267 **no** toca el eje modelo/effort porque su camino es determinista. Si más adelante se agrega enriquecimiento por LLM (fuera de scope, §7.6), debe usar `clamp_model`/`clamp_effort_for_model` del 264 y **nunca** el literal `_EFFORTS` de `devops_agent.py:15` |
+| **265** (PROPUESTO v1) | `components/CodexConsoleDock.tsx`, `store/workbench.ts:10-11`, `hooks/useExecutionStream.ts` | **Cero ediciones.** Único punto de contacto potencial: si el 265 agrega comandos a la paleta, ambos planes editan `commandPaletteData.ts`. **Regla de convivencia:** el 267 agrega `"devops-action"` **al final** del union `CommandKind` y una función nueva `devopsActionCommands()`; no reordena `CommandKind` ni modifica `NAV_COMMANDS`, `fuzzyScore` ni `mergeDeepResults`. Un merge posterior es aditivo por construcción. **Ojo con el duplicado silencioso**: si ambas ramas agregan una entrada a `DEEP_ICONS`, git puede fusionar sin conflicto — verificar `tsc --noEmit` después del merge |
 | **175** (implementado) | `services/entityActions.ts`, `services/confirmGateway.ts` | `confirmGateway.ts` se **importa sin modificar**. `entityActions.ts` se toca **solo** si se decide exportar `EntityKind` ampliado — **no hace falta**: `devops-action` vive en su propio módulo y `EntityKind` usa `Extract<>`, que ignora los valores nuevos del union |
 | **129** (implementado) | `components/commandPaletteData.ts`, `components/CommandPalette.tsx` | Edición **aditiva** (F5), con test de no-regresión de `fuzzyScore` |
 | **41** (implementado) | `services/intent_preflight.py` | **Lectura solamente**: se calca la forma de `IntentBrief`. No se importa ni se modifica |
@@ -1191,7 +1196,7 @@ function catalogIds(): string[] {
 5. **F4** — `devopsActionTypes.ts` + `devopsActionRunner.ts` + `devopsActionBindings.ts` + 14 tests de vitest.
 6. **F5** — `commandPaletteData.ts` (aditivo) + `CommandPalette.tsx` + `commandPaletteDevopsActions.test.ts` (7 tests).
 7. **F6** — `devopsActionConsoleModel.ts` + `DevOpsActionProposalCard.tsx` + `DevOpsActionConsole.tsx` + `DevOpsAgentSection.tsx` + flag `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` (default **OFF**, 7 patas) + 9 tests.
-8. **F7** — recableado de los 6 archivos de secciones, **uno por vez** + `plan266Adoption.test.ts` (3 tests).
+8. **F7** — recableado de los 6 archivos de secciones, **uno por vez** + `plan267Adoption.test.ts` (3 tests).
 9. **F8** — `test_devops_action_ratchet.py` (10 tests) + `devopsActionCatalogRatchet.test.ts` (5 tests).
 
 Registrar en `HARNESS_TEST_FILES` (`backend/scripts/run_harness_tests.sh:20` **y** `backend/scripts/run_harness_tests.ps1:15`) los 4 archivos backend nuevos: `tests/test_devops_action_catalog.py`, `tests/test_devops_actions_api.py`, `tests/test_devops_action_matcher.py`, `tests/test_devops_action_ratchet.py`.
@@ -1219,7 +1224,7 @@ npx vitest run src/components/devops/devopsActionConsoleModel.test.ts        #  
 npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts  #  7 passed
 npx vitest run src/components/__tests__/commandPaletteData.test.ts           # sin regresion
 npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts              #  5 passed
-npx vitest run src/__tests__/plan266Adoption.test.ts                         #  3 passed
+npx vitest run src/__tests__/plan267Adoption.test.ts                         #  3 passed
 npx vitest run src/__tests__/devopsPollingRatchet.test.ts                    # sin regresion
 npx vitest run src/__tests__/uiDebtRatchet.test.ts                           # sin regresion
 npx vitest run src/services/entityActions.test.ts                            # sin regresion

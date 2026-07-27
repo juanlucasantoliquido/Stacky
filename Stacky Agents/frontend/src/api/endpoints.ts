@@ -4497,9 +4497,13 @@ export const SectionDoctorApi = {
 };
 
 export const PipelineGenerator = {
-  /** POST /api/pipeline-generator/preview — spec → {ado, gitlab} (200) o {errors} (400). */
-  preview: (spec: object) =>
-    api.post<{ ado: string; gitlab: string }>("/api/pipeline-generator/preview", spec),
+  /** POST /api/pipeline-generator/preview — spec → {ado, gitlab} (200) o {errors} (400).
+   *  Plan 99 F1 — `signal` OPCIONAL y backward-compatible: sin él, el comportamiento
+   *  es byte-idéntico al de antes. */
+  preview: (spec: object, signal?: AbortSignal) =>
+    signal
+      ? api.postAbortable<{ ado: string; gitlab: string }>("/api/pipeline-generator/preview", spec, signal)
+      : api.post<{ ado: string; gitlab: string }>("/api/pipeline-generator/preview", spec),
   /**
    * POST /api/pipeline-generator/commit — commit HITL con confirm.
    * El spec va en el body ROOT junto a confirm/target/branch/project.

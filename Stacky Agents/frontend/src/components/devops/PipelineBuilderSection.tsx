@@ -9,7 +9,7 @@
  * - Commit HITL al repo
  * - Trigger/monitor de pipelines (reusa CIPipeline, FIX C5)
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWorkbench } from '../../store/workbench';
 import { api } from '../../api/client';
 import {
@@ -92,8 +92,6 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const [lintHighlight, setLintHighlight] = useState<number | undefined>(undefined);
   // Errores (C16)
   const [actionError, setActionError] = useState<string | null>(null);
-  // Debounce para auto-refresh preview (C17)
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Plan 93 — último resultado de preflight + el spec (serializado) sobre el
   // que se corrió, para saber si quedó desactualizado (badge -> "sin correr").
   const [lastPreflight, setLastPreflight] = useState<{ result: PreflightResult; specJson: string } | null>(null);
@@ -165,22 +163,10 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     return () => { cancelled = true; };
   }, []);
 
-  // Auto-refresh preview con debounce (C17)
-  useEffect(() => {
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-    }
-    if (ctx.health.generator_enabled && localErrors.length === 0) {
-      refreshTimeoutRef.current = setTimeout(() => {
-        // El preview se refresca automáticamente en PipelineYamlPreview
-      }, 800);
-    }
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-    };
-  }, [spec, ctx.health.generator_enabled, localErrors.length]);
+  // Plan 99 F3 — acá vivía un debounce FANTASMA: un timer de 800ms que se
+  // re-armaba en cada tecla y cuyo callback contenía SOLO un comentario. El
+  // debounce de verdad siempre estuvo en PipelineYamlPreview.tsx (mismo 800ms).
+  // Borrado: no cambia ningún comportamiento observable.
 
   const loadDrafts = async () => {
     if (!activeProject) return;

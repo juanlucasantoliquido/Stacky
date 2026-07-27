@@ -505,6 +505,34 @@
       "guard_test": "backend/tests/test_plan98_profile_key_patch.py; frontend/src/devops/profileKeys.test.ts",
       "evidence": "backend/api/client_profile.py:323-368 (_PROFILE_WRITE_LOCK); frontend/src/devops/profileKeys.ts",
       "note": "El riel viejo era GET del perfil ENTERO -> merge en el cliente -> PUT del perfil entero. Cualquier key escrita entre el GET y el PUT por otra pestana o por otra seccion se perdia en silencio, sin error y sin log. Con el PATCH por clave el cliente solo manda el valor de SU key y el merge lo hace el backend bajo lock de proceso. handleAutoDetect de PublicationsSection queda a proposito en el riel viejo porque escribe process_catalog junto con los presets en una sola operacion atomica y process_catalog no esta en PATCHABLE_PROFILE_KEYS."
+    },
+    {
+      "id": "preview_out_of_order_response",
+      "title": "Una respuesta vieja del preview YAML pisa el estado de una mas nueva",
+      "class": "devops-preview-race",
+      "status": "resolved",
+      "log_pattern": "pipeline-generator/preview",
+      "log_guarded": false,
+      "killed_by": "plan 99 F0 (createPreviewFetcher: secuencia monotona + AbortController como cinturon 2)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "frontend/src/devops/previewFetcher.test.ts (casos 5, 6 y 11)",
+      "evidence": "frontend/src/devops/previewFetcher.ts; frontend/src/components/devops/PipelineYamlPreview.tsx",
+      "note": "El refreshPreview viejo no tenia ni secuencia ni abort: con el debounce de 800ms y el backend respondiendo desparejo, un POST lanzado antes podia contestar despues y dejar en pantalla un YAML que ya no correspondia al spec editado. No habia error, no habia log: el operador veia YAML valido pero viejo. El mecanismo es el MISMO que ya usaba PipelineLintPanel (seqRef); F0.bis pinea esa paridad para que no aparezca un tercer mecanismo distinto."
+    },
+    {
+      "id": "preview_structured_400_unreachable",
+      "title": "El branch de errores 400 por campo del preview era inalcanzable",
+      "class": "devops-preview-error",
+      "status": "resolved",
+      "log_pattern": "400 BAD REQUEST",
+      "log_guarded": false,
+      "killed_by": "plan 99 F0 (parsePreviewError parsea el body real del Error plano)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "frontend/src/devops/previewFetcher.test.ts (casos 8 y 9)",
+      "evidence": "frontend/src/api/client.ts:155 (throw new Error(status statusText: text)); frontend/src/devops/previewFetcher.ts (parsePreviewError)",
+      "note": "El codigo viejo hacia if (e && typeof e === object && errors in e) para mostrar los errores por campo. Pero api/client.ts tira SIEMPRE un Error plano con el body embebido en el message, y un Error plano nunca tiene la key errors: el branch era codigo muerto y el 100% de los 400 estructurados se mostraba como un unico chorizo generico. Clase de bug a vigilar: validar la FORMA real de lo que tira el cliente HTTP antes de escribir un branch que la asuma."
     }
   ]
 }

@@ -1,7 +1,72 @@
 # Plan 99 — Preview sin espera: cache por spec, cancelación anti-stale y SWR honesto en el preview YAML
 
-**Estado:** CRITICADO (v2) — **VIGENTE** (los 5 defectos siguen vivos)
-**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26)
+**Estado:** **IMPLEMENTADO** (F0 · F0.bis · F1 · F2 · F3 · F4) — 2026-07-26
+**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26 · implementado: 2026-07-26)
+
+---
+
+## §I — REGISTRO DE IMPLEMENTACIÓN (2026-07-26)
+
+**Los 5 defectos están muertos.** Cero líneas de backend, cero flags nuevas, cero deps npm.
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| F0 + F0.bis | IMPLEMENTADA | `frontend/src/devops/previewFetcher.ts` (nuevo) |
+| F1 | IMPLEMENTADA | `api/client.ts` (`isAbortError` exportada + `api.postAbortable`), `api/endpoints.ts` (`preview(spec, signal?)`) |
+| F2 | IMPLEMENTADA | 5 ediciones quirúrgicas en `PipelineYamlPreview.tsx` + 3 clases en `devops.module.css` |
+| F3 | IMPLEMENTADA | fantasma borrado de `PipelineBuilderSection.tsx` (ref + `useEffect` + import de `useRef`) |
+| F4 | IMPLEMENTADA (salvo smoke) | 2 huellas registradas: `preview_out_of_order_response`, `preview_structured_400_unreachable` |
+
+**Tests (corridos de verdad, por archivo):**
+
+| Archivo | Resultado |
+|---|---|
+| `src/devops/previewFetcher.test.ts` | **12 passed** |
+| `src/components/devops/__tests__/devopsPreview.test.ts` | **12 passed** |
+| `src/__tests__/uiDebtRatchet.test.ts` | **3 passed** (criterio obligatorio de F2) |
+| `src/components/devops/__tests__/PipelineBuilderSection.test.ts` | **17 passed** |
+| `src/pages/__tests__/DevOpsPage.test.ts` | **21 passed** |
+| `pipelinePresets` / `pipelineStepSnippets` / `pipelineRecipes` / `ServersSection` | **11 / 20 / 11 / 4 passed** |
+| `npx tsc --noEmit` | **0 errores** |
+
+**Mediciones del DoD:** `style={{` en `PipelineYamlPreview.tsx` = **13** (bajó de 14; el
+ratchet exige `count <= allowed`) · hex literales = **0** · `PipelineProfiler.profile` = **1**
+· `refreshTimeoutRef` = **0 matches**.
+
+### El perfilador del 247 sobrevivió (control de C1)
+
+Es el riesgo principal del plan y se cumplió: `refreshPreview` **no** se reemplazó. El bloque
+del perfilador se conservó textual y quedó **pineado por el caso 9** de `devopsPreview.test.ts`,
+que además verifica que siga DENTRO de `refreshPreview`, después del preview exitoso, y
+envuelto en su propio `catch` (su fallo no puede degradar el preview).
+
+### Bugs del PROPIO plan hallados al construirlo (3)
+
+1. **F0 remite a un snippet que ya no existe.** §F0 dice *"contenido igual al v1"* y *"el resto
+   se conserva del v1 sin cambios"*, pero la v2 **reescribió el documento in place**: el código
+   de `PreviewOutcome` / `parsePreviewError` / `createPreviewFetcher` que menciona **no está en
+   ninguna parte del doc**. Criterio aplicado: implementar el módulo desde el contrato
+   semántico, que sí está completo (kinds `ok`/`error`/`stale`, `PREVIEW_CACHE_LIMIT = 20`,
+   `Map` como LRU, `isAbortError`), y fijarlo con los 12 tests. Lección: una v2 que reescribe
+   in place no puede citar "el v1" como fuente de código.
+2. **El checklist se contradice con su propia Edición 5.** El DoD exige
+   `grep -c 'style={{' PipelineYamlPreview.tsx` = **14**, pero la Edición 5 convierte la fila
+   del título (`style={{ display:'flex', … }}`) en `className={styles.previewHeader}`, lo que
+   baja el conteo a **13**. Criterio aplicado: el invariante real del ratchet es
+   `count <= allowed` ("la deuda solo puede BAJAR", `uiDebtRatchet.test.ts:4`), así que 13 es
+   *mejor* que 14, no un fallo. El test lo assertea como `<= 14`.
+3. **F3 dice que `tsc` cazaría el `useRef` sin usos: es falso.**
+   `tsconfig.json:10` tiene `"noUnusedLocals": false`, así que un import muerto **no** produce
+   error. El criterio binario propuesto no habría detectado nada. Criterio aplicado: quitar el
+   import igual (es lo correcto) y **fijarlo por test** — caso 10 de `devopsPreview.test.ts`
+   assertea `not.toContain('useRef')` sobre el fuente del builder.
+
+**Pendiente:** solo los 5 puntos de verificación manual HITL de §F4 (requieren la app
+corriendo). No automatizables: `@testing-library/react` y `jsdom` no están instalados.
+
+---
+
+**Versión previa del encabezado:** CRITICADO (v2) — VIGENTE (los 5 defectos seguían vivos)
 **Veredicto del juez:** RECHAZADO (v1) → v2 corregida. 3 BLOQUEANTES, 4 IMPORTANTES, 3 MENORES.
 **Autor v1:** StackyArchitectaUltraEficientCode · **Crítica v2:** StackyArchitectaUltraEficientCode (juez adversarial)
 

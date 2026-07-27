@@ -9,6 +9,7 @@ import { PipelineProfileCard } from './PipelineProfileCard';
 import type { PipelineProfileDto } from '../../devops/pipelineProfileModel';
 import { FlagGateBanner } from './FlagGateBanner';
 import { toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
+import { createPreviewFetcher, type PreviewFetcher } from '../../devops/previewFetcher'; // Plan 99
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import styles from './devops.module.css';
 
@@ -54,31 +55,41 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
   const [profile, setProfile] = useState<PipelineProfileDto | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Plan 99 F2 — fetcher con cache + anti-stale; una instancia por montaje
+  // (se descarta al desmontar, así que nunca sirve YAML rancio entre sesiones).
+  const fetcherRef = useRef<PreviewFetcher | null>(null);
+  if (fetcherRef.current === null) {
+    fetcherRef.current = createPreviewFetcher(
+      (s, signal) => PipelineGenerator.preview(s, signal),
+    );
+  }
+
   // Refrescar preview manual o auto
-  const refreshPreview = async () => {
+  const refreshPreview = async (force = false) => {
     if (localErrors.length > 0) return; // No preview si hay errores locales
+    if (force) fetcherRef.current!.invalidate();
     setLoading(true);
+    // Plan 99 — los errores NO se blanquean al iniciar (eso causaba el parpadeo):
+    // se limpian recién en el desenlace exitoso, más abajo.
+    const outcome = await fetcherRef.current!.request(toSpecDict(spec));
+    // Hay un pedido más nuevo en vuelo: NO tocar estado, ni siquiera el loading
+    // (lo apaga el pedido que sí manda).
+    if (outcome.kind === 'stale') return;
+    setLoading(false);
+    if (outcome.kind === 'error') {
+      setPreviewErrors(outcome.errors); // el preview viejo QUEDA visible (SWR)
+      return;
+    }
+    const result = outcome.data;
+    setPreview(result);
     setPreviewErrors([]);
+    // Plan 247 F5 — el perfil es aditivo: su fallo NUNCA degrada el preview. NO BORRAR.
     try {
-      const result = await PipelineGenerator.preview(toSpecDict(spec));
-      setPreview(result);
-      // Plan 247 F5 — el perfil es aditivo: su fallo NUNCA degrada el preview.
-      try {
-        setProfile(await PipelineProfiler.profile({ yaml_text: result.ado }));
-        setProfileError(null);
-      } catch (pe: unknown) {
-        setProfile(null);
-        setProfileError(pe instanceof Error ? pe.message : 'perfil no disponible');
-      }
-    } catch (e: unknown) {
-      // 400 con errors
-      if (e && typeof e === 'object' && 'errors' in e) {
-        setPreviewErrors((e.errors as Array<{ field: string; message: string }>));
-      } else {
-        setPreviewErrors([{ field: 'general', message: e instanceof Error ? e.message : 'Error desconocido' }]);
-      }
-    } finally {
-      setLoading(false);
+      setProfile(await PipelineProfiler.profile({ yaml_text: result.ado }));
+      setProfileError(null);
+    } catch (pe: unknown) {
+      setProfile(null);
+      setProfileError(pe instanceof Error ? pe.message : 'perfil no disponible');
     }
   };
 
@@ -108,10 +119,15 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
 
   return (
     <div className={styles.panelMuted}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <h3 style={{ margin: 0 }}>Preview YAML</h3>
+      <div className={styles.previewHeader}>
+        <h3 style={{ margin: 0 }}>
+          Preview YAML{' '}
+          {/* Plan 99 — SWR honesto: mientras recalcula, el YAML anterior sigue
+              visible y atenuado en vez de desaparecer. */}
+          {loading && <span className={styles.recalcBadge}>Recalculando…</span>}
+        </h3>
         <button
-          onClick={() => void refreshPreview()}
+          onClick={() => void refreshPreview(true)}
           disabled={loading || localErrors.length > 0}
           title={localErrors.length > 0 ? 'Resolvé los avisos primero' : undefined}
           style={{ padding: '6px 12px', fontSize: '12px' }}
@@ -151,13 +167,13 @@ export const PipelineYamlPreview: React.FC<PipelineYamlPreviewProps> = ({ spec, 
         <div style={{ display: 'flex', gap: '16px' }}>
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>Azure DevOps</h4>
-            <pre className={styles.yamlPre}>
+            <pre className={`${styles.yamlPre} ${loading ? styles.yamlPreStale : ''}`}>
               {renderYaml(preview.ado)}
             </pre>
           </div>
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: '0 0 8px 0', fontSize: '14px' }}>GitLab CI</h4>
-            <pre className={styles.yamlPre}>
+            <pre className={`${styles.yamlPre} ${loading ? styles.yamlPreStale : ''}`}>
               {renderYaml(preview.gitlab)}
             </pre>
           </div>

@@ -518,3 +518,10 @@
 .trigger__notice { margin-bottom: var(--space-5); padding: var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-md); }
 .trigger__ml { margin-left: var(--space-4); }
 .trigger__pre { margin: var(--space-2) 0 0 0; white-space: pre-wrap; }
+
+/* Plan 99 F2 — preview YAML: cabecera, badge de recálculo y atenuado SWR.
+   Van por CSS module y con tokens (nunca hex literal): el uiDebtRatchet cuenta
+   tanto `style={{` como hex por archivo, y este componente está en su techo. */
+.previewHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-5); }
+.recalcBadge { font-size: var(--text-md); font-weight: normal; color: var(--text-muted); }
+.yamlPreStale { opacity: 0.6; }

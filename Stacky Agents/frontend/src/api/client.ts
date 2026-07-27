@@ -8,7 +8,10 @@ const BASE = (import.meta as any).env?.VITE_API_BASE ?? "";
 
 // Plan 192 F2 — instrumentacion pasiva del choke-point de red. GATEWAY_DOWN_STATUSES
 // se IMPORTA del monitor (fuente unica; prohibido duplicar el Set aca — C8).
-function isAbortError(e: unknown): boolean {
+// Plan 99 F1 — exportada (antes privada). Cambio ADITIVO: la firma y el cuerpo no
+// cambian. Es la definición ÚNICA de "esto fue un abort" del frontend; duplicarla
+// en el fetcher del preview habría dejado dos predicados que pueden divergir.
+export function isAbortError(e: unknown): boolean {
   return e instanceof DOMException && e.name === "AbortError";
 }
 function reportOutcome(res: Response): void {
@@ -174,4 +177,9 @@ export const api = {
       body: JSON.stringify(body),
       headers: extraHeaders,
     }),
+  /** POST cancelable (Plan 99 F1): pasa un AbortSignal a fetch. ADITIVO — `post`
+   *  no se toca. `request()` hace spread del RequestInit, así que el signal viaja
+   *  a fetch sin cambiar nada más. */
+  postAbortable: <T,>(path: string, body: unknown, signal: AbortSignal) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body), signal }),
 };

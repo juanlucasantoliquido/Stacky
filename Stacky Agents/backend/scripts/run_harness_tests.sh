@@ -824,6 +824,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan252_handoff_bundle.py
   tests/test_plan252_zip_determinismo.py
   tests/test_plan252_handoff_api.py
+
+  # Plan 202 — La Fragua Nocturna (TMV)
+  tests/test_plan202_ledger.py
+  tests/test_plan202_planner.py
 )
 
 pass=0

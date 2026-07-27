@@ -1,10 +1,39 @@
 # Plan 268 — Explorador del grafo documental: filtros, foco por vecindario, búsqueda navegable, agrupación y peek de contenido
 
-> **Estado:** PROPUESTO — 2026-07-27 (v1, sin criticar)
+> **Estado:** CRITICADO — v1 → **v2** — 2026-07-27. **Veredicto del juez: RECHAZADO en v1** (5 bloqueantes). Esta versión los corrige.
 > **Serie:** Documentación agéntica Obsidian (109 grafo backend → 111 graph view canvas → 114 staleness → **268 explorador**). Este plan NO toca el motor de grafo del backend: consume el mismo contrato `GET /api/docs/graph` del 109.
 > **Pipeline:** este documento pasó `proponer`. Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Depende de:** Plan 109 (endpoint `GET /api/docs/graph`, contrato de `DocGraphResponse`/`DocGraphNode`/`DocGraphEdge`, flag `STACKY_DOCS_GRAPH_ENABLED`), Plan 111 (`forceLayout.ts`, `graphViewport.ts`, `DocGraphView.tsx`, pestaña "Grafo" en `DocsPage`), Plan 114 (campos `has_stale` / `edge.stale` / `stale_stats`).
 > **Pedido literal del operador (2026-07-27):** *"Mejorar la visualización y la experiencia de uso del grafo de documentación, optimizando su estructura, legibilidad, navegación e interacción. Siempre que sea técnicamente viable, integrar Grapify directamente en la plataforma... La solución debe permitir explorar el grafo con facilidad mediante funciones como zoom, filtros, búsqueda, agrupación de nodos, navegación entre relaciones y acceso rápido al contenido asociado a cada elemento."*
+
+---
+
+## 0. CHANGELOG v1 → v2 (qué corrigió el juez)
+
+Cada bullet cita el hallazgo que resuelve. **Nada del v1 se borró**: todo lo que era correcto se conserva.
+
+**Bloqueantes (el v1 quedaba inimplementable o producía un bug silencioso):**
+
+- **C1 — Los tokens de color que el v1 asumía NO EXISTEN.** Verificado abriendo `Stacky Agents/frontend/src/theme.css`: el tema define `--accent`, `--accent-hot`, `--success`, `--warn`, `--danger`, `--border`, `--text-primary`, `--text-muted`, `--bg-panel`, `--bg-elev`, `--agent-business`, `--agent-functional`, `--agent-custom` — y **ningún** `--color-*` salvo `--color-scheme`. `grep -rn -- "--color-accent:" src` devuelve **0 hits**. Consecuencia real: `readPalette` (`DocGraphView.tsx:52-69`) **siempre** cae al hex de fallback y el canvas del 111 **no es theme-aware** aunque el código lo aparente; y `DocGraphView.module.css` usa 6 tokens inexistentes. El v1 agravaba esto (6 tokens más inventados en F5.2 y swatches CSS **sin fallback** en F5.4 ⇒ swatches transparentes y leyenda de un color distinto que el canvas). **Fix:** nueva **F0.6** con `graphPalette.ts` (lista canónica de tokens REALES) + `graphPalette.test.ts` que lee `theme.css` de disco y falla si un token no está definido **en el bloque oscuro y en el claro**. Ver **[ADICIÓN ARQUITECTO #1]**.
+- **C2 — `draw()` con closures stale.** El efecto de layout tiene deps `[visibleGraph, selectedNodeId]` y `draw` se define adentro; el v1 hacía que `draw()` leyera `activeMatchId` (F2), `slots` (F5) y `explorerEnabled` (F7) sin ponerlos en deps ni en refs ⇒ apretar Enter cambiaba el contador pero el anillo se quedaba clavado en el primer resultado. **Fix:** regla dura **§4 G12** (todo valor que lee `draw()` va por `useRef`) + lista exacta de refs en F1.3.
+- **C3 — El colapso de F5 y los filtros de F1 vaciaban el canvas.** Si el nodo enfocado deja de existir en el grafo compuesto (porque su grupo se colapsó o un filtro lo descartó), `focusSubgraph` devuelve —por la propia spec del v1— un grafo **vacío**. **Fix:** helper puro `resolveFocusId` (F4.1) que remapea al super-nodo o desactiva el foco, nunca vacía la pantalla; mismo tratamiento para `peekNodeId` y `activeMatchId`.
+- **C4 — Gesto en conflicto sobre el super-nodo.** F4 decía "click = enfocar" y F5 "click sobre el super-nodo = des-colapsar". **Fix:** tabla única de gestos en F4.2, repetida en F5.4.
+- **C5 — `indexById` apuntaba al grafo equivocado** (exactamente el riesgo R1 que el propio plan denunciaba): se calculaba sobre `graph` y se usaba para indexar `visibleGraph`. **Fix:** lista cerrada de derivados que pasan a `visibleGraph` + grep-gate en el criterio de aceptación de F1.
+
+**Importantes:**
+
+- **C6 — K5/DoD-4 era un falso verde perfecto:** `git diff --stat -- "Stacky Agents/frontend/package.json"` corrido desde `Stacky Agents/frontend` (el CWD de todos los demás comandos del plan) no matchea nada y devuelve vacío = "verde" aunque el archivo esté modificado. **Fix:** pathspec absoluto de repo + `--exit-code`.
+- **C7 — El `%` de zoom mentía y el viewport se reseteaba en silencio** en cada cambio de filtro (re-init del efecto ⇒ `viewportRef.current = IDENTITY`, línea 149) sin que `viewScale` se enterara. **Fix:** un único `setViewport(next)` que escribe ref + estado + redibujo (F3), y re-encuadre tras cada re-init en modo explorador.
+- **C8 — K9 prometía "cero fetch" y no es garantizable:** el Lector usa `selectedContentSourceId = selectedNode?.source_id ?? selectedSourceId` y `DocNode.source_id` es **opcional** (`endpoints.ts:3323`), mientras que `DocGraphNode.source_id` es obligatorio. **Fix:** se mantiene la misma `queryKey` (es lo correcto) pero el hit de cache deja de ser criterio binario.
+- **C9 — Atajos de teclado muertos:** `.canvasBox` con `tabIndex={0}` nunca recibe foco porque el click cae en el `<canvas>` hijo. **Fix:** `boxRef.current?.focus({ preventScroll: true })` en `onPointerDown` + `:focus-visible`.
+- **C10 — Umbrales de tiempo (`200 ms` / `150 ms` / `50 ms`) como criterio binario** son no deterministas. **Fix:** presupuesto 2000 ms (sigue cazando un O(n²)) y un rojo de tiempo **no** bloquea la fase.
+- **C11 — `availableFilterOptions` sin fuente de verdad:** no se decía de dónde sale el label de cada fuente. **Fix:** de `graph.sources` (`DocGraphSource.label`, `docGraphModel.ts:38-44`), con regla explícita para el id no encontrado.
+- **C12 — F2.2 decía "reemplazar el `useState` query" y después seguía usándolo.** **Fix:** el `useState` se **conserva** (camino flag-OFF) y se declara cuál es la fuente de verdad en cada modo.
+- **C13 — F7 no decía dónde vive el canvas del minimapa** ni cómo entra a `draw()`, y el umbral de LOD `r < 6` no era verificable. **Fix:** cableado explícito del segundo canvas + el umbral expresado en `in_degree` (con `nodeRadius`, `forceLayout.ts:47-49`) + predicado puro `shouldDrawEdge` con tests.
+
+**Menores:** C14 ruta falsa `src/styles/theme.css` → es `src/theme.css`; C15 DoD-1 decía "8 archivos" y listaba 10; C16 anclajes de inserción de `harness_flags_help.py` (la entrada del 109 **termina** en la línea 279) y de `harness_defaults.env` (el archivo está **ordenado alfabéticamente** y **no** se regenera); C17 "byte-idéntico al 111" pasa a ser "observacionalmente idéntico" (F0.3 y F5.3 no están gateados, a propósito); C18 se agrega el registro en `docs/sistema/error_fingerprints.json`.
+
+**Anclajes verificados uno por uno contra el código real (2026-07-27):** `DocGraphView.tsx` 34-38, 52-75, 97, 100, 112, 114, 119, 122, 127-130, 135-145, 151-158, 176, 247, 261, 266-267, 305, 422, 434-448, 459-475, 492, 505-518, 519-526, 529-533, 537-539 → **todos OK**. `docGraphModel.ts:127-138` OK. `forceLayout.ts` 11, 47-49, 62-64, 101, 203-231 OK. `graphViewport.ts:57` (fin de `panBy`) OK; `IDENTITY`/`MIN_SCALE`/`MAX_SCALE`/`zoomAt`/`toScreen` OK. `DocsPage.tsx` 76, 146, 230, 295-310, 392-416 OK. `config.py:672-675` OK. `harness_flags.py` 120, 400, 2280-2295 OK. `harness_flags_help.py:274` OK (la entrada cierra en 279). `api/docs.py` 52-60 OK. `test_harness_flags.py:467` OK. `test_harness_flags_requires.py` 120 y 316 OK. `harness_defaults.env:158` OK. `endpoints.ts:3356-3370` OK. **Contrato:** `DocGraphNode.source_id/.kind/.in_degree/.out_degree/.has_stale`, `DocGraphEdge.kind`, `graph.orphans`, `graph.sources` **existen**; `Docs.getContent(path, {project, sourceId})` existe (`endpoints.ts:3461-3469`) y la `queryKey` del Lector es la de `DocsPage.tsx:146`. **Único anclaje FALSO del v1:** `frontend/src/styles/theme.css` (no existe; es `frontend/src/theme.css`) — y con él, toda la familia `--color-*`.
 
 ---
 
@@ -20,11 +49,12 @@
 | K2 | **Aislar el vecindario** | `neighborhoodOf(graph, rootId, 1)` devuelve exactamente `{root} ∪ vecinos directos`; con `depth=0` devuelve `{root}`; con un `rootId` inexistente devuelve `Set` vacío. | `npx vitest run src/docs/graphNeighborhood.test.ts` |
 | K3 | **Búsqueda que navega** | Con `q` que matchea m nodos, la UI muestra `1 de m` y `NEXT_MATCH` cicla `1→2→…→m→1` sin salirse de rango; con m=0 el índice queda en 0 y no lanza. | `npx vitest run src/docs/graphSearch.test.ts` + `graphExplorerState.test.ts` |
 | K4 | **Encuadre determinista** | `fitViewport(points, w, h)` deja **todos** los puntos dentro del rectángulo `[0,w]×[0,h]` con al menos `padding` px de margen, para 1, 2 y 500 puntos. | `npx vitest run src/docs/graphViewport.test.ts` |
-| K5 | **Cero dependencias nuevas** | `frontend/package.json` byte-idéntico al de HEAD al terminar el plan. | `git diff --stat -- "Stacky Agents/frontend/package.json"` devuelve vacío |
+| K5 | **Cero dependencias nuevas** | `frontend/package.json` byte-idéntico al de HEAD al terminar el plan. | `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con **código 0**. ⚠️ (C6) **NO** usar `git diff --stat -- "Stacky Agents/frontend/package.json"`: los comandos del plan corren desde `Stacky Agents/frontend` y ahí ese pathspec **no matchea ningún archivo**, así que devuelve vacío aunque el archivo esté modificado — un falso verde perfecto. El prefijo `:/` ancla el pathspec a la raíz del repo desde cualquier CWD. |
 | K6 | **Cero regresión de compilación** | `npx tsc --noEmit` sale con 0 errores desde `Stacky Agents/frontend`. | comando literal |
 | K7 | **Cero deuda visual nueva** | `uiDebtRatchet` y `motionDebtRatchet` en verde sin regenerar baseline (⇒ 0 `style={{` en `.tsx` nuevos, 0 hex y 0 tiempos literales en el `.module.css` nuevo y en las líneas nuevas del existente). | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `.../motionDebtRatchet.test.ts` |
 | K8 | **Performance no degradada** | El dibujo de labels deja de hacer `Array.findIndex` por label por frame (O(n·L)) y pasa a `Map.get` (O(L)); el tope `MAX_ANIMATED_NODES = 300` y `prefers-reduced-motion` siguen respetados sin cambios de semántica. | F0 + revisión de diff |
-| K9 | **Acceso rápido al contenido** | Seleccionar un nodo nota muestra el peek con las primeras ~600 caracteres del documento **sin** cambiar de pestaña, reusando la cache de react-query del Lector (misma `queryKey`). | Verificación visual F8, paso 9 |
+| K9 | **Acceso rápido al contenido** | Seleccionar un nodo nota muestra el peek con las primeras ~600 caracteres del documento **sin** cambiar de pestaña, usando **exactamente la misma `queryKey`** que el Lector (`DocsPage.tsx:146`). ⚠️ (C8) El *hit* de cache es **deseable, no binario**: el Lector arma el 3.º campo de la clave con `selectedNode?.source_id ?? selectedSourceId` y `DocNode.source_id` es **opcional** (`endpoints.ts:3323`), así que si el índice no trae `source_id` las claves difieren legítimamente y se hace un `GET` de más (costo: una lectura de disco local). Lo binario es que la clave sea la misma expresión y que el peek muestre texto real. | Verificación visual F8, paso 9 |
+| K10 | **El canvas es de verdad theme-aware** (C1) | Todo token de color que el grafo lee existe en `frontend/src/theme.css` **en el bloque oscuro y en el claro**. Test puro que lee el archivo de disco. | `npx vitest run src/docs/graphPalette.test.ts` |
 
 ---
 
@@ -37,7 +67,9 @@
 5. **No hay acceso al contenido desde el grafo.** El único acceso es `onOpenNoteById` (`DocGraphView.tsx:422`), que **abandona la vista** (`DocsPage.tsx:230` hace `setDocsView("reader")`). No hay forma de espiar una nota y seguir explorando.
 6. **El zoom no es descubrible.** Solo rueda (`DocGraphView.tsx:434-444`) y doble click para resetear (`:446-448`). El único botón de la toolbar es "Centrar" (`:519-526`). No hay `+`, `−`, "Ajustar a pantalla", ni teclado. Un operador que use trackpad o teclado no descubre el zoom.
 7. **Hay un costo O(n) escondido por label y por frame.** `DocGraphView.tsx:266` hace `graph.nodes.findIndex((n) => n.id === c.id)` **dentro del loop de dibujo de labels**, que corre hasta 60 veces por frame (`pickVisibleLabels(candidates, 60)`, `:261`). Con 300 nodos son hasta 18.000 comparaciones por frame gratis. Se arregla con un `Map` en F0.
-8. **`docsView` ya soporta tres vistas** (`DocsPage.tsx:76`: `"reader" | "coverage" | "graph"`) y la pestaña "Grafo" ya está cableada (`DocsPage.tsx:392-400`, `:410-416`). Este plan **no** agrega una pestaña nueva: mejora la que ya está.
+8bis. **(C1 — hallazgo del juez, bug VIVO) El grafo NO es theme-aware, aunque el código lo aparente.** `readPalette` (`DocGraphView.tsx:52-69`) lee `--color-accent`, `--color-success`, `--color-danger`, `--color-border`, `--color-text`, `--color-surface`; el tema (`frontend/src/theme.css`) define `--accent` (línea 17), `--success` (19), `--danger` (21), `--border` (8), `--text-primary` (11), `--bg-panel` (6) — y **ningún** `--color-*` salvo `--color-scheme` (163/243/279). `grep -rn -- "--color-accent:" src` → **0 hits**. Como `readPalette` hace `raw || fallback` (línea 56), el canvas dibuja **siempre** los hex hardcodeados y no se entera del tema claro. Peor: `DocGraphView.module.css` usa **6** tokens inexistentes (`--color-accent`, `--color-border`, `--color-surface`, `--color-surface-2`, `--color-text`, `--color-text-muted`), que en CSS resuelven a *unset*. **F0.6 lo arregla y deja un test que impide que vuelva.**
+
+9. **`docsView` ya soporta tres vistas** (`DocsPage.tsx:76`: `"reader" | "coverage" | "graph"`) y la pestaña "Grafo" ya está cableada (`DocsPage.tsx:392-400`, `:410-416`). Este plan **no** agrega una pestaña nueva: mejora la que ya está.
 
 ---
 
@@ -80,7 +112,9 @@ El operador pidió, textualmente, *"siempre que sea técnicamente viable, integr
 - **G3 — Read-only absoluto.** Ninguna fase escribe un documento, un ticket, una rama ni una fila de BD. El único verbo HTTP usado es `GET` (`/api/docs/graph`, `/api/docs/content`, `/api/docs/sources`).
 - **G4 — Human-in-the-loop.** Nada se decide solo: los filtros, el foco, el colapso y el peek son acciones explícitas del operador. No hay auto-foco, no hay auto-filtrado "inteligente", no hay llamadas a modelos. El grafo nunca "decide" qué es importante en lugar del operador.
 - **G5 — Mono-operador sin auth.** No se agrega identidad, ni RBAC, ni preferencias por usuario. El estado del explorador es de sesión (en memoria del componente); no se persiste en disco ni en BD.
-- **G6 — Theme-aware.** Todo color del canvas se lee de CSS custom properties vía `readPalette` (`DocGraphView.tsx:52-69`), nunca hardcodeado. Todo color de CSS usa `var(--token)`.
+- **G6 — Theme-aware DE VERDAD (reescrito por C1).** Todo color del canvas se lee de CSS custom properties vía `readPalette` (`DocGraphView.tsx:52-69`), y **el nombre del token tiene que existir en `Stacky Agents/frontend/src/theme.css`**. ⚠️ Hoy **no existe**: `readPalette` pide `--color-accent` / `--color-success` / `--color-danger` / `--color-border` / `--color-text` / `--color-surface` y el tema define `--accent` / `--success` / `--danger` / `--border` / `--text-primary` / `--bg-panel`. Verificado: `grep -rn -- "--color-accent:" "Stacky Agents/frontend/src"` → **0 hits**; en `theme.css` el único `--color-*` es `--color-scheme`. Resultado: el grafo del 111 se dibuja **siempre** con los hex de fallback y **no** cambia con el tema. **F0.6 lo arregla** y deja un test que impide que vuelva a pasar. Regla operativa: **ningún token nuevo**; se usan únicamente los ya definidos en `theme.css`, y `graphPalette.ts` es la lista canónica.
+- **G12 — Todo lo que lee `draw()` va por `useRef` (nuevo por C2).** `draw()` se define **dentro** del efecto de layout, cuyas deps son `[visibleGraph, selectedNodeId]`. Por lo tanto **cualquier** valor de React que `draw()` lea y que pueda cambiar sin que esas deps cambien **queda congelado** (closure stale). El archivo ya usa este patrón: `filterRef`, `hoverRef`, `paletteRef`, `viewportRef` (`DocGraphView.tsx:89-95`). **Consecuencia dura:** cada valor nuevo que `draw()` necesite se guarda en un `useRef` y se sincroniza con un `useEffect` de dos líneas (`ref.current = valor; if (stateRef.current && !stateRef.current.animated) drawRef.current();`). **Prohibido** leer un `useState` o una variable derivada del render directamente dentro de `draw()`.
+- **G13 — Ningún estado del explorador puede dejar el canvas vacío (nuevo por C3).** Filtrar, colapsar y enfocar componen; cualquier composición que dé `nodes: []` teniendo el operador un grafo cargado es un **bug**, no un estado válido. La única forma legítima de ver 0 nodos es que el operador haya puesto filtros que efectivamente no dejan nada (y ahí el `EmptyState` de `DocGraphView.tsx:529-533` lo dice, con el botón "Limpiar filtros" a mano).
 - **G7 — Respetar `prefers-reduced-motion` y `MAX_ANIMATED_NODES = 300`.** Ninguna fase toca esa lógica (`forceLayout.ts:11`, `:101`; `DocGraphView.tsx:127-130`). Cualquier redibujo nuevo en modo estático debe llamar `drawRef.current()` explícitamente, igual que hoy (`DocGraphView.tsx:114`, `:119`).
 - **G8 — Ratchets de deuda visual.** `frontend/src/__tests__/uiDebtRatchet.test.ts` congela **por archivo** la cantidad de `style={{` en `*.tsx` y de colores **hex** en `*.module.css`; `motionDebtRatchet.test.ts` congela tiempos literales (`120ms`, `0.2s`) y `cubic-bezier(` en `*.module.css`. **Consecuencia dura:** los `.tsx` nuevos van con **cero** `style={{`, y **toda línea CSS nueva** (tanto en el `.module.css` nuevo como en las que se agreguen a `DocGraphView.module.css`) usa `var(--token)` **sin fallback hex** y `var(--duration-*)` / `var(--ease-*)` para tiempos. Ambos ratchets deben quedar verdes **sin regenerar baseline**.
 - **G9 — Backward-compatible.** Con `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` en OFF, la pestaña "Grafo" se comporta **exactamente** como hoy (toolbar de 111: buscar + leyenda + "Centrar"). Con `STACKY_DOCS_GRAPH_ENABLED` en OFF, la pestaña ni siquiera se monta (comportamiento del 109/111, intacto).
@@ -127,6 +161,12 @@ El operador pidió, textualmente, *"siempre que sea técnicamente viable, integr
 | Prefijo del id de super-nodo | `GROUP_NODE_PREFIX` (`"group:"`) | F5 |
 | Componente de peek | `frontend/src/components/docs/DocGraphPeek.tsx` | F6 |
 | Excerpt puro del markdown | `previewExcerpt` | F6 (en `frontend/src/docs/graphPreview.ts`) |
+| **Paleta canónica del grafo** (C1) | `frontend/src/docs/graphPalette.ts` | **F0.6** |
+| Lista de tokens que el canvas lee | `GRAPH_PALETTE_TOKENS` | F0.6 |
+| Tokens de color por slot de grupo | `GROUP_SLOT_TOKENS` | F0.6 |
+| Escritor único de viewport (ref + estado + redibujo) | `setViewport` | F3 (helper local de `DocGraphView`) |
+| Resolución del foco tras filtrar/agrupar (C3) | `resolveFocusId` | F4 (en `graphNeighborhood.ts`) |
+| Predicado puro de nivel de detalle (C13) | `shouldDrawEdge` | F7 (en `graphMinimap.ts`) |
 | Módulo del minimapa | `frontend/src/docs/graphMinimap.ts` | F7 |
 | Transformación mundo→minimapa | `minimapTransform` | F7 |
 | Rectángulo del viewport en el minimapa | `viewportRectInMinimap` | F7 |
@@ -195,7 +235,7 @@ Editar, **en este orden**:
         "STACKY_DOCS_GRAPH_EXPLORER_ENABLED",   # Plan 268 — explorador del grafo (filtros/foco/peek)
 ```
 
-4. **`Stacky Agents/backend/services/harness_flags_help.py`** — agregar la entrada de ayuda llana justo después de `"STACKY_DOCS_GRAPH_ENABLED"` (línea 274):
+4. **`Stacky Agents/backend/services/harness_flags_help.py`** — agregar la entrada de ayuda llana justo después de la **entrada completa** de `"STACKY_DOCS_GRAPH_ENABLED"`. ⚠️ (C16) Esa entrada **empieza** en la línea 274 y **cierra** con `),` en la línea **279**: hay que insertar **después de la 279**, no después de la 274 (si insertás en la 275 partís el `PlainHelp` del 109 al medio y el módulo no importa):
 ```python
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": PlainHelp(
         what="Agrega herramientas para explorar el mapa de documentos: filtros, buscador que salta al resultado, foco en los vecinos de una nota, colores por carpeta, zoom con botones y una vista previa del texto.",
@@ -220,10 +260,11 @@ Editar, **en este orden**:
 ```
    Sin esto, la aserción de la línea 316 (`actual == _REQUIRES_MAP_FROZEN`) se pone **ROJA** con "Extras: [...]".
 
-7. **`Stacky Agents/deployment/harness_defaults.env`** — agregar debajo de la línea 158:
+7. **`Stacky Agents/deployment/harness_defaults.env`** — agregar **a mano** debajo de la línea 158 (`STACKY_DOCS_GRAPH_ENABLED=true`) y **antes** de la 159 (`STACKY_DOCS_RAG_HYBRID_ALPHA=1.0`):
 ```
 STACKY_DOCS_GRAPH_EXPLORER_ENABLED=true
 ```
+   ⚠️ (C16) Dos cosas, ninguna opcional: **(a)** el archivo está **ordenado alfabéticamente** y esa posición es la correcta (`..._GRAPH_ENABLED` < `..._GRAPH_EXPLORER_ENABLED` < `..._RAG_...`); **(b)** **NO** regenerar el archivo con el generador de `deployment/`. El archivo tiene deuda ajena congelada de otros planes; regenerarlo mete cambios que no son tuyos y contamina el diff. Se agrega **una línea, a mano**.
 
 #### F0.2 — Exponer la flag por HTTP
 
@@ -267,6 +308,8 @@ donde `indexById` se calcula con `useMemo` junto a `kindById` (línea 100) y se 
   const indexById = useMemo(() => nodeIndexById(graph), [graph]);
 ```
 ⚠️ El efecto principal (línea 122, deps `[graph, selectedNodeId]`) ya se re-crea cuando cambia `graph`, así que la captura del `Map` es correcta. Agregar `nodeIndexById` al import de `../../docs/docGraphModel` (línea 14).
+
+⚠️ **(C5) DEUDA QUE F1 TIENE QUE PAGAR — leer antes de escribir F1.** En F0 `indexById` se calcula sobre `graph` porque todavía no existe `visibleGraph`. En cuanto F1 introduce `visibleGraph`, **`indexById` PASA a calcularse sobre `visibleGraph`**, igual que `kindById` y `orphanSet`. Si queda apuntando a `graph` mientras `draw()` indexa `visibleGraph.nodes[i]`, los labels salen del nodo equivocado en cuanto haya un filtro activo — que es literalmente el riesgo R1 de este mismo plan. F1.3 lo lista explícito y el criterio de aceptación de F1 lo verifica con un grep.
 
 #### F0.4 — Matemática de encuadre en `graphViewport.ts`
 
@@ -475,6 +518,129 @@ export function graphExplorerReducer(
 
 **Casos borde cubiertos:** query vacía (`matchIndex` vuelve a 0), `total = 0` (no divide por cero), `PREV_MATCH` desde 0 (envuelve al último), `depth` fuera de `[1,3]` (clampea), `FOCUS_BACK` con historial vacío (limpia el foco en vez de romper), re-focar el mismo nodo (no duplica historial), `minDegree` negativo o `NaN` (→ 0).
 
+#### F0.6 — **[ADICIÓN ARQUITECTO #1]** Paleta REAL del grafo: que "theme-aware" deje de ser mentira
+
+> **Por qué esto entra al plan (C1).** El plan 111 escribió `readPalette` leyendo `--color-accent`, `--color-success`, `--color-danger`, `--color-border`, `--color-text`, `--color-surface`. **Ninguno de esos tokens existe.** Evidencia, verificable en 5 segundos:
+> ```
+> # desde "Stacky Agents/frontend"
+> grep -rn -- "--color-accent:" src        # → 0 hits
+> grep -n -- "--color-" src/theme.css      # → solo --color-scheme (líneas 163, 243, 279)
+> grep -n -- "--accent:\|--success:\|--danger:" src/theme.css   # → 17,19,21 (oscuro) y 187,189,191 (claro)
+> ```
+> Es decir: **el canvas del grafo nunca cambió de color con el tema**; siempre dibujó los hex de fallback del `.tsx`. Y `DocGraphView.module.css` usa 6 tokens inexistentes (`--color-accent`, `--color-border`, `--color-surface`, `--color-surface-2`, `--color-text`, `--color-text-muted`), que en CSS resuelven a *unset* — de ahí que la pestaña Grafo se vea "casi bien pero rara".
+> El v1 de este plan **empeoraba** el problema: inventaba 6 tokens más (`--color-info/purple/teal/pink`) para los colores de grupo y, peor, exigía que los swatches de la leyenda usaran `var(--color-teal)` **sin fallback** (G8) — o sea, swatches transparentes en la leyenda mientras el canvas dibuja el hex de fallback: **la leyenda y el grafo mostrando colores distintos**.
+> Costo de arreglarlo acá: un archivo puro de 30 líneas y un test. Beneficio: el paso 18 de F8 (cambiar de tema) pasa a significar algo, la leyenda y el canvas quedan garantizados iguales, y el bug no puede volver.
+
+**Crear `Stacky Agents/frontend/src/docs/graphPalette.ts`:**
+```ts
+/**
+ * graphPalette.ts — Plan 268 F0.6.
+ * ÚNICA fuente de verdad de los tokens de color que el grafo documental lee del
+ * tema. PURO: solo nombres y fallbacks, sin DOM. El test lee theme.css de disco y
+ * verifica que cada token esté definido en el bloque oscuro Y en el claro.
+ *
+ * ⚠️ REGLA: acá NO se inventan tokens. Todo nombre de esta lista tiene que existir
+ * ya en frontend/src/theme.css. Si hace falta un color nuevo, se elige otro token
+ * existente; agregar tokens al tema es otro plan (contrato congelado del 138 §10.1,
+ * vigilado por src/__tests__/themeTokens.test.ts).
+ */
+
+/** Rol semántico dentro del grafo → token del tema + fallback (por si el tema no cargó aún). */
+export const GRAPH_PALETTE_TOKENS = {
+  note:    { token: "--accent",       fallback: "#388bfd" },
+  code:    { token: "--success",      fallback: "#3fb950" },
+  missing: { token: "--danger",       fallback: "#f85149" },
+  edge:    { token: "--border",       fallback: "#30363d" },
+  stale:   { token: "--danger",       fallback: "#f85149" },
+  label:   { token: "--text-primary", fallback: "#e6edf3" },
+  labelBg: { token: "--bg-panel",     fallback: "#161b22" },
+  halo:    { token: "--accent-hot",   fallback: "#58a6ff" },
+  ring:    { token: "--text-primary", fallback: "#e6edf3" },
+} as const;
+
+/** Colores por SLOT de grupo (F5). Orden fijo = orden de asignación de slots.
+ *  Los 6 existen en el bloque oscuro y en el claro de theme.css. */
+export const GROUP_SLOT_TOKENS = [
+  { token: "--accent",            fallback: "#388bfd" },  // slot 0
+  { token: "--accent-hot",        fallback: "#58a6ff" },  // slot 1
+  { token: "--warn",              fallback: "#d29922" },  // slot 2
+  { token: "--agent-business",    fallback: "#a371f7" },  // slot 3
+  { token: "--agent-functional",  fallback: "#f78166" },  // slot 4
+  { token: "--agent-custom",      fallback: "#8b949e" },  // slot 5
+] as const;
+
+/** Todos los nombres de token usados por el grafo (para el test de existencia). */
+export function allGraphTokenNames(): string[] {
+  const a = Object.values(GRAPH_PALETTE_TOKENS).map((e) => e.token);
+  const b = GROUP_SLOT_TOKENS.map((e) => e.token);
+  return Array.from(new Set([...a, ...b])).sort();
+}
+
+/** Parseo PURO de un CSS: nombres de custom properties DEFINIDAS (`--x: valor;`). */
+export function definedTokenNames(css: string): Set<string> {
+  const out = new Set<string>();
+  const re = /(--[a-zA-Z0-9-]+)\s*:/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(css)) !== null) out.add(m[1]);
+  return out;
+}
+
+/** Corta el CSS del tema en sus dos bloques: el `:root` base (oscuro) y el bloque
+ *  del tema claro. Devuelve `{ dark, light }` con el TEXTO de cada uno.
+ *  Criterio: el bloque claro es el que contiene `--color-scheme: light`. */
+export function splitThemeBlocks(css: string): { dark: string; light: string };
+```
+
+**Cablear en `DocGraphView.tsx`** — `readPalette` (líneas 52-69) pasa a:
+```ts
+import { GRAPH_PALETTE_TOKENS, GROUP_SLOT_TOKENS } from "../../docs/graphPalette";
+
+function readPalette(el: HTMLElement): Palette {
+  const cs = getComputedStyle(el);
+  const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+  const t = GRAPH_PALETTE_TOKENS;
+  return {
+    note:    v(t.note.token,    t.note.fallback),
+    code:    v(t.code.token,    t.code.fallback),
+    missing: v(t.missing.token, t.missing.fallback),
+    edge:    v(t.edge.token,    t.edge.fallback),
+    stale:   v(t.stale.token,   t.stale.fallback),
+    label:   v(t.label.token,   t.label.fallback),
+    labelBg: v(t.labelBg.token, t.labelBg.fallback),
+    halo:    v(t.halo.token,    t.halo.fallback),
+    ring:    v(t.ring.token,    t.ring.fallback),
+    groups:  GROUP_SLOT_TOKENS.map((g) => v(g.token, g.fallback)),   // Plan 268 F5
+  };
+}
+```
+⚠️ El campo `groups: string[]` se agrega **acá, en F0.6** (F5 ya lo asume; el v1 lo agregaba en F5.2 con tokens inventados).
+
+**Reparar `DocGraphView.module.css`** — sustitución 1 a 1, **sin agregar tokens ni hex** (el ratchet de hex se mide sobre `*.module.css`, así que meter un fallback hex sería deuda nueva):
+
+| Lo que dice hoy (no existe) | Lo que tiene que decir |
+|---|---|
+| `var(--color-accent)` | `var(--accent)` |
+| `var(--color-border)` | `var(--border)` |
+| `var(--color-surface)` | `var(--bg-panel)` |
+| `var(--color-surface-2)` | `var(--bg-elev)` |
+| `var(--color-text)` | `var(--text-primary)` |
+| `var(--color-text-muted)` | `var(--text-muted)` |
+
+⚠️ **No** tocar los 3 `style={{ background: "var(--color-accent, #4a9eff)" }}` de la leyenda vieja (`DocGraphView.tsx:507`, `:511`, `:515`): **ya están contados en el baseline de `uiDebtRatchet`** y son el camino flag-OFF. Sí se puede (y conviene) corregirles el nombre del token dejando el fallback: `"var(--accent, #388bfd)"` — el conteo de `style={{` no cambia y el ratchet sigue verde.
+
+**Test nuevo `Stacky Agents/frontend/src/docs/graphPalette.test.ts`** (puro, lee el archivo con `fs`, igual que hacen los ratchets — no necesita DOM):
+- `it("todos los tokens del grafo estan definidos en el bloque OSCURO de theme.css")`
+- `it("todos los tokens del grafo estan definidos en el bloque CLARO de theme.css")`
+- `it("ningun token del grafo empieza con --color- (esa familia no existe en el tema)")`
+- `it("los 6 slots de grupo son tokens DISTINTOS entre si")`
+- `it("definedTokenNames encuentra una custom property y ignora un var() de uso")`
+- `it("splitThemeBlocks separa el bloque claro por --color-scheme: light")`
+- `it("DocGraphView.module.css no usa ningun token inexistente")` — lee `src/components/docs/DocGraphView.module.css` y `src/components/docs/DocGraphExplorer.module.css` (si ya existe), extrae todos los `var(--x)` **usados** y verifica que cada uno esté en `definedTokenNames(theme.css)`. **Este caso es el que impide que el bug vuelva.**
+
+⚠️ El último caso empieza en **ROJO** (los 6 tokens actuales de `DocGraphView.module.css` no existen) y pasa a verde con la sustitución de la tabla. Eso es TDD correcto: el test reproduce un bug **real y vivo** antes de arreglarlo.
+
+**Ruta del tema (C14):** es `Stacky Agents/frontend/src/theme.css`. **No** existe `frontend/src/styles/theme.css` (el v1 lo citaba mal).
+
 #### Tests de F0 (TDD — escribir primero)
 
 **`Stacky Agents/frontend/src/docs/graphViewport.test.ts`** (EDITAR el existente; agregar un `describe`):
@@ -516,6 +682,8 @@ export function graphExplorerReducer(
 npx vitest run src/docs/graphViewport.test.ts
 npx vitest run src/docs/graphExplorerState.test.ts
 npx vitest run src/docs/docGraphModel.test.ts
+npx vitest run src/docs/graphPalette.test.ts
+npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 ```
 ```
@@ -526,7 +694,7 @@ npx tsc --noEmit
 .venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_help.py -q
 ```
 
-**Criterio de aceptación binario.** Los 4 archivos de test frontend en verde, `npx tsc --noEmit` con 0 errores, `test_docs_api.py` / `test_harness_flags.py` / `test_harness_flags_requires.py` en verde, y en `test_harness_flags_help.py` la entrada nueva sin fallos (los 4 fallos ajenos preexistentes NO cuentan).
+**Criterio de aceptación binario.** Los **5** archivos de test frontend en verde (`graphViewport`, `graphExplorerState`, `docGraphModel`, `graphPalette`, y `uiDebtRatchet` sin regenerar baseline), `npx tsc --noEmit` con 0 errores, `test_docs_api.py` / `test_harness_flags.py` / `test_harness_flags_requires.py` en verde, y en `test_harness_flags_help.py` la entrada nueva sin fallos (los 4 fallos ajenos preexistentes NO cuentan). Además: `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con código 0.
 
 **Flag que la protege.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**. (Los helpers puros no están gateados: son código muerto hasta que F1+ los use; el gate está en el montaje de la UI.)
 
@@ -575,8 +743,26 @@ export interface FilterOptions {
   maxDegree: number;
 }
 
-/** Opciones disponibles derivadas del grafo COMPLETO (no del filtrado): la barra
- *  no debe cambiar de forma cuando el operador filtra. */
+/**
+ * Opciones disponibles derivadas del grafo COMPLETO (no del filtrado): la barra
+ * no debe cambiar de forma cuando el operador filtra.
+ *
+ * (C11) Reglas EXACTAS, no interpretables:
+ *  - `sources`: una entrada por cada `source_id` NO VACÍO que aparezca en al menos
+ *    un nodo. `count` = cuántos nodos lo tienen. El `label` sale de `graph.sources`
+ *    (`DocGraphSource.label`, docGraphModel.ts:38-44) buscando por `id`; si ese id
+ *    NO está en graph.sources, el label ES el propio id. Orden: por `label` asc con
+ *    `localeCompare`, y a igual label por `value` asc. Las fuentes declaradas en
+ *    graph.sources con 0 nodos NO se listan (un chip que no filtra nada es ruido).
+ *  - `kinds`: SIEMPRE las 3 entradas en orden fijo note, code, missing, aun con
+ *    count 0 (la barra no debe cambiar de forma). Labels: "Notas", "Código", "Faltantes".
+ *  - `edgeKinds`: SIEMPRE las 3 en orden fijo md, wikilink, code_ref, aun con count 0.
+ *    Labels: "Links markdown", "Wikilinks", "Referencias a código".
+ *  - `staleCount`: nodos con has_stale === true. `orphanCount`: graph.orphans.length.
+ *  - `maxDegree`: max(in_degree + out_degree) sobre todos los nodos; 0 si no hay nodos.
+ *  - graph undefined o sin nodos → sources [], kinds y edgeKinds con las 3 entradas
+ *    en count 0, staleCount 0, orphanCount 0, maxDegree 0.
+ */
 export function availableFilterOptions(graph: DocGraphResponse | undefined): FilterOptions
 
 /**
@@ -679,8 +865,41 @@ const visibleGraph = useMemo(
   [explorerEnabled, graph, ui.filters]
 );
 ```
-3. **⚠️ INVARIANTE CRÍTICA (no romper):** el efecto de layout (línea 122) y el dibujo de labels usan **el mismo array de nodos por índice** (`state.nodes[i]` ↔ `graph.nodes[i]`, líneas 247 y 266). Por lo tanto, a partir de esta fase **todas** las referencias a `graph` **dentro del efecto de layout y del `draw()`** pasan a ser `visibleGraph`, y la lista de deps del efecto (línea 492) pasa de `[graph, selectedNodeId]` a `[visibleGraph, selectedNodeId]`. Las referencias a `graph` que quedan fuera del efecto (`kindById`, `orphanSet`) también pasan a derivarse de `visibleGraph`. **No mezclar los dos objetos.**
-4. Cuando `explorerEnabled` es falsy, `visibleGraph === graph` (misma referencia) ⇒ comportamiento byte-idéntico al 111.
+3. **⚠️ INVARIANTE CRÍTICA I1 (no romper):** el efecto de layout (línea 122) y el dibujo de labels usan **el mismo array de nodos por índice** (`state.nodes[i]` ↔ `graph.nodes[i]`, líneas 247 y 266). Por lo tanto, a partir de esta fase **todas** las referencias a `graph` **dentro del efecto de layout y del `draw()`** pasan a ser `visibleGraph`, y la lista de deps del efecto (línea 492) pasa de `[graph, selectedNodeId]` a `[visibleGraph, selectedNodeId]`. **No mezclar los dos objetos.**
+
+   **(C5) Lista CERRADA de derivados — copiar tal cual, no interpretar:**
+
+   | Símbolo | Antes | Después | Por qué |
+   |---|---|---|---|
+   | `kindById` (línea 100) | `graph` | **`visibleGraph`** | decide el cursor y si un click abre nota |
+   | `orphanSet` (línea 106) | `graph` | **`visibleGraph`** | alpha de huérfanas por id |
+   | `indexById` (F0.3) | `graph` | **`visibleGraph`** | **se indexa por posición**: si difiere del array del layout, labels cruzados |
+   | `nodeCount` (línea 108) | `graph` | **`visibleGraph`** | decide el `EmptyState` (`:529`) |
+   | `initLayout(...)` (líneas 148 y 463) | `graph` | **`visibleGraph`** | el layout ES el subgrafo visible |
+   | `graph.nodes[i]` en `draw()` (línea 247) | `graph` | **`visibleGraph`** | ídem I1 |
+   | `filterOptions` (F1.3-2) | — | **`graph`** (¡el completo!) | **excepción a propósito**: la barra no debe cambiar de forma al filtrar |
+   | `totalNodes` del contador | — | **`graph`** | es el denominador "N de TOTAL" |
+
+   **Las dos últimas filas son las ÚNICAS referencias legítimas a `graph` que quedan fuera del efecto.**
+
+   **⚠️ INVARIANTE CRÍTICA I2 — refs para todo lo que lee `draw()` (C2, guardarraíl G12).** `draw()` vive **dentro** del efecto de deps `[visibleGraph, selectedNodeId]`. Cualquier valor que cambie sin cambiar esas deps queda **congelado en el closure**. El archivo ya resuelve esto con `filterRef`/`hoverRef`/`paletteRef` (líneas 89-95). A partir de acá se agregan estos refs, **todos declarados en F1 aunque los llene una fase posterior** (así ninguna fase tiene que tocar la firma del efecto de nuevo):
+```ts
+  const activeMatchIdRef   = useRef<string | null>(null);   // F2 — resultado de búsqueda activo
+  const groupSlotsRef      = useRef<Map<string, number>>(new Map()); // F5 — slot de color por grupo
+  const explorerEnabledRef = useRef<boolean>(false);        // F7 — gatea el LOD y el minimapa
+  const canvasSizeRef      = useRef<{ w: number; h: number }>({ w: 0, h: 0 }); // F2/F3 — encuadre
+```
+   y **un** efecto de sincronización (uno solo, no cuatro), que además fuerza el redibujo en modo estático:
+```ts
+  useEffect(() => {
+    activeMatchIdRef.current   = activeMatchId;       // null hasta F2
+    groupSlotsRef.current      = groupSlots;          // Map vacío hasta F5
+    explorerEnabledRef.current = Boolean(explorerEnabled);
+    if (stateRef.current && !stateRef.current.animated) drawRef.current();
+  }, [activeMatchId, groupSlots, explorerEnabled]);
+```
+   **Regla de oro:** dentro de `draw()` se lee **`xxxRef.current`**, nunca la variable del render. Si una fase posterior necesita un dato nuevo en `draw()`, agrega un ref y una línea a este efecto — **jamás** una dep al efecto de layout (eso re-inicializaría el grafo entero en cada tecla).
+4. Cuando `explorerEnabled` es falsy, `visibleGraph === graph` (misma referencia) ⇒ comportamiento **observacionalmente idéntico** al 111. ⚠️ (C17) No es "byte-idéntico" en sentido literal: F0.3 (`findIndex` → `Map`), F0.6 (nombres de token reales) y F5.3 (`groupOf` → `groupKeyOf`) corren en **ambos** modos, a propósito — son correcciones sin cambio de semántica, cubiertas por test. Lo que sí es idéntico es **lo que el operador ve y puede hacer**.
 5. Render de la toolbar:
 ```tsx
 {explorerEnabled ? (
@@ -732,7 +951,10 @@ const visibleGraph = useMemo(
 - `it("no muta el grafo de entrada")`
 - `it("availableFilterOptions cuenta nodos por fuente y por kind")`
 - `it("availableFilterOptions con grafo vacio devuelve listas vacias y maxDegree 0")`
-- `it("applyGraphFilters con 5000 nodos termina en menos de 200 ms")` — genera 5000 nodos y 10000 aristas; mide con `Date.now()`; sirve de guardia de complejidad (debe ser O(n+m), sin `find` anidados).
+- `it("applyGraphFilters con 5000 nodos termina en menos de 2000 ms")` — genera 5000 nodos y 10000 aristas; mide con `Date.now()`; sirve de **guardia de complejidad** (una implementación O(n·m) con `find` anidados tarda decenas de segundos y cae; una O(n+m) tarda milisegundos). ⚠️ **(C10) Presupuesto de tiempo, no de performance.** Un rojo **solo por tiempo** en una máquina cargada **NO bloquea la fase**: se re-corre una vez y, si vuelve a dar rojo, se anota en `## 10` y se sigue. Lo que bloquea es un rojo de **corrección**.
+- `it("availableFilterOptions toma el label de graph.sources y cae al id si no esta")` — (C11).
+- `it("availableFilterOptions no lista fuentes con 0 nodos")` — (C11).
+- `it("availableFilterOptions devuelve SIEMPRE los 3 kinds y los 3 edgeKinds, aun con count 0")` — (C11).
 
 **Comandos:**
 ```
@@ -740,10 +962,20 @@ const visibleGraph = useMemo(
 npx vitest run src/docs/graphFilters.test.ts
 npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx vitest run src/__tests__/motionDebtRatchet.test.ts
+npx vitest run src/docs/graphPalette.test.ts
 npx tsc --noEmit
 ```
+```
+# desde la RAIZ del repo o desde donde sea (el prefijo :/ ancla el pathspec)
+git diff --exit-code -- ":/Stacky Agents/frontend/package.json"
+```
 
-**Criterio de aceptación binario.** `graphFilters.test.ts` verde (18 casos), ambos ratchets verdes **sin regenerar baseline**, `tsc --noEmit` con 0 errores, y `git diff --stat -- "Stacky Agents/frontend/package.json"` vacío.
+**Criterio de aceptación binario.** `graphFilters.test.ts` verde (**21 casos**: los 18 del v1 + los 3 de C11), ambos ratchets verdes **sin regenerar baseline**, `graphPalette.test.ts` verde (incluido el caso que valida `DocGraphExplorer.module.css`), `tsc --noEmit` con 0 errores, `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` con código 0, **y** el grep-gate de la invariante I1:
+```
+# desde "Stacky Agents/frontend"
+grep -n "graph\." src/components/docs/DocGraphView.tsx
+```
+Todos los hits deben ser: (a) `visibleGraph.…`, (b) `graph.nodes.length` como **denominador** del contador, o (c) el argumento de `availableFilterOptions(graph, …)`. **Cualquier otro hit de `graph.` es el bug R1 y se corrige antes de cerrar la fase.**
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -821,7 +1053,10 @@ return out.slice(0, limit)
 
 #### F2.2 — Cableado en `DocGraphView.tsx`
 
-1. Reemplazar el estado local `query` (línea 97) por `ui.query` del reducer (`dispatch({type:"SET_QUERY", query: e.target.value})`). **Solo cuando `explorerEnabled`**; con la flag OFF se conserva el `useState` del 111 tal cual.
+1. **(C12) El `useState<string>` de la línea 97 SE CONSERVA** — el v1 decía "reemplazar" y después seguía usándolo, lo cual era una contradicción literal. La regla exacta es:
+   - `explorerEnabled === true` → la **fuente de verdad es `ui.query`**. El `onChange` del input hace `dispatch({type:"SET_QUERY", query: e.target.value})` y **no** llama a `setQuery`.
+   - `explorerEnabled` falsy → la fuente de verdad es el `useState` `query`, exactamente como en el 111.
+   - El `value` del input es **`explorerEnabled ? ui.query : query`**. Una sola línea, sin ramas de render duplicadas.
 2. Calcular:
 ```ts
 const matches = useMemo(
@@ -850,8 +1085,10 @@ useEffect(() => {
   drawRef.current();
 }, [explorerEnabled, activeMatchId]);
 ```
-   ⚠️ Hace falta un `canvasSizeRef = useRef({w:0,h:0})` que el efecto de layout actualice en `sizeCanvas()` (líneas 135-145) y en el `ResizeObserver` (líneas 459-475). **Sin ese ref el encuadre usa 0×0 y el nodo se va del canvas.**
-5. **Resaltado del activo:** en `draw()`, el nodo cuyo id es `activeMatchId` se dibuja con el mismo anillo que el hovered (líneas 223-229) usando `palette.halo` en lugar de `palette.ring`, y su label recibe `priority: 950` en el array de candidatos (línea 258), entre `isSelected` (900) y `isHover` (1000).
+   ⚠️ `canvasSizeRef` ya quedó declarado en F1.3-3 (I2). El efecto de layout lo actualiza en **dos** lugares: dentro de `sizeCanvas()` antes del `return` (líneas 135-145) y en el callback del `ResizeObserver` (líneas 459-475). **Sin ese ref el encuadre usa 0×0 y el nodo se va del canvas.**
+   ⚠️ Además, este efecto **debe** usar `setViewport(...)` (F3) en vez de escribir `viewportRef.current` a mano, para que el `%` de zoom no se desincronice (C7).
+5. **Resaltado del activo:** en `draw()`, el nodo cuyo id es **`activeMatchIdRef.current`** (I2 — **NO** la variable `activeMatchId` del render: quedaría congelada en el primer resultado y el anillo no se movería nunca al apretar Enter, C2) se dibuja con el mismo anillo que el hovered (líneas 223-229) usando `palette.halo` en lugar de `palette.ring`, y su label recibe `priority: 950` en el array de candidatos (línea 258), entre `isSelected` (900) y `isHover` (1000).
+6. **(C3) Coherencia del contador.** `matches` se calcula sobre `visibleGraph`, así que buscar **estando enfocado o con filtros** busca dentro de lo visible — es lo correcto y hay que decírselo al operador: si `ui.focusRootId` o los filtros no son `EMPTY_FILTERS`, el contador se muestra como `n de m (en lo visible)`. Así nadie interpreta que "no está" una nota que sí está pero filtrada.
 6. **UI de la búsqueda** (dentro de `DocGraphFilterBar` o inmediatamente al lado, misma barra):
    - el `<input type="search">` existente,
    - `<span>{matches.length ? ui.matchIndex + 1 : 0} de {matches.length}</span>`,
@@ -877,7 +1114,7 @@ useEffect(() => {
 - `it("matchAt con lista vacia devuelve null")`
 - `it("matchAt aplica modulo al indice fuera de rango")`
 - `it("matchAt con indice negativo devuelve null")`
-- `it("con 5000 nodos la busqueda termina en menos de 150 ms")`
+- `it("con 5000 nodos la busqueda termina en menos de 2000 ms")` — (C10) guardia de complejidad, no de performance; un rojo solo por tiempo no bloquea la fase.
 
 **Comandos:**
 ```
@@ -922,18 +1159,29 @@ interface DocGraphZoomControlsProps {
 ```
 Render: 4 `<button type="button">` con `title` y `aria-label` en español (`Acercar`, `Alejar`, `Ajustar a pantalla`, `Restablecer vista`), más un `<span>{Math.round(scale*100)}%</span>`. Cero `style={{}}`; posicionado con la clase `.zoomControls` (esquina inferior derecha del `.canvasBox`, `position: absolute`).
 
-**Handlers en `DocGraphView.tsx`** (todos dentro del efecto de layout, expuestos por refs igual que `resetViewRef`):
+**(C7) ESCRITOR ÚNICO DEL VIEWPORT — obligatorio.** El v1 dejaba `viewportRef.current = …` esparcido por 6 lugares y el `%` de zoom en un `useState` que solo se actualizaba "al terminar una interacción de zoom". Eso miente en dos casos **reales y frecuentes**: (i) el `ResizeObserver` ya hace `viewportRef.current = IDENTITY` (línea 464) sin avisarle a nadie; (ii) a partir de F1 **cada cambio de filtro re-ejecuta el efecto de layout** (deps `[visibleGraph, …]`) y la línea 149 vuelve a poner `IDENTITY` — el grafo vuelve a 100% mientras el indicador sigue diciendo 195%. Se resuelve con **una sola función** dentro del efecto:
 ```ts
-zoomInRef.current  = () => { viewportRef.current = zoomAtCenter(viewportRef.current, ZOOM_STEP, w, h); draw(); };
-zoomOutRef.current = () => { viewportRef.current = zoomAtCenter(viewportRef.current, 1 / ZOOM_STEP, w, h); draw(); };
+    // ÚNICO lugar del componente donde se escribe viewportRef.current.
+    function setViewport(next: Viewport) {
+      if (next === viewportRef.current) return;   // zoomAt devuelve el MISMO objeto si clampeó
+      viewportRef.current = next;
+      setViewScale(next.scale);                   // mantiene el % sincronizado (React re-render barato)
+      draw();
+    }
+```
+y **todos** los escritores pasan por ahí: `onWheel` (línea 438-443), `onPointerMove` del pan (línea 382), `resetViewRef` (línea 306), el `ResizeObserver` (línea 464), el encuadre de F2, y los handlers de abajo.
+```ts
+zoomInRef.current  = () => setViewport(zoomAtCenter(viewportRef.current, ZOOM_STEP, w, h));
+zoomOutRef.current = () => setViewport(zoomAtCenter(viewportRef.current, 1 / ZOOM_STEP, w, h));
 fitRef.current     = () => {
   const st = stateRef.current; if (!st || !st.nodes.length) return;
-  viewportRef.current = fitViewport(st.nodes.map(n => ({ x: n.x, y: n.y, r: n.r })), w, h, 40);
-  draw();
+  setViewport(fitViewport(st.nodes.map(n => ({ x: n.x, y: n.y, r: n.r })), w, h, 40));
 };
-// resetViewRef ya existe (línea 305) y se conserva
+// resetViewRef (línea 305) se conserva, pero pasa a llamar setViewport(IDENTITY).
 ```
-⚠️ El `scale` que muestra el componente vive en un `useState<number>` (`viewScale`) que se actualiza **solo** al terminar una interacción de zoom (rueda, botón, fit, reset), **nunca** dentro de `tick()` — si se actualizara por frame, React re-renderizaría 60 veces por segundo (regresión de performance, prohibida por G-no-degradar).
+⚠️ `setViewScale` **nunca** se llama desde `tick()`: eso re-renderizaría React 60 veces por segundo (regresión de performance, prohibida). `tick()` llama `draw()` a secas, que **no** toca estado de React. `setViewport` solo se invoca en respuesta a un gesto o a un re-init — como mucho unas pocas veces por segundo.
+
+**(C7) Re-encuadre tras cada re-init en modo explorador.** Al final del efecto de layout, en modo explorador y **solo** si `visibleGraph.nodes.length > 0`, se llama una vez a `fitRef.current()` (dentro de un `requestAnimationFrame` para que `staticLayout`/el primer `stepLayout` ya hayan corrido). Así, cuando el operador toca un filtro, el subgrafo aparece **encuadrado** en vez de aparecer a escala 1 con la mitad fuera de pantalla. Con la flag OFF esto **no** se hace (comportamiento del 111). Esto no es autonomía (G4): es la consecuencia visual directa del click del operador.
 
 **Atajos de teclado.** Se registran sobre el `.canvasBox` con `tabIndex={0}` y `onKeyDown` (**no** sobre `window`: no deben dispararse mientras el operador escribe en otro lado de la app):
 
@@ -952,6 +1200,11 @@ const t = ev.target as HTMLElement | null;
 const tag = (t?.tagName || "").toLowerCase();
 if (tag === "input" || tag === "textarea" || tag === "select" || t?.isContentEditable) return;
 ```
+
+⚠️ **(C9) SIN ESTO LOS ATAJOS ESTÁN MUERTOS.** `tabIndex={0}` hace al `.canvasBox` **enfocable**, pero el click del operador cae en el `<canvas>` hijo y `pointerdown` **no** enfoca a un ancestro con `tabIndex`. Resultado: el operador hace click en el grafo, aprieta `f` y **no pasa nada** — el `keydown` se fue al `<body>`. Dos líneas obligatorias:
+1. En `onPointerDown` (línea 357), **primera** instrucción: `boxRef.current?.focus({ preventScroll: true });`
+2. En `DocGraphExplorer.module.css`, `.canvasBox:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }` — así el operador **ve** que el grafo tiene el foco del teclado (y es requisito de accesibilidad: un elemento enfocable sin indicador visible es una regresión de a11y).
+3. El `.hint` en modo explorador agrega, al final: `· Click en el grafo para usar el teclado`.
 
 **Descubribilidad.** El `.hint` existente (`DocGraphView.tsx:537-539`) pasa, en modo explorador, a:
 `Rueda o + / −: zoom · F: ajustar · 0: restablecer · Arrastrá el fondo: mover · Click: enfocar · Doble click: abrir`
@@ -1033,6 +1286,29 @@ export interface NeighborEntry {
   edgeKinds: Array<"md" | "wikilink" | "code_ref">;
 }
 export function rankedNeighbors(graph: DocGraphResponse, rootId: string): NeighborEntry[]
+
+/**
+ * (C3) Resuelve el id de foco CONTRA EL GRAFO YA COMPUESTO (filtrado + agrupado).
+ * Existe porque el foco lo eligió el operador sobre un grafo que después puede
+ * cambiar de forma: un filtro puede descartar el nodo enfocado y un colapso de
+ * grupo puede reemplazarlo por su super-nodo. Sin esto, focusSubgraph recibe un
+ * root inexistente y —por su propia spec— devuelve un grafo VACÍO: pantalla en
+ * blanco sin explicación (viola G13).
+ *
+ * Reglas, en este orden:
+ *  1. focusRootId null → null.
+ *  2. focusRootId presente en composed.nodes → ese mismo id.
+ *  3. Si el nodo original (buscado en `original.nodes`) existe y su grupo está
+ *     colapsado, devolver GROUP_NODE_PREFIX + groupKeyOf(kind, source_id) si ese
+ *     super-nodo está en composed.nodes.
+ *  4. En cualquier otro caso → null (⇒ se muestra el grafo compuesto ENTERO,
+ *     nunca vacío) y el caller avisa al operador (ver F4.2 punto 6).
+ */
+export function resolveFocusId(
+  composed: DocGraphResponse,
+  original: DocGraphResponse,
+  focusRootId: string | null
+): string | null
 ```
 
 Pseudocódigo de `neighborhoodOf`:
@@ -1058,18 +1334,39 @@ return seen
 
 #### F4.2 — Cableado
 
-1. **Entrar en foco.** El click simple sobre un nodo, en modo explorador, **cambia de significado**: pasa a ser `dispatch({type:"FOCUS_NODE", nodeId: id})` en vez de `onOpenNoteById(id)`. **Abrir la nota** pasa al **doble click** (`onDblClick`, que hoy resetea la vista — el reset se mueve al botón "Restablecer vista" de F3 y a la tecla `0`).
-   ⚠️ Con `explorerEnabled === false` el comportamiento del 111 se conserva **exacto**: click abre, doble click resetea.
+1. **(C4) TABLA ÚNICA DE GESTOS — esta tabla manda sobre cualquier otra frase del plan.** El v1 se contradecía: F4 decía "click = enfocar (siempre)" y F5 decía "click sobre el super-nodo = des-colapsar". Regla desempatada, a implementar **literalmente** en `onPointerUp` (línea 406-423) y `onDblClick` (línea 446-448):
+
+   | `explorerEnabled` | Gesto | Sobre qué nodo | Acción exacta |
+   |---|---|---|---|
+   | **false** | click | cualquiera | comportamiento del 111: `if (kindById.get(id) === "note") onOpenNoteById(id)` |
+   | **false** | doble click | cualquiera | `resetViewRef.current()` (111) |
+   | **true** | click | `isGroupNodeId(id)` (super-nodo, F5) | `dispatch({type:"TOGGLE_GROUP_COLLAPSED", groupKey: groupKeyFromNodeId(id)!})` — **des-colapsa**. No enfoca, no abre nada. |
+   | **true** | click | nodo normal (`note` / `code` / `missing`) | `dispatch({type:"FOCUS_NODE", nodeId: id})` — enfoca y abre el peek |
+   | **true** | doble click | nodo `note` | `onOpenNoteById(id)` — abre en el Lector |
+   | **true** | doble click | `code` / `missing` / super-nodo | **nada** (no hay documento que abrir) |
+   | **true** | doble click | el vacío (ningún nodo bajo el cursor) | `resetViewRef.current()` — el reset del 111 sigue existiendo sobre el fondo |
+
+   ⚠️ `onDblClick` hoy no sabe qué nodo hay debajo: hay que darle las coordenadas y llamar a `nearestNode(x, y)` (línea 316), igual que `onPointerUp`. Firma: `function onDblClick(ev: MouseEvent)` con `const { x, y } = toLocal(ev as any)`.
+   ⚠️ El reset de vista **sigue disponible** en modo explorador por el botón "Restablecer vista" de F3 y por la tecla `0`, además del doble click al vacío.
 2. **Componer con los filtros.** El grafo que llega al layout es:
 ```ts
-const visibleGraph = useMemo(() => {
-  if (!explorerEnabled) return graph;
+const { visibleGraph, effectiveFocusId } = useMemo(() => {
+  if (!explorerEnabled) return { visibleGraph: graph, effectiveFocusId: null as string | null };
   const filtered = applyGraphFilters(graph, ui.filters);
   const grouped  = collapseGroups(filtered, ui.collapsedGroups);        // F5
-  return ui.focusRootId ? focusSubgraph(grouped, ui.focusRootId, ui.focusDepth) : grouped;
+  // (C3) el foco se RESUELVE contra el grafo ya compuesto: si el nodo enfocado
+  // desapareció (filtro) o fue absorbido por un super-nodo (colapso), esto
+  // devuelve el super-nodo o null — NUNCA deja el canvas vacío (G13).
+  const focusId  = resolveFocusId(grouped, graph, ui.focusRootId);
+  return {
+    visibleGraph: focusId ? focusSubgraph(grouped, focusId, ui.focusDepth) : grouped,
+    effectiveFocusId: focusId,
+  };
 }, [explorerEnabled, graph, ui.filters, ui.collapsedGroups, ui.focusRootId, ui.focusDepth]);
 ```
-   **Orden fijo y obligatorio: filtros → agrupación → foco.** (Filtrar después de enfocar daría vecindarios rotos; agrupar después de enfocar generaría super-nodos parciales.)
+   **Orden fijo y obligatorio: filtros → agrupación → RESOLUCIÓN DEL FOCO → foco.** (Filtrar después de enfocar daría vecindarios rotos; agrupar después de enfocar generaría super-nodos parciales; y **sin el paso de resolución, colapsar el grupo del nodo enfocado o filtrarlo deja la pantalla en blanco** — C3.)
+   ⚠️ A partir de acá, **todo lo que se muestre del foco usa `effectiveFocusId`, no `ui.focusRootId`**: las migas, el título del peek, `rankedNeighbors`, y el `aria-pressed` de los botones de profundidad. `ui.focusRootId` sigue siendo lo que el operador pidió; `effectiveFocusId` es lo que se puede mostrar.
+   ⚠️ Lo mismo para el peek y para la búsqueda: `peekNodeId` y `activeMatchId` se resuelven **contra `visibleGraph`**; si el id ya no está, el peek se cierra solo (`SET_PEEK` con `null`) y el contador de búsqueda se recalcula (ya lo hace, porque `matches` depende de `visibleGraph`).
 3. **Migas + control de profundidad** (barra sobre el canvas, solo si `ui.focusRootId`):
    - `<button>← Volver</button>` → `FOCUS_BACK`, `disabled` si `focusHistory.length === 0 && !focusRootId`.
    - `<span>Foco: {labelDelRoot}</span>`
@@ -1077,7 +1374,8 @@ const visibleGraph = useMemo(() => {
    - `<button>Ver todo</button>` → `CLEAR_FOCUS`.
    - `<span>{visibleGraph.nodes.length} de {graph.nodes.length} nodos</span>`
 4. **Encuadre automático al enfocar.** Un `useEffect` sobre `[ui.focusRootId, ui.focusDepth]` que llama `fitRef.current()` tras un `requestAnimationFrame` (para que el layout ya tenga posiciones). Esto **no** es autonomía: es la consecuencia visual directa de un click del operador (G4).
-5. **Panel "Relaciones"** (lista lateral, dentro del peek de F6 o encima si F6 aún no está): `rankedNeighbors(visibleGraph, ui.focusRootId)` renderizado como `<ul>` de `<button>`; click en un vecino → `FOCUS_NODE` de ese vecino. Así se "camina" el grafo.
+5. **Panel "Relaciones"** (lista lateral, dentro del peek de F6 o encima si F6 aún no está): `rankedNeighbors(visibleGraph, effectiveFocusId)` renderizado como `<ul>` de `<button>`; click en un vecino → `FOCUS_NODE` de ese vecino. Así se "camina" el grafo.
+6. **(C3) Aviso cuando el foco pedido no se puede mostrar.** Si `ui.focusRootId !== null` y `effectiveFocusId === null`, en la barra de migas se muestra, en lugar de `Foco: <nota>`, el texto llano: **`El nodo enfocado no está en la vista actual (lo ocultó un filtro o un grupo colapsado).`** más el botón `Ver todo` (`CLEAR_FOCUS`) ya existente. **Nunca** se limpia el foco solo: el operador decide (G4). Y si `effectiveFocusId !== ui.focusRootId` (se remapeó al super-nodo), las migas dicen `Foco: <etiqueta del grupo> (grupo colapsado)`.
 
 #### Tests de F4 (TDD)
 
@@ -1100,17 +1398,27 @@ const visibleGraph = useMemo(() => {
 - `it("rankedNeighbors lista primero los entrantes y despues los salientes")`
 - `it("rankedNeighbors marca direction both cuando hay arista en los dos sentidos")`
 - `it("rankedNeighbors agrupa los edgeKinds del mismo par de nodos")`
-- `it("neighborhoodOf sobre 5000 nodos con depth 3 termina en menos de 200 ms")`
+- `it("neighborhoodOf sobre 5000 nodos con depth 3 termina en menos de 2000 ms")` — (C10) guardia de complejidad; un rojo solo por tiempo no bloquea la fase.
+- **(C3) Los 5 casos de `resolveFocusId` — ninguno opcional:**
+- `it("resolveFocusId con focusRootId null devuelve null")`
+- `it("resolveFocusId devuelve el mismo id si el nodo sigue en el grafo compuesto")`
+- `it("resolveFocusId remapea al super-nodo cuando el grupo del nodo enfocado esta colapsado")`
+- `it("resolveFocusId devuelve null si un filtro descarto el nodo enfocado")`
+- `it("resolveFocusId nunca devuelve un id ausente del grafo compuesto")` — propiedad: para 20 combinaciones de filtros/colapsos generadas, el resultado o es null o está en `composed.nodes`.
+- **(G13) El caso que prueba que el canvas nunca queda vacío:**
+- `it("componer filtros + colapso + foco sobre el grupo del nodo enfocado NO devuelve un grafo vacio")` — arma un grafo de 12 nodos en 2 fuentes, enfoca uno, colapsa su fuente, compone en el orden de F4.2-2 y verifica `visibleGraph.nodes.length > 0`.
 
 **Comandos:**
 ```
 # desde "Stacky Agents/frontend"
 npx vitest run src/docs/graphNeighborhood.test.ts
 npx vitest run src/docs/graphFilters.test.ts
+npx vitest run src/docs/graphGrouping.test.ts
 npx tsc --noEmit
 ```
+⚠️ El último comando **solo aplica cuando F5 ya existe**. Si F4 se implementa antes que F5 (que es el orden del plan), los 6 casos nuevos que dependen de `collapseGroups` se escriben en F4 y quedan **skippeados** (`it.skip`) con el comentario `// se activa en F5`; F5 los des-skippea. Esto es explícito para que un modelo menor no invente un `collapseGroups` provisorio.
 
-**Criterio de aceptación binario.** `graphNeighborhood.test.ts` verde (19 casos), `graphFilters.test.ts` sigue verde (no hubo regresión al componer), `tsc --noEmit` 0 errores.
+**Criterio de aceptación binario.** `graphNeighborhood.test.ts` verde (**25 casos**: los 19 del v1 + 5 de `resolveFocusId` + 1 de G13; de esos, los que dependen de `collapseGroups` pueden estar `it.skip` hasta F5), `graphFilters.test.ts` sigue verde (no hubo regresión al componer), `tsc --noEmit` 0 errores.
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -1190,25 +1498,9 @@ export function groupKeyFromNodeId(id: string): string | null
 
 #### F5.2 — Color por grupo (theme-aware, G6)
 
-En `DocGraphView.tsx`, `Palette` gana un array:
-```ts
-interface Palette {
-  /* ...los 9 campos existentes... */
-  groups: string[];   // Plan 268 — colores por slot de grupo
-}
-```
-y `readPalette` lo llena leyendo **CSS custom properties existentes del tema**, en este orden fijo (slot 0..5):
-```ts
-groups: [
-  v("--color-accent",  "#4a9eff"),
-  v("--color-info",    "#58a6ff"),
-  v("--color-warning", "#d29922"),
-  v("--color-purple",  "#a371f7"),
-  v("--color-teal",    "#39c5cf"),
-  v("--color-pink",    "#db61a2"),
-],
-```
-⚠️ Si alguna de esas custom properties **no existe** en `frontend/src/styles/theme.css`, el fallback string se usa igual (`readPalette` ya hace `raw || fallback`, línea 56) — **no** hay que agregar tokens nuevos ni tocar `theme.css`. Los fallbacks van en el `.tsx`, donde el ratchet de hex **no** cuenta (solo cuenta hex en `*.module.css`).
+⚠️ **(C1) REESCRITO. El v1 inventaba tokens que no existen** (`--color-info`, `--color-purple`, `--color-teal`, `--color-pink`) y se apoyaba en que "el fallback string se usa igual". Eso funcionaba **solo** en el canvas, no en la leyenda (que por G8 va sin fallback), dejando **leyenda y grafo con colores distintos**. Y citaba una ruta inexistente (`frontend/src/styles/theme.css` → es `frontend/src/theme.css`).
+
+La paleta —incluido el array `groups: string[]` del `interface Palette`— **ya quedó definida y cableada en F0.6**, con los **tokens reales de `theme.css`** (`GROUP_SLOT_TOKENS`: `--accent`, `--accent-hot`, `--warn`, `--agent-business`, `--agent-functional`, `--agent-custom`; los 6 existen en el bloque oscuro **y** en el claro). **F5 no toca `readPalette`**: solo consume `pal.groups`.
 
 `colorForGroup` pasa a:
 ```ts
@@ -1219,6 +1511,7 @@ function colorForGroup(group: string, pal: Palette, slots: Map<string, number>):
   return slot === undefined ? pal.note : pal.groups[slot % pal.groups.length];
 }
 ```
+⚠️ **(C2/I2)** El `slots` que `draw()` usa es **`groupSlotsRef.current`**, no la variable del render: `assignGroupColorSlots` produce un `Map` nuevo cada vez que cambia `visibleGraph`, y el efecto de layout no se re-ejecuta por eso solo. El ref ya está declarado en F1.3-3 y lo llena el efecto de sincronización.
 
 #### F5.3 — Una sola definición de `groupOf`
 
@@ -1238,7 +1531,20 @@ En `Stacky Agents/frontend/src/docs/forceLayout.ts`:
 
 #### F5.4 — Leyenda accionable
 
-La leyenda actual (`DocGraphView.tsx:505-518`, con 3 `style={{}}` que **ya están en el baseline del ratchet**) se **conserva tal cual** cuando `explorerEnabled` es falsy. En modo explorador se renderiza una leyenda nueva dentro de `DocGraphFilterBar`, con **cero `style={{}}`**: cada swatch usa una clase `.swatchSlot0` … `.swatchSlot5` definida en `DocGraphExplorer.module.css` con `background: var(--color-accent)` etc. (**sin fallback hex**, G8). Click en un ítem de la leyenda → `TOGGLE_GROUP_COLLAPSED`, con `aria-pressed` reflejando si está colapsado.
+La leyenda actual (`DocGraphView.tsx:505-518`, con 3 `style={{}}` que **ya están en el baseline del ratchet**) se **conserva tal cual** cuando `explorerEnabled` es falsy (F0.6 solo le corrige el **nombre** del token dejando el fallback: el conteo de `style={{` no cambia y `uiDebtRatchet` sigue verde).
+
+En modo explorador se renderiza una leyenda nueva dentro de `DocGraphFilterBar`, con **cero `style={{}}`**: cada swatch usa una clase `.swatchSlot0` … `.swatchSlot5` definida en `DocGraphExplorer.module.css`. **(C1) Los `background` de esas 6 clases tienen que ser EXACTAMENTE los mismos tokens que `GROUP_SLOT_TOKENS` (F0.6), en el mismo orden**, o la leyenda le miente al operador:
+```css
+.swatchSlot0 { background: var(--accent); }
+.swatchSlot1 { background: var(--accent-hot); }
+.swatchSlot2 { background: var(--warn); }
+.swatchSlot3 { background: var(--agent-business); }
+.swatchSlot4 { background: var(--agent-functional); }
+.swatchSlot5 { background: var(--agent-custom); }
+```
+(**sin fallback hex**, G8 — y ahora eso es seguro porque los 6 tokens **existen de verdad**; el caso `it("DocGraphView.module.css no usa ningun token inexistente")` de F0.6 cubre también este archivo). Click en un ítem de la leyenda → `TOGGLE_GROUP_COLLAPSED`, con `aria-pressed` reflejando si está colapsado.
+
+⚠️ **(C4) El gesto sobre el super-nodo dibujado en el canvas está definido en la TABLA ÚNICA DE GESTOS de F4.2-1** y esa tabla manda: click sobre un `isGroupNodeId(id)` ⇒ `TOGGLE_GROUP_COLLAPSED` (des-colapsa), **no** `FOCUS_NODE`. La leyenda y el super-nodo hacen exactamente lo mismo; son dos accesos al mismo comando.
 
 #### Tests de F5 (TDD)
 
@@ -1349,7 +1655,8 @@ useQuery({
   retry: 1,
 })
 ```
-  ⚠️ La clave debe coincidir **campo por campo** con la de `DocsPage.tsx:146` (`["docs-content", projectName ?? "active", selectedContentSourceId, selectedNode?.path]`); si difiere, se pierde el hit de cache y se hace un fetch de más.
+  ⚠️ La clave debe coincidir **campo por campo** con la de `DocsPage.tsx:146` (`["docs-content", projectName ?? "active", selectedContentSourceId, selectedNode?.path]`).
+  ⚠️ **(C8) Pero el hit de cache NO es un criterio binario, y el v1 se equivocaba al prometerlo.** En el Lector el 3.º campo es `selectedContentSourceId = selectedNode?.source_id ?? selectedSourceId` (`DocsPage.tsx:140`) y **`DocNode.source_id` es opcional** (`endpoints.ts:3323`), mientras que `DocGraphNode.source_id` es obligatorio (`docGraphModel.ts:13`). Si el índice de documentos no trae `source_id` para ese nodo, el Lector usa el id del `<select>` y las dos claves **difieren legítimamente** ⇒ se hace un `GET /api/docs/content` de más. Costo real: una lectura de disco local, sin LLM. **Lo binario es:** (a) la clave es esa expresión, (b) el peek muestra el texto correcto, (c) mover la selección N veces sobre el **mismo** nodo no dispara N fetches (eso sí lo garantiza `staleTime`).
 - Render: título (`previewTitle(content) ?? node.label`), chip de fuente, chip `Desactualizada` si `node.has_stale`, `<p>{previewExcerpt(content, 600)}</p>`, botón **"Abrir en el Lector"**, botón **"Enfocar"**, y la lista `Relaciones` (F4).
 - Estados: cargando → `SkeletonList` (`frontend/src/components/SkeletonList.tsx`, ya existe); error → texto llano `No se pudo cargar la vista previa.` **sin** lanzar.
 
@@ -1375,7 +1682,7 @@ useQuery({
 - `it("previewExcerpt corta en maxChars y agrega puntos suspensivos")`
 - `it("previewExcerpt no agrega puntos suspensivos si el texto entra entero")`
 - `it("previewExcerpt corta en el ultimo espacio, no a mitad de palabra")`
-- `it("previewExcerpt sobre 100 KB termina en menos de 50 ms")`
+- `it("previewExcerpt sobre 100 KB termina en menos de 1000 ms")` — (C10) guardia contra regex catastrófica; un rojo solo por tiempo no bloquea la fase.
 - `it("previewTitle devuelve el primer H1 sin la almohadilla")`
 - `it("previewTitle ignora un H1 que este dentro del frontmatter")`
 - `it("previewTitle devuelve null si no hay H1")`
@@ -1388,7 +1695,7 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación binario.** `graphPreview.test.ts` verde (17 casos), `uiDebtRatchet` verde sin regenerar, `tsc --noEmit` 0 errores, y verificación visual F8 paso 9 (el peek muestra texto real de un documento y **no** se dispara un fetch nuevo si ese documento ya se abrió en el Lector — se comprueba en la pestaña Red del navegador).
+**Criterio de aceptación binario.** `graphPreview.test.ts` verde (17 casos), `uiDebtRatchet` verde sin regenerar, `tsc --noEmit` 0 errores, y verificación visual F8 paso 9 (el peek muestra **texto real** del documento correcto, y hacer click 3 veces sobre el mismo nodo dispara **como mucho un** `GET /api/docs/content`). ⚠️ (C8) Que además reuse la entrada de cache del Lector es deseable pero **no** es criterio de aceptación.
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -1438,30 +1745,52 @@ export function viewportRectInMinimap(
 export function viewportFromMinimapClick(
   vp: Viewport, mx: number, my: number, t: MinimapTransform, canvasW: number, canvasH: number
 ): Viewport
+
+/**
+ * (C13) Predicado PURO del nivel de detalle: ¿se dibuja esta arista a esta escala?
+ * Sacado de draw() a propósito: dentro de draw() sería intesteable (no hay jsdom ni
+ * canvas en este repo), y una regla de dibujo sin test es una regla que nadie sabe
+ * si funciona.
+ *
+ * Regla: a escala < LOD_SCALE_THRESHOLD (0.6) se ocultan las aristas cuyos DOS
+ * extremos son nodos poco conectados. "Poco conectado" = radio < LOD_MIN_RADIUS (6).
+ * Con nodeRadius(d) = 4 + min(11, d*1.15) (forceLayout.ts:47-49), r < 6 equivale
+ * EXACTAMENTE a in_degree <= 1 (d=1 → r=5.15; d=2 → r=6.3). O sea: a alejarse se
+ * ven los troncos y desaparecen las hojas. A escala >= 0.6 se dibuja todo.
+ */
+export const LOD_SCALE_THRESHOLD = 0.6;
+export const LOD_MIN_RADIUS = 6;
+export function shouldDrawEdge(rA: number, rB: number, scale: number): boolean
 ```
 
 **Casos borde:** 0 puntos (`scale` = 1, rect = todo el minimapa); 1 punto (span 0 → usar `Math.max(1e-6, span)`, igual que `fitViewport`); viewport más grande que el grafo (el rect se clampea al minimapa completo); viewport totalmente fuera del bounding box (rect clampeado, `w`/`h` ≥ 0, nunca negativos).
 
 #### F7.2 — Dibujo del minimapa
 
-Un **segundo `<canvas>`** de 160×110 px CSS (con el mismo tratamiento de `devicePixelRatio` que el principal, `DocGraphView.tsx:139-143`), posicionado con la clase `.minimap` (esquina inferior izquierda del `.canvasBox`). Se redibuja **dentro del mismo `draw()`** del canvas principal (no un `requestAnimationFrame` propio: eso duplicaría el costo por frame). Dibuja:
-- un punto de 1.5 px por nodo, con el color de su grupo (F5) y alpha 0.7,
-- **sin aristas** (a esa escala son ruido),
-- el rectángulo del viewport con `strokeStyle = palette.halo` y `lineWidth = 1`.
-Click en el minimapa → `viewportFromMinimapClick` + `draw()`.
+Un **segundo `<canvas>`** de 160×110 px CSS, posicionado con la clase `.minimap` (esquina inferior izquierda del `.canvasBox`). **(C13) Cableado exacto — el v1 no lo decía y sin esto la fase no es implementable:**
+
+1. **Ref:** `const minimapRef = useRef<HTMLCanvasElement | null>(null);` junto a `canvasRef` (línea 85). El `<canvas ref={minimapRef} className={styles.minimap} />` se renderiza **solo** si `explorerEnabled && nodeCount > 0`, hermano del `<canvas>` principal dentro del `.canvasBox` (línea 536).
+2. **Tamaño y DPR:** dentro del efecto de layout, una función `sizeMinimap()` que hace **exactamente** lo mismo que `sizeCanvas()` (líneas 135-145) sobre `minimapRef.current` con `MM_W = 160`, `MM_H = 110` fijos (no dependen del `getBoundingClientRect`, así que no hace falta observarlo con el `ResizeObserver`). Si `minimapRef.current` es `null` (flag OFF), **sale sin hacer nada**.
+3. **Dibujo:** una función `drawMinimap()` llamada **al final de `draw()`**, no en un `requestAnimationFrame` propio (eso duplicaría el costo por frame). Primera línea: `if (!explorerEnabledRef.current) return;` (I2 — se lee el **ref**, no la variable del render). Dibuja:
+   - un punto de 1.5 px por nodo, con el color de su grupo (`colorForGroup` + `groupSlotsRef.current`) y alpha 0.7,
+   - **sin aristas** (a esa escala son ruido),
+   - el rectángulo de `viewportRectInMinimap(...)` con `strokeStyle = palette.halo` y `lineWidth = 1`.
+4. **Click:** se registra `minimap.addEventListener("pointerdown", onMinimapDown)` **dentro del mismo efecto** de layout y se quita en su `return` de limpieza (líneas 478-490), junto a los otros 6 listeners. El handler calcula `(mx,my)` con el `getBoundingClientRect()` **del minimapa** (no del canvas principal) y llama `setViewport(viewportFromMinimapClick(...))` (F3, C7).
+5. **Aislamiento del hit-test:** el minimapa es un elemento hermano **encima** del canvas principal, así que sus eventos **no** llegan a `onPointerDown`/`nearestNode`. Igual, el handler hace `ev.stopPropagation()` como cinturón y tirantes. En CSS, `.minimap { pointer-events: auto; }` y `.hint { pointer-events: none; }` (el hint ya está por encima y no debe robar clicks).
 
 #### F7.3 — Nivel de detalle (LOD) por escala
 
 En `draw()`, tres umbrales fijos y explícitos:
 
-| Condición | Efecto |
-|---|---|
-| `vp.scale < 0.6` | **No** dibujar aristas cuyos dos extremos tengan `r < 6` (nodos poco conectados). Reduce el hairball a la estructura troncal. |
-| `vp.scale < 0.6` | **No** dibujar labels salvo hover / seleccionado / coincidencia activa. |
-| `vp.scale >= 1.4` | Se dibujan labels de todos los nodos visibles (ya existe: `zoomedIn`, línea 237). |
-| `state.nodes.length > 800` | `pickVisibleLabels(candidates, 30)` en vez de 60. |
+| Condición | Efecto | Cómo se decide |
+|---|---|---|
+| `vp.scale < LOD_SCALE_THRESHOLD` (0.6) | **No** dibujar aristas cuyos dos extremos tengan `r < LOD_MIN_RADIUS` (6), es decir `in_degree <= 1`. Reduce el hairball a la estructura troncal. | **`shouldDrawEdge(a.r, b.r, vp.scale)`** — predicado puro con test (C13), no un `if` suelto dentro de `draw()` |
+| `vp.scale < 0.6` | **No** dibujar labels salvo hover / seleccionado / coincidencia activa | `if` en el armado de candidatos (líneas 236-260) |
+| `vp.scale >= 1.4` | Se dibujan labels de todos los nodos visibles (ya existe: `zoomedIn`, línea 237) | sin cambios |
+| `state.nodes.length > 800` | `pickVisibleLabels(candidates, 30)` en vez de 60 | línea 261 |
 
-⚠️ El LOD **solo** aplica en modo explorador (`explorerEnabled`); con la flag OFF el dibujo es el del 111, byte-idéntico.
+⚠️ El LOD **solo** aplica en modo explorador: la guarda es **`explorerEnabledRef.current`** (I2 — leer el ref, no la variable del render, o el LOD queda pegado al valor del primer render, que es `false` porque `sourcesData` llega **después**; C2). Con la flag OFF el dibujo es observacionalmente el del 111.
+⚠️ Los umbrales `0.6`, `6`, `1.4`, `800`, `60`, `30` son **constantes exportadas**, no números mágicos repartidos por `draw()`: `LOD_SCALE_THRESHOLD` y `LOD_MIN_RADIUS` van en `graphMinimap.ts`; los otros cuatro quedan como `const` con nombre arriba de `DocGraphView.tsx`, junto a `LABEL_FONT_PX` (línea 77).
 
 #### Tests de F7 (TDD)
 
@@ -1477,6 +1806,11 @@ En `draw()`, tres umbrales fijos y explícitos:
 - `it("viewportRectInMinimap nunca devuelve ancho o alto negativos")`
 - `it("viewportFromMinimapClick centra el punto clickeado y conserva la escala")`
 - `it("viewportFromMinimapClick en una esquina no rompe el viewport")`
+- **(C13) LOD:**
+- `it("shouldDrawEdge devuelve true a escala normal aunque los dos nodos sean chicos")`
+- `it("shouldDrawEdge oculta la arista entre dos nodos de radio menor a 6 al alejar")`
+- `it("shouldDrawEdge conserva la arista si al menos un extremo es un hub")`
+- `it("shouldDrawEdge con los radios que produce nodeRadius oculta exactamente in_degree<=1")` — usa `nodeRadius` de `forceLayout.ts` para que el umbral quede atado al modelo real y no a un número inventado.
 
 **Comandos:**
 ```
@@ -1486,7 +1820,7 @@ npx vitest run src/docs/graphViewport.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación binario.** `graphMinimap.test.ts` verde (11 casos), `graphViewport.test.ts` sigue verde, `tsc --noEmit` 0 errores, y verificación visual F8 paso 10.
+**Criterio de aceptación binario.** `graphMinimap.test.ts` verde (**15 casos**: 11 del v1 + 4 de `shouldDrawEdge`), `graphViewport.test.ts` sigue verde, `tsc --noEmit` 0 errores, y verificación visual F8 pasos 16-17.
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -1520,7 +1854,7 @@ npx tsc --noEmit
 | 6 | Tecla `0` | Vuelve a 100% y a la posición original. |
 | 7 | Escribir una palabra en el buscador | Los nodos que no matchean se atenúan; aparece `1 de m`; el primer resultado queda centrado y con anillo resaltado. |
 | 8 | Enter varias veces | El contador avanza `2 de m`, `3 de m`, …, vuelve a `1 de m`; el canvas se centra en cada resultado. |
-| 9 | Click simple en un nodo nota | El grafo se reduce a ese nodo y sus vecinos; aparecen las migas `← Volver · Foco: <nota> · 1 2 3 · Ver todo`; a la derecha aparece el peek con el título y las primeras líneas del documento y la lista `Relaciones`. **Abrir la pestaña Red del navegador: si ese documento ya se abrió antes en el Lector, NO debe haber un request nuevo a `/api/docs/content`.** |
+| 9 | Click simple en un nodo nota, tres veces seguidas sobre el mismo | El grafo se reduce a ese nodo y sus vecinos; aparecen las migas `← Volver · Foco: <nota> · 1 2 3 · Ver todo`; a la derecha aparece el peek con el título y las **primeras líneas reales** del documento y la lista `Relaciones`. **En la pestaña Red: como mucho UN `GET /api/docs/content` para los tres clicks.** (C8) Que además reuse la entrada que dejó el Lector es deseable, **no** obligatorio. |
 | 10 | Click en un vecino de la lista `Relaciones` | El foco salta a ese vecino, el peek cambia de documento y `← Volver` queda habilitado. |
 | 11 | Click en `← Volver` | Vuelve al nodo anterior. |
 | 12 | Click en `2` en el control de profundidad | Aparecen los vecinos de los vecinos; el contador de nodos sube. |
@@ -1529,11 +1863,19 @@ npx tsc --noEmit
 | 15 | Doble click en un nodo nota | Se abre el Lector con esa nota (la vista cambia de pestaña). |
 | 16 | Click en el minimapa, en una zona lejana | El canvas se desplaza a esa zona; el rectángulo del minimapa se mueve ahí. |
 | 17 | Alejar hasta ~40% | Desaparecen las aristas entre nodos poco conectados y casi todos los labels: se ve la estructura troncal, no un plato de fideos. |
-| 18 | Cambiar el tema claro/oscuro de la app | Todos los colores del canvas, del minimapa y del peek acompañan el tema. Ningún color queda "pegado" del tema anterior (puede requerir volver a entrar a la pestaña: **documentarlo si pasa**, no es bloqueante). |
+| 18 | Cambiar el tema claro/oscuro de la app | **(C1) Este paso recién ahora significa algo.** Los colores del canvas, del minimapa y del peek acompañan el tema: en claro las notas se ven `#0969da` y no `#388bfd`. Ningún color queda "pegado" del tema anterior (puede requerir volver a entrar a la pestaña: **documentarlo si pasa**, no es bloqueante). |
+| 18b | Con el tema claro puesto, mirar la leyenda del explorador y el canvas | **(C1) Cada swatch de la leyenda tiene EXACTAMENTE el mismo color que los nodos de su grupo en el canvas.** Ningún swatch transparente o invisible. |
+| 18c | Zoom al 195% con `+`, y después tocar un chip de fuente en la barra de filtros | **(C7)** El grafo se re-encuadra solo con el subgrafo filtrado **y el porcentaje del control de zoom coincide con lo que se ve**. No puede decir 195% mientras el grafo está al 100%. |
+| 18d | Con un nodo enfocado, colapsar desde la leyenda el grupo al que ese nodo pertenece | **(C3/G13) El canvas NO queda en blanco.** O el foco salta al super-nodo del grupo (migas: `Foco: Notas · <fuente> (grupo colapsado)`), o aparece el aviso `El nodo enfocado no está en la vista actual…` con el grafo agrupado completo detrás. |
+| 18e | Buscar una palabra con ≥3 coincidencias y apretar Enter dos veces | **(C2) El anillo resaltado se MUEVE al 2.º y al 3.º resultado.** Si el contador avanza pero el anillo se queda en el primero, el `draw()` tiene un closure stale: falta el `activeMatchIdRef` de I2. |
+| 18f | Click sobre el nodo grande de un grupo colapsado | **(C4)** El grupo se **expande** (no se enfoca, no abre nada). Doble click sobre él: **no pasa nada**. |
+| 18g | Click en el canvas y después apretar `f` sin tocar nada más | **(C9)** El grafo se ajusta a pantalla. Si no pasa nada, falta el `boxRef.current?.focus()` del `onPointerDown` y **todos** los atajos están muertos. Además, al hacer click debe verse el contorno de foco en el borde del canvas. |
 | 19 | Apagar `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` desde el panel de flags y recargar | La pestaña Grafo vuelve **exactamente** a la del plan 111: buscador simple, leyenda, botón "Centrar"; click abre la nota; doble click resetea la vista. |
 | 20 | Apagar `STACKY_DOCS_GRAPH_ENABLED` y recargar | Las tres pestañas (Lector/Cobertura/Grafo) desaparecen y la página Docs se comporta como antes del plan 109. |
 
-**Criterio de aceptación binario.** Los 20 pasos dan el resultado esperado. Cualquier desvío se anota **en este mismo documento**, en una sección `## 10. Desvíos de la verificación visual`, con el paso, lo observado y si se corrigió.
+**Criterio de aceptación binario.** Los **27** pasos (20 del v1 + los 7 nuevos 18b-18g que verifican los bloqueantes corregidos) dan el resultado esperado. Cualquier desvío se anota **en este mismo documento**, en una sección `## 10. Desvíos de la verificación visual`, con el paso, lo observado y si se corrigió.
+
+**Trabajo del operador (recuento honesto).** ~13 minutos, una sola vez, al final. Es la única fase que le pide algo y es inevitable (no hay RTL ni jsdom en el repo). Los 7 pasos nuevos suman ~3 minutos y cada uno caza un bloqueante concreto que el v1 hubiera dejado pasar.
 
 **Flag.** N/A (se verifican los dos estados de `STACKY_DOCS_GRAPH_EXPLORER_ENABLED`).
 
@@ -1558,6 +1900,10 @@ npx tsc --noEmit
 | R9 | **`test_harness_flags_help.py` tiene 4 fallos ajenos preexistentes** y se interpreta como rojo propio. | Alta | Bajo | Escrito en F0.1 punto 4: validar **solo** la entrada nueva leyendo el output; los 4 fallos ajenos no cuentan. |
 | R10 | **El operador insiste con Grapify.** | Baja | Bajo | §3 documenta la evidencia, la fecha y las 3 razones. Si aparece una librería de grafos de red que valga la pena, es un plan aparte con su propia decisión de arquitectura. |
 | R11 | **Sobrecarga de la barra de filtros** (demasiados controles arriba del canvas). | Media | Medio (UX) | La barra es una sola fila con `flex-wrap`; los grupos poco usados (`minDegree`, `edgeKinds`) van detrás de un `<details>` "Más filtros" cerrado por default. Se valida en F8 paso 1. |
+| R12 | **(C2) Closure stale en `draw()`**: el anillo del resultado de búsqueda, los colores de grupo o el LOD quedan congelados en el valor del primer render. Es **silencioso**: nada falla, simplemente no se actualiza. | **Alta** (el v1 lo tenía) | Alto | Guardarraíl **G12** + invariante **I2** en F1.3 (lista cerrada de refs + un único efecto de sincronización) + F8 paso 18e, que lo caza en 5 segundos. |
+| R13 | **(C3) Canvas vacío por composición**: colapsar el grupo del nodo enfocado o filtrarlo deja `nodes: []`. | **Alta** (el v1 lo tenía) | Alto (parece que la app se rompió) | Guardarraíl **G13** + `resolveFocusId` (F4.1) con 5 tests + el caso de propiedad "componer nunca devuelve vacío" + F8 paso 18d. |
+| R14 | **(C1) Colores que no existen**: se agregan tokens `var(--algo)` que el tema no define. En el canvas se ve el fallback; en el CSS se ve **nada**. | Media (es el estado ACTUAL del 111) | Medio | `graphPalette.ts` es la única lista de tokens y `graphPalette.test.ts` lee `theme.css` de disco y falla si un token no está en el bloque oscuro **y** en el claro; incluye un caso que barre los `.module.css` de `components/docs/`. |
+| R15 | **(C6) Gates que no pueden fallar** (falso verde). El `git diff --stat` con pathspec relativo era el caso concreto. | Media | Alto (da confianza falsa) | Todo gate del plan se ejecuta al menos una vez **esperando ROJO** antes de darlo por bueno: el `git diff --exit-code` se prueba tocando el `package.json` y revirtiendo; el caso de tokens de F0.6 **nace rojo** por diseño. |
 
 ---
 
@@ -1600,7 +1946,7 @@ npx tsc --noEmit
 
 ### 9.2 Orden de implementación (estricto — cada fase depende de las anteriores)
 
-1. **F0** — Flag (7 patas) + `nodeIndexById` + fix del `findIndex` + `fitViewport`/`centerOn`/`zoomAtCenter`/`ZOOM_STEP` + `graphExplorerState.ts` + tests. **Nada visible cambia todavía.**
+1. **F0** — Flag (7 patas) + `nodeIndexById` + fix del `findIndex` + `fitViewport`/`centerOn`/`zoomAtCenter`/`ZOOM_STEP` + `graphExplorerState.ts` + **F0.6 `graphPalette.ts` (paleta REAL, C1)** + tests. **Lo único visible que cambia acá:** el grafo pasa a acompañar el tema, que es un bug vivo del 111 que este plan arregla de paso.
 2. **F1** — `graphFilters.ts` + `DocGraphFilterBar.tsx` + `DocGraphExplorer.module.css` + cableado de `visibleGraph` en `DocGraphView` y de `explorerEnabled` en `DocsPage`.
 3. **F2** — `graphSearch.ts` + contador `n de m` + Enter/Shift+Enter/Escape + encuadre al resultado activo (necesita `canvasSizeRef`).
 4. **F3** — `DocGraphZoomControls.tsx` + atajos de teclado + `.hint` nuevo. (Reusa `fitViewport` de F0.)
@@ -1610,20 +1956,33 @@ npx tsc --noEmit
 8. **F7** — `graphMinimap.ts` + segundo canvas + LOD por escala.
 9. **F8** — Verificación visual manual del operador (20 pasos).
 
-> **Nota de dependencia cruzada F4↔F5:** F4 escribe la composición `filtros → agrupación → foco` y por lo tanto **referencia** `collapseGroups`, que recién existe en F5. Para que F4 compile sola, en F4 se escribe la composición **sin** la línea de `collapseGroups` (solo filtros → foco) y F5 la **inserta** en el medio. Está indicado así a propósito: cada fase queda verificable sola.
+> **Nota de dependencia cruzada F4↔F5:** F4 escribe la composición `filtros → agrupación → resolución del foco → foco` y por lo tanto **referencia** `collapseGroups`, que recién existe en F5. Para que F4 compile sola: en F4 la línea de `collapseGroups` se omite (`const grouped = filtered;`) y **`resolveFocusId` se implementa COMPLETO desde F4** — su regla 3 (remapeo al super-nodo) simplemente no se dispara todavía, y sus tests que dependen de `collapseGroups` quedan `it.skip` con el comentario `// se activa en F5`. F5 hace **dos** cosas: inserta `collapseGroups` en el medio y des-skippea esos casos. **Prohibido** escribir un `collapseGroups` provisorio en F4.
+>
+> **(C2) Nota transversal:** los cuatro `useRef` de la invariante I2 (`activeMatchIdRef`, `groupSlotsRef`, `explorerEnabledRef`, `canvasSizeRef`) y su efecto de sincronización se escriben **enteros en F1**, aunque F1 solo llene dos de ellos. Motivo: si cada fase agrega un ref, alguna se olvida y el bug de closure stale entra sin que ningún test lo note (no hay tests de componente en este repo). Se paga una vez, en F1.
 
 ### 9.3 Definición de Hecho (DoD) global
 
 El plan 268 está HECHO cuando **todas** estas condiciones se cumplen y se pueden mostrar:
 
-- [ ] **DoD-1.** Los 8 archivos de test frontend nombrados en el plan están en verde, corridos **uno por uno** desde `Stacky Agents/frontend`:
-  `graphViewport.test.ts`, `graphExplorerState.test.ts`, `docGraphModel.test.ts`, `graphFilters.test.ts`, `graphSearch.test.ts`, `graphNeighborhood.test.ts`, `graphGrouping.test.ts`, `graphPreview.test.ts`, `graphMinimap.test.ts`, `forceLayout.test.ts`.
+- [ ] **DoD-1.** (C15 — el v1 decía "8" y listaba 10) Los **11** archivos de test frontend nombrados en el plan están en verde, corridos **uno por uno** desde `Stacky Agents/frontend` (hay contaminación cross-file conocida en la corrida completa):
+  `graphViewport.test.ts`, `graphExplorerState.test.ts`, `docGraphModel.test.ts`, **`graphPalette.test.ts`**, `graphFilters.test.ts`, `graphSearch.test.ts`, `graphNeighborhood.test.ts`, `graphGrouping.test.ts`, `graphPreview.test.ts`, `graphMinimap.test.ts`, `forceLayout.test.ts`.
 - [ ] **DoD-2.** `npx tsc --noEmit` desde `Stacky Agents/frontend` sale con **0 errores**.
 - [ ] **DoD-3.** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `npx vitest run src/__tests__/motionDebtRatchet.test.ts` en verde **sin haber regenerado ningún baseline**.
-- [ ] **DoD-4.** `git diff --stat -- "Stacky Agents/frontend/package.json"` devuelve **vacío** (KPI K5).
+- [ ] **DoD-4.** (C6) `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con **código 0** (KPI K5). El prefijo `:/` es obligatorio: sin él, corrido desde `Stacky Agents/frontend`, el pathspec no matchea nada y el gate **nunca puede fallar**. Verificar el gate una vez a propósito: tocar el `package.json`, confirmar que sale con código 1, y revertir.
 - [ ] **DoD-5.** Backend en verde desde `Stacky Agents`: `test_docs_api.py`, `test_harness_flags.py`, `test_harness_flags_requires.py`; y en `test_harness_flags_help.py` la entrada nueva sin fallos (los 4 fallos ajenos preexistentes documentados como tales).
 - [ ] **DoD-6.** Las **7 patas** de `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` están puestas: `config.py`, `FlagSpec`, `_CATEGORY_KEYS`, `harness_flags_help.py`, `_CURATED_DEFAULTS_ON`, `_REQUIRES_MAP_FROZEN`, `harness_defaults.env`. Verificable con `grep -rn "STACKY_DOCS_GRAPH_EXPLORER_ENABLED"` → **≥ 8 hits** (7 patas + `backend/api/docs.py`).
-- [ ] **DoD-7.** Los 20 pasos de F8 verificados por el operador; los desvíos anotados en `## 10` de este documento.
+- [ ] **DoD-7.** Los **27** pasos de F8 (incluidos 18b-18g) verificados por el operador; los desvíos anotados en `## 10` de este documento.
+- [ ] **DoD-11.** (C1) Ningún archivo bajo `frontend/src/components/docs/` usa un token CSS que `frontend/src/theme.css` no defina. Verificable con el caso `it("DocGraphView.module.css no usa ningun token inexistente")` de `graphPalette.test.ts`, y a mano con:
+  ```
+  # desde "Stacky Agents/frontend"
+  grep -rn -- "var(--color-" src/components/docs/ src/docs/
+  ```
+  → **0 hits** (la familia `--color-*` no existe en el tema; el único `--color-scheme` vive en `theme.css` y no se usa acá).
+- [ ] **DoD-12.** (C18 — huella de regresión) Se agrega a `Stacky Agents/docs/sistema/error_fingerprints.json` una entrada por cada clase de error que este plan mata, respetando el esquema que ya usa el archivo (leerlo antes de escribir; **no** inventar campos):
+  1. **Token CSS inexistente en un `.module.css` o en `readPalette`** → síntoma: "el componente se ve casi bien pero los colores no cambian con el tema / un swatch se ve transparente"; causa: se usó `var(--color-x)` y el tema define `--x`; detección: `graphPalette.test.ts`.
+  2. **Closure stale en un `draw()` de canvas** → síntoma: "el contador avanza pero el dibujo no se mueve"; causa: `draw()` definido dentro de un `useEffect` lee una variable del render que no está en las deps; detección: F8 paso 18e / guardarraíl G12.
+  3. **Canvas vacío por composición de filtros** → síntoma: "la pantalla queda en blanco después de filtrar/colapsar"; causa: un id de selección sobrevive a una transformación que lo eliminó; detección: G13 + `resolveFocusId`.
+  4. **Gate de `git diff` con pathspec relativo** → síntoma: "el gate siempre pasa"; causa: pathspec relativo al CWD; detección: probar el gate esperando rojo (R15).
 - [ ] **DoD-8.** Con la flag nueva en OFF, la pestaña Grafo se comporta **exactamente** como el plan 111 (F8 paso 19), y con `STACKY_DOCS_GRAPH_ENABLED` en OFF la página Docs se comporta como antes del 109 (F8 paso 20).
-- [ ] **DoD-9.** Ninguna fase escribió en un documento, ticket, rama, BD ni sistema del operador: el diff completo del plan toca **solo** `frontend/src/**`, `backend/api/docs.py`, `backend/config.py`, `backend/services/harness_flags*.py`, `backend/tests/**`, `deployment/harness_defaults.env` y este documento.
+- [ ] **DoD-9.** Ninguna fase escribió en un documento, ticket, rama, BD ni sistema del operador: el diff completo del plan toca **solo** `frontend/src/**` (incluido `frontend/src/components/docs/DocGraphView.module.css`, cuyos 6 nombres de token se corrigen en F0.6; **`frontend/src/theme.css` NO se toca**), `backend/api/docs.py`, `backend/config.py`, `backend/services/harness_flags*.py`, `backend/tests/test_docs_api.py`, `backend/tests/test_harness_flags.py`, `backend/tests/test_harness_flags_requires.py`, `deployment/harness_defaults.env`, `docs/sistema/error_fingerprints.json` y este documento. **Cero archivos `test_*.py` nuevos** ⇒ no hay que registrar nada en `HARNESS_TEST_FILES` del arnés `.sh` ni en `$HarnessTestFiles` del `.ps1` (verificado: el plan solo **edita** archivos de test ya registrados).
 - [ ] **DoD-10.** El estado de este documento se actualiza a `IMPLEMENTADO — <fecha>` con el detalle de qué fases quedaron cerradas y con qué evidencia (conteos de tests y comandos corridos), para que `supervisar-implementaciones-planes` pueda auditarlo.

@@ -1,6 +1,23 @@
 # Plan 129 — Paleta global: búsqueda profunda multi-fuente y navegación total (Ctrl+K que encuentra TODO)
 
-**Estado:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS. v1 era 2026-07-13.
+**Estado:** **IMPLEMENTADO** — F0..F5 (commits `50124e96`, `5c3bb42f`, `ad65b9c8`, `ee420439`,
+`3d9d54de`; mergeado en `2993fd51`).
+Auditoría solo-lectura 2026-07-26 (supervisar-implementaciones-planes), evidencia contra código:
+F0 flag `STACKY_PALETTE_DEEP_SEARCH_ENABLED` (`config.py:717`, `harness_flags.py:360,4539`) propagada a
+la UI (`App.tsx:102,503`); F1 `services/global_search.py` (5 fuentes, `:103` emite
+`/history?execution={id}`); F2 `api/global_search.py` (`GET /api/search/global`); F3 cableado y NO
+inerte en `CommandPalette.tsx:2,72,78` (`GlobalSearchApi.query`, gateado por `deepSearchEnabled`);
+F4 `utils/queryParams.ts` + receptores en `DocsPage.tsx:93` (`path`), `SettingsPage.tsx:156` (`flag`),
+`DevOpsPage.tsx:360` (`server`) y `HarnessFlagsPanel.tsx` (`id="flag-row-…"`, 3 hits).
+**Desvío honesto verificado:** el 4º receptor (`?execution=`) NO vive en `ExecutionHistoryPage.tsx`
+como decía este plan — lo reemplazó el contrato de URL canónico del plan 165, que parsea AMBAS claves
+(`services/routes.ts:32` `EXEC_KEYS = ["exec","execution"]`) y lo entrega como prop
+(`ExecutionHistoryPage.tsx:98,120-129`, con el comentario literal "Reemplaza al receptor ?execution=
+roto"). El deep-link funciona; el mecanismo es mejor que el planeado. Tests corridos de verdad:
+`test_plan129_flag.py` 4, `test_plan129_global_search_service.py` 10, `test_plan129_global_search_api.py`
+5 = **19 passed**; vitest `queryParams.test.ts` + `commandPaletteData.test.ts` = **10 passed**;
+`npx tsc --noEmit` exit 0. Pendiente único: el smoke visual de F5 (no automatizable).
+**Estado previo:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS. v1 era 2026-07-13.
 **Dependencias duras:** ninguna. Reusa sustrato ya implementado: `CommandPalette` existente,
 `doc_indexer` (DocTree), `server_registry` (Plan 91), `FLAG_REGISTRY` (HarnessFlagsPanel),
 modelos `Ticket`/`AgentExecution`, patrón health-check de flags (Planes 74/87).

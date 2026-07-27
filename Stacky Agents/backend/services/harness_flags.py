@@ -233,6 +233,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_DOCTOR_ENABLED",  # Plan 96 — doctor de pipelines: diagnóstico en llano
         "STACKY_DEVOPS_SECTION_DOCTOR_ENABLED",  # Plan 104 — doctores IA por sección
         "STACKY_DEVOPS_BOOTSTRAP_ENABLED",  # Plan 98 — bootstrap unico + PATCH por clave
+        "STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED",  # Plan 103 — monitor vivo del ultimo pipeline
         "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",  # Plan 105 — consola remota
         "STACKY_DEVOPS_REMOTE_TARGET_ENABLED",  # Plan 108 — anclaje remoto agente/ambientes
         "STACKY_DEVOPS_ENV_TREE_PREVIEW_ENABLED",  # Plan 107 — preview de árbol de ambientes
@@ -3305,6 +3306,29 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # ON por default por decisión explícita del operador (2026-07-09): rompe el
         # default-OFF original conscientemente. Está curada en _CURATED_DEFAULTS_ON
         # (test_default_known_only_for_curated exige la pertenencia al set).
+        default=True,
+    ),
+    # ── Plan 103 — Monitor vivo del ultimo pipeline ────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED",
+        type="bool",
+        label="Monitor vivo del ultimo pipeline (Plan 103)",
+        description=(
+            "Plan 103 — El estado del ultimo pipeline que disparaste queda en un "
+            "badge del header del panel DevOps: sobrevive al cambio de sub-seccion "
+            "y a recargar la pagina, se lee en castellano en vez de JSON crudo, y "
+            "el sondeo usa backoff (3s->5s->10s->30s) y se pausa cuando la pestana "
+            "del navegador no esta al frente. Default ON: es solo-lectura, no "
+            "dispara nada ni gasta tokens. Con OFF, Trigger CI vuelve al sondeo "
+            "fijo de 3s y al JSON crudo de hoy."
+        ),
+        group="global",  # mismo group que STACKY_DEVOPS_PANEL_ENABLED (87 v2 F0)
+        env_only=False,  # editable por UI (categoría 'devops')
+        requires="STACKY_DEVOPS_PANEL_ENABLED",  # Plan 82 — declarativo, informa en UI
+        # Default ON: ninguna de las 4 excepciones duras aplica (no bypasea revisión
+        # humana, no es destructiva, no depende de un prerequisito ausente y no baja
+        # la seguridad). Curada en _CURATED_DEFAULTS_ON, que
+        # test_default_known_only_for_curated exige para toda flag con default conocido.
         default=True,
     ),
     # ── Plan 104 — Doctores IA por sección del panel DevOps ────────────────────

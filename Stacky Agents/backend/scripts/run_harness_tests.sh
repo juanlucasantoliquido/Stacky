@@ -479,6 +479,8 @@ HARNESS_TEST_FILES=(
   # — Fix deploy: index.html sin cache-control servia UI vieja tras rebuild —
   tests/test_spa_index_no_cache.py
   # ===== Plan 154 F1 · reclasificacion de tests sin gatear (verdes aislados) =====
+  # — Plan 103 · Monitor vivo del ultimo pipeline —
+  tests/test_plan103_pipeline_monitor_flag.py
   # — Plan 98 · Bootstrap DevOps + profile keys —
   tests/test_plan98_bootstrap_endpoint.py
   tests/test_plan98_bootstrap_flag.py

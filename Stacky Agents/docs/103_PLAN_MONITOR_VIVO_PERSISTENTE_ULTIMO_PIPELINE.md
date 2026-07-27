@@ -1,7 +1,77 @@
 # Plan 103 — Monitor vivo y persistente: badge del último pipeline en el shell DevOps, con backoff y estado legible
 
-**Estado:** CRITICADO (v2) — **PARCIALMENTE SUPERADO** · núcleo vigente, **arquitectura a rehacer**
-**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26)
+**Estado:** **IMPLEMENTADO** (F0 · F1 · F2 · F3 · F5.bis · F4) — 2026-07-26
+**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26 · implementado: 2026-07-26)
+
+---
+
+## §I — REGISTRO DE IMPLEMENTACIÓN (2026-07-26)
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| F5.bis | IMPLEMENTADA | `src/__tests__/devopsPollingRatchet.test.ts` — censo extendido a `.ts` + shell |
+| F0 | IMPLEMENTADA | flag **6 patas, default ON**: `config.py`, `harness_flags.py` (`_CATEGORY_KEYS` + `FlagSpec`), `harness_flags_help.py`, `api/devops.py` (`pipeline_monitor_enabled`), `_CURATED_DEFAULTS_ON`, arista `requires` |
+| F1 | IMPLEMENTADA | `frontend/src/devops/pipelineMonitor.ts` (nuevo) |
+| F2 | IMPLEMENTADA | `components/devops/useDevopsPipelineMonitor.ts` (nuevo), con guard de `visibilityState` |
+| F3 | IMPLEMENTADA | badge en `pages/DevOpsHeaderV2.tsx`; hook invocado en el shell; delegación en `TriggerPipelineSection` |
+| F4 | IMPLEMENTADA (salvo smoke) | huella `pipeline_state_lost_on_reload` registrada |
+
+**Tests (corridos de verdad, por archivo):**
+
+| Archivo | Resultado |
+|---|---|
+| `backend/tests/test_plan103_pipeline_monitor_flag.py` | **6 passed** |
+| `backend/tests/test_harness_flags.py` | **56 passed** |
+| `backend/tests/test_harness_flags_requires.py` | **9 passed** |
+| `src/devops/pipelineMonitor.test.ts` | **11 passed** |
+| `src/components/devops/__tests__/pipelineMonitorHook.test.ts` | **11 passed** |
+| `src/__tests__/uiDebtRatchet.test.ts` | **3 passed** |
+| `src/pages/__tests__/DevOpsPage.test.ts` / `DevOpsShellV2Regression.test.ts` | **21 / 2 passed** |
+| `npx tsc --noEmit` | **0 errores** |
+
+### F5.bis — la transición ROJO → VERDE, demostrada
+
+Es el criterio que el plan exige y se cumplió en el orden correcto:
+
+1. Ratchet extendido a `.ts` + shell, con `ALLOWLIST` **vacía** ⇒ sigue rojo **solo** por
+   `BuildWorkshopSection.tsx:93` (deuda ajena del plan 201).
+2. Hook escrito **sin** guard de visibilidad ⇒ el ratchet lo caza:
+   `{"file":"useDevopsPipelineMonitor.ts","line":13,"kind":"setInterval"}`.
+   **Ese es el punto entero de la fase:** el ratchet ORIGINAL era ciego a este archivo por
+   ser `.ts`, y lo habría dejado pasar.
+3. Guard de `visibilityState` agregado ⇒ el hook desaparece de los hallazgos.
+
+Estado final del censo: **un solo** hallazgo, `BuildWorkshopSection.tsx:93`, **no tocado**;
+`ALLOWLIST` sigue **vacía**; cero hallazgos atribuibles al 103.
+
+### Bugs del PROPIO plan hallados al construirlo (3)
+
+1. **El orden de §8 vuelve imposible el control negativo de F5.bis** (mismo defecto que el
+   plan 98). Manda *"F5.bis primero, y verlo ROJO por `useDevopsPipelineMonitor.ts`"*, pero en
+   el paso 1 ese archivo **todavía no existe**, así que el ratchet no puede nombrarlo. Criterio
+   aplicado: extender el ratchet → escribir el hook **sin** guard (rojo, nombrando el archivo)
+   → agregar el guard (verde). Mismo par rojo→verde, en un orden que sí se puede ejecutar.
+2. **F1 remite a código del v1 que la reescritura in place borró** (idéntico al bug 1 del plan
+   99). Dice *"se conserva del v1 tal cual"* listando símbolos (`BACKOFF_STEPS_MS`,
+   `computeBackoffMs`, `toneForStatus`, `formatMonitorStatus`, …) cuyo cuerpo **no está en
+   ninguna parte del documento**. Criterio aplicado: implementar desde el contrato semántico,
+   que sí está completo, y fijarlo con los 11 tests. **Patrón que ya apareció dos veces: una
+   crítica que reescribe el doc in place NO puede citar "el v1" como fuente de código.**
+3. **El `PlainHelp` del plan no habría pasado su propio gate.** El test
+   `test_plain_help_fields_non_empty_and_bounded` limita `on_effect` a **240 caracteres**; la
+   primera redacción salió en **253** y puso el test en rojo — un rojo MÍO, no de los 4 ajenos
+   preexistentes. El plan describe la 6ª pata pero no menciona el límite. Criterio aplicado:
+   reescribir el texto a 236 y verificar que la flag desapareciera del listado de fallos
+   (`grep -c PIPELINE_MONITOR` sobre el output: de 1 a **0**).
+
+**Rojos AJENOS confirmados (NO tocados):** `devopsPollingRatchet.test.ts` 1 failed
+(`BuildWorkshopSection.tsx:93`) y `test_harness_flags_help.py` 4 failed (deuda de otras flags;
+verificado que ninguno menciona ya a `STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED`).
+
+**Pendiente:** los 7 puntos de verificación manual HITL de §F4 (requieren la app corriendo).
+No automatizables: `@testing-library/react` y `jsdom` no están instalados.
+
+---
 **Veredicto del juez:** RECHAZADO (v1) → v2 re-diseñada. 3 BLOQUEANTES, 5 IMPORTANTES, 2 MENORES.
 **Autor v1:** StackyArchitectaUltraEficientCode · **Crítica v2:** StackyArchitectaUltraEficientCode (juez adversarial)
 

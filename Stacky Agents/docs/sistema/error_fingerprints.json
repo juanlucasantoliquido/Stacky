@@ -533,6 +533,20 @@
       "guard_test": "frontend/src/devops/previewFetcher.test.ts (casos 8 y 9)",
       "evidence": "frontend/src/api/client.ts:155 (throw new Error(status statusText: text)); frontend/src/devops/previewFetcher.ts (parsePreviewError)",
       "note": "El codigo viejo hacia if (e && typeof e === object && errors in e) para mostrar los errores por campo. Pero api/client.ts tira SIEMPRE un Error plano con el body embebido en el message, y un Error plano nunca tiene la key errors: el branch era codigo muerto y el 100% de los 400 estructurados se mostraba como un unico chorizo generico. Clase de bug a vigilar: validar la FORMA real de lo que tira el cliente HTTP antes de escribir un branch que la asuma."
+    },
+    {
+      "id": "pipeline_state_lost_on_reload",
+      "title": "El estado del pipeline disparado se pierde al recargar o al cambiar de sub-seccion",
+      "class": "devops-pipeline-monitor",
+      "status": "resolved",
+      "log_pattern": "",
+      "log_guarded": false,
+      "killed_by": "plan 103 F1/F2/F3 (store persistido en localStorage + badge en DevOpsHeaderV2 + hook con backoff)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "frontend/src/devops/pipelineMonitor.test.ts (casos 7-10, persistencia); frontend/src/components/devops/__tests__/pipelineMonitorHook.test.ts",
+      "evidence": "frontend/src/devops/pipelineMonitor.ts; frontend/src/components/devops/useDevopsPipelineMonitor.ts; frontend/src/pages/DevOpsHeaderV2.tsx",
+      "note": "El estado vivia en useState de TriggerPipelineSection: al recargar la pagina o irse a otra sub-seccion se perdia el hilo del pipeline y el operador tenia que volver a buscarlo a mano en el tracker. Ahora el ultimo pipeline se persiste en localStorage y el badge del header lo sigue. Dos trampas que costaron: (a) el sondeo tuvo que gatearse por visibilityState del documento y NO por ctx.visible, porque el hook vive en el shell y no en una seccion; (b) un 429 del cap de polls del backend NO es un fallo del pipeline: se trata subiendo el backoff, nunca pintando el badge de rojo."
     }
   ]
 }

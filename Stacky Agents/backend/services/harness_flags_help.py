@@ -821,6 +821,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no cambia nada de lo guardado; el panel vuelve a cargar y guardar como antes (más pedidos y más datos por viaje).",
         example="Como pedir todo el supermercado en un solo delivery en vez de un viaje por producto — y devolver solo la botella vacía en vez de re-empacar toda la compra.",
     ),
+    "STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED": PlainHelp(
+        what="El pipeline que disparaste queda a la vista arriba del panel, aunque cambies de pantalla o recargues.",
+        on_effect="Si la activás: tras disparar un pipeline aparece un cartelito arriba con cómo va, en castellano. Te sigue por todo el panel y aguanta si recargás la página. Consulta cada vez más espaciado y para si te vas a otra pestaña.",
+        off_effect="Si la apagás: el estado solo se ve en la pantalla Trigger CI, se pierde al recargar y se muestra en formato técnico.",
+        example="Como el seguimiento de un pedido que te queda fijo arriba de la pantalla en vez de tener que volver a la pantalla del pedido cada vez.",
+    ),
     "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED": PlainHelp(
         what="Consola remota para ejecutar pedidos y comandos PowerShell en el servidor seleccionado, con auditoría completa.",
         on_effect="Si la activás: aparece 'Consola remota' en el panel DevOps. Elegís un servidor, escribís un pedido y un agente ejecuta comandos PowerShell ahí vía WinRM, todo auditado. Empieza en modo lectura; podés habilitar escritura por conversación.",

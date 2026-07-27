@@ -51,6 +51,7 @@ export interface DevOpsHealth {
   deployments_ai_enabled?: boolean; // Plan 120 — diagnóstico IA de deploys fallidos
   local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
   bootstrap_enabled?: boolean; // Plan 98 — hidratación del panel en 1 round-trip
+  pipeline_monitor_enabled?: boolean; // Plan 103 — monitor vivo del último pipeline
   cockpit_enabled?: boolean; // Plan 239 — cockpit DevOps
   pipeline_inventory_enabled?: boolean; // Plan 246 — Inventario de pipelines
   pipeline_audit_enabled?: boolean; // Plan 248 — Auditoría de pipelines
@@ -136,6 +137,8 @@ import { PipelineEditNlPanel } from '../components/devops/PipelineEditNlPanel';
 import { PipelineEnvMatrixPanel } from '../components/devops/PipelineEnvMatrixPanel';
 // Importar PipelineHandoffPanel (Plan 252 F5)
 import { PipelineHandoffPanel } from '../components/devops/PipelineHandoffPanel';
+// Plan 103 — monitor vivo del ultimo pipeline (sondeo con backoff + guard de pestana)
+import { useDevopsPipelineMonitor } from '../components/devops/useDevopsPipelineMonitor';
 
 // Registro extensible de secciones DevOps
 // Los planes 88/89 y features futuras agregan entradas aquí SIN refactor
@@ -449,6 +452,12 @@ export const DevOpsPage: React.FC<{ subTab?: string | null }> = ({ subTab = null
     bootstrap: bootstrapQuery.data ?? null, // Plan 98 F4
   };
 
+  // Plan 103 — monitor vivo del último pipeline. El hook vive en el SHELL para que
+  // el seguimiento sobreviva al cambio de sub-sección; su sondeo se pausa con la
+  // pestaña del navegador en segundo plano (guard de visibilidad dentro del hook).
+  const monitorOn = ctx.health.pipeline_monitor_enabled === true;
+  useDevopsPipelineMonitor(monitorOn);
+
   // Plan 119 — shell v2 (presentación pura, conmutado por flag; ahora default ON).
   const uiV2 = ctx.health.ui_v2_enabled === true;
   // Plan 239 — cockpit (nav agrupada de 2 niveles + control de inicio fijable).
@@ -489,6 +498,9 @@ export const DevOpsPage: React.FC<{ subTab?: string | null }> = ({ subTab = null
           serversEnabled={ctx.health.servers_enabled === true}
           selectedAlias={selectedAlias}
           onSelectServer={onSelectServer}
+          // Plan 103 — badge del último pipeline (solo-lectura).
+          activeProject={activeProjectName}
+          monitorEnabled={monitorOn}
           // Plan 239 F4 — con el cockpit ON la línea de contexto pasa a ser OPERACIONAL
           // (estado real) en vez de "N / 10 capacidades activas" (que contaba flags).
           meta={cockpit ? buildOperationalMeta({

@@ -26,10 +26,33 @@ const LOOKBEHIND_INTERVAL = 12;
 
 interface Hallazgo { file: string; line: number; kind: 'refetchInterval' | 'setInterval'; }
 
+/**
+ * Plan 103 F5.bis — ALCANCE EXTENDIDO (cambio aditivo; la regla de guarda no cambia).
+ *
+ * El censo original miraba SOLO los `.tsx` directos de components/devops/. Cualquier
+ * sondeo puesto en un `.ts` (hooks, modelos) o en el shell de `pages/` era INVISIBLE
+ * para este ratchet — justo el agujero por el que se colaría un hook de monitoreo.
+ * Ahora también entran los `.ts` de components/devops/ y los 2 archivos del shell.
+ */
+const SHELL_FILES = [
+  path.resolve(__dirname, '../pages/DevOpsPage.tsx'),
+  path.resolve(__dirname, '../pages/DevOpsHeaderV2.tsx'),
+];
+
 function tsxFiles(): string[] {
   return fs.readdirSync(DEVOPS_DIR)
-    .filter((f) => f.endsWith('.tsx'))
+    .filter((f) => (f.endsWith('.tsx') || f.endsWith('.ts')) && !/\.test\.tsx?$/.test(f))
     .filter((f) => !ALLOWLIST.includes(f));
+}
+
+/** Rutas ABSOLUTAS de todo lo que el ratchet vigila (devops/ + shell). */
+function pollingFiles(): Array<{ file: string; full: string }> {
+  const out = tsxFiles().map((f) => ({ file: f, full: path.join(DEVOPS_DIR, f) }));
+  for (const full of SHELL_FILES) {
+    const file = path.basename(full);
+    if (fs.existsSync(full) && !ALLOWLIST.includes(file)) out.push({ file, full });
+  }
+  return out;
 }
 
 /** Sondeos SIN guarda de visibilidad. Exportado para probar el helper con fixtures. */
@@ -54,8 +77,8 @@ function censo(): { refetch: Hallazgo[]; intervals: Hallazgo[]; sinGuarda: Halla
   const refetch: Hallazgo[] = [];
   const intervals: Hallazgo[] = [];
   const sinGuarda: Hallazgo[] = [];
-  for (const file of tsxFiles()) {
-    const src = fs.readFileSync(path.join(DEVOPS_DIR, file), 'utf-8');
+  for (const { file, full } of pollingFiles()) {
+    const src = fs.readFileSync(full, 'utf-8');
     src.split(/\r?\n/).forEach((line, i) => {
       if (line.includes('refetchInterval:')) refetch.push({ file, line: i + 1, kind: 'refetchInterval' });
       if (line.includes('setInterval(')) intervals.push({ file, line: i + 1, kind: 'setInterval' });

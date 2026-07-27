@@ -1566,6 +1566,15 @@ class Config:
         "STACKY_DEVOPS_BOOTSTRAP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 103 — Monitor vivo y persistente del ultimo pipeline (badge en el header
+    # del panel DevOps). Default ON: es solo-lectura, sin efectos externos y sin gasto
+    # de tokens de LLM, asi que NO califica para ninguna de las 4 excepciones duras.
+    # El consumo ocioso esta acotado por el guard de visibilityState del hook.
+    # Curada en _CURATED_DEFAULTS_ON y espejada con default=True en la FlagSpec.
+    STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_PIPELINE_MONITOR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 104 — Doctores IA por seccion del panel DevOps. Default ON (activado
     # 2026-07-09, decisión explícita del operador; rompe el opt-in original).
     STACKY_DEVOPS_SECTION_DOCTOR_ENABLED: bool = os.getenv(

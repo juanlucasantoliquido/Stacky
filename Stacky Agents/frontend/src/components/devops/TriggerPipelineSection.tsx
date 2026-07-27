@@ -3,6 +3,8 @@
  * Trigger y monitor de pipelines CI (reusa CIPipeline, FIX C5)
  */
 import React, { useState } from 'react';
+// Plan 103 — monitor vivo del ultimo pipeline (badge persistente en el header)
+import { useDevopsMonitorStore, formatMonitorStatus } from '../../devops/pipelineMonitor';
 import {
   CIPipeline,
   type CIPreviewResponse,
@@ -138,6 +140,9 @@ export interface TriggerPipelineSectionProps {
 }
 
 export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ ctx, project, lastBranch }) => {
+  // Plan 103 — con el monitor ON, el sondeo y el texto los maneja el shell.
+  const monitorOn = ctx.health.pipeline_monitor_enabled === true;
+  const setLastPipeline = useDevopsMonitorStore((st) => st.setLast);
   const [ref, setRef] = useState(lastBranch);
   const [previewData, setPreviewData] = useState<CIPreviewResponse | null>(null);
   const [triggerResult, setTriggerResult] = useState<CITriggerResponse | null>(null);
@@ -266,6 +271,15 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
       if (result.pipeline_id) {
         setPipelineId(result.pipeline_id);
         setPolling(true);
+        // Plan 103 — registrar el pipeline para el badge persistente del header.
+        setLastPipeline({
+          project,
+          pipelineId: result.pipeline_id,
+          ref,
+          status: null,
+          webUrl: result.web_url ?? null,
+          updatedAt: new Date().toISOString(),
+        });
       }
       void loadRuns(); // Plan 191 — refrescar la bitácora tras el disparo
     } catch (e: unknown) {
@@ -292,6 +306,10 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
 
   // Auto-polling si está activo
   React.useEffect(() => {
+    // Plan 103 C7 — con el monitor ON el sondeo lo hace el hook del shell (que
+    // ademas sobrevive al cambio de sub-seccion). El guard ctx.visible !== false
+    // del Plan 239 F6 se CONSERVA intacto.
+    if (monitorOn) return;
     if (polling && pipelineId && ctx.visible !== false) {   // Plan 239 F6
       const interval = setInterval(() => {
         void handleMonitor();
@@ -359,7 +377,18 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
         <div className={`${styles.alertWarning} ${styles.trigger__notice}`}>
           <strong>Estado:</strong>
           <pre className={styles.trigger__pre}>
-            {JSON.stringify(monitorStatus, null, 2)}
+            {/* Plan 103 — con el monitor ON se lee en castellano; con OFF queda el
+                JSON crudo de siempre. */}
+            {monitorOn
+              ? formatMonitorStatus({
+                  project,
+                  pipelineId: monitorStatus.id,
+                  ref: monitorStatus.ref,
+                  status: monitorStatus.status,
+                  webUrl: monitorStatus.web_url,
+                  updatedAt: '',
+                })
+              : JSON.stringify(monitorStatus, null, 2)}
           </pre>
         </div>
       )}

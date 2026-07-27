@@ -1337,6 +1337,13 @@ class Config:
     STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED: bool = os.getenv(
         "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED", "true"
     ).lower() == "true"
+    # ── Plan 215 — Publicador de Soluciones (escaneo unico + publish 1-click) ──
+    # Catalogo/config/UI son read-only y seguros ⇒ default ON. El PUBLISH se
+    # auto-gatea con detect_toolchain(): sin MSBuild/.NET muestra el doctor y no
+    # hace nada (G7, excepcion dura #3 — prerequisito no garantizado).
+    STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED", "true"
+    ).lower() == "true"
     # ── Plan 246 — Inventario vivo de pipelines (read-only, default ON) ──
     STACKY_PIPELINE_INVENTORY_ENABLED: bool = os.getenv(
         "STACKY_PIPELINE_INVENTORY_ENABLED", "true"

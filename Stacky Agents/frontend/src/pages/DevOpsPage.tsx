@@ -111,6 +111,7 @@ import { PrReviewerSection } from '../components/devops/PrReviewerSection';
 import { DeploymentsSection } from '../components/devops/DeploymentsSection';
 // Plan 201 — Taller de Compilación (.sln + build Release + artefactos descargables)
 import { BuildWorkshopSection } from '../components/devops/BuildWorkshopSection';
+import { SolutionPublisherSection } from '../components/devops/SolutionPublisherSection';
 // Importar DevOpsOverviewSection (Plan 239 F3)
 import { DevOpsOverviewSection } from '../components/devops/DevOpsOverviewSection';
 // Plan 246 — Inventario vivo de pipelines (read-only, multiproveedor)
@@ -239,6 +240,17 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED',
     gateMessage: 'La sección Compilar necesita la flag STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED (Configuración → Arnés, categoría DevOps).',
     render: (ctx) => <BuildWorkshopSection ctx={ctx} />,
+  },
+  // Plan 215 — Publicador de Soluciones (scan único persistido + publish 1-click + asistente DevOps)
+  {
+    id: 'publicador-soluciones',
+    label: 'Publicar Soluciones',
+    group: 'operar',
+    icon: '🚀',
+    healthKey: 'solution_publisher_enabled',
+    gateFlagKey: 'STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED',
+    gateMessage: 'La sección Publicar Soluciones necesita la flag STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <SolutionPublisherSection ctx={ctx} />,
   },
   // Plan 246 — Inventario vivo de pipelines (read-only, multiproveedor)
   {

@@ -1,6 +1,73 @@
 # Plan 215 — Publicador de Soluciones: escaneo único persistido, publish 1-click por solución y asistente DevOps HITL
 
-> Estado: **CRITICADO v2** (2026-07-23) — **v1 RECHAZADO** (C1 BLOQUEANTE: timeout/cancel del runner inefectivos + runs pegados en "running" sin recuperación) → **corregido en esta v2**. Pipeline: proponer ✓ → **criticar ✓ [este paso]** (`criticar-y-mejorar-plan`) → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **IMPLEMENTADO — F0..F6 (backend completo)** (2026-07-26); **F7 (frontend) PENDIENTE** — la sección existe y está registrada, pero renderiza el placeholder de F0. Base: CRITICADO v2 (2026-07-23) — v1 RECHAZADO (C1 BLOQUEANTE) → corregido en la v2. Pipeline: proponer ✓ → criticar ✓ → **implementar ✓ [este paso]** (`implementar-plan-stacky`) → supervisar.
+
+### Registro de implementación (2026-07-26) — desvíos del doc y bugs hallados al construir
+
+**Fases:** F0 IMPLEMENTADA · F1 IMPLEMENTADA · F2 IMPLEMENTADA · F3 IMPLEMENTADA ·
+F4 IMPLEMENTADA · F5 IMPLEMENTADA · F6 IMPLEMENTADA · **F7 PENDIENTE (frontend)**.
+
+**Verificación real (pytest por archivo, venv py3.13 del repo):**
+`test_plan215_flag` **4 passed** · `test_plan215_publish_profile_scanner` **12 passed** ·
+`test_plan215_publish_config_store` **9 passed** · `test_plan215_catalog_ops` **9 passed** ·
+`test_plan215_solution_publisher` **15 passed** · `test_plan215_api` **18 passed** ·
+`test_harness_flags` **56 passed** · `test_harness_ratchet_meta` **4 passed** ·
+no-regresión del 201: `test_plan201_solution_scanner` **13**, `test_plan201_solution_store` **12**,
+`test_plan201_api` **21** · `npx tsc --noEmit` **exit 0**.
+
+**El Plan 201 estaba realmente implementado y con los nombres EXACTOS que este plan cita**
+(`_dedupe`, `_title_case`, `_parse_sln_projects`, `slugify_solution`, `_LOCK`, `_load_doc`,
+`_save_doc`, `_is_deployable`, `rescan_and_save`, `load_catalog`, `detect_toolchain`):
+la advertencia C12 sobre "símbolos privados que solo existen en papel" resultó infundada
+y no hizo falta adaptar ningún nombre.
+
+**Desvíos aplicados (el plan se contradecía con el árbol real):**
+
+1. **La flag se cablea en 6 lugares, no en 5.** §4 lista 5 y omite
+   `services/harness_flags_help.py` (`PLAIN_HELP`), que es obligatorio
+   (`test_plain_help_covers_all_registry_keys`). Se agregó la entrada. Nota: la flag del
+   propio Plan 201 (`STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED`) **no** tiene su `PlainHelp` —
+   es una de las 4 fallas ajenas preexistentes de `test_harness_flags_help.py`, que se dejó
+   como estaba (criterio NO-EMPEORAR; se verificó que la key de este plan no está entre las
+   ofensoras).
+2. **BUG del plan — la key del catálogo se normalizaba solo en las funciones nuevas.**
+   El pseudocódigo de `add_manual_solution` usa `os.path.normpath(workspace_root)` como key
+   del documento, pero `rescan_and_save` y `load_catalog` del 201 la usan **CRUDA**.
+   Normalizar solo ahí habría creado DOS buckets para el mismo workspace y las altas
+   manuales habrían quedado invisibles para el resto del catálogo (y para
+   `rescan_preserving_manual`). Se usa la key cruda; el `normpath`/`normcase` se aplica SOLO
+   a la comparación de rutas (commonpath y dedupe).
+3. **BUG del plan — import equivocado.** El pseudocódigo dice
+   `from solution_scanner import scan_single_solution`; el módulo real se importa como
+   `from services.solution_scanner import ...` (así lo hace `solution_store.py:19`).
+4. **BUG del plan — el invariante "ninguna función lanza jamás" no se cumplía.**
+   F1 mandaba capturar solo `OSError`, pero `open()`/`os.listdir()` con un byte nulo en la
+   ruta lanzan **`ValueError`**. Se captura `(OSError, ValueError)` en las tres lecturas de
+   `publish_profile_scanner`; sin eso el módulo violaba su propio contrato (test
+   `test_resolve_never_raises_on_bad_paths`).
+5. **BUG del plan — `register-deploy-app` estaba subespecificado.** §F5 dice "payload y
+   validación IDÉNTICOS al 201 F8" y a la vez describe solo
+   `artifact:{kind:"folder", path}`. El bridge real del 201 **exige además `targets` con
+   `install_path` absoluto** (`deploy_planner.validate_app`), e inventarlo sería escribir
+   donde el operador no eligió. Se espejó el 201 de verdad: se reusan los `targets` de la
+   app existente y, si no hay, se responde 400 pidiéndolos.
+6. **G13 se recontró (8ª vez): la prosa chocaba con su propio gate.** El docstring de
+   `solution_publisher.py` decía literalmente "NUNCA \`shell=True\`" y "PROHIBIDO
+   \`log_streamer\`", lo que hacía fallar el criterio binario de F4
+   (`grep "shell=True"` → 0 y `grep "log_streamer"` → 0). Se reescribió la prosa sin nombrar
+   los símbolos prohibidos.
+7. **Ajuste de test propio:** el fake de `Popen` para C1 necesita un `stdout` que BLOQUEE
+   hasta que `terminate()` lo libere; con un iterador que termina solo, el test verdea sin
+   probar nada (el cancel/timeout se "cumplirían" por EOF natural).
+
+**PENDIENTE — F7 (frontend), único bloque sin implementar.** El backend está completo y
+verificado, y la sección ya está registrada en `DEVOPS_SECTIONS` con su gate, pero
+`SolutionPublisherSection.tsx` sigue siendo el placeholder de F0: **la feature todavía no es
+operable por el operador**. Falta: `solutionPublisherModel.ts` + su vitest, el objeto
+`DevOpsSolutionPublisher` en `endpoints.ts`, y la pantalla real (catálogo, modal de config
+con el Dialog canónico, publish con preview del comando, log vivo, descarga, historial,
+escalera de fallback y botones del asistente). Motivo: se agotó el presupuesto de contexto
+de la corrida; se prefirió dejar el backend cerrado y verificado antes que una UI a medias.
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5).
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
 > Origen: pedido EXPLÍCITO del operador — "El publicador actual no me resulta cómodo. La idea es que la herramienta realice un escaneo inicial de todos los archivos .sln del proyecto, identifique cada solución y permita configurar su proceso de publicación de manera individual. Luego, desde una interfaz simple, debería ser posible seleccionar una solución y generar su publish con un solo botón. Además […] una opción asistida por un agente de DevOps […] cuando el proceso de publicación presente errores […]. El primer escaneo debería ejecutarse una única vez y guardar […] una lista con todas las soluciones detectadas y sus respectivas rutas. […] Idealmente, el escaneo inicial debería realizarse de forma determinística. Sin embargo, si ese mecanismo no logra identificar correctamente las soluciones, debería existir la posibilidad de ejecutar un escaneo de forma agéntica como alternativa."

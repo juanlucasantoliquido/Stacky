@@ -677,6 +677,13 @@ HARNESS_TEST_FILES=(
   tests/test_plan214_qa_browser_playbooks.py
   # -- Plan 172 - Teclado primero: registro de atajos + overlay de ayuda --
   tests/test_plan172_shortcuts_flag.py
+  # -- Plan 215 - Publicador de Soluciones (scan unico + publish 1-click) --
+  tests/test_plan215_flag.py
+  tests/test_plan215_publish_profile_scanner.py
+  tests/test_plan215_publish_config_store.py
+  tests/test_plan215_catalog_ops.py
+  tests/test_plan215_solution_publisher.py
+  tests/test_plan215_api.py
   # -- Plan 196 - Acciones HITL del pipeline de planes sobre el Tablero --
   tests/test_plan196_pipeline_service.py
   tests/test_plan196_actions_api.py

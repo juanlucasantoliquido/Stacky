@@ -121,3 +121,78 @@ def set_tracked(workspace_root: str, slug: str, tracked: bool) -> dict:
 
 def tracked_solutions(workspace_root: str) -> list:
     return [s for s in load_catalog(workspace_root)["solutions"] if s.get("tracked")]
+
+
+# ── Plan 215 F3 (ADITIVO) — altas manuales y re-scan que las preserva ───────
+#
+# NOTA de implementación (desvío consciente del doc 215): el doc normalizaba la
+# key del documento con os.path.normpath(workspace_root), pero `rescan_and_save`
+# y `load_catalog` del Plan 201 la usan CRUDA. Normalizar solo acá crearía DOS
+# buckets para el mismo workspace y las altas manuales quedarían invisibles para
+# el resto del catálogo. Se usa la key cruda; el normpath se aplica SOLO a la
+# comparación de rutas (commonpath / dedupe).
+def add_manual_solution(workspace_root: str, sln_path: str) -> dict:
+    """Agrega una .sln al catálogo con origin="manual". ValueError con razón legible."""
+    import os
+
+    from services.solution_scanner import scan_single_solution
+
+    key = workspace_root or ""
+    root = os.path.normpath(key)
+    target = os.path.normpath(os.path.abspath(sln_path or ""))
+    # C7 — commonpath lanza ValueError con drives distintos en Windows y compara
+    # case-sensitive: normcase + try/except con rechazo legible.
+    try:
+        inside = bool(key) and os.path.commonpath(
+            [os.path.normcase(root), os.path.normcase(target)]
+        ) == os.path.normcase(root)
+    except ValueError:
+        inside = False
+    if not inside:
+        raise ValueError("La ruta debe estar dentro del workspace del proyecto activo")
+    with _LOCK:
+        doc = _load_doc()
+        block = doc.get(key)
+        if not isinstance(block, dict):
+            block = {"scanned_at": None, "truncated": False, "solutions": []}
+        existing = [s for s in (block.get("solutions") or []) if isinstance(s, dict)]
+        if any(
+            os.path.normcase(s.get("sln_path", "")) == os.path.normcase(target)
+            for s in existing
+        ):
+            block["solutions"] = existing
+            return block  # idempotente: ya está
+        entry = scan_single_solution(target, existing_slugs=[s.get("slug") for s in existing])
+        if entry is None:
+            raise ValueError("La ruta no es un archivo .sln legible")
+        entry["tracked"] = _is_deployable(entry)
+        entry["origin"] = "manual"
+        existing.append(entry)
+        existing.sort(key=lambda s: s.get("sln_path", ""))
+        block["solutions"] = existing
+        doc[key] = block
+        _save_doc(doc)
+        return block
+
+
+def rescan_preserving_manual(workspace_root: str) -> dict:
+    """rescan_and_save (201) + re-anexa las manuales cuyo .sln sigue existiendo."""
+    import os
+
+    if not workspace_root:
+        return dict(_EMPTY_BLOCK)
+    with _LOCK:
+        prev = [
+            s for s in ((_load_doc().get(workspace_root) or {}).get("solutions") or [])
+            if isinstance(s, dict)
+        ]
+    manual_prev = [
+        s for s in prev
+        if s.get("origin") == "manual" and os.path.exists(s.get("sln_path", ""))
+    ]
+    block = rescan_and_save(workspace_root)  # 201 F2, intacto
+    found = {os.path.normcase(s.get("sln_path", "")) for s in block.get("solutions", [])}
+    for m in manual_prev:
+        if os.path.normcase(m.get("sln_path", "")) not in found:
+            block = add_manual_solution(workspace_root, m["sln_path"])
+    return block

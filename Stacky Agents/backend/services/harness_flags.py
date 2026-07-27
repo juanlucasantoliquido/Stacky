@@ -245,6 +245,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC",  # Plan 120 — timeout del smoke post-deploy
         "STACKY_DEVOPS_LOCAL_DOCTOR_ENABLED",  # Plan 127 — doctor local DevOps (IA local)
         "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",  # Plan 201 — Taller de Compilación (.sln + build Release)
+        "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED",  # Plan 215 — Publicador de Soluciones
         "STACKY_DEV_BUILD_VERIFY_ENABLED",  # Plan 210 — gate de build determinista del Developer
         "STACKY_DEV_POST_BUILD_INSPECT_ENABLED",  # Plan 211 — inspector post-build
         "STACKY_DEV_PORT_RESIDUE_SCAN_ENABLED",  # Plan 211 — barrido de residuos de port
@@ -2039,6 +2040,19 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "produce artefactos descargables. La detección y el catálogo son read-only "
             "y siempre seguros; el build requiere toolchain .NET (si falta, muestra el "
             "doctor y no hace nada). Default ON."
+        ),
+        group="global",
+    ),
+    # ── Plan 215 — Publicador de Soluciones ─────────────────────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED",
+        type="bool",
+        default=True,
+        label="Publicador de Soluciones",
+        description=(
+            "Escanea una única vez los .sln del workspace, permite configurar el "
+            "publish de cada solución y publicarla con un click; asistencia del "
+            "agente DevOps ante fallos (el publish requiere toolchain .NET)."
         ),
         group="global",
     ),

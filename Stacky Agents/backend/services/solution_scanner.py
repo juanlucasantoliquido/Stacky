@@ -157,3 +157,29 @@ def scan_solutions_ex(workspace_root) -> dict:
 def scan_solutions(workspace_root) -> list:
     """Wrapper de compatibilidad: solo la lista de soluciones."""
     return scan_solutions_ex(workspace_root)["solutions"]
+
+
+# ── Plan 215 F3 (ADITIVO) — alta manual de una .sln concreta ────────────────
+def scan_single_solution(sln_path: str, existing_slugs=None):
+    """Entrada de catálogo de UNA .sln concreta (alta manual del Plan 215).
+
+    Devuelve un dict con el MISMO shape que produce `scan_solutions_ex`, o None
+    si la ruta no es un `.sln` legible. No lanza nunca.
+    """
+    if not sln_path or not sln_path.lower().endswith(".sln"):
+        return None
+    try:
+        if not os.path.isfile(sln_path):
+            return None
+    except (OSError, ValueError):
+        return None
+    name = os.path.splitext(os.path.basename(sln_path))[0]
+    seen = set(existing_slugs or [])
+    slug = _dedupe(slugify_solution(name), seen)
+    return {
+        "slug": slug,
+        "sln_path": os.path.normpath(sln_path),
+        "sln_name": name,
+        "friendly_name": _title_case(name),
+        "projects": _parse_sln_projects(sln_path),
+    }

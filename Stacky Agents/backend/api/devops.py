@@ -73,6 +73,9 @@ def _health_payload() -> dict:
         "build_workshop_enabled": bool(
             getattr(cfg, "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED", False)
         ),  # Plan 201 — Taller de Compilación
+        "solution_publisher_enabled": bool(
+            getattr(cfg, "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED", False)
+        ),  # Plan 215 — Publicador de Soluciones
         "dev_build_verify_enabled": bool(
             getattr(cfg, "STACKY_DEV_BUILD_VERIFY_ENABLED", False)
         ),  # Plan 210 — gate de build del Developer

@@ -483,6 +483,9 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED",
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
+    # ── Plan 215 — Publicador de Soluciones: bool default ON; catálogo/config/UI
+    # son read-only y el publish se auto-gatea con el doctor de toolchain. ──
+    "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED",
     # ── Plan 210 — gate de build del Developer (ausencia = no verificado) ──
     "STACKY_DEV_BUILD_VERIFY_ENABLED",
     # ── Plan 211 — inspector post-build + residuos de port (read-only) ──

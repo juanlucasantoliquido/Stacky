@@ -1431,6 +1431,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el tablero queda solo-lectura, como antes, con la acción sugerida copiable a mano.",
         example="Como pasar de un semáforo que solo te dice 'avanzá' a un botón que arranca el auto por vos — pero siempre apretás vos el botón.",
     ),
+    # ── Plan 215 — Publicador de Soluciones ──────────────────────────────────
+    "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED": PlainHelp(
+        what="Agrega al panel DevOps una sección que busca una sola vez todas las soluciones de tu proyecto, te deja elegir cómo se publica cada una y publicarla con un botón.",
+        on_effect="Si la activás (viene así de fábrica): aparece 'Publicar Soluciones' con la lista ya armada; publicar deja una carpeta lista para descargar, y si algo falla podés pedirle ayuda al agente de DevOps.",
+        off_effect="Si la apagás: esa sección desaparece y todo lo demás del panel DevOps sigue igual.",
+        example="Como tener el botón 'Publicar' de Visual Studio, pero para todas tus soluciones juntas y sin abrir Visual Studio.",
+    ),
     # ── Plan 238 — Bandeja de incidencias abiertas ───────────────────────────
     "STACKY_INCIDENT_INBOX_ENABLED": PlainHelp(
         what="Una vista aparte que junta solo las incidencias (los tickets de tipo Issue y Bug) y pone primero las que siguen abiertas.",

@@ -40,7 +40,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -149,6 +149,10 @@ class AdoOutputWatcher:
         self._seen_b: dict[str, tuple[int, str]] = {}  # path -> (mtime_ns, sha256)
         # cache (epic_dir, last_max_mtime_ns) — para Modo A
         self._seen_a: dict[str, int] = {}
+        # Plan 256 F1 — la rehidratación de la cuarentena desde los sidecars se
+        # hace UNA vez, en el primer scan_once. Nunca en el import del módulo:
+        # importar output_watcher no debe tocar disco.
+        self._quarantine_rehydrated = False
 
     @property
     def outputs_dir(self) -> Path:
@@ -230,6 +234,18 @@ class AdoOutputWatcher:
         if outputs_dir != self._last_scanned_dir:
             logger.info("output_watcher: dir vigilado → %s (existe=%s)", outputs_dir, outputs_dir.exists())
             self._last_scanned_dir = outputs_dir
+        # Plan 256 F1 — antes de decidir nada, recuperar del disco lo que ya
+        # estaba en cuarentena antes del reinicio. Si falla, el scan sigue: la
+        # cuarentena degrada a RAM, que es exactamente el comportamiento de hoy.
+        if not self._quarantine_rehydrated:
+            self._quarantine_rehydrated = True
+            try:
+                _rehydrate_quarantine(outputs_dir)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "output_watcher: no se pudo rehidratar la cuarentena desde disco",
+                    exc_info=True,
+                )
         # NO retornar temprano si el dir canónico no existe: el agente funcional
         # a veces sólo escribe el pending-task.json en la base alternativa
         # `<repo>/output/tickets/epic-{id}/` y nunca crea `Agentes/outputs`. El
@@ -866,12 +882,243 @@ _TERMINAL_CREATE_ERRORS = {
     "PENDING_TASK_STATUS_INVALID",
 }
 
+# ── Plan 256 F1 — causa tipada + cuarentena persistente ─────────────────────
+#
+# Plan 256 F1 — mapeo ÚNICO reason_code(artifact_intake) -> cause_code(cuarentena).
+# OJO: el campo real de IntakeResult es `reason_code`; NO existe `code`.
+_INTAKE_REASON_TO_CAUSE: dict[str, str] = {
+    "empty": "INTAKE_EMPTY",
+    "truncated": "INTAKE_TRUNCATED",
+    "malformed": "INTAKE_MALFORMED",
+    "schema": "INTAKE_SCHEMA",
+    "anti_ordinal": "INTAKE_ANTI_ORDINAL",
+}
+# Causas que NO tiene sentido reintentar tal cual: primero hay que arreglar el
+# disco/permisos. El resto es reintentable desde la UI.
+_NON_RETRYABLE_CAUSES: frozenset[str] = frozenset({"ORIG_BACKUP_FAILED"})
 
-def _quarantine_pending_once(pt_file: Path, reason: str) -> bool:
+# Enum ÚNICO de causas de cuarentena (§4.1 del plan 256). `_TERMINAL_CREATE_ERRORS`
+# es el vocabulario del endpoint de creación, NO de la cuarentena: todos esos
+# colapsan en WATCHER_HTTP_TERMINAL y el detalle viaja en `reason`.
+_CAUSE_CODES: frozenset[str] = frozenset(
+    set(_INTAKE_REASON_TO_CAUSE.values())
+    | {"WATCHER_UNREADABLE", "WATCHER_HTTP_TERMINAL", "ORIG_BACKUP_FAILED", "UNKNOWN"}
+)
+
+# Causa por path (mismo key que _SEEN_TERMINAL_PENDING / _QUARANTINE_REASON).
+_QUARANTINE_CAUSE: dict[str, str] = {}
+# Metadatos por path: first_seen / last_seen / occurrences / discarded_at /
+# discarded_by. Viven en RAM SIEMPRE (no cuestan disco) y se persisten en el
+# sidecar solo cuando la flag del sidecar está encendida.
+_QUARANTINE_META: dict[str, dict] = {}
+
+QUARANTINE_SIDECAR_SUFFIX = ".quarantine.json"
+QUARANTINE_SIDECAR_SCHEMA = 1
+ORIGINAL_BACKUP_SUFFIX = ".orig"
+
+
+def _cause_from_intake(result) -> str:
+    """reason_code -> cause_code. OJO: el campo es `reason_code`, NO `code`."""
+    return _INTAKE_REASON_TO_CAUSE.get(getattr(result, "reason_code", None) or "", "UNKNOWN")
+
+
+def _utc_now_iso() -> str:
+    """ISO-8601 UTC con microsegundos y sufijo Z. Los microsegundos importan:
+    sin ellos, dos cuarentenas del mismo segundo dan `last_seen` idéntico y el
+    operador no puede distinguir un reintento de un relogueo."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _sidecar_enabled() -> bool:
+    """Flag del plan 256 F1. Se lee de la INSTANCIA de Config (leer el módulo
+    devuelve el default y mata el branch OFF)."""
+    try:
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _preserve_original_enabled() -> bool:
+    """Flag del plan 256 F2 (copia .orig antes de reparar in place)."""
+    try:
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _sidecar_path(pt_file: Path) -> Path:
+    """`<artefacto>.quarantine.json`, junto al artefacto. Forma explícita en vez
+    de `with_suffix` para ser inmune a nombres con puntos internos."""
+    return Path(str(pt_file) + QUARANTINE_SIDECAR_SUFFIX)
+
+
+def _original_backup_path(pt_file: Path) -> Path:
+    return Path(str(pt_file) + ORIGINAL_BACKUP_SUFFIX)
+
+
+def _read_sidecar(pt_file: Path) -> dict | None:
+    """Lee el sidecar de cuarentena. None si no existe, no se puede leer, no es
+    un objeto JSON o declara un `schema` desconocido. NUNCA lanza."""
+    sidecar = _sidecar_path(pt_file)
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    try:
+        if int(data.get("schema") or 0) != QUARANTINE_SIDECAR_SCHEMA:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return data
+
+
+def _write_sidecar(pt_file: Path, *, reason: str, cause_code: str,
+                   mtime_ns: int, discarded_at: str | None = None,
+                   discarded_by: str | None = None) -> bool:
+    """Escribe/actualiza `<artefacto>.quarantine.json`.
+
+    NUNCA toca el artefacto: es un archivo aparte, con su propio nombre. Si no
+    se puede escribir (permisos, disco lleno) degrada limpio — `warning` y la
+    cuarentena sigue viva en RAM, nunca se pierde el gate anti-loop.
+
+    `first_seen` se preserva entre arranques, `occurrences` incrementa y
+    `last_seen` se pisa. El marcador de descarte es sticky: una vez puesto no
+    se borra por un ciclo de cuarentena posterior.
+    """
+    key = str(pt_file)
+    previo = _read_sidecar(pt_file) or {}
+    ahora = _utc_now_iso()
+    first_seen = previo.get("first_seen") or _QUARANTINE_META.get(key, {}).get("first_seen") or ahora
+    try:
+        occurrences = int(previo.get("occurrences") or 0) + 1
+    except (TypeError, ValueError):
+        occurrences = 1
+    payload = {
+        "schema": QUARANTINE_SIDECAR_SCHEMA,
+        "artifact": pt_file.name,
+        "cause_code": cause_code,
+        "reason": reason,
+        "first_seen": first_seen,
+        "last_seen": ahora,
+        "occurrences": occurrences,
+        "artifact_mtime_ns": mtime_ns,
+        "discarded_at": discarded_at if discarded_at is not None else previo.get("discarded_at"),
+        "discarded_by": discarded_by if discarded_by is not None else previo.get("discarded_by"),
+    }
+    _QUARANTINE_META[key] = {
+        "first_seen": payload["first_seen"],
+        "last_seen": payload["last_seen"],
+        "occurrences": payload["occurrences"],
+        "discarded_at": payload["discarded_at"],
+        "discarded_by": payload["discarded_by"],
+    }
+    try:
+        _sidecar_path(pt_file).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        logger.warning(
+            "output_watcher: no se pudo escribir el sidecar de cuarentena de %s "
+            "— la cuarentena sigue en memoria", pt_file, exc_info=True,
+        )
+        return False
+    return True
+
+
+def _touch_quarantine_meta_ram(key: str) -> None:
+    """Actualiza first_seen/last_seen/occurrences SIN tocar disco. Es el camino
+    cuando el sidecar está apagado: la UI sigue mostrando antigüedad dentro del
+    proceso, pero no queda un solo byte nuevo en la carpeta del operador."""
+    ahora = _utc_now_iso()
+    meta = _QUARANTINE_META.get(key) or {}
+    _QUARANTINE_META[key] = {
+        "first_seen": meta.get("first_seen") or ahora,
+        "last_seen": ahora,
+        "occurrences": int(meta.get("occurrences") or 0) + 1,
+        "discarded_at": meta.get("discarded_at"),
+        "discarded_by": meta.get("discarded_by"),
+    }
+
+
+def _rehydrate_quarantine(outputs_dir: Path) -> int:
+    """Plan 256 F1 — repuebla la cuarentena desde los sidecars en disco.
+
+    Se llama UNA vez por instancia del watcher, dentro del primer `scan_once`.
+    NUNCA en el import del módulo: importar `output_watcher` no debe tocar disco.
+
+    Una entrada se rehidrata si el `artifact_mtime_ns` del sidecar coincide con
+    el mtime real del artefacto (si no coincide, el operador lo editó y sale de
+    cuarentena solo, mismo criterio que hoy pero ahora persistente). El
+    marcador de descarte se rehidrata SIEMPRE: el operador ya dijo que no lo
+    quiere reintentar. Devuelve cuántas entradas restauró.
+    """
+    if not _sidecar_enabled():
+        return 0
+    patron = PENDING_TASK_FILENAME + QUARANTINE_SIDECAR_SUFFIX
+    try:
+        sidecars = list(outputs_dir.glob("*/" + patron)) + list(outputs_dir.glob("*/*/" + patron))
+    except OSError:
+        return 0
+    restaurados = 0
+    for sidecar in sidecars:
+        pt_file = Path(str(sidecar)[: -len(QUARANTINE_SIDECAR_SUFFIX)])
+        data = _read_sidecar(pt_file)
+        if data is None:
+            logger.warning(
+                "output_watcher: sidecar de cuarentena ilegible o de schema desconocido "
+                "(se ignora, no aborta el scan): %s", sidecar,
+            )
+            continue
+        key = str(pt_file)
+        if key in _SEEN_TERMINAL_PENDING:
+            continue  # la RAM manda: ya se cuarentenó en este proceso
+        try:
+            mtime_real = pt_file.stat().st_mtime_ns
+        except OSError:
+            mtime_real = -1
+        descartado = bool(data.get("discarded_at"))
+        try:
+            mtime_guardado = int(data.get("artifact_mtime_ns"))
+        except (TypeError, ValueError):
+            mtime_guardado = None
+        if not descartado and mtime_guardado != mtime_real:
+            continue  # el operador tocó el artefacto: se reprocesa
+        _SEEN_TERMINAL_PENDING[key] = mtime_real
+        _QUARANTINE_REASON[key] = data.get("reason") or ""
+        _QUARANTINE_CAUSE[key] = data.get("cause_code") or "UNKNOWN"
+        _QUARANTINE_META[key] = {
+            "first_seen": data.get("first_seen"),
+            "last_seen": data.get("last_seen"),
+            "occurrences": int(data.get("occurrences") or 1),
+            "discarded_at": data.get("discarded_at"),
+            "discarded_by": data.get("discarded_by"),
+        }
+        restaurados += 1
+    if restaurados:
+        logger.info(
+            "output_watcher: cuarentena rehidratada desde disco — %d artefacto(s) "
+            "seguian atascados de antes del reinicio", restaurados,
+        )
+    return restaurados
+
+
+def _quarantine_pending_once(pt_file: Path, reason: str, *,
+                             cause_code: str = "UNKNOWN") -> bool:
     """Loguea UNA vez (por path+mtime) un pending-task.json con fallo terminal y
     lo registra en la cuarentena. Devuelve True si logueó (primera vez para este
-    contenido), False si ya estaba en cuarentena."""
-    key = str(pt_file)
+    contenido), False si ya estaba en cuarentena.
+
+    Plan 256 F1 — `cause_code` es un valor del enum único (§4.1) y se persiste
+    en un sidecar `<artefacto>.quarantine.json` para que la cuarentena sobreviva
+    al reinicio del backend. La CLAVE en memoria sigue siendo `str(pt_file)`: NO
+    se compone con el cause_code (ver plan 256 C4 — no resolvía nada y rompía
+    `clear_quarantine`, que deriva la clave exactamente igual).
+    """
+    key = str(pt_file)                      # SIN CAMBIOS — clear_quarantine depende de esto
     try:
         mtime_ns = pt_file.stat().st_mtime_ns
     except OSError:
@@ -880,6 +1127,11 @@ def _quarantine_pending_once(pt_file: Path, reason: str) -> bool:
         return False  # ya logueado para este contenido
     _SEEN_TERMINAL_PENDING[key] = mtime_ns
     _QUARANTINE_REASON[key] = reason
+    _QUARANTINE_CAUSE[key] = cause_code
+    if _sidecar_enabled():
+        _write_sidecar(pt_file, reason=reason, cause_code=cause_code, mtime_ns=mtime_ns)
+    else:
+        _touch_quarantine_meta_ram(key)
     logger.error(
         "output_watcher mode_a: pending-task con fallo terminal (se omite hasta "
         "corregir el archivo/carpeta) en %s: %s",
@@ -890,11 +1142,31 @@ def _quarantine_pending_once(pt_file: Path, reason: str) -> bool:
 
 def quarantine_snapshot() -> dict[str, dict]:
     """Plan 149 F4/F7 — Snapshot read-only de la cuarentena para diag/board.
-    path -> {reason, mtime_ns}."""
-    return {
-        k: {"reason": _QUARANTINE_REASON.get(k, ""), "mtime_ns": v}
-        for k, v in _SEEN_TERMINAL_PENDING.items()
-    }
+    path -> {reason, mtime_ns}. Plan 256 F1 — agrega cause_code / retryable /
+    first_seen / last_seen / occurrences / discarded / has_original_backup
+    (ADITIVO: las claves viejas NO cambian de nombre ni de tipo)."""
+    snapshot: dict[str, dict] = {}
+    for key, mtime_ns in _SEEN_TERMINAL_PENDING.items():
+        meta = _QUARANTINE_META.get(key) or {}
+        cause = _QUARANTINE_CAUSE.get(key, "UNKNOWN")
+        try:
+            tiene_backup = _original_backup_path(Path(key)).exists()
+        except OSError:
+            tiene_backup = False
+        snapshot[key] = {
+            "reason": _QUARANTINE_REASON.get(key, ""),
+            "mtime_ns": mtime_ns,
+            "cause_code": cause,
+            "retryable": cause not in _NON_RETRYABLE_CAUSES,
+            "first_seen": meta.get("first_seen"),
+            "last_seen": meta.get("last_seen"),
+            "occurrences": int(meta.get("occurrences") or 1),
+            "discarded": bool(meta.get("discarded_at")),
+            "discarded_at": meta.get("discarded_at"),
+            "discarded_by": meta.get("discarded_by"),
+            "has_original_backup": tiene_backup,
+        }
+    return snapshot
 
 
 def clear_quarantine(pt_file: Path) -> bool:
@@ -903,15 +1175,91 @@ def clear_quarantine(pt_file: Path) -> bool:
     True si había algo que limpiar. Los callers DEBEN usar este helper en vez de
     poppear el dict privado con un path resuelto aparte: en Windows
     str((repo_root/rel).resolve()) puede divergir de cómo el watcher guardó la
-    clave, dejando el pop en un no-op silencioso."""
+    clave, dejando el pop en un no-op silencioso.
+
+    Plan 256 F4 — es TAMBIÉN el reintento desde la UI: a propósito NO se creó un
+    helper gemelo para reintentar. Además del estado en RAM borra el sidecar en
+    disco; si no, la rehidratación del próximo arranque devolvería el artefacto
+    a la cuarentena que el operador acaba de limpiar. NO toca el artefacto."""
     key = str(pt_file)
     existed = _SEEN_TERMINAL_PENDING.pop(key, None) is not None
     _QUARANTINE_REASON.pop(key, None)
+    _QUARANTINE_CAUSE.pop(key, None)
+    _QUARANTINE_META.pop(key, None)
+    try:
+        _sidecar_path(pt_file).unlink(missing_ok=True)
+    except OSError:
+        logger.warning(
+            "output_watcher: no se pudo borrar el sidecar de cuarentena de %s",
+            pt_file, exc_info=True,
+        )
     return existed
+
+
+def quarantine_discard(pt_file: Path, *, operator: str) -> dict:
+    """Plan 256 F4 — marca el artefacto como descartado por el operador.
+
+    NO borra ni modifica el artefacto: escribe `discarded_at`/`discarded_by` en
+    el SIDECAR (`<artefacto>.quarantine.json`). El trabajo del agente queda
+    intacto en disco. El watcher omite los artefactos con `discarded_at != null`.
+
+    Idempotente: si ya estaba descartado, `discarded_at` NO se pisa.
+    Devuelve {'ok', 'path', 'sidecar', 'discarded_at', 'discarded_by'}.
+    """
+    key = str(pt_file)
+    previo = _read_sidecar(pt_file) or {}
+    ya = previo.get("discarded_at") or (_QUARANTINE_META.get(key) or {}).get("discarded_at")
+    discarded_at = ya or _utc_now_iso()
+    discarded_by = (previo.get("discarded_by") if ya else None) or operator
+    reason = _QUARANTINE_REASON.get(key) or previo.get("reason") or ""
+    cause = _QUARANTINE_CAUSE.get(key) or previo.get("cause_code") or "UNKNOWN"
+    try:
+        mtime_ns = pt_file.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = int(previo.get("artifact_mtime_ns") or -1)
+
+    escrito = _write_sidecar(
+        pt_file, reason=reason, cause_code=cause, mtime_ns=mtime_ns,
+        discarded_at=discarded_at, discarded_by=discarded_by,
+    )
+    if not escrito:
+        # No se pudo persistir el marcador: se revierte el metadato en RAM para
+        # NO mentirle al operador (la entrada QUEDA en cuarentena, visible).
+        meta = _QUARANTINE_META.get(key) or {}
+        meta["discarded_at"] = previo.get("discarded_at")
+        meta["discarded_by"] = previo.get("discarded_by")
+        _QUARANTINE_META[key] = meta
+        return {
+            "ok": False,
+            "path": key,
+            "sidecar": str(_sidecar_path(pt_file)),
+            "error": "sidecar_not_writable",
+            "detail": "no se pudo escribir el marcador de descarte; el artefacto sigue en cuarentena",
+        }
+
+    # La entrada sigue en la cuarentena (el watcher la omite), ahora marcada.
+    _SEEN_TERMINAL_PENDING.setdefault(key, mtime_ns)
+    _QUARANTINE_REASON.setdefault(key, reason)
+    _QUARANTINE_CAUSE.setdefault(key, cause)
+    logger.warning(
+        "output_watcher: artefacto DESCARTADO por el operador (%s) — el archivo "
+        "queda intacto en disco, solo se marca el sidecar: %s", discarded_by, pt_file,
+    )
+    return {
+        "ok": True,
+        "path": key,
+        "sidecar": str(_sidecar_path(pt_file)),
+        "discarded_at": discarded_at,
+        "discarded_by": discarded_by,
+    }
 
 
 def _pending_is_quarantined(pt_file: Path) -> bool:
     key = str(pt_file)
+    # Plan 256 F4 — descartado por el operador: se omite pase lo que pase, aunque
+    # el mtime cambie. Es una decisión explícita suya, no una heurística.
+    if (_QUARANTINE_META.get(key) or {}).get("discarded_at"):
+        return True
     if key not in _SEEN_TERMINAL_PENDING:
         return False
     try:
@@ -1034,7 +1382,8 @@ def _auto_create_pending_tasks(
                 from services import artifact_intake
                 raw_text = pt_file.read_text(encoding="utf-8")
             except OSError as exc:
-                _quarantine_pending_once(pt_file, f"no legible: {exc}")
+                _quarantine_pending_once(pt_file, f"no legible: {exc}",
+                                         cause_code="WATCHER_UNREADABLE")
                 skipped += 1
                 continue
             # status=consumed: no re-validar, ya procesado.
@@ -1055,10 +1404,35 @@ def _auto_create_pending_tasks(
                 _quarantine_pending_once(
                     pt_file,
                     "intake rechazó el artefacto: " + "; ".join(result.errors),
+                    cause_code=_cause_from_intake(result),   # <-- reason_code, NO .code
                 )
                 skipped += 1
                 continue
             if result.repaired and isinstance(result.normalized, dict):
+                # Plan 256 F2 — el original del agente se preserva ANTES de
+                # reescribir. Idempotente: si el .orig ya existe NO se pisa (si
+                # no, el segundo pase guardaría como "original" la versión ya
+                # reparada). Si la copia falla se ABORTA la reparación: es
+                # preferible un artefacto en cuarentena con razón clara a un
+                # artefacto del agente destruido.
+                if _preserve_original_enabled():
+                    orig = _original_backup_path(pt_file)
+                    try:
+                        if not orig.exists():
+                            orig.write_text(raw_text, encoding="utf-8")
+                    except OSError:
+                        logger.error(
+                            "intake: NO se pudo preservar el original de %s — se ABORTA "
+                            "la reparación para no destruir el artefacto",
+                            pt_file, exc_info=True,
+                        )
+                        _quarantine_pending_once(
+                            pt_file,
+                            "reparación abortada: no se pudo escribir la copia .orig",
+                            cause_code="ORIG_BACKUP_FAILED",
+                        )
+                        skipped += 1
+                        continue
                 # Reescribir el archivo con el JSON normalizado para que el
                 # endpoint downstream consuma una versión válida.
                 try:
@@ -1077,7 +1451,8 @@ def _auto_create_pending_tasks(
             try:
                 pt_payload = _json.loads(pt_file.read_text(encoding="utf-8"))
             except (OSError, _json.JSONDecodeError) as exc:
-                _quarantine_pending_once(pt_file, f"JSON inválido/no legible: {exc}")
+                _quarantine_pending_once(pt_file, f"JSON inválido/no legible: {exc}",
+                                         cause_code="INTAKE_MALFORMED")
                 skipped += 1
                 continue
 
@@ -1183,7 +1558,11 @@ def _auto_create_pending_tasks(
                 else None
             ) or resp.text[:200]
             if _terminal_create_failure(resp.status_code, err_code):
-                _quarantine_pending_once(pt_file, f"HTTP {resp.status_code}: {err_msg}")
+                # Plan 256 §4.1 — los codigos de _TERMINAL_CREATE_ERRORS son el
+                # vocabulario del endpoint de creacion, NO del intake: colapsan
+                # todos en WATCHER_HTTP_TERMINAL y el detalle viaja en `reason`.
+                _quarantine_pending_once(pt_file, f"HTTP {resp.status_code}: {err_msg}",
+                                         cause_code="WATCHER_HTTP_TERMINAL")
                 skipped += 1
                 continue
             errors += 1

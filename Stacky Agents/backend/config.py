@@ -1883,6 +1883,29 @@ class Config:
         "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 256 — Intake sin pérdida: ningún artefacto rechazado sin razón ──
+    # F1: la cuarentena deja un sidecar `<artefacto>.quarantine.json` y sobrevive
+    # al reinicio del backend. Default ON: nunca modifica el artefacto y OFF
+    # revierte al comportamiento actual (solo RAM), byte-idéntico.
+    STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED: bool = os.getenv(
+        "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # F2: copia `.orig` antes de que la reparación automática reescriba el
+    # artefacto del agente in place. Default ON: escribir una copia de respaldo
+    # no es destructivo, no bypasea revisión humana y no reduce la seguridad.
+    STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED: bool = os.getenv(
+        "STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # F4: descarte de un artefacto en cuarentena desde la UI. Default OFF por
+    # EXCEPCIÓN DURA (acción irreversible desde la UI: el marcador de descarte
+    # no se revierte por pantalla, hay que borrar el sidecar a mano). El
+    # artefacto NUNCA se borra ni se modifica.
+    STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED: bool = os.getenv(
+        "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
     # ── Plan 128 — Tablero de evolución de planes (default ON desde el Plan 237:
     #    solo lectura de docs/ locales, sin egreso ni escritura) ──
     STACKY_PLANS_BOARD_ENABLED: bool = os.getenv(

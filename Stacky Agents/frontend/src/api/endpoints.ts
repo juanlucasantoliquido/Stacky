@@ -11,6 +11,8 @@ import type { InventoryPayload } from "../devops/pipelineInventoryModel";
 import type { PipelineProfileDto } from "../devops/pipelineProfileModel";
 // Plan 248 — Auditoria de pipelines (SEC/OPT).
 import type { AuditReport } from "../devops/pipelineAuditModel";
+// Plan 256 — Artefactos apartados por el intake (contrato congelado del backend).
+import type { QuarantineItem } from "../incidents/quarantineModel";
 export type { RawResponse, GatewayErrorBody };
 import type {
   CostBreakdownResponse,
@@ -5523,4 +5525,55 @@ export const DevOpsSolutionPublisher = {
    *  devuelve JSON, no el binario. */
   artifactDownloadUrl: (runId: string) =>
     `/api/devops/solution-publisher/runs/${encodeURIComponent(runId)}/artifact/download`,
+};
+
+// ── Plan 256 F3/F4 — artefactos apartados por el intake, visibles y accionables ─
+export interface IntakeQuarantineResponse {
+  enabled: boolean;
+  count?: number;
+  items: QuarantineItem[];
+  /** Refleja la flag de descarte (nace apagada: acción irreversible desde la UI). */
+  discard_enabled?: boolean;
+}
+
+/** Respuesta cruda: el 409 del descarte TRAE el identificador de confirmación en
+ *  el cuerpo, así que `api.post` (que lanza en non-2xx) no sirve acá. */
+export interface QuarantineActionResult {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+async function _quarantinePost(path: string, body: unknown): Promise<QuarantineActionResult> {
+  const resp = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = (await resp.json()) as Record<string, unknown>;
+  } catch {
+    parsed = {};
+  }
+  return { status: resp.status, body: parsed };
+}
+
+export const IntakeQuarantine = {
+  /** READ-ONLY. Con la flag de superficie apagada responde `enabled:false`. */
+  get: (includeDiscarded = false): Promise<IntakeQuarantineResponse> =>
+    fetch(`/api/diag/intake-quarantine${includeDiscarded ? "?include_discarded=1" : ""}`).then(
+      (r) => {
+        if (!r.ok) throw new Error(`intake quarantine ${r.status}`);
+        return r.json();
+      },
+    ),
+  /** No destructivo: saca el artefacto de la cuarentena para que se reintente. */
+  retry: (path: string): Promise<QuarantineActionResult> =>
+    _quarantinePost("/api/diag/intake-quarantine/retry", { path }),
+  /** Sin identificador de confirmación responde 409 y devuelve uno nuevo. */
+  discard: (path: string, confirmToken?: string): Promise<QuarantineActionResult> =>
+    _quarantinePost("/api/diag/intake-quarantine/discard", {
+      path,
+      ...(confirmToken ? { confirm_token: confirmToken } : {}),
+    }),
 };

@@ -693,6 +693,27 @@
           "NameError: name 'metadata_dir' is not defined"
         ]
       }
+    },
+    {
+      "id": "PLAN256-ARTEFACTO-EN-CUARENTENA-INVISIBLE",
+      "title": "pending-task.json en cuarentena que nadie ve",
+      "class": "artefacto-atascado-sin-superficie",
+      "status": "by_design",
+      "log_pattern": "output_watcher mode_a: pending-task con fallo terminal",
+      "log_guarded": false,
+      "killed_by": "plan 256 (intake sin perdida: cuarentena persistente + tarjeta 'Artefactos en cuarentena')",
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan256_intake_razon.py",
+      "evidence": "backend/services/output_watcher.py:_quarantine_pending_once; backend/api/diag.py:/intake-quarantine",
+      "note": "La linea NO es un bug: es el aviso correcto y trae la razon completa y accionable (se midieron 26 ocurrencias, 0 con la razon vacia). El bug era que solo vivia en un log de 4 MB y en un dict de RAM que el reinicio borraba, asi que epic-28/rf-028 estuvo 11 dias atascado con 25 relogueos y cero visibilidad. El plan 256 persiste la cuarentena en un sidecar <artefacto>.quarantine.json, le pone cause_code y antiguedad, y la muestra en Diagnostico con reintentar/descartar. Si esta firma REAPARECE en volumen sin que la tarjeta 'Artefactos en cuarentena' liste el artefacto, la persistencia se rompio. Diagnosticar SIEMPRE con el log crudo: la firma agregada trunca la linea y fue lo que hizo creer que el mensaje llegaba vacio.",
+      "self_test": {
+        "matches": [
+          "2026-07-16 13:34:24 ERROR [stacky.output_watcher] output_watcher mode_a: pending-task con fallo terminal (se omite hasta corregir el archivo/carpeta) en C:\\outputs\\epic-28\\rf-028\\pending-task.json: intake rechazo el artefacto: el archivo esta vacio o solo tiene espacios."
+        ],
+        "clean": [
+          "2026-07-16 13:34:24 INFO [stacky.output_watcher] output_watcher mode_a: done-marker detectado — cierre inmediato"
+        ]
+      }
     }
   ]
 }

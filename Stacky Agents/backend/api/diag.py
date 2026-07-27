@@ -190,6 +190,59 @@ def output_watcher_stats():
     })
 
 
+def _quarantine_age_days(first_seen: str | None) -> int:
+    """Plan 256 F3 — dias enteros desde `first_seen`. Es el campo que hace
+    visible un artefacto atascado hace 11 dias; sin el, la tarjeta muestra una
+    lista sin urgencia. Tolerante: si la marca de tiempo no se puede leer,
+    devuelve 0 en vez de romper el diagnostico."""
+    if not first_seen:
+        return 0
+    texto = str(first_seen).strip().replace("Z", "+00:00")
+    try:
+        cuando = datetime.fromisoformat(texto)
+    except ValueError:
+        return 0
+    from datetime import timezone as _tz
+    if cuando.tzinfo is None:
+        cuando = cuando.replace(tzinfo=_tz.utc)
+    delta = datetime.now(_tz.utc) - cuando
+    return max(int(delta.total_seconds() // 86400), 0)
+
+
+# Accion del interlock de confirmacion del descarte (plan 256 F4). Namespaced
+# para que un identificador emitido para otra accion no sirva aca.
+_DISCARD_ACTION = "intake_quarantine_discard"
+
+
+class _PathOutsideOutputs(ValueError):
+    """El `path` que mando el cliente no cae bajo el outputs_dir del watcher."""
+
+
+def _assert_under_outputs(raw_path: str) -> Path:
+    """Plan 256 F4 — 400 si el path no cae bajo el outputs_dir del watcher vivo.
+
+    Se usa la property de la INSTANCIA viva (`outputs_dir`), no `_outputs_dir()`
+    a secas: la property respeta `_outputs_dir_override`, que es lo que usan los
+    tests y un proyecto con override. `resolve()` colapsa `..`, symlinks y 8.3;
+    `os.path.normcase` cubre el case-insensitive de Windows; el `+ os.sep` evita
+    que `C:\\outputs-evil` pase como hijo de `C:\\outputs`.
+    """
+    from services.output_watcher import AdoOutputWatcher, get_output_watcher
+
+    watcher = get_output_watcher() or AdoOutputWatcher()
+    base = watcher.outputs_dir.resolve()
+    candidato = Path(raw_path or "").resolve()
+    base_n = os.path.normcase(str(base))
+    cand_n = os.path.normcase(str(candidato))
+    if cand_n != base_n and not cand_n.startswith(base_n + os.sep):
+        raise _PathOutsideOutputs("path fuera de outputs_dir")
+    return candidato
+
+
+def _quarantine_surface_enabled() -> bool:
+    return bool(getattr(_config.config, "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", True))
+
+
 @bp.get("/intake-quarantine")
 def intake_quarantine():
     """Plan 149 F7 — Snapshot read-only GLOBAL de la cuarentena de intake.
@@ -197,14 +250,135 @@ def intake_quarantine():
     Complementa el board Desatascador (epic-scoped) con una vista total, incluidos
     archivos cuya Epic no resuelve. Read-only, sin efectos. Gobernado por el mismo
     kill-switch que la superficie del board (F4), sin flag nueva.
+
+    Plan 256 F3 — ADITIVO: `path`/`reason`/`mtime_ns` se conservan con el mismo
+    nombre y tipo (hay consumidores) y se agregan la causa tipada, la antiguedad
+    en dias, las ocurrencias y si el artefacto se puede reintentar. Los
+    descartados por el operador NO se listan salvo `?include_discarded=1`.
     """
-    if not getattr(_config.config, "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED", True):
+    if not _quarantine_surface_enabled():
         return jsonify({"enabled": False, "items": []})
     from services.output_watcher import quarantine_snapshot
-    snap = quarantine_snapshot()
-    items = [{"path": k, "reason": v.get("reason", ""), "mtime_ns": v.get("mtime_ns")}
-              for k, v in snap.items()]
-    return jsonify({"enabled": True, "count": len(items), "items": items})
+
+    incluir_descartados = (request.args.get("include_discarded") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    items = []
+    for path, entry in quarantine_snapshot().items():
+        descartado = bool(entry.get("discarded"))
+        if descartado and not incluir_descartados:
+            continue
+        items.append({
+            # ── contrato del plan 149, intacto ──
+            "path": path,
+            "reason": entry.get("reason", ""),
+            "mtime_ns": entry.get("mtime_ns"),
+            # ── plan 256 F3, aditivo ──
+            "file_name": Path(path).name,
+            "cause_code": entry.get("cause_code") or "UNKNOWN",
+            "first_seen": entry.get("first_seen"),
+            "age_days": _quarantine_age_days(entry.get("first_seen")),
+            "occurrences": int(entry.get("occurrences") or 1),
+            "has_original_backup": bool(entry.get("has_original_backup")),
+            "discarded": descartado,
+            "retryable": bool(entry.get("retryable", True)),
+        })
+    items.sort(key=lambda i: (-i["age_days"], i["path"]))
+    return jsonify({
+        "enabled": True,
+        "count": len(items),
+        "items": items,
+        "discard_enabled": bool(
+            getattr(_config.config, "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED", False)
+        ),
+    })
+
+
+@bp.post("/intake-quarantine/retry")
+def intake_quarantine_reintento():
+    """Plan 256 F4 — saca UN artefacto de la cuarentena para que el proximo scan
+    lo reintente. NO DESTRUCTIVO: no toca el archivo, no crea nada, no publica.
+
+    REUSA `clear_quarantine` (plan 149 F5), que ya deriva la clave exactamente
+    igual que `_quarantine_pending_once` y documenta el gotcha de Windows. A
+    proposito NO se creo un helper gemelo para reintentar.
+
+    Idempotente: reintentar algo que no estaba en cuarentena devuelve ok=True.
+    OJO: reintenta la VALIDACION, no corrige el artefacto — si la causa era la
+    carpeta o el archivo vacio, va a volver a fallar hasta que el operador lo
+    corrija (la razon dice exactamente que hacer).
+    """
+    if not _quarantine_surface_enabled():
+        return jsonify({"ok": False, "error": "quarantine_surface_disabled"}), 404
+
+    body = request.get_json(silent=True) or {}
+    try:
+        pt_file = _assert_under_outputs(str(body.get("path") or ""))
+    except _PathOutsideOutputs as exc:
+        return jsonify({"ok": False, "error": "path_outside_outputs", "detail": str(exc)}), 400
+
+    from services.output_watcher import clear_quarantine
+
+    estaba = bool(clear_quarantine(pt_file))
+    logger.info("intake-quarantine: reintento pedido por el operador para %s (estaba=%s)",
+                pt_file, estaba)
+    return jsonify({"ok": True, "path": str(pt_file), "was_quarantined": estaba})
+
+
+@bp.post("/intake-quarantine/discard")
+def intake_quarantine_discard():
+    """Plan 256 F4 — marca un artefacto como descartado por el operador.
+
+    NO borra ni modifica el artefacto: el trabajo del agente queda intacto en
+    disco y el marcador va al sidecar `<artefacto>.quarantine.json`. Aun asi
+    exige confirmacion explicita, porque el marcador no se revierte desde la UI.
+
+    Interlock de dos pasos (reusa `services/confirm_token.py` del plan 253, no
+    se reimplementa): sin identificador valido responde 409 y devuelve uno nuevo
+    para que la UI pueda mostrar el aviso y confirmar. NO ES SEGURIDAD — Stacky
+    es mono-operador sin login; es un anti-clic-accidental.
+    """
+    if not getattr(_config.config, "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED", False):
+        return jsonify({"ok": False, "error": "discard_disabled"}), 404
+
+    body = request.get_json(silent=True) or {}
+    try:
+        pt_file = _assert_under_outputs(str(body.get("path") or ""))
+    except _PathOutsideOutputs as exc:
+        return jsonify({"ok": False, "error": "path_outside_outputs", "detail": str(exc)}), 400
+
+    from services.confirm_token import ConfirmTokenError, consume_token, issue_token
+
+    token = str(body.get("confirm_token") or "")
+    try:
+        payload = consume_token(_DISCARD_ACTION, token)
+    except ConfirmTokenError as exc:
+        return jsonify({
+            "ok": False,
+            "error": "confirmation_required",
+            "detail": str(exc),
+            "confirm_token": issue_token(_DISCARD_ACTION, {"path": str(pt_file)}),
+            "confirm_ttl_s": 120,
+            "message": (
+                "El artefacto queda intacto en disco. Solo se marca como descartado "
+                "y el vigilante deja de reintentarlo."
+            ),
+        }), 409
+
+    if str(payload.get("path") or "") != str(pt_file):
+        return jsonify({
+            "ok": False,
+            "error": "confirmation_stale",
+            "detail": "la confirmacion era para otro artefacto",
+        }), 409
+
+    from services.output_watcher import quarantine_discard
+
+    operador = (request.headers.get("X-Current-User") or "operador").strip() or "operador"
+    resultado = quarantine_discard(pt_file, operator=operador)
+    if not resultado.get("ok"):
+        return jsonify(resultado), 409
+    return jsonify(resultado)
 
 
 @bp.get("/metrics")

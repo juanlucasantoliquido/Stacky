@@ -296,6 +296,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED",
         "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED",
         "STACKY_CLI_STREAM_DRAIN_TIMEOUT_S",
+        # Plan 256 — cuarentena de intake persistente, copia del original y
+        # descarte HITL (la superficie ya vivia aca desde el plan 149).
+        "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED",
+        "STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED",
+        "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED",
     ),
     "observabilidad_notif": (
         "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
@@ -986,6 +991,52 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=True,
         default=True,
+    ),
+    # ── Plan 256 — Intake sin pérdida: ningún artefacto rechazado sin razón ───
+    FlagSpec(
+        key="STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED",
+        type="bool",
+        label="Cuarentena de intake persistente en disco",
+        description=(
+            "Plan 256 — Si ON, cada artefacto en cuarentena deja un sidecar "
+            "<artefacto>.quarantine.json con la causa y la antigüedad, y la cuarentena "
+            "sobrevive al reinicio del backend. Nunca modifica el artefacto. "
+            "OFF = solo en memoria (comportamiento legacy)."
+        ),
+        group="global",
+        env_only=False,   # SÍ es atributo de Config (ver plan 256 C16)
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED",
+        type="bool",
+        label="Copia del original antes de reparar un artefacto",
+        description=(
+            "Plan 256 — Si ON, la reparación automática del intake guarda "
+            "<artefacto>.orig con el contenido crudo del agente ANTES de reescribir "
+            "el archivo in place, y ABORTA la reparación si no puede escribir la "
+            "copia. OFF = camino actual exacto (reescribe sin respaldo)."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED",
+        type="bool",
+        label="Descartar artefactos en cuarentena desde la UI",
+        description=(
+            "Plan 256 — Si ON, el operador puede marcar un artefacto en cuarentena "
+            "como descartado (con confirmación explícita). NUNCA borra ni modifica "
+            "el artefacto: el marcador va al sidecar. Default OFF por excepción "
+            "dura: el descarte no se revierte desde la UI."
+        ),
+        group="global",
+        env_only=False,
+        # SIN `default=`: una flag que nace APAGADA no lo declara. `declared_default`
+        # cae al type-zero (False) igual, pero `default_is_known` queda en False y
+        # asi no entra en el set curado de defaults-ON (si no, el centinela
+        # test_default_known_only_for_curated se pone rojo).
     ),
     # ── V1.2 — Smart dispatch v1 (advisor) ─────────────────────────────────────
     FlagSpec(

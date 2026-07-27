@@ -1030,6 +1030,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: los archivos entregados se suben al tablero tal cual, sin esa revisión adicional.",
         example="Como un control de calidad antes de despachar un paquete, corrigiendo la etiqueta si viene mal.",
     ),
+    # ── Plan 256 — que ningún archivo entregado quede apartado en silencio ──
+    "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED": PlainHelp(
+        what="Hace que Stacky recuerde, aun después de reiniciarse, qué archivos entregados quedaron apartados por venir mal y desde cuándo.",
+        on_effect="Si la activás: al lado de cada archivo apartado queda una ficha con el motivo y la fecha, así seguís viendo lo trabado aunque el sistema se reinicie.",
+        off_effect="Si la apagás: la lista de archivos apartados se borra en cada reinicio y solo te enterás mirando el registro de actividad.",
+        example="Como una etiqueta pegada a la caja devuelta en el depósito: aunque cierres y abras el local, la etiqueta sigue ahí diciendo por qué volvió.",
+    ),
+    "STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED": PlainHelp(
+        what="Guarda una copia intacta del archivo que dejó el agente antes de que el sistema lo corrija automáticamente.",
+        on_effect="Si la activás: siempre queda el archivo tal cual lo escribió el agente, y si esa copia no se puede guardar el sistema prefiere no corregir nada antes que arruinarlo.",
+        off_effect="Si la apagás: la corrección automática reescribe el archivo del agente sin dejar copia y el contenido original se pierde.",
+        example="Como sacarle una foto al documento antes de pasarle el corrector: si la corrección sale mal, todavía tenés el original.",
+    ),
+    "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED": PlainHelp(
+        what="Habilita un botón para dar por descartado un archivo apartado que ya no querés que el sistema siga reintentando.",
+        on_effect="Si la activás: podés marcar un archivo apartado como descartado, con un aviso de confirmación; el archivo no se borra, queda intacto en el disco.",
+        off_effect="Si la apagás: los archivos apartados solo se pueden reintentar, nunca marcar como descartados, y siguen apareciendo en la lista.",
+        example="Como archivar un correo molesto en vez de borrarlo: deja de aparecer en la bandeja, pero el mensaje sigue guardado.",
+    ),
     "STACKY_ARTIFACT_RESCUE_ENABLED": PlainHelp(
         what="Si el agente termina contando lo que hizo en vez de entregar el resultado esperado, el sistema rescata el archivo que ya guardó y lo publica.",
         on_effect="Si la activás: se rescata y publica el archivo real que el agente ya había guardado, aunque no lo haya entregado como se esperaba.",

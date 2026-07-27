@@ -17,6 +17,7 @@ import CodeIntegrityCard from "../components/CodeIntegrityCard";
 import RunReconciliationCard from "../components/RunReconciliationCard";
 import SilentFailuresCard from "../components/SilentFailuresCard";
 import DormantCanariesCard from "../components/DormantCanariesCard";
+import IntakeQuarantineCard from "../components/IntakeQuarantineCard";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
@@ -298,6 +299,11 @@ export default function DiagnosticsPage() {
           AVISA, nunca arregla. No se monta si STACKY_DORMANT_CANARY_ENABLED
           está apagada (404). */}
       <DormantCanariesCard />
+
+      {/* Plan 256 F3 — artefactos entregados por un agente que quedaron apartados
+          por el intake, con el motivo COMPLETO y hace cuántos días. No se monta si
+          no hay ninguno o si STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED está apagada. */}
+      <IntakeQuarantineCard />
 
       {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
           maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}

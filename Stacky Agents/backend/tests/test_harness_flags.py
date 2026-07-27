@@ -743,6 +743,12 @@ _CURATED_DEFAULTS_ON = {
     # Plan 149 F4 — Superficie de cuarentena de intake en Desatascador: kill-switch
     # default ON (OFF revierte a json.loads plano, legacy byte-idéntico).
     "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",
+    # Plan 256 F1/F2 — cuarentena persistente en disco y copia .orig antes de la
+    # reparación automática: ninguna de las dos es destructiva ni bypasea revisión
+    # humana, y OFF revierte al camino actual. El descarte (F4) NO va acá: nace
+    # OFF por excepción dura (acción irreversible desde la UI).
+    "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED",
+    "STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED",
     # ── Activación operador 2026-07-12 — Plan 127: reuso IA local ON por default
     # (directiva explícita "HACELO DEFAULT ON"; HITL on-demand, cero costo pasivo) ──
     "STACKY_EXEC_ERROR_ANALYSIS_ENABLED",

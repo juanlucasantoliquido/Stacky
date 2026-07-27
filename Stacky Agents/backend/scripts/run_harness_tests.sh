@@ -856,6 +856,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan255_silent_failures.py
   tests/test_plan255_silence_ratchet.py
   tests/test_plan255_dormant_canary.py
+
+  # Plan 256 - intake sin perdida (razon, cuarentena persistente, retry/discard, flags)
+  tests/test_plan256_intake_razon.py
+  tests/test_plan256_quarantine_api.py
+  tests/test_plan256_flags.py
 )
 
 pass=0

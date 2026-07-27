@@ -1,11 +1,44 @@
 # Plan 267 — Catálogo único de acciones DevOps: una sola declaración, tres superficies, un solo contrato de confirmación
 
-**Estado:** PROPUESTO v1 (2026-07-27) · **Autor:** pipeline proponer-plan-stacky · **Juez:** pendiente (criticar-y-mejorar-plan)
+**Estado:** **CRITICADO v1 → v2** (2026-07-27) · **Autor:** pipeline proponer-plan-stacky · **Juez:** criticar-y-mejorar-plan (Opus 5) · **Veredicto v1: RECHAZADO** (5 bloqueantes)
 
 > **Nota de numeración.** Este plan nació como **266** y se renumeró a **267**: mientras se escribía, una
 > sesión paralela commiteó `9281ca75 docs(plan-266): cero pantalla rota en el comparador de BD`, que tomó
 > el 266 primero. Ese plan toca `frontend/src/components/dbcompare/` y `radarLogic.ts`; **no hay
 > superposición de archivos con este**. Los números **261 y 262** siguen libres (huecos preexistentes).
+> *Verificado en la crítica v2:* no quedó **ninguna** referencia interna stale al número viejo — ni flags,
+> ni archivos, ni tests, ni fases. Las únicas apariciones son las de esta misma nota.
+
+### CHANGELOG v1 → v2
+
+Los anclajes `archivo:línea` del v1 se verificaron **uno por uno abriendo los archivos reales**. El
+resultado fue inusualmente bueno (los 17 ids de secciones, los 21 `health_key`, las 16 flags citadas,
+los 3 conteos de tests y los 4 rojos ajenos son **exactos**), pero aparecieron 5 bloqueantes:
+
+| # | Severidad | Qué estaba mal | Dónde se corrigió |
+|---|-----------|----------------|-------------------|
+| **C1** | BLOQUEANTE | `HARNESS_TEST_FILES` **no existe** en `run_harness_tests.ps1`: ahí es `$HarnessTestFiles = @(` en **`:13`** (no `:15`) y las entradas van **entrecomilladas y con coma**, no desnudas. Además `test_harness_ratchet_meta.py` parsea **solo el `.sh`** | §4.2, F0, F1, F2, F8, §10 |
+| **C2** | BLOQUEANTE | El test 4 de F2 salía **rojo el día 1** contra el propio algoritmo del plan: `"Quiero DISPARAR la píplain"` da **0.667 ≥ `MIN_SCORE`** porque `_phrase_score` cuenta `la` como token de contenido | F2 (stopwords + caso reescrito) |
+| **C3** | BLOQUEANTE | Los tests 3/5/6 de F2 afirman **quién gana** el ranking, pero el v1 declaraba `phrases` literales para **4 de 23** acciones. El criterio no era determinable | F0 (las 23 listas declaradas) |
+| **C4** | BLOQUEANTE | Contradicción triple: §4.7 decía "el mismo texto de confirmación", F7 decía "el texto de la confirmación **cambia**", y la DoD tenía un checkbox binario **falso por construcción** | §4.7, F7, §11 |
+| **C5** | BLOQUEANTE | F5 ponía las **7 acciones de escritura de alto impacto** a dos teclas de la paleta global, sin el doble cerrojo que el propio plan elogia (`entityActions.ts:44-46`), y sin flag que lo gatee | §4.10 + campo `reach` (F0), F5, F8 |
+| C6 | IMPORTANTE | El catálogo ignoraba el master `STACKY_DEVOPS_PANEL_ENABLED` | F0 `visible_actions` |
+| C7 | IMPORTANTE | `replace(...)` usado sin importar en `/propose` ⇒ `NameError`, y sin test que cubriera el camino `ambiguous` | F3 |
+| C8 | IMPORTANTE | 3 KPIs se medían con un comando que **no los mide** | §2 |
+| C9 | IMPORTANTE | KPI-1 exigía `section_id`+`flag_key` en **todas**, contra su propia semilla y el test 5 de F0 | §2 |
+| C10 | IMPORTANTE | `PLAIN_HELP` literal para 1 de 3 flags, sobre un archivo **que ya está rojo** (medido: 4 failed / 4 passed) | F3, F6, §4.1 |
+| C11 | IMPORTANTE | `devopsPollingRatchet.test.ts` **no escanea** `CommandPalette.tsx` (solo `components/devops/`) y estaba declarado criterio de F5 | F5 |
+| C12 | IMPORTANTE | Los 2 `.tsx` nuevos de F6 no pueden tener **ni un** `style={{` (baseline por archivo = 0) y el plan no lo decía | F6 |
+| C13 | IMPORTANTE | F1 test 3 no decía **cómo** apagar "todas las flags DevOps" | F1 |
+| C20 | IMPORTANTE | F6 obligaba a prometerle al operador "te deja en la sección **con los datos ya cargados**" y no había mecanismo que lo cumpliera | F4 `navPathWithParams` |
+| C14..C19 | MENOR | Pata 7 contradictoria, 6 anclajes corridos, nombre de test más débil que su assert, imports muertos, huella de regresión, frontera del 264/265 | varios |
+
+**[ADICIÓN ARQUITECTO] — `reach`: el catálogo declara también *desde dónde puede dispararse* una acción.**
+El v1 unificaba *qué es* y *si escribe*, pero dejaba *desde qué superficie puede ejecutarse* implícito en
+el código de cada superficie — que es exactamente el agujero de C5. El v2 agrega un cuarto eje declarado y
+verificado por ratchet (§4.10, F0, F5, F8), más `navPathWithParams()` para que "Ver en el panel" cumpla su
+promesa (C20). Con eso, "una declaración, tres superficies" pasa a ser cierto también en la dimensión de
+seguridad, y no solo en la de nomenclatura.
 
 ---
 
@@ -17,16 +50,17 @@ Hoy el panel DevOps tiene 17 secciones y decenas de acciones, y **cada acción e
 
 | # | Métrica | Antes (medido) | Después (binario) | Comando que lo mide |
 |---|---------|----------------|-------------------|---------------------|
-| KPI-1 | Acciones del panel DevOps declaradas en un catálogo | **0** (no existe el archivo) | **≥ 23**, todas con `effect`+`impact`+`section_id`+`flag_key` | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v` |
-| KPI-2 | Comandos de la paleta que **ejecutan** una acción del panel | **0** — `NAV_COMMANDS` (`frontend/src/components/commandPaletteData.ts:59-76`) tiene 14 entradas y las 14 son navegación | **≥ 12** entradas `kind:"devops-action"` | `npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts` |
-| KPI-3 | Entidades cubiertas por el registro de acciones | **2** — `EntityKind = Extract<CommandKind,"execution"\|"ticket">` (`frontend/src/services/entityActions.ts:15`) | **3** (se suma `devops-action` como tercer vocabulario, sin tocar los 2 existentes) | `npx vitest run src/services/entityActions.test.ts src/services/devopsActionRunner.test.ts` |
+| KPI-1 | Acciones del panel DevOps declaradas en un catálogo | **0** (no existe el archivo) | **≥ 23**, todas con `effect`, `impact`, `reach` y `phrases`; `section_id` ∈ (ids reales ∪ `None`); `flag_key` **no vacío para toda `write`** [C9] | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v` |
+| KPI-2 | Comandos de la paleta que **ejecutan** una acción del panel | **0** — `NAV_COMMANDS` (`frontend/src/components/commandPaletteData.ts:59-76`) tiene 14 entradas y las 14 son navegación | **≥ 12** entradas `kind:"devops-action"`, **todas de `effect:"read"`** (las `write` entran como navegación, §4.10) | `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts` — caso `test_paleta_ofrece_al_menos_12_lecturas`, que cuenta sobre el **catálogo real**, no sobre entrada sintética [C8] |
+| KPI-3 | Entidades cubiertas por el registro de acciones | **2** — `EntityKind = Extract<CommandKind,"execution"\|"ticket">` (`frontend/src/services/entityActions.ts:15`) | **3** (se suma `devops-action` como tercer vocabulario, sin tocar los 2 existentes) | dos corridas **separadas** (regla §4.2, un archivo por invocación): `npx vitest run src/services/entityActions.test.ts` y `npx vitest run src/services/devopsActionRunner.test.ts` [C8] |
 | KPI-4 | Respuestas del agente DevOps que son una acción tipada | **0** — `api/devops_agent.py` lanza un turno de CLI y devuelve prosa (`backend/api/devops_agent.py:136-140`) | **100 %** de las frases que superan el umbral del matcher devuelven `ActionProposal` con `action_id` | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v` |
 | KPI-5 | Runtimes soportados por el camino "lenguaje natural → acción" | **2 de 3** — `_CLI_RUNTIMES = ("claude_code_cli","codex_cli")` (`backend/api/devops_agent.py:14`) y Copilot recibe **400** `devops_chat_requires_cli_runtime` (`backend/api/devops_agent.py:69-78`) | **3 de 3**: el matcher determinista no usa modelo, así que Copilot obtiene propuesta y vista previa completas | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -k copilot -v` |
-| KPI-6 | Confirmaciones de acciones DevOps construidas a mano fuera de `confirmGateway` | **≥ 6 archivos** (`BuildWorkshopSection.tsx`, `PipelineBuilderSection.tsx`, `ProductionFlow.tsx`, `RemoteConsoleSection.tsx`, `ServersSection.tsx`, `SolutionPublisherSection.tsx`) | **0 nuevas**: el ratchet prohíbe que aparezca una acción con efecto que no derive su `ConfirmRequest` del catálogo | `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts` |
+| KPI-6 | Confirmaciones de acciones DevOps construidas a mano fuera de `confirmGateway` | **16 construcciones en 6 archivos** — medido con `grep -c 'askConfirm({'`: `ServersSection` 2, `BuildWorkshopSection` 2, `PipelineBuilderSection` 4, `ProductionFlow` 2, `RemoteConsoleSection` 1, `SolutionPublisherSection` 5 | **0 en esos 6 archivos**: todas derivan su `ConfirmRequest` del catálogo | `npx vitest run src/__tests__/plan267Adoption.test.ts` — es **este** el test que mira `askConfirm({`, no el ratchet de catálogo [C8] |
 | KPI-7 | Deriva backend↔frontend de acciones | **N/A** (no hay contrato que derive) | **0**: igualdad exacta de conjuntos entre ids del catálogo y claves de `DEVOPS_ACTION_BINDINGS` | `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts` |
 | KPI-8 | Acciones con `effect:"write"` sin declarar impacto ni entorno | **N/A** | **0**: `targets_environment=True` ⇒ param `environment` obligatorio; `effect="write"` ⇒ `impact != "none"` | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v` |
+| **KPI-9** *(v2, C5)* | Acciones de escritura **ejecutables desde la paleta global** | **N/A** (hoy la paleta no ejecuta nada) | **0**: `effect=="write"` ⇒ `"palette-run" not in reach`. Una acción de alto impacto nunca queda a un fuzzy-match + Enter de distancia | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v` (caso `test_write_no_es_ejecutable_desde_la_paleta`) |
 
-Cómo se obtuvo cada "Antes": KPI-1 por ausencia del archivo (`backend/services/devops_action_catalog.py` no existe); KPI-2 contando las entradas del array literal en `commandPaletteData.ts:59-76` (el comentario de `:58` dice "13 tabs" — quedó desactualizado, hay 14); KPI-3 leyendo `entityActions.ts:15`; KPI-4 y KPI-5 leyendo `api/devops_agent.py`; KPI-6 por censo de `askConfirm`/modales propios en `frontend/src/components/devops/`.
+Cómo se obtuvo cada "Antes": KPI-1 por ausencia del archivo (`backend/services/devops_action_catalog.py` no existe); KPI-2 contando las entradas del array literal en `commandPaletteData.ts:59-76` (el comentario de `:58` dice "13 tabs" — quedó desactualizado, hay 14); KPI-3 leyendo `entityActions.ts:15`; KPI-4 y KPI-5 leyendo `api/devops_agent.py`; KPI-6 por `grep -c "askConfirm({"` sobre los 6 archivos de `frontend/src/components/devops/` (los 6 conteos están arriba, medidos el 2026-07-27).
 
 ---
 
@@ -61,7 +95,7 @@ El 239 unificó *dónde está cada cosa*. No unificó *qué se puede hacer y có
 
 4. **`backend/api/devops_agent.py` (364 líneas, plan 90)** es un chat de texto libre: `POST /devops/agent/conversations` con `project`/`message`/`runtime`/`model`/`server_alias`. No conoce ningún catálogo, no propone una acción tipada, no tiene contrato preview→confirmación→resultado. Además **rechaza Copilot con 400** (`:69-78`) y duplica el literal de efforts en `:15` (`_EFFORTS`), cuando el 264 congela ese eje en `services/model_catalog.py` + `services/llm_router.py`.
 
-Y ya existe el molde exacto para el "esto entendí y así lo haría": **`backend/services/intent_preflight.py` (plan 41)** con `IntentBrief{objective,deliverables,assumptions,open_questions,areas,confidence,version}` (`:39-47`), `IntentAssumption{text,impact,needs_confirmation,basis}` (`:29-37`), `PreflightRuntimeUnavailable` (`:25-26`) y un parser tolerante `from_model_json` (`:81`). **No se inventa un contrato nuevo: se calca ese.**
+Y ya existe el molde exacto para el "esto entendí y así lo haría": **`backend/services/intent_preflight.py` (plan 41)** con `IntentBrief{objective,deliverables,assumptions,open_questions,areas,confidence,version}` (**`:38-46`** — el v1 citaba `:39-47`, corrido en 1 [C15]), `IntentAssumption{text,impact,needs_confirmation,basis}` (**`:29-35`**), `PreflightRuntimeUnavailable` (`:25-26`, exacto) y un parser tolerante `from_model_json` (`:81`, exacto). **No se inventa un contrato nuevo: se calca ese.**
 
 ### 3.3 Lo que pidió el operador, mapeado
 
@@ -88,9 +122,39 @@ Y ya existe el molde exacto para el "esto entendí y así lo haría": **`backend
 4. **Regla de default de flags.** Toda flag nueva nace **ON**. Solo nace OFF si cae en **(A)** quema tokens en reposo o **(B)** escribe en un sistema real / le saca la decisión al operador. Leer, calcular, mostrar, diffear, auditar y avisar son **siempre ON**. Cuando una capacidad mezcla lo inocuo con lo que escribe, se **parte en dos flags** (precedente: `STACKY_PIPELINE_NL_EDIT_ENABLED` ON en `harness_flags.py:3149-3165` vs `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` OFF en `:3166-3187`).
 5. **Paridad de 3 runtimes por construcción.** El matcher de intención es **determinista y sin modelo**. Codex CLI, Claude Code CLI y GitHub Copilot Pro obtienen el mismo catálogo, la misma propuesta y la misma vista previa. El enriquecimiento por LLM es un extra opcional que, si falla o no está disponible, **degrada al resultado determinista** — nunca a un error.
 6. **Mono-operador.** Sin RBAC, sin roles, sin multiusuario. `current_user` sigue siendo el header sin validar de `api/_helpers.py`.
-7. **Backward-compatible.** Con las tres flags apagadas, el panel DevOps queda **byte-idéntico** al de hoy. Ningún archivo existente cambia de comportamiento por default salvo el recableado de botones de F7, que preserva exactamente el mismo efecto y el mismo texto de confirmación.
+7. **Backward-compatible, con una excepción declarada [C4].** Con las tres flags apagadas: los mismos botones, en los mismos lugares, con el **mismo efecto** y la **misma severidad** (una confirmación que hoy es `tone:'danger'` sigue siendo `'danger'`). **Lo único que cambia es el TEXTO de la confirmación**, que a partir de F7 lo genera `confirmRequestFor()` desde el catálogo en vez de estar escrito a mano en cada sección — que es justamente el punto del plan. El v1 afirmaba a la vez "byte-idéntico" y "el texto cambia": no pueden ser ciertas las dos, y esta es la que vale. Ninguna otra ruta de código existente cambia de comportamiento por default.
 8. **Reuso obligatorio.** `confirmGateway`, `entityActions` (patrón), `IntentBrief` (molde), `fuzzyScore` (paleta), `ModelEffortPicker` + `llm_router.clamp_model`/`clamp_effort_for_model` (264), flags del arnés, `devops_overview`. **Prohibido** crear un segundo mecanismo de confirmación, un segundo enum de efforts o un segundo catálogo de modelos.
-9. **Nada de sondeo.** Ninguna fase introduce `setInterval`, `setTimeout` recurrente ni `refetchInterval`. `frontend/src/__tests__/devopsPollingRatchet.test.ts` (plan 239 F6) ya lo vigila y debe seguir verde.
+9. **Nada de sondeo.** Ninguna fase introduce `setInterval`, `setTimeout` recurrente ni `refetchInterval`. `frontend/src/__tests__/devopsPollingRatchet.test.ts` (plan 239 F6) ya lo vigila y debe seguir verde — **pero solo escanea `frontend/src/components/devops/`** (`DEVOPS_DIR = path.resolve(__dirname, '../components/devops')`, `:21`). Para `CommandPalette.tsx`, que vive en `components/` y **no** está en ese alcance, F5 trae su propio grep-gate [C11].
+
+### 4.10 Alcance de disparo (`reach`) — el doble cerrojo, elevado a dato [ADICIÓN ARQUITECTO, C5]
+
+El v1 declaraba *qué es* una acción y *si escribe*, pero dejaba **desde qué superficie puede ejecutarse**
+implícito en el código de cada superficie. Eso abría un agujero concreto: hoy, disparar
+`devops.deployment.execute` exige navegar a `/devops/despliegues`; con la paleta ejecutando acciones
+bastaría abrirla, teclear `desp` (`fuzzyScore` matchea por **subsecuencia**, `commandPaletteData.ts:31-49`)
+y apretar Enter. `entityActions.ts:44-46` ya resolvió este problema para 2 entidades con un **doble
+cerrojo** (`a.quick && a.effect === "safe"`) y el §3.2 lo cita como el patrón correcto — el v1 lo elogiaba
+y no lo aplicaba.
+
+**Regla dura.** Cada acción declara `reach: tuple[str, ...]`, subconjunto no vacío de
+`REACHES = ("button", "palette-run", "palette-nav", "assistant")`:
+
+| valor | significa |
+|---|---|
+| `button` | el botón manual de su sección puede ejecutarla (**todas** lo llevan) |
+| `palette-run` | la paleta global puede **ejecutarla** |
+| `palette-nav` | la paleta global la **ofrece**, pero seleccionarla **navega** a su sección con los parámetros precargados; no ejecuta nada |
+| `assistant` | el asistente puede proponerla (y ejecutarla si la flag 3 está ON) |
+
+**Invariante I-REACH, verificada por ratchet (F8):** `effect == "write"` ⇒ `"palette-run" not in reach`.
+Sin excepciones y sin allowlist: si mañana alguien quiere una escritura en la paleta, tiene que borrar el
+test, y borrar un test es una decisión visible. Las 7 acciones de escritura llevan
+`reach=("button","palette-nav","assistant")`; las 16 de lectura llevan
+`reach=("button","palette-run","assistant")`.
+
+Esto **no le saca nada al operador**: la acción de escritura sigue apareciendo en la paleta (la encuentra
+buscando), y elegirla lo deja en la pantalla correcta con los datos cargados, a un click del botón de
+siempre. Es la misma filosofía de `denyByDefault`: el camino peligroso existe, pero nunca es el accidental.
 
 ### 4.1 Receta obligatoria de cableado de flags (7 patas)
 
@@ -104,21 +168,57 @@ Cada flag nueva de este plan toca **hasta 7 lugares**. Saltear uno deja un test 
 | 4 | `backend/services/harness_flags_help.py` — `PLAIN_HELP` (dict en `:25`, dataclass en `:17-23`) | siempre |
 | 5 | `backend/tests/test_harness_flags.py:467` — `_CURATED_DEFAULTS_ON` | **solo si la `FlagSpec` declara `default=True`** |
 | 6 | `backend/tests/test_harness_flags_requires.py:120` — `_REQUIRES_MAP_FROZEN` | **solo si la `FlagSpec` declara `requires=`** |
-| 7 | `backend/api/devops.py::_health_payload()` (`:28-108`) + `DevOpsPage.tsx` `DEVOPS_SECTIONS` | solo si gatea una sección de UI |
+| 7 | `backend/api/devops.py::_health_payload()` (`:28-108`, verificado: `def` en `:28`, `}` de cierre en `:108`) | **siempre que la UI necesite saber si la flag está ON** — no solo cuando gatea una sección. Las 3 flags de este plan van al `_health_payload()` (F1) aunque **ninguna** gatee una sección; lo que es condicional es tocar `DEVOPS_SECTIONS` en `DevOpsPage.tsx`, y este plan **no lo toca** [C14] |
 
 **REGLA DURA:** una flag **default OFF NO debe declarar `default=False`** en la `FlagSpec`. Declarar cualquier default la vuelve `default_is_known` y `test_default_known_only_for_curated` exige que ese conjunto sea EXACTAMENTE `_CURATED_DEFAULTS_ON`, donde una flag OFF no puede entrar. El OFF vive **solo** en `config.py`. Precedente literal: `harness_flags.py:3169-3173`.
 
 **REGLA DURA (R4):** `validate_requires_graph` (`harness_flags.py:5545-5569`) prohíbe cadenas: si `A.requires = B`, entonces `B.requires` debe ser `None`. Por eso las tres flags de este plan forman una **estrella**, no una cadena (ver §5.0.4).
 
-**PLAIN_HELP:** los 4 campos tienen límites (`what` ≤200, `on_effect` ≤240, `off_effect` ≤240, `example` ≤300); `on_effect`/`off_effect` empiezan con `"Si "`; está prohibida la denylist congelada de jerga de `backend/tests/test_harness_flags_help.py:17-20` (`MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime`), las keys `SCREAMING_SNAKE` y las referencias `F1`/`F2`.
+**PLAIN_HELP:** los 4 campos tienen límites (`what` ≤200, `on_effect` ≤240, `off_effect` ≤240, `example` ≤300, declarados en `harness_flags_help.py:19-22`); `on_effect`/`off_effect` empiezan con `"Si "`; está prohibida la denylist congelada de jerga de `backend/tests/test_harness_flags_help.py:17-20` — **15 palabras, match por palabra completa e insensible a mayúsculas**: `MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime` — las keys `SCREAMING_SNAKE` (`_KEY_RE = \b[A-Z]+_[A-Z0-9_]+\b`) y las referencias a fases (`_PHASE_RE = \bF\d`).
+
+**REGLA DURA [C10] — `test_harness_flags_help.py` NO sirve como criterio de aceptación de este plan.**
+Medido el 2026-07-27 con `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_help.py -q`:
+**4 failed, 4 passed**, y los 4 rojos son **exactamente las 4 reglas que las entradas nuevas deben cumplir**
+(`test_plain_help_covers_all_registry_keys`, `test_plain_help_fields_non_empty_and_bounded`,
+`test_plain_help_on_off_start_with_si`, `test_plain_help_avoids_jargon_denylist`). Es decir: el archivo
+está rojo por deuda ajena y **un modelo menor no puede distinguir su propio error del rojo preexistente**.
+Por eso este plan escribe el texto LITERAL de las 3 entradas (F0, F3 y F6 — ninguna queda "a criterio") y
+la verificación de las claves propias se hace con este comando, que **no depende** del archivo rojo:
+
+```
+backend\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'backend'); import re; from services.harness_flags_help import PLAIN_HELP; D=('MCP','TF-IDF','LLM','stdin','stdout','endpoint','frontmatter','prompt','token','regex','backend','frontend','gate','hook','runtime'); L={'what':200,'on_effect':240,'off_effect':240,'example':300}; K=['STACKY_DEVOPS_ACTION_CATALOG_ENABLED','STACKY_DEVOPS_ACTION_NL_ENABLED','STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED']; e=[]
+for k in K:
+    h=PLAIN_HELP.get(k)
+    if h is None: e.append(k+': FALTA'); continue
+    for f,m in L.items():
+        v=getattr(h,f)
+        if not v or len(v)>m: e.append(f'{k}.{f}: largo {len(v)} > {m} o vacio')
+    for f in ('on_effect','off_effect'):
+        if not getattr(h,f).startswith('Si '): e.append(f'{k}.{f}: no empieza con Si ')
+    t=' '.join([h.what,h.on_effect,h.off_effect,h.example])
+    for w in D:
+        if re.search(r'\b'+re.escape(w)+r'\b',t,re.I): e.append(f'{k}: jerga prohibida {w!r}')
+    if re.search(r'\b[A-Z]+_[A-Z0-9_]+\b',t): e.append(k+': cita una clave en mayusculas')
+    if re.search(r'\bF\d',t): e.append(k+': cita una fase')
+print('OK' if not e else '\n'.join(e)); sys.exit(1 if e else 0)"
+```
+**Aceptación binaria:** imprime `OK` y sale con código 0.
 
 ### 4.2 Reglas de test (no negociables)
 
 - **Correr SIEMPRE por archivo, nunca la suite completa** (contaminación cross-file conocida en backend y en vitest).
 - Backend: `backend\.venv\Scripts\python.exe -m pytest backend/tests/<archivo>.py -v` desde la raíz `Stacky Agents`.
 - Frontend: `npx vitest run src/<ruta>.test.ts` **desde `frontend/`**.
-- **Todo `backend/tests/test_*.py` nuevo debe registrarse en `HARNESS_TEST_FILES` — en los DOS runners**: `backend/scripts/run_harness_tests.sh:20` y `backend/scripts/run_harness_tests.ps1:15`. Si no, `backend/tests/test_harness_ratchet_meta.py` sale rojo (`:19`, `:49`).
-- `backend/tests/test_harness_flags_help.py` arrastra **4 fallos ajenos preexistentes**: verificar que la key propia no esté entre las ofensoras y seguir.
+- **REGLA DURA [C1] — los dos runners NO se escriben igual.** El v1 decía "`HARNESS_TEST_FILES` en los DOS runners, `.sh:20` y `.ps1:15`". **Eso es falso y un modelo menor lo implementa mal.** Verificado abriendo los dos archivos:
+
+  | runner | símbolo REAL | línea REAL | sintaxis de una entrada |
+  |---|---|---|---|
+  | `backend/scripts/run_harness_tests.sh` | `HARNESS_TEST_FILES=(` | **`:20`** | `  tests/test_devops_action_catalog.py` — **desnuda**, sin comillas y sin coma |
+  | `backend/scripts/run_harness_tests.ps1` | `$HarnessTestFiles = @(` | **`:13`** (no `:15`) | `  "tests/test_devops_action_catalog.py",` — **entrecomillada y con coma** |
+
+  Copiar la línea de un runner al otro rompe: en PowerShell una entrada desnuda es un error de parseo, y en el `.sh` una entrada entrecomillada **deja de matchear** el ratchet.
+- **El meta-test parsea SOLO el `.sh`.** `backend/tests/test_harness_ratchet_meta.py:13` fija `_SCRIPT = _BACKEND / "scripts" / "run_harness_tests.sh"` y `:18-21` lo parsea con `re.findall(r"^\s*(tests/[\w/]+\.py)\s*$", ...)` — línea entera, sin comillas ni coma. Consecuencia práctica: **olvidar el `.sh` pone rojo el meta-test; olvidar el `.ps1` NO lo pone rojo**, y deja el arnés de Windows corriendo menos tests que el de bash sin que nadie se entere. Los dos son obligatorios, por motivos distintos.
+- `backend/tests/test_harness_flags_help.py` arrastra **4 fallos ajenos preexistentes** (medido 2026-07-27: 4 failed / 4 passed): **no es criterio de aceptación de ninguna fase**; usar el verificador de 3 claves de §4.1.
 - **Prohibido el falso verde:** cada fase declara su criterio binario y el comando exacto que lo produce. El output se lee, no se asume.
 
 ---
@@ -160,6 +260,15 @@ CATALOG_VERSION = "1"
 EFFECTS = ("read", "write")
 IMPACTS = ("none", "low", "high")
 PARAM_TYPES = ("string", "int", "bool", "enum")
+# v2 [C5] — desde donde puede DISPARARSE una accion (ver §4.10). Invariante
+# I-REACH, verificada por el ratchet de F8: effect == "write" => "palette-run"
+# NO puede estar en reach. El doble cerrojo de entityActions.ts:44-46, elevado
+# a dato y cubriendo las TRES superficies en vez de una.
+REACHES = ("button", "palette-run", "palette-nav", "assistant")
+
+# Master del panel DevOps (api/devops.py:39). Si esta en False, el panel no
+# existe para el operador y ninguna accion de seccion es alcanzable [C6].
+MASTER_HEALTH_KEY = "flag_enabled"
 
 # Espejo CONGELADO de los ids de DEVOPS_SECTIONS (frontend/src/pages/DevOpsPage.tsx:145,
 # ids en :149..:320). El ratchet de F8 lo compara contra el archivo .tsx real: si el
@@ -194,6 +303,7 @@ class DevOpsAction:
     targets_environment: bool       # True si actua sobre un entorno concreto del operador
     health_key: str                 # key de api/devops.py::_health_payload(), "" = siempre visible
     flag_key: str                   # key de la FlagSpec que la gatea, "" = ninguna
+    reach: tuple[str, ...]          # v2 [C5] — subconjunto NO VACIO de REACHES, ver §4.10
     params: tuple[ActionParam, ...] = ()
     phrases: tuple[str, ...] = ()   # frases de intencion en español (matcher determinista)
 
@@ -204,11 +314,40 @@ def get_action(action_id: str) -> DevOpsAction | None:
 
 
 def visible_actions(health: dict | None) -> list[DevOpsAction]:
-    """Acciones cuyo health_key esta en True. health_key == "" => siempre visible.
-    health None o vacio => solo las de health_key vacio. NUNCA lanza."""
+    """Acciones alcanzables segun el health del panel. NUNCA lanza.
+
+    Reglas, en este orden:
+      1. health_key == ""  => SIEMPRE visible (no depende del panel: son las que
+         viven fuera de /devops, como /logs y /incidencias).
+      2. resto             => visible solo si el MASTER del panel esta ON
+         (health[MASTER_HEALTH_KEY] is True) Y su propio health_key esta ON.
+
+    La regla 2 es el fix de C6: sin ella, con STACKY_DEVOPS_PANEL_ENABLED apagado
+    el catalogo seguia ofreciendo ~21 acciones cuyo nav_path (/devops/<seccion>)
+    no lleva a ningun lado.
+    """
     h = health or {}
-    return [a for a in DEVOPS_ACTION_CATALOG
-            if not a.health_key or h.get(a.health_key) is True]
+    master_on = h.get(MASTER_HEALTH_KEY) is True
+    out = []
+    for a in DEVOPS_ACTION_CATALOG:
+        if not a.health_key:
+            out.append(a)
+        elif master_on and h.get(a.health_key) is True:
+            out.append(a)
+    return out
+
+
+def palette_actions(health: dict | None) -> list[DevOpsAction]:
+    """Lo que la paleta global puede OFRECER: reach contiene palette-run o
+    palette-nav. Quien decide si ejecuta o navega es el propio reach [C5]."""
+    return [a for a in visible_actions(health)
+            if "palette-run" in a.reach or "palette-nav" in a.reach]
+
+
+def assistant_actions(health: dict | None) -> list[DevOpsAction]:
+    """Lo que el matcher de F2 tiene permitido proponer. Es el UNICO universo que
+    recibe match_intent(): una accion sin 'assistant' en reach jamas se propone."""
+    return [a for a in visible_actions(health) if "assistant" in a.reach]
 
 
 def param_of(action: DevOpsAction, name: str) -> ActionParam | None:
@@ -225,6 +364,7 @@ def action_to_dict(a: DevOpsAction) -> dict:
         "effect": a.effect, "impact": a.impact,
         "targets_environment": a.targets_environment,
         "health_key": a.health_key, "flag_key": a.flag_key,
+        "reach": list(a.reach),
         "params": [
             {"name": p.name, "type": p.type, "label": p.label,
              "required": p.required, "enum_values": list(p.enum_values),
@@ -263,8 +403,8 @@ def catalog_payload(health: dict | None) -> dict:
 | 12 | `devops.pr.list` | `pr-review` | `/devops/pr-review` | read | none | false | `pr_reviewer_enabled` | — |
 | 13 | `devops.build.status` | `taller-compilacion` | `/devops/taller-compilacion` | read | none | false | `build_workshop_enabled` | — |
 | 14 | `devops.handoff.preview` | `paquete-entrega` | `/devops/paquete-entrega` | read | none | false | `handoff_bundle_enabled` | — |
-| 15 | `devops.logs.tail` | `None` | `/logs` | read | none | false | `""` | `lines` (int, default `"200"`) |
-| 16 | `devops.incidents.list` | `None` | `/incidencias` | read | none | false | `""` | — |
+| 15 | `devops.logs.tail` | `None` **(el valor Python `None`, no la cadena `"None"`)** | `/logs` | read | none | false | `""` **(cadena vacía)** | `lines` (int, default `"200"`) |
+| 16 | `devops.incidents.list` | `None` (valor Python) | `/incidencias` | read | none | false | `""` (cadena vacía) | — |
 | 17 | `devops.pipeline.trigger` | `pipelines` | `/devops/pipelines` | **write** | **high** | **true** | `trigger_enabled` | `ENV`, `pipeline_id` (string, required) |
 | 18 | `devops.deployment.execute` | `despliegues` | `/devops/despliegues` | **write** | **high** | **true** | `deployments_execute_enabled` | `ENV`, `deployment_id` (string, required) |
 | 19 | `devops.publication.run` | `publicaciones` | `/devops/publicaciones` | **write** | **high** | **true** | `one_click_publish_enabled` | `ENV`, `publication_id` (string, required) |
@@ -273,21 +413,54 @@ def catalog_payload(health: dict | None) -> dict:
 | 22 | `devops.pipeline_edit.commit` | `editar-pipeline` | `/devops/editar-pipeline` | **write** | **high** | false | `pipeline_nl_edit_commit_enabled` | `branch` (string, required) |
 | 23 | `devops.build.run` | `taller-compilacion` | `/devops/taller-compilacion` | **write** | **low** | false | `build_workshop_enabled` | `solution_path` (string, required) |
 
-Todas llevan `PRJ` como primer param. `flag_key` de cada una es la flag ya existente que produce ese `health_key` (por ejemplo `devops.pipeline.trigger` ⇒ `STACKY_PIPELINE_TRIGGER_ENABLED`, `devops.pipeline_edit.commit` ⇒ `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`); las dos de `health_key=""` llevan `flag_key=""`.
+Todas llevan `PRJ` como primer param.
 
-**`phrases`** — mínimo 3 por acción, en español rioplatense, en minúscula y sin acentos (el matcher normaliza igual, pero así el dato es legible). Ejemplos literales:
-- `devops.pipeline.trigger`: `("disparar la pipeline", "correr el pipeline", "ejecutar la pipeline", "lanzar el build de ci")`
-- `devops.logs.tail`: `("ver los logs", "revisar logs", "mostrame el log", "ultimas lineas del log")`
-- `devops.servers.doctor`: `("estado de los servidores", "chequear conexion", "diagnosticar el servidor", "esta caido el servidor")`
-- `devops.deployment.execute`: `("desplegar", "hacer el deploy", "publicar el despliegue", "subir a produccion")`
+**`reach` (v2, §4.10).** Las **16 de `effect:read`** (filas 1-16) llevan `reach=("button","palette-run","assistant")`. Las **7 de `effect:write`** (filas 17-23) llevan `reach=("button","palette-nav","assistant")` — la paleta las **ofrece** y **navega**, nunca las ejecuta (invariante I-REACH). Ninguna otra combinación está permitida en la semilla.
+
+**`flag_key`.** Es la flag YA EXISTENTE que produce ese `health_key`. **Verificado el 2026-07-27: las 21 `health_key` de esta tabla existen en `api/devops.py::_health_payload()` y las 16 flags correspondientes existen en `harness_flags.py` y en `config.py`** (no hay ninguna inventada). El mapeo es 1:1 con el `getattr` de `_health_payload()`; los pares no obvios son: `cockpit_enabled`⇒`STACKY_DEVOPS_COCKPIT_ENABLED` (`:74`), `trigger_enabled`⇒`STACKY_PIPELINE_TRIGGER_ENABLED` (`:41`), `deployments_execute_enabled`⇒`STACKY_DEPLOYMENTS_EXECUTE_ENABLED` (`:68`), `one_click_publish_enabled`⇒`STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED` (`:59`), `env_matrix_enabled`⇒`STACKY_PIPELINE_ENV_MATRIX_ENABLED` (`:102`), `handoff_bundle_enabled`⇒`STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED` (`:105`), `pipeline_nl_edit_commit_enabled`⇒`STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (`:99`). Las dos de `health_key=""` llevan `flag_key=""`.
+
+> **Deuda conocida, declarada y NO resuelta acá [C16]:** `devops.build.status` (read) y `devops.build.run` (write, `impact:low`) comparten `flag_key=STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED`. Eso viola el principio §4.4 ("partir la flag cuando mezcla lo inocuo con lo que escribe"), pero **la flag es preexistente del plan 201** y partirla es scope de otro plan. Se declara para que no quede mudo; el `reach` de `devops.build.run` (sin `palette-run`) y `needs_confirmation` cubren el riesgo operativo.
+
+**`phrases` — LAS 23 LISTAS, LITERALES [C3].** El v1 declaraba 4 de 23 y decía "mínimo 3 por acción" para el resto; los tests 3/5/6 de F2 afirman **quién gana el ranking**, y el ganador depende de las listas que faltaban. Un modelo menor inventándolas volvía el criterio no determinable. Van todas, en español rioplatense, minúscula y sin acentos (el matcher normaliza igual, pero así el dato es legible y diffeable):
+
+```python
+# id -> phrases   (copiar TAL CUAL; no agregar, no reordenar, no traducir)
+"devops.overview.refresh":     ("resumen de devops", "estado general", "como esta todo")
+"devops.servers.list":         ("listar servidores", "que servidores hay", "ver los servidores")
+"devops.servers.doctor":       ("estado de los servidores", "chequear conexion", "diagnosticar el servidor", "esta caido el servidor")
+"devops.environments.list":    ("listar ambientes", "que ambientes hay", "ver los ambientes")
+"devops.variables.list":       ("listar variables", "ver las variables", "que variables hay")
+"devops.pipelines.inventory":  ("inventario de pipelines", "que pipelines hay", "listar pipelines")
+"devops.pipelines.audit":      ("auditar pipelines", "revisar las pipelines", "auditoria de pipelines")
+"devops.pipelines.env_matrix": ("matriz de entornos", "comparar entornos", "diferencias entre entornos")
+"devops.pipeline_edit.preview":("previsualizar el cambio de pipeline", "ver el diff de la pipeline", "simular la edicion de pipeline")
+"devops.deployments.history":  ("historial de despliegues", "ultimos despliegues", "que se desplego")
+"devops.publications.list":    ("listar publicaciones", "ver las publicaciones", "que publicaciones hay")
+"devops.pr.list":              ("listar pull requests", "ver los pull requests", "que pull requests hay")
+"devops.build.status":         ("estado de la compilacion", "como viene el build", "ver la compilacion")
+"devops.handoff.preview":      ("previsualizar el paquete de entrega", "ver el paquete de entrega", "armar entrega")
+"devops.logs.tail":            ("ver los logs", "revisar logs", "mostrame el log", "ultimas lineas del log")
+"devops.incidents.list":       ("listar incidencias", "ver las incidencias", "que incidencias hay")
+"devops.pipeline.trigger":     ("disparar la pipeline", "correr la pipeline", "ejecutar la pipeline", "lanzar la pipeline")
+"devops.deployment.execute":   ("ejecutar el despliegue", "hacer el despliegue", "desplegar ahora")
+"devops.publication.run":      ("correr la publicacion", "ejecutar la publicacion", "publicar ahora")
+"devops.solution.publish":     ("publicar la solucion", "compilar y publicar la solucion", "generar la publicacion de la solucion")
+"devops.remote_console.run":   ("correr un comando remoto", "ejecutar en el servidor", "comando en la consola remota")
+"devops.pipeline_edit.commit": ("commitear la pipeline editada", "guardar el cambio de pipeline en el repositorio", "subir el cambio de pipeline")
+"devops.build.run":            ("compilar la solucion", "correr la compilacion", "buildear el proyecto")
+```
+
+**Por qué estas y no otras (regla de diseño, para quien agregue la 24.ª):** ninguna frase de lectura puede ser prefijo/subconjunto de tokens de contenido de una frase de escritura. Contraejemplo prohibido: `devops.deployments.history` NO puede llevar `"desplegar"` (chocaría con `devops.deployment.execute`), por eso lleva `"historial de despliegues"`. El test 6 de F8 (`test_phrases_no_colisionan_entre_read_y_write`) lo verifica automáticamente.
 
 **Flag 1 — `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (default ON)**
 
-- `backend/config.py`, junto a las demás flags DevOps (patrón de `:1540-1541`):
+- `backend/config.py`, junto a las demás flags DevOps. **Usar el patrón REAL de los vecinos, verificado en `:1540-1542`** (el v1 escribía `.lower() in ("1","true","yes")`, que no es el patrón de este archivo) [C15]:
   ```python
+  # Plan 267 — Catalogo unico de acciones DevOps. Default ON (solo LISTA lo que
+  # ya existe: no escribe, no llama a ningun modelo, no corre en reposo).
   STACKY_DEVOPS_ACTION_CATALOG_ENABLED: bool = os.getenv(
       "STACKY_DEVOPS_ACTION_CATALOG_ENABLED", "true"
-  ).lower() in ("1", "true", "yes")
+  ).strip().lower() == "true"
   ```
 - `backend/services/harness_flags.py`, `FlagSpec` nueva en el bloque DevOps:
   ```python
@@ -324,7 +497,9 @@ Todas llevan `PRJ` como primer param. `flag_key` de cada una es la flag ya exist
   ```
   (verificado contra la denylist de `test_harness_flags_help.py:17-20`: no usa ninguna de las 15 palabras prohibidas, no cita keys ni fases).
 - `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`): agregar `"STACKY_DEVOPS_ACTION_CATALOG_ENABLED"`.
-- `HARNESS_TEST_FILES` en `run_harness_tests.sh:20` **y** `run_harness_tests.ps1:15`: agregar `tests/test_devops_action_catalog.py`.
+- **Registro del test nuevo, con la sintaxis de cada runner [C1]:**
+  - en `backend/scripts/run_harness_tests.sh` (array `HARNESS_TEST_FILES=(` en `:20`), una línea **desnuda**: `  tests/test_devops_action_catalog.py`
+  - en `backend/scripts/run_harness_tests.ps1` (array `$HarnessTestFiles = @(` en `:13`), una línea **entrecomillada y con coma**: `  "tests/test_devops_action_catalog.py",`
 
 **Tests PRIMERO — `backend/tests/test_devops_action_catalog.py`**
 
@@ -339,13 +514,19 @@ Todas llevan `PRJ` como primer param. `flag_key` de cada una es la flag ya exist
 9. `test_enum_declara_valores` — `p.type != "enum" or len(p.enum_values) > 0`.
 10. `test_phrases_minimo_tres` — `len(a.phrases) >= 3` para toda acción.
 11. `test_get_action_desconocida_devuelve_none` — `get_action("nope") is None`, `get_action("") is None`, `get_action(None) is None` (no lanza).
-12. `test_visible_actions_filtra_por_health` — con `health={"servers_enabled": True}` aparecen `devops.servers.list` y las de `health_key=""`, y NO aparece `devops.pipeline.trigger`.
+12. `test_visible_actions_filtra_por_health` — con `health={"flag_enabled": True, "servers_enabled": True}` aparecen `devops.servers.list` y las 2 de `health_key==""`, y NO aparece `devops.pipeline.trigger`.
 13. `test_visible_actions_health_none` — `visible_actions(None)` devuelve solo las de `health_key==""` (2 acciones) y no lanza.
 14. `test_catalog_payload_serializa` — `json.dumps(catalog_payload({...}))` no lanza y `payload["version"] == "1"`.
 15. `test_modulo_no_importa_flask_ni_config` — leer el propio `.py` como texto y afirmar que no contiene `"import flask"`, `"from flask"` ni `"import config"`.
+16. **`test_master_apagado_deja_solo_las_de_afuera` [C6]** — con `health={"flag_enabled": False, "servers_enabled": True, "trigger_enabled": True}`, `visible_actions(health)` devuelve **exactamente 2** acciones (`devops.logs.tail` y `devops.incidents.list`). Sin este test, apagar el panel dejaba 21 acciones ofrecidas y navegables a ninguna parte.
+17. **`test_reach_no_vacio_y_en_vocabulario`** — para toda acción, `a.reach` no está vacío y `set(a.reach) <= set(REACHES)`.
+18. **`test_todas_alcanzan_el_boton`** — `"button" in a.reach` para las 23 (el botón manual nunca se pierde; §4.3).
+19. **`test_write_nunca_es_palette_run` (I-REACH)** — `effect=="write"` ⇒ `"palette-run" not in a.reach`. El mensaje de fallo **nombra los ids ofensores**.
+20. **`test_palette_actions_excluye_ejecucion_de_escritura`** — con todo el health en `True`, `palette_actions(health)` contiene las 7 de escritura (se ofrecen) y `[a for a in palette_actions(health) if "palette-run" in a.reach]` tiene **0** con `effect=="write"`.
+21. **`test_assistant_actions_es_el_universo_del_matcher`** — `assistant_actions(health)` con todo ON devuelve las 23; ninguna acción queda fuera del asistente por accidente.
 
 **Comando:** `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v`
-**Aceptación binaria:** 15 passed, 0 failed. Además `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` (56 passed) y `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v` (4 passed).
+**Aceptación binaria:** **21 passed**, 0 failed. Además `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` (**56 passed** — medido hoy: 56; verificado que este archivo **no tiene ningún `parametrize` sobre `FLAG_REGISTRY`**, así que agregar flags no cambia el número) y `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v` (**4 passed** — medido hoy: 4).
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` — **default ON**.
 **Runtimes:** Codex / Claude Code / Copilot — **idéntico**; el módulo es datos puros, no ejecuta nada. Sin fallback necesario.
@@ -362,7 +543,7 @@ Todas llevan `PRJ` como primer param. `flag_key` de cada una es la flag ya exist
 - `backend/tests/test_devops_actions_api.py`
 
 **Archivos a editar**
-- `backend/api/__init__.py` — import junto a `:49`/`:54` y `register_blueprint` en el bloque de `:85+`.
+- `backend/api/__init__.py` — el import va **inmediatamente después de `from .devops_agent import ...` (`:54`)**; los vecinos verificados son `:53` `from .devops import bp as devops_bp` y `:54` `from .devops_agent import bp as devops_agent_bp` (el v1 citaba `:49`, que es `from .pipeline_editor`) [C15]. El `register_blueprint` va en el bloque que arranca en `:85` (el `api_bp = Blueprint(...)` está en `:84`).
 - `backend/api/devops.py` — `_health_payload()` (`:28-108`): agregar antes del cierre de `:108`.
 
 ```python
@@ -410,14 +591,22 @@ Las tres keys se agregan **en F1** aunque las flags 2 y 3 se declaren en F3 y F6
 
 **Tests (parte 1 de `test_devops_actions_api.py`)**
 1. `test_catalog_flag_off_404` — con `monkeypatch.setattr(config.config, "STACKY_DEVOPS_ACTION_CATALOG_ENABLED", False)` ⇒ `GET /api/devops/actions/catalog` da **404** con `{"error":"devops_action_catalog_disabled"}`.
-2. `test_catalog_flag_on_200_y_shape` — 200; `body["ok"] is True`; `body["version"] == "1"`; `isinstance(body["actions"], list)`; cada item tiene las 11 keys de `action_to_dict`.
-3. `test_catalog_filtra_por_health` — con todas las flags DevOps en False, solo aparecen las 2 acciones de `health_key==""`.
+2. `test_catalog_flag_on_200_y_shape` — 200; `body["ok"] is True`; `body["version"] == "1"`; `isinstance(body["actions"], list)`; cada item tiene las **12** keys de `action_to_dict` (las 11 del v1 + `reach`).
+3. `test_catalog_filtra_por_health` — **el v1 decía "con todas las flags DevOps en False" sin decir cómo, y `_health_payload()` lee ~35 atributos [C13]. El modo literal, que NO depende de enumerar flags:**
+   ```python
+   def test_catalog_filtra_por_health(client, monkeypatch):
+       import api.devops_actions as mod
+       monkeypatch.setattr(mod, "_health_payload_for_catalog",
+                           lambda: {"flag_enabled": False}, raising=False)
+       ...
+   ```
+   Para que eso sea posible, `api/devops_actions.py` **no llama a `api.devops._health_payload` directamente**: define `def _health_payload_for_catalog() -> dict:` que la envuelve (2 líneas), y **ese** es el seam que los tests parchean. Es el único cambio de estructura que este test impone, y evita monkeypatchear 35 atributos de `config.config`.
 4. `test_health_expone_las_tres_keys_nuevas` — `GET /api/devops/health` incluye `action_catalog_enabled`, `action_nl_enabled`, `agent_action_run_enabled`.
 5. `test_bootstrap_health_paridad` — `/bootstrap` y `/health` devuelven el mismo subconjunto de esas 3 keys.
 
 **Comando:** `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v`
 **Aceptación binaria:** los 5 tests de F1 en verde. Además `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops.py -v` sigue verde (paridad de `/health`).
-**Registro:** agregar `tests/test_devops_actions_api.py` a `HARNESS_TEST_FILES` en el `.sh` y en el `.ps1`.
+**Registro [C1]:** `  tests/test_devops_actions_api.py` (desnuda) en `run_harness_tests.sh` `HARNESS_TEST_FILES` (`:20`) **y** `  "tests/test_devops_actions_api.py",` (entrecomillada, con coma) en `run_harness_tests.ps1` `$HarnessTestFiles` (`:13`).
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` — default ON.
 **Runtimes:** idéntico en los 3; es un `GET` sin modelo.
@@ -451,8 +640,28 @@ MIN_SCORE = 0.6          # por debajo => no hay match
 AMBIGUITY_DELTA = 0.10   # si top1 - top2 < esto => needs_disambiguation
 MAX_MATCHES = 3
 
-_NON_WORD = re.compile(r"[^a-z0-9ñ ]+")
+_NON_WORD = re.compile(r"[^a-z0-9 ]+")   # v2: la ñ se fue en el paso NFD+Mn de
+                                         # normalize_text (n + tilde combinante);
+                                         # dejarla en la clase era regla muerta [C17]
 _SPACES = re.compile(r"\s+")
+
+# v2 [C2] — FIX BLOQUEANTE. Sin esto, "quiero disparar la piplain" puntuaba
+# 2/3 = 0.667 >= MIN_SCORE contra la frase "disparar la pipeline", porque el
+# articulo "la" contaba como token de contenido. El test 4 salia ROJO el dia 1.
+# Las stopwords NO se borran del texto: se excluyen del DENOMINADOR y del
+# numerador, para que el score mida solo palabras que significan algo.
+_STOPWORDS = frozenset((
+    "el", "la", "los", "las", "un", "una", "unos", "unas",
+    "de", "del", "al", "a", "en", "con", "por", "para", "sobre",
+    "y", "o", "que", "se", "lo", "mi", "me", "te", "su",
+    "quiero", "necesito", "podes", "puedo", "hace", "haceme", "dame",
+    "mostrame", "decime", "porfa", "please",
+))
+
+
+def _content_tokens(text: str) -> list[str]:
+    """Tokens que significan algo: no vacios y no stopwords. NUNCA lanza."""
+    return [t for t in (text or "").split(" ") if t and t not in _STOPWORDS]
 
 
 @dataclass(frozen=True)
@@ -473,14 +682,22 @@ def normalize_text(text: str | None) -> str:
 
 
 def _phrase_score(norm_text: str, phrase: str) -> float:
-    """Cobertura de tokens de la frase presentes en el texto, + bonus por substring.
-    Determinista y acotado a [0,1]."""
-    tokens = [t for t in normalize_text(phrase).split(" ") if t]
+    """Cobertura de tokens DE CONTENIDO de la frase presentes en el texto, mas un
+    bonus por aparicion literal. Determinista y acotado a [0,1]. NUNCA lanza.
+
+    v2 [C2]: los articulos y muletillas no cuentan ni arriba ni abajo. Con la
+    frase "disparar la pipeline" los tokens de contenido son ("disparar",
+    "pipeline"); "quiero disparar la piplain" da 1/2 = 0.5 < MIN_SCORE => NO
+    matchea, que es lo que el test 4 siempre quiso afirmar.
+    """
+    norm_phrase = normalize_text(phrase)
+    tokens = _content_tokens(norm_phrase)
     if not tokens:
         return 0.0
-    hits = sum(1 for t in tokens if t in norm_text.split(" "))
+    text_tokens = set(_content_tokens(norm_text))
+    hits = sum(1 for t in tokens if t in text_tokens)
     base = hits / len(tokens)
-    if normalize_text(phrase) and normalize_text(phrase) in norm_text:
+    if norm_phrase and norm_phrase in norm_text:
         base = min(1.0, base + 0.15)
     return round(base, 4)
 
@@ -513,21 +730,27 @@ def is_ambiguous(matches: list[ActionMatch]) -> bool:
 ```
 
 **Tests — `backend/tests/test_devops_action_matcher.py`**
+Todos los casos corren contra `DEVOPS_ACTION_CATALOG` **completo** (las 23 acciones con sus 23 listas de `phrases` literales de F0), no contra un subconjunto: es la única forma de que el ranking sea el real.
+
 1. `test_normalize_quita_acentos_y_puntuacion` — `normalize_text("¿Disparar la Pipeline?") == "disparar la pipeline"`.
 2. `test_normalize_none_y_vacio` — `normalize_text(None) == ""`, `normalize_text("   ") == ""`.
-3. `test_match_frase_exacta` — `"disparar la pipeline"` ⇒ `matches[0].action_id == "devops.pipeline.trigger"`.
-4. `test_match_con_acentos_y_mayusculas` — `"Quiero DISPARAR la píplain"` no matchea (score bajo); `"Quiero disparar la pipeline de QA"` sí.
-5. `test_match_parcial_supera_umbral` — `"ver los logs"` ⇒ `devops.logs.tail`.
-6. `test_sin_match_devuelve_vacio` — `"receta de milanesas"` ⇒ `[]`.
-7. `test_texto_vacio_devuelve_vacio` — `match_intent("", CAT) == []` y `match_intent(None, CAT) == []`.
-8. `test_orden_estable_ante_empate` — construir 2 acciones sintéticas con la misma frase y verificar que gana la de índice menor, **corriendo 5 veces con el mismo input y comparando la salida**.
-9. `test_tope_de_tres_matches` — nunca devuelve más de 3.
-10. `test_is_ambiguous_true_y_false` — dos matches con 0.90/0.85 ⇒ `True`; con 0.90/0.60 ⇒ `False`; con 1 match ⇒ `False`; con 0 ⇒ `False`.
-11. `test_no_importa_flask_ni_red` — leer el `.py` y afirmar que no contiene `"requests"`, `"flask"` ni `"urllib"`.
-12. `test_score_acotado` — para 200 frases generadas, `0.0 <= score <= 1.0`.
+3. `test_match_frase_exacta` — `"disparar la pipeline"` ⇒ `matches[0].action_id == "devops.pipeline.trigger"` con `score == 1.0`.
+4. **`test_typo_no_matchea` [C2, era rojo el día 1]** — `"Quiero DISPARAR la píplain"` ⇒ `match_intent(...) == []`. Cálculo verificable a mano: tokens de contenido de `"disparar la pipeline"` = `("disparar","pipeline")`; el texto normalizado es `"quiero disparar la piplain"` cuyos tokens de contenido son `("disparar","piplain")` (`quiero` y `la` son stopwords) ⇒ `1/2 = 0.5 < MIN_SCORE (0.6)`. **Con el `_phrase_score` del v1 daba 0.667 y el test salía ROJO.**
+5. `test_frase_con_ruido_si_matchea` — `"Quiero disparar la pipeline de QA"` ⇒ `matches[0].action_id == "devops.pipeline.trigger"` (los tokens de contenido de la frase están los 2, y además aparece literal ⇒ `1.0`).
+6. `test_match_parcial_supera_umbral` — `"ver los logs"` ⇒ `matches[0].action_id == "devops.logs.tail"`.
+7. `test_lectura_y_escritura_no_se_confunden` — `"historial de despliegues"` ⇒ `devops.deployments.history` (**no** `devops.deployment.execute`); `"hacer el despliegue"` ⇒ `devops.deployment.execute` (**no** el historial). Es el caso que la regla de diseño de `phrases` (F0) existe para garantizar.
+8. `test_sin_match_devuelve_vacio` — `"receta de milanesas"` ⇒ `[]`.
+9. `test_texto_vacio_devuelve_vacio` — `match_intent("", CAT) == []` y `match_intent(None, CAT) == []`.
+10. `test_solo_stopwords_devuelve_vacio` — `"quiero que me des el la de"` ⇒ `[]` (sin tokens de contenido no hay match; verifica que la división `hits/len(tokens)` nunca divide por cero).
+11. `test_orden_estable_ante_empate` — construir 2 acciones sintéticas con la misma frase y verificar que gana la de índice menor, **corriendo 5 veces con el mismo input y comparando la salida**.
+12. `test_tope_de_tres_matches` — nunca devuelve más de 3.
+13. `test_is_ambiguous_true_y_false` — dos matches con 0.90/0.85 ⇒ `True`; con 0.90/0.60 ⇒ `False`; con 1 match ⇒ `False`; con 0 ⇒ `False`.
+14. `test_no_importa_flask_ni_red` — leer el `.py` y afirmar que no contiene `"requests"`, `"flask"` ni `"urllib"`.
+15. `test_score_acotado` — para **cada una de las 23 acciones, con cada una de sus `phrases` y con cada `phrase` truncada a su primera palabra** (universo determinista, no "200 frases generadas" como decía el v1): `0.0 <= score <= 1.0`.
 
 **Comando:** `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_matcher.py -v`
-**Aceptación binaria:** 12 passed. **Registro:** `tests/test_devops_action_matcher.py` en `HARNESS_TEST_FILES` (`.sh` y `.ps1`).
+**Aceptación binaria:** **15 passed**.
+**Registro [C1]:** `  tests/test_devops_action_matcher.py` (desnuda) en `run_harness_tests.sh:20`; `  "tests/test_devops_action_matcher.py",` (entrecomillada, con coma) en `run_harness_tests.ps1:13`.
 
 **Flag:** ninguna propia (es una función pura consumida por F3, gateada por `STACKY_DEVOPS_ACTION_NL_ENABLED`).
 **Runtimes:** **idéntico en los 3** — no usa modelo. Ese es el punto de la fase.
@@ -558,8 +781,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from services.devops_action_catalog import DevOpsAction, get_action, param_of
-from services.devops_action_matcher import ActionMatch, is_ambiguous, match_intent
+# v2 [C17]: el v1 importaba ademas get_action, ActionMatch, is_ambiguous y
+# match_intent, y NO usaba ninguno. Este modulo solo arma la propuesta; el
+# matching vive en el endpoint.
+from services.devops_action_catalog import DevOpsAction, param_of
 
 PROPOSAL_VERSION = "1"
 
@@ -682,13 +907,18 @@ def propose_action():
         return jsonify({"ok": False, "error": "text es obligatorio"}), 400
     supplied = body.get("params") if isinstance(body.get("params"), dict) else {}
 
-    from api.devops import _health_payload
-    from services.devops_action_catalog import get_action, visible_actions
+    from dataclasses import replace          # v2 [C7] — el v1 usaba replace()
+                                             # sin importarlo: NameError seguro
+                                             # en el camino ambiguo, y ningun
+                                             # test lo cubria.
+    from services.devops_action_catalog import assistant_actions, get_action
     from services.devops_action_matcher import is_ambiguous, match_intent
     from services import devops_action_proposal as dap
 
-    health = _health_payload()
-    actions = visible_actions(health)
+    health = _health_payload_for_catalog()   # seam parcheable, ver F1 test 3
+    # v2 [C5]: el universo del matcher son las acciones con "assistant" en su
+    # reach, no todas las visibles.
+    actions = assistant_actions(health)
     matches = match_intent(text, actions)
     if not matches:
         return jsonify({"ok": True, "proposal": None,
@@ -735,9 +965,21 @@ def preview_action():
 15. `test_preview_accion_gateada_404` — una acción cuyo `health_key` está en False no se previsualiza.
 16. `test_preview_no_ejecuta_nada` — monkeypatchear los módulos de ejecución para que exploten si se los llama; el endpoint responde 200 sin tocarlos.
 17. `test_what_will_happen_nombra_entorno_e_impacto` — la frase contiene el entorno declarado y una de las 3 etiquetas de impacto.
+18. **`test_propose_ambiguo_devuelve_alternativas` [C7]** — dos acciones que empatan dentro de `AMBIGUITY_DELTA` ⇒ `blocked_reason == "ambiguous"`, `alternatives` no vacío y **200, no 500**. Es el único test que ejecuta la línea `replace(prop, ...)`; sin él, el `NameError` del v1 llegaba a producción con la suite en verde.
+19. **`test_propose_respeta_reach_assistant`** — una acción cuyo `reach` no incluye `"assistant"` **nunca** sale propuesta, aunque su frase sea un match perfecto (se construye con una acción sintética inyectada en el universo del matcher).
 
 **Comando:** `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v`
-**Aceptación binaria:** 17 passed (5 de F1 + 12 de F3), 0 failed. Más: `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v` (9 passed).
+**Aceptación binaria:** **19 passed (5 de F1 + 14 de F3)**, 0 failed. Más: `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v` (**9 passed** — medido hoy: 9).
+
+**`PLAIN_HELP` de la flag 2 — texto LITERAL [C10]** (el v1 no lo daba; verificado contra los 4 límites, el prefijo `"Si "`, las 15 palabras de la denylist, `_KEY_RE` y `_PHASE_RE`):
+```python
+"STACKY_DEVOPS_ACTION_NL_ENABLED": PlainHelp(
+    what="Permite pedir una tarea de despliegue escribiendola en castellano, y que el asistente te muestre cual seria la accion antes de hacer nada.",
+    on_effect="Si la activas: escribis lo que queres hacer y aparece una tarjeta con la accion, el ambiente, el riesgo y que va a pasar.",
+    off_effect="Si la apagas: el asistente vuelve a responder solo con texto y tenes que buscar el boton vos mismo.",
+    example="Escribis «quiero ver los logs» y te muestra la tarjeta de esa tarea, sin ejecutar nada hasta que confirmes.",
+),
+```
 
 **Flag:** `STACKY_DEVOPS_ACTION_NL_ENABLED` — **default ON**.
 **Runtimes:**
@@ -775,6 +1017,8 @@ export interface DevOpsActionMeta {
   section_id: string | null; nav_path: string;
   effect: DevOpsActionEffect; impact: DevOpsActionImpact;
   targets_environment: boolean; health_key: string; flag_key: string;
+  /** v2 [C5] — subconjunto de 'button'|'palette-run'|'palette-nav'|'assistant'. */
+  reach: string[];
   params: DevOpsActionParamMeta[]; phrases: string[];
 }
 ```
@@ -835,6 +1079,29 @@ export function missingRequired(
     .map((p) => p.name);
 }
 
+/** v2 [C20] — El v1 prometia por escrito al operador que «Ver en el panel te deja
+ *  en la seccion CON LOS DATOS YA CARGADOS», y el unico mecanismo que tenia era
+ *  ctx.navigate(a.nav_path), que va a /devops/<seccion> pelado. Era una promesa
+ *  que el codigo no cumplia. Esto la cumple: query string determinista, claves
+ *  ordenadas alfabeticamente (para que el test compare strings), valores vacios
+ *  omitidos, y encodeURIComponent en clave y valor. */
+export function navPathWithParams(
+  a: DevOpsActionMeta, params: Record<string, string>
+): string {
+  const pairs = Object.keys(params ?? {})
+    .sort()
+    .filter((k) => String(params[k] ?? '').trim())
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(params[k]).trim())}`);
+  return pairs.length ? `${a.nav_path}?${pairs.join('&')}` : a.nav_path;
+}
+
+/** v2 [C5] — la paleta puede EJECUTAR esta accion, o solo llevar a su seccion. */
+export function paletteMode(a: DevOpsActionMeta): 'run' | 'nav' | 'hidden' {
+  if (a.reach.includes('palette-run')) return 'run';
+  if (a.reach.includes('palette-nav')) return 'nav';
+  return 'hidden';
+}
+
 /** Ejecuta. NUNCA lanza: siempre devuelve un recibo.
  *  Orden EXACTO e inviolable:
  *    1. binding ausente        -> recibo ok:false, NO se ejecuta nada
@@ -878,14 +1145,17 @@ export function bindingFor(id: string): DevOpsActionBinding | undefined {
 9. `runDevOpsAction` con binding `undefined` devuelve `ok:false` y **no lanza**.
 10. `runDevOpsAction` con un binding cuyo `run` lanza devuelve `ok:false` con el mensaje, **no propaga**.
 11. `runDevOpsAction` con `missingRequired` no vacío ⇒ `ok:false`, `askConfirm` **no** se llama y el binding **no** se llama.
+12. **`navPathWithParams` sin params ⇒ `nav_path` pelado**; con `{environment:'qa', project:'Pacifico'}` ⇒ `'/devops/despliegues?environment=qa&project=Pacifico'` (**orden alfabético exacto**, string comparado literal) [C20].
+13. **`navPathWithParams` omite vacíos y espacios en blanco**, y **escapa** un valor con espacio y `&` (`'a b&c'` ⇒ `a%20b%26c`).
+14. **`paletteMode`** ⇒ `'run'` con `reach:['button','palette-run','assistant']`; `'nav'` con `reach:['button','palette-nav','assistant']`; `'hidden'` con `reach:['button']`.
 
 **Tests — `frontend/src/services/devopsActionBindings.test.ts`** (3 casos)
 1. Toda clave del record cumple `/^devops\.[a-z_]+\.[a-z_]+$/`.
 2. Para toda clave `k`, `DEVOPS_ACTION_BINDINGS[k].id === k` (no hay ids desalineados).
 3. `bindingFor('no-existe')` devuelve `undefined` sin lanzar.
 
-**Comando:** desde `frontend/`: `npx vitest run src/services/devopsActionRunner.test.ts` y `npx vitest run src/services/devopsActionBindings.test.ts`
-**Aceptación binaria:** 11 + 3 passed. Más `npx tsc --noEmit` sin errores.
+**Comando:** desde `frontend/`: `npx vitest run src/services/devopsActionRunner.test.ts` y `npx vitest run src/services/devopsActionBindings.test.ts` (**dos invocaciones separadas**, regla §4.2)
+**Aceptación binaria:** **14 + 3 passed**. Más `npx tsc --noEmit` sin errores.
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (la UI solo carga el catálogo si `health.action_catalog_enabled === true`).
 **Runtimes:** irrelevante — código de UI, no llama a ningún modelo. Idéntico en los 3.
@@ -908,35 +1178,45 @@ Cambios exactos en `commandPaletteData.ts`:
 
 1. Agregar `"devops-action"` al union `CommandKind` (`:10-19`) — **al final**, para no alterar el orden que otros módulos puedan asumir. `EntityKind` (`entityActions.ts:15`) usa `Extract<..., "execution"|"ticket">`, así que **no se ve afectado**.
 2. Agregar la entrada `'devops-action': '⚡'` a `DEEP_ICONS` (`:91-97`).
-3. Función nueva, pura:
+3. Función nueva, pura — **con el doble cerrojo de §4.10 [C5]**:
    ```ts
-   /** Plan 267 F5 — Convierte el catalogo en Command[] para la paleta.
-    *  - Solo entran acciones cuyo health_key esta ON (ya viene filtrado por el
-    *    servidor, pero se re-filtra por defensa).
-    *  - Las de effect 'write' llevan el hint con el impacto y el entorno, para que
-    *    el operador NO las dispare de memoria creyendo que son inocuas.
-    *  - `run` NO ejecuta: delega en onRun(action), que en CommandPalette.tsx llama
-    *    a runDevOpsAction (que a su vez confirma). La paleta jamas confirma sola. */
+   /** Plan 267 F5 v2 — Convierte el catalogo en Command[] para la paleta.
+    *
+    *  DOBLE CERROJO (§4.10, calcado de entityActions.ts:44-46, que ya resolvio
+    *  esto para 2 entidades): una accion de ESCRITURA nunca queda a un
+    *  fuzzy-match + Enter de distancia. `paletteMode(a)` decide:
+    *    - 'run'    => el Command EJECUTA (via onRun). Solo effect 'read'.
+    *    - 'nav'    => el Command NAVEGA a navPathWithParams(a, {}) y NO ejecuta.
+    *                  El label lo dice: "Ir a <seccion> para <accion>".
+    *    - 'hidden' => no entra a la paleta.
+    *  La paleta jamas confirma sola, y jamas dispara una escritura. */
    export function devopsActionCommands(
      actions: DevOpsActionMeta[],
-     onRun: (a: DevOpsActionMeta) => void
+     onRun: (a: DevOpsActionMeta) => void,
+     onNavigate: (path: string) => void
    ): Command[]
    ```
-   Cada `Command` resultante: `id: \`devops-action-${a.id}\``, `kind: 'devops-action'`, `icon: a.effect === 'write' ? '⚠️' : '⚡'`, `label: a.label`, `hint: a.effect === 'write' ? \`Escribe · ${IMPACT_TEXT[a.impact]}\` : a.summary`, `run: () => onRun(a)`.
+   `Command` resultante según el modo:
+   - **`run`**: `id: \`devops-action-${a.id}\``, `kind:'devops-action'`, `icon:'⚡'`, `label: a.label`, `hint: a.summary`, `run: () => onRun(a)`.
+   - **`nav`**: `id: \`devops-action-nav-${a.id}\``, `kind:'devops-action'`, `icon:'⚠️'`, `label: \`Ir a ${a.label}\``, `hint: \`Escribe · ${IMPACT_TEXT[a.impact]} · se hace desde el panel\``, `run: () => onNavigate(navPathWithParams(a, {}))`.
+   - **`hidden`**: no se emite.
 
-En `CommandPalette.tsx`: cargar el catálogo con un `GET /api/devops/actions/catalog` **una sola vez al abrir la paleta** (nunca en un intervalo — el ratchet de sondeo del 239 F6 lo prohíbe), concatenar `devopsActionCommands(...)` después de `NAV_COMMANDS`, y cablear `onRun` a `runDevOpsAction` con el `askConfirm` real de la app. Si el `GET` falla o devuelve 404, la paleta queda **exactamente como hoy** (solo navegación), sin banner ni error.
+En `CommandPalette.tsx`: cargar el catálogo con un `GET /api/devops/actions/catalog` **una sola vez al abrir la paleta** (nunca en un intervalo), concatenar `devopsActionCommands(...)` después de `NAV_COMMANDS`, y cablear `onRun` a `runDevOpsAction` con el `askConfirm` real de la app y `onNavigate` al `navigate` de la app. Si el `GET` falla o devuelve 404, la paleta queda **exactamente como hoy** (solo navegación), sin banner ni error.
 
-**Tests — `commandPaletteDevopsActions.test.ts`** (7 casos)
-1. `devopsActionCommands([], noop)` ⇒ `[]`.
-2. Con 12 acciones ⇒ 12 comandos, todos con `kind === 'devops-action'`.
+**Tests — `commandPaletteDevopsActions.test.ts`** (10 casos)
+1. `devopsActionCommands([], noop, noop)` ⇒ `[]`.
+2. Con 12 acciones de lectura ⇒ 12 comandos, todos con `kind === 'devops-action'`.
 3. Todos los `id` empiezan con `devops-action-` y son únicos.
-4. Una acción `write` con `impact:'high'` produce `icon === '⚠️'` y un `hint` que contiene `'Escribe'`.
-5. Una acción `read` produce `icon === '⚡'` y `hint === a.summary`.
-6. `run()` invoca `onRun` con la acción **y no hace nada más** (spy: 1 llamada, y ningún otro efecto).
-7. `fuzzyScore` (`commandPaletteData.ts:31-49`) sigue devolviendo lo mismo para 6 pares de entrada conocidos — **test de no-regresión de la función existente**.
+4. **Una acción `write` (`reach` sin `palette-run`) produce un comando de NAVEGACIÓN**: `icon === '⚠️'`, `label` empieza con `'Ir a '`, `hint` contiene `'se hace desde el panel'`.
+5. **`run()` de esa acción `write` llama a `onNavigate` y NO llama a `onRun`** (dos spies: `onNavigate` 1 llamada, `onRun` **0** llamadas). Este es el test que materializa KPI-9 en la superficie de la paleta.
+6. Una acción `read` produce `icon === '⚡'`, `hint === a.summary` y su `run()` llama a `onRun` (1) y no a `onNavigate` (0).
+7. Una acción con `reach: ['button']` **no aparece** en la salida.
+8. `fuzzyScore` (`commandPaletteData.ts:31-49`) sigue devolviendo lo mismo para 6 pares de entrada conocidos — **test de no-regresión de la función existente**.
+9. **`test_command_palette_no_sondea` [C11]** — grep-gate propio sobre `frontend/src/components/CommandPalette.tsx` leído como texto: **0** ocurrencias de `setInterval(` y de `refetchInterval`. Motivo: `devopsPollingRatchet.test.ts` escanea **solo** `components/devops/` (`:21`), así que `CommandPalette.tsx` está **fuera de su alcance** y declararlo criterio de aceptación de F5 era un falso verde.
+10. **`test_catalogo_se_pide_una_sola_vez`** — sobre el mismo texto: la cadena `'/api/devops/actions/catalog'` aparece **exactamente 1 vez** en el archivo.
 
-**Comando:** desde `frontend/`: `npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts` y, por no-regresión, `npx vitest run src/components/__tests__/commandPaletteData.test.ts`
-**Aceptación binaria:** 7 passed + los tests preexistentes de `commandPaletteData.test.ts` en verde (mismo número que antes del cambio).
+**Comando:** desde `frontend/`: `npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts` y, en **otra invocación**, `npx vitest run src/components/__tests__/commandPaletteData.test.ts`
+**Aceptación binaria:** **10 passed** + los tests preexistentes de `commandPaletteData.test.ts` en verde (mismo número que antes del cambio: anotar el número ANTES de tocar nada y compararlo).
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED`. Con OFF, el `GET` da 404 y la paleta queda idéntica a hoy.
 **Runtimes:** idéntico en los 3.
@@ -958,6 +1238,11 @@ En `CommandPalette.tsx`: cargar el catálogo con un `GET /api/devops/actions/cat
 - `frontend/src/components/devops/DevOpsAgentSection.tsx` (228 líneas) — montar `DevOpsActionConsole` **encima** del chat existente, sin borrarlo.
 - las 7 patas de la flag 3.
 
+**REGLA DURA de los `.tsx` nuevos [C12].** `uiDebtRatchet.test.ts` (plan 138 F0) congela **por archivo** el conteo de `style={{` en `*.tsx` y de hex en `*.module.css`; un archivo **nuevo** no tiene entrada de baseline, así que su presupuesto es **CERO**, y regenerar el baseline está bloqueado por deuda ajena. Por lo tanto, en `DevOpsActionProposalCard.tsx` y `DevOpsActionConsole.tsx`:
+- **cero** `style={{` — todo con CSS modules y variables de token (cero literales hex en el `.module.css`);
+- **cero** `confirm(`, `alert(`, `prompt(` — el ratchet también los cuenta (`NATIVE_DIALOG_RE`, `uiDebtRatchet.test.ts:27`), y además `confirmGateway.ts:7-8` los prohíbe explícitamente;
+- si hace falta un valor calculado en runtime (ancho de barra, etc.): `ref` + `useEffect` que setea `el.style.setProperty(...)`, nunca `style={{}}` en el JSX.
+
 **Contrato visual de la tarjeta (obligatorio, en este orden vertical):**
 1. **Qué acción** — `label` en el título + `summary` debajo.
 2. **Sobre qué entorno** — chip con `environment` si `targets_environment`; si está vacío, chip rojo `"Falta declarar el entorno"`.
@@ -966,7 +1251,7 @@ En `CommandPalette.tsx`: cargar el catálogo con un `GET /api/devops/actions/cat
 5. **Parámetros** — tabla `nombre / valor / origen`; los de `source:'missing'` son campos editables.
 6. **Preguntas abiertas** — `open_questions`, una por línea, si las hay.
 7. **Alternativas** — si `blocked_reason === 'ambiguous'`, botones para elegir entre `alternatives`.
-8. **Acciones** — `[Ejecutar]` (deshabilitado si `blocked_reason !== ''`) + `[Ver en el panel]` (siempre habilitado, navega a `nav_path`).
+8. **Acciones** — `[Ejecutar]` (deshabilitado si `blocked_reason !== ''`) + `[Ver en el panel]` (siempre habilitado, navega a **`navPathWithParams(meta, paramsActuales)`**, no a `nav_path` pelado — es lo que hace verdadera la frase obligatoria de más abajo) [C20].
 9. **Recibo** — tras ejecutar: ✅/❌, `summary`, `detail`, y la duración `finishedAt - startedAt` en ms.
 
 **Lógica pura en `devopsActionConsoleModel.ts`** (todo lo testeable sin DOM, por el gap RTL/jsdom):
@@ -996,7 +1281,16 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 - `FlagSpec`: **SIN `default=`** (regla dura de §4.1), `requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED"` (estrella, no cadena — R4), `group="global"`, `env_only=False`.
   Comentario obligatorio, en la línea de la flag:
   > **EXCEPCIÓN DURA (B)** — es la única ruta por la que una frase en lenguaje natural puede terminar **escribiendo en un sistema real del operador**: dispara pipelines (`devops.pipeline.trigger`), ejecuta despliegues (`devops.deployment.execute`), publica (`devops.publication.run`, `devops.solution.publish`), commitea al repo real (`devops.pipeline_edit.commit`, vía `ado_provider.commit_file`, `backend/services/ado_provider.py:146`) y corre comandos en un servidor remoto (`devops.remote_console.run`). Precedente exacto: `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` OFF (`harness_flags.py:3166-3187`) mientras su hermana de solo-lectura `STACKY_PIPELINE_NL_EDIT_ENABLED` está ON (`:3149-3165`). **Con esta flag OFF el sistema NO pierde capacidad**: las 16 acciones de solo lectura se ejecutan igual desde el asistente, y las 7 de escritura se muestran completas con su vista previa y un botón que lleva al panel a hacerlas a mano.
-- `_CATEGORY_KEYS["devops"]`, `PLAIN_HELP`, y **`_REQUIRES_MAP_FROZEN`** (`test_harness_flags_requires.py:120`). **NO** va en `_CURATED_DEFAULTS_ON` (es OFF y no declara `default`).
+- `_CATEGORY_KEYS["devops"]` (`harness_flags.py:223`) y **`_REQUIRES_MAP_FROZEN`** (`test_harness_flags_requires.py:120`; el assert de igualdad de mapas está en `:316`). **NO** va en `_CURATED_DEFAULTS_ON` (es OFF y no declara `default`).
+- **`PLAIN_HELP` de la flag 3 — texto LITERAL [C10]** (verificado contra los 4 límites, el prefijo `"Si "`, las 15 palabras de la denylist, `_KEY_RE` y `_PHASE_RE`):
+  ```python
+  "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": PlainHelp(
+      what="Decide si el asistente puede llevar a cabo por si mismo las tareas que modifican tus servidores y repositorios, o si solo puede mostrartelas.",
+      on_effect="Si la activas: despues de que confirmes, el asistente hace la tarea (desplegar, publicar, correr una orden en un servidor).",
+      off_effect="Si la apagas: el asistente igual te muestra la tarjeta completa con todo lo que haria, y un boton que te lleva a la pantalla para hacerlo vos.",
+      example="Le pedis «hace el despliegue en produccion»: apagada, te muestra que haria y te lleva a la pantalla; activada, lo hace despues de tu confirmacion.",
+  ),
+  ```
 
 **Tests — `devopsActionConsoleModel.test.ts`** (9 casos)
 1. `isRunDisabled` ⇒ `true` para los 5 `blocked_reason` no vacíos y `false` para `''`.
@@ -1008,9 +1302,10 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 7. `headerChips` con `impact:'high'` ⇒ el chip 3 tiene `tone:'bad'`.
 8. `receiptLine` de un recibo ok incluye `'✅'` y la duración en ms.
 9. `receiptLine` de un recibo con `confirmed:false` dice explícitamente que fue cancelado por el operador.
+10. **`test_ver_en_el_panel_lleva_los_datos` [C20]** — dado un `ProposalView` con `environment:'prod'` y `project:'Pacifico'`, la ruta del botón "Ver en el panel" es `'/devops/despliegues?environment=prod&project=Pacifico'`. Sin este test, la frase obligatoria de abajo es una promesa que el código no cumple.
 
-**Comando:** desde `frontend/`: `npx vitest run src/components/devops/devopsActionConsoleModel.test.ts`; y backend: `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` + `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v`.
-**Aceptación binaria:** 9 passed en vitest; 56 passed y 9 passed en los dos de flags; `npx tsc --noEmit` limpio; y `npx vitest run src/__tests__/devopsPollingRatchet.test.ts` sigue verde (los componentes nuevos no sondean).
+**Comando:** desde `frontend/`: `npx vitest run src/components/devops/devopsActionConsoleModel.test.ts`; y backend, en invocaciones separadas: `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` y `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v`, más el verificador de 3 claves de `PLAIN_HELP` de §4.1.
+**Aceptación binaria:** **10 passed** en vitest; 56 passed y 9 passed en los dos de flags; el verificador de `PLAIN_HELP` imprime `OK`; `npx tsc --noEmit` limpio; `npx vitest run src/__tests__/uiDebtRatchet.test.ts` verde (los 2 `.tsx` nuevos suman **0** a la deuda) y `npx vitest run src/__tests__/devopsPollingRatchet.test.ts` verde (**este sí aplica en F6**: los componentes nuevos viven en `components/devops/`, que es el alcance real del ratchet — a diferencia de F5, ver C11).
 
 **Flag:** `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` — **default OFF, categoría (B)** (razón y `archivo:línea` arriba).
 **Runtimes:**
@@ -1054,17 +1349,18 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 
 **Reglas duras del recableado:**
 - **No se borra ningún botón.** El operador ve exactamente los mismos controles.
-- **El texto de la confirmación cambia** (ahora lo genera `confirmRequestFor`), pero **el `tone` no puede aflojarse**: si hoy una confirmación es `'danger'`, su acción debe declarar `impact:'high'` en el catálogo. Verificar acción por acción antes de editar.
+- **El texto de la confirmación cambia, y eso es lo que el plan viene a hacer [C4].** El v1 decía a la vez, en §4.7, que el panel quedaba "byte-idéntico ... con el mismo texto de confirmación", y acá, que "el texto cambia". Las dos no pueden ser ciertas; vale esta. Lo que **no** cambia: el mismo botón, el mismo efecto, la misma severidad y el mismo `tone`.
+- **El `tone` no puede aflojarse**: si hoy una confirmación es `'danger'`, su acción debe declarar `impact:'high'` en el catálogo. **Verificación previa obligatoria, archivo por archivo**, antes de tocar nada: `grep -n "tone: 'danger'" frontend/src/components/devops/<Archivo>.tsx` y anotar a qué acción corresponde cada uno. Censo medido el 2026-07-27 de construcciones a mano (`grep -c "askConfirm({"`): `ServersSection` 2, `BuildWorkshopSection` 2, `PipelineBuilderSection` 4, `ProductionFlow` 2, `RemoteConsoleSection` 1, `SolutionPublisherSection` 5 = **16 en total**. Si al terminar F7 el catálogo no cubre las 16, falta una acción.
 - Si una sección tiene una acción con efecto que **no** está en el catálogo, se agrega al catálogo en esta fase (F0 quedó con 23; F7 puede llegar a más) — **nunca** se deja fuera.
 - Si un binding no puede reproducir exactamente el comportamiento del botón, **se detiene la fase y se reporta**; no se aproxima.
 
-**Test — `frontend/src/__tests__/plan267Adoption.test.ts`** (patrón calcado de `plan175Adoption.test.ts`, que ya existe)
+**Test — `frontend/src/__tests__/plan267Adoption.test.ts`** (patrón calcado de `plan175Adoption.test.ts`, que ya existe en `frontend/src/__tests__/`)
 1. Los 6 archivos de la lista **importan** `runDevOpsAction` desde `../../services/devopsActionRunner`.
-2. Ninguno de los 6 contiene la cadena `askConfirm({` (construcción de `ConfirmRequest` a mano).
-3. `frontend/src/services/devopsActionRunner.ts` es el **único** archivo de `src/` (fuera de tests) que contiene `confirmRequestFor` como definición.
+2. Ninguno de los 6 contiene la cadena `askConfirm({` (construcción de `ConfirmRequest` a mano). **Verificado: hoy los 6 SÍ la contienen (2/2/4/2/1/5), así que este test es rojo antes del recableado y verde después — no es un verde vacío.**
+3. `frontend/src/services/devopsActionRunner.ts` es el **único** archivo de `src/` (excluyendo `*.test.ts` y `__tests__/`) que contiene la cadena **`export function confirmRequestFor`**. Se busca esa cadena literal, no `confirmRequestFor` a secas, para no cazar a los que la importan.
 
 **Comando:** desde `frontend/`: `npx vitest run src/__tests__/plan267Adoption.test.ts` + `npx tsc --noEmit`
-**Aceptación binaria:** 3 passed, `tsc` sin errores, y `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `npx vitest run src/__tests__/undoConfirmRatchet.test.ts` siguen verdes (los ratchets de deuda del 239/175 no empeoran).
+**Aceptación binaria:** 3 passed, `tsc` sin errores, y `npx vitest run src/__tests__/uiDebtRatchet.test.ts` sigue verde. (`undoConfirmRatchet.test.ts` también debe seguir verde, pero **es informativo**: cuenta `window.confirm(` y `[^.\w]confirm\(` y su propio encabezado aclara que `askConfirm(` **no** matchea ninguno de los dos, así que este plan no puede moverlo.)
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED`. **Nota de degradación:** los bindings y `runDevOpsAction` funcionan con el catálogo **embebido en el frontend como fallback** si el `GET /catalog` falla o la flag está OFF, para que apagar la flag **nunca** rompa un botón que hoy funciona. El fallback embebido se genera copiando los metadatos de las acciones de las 6 secciones tocadas (no las 23) — se declara en `devopsActionBindings.ts` como `FALLBACK_META: Record<string, DevOpsActionMeta>` y un test verifica que sus 6+ entradas coinciden campo a campo con el catálogo backend.
 **Runtimes:** irrelevante (UI). Idéntico en los 3.
@@ -1091,6 +1387,9 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 8. `test_section_ids_espejan_el_tsx` — leer `frontend/src/pages/DevOpsPage.tsx` como TEXTO, extraer los ids con `re.findall(r"^\s*id: '([a-z0-9-]+)',", src, re.M)`, y afirmar `set(...) == set(DEVOPS_SECTION_IDS)`. **Esta es la guarda contra el drift más caro**: si alguien agrega una sección DevOps y no la declara acá, el test lo caza.
 9. `test_nav_path_de_seccion_es_devops_slug` — si `section_id` no es `None`, `nav_path == f"/devops/{section_id}"`.
 10. `test_ninguna_accion_escribe_sin_confirmacion_posible` — para toda `write`, `summary` no está vacío (la tarjeta lo necesita para explicar qué va a pasar).
+11. **`test_write_no_es_ejecutable_desde_la_paleta` (I-REACH, KPI-9) [C5]** — para toda acción con `effect=="write"`, `"palette-run" not in a.reach`. El mensaje de fallo **lista los ids ofensores por nombre**. Es el ratchet que impide que un plan futuro reabra el agujero sin que nadie lo note.
+12. **`test_phrases_no_colisionan_entre_read_y_write` [C3]** — para todo par (`r` de lectura, `w` de escritura), ninguna `phrase` de `r` tiene su conjunto de **tokens de contenido** (usando `_content_tokens` del matcher) contenido en el de alguna `phrase` de `w`, ni al revés. Es la regla de diseño de `phrases` de F0, hecha test: sin ella, agregar `"desplegar"` al historial de despliegues volvería ambiguo el ranking y nadie se enteraría hasta que el operador confirmara la acción equivocada.
+13. **`test_reach_incluye_button_siempre`** — `"button" in a.reach` para las 23: ninguna acción puede volverse *solo* del asistente. Es el guardarraíl de "sin eliminar la posibilidad de hacerlo manualmente", verificado.
 
 **`frontend/src/__tests__/devopsActionCatalogRatchet.test.ts`** (paridad backend↔frontend, leyendo el `.py` como texto — patrón calcado de `devopsPollingRatchet.test.ts:17-21`)
 ```ts
@@ -1111,15 +1410,19 @@ function catalogIds(): string[] {
 3. `test_igualdad_exacta` — los dos conjuntos ordenados son iguales (KPI-7).
 4. `test_el_archivo_de_catalogo_existe` — falla con un mensaje explícito si la ruta se rompió (protege contra un falso verde por regex que no matchea nada sobre un archivo movido: si el `.py` no existe, el test **no** puede pasar con listas vacías).
 5. `test_hay_al_menos_23_ids` — protege contra el mismo falso verde: una regex que deja de matchear daría 2 listas vacías **iguales**, y `test_igualdad_exacta` pasaría sin decir nada.
+6. **`test_paleta_ofrece_al_menos_12_lecturas` (KPI-2) [C8]** — parsear del mismo `.py` los bloques `id="..."` junto con su `effect="..."` y su `reach=(...)`, y afirmar que hay **≥12** con `effect="read"` y `"palette-run"` en `reach`. Mide el **catálogo real**, no una entrada sintética como hacía el v1.
+7. **`test_ningun_write_tiene_palette_run` (KPI-9, espejo del test 11 del backend)** — el mismo invariante verificado desde el lado del frontend, para que borrar el test de Python no alcance para reabrir el agujero.
 
-**Registro:** `tests/test_devops_action_ratchet.py` en `HARNESS_TEST_FILES` (`.sh` y `.ps1`).
+**Registro [C1]:** `  tests/test_devops_action_ratchet.py` (desnuda) en `run_harness_tests.sh:20` **y** `  "tests/test_devops_action_ratchet.py",` (entrecomillada, con coma) en `run_harness_tests.ps1:13`.
 
 **Comandos:**
 - `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v`
 - desde `frontend/`: `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts`
 - `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v`
 
-**Aceptación binaria:** 10 passed (backend) + 5 passed (frontend) + 4 passed (meta-ratchet).
+**Aceptación binaria:** **13 passed (backend) + 7 passed (frontend) + 4 passed (meta-ratchet)**.
+
+**Huella de regresión [C18].** Al cerrar F8, agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` la huella del modo de falla que este plan introduce y que no existía antes: *"el asistente propone una acción DevOps que nunca se puede ejecutar"* — síntoma: `blocked_reason` distinto de `""` de forma permanente; causas ordenadas por probabilidad: (1) `health_key` de la acción apagado o master `flag_enabled` en `False`; (2) `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` OFF (esperado, no es bug: la tarjeta lo explica); (3) `flag_key` que ya no existe en el registro (lo caza el test 7 de este mismo archivo). Sin la huella, el primer reporte de "propone y no hace nada" se investiga desde cero.
 
 **Flag:** ninguna (son tests).
 **Runtimes:** irrelevante.
@@ -1140,7 +1443,9 @@ function catalogIds(): string[] {
 | R7 | Colisión de merge con 264 (modelo/effort) o 265 (consola) | Media | §8 declara la frontera archivo por archivo; el 267 **no toca** `model_catalog.py`, `llm_router.py`, `ModelEffortPicker.tsx`, `CodexConsoleDock.tsx` ni `store/workbench.ts` |
 | R8 | Un modelo menor implementa `runDevOpsAction` con el orden de guardas invertido y ejecuta sin confirmar | Media | El orden de los 5 pasos está escrito literalmente en el docstring de F4, y los tests 7/8/11 lo verifican con spies de 0 llamadas |
 | R9 | `sqlite` bajo pytest da `SQLITE_LOCKED` en los tests de API | Alta (conocido) | `test_devops_actions_api.py` **no escribe en la DB**: `/catalog`, `/propose` y `/preview` son de solo lectura. Si aun así aparece flaky, correr el archivo 8-12 veces y confirmar |
-| R10 | Se agrega una sección DevOps nueva y `DEVOPS_SECTION_IDS` queda stale | Alta a mediano plazo | `test_section_ids_espejan_el_tsx` (F8, test 8) lee el `.tsx` real |
+| R10 | Se agrega una sección DevOps nueva y `DEVOPS_SECTION_IDS` queda stale | Alta a mediano plazo | `test_section_ids_espejan_el_tsx` (F8, test 8) lee el `.tsx` real. *Verificado en la crítica v2: los 17 ids congelados del plan coinciden **exactamente** con los 17 de `DevOpsPage.tsx` (`:149`…`:320`), y la regex `^\s*id: '([a-z0-9-]+)',` devuelve esos 17 y nada más — el ratchet arranca verde y no por casualidad* |
+| **R11** *(v2, C1)* | El registro del test en el `.ps1` se hace con sintaxis de bash (o no se hace) y el arnés de Windows corre menos tests que el de bash **sin ponerse rojo** | **Alta**: el meta-test solo lee el `.sh` | §4.2 tabula el símbolo, la línea y la sintaxis de cada runner. Verificación manual obligatoria al cerrar: `grep -c "test_devops_action" backend/scripts/run_harness_tests.sh` y `backend/scripts/run_harness_tests.ps1` deben dar **4 y 4** |
+| **R12** *(v2, C5)* | Un plan futuro "simplifica" `devopsActionCommands` y vuelve a poner las escrituras a un Enter de distancia | Media a mediano plazo | Invariante I-REACH verificada por **dos** ratchets independientes (F8 backend test 11 y frontend test 7) más el test 5 de F5 con spy de 0 llamadas. Hay que borrar tres tests para reabrirlo |
 
 ---
 
@@ -1162,8 +1467,8 @@ function catalogIds(): string[] {
 | Plan | Archivos que ESE plan posee | Qué hace el 267 con ellos |
 |------|------------------------------|----------------------------|
 | **239** (IMPLEMENTADO) | `pages/devopsCockpitShell.ts`, `pages/DevOpsCockpitNav.tsx`, `pages/DevOpsTabsV2.tsx`, `pages/DevOpsHeaderV2.tsx`, `services/devops_overview.py`, `components/devops/DevOpsOverviewSection.tsx`, `__tests__/devopsPollingRatchet.test.ts` | **Lectura solamente.** El 267 consume `DevOpsSection.id` y `nav_path=/devops/<id>`, y agrega la acción `devops.overview.refresh` que llama al `GET /api/devops/overview` existente. **Cero ediciones.** `devopsPollingRatchet.test.ts` es criterio de aceptación de F5 y F6 |
-| **264** (CRITICADO v2, sin implementar) | `services/model_catalog.py`, `services/llm_router.py` (`clamp_model` `:38`, `clamp_effort_for_model` `:60`), `components/ModelEffortPicker.tsx`, `effort_mode:"no_aplica"` para Copilot, y el fix de `agent_runner.py:256-264` | **Cero ediciones.** El 267 **no** toca el eje modelo/effort porque su camino es determinista. Si más adelante se agrega enriquecimiento por LLM (fuera de scope, §7.6), debe usar `clamp_model`/`clamp_effort_for_model` del 264 y **nunca** el literal `_EFFORTS` de `devops_agent.py:15` |
-| **265** (PROPUESTO v1) | `components/CodexConsoleDock.tsx`, `store/workbench.ts:10-11`, `hooks/useExecutionStream.ts` | **Cero ediciones.** Único punto de contacto potencial: si el 265 agrega comandos a la paleta, ambos planes editan `commandPaletteData.ts`. **Regla de convivencia:** el 267 agrega `"devops-action"` **al final** del union `CommandKind` y una función nueva `devopsActionCommands()`; no reordena `CommandKind` ni modifica `NAV_COMMANDS`, `fuzzyScore` ni `mergeDeepResults`. Un merge posterior es aditivo por construcción. **Ojo con el duplicado silencioso**: si ambas ramas agregan una entrada a `DEEP_ICONS`, git puede fusionar sin conflicto — verificar `tsc --noEmit` después del merge |
+| **264** (CRITICADO v2, sin implementar) | `services/model_catalog.py`, `services/llm_router.py`, `components/ModelEffortPicker.tsx`, `agent_runner.py:256-264`, **y `api/devops_agent.py:15`** — el 264 lista ese `_EFFORTS` como uno de los 5 literales que va a reemplazar (ver su §2 y su bloque de F, `# api/devops_agent.py:15`) [C19] | **Cero ediciones, y en particular CERO ediciones a `api/devops_agent.py`**, que es propiedad del 264 en ese punto. El 267 no toca el eje modelo/effort porque su camino es determinista. Si más adelante se agrega enriquecimiento por LLM (fuera de scope, §7.6), debe usar `clamp_model`/`clamp_effort_for_model` del 264 y **nunca** el literal `_EFFORTS` |
+| **265** (PROPUESTO v1) | `components/CodexConsoleDock.tsx`, `store/workbench.ts`, `hooks/useExecutionStream.ts` | **Cero ediciones.** *Medido el 2026-07-27:* el doc del 265 **no menciona `CommandPalette` ni `commandPaletteData` ni una sola vez**, así que el riesgo de colisión en la paleta que el v1 declaraba es **teórico, no real** [C19]. Igual se mantiene la regla de convivencia por si el 265 crece: el 267 agrega `"devops-action"` **al final** del union `CommandKind` y una función nueva; no reordena `CommandKind` ni modifica `NAV_COMMANDS`, `fuzzyScore` ni `mergeDeepResults`. **Ojo con el duplicado silencioso**: si dos ramas agregan una entrada a `DEEP_ICONS`, git puede fusionar sin conflicto — verificar `tsc --noEmit` después del merge |
 | **175** (implementado) | `services/entityActions.ts`, `services/confirmGateway.ts` | `confirmGateway.ts` se **importa sin modificar**. `entityActions.ts` se toca **solo** si se decide exportar `EntityKind` ampliado — **no hace falta**: `devops-action` vive en su propio módulo y `EntityKind` usa `Extract<>`, que ignora los valores nuevos del union |
 | **129** (implementado) | `components/commandPaletteData.ts`, `components/CommandPalette.tsx` | Edición **aditiva** (F5), con test de no-regresión de `fuzzyScore` |
 | **41** (implementado) | `services/intent_preflight.py` | **Lectura solamente**: se calca la forma de `IntentBrief`. No se importa ni se modifica |
@@ -1182,24 +1487,30 @@ function catalogIds(): string[] {
 - **`effect`** — `read` (no cambia nada) o `write` (escribe en un sistema real). Determina si se confirma.
 - **`impact`** — `none` / `low` / `high`. Determina el `tone` de la confirmación.
 - **`targets_environment`** — si la acción actúa sobre un entorno concreto del operador. Obliga a declarar el param `environment`.
-- **Ratchet** — test que solo permite mejorar: impide que nazca una acción fuera del catálogo o que el catálogo y los bindings diverjan.
+- **`reach`** *(v2)* — desde qué superficies puede **dispararse** una acción: `button`, `palette-run`, `palette-nav`, `assistant`. Es el cuarto eje del catálogo y el que sostiene la invariante I-REACH.
+- **I-REACH** *(v2)* — `effect == "write"` ⇒ `"palette-run" not in reach`. Una acción que escribe nunca queda a un fuzzy-match + Enter de distancia. Es el doble cerrojo de `entityActions.ts:44-46` aplicado a las tres superficies en vez de a una.
+- **Ratchet** — test que solo permite mejorar: impide que nazca una acción fuera del catálogo, que el catálogo y los bindings diverjan, o que una escritura se vuelva ejecutable desde la paleta.
 - **Las 7 patas** — los 7 lugares donde se cablea una flag del arnés (§4.1).
 
 ---
 
 ## 10. Orden de implementación
 
-1. **F0** — `devops_action_catalog.py` + catálogo de 23 acciones + flag `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (7 patas) + `test_devops_action_catalog.py` (15 tests).
-2. **F1** — `api/devops_actions.py` con `GET /catalog` + 3 keys nuevas en `_health_payload()` + los 3 atributos en `config.py` + `test_devops_actions_api.py` (5 tests).
-3. **F2** — `devops_action_matcher.py` + `test_devops_action_matcher.py` (12 tests).
-4. **F3** — `devops_action_proposal.py` + `POST /propose` + `POST /preview` + flag `STACKY_DEVOPS_ACTION_NL_ENABLED` (7 patas, incluye `_REQUIRES_MAP_FROZEN`) + 12 tests más en `test_devops_actions_api.py`.
-5. **F4** — `devopsActionTypes.ts` + `devopsActionRunner.ts` + `devopsActionBindings.ts` + 14 tests de vitest.
-6. **F5** — `commandPaletteData.ts` (aditivo) + `CommandPalette.tsx` + `commandPaletteDevopsActions.test.ts` (7 tests).
-7. **F6** — `devopsActionConsoleModel.ts` + `DevOpsActionProposalCard.tsx` + `DevOpsActionConsole.tsx` + `DevOpsAgentSection.tsx` + flag `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` (default **OFF**, 7 patas) + 9 tests.
+1. **F0** — `devops_action_catalog.py` + catálogo de 23 acciones (con `reach` y las 23 listas de `phrases`) + flag `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (7 patas) + `test_devops_action_catalog.py` (**21 tests**).
+2. **F1** — `api/devops_actions.py` con `GET /catalog` y el seam `_health_payload_for_catalog()` + 3 keys nuevas en `_health_payload()` + los 3 atributos en `config.py` + `test_devops_actions_api.py` (5 tests).
+3. **F2** — `devops_action_matcher.py` (con `_STOPWORDS` y `_content_tokens`) + `test_devops_action_matcher.py` (**15 tests**).
+4. **F3** — `devops_action_proposal.py` + `POST /propose` (con `from dataclasses import replace`) + `POST /preview` + flag `STACKY_DEVOPS_ACTION_NL_ENABLED` (7 patas, incluye `_REQUIRES_MAP_FROZEN` y su `PLAIN_HELP` literal) + **14 tests más** en `test_devops_actions_api.py`.
+5. **F4** — `devopsActionTypes.ts` + `devopsActionRunner.ts` (con `navPathWithParams` y `paletteMode`) + `devopsActionBindings.ts` + **17 tests de vitest** (14 + 3).
+6. **F5** — `commandPaletteData.ts` (aditivo) + `CommandPalette.tsx` + `commandPaletteDevopsActions.test.ts` (**10 tests**).
+7. **F6** — `devopsActionConsoleModel.ts` + `DevOpsActionProposalCard.tsx` + `DevOpsActionConsole.tsx` (**cero `style={{}}`**) + `DevOpsAgentSection.tsx` + flag `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` (default **OFF**, 7 patas, con su `PLAIN_HELP` literal) + **10 tests**.
 8. **F7** — recableado de los 6 archivos de secciones, **uno por vez** + `plan267Adoption.test.ts` (3 tests).
-9. **F8** — `test_devops_action_ratchet.py` (10 tests) + `devopsActionCatalogRatchet.test.ts` (5 tests).
+9. **F8** — `test_devops_action_ratchet.py` (**13 tests**) + `devopsActionCatalogRatchet.test.ts` (**7 tests**) + la huella en `error_fingerprints.json`.
 
-Registrar en `HARNESS_TEST_FILES` (`backend/scripts/run_harness_tests.sh:20` **y** `backend/scripts/run_harness_tests.ps1:15`) los 4 archivos backend nuevos: `tests/test_devops_action_catalog.py`, `tests/test_devops_actions_api.py`, `tests/test_devops_action_matcher.py`, `tests/test_devops_action_ratchet.py`.
+**Registro de los 4 archivos backend nuevos, con la sintaxis de cada runner [C1]** — `tests/test_devops_action_catalog.py`, `tests/test_devops_actions_api.py`, `tests/test_devops_action_matcher.py`, `tests/test_devops_action_ratchet.py`:
+- en `backend/scripts/run_harness_tests.sh`, array **`HARNESS_TEST_FILES=(`** en **`:20`** ⇒ 4 líneas **desnudas** (`  tests/test_devops_action_catalog.py`)
+- en `backend/scripts/run_harness_tests.ps1`, array **`$HarnessTestFiles = @(`** en **`:13`** ⇒ 4 líneas **entrecomilladas y con coma** (`  "tests/test_devops_action_catalog.py",`)
+
+Verificación de que el registro quedó en los dos: `grep -c "test_devops_action" backend/scripts/run_harness_tests.sh` y el mismo sobre el `.ps1` deben dar **4** y **4**.
 
 ---
 
@@ -1208,35 +1519,40 @@ Registrar en `HARNESS_TEST_FILES` (`backend/scripts/run_harness_tests.sh:20` **y
 Todos estos comandos, corridos **por archivo** desde la raíz `Stacky Agents` (backend) o desde `frontend/` (vitest), en verde:
 
 ```
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v      # 15 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_matcher.py -v      # 12 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v         # 17 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v      # 10 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v              # 56 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v     #  9 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v       #  4 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v      # 21 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_matcher.py -v      # 15 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v         # 19 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v      # 13 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v              # 56 passed (medido hoy: 56)
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v     #  9 passed (medido hoy: 9)
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v       #  4 passed (medido hoy: 4)
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops.py -v                     # sin regresion
 ```
+Más el verificador de las 3 claves de `PLAIN_HELP` de §4.1 ⇒ imprime `OK`. **`test_harness_flags_help.py` NO está en esta lista a propósito: hoy tiene 4 fallos ajenos (medido: 4 failed / 4 passed) y no puede ser criterio binario de nada [C10].**
 ```
-npx vitest run src/services/devopsActionRunner.test.ts                       # 11 passed
+npx vitest run src/services/devopsActionRunner.test.ts                       # 14 passed
 npx vitest run src/services/devopsActionBindings.test.ts                     #  3 passed
-npx vitest run src/components/devops/devopsActionConsoleModel.test.ts        #  9 passed
-npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts  #  7 passed
+npx vitest run src/components/devops/devopsActionConsoleModel.test.ts        # 10 passed
+npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts  # 10 passed
 npx vitest run src/components/__tests__/commandPaletteData.test.ts           # sin regresion
-npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts              #  5 passed
+npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts              #  7 passed
 npx vitest run src/__tests__/plan267Adoption.test.ts                         #  3 passed
-npx vitest run src/__tests__/devopsPollingRatchet.test.ts                    # sin regresion
-npx vitest run src/__tests__/uiDebtRatchet.test.ts                           # sin regresion
+npx vitest run src/__tests__/devopsPollingRatchet.test.ts                    # sin regresion (cubre F6, NO F5)
+npx vitest run src/__tests__/uiDebtRatchet.test.ts                           # sin regresion (los .tsx nuevos suman 0)
 npx vitest run src/services/entityActions.test.ts                            # sin regresion
 npx tsc --noEmit                                                             # 0 errores
 ```
+**Total de tests nuevos: 68 backend + 47 frontend.**
 
 Y estos criterios cualitativos, verificables leyendo el diff:
 
-- [ ] Ningún archivo de los planes 239, 264 y 265 listados en §8 fue editado.
+- [ ] Ningún archivo de los planes 239, 264 y 265 listados en §8 fue editado — **en particular, cero ediciones a `api/devops_agent.py`** (es del 264).
 - [ ] Las 3 flags nuevas tienen sus 7 patas cableadas, y la OFF **no** declara `default=False`.
 - [ ] La flag OFF tiene escrita, en su propia línea, la categoría de excepción **(B)** y el porqué con `archivo:línea`.
-- [ ] Ningún `setInterval`, `setTimeout` recurrente ni `refetchInterval` nuevo.
+- [ ] Las 3 entradas de `PLAIN_HELP` están escritas con el texto literal de este plan (no inventadas).
+- [ ] `grep -c "test_devops_action"` da **4** en `run_harness_tests.sh` **y 4** en `run_harness_tests.ps1`, cada uno con la sintaxis de su runner.
+- [ ] Ningún `setInterval`, `setTimeout` recurrente ni `refetchInterval` nuevo — **incluido `CommandPalette.tsx`, que ningún ratchet existente cubre**.
 - [ ] Ningún endpoint de ejecución nuevo en el backend.
-- [ ] Ningún botón existente del panel DevOps fue borrado.
-- [ ] Con las 3 flags apagadas, el panel se comporta igual que antes del plan.
+- [ ] Ningún botón existente del panel DevOps fue borrado, y `"button" in reach` para las 23 acciones.
+- [ ] **Ninguna acción con `effect:"write"` tiene `"palette-run"` en su `reach`** (I-REACH / KPI-9).
+- [ ] **Con las 3 flags apagadas: los mismos botones, en los mismos lugares, con el mismo efecto y el mismo `tone`. Lo único distinto es el TEXTO de la confirmación, que ahora sale del catálogo — que es el objetivo del plan [C4].** (El v1 pedía "se comporta igual que antes", un checkbox falso por construcción tras F7.)

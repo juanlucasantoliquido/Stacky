@@ -469,6 +469,28 @@
         "matches": [],
         "clean": []
       }
+    },
+    {
+      "id": "qa_uat_nav_deviation",
+      "title": "El QAUAT sigue navegando despues de haberse desviado de la ruta",
+      "class": "qa-uat-navigation",
+      "status": "resolved",
+      "log_pattern": "NAV_DEVIATION",
+      "log_guarded": true,
+      "killed_by": "plan 214 F2 (assert_arrival + assertArrival del template + replan switch_human_path)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/unit/test_plan214_nav_deviation.py",
+      "evidence": "Stacky tools/QA UAT Agent/navigation_driver.py; replan_engine.py; templates/playwright_test.spec.ts.j2; qa_uat_pipeline.py",
+      "note": "Un postback de WebForms puede dejar la sesion en la pantalla equivocada mientras el spec sigue clickeando: el run terminaba en un fallo APP confuso muchos pasos despues, sin decir nunca que el problema fue la navegacion. La llegada se asevera EN el paso (ancla del ui_map, o URL si no hay ui_map); el desvio se cuenta en stages.runner.nav_deviations y el replan cambia de human_path en vez de reintentar el mismo camino.",
+      "self_test": {
+        "matches": [
+          "navigation_driver: form_submit - NAV_DEVIATION: expected=FrmDetalleClie.aspx url=http://localhost:35017/AgendaWeb/FrmAgenda.aspx"
+        ],
+        "clean": [
+          "navigation_driver: form_submit OK (attempt 1) -> http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx"
+        ]
+      }
     }
   ]
 }

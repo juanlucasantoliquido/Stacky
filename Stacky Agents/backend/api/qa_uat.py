@@ -2009,3 +2009,18 @@ def get_runtime_doctor():
         out["ado_bridge"] = {"ok": False, "detail": str(exc)}
     out["ok"] = bool((out["browser"] or {}).get("ok"))
     return jsonify(out)
+
+
+@bp.get("/kb")
+def get_kb_inventory():
+    """Inventario de la KB de navegación (Plan 214 F1). Read-only, best-effort.
+
+    SIEMPRE 200: el consumidor (pane de veredicto) lo lee de forma opcional, así
+    que un tool ausente o un YAML roto degradan a ok:false, nunca a 5xx.
+    """
+    _ensure_pipeline_on_path()
+    try:
+        import navigation_kb
+        return jsonify(navigation_kb.kb_inventory())
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": "kb_unavailable", "message": str(exc)}), 200

@@ -30,28 +30,59 @@ const RESOLVED_{{ key }} = process.env['RESOLVED_{{ key }}'] || {{ val | tojson 
 // for the one-time login.  Specs restore auth from storageState — no login here.
 
 /**
+ * waitForAspNetIdle — Plan 214 F2. Bounded wait until ASP.NET is idle.
+ *
+ * Returns TRUE when the page settled (readyState complete AND no UpdatePanel
+ * async PostBack in flight) and FALSE when the budget ran out. Never throws.
+ * The boolean matters: assertArrival needs to know whether it is looking at a
+ * settled page or at one still mid-postback.
+ */
+async function waitForAspNetIdle(page: any, timeoutMs = 3_000): Promise<boolean> {
+  const idle = await page.waitForFunction(
+    () => {
+      if (document.readyState !== 'complete') return false;
+      try {
+        const prm = (window as any).Sys?.WebForms?.PageRequestManager?.getInstance?.();
+        if (prm && prm.get_isInAsyncPostBack()) return false;
+      } catch (_) { /* no ScriptManager => no async postback */ }
+      return true;
+    },
+    null,
+    { timeout: timeoutMs },
+  ).then(() => true).catch(() => false);
+  return idle;
+}
+
+/**
  * waitForAgendaStable — Wait for AgendaWeb / ASP.NET WebForms to settle.
  *
  * Replaces raw waitForLoadState('load') which misses UpdatePanel async PostBacks.
- * Strategy:
- *   1. Wait for DOM content parsed (domcontentloaded — fast, reliable).
- *   2. Wait for ASP.NET PageRequestManager async PostBack to finish (UpdatePanel).
- *   3. Fail-safe: if Sys is not available, resolve immediately (static pages).
+ * Delegates the ASP.NET part to waitForAspNetIdle (single source of truth) and
+ * stays best-effort: it never fails a test on its own.
  */
 async function waitForAgendaStable(page: any, timeout = 10_000): Promise<void> {
   await page.waitForLoadState('domcontentloaded').catch(() => null);
-  await page.waitForFunction(
-    () => {
-      try {
-        const prm = (window as any).Sys?.WebForms?.PageRequestManager?.getInstance?.();
-        return !prm || !prm.get_isInAsyncPostBack();
-      } catch (_) {
-        return true;  // Sys not available — page is stable
-      }
-    },
-    null,
-    { timeout },
-  ).catch(() => null);  // Never fail the test on this wait — it's best-effort
+  await waitForAspNetIdle(page, timeout);
+}
+
+/**
+ * assertArrival — Plan 214 F2. Fail EARLY when navigation went off-route.
+ *
+ * A WebForms postback can leave you on the wrong screen while the test happily
+ * keeps clicking, so the run ends in a confusing APP failure many steps later.
+ * Throwing NAV_DEVIATION here makes the deviation the reported cause: the
+ * pipeline counts it in stages.runner.nav_deviations and replan_engine turns it
+ * into a switch_human_path retry instead of a mute FAIL.
+ */
+async function assertArrival(page: any, expectedScreen: string, stepIndex: number): Promise<void> {
+  await waitForAspNetIdle(page);
+  const token = String(expectedScreen || '').replace('.aspx', '').toLowerCase();
+  const current = String(page.url() || '');
+  if (token && !current.toLowerCase().includes(token)) {
+    throw new Error(
+      `NAV_DEVIATION: expected=${expectedScreen} url=${current} step=${stepIndex}`,
+    );
+  }
 }
 
 // ORACLE_PROBES — generated from scenario.oraculos × ui_map.
@@ -568,6 +599,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
       console.log('[STEP {{ '%02d' | format(loop.index) }}] navigate_webforms OK — landed on', page.url(), 'in', _navResult_{{ loop.index }}.elapsedMs, 'ms');
     }
     await waitForAgendaStable(page);
+    await assertArrival(page, {{ step.target | tojson }}, {{ loop.index }});
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     {% elif step.accion == 'expand_collapsible' %}
     // [STEP {{ '%02d' | format(loop.index) }}] expand collapsible search panel
@@ -582,7 +614,10 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
 {% endif %}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] click {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
-    await page.locator("{{ ui_map[step.target] }}").click();
+    // Plan 214 F2 — WebForms-safe: el click no espera la navegación implícita
+    // (el postback la rompe); la espera real es el idle de ASP.NET.
+    await page.locator("{{ ui_map[step.target] }}").click({ noWaitAfter: true });
+    await waitForAspNetIdle(page);
     await waitForAgendaStable(page);
     await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });

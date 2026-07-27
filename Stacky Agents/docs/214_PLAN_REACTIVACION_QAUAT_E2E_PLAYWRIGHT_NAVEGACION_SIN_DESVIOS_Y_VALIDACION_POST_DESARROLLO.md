@@ -1,12 +1,12 @@
 # Plan 214 — Reactivación y fortalecimiento del agente QAUAT E2E (Playwright): navegación sin desvíos y validación post-desarrollo desde Agenda Web
 
-> Estado: **PARCIAL — faltan F1 y F2** (auditoría solo-lectura 2026-07-26, `supervisar-implementaciones-planes`).
+> Estado: **COMPLETO F0..F6** — F1 y F2 implementadas el 2026-07-26 (`implementar-plan-stacky`); el resto ya estaba.
 >
 > | Fase | Veredicto | Evidencia verificada contra código |
 > |---|---|---|
 > | F0 | **IMPLEMENTADA** (`615baf45`) | `ls "Stacky tools/QA UAT Agent" \| grep -c "^tmp"` = **0**; `_attic/` = **12** archivos; `grep -c RSPACIFICO run_tests.py` = **0** |
-> | F1 | **PENDIENTE — SIN CÓDIGO** | NO existen `navigation_kb.py` ni `playbook_curator.py` en el tool; NO existe `tests/unit/test_plan214_navigation_kb.py`; `grep -n "get_kb_inventory" backend/api/qa_uat.py` = **0 hits** (no hay endpoint `GET /api/qa-uat/kb`); no existe `backend/tests/test_plan214_qa_uat_kb_endpoint.py`. La KB SÍ creció (7 playbooks + 6 ui_maps en `cache/`), pero eso lo trajeron los planes 240/241: el inventario determinista y el curador del 214 no están |
-> | F2 | **PARCIAL (≈20%)** | Único hit: `navigation_driver.py:390` `click(no_wait_after=True)` — y lo puso el plan **241** (`25fc4072`), no el 214. FALTAN: `wait_aspnet_idle`/`_ASPNET_IDLE_JS` (0 hits), `assert_arrival` (0 hits), `NAV_DEVIATION` en `navigation_driver.py` **y** en `replan_engine.py` (**0 hits en ambos**), `waitForAspNetIdle` en `templates/playwright_test.spec.ts.j2` (**0 hits**), `nav_deviations` en `qa_uat_pipeline.py` (**0 hits**), la huella `qa_uat_nav_deviation` en `docs/sistema/error_fingerprints.json` (**0 hits**), y los 2 archivos de test (`test_plan214_webforms_idle.py`, `test_plan214_nav_deviation.py`). `grep -rn "deviation" --include=*.py` sobre el tool devuelve **0 hits** |
+> | F1 | **IMPLEMENTADA** (2026-07-26) | `navigation_kb.py` (`kb_inventory`, `load_contract_screens`, CLI `--report/--json-out`) + `playbook_curator.py` (`validate_playbook`, `validate_playbook_file`, `curate`, CLI `--session/--dry-run`); `api/qa_uat.py::get_kb_inventory` → `GET /api/qa-uat/kb`; `Flujo_QA_UAT.md` §"Crecer la base de navegación". Tests: `tests/unit/test_plan214_navigation_kb.py` **9 passed**, `backend/tests/test_plan214_qa_uat_kb_endpoint.py` **2 passed** (registrado en el ratchet sh **y** ps1) |
+> | F2 | **IMPLEMENTADA** (2026-07-26) | `navigation_driver.py`: `_ASPNET_IDLE_JS`, `wait_aspnet_idle`, `_ui_map_anchor`, `NavigationDriver.assert_arrival`, `_deviation_result`, rama `NAV_DEVIATION` en `_classify_error`, y el par WebForms-safe cableado en `via_link_click` / `_execute_nav` / `via_menu`. `replan_engine.py`: `_CONTRACTS_PATH`, `_extract_deviation_screen`, `_declared_human_paths`, `replan_type="switch_human_path"` (Priority 0) + su `_apply_patch`. `templates/playwright_test.spec.ts.j2`: `waitForAspNetIdle` (6 hits), `assertArrival` que lanza `NAV_DEVIATION`, `click({ noWaitAfter: true })`. `qa_uat_pipeline.py`: `_count_nav_deviations` + `nav_deviations` en `_summarise_runner` (incondicional). Huella `qa_uat_nav_deviation` sembrada. Tests: `test_plan214_webforms_idle.py` **5 passed**, `test_plan214_nav_deviation.py` **19 passed** |
 > | F3 | **IMPLEMENTADA** (`02ffdac9`) | `backend/services/qa_uat_enqueue.py` + wiring real `app.py:924-925` (`register(ticket_status.register_post_hook)`); flags `STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED` / `STACKY_QA_UAT_AUTORUN_ENABLED` en `harness_flags.py:178,1966,1978` (la 2ª con `requires` de profundidad 1) |
 > | F4 | **IMPLEMENTADA** (`02ffdac9`) | `api/qa_uat.py:174` `def _update_dev_candidate(...)`; `components/qaUatVerdictModel.ts`, `QaUatVerdictPane.tsx` + `.module.css`, `__tests__/qaUatVerdictModel.test.ts`; montado en `OutputPanel.tsx` (2 hits, no inerte) |
 > | F5 | **IMPLEMENTADA** (`615baf45`) | `grep -c "PLAYBOOKS PRIMERO" backend/Stacky/agents/QAUat1.agent.md` = **1**; `services/qa_browser_plan.py:27` `def playbook_candidates(...)` |
@@ -18,7 +18,65 @@
 >
 > **Corrección de una creencia previa:** se creía que F3/F4 estaban hechas y que F1/F2 "las cubrieron los
 > planes 240/241". Falso contra código: 240/241 aportaron `no_wait_after` y crecieron el `cache/`, pero NO
-> construyeron el inventario/curador de F1 ni el circuito `NAV_DEVIATION` de F2. Lo pendiente REAL es F1 + F2.
+> construyeron el inventario/curador de F1 ni el circuito `NAV_DEVIATION` de F2. Lo pendiente REAL era F1 + F2.
+>
+> ---
+>
+> ### Desvíos del plan aplicados al construir F1/F2 (2026-07-26) — con justificación
+>
+> Siete puntos del plan se contradecían con el árbol real. En todos se aplicó el criterio correcto
+> y quedó documentado en el código; ninguno se gameó para verdear un grep-gate.
+>
+> 1. **(F1, BLOQUEANTE — el plan destruía la KB que venía a hacer crecer.)** El plan ordenaba validar el
+>    playbook contra el `required` de `schemas/Playbook.schema.json`. Ese `required` incluye `playbook_id`
+>    y `arrival_assertions`, que `session_to_playbook.run()` **nunca emite** (`session_to_playbook.py:202-215`)
+>    y que **ninguno de los 7 playbooks del `cache/` tiene**: aplicado al pie de la letra habría renombrado
+>    el 100% de la KB viva a `.rejected.json`. Implementado: se valida el contrato **efectivo** del productor
+>    (`_REQUIRED_KEYS`) y la diferencia contra el schema se reporta como `schema_drift` — visible, nunca
+>    destructiva. Cubierto por el control `test_curator_no_rechaza_los_playbooks_reales`.
+> 2. **(F2)** Los anclajes de línea de F2 estaban stale: el archivo creció con el plan 241. `via_link_click`
+>    está en `:284` (no `:280`), `_execute_nav` en `:483` (no `:342`), `_classify_error` en `:637` (no `:496`).
+>    Peor: el `__doPostBack` que el plan ubicaba en `_execute_nav:364` es hoy el `click` de **`via_menu`**.
+>    Los símbolos existen; se editaron por símbolo, no por línea.
+> 3. **(F2, BLOQUEANTE — el plan no compilaba.)** El plan pedía `ReplanDecision(category="NAV", action="switch_human_path")`.
+>    `ReplanDecision` **no tiene** `category` ni `action` (`replan_engine.py:71-79`): sus campos son
+>    `scenario_id/replan_type/description/patch/confidence`, y `"abort_round"` no existe en ningún enum.
+>    Instanciarlo así era un `TypeError`. Implementado: `replan_type="switch_human_path"` (miembro nuevo del
+>    union) y, sin alternativa, `replan_type="escalate"` — que es exactamente lo que `analyze()` traduce a
+>    `ReplanResult.action == "escalate"` (`replan_engine.py:180-186`), el equivalente real de "abort_round".
+> 4. **(F2)** "otro `human_paths` no intentado aún" con **un solo** path declarado debe dar `escalate`, no
+>    `switch_human_path`: el camino en uso cuenta como intentado. Sin esta regla el replan quemaba sus 3 rondas
+>    reintentando el MISMO camino y terminaba en un FAIL mudo. Control negativo: `test_replan_sin_alternativa_escala`.
+> 5. **(F2)** El plan mandaba agregar `waitForAspNetIdle` al template, que **ya tenía** `waitForAgendaStable`
+>    con semántica idéntica. En vez de duplicar, `waitForAspNetIdle` quedó como helper canónico — devolviendo
+>    el `boolean` que faltaba y que `assertArrival` necesita — y `waitForAgendaStable` delega en él.
+> 6. **(F2)** Los elementos del `ui_map` traen la clave **`asp_id`**, no `id` como decía el plan
+>    (verificado en `cache/ui_maps/*.json`). `_ui_map_anchor` lee `asp_id` con `id` como fallback.
+> 7. **(F2)** `nav_deviations` va en el `base` **incondicional** de `_summarise_runner`, no en su rama `ok`:
+>    KPI-1 exige el contador en el 100% de los runs y un crash del runner lo habría dejado mudo.
+>    Control: `test_nav_deviations_presente_incluso_si_el_runner_fallo`.
+>
+> **Bug REAL preexistente hallado y corregido de paso (no era del plan):** `_classify_failure` agregaba
+> `actual`/`expected` de cada `assertion_failure` pero **nunca `message`** — el único campo obligatorio de
+> ese objeto según `runner_output.schema.json`. Como Playwright reporta TODO fallo de aserción vía
+> `throw new Error(...)`, el clasificador del replan venía leyendo texto vacío y decidía a ciegas. Sin este
+> arreglo, el `NAV_DEVIATION` que emite el spec generado nunca habría llegado al replan (medido:
+> `analyze()` devolvía `escalate` en vez de `retry`). Corregido en `replan_engine.py`;
+> `test_replan_engine.py` sigue **19 passed**.
+>
+> **Regresión medida contra HEAD (copia limpia del tool, no por inspección):** `test_qa_uat_pipeline.py`
+> 5 failed/13 passed, `test_playwright_test_generator.py` 5 failed/6 passed y `test_navigation_plan_gate.py`
+> 3 failed dan **exactamente los mismos números antes y después** de F1/F2 — son rojos ajenos preexistentes,
+> no regresiones. Igual `test_error_fingerprints_catalog.py` (3 failed/5 passed) y `..._scan.py`
+> (2 failed/7 passed): fallan por 4 huellas guarded **de los planes 210/241** que no declaran `self_test`;
+> la huella nueva `qa_uat_nav_deviation` sí lo declara.
+>
+> **Pendiente de F2 (declarado, no maquillado):** el smoke E2E contra AgendaWeb viva (F6, excepción #3) sigue
+> sin correrse; y `NavigationDriver` **no tiene ningún importador de producción** en el tool
+> (`grep -rn "NavigationDriver" --include=*.py` fuera de tests = 2 comentarios): la navegación del pipeline
+> corre por los `.spec.ts` generados, por eso el circuito vivo de detección de desvío es
+> template → `assertArrival` → `runner_output` → `nav_deviations` → `replan_engine`, y el driver queda como
+> biblioteca para scripts one-shot, ya con el mismo patrón aplicado.
 >
 > Estado previo: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-23). Pipeline: proponer ✓ → **criticar ✓** → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5). Juez v2: el mismo agente en rol adversarial.

@@ -418,3 +418,43 @@ error"):
 **Estado: PENDIENTE de corrida.** Igual que los smokes E2E de los planes 153,
 166 y 177, queda documentado para que lo corra el operador contra un ambiente
 vivo; no se declara verde hasta que se corra de verdad.
+
+---
+
+## Crecer la base de navegación (Plan 214 F1)
+
+El agente se desvía navegando cuando no tiene conocimiento de la pantalla: sin
+`ui_map` improvisa selectores y sin `playbook` improvisa el orden de los pasos.
+Estos tres comandos convierten una demo humana de ~2 minutos en conocimiento
+estable y reusable por los 3 runtimes.
+
+**Prerequisitos (EXCEPCIÓN DURA #3, opt-in):** AgendaWeb viva en
+`http://localhost:35017/AgendaWeb/`, credenciales en
+`Tools/Stacky/.secrets/agenda_web.env` y los browsers de Playwright instalados
+(`playwright install chromium`). Sin esto, todo lo demás sigue funcionando igual
+que hoy: el inventario simplemente reporta la cobertura baja.
+
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent"
+# 1) Grabar una demo humana del flujo (login automático; navegás vos; Ctrl+C al terminar):
+& "..\..\Stacky Agents\backend\.venv\Scripts\python.exe" session_recorder.py --goal "alta de obligacion desde agenda"
+# 2) Curar la grabación a playbook VALIDADO (un playbook irreplayable se pone en
+#    cuarentena como <slug>.rejected.json en vez de contaminar la KB):
+& "..\..\Stacky Agents\backend\.venv\Scripts\python.exe" playbook_curator.py --session evidence\recordings\latest
+# 3) Ver la cobertura resultante:
+& "..\..\Stacky Agents\backend\.venv\Scripts\python.exe" navigation_kb.py --report
+```
+
+El mismo inventario del paso 3 se consulta desde Stacky con
+`GET /api/qa-uat/kb` (read-only, siempre 200): devuelve `screens_declared`,
+`ui_maps`, `playbooks`, `missing_ui_maps` y `coverage_pct`.
+
+### Nota sobre la validación del curador
+
+`playbook_curator` valida el contrato EFECTIVO que emite `session_to_playbook`
+(`schema_version`, `goal_slug`, `target_screen`, `navigation_steps`,
+`action_steps`). El `required` de `schemas/Playbook.schema.json` además exige
+`playbook_id` y `arrival_assertions`, que el conversor nunca emite y que ningún
+playbook del `cache/` tiene: esa diferencia se reporta como `schema_drift` —
+visible pero NO destructiva. Validar por el `required` crudo del schema
+rechazaría el 100% de la KB viva.

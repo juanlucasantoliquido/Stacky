@@ -4455,8 +4455,37 @@ def _extract_screen_from_ticket(ticket_result: dict) -> Optional[str]:
     return None
 
 
+def _count_nav_deviations(r: dict) -> int:
+    """Plan 214 F2 — corridas que se desviaron de la ruta de navegación.
+
+    Cuenta CORRIDAS, no ocurrencias: un scenario que grita NAV_DEVIATION en tres
+    lugares del stdout sigue siendo un desvío. Puro y sin excepciones: ante
+    cualquier forma inesperada devuelve 0 (nunca rompe el resumen del pipeline).
+    """
+    if not isinstance(r, dict):
+        return 0
+    runs = r.get("runs")
+    if not isinstance(runs, list):
+        return 0
+    count = 0
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        try:
+            blob = json.dumps(run, ensure_ascii=False, default=str)
+        except Exception:  # noqa: BLE001
+            blob = str(run)
+        if "NAV_DEVIATION" in blob:
+            count += 1
+    return count
+
+
 def _summarise_runner(r: dict) -> dict:
     base = {"ok": r.get("ok", False), "skipped": False}
+    # KPI-1 del Plan 214: el contador se expone en el 100% de los runs, también
+    # cuando el runner falló — si solo estuviera en la rama ok, un crash dejaría
+    # la señal de navegación muda.
+    base["nav_deviations"] = _count_nav_deviations(r)
     if r.get("ok"):
         base["pass"] = r.get("pass", r.get("pass_count", 0))
         base["fail"] = r.get("fail", r.get("fail_count", 0))

@@ -65,6 +65,10 @@ logger = logging.getLogger("stacky.qa_uat.replan_engine")
 _TOOL_VERSION = "1.0.0"
 MAX_REPLAN_ROUNDS = 3
 
+# Plan 214 F2 — contrato de navegación consultado ante un NAV_DEVIATION.
+# Módulo-level para que los tests puedan apuntarlo a un fixture.
+_CONTRACTS_PATH = Path(__file__).resolve().parent / "navigation_contracts.yml"
+
 # ── Data structures ───────────────────────────────────────────────────────────
 
 @dataclass
@@ -72,7 +76,8 @@ class ReplanDecision:
     """Decision for a single failed/blocked scenario."""
     scenario_id: str
     replan_type: str        # "add_field" | "fix_selector" | "fix_navigation" |
-                            # "dismiss_modal" | "escalate"
+                            # "dismiss_modal" | "switch_human_path" | "escalate"
+                            # (switch_human_path: Plan 214 F2 — desvío de navegación)
     description: str
     patch: dict = field(default_factory=dict)   # mutations applied to intent_spec
     confidence: str = "medium"                  # "high" | "medium" | "low"
@@ -131,6 +136,43 @@ _WRONG_SCREEN_PATTERNS = (
 def _text_contains_any(text: str, patterns: tuple) -> bool:
     t = text.lower()
     return any(p.lower() in t for p in patterns)
+
+
+# ── Plan 214 F2 — desvío de navegación (NAV_DEVIATION) ────────────────────────
+
+_NAV_DEVIATION_MARKER = "NAV_DEVIATION"
+
+
+def _extract_deviation_screen(text: str) -> str:
+    """Pantalla esperada embebida en `NAV_DEVIATION: expected=<screen> url=...`."""
+    marker = "expected="
+    idx = text.find(marker)
+    if idx < 0:
+        return ""
+    tail = text[idx + len(marker):]
+    # El nombre de pantalla no lleva espacios; corta en el primer separador.
+    for sep in (" ", "\t", "\n", ","):
+        cut = tail.find(sep)
+        if cut >= 0:
+            tail = tail[:cut]
+    return tail.strip()
+
+
+def _declared_human_paths(screen: str, contracts_path: Optional[Path] = None) -> list[str]:
+    """Nombres de los human_paths declarados para `screen`. [] si no hay. Nunca lanza."""
+    path = Path(contracts_path) if contracts_path else _CONTRACTS_PATH
+    try:
+        import yaml
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return []
+    if not isinstance(data, dict):
+        return []
+    entry = data.get(screen)
+    if not isinstance(entry, dict):
+        return []
+    hp = entry.get("human_paths")
+    return list(hp.keys()) if isinstance(hp, dict) else []
 
 
 # ── Core analysis ─────────────────────────────────────────────────────────────
@@ -263,8 +305,14 @@ def _classify_failure(failure: dict, intent_spec: dict, evidence_dir: Path) -> O
         failure.get("error_message", ""),
         " ".join(failure.get("console_errors", [])),
         " ".join(str(e) for e in failure.get("screen_errors", [])),
+        # BUGFIX (hallado al construir el Plan 214 F2): `message` es el UNICO
+        # campo obligatorio de assertion_failures (runner_output.schema.json) y
+        # el classifier no lo leia. Un `throw new Error(...)` del spec — que es
+        # como Playwright reporta TODO fallo de asercion — llegaba aca como
+        # texto vacio, asi que el replan clasificaba a ciegas.
         " ".join(
-            str(a.get("actual", "")) + " " + str(a.get("expected", ""))
+            str(a.get("message", "")) + " " + str(a.get("actual", "")) + " "
+            + str(a.get("expected", ""))
             for a in failure.get("assertion_failures", [])
         ),
         " ".join(
@@ -273,6 +321,40 @@ def _classify_failure(failure: dict, intent_spec: dict, evidence_dir: Path) -> O
             if a.get("status") == "fail"
         ),
     ])
+
+    # ── Priority 0 (Plan 214 F2): desvío de navegación ──────────────────────
+    # VA PRIMERO a propósito: el detalle del desvío arrastra palabras que las
+    # ramas genéricas ("timeout exceeded", runner_status blocked) se llevarían
+    # puestas, convirtiendo una falla NAV en un fix_selector inútil.
+    if _NAV_DEVIATION_MARKER in all_text:
+        screen = _extract_deviation_screen(all_text)
+        declared = _declared_human_paths(screen)
+        meta = (intent_spec.get("_replan_meta") or {}).get("tried_human_paths") or {}
+        tried = list(meta.get(screen) or [])
+        if not tried and declared:
+            # El camino en uso es el primero declarado: cuenta como intentado,
+            # si no el replan "cambiaría" al MISMO camino y quemaría sus rondas.
+            tried = [declared[0]]
+        available = [p for p in declared if p not in tried]
+        if available:
+            chosen = available[0]
+            return ReplanDecision(
+                scenario_id=sid,
+                replan_type="switch_human_path",
+                description=(f"NAV_DEVIATION en {screen or '<desconocida>'} para {sid}: "
+                             f"cambiando al human_path alternativo {chosen!r}"),
+                patch={"scenario_id": sid, "screen": screen,
+                       "human_path": chosen, "tried": tried},
+                confidence="medium",
+            )
+        return ReplanDecision(
+            scenario_id=sid,
+            replan_type="escalate",
+            description=(f"NAV_DEVIATION en {screen or '<desconocida>'} para {sid}: "
+                         "no quedan human_paths alternativos declarados en el "
+                         "contrato. Revisión manual requerida (veredicto FAIL/NAV honesto)."),
+            confidence="low",
+        )
 
     # ── Priority 1: required-field error ────────────────────────────────────
     if _text_contains_any(all_text, _REQUIRED_FIELD_PATTERNS):
@@ -420,6 +502,27 @@ def _apply_patch(decision: ReplanDecision, intent_spec: dict) -> None:
                     if field_name not in placeholders:
                         placeholders.append(field_name)
             logger.info("replan_engine: added required field %r to resolved_data", field_name)
+
+    elif replan_type == "switch_human_path":
+        # Plan 214 F2 — registra el camino elegido y marca los ya intentados,
+        # para que la ronda siguiente no vuelva a caer en el mismo desvío.
+        screen = patch.get("screen", "")
+        chosen = patch.get("human_path", "")
+        meta = intent_spec.setdefault("_replan_meta", {})
+        preferred = meta.setdefault("preferred_human_path", {})
+        tried_map = meta.setdefault("tried_human_paths", {})
+        if screen:
+            preferred[screen] = chosen
+            tried = tried_map.setdefault(screen, [])
+            for name in list(patch.get("tried") or []) + [chosen]:
+                if name and name not in tried:
+                    tried.append(name)
+        # El navigation_path se recalcula con la preferencia nueva (mismo
+        # mecanismo probado de fix_navigation: limpiar, no inventar).
+        for tc in (intent_spec.get("test_cases") or []):
+            if tc.get("id") == sid or not sid:
+                tc.pop("navigation_path", None)
+        logger.info("replan_engine: switch_human_path %s → %r", screen, chosen)
 
     elif replan_type == "fix_navigation":
         # Reset navigation_path so intent_parser recomputes it via path_planner

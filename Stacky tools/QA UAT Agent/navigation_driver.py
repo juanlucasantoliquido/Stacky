@@ -82,12 +82,15 @@ VARIABLES DE ENTORNO
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+_TOOL_ROOT = Path(__file__).resolve().parent
 
 logger = logging.getLogger("stacky.qa_uat.navigation_driver")
 
@@ -205,6 +208,76 @@ _JS_DOPOSTBACK = """
 """
 
 
+# ── Plan 214 F2 — patrón WebForms-safe: espera de idle ASP.NET ───────────────
+# Los postbacks de WebForms (full page o UpdatePanel) rompen las esperas default
+# de Playwright: la acción "termina" antes de que el servidor haya devuelto la
+# pantalla. El patrón correcto es click sin espera implícita + espera CORTA de
+# idle + validación de llegada por DOM; nunca una espera larga ciega.
+
+_ASPNET_IDLE_JS = """
+() => {
+  if (document.readyState !== 'complete') return false;
+  try {
+    const prm = window.Sys && window.Sys.WebForms
+      && window.Sys.WebForms.PageRequestManager
+      && window.Sys.WebForms.PageRequestManager.getInstance();
+    if (prm && prm.get_isInAsyncPostBack()) return false;
+  } catch (e) { /* sin ScriptManager => no hay async postback */ }
+  return true;
+}
+"""
+
+
+async def wait_aspnet_idle(page, timeout_ms: int = 3000) -> bool:
+    """Espera corta a que ASP.NET quede idle (readyState + PageRequestManager).
+
+    Poll cada 100ms. True=idle, False=timeout. NUNCA lanza: durante una
+    navegación en curso `evaluate` puede fallar transitoriamente y eso NO es
+    un error del test.
+    """
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while True:
+        try:
+            if await page.evaluate(_ASPNET_IDLE_JS):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(0.1)
+
+
+def _ui_map_anchor(expected_screen: str, ui_maps_dir: Optional[Path] = None) -> Optional[str]:
+    """Primer id estable declarado en el ui_map de la pantalla. None si no hay.
+
+    OJO (desvío del plan 214 F2): los elementos del ui_map traen la clave
+    `asp_id`, NO `id` (verificado en cache/ui_maps/*.json, 2026-07-26).
+    NUNCA lanza.
+    """
+    base = Path(ui_maps_dir) if ui_maps_dir else (_TOOL_ROOT / "cache" / "ui_maps")
+    name = str(expected_screen or "").strip()
+    if not name:
+        return None
+    candidates = [f"{name}.json"]
+    if not name.lower().endswith(".aspx"):
+        candidates.append(f"{name}.aspx.json")
+    for candidate in candidates:
+        path = base / candidate
+        try:
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        for el in (data.get("elements") or []):
+            if not isinstance(el, dict):
+                continue
+            el_id = el.get("asp_id") or el.get("id")
+            if isinstance(el_id, str) and el_id.strip():
+                return el_id.strip()
+    return None
+
+
 # ── NavigationDriver ──────────────────────────────────────────────────────────
 
 class NavigationDriver:
@@ -228,6 +301,51 @@ class NavigationDriver:
         self.page = page
         self.evidence_dir = evidence_dir or Path("evidence")
         self.scenario_id = scenario_id
+        # Plan 214 F2 — raíz de ui_maps para assert_arrival (inyectable en tests)
+        self.ui_maps_dir: Optional[Path] = None
+
+    async def assert_arrival(
+        self,
+        expected_screen: str,
+        ui_maps_dir: Optional[Path] = None,
+    ) -> dict:
+        """Valida por DOM que estamos en `expected_screen` (Plan 214 F2).
+
+        Devuelve {'ok': bool, 'deviation': str|None, 'checked_by': str, 'anchor': str|None}.
+
+        Capas, de más fuerte a más débil:
+          1. ui_map presente → el ancla estable debe existir en el DOM. Es el
+             ÚNICO chequeo que atrapa "la URL es la correcta pero la pantalla no
+             cargó" (falso PASS clásico de WebForms).
+          2. sin ui_map (o locator inutilizable) → chequeo por URL, equivalente
+             al comportamiento previo a este plan.
+        NUNCA lanza: ante cualquier error de I/O degrada a la capa siguiente.
+        """
+        current = await self._current_url()
+        token = str(expected_screen or "").replace(".aspx", "").strip()
+        url_ok = bool(token) and token.lower() in current.lower()
+
+        anchor = _ui_map_anchor(expected_screen, ui_maps_dir or self.ui_maps_dir)
+        if anchor:
+            try:
+                count = int(await self.page.locator(f"#{anchor}").count())
+                if count > 0:
+                    return {"ok": True, "deviation": None,
+                            "checked_by": "ui_map", "anchor": anchor}
+                return {
+                    "ok": False,
+                    "deviation": (f"expected={expected_screen} url={current} "
+                                  f"anchor=#{anchor} count=0"),
+                    "checked_by": "ui_map", "anchor": anchor,
+                }
+            except Exception:  # noqa: BLE001 — locator inutilizable => capa 2
+                pass
+
+        if url_ok:
+            return {"ok": True, "deviation": None, "checked_by": "url", "anchor": anchor}
+        return {"ok": False,
+                "deviation": f"expected={expected_screen} url={current}",
+                "checked_by": "url", "anchor": anchor}
 
     async def via_form_submit(
         self,
@@ -237,12 +355,17 @@ class NavigationDriver:
         timeout_ms: int = _DEFAULT_TIMEOUT_MS,
         retries: int = _DEFAULT_RETRIES,
         screenshot_prefix: str = "nav",
+        expected_screen: Optional[str] = None,
     ) -> NavigationResult:
         """
         Navega via HTMLFormElement.prototype.submit.call() — mecanismo primario.
 
         Bypasea ScriptManager. Funciona en headless y headful.
         Realiza hasta `retries` intentos con backoff exponencial.
+
+        `expected_screen` (Plan 214 F2, opcional): pantalla que se DEBE alcanzar.
+        Con valor activa la aserción de llegada por DOM (NAV_DEVIATION); con
+        None el comportamiento es idéntico al previo al plan.
         """
         return await self._execute_nav(
             method="form_submit",
@@ -253,6 +376,7 @@ class NavigationDriver:
             timeout_ms=timeout_ms,
             retries=retries,
             screenshot_prefix=screenshot_prefix,
+            expected_screen=expected_screen,
         )
 
     async def via_dopostback(
@@ -263,6 +387,7 @@ class NavigationDriver:
         timeout_ms: int = _DEFAULT_TIMEOUT_MS,
         retries: int = _DEFAULT_RETRIES,
         screenshot_prefix: str = "nav",
+        expected_screen: Optional[str] = None,
     ) -> NavigationResult:
         """
         Navega via window.__doPostBack() — fallback, puede ser bloqueado por ScriptManager.
@@ -279,6 +404,7 @@ class NavigationDriver:
             timeout_ms=timeout_ms,
             retries=retries,
             screenshot_prefix=screenshot_prefix,
+            expected_screen=expected_screen,
         )
 
     async def via_link_click(
@@ -288,6 +414,7 @@ class NavigationDriver:
         timeout_ms: int = _DEFAULT_TIMEOUT_MS,
         retries: int = _DEFAULT_RETRIES,
         screenshot_prefix: str = "nav",
+        expected_screen: Optional[str] = None,
     ) -> NavigationResult:
         """
         Navega haciendo click en un <a> o botón.
@@ -301,12 +428,30 @@ class NavigationDriver:
             try:
                 locator = self.page.locator(selector)
                 await locator.scroll_into_view_if_needed()
-                await locator.click()
+                # Plan 214 F2 — patrón WebForms-safe: el click NO espera la
+                # navegación implícita (los postbacks la rompen); la espera real
+                # es la de idle ASP.NET, corta y acotada.
+                await locator.click(no_wait_after=True)
+                await wait_aspnet_idle(self.page, min(timeout_ms, 5000))
                 await self.page.wait_for_url(
                     lambda u, _wuc=wait_url_contains: _wuc.lower() in u.lower(),
                     timeout=timeout_ms,
                 )
                 await self.page.wait_for_load_state("load", timeout=15_000)
+
+                if expected_screen:
+                    arrival = await self.assert_arrival(expected_screen)
+                    if not arrival["ok"]:
+                        dev = await self._deviation_result(
+                            method="link_click", attempt=attempt, retries=retries,
+                            started=started, url_before=url_before,
+                            deviation=arrival["deviation"], screenshots=screenshots,
+                            screenshot_prefix=screenshot_prefix,
+                        )
+                        if dev is None:
+                            continue
+                        return dev
+
                 url_after = str(self.page.url) if hasattr(self.page, 'url') else ""
                 return NavigationResult(
                     ok=True,
@@ -389,6 +534,9 @@ class NavigationDriver:
                                                     exact=True)
                 await locator.first.click(no_wait_after=True, timeout=timeout_ms)
                 await self._wait_settled(min(timeout_ms, 5000))
+                # Plan 214 F2 — el settle de Playwright no sabe de postbacks:
+                # sumamos la espera de idle ASP.NET antes de leer la URL.
+                await wait_aspnet_idle(self.page, min(timeout_ms, 5000))
 
                 current = await self._current_url()
                 if is_login_redirect(current):
@@ -424,6 +572,20 @@ class NavigationDriver:
                         url_after=current,
                     )
 
+                # Plan 214 F2 — la URL puede mentir (200 con cuerpo de error,
+                # postback que no repintó): validamos la llegada por DOM.
+                arrival = await self.assert_arrival(expected)
+                if not arrival["ok"]:
+                    dev = await self._deviation_result(
+                        method="menu", attempt=attempt, retries=retries,
+                        started=started, url_before=url_before,
+                        deviation=arrival["deviation"], screenshots=screenshots,
+                        screenshot_prefix=screenshot_prefix,
+                    )
+                    if dev is None:
+                        continue
+                    return dev
+
                 return NavigationResult(
                     ok=True, method="menu", attempts=attempt,
                     elapsed_ms=int((time.time() - started) * 1000),
@@ -449,6 +611,48 @@ class NavigationDriver:
             ok=False, method="menu", attempts=retries,
             elapsed_ms=int((time.time() - started) * 1000),
             error_code="NAV_TIMEOUT", screenshots=screenshots,
+        )
+
+    async def _deviation_result(
+        self,
+        *,
+        method: str,
+        attempt: int,
+        retries: int,
+        started: float,
+        url_before: str,
+        deviation: str,
+        screenshots: list,
+        screenshot_prefix: str,
+    ) -> Optional[NavigationResult]:
+        """Plan 214 F2 — cierre común del desvío de navegación.
+
+        Devuelve None cuando todavía quedan reintentos (el caller hace backoff y
+        `continue`); devuelve el NavigationResult terminal con NAV_DEVIATION y su
+        screenshot forense cuando se agotó el retry del paso.
+        """
+        if attempt < retries:
+            logger.warning("navigation_driver: %s desvío detectado (intento %d/%d) — %s",
+                           method, attempt, retries, deviation)
+            await asyncio.sleep(
+                _RETRY_BACKOFF_S[min(attempt - 1, len(_RETRY_BACKOFF_S) - 1)])
+            return None
+
+        scr = await self._screenshot(f"{screenshot_prefix}_{method}_deviation_{attempt}")
+        if scr:
+            screenshots.append(scr)
+        detail = f"NAV_DEVIATION: {deviation}"
+        logger.warning("navigation_driver: %s — %s", method, detail)
+        return NavigationResult(
+            ok=False,
+            method=method,
+            attempts=attempt,
+            elapsed_ms=int((time.time() - started) * 1000),
+            error_code="NAV_DEVIATION",
+            error_detail=detail,
+            screenshots=screenshots,
+            url_before=url_before,
+            url_after=await self._current_url(),
         )
 
     async def _wait_settled(self, timeout_ms: int) -> None:
@@ -490,6 +694,7 @@ class NavigationDriver:
         timeout_ms: int,
         retries: int,
         screenshot_prefix: str,
+        expected_screen: Optional[str] = None,
     ) -> NavigationResult:
         started = time.time()
         url_before = await self._current_url()
@@ -540,12 +745,29 @@ class NavigationDriver:
                     await asyncio.sleep(delay)
                     continue
 
+                # Plan 214 F2 — el postback ya se disparó: esperamos el idle de
+                # ASP.NET ANTES de leer la URL o de aseverar nada.
+                await wait_aspnet_idle(self.page, min(timeout_ms, 5000))
+
                 # Esperar a que la URL cambie al destino esperado
                 await self.page.wait_for_url(
                     lambda u, _wuc=wait_url_contains: _wuc.lower() in u.lower(),
                     timeout=timeout_ms,
                 )
                 await self.page.wait_for_load_state("load", timeout=15_000)
+
+                if expected_screen:
+                    arrival = await self.assert_arrival(expected_screen)
+                    if not arrival["ok"]:
+                        dev = await self._deviation_result(
+                            method=method, attempt=attempt, retries=retries,
+                            started=started, url_before=url_before,
+                            deviation=arrival["deviation"], screenshots=screenshots,
+                            screenshot_prefix=screenshot_prefix,
+                        )
+                        if dev is None:
+                            continue
+                        return dev
 
                 url_after = await self._current_url()
                 logger.info(
@@ -643,6 +865,12 @@ def _classify_error(exc_str: str, current_url: str) -> str:
     # Diferencia semántica OBLIGATORIA: NAV_AUTH_EXPIRED = la sesión venció por
     # tiempo; NAV_SESSION_LOST = la app nos expulsó POR NAVEGAR MAL (deep-link sin
     # el payload de sesión) y es RECUPERABLE con re-auth + reintento del paso.
+    # ── Plan 214 F2: desvío de navegación, clase propia del contrato ────────
+    # El texto del desvío suele arrastrar palabras ("timeout", "not found") que
+    # las ramas genéricas se llevarían puestas, borrando la señal NAV.
+    if "nav_deviation" in exc_lower:
+        return "NAV_DEVIATION"
+
     if "nav_session_lost" in exc_lower:
         return "NAV_SESSION_LOST"
     if "menu_label_not_found" in exc_lower:

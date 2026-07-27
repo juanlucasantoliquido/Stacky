@@ -1,10 +1,89 @@
 # Plan 263 — Tablero de planes denso y ningún plan sin estado: fallback único, migración con evidencia y guardia anti-regresión
 
-**Estado:** CRITICADO v2 (2026-07-27) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES), reescrito a v2 in place
+**Estado:** CRITICADO v3 (2026-07-27) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3 in place
 
 ---
 
-## 0. CHANGELOG v1 → v2
+## 0. CHANGELOG v2 → v3
+
+El v2 fue **RECHAZADO**. La v2 no había tenido revisión independiente (la escribió el mismo agente en
+la misma corrida), y al abrir los archivos que anclaba aparecieron **cinco bloqueantes**. Los anclajes
+de flags que el v2 dice haber arreglado (C1/C2/C3 de la ronda anterior) **verifican todos** — eso se
+conserva intacto. Lo que no verificaba era el **diseño de F3**, la lectura de flags en la API, la
+relación entre los dos campos nuevos, el criterio binario de F0 y el contrato de escritura del ledger.
+**Nada del valor del v2 se podó.**
+
+- **C1 (BLOQUEANTE)** — **las reglas de inferencia de F3 no hacen lo que el plan dice, MEDIDO sobre los
+  79 planes vivos.** `_umbral_reciente = max(numeros) - 20 = 269 - 20 = **249**` ⇒ la **regla 4 matchea
+  0 archivos** (su propósito declarado —"dejar los recientes pendientes en `PROPUESTO`"— es
+  inalcanzable). La **regla 1 matchea 18**, pero los **18** son exactamente los que F1.5 excluye en
+  `ya_resueltos_por_ledger` (medido: 18 aprobados sin drift, **0** con drift) ⇒ **regla 1 = código
+  muerto**. Resultado real del v2: **61 propuestas, ninguna en `PROPUESTO`, y 45 (74 %) en
+  `IMPLEMENTADO`/`baja` = "sin evidencia"**. Es decir, el botón escribía a disco 45 estados que el
+  propio plan admite no poder justificar. Corregido: reglas reescritas y medidas, y la
+  **[ADICIÓN ARQUITECTO 4]** prohíbe escribir una propuesta sin evidencia.
+- **C2 (BLOQUEANTE)** — los endpoints de F3 leían la flag como `config.config.STACKY_...`, pero
+  `api/plans_board.py:10` hace `from config import config`: dentro de ESE módulo `config` **ya es la
+  instancia**. `config.config` lanza `AttributeError` ⇒ **500 en vez del 404** que exige el criterio
+  binario de la propia fase. Corregido: `getattr(config, "…", <default>)`, el patrón literal de
+  `api/plans_board.py:16` y `:79-81`.
+- **C3 (BLOQUEANTE)** — **falso verde y mentira en pantalla.** El §4 y F1.5 declaraban
+  `estado_inferido` como "azúcar de `estado_origen == 'inferido'`", pero el **caso 13 de F1** exigía
+  `estado_origen == "ledger"` **y** `estado_inferido is True` a la vez. Con eso, el `estadoChip` de F4
+  (`… || card.estado_inferido`) pinta **"Aprobado (inferido)"** en la card real — justo la mentira que
+  R9 dice matar — y el **test 4 de F4 sale VERDE** sólo porque su fixture omite `estado_inferido`.
+  Corregido: `estado_inferido` pasa a ser **exactamente** `estado_origen == "inferido"`, el caso 13
+  cambia a `is False`, y se agrega el test con la card real (las dos claves juntas).
+- **C4 (BLOQUEANTE)** — el criterio binario de F0 ("los tres comandos exit 0") es **imposible hoy**:
+  `tests/test_harness_flags_help.py` tiene **4 fallos preexistentes ajenos** y el primero es
+  `test_plain_help_covers_all_registry_keys` con **79 flags del registry sin entrada en `PLAIN_HELP`**.
+  La tabla de causas del v2 atribuía ese rojo a "falta una de las 3 entradas de ayuda llana", que es
+  falso. Corregido: criterio binario **por entrada propia**, con el comando exacto que valida las 3
+  keys del 263 sin depender del rojo ajeno.
+- **C5 (BLOQUEANTE)** — la pata 2 de F2.5 (re-sellado del ledger) **no tenía contrato de escritura**.
+  `load_ledger()` (`plans_board.py:425-446`) devuelve **sólo** `data["planes"]`; reusarla para escribir
+  deja el archivo sin la clave `version` y sin el envoltorio ⇒ `load_ledger` pasa a devolver `{}` y
+  **los 47 planes aprobados pierden su aprobación en silencio**. Ningún test del v2 lo cubría.
+  Corregido: contrato de re-escritura del documento COMPLETO + 2 casos de test nuevos.
+- **C6 (IMPORTANTE)** — F2 predicaba "la regla se importa, no se reescribe" y a la vez **reimplementaba
+  `_PLAN_FILE_RE`** como `^[0-9]+_PLAN_.*\.md$`, cuando el real es `^(\d{2,3})_PLAN_(.+)\.md$`
+  (`plans_board.py:23`). Hoy coinciden (220 = 220, medido), pero es el mismo pecado que C9.
+  Corregido: se importa `_PLAN_FILE_RE` + **[ADICIÓN ARQUITECTO 5]**.
+- **C7 (IMPORTANTE)** — F7 mandaba escribir la huella con los campos "síntoma / causa raíz / detección /
+  fix", que **no existen** en el esquema: `tests/test_error_fingerprints_catalog.py:19` exige
+  `id, title, class, status, log_pattern, log_guarded, killed_by, guard_test, self_test`, con
+  `status ∈ {resolved, open, by_design}` y un `self_test` cuyos `matches` **tienen que matchear** el
+  `log_pattern`. Y ese archivo de test no estaba en la lista de F7 (hoy trae **3 rojos ajenos**).
+  Corregido: entrada con el esquema real, una línea de registro honesta en el único camino destructivo,
+  y el test agregado a F7 con su nota de rojo ajeno.
+- **C8 (IMPORTANTE)** — el test 5 de F2 usaba `parse_plan_header`, que **el snippet del módulo no
+  importa** (`NameError`), y decía "la línea justo después" sin el `\n` explícito: `_ESTADO_RE` es
+  `MULTILINE` y exige inicio de línea. Corregido: import completo y literal exacto del archivo sintético.
+- **C9 (IMPORTANTE)** — la regla 2 disparaba por la **subcadena desnuda `"IMPLEMENTADA"`** con
+  `confianza: alta`. Medido: de sus 6 hits, **sólo 2** vienen de `"Registro de implementación"`; los
+  otros 4 de la subcadena. `"NO IMPLEMENTADA"` la satisface igual. Corregido: marcador **estructural**
+  (fila de tabla) y nunca `alta` desde una subcadena suelta.
+- **C10 (IMPORTANTE)** — KPI stale otra vez: el v2 fijó `total 216` y el **mismo día** el comando
+  imprime **220** (los planes 266-269 nacieron después). Corregido: el total deja de ser una constante.
+- **C11 (IMPORTANTE)** — el smoke de F5 mandaba "activar densidad compacto con el `DensityToggle`" sin
+  decir dónde vive (`frontend/src/components/AppearanceSettings.tsx:48`, no en el tablero).
+- **C12 (IMPORTANTE)** — F6 no decía que `rawGet`/`rawPost` devuelven `Promise<RawResponse<T>>`
+  (`api/client.ts:96` y `:47`), ni cómo se lee la flag en la app (`Diag.health()` →
+  `flags.find(x => x.key === …)`, patrón de `App.tsx:211`).
+- **C13-C16 (MENORES)** — `estado_origen: "declarado"` para un doc que no declara nada con la flag OFF;
+  R6 decía "token exacto o inmediatamente superior" y `0.15rem`→`--space-1` baja de 2,4 a 2 px; R1
+  citaba `243, 247..252` como no implementados (medido: 243/247/248/249 **no** están sin estado y
+  250/251/252 **sí** traen su registro de implementación con tests en verde); y no se citaba
+  `claim_plan_path` (`plans_board.py:382-394`), que **ya escribe** `**Estado:** PROPUESTO v1` y es la
+  prueba de que KPI-4 no agrega trabajo al operador.
+- **[ADICIÓN ARQUITECTO 4]** F3 — **prohibido escribir sin evidencia**: `confianza: "sin_evidencia"`
+  no es aplicable, y un centinela corre la inferencia sobre el **corpus vivo** (no un fixture).
+- **[ADICIÓN ARQUITECTO 5]** F2 — `test_regla_de_archivo_unica`: el ratchet usa el **mismo**
+  `_PLAN_FILE_RE` del tablero, importado; cierra C6 para siempre.
+
+---
+
+## 0.1 CHANGELOG v1 → v2
 
 El v1 fue **RECHAZADO**: su F0 tenía **cinco rojos garantizados** (el arnés se ponía rojo antes de
 escribir una sola línea de producto) y su F3 **des-aprobaba** planes que el supervisor ya había
@@ -48,7 +127,8 @@ cerrado. Todo el valor del v1 se conserva; nada se podó.
 
 ## 1. Objetivo y KPI
 
-El Tablero de Planes muestra hoy **79 de 216 planes (36,6 %) con estado `SIN_ESTADO`**, y para esos 79 la
+El Tablero de Planes muestra hoy **79 planes con estado `SIN_ESTADO`** (sobre **220** documentos
+catalogados el 2026-07-27, ≈36 %), y para esos 79 la
 UI no ofrece **ninguna** acción: `allowedActionsForCard("SIN_ESTADO", null)` devuelve `[]`
 (`frontend/src/plansBoard/actions.ts:19-30`, test en `frontend/src/plansBoard/__tests__/actions.test.ts:18-19`).
 Son planes invisibles al pipeline: no se pueden criticar, ni implementar, ni supervisar desde el
@@ -62,19 +142,22 @@ Este plan cierra las dos cosas con un solo criterio: **un plan nunca tiene estad
 (para no mentir), se ofrece una migración a disco con evidencia y confirmación humana, y se instala un
 ratchet que impide que un plan nuevo nazca sin estado.
 
-> **v2 / C8 — los KPI son valores MEDIDOS, no constantes de fe.** El 79 y el 216 se midieron el
-> 2026-07-27 con la regla EXACTA del parser (`_ESTADO_RE` + `_HEADER_READ_CHARS=4000` de
-> `services/plans_board.py:25,30`), no con un grep aproximado. El v1 decía 78/212 y **ese número no
-> es reproducible con su propio comando**. El implementador **vuelve a medir al arrancar** con el
-> comando de §1.1 y usa **su** número como línea base; el criterio binario es el **0** final, no el 79.
+> **v2 / C8 + v3 / C10 — los KPI son valores MEDIDOS, no constantes de fe.** Se miden con la regla
+> EXACTA del parser (`_ESTADO_RE` + `_HEADER_READ_CHARS=4000` de `services/plans_board.py:25,30`) **y
+> con el mismo `_PLAN_FILE_RE` del tablero** (`plans_board.py:23`), no con un grep aproximado ni con
+> una regex copiada a mano. El v1 decía 78/212 y no era reproducible; el v2 fijó `total 216` y **el
+> mismo día el comando imprime 220** (nacieron los planes 266-269). Moraleja: **el total es una
+> variable, no un dato del plan**. El implementador **vuelve a medir al arrancar** con el comando de
+> §1.1 y usa **su** número como línea base; el criterio binario es el **0** final, no el 79.
 
 ### 1.1 Comando de medición (correr ANTES de F0 y anotar el resultado)
 
 ```powershell
-& "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); import pathlib, re; from services.plans_board import _ESTADO_RE, _HEADER_READ_CHARS; d=pathlib.Path('Stacky Agents/docs'); fs=sorted(p for p in d.iterdir() if re.match(r'^[0-9]+_PLAN_.*\.md$', p.name)); sin=[p.name for p in fs if not _ESTADO_RE.search(p.open('r',encoding='utf-8',errors='replace').read(_HEADER_READ_CHARS))]; print('total', len(fs), '| sin estado', len(sin))"
+& "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); import pathlib; from services.plans_board import _ESTADO_RE, _HEADER_READ_CHARS, _PLAN_FILE_RE; d=pathlib.Path('Stacky Agents/docs'); fs=sorted(p for p in d.iterdir() if p.is_file() and _PLAN_FILE_RE.match(p.name)); sin=[p.name for p in fs if not _ESTADO_RE.search(p.open('r',encoding='utf-8',errors='replace').read(_HEADER_READ_CHARS))]; print('total', len(fs), '| sin estado', len(sin))"
 ```
 
-Salida de referencia el 2026-07-27: `total 216 | sin estado 79`.
+Salida medida el 2026-07-27: `total 220 | sin estado 79`. **El `220` cambia con cada plan nuevo; el
+`79` es el que importa.** (v3/C6: este comando usa `_PLAN_FILE_RE` **importado**, no una copia.)
 
 | KPI | Antes (medido 2026-07-27) | Después (criterio binario) |
 |---|---|---|
@@ -84,8 +167,10 @@ Salida de referencia el 2026-07-27: `total 216 | sin estado 79`.
 | **KPI-4** Planes nuevos que pueden guardarse sin `**Estado:**` sin que nada avise | ilimitado | **0** (ratchet rojo) |
 | **KPI-5** Cards visibles sin scroll en el tablero a 1080 px de alto, densidad `compacto` | ~7 | **≥ 11** |
 | **KPI-6** *(v2/C6)* Planes aprobados por el supervisor que la normalización des-aprueba | n/a | **0** |
+| **KPI-7** *(v3/ADICIÓN 4)* Estados escritos a disco **sin evidencia verificable** | **45** (lo que habría escrito el v2) | **0** |
+| **KPI-8** *(v3/C5)* Entradas del ledger dañadas o perdidas por la normalización (sobre 47) | n/a | **0** |
 
-Comandos que miden KPI-1..KPI-4 y KPI-6: ver §8 (DoD).
+Comandos que miden KPI-1..KPI-4 y KPI-6..KPI-8: ver §8 (DoD).
 
 ---
 
@@ -109,11 +194,16 @@ determina el estado real**. Es decir: el fallback no inventa una verdad, **rutea
 auditoría que la resuelve**. Ese es el argumento arquitectónico central de este plan.
 
 > **Riesgo declarado por escrito (R1, §6):** el fallback muestra como "Implementado (inferido)" planes
-> que verificablemente **no** están implementados — p. ej. `243`, `247`..`252`. Por eso el fallback
-> **nunca** se aplica en silencio: viaja siempre acompañado de `estado_inferido: true` y
-> `estado_origen: "inferido"`, la UI lo rotula "inferido" y la acción sugerida dice explícitamente que
-> el estado no está declarado. La verdad se escribe a disco sólo por la migración con evidencia de F3,
-> que es opt-in y confirmada.
+> que **no** están implementados. Por eso el fallback **nunca** se aplica en silencio: viaja siempre
+> acompañado de `estado_origen: "inferido"` (y su derivado `estado_inferido: true`), la UI lo rotula
+> "inferido" y la acción sugerida dice explícitamente que el estado no está declarado. La verdad se
+> escribe a disco sólo por la migración con evidencia de F3, que es opt-in, confirmada y —desde el
+> v3— **incapaz de escribir una propuesta sin evidencia** (ADICIÓN ARQUITECTO 4).
+>
+> *v3/C15 — los ejemplos del v2 no verificaban.* El v2 citaba `243, 247..252` como "verificablemente no
+> implementados": medido el 2026-07-27, **243/247/248/249 ni siquiera están en el conjunto sin estado**
+> (declaran el suyo) y **250/251/252 sí traen su registro de implementación con tests en verde**. No se
+> reemplazan por otros nombres propios: el riesgo es real sin necesidad de ejemplos que envejecen.
 
 ---
 
@@ -140,8 +230,10 @@ auditoría que la resuelve**. Ese es el argumento arquitectónico central de est
    parámetros nuevos son *keyword-only con default*, y las claves nuevas del card son **aditivas**.
 6. **Reusar lo existente.** Densidad: tokens `--space-*` del Plan 150 (`frontend/src/theme.css:100-108`
    y `:251-259`). Ratchet: patrón de baseline JSON ya usado por `silence_ratchet_baseline.json` y
-   `uiDebtBaseline.json`. Regla de estado: **se importa** de `services/plans_board.py`, no se
-   reimplementa. Parser, tablero, triage y acciones de 128/237/196: **no se reescriben**.
+   `uiDebtBaseline.json`. Regla de estado **y regla de qué archivo es un plan**: **se importan** de
+   `services/plans_board.py` (`_ESTADO_RE`, `_HEADER_READ_CHARS`, `_PLAN_FILE_RE`), no se reimplementan
+   —ni en Python, ni en shell, ni en un comando de una línea (v3/C6). Parser, tablero, triage y
+   acciones de 128/237/196: **no se reescriben**.
 7. **No degradar.** F1 es aritmética pura sobre datos ya parseados: **cero I/O nuevo**, cero llamadas de
    red, cero costo. El cache TTL de 15 s (`services/plans_board.py:698`) no se toca, sólo se **invalida**
    explícitamente después de una escritura (v2/C14).
@@ -155,8 +247,8 @@ auditoría que la resuelve**. Ese es el argumento arquitectónico central de est
 | **estado normalizado** | Salida de `normalize_estado()` (`services/plans_board.py:73-86`): uno de `PROPUESTO`, `CRITICADO`, `IMPLEMENTADO`, `IMPLEMENTADO_PARCIAL`, `SIN_ESTADO`. |
 | **estado resuelto** | **NUEVO**: el normalizado, salvo que sea `SIN_ESTADO` → entonces `IMPLEMENTADO`. Lo calcula `resolve_estado()`. |
 | **estado efectivo** | Ya existe (`services/plans_board.py:568`): el resuelto, salvo que el ledger lo apruebe sin drift → entonces `APROBADO`. Es lo que consume la UI. |
-| **estado inferido** | **NUEVO**: `True` cuando el documento no declaraba estado y se aplicó el fallback. |
-| **estado origen** | **NUEVO (v2, ADICIÓN ARQUITECTO 2)**: `"declarado"` \| `"inferido"` \| `"ledger"`. Explica *por qué* el card muestra lo que muestra. `estado_inferido` se conserva como azúcar de `estado_origen == "inferido"`. |
+| **estado origen** | **NUEVO (v2, ADICIÓN ARQUITECTO 2)**: `"declarado"` \| `"inferido"` \| `"ledger"`. Explica **de dónde salió el valor de `estado_efectivo`**: `"ledger"` = lo puso el veredicto del supervisor; `"inferido"` = lo puso el fallback del 263; `"declarado"` = salió tal cual del parser del documento. Es el **único** campo con la verdad. |
+| **estado inferido** | **NUEVO**: booleano derivado, **exactamente `estado_origen == "inferido"`** — ni más ni menos (v3/C3). Existe sólo por comodidad del consumidor. Un plan sin `**Estado:**` **pero aprobado en el ledger** tiene `estado_origen == "ledger"` y por lo tanto `estado_inferido is False`: el ledger ya dijo la verdad y no hay nada inferido en pantalla. |
 | **ledger** | `Stacky Agents/docs/_supervision/ledger.json`: qué planes aprobó el supervisor, con el sha256 del doc. Claves = número de plan **como string**. |
 | **drift del doc** | El sha256 actual del `.md` ≠ el que registró el supervisor ⇒ el doc cambió después de aprobarse (`services/plans_board.py:454-463`). |
 | **re-sellado del ledger** | **NUEVO (v2)**: tras normalizar un `.md`, actualizar su `doc_sha256` en el ledger para que el cambio cosmético **no** cuente como drift. |
@@ -368,21 +460,43 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q
 ```
 
-**Criterio binario (v2 / C5 — dice la verdad sobre cada modo de fallo).**
-Los tres comandos exit 0. Si alguno falla, la causa es **una de estas cinco y sólo estas cinco**:
+**Criterio binario (v3 / C4 — reescrito: "los tres exit 0" era IMPOSIBLE).**
+
+`test_harness_flags.py` y `test_harness_flags_requires.py` deben salir **exit 0** (medido el
+2026-07-27 en el árbol limpio: **56 passed** y **9 passed** respectivamente — están verdes, un rojo ahí
+**es tuyo**).
+
+`test_harness_flags_help.py` **NO puede salir exit 0 y no es culpa de este plan**: medido el
+2026-07-27 trae **4 fallos preexistentes ajenos**, y el primero es
+`test_plain_help_covers_all_registry_keys` con **79 flags del registry sin entrada en `PLAIN_HELP`**
+(`STACKY_DB_COMPARE_*`, `STACKY_UI_*`, `STACKY_COST_*`, …). Por eso su criterio binario es **por
+entrada propia**, con este comando —que no depende del rojo ajeno—:
+
+```powershell
+& "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.harness_flags_help import PLAIN_HELP; ks=['STACKY_PLANS_ESTADO_FALLBACK_ENABLED','STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED','STACKY_PLANS_NORMALIZE_APPLY_ENABLED']; import re; DENY=('MCP','TF-IDF','LLM','stdin','stdout','endpoint','frontmatter','prompt','token','regex','backend','frontend','gate','hook','runtime'); bad=[]; [bad.append((k,'falta')) for k in ks if k not in PLAIN_HELP]; [ (lambda e: [bad.append((k,m)) for m in ([] if e.on_effect.startswith('Si ') else ['on_effect no empieza con Si ']) + ([] if e.off_effect.startswith('Si ') else ['off_effect no empieza con Si ']) + ([] if len(e.what)<=200 else ['what>200']) + ([] if len(e.on_effect)<=240 else ['on>240']) + ([] if len(e.off_effect)<=240 else ['off>240']) + ([] if len(e.example)<=300 else ['ex>300']) + [f'jerga:{t}' for f in (e.what,e.on_effect,e.off_effect,e.example) for t in DENY if re.search(rf'\b{re.escape(t)}s?\b',f,re.I)] + [f'key SCREAMING:{f[:20]}' for f in (e.what,e.on_effect,e.off_effect,e.example) if re.search(r'\b[A-Z]+_[A-Z0-9_]+\b',f)] + [f'fase F<n>:{f[:20]}' for f in (e.what,e.on_effect,e.off_effect,e.example) if re.search(r'\bF\d',f)])])(PLAIN_HELP[k]) for k in ks if k in PLAIN_HELP]; print('OK' if not bad else bad)"
+```
+
+Debe imprimir **`OK`**. Y el **delta** del archivo entero tiene que ser cero: corré
+`pytest tests/test_harness_flags_help.py -q` **antes** de tocar nada y **después**, y el conteo
+`N failed` debe ser **el mismo (4)**. Si sube, el rojo nuevo es tuyo. **No adoptes la deuda ajena de
+las 79 flags sin ayuda llana: está fuera de scope (§7).**
+
+Si algo se pone rojo, la causa es **una de estas cinco y sólo estas cinco**:
 
 | Test rojo | Causa exacta | Pata que falta |
 |---|---|---|
 | `test_default_known_only_for_curated` → **"Extras (no curadas)"** | una flag `default=True` (o `default=False`, que también cuenta como *conocido*) no está en el conjunto | F0.4 — o le sobra el `default=` a la flag OFF |
 | `test_default_known_only_for_curated` → **"Faltantes"** | una key está en el conjunto curado pero su `FlagSpec` no declara `default=` | F0.2 / F0.4 desalineados |
 | `test_every_registry_flag_is_categorized` | falta una de las 3 keys en `_CATEGORY_KEYS` | F0.3 |
-| `test_plain_help_covers_all_registry_keys` | falta una de las 3 entradas de ayuda llana | F0.5 |
+| el comando de arriba imprime `('STACKY_PLANS_…','falta')` | falta una de las 3 entradas de ayuda llana | F0.5 |
 | `test_requires_map_is_frozen` → **"Extras"** | la `FlagSpec` declara `requires=` y la arista no está congelada | F0.6 |
 
-> **Ojo, rojo ajeno conocido:** `test_harness_flags_help.py` puede traer fallos **preexistentes** de
-> otros planes. Antes de tocar nada, corré ese archivo **en un worktree del commit base** y anotá
-> cuáles ya estaban rojos. Los tuyos son sólo los que nombran una de tus 3 keys. **No adoptes deuda
-> ajena y no la escondas en una allowlist.**
+> **Ojo, rojo ajeno MEDIDO (v3/C4):** `test_harness_flags_help.py` sale **4 failed / 4 passed** en el
+> árbol limpio del 2026-07-27 (`test_plain_help_covers_all_registry_keys`,
+> `test_plain_help_fields_non_empty_and_bounded`, `test_plain_help_on_off_start_with_si`,
+> `test_plain_help_avoids_jargon_denylist`). No hace falta un worktree para saberlo: está medido acá.
+> Lo que sí hace falta es que **tu delta sea cero**. Los tuyos son sólo los que nombran una de tus 3
+> keys. **No adoptes deuda ajena y no la escondas en una allowlist.**
 
 **Flags:** las 3 del plan. 2 ON (cálculo puro / solo lectura) y 1 OFF con justificación de
 **categoría (B)** escrita en el propio código.
@@ -415,16 +529,24 @@ exactos:
 | 10 | idem 9 | `card["suggested_action"]["kind"] == "supervisar"` |
 | 11 | idem 9 | `"no declara" in card["suggested_action"]["natural_language"]` (la sugerencia AVISA que fue inferido) |
 | 12 | `build_board` con un `.md` **con** `**Estado:** PROPUESTO v1` | `estado_inferido is False`, `estado_origen == "declarado"`, `estado_efectivo == "PROPUESTO"` |
-| 13 | `build_board` sobre un doc **sin** estado **pero aprobado en el ledger sin drift** | `estado_efectivo == "APROBADO"` (el ledger sigue ganando), `estado_inferido is True` y `estado_origen == "ledger"` |
+| 13 | *(v3/C3 — CAMBIÓ)* `build_board` sobre un doc **sin** estado **pero aprobado en el ledger sin drift** | `estado_efectivo == "APROBADO"` (el ledger sigue ganando), `estado_origen == "ledger"` y **`estado_inferido is False`**. El v2 pedía `True` acá y eso hacía que el chip de la app dijera **"Aprobado (inferido)"**: el ledger ya dijo la verdad, no hay nada inferido en pantalla. |
 | 14 | `build_board(tmp_docs, None)` sobre 3 docs sin estado | `"SIN_ESTADO" not in board["totals"]` y `board["totals"]["inferidos"] == 3` |
 | 15 | **flag OFF** (`monkeypatch.setattr(config.config, "STACKY_PLANS_ESTADO_FALLBACK_ENABLED", False)`) sobre el mismo doc del caso 9 | **una sola aserción:** `card["estado_efectivo"] == "SIN_ESTADO"`, `card["estado_inferido"] is False`, `card["estado_origen"] == "declarado"`, `card["suggested_action"]["kind"] == "revisar"` — es decir, el comportamiento **byte-idéntico al de antes de este plan (263)** |
 | 16 | *(v2)* `build_planned_cards` (bucket `SIN_DOCUMENTO`) | cada card trae `estado_inferido is False` y `estado_origen == "declarado"` — **todas** las cards tienen la misma forma |
 | 17 | *(v2)* `suggest_next_action("IMPLEMENTADO", None, None, "07")` llamado **posicionalmente con 4 args** | no lanza `TypeError` y devuelve `kind == "supervisar"` (prueba de que el parámetro nuevo es keyword-only con default) |
+| 18 | **[v3/C3 — INVARIANTE]** `build_board` sobre un `tmp_path` con los 4 tipos de card a la vez (uno declarado, uno sin estado, uno sin estado + ledger aprobado, uno `SIN_DOCUMENTO` del roadmap) | para **TODAS** las cards del board: `card["estado_inferido"] == (card["estado_origen"] == "inferido")`, y `card["estado_origen"] in ("declarado","inferido","ledger")`. Un solo `for` sobre `board["plans"]`. Este test es el que impide que los dos campos vuelvan a divergir. |
 
 > **v2 / C12:** el v1 escribía el caso 15 con una corrección tachada adentro ("vuelve a
 > `"IMPLEMENTADO"`… **NO**: vuelve a `"SIN_ESTADO"`"). Un modelo menor no puede saber cuál gana. La
 > aserción correcta es `"SIN_ESTADO"`. Y el comportamiento de referencia es el **pre-263** (el Plan 260
 > es de pipelines y no toca nada de esto).
+
+> **v3 / C13 — por qué `estado_origen` dice `"declarado"` con la flag OFF y un doc sin estado.**
+> `estado_origen` no responde "¿el doc declaraba algo?" sino **"¿de dónde salió el valor que estás
+> viendo en `estado_efectivo`?"**. Con la flag OFF, ese valor (`"SIN_ESTADO"`) salió **tal cual del
+> parser del documento**, así que `"declarado"` es correcto y no hace falta un cuarto valor del enum
+> (que rompería el tipo de F4). El "no declara nada" ya está dicho, y con precisión, por el propio
+> `estado_efectivo == "SIN_ESTADO"`.
 
 > **Aviso al implementador (gotcha conocido del repo):** para leer la flag usá
 > **`config.config.STACKY_PLANS_ESTADO_FALLBACK_ENABLED`** (la *instancia*), no `config.STACKY_...`
@@ -459,7 +581,11 @@ def _fallback_activo() -> bool:
 
 
 def resolve_estado(estado_normalizado: str | None) -> tuple[str, bool]:
-    """(estado_resuelto, inferido).
+    """(estado_resuelto, fallback_aplicado).
+
+    v3/C3: el segundo elemento NO es `estado_inferido` del card. Es "¿tuve que
+    aplicar el fallback?". `estado_inferido` lo deriva build_board de
+    `estado_origen`, porque el ledger puede ganarle al fallback.
 
     Un estado nulo, vacío, no reconocido o SIN_ESTADO resuelve a ESTADO_FALLBACK
     con inferido=True. Con la flag OFF devuelve el valor tal cual, inferido=False
@@ -519,15 +645,20 @@ archivo real hay una **línea en blanco** entre `:568` y `:570`; el bloque queda
 -        estado_efectivo = "APROBADO" if (ledger_ok and doc_drift is not True) else c["estado"]
 -
 -        action = suggest_next_action(c["estado"], ledger_info, unpushed, c["number_str"])
-+        estado_resuelto, estado_inferido = resolve_estado(c["estado"])
++        estado_resuelto, fallback_aplicado = resolve_estado(c["estado"])
 +        aprobado = bool(ledger_ok and doc_drift is not True)
 +        estado_efectivo = "APROBADO" if aprobado else estado_resuelto
 +        if aprobado:
 +            estado_origen = ORIGEN_LEDGER
-+        elif estado_inferido:
++        elif fallback_aplicado:
 +            estado_origen = ORIGEN_INFERIDO
 +        else:
 +            estado_origen = ORIGEN_DECLARADO
++        # v3/C3 — UNA sola fuente de verdad: estado_inferido ES estado_origen.
++        # Nunca se asigna por separado. Un doc sin **Estado:** aprobado por el
++        # supervisor sale con origen "ledger" e inferido False: el ledger ya
++        # dijo la verdad y el chip NO debe decir "(inferido)".
++        estado_inferido = estado_origen == ORIGEN_INFERIDO
 +
 +        action = suggest_next_action(
 +            estado_resuelto, ledger_info, unpushed, c["number_str"],
@@ -566,7 +697,7 @@ claves aditivas:
 > funciones puras), así que no es flaky y **no necesita** `run_with_retry`. Si aun así aparece un
 > `SQLITE_LOCKED`, es contaminación de otro archivo: corré **este archivo solo**, nunca la suite completa.
 
-**Criterio binario.** 17 passed, 0 failed. Y:
+**Criterio binario.** 18 passed, 0 failed. Y:
 
 ```powershell
 & "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.plans_board import get_board_cached; b=get_board_cached(refresh=True); print(sum(1 for p in b['plans'] if p['estado_efectivo']=='SIN_ESTADO'))"
@@ -586,21 +717,30 @@ cero costo, no escribe nada y no le saca ninguna decisión al operador: **no cae
 derivados.
 
 **Problema real que resuelve.** Con el v1, un card `APROBADO` y un card `IMPLEMENTADO (inferido)` se
-distinguen por un booleano que además es ambiguo en el caso 13: un plan **sin estado declarado** pero
-**aprobado por el supervisor** llega con `estado_efectivo="APROBADO"` y `estado_inferido=True`, y la UI
-no tiene forma de saber que ahí el ledger ya dijo la verdad y **no hace falta normalizar nada**. Sin
-este campo, el panel de F6 le propone al operador reescribir un `.md` que ya está resuelto.
+distinguen por un booleano que además es ambiguo: un plan **sin estado declarado** pero **aprobado por
+el supervisor** llega con `estado_efectivo="APROBADO"`, y la UI no tiene forma de saber que ahí el
+ledger ya dijo la verdad y **no hace falta normalizar nada**. Sin este campo, el panel de F6 le propone
+al operador reescribir un `.md` que ya está resuelto.
 
-**Contrato (aditivo, backward-compatible).** `estado_origen: "declarado" | "inferido" | "ledger"`.
-Se computa en `build_board` (ver F1(d)). `estado_inferido` **se conserva** como azúcar
-(`estado_origen == "inferido"`), para no romper ningún consumidor.
+**Contrato (aditivo, backward-compatible).** `estado_origen: "declarado" | "inferido" | "ledger"` es el
+**único campo con la verdad**; se computa en `build_board` (ver F1(d)). `estado_inferido` es su
+**derivado literal** (`estado_origen == "inferido"`) y existe sólo por comodidad del consumidor.
+
+> **v3 / C3 — esto NO es una redundancia inocua, es el bloqueante que tumbó al v2.** El v2 declaraba
+> "azúcar de `estado_origen == 'inferido'`" en el glosario y a la vez pedía, en el caso 13,
+> `estado_origen == "ledger"` **con** `estado_inferido is True`. Las dos cosas no pueden ser ciertas.
+> Consecuencia medible: el `estadoChip` de F4 (`… || card.estado_inferido`) pintaba **"Aprobado
+> (inferido)"** en la card real, y el test 4 de F4 salía **verde** porque su fixture omitía
+> `estado_inferido` — un falso verde de manual. En el v3 hay **una sola asignación**
+> (`estado_inferido = estado_origen == ORIGEN_INFERIDO`) y el **caso 18 de F1** la congela como
+> invariante sobre todas las cards del board.
 
 **Consumidores en este plan:**
 - F3 `preview_estado_migration` **excluye por default** los planes con `estado_origen == "ledger"` y
   los reporta aparte en `ya_resueltos_por_ledger` (no hay nada que escribir: el supervisor ya cerró).
 - F4 muestra el sufijo `(inferido)` sólo cuando `estado_origen === "inferido"`.
 
-**Tests:** casos 9, 12, 13 y 16 de F1 ya lo cubren. Sin archivo nuevo, sin flag nueva.
+**Tests:** casos 9, 12, 13, 16 y **18** de F1 lo cubren. Sin archivo nuevo, sin flag nueva.
 **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
 ---
@@ -632,23 +772,30 @@ Se computa en `build_board` (ver F1(d)). `estado_inferido` **se conserva** como 
 ```python
 """Plan 263 F2 — ratchet: ningún plan nuevo nace sin **Estado:**.
 
-La regla de "tiene estado" NO se reimplementa acá: se importa de
-services.plans_board (_ESTADO_RE + _HEADER_READ_CHARS), que es la misma que usa
-el tablero. Ver [ADICIÓN ARQUITECTO 3]: test_regla_unica_de_estado lo prueba.
+NADA de la regla se reimplementa acá. Se importan de services.plans_board las
+TRES piezas que definen "esto es un plan y tiene estado":
+  _ESTADO_RE          -> qué línea cuenta como estado
+  _HEADER_READ_CHARS  -> cuánto encabezado se lee (CARACTERES, no bytes)
+  _PLAN_FILE_RE       -> qué archivo es un plan            (v3/C6)
+Ver [ADICIÓN ARQUITECTO 3] (test_regla_unica_de_estado) y
+[ADICIÓN ARQUITECTO 5] (test_regla_de_archivo_unica).
 """
 import json
 import pathlib
-import re
 import sys
 
 _BACKEND = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_BACKEND))
 
-from services.plans_board import _ESTADO_RE, _HEADER_READ_CHARS  # noqa: E402
+from services.plans_board import (  # noqa: E402
+    _ESTADO_RE,
+    _HEADER_READ_CHARS,
+    _PLAN_FILE_RE,
+    parse_plan_header,
+)
 
 DOCS_DIR = _BACKEND.parent / "docs"
 BASELINE_PATH = _BACKEND / "tests" / "plans_estado_baseline.json"
-_PLAN_FILE_RE = re.compile(r"^[0-9]+_PLAN_.*\.md$")
 
 
 def _texto_encabezado(path: pathlib.Path) -> str:
@@ -669,6 +816,14 @@ def planes_sin_estado(docs_dir: pathlib.Path) -> list[str]:
     )
 ```
 
+> **v3 / C6 — por qué `_PLAN_FILE_RE` también se importa.** El v2 escribía acá
+> `re.compile(r"^[0-9]+_PLAN_.*\.md$")`, una copia a mano. El real es
+> `^(\d{2,3})_PLAN_(.+)\.md$` (`plans_board.py:23`): acepta **2 o 3 dígitos**, no "uno o más". Medido
+> el 2026-07-27 las dos dan lo mismo (**220 = 220**, cero archivos de diferencia), así que el v2 se
+> salvó por el corpus, no por el diseño: el día que exista `9_PLAN_*.md` o `1000_PLAN_*.md`, el ratchet
+> y el tablero contarían universos distintos y el arnés se pondría rojo por un archivo que el tablero
+> ni ve. Es exactamente el pecado que C9 vino a matar, cometido en el otro eje.
+
    Y estos tests:
 
 | # | Test | Qué asegura |
@@ -677,8 +832,9 @@ def planes_sin_estado(docs_dir: pathlib.Path) -> list[str]:
 | 2 | `test_ningun_plan_nuevo_sin_estado` | `set(planes_sin_estado(DOCS_DIR)) - set(baseline) == set()`. Mensaje: `"El plan <archivo> no declara **Estado:**. Agregale la linea o corré la normalización del Plan 263."` |
 | 3 | `test_el_ratchet_solo_se_achica` | `set(baseline) - set(planes_sin_estado(DOCS_DIR)) == set()` ⇒ obliga a achicar el baseline cuando un plan se normaliza o se borra. Mensaje: `"El baseline quedó stale: sacá <archivo> de plans_estado_baseline.json (o dejá que la normalización del Plan 263 lo pode sola)."` |
 | 4 | `test_baseline_sin_duplicados` | `len(sin_estado) == len(set(sin_estado))`. |
-| 5 | **`test_regla_unica_de_estado`** **[ADICIÓN ARQUITECTO 3]** | Escribe en `tmp_path` un `.md` sintético con ~3.900 caracteres **acentuados** de relleno (p. ej. `"á" * 3900`) y la línea `**Estado:** PROPUESTO v1` justo después, de modo que caiga **dentro** de los 4000 *caracteres* pero **fuera** de los 4000 *bytes*. Asserta las tres cosas: (a) `tiene_estado(p) is True`; (b) `parse_plan_header(_texto_encabezado(p))["estado"] == "PROPUESTO"` (la función pública real es **`parse_plan_header(text: str)`**, `plans_board.py:89` — recibe **texto**, no un `Path`); (c) el equivalente por bytes **NO** lo ve: `_ESTADO_RE.search(p.read_bytes()[:4000].decode("utf-8", "replace")) is None`. Es decir: ratchet y tablero coinciden, y el atajo shell habría mentido. Este test impide que alguien "optimice" el ratchet a shell y reintroduzca C9. |
+| 5 | **`test_regla_unica_de_estado`** **[ADICIÓN ARQUITECTO 3]** | *(v3/C8 — literal exacto, el v2 dejaba dos huecos de inferencia)*. Contenido **textual** del archivo, sin adornos: `p = tmp_path / "263_PLAN_MULTIBYTE.md"` y `p.write_text("# t\n" + "á" * 3900 + "\n**Estado:** PROPUESTO v1\n", encoding="utf-8")`. El `\n` **antes** de `**Estado:**` es obligatorio: `_ESTADO_RE` es `MULTILINE` y ancla en `^`; pegado al relleno no matchea y el test sale rojo por la razón equivocada. Con "á" = 2 bytes en UTF-8, la línea cae **dentro** de los 4000 *caracteres* (≈3.929) y **fuera** de los 4000 *bytes* (≈7.830). Asserta las tres cosas: (a) `tiene_estado(p) is True`; (b) `parse_plan_header(_texto_encabezado(p))["estado"] == "PROPUESTO"` (la función pública real es **`parse_plan_header(text: str)`**, `plans_board.py:89` — recibe **texto**, no un `Path`, y **ya está importada** en el encabezado del módulo de arriba); (c) el equivalente por bytes **NO** lo ve: `_ESTADO_RE.search(p.read_bytes()[:4000].decode("utf-8", "replace")) is None`. Es decir: ratchet y tablero coinciden, y el atajo shell habría mentido. Este test impide que alguien "optimice" el ratchet a shell y reintroduzca C9. |
 | 6 | `test_baseline_solo_nombres_de_plan` | Toda entrada del baseline matchea `_PLAN_FILE_RE` (nada de rutas ni `..`). |
+| 7 | **`test_regla_de_archivo_unica`** **[ADICIÓN ARQUITECTO 5]** *(v3/C6)* | El ratchet usa **el mismo** objeto regex que el tablero, no una copia equivalente. Dos aserciones: (a) `from services import plans_board; assert _PLAN_FILE_RE is plans_board._PLAN_FILE_RE` — identidad de objeto, `is`, no `==`; (b) el universo coincide: `{p.name for p in DOCS_DIR.iterdir() if p.is_file() and _PLAN_FILE_RE.match(p.name)} == {c["filename"] for c in plans_board.scan_plan_files_with_census(DOCS_DIR)[0]}`. Si alguien vuelve a copiar la regex a mano, (a) falla al instante. |
 
 2. **Crear** `Stacky Agents/backend/tests/plans_estado_baseline.json` — la deuda histórica congelada.
    Generalo con **este comando exacto** (usa la misma función que el test; no lo escribas a mano):
@@ -719,7 +875,9 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
 ```
 
-**Criterio binario.** Ambos exit 0 (6 passed en el primero). **Prueba negativa manual obligatoria:**
+**Criterio binario.** Ambos exit 0 (**7 passed** en el primero; `test_harness_ratchet_meta.py` da
+**4 passed** y está verde en el árbol limpio, medido el 2026-07-27 — un rojo ahí es tuyo).
+**Prueba negativa manual obligatoria:**
 creá `Stacky Agents/docs/999_PLAN_PRUEBA_RATCHET.md` con una sola línea `# hola`, corré el primer
 comando, verificá que **falla** nombrando `999_PLAN_PRUEBA_RATCHET.md`, y **borrá el archivo**
 (`Remove-Item "Stacky Agents\docs\999_PLAN_PRUEBA_RATCHET.md"`). Volvé a correr: verde.
@@ -727,6 +885,14 @@ comando, verificá que **falla** nombrando `999_PLAN_PRUEBA_RATCHET.md`, y **bor
 **Flag:** ninguna nueva — es un test del arnés, siempre activo.
 **Impacto por runtime:** ninguno (test determinista, sin modelo).
 **Trabajo del operador: ninguno.**
+
+> **v3 / C16 — por qué KPI-4 no le agrega una sola tarea al operador (verificado, no supuesto).** El
+> creador atómico de planes ya escribe la línea: `claim_plan_path` (`plans_board.py:382-394`) hace
+> `fh.write(f"# Plan {number} — (borrador)\n\n**Estado:** PROPUESTO v1\n")`, y la skill
+> `proponer-plan-stacky` la escribe también en su encabezado. O sea: **todo plan nuevo ya nace con
+> estado**; este ratchet no cambia ningún flujo, sólo impide que eso se rompa en silencio. El caso en
+> que se pondría rojo es un `.md` escrito a mano — y ahí el mensaje del test 2 dice exactamente qué
+> agregar.
 
 ---
 
@@ -766,10 +932,33 @@ al final, SIEMPRE:
   5. services.plans_board._BOARD_CACHE = None                     (invalidar cache)
 ```
 
+**Contrato de escritura del ledger (v3 / C5 — BLOQUEANTE del v2: no existía).**
+`load_ledger()` (`plans_board.py:425-446`) devuelve **`data["planes"]`, no el documento**: el archivo
+real es `{"version": …, "planes": {…}}` (verificado el 2026-07-27: 47 entradas, y cada entrada trae
+`plan`, `ruta`, `doc_sha256`, `veredicto`, `fecha`). Si la pata 2 vuelca lo que devolvió `load_ledger`,
+el archivo queda **sin `version` y sin el envoltorio** ⇒ `load_ledger` pasa a devolver `{}` para
+siempre ⇒ **los 47 planes aprobados pierden su aprobación en silencio** y el tablero pide re-supervisar
+todo. Reglas, obligatorias:
+
+1. La pata 2 **NO usa `load_ledger()`**. Lee el archivo completo con
+   `json.loads(ledger_path.read_text(encoding="utf-8"))`.
+2. Modifica **una sola clave** del documento: `data["planes"][str(number)]["doc_sha256"]`, y le agrega
+   a **esa** entrada `normalizado_por: "plan-263"` y `normalizado_en: "<fecha ISO>"`. **Nada más se
+   toca**: ni `version`, ni las otras entradas, ni el orden de las claves.
+3. Escribe con `json.dumps(data, indent=2, ensure_ascii=False)` + `.tmp` + `os.replace`.
+4. Si el archivo no existe, o no parsea, o no tiene la clave `"planes"` como dict ⇒ **no escribe** y
+   dispara el rollback de abajo. Nunca lo "repara" ni lo crea.
+
 **Rollback.** Las patas 2 y 3 se escriben con el mismo patrón atómico (`.tmp` + `os.replace`). Si la
 pata 2 o la 3 fallan (p. ej. el JSON del ledger está corrupto), la función **restaura el `.md`** desde
 el contenido original que guardó en memoria antes de la pata 1 y devuelve ese archivo en `omitidos`
 con `razon="rollback: no se pudo actualizar el ledger o el baseline"`. **Ningún archivo queda a medias.**
+El rollback además emite **una** línea de registro (la única de todo el plan), porque es el único
+camino destructivo y porque es la que sostiene la huella de F7:
+
+```python
+logger.error("[plan263] rollback de normalizacion: %s (%s)", filename, razon)
+```
 
 **Por qué re-sellar el ledger no es hacer trampa.** El re-sellado se aplica **sólo** a un cambio que
 esta misma función acaba de hacer y que es **puramente aditivo en el encabezado**: inserta una línea
@@ -777,7 +966,7 @@ esta misma función acaba de hacer y que es **puramente aditivo en el encabezado
 `normalizado_por: "plan-263"` y la fecha, así que queda auditable. Cualquier otra edición del `.md`
 sigue produciendo drift normal.
 
-**Tests (van en `test_plan263_migration.py`, F3):** casos 13-18 de esa lista.
+**Tests (van en `test_plan263_migration.py`, F3):** casos 13-22 de esa lista.
 
 **Flag:** la misma de F3 (`STACKY_PLANS_NORMALIZE_APPLY_ENABLED`, OFF).
 **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno adicional — al contrario, **elimina**
@@ -804,10 +993,14 @@ def infer_estado_con_evidencia(plan_card: dict, docs_dir: Path) -> dict:
       {
         "number": int,
         "filename": str,
-        "estado_propuesto": str,        # "IMPLEMENTADO" | "PROPUESTO" | "CRITICADO" | "IMPLEMENTADO-PARCIAL"
-        "confianza": str,               # "alta" | "media" | "baja"
+        "estado_propuesto": str | None, # "IMPLEMENTADO"|"PROPUESTO"|"CRITICADO"|"IMPLEMENTADO-PARCIAL"
+                                        # o None cuando confianza == "sin_evidencia" (v3/ADICIÓN 4)
+        "confianza": str,               # "alta" | "media" | "sin_evidencia"
+        "aplicable": bool,              # v3 — False si estado_propuesto is None. La UI NO le da
+                                        # checkbox y el apply lo RECHAZA salvo estado_elegido explícito.
         "evidencia": list[str],         # frases cortas, verificables, en español
-        "linea_a_insertar": str,        # p.ej. "**Estado:** IMPLEMENTADO (normalizado 2026-07-27, Plan 263) — sin veredicto de supervisor"
+        "linea_a_insertar": str | None, # p.ej. "**Estado:** IMPLEMENTADO (normalizado 2026-07-27, Plan 263) — sin veredicto de supervisor"
+                                        # None cuando estado_propuesto is None
         "insert_after_line": int,       # índice 0-based de la línea tras la cual insertar
         "sha256_visto": str,            # v2/C7 — sha256 del archivo COMPLETO al momento del preview
         "resella_ledger": bool,         # v2/C6 — el ledger tiene doc_sha256 para este plan
@@ -816,37 +1009,58 @@ def infer_estado_con_evidencia(plan_card: dict, docs_dir: Path) -> dict:
     """
 ```
 
-**Reglas de inferencia (en este orden exacto; la primera que matchea gana):**
+**Reglas de inferencia (v3 — REESCRITAS. En este orden exacto; la primera que matchea gana):**
 
-| Orden | Condición (verificable, sin modelo) | `estado_propuesto` | `confianza` | Evidencia que se agrega |
+| Orden | Condición (verificable, sin modelo, sin heurística de número) | `estado_propuesto` | `confianza` | Evidencia que se agrega |
 |---|---|---|---|---|
-| 1 | El ledger (`load_ledger`) tiene entrada con `veredicto` en `("APROBADO","TERMINADO-POR-SUPERVISOR")` | `IMPLEMENTADO` | `alta` | `"El supervisor lo aprobó el <fecha> (ledger.json)."` |
-| 2 | El doc contiene la subcadena `"Registro de implementación"` o `"IMPLEMENTADA"` en los primeros 8000 chars | `IMPLEMENTADO` | `alta` | `"El propio documento registra fases IMPLEMENTADAS."` |
-| 3 | El doc contiene `"veredicto"` y (`"APROBADO"` o `"RECHAZADO"`) en los primeros 8000 chars | `CRITICADO` | `media` | `"El documento trae un veredicto del juez, pero no registro de implementación."` |
-| 4 | Ninguna de las anteriores **y** `number > _umbral_reciente(docs_dir)` | `PROPUESTO` | `baja` | `"Plan reciente sin rastro de crítica ni implementación."` |
-| 5 | Ninguna de las anteriores | `IMPLEMENTADO` | `baja` | `"Sin evidencia; se aplica el fallback del Plan 263."` |
+| 1 | El ledger tiene entrada para este número con `veredicto` en `("APROBADO","TERMINADO-POR-SUPERVISOR")`. **Sólo alcanzable con `doc_drift is True`**: los aprobados sin drift ni llegan acá (los filtró `ya_resueltos_por_ledger`, F1.5). | `IMPLEMENTADO` | `alta` | `"El supervisor lo aprobó el <fecha> y el documento cambió después (ledger.json)."` |
+| 2 | El doc trae un **marcador estructural** de implementación en los primeros 8000 chars: `re.search(r"^#{1,4}\s*.*Registro de implementaci", texto, re.M)` **o** `re.search(r"^\|[^|\n]*\|\s*IMPLEMENTADA\s*\|", texto, re.M)` (una fila de tabla cuya celda **completa** dice `IMPLEMENTADA`). | `IMPLEMENTADO` | `alta` | `"El documento trae su registro de implementacion (<marcador>)."` |
+| 3 | El doc trae `"veredicto"` **y** (`"APROBADO"` o `"RECHAZADO"`) en los primeros 8000 chars. | `CRITICADO` | `media` | `"El documento trae un veredicto del juez, pero no registro de implementacion."` |
+| 4 | Ninguna de las anteriores. | **`None`** | **`sin_evidencia`** | `"Sin evidencia en el documento ni en el ledger. El tablero lo muestra como implementado (inferido), pero NO hay nada verificable que escribir: decidilo vos."` |
 
-```python
-def _umbral_reciente(docs_dir: Path) -> int:
-    """v2/C19 — determinista y sin excepciones.
+> **v3 / C1 — las reglas del v2 no hacían lo que el v2 decía. MEDIDO sobre los 79 planes vivos el
+> 2026-07-27, con `_umbral_reciente = max(numeros) - 20 = 269 - 20 = 249`:**
+>
+> | Regla del v2 | Hits | Qué significaba de verdad |
+> |---|---|---|
+> | 1 (ledger APROBADO → `IMPLEMENTADO`/`alta`) | **18** | pero los **18** son exactamente los que F1.5 excluye en `ya_resueltos_por_ledger` (medido: **18** aprobados sin drift, **0** con drift) ⇒ **código muerto** |
+> | 2 (`"Registro de implementación"` **o** `"IMPLEMENTADA"`) | **6** | de los cuales **sólo 2** por el registro; los otros **4** por la subcadena desnuda `"IMPLEMENTADA"` — que también satisface `"NO IMPLEMENTADA"` — y todos con `confianza: alta` |
+> | 3 (veredicto) | **10** | razonable |
+> | 4 (`number > 249` → `PROPUESTO`) | **0** | **no matchea un solo archivo**: los planes recientes sin estado son 250/251/252, que caen antes en la regla 2. Su propósito declarado —"dejar los pendientes recientes en `PROPUESTO`"— era **inalcanzable** |
+> | 5 (fallback → `IMPLEMENTADO`/`baja`) | **45** | **57 % del corpus** escrito a disco como `IMPLEMENTADO` con la evidencia literal *"Sin evidencia"* |
+>
+> Resultado del v2 sobre el corpus real: **61 propuestas, ninguna en `PROPUESTO`, y 45 (74 % de las
+> propuestas) sin ninguna evidencia**. Un botón que escribe 45 mentiras al disco del operador con
+> confirmación de un click. Por eso el v3 **borra la regla 5** y la reemplaza por la
+> **[ADICIÓN ARQUITECTO 4]**: sin evidencia **no hay propuesta**.
+>
+> **`_umbral_reciente` se elimina.** No queda ninguna heurística basada en el número del plan: era la
+> única regla que dependía de una constante arbitraria (`- 20`) y medía **cero**. Con ella se va el
+> problema de C19 (claves string del ledger) y una función menos que testear.
 
-    El v1 usaba `max(ledger) - 20`: `load_ledger` devuelve un dict con claves
-    STRING (ver plans_board.py:451 `ledger.get(str(number))`), así que `max()`
-    ordenaba lexicográficamente ("99" > "265") y encima lanzaba ValueError con el
-    ledger vacío, contra el contrato "NUNCA lanza".
-    """
-    numeros = [c["number"] for c in scan_plan_files_with_census(docs_dir)[0]]
-    return max(numeros, default=0) - 20
-```
-
-> **Por qué la regla 4 existe:** sin ella, planes recientes y realmente pendientes (`243`, `247`..`252`)
-> quedarían escritos en disco como `IMPLEMENTADO`, que es exactamente la mentira que R1 advierte. La
-> regla 4 los deja en `PROPUESTO` y `confianza: baja`, para que el operador los revise.
+> **[ADICIÓN ARQUITECTO 4] — Prohibido escribir sin evidencia.**
+>
+> `confianza: "sin_evidencia"` ⇒ `estado_propuesto is None`, `linea_a_insertar is None`,
+> `aplicable is False`. Consecuencias, todas obligatorias:
+> - `preview_estado_migration` los devuelve en `propuestas` **igual** (el operador tiene que verlos:
+>   son los 45 casos donde el tablero está adivinando) pero con `aplicable: False`.
+> - La UI (F6) los lista **sin checkbox**, con la leyenda *"sin evidencia — elegí vos la etapa"* y un
+>   selector de estado por fila. Si el operador elige uno, el item viaja con `estado_elegido`.
+> - `apply_estado_migration` **rechaza** cualquier item cuya propuesta sea `sin_evidencia` **salvo**
+>   que el item traiga `estado_elegido` en `("PROPUESTO","CRITICADO","IMPLEMENTADO","IMPLEMENTADO-PARCIAL")`.
+>   Razón de omisión: `"sin evidencia y sin estado elegido por el operador"`.
+> - La línea escrita en ese caso dice quién decidió:
+>   `**Estado:** <elegido> (normalizado <fecha>, Plan 263) — elegido por el operador, sin evidencia en el documento`.
+>
+> Esto **amplifica** al operador (le muestra los 45 y le pide la decisión) en vez de reemplazarlo
+> (escribirle 45 estados inventados). Es el mismo criterio de human-in-the-loop de todo el plan,
+> aplicado al único lugar donde el v2 lo había perdido.
 
 ```python
 def preview_estado_migration(docs_dir: Path) -> dict:
     """{"ok": True, "total": int, "propuestas": [<dict de infer_estado_con_evidencia>, ...],
-        "por_confianza": {"alta": int, "media": int, "baja": int},
+        "por_confianza": {"alta": int, "media": int, "sin_evidencia": int},  # v3
+        "aplicables": int,                  # v3 — cuántas propuestas tienen aplicable=True
         "ya_resueltos_por_ledger": [str]}   # v2/F1.5: estado_origen == "ledger", NO se proponen
     SOLO LECTURA. Nunca escribe. Nunca lanza."""
 
@@ -856,8 +1070,14 @@ def apply_estado_migration(
 ) -> dict:
     """Escribe la línea **Estado:** en los planes pedidos, UNO POR UNO (transacción F2.5).
 
-    - `items` es una lista EXPLÍCITA de {"filename": str, "sha256_visto": str}:
+    - `items` es una lista EXPLÍCITA de
+      {"filename": str, "sha256_visto": str, "estado_elegido": str | None}:
       no existe "aplicar a todos" implícito y no se acepta el comodín "*".
+    - v3/ADICIÓN 4: si la propuesta recalculada para ese archivo es
+      `sin_evidencia` y el item NO trae `estado_elegido` válido -> omitido con
+      razón "sin evidencia y sin estado elegido por el operador". `estado_elegido`
+      sólo se acepta con uno de los 4 valores del vocabulario; cualquier otra
+      cosa -> omitido con razón "estado elegido invalido".
     - v2/C7 (TOCTOU): si el sha256 actual != sha256_visto -> omitido con razón
       "cambio en disco desde la vista previa". El offset se RE-DERIVA del archivo
       recién leído, nunca se reusa el `insert_after_line` del preview.
@@ -875,13 +1095,13 @@ def apply_estado_migration(
     """
 ```
 
-**Casos de test (mínimo 18):**
+**Casos de test (mínimo 24):**
 
-1. `infer_estado_con_evidencia` con ledger APROBADO → `IMPLEMENTADO`/`alta`.
-2. …con doc que dice `"Registro de implementación"` → `IMPLEMENTADO`/`alta`.
+1. `infer_estado_con_evidencia` con ledger APROBADO **y drift** → `IMPLEMENTADO`/`alta`, `aplicable is True`.
+2. …con doc que trae un encabezado `## Registro de implementación` → `IMPLEMENTADO`/`alta`.
 3. …con doc que trae `veredicto ... APROBADO` → `CRITICADO`/`media`.
-4. …plan reciente sin nada → `PROPUESTO`/`baja`.
-5. …plan viejo sin nada → `IMPLEMENTADO`/`baja`.
+4. **(v3/C9)** …con doc cuyo único rastro es la frase suelta `"la fase NO fue IMPLEMENTADA"` → **NO** matchea la regla 2; cae en `sin_evidencia` con `estado_propuesto is None`. *(Este es el caso que el v2 clasificaba `IMPLEMENTADO`/`alta`.)*
+5. **(v3/C1)** …doc sin ninguna señal → `confianza == "sin_evidencia"`, `estado_propuesto is None`, `linea_a_insertar is None`, `aplicable is False`. **No existe `baja`**: `assert "baja" not in preview["por_confianza"]`.
 6. `linea_a_insertar` empieza con `**Estado:** ` y contiene el string `Plan 263`.
 7. `insert_after_line` apunta a la línea del `# ` título (el estado va justo debajo del H1).
 8. `preview_estado_migration` sobre un `tmp_path` con 3 docs sin estado → `total == 3`, no escribe (mtime de los 3 archivos idéntico antes/después).
@@ -895,27 +1115,63 @@ def apply_estado_migration(
 16. **v2/C10 poda:** el filename normalizado **desaparece** de `plans_estado_baseline.json` y `test_el_ratchet_solo_se_achica` sigue verde después del apply.
 17. **v2 rollback:** con el `ledger.json` corrupto (texto no-JSON), el apply devuelve ese archivo en `omitidos` con razón que empieza con `"rollback"` y el `.md` queda **byte-idéntico** al original.
 18. **v2/C14 cache:** tras un apply exitoso, `services.plans_board._BOARD_CACHE is None`.
+19. **v3/C5 el ledger sobrevive entero:** ledger con `{"version": 1, "planes": {"7": {...}, "8": {...}}}`; se normaliza el plan 7. Después: `data["version"] == 1` **sigue**, `set(data["planes"]) == {"7","8"}`, la entrada `"8"` es **byte-idéntica** (comparar `json.dumps(..., sort_keys=True)`), y la `"7"` conserva `plan`/`ruta`/`veredicto`/`fecha` y sólo cambió `doc_sha256` + ganó `normalizado_por`/`normalizado_en`.
+20. **v3/C5 el ledger sin envoltorio no se "repara":** ledger `{"planes": {...}}` **sin** `version` ⇒ el apply respeta el documento tal cual (no inventa `version`) y sigue funcionando; ledger `{"otra_cosa": 1}` (sin `"planes"`) ⇒ rollback, `.md` intacto.
+21. **v3/ADICIÓN 4 el apply rechaza lo que no tiene evidencia:** item de un doc `sin_evidencia` **sin** `estado_elegido` ⇒ `omitidos` con razón `"sin evidencia y sin estado elegido por el operador"`, archivo **intacto** (sha256 idéntico). Con `estado_elegido: "PROPUESTO"` ⇒ se aplica y la línea escrita contiene `"elegido por el operador"`.
+22. **v3/ADICIÓN 4 vocabulario cerrado:** `estado_elegido: "LO_QUE_SEA"` ⇒ `omitidos` con razón `"estado elegido invalido"`, archivo intacto.
+23. **v3/ADICIÓN 4 centinela sobre el CORPUS VIVO** (`test_ninguna_propuesta_alta_sin_marcador_estructural`): corre `preview_estado_migration(plans_board.docs_dir_default())` sobre `Stacky Agents/docs` **real** y asserta, para cada propuesta con `confianza == "alta"`, que su lista `evidencia` nombra el marcador estructural o el ledger (`any("Registro de implementaci" in e or "ledger.json" in e for e in p["evidencia"])`). Es el único test del plan que toca el corpus real: es **solo lectura**, no escribe nada, y es el que impide que una regla laxa vuelva a producir un `alta` de aire. Si `docs/` no existe (deploy congelado), `pytest.skip`.
+24. **v3/ADICIÓN 4 ninguna propuesta miente por default:** sobre el mismo corpus vivo, `preview["por_confianza"].get("sin_evidencia", 0) == sum(1 for p in preview["propuestas"] if not p["aplicable"])` y **toda** propuesta con `aplicable is False` tiene `estado_propuesto is None`. Invariante, no número: no se congela el 45.
 
 **Endpoints (editar `Stacky Agents/backend/api/plans_board.py`):**
 
+> **v3 / C2 — LEÉ ESTO ANTES DE ESCRIBIR UNA LÍNEA EN `api/plans_board.py`.** Ese módulo hace
+> `from config import config` (`api/plans_board.py:10`): dentro de él, el nombre `config` **YA ES LA
+> INSTANCIA**, no el módulo. Escribir `config.config.STACKY_…` (como hacía el v2) lanza
+> `AttributeError` y Flask devuelve **500**, no el 404 que exige el criterio binario de esta fase — y
+> lo hace sólo en runtime, así que ningún test unitario del módulo lo atrapa. El patrón correcto y
+> vigente en ese archivo es `getattr(config, "<KEY>", <default>)`: ver `_enabled()`
+> (`api/plans_board.py:15-16`) y `_actions_enabled()` (`api/plans_board.py:78-81`). El gotcha del repo
+> "usá `config.config`, no `config`" aplica a los módulos que hacen `import config`; **acá no**.
+
 ```python
+# api/plans_board.py — `config` ya es la INSTANCIA (from config import config, :10).
+
+def _normalize_preview_enabled() -> bool:
+    # Espejo EXACTO de _actions_enabled() (:78-81). Default True: la flag es ON.
+    return _enabled() and bool(
+        getattr(config, "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED", True)
+    )
+
+
+def _normalize_apply_enabled() -> bool:
+    # Candado 0 (patrón Plan 250, api/pipeline_editor.py): las TRES flags acá, NO
+    # se confía en `requires` (que es metadata para la UI y no la evalúa nadie).
+    # Esto materializa "APPLY exige PREVIEW". Default False: la flag nace OFF.
+    return _normalize_preview_enabled() and bool(
+        getattr(config, "STACKY_PLANS_NORMALIZE_APPLY_ENABLED", False)
+    )
+
+
 @bp.get("/normalize/preview")          # ruta final: /api/plans-board/normalize/preview
 def plans_normalize_preview():
-    # Candado 0 (patrón Plan 250): chequear las flags acá, NO confiar en `requires`.
-    #   config.config.STACKY_PLANS_BOARD_ENABLED  AND
-    #   config.config.STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED
-    # deshabilitada -> reusar _disabled_resp() (api/plans_board.py:19-29) -> 404
-    # 200 -> preview_estado_migration(plans_board.docs_dir_default())
+    if not _normalize_preview_enabled():
+        return _disabled_resp()        # api/plans_board.py:19-29 -> 404
+    from services import plans_board, plans_estado_migration   # import lazy (patrón :36)
+    return jsonify(
+        plans_estado_migration.preview_estado_migration(plans_board.docs_dir_default())
+    )
+
 
 @bp.post("/normalize/apply")           # ruta final: /api/plans-board/normalize/apply
 def plans_normalize_apply():
-    # Candado 0: las TRES flags — BOARD AND PREVIEW AND APPLY. Con cualquiera OFF -> 404
-    # (_disabled_resp). Esto materializa "APPLY exige PREVIEW" que `requires` NO evalúa.
-    # Body: {"items": [{"filename": "...", "sha256_visto": "..."}], "dry_run": true|false,
-    #        "confirm": true}
-    # 400 si falta `confirm: true`, si `items` está vacío/ausente, o si algún item no
-    # trae `sha256_visto`.
-    # -> apply_estado_migration(...)
+    if not _normalize_apply_enabled():
+        return _disabled_resp()        # 404 con CUALQUIERA de las 3 flags en OFF
+    # Body: {"items": [{"filename": str, "sha256_visto": str,
+    #                   "estado_elegido": str | null}],
+    #        "dry_run": true|false, "confirm": true}
+    # 400 si falta `confirm: true`, si `items` está vacío/ausente/no es lista, o si
+    # algún item no trae `sha256_visto`. `items` NUNCA acepta el comodín "*".
+    # -> plans_estado_migration.apply_estado_migration(...)
 ```
 
 > **HITL, explícito:** `confirm: true` es obligatorio y `items` nunca puede ser `"*"`. El servidor
@@ -931,7 +1187,12 @@ def plans_normalize_apply():
 
 (el registro en las dos listas `HARNESS_TEST_FILES` ya se hizo en F2, punto 3/4).
 
-**Criterio binario.** 18 passed, 0 failed. Además, con `STACKY_PLANS_NORMALIZE_APPLY_ENABLED=false`,
+> **Gotcha del repo (SQLITE_LOCKED bajo pytest):** este archivo **no toca la DB** — usa `tmp_path`,
+> funciones puras y, en los casos 23-24, lectura de `docs/` en solo lectura. No necesita
+> `run_with_retry`. Los casos 23-24 **jamás** escriben en `docs/`; si alguien los ve mutar algo, es un
+> bug de la implementación, no del test.
+
+**Criterio binario.** 24 passed, 0 failed. Además, con `STACKY_PLANS_NORMALIZE_APPLY_ENABLED=false`,
 `POST /api/plans-board/normalize/apply` responde 404 con el envelope de deshabilitado y **no** modifica
 ningún archivo — verificable comparando la salida de
 `git status --porcelain "Stacky Agents/docs"` **antes y después** (debe ser idéntica, carácter por
@@ -982,9 +1243,15 @@ fallback y muestren el rótulo "inferido".
  export function estadoChip(card: PlanCardDto): { label: string; color: string } {
 -  return ESTADO_CHIP[card.estado_efectivo] ?? ESTADO_CHIP.SIN_ESTADO;
 +  const chip = ESTADO_CHIP[card.estado_efectivo] ?? ESTADO_CHIP.SIN_ESTADO;
-+  return card.estado_origen === "inferido" || card.estado_inferido
-+    ? { ...chip, label: `${chip.label} (inferido)` }
-+    : chip;
++  // Plan 263 v3/C3 — `estado_origen` MANDA. `estado_inferido` sólo se mira
++  // cuando el servidor no mandó `estado_origen` (deploy intermedio). Mirar los
++  // dos con `||` pintaba "Aprobado (inferido)" en las cards que el ledger ya
++  // había resuelto: el servidor manda origen "ledger" en esa card.
++  const inferido =
++    card.estado_origen !== undefined
++      ? card.estado_origen === "inferido"
++      : card.estado_inferido === true;
++  return inferido ? { ...chip, label: `${chip.label} (inferido)` } : chip;
  }
 ```
 
@@ -1006,9 +1273,10 @@ fallback y muestren el rótulo "inferido".
 | 1 | `estadoChip(card({estado_efectivo:"IMPLEMENTADO", estado_origen:"inferido"}))` | `.label === "Implementado (inferido)"` |
 | 2 | `estadoChip(card({estado_efectivo:"IMPLEMENTADO", estado_inferido:true}))` (sin `estado_origen`, servidor intermedio) | `.label === "Implementado (inferido)"` |
 | 3 | `estadoChip(card({estado_efectivo:"IMPLEMENTADO"}))` (sin ninguna clave nueva — deploy viejo) | `.label === "Implementado"` |
-| 4 | `estadoChip(card({estado_efectivo:"APROBADO", estado_origen:"ledger"}))` | `.label === ESTADO_CHIP.APROBADO.label` (sin sufijo: el ledger **no** es inferencia) |
+| 4 | **(v3/C3 — CAMBIÓ: la card REAL, con las DOS claves)** `estadoChip(card({estado_efectivo:"APROBADO", estado_origen:"ledger", estado_inferido:false}))` | `.label === ESTADO_CHIP.APROBADO.label` (sin sufijo: el ledger **no** es inferencia) |
+| 4b | **(v3/C3 — el falso verde, explícito)** `estadoChip(card({estado_efectivo:"APROBADO", estado_origen:"ledger", estado_inferido:true}))` — payload **imposible** que el servidor ya no puede emitir | `.label === ESTADO_CHIP.APROBADO.label`. **`estado_origen` manda sobre `estado_inferido`.** Sin este caso, el fixture del v2 (que omitía `estado_inferido`) hacía pasar un `estadoChip` roto |
 | 5 | `filterPlans([...], {estado:"IMPLEMENTADO", ...})` con un card inferido | lo incluye (filtro consistente con el fallback) |
-| 6 | el test existente `"cae a SIN_ESTADO ante una clave desconocida"` | **sigue verde sin tocarlo** |
+| 6 | el test existente `"cae a SIN_ESTADO ante una clave desconocida"` (`model.test.ts:55-57`) | **sigue verde sin tocarlo** |
 
 **Comando de test (por archivo — nunca la suite completa, por contaminación cross-file conocida):**
 
@@ -1103,10 +1371,17 @@ cd "Stacky Agents\frontend"; npx vitest run src/__tests__/uiDebtRatchet.test.ts
 usaban token), ratchet de UI verde, `npx tsc --noEmit` exit 0.
 
 **Smoke visual (manual, 2 minutos — NO automatizable):** el repo **no tiene RTL ni jsdom instalados**,
-así que la verificación visual es a ojo y va documentada, no scripteada. Pasos: abrir `/plans`, poner
-la ventana en 1080 px de alto, activar densidad `compacto` con el `DensityToggle`, contar las cards
-visibles sin scroll ⇒ **≥ 11** (KPI-5). Repetir en `cómodo` y confirmar que **no** se rompió el layout.
-Anotar los dos números en el registro de implementación del plan.
+así que la verificación visual es a ojo y va documentada, no scripteada. Pasos exactos *(v3/C11: el
+`DensityToggle` **no** está en el tablero)*:
+
+1. Abrir la app y entrar a **Configuración → Apariencia**; el `DensityToggle` vive ahí
+   (`frontend/src/components/AppearanceSettings.tsx:48`, componente en
+   `frontend/src/components/DensityToggle.tsx`). Ponerlo en **`compacto`** — escribe
+   `<html data-density="compacto">` y re-apunta los tokens (`theme.css:250-260`).
+2. Ir a `/plans`, dejar la ventana en **1080 px de alto**, contar las cards visibles sin scroll ⇒
+   **≥ 11** (KPI-5).
+3. Volver a **`cómodo`**, recontar y confirmar que **no** se rompió el layout.
+4. Anotar los **dos** números en el "Registro de implementación" de este documento.
 
 **Flag:** ninguna nueva — protegido por `STACKY_PLANS_BOARD_ENABLED` (ON) y por el sistema de densidad
 del Plan 150, ya existente y ya ON.
@@ -1146,11 +1421,23 @@ obedecerlo).
 > (b) **El preview también necesita `rawGet`.** `_disabled_resp()` (`api/plans_board.py:19-29`)
 > devuelve **404**, y `api.get` lanza ante cualquier non-2xx. El v1 sólo protegía el apply.
 > Ambos helpers ya están importados en `endpoints.ts:1`.
+>
+> **v3 / C12 — la forma del retorno.** `rawGet<T>` (`api/client.ts:96-99`) y `rawPost<T>`
+> (`api/client.ts:47-51`) devuelven **`Promise<RawResponse<T>>`** (`api/client.ts:28`), **no** el DTO
+> pelado. El consumidor de F6 tiene que desenvolverlo: `const r = await PlansBoard.normalizePreview();`
+> y después mirar `r.status` (404 ⇒ mostrar el hint de flag apagada, no un error) y `r.body`. Es el
+> mismo contrato que ya usa `PlansPipeline.run` (`endpoints.ts:4994-4995`). `npx tsc --noEmit` lo
+> atrapa si se olvida, pero pierde media hora de un modelo menor.
 
 2. `Stacky Agents/frontend/src/pages/PlansBoardPage.tsx` — un panel plegable "Planes sin estado
    declarado (N)", visible sólo si `preview.total > 0`, con:
    - una fila por propuesta: número, título, `estado_propuesto`, chip de `confianza`, y la evidencia;
    - checkbox por fila, **desmarcado por default** (nada se aplica sin marcarlo);
+   - **(v3 / ADICIÓN ARQUITECTO 4)** las filas con `aplicable === false` (`confianza ===
+     "sin_evidencia"`, medido: **la mayoría**) van **sin checkbox**, con la leyenda *"sin evidencia —
+     elegí vos la etapa"* y un `<select>` con los 4 estados del vocabulario + una opción vacía por
+     default. Sólo cuando el operador elige uno, esa fila pasa a ser seleccionable y su item viaja con
+     `estado_elegido`. **Nunca** se preselecciona un valor: el default es "no decidido";
    - los planes de `ya_resueltos_por_ledger` se listan aparte, **sin checkbox**, con la leyenda
      "ya resuelto por el supervisor — no hace falta normalizar";
    - botón "Ver diff" → llama `normalizeApply(seleccionados, true)` (dry-run) y muestra el diff;
@@ -1164,8 +1451,13 @@ obedecerlo).
    - tras un apply exitoso, refrescar el tablero (el servidor ya invalidó su cache en F2.5, así que un
      `refresh=1` devuelve el estado nuevo de inmediato).
 
-> **Cómo sabe la app si la flag está OFF:** las flags de UI se exponen en **`/api/diag/health`**
-> (patrón ya usado por el resto del cockpit). Leé de ahí, no inventes un endpoint nuevo.
+> **Cómo sabe la app si la flag está OFF (v3/C12 — literal, no "leé de ahí").** Las flags de UI se
+> exponen en **`/api/diag/health`**, ya envuelto en `endpoints.ts:3306`
+> (`Diag.get(): Promise<HealthResponse>`), y el patrón de lectura vigente en el repo es
+> `const f = r.flags.find((x) => x.key === "STACKY_PLANS_NORMALIZE_APPLY_ENABLED");` — copiá la forma
+> de `App.tsx:211`. **No inventes un endpoint nuevo ni agregues una llamada nueva**: si la página ya
+> tiene el health cargado, reusá ese estado. Si la clave no aparece (servidor viejo), tratá la flag
+> como **apagada** y mostrá el hint: nunca habilites un botón de escritura por falta de información.
 
 **`sha256_visto` en el cliente:** la app **no calcula** ningún hash. Toma el `sha256_visto` que vino en
 cada propuesta del preview y lo devuelve tal cual en el item del apply. Si el operador deja el panel
@@ -1178,18 +1470,20 @@ abierto un rato y el archivo cambió, el servidor lo omite con su razón y la UI
 | # | Función | Caso |
 |---|---|---|
 | 1 | `seleccionablesPorDefecto(propuestas)` | devuelve `[]` (nada preseleccionado) |
-| 2 | `resumenConfianza(propuestas)` | `{alta: n, media: n, baja: n}` correcto |
+| 2 | `resumenConfianza(propuestas)` | `{alta: n, media: n, sin_evidencia: n}` correcto *(v3: ya no existe `baja`)* |
 | 3 | `puedeAplicar(flagOn, seleccionados)` | `false` si `flagOn === false`; `false` si `seleccionados.length === 0`; `true` si ambos ok |
 | 4 | `textoConfirmacion(seleccionados)` | contiene la cantidad y la palabra `"archivos"` |
-| 5 | `itemsParaApply(propuestas, seleccionados)` | devuelve `[{filename, sha256_visto}]` — **nunca** pierde el `sha256_visto` ni manda claves de más |
+| 5 | `itemsParaApply(propuestas, seleccionados, elegidos)` | devuelve `[{filename, sha256_visto, estado_elegido}]` — **nunca** pierde el `sha256_visto` ni manda claves de más |
 | 6 | `itemsParaApply` con una propuesta sin `sha256_visto` | la **excluye** (no manda un item inválido que el servidor rechazaría con 400) |
+| 7 | **(v3/ADICIÓN 4)** `esSeleccionable(propuesta, elegidoDelOperador)` | `false` si `propuesta.aplicable === false` **y** no hay elegido; `true` si `aplicable === true`; `true` si `aplicable === false` **y** el elegido está en los 4 valores; `false` si el elegido es `""` o cualquier otra cosa |
+| 8 | **(v3/ADICIÓN 4)** `itemsParaApply` sobre una propuesta `sin_evidencia` **sin** elegido | la **excluye**: la app **no puede** mandar al servidor un item que el servidor va a rechazar. La guardia vive en los dos lados |
 
 ```powershell
 cd "Stacky Agents\frontend"; npx vitest run src/plansBoard/normalize.test.ts
 cd "Stacky Agents\frontend"; npx tsc --noEmit
 ```
 
-**Criterio binario.** 6 passed, `tsc --noEmit` exit 0, y
+**Criterio binario.** 8 passed, `tsc --noEmit` exit 0, y
 `Select-String -Path "Stacky Agents\frontend\src\pages\PlansBoardPage.tsx" -Pattern "style=\{\{" | Measure-Object`
 devuelve el **mismo** número que antes de empezar (ver §9 si el 264 ya se mergeó).
 
@@ -1204,15 +1498,47 @@ devuelve el **mismo** número que antes de empezar (ver §9 si el 264 ya se merg
 
 **Objetivo.** Dejar constancia verificable de que los 6 KPI se cumplen.
 
-**Un archivo a editar (v2 / C17):** `Stacky Agents/docs/sistema/error_fingerprints.json` — registrar la
-huella de esta clase de regresión, siguiendo el formato que ya usan las entradas vecinas (leelo antes y
-copiá su forma exacta):
+**Un archivo a editar (v2 / C17, reescrito en v3 / C7):**
+`Stacky Agents/docs/sistema/error_fingerprints.json`.
 
-- **síntoma:** un plan aparece en el tablero sin ninguna acción disponible / el chip dice "Sin estado".
-- **causa raíz:** el `.md` no declara la línea `**Estado:**`, o
-  `STACKY_PLANS_ESTADO_FALLBACK_ENABLED` está apagada.
-- **detección:** el comando de §1.1 devuelve un número > 0 para `sin estado`.
-- **fix:** normalizar el estado desde el panel del tablero, o encender la flag.
+> **v3 / C7 — los campos que pedía el v2 NO EXISTEN.** El v2 mandaba escribir "síntoma / causa raíz /
+> detección / fix". El esquema real, congelado por `tests/test_error_fingerprints_catalog.py:19`,
+> exige **exactamente** estas 9 claves: `id`, `title`, `class`, `status`, `log_pattern`, `log_guarded`,
+> `killed_by`, `guard_test`, `self_test` — con `status ∈ {"resolved","open","by_design"}`, un
+> `log_pattern` que **compile** como regex, y un `self_test` = `{"matches": [...], "clean": [...]}`
+> cuyos `matches` **tienen que matchear** el patrón y cuyos `clean` **no**. Es un catálogo de
+> **patrones de registro**, no de síntomas de pantalla: por eso la huella de este plan cuelga de la
+> **única línea de registro** que el plan introduce (la del rollback de F2.5), que es además su único
+> camino destructivo. Entrada exacta a agregar al final de `fingerprints`:
+
+```json
+{
+  "id": "PLAN263-ROLLBACK-NORMALIZACION-ESTADO",
+  "title": "La normalizacion de estados de un plan se revirtio sin completar",
+  "class": "data-integrity",
+  "status": "resolved",
+  "log_pattern": "\\[plan263\\] rollback de normalizacion: (\\S+)",
+  "log_guarded": true,
+  "killed_by": "plan 263 F2.5 (transaccion de 3 patas con rollback) + F3 (guardia TOCTOU por sha256)",
+  "killed_commit": null,
+  "date_resolved": "2026-07-27",
+  "guard_test": "tests/test_plan263_migration.py",
+  "self_test": {
+    "matches": ["[plan263] rollback de normalizacion: 51_PLAN_X.md (ledger corrupto)"],
+    "clean": ["[plan263] normalizacion aplicada: 51_PLAN_X.md"]
+  },
+  "evidence": "backend/services/plans_estado_migration.py (apply_estado_migration restaura el .md desde memoria si falla la pata 2 o la 3); backend/tests/test_plan263_migration.py casos 17, 19 y 20"
+}
+```
+
+> **Rojo ajeno MEDIDO:** `tests/test_error_fingerprints_catalog.py` sale **3 failed / 5 passed** en el
+> árbol limpio del 2026-07-27 (`PLAN239-OUTLET-EN-BLANCO` sin `self_test`, y un `status: "guarded"`
+> fuera del enum). **No los arregles** (deuda de otro plan, §7). Tu entrada **sí** tiene que cumplir el
+> esquema: verificalo con el comando de abajo, que valida **sólo la tuya**.
+
+```powershell
+& "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import json,re,pathlib; d=json.loads(pathlib.Path('Stacky Agents/docs/sistema/error_fingerprints.json').read_text(encoding='utf-8')); fp=[f for f in d['fingerprints'] if f['id']=='PLAN263-ROLLBACK-NORMALIZACION-ESTADO'][0]; req=('id','title','class','status','log_pattern','log_guarded','killed_by','guard_test','self_test'); assert all(k in fp for k in req), [k for k in req if k not in fp]; assert fp['status'] in ('resolved','open','by_design'); p=re.compile(fp['log_pattern']); assert all(p.search(s) for s in fp['self_test']['matches']); assert not any(p.search(s) for s in fp['self_test']['clean']); print('OK')"
+```
 
 **Correr, en este orden**, y pegar la salida en el "Registro de implementación" que se agrega al final
 de **este** documento:
@@ -1228,8 +1554,9 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_plan196_actions_api.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
-& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q
+& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -q   # 4 failed AJENOS: exigí delta 0, no exit 0
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
+& $py -m pytest "Stacky Agents\backend\tests\test_error_fingerprints_catalog.py" -q  # 3 failed AJENOS: delta 0
 cd "Stacky Agents\frontend"; npx vitest run src/plansBoard/model.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/plansBoard/__tests__/actions.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/plansBoard/normalize.test.ts
@@ -1247,7 +1574,18 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 > antes de cerrar**, no lo pongas en una allowlist. Si estaba rojo **antes** de tu cambio, probalo con
 > un worktree del commit base y anotalo como rojo ajeno; no lo adoptes.
 
-**Criterio binario.** Los 16 comandos exit 0, más los comandos de KPI de §8.
+**Criterio binario (v3 / C4+C7 — "todos exit 0" era falso).** Los **17** comandos salen exit 0
+**excepto los dos con deuda ajena medida**, que se juzgan por **delta cero**:
+
+| Comando | Criterio |
+|---|---|
+| los 14 restantes (`test_plan263_*`, 128, 237, 196, flags, requires, ratchet meta, vitest ×4, `tsc`) | **exit 0**, sin excepciones |
+| `test_harness_flags_help.py` | **exactamente 4 failed**, los mismos 4 de la línea base; ni uno más. Más el comando por entrada de F0 imprimiendo `OK` |
+| `test_error_fingerprints_catalog.py` | **exactamente 3 failed**, los mismos 3. Más el comando por entrada de arriba imprimiendo `OK` |
+
+Medí la línea base de esos dos **antes** de tocar nada y pegá los dos conteos en el registro. Cualquier
+fallo **nuevo** en ellos es tuyo.
+
 **Trabajo del operador: ninguno.**
 
 ---
@@ -1256,17 +1594,19 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 
 | # | Riesgo | Probabilidad | Mitigación |
 |---|---|---|---|
-| **R1** | El fallback muestra "Implementado" en planes que **no** lo están (243, 247-252) y el operador les cree. | **Alta** (es el diseño pedido) | `estado_inferido: true` + `estado_origen: "inferido"` viajan siempre; el chip dice **"(inferido)"**; la acción sugerida dice literalmente *"no declara **Estado:**"*. La escritura a disco (F3) usa la **regla 4** que deja los planes recientes en `PROPUESTO`, no en `IMPLEMENTADO`. |
+| **R1** | El fallback muestra "Implementado" en planes que **no** lo están y el operador les cree. | **Alta** (es el diseño pedido) | `estado_origen: "inferido"` (y su derivado `estado_inferido`) viaja siempre; el chip dice **"(inferido)"**; la acción sugerida dice literalmente *"no declara **Estado:**"*. *(v3/C1: la mitigación del v2 —"la regla 4 los deja en `PROPUESTO`"— era **falsa**: medida, la regla 4 matcheaba **0** archivos. La mitigación real es la **[ADICIÓN ARQUITECTO 4]**: sin evidencia no hay propuesta escribible.)* |
 | **R2** | Con el fallback, el bucket `SIN_SUPERVISAR` salta de ~N a ~N+79 y el triage se vuelve inútil por volumen. | Alta | El panel de F6 separa visualmente los inferidos, y `totals["inferidos"]` permite filtrarlos. El filtro por bucket del Plan 237 sigue funcionando. Medir tras F1: si `SIN_SUPERVISAR > 100`, priorizar F3 sobre F5. |
 | **R3** | `suggest_next_action` cambia de firma y rompe `test_plan128_plans_board_parser.py`. | Media | El parámetro nuevo es **keyword-only con default** (`*, estado_inferido: bool = False`) ⇒ los llamadores viejos compilan igual. El caso 17 de F1 lo prueba explícitamente y F7 corre ese test. |
 | **R4** | La escritura de F3 corrompe un `.md` del operador (que además tiene cambios sin commitear). | Media | Escritura atómica (`.tmp` + `os.replace`), idempotente, guardia de path traversal, guardia TOCTOU por `sha256_visto`, `dry_run` por default, lista explícita de archivos, rollback de 3 patas, y la flag nace **OFF**. El operador ve el diff antes. Y el `.md` sigue versionado en git: el `git diff` es el backup. |
 | **R5** | El baseline del ratchet queda stale y el arnés se pone rojo por un archivo borrado o normalizado. | Media | La pata 3 de F2.5 lo poda sola en el mismo apply. Para el borrado manual, el test 3 de F2 da el mensaje exacto de qué sacar del JSON. |
-| **R6** | La tokenización del CSS rompe el layout en `cómodo` (los tokens dan menos px que el hardcode). | Media | La tabla de conversión de F5 mapea cada valor a su token exacto o inmediatamente superior en cómodo (`1.5rem`=24px → `--space-7`=24px exacto). Smoke visual obligatorio en las **2** densidades. |
+| **R6** | La tokenización del CSS rompe el layout en `cómodo` (los tokens dan menos px que el hardcode). | Media | *(v3/C14 — corregido el enunciado)* La tabla de F5 cubre los **15 valores distintos** que aparecen en las 31 líneas, verificado uno por uno; 14 de ellos mapean a un token **igual o inmediatamente superior** en cómodo (`1.5rem`=24px → `--space-7`=24px exacto), y el único que baja es `0.15rem` (2,4px → 2px): **0,4 px**, imperceptible. `padding: 0 0.35rem` conserva el `0` literal (no hay token cero). Smoke visual obligatorio en las **2** densidades. |
 | **R7** | Un deploy congelado (PyInstaller) sin `.git` rompe algo. | Baja | `repo_root()` ya devuelve `None` sin `.git` y `collect_unpushed_docs` degrada a `None` (`plans_board.py:647-652`, `:660-663`). Nada de este plan agrega dependencia de git. En congelado, `docs/` puede ser read-only: `apply_estado_migration` captura el `OSError` y devuelve `omitidos` con razón, sin lanzar. |
 | **R8** | `test_harness_flags_help` sale rojo. | Media | Ese archivo puede traer fallos **ajenos preexistentes**. *(v2/C3: el v1 decía que bastaba con `label`/`description` no vacíos — falso.)* Lo que el gate mide es: **cobertura 100 % de `PLAIN_HELP`**, `on/off` empezando con `"Si "`, largos ≤200/240/240/300, y cero palabras de `JARGON_DENYLIST` / cero MAYÚSCULAS_CON_GUION / cero `F`+dígito. Las 3 entradas de F0.5 ya cumplen. Aislá tus rojos de los ajenos con un worktree del commit base. |
 | **R9** | *(v2)* Normalizar un plan aprobado lo des-aprueba y dispara una re-supervisión cara. | **Alta si no se mitiga** | F2.5 pata 2 (re-sellado del ledger) + F1.5 (`ya_resueltos_por_ledger` ni siquiera se proponen). Caso 14 de F3 lo prueba (**KPI-6 = 0**). |
 | **R10** | *(v2)* Una sesión paralela sobre este mismo árbol edita un `.md` entre el preview y el apply. | Media (hay sesiones paralelas vivas) | Guardia TOCTOU: `sha256_visto` por archivo; el offset se re-deriva del archivo recién leído. Caso 13 de F3. |
 | **R11** | *(v2)* El plan colisiona con 260/264/265 en los archivos compartidos de flags y en `PlansBoardPage.tsx`. | **Alta** (los 4 tocan los mismos 5 archivos) | §9: bloques comentados por plan, orden por número, y frontera explícita con el 264 dentro de `PlansBoardPage.tsx`. |
+| **R12** | *(v3/C5)* La pata 2 sobrescribe `ledger.json` con lo que devolvió `load_ledger()` (sólo el sub-dict `planes`) y **los 47 planes aprobados pierden su aprobación en silencio**. | **Alta si no se mitiga** — es el modo de fallo natural de reusar la función de lectura | Contrato de escritura explícito en F2.5 (leer el documento COMPLETO, tocar **una** clave, nunca `load_ledger()` para escribir) + casos 19 y 20 de F3, que comparan `version` y la entrada del plan vecino byte a byte. |
+| **R13** | *(v3/C1+ADICIÓN 4)* El operador aprieta "aplicar" sobre las filas sin evidencia porque son la mayoría y el diff "se ve bien", y escribe a disco decenas de estados inventados. | Media | Esas filas **no tienen checkbox**: hay que elegir la etapa a mano por fila. El servidor las rechaza igual si llegan sin `estado_elegido` (guardia en los dos lados, casos 21-22), y la línea escrita **dice** que la eligió el operador y que no había evidencia. El `git diff` del `.md` sigue siendo el backup. |
 
 ---
 
@@ -1281,9 +1621,18 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 - **No** se refactoriza `PlansBoardPage.tsx` más allá del panel de F6 y los inline styles congelados.
 - **No** se toca `evolution/PlansSection.tsx` salvo que `tsc` lo exija por el tipo nuevo.
 - **No** se cambia el TTL ni la política del cache del tablero: sólo se **invalida** tras una escritura.
-- **No** se reescribe el parser de encabezados (`_ESTADO_RE`, `parse_plan_header`, `_read_header_cached`):
-  se **importa**. Tampoco se corrige la docstring de `_read_header_cached` que dice "bytes" donde el
-  código lee caracteres (fuera de scope; archivo compartido con el 265).
+- **No** se reescribe el parser de encabezados (`_ESTADO_RE`, `parse_plan_header`, `_read_header_cached`,
+  `_PLAN_FILE_RE`): se **importan**. Tampoco se corrige la docstring de `_read_header_cached` que dice
+  "bytes" donde el código lee caracteres (fuera de scope; archivo compartido con el 265).
+- *(v3/C4)* **No** se escriben las **79 entradas faltantes de `PLAIN_HELP`** que tienen a
+  `tests/test_harness_flags_help.py` en 4 rojos ni se tocan las entradas ajenas que citan keys en
+  MAYÚSCULAS: es deuda de otros planes y merece su propio plan. Sólo se exige **delta cero**.
+- *(v3/C7)* **No** se arreglan los **3 rojos** de `tests/test_error_fingerprints_catalog.py`
+  (`PLAN239-OUTLET-EN-BLANCO` sin `self_test`, `status: "guarded"` fuera del enum). Misma regla:
+  delta cero.
+- *(v3/C1)* **No** se infiere estado con ningún modelo, ni con heurísticas basadas en el número del
+  plan (`_umbral_reciente` se **elimina**), ni con búsquedas difusas en el cuerpo del documento. Si no
+  hay un marcador estructural o el ledger, **no hay propuesta**.
 
 ---
 
@@ -1291,7 +1640,11 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 
 **Orden (estricto, por dependencia):**
 
-1. **Medición inicial** — correr §1.1 y anotar `total` y `sin estado`.
+1. **Medición inicial (v3 — son CUATRO números, no dos).** Correr §1.1 y anotar `total` y `sin estado`;
+   correr `pytest tests/test_harness_flags_help.py -q` y anotar el `N failed` (esperado: **4**); correr
+   `pytest tests/test_error_fingerprints_catalog.py -q` y anotar el `N failed` (esperado: **3**). Esos
+   dos conteos son tu línea base de deuda ajena: el criterio de F7 es **delta cero**, no exit 0.
+   Anotá también el conteo de `style={{` de `PlansBoardPage.tsx` (esperado: **3**).
 2. **F0** — flags, las 6 patas (todo lo demás las lee).
 3. **F1 + F1.5** — `resolve_estado()` + `estado_origen` + `build_board` (el núcleo; sin esto no hay KPI-1 ni KPI-3).
 4. **F2** — ratchet anti-regresión + registro en las dos listas del arnés (protege lo de F1 hacia adelante).
@@ -1303,7 +1656,11 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 
 **Definición de Hecho (DoD) — global, binaria:**
 
-- [ ] Los 16 comandos de F7 salen **exit 0**, cero rojos propios (los ajenos, documentados con worktree del commit base).
+- [ ] Los **17** comandos de F7 con el criterio de su tabla: 14 en **exit 0** y los 2 con deuda ajena medida (`test_harness_flags_help.py` = **4 failed**, `test_error_fingerprints_catalog.py` = **3 failed**) con **delta cero** respecto de la línea base tomada antes de empezar.
+- [ ] **KPI-7:** ninguna propuesta con `confianza == "sin_evidencia"` se escribió sin `estado_elegido` del operador (casos 21-22 de F3 verdes; centinela del corpus vivo, caso 23, verde).
+- [ ] **KPI-8:** tras un apply, `ledger.json` conserva `version`, las 47 entradas, y las entradas ajenas byte-idénticas (casos 19-20 de F3 verdes).
+- [ ] `estado_inferido == (estado_origen == "inferido")` para **todas** las cards (caso 18 de F1) y el chip de una card `estado_origen: "ledger"` **no** dice "(inferido)" (casos 4 y 4b de F4).
+- [ ] `api/plans_board.py` lee las flags con `getattr(config, …)` y **no** contiene la cadena `config.config` (`Select-String -Path "Stacky Agents\backend\api\plans_board.py" -Pattern "config\.config"` no devuelve nada).
 - [ ] `sum(1 for p in board['plans'] if p['estado_efectivo']=='SIN_ESTADO')` ⇒ **0** (KPI-3).
 - [ ] `grep -cE '^\s*(padding|margin|gap)[^:]*:\s*[^;]*(rem|px)' PlansBoardPage.module.css` ⇒ **0** (KPI-2).
 - [ ] El conteo de `style={{` en `PlansBoardPage.tsx` **no aumentó** respecto de la medición inicial.
@@ -1313,12 +1670,12 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 - [ ] Las 3 aristas `requires` son de **profundidad 1** (todas a `STACKY_PLANS_BOARD_ENABLED`) y están congeladas en `_REQUIRES_MAP_FROZEN`.
 - [ ] `tests/test_plan263_*.py` (3 archivos) registrados en **ambas** listas `HARNESS_TEST_FILES` (`.sh` y `.ps1`), y `test_harness_ratchet_meta.py` verde.
 - [ ] Prueba negativa del ratchet ejecutada y el archivo `999_PLAN_PRUEBA_RATCHET.md` **borrado**.
-- [ ] `test_regla_unica_de_estado` verde (ratchet y tablero comparten la regla, borde multibyte incluido).
+- [ ] `test_regla_unica_de_estado` verde (ratchet y tablero comparten la regla del **estado**, borde multibyte incluido) **y** `test_regla_de_archivo_unica` verde (comparten la regla del **archivo**: `_PLAN_FILE_RE` importado, identidad de objeto con `is`).
 - [ ] **KPI-6:** tras un apply sobre un plan aprobado en el ledger, su card sigue en `estado_efectivo == "APROBADO"` y `doc_drift is False`.
 - [ ] Tras un apply, `plans_estado_baseline.json` quedó podado solo y `test_plan263_estado_guard.py` sigue verde **sin edición manual**.
 - [ ] Smoke visual hecho en las **dos** densidades, con los dos conteos de cards anotados (KPI-5 ≥ 11 en compacto).
 - [ ] Con `STACKY_PLANS_NORMALIZE_APPLY_ENABLED=false`, `git status --porcelain "Stacky Agents/docs"` es **idéntico** antes y después de llamar al endpoint de apply.
-- [ ] Huella registrada en `docs/sistema/error_fingerprints.json`.
+- [ ] Huella `PLAN263-ROLLBACK-NORMALIZACION-ESTADO` registrada en `docs/sistema/error_fingerprints.json` **con las 9 claves del esquema real** (`self_test` incluido) y el comando de validación de F7 imprimiendo `OK`.
 - [ ] El "Registro de implementación" se agrega al final de **este** documento con la salida real de los comandos, los números medidos y los desvíos encontrados.
 - [ ] `git commit` del trabajo hecho **con pathspec explícito** (`git commit -- "<ruta>" ...`): el working tree tiene cambios de otras sesiones y un commit de índice compartido se los roba. **Prohibido** `git add -A`, `reset`, `amend`, `stash`, `checkout` y `--no-verify`. El `push` es manual.
 

@@ -1,6 +1,26 @@
 # Plan 214 — Reactivación y fortalecimiento del agente QAUAT E2E (Playwright): navegación sin desvíos y validación post-desarrollo desde Agenda Web
 
-> Estado: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-23). Pipeline: proponer ✓ → **criticar ✓ [este paso]** → implementar (`implementar-plan-stacky`) → supervisar.
+> Estado: **PARCIAL — faltan F1 y F2** (auditoría solo-lectura 2026-07-26, `supervisar-implementaciones-planes`).
+>
+> | Fase | Veredicto | Evidencia verificada contra código |
+> |---|---|---|
+> | F0 | **IMPLEMENTADA** (`615baf45`) | `ls "Stacky tools/QA UAT Agent" \| grep -c "^tmp"` = **0**; `_attic/` = **12** archivos; `grep -c RSPACIFICO run_tests.py` = **0** |
+> | F1 | **PENDIENTE — SIN CÓDIGO** | NO existen `navigation_kb.py` ni `playbook_curator.py` en el tool; NO existe `tests/unit/test_plan214_navigation_kb.py`; `grep -n "get_kb_inventory" backend/api/qa_uat.py` = **0 hits** (no hay endpoint `GET /api/qa-uat/kb`); no existe `backend/tests/test_plan214_qa_uat_kb_endpoint.py`. La KB SÍ creció (7 playbooks + 6 ui_maps en `cache/`), pero eso lo trajeron los planes 240/241: el inventario determinista y el curador del 214 no están |
+> | F2 | **PARCIAL (≈20%)** | Único hit: `navigation_driver.py:390` `click(no_wait_after=True)` — y lo puso el plan **241** (`25fc4072`), no el 214. FALTAN: `wait_aspnet_idle`/`_ASPNET_IDLE_JS` (0 hits), `assert_arrival` (0 hits), `NAV_DEVIATION` en `navigation_driver.py` **y** en `replan_engine.py` (**0 hits en ambos**), `waitForAspNetIdle` en `templates/playwright_test.spec.ts.j2` (**0 hits**), `nav_deviations` en `qa_uat_pipeline.py` (**0 hits**), la huella `qa_uat_nav_deviation` en `docs/sistema/error_fingerprints.json` (**0 hits**), y los 2 archivos de test (`test_plan214_webforms_idle.py`, `test_plan214_nav_deviation.py`). `grep -rn "deviation" --include=*.py` sobre el tool devuelve **0 hits** |
+> | F3 | **IMPLEMENTADA** (`02ffdac9`) | `backend/services/qa_uat_enqueue.py` + wiring real `app.py:924-925` (`register(ticket_status.register_post_hook)`); flags `STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED` / `STACKY_QA_UAT_AUTORUN_ENABLED` en `harness_flags.py:178,1966,1978` (la 2ª con `requires` de profundidad 1) |
+> | F4 | **IMPLEMENTADA** (`02ffdac9`) | `api/qa_uat.py:174` `def _update_dev_candidate(...)`; `components/qaUatVerdictModel.ts`, `QaUatVerdictPane.tsx` + `.module.css`, `__tests__/qaUatVerdictModel.test.ts`; montado en `OutputPanel.tsx` (2 hits, no inerte) |
+> | F5 | **IMPLEMENTADA** (`615baf45`) | `grep -c "PLAYBOOKS PRIMERO" backend/Stacky/agents/QAUat1.agent.md` = **1**; `services/qa_browser_plan.py:27` `def playbook_candidates(...)` |
+> | F6 | **IMPLEMENTADA** (`615baf45`) | `grep -c "Smoke E2E de reactivación" "Stacky tools/QA UAT Agent/Flujo_QA_UAT.md"` = **1**. La CORRIDA del smoke sigue pendiente (manual, opt-in, como el plan lo declara) |
+>
+> Tests corridos de verdad con `backend/.venv` (py3.13.5), por archivo:
+> `test_plan214_qa_uat_enqueue.py` **26 passed**, `test_plan214_qa_browser_playbooks.py` **11 passed**.
+> Ambos registrados en `run_harness_tests.sh` (2 hits). `npx tsc --noEmit` exit 0.
+>
+> **Corrección de una creencia previa:** se creía que F3/F4 estaban hechas y que F1/F2 "las cubrieron los
+> planes 240/241". Falso contra código: 240/241 aportaron `no_wait_after` y crecieron el `cache/`, pero NO
+> construyeron el inventario/curador de F1 ni el circuito `NAV_DEVIATION` de F2. Lo pendiente REAL es F1 + F2.
+>
+> Estado previo: **v2 · CRITICADO (v1 → v2)** — VEREDICTO: **APROBADO-CON-CAMBIOS** (2026-07-23). Pipeline: proponer ✓ → **criticar ✓** → implementar (`implementar-plan-stacky`) → supervisar.
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5). Juez v2: el mismo agente en rol adversarial.
 
 **CHANGELOG v1 → v2 (hallazgos del juez, todos verificados contra código):**

@@ -1,11 +1,11 @@
 # Plan 215 — Publicador de Soluciones: escaneo único persistido, publish 1-click por solución y asistente DevOps HITL
 
-> Estado: **IMPLEMENTADO — F0..F6 (backend completo)** (2026-07-26); **F7 (frontend) PENDIENTE** — la sección existe y está registrada, pero renderiza el placeholder de F0. Base: CRITICADO v2 (2026-07-23) — v1 RECHAZADO (C1 BLOQUEANTE) → corregido en la v2. Pipeline: proponer ✓ → criticar ✓ → **implementar ✓ [este paso]** (`implementar-plan-stacky`) → supervisar.
+> Estado: **IMPLEMENTADO — F0..F7 COMPLETO** (2026-07-26): backend (F0..F6, commit `180d3310`) + frontend (F7, commit `2cc664b0`). Falta SOLO el smoke visual del operador. Base: CRITICADO v2 (2026-07-23) — v1 RECHAZADO (C1 BLOQUEANTE) → corregido en la v2. Pipeline: proponer ✓ → criticar ✓ → **implementar ✓ [este paso]** (`implementar-plan-stacky`) → supervisar.
 
 ### Registro de implementación (2026-07-26) — desvíos del doc y bugs hallados al construir
 
 **Fases:** F0 IMPLEMENTADA · F1 IMPLEMENTADA · F2 IMPLEMENTADA · F3 IMPLEMENTADA ·
-F4 IMPLEMENTADA · F5 IMPLEMENTADA · F6 IMPLEMENTADA · **F7 PENDIENTE (frontend)**.
+F4 IMPLEMENTADA · F5 IMPLEMENTADA · F6 IMPLEMENTADA · **F7 IMPLEMENTADA (frontend)**.
 
 **Verificación real (pytest por archivo, venv py3.13 del repo):**
 `test_plan215_flag` **4 passed** · `test_plan215_publish_profile_scanner` **12 passed** ·
@@ -60,14 +60,56 @@ y no hizo falta adaptar ningún nombre.
    hasta que `terminate()` lo libere; con un iterador que termina solo, el test verdea sin
    probar nada (el cancel/timeout se "cumplirían" por EOF natural).
 
-**PENDIENTE — F7 (frontend), único bloque sin implementar.** El backend está completo y
-verificado, y la sección ya está registrada en `DEVOPS_SECTIONS` con su gate, pero
-`SolutionPublisherSection.tsx` sigue siendo el placeholder de F0: **la feature todavía no es
-operable por el operador**. Falta: `solutionPublisherModel.ts` + su vitest, el objeto
-`DevOpsSolutionPublisher` en `endpoints.ts`, y la pantalla real (catálogo, modal de config
-con el Dialog canónico, publish con preview del comando, log vivo, descarga, historial,
-escalera de fallback y botones del asistente). Motivo: se agotó el presupuesto de contexto
-de la corrida; se prefirió dejar el backend cerrado y verificado antes que una UI a medias.
+### Registro de implementación de F7 — frontend (2026-07-26, commit `2cc664b0`)
+
+**Archivos:** `frontend/src/api/endpoints.ts` (objeto `DevOpsSolutionPublisher` + contratos),
+`components/devops/solutionPublisherModel.ts` (+ `.test.ts`),
+`components/devops/SolutionPublisherSection.tsx` (+ `.module.css` propio) y
+`components/devops/__tests__/SolutionPublisherSection.test.ts`.
+
+**Verificación real (vitest POR ARCHIVO, desde `Stacky Agents/frontend`):**
+`solutionPublisherModel.test.ts` **8 passed** · `__tests__/SolutionPublisherSection.test.ts`
+**3 passed** · `uiDebtRatchet.test.ts` **3 passed** · `copyDebtRatchet` **3** ·
+`devopsDesignTokens` **7** · `undoConfirmRatchet` **2** · `a11yCss` **3** · `themeContrast` **4** ·
+`densityTokens` **5** · `uiPrimitives` **11** · `formPrimitives` **7** · `npx tsc --noEmit`
+**exit 0**. Greps del criterio binario: `navigator.clipboard` → 0, `style={{` → 0 y literales
+hex en el `.module.css` → 0.
+
+**Rojos AJENOS y PREEXISTENTES (no los toca este plan, criterio NO-EMPEORAR):**
+`formDebtRatchet` (7 archivos, ninguno de 215), `motionDebtRatchet` (7 `.module.css` ajenos),
+`adhocModalRatchet` (`ContextMenu.tsx`, `PeekCard.tsx`, `ShortcutsCheatsheet.tsx` — planes
+173/175 sin commitear) y `devopsPollingRatchet`, cuyo único hallazgo restante es
+`BuildWorkshopSection.tsx:93` del **Plan 201** (su `refetchInterval` nunca se gateó con
+`ctx.visible`, deuda del 239 F6 anterior a esta corrida).
+
+**Desvíos del doc hallados al construir F7:**
+
+8. **BUG del plan — el snippet de `endpoints.ts` omite el prefijo `/api`.** §F7 escribe
+   `api.get('/devops/solution-publisher/catalog')`, pero el wrapper `api.*` NO antepone nada
+   (`api/client.ts:161` hace `fetch(BASE + path)`); el hermano real del 201 usa
+   `'/api/devops/build/catalog'`. Copiado literal, TODAS las llamadas hubieran dado 404.
+9. **El objeto `DevOpsAgentChat` del plan es una duplicación.** Ya existe `DevOpsAgentApi`
+   (`endpoints.ts:4021`) con `start({project, message, runtime, model, effort, server_alias})`
+   apuntando al mismo endpoint del Plan 90. Se reusa ESE, como el propio plan pedía verificar.
+10. **`planReasonLabel` necesita 7 códigos, no 6.** El plan lista 6, pero `_enrich`
+    (`api/devops_solution_publisher.py:81`) inyecta además `plan_no_resoluble` cuando
+    `resolve_publish_plan` lanza; sin esa entrada el operador veía el código crudo.
+11. **`register_as_deploy_app` NO tiene consumidor en el backend.** Se guarda y se valida
+    (`publish_config_store.py:67,95`) y nada más: no hay auto-registro (correcto — sería
+    autonomía sin click). El plan decía "si `config.register_as_deploy_app` [mostrar] botón",
+    así que el único consumidor es la UI; se reetiquetó el toggle a «Al terminar, ofrecer
+    "Registrar como app de despliegue"» para que la etiqueta no prometa automatismo.
+12. **Contradicción interna en `publishStatusLabel`.** §F7 exige labels "sin colisionar con
+    los de buildWorkshop" y a la vez prescribe `'Falló'` y `'Cancelado'`, que son
+    byte-idénticos a `buildWorkshopModel._STATUS_LABEL`. Se respetaron las cadenas prescritas
+    (son las correctas para el operador); lo que NO se comparte es el mapa.
+13. **Ratchet no listado por el plan: `devopsPollingRatchet` (239 F6).** Exige la palabra
+    `visible` en la línea del `refetchInterval` o en las 2 siguientes. Gatear solo con
+    `enabled:` —funcionalmente correcto— dejaba el test en rojo; el sondeo quedó gateado en
+    ambos lugares.
+14. **`var(--text)` no existe en `theme.css`** (el token es `--text-primary`);
+    `BuildWorkshopSection.module.css` lo usa igual y resuelve a nada. El `.module.css` de F7
+    usa los tokens reales.
 > Autor: StackyArchitectaUltraEficientCode (perfil normal, heredado de Fable 5).
 > Runtimes objetivo: Codex CLI, Claude Code CLI, GitHub Copilot Pro (paridad obligatoria; el núcleo NO usa LLM).
 > Origen: pedido EXPLÍCITO del operador — "El publicador actual no me resulta cómodo. La idea es que la herramienta realice un escaneo inicial de todos los archivos .sln del proyecto, identifique cada solución y permita configurar su proceso de publicación de manera individual. Luego, desde una interfaz simple, debería ser posible seleccionar una solución y generar su publish con un solo botón. Además […] una opción asistida por un agente de DevOps […] cuando el proceso de publicación presente errores […]. El primer escaneo debería ejecutarse una única vez y guardar […] una lista con todas las soluciones detectadas y sus respectivas rutas. […] Idealmente, el escaneo inicial debería realizarse de forma determinística. Sin embargo, si ese mecanismo no logra identificar correctamente las soluciones, debería existir la posibilidad de ejecutar un escaneo de forma agéntica como alternativa."

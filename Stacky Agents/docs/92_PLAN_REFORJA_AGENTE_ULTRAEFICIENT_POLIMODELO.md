@@ -1,6 +1,7 @@
 # Plan 92 — Reforja del agente StackyArchitectaUltraEficientCode: robusto, polifuncional y polimodelo
 
-**Estado:** CRITICADO (v1 → v2) — 2026-07-04
+**Estado:** **IMPLEMENTADO** — F0..F5 completas (commit `2d4c3a35`, 2026-07-04). Auditoría solo-lectura 2026-07-26 (supervisar-implementaciones-planes): DoD verificado íntegro contra código — `backend/tests/test_agent_tooling_contracts.py` **6 passed**; `git hash-object` de `.claude/agents/StackyArchitectaUltraEficientCode.md` (repo) == copia user-level (`45894a99…`, F2); `grep "corré con model haiku" .claude/skills/` = **0** (F4); `MEMORY.md` del agente con **90** entradas índice (F5, mínimo pedido ≥3). Nada pendiente.
+**Estado previo:** CRITICADO (v1 → v2) — 2026-07-04
 **Tipo:** Tooling de agentes/skills (no toca runtime de Stacky)
 **Autor:** pipeline proponer-plan-stacky → criticar-y-mejorar-plan
 

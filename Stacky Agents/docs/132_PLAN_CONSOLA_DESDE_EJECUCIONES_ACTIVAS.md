@@ -1,6 +1,18 @@
 # Plan 132 — Abrir la consola en vivo desde el panel "Ejecuciones Activas"
 
-**Estado:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS (v1 sin bloqueantes; C1 IMPORTANTE corregido in place)
+**Estado:** **IMPLEMENTADO** — F0..F2 (commits `1553a36d`, `50e8ab7f`; mergeado en `bf5fbe5f`).
+**F3 (smoke manual de 5 pasos) PENDIENTE** — requiere la app corriendo, no es automatizable.
+Auditoría solo-lectura 2026-07-26 (supervisar-implementaciones-planes), evidencia contra código:
+`ActiveRunsPanel.tsx:2` (`Terminal`), `:40-41` (`setCodexConsoleExecution`/`consoleExecutionId`),
+`:132-143` (botón con `className={styles.consoleBtn}`, `aria-pressed={consoleExecutionId === e.id}` y
+**toggle real** `consoleExecutionId === e.id ? null : e.id`); `ActiveRunsPanel.module.css:116`
+(`grid-template-columns: 10px 44px 1fr auto auto`) y `:206,220-221` (`.consoleBtn` + estado
+`aria-pressed="true"`). Los 4 tests de F0 existen con los nombres EXACTOS del plan
+(`__tests__/ActiveRunsPanel.test.tsx:127,139,153,165`). `npx tsc --noEmit` exit 0.
+**No pudieron EJECUTARSE** esos 4 tests: `npx vitest run src/components/__tests__/ActiveRunsPanel.test.tsx`
+falla en el import de `@testing-library/react` — el gap estructural que el propio plan declaró aceptable
+en F0/F2 (verificado 2026-07-26: RTL y jsdom siguen sin estar en `node_modules`).
+**Estado previo:** CRITICADO (v2, 2026-07-14) — APROBADO-CON-CAMBIOS (v1 sin bloqueantes; C1 IMPORTANTE corregido in place)
 **Origen:** pedido directo del operador (verbatim): *"en la parte de ejecuciones activas me permitas abrir la consola de la ejecución activa para ver cómo está"*.
 **Alcance:** 100% frontend. Cero backend nuevo, cero endpoint nuevo, cero store nuevo.
 **Flag:** NO lleva flag (decisión de diseño justificada en §3.1).

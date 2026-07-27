@@ -1,10 +1,10 @@
-# Plan 267 — Veredicto por evidencia: tres niveles y fin del falso error VISIBLE
+# Plan 269 — Veredicto por evidencia: tres niveles y fin del falso error VISIBLE
 
 > **Estado:** PROPUESTO v1
 > **Autor:** StackyArchitectaUltraEficientCode
 > **Fecha:** 2026-07-27
 > **Depende de:** Plan 254 (IMPLEMENTADO, commit `92e593f2`). Este plan **se apoya** en 254, **no lo reemplaza** ni lo duplica.
-> **Numeración:** verificada con `ls "Stacky Agents/docs"` — el máximo era 266 (con colisión: existen `266_PLAN_CATALOGO_UNICO_DE_ACCIONES_DEVOPS_...md` y `266_PLAN_CERO_PANTALLA_ROTA_EN_EL_COMPARADOR_DE_BD_...md`). **267 estaba libre.**
+> **Numeración:** este plan nació como **267** y se **renumeró a 269** por colisión con una sesión paralela viva sobre el mismo árbol. Secuencia real verificada tras el renumerado: `267_PLAN_CATALOGO_UNICO_DE_ACCIONES_DEVOPS_...md` (sesión paralela, que a su vez renumeró de 266 a 267 en `07e3eae7`/`fc29e7cb`) y `268_PLAN_EXPLORADOR_DEL_GRAFO_DOCUMENTAL_...md` (`00704dee`). **269 es el primer número libre.** Todos los identificadores internos del plan (los 6 `test_plan269_*.py` y `plan269RunVerdict.test.ts`) se renumeraron junto con el archivo.
 
 ---
 
@@ -26,7 +26,7 @@ El plan 254 clasificó **por qué terminó** una corrida mirando únicamente se�
 | K2 | Degradaciones `completed`→`error` en 30 días (KPI heredado del 254) | `SIN MEDIR` | No sube (este plan no toca el cierre) | `cd "Stacky Agents/backend" && .venv\Scripts\python.exe -c "from services.error_fingerprints import count_falso_rojo_downgrades; print(count_falso_rojo_downgrades(30))"` — función real en `backend/services/error_fingerprints.py:50` |
 | K3 | Niveles visibles en la **fila** de una lista de corridas | **1 dimensión** (`status` crudo vía `runStatusTone`, `frontend/src/pages/ExecutionHistoryPage.tsx:633`) | **2 dimensiones**: estado + veredicto de 3 niveles | Lectura del archivo: `grep -c "verdictTone" frontend/src/pages/ExecutionHistoryPage.tsx` ≥ 1 |
 | K4 | Items de reconciliación con camino HITL desde la UI | **0** (`RunReconciliationCard.tsx` renderiza solo contadores por `by_kind`, líneas 94-102; nunca renderiza `items`) | 100% de los items `red_with_delivered_work` con botón de corrección | `grep -c "items.map" frontend/src/components/RunReconciliationCard.tsx` ≥ 1 |
-| K5 | Colectores de evidencia que pueden colgar una request | **N/A (no existen)** | **0**: todo colector tiene tope de tiempo y degrada a `None` (desconocido) | `.venv\Scripts\python.exe -m pytest tests/test_plan267_run_evidence.py -v` (test `test_colector_lento_degrada_a_desconocido`) |
+| K5 | Colectores de evidencia que pueden colgar una request | **N/A (no existen)** | **0**: todo colector tiene tope de tiempo y degrada a `None` (desconocido) | `.venv\Scripts\python.exe -m pytest tests/test_plan269_run_evidence.py -v` (test `test_colector_lento_degrada_a_desconocido`) |
 
 ---
 
@@ -67,12 +67,12 @@ Toda ruta es relativa a `Stacky Agents/`. Todo símbolo fue abierto y leído.
 
 ### 3.1 Módulos del 254 que se REUSAN (no se reescriben)
 
-| Símbolo | Ubicación | Qué aporta al 267 |
+| Símbolo | Ubicación | Qué aporta al 269 |
 |---|---|---|
 | `OUTCOME_REASONS` (9 tuplas) | `backend/services/run_outcome.py:13` | Entrada del veredicto |
 | `outcome_reason_to_status(reason)` | `backend/services/run_outcome.py:113` | Deriva el **nivel base** del veredicto |
 | `is_operator_actionable(reason)` | `backend/services/run_outcome.py:104` | Ya expuesto en el payload (`api/executions.py:85`) |
-| `VALID_TICKET_STATUSES` | `backend/services/status_vocabulary.py:18` | Vocabulario congelado; **el 267 NO agrega estados** |
+| `VALID_TICKET_STATUSES` | `backend/services/status_vocabulary.py:18` | Vocabulario congelado; **el 269 NO agrega estados** |
 | `DISCREPANCY_KINDS` / `summarize()` | `backend/services/run_reconciliation.py:28` / `:217` | Base del HITL de F6 |
 | `OutcomeTone` | `frontend/src/utils/outcomeReason.ts:12` | Tipo de tono **reusado**, no redefinido |
 | `describeOutcomeReason()` | `frontend/src/utils/outcomeReason.ts:62` | Etiqueta de la causa en el drawer |
@@ -172,12 +172,12 @@ cd "Stacky Agents/backend"
 ```
 
 **Archivo a crear:** `Stacky Agents/backend/services/run_verdict.py`
-**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan267_run_verdict.py`
+**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan269_run_verdict.py`
 
 **Contenido EXACTO del módulo (nombres congelados):**
 
 ```python
-"""Plan 267 F0 — veredicto por evidencia. Módulo PURO.
+"""Plan 269 F0 — veredicto por evidencia. Módulo PURO.
 
 Sin DB, sin red, sin disco, sin imports de `db`/`models`. Se testea solo.
 
@@ -359,7 +359,7 @@ def evaluate_verdict(
 
 > **Nota de diseño para el implementador:** la regla 5 (`base == "advertencia"`) captura `needs_review` y `cancelled`. Si el `outcome_reason` era `dirty_exit_after_work` o `stall_after_work`, el 254 ya mapeó el estado a `needs_review` (`services/run_outcome.py:36,38`), así que llegan acá y reciben `cierre_sucio_pendiente_de_revision`. **No** hay que replicar esa lógica.
 
-**Tests PRIMERO — `backend/tests/test_plan267_run_verdict.py`**, casos exactos:
+**Tests PRIMERO — `backend/tests/test_plan269_run_verdict.py`**, casos exactos:
 
 | Test | Qué prueba |
 |---|---|
@@ -382,7 +382,7 @@ def evaluate_verdict(
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_run_verdict.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_run_verdict.py -v
 ```
 **Criterio:** 15/15 verdes. Cero fallos.
 
@@ -400,12 +400,12 @@ cd "Stacky Agents/backend"
 **Valor:** Es lo que convierte el veredicto de F0 en algo que refleja la realidad del operador.
 
 **Archivo a crear:** `Stacky Agents/backend/services/run_evidence.py`
-**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan267_run_evidence.py`
+**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan269_run_evidence.py`
 
 **API pública EXACTA:**
 
 ```python
-"""Plan 267 F1 — colectores de evidencia. SOLO LECTURA, con tope de tiempo.
+"""Plan 269 F1 — colectores de evidencia. SOLO LECTURA, con tope de tiempo.
 
 Rieles duros:
 - No escribe, no crea, no borra, no mueve. Ni una fila, ni un archivo.
@@ -494,7 +494,7 @@ class _Budget:
     def exhausted(self) -> bool: return time.monotonic() >= self._deadline
 ```
 
-**Tests PRIMERO — `backend/tests/test_plan267_run_evidence.py`** (usan objetos falsos con los mismos atributos; **no tocan la base real**):
+**Tests PRIMERO — `backend/tests/test_plan269_run_evidence.py`** (usan objetos falsos con los mismos atributos; **no tocan la base real**):
 
 | Test | Qué prueba |
 |---|---|
@@ -514,7 +514,7 @@ class _Budget:
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_run_evidence.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_run_evidence.py -v
 ```
 **Criterio:** 12/12 verdes.
 
@@ -536,13 +536,13 @@ cd "Stacky Agents/backend"
 **Valor:** Un solo punto de inyección alimenta el drawer, el historial y cualquier consumidor futuro.
 
 **Archivo a editar:** `Stacky Agents/backend/api/executions.py`
-**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan267_executions_payload.py`
+**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan269_executions_payload.py`
 
 **Diff ilustrativo (se agrega **debajo** de `_with_outcome`, sin tocar su cuerpo):**
 
 ```python
 def _verdict_badge_enabled() -> bool:
-    """Plan 267 F2 — kill-switch del veredicto en el payload. Se lee la INSTANCIA.
+    """Plan 269 F2 — kill-switch del veredicto en el payload. Se lee la INSTANCIA.
 
     Dependencia resuelta EN CÓDIGO, no con `requires=` en la FlagSpec (ver §3.7):
     el veredicto solo se sirve si están ON la flag de UI Y la del núcleo.
@@ -556,7 +556,7 @@ def _verdict_badge_enabled() -> bool:
 
 
 def _verdicts_for_batch(session, executions: list) -> dict[int, dict]:
-    """Plan 267 F2 — veredicto de TODO el lote. Read-only, sin N+1.
+    """Plan 269 F2 — veredicto de TODO el lote. Read-only, sin N+1.
 
     Nunca lanza: cualquier fallo devuelve {} y el listado sale como antes.
     """
@@ -579,7 +579,7 @@ def _verdicts_for_batch(session, executions: list) -> dict[int, dict]:
             ).to_dict()
         return out
     except Exception:  # noqa: BLE001 — enriquecer JAMÁS rompe el listado
-        logger.debug("verdict 267 falló", exc_info=True)
+        logger.debug("verdict 269 falló", exc_info=True)
         return {}
 
 
@@ -606,7 +606,7 @@ def _with_verdict(d: dict, verdicts: dict[int, dict]) -> dict:
 }
 ```
 
-**Tests PRIMERO — `backend/tests/test_plan267_executions_payload.py`:**
+**Tests PRIMERO — `backend/tests/test_plan269_executions_payload.py`:**
 
 | Test | Qué prueba |
 |---|---|
@@ -614,13 +614,13 @@ def _with_verdict(d: dict, verdicts: dict[int, dict]) -> dict:
 | `test_flag_nucleo_off_tambien_apaga` | Con `STACKY_RUN_VERDICT_ENABLED=False` y la de UI en ON, tampoco aparece la clave (dependencia en código). |
 | `test_flag_on_agrega_la_clave_con_las_6_subclaves` | `set(payload["verdict"]) == {"level","cause","strength","present","absent","unknown"}`. |
 | `test_colector_que_lanza_no_rompe_el_listado` | `collect_for_executions` monkeypatcheado a lanzar → la respuesta sigue siendo 200 y las claves del 254 (`outcome_reason`, `outcome_actionable`) **siguen presentes**. |
-| `test_no_pisa_claves_del_254` | `outcome_reason` y `outcome_actionable` conservan exactamente el mismo valor con la flag del 267 en ON y en OFF. |
+| `test_no_pisa_claves_del_254` | `outcome_reason` y `outcome_actionable` conservan exactamente el mismo valor con la flag del 269 en ON y en OFF. |
 | `test_sin_n_mas_uno` | Con 30 ejecuciones se cuenta el número de queries emitidas; debe ser **constante** respecto a un lote de 3 (no crecer con el tamaño). |
 
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_executions_payload.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_executions_payload.py -v
 ```
 **Criterio:** 6/6 verdes. Y sin regresión en el 254, validado **por archivo**:
 ```
@@ -641,14 +641,14 @@ cd "Stacky Agents/backend"
 **Valor:** Toda la lógica de UI queda testeable con vitest; los `.tsx` solo consumen.
 
 **Archivo a crear:** `Stacky Agents/frontend/src/utils/runVerdict.ts`
-**Archivo de test a crear:** `Stacky Agents/frontend/src/utils/__tests__/plan267RunVerdict.test.ts`
+**Archivo de test a crear:** `Stacky Agents/frontend/src/utils/__tests__/plan269RunVerdict.test.ts`
 
 **Por qué un módulo puro y no un test de render:** `@testing-library/react` y `jsdom` **no están instalados** en este repo (`frontend/package.json` devDependencies). Un test de vitest que renderice React **no es ejecutable acá**. Mismo criterio que `outcomeReason.ts` (ver su comentario de cabecera, líneas 2-6).
 
 **Contenido EXACTO (nombres congelados):**
 
 ```typescript
-// Plan 267 F3 — veredicto por evidencia → etiqueta + tono + explicación.
+// Plan 269 F3 — veredicto por evidencia → etiqueta + tono + explicación.
 //
 // Reusa OutcomeTone de outcomeReason.ts (254 F4): NO se define un tipo de tono
 // nuevo. El veredicto es una DIMENSIÓN SEPARADA del estado, no un estado más.
@@ -747,7 +747,7 @@ export function matchesVerdictLevel(
 }
 ```
 
-**Tests PRIMERO — `frontend/src/utils/__tests__/plan267RunVerdict.test.ts`:**
+**Tests PRIMERO — `frontend/src/utils/__tests__/plan269RunVerdict.test.ts`:**
 
 | Test | Qué prueba |
 |---|---|
@@ -766,7 +766,7 @@ export function matchesVerdictLevel(
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/frontend"
-npx vitest run src/utils/__tests__/plan267RunVerdict.test.ts
+npx vitest run src/utils/__tests__/plan269RunVerdict.test.ts
 ```
 (Correr **por archivo**: la corrida completa de vitest tiene contaminación cross-file conocida en este repo.)
 **Criterio:** 11/11 verdes. Y `npx tsc --noEmit` sin errores nuevos.
@@ -822,7 +822,7 @@ export function verdictChipTone(tone: OutcomeTone): "success" | "warning" | "dan
 
 **Filtro por nivel:** agregar un `<select>` junto al de estado (`ExecutionHistoryPage.tsx:400-401`) con opciones `""` (Todos) / `exito` / `advertencia` / `error_real`, guardado en el mismo objeto `filters` bajo la clave `verdict_level`, y **filtrado en cliente** con `matchesVerdictLevel(item.verdict, filters.verdict_level)` justo antes del `.map` de filas. Agregar `"verdict_level"` al array `urlFilterKeys` (`ExecutionHistoryPage.tsx:450`) para que el filtro viaje en la URL como los demás. **No** se toca el backend: el filtro es de presentación.
 
-**Tests PRIMERO:** la lógica pura ya está cubierta por F3 (`matchesVerdictLevel`, `verdictChipTone`). Se **agrega** a `plan267RunVerdict.test.ts`:
+**Tests PRIMERO:** la lógica pura ya está cubierta por F3 (`matchesVerdictLevel`, `verdictChipTone`). Se **agrega** a `plan269RunVerdict.test.ts`:
 
 | Test | Qué prueba |
 |---|---|
@@ -832,7 +832,7 @@ export function verdictChipTone(tone: OutcomeTone): "success" | "warning" | "dan
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/frontend"
-npx vitest run src/utils/__tests__/plan267RunVerdict.test.ts
+npx vitest run src/utils/__tests__/plan269RunVerdict.test.ts
 npx tsc --noEmit
 ```
 **Criterio:** 13/13 verdes y `tsc` sin errores nuevos. Además, gate de presencia:
@@ -857,7 +857,7 @@ grep -c "style={{" src/pages/ExecutionHistoryPage.tsx           # no debe AUMENT
 - `Stacky Agents/backend/api/incident_inbox.py`
 - `Stacky Agents/frontend/src/pages/IncidentInboxPage.tsx`
 - `Stacky Agents/frontend/src/pages/IncidentInboxPage.module.css`
-**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan267_inbox_verdict.py`
+**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan269_inbox_verdict.py`
 
 **Restricción heredada, no negociable:** `backend/api/incident_inbox.py:149` declara textualmente *"Sin N+1: NO se consulta AgentExecution ni pipeline_summary"*. Este plan **conserva** esa propiedad: se agrega **una sola** query extra para todo el lote.
 
@@ -911,7 +911,7 @@ if _inbox_verdict_enabled():
                 signals=señales.get(ex.id),
             ).to_dict()
     except Exception:  # noqa: BLE001 — la bandeja JAMÁS se rompe por el veredicto
-        logger.debug("verdict 267 en la bandeja falló", exc_info=True)
+        logger.debug("verdict 269 en la bandeja falló", exc_info=True)
         verdicts = {}
 
 for t in rows:
@@ -931,7 +931,7 @@ for t in rows:
 ```
 y en el CSS Module una regla `.verdictBadge` con selectores `[data-tone="exito"|"atencion"|"espera"|"error"]`. **Cero estilo inline** (ratchet de deuda de UI).
 
-**Tests PRIMERO — `backend/tests/test_plan267_inbox_verdict.py`:**
+**Tests PRIMERO — `backend/tests/test_plan269_inbox_verdict.py`:**
 
 | Test | Qué prueba |
 |---|---|
@@ -945,7 +945,7 @@ y en el CSS Module una regla `.verdictBadge` con selectores `[data-tone="exito"|
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_inbox_verdict.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_inbox_verdict.py -v
 .venv\Scripts\python.exe -m pytest tests/test_plan238_incident_inbox_api.py -v
 ```
 **Criterio:** 6/6 verdes en el nuevo, y el del plan 238 **sin regresiones** (es el contrato de forma de la bandeja: `test_plan238_incident_inbox_api.py:147` verifica las claves obligatorias, que este plan **no quita**).
@@ -968,11 +968,11 @@ Además: `cd "Stacky Agents/frontend" && npx tsc --noEmit` sin errores nuevos.
 - `Stacky Agents/frontend/src/components/RunReconciliationCard.module.css`
 - `Stacky Agents/frontend/src/api/endpoints.ts`
 **Archivo a crear (lógica pura):** `Stacky Agents/frontend/src/components/reconciliationActions.ts`
-**Archivos de test a crear:** `Stacky Agents/frontend/src/components/reconciliationActions.test.ts` (colocado, como `incidentConsole.test.ts`) y `Stacky Agents/backend/tests/test_plan267_hitl_correccion.py`
+**Archivos de test a crear:** `Stacky Agents/frontend/src/components/reconciliationActions.test.ts` (colocado, como `incidentConsole.test.ts`) y `Stacky Agents/backend/tests/test_plan269_hitl_correccion.py`
 
 **Regla dura del HITL (codificada en el módulo puro):**
 ```typescript
-// Plan 267 F6 — qué acción ofrece cada discrepancia. PURO, sin fetch.
+// Plan 269 F6 — qué acción ofrece cada discrepancia. PURO, sin fetch.
 //
 // RIEL DURO: Stacky NUNCA cambia un estado terminal por su cuenta. Este módulo
 // solo decide QUÉ botón se ofrece; el cambio lo dispara un click del operador.
@@ -1005,7 +1005,7 @@ export function actionForItem(item: ReconciliationItem): ItemAction | null {
       label: "Marcar como terminado",
       targetStatus: "completed",
       confirm: `La incidencia #${item.ticket_id} figura como fallada pero entregó trabajo. ¿La marcás como terminada?`,
-      reason: `[267] corrección manual de falso rojo (execution ${item.execution_id})`,
+      reason: `[269] corrección manual de falso rojo (execution ${item.execution_id})`,
     };
   }
   if (item.kind === "green_with_dirty_close") {
@@ -1013,7 +1013,7 @@ export function actionForItem(item: ReconciliationItem): ItemAction | null {
       label: "Marcar para revisión",
       targetStatus: "needs_review",
       confirm: `La incidencia #${item.ticket_id} figura como terminada sobre un cierre sucio. ¿La marcás para revisar?`,
-      reason: `[267] cierre sucio confirmado por el operador (execution ${item.execution_id})`,
+      reason: `[269] cierre sucio confirmado por el operador (execution ${item.execution_id})`,
     };
   }
   return null;
@@ -1044,7 +1044,7 @@ export function correctionPath(ticketId: number): string {
 | `correctionPath nunca usa by-ado` | `expect(correctionPath(7)).toBe("/api/tickets/7/stacky-status")` y `expect(correctionPath(7)).not.toContain("by-ado")`. |
 | `targetStatus siempre es un estado válido` | Los `targetStatus` de las 2 acciones ∈ `["completed","needs_review","error","cancelled","idle","running"]` (espejo de `VALID_TICKET_STATUSES`). |
 
-**Tests PRIMERO — `backend/tests/test_plan267_hitl_correccion.py`:**
+**Tests PRIMERO — `backend/tests/test_plan269_hitl_correccion.py`:**
 
 | Test | Qué prueba |
 |---|---|
@@ -1059,7 +1059,7 @@ export function correctionPath(ticketId: number): string {
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_hitl_correccion.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_hitl_correccion.py -v
 .venv\Scripts\python.exe -m pytest tests/test_plan254_reconciliation.py -v
 
 cd "Stacky Agents/frontend"
@@ -1091,7 +1091,7 @@ npx tsc --noEmit
 6. `Stacky Agents/backend/scripts/run_harness_tests.sh`
 7. `Stacky Agents/backend/scripts/run_harness_tests.ps1`
 
-**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan267_flags.py`
+**Archivo de test a crear:** `Stacky Agents/backend/tests/test_plan269_flags.py`
 
 **Las 5 flags, exactas:**
 
@@ -1108,12 +1108,12 @@ npx tsc --noEmit
 
 **Los 6 archivos de test a registrar en los 2 scripts del arnés:**
 ```
-tests/test_plan267_run_verdict.py
-tests/test_plan267_run_evidence.py
-tests/test_plan267_executions_payload.py
-tests/test_plan267_inbox_verdict.py
-tests/test_plan267_hitl_correccion.py
-tests/test_plan267_flags.py
+tests/test_plan269_run_verdict.py
+tests/test_plan269_run_evidence.py
+tests/test_plan269_executions_payload.py
+tests/test_plan269_inbox_verdict.py
+tests/test_plan269_hitl_correccion.py
+tests/test_plan269_flags.py
 ```
 - En `run_harness_tests.sh`: una línea por archivo, **sin comillas ni comas**, con un comentario de encabezado del plan (patrón `:847-852`).
 - En `run_harness_tests.ps1`: una línea por archivo, **entre comillas dobles y separadas por coma** (patrón `:762-765`). **Cuidado:** el último elemento del array no lleva coma final.
@@ -1153,7 +1153,7 @@ tests/test_plan267_flags.py
 ),
 ```
 
-**Tests PRIMERO — `backend/tests/test_plan267_flags.py`** (patrón copiado de `backend/tests/test_evolution_flags.py:55,83`):
+**Tests PRIMERO — `backend/tests/test_plan269_flags.py`** (patrón copiado de `backend/tests/test_evolution_flags.py:55,83`):
 
 | Test | Qué prueba |
 |---|---|
@@ -1169,7 +1169,7 @@ tests/test_plan267_flags.py
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_flags.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_flags.py -v
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -v
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -v
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags_requires.py -v
@@ -1192,7 +1192,7 @@ cd "Stacky Agents/backend"
 - `Stacky Agents/backend/services/run_verdict.py` (agregar el contador; sigue siendo el único módulo que conoce el veredicto)
 - `Stacky Agents/backend/api/diag.py` (extender el payload de `/run-reconciliation`, `:987-1016`)
 - `Stacky Agents/frontend/src/components/RunReconciliationCard.tsx` (mostrar el conteo por nivel)
-**Archivo de test:** se **amplía** `Stacky Agents/backend/tests/test_plan267_run_verdict.py` (no se crea uno nuevo: menos archivos que registrar en el arnés).
+**Archivo de test:** se **amplía** `Stacky Agents/backend/tests/test_plan269_run_verdict.py` (no se crea uno nuevo: menos archivos que registrar en el arnés).
 
 **Función a agregar (read-only, sin loop, bajo demanda):**
 ```python
@@ -1219,11 +1219,11 @@ try:
     from services.run_verdict import count_by_level  # noqa: PLC0415
     result["verdict_counts"] = count_by_level(days=30)
 except Exception:  # noqa: BLE001
-    logger.debug("verdict_counts 267 falló", exc_info=True)
+    logger.debug("verdict_counts 269 falló", exc_info=True)
 result["hitl_enabled"] = bool(getattr(_config.config, "STACKY_RUN_RECONCILIATION_HITL_ENABLED", True))
 ```
 
-**Tests a agregar en `test_plan267_run_verdict.py`:**
+**Tests a agregar en `test_plan269_run_verdict.py`:**
 
 | Test | Qué prueba |
 |---|---|
@@ -1234,7 +1234,7 @@ result["hitl_enabled"] = bool(getattr(_config.config, "STACKY_RUN_RECONCILIATION
 **Comando de aceptación (BINARIO):**
 ```
 cd "Stacky Agents/backend"
-.venv\Scripts\python.exe -m pytest tests/test_plan267_run_verdict.py -v
+.venv\Scripts\python.exe -m pytest tests/test_plan269_run_verdict.py -v
 ```
 **Criterio:** 18/18 verdes (15 de F0 + 3 de F8). Y la medición final de K1, anotada en §1:
 ```
@@ -1256,7 +1256,7 @@ cd "Stacky Agents/backend"
 | R4 | **Se rompe el listado si un colector falla.** | Todo el bloque de veredicto está envuelto en `try/except Exception` que degrada a `{}` y loguea en `debug`. Probado por `test_colector_que_lanza_no_rompe_el_listado` y `test_excepcion_en_el_veredicto_no_rompe_la_bandeja`. |
 | R5 | **El implementador usa el endpoint `by-ado` y publica en el ADO real del operador.** | Prohibición escrita en 3 lugares del plan (§3.6, F6, comentario del módulo) + test `correctionPath nunca usa by-ado` + test backend `test_patch_por_ticket_id_no_publica` que cuenta filas en `agent_html_publish`. |
 | R6 | **Hipótesis no probadas sobre la forma de `contract_result` y de la verificación** (H1 y H2). | **Declaradas como hipótesis** en F1, con tests que las **DISCRIMINAN**: se prueban las 2 formas plausibles y se prueba que una tercera forma devuelve `False`/`None` (no `True`). Si el árbol usa otra clave, el implementador la agrega a la condición **y al test**. |
-| R7 | **Alta de flag incompleta** ⇒ `test_default_known_only_for_curated` rojo. | F7 lista los 7 archivos con el anclaje del patrón a copiar, y `test_plan267_flags.py` verifica los 5 lugares + los 2 scripts del arnés en 8 asserts. |
+| R7 | **Alta de flag incompleta** ⇒ `test_default_known_only_for_curated` rojo. | F7 lista los 7 archivos con el anclaje del patrón a copiar, y `test_plan269_flags.py` verifica los 5 lugares + los 2 scripts del arnés en 8 asserts. |
 | R8 | **Rojos preexistentes ajenos** en `test_harness_flags_help.py` se atribuyen a este plan. | F7 obliga a capturar la salida de los 4 archivos de flags **antes** de tocar nada y comparar después. Si el fallo menciona una key ajena, se documenta con el diff; no se argumenta de memoria. |
 | R9 | **Columna nueva sin `<th>`** desalinea la tabla del historial. | Nota explícita en F4 + gate `npx tsc --noEmit` y verificación visual manual (el render no es automatizable acá, ver §3.8 punto 2). |
 | R10 | **Estilo inline en un `.tsx`** dispara el ratchet de deuda de UI. | El plan no crea ningún `.tsx` nuevo; los badges usan CSS Modules con `data-tone`. Gate: `grep -c "style={{"` no debe aumentar respecto a HEAD en los 3 `.tsx` editados. |
@@ -1286,10 +1286,10 @@ cd "Stacky Agents/backend"
 | Término | Significado en este plan |
 |---|---|
 | **`outcome_reason`** | Los 9 desenlaces del 254 (`services/run_outcome.py:13`). Responde **por qué terminó**. Señales del proceso. |
-| **Veredicto** | Los 3 niveles del 267 (`exito` / `advertencia` / `error_real`). Responde **si cumplió su objetivo**. Combina el `outcome_reason` con evidencia. |
+| **Veredicto** | Los 3 niveles del 269 (`exito` / `advertencia` / `error_real`). Responde **si cumplió su objetivo**. Combina el `outcome_reason` con evidencia. |
 | **Señal de evidencia** | Uno de los 5 hechos de `EVIDENCE_SIGNALS`, tri-estado: `True` presente, `False` ausente, `None` **desconocida**. |
 | **Fuerza de entrega** | Suma de pesos de las señales **presentes**. Umbral `UMBRAL_ENTREGA = 2`. |
-| **Falso rojo** | Corrida con estado `error` que sí entregó trabajo. En el 267 recibe causa `falso_rojo_probable` y nivel `advertencia` — **nunca** `exito` automático. |
+| **Falso rojo** | Corrida con estado `error` que sí entregó trabajo. En el 269 recibe causa `falso_rojo_probable` y nivel `advertencia` — **nunca** `exito` automático. |
 | **Nivel base** | Nivel derivado solo del estado terminal, antes de mirar evidencia (`_STATUS_TO_BASE`). |
 | **HITL** | El humano decide y hace click. Stacky ofrece, nunca ejecuta por su cuenta. |
 
@@ -1321,12 +1321,12 @@ F8 (después de F0 y F7)
 - [ ] La bandeja de incidencias muestra el chip: `grep -c "describeVerdict" frontend/src/pages/IncidentInboxPage.tsx` ≥ 1.
 - [ ] La card de reconciliación renderiza items con acción: `grep -c "actionForItem" frontend/src/components/RunReconciliationCard.tsx` ≥ 1.
 - [ ] El HITL usa **solo** el endpoint por `ticket_id`: `grep -c "by-ado" frontend/src/components/reconciliationActions.ts` = **0**.
-- [ ] Las **5 flags** están en los 5 lugares con `default=True` (`test_plan267_flags.py` 8/8 verde).
+- [ ] Las **5 flags** están en los 5 lugares con `default=True` (`test_plan269_flags.py` 8/8 verde).
 - [ ] Los **6 archivos de test** están registrados en `run_harness_tests.sh` **y** en `run_harness_tests.ps1`.
 - [ ] Los 6 archivos de test de backend corren **por archivo** y dan verde:
-      `test_plan267_run_verdict.py` (18) · `test_plan267_run_evidence.py` (12) · `test_plan267_executions_payload.py` (6) · `test_plan267_inbox_verdict.py` (6) · `test_plan267_hitl_correccion.py` (5) · `test_plan267_flags.py` (8).
+      `test_plan269_run_verdict.py` (18) · `test_plan269_run_evidence.py` (12) · `test_plan269_executions_payload.py` (6) · `test_plan269_inbox_verdict.py` (6) · `test_plan269_hitl_correccion.py` (5) · `test_plan269_flags.py` (8).
 - [ ] Los 2 archivos de test de frontend corren **por archivo** y dan verde:
-      `plan267RunVerdict.test.ts` (13) · `reconciliationActions.test.ts` (6).
+      `plan269RunVerdict.test.ts` (13) · `reconciliationActions.test.ts` (6).
 - [ ] `cd "Stacky Agents/frontend" && npx tsc --noEmit` sin errores nuevos.
 - [ ] **Sin regresiones del 254**, validado por archivo: `test_plan254_outcome_reason.py`, `test_plan254_reconciliation.py`, `test_plan254_falso_rojo.py`, `test_plan254_stream_drain.py`.
 - [ ] **Sin regresiones del 238**: `test_plan238_incident_inbox_api.py` verde (contrato de forma de la bandeja).

@@ -1,6 +1,51 @@
 # Plan 202 — La Fragua Nocturna (1/6): Turno Mínimo Viable (TMV) — Orquestador, Planner de cola derivada, Ledger durable y Digest triado
 
-- **Estado:** CRITICADO v2 (v1 RECHAZADO → corregido in place; ahora **APROBADO-CON-CAMBIOS**) — 2026-07-18 · Autor: StackyArchitectaUltraEficientCode · **SIN IMPLEMENTAR** (pre-flight hecho y verificado el 2026-07-26; ver el bloque de abajo)
+- **Estado:** **IMPLEMENTADO** — E1..E7 COMPLETAS — 2026-07-26 · Autor: StackyArchitectaUltraEficientCode · 90 tests propios verdes, corridos POR ARCHIVO con `.venv\Scripts\python.exe` · SIN push
+
+### Registro de implementación — 2026-07-26
+
+**Etapas.** E1 ledger (11 tests) · E2/E3 planner + gate (24) · E4 workers (13) · E5 orquestador (12) · E6 digest (13) · E7 flags + API + skill (17). **Total 90 verdes.** Ninguna etapa quedó parcial ni bloqueada.
+
+**Archivos.** `backend/services/night_foundry_{ledger,planner,workers,orchestrator,digest}.py`, `backend/api/night_foundry.py` (registrado en `api/__init__.py`), `.claude/skills/fragua-nocturna/SKILL.md`, los 6 `tests/test_plan202_*.py` (registrados en AMBOS runners del ratchet), más el cableado de flags en `services/harness_flags.py`, `services/harness_flags_help.py`, `config.py`, `tests/test_harness_flags_bounds.py` y `tests/test_harness_flags_requires.py`.
+
+**Smoke E2E contra el repo REAL** (no fixtures): la Fragua derivó **25 candidatos** verdaderos (1 critic + 2 package + 22 reconciler), los encoló, drenó la cola y emitió un digest con **24 decisiones** rankeadas — sin tocar un solo archivo del repo (`git status` idéntico). Esto es lo que cierra el falso verde histórico de este plan: hay tests de anclaje SIN monkeypatch de `_docs_dir` (`test_docs_dir_resuelve_a_carpeta_de_planes`, `test_order_block_numbers_real_sobre_hojas_de_ruta`, `test_count_backlog_real_no_explota`, `test_auditor_readonly_arbol_intacto`, `test_build_package_sobre_el_doc_real_202`, `test_mergeability_real_contra_el_repo`).
+
+#### VEREDICTO sobre el deploy congelado (el riesgo que la v2 dejaba abierto)
+
+**La Fragua NO corre en deploy congelado (PyInstaller). Solo en el árbol de desarrollo.** Razón medida, no supuesta: en congelado `backend_root()` es el directorio del `.exe`, con lo cual `backend_root().parent/"docs"` vuelve a colapsar exactamente sobre `app_root()/"docs"` —el path inexistente que hundió la v1— y además no hay repo git, ni ramas, ni working tree que auditar: los cuatro carriles quedarían sin insumo.
+
+Cableado: `night_foundry_planner.foundry_availability()` devuelve `{available, reason_code, reason}` con `reason_code ∈ {frozen_deploy, docs_dir_missing, not_a_git_repo}`. **Falla CERRADO** (`derive_candidates` → `[]`, `plan_night` → todo en cero, `run_night` → `stopped_reason="unavailable"` sin procesar nada) y **VISIBLE** (`GET /api/night-foundry/status` expone el motivo legible; `POST /run-one-turn` responde **409** con la razón; el digest admite `stopped_reason="unavailable"` para que una noche que no corrió NO se lea como "noche tranquila"). Nunca degrada a un silencioso "0 ítems". Tests: `test_fragua_no_disponible_en_congelado`, `test_run_night_se_niega_en_congelado`, `test_status_expone_no_disponible_en_congelado`, `test_run_one_turn_409_en_congelado`.
+
+#### Desvíos deliberados respecto del texto del plan (el código manda, con motivo)
+
+1. **[BLOQUEANTE] C10 era imposible.** El doc exigía meter AMBAS flags en `_CURATED_DEFAULTS_ON`. Pero `test_declared_default_true_set` (`tests/test_harness_flags.py:894-902`) exige `declared_default(spec) is True` para toda key curada: una `int` con `default=40000` da `40000`, no `True`, y el test se pondría rojo. **Ninguna** de las dos declara `default=` en su `FlagSpec` (patrón real de la casa, `harness_flags.py:4439,4462`); los defaults EFECTIVOS viven en `config.py`.
+2. **Flag maestra default OFF**, no ON como decía §E7 (la §4 del propio pre-flight ya lo contradecía). Se cita la **EXCEPCIÓN DURA #3** (prerequisito no garantizado en instalación default): necesita el árbol de desarrollo y su turno depende de `/loop`, nativo de Claude Code y ausente en Codex/Copilot. Es activable **desde la UI** sin tocar frontend: el `HarnessFlagsPanel` lee el registro dinámicamente (0 keys hardcodeadas), así que registrar las 6 patas (FlagSpec + `_CATEGORY_KEYS` + `config.py` + `_REQUIRES_MAP_FROZEN` + `_FROZEN_BOUNDS` + `PLAIN_HELP`) alcanza. `_CURATED_DEFAULTS_ON` NO se toca.
+3. **Helpers §E0: dueño único.** El doc los repartía entre planner y workers, pero `_derive_drift_candidates` (planner) llama a `_extract_files` y el orquestador llama a `_doc_for` sin importarlo → `NameError` al copiar verbatim. Viven todos en `night_foundry_planner.py`; workers y orquestador los importan.
+4. **URL con guion** (`/api/night-foundry/…`) en vez de `night_foundry`, por convención de la casa (`pipeline-handoff`, `db-compare`). §5 no congelaba la URL.
+5. **`stopped_reason` suma `"unavailable"`** — extensión ADITIVA del contrato §5.2 (203-207 no existen como archivos, así que no hay consumidor que romper).
+
+#### Bugs REALES del propio plan, hallados construyéndolo (no leyéndolo)
+
+- **`claim_next` re-entregaba el MISMO ítem.** Acepta `claimed` como candidato a propósito (resume de huérfanos, KPI-4), pero sin marca de "en vuelo" dos llamadas seguidas devuelven el mismo. El `seen` de `run_night` tapaba el síntoma solo dentro del loop; el ledger era inseguro para cualquier otro consumidor (p. ej. el botón manual). Fijo con `_INFLIGHT` **de proceso** (los huérfanos de OTRA corrida siguen siendo re-clamables, que es lo que pide la resumibilidad).
+- **`_parse_conflict_paths` mentía sobre los archivos en conflicto.** Usaba `\S+`, y **TODAS** las rutas versionadas de este repo empiezan con `Stacky Agents/`, o sea que contienen un espacio: la forma `both modified:` no matcheaba nunca y la forma `CONFLICT (…)` devolvía la ruta **truncada** (`Agents/backend/app.py`). Se captura hasta fin de línea.
+- **La ventana de 8 líneas de "Orden de implementación" (§E0) no servía.** Medido sobre los docs reales: alcanza para la hoja de ruta 195 (su línea de orden cae 6 líneas debajo del encabezado) pero **no** para la 197 (cae 8, justo fuera) ⇒ el carril `package` habría derivado la mitad. Ahora se leen TODAS las coincidencias con ventana de 12.
+- **KPI-5 estaba detectado pero no cableado.** `run_auditor` devolvía `readonly_ok=False` ante una violación read-only y `run_night` lo grababa igual como `done`. Ahora marca el ítem `failed` con el motivo.
+- **El drift hacía miles de spawns de proceso.** Un `git cat-file -e main:<archivo>` por archivo por doc IMPLEMENTADO = 211 docs × hasta 20 archivos, minutos en Windows. Un único `git ls-tree -r main` da la misma semántica; si `main` no se puede leer, NO se deriva drift (fail-closed).
+- **Falso verde propio, atrapado a tiempo:** `workers` importaba `_main_tree_files` por nombre, así que el binding quedaba congelado y dos tests del reconciliador verdeaban ejercitando el repo REAL en vez del mock. Se invoca vía módulo.
+
+#### Evidencia STALE del plan que quedó desmentida
+
+§2.3 afirmaba que hay ramas `impl/*` sin consolidar (`impl/dbcompare`, `impl/devops`, `impl/plan-159`, `impl/plan-163`, `impl/rsi`, `impl/ux`). **`git for-each-ref refs/heads/impl` devuelve VACÍO** el 2026-07-26: se consolidaron el 2026-07-20. El carril `auditor` deriva 0 candidatos hoy — el código es correcto, la premisa envejeció. Cuando vuelva a haber ramas `impl/*`, el carril funciona sin cambios.
+
+#### Qué produce de noche y con qué gate humano
+
+Produce **solo papel inerte**: `packages/plan-NN-<fecha>.json` (mapa de archivos, tests a escribir como TEXTO, checklist de fases, gotchas, gates), `audits/<rama>-<fecha>.json` (diffstat + archivos de test + mapa fase→archivo, GIT-ONLY), el drift doc-vs-código dentro del digest, y `digests/digest-<fecha>.json` con las decisiones rankeadas y su veredicto de mergeabilidad. Lo único que escribe en el repo es el carril de crítica, y **dentro del worktree/rama `nightly/<fecha>`**, nunca en el árbol diurno ni en `main`. **Gate humano:** el operador lee el digest a la mañana y decide qué mergear e implementar; no hay merge, push, publicación ni implementación automática en ningún camino. Kill-switches redundantes: archivo `STOP` (un clic vía `POST`/`DELETE /api/night-foundry/stop`), `STACKY_NIGHT_FOUNDRY_HARD_DISABLE`, `STACKY_EVOLUTION_HARD_DISABLE`, detener el `/loop`, y la flag maestra apagada (default). **Costo ocioso 0:** ningún hook de arranque referencia la Fragua (`test_ningun_hook_de_arranque_invoca_la_fragua`).
+
+#### Pendiente
+
+Solo el **smoke visual** del panel: el TMV expone las rutas de solo lectura y el botón manual, pero la pantalla rica del digest queda fuera de alcance por §8 ("UI rica del panel: mejora posterior"). La flag ya es toggleable desde el panel de flags del Arnés.
+
+---
 
 ### Pre-flight verificado el 2026-07-26 (NO re-derivar: está medido contra el árbol real)
 

@@ -390,6 +390,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
         "STACKY_INCIDENT_DEV_PR_ENABLED",          # Plan 177 — auto-PR del Dev Resolutor
         "STACKY_NOTIFICATION_CENTER_ENABLED",      # Plan 152 — centro de actividad (campana + feed, default ON)
+        # Plan 202 — La Fragua Nocturna: master opt-in (default OFF) + su techo de
+        # gasto. Van juntas acá porque son la MISMA capacidad opt-in; el techo no
+        # tiene sentido sin el master (y lo declara con `requires`).
+        "STACKY_NIGHT_FOUNDRY_ENABLED",
+        "STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET",
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -4829,6 +4834,51 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "404; todo lo demas queda identico."
         ),
         group="global",
+    ),
+    # ── Plan 202 — La Fragua Nocturna (turno mínimo viable) ─────────────────────
+    FlagSpec(
+        key="STACKY_NIGHT_FOUNDRY_ENABLED",
+        type="bool",
+        # SIN default= a propósito: default_is_known() es `spec.default is not None`
+        # (type-agnóstico), así que declarar `default=False` la volvería "curada" y
+        # rompería test_default_known_only_for_curated. El default EFECTIVO (OFF)
+        # vive en config.py.
+        #
+        # Default OFF citando la EXCEPCIÓN DURA #3 (prerequisito NO garantizado en
+        # una instalación default): la Fragua es una herramienta del árbol de
+        # desarrollo —necesita el repo git y la carpeta de planes, que no existen en
+        # el deploy congelado— y su turno nocturno depende de /loop, que es nativo de
+        # Claude Code y no existe en Codex ni en Copilot. Además es un orquestador
+        # nocturno: encenderlo sin querer sería gasto en reposo.
+        label="La Fragua Nocturna",
+        description=(
+            "Plan 202 - Habilita la maquinaria de la Fragua Nocturna: la cola derivada del "
+            "estado real del repo, la bitácora durable, el resumen triado de la mañana, el "
+            "panel de solo lectura y el botón manual 'correr un turno'. NO corre nada sola: "
+            "la corrida nocturna la arma el operador. Solo produce papel revisable (críticas, "
+            "auditorías de solo lectura y paquetes listos para implementar); nunca mergea, "
+            "nunca publica y nunca implementa. Default OFF (excepción dura #3: depende del "
+            "árbol de desarrollo y de /loop, que es propio de Claude Code). "
+            "OFF: las rutas responden 404 y todo queda idéntico a hoy."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET",
+        type="int",
+        # SIN default= (mismo motivo type-agnóstico de arriba; los ints no se curan).
+        # El default EFECTIVO (40000) vive en config.py.
+        label="Presupuesto de la Fragua por noche",
+        description=(
+            "Plan 202 - Corte DURO: la Fragua deja de tomar trabajo nuevo cuando el gasto "
+            "estimado de la noche supera este techo. Se evalúa antes de cada ítem, y el "
+            "carril de crítica pre-reserva su costo estimado para que uno solo no se pase."
+        ),
+        group="global",
+        requires="STACKY_NIGHT_FOUNDRY_ENABLED",
+        # OBLIGATORIO en la FlagSpec: test_bounds_map_is_frozen deriva `actual` de
+        # FlagSpec.min_value/max_value y lo compara contra _FROZEN_BOUNDS.
+        min_value=1000, max_value=500000,
     ),
 )
 

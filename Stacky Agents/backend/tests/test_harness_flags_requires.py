@@ -118,6 +118,9 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 202: el techo de gasto solo se lee desde el camino que abre el master de
+    # la Fragua; sin la arista, tocarlo con la Fragua apagada no haría nada.
+    "STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET": "STACKY_NIGHT_FOUNDRY_ENABLED",
     # Plan 196: los botones del pipeline viven DENTRO del Tablero de Planes; sin
     # la arista, acciones ON + tablero OFF dejaria endpoints sin superficie.
     "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED": "STACKY_PLANS_BOARD_ENABLED",

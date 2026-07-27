@@ -1669,6 +1669,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el detalle de la ejecución queda como está hoy, sin la ficha de traza.",
         example="Como el resumen de un viaje: hora de salida, hora de llegada, cuánto costó y qué tramos no quedaron registrados.",
     ),
+    "STACKY_NIGHT_FOUNDRY_ENABLED": PlainHelp(
+        what="Un turno de trabajo nocturno que prepara material para revisar a la mañana: críticas de planes, revisiones de ramas y carpetas de trabajo listas para arrancar.",
+        on_effect="Si la activás: aparece el panel de la Fragua con el resumen de la última noche y un botón para correr un turno a mano. Nada arranca solo: la corrida nocturna la programás vos.",
+        off_effect="Si la apagás: no cambia nada respecto de hoy; el panel no aparece y la Fragua no trabaja ni en manual ni de noche.",
+        example="Como dejar preparada la mesa de trabajo antes de irte: a la mañana encontrás todo listo para decidir, pero nadie tocó nada sin tu visto bueno.",
+    ),
+    "STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET": PlainHelp(
+        what="El techo de gasto que la Fragua puede consumir en una noche. Al llegar al tope deja de tomar trabajo nuevo y avisa en el resumen de la mañana.",
+        on_effect="Si lo subís: la Fragua alcanza a preparar más material por noche y gasta más.",
+        off_effect="Si lo bajás: la Fragua corta antes y prepara menos, con la ventaja de un costo más acotado.",
+        example="Como el límite de una tarjeta prepaga: cuando se agota deja de comprar, no se pasa de largo.",
+    ),
 }
 
 

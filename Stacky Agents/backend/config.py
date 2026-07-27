@@ -1495,6 +1495,22 @@ class Config:
         "STACKY_DEVOPS_ENV_SANDBOX_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # Plan 202 — La Fragua Nocturna (turno mínimo viable). Default EFECTIVO OFF
+    # citando la EXCEPCIÓN DURA #3 (prerequisito no garantizado en instalación
+    # default): necesita el árbol de desarrollo con repo git y carpeta de planes
+    # —que no existen en el deploy congelado— y su turno depende de /loop, que es
+    # nativo de Claude Code y no existe en Codex ni Copilot. Además es un
+    # orquestador nocturno: encendido sin querer sería gasto en reposo.
+    # Editable por UI (HarnessFlagsPanel, categoría "Capacidades opt-in").
+    STACKY_NIGHT_FOUNDRY_ENABLED: bool = os.getenv(
+        "STACKY_NIGHT_FOUNDRY_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # Plan 202 — techo duro de gasto por noche de la Fragua. Editable por UI.
+    STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET: int = int(
+        os.getenv("STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET", "40000") or 40000
+    )
+
     # Plan 90 — Agente DevOps interactivo multi-turno (seccion del panel DevOps).
     # Default ON (activado 2026-07-05, decisión explícita del operador, con
     # conocimiento de que cada turno consume una llamada LLM completa).

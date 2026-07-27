@@ -1,9 +1,15 @@
+import logging
+import threading
+import time
 from contextlib import contextmanager
-from sqlalchemy import create_engine, text
+
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from config import config
 from runtime_paths import data_dir
+
+logger = logging.getLogger("stacky.db")
 
 data_dir().mkdir(parents=True, exist_ok=True)
 
@@ -31,6 +37,182 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+# ── Plan 253 F2 — concurrencia SQLite ────────────────────────────────────────
+# Estado EFECTIVO, leido de vuelta del motor. Lo consume el guard de
+# /api/diag/health. Nunca se "asume": siempre se relee.
+_CONCURRENCY_STATE: dict = {
+    "journal_mode_effective": None,
+    "wal_status": "unknown",     # ok | in_memory | rejected | disabled | not_sqlite
+    "busy_timeout_ms": None,
+    "synchronous": None,
+    "last_applied_at": None,
+}
+_IS_SQLITE = _effective_url.startswith("sqlite")
+_IS_MEMORY_DB = "mode=memory" in _effective_url or _effective_url.endswith(":memory:")
+if not _IS_SQLITE:
+    _CONCURRENCY_STATE["wal_status"] = "not_sqlite"
+
+
+def apply_sqlite_pragmas(dbapi_conn) -> dict:
+    """Plan 253 F2 — aplica los PRAGMA de concurrencia a UNA conexion sqlite3 cruda.
+
+    Devuelve el estado EFECTIVO releido del motor (no lo que pedimos).
+    NUNCA levanta: cualquier fallo degrada al comportamiento de hoy.
+    """
+    state = {"journal_mode_effective": None, "wal_status": "disabled",
+             "busy_timeout_ms": None, "synchronous": None,
+             "last_applied_at": time.time()}
+    cur = dbapi_conn.cursor()
+    try:
+        if config.STACKY_SQLITE_WAL_ENABLED:
+            cur.execute("PRAGMA journal_mode=WAL")
+            mode = str((cur.fetchone() or [""])[0]).lower()
+            state["journal_mode_effective"] = mode
+            if mode == "wal":
+                state["wal_status"] = "ok"
+            elif mode == "memory":
+                # Base en memoria (tests / DB compartida en RAM). NO es un rechazo
+                # del filesystem: WAL no aplica por definicion. Medido: devuelve 'memory'.
+                state["wal_status"] = "in_memory"
+            else:
+                state["wal_status"] = "rejected"
+        else:
+            cur.execute("PRAGMA journal_mode")
+            state["journal_mode_effective"] = str((cur.fetchone() or [""])[0]).lower()
+            state["wal_status"] = "disabled"
+
+        cur.execute(f"PRAGMA busy_timeout={int(config.STACKY_SQLITE_BUSY_TIMEOUT_MS)}")
+        cur.execute("PRAGMA busy_timeout")
+        state["busy_timeout_ms"] = (cur.fetchone() or [None])[0]
+
+        if config.STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED:
+            cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA synchronous")
+        state["synchronous"] = (cur.fetchone() or [None])[0]
+    except Exception:  # noqa: BLE001 — la concurrencia jamas impide abrir la base
+        logger.warning("sqlite: no se pudieron aplicar los PRAGMA de concurrencia", exc_info=True)
+    finally:
+        cur.close()
+    return state
+
+
+if _IS_SQLITE:
+    @event.listens_for(engine, "connect")
+    def _sqlite_on_connect(dbapi_conn, _rec):
+        """Plan 253 F2 — PRAGMA en TODA conexion nueva del pool."""
+        st = apply_sqlite_pragmas(dbapi_conn)
+        _CONCURRENCY_STATE.update(st)
+        if st["wal_status"] == "rejected":
+            from services.log_throttle import log_throttled
+            log_throttled(
+                "db.wal_rejected", logger, logging.WARNING,
+                "sqlite: el sistema de archivos rechazo WAL (journal_mode=%s); "
+                "se sigue en ese modo con espera por lock de %d ms",
+                st["journal_mode_effective"], int(config.STACKY_SQLITE_BUSY_TIMEOUT_MS),
+                min_interval_s=300.0,
+            )
+
+
+def sqlite_concurrency_state() -> dict:
+    """Plan 253 F2 — copia del estado efectivo, para el guard de salud."""
+    return dict(_CONCURRENCY_STATE)
+
+
+# ── Plan 253 F3 — barrera de ESCRITURAS DE ARRANQUE (no de esquema) ──────────
+_STARTUP_WRITES_DONE = threading.Event()
+_BARRIER_ARMED = threading.Event()
+
+
+def arm_startup_writes() -> None:
+    """Plan 253 F3 — declara que empieza la fase de escritura del arranque.
+
+    Se llama UNA vez por create_app(). Es idempotente y re-armable: si
+    create_app() corre dos veces (medido: pasa), la segunda vuelve a cerrar la
+    barrera mientras el segundo arranque escribe. Eso es lo correcto.
+    """
+    _BARRIER_ARMED.set()
+    _STARTUP_WRITES_DONE.clear()
+
+
+def mark_startup_writes_done() -> None:
+    """Plan 253 F3 — libera la barrera. Va SIEMPRE en un finally."""
+    _STARTUP_WRITES_DONE.set()
+
+
+def wait_for_startup_writes(timeout_s: float = 30.0) -> bool:
+    """Plan 253 F3 — bloquea hasta que la fase de escritura del arranque termino.
+
+    Devuelve True si se puede trabajar, False si expiro el timeout.
+    NUNCA levanta. Si la barrera nunca se armo (proceso empaquetado sin
+    create_app, scan ad-hoc del panel de diagnostico, tests que instancian el
+    watcher a mano) devuelve True INMEDIATAMENTE: sin armado no hay escritor
+    de arranque contra el cual esperar. Esto elimina cualquier riesgo de que un
+    daemon quede esperando 30 s por una barrera que nadie va a abrir.
+    """
+    if not _BARRIER_ARMED.is_set():
+        return True
+    if timeout_s <= 0:
+        return _STARTUP_WRITES_DONE.is_set()
+    return _STARTUP_WRITES_DONE.wait(timeout=timeout_s)
+
+
+def startup_writes_state() -> dict:
+    """Plan 253 F3 — para el guard de salud."""
+    return {"armed": _BARRIER_ARMED.is_set(), "done": _STARTUP_WRITES_DONE.is_set()}
+
+
+# ── Plan 253 F4 — reintento por UNIDAD DE TRABAJO ────────────────────────────
+_LOCK_MARKERS = ("database is locked", "database table is locked")
+_LOCK_STATS = {"retried": 0, "recovered": 0, "exhausted": 0}
+_LOCK_STATS_LOCK = threading.Lock()
+
+
+def lock_stats() -> dict:
+    """Plan 253 F4 — contadores acumulados, para el guard de salud."""
+    with _LOCK_STATS_LOCK:
+        return dict(_LOCK_STATS)
+
+
+def run_with_retry(fn, *, attempts: int = 3, base_delay_s: float = 0.25, label: str = ""):
+    """Plan 253 F4 — reintenta una UNIDAD DE TRABAJO COMPLETA ante lock de SQLite.
+
+    `fn` DEBE abrir su propia sesion/transaccion en cada invocacion (tipicamente
+    un `with session_scope() as session:` adentro). PROHIBIDO pasarle una lambda
+    que use una Session ya abierta: tras un OperationalError esa Session queda
+    con la transaccion abortada y cerrada por el finally de session_scope.
+
+    Reintenta SOLO si es OperationalError cuyo mensaje contiene un marcador de
+    lock. Cualquier otra excepcion se re-lanza en el primer intento (no se
+    enmascaran bugs). Tras agotar los intentos, re-lanza la ultima.
+    Con la flag apagada, ejecuta fn() una sola vez.
+    """
+    from sqlalchemy.exc import OperationalError
+    if not config.STACKY_SQLITE_LOCK_RETRY_ENABLED:
+        return fn()
+    last = None
+    for i in range(attempts):
+        try:
+            result = fn()
+            if i > 0:
+                with _LOCK_STATS_LOCK:
+                    _LOCK_STATS["recovered"] += 1
+            return result
+        except OperationalError as exc:
+            msg = str(getattr(exc, "orig", None) or exc).lower()
+            if not any(m in msg for m in _LOCK_MARKERS):
+                raise
+            last = exc
+            if i < attempts - 1:
+                with _LOCK_STATS_LOCK:
+                    _LOCK_STATS["retried"] += 1
+                time.sleep(base_delay_s * (2 ** i))   # 0.25s, 0.5s
+                logger.warning("db lock en %s — reintento %d/%d",
+                               label or "operacion", i + 2, attempts)
+    with _LOCK_STATS_LOCK:
+        _LOCK_STATS["exhausted"] += 1
+    raise last
 
 
 class Base(DeclarativeBase):

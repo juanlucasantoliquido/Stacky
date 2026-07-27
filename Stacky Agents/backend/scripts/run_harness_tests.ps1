@@ -749,7 +749,14 @@ $HarnessTestFiles = @(
   "tests/test_plan202_workers.py",
   "tests/test_plan202_orchestrator.py",
   "tests/test_plan202_digest.py",
-  "tests/test_plan202_api_flag.py"
+  "tests/test_plan202_api_flag.py",
+
+  # Plan 253 - concurrencia SQLite (WAL, barrera de arranque, retry, purga, compactacion)
+  "tests/test_plan253_sqlite_concurrency.py",
+  "tests/test_plan253_flags_ui.py",
+  "tests/test_plan253_syslog_purge.py",
+  "tests/test_plan253_db_compact.py",
+  "tests/test_plan253_health_guard.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

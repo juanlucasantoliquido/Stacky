@@ -355,6 +355,12 @@ def _log_completion_preflight(logger) -> None:
         logger.exception("preflight de cierre open-chat falló (continuando)")
 
 
+# Plan 253 F7 [C18] — cuantas veces corrio create_app() en este proceso. Medido
+# el 2026-07-26: vale 2 por arranque, lo que DUPLICA los escritores concurrentes.
+# Se publica en /api/diag/health para que el operador lo vea; corregirlo es otro plan.
+_CREATE_APP_COUNT = 0
+
+
 def create_app() -> Flask:
     dist_dir = frontend_dist_dir()
     app = Flask(__name__)
@@ -365,6 +371,14 @@ def create_app() -> Flask:
     logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, logging.INFO))
     install_file_log_handler()
     logger = logging.getLogger("stacky_agents.app")
+
+    # Plan 253 F3 — cierra la barrera ANTES del primer write del arranque. El
+    # escritor que produce `database table is locked` no es el DDL de init_db()
+    # sino _startup_sync (medido): la barrera se libera despues de el, mas abajo.
+    from db import arm_startup_writes, mark_startup_writes_done
+    global _CREATE_APP_COUNT
+    _CREATE_APP_COUNT += 1   # Plan 253 F7 — medido: hoy vale 2 por arranque
+    arm_startup_writes()
 
     init_db()
     install_console_log_handler()
@@ -543,17 +557,61 @@ def create_app() -> Flask:
     # funcionar: directorio vigilado inexistente (C1) o PAT ausente (C2).
     _log_completion_preflight(logger)
 
-    if _is_test_mode():
-        # Plan 154 F5.ii — create_app() NO hace sync de red real (egress) bajo pytest,
-        # pero SÍ ejecuta la purga LOCAL de tickets ajenos que _startup_sync hace
-        # incidentalmente: varios tests comparten la DB in-memory y dependen de esa
-        # limpieza entre create_app(). Los llamadores DIRECTOS de _startup_sync
-        # (p.ej. tests de circuit-breaker) siguen ejercitando la función completa.
-        _startup_purge_only(logger)
-    else:
-        _startup_sync(logger)
-        _plan158_maybe_backfill_claude_model(logger)
-        _plan199_maybe_autoscan_harvest(logger)
+    try:
+        if _is_test_mode():
+            # Plan 154 F5.ii — create_app() NO hace sync de red real (egress) bajo pytest,
+            # pero SÍ ejecuta la purga LOCAL de tickets ajenos que _startup_sync hace
+            # incidentalmente: varios tests comparten la DB in-memory y dependen de esa
+            # limpieza entre create_app(). Los llamadores DIRECTOS de _startup_sync
+            # (p.ej. tests de circuit-breaker) siguen ejercitando la función completa.
+            _startup_purge_only(logger)
+        else:
+            _startup_sync(logger)
+            _plan158_maybe_backfill_claude_model(logger)
+            _plan199_maybe_autoscan_harvest(logger)
+    finally:
+        # Plan 253 F3 — la barrera se abre SIEMPRE, aunque el sync falle:
+        # un arranque roto degrada al comportamiento de hoy, no cuelga daemons.
+        mark_startup_writes_done()
+
+    # ── Plan 253 F5 — daemon UNICO de mantenimiento periódico ───────────────
+    # Punto de extensión compartido: las tareas se registran con
+    # services.maintenance.register_maintenance_task(). NO agregar threads nuevos.
+    # Costo ocioso: un sleep(30) y una comparación de enteros. Cero red, cero modelo.
+    def _maintenance_loop():
+        """Plan 253 F5 — único daemon de mantenimiento periódico del backend."""
+        from services.maintenance import iter_maintenance_tasks, note_run
+        import time as _time
+        _next: dict[str, float] = {}
+        while True:
+            _time.sleep(30.0)                      # tick fijo; el intervalo real es por tarea
+            now = _time.monotonic()
+            for task in iter_maintenance_tasks():
+                try:
+                    if not task.enabled():
+                        continue
+                    due = _next.get(task.name, 0.0)
+                    if now < due:
+                        continue
+                    _next[task.name] = now + max(30, int(task.interval_s()))
+                    count = task.run()
+                    note_run(task.name, count)
+                    if count:
+                        logger.info("mantenimiento %s: %d unidades procesadas", task.name, count)
+                except Exception as exc:           # noqa: BLE001 — jamás mata el daemon
+                    note_run(task.name, 0, error=str(exc))
+                    logger.exception("mantenimiento %s: fallo no fatal", task.name)
+
+    try:
+        from services.db_maintenance import register_syslog_purge_task
+        register_syslog_purge_task()
+        if not _is_test_mode():
+            threading.Thread(
+                target=_maintenance_loop, name="stacky-maintenance", daemon=True
+            ).start()
+            logger.info("maintenance daemon armed (tick=30s)")
+    except Exception:  # noqa: BLE001 — el mantenimiento jamás impide arrancar
+        logger.exception("no se pudo armar el daemon de mantenimiento (continuando)")
 
     # ── U2.1 — Hook de avance de pipeline por finalización de ejecución ─────
     try:

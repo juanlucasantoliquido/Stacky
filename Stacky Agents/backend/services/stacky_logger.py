@@ -59,6 +59,9 @@ ERROR_MAX_BYTES = 65_536        # 64 KB  — full stacktraces
 QUEUE_MAX = 10_000              # max enqueued events before fail-safe sync write
 BATCH_SIZE = 50                 # rows per DB flush
 FLUSH_INTERVAL_SEC = 2.0        # max seconds between DB flushes
+# Plan 253: deprecado, usar config.STACKY_SYSLOG_RETENTION_DAYS (fuente unica,
+# configurable desde la UI). Se conserva porque hay imports vivos; su valor se
+# congela en el import y NO refleja cambios en caliente.
 RETENTION_DAYS = int(os.getenv("SYSLOG_RETENTION_DAYS", "90"))
 
 # Keys whose values are redacted before persisting (case-insensitive match)
@@ -370,12 +373,31 @@ class _StackyLogger:
                 batch = []
                 last_flush = now
 
+    def _requeue_once(self, events: list[LogEvent]) -> bool:
+        """Plan 253 F4 — reencola UNA sola vez un batch que fallo por lock.
+
+        Devuelve True si el batch quedo reencolado (el llamador NO debe loguear
+        la perdida) y False si hay que descartarlo: eventos ya reencolados antes,
+        o cola llena (nunca se bloquea al writer).
+        """
+        if any(getattr(evt, "_requeued", False) for evt in events):
+            return False
+        requeued = 0
+        for evt in events:
+            try:
+                evt._requeued = True
+                self._q.put_nowait(evt)
+                requeued += 1
+            except queue.Full:
+                return False
+        return requeued > 0
+
     def _persist_batch(self, events: list[LogEvent]) -> None:
         # Import here to avoid circular import at module load time
-        from db import session_scope
+        from db import run_with_retry, session_scope
         from models import SystemLog
 
-        try:
+        def _unit():
             with session_scope() as session:
                 for evt in events:
                     # Prepare and mask payload fields
@@ -419,8 +441,14 @@ class _StackyLogger:
                         tags_json=json.dumps(evt.tags) if evt.tags else None,
                     )
                     session.add(row)
+
+        try:
+            run_with_retry(_unit, label="syslog.persist_batch")
         except Exception:
-            _std.exception("syslog failed to persist batch of %d events", len(events))
+            # Anti-recursion: se usa el logger stdlib directo (_std), NUNCA este
+            # logger, o el fallo del sink se alimentaria a si mismo.
+            if not self._requeue_once(events):
+                _std.exception("syslog failed to persist batch of %d events", len(events))
 
     def _flush_on_exit(self) -> None:
         """Drain remaining queued events before process exits."""
@@ -451,12 +479,20 @@ class _StackyLogger:
 
     # ── maintenance ─────────────────────────────────────────────────────
 
-    def purge_old_logs(self, days: int = RETENTION_DAYS) -> int:
-        """Delete SystemLog rows older than `days` days. Returns count deleted."""
+    def purge_old_logs(self, days: int | None = None) -> int:
+        """Delete SystemLog rows older than `days` days. Returns count deleted.
+
+        Plan 253 — days=None lee config.STACKY_SYSLOG_RETENTION_DAYS EN EL CUERPO,
+        para que el valor de la UI aplique en caliente. Llamar con un int explicito
+        sigue funcionando igual (api/logs.py, tests/test_stacky_logger.py).
+        """
+        from config import config
         from db import session_scope
         from models import SystemLog
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        if days is None:
+            days = config.STACKY_SYSLOG_RETENTION_DAYS
+        cutoff = datetime.utcnow() - timedelta(days=int(days))
         try:
             with session_scope() as session:
                 deleted: int = (

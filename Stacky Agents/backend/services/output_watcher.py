@@ -209,6 +209,19 @@ class AdoOutputWatcher:
 
     def scan_once(self) -> dict:
         """Una pasada manual. Retorna dict con counts del round."""
+        # Plan 253 F3 — no tocar la base mientras la fase de escritura del
+        # arranque (init_db + _startup_sync) sigue en curso: ahi nace el
+        # `database table is locked: tickets` de los logs. Si la barrera nunca
+        # se armo (scan ad-hoc, proceso empaquetado, tests) devuelve True al toque.
+        from config import config
+        from db import wait_for_startup_writes
+        if not wait_for_startup_writes(timeout_s=config.STACKY_STARTUP_WRITE_BARRIER_WAIT_S):
+            logger.warning(
+                "output_watcher: la carga inicial sigue en curso tras %.1fs — se omite este "
+                "round SIN marcar los artefactos como procesados",
+                config.STACKY_STARTUP_WRITE_BARRIER_WAIT_S)
+            self.stats.skipped_not_ready = getattr(self.stats, "skipped_not_ready", 0) + 1
+            return {"skipped_startup_writes_pending": True}
         self.stats.scans += 1
         round_result = _ScanRoundResult()
         outputs_dir = self.outputs_dir  # resuelto lazy: snapshot por scan
@@ -300,59 +313,63 @@ class AdoOutputWatcher:
             return
 
         # ── Consultar DB ──────────────────────────────────────────────────────
-        with session_scope() as session:
-            ticket = session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
-            if ticket is None:
-                logger.debug("output_watcher mode_b: ticket ADO-%s no existe en DB", ado_id)
-                self._seen_b[key] = (stat.st_mtime_ns, sha256)
-                round_result.mode_b_skipped += 1
-                return
-            ticket_id = ticket.id
+        # Plan 253 F4 — la unidad de trabajo COMPLETA (una session_scope fresca
+        # por intento) se reintenta ante lock de SQLite. Los side-effects
+        # (cachear el mtime, contar el skip) quedan AFUERA a proposito: si
+        # vivieran adentro, un reintento los duplicaria.
+        from db import run_with_retry
 
-            # ¿Ya hay publish con este SHA exacto? Dedup DB-level.
-            already_published = _find_publish_by_sha(session, ticket_id=ticket_id, sha256=sha256)
-            if already_published is not None and already_published.status == "ok":
-                logger.debug(
-                    "output_watcher mode_b: ADO-%s sha=%s ya publicado en row %d — skip",
-                    ado_id, sha256[:8], already_published.id,
+        def _unit():
+            with session_scope() as session:
+                ticket = session.query(Ticket).filter(Ticket.ado_id == ado_id).first()
+                if ticket is None:
+                    logger.debug("output_watcher mode_b: ticket ADO-%s no existe en DB", ado_id)
+                    return None
+                ticket_id = ticket.id
+
+                # ¿Ya hay publish con este SHA exacto? Dedup DB-level.
+                already_published = _find_publish_by_sha(session, ticket_id=ticket_id, sha256=sha256)
+                if already_published is not None and already_published.status == "ok":
+                    logger.debug(
+                        "output_watcher mode_b: ADO-%s sha=%s ya publicado en row %d — skip",
+                        ado_id, sha256[:8], already_published.id,
+                    )
+                    return None
+
+                # Tomar la LATEST execution (running o terminal). El publish puede
+                # disparar aunque la execution esté cerrada — esto cubre el race
+                # Modo A → Modo B cuando un Epic produce ambos artifacts y Modo A
+                # cerró antes. El dedup SHA en agent_html_publish evita doble-publish.
+                latest_exec = (
+                    session.query(AgentExecution)
+                    .filter(AgentExecution.ticket_id == ticket_id)
+                    .order_by(AgentExecution.id.desc())
+                    .first()
                 )
-                self._seen_b[key] = (stat.st_mtime_ns, sha256)
-                round_result.mode_b_skipped += 1
-                return
+                if latest_exec is None:
+                    logger.debug(
+                        "output_watcher mode_b: comment.html para ADO-%s pero no hay execution registrada",
+                        ado_id,
+                    )
+                    return None
 
-            # Tomar la LATEST execution (running o terminal). El publish puede
-            # disparar aunque la execution esté cerrada — esto cubre el race
-            # Modo A → Modo B cuando un Epic produce ambos artifacts y Modo A
-            # cerró antes. El dedup SHA en agent_html_publish evita doble-publish.
-            latest_exec = (
-                session.query(AgentExecution)
-                .filter(AgentExecution.ticket_id == ticket_id)
-                .order_by(AgentExecution.id.desc())
-                .first()
-            )
-            if latest_exec is None:
-                logger.debug(
-                    "output_watcher mode_b: comment.html para ADO-%s pero no hay execution registrada",
-                    ado_id,
-                )
-                self._seen_b[key] = (stat.st_mtime_ns, sha256)
-                round_result.mode_b_skipped += 1
-                return
+                # El archivo debe ser de esta execution (mtime ≥ started_at - margen)
+                cutoff = latest_exec.started_at - timedelta(seconds=DEFAULT_STARTED_AT_GRACE_SECONDS)
+                if datetime.utcfromtimestamp(stat.st_mtime) < cutoff:
+                    logger.debug(
+                        "output_watcher mode_b: comment.html para ADO-%s es más viejo que la execution %d — skip",
+                        ado_id, latest_exec.id,
+                    )
+                    return None
 
-            # El archivo debe ser de esta execution (mtime ≥ started_at - margen)
-            cutoff = latest_exec.started_at - timedelta(seconds=DEFAULT_STARTED_AT_GRACE_SECONDS)
-            if datetime.utcfromtimestamp(stat.st_mtime) < cutoff:
-                logger.debug(
-                    "output_watcher mode_b: comment.html para ADO-%s es más viejo que la execution %d — skip",
-                    ado_id, latest_exec.id,
-                )
-                self._seen_b[key] = (stat.st_mtime_ns, sha256)
-                round_result.mode_b_skipped += 1
-                return
+                return (latest_exec.id, latest_exec.agent_type, latest_exec.status == "running")
 
-            execution_id = latest_exec.id
-            agent_type = latest_exec.agent_type
-            is_running = latest_exec.status == "running"
+        resolved = run_with_retry(_unit, label="output_watcher.mode_b")
+        if resolved is None:
+            self._seen_b[key] = (stat.st_mtime_ns, sha256)
+            round_result.mode_b_skipped += 1
+            return
+        execution_id, agent_type, is_running = resolved
 
         # ── Cerrar y publicar (afuera del session_scope para no anidar) ───────
         try:
@@ -511,60 +528,63 @@ class AdoOutputWatcher:
         # El cierre del run sí requiere una AgentExecution running. Si no hay
         # (agente fuera de tracking), las Tasks ya quedaron creadas arriba y no
         # hay nada que cerrar.
-        with session_scope() as session:
-            ticket = session.query(Ticket).filter(Ticket.ado_id == effective_epic_ado_id).first()
-            if ticket is None:
-                logger.debug("output_watcher mode_a: ADO-%s no existe en DB", effective_epic_ado_id)
-                if not auto_create_had_errors:
-                    self._seen_a[str(epic_dir)] = max_mtime_ns
-                round_result.mode_a_skipped += 1
-                return
-            ticket_id = ticket.id
+        # Plan 253 F4 — unidad de trabajo completa reintentable ante lock; los
+        # side-effects del corte (cachear mtime, contar el skip) van AFUERA.
+        from db import run_with_retry
 
-            running_exec = (
-                session.query(AgentExecution)
-                .filter(
-                    AgentExecution.ticket_id == ticket_id,
-                    AgentExecution.status == "running",
-                )
-                .order_by(AgentExecution.started_at.desc())
-                .first()
-            )
-            if running_exec is None:
-                logger.debug(
-                    "output_watcher mode_a: epic-%s sin execution running — "
-                    "Tasks auto-creadas, nada que cerrar",
-                    effective_epic_ado_id,
-                )
-                # Reintentar el auto-create en el próximo scan si hubo errores.
-                if not auto_create_had_errors:
-                    self._seen_a[str(epic_dir)] = max_mtime_ns
-                round_result.mode_a_skipped += 1
-                return
+        def _unit():
+            with session_scope() as session:
+                ticket = session.query(Ticket).filter(Ticket.ado_id == effective_epic_ado_id).first()
+                if ticket is None:
+                    logger.debug("output_watcher mode_a: ADO-%s no existe en DB", effective_epic_ado_id)
+                    return None
+                ticket_id = ticket.id
 
-            # Dedup: ya cerramos esta execution con mode_a antes? Buscamos
-            # por el patrón del reason — on_execution_end hardcodea changed_by="system"
-            # así que no podemos distinguir por ahí.
-            already_event = (
-                session.query(TicketStatusEvent)
-                .filter(
-                    TicketStatusEvent.execution_id == running_exec.id,
-                    TicketStatusEvent.reason.like("%output_watcher mode_a%"),
+                running_exec = (
+                    session.query(AgentExecution)
+                    .filter(
+                        AgentExecution.ticket_id == ticket_id,
+                        AgentExecution.status == "running",
+                    )
+                    .order_by(AgentExecution.started_at.desc())
+                    .first()
                 )
-                .first()
-            )
-            if already_event is not None:
-                logger.debug(
-                    "output_watcher mode_a: exec=%d epic-%s ya tiene close event (id=%d) — skip",
-                    running_exec.id, effective_epic_ado_id, already_event.id,
-                )
-                if not auto_create_had_errors:
-                    self._seen_a[str(epic_dir)] = max_mtime_ns
-                round_result.mode_a_skipped += 1
-                return
+                if running_exec is None:
+                    logger.debug(
+                        "output_watcher mode_a: epic-%s sin execution running — "
+                        "Tasks auto-creadas, nada que cerrar",
+                        effective_epic_ado_id,
+                    )
+                    return None
 
-            execution_id = running_exec.id
-            agent_type = running_exec.agent_type
+                # Dedup: ya cerramos esta execution con mode_a antes? Buscamos
+                # por el patrón del reason — on_execution_end hardcodea changed_by="system"
+                # así que no podemos distinguir por ahí.
+                already_event = (
+                    session.query(TicketStatusEvent)
+                    .filter(
+                        TicketStatusEvent.execution_id == running_exec.id,
+                        TicketStatusEvent.reason.like("%output_watcher mode_a%"),
+                    )
+                    .first()
+                )
+                if already_event is not None:
+                    logger.debug(
+                        "output_watcher mode_a: exec=%d epic-%s ya tiene close event (id=%d) — skip",
+                        running_exec.id, effective_epic_ado_id, already_event.id,
+                    )
+                    return None
+
+                return (running_exec.id, running_exec.agent_type)
+
+        resolved = run_with_retry(_unit, label="output_watcher.mode_a")
+        if resolved is None:
+            # Reintentar el auto-create en el próximo scan si hubo errores.
+            if not auto_create_had_errors:
+                self._seen_a[str(epic_dir)] = max_mtime_ns
+            round_result.mode_a_skipped += 1
+            return
+        execution_id, agent_type = resolved
 
         logger.info(
             "output_watcher mode_a: cerrando exec=%d epic-%s (pending_tasks=%d, disparador=%s)",

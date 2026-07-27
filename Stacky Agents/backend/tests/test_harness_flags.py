@@ -465,6 +465,12 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 253 — concurrencia SQLite y purga por retención ──
+    # STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED y STACKY_DB_COMPACT_ENABLED NO van:
+    # son default OFF por excepción dura (durabilidad / destructiva).
+    "STACKY_SQLITE_WAL_ENABLED",
+    "STACKY_SQLITE_LOCK_RETRY_ENABLED",
+    "STACKY_SYSLOG_AUTO_PURGE_ENABLED",
     # ── Plan 246 — Inventario vivo de pipelines (read-only absoluto) ──
     "STACKY_PIPELINE_INVENTORY_ENABLED",
     # ── Plan 247 — Perfilador de pipelines (determinista, sin modelo) ──

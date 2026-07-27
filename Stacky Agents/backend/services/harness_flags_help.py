@@ -1693,6 +1693,61 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás: la Fragua corta antes y prepara menos, con la ventaja de un costo más acotado.",
         example="Como el límite de una tarjeta prepaga: cuando se agota deja de comprar, no se pasa de largo.",
     ),
+    # ── Plan 253 — concurrencia y mantenimiento de la base ─────────────────
+    "STACKY_SQLITE_WAL_ENABLED": PlainHelp(
+        what="Permite que la aplicación lea y escriba en su base al mismo tiempo, sin que una cosa trabe la otra.",
+        on_effect="Si la activás: mientras algo se guarda, el resto de la aplicación puede seguir leyendo sin fallar.",
+        off_effect="Si la apagás: se vuelve al comportamiento anterior, donde guardar bloquea a quien está leyendo.",
+        example="Como una caja registradora que sigue atendiendo mientras se imprime el comprobante anterior.",
+    ),
+    "STACKY_SQLITE_BUSY_TIMEOUT_MS": PlainHelp(
+        what="Cuántos milisegundos espera la aplicación cuando su base está ocupada, antes de dar error.",
+        on_effect="Si le ponés un número más alto: se aguantan esperas más largas en vez de fallar enseguida.",
+        off_effect="Si lo ponés en cero: ante una base ocupada se falla de inmediato, como antes.",
+        example="Como esperar unos segundos en la fila en vez de irte apenas ves gente.",
+    ),
+    "STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED": PlainHelp(
+        what="Acelera el guardado a cambio de poder perder lo último guardado si se corta la luz de golpe.",
+        on_effect="Si la activás: guardar es más rápido, pero un corte abrupto puede perder la última operación.",
+        off_effect="Si la apagás: cada guardado se confirma en disco antes de seguir. Es lo recomendado.",
+        example="Como elegir entre guardar el documento cada vez o dejarlo para el final.",
+    ),
+    "STACKY_STARTUP_WRITE_BARRIER_WAIT_S": PlainHelp(
+        what="Cuántos segundos esperan las tareas de fondo a que termine la carga inicial antes de empezar a trabajar.",
+        on_effect="Si le ponés segundos: las tareas de fondo arrancan recién cuando la carga inicial terminó.",
+        off_effect="Si lo ponés en cero: las tareas de fondo arrancan de una, como antes, y pueden chocar con la carga.",
+        example="Como esperar a que terminen de acomodar la mercadería antes de abrir la puerta al público.",
+    ),
+    "STACKY_SQLITE_LOCK_RETRY_ENABLED": PlainHelp(
+        what="Vuelve a intentar una operación sobre la base cuando falló solo porque estaba ocupada.",
+        on_effect="Si la activás: una operación que falló por base ocupada se reintenta sola y no se pierde trabajo.",
+        off_effect="Si la apagás: la operación se descarta al primer choque, como pasaba antes.",
+        example="Como volver a llamar cuando da ocupado, en vez de darlo por perdido.",
+    ),
+    "STACKY_SYSLOG_AUTO_PURGE_ENABLED": PlainHelp(
+        what="Borra solo el historial de actividad más viejo que el plazo de conservación que elegiste.",
+        on_effect="Si la activás: cada tanto se borra el historial vencido y la base deja de crecer sin control.",
+        off_effect="Si la apagás: el historial se acumula para siempre y la base sigue creciendo.",
+        example="Como tirar los recibos de hace más de dos años en vez de guardarlos todos.",
+    ),
+    "STACKY_SYSLOG_PURGE_INTERVAL_S": PlainHelp(
+        what="Cada cuántos segundos se revisa si hay historial vencido para borrar.",
+        on_effect="Si le ponés un número más chico: se limpia más seguido y de a menos cantidad por vez.",
+        off_effect="Si le ponés un número más grande: se limpia con menos frecuencia y de a más por vez.",
+        example="Como pasar a ordenar el archivo cada seis horas en lugar de una vez por semana.",
+    ),
+    "STACKY_SYSLOG_RETENTION_DAYS": PlainHelp(
+        what="Cuántos días se conserva el historial de actividad antes de que se pueda borrar.",
+        on_effect="Si le ponés más días: se guarda más historial y la base ocupa más lugar.",
+        off_effect="Si le ponés menos días: se guarda menos historial y la base ocupa menos lugar.",
+        example="Como decidir si guardás las facturas tres meses o tres años.",
+    ),
+    "STACKY_DB_COMPACT_ENABLED": PlainHelp(
+        what="Habilita el botón que comprime la base para recuperar el espacio que dejaron los datos borrados.",
+        on_effect="Si la activás: aparece el botón para comprimir. Nada se comprime hasta que vos lo confirmes.",
+        off_effect="Si la apagás: el botón no aparece y la base nunca se comprime.",
+        example="Como habilitar el botón de vaciar la papelera, que igual te pregunta antes de vaciarla.",
+    ),
 }
 
 

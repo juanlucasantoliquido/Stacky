@@ -561,6 +561,50 @@
       "guard_test": "frontend/src/components/devops/__tests__/oneClickPublish.test.ts (caso 9)",
       "evidence": "frontend/src/components/devops/CommitPipelineModal.tsx; backend/services/ado_provider.py:146; backend/api/devops.py:55",
       "note": "CommitPipelineModal decia que el commit a Azure DevOps no estaba implementado y devolvia un error de no-implementado. Dejo de ser cierto con el plan 95 F1.a, que hace el push real. El texto quedo obsoleto y ademas en una rama inalcanzable (ado_commit_supported esta fijo en True). El dano no fue visual: el autor del plan 102 v1 LEYO ese texto, lo creyo, y diseno una bandera adoCommitBlocked que habria bloqueado todos los presets ADO del flujo nuevo mientras el flujo viejo funcionaba. Clase de bug a vigilar: una mentira en la UI se propaga a los planes que la leen como si fuera evidencia. Verificar el comportamiento contra el codigo del servidor, nunca contra un texto de la interfaz."
+    },
+    {
+      "id": "sqlite_table_locked_startup",
+      "title": "database table is locked: tickets durante el arranque",
+      "class": "sqlite-contention",
+      "status": "resolved",
+      "log_pattern": "database table is locked",
+      "log_guarded": true,
+      "killed_by": "plan 253 (concurrencia SQLite)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/test_plan253_sqlite_concurrency.py",
+      "evidence": "backend/app.py:369,522,554; backend/db.py:19-31; backend/services/output_watcher.py:303,514; stacky-2026-07-26.log lineas 42 y 160",
+      "note": "El escritor es _startup_sync (176 INSERT), no el DDL de init_db: init_db termina antes de que el watcher arranque. El fix combina WAL + busy_timeout, barrera de escrituras de arranque y reintento por unidad de trabajo. busy_timeout NO cubre SQLITE_LOCKED (database TABLE is locked), solo SQLITE_BUSY.",
+      "self_test": {
+        "matches": [
+          "2026-07-26 00:24:48 ERROR [stacky.output_watcher] output_watcher: error procesando ...: (sqlite3.OperationalError) database table is locked: tickets"
+        ],
+        "clean": [
+          "2026-07-26 00:24:48 INFO [stacky.output_watcher] output_watcher: dir vigilado (existe=True)"
+        ]
+      }
+    },
+    {
+      "id": "syslog_batch_persist_failed",
+      "title": "syslog failed to persist batch por contencion de SQLite",
+      "class": "sqlite-contention",
+      "status": "resolved",
+      "log_pattern": "syslog failed to persist batch",
+      "log_guarded": true,
+      "killed_by": "plan 253 (reintento por unidad de trabajo + reencolado)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "tests/test_plan253_sqlite_concurrency.py",
+      "evidence": "backend/services/stacky_logger.py:373-423",
+      "note": "El reintento va DENTRO de _persist_batch: envolver desde afuera no ve la excepcion. Ademas el batch se reencola UNA vez antes de descartarse, asi que un lock transitorio ya no pierde eventos del operador.",
+      "self_test": {
+        "matches": [
+          "2026-07-18 09:12:03 ERROR [stacky.syslog] syslog failed to persist batch of 1 events"
+        ],
+        "clean": [
+          "2026-07-18 09:12:03 INFO [stacky.syslog] syslog writer started"
+        ]
+      }
     }
   ]
 }

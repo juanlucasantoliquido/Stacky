@@ -19,9 +19,10 @@ from datetime import datetime
 from flask import Blueprint, Response, abort, jsonify, request
 from sqlalchemy import func, or_
 
+from config import config
 from db import session_scope
 from models import SystemLog
-from services.stacky_logger import RETENTION_DAYS, logger as stacky_logger
+from services.stacky_logger import logger as stacky_logger
 
 bp = Blueprint("logs", __name__, url_prefix="/logs")
 
@@ -248,9 +249,12 @@ def purge_logs():
     """
     Delete system logs older than N days.
 
-    Query param: days (default: SYSLOG_RETENTION_DAYS env var, fallback 90)
+    Query param: days (default: config.STACKY_SYSLOG_RETENTION_DAYS, configurable
+    desde la UI; retrocompatible con la env var historica SYSLOG_RETENTION_DAYS)
     """
-    days = request.args.get("days", default=RETENTION_DAYS, type=int)
+    # Plan 253 F5.d — se lee de config EN CALL TIME: el import de RETENTION_DAYS
+    # congelaba el valor y el cambio desde la UI no aplicaba nunca.
+    days = request.args.get("days", default=config.STACKY_SYSLOG_RETENTION_DAYS, type=int)
     if days < 1:
         return jsonify({"error": "days must be >= 1"}), 400
     deleted = stacky_logger.purge_old_logs(days=days)

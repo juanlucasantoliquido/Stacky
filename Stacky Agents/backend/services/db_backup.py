@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import re
 import shutil
+import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 
@@ -9,6 +11,8 @@ from sqlalchemy.engine import make_url
 
 from config import config
 from runtime_paths import data_dir
+
+logger = logging.getLogger("stacky.db_backup")
 
 BACKUP_KEEP = 4
 _BACKUP_RE = re.compile(r"^stacky_agents-(\d{8})\.db$")
@@ -59,9 +63,44 @@ def ensure_weekly_backup(today: date | None = None) -> dict:
         return {"ok": True, "skipped": True, "reason": "already_backed_up_this_week", "backup_path": str(newest)}
 
     target = backup_dir / f"stacky_agents-{today:%Y%m%d}.db"
-    shutil.copy2(source, target)
+    # Plan 253 F2.b — con WAL, lo commiteado vive en `stacky_agents.db-wal` hasta
+    # el checkpoint: una copia plana del archivo produciria un backup
+    # silenciosamente INCOMPLETO. `Connection.backup()` consolida el WAL en el
+    # destino y deja el respaldo consistente.
+    _copy_consistente(source, target)
     prune_old_backups(backup_dir)
     return {"ok": True, "skipped": False, "reason": None, "backup_path": str(target)}
+
+
+def _copy_consistente(source: Path, target: Path) -> None:
+    """Plan 253 F2.b — copia la base de forma consistente con WAL.
+
+    Con WAL, lo commiteado vive en el sidecar hasta el checkpoint: una copia
+    plana del archivo produciria un respaldo silenciosamente INCOMPLETO.
+    `Connection.backup()` consolida el sidecar en el destino.
+
+    Degradacion declarada: si el origen no es una base SQLite legible (archivo
+    ajeno o corrupto), no hay sidecar que consolidar y se copia byte a byte —
+    exactamente el comportamiento anterior, que nunca es peor.
+    """
+    try:
+        src_conn = sqlite3.connect(str(source))
+        try:
+            dst_conn = sqlite3.connect(str(target))
+            try:
+                src_conn.backup(dst_conn)
+                return
+            finally:
+                dst_conn.close()
+        finally:
+            src_conn.close()
+    except sqlite3.Error:
+        logger.warning(
+            "db backup: %s no se pudo leer como base SQLite; se copia byte a byte",
+            source, exc_info=True,
+        )
+    target.unlink(missing_ok=True)
+    shutil.copy2(source, target)
 
 
 def list_backups() -> list[dict]:

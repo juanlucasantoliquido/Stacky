@@ -9,7 +9,7 @@ import {
   RefreshCcw,
   XCircle,
 } from "lucide-react";
-import { LocalDiagnostics, type LocalDiagnosticCheck } from "../api/endpoints";
+import { Health, LocalDiagnostics, type LocalDiagnosticCheck } from "../api/endpoints";
 import HarnessHealthCard from "../components/HarnessHealthCard";
 import PublishLedgerPanel from "../components/PublishLedgerPanel";
 import OperationalHealthCard from "../components/OperationalHealthCard";
@@ -46,6 +46,71 @@ function DetailBlock({ detail }: { detail: unknown }) {
   if (!detail) return null;
   const text = typeof detail === "string" ? detail : JSON.stringify(detail, null, 2);
   return <pre className={styles.detail}>{text}</pre>;
+}
+
+const WAL_STATUS_LABEL: Record<string, string> = {
+  ok: "activa (lectura y escritura simultáneas)",
+  in_memory: "base en memoria (no aplica)",
+  rejected: "el disco la rechazó — puede haber bloqueos",
+  disabled: "desactivada por configuración",
+  not_sqlite: "no aplica a este motor",
+  unknown: "sin determinar todavía",
+};
+
+/**
+ * Plan 253 F7 — estado REAL de la concurrencia de la base, en solo lectura.
+ * Sin polling propio: se consulta una vez al abrir el panel. Si el servidor es
+ * viejo y no manda el bloque, la tarjeta simplemente no se muestra.
+ */
+function DbRuntimeCard() {
+  const health = useQuery({
+    queryKey: ["diag-health-db-runtime"],
+    queryFn: Health.get,
+    staleTime: 60_000,
+  });
+  const rt = health.data?.db_runtime;
+  if (!rt) return null;
+
+  const rows: Array<[string, string]> = [
+    ["Lectura/escritura simultáneas", WAL_STATUS_LABEL[rt.wal_status] ?? rt.wal_status],
+    ["Modo de registro efectivo", rt.journal_mode_effective ?? "—"],
+    ["Espera máxima ante bloqueo", rt.busy_timeout_ms == null ? "—" : `${rt.busy_timeout_ms} ms`],
+    ["Confirmación a disco", rt.synchronous === 1 ? "NORMAL (rápida)" : "FULL (durable)"],
+    ["Tamaño de la base", rt.db_size_bytes == null ? "—" : fmtBytes(rt.db_size_bytes)],
+    ["Tamaño del archivo auxiliar", fmtBytes(rt.wal_size_bytes ?? 0)],
+    ["Carga inicial", rt.startup_writes.done ? "terminada" : "en curso"],
+    [
+      "Bloqueos",
+      `${rt.lock_stats.retried} reintentos · ${rt.lock_stats.recovered} recuperados · ` +
+        `${rt.lock_stats.exhausted} perdidos`,
+    ],
+    ["Arranques contabilizados", rt.create_app_count == null ? "—" : String(rt.create_app_count)],
+  ];
+  for (const [name, info] of Object.entries(rt.maintenance ?? {})) {
+    rows.push([
+      `Mantenimiento: ${name}`,
+      info.last_error
+        ? `último error: ${info.last_error}`
+        : `${info.last_count} unidades en la última pasada`,
+    ]);
+  }
+
+  return (
+    <section className={styles.opsPanel}>
+      <div className={styles.panelHeader}>
+        <DatabaseBackup size={16} aria-hidden="true" />
+        <h3>Base de datos: concurrencia y mantenimiento</h3>
+      </div>
+      <ul className={styles.fileList}>
+        {rows.map(([label, value]) => (
+          <li key={label}>
+            {label}: {value}
+          </li>
+        ))}
+      </ul>
+      {rt.sqlite_file ? <p className={styles.pathLine}>{rt.sqlite_file}</p> : null}
+    </section>
+  );
 }
 
 export default function DiagnosticsPage() {
@@ -201,6 +266,9 @@ export default function DiagnosticsPage() {
           </div>
         </section>
       )}
+
+      {/* Plan 253 F7 — concurrencia de la base, consultable (solo lectura) */}
+      <DbRuntimeCard />
 
       {/* H8 — KPIs de valor agregado del arnés */}
       <HarnessHealthCard />

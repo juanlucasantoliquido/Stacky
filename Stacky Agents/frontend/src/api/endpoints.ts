@@ -3154,14 +3154,39 @@ export const CodeIntegrity = {
     }),
 };
 
+// ── Plan 253 F7 — estado de concurrencia de la base, consultable ─────────────
+export interface DbRuntimeInfo {
+  sqlite_file: string | null;
+  db_size_bytes: number | null;
+  wal_size_bytes: number;
+  journal_mode_effective: string | null;
+  /** ok | in_memory | rejected | disabled | not_sqlite | unknown */
+  wal_status: string;
+  busy_timeout_ms: number | null;
+  synchronous: number | null;
+  startup_writes: { armed: boolean; done: boolean };
+  lock_stats: { retried: number; recovered: number; exhausted: number };
+  maintenance: Record<string, { last_run_at: number | null; last_count: number; last_error: string | null }>;
+  create_app_count: number | null;
+}
+
+export interface HealthResponse {
+  version?: string;
+  ok?: boolean;
+  healthy?: boolean;
+  shell_v2_enabled?: boolean;
+  source_commit?: string | null;
+  built_at?: string | null;
+  repo_head?: string | null;
+  build_drift?: boolean;
+  warnings?: string[];
+  /** Plan 253 F7 — opcional: un servidor viejo no lo manda. */
+  db_runtime?: DbRuntimeInfo;
+}
+
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
 export const Health = {
-  get: (): Promise<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean;
-                     source_commit?: string | null; built_at?: string | null;
-                     repo_head?: string | null; build_drift?: boolean }> =>
-    api.get<{ version?: string; ok?: boolean; healthy?: boolean; shell_v2_enabled?: boolean;
-              source_commit?: string | null; built_at?: string | null;
-              repo_head?: string | null; build_drift?: boolean }>("/api/diag/health"),
+  get: (): Promise<HealthResponse> => api.get<HealthResponse>("/api/diag/health"),
 };
 
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────

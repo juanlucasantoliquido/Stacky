@@ -1980,4 +1980,33 @@ class Config:
         "STACKY_KNOWLEDGE_MAX_LESSONS", "200"
     ) or "200")
 
+    # ── Plan 253 — concurrencia SQLite ──────────────────────────────────────
+    # Tabla unica de 9 flags (seccion 4 del plan). Los consumidores hacen
+    # `from config import config` (la INSTANCIA), nunca el modulo.
+    STACKY_SQLITE_WAL_ENABLED: bool = os.getenv(
+        "STACKY_SQLITE_WAL_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_SQLITE_BUSY_TIMEOUT_MS: int = int(os.getenv("STACKY_SQLITE_BUSY_TIMEOUT_MS", "15000"))
+    # Default OFF por EXCEPCION DURA #4 (reduce durabilidad): con WAL,
+    # synchronous=NORMAL puede perder la ultima transaccion ante corte de energia.
+    STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED: bool = os.getenv(
+        "STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED", "false").lower() in ("1", "true", "yes")
+    STACKY_STARTUP_WRITE_BARRIER_WAIT_S: float = float(
+        os.getenv("STACKY_STARTUP_WRITE_BARRIER_WAIT_S", "30"))
+    STACKY_SQLITE_LOCK_RETRY_ENABLED: bool = os.getenv(
+        "STACKY_SQLITE_LOCK_RETRY_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_SYSLOG_AUTO_PURGE_ENABLED: bool = os.getenv(
+        "STACKY_SYSLOG_AUTO_PURGE_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_SYSLOG_PURGE_INTERVAL_S: int = int(os.getenv("STACKY_SYSLOG_PURGE_INTERVAL_S", "21600"))
+    # Retrocompat: la env var historica SYSLOG_RETENTION_DAYS (stacky_logger.py:35)
+    # sigue valiendo si la nueva no esta seteada.
+    STACKY_SYSLOG_RETENTION_DAYS: int = int(
+        os.getenv("STACKY_SYSLOG_RETENTION_DAYS")
+        or os.getenv("SYSLOG_RETENTION_DAYS")
+        or "90"
+    )
+    # Default OFF por EXCEPCION DURA #2 (destructiva/irreversible): borra filas
+    # historicas y reescribe el archivo de la base del operador.
+    STACKY_DB_COMPACT_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPACT_ENABLED", "false").lower() in ("1", "true", "yes")
+
 config = Config()

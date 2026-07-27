@@ -289,6 +289,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INTEGRATION_DEGRADATION_ENABLED",  # Plan 148 — degradacion de integraciones
         "STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED",  # Plan 149 F4 — cuarentena intake en board
         "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED",  # Plan 208 — auto-sync al completar un agente
+        # Plan 253 — barrera de escrituras de arranque + reintento por unidad de trabajo
+        "STACKY_STARTUP_WRITE_BARRIER_WAIT_S", "STACKY_SQLITE_LOCK_RETRY_ENABLED",
     ),
     "observabilidad_notif": (
         "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
@@ -305,6 +307,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TELEMETRY_HARVEST_ATTRIBUTED_ONLY",   # Plan 199
         "STACKY_TELEMETRY_HARVEST_LOOKBACK_DAYS",     # Plan 199
         "STACKY_TELEMETRY_HARVEST_ROOTS_JSON",        # Plan 199
+        # Plan 253 — purga por retencion del historial de actividad
+        "STACKY_SYSLOG_AUTO_PURGE_ENABLED", "STACKY_SYSLOG_PURGE_INTERVAL_S",
+        "STACKY_SYSLOG_RETENTION_DAYS",
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -347,6 +352,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # NOTA: el master STACKY_ADO_PREWARM_ENABLED (feature opt-in) → "capacidades_optin".
         # STACKY_ADO_READ_CACHE_TTL_SEC (que lo habilita de verdad) queda aquí.
         "STACKY_DB_READONLY_DIRECTIVE_ENABLED", "STACKY_ADO_READ_CACHE_TTL_SEC",
+        # Plan 253 — concurrencia y mantenimiento de la base de runtime
+        "STACKY_SQLITE_WAL_ENABLED", "STACKY_SQLITE_BUSY_TIMEOUT_MS",
+        "STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED", "STACKY_DB_COMPACT_ENABLED",
     ),
     "avanzado": (
         "STACKY_CLI_EGRESS_ENABLED", "STACKY_SPECULATIVE_ENABLED", "STACKY_SPECULATIVE_MODE",
@@ -4929,6 +4937,125 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # OBLIGATORIO en la FlagSpec: test_bounds_map_is_frozen deriva `actual` de
         # FlagSpec.min_value/max_value y lo compara contra _FROZEN_BOUNDS.
         min_value=1000, max_value=500000,
+    ),
+    # ── Plan 253 — concurrencia SQLite y mantenimiento de la base ───────────
+    FlagSpec(
+        key="STACKY_SQLITE_WAL_ENABLED",
+        type="bool",
+        label="Base de datos: lectura y escritura simultaneas",
+        description=(
+            "Plan 253 - Pone la base de runtime en WAL: un escritor deja de bloquear a los "
+            "lectores. Si el sistema de archivos lo rechaza, se sigue en el modo anterior "
+            "con espera por lock y el estado queda visible en /api/diag/health."
+        ),
+        group="global",
+        default=True,
+        restart_required=True,   # el listener se ata al engine en el import de db.py
+    ),
+    FlagSpec(
+        key="STACKY_SQLITE_BUSY_TIMEOUT_MS",
+        type="int",
+        # SIN default= a proposito: default_is_known() es `spec.default is not None`
+        # (type-agnostico), asi que declararlo la volveria "curada" y romperia
+        # test_default_known_only_for_curated. El default EFECTIVO vive en config.py.
+        label="Base de datos: espera maxima ante bloqueo (ms)",
+        description="Plan 253 - Milisegundos que se espera si la base esta tomada. 0 = sin espera.",
+        group="global",
+        min_value=0,
+        max_value=120000,
+        restart_required=True,
+    ),
+    FlagSpec(
+        key="STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED",
+        type="bool",
+        # SIN default= (mismo motivo type-agnostico). Default EFECTIVO OFF en config.py
+        # por EXCEPCION DURA #4: reduce la durabilidad ante corte de energia.
+        label="Base de datos: guardado rapido con menor durabilidad",
+        description=(
+            "Plan 253 - Baja el nivel de sincronizacion a disco a NORMAL. Acelera el "
+            "guardado pero un corte abrupto de energia puede perder la ultima operacion "
+            "confirmada. Default OFF (excepcion dura #4: reduce seguridad de los datos)."
+        ),
+        group="global",
+        restart_required=True,
+    ),
+    FlagSpec(
+        key="STACKY_STARTUP_WRITE_BARRIER_WAIT_S",
+        type="float",
+        # SIN default= (numerica; el default EFECTIVO 30.0 vive en config.py).
+        label="Espera de las tareas de fondo a la carga inicial (segundos)",
+        description=(
+            "Plan 253 - Segundos que los procesos de fondo esperan a que termine la fase "
+            "de escritura del arranque antes de trabajar. 0 = sin espera (como antes)."
+        ),
+        group="global",
+        min_value=0,
+        max_value=300,
+    ),
+    FlagSpec(
+        key="STACKY_SQLITE_LOCK_RETRY_ENABLED",
+        type="bool",
+        label="Reintentar operaciones bloqueadas por la base",
+        description=(
+            "Plan 253 - Reintenta la unidad de trabajo COMPLETA (una transaccion nueva por "
+            "intento) cuando falla solo porque la base estaba tomada. Cualquier otro error "
+            "se re-lanza en el primer intento: no enmascara bugs."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_SYSLOG_AUTO_PURGE_ENABLED",
+        type="bool",
+        label="Borrado automatico del historial vencido",
+        description=(
+            "Plan 253 - Hace EFECTIVA la retencion declarada: borra en lotes las filas de "
+            "system_logs mas viejas que el plazo configurado. Corre en el hilo de "
+            "mantenimiento; costo ocioso cero."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_SYSLOG_PURGE_INTERVAL_S",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 21600 vive en config.py).
+        label="Cada cuanto se revisa el historial vencido (segundos)",
+        description="Plan 253 - Intervalo entre pasadas de borrado del historial vencido.",
+        group="global",
+        # SIN `requires=`: la tabla congelada del plan (seccion 4) no declara aristas y
+        # `requires` obliga a un 7mo lugar (tests/test_harness_flags_requires.py
+        # _REQUIRES_MAP_FROZEN) fuera del contrato de esta serie.
+        min_value=300,
+        max_value=604800,
+    ),
+    FlagSpec(
+        key="STACKY_SYSLOG_RETENTION_DAYS",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 90 vive en config.py, que
+        # ademas respeta la env var historica SYSLOG_RETENTION_DAYS).
+        label="Dias de conservacion del historial de actividad",
+        description=(
+            "Plan 253 - Cuantos dias se conserva el historial antes de poder borrarse. "
+            "Fuente unica: reemplaza al valor congelado en el import de stacky_logger."
+        ),
+        group="global",
+        min_value=1,
+        max_value=3650,
+    ),
+    FlagSpec(
+        key="STACKY_DB_COMPACT_ENABLED",
+        type="bool",
+        # SIN default= (default EFECTIVO OFF en config.py) por EXCEPCION DURA #2:
+        # la compactacion borra filas historicas y reescribe el archivo de la base.
+        label="Habilitar el boton de compactar la base",
+        description=(
+            "Plan 253 - Habilita el diagnostico y el boton de compactacion. Nada se borra "
+            "ni se compacta sin confirmacion explicita del operador, con el conteo exacto "
+            "a la vista y copia de respaldo previa. Default OFF (excepcion dura #2: "
+            "destructiva e irreversible)."
+        ),
+        group="global",
     ),
 )
 

@@ -364,8 +364,53 @@ def health():
         "watching_dir": str(ow.outputs_dir) if ow else None,
     }
 
+    # ── Plan 253 F7 — estado REAL de la concurrencia de la base de runtime ───
+    # El operador no tenía forma de saber si el fix está VIVO en su máquina.
+    # Solo lectura: no muta nada y no tiene costo ocioso.
+    from db import lock_stats, sqlite_concurrency_state, startup_writes_state
+    from services.db_backup import sqlite_db_path
+    from services.maintenance import maintenance_state
+
+    _db_path = sqlite_db_path()
+    _conc = sqlite_concurrency_state()
+    _wal_file = _db_path.with_name(_db_path.name + "-wal") if _db_path else None
+    try:
+        from app import _CREATE_APP_COUNT as _create_app_count
+    except Exception:  # noqa: BLE001
+        _create_app_count = None
+    db_runtime = {
+        "sqlite_file": str(_db_path) if _db_path else None,
+        "db_size_bytes": _db_path.stat().st_size if _db_path and _db_path.exists() else None,
+        "wal_size_bytes": _wal_file.stat().st_size if _wal_file and _wal_file.exists() else 0,
+        "journal_mode_effective": _conc["journal_mode_effective"],
+        "wal_status": _conc["wal_status"],          # ok | in_memory | rejected | disabled | not_sqlite
+        "busy_timeout_ms": _conc["busy_timeout_ms"],
+        "synchronous": _conc["synchronous"],
+        "startup_writes": startup_writes_state(),   # {"armed": bool, "done": bool}
+        "lock_stats": lock_stats(),                 # {"retried","recovered","exhausted"}
+        "maintenance": maintenance_state(),
+        "create_app_count": _create_app_count,
+    }
+
     # Señales de salud "dura": condiciones que romperían el cierre automático.
     warnings: list[str] = []
+
+    if db_runtime["wal_status"] == "rejected":
+        warnings.append(
+            "la base no pudo pasar a lectura/escritura simultánea en este disco "
+            f"(quedó en '{db_runtime['journal_mode_effective']}'): puede haber "
+            "errores de bloqueo bajo carga"
+        )
+    if (db_runtime["lock_stats"] or {}).get("exhausted", 0) > 0:
+        warnings.append(
+            f"{db_runtime['lock_stats']['exhausted']} operaciones se perdieron por "
+            "bloqueo de la base pese a los reintentos"
+        )
+    if db_runtime["sqlite_file"] is None and str(_config.config.DATABASE_URL).startswith("sqlite"):
+        warnings.append(
+            "la base figura como archivo pero no se pudo resolver su ruta: "
+            "la copia de respaldo semanal no se está haciendo"
+        )
     if outputs_path is None or not outputs_exists:
         warnings.append(
             "outputs_dir no existe — el output_watcher no encontrará artifacts "
@@ -422,8 +467,53 @@ def health():
         "ui_peek_enabled": bool(getattr(_config.config, "STACKY_UI_PEEK_ENABLED", False)),  # Plan 175
         "ui_context_menu_enabled": bool(getattr(_config.config, "STACKY_UI_CONTEXT_MENU_ENABLED", False)),  # Plan 175
         "watchers": {"output_watcher": output_watcher_info},
+        "db_runtime": db_runtime,   # Plan 253 F7 — concurrencia de la base, consultable
         "warnings": warnings,
     })
+
+
+# ── Plan 253 F6 — compactacion asistida de la base (HITL, destructiva) ───────
+
+
+@bp.get("/db/stats")
+def db_stats_route():
+    """Diagnostico read-only de la base de runtime + identificador de confirmacion.
+
+    El identificador (TTL 120 s, un solo uso) transporta el conteo EXACTO que se
+    le muestra al operador: no es seguridad, es un interlock anti-clic-accidental.
+    """
+    from services.db_maintenance import db_stats, issue_compact_token
+
+    stats = db_stats()
+    if not _config.config.STACKY_DB_COMPACT_ENABLED:
+        return jsonify({**stats, "compact_enabled": False, "confirm_token": None})
+    if not stats.get("available"):
+        return jsonify({**stats, "compact_enabled": True, "confirm_token": None}), 409
+    return jsonify({
+        **stats,
+        "compact_enabled": True,
+        "confirm_token": issue_compact_token(stats),
+        "confirm_ttl_s": 120,
+    })
+
+
+@bp.post("/db/compact")
+def db_compact_route():
+    """Compacta la base. DESTRUCTIVO e IRREVERSIBLE: exige confirmacion explicita.
+
+    Respalda antes (reusando la convencion de nombre existente), hace
+    wal_checkpoint(TRUNCATE) y recien despues el VACUUM. Sin identificador
+    valido, o con el conteo cambiado, responde 409 y no toca nada.
+    """
+    from services.db_maintenance import CompactError, compact_db
+
+    body = request.get_json(silent=True) or {}
+    token = str(body.get("confirm_token") or "")
+    purge_retroactive = bool(body.get("purge_retroactive", True))
+    try:
+        return jsonify(compact_db(token=token, purge_retroactive=purge_retroactive))
+    except CompactError as exc:
+        return jsonify({"ok": False, "error": exc.reason, "detail": str(exc)}), 409
 
 
 @bp.get("/local")

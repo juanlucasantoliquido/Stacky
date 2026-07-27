@@ -1,0 +1,57 @@
+/* Plan 257 F4 — panel "Nivel de detalle del registro" en Diagnóstico. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 16px 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.control {
+  max-width: 220px;
+}
+
+.aviso {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.okLine {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ok);
+}
+
+.errorLine {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.muted {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}

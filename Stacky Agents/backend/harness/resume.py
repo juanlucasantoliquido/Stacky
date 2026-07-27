@@ -17,7 +17,8 @@ from __future__ import annotations
 import logging
 
 from harness.capabilities import CAPABILITIES
-from services.silent_failure_counter import log_at_level, note_swallowed  # Plan 255 F2
+from services.log_throttle import log_throttled  # Plan 257 F1-bis
+from services.silent_failure_counter import level_int_for, note_swallowed  # Plan 255 F2 / 257 F1-bis
 
 logger = logging.getLogger(__name__)
 
@@ -156,5 +157,18 @@ def resolve(
         # ahora lo decide la clase de excepción, y el contador lo registra
         # aunque el nivel bajara. El TEXTO no cambia: es la huella de F5.
         note_swallowed("harness.resume.resolve", exc)
-        log_at_level(logger, exc, "harness.resume.resolve falló (arranque en frío): %s", exc)
+        # Plan 257 F1-bis — el NIVEL lo sigue decidiendo el plan 255
+        # (`level_int_for` es la misma regla que usa `log_at_level`): no se
+        # revierte para hacerlo throttleable. Lo unico que agrega el 257 es la
+        # ventana de 300 s, que `log_throttled` respeta sea cual sea el nivel
+        # — incluido ERROR, que el filtro de F1 exime a proposito. El TEXTO no
+        # cambia: es la huella de la que depende el plan 255.
+        log_throttled(
+            "harness.resume_resolve_failed",
+            logger,
+            level_int_for(exc),
+            "harness.resume.resolve falló (arranque en frío): %s",
+            exc,
+            min_interval_s=300.0,
+        )
         return None, None

@@ -81,6 +81,11 @@ _MANAGED_KEYS = [
     "STACKY_GITLAB_ENABLED",
     "STACKY_GITLAB_EPICS_NATIVE",
     "STACKY_GITLAB_CI_INFERENCE",
+    # Plan 257 F4 — nivel de detalle del registro de actividad. NO es una
+    # FlagSpec a proposito (C14): el hot-apply del panel de flags solo hace
+    # setattr sobre config y no ejecutaria ningun efecto, asi que la interfaz
+    # diria "aplicado" mientras el logging sigue igual. UN solo escritor.
+    "LOG_LEVEL",
 ]
 
 # Claves que contienen secrets -- no se devuelven en GET
@@ -103,6 +108,8 @@ _CODEX_DEFAULTS = {
     "CLAUDE_CODE_CLI_EFFORT": "medium",
     "CLAUDE_CODE_CLI_PERMISSION_MODE": "acceptEdits",
     "CLAUDE_CODE_CLI_SKIP_PERMISSIONS": "false",
+    # Plan 257 F4 — el default coincide con config.LOG_LEVEL.
+    "LOG_LEVEL": "INFO",
 }
 
 
@@ -194,9 +201,56 @@ def put_global_config():
             continue
         updates[key] = val
 
-    _write_env(updates)
+    # ── Plan 257 F4 — LOG_LEVEL: validar, auditar, aplicar, recien persistir ──
+    nivel_resultado: dict | None = None
+    if "LOG_LEVEL" in updates:
+        from services.local_file_logging import _VALID_LEVELS, apply_log_level
+
+        pedido = updates["LOG_LEVEL"].strip().upper()
+        if pedido not in _VALID_LEVELS:
+            # 400 y NO se toca nada: ni el archivo de configuracion ni el nivel
+            # vivo. app.py usa getattr(logging, X, INFO), que se traga un
+            # "TRACE" en silencio; aca el operador pide un error explicito.
+            return jsonify({
+                "ok": False,
+                "error": (
+                    f"Nivel de registro invalido: {updates['LOG_LEVEL']!r}. "
+                    f"Validos: {', '.join(_VALID_LEVELS)}."
+                ),
+            }), 400
+        updates["LOG_LEVEL"] = pedido
+        anterior = logging.getLevelName(logging.getLogger().level)
+        # Se audita ANTES de aplicar: subir a ERROR no puede ocultar su propio
+        # registro de auditoria. Y queda EXENTO del throttle del plan 257: es un
+        # evento unico del operador, no una firma repetida.
+        logger.warning(
+            "LOG_LEVEL cambiado por el operador: %s -> %s (en caliente, sin reiniciar)",
+            anterior, pedido,
+            extra={"_stacky_throttle_decision": True},
+        )
+        nivel_resultado = apply_log_level(pedido)
+
+    # El cambio en caliente ya se aplico: no fallar el pedido entero por no
+    # poder persistir. El operador se entera de que no sobrevive al reinicio.
+    persisted = True
+    mensaje: str | None = None
+    try:
+        _write_env(updates)
+    except OSError as exc:
+        persisted = False
+        mensaje = (
+            f"El cambio se aplico en caliente pero NO se pudo guardar: {exc}. "
+            "No sobrevive al reinicio del servicio."
+        )
+        logger.error("global-config: no se pudo escribir el archivo de configuracion: %s", exc)
+
     logger.info("global-config actualizado: %s", list(updates.keys()))
-    return jsonify({"ok": True})
+    respuesta: dict = {"ok": True, "persisted": persisted}
+    if mensaje:
+        respuesta["message"] = mensaje
+    if nivel_resultado is not None:
+        respuesta["log_level"] = nivel_resultado
+    return jsonify(respuesta)
 
 
 @bp.post("/global-config/test-connection")

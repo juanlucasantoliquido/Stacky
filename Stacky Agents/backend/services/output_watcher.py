@@ -499,13 +499,22 @@ class AdoOutputWatcher:
             max_mtime_dt=max_mtime_dt,
         )
         if effective_epic_ado_id != epic_ado_id:
-            logger.warning(
+            # Plan 257 F1-bis — el watcher reescanea en loop y repite la misma
+            # correccion en cada pasada. Ventana de 300 s: es una condicion de
+            # estado del directorio, no un evento nuevo por vuelta.
+            from services.log_throttle import log_throttled
+
+            log_throttled(
+                "output_watcher.epic_dir_rename",
+                logger,
+                logging.WARNING,
                 "output_watcher mode_a: corrigiendo epic dir mal nombrado "
                 "source_epic=%s effective_ado=%s reason=%s path=%s",
                 epic_ado_id,
                 effective_epic_ado_id,
                 epic_resolution.get("reason"),
                 epic_dir,
+                min_interval_s=300.0,
             )
 
         # ── Auto-create Tasks en ADO (Fase W5 + W6) ───────────────────────────

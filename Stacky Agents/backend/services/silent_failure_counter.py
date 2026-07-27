@@ -40,6 +40,7 @@ __all__ = [
     "reset_swallowed",
     "log_level_for",
     "log_at_level",
+    "level_int_for",
     "MAX_SITES",
 ]
 
@@ -148,13 +149,33 @@ def log_level_for(exc: BaseException) -> str:
     return "error" if isinstance(exc, _STRUCTURAL) else "warning"
 
 
+def _nivel_efectivo(exc: BaseException) -> str:
+    """Nivel efectivo de `exc`. UN SOLO lugar decide (lo consumen log_at_level y
+    level_int_for). Con `STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL` en OFF todo
+    sale a 'warning', que es el comportamiento previo exacto."""
+    if _flag_on("STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL"):
+        return log_level_for(exc)
+    return "warning"
+
+
 def log_at_level(logger, exc: BaseException, msg: str, *args) -> None:
     """Loguea `msg` al nivel que corresponde a `exc`. UN SOLO lugar decide.
 
     Con `STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL` en OFF todo sale a `warning`,
     que es el comportamiento previo exacto (kill-switch sin cambio de datos).
     """
-    nivel = "warning"
-    if _flag_on("STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL"):
-        nivel = log_level_for(exc)
-    getattr(logger, nivel)(msg, *args)
+    getattr(logger, _nivel_efectivo(exc))(msg, *args)
+
+
+def level_int_for(exc: BaseException) -> int:
+    """Plan 257 F1-bis — el MISMO nivel que decide `log_at_level`, como int de
+    `logging`, para poder pasarlo a `log_throttled` sin duplicar la regla.
+
+    Existe porque el throttle del 257 necesita el nivel ANTES de loguear y
+    `log_at_level` ya loguea. Prohibido revertir el nivel del plan 255 para
+    hacer throttleable un sitio: `log_throttled` respeta su intervalo sea cual
+    sea el nivel.
+    """
+    import logging
+
+    return logging.ERROR if _nivel_efectivo(exc) == "error" else logging.WARNING

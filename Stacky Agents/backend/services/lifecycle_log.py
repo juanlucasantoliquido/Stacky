@@ -23,6 +23,16 @@ def log_shutdown(reason: str) -> None:
     if _LOGGED:
         return
     _LOGGED = True
+    # Plan 257 F1-ter — el flush del contador de repeticiones va ANTES de la
+    # fila de shutdown, para que el resumen entre al log del día. Es el
+    # disparador que salva el caso "el loop terminó y el proceso se apagó":
+    # sin él, 854 repeticiones quedaban registradas como una sola.
+    try:
+        from services.local_file_logging import flush_throttle_pending
+
+        flush_throttle_pending(f"apagado: {reason}")
+    except Exception as exc:  # noqa: BLE001 — jamas bloquear el apagado
+        logger.debug("lifecycle_log: flush del contador de repeticiones fallo: %s", exc)
     try:
         from db import session_scope
         from models import SystemLog

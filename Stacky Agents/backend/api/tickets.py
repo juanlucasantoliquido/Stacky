@@ -6795,9 +6795,18 @@ def autopublish_epic_from_run(
             catalog = []
         grounding_warnings = grounding_warnings + _catalog_grounding_warnings(clean_html, catalog)
     if grounding_warnings:
-        logger.warning(
+        # Plan 257 F1-bis — 107 lineas en un solo dia con la misma firma. La
+        # publicacion sigue igual: lo unico que cambia es cuantas veces se
+        # escribe el aviso (a lo sumo una cada 300 s).
+        from services.log_throttle import log_throttled
+
+        log_throttled(
+            "tickets.autopublish_grounding_warnings",
+            logger,
+            logging.WARNING,
             "autopublish_epic_from_run: grounding_warnings=%s (publicando igual)",
             grounding_warnings,
+            min_interval_s=300.0,
         )
 
     # Plan 51 F3 — Gate correctivo determinista (default OFF). Si bloquea, NO

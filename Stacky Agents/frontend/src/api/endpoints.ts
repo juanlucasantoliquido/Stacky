@@ -1,4 +1,4 @@
-import { api, apiBase, rawPost, rawGet, type RawResponse, type GatewayErrorBody } from "./client";
+import { api, apiBase, rawPost, rawGet, rawPut, type RawResponse, type GatewayErrorBody } from "./client";
 // Plan 238 — Bandeja de incidencias abiertas (los import type van AL TOPE).
 import type {
   IncidentInboxResponse,
@@ -3198,6 +3198,55 @@ export const SilentFailures = {
       if (!r.ok) throw new Error(`silent failures ${r.status}`);
       return r.json();
     }),
+};
+
+// ── Plan 257 F3 — firmas de log más repetidas (READ-ONLY, desde memoria) ─────
+export type { LogNoiseSignature, LogNoisePayload } from "../components/logNoiseModel";
+
+export const LogNoise = {
+  /** Siempre 200: con el agrupado apagado devuelve `enabled: false` y lista
+   *  vacía. Se usa `rawGet` porque `api.get` lanza en cualquier non-2xx y un
+   *  panel de diagnóstico no debe romperse por eso. */
+  get: async (): Promise<import("../components/logNoiseModel").LogNoisePayload> => {
+    const res = await rawGet<import("../components/logNoiseModel").LogNoisePayload>(
+      "/api/diag/logs/noise"
+    );
+    return res.data ?? { enabled: false, signatures: [] };
+  },
+};
+
+// ── Plan 257 F4 — nivel de detalle del registro, en caliente ─────────────────
+export const LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] as const;
+export type LogLevelName = (typeof LOG_LEVELS)[number];
+
+export interface LogLevelResult {
+  ok: boolean;
+  persisted?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export const LogLevel = {
+  /** Nivel guardado hoy (cadena vacía si nunca se fijó). */
+  get: async (): Promise<LogLevelName | ""> => {
+    const res = await rawGet<{ ok?: boolean; config?: Record<string, unknown> }>(
+      "/api/global-config"
+    );
+    const val = String(res.data?.config?.LOG_LEVEL ?? "").toUpperCase();
+    return (LOG_LEVELS as readonly string[]).includes(val) ? (val as LogLevelName) : "";
+  },
+  /** Aplica EN CALIENTE y persiste. Un nivel inválido devuelve 400 sin tocar
+   *  nada; por eso se lee con el cliente que no lanza en non-2xx. */
+  set: async (level: LogLevelName): Promise<LogLevelResult> => {
+    const res = await rawPut<LogLevelResult>("/api/global-config", { LOG_LEVEL: level });
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: res.errorBody?.error ?? `No se pudo aplicar el nivel (${res.status}).`,
+      };
+    }
+    return res.data ?? { ok: true };
+  },
 };
 
 // ── Plan 255 F6 — mecanismos caros que dejaron de dar señal de éxito ─────────

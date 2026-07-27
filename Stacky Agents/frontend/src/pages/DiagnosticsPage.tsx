@@ -18,6 +18,8 @@ import RunReconciliationCard from "../components/RunReconciliationCard";
 import SilentFailuresCard from "../components/SilentFailuresCard";
 import DormantCanariesCard from "../components/DormantCanariesCard";
 import IntakeQuarantineCard from "../components/IntakeQuarantineCard";
+import LogNoiseCard from "../components/LogNoiseCard";
+import LogLevelPanel from "../components/LogLevelPanel";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
@@ -304,6 +306,17 @@ export default function DiagnosticsPage() {
           por el intake, con el motivo COMPLETO y hace cuántos días. No se monta si
           no hay ninguno o si STACKY_INTAKE_QUARANTINE_SURFACE_ENABLED está apagada. */}
       <IntakeQuarantineCard />
+
+      {/* Plan 257 F3 — qué firma está inundando el registro, desde memoria y sin
+          releer un archivo de 4 MB. READ-ONLY: mirarla NO borra los contadores.
+          No se renderiza si no hay ninguna firma agrupada. */}
+      <LogNoiseCard />
+
+      {/* Plan 257 F4 — el nivel de detalle del registro, en caliente y sin
+          reiniciar. Era la ÚNICA configuración del operador que exigía editar un
+          archivo a mano; va acá (y no en el panel de flags) porque ese panel solo
+          guarda el valor y no ejecutaría el cambio: diría "aplicado" en falso. */}
+      <LogLevelPanel />
 
       {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
           maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}

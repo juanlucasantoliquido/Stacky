@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from services.log_throttle import log_throttled  # Plan 257 F1-bis (stdlib-only, sin ciclos)
 from services.silent_failure_counter import log_at_level  # Plan 255 F2
 
 logger = logging.getLogger("stacky_agents.services.ado_edit_learning")
@@ -335,6 +336,16 @@ def sweep_recent_runs(
         logger.error("sweep_recent_runs: fallo ESTRUCTURAL (el sweep queda "
                      "inerte hasta arreglarlo): %s", exc)
     except Exception as exc:
-        logger.warning("sweep_recent_runs: error general: %s", exc)
+        # Plan 257 F1-bis — misma firma, mismo nivel, a lo sumo una vez cada
+        # 300 s: es una condicion de estado, no un evento. Esta firma produjo
+        # 1016 lineas en dos dias (854 + 162 con el otro prefijo de ruta).
+        log_throttled(
+            "ado_edit_learning.sweep_error_general",
+            logger,
+            logging.WARNING,
+            "sweep_recent_runs: error general: %s",
+            exc,
+            min_interval_s=300.0,
+        )
 
     return new_lessons

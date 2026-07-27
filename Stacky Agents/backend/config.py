@@ -2072,4 +2072,33 @@ class Config:
     STACKY_RUN_RECONCILIATION_ENABLED: bool = os.getenv(
         "STACKY_RUN_RECONCILIATION_ENABLED", "true").lower() in ("1", "true", "yes")
 
+    # ── Plan 257 — Observabilidad antirruido (throttle / rotacion / purga) ──
+    # Fuente UNICA de los limites de log: services/local_file_logging.py los lee
+    # LAZY en call time con getattr(cfg, "X", default) — prohibido dejar
+    # os.getenv sueltos alla (C12). Nunca `_env_bool`: esa funcion no existe en
+    # este modulo y un NameError aca deja el backend muerto en import time (C1).
+    # Default ON: el throttle preserva la primera ocurrencia y el conteo (nunca
+    # borra), no es destructivo, no bypasea revision humana, no tiene
+    # prerequisito externo y no reduce seguridad => ninguna de las 4 excepciones
+    # duras aplica. LOG_LEVEL NO entra aca: va por api/global_config.py (C14).
+    STACKY_LOG_THROTTLE_ENABLED: bool = os.getenv(
+        "STACKY_LOG_THROTTLE_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_LOG_THROTTLE_WINDOW_S: float = float(os.getenv("STACKY_LOG_THROTTLE_WINDOW_S", "60"))
+    STACKY_LOG_THROTTLE_MAX_SIGNATURES: int = int(
+        os.getenv("STACKY_LOG_THROTTLE_MAX_SIGNATURES", "1000")
+    )
+    STACKY_LOG_THROTTLE_FLUSH_S: int = int(os.getenv("STACKY_LOG_THROTTLE_FLUSH_S", "300"))
+    STACKY_LOG_SIZE_ROTATION_ENABLED: bool = os.getenv(
+        "STACKY_LOG_SIZE_ROTATION_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_LOG_MAX_BYTES: int = int(os.getenv("STACKY_LOG_MAX_BYTES", str(20 * 1024 * 1024)))
+    STACKY_LOG_MAX_PARTS_PER_DAY: int = int(os.getenv("STACKY_LOG_MAX_PARTS_PER_DAY", "10"))
+    # Reemplaza a la constante congelada local_file_logging.LOG_RETENTION_DAYS,
+    # que queda solo como default de la firma publica (retro-compat).
+    STACKY_LOG_RETENTION_DAYS: int = int(os.getenv("STACKY_LOG_RETENTION_DAYS", "14"))
+    STACKY_UI_LOG_NOISE_CARD_ENABLED: bool = os.getenv(
+        "STACKY_UI_LOG_NOISE_CARD_ENABLED", "true"
+    ).strip().lower() == "true"
+
 config = Config()

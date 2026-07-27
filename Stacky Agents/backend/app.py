@@ -345,11 +345,19 @@ def _log_completion_preflight(logger) -> None:
                 )
             else:
                 # Proyecto activo PERO el dir no existe → misconfig real, accionable.
-                logger.warning(
+                # Plan 257 F1-bis — 621 lineas en 6 dias (237 en un solo dia).
+                # Condicion de estado, no evento: ventana de 300 s.
+                from services.log_throttle import log_throttled
+
+                log_throttled(
+                    "app.preflight_outputs_dir_missing",
+                    logger,
+                    logging.WARNING,
                     "preflight: proyecto activo '%s' pero outputs_dir NO existe (%s) "
                     "— el output_watcher no encontrará artifacts. Revisá "
                     "workspace_root del proyecto / STACKY_REPO_ROOT.",
                     active, od,
+                    min_interval_s=300.0,
                 )
 
         auto_create = (
@@ -391,6 +399,12 @@ def create_app() -> Flask:
 
     init_db()
     install_console_log_handler()
+
+    # Plan 257 F1 — UNA instancia de filtro compartida en los TRES handlers del
+    # root logger (consola, archivo diario y sink de system_logs). Va DESPUES de
+    # install_console_log_handler(), que es donde ya existen los tres.
+    from services.local_file_logging import install_throttle_filter
+    install_throttle_filter()
 
     from services.lifecycle_log import install_shutdown_hook
     install_shutdown_hook()   # Plan 163 F3 — firmar el shutdown en system_logs
@@ -614,6 +628,11 @@ def create_app() -> Flask:
     try:
         from services.db_maintenance import register_syslog_purge_task
         register_syslog_purge_task()
+        # Plan 257 F2/F1-ter — la purga de ARCHIVOS de log y el vaciado del
+        # contador de repeticiones se REGISTRAN en el loop que ya existe. El
+        # loop es UNO SOLO: no se crea ningún thread nuevo.
+        from services.local_file_logging import register_log_maintenance_tasks
+        register_log_maintenance_tasks()
         if not _is_test_mode():
             threading.Thread(
                 target=_maintenance_loop, name="stacky-maintenance", daemon=True

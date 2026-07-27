@@ -226,7 +226,13 @@ def test_helper_importado_en_al_menos_4_archivos_de_produccion():
         "app.py",
         "services/console_log_handler.py",
     ]
-    simbolos = {"log_at_level", "log_level_for"}
+    # `level_int_for` (plan 257 F1-bis) es OTRO punto de entrada del MISMO
+    # helper: delega en `_nivel_efectivo`, exactamente la funcion que usa
+    # `log_at_level`, y solo devuelve el nivel como int para poder pasarselo a
+    # `log_throttled`. Sin registrarlo aca, harness/resume.py deja de contar y
+    # el ratchet subcuenta: no se debilita el invariante (siguen siendo >= 4
+    # archivos, sigue siendo por AST y sigue siendo el mismo modulo).
+    simbolos = {"log_at_level", "log_level_for", "level_int_for"}
     con_import: list[str] = []
 
     for rel in candidatos:

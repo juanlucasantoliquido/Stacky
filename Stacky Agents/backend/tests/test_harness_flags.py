@@ -465,6 +465,15 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 257 — observabilidad antirruido: agrupado de repetidos, rotacion
+    # por tamano y tarjeta de firmas ruidosas. Las 3 nacen ON: el agrupado
+    # preserva la primera aparicion y el conteo (nunca borra), rotar no borra
+    # nada y la tarjeta es de solo lectura. Ninguna cae en las 4 excepciones
+    # duras. Las numericas (ventana, tope de firmas, volcado, bytes, partes,
+    # retencion) NO llevan default=True y NO van a este set.
+    "STACKY_LOG_THROTTLE_ENABLED",
+    "STACKY_LOG_SIZE_ROTATION_ENABLED",
+    "STACKY_UI_LOG_NOISE_CARD_ENABLED",
     # ── Plan 255 — cero fallas mudas: silencio medido, nivel por clase, canario ──
     # Las 3 nacen ON: dict en memoria, nivel de log y lectura bajo demanda de un
     # tail acotado. Ninguna cae en las 4 excepciones duras.

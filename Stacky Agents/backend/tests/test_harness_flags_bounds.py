@@ -208,6 +208,15 @@ _FROZEN_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "STACKY_PR_REVIEW_DIFF_MAX_CHARS": (1000, 500000),
     "STACKY_PR_REVIEW_LOCAL_DIFF_MAX_CHARS": (0, 2000000),
     "STACKY_PR_REVIEW_TIMEOUT_SEC": (10, 600),
+    # Plan 257 — observabilidad antirruido. Se agregan AL FINAL a proposito:
+    # _first_key_with_min() toma la PRIMERA key del mapa con min_value, asi que
+    # insertar arriba cambiaria el sujeto de tres tests de este mismo archivo.
+    "STACKY_LOG_THROTTLE_WINDOW_S": (1, 3600),
+    "STACKY_LOG_THROTTLE_MAX_SIGNATURES": (10, 100000),
+    "STACKY_LOG_THROTTLE_FLUSH_S": (0, 86400),
+    "STACKY_LOG_MAX_BYTES": (65536, 1073741824),
+    "STACKY_LOG_MAX_PARTS_PER_DAY": (1, 1000),
+    "STACKY_LOG_RETENTION_DAYS": (1, 3650),
 }
 
 

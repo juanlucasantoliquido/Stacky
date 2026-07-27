@@ -738,6 +738,54 @@ def run_db_backup():
     return jsonify(ensure_weekly_backup())
 
 
+@bp.get("/logs/noise")
+def logs_noise_route():
+    """Plan 257 F3 — las firmas de log mas repetidas, desde MEMORIA.
+
+    Sale de `get_throttle_filter().snapshot()`, que ya tiene los contadores en
+    memoria: cero costo extra, no se re-parsea ningun archivo de disco. Y
+    `snapshot()` es READ-ONLY: la UI mira el rastro, nunca lo borra (el unico
+    que resetea es el flush determinista de F1-ter).
+
+    Con la flag apagada o sin filtro instalado devuelve 200 con
+    `enabled: false` — no 404, no 500: un panel de diagnostico no debe romperse
+    porque una flag este apagada.
+    """
+    from services.local_file_logging import get_throttle_filter
+
+    ventana = float(getattr(_config.config, "STACKY_LOG_THROTTLE_WINDOW_S", 60.0))
+    flush_s = int(getattr(_config.config, "STACKY_LOG_THROTTLE_FLUSH_S", 300))
+    habilitada = bool(getattr(_config.config, "STACKY_LOG_THROTTLE_ENABLED", True))
+    # `card_enabled` es EJE APARTE de `enabled`: apagar la tarjeta no debe
+    # apagar la consulta (el operador puede querer el dato sin la tarjeta), y
+    # apagar el agrupado no debe devolver 404. La tarjeta es su unico consumidor.
+    tarjeta = bool(getattr(_config.config, "STACKY_UI_LOG_NOISE_CARD_ENABLED", True))
+    flt = get_throttle_filter()
+
+    if not habilitada or flt is None:
+        return jsonify({
+            "enabled": False,
+            "card_enabled": tarjeta,
+            "window_s": ventana,
+            "flush_interval_s": flush_s,
+            "signatures": [],
+        }), 200
+
+    try:
+        firmas = flt.snapshot()
+    except Exception:  # noqa: BLE001 — un diagnostico jamas rompe el panel
+        logger.debug("logs/noise fallo", exc_info=True)
+        firmas = []
+
+    return jsonify({
+        "enabled": True,
+        "card_enabled": tarjeta,
+        "window_s": flt.window_s,
+        "flush_interval_s": flush_s,
+        "signatures": firmas,
+    }), 200
+
+
 @bp.get("/logs/export")
 def export_local_logs():
     """Exporta los últimos 3 días de logs locales rotativos como ZIP."""

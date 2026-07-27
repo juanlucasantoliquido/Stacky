@@ -773,7 +773,13 @@ $HarnessTestFiles = @(
   # Plan 256 - intake sin perdida (razon, cuarentena persistente, retry/discard, flags)
   "tests/test_plan256_intake_razon.py",
   "tests/test_plan256_quarantine_api.py",
-  "tests/test_plan256_flags.py"
+  "tests/test_plan256_flags.py",
+
+  # Plan 257 - observabilidad antirruido (throttle, flush, rotacion/purga, nivel por UI)
+  "tests/test_plan257_log_antirruido.py",
+  "tests/test_plan257_log_noise_api.py",
+  "tests/test_plan257_log_level_ui.py",
+  "tests/test_plan257_flags.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

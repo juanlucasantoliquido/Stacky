@@ -135,6 +135,56 @@ export async function rawGet<T>(
   return { status: res.status, ok: res.ok, data, errorBody };
 }
 
+/**
+ * Plan 257 F4 — gemelo de escritura de rawGet: fetch PUT que NO lanza en
+ * 4xx/5xx. Necesario para leer el mensaje del 400 de un nivel de registro
+ * inválido sin parsear el texto de una excepción (api.put lanza en todo
+ * non-2xx y aplana el cuerpo en `${status} ${statusText}: ${text}`).
+ */
+export async function rawPut<T>(
+  path: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {}
+): Promise<RawResponse<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Email": "dev@local",
+        ...extraHeaders,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    if (!isAbortError(e)) reportConnectionFailure();
+    throw e; // semantica intacta: el caller ve el mismo error de red
+  }
+  reportOutcome(res);
+
+  let data: T | null = null;
+  let errorBody: GatewayErrorBody | null = null;
+
+  const text = await res.text().catch(() => "");
+  if (text) {
+    try {
+      const parsed = JSON.parse(text);
+      if (res.ok) {
+        data = parsed as T;
+      } else {
+        errorBody = parsed as GatewayErrorBody;
+      }
+    } catch {
+      if (!res.ok) {
+        errorBody = { message: text };
+      }
+    }
+  }
+
+  return { status: res.status, ok: res.ok, data, errorBody };
+}
+
 export const apiBase = BASE;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

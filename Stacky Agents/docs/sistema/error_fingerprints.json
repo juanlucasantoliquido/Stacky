@@ -714,6 +714,53 @@
           "2026-07-16 13:34:24 INFO [stacky.output_watcher] output_watcher mode_a: done-marker detectado — cierre inmediato"
         ]
       }
+    },
+    {
+      "id": "log_signature_flood",
+      "title": "Una sola firma de WARNING inunda el log del dia",
+      "class": "log-noise-flood",
+      "status": "resolved",
+      "log_pattern": "(sweep_recent_runs: error general|preflight: proyecto activo)[\\s\\S]{0,300}?\\1",
+      "log_guarded": true,
+      "killed_by": "plan 257 (throttle de firmas + flush determinista)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan257_log_antirruido.py",
+      "evidence": "backend/services/local_file_logging.py (_ThrottleFilter / install_throttle_filter); backend/services/ado_edit_learning.py; backend/app.py",
+      "note": "Medido: 854+162=1016 lineas de UNA firma en 2 dias, y 829 de los 1173 warnings del 2026-07-15 (71%). Las dos firmas mas ruidosas quedaron cableadas a log_throttled con ventana de 300 s, asi que verlas DOS veces dentro de 300 caracteres (unas 2 lineas) solo puede pasar si el throttle no esta activo. Alcance honesto: el patron cubre las 2 firmas MEDIDAS, no cualquier firma futura; un regex barato no puede contar repeticiones sobre 5 MB de tail sin degradar el arranque. La cobertura general de firmas nuevas la da el panel de firmas ruidosas y el invariante de cero-perdida (test_invariante_cero_perdida), no este smoke.",
+      "self_test": {
+        "matches": [
+          "2026-07-15 10:00:01 WARNING [services.ado_edit_learning] sweep_recent_runs: error general: boom\n2026-07-15 10:00:01 WARNING [services.ado_edit_learning] sweep_recent_runs: error general: boom"
+        ],
+        "clean": [
+          "2026-07-27 10:00:01 WARNING [services.ado_edit_learning] sweep_recent_runs: error general: boom",
+          "2026-07-27 10:05:01 WARNING [services.ado_edit_learning] [x99 repeticiones en 60s] sweep_recent_runs: error general: boom"
+        ]
+      }
+    },
+    {
+      "id": "log_retention_not_effective",
+      "title": "La retencion de logs es declarativa: quedan archivos mas viejos que el plazo",
+      "class": "log-retention",
+      "status": "resolved",
+      "log_pattern": "stacky-\\d{4}-\\d\\d-\\d\\d(?:\\.\\d+)?\\.log",
+      "log_guarded": false,
+      "killed_by": "plan 257 F2 (purga al arrancar + tarea del loop de mantenimiento)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan257_log_antirruido.py",
+      "evidence": "backend/services/local_file_logging.py (install_file_log_handler purga al arrancar; register_log_maintenance_tasks; _date_from_log_name)",
+      "note": "log_guarded=false A PROPOSITO: la condicion es de SISTEMA DE ARCHIVOS (existe un stacky-*.log con fecha anterior a la retencion configurada) y scan_text solo mira el TEXTO del log, nunca la fecha de los archivos del directorio. El guard real son los tests de purga: test_purga_corre_al_arrancar, test_purga_respeta_retention_days_de_config y test_purga_matchea_partes_numeradas. Antes del 257 la purga solo se disparaba al cruzar la medianoche con el proceso vivo (en un arranque-y-apagado del mismo dia NUNCA corria) y _date_from_log_name devolvia None para las partes numeradas, asi que ni se borraban ni entraban al ZIP de exportacion.",
+      "self_test": {
+        "matches": [
+          "stacky-2026-06-01.3.log",
+          "stacky-2026-06-01.log"
+        ],
+        "clean": [
+          "otro-archivo.txt",
+          "stacky-junio.log"
+        ]
+      }
     }
   ]
 }

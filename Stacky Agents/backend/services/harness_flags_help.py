@@ -1811,6 +1811,61 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: nadie vigila esas ausencias y un mecanismo puede quedar muerto durante días sin que aparezca un solo error.",
         example="Como el canario de la mina: no grita cuando hay peligro, deja de cantar. Avisa y nada más; qué hacer con eso lo decidís vos.",
     ),
+    # ── Plan 257 — observabilidad antirruido ─────────────────────────────
+    "STACKY_LOG_THROTTLE_ENABLED": PlainHelp(
+        what="Agrupa los mensajes repetidos del registro de actividad: se escribe el primero y las repeticiones se resumen con su cuenta.",
+        on_effect="Si la activás: un mensaje repetido aparece una vez con la cuenta de cuántas veces se repitió, en lugar de miles de líneas iguales.",
+        off_effect="Si la apagás: el registro vuelve a escribir una línea por cada repetición, exactamente como hoy.",
+        example="Como el resumen del correo que dice «99 mensajes nuevos» en vez de sonar 99 veces. Los avisos graves nunca se agrupan: esos se escriben todos.",
+    ),
+    "STACKY_LOG_THROTTLE_WINDOW_S": PlainHelp(
+        what="Cuántos segundos se agrupan las repeticiones de un mismo mensaje antes de volver a escribirlo con su cuenta acumulada.",
+        on_effect="Si subís el número: se agrupa más y el registro queda más corto, pero tardás más en enterarte de que algo se está repitiendo.",
+        off_effect="Si lo bajás: el mensaje se escribe más seguido y ves antes lo que pasa, a costa de más líneas.",
+        example="Como elegir si el resumen del correo te llega cada minuto o una vez por hora.",
+    ),
+    "STACKY_LOG_THROTTLE_MAX_SIGNATURES": PlainHelp(
+        what="Cuántos mensajes distintos se siguen a la vez para poder agruparlos. Es la cota de memoria del agrupador.",
+        on_effect="Si subís el número: se agrupan más mensajes distintos, usando algo más de memoria.",
+        off_effect="Si lo bajás: pasado el tope, los mensajes nuevos se escriben sin agrupar. Se prefiere ruido antes que silencio.",
+        example="Como una libreta con lugar para mil anotaciones: llena la libreta, lo nuevo se anota igual, pero en hoja suelta.",
+    ),
+    "STACKY_LOG_THROTTLE_FLUSH_S": PlainHelp(
+        what="Cada cuántos segundos se vuelca la cuenta de repeticiones pendientes, aunque ese mensaje ya no vuelva a aparecer.",
+        on_effect="Si subís el número: la cuenta pendiente se escribe más espaciada. No se pierde nada, solo tarda más en verse.",
+        off_effect="Si lo ponés en cero: la cuenta se vuelca únicamente al apagar el servicio.",
+        example="Un mensaje se repitió 854 veces y después paró. Sin este volcado el registro diría «una vez» y esa cuenta se perdería para siempre.",
+    ),
+    "STACKY_LOG_SIZE_ROTATION_ENABLED": PlainHelp(
+        what="Abre un archivo nuevo cuando el registro del día crece más de lo permitido, en vez de dejarlo crecer sin techo.",
+        on_effect="Si la activás: al pasar el tamaño máximo se abre la parte siguiente del mismo día y el archivo deja de crecer sin control.",
+        off_effect="Si la apagás: hay un solo archivo por día y puede crecer sin límite. Se midió uno de 4,45 MB en una sola jornada.",
+        example="Como cambiar de cuaderno cuando se llena, en lugar de seguir escribiendo en los márgenes.",
+    ),
+    "STACKY_LOG_MAX_BYTES": PlainHelp(
+        what="Tamaño máximo de cada archivo de registro antes de abrir la parte siguiente del mismo día.",
+        on_effect="Si subís el número: quedan menos archivos y más grandes, más incómodos de abrir y de buscar.",
+        off_effect="Si lo bajás: quedan más archivos y más chicos, más fáciles de revisar de a uno.",
+        example="Veinte millones son unos 20 MB por archivo: más o menos lo que ocupa una foto grande.",
+    ),
+    "STACKY_LOG_MAX_PARTS_PER_DAY": PlainHelp(
+        what="Cuántas partes como máximo puede tener el registro de un mismo día antes de dejar de abrir archivos nuevos.",
+        on_effect="Si subís el número: se permiten más archivos por día antes de tocar el techo.",
+        off_effect="Si lo bajás: se llega antes al techo. Alcanzado el techo se sigue escribiendo en la última parte, con un único aviso.",
+        example="Como decidir cuántos cuadernos se pueden usar en un día: al último no se le arrancan hojas, se sigue escribiendo ahí.",
+    ),
+    "STACKY_LOG_RETENTION_DAYS": PlainHelp(
+        what="Cuántos días se conservan los archivos de registro antes de borrarse. La limpieza ahora corre de verdad, no solo a medianoche.",
+        on_effect="Si subís el número: guardás más historia para investigar un problema viejo, ocupando más disco.",
+        off_effect="Si lo bajás: se libera disco antes, a costa de perder la historia más vieja.",
+        example="Como la política de guardar los tickets de compra dos semanas y después tirarlos.",
+    ),
+    "STACKY_UI_LOG_NOISE_CARD_ENABLED": PlainHelp(
+        what="Muestra en la pantalla de Diagnóstico qué mensajes inundan más el registro y cuántas repeticiones se agruparon.",
+        on_effect="Si la activás: ves de un vistazo qué mensaje está inundando el registro, sin abrir un archivo de varios megabytes.",
+        off_effect="Si la apagás: la tarjeta no se dibuja y hay que revisar el archivo a mano.",
+        example="Como el ranking de los diez remitentes que más correo te mandan: te dice a quién conviene silenciar primero.",
+    ),
     "STACKY_DB_COMPACT_ENABLED": PlainHelp(
         what="Habilita el botón que comprime la base para recuperar el espacio que dejaron los datos borrados.",
         on_effect="Si la activás: aparece el botón para comprimir. Nada se comprime hasta que vos lo confirmes.",

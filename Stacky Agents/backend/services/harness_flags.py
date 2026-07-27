@@ -326,6 +326,13 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_SILENT_FAILURE_COUNTER_ENABLED",
         "STACKY_STRUCTURAL_ERRORS_TO_ERROR_LEVEL",
         "STACKY_DORMANT_CANARY_ENABLED",
+        # Plan 257 — observabilidad antirruido: agrupado de repetidos, volcado
+        # del conteo, rotacion por tamano y retencion efectiva de los archivos.
+        # (La tarjeta de firmas ruidosas va en "interfaz_ui", no aca.)
+        "STACKY_LOG_THROTTLE_ENABLED", "STACKY_LOG_THROTTLE_WINDOW_S",
+        "STACKY_LOG_THROTTLE_MAX_SIGNATURES", "STACKY_LOG_THROTTLE_FLUSH_S",
+        "STACKY_LOG_SIZE_ROTATION_ENABLED", "STACKY_LOG_MAX_BYTES",
+        "STACKY_LOG_MAX_PARTS_PER_DAY", "STACKY_LOG_RETENTION_DAYS",
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -461,6 +468,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CONNECTION_RESILIENCE_ENABLED",  # Plan 192 — resiliencia de conexión (banner + re-hidratación)
         "STACKY_INCIDENT_INBOX_ENABLED",  # Plan 238 — bandeja de incidencias abiertas
         "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED",  # Acciones (cerrar / resolver+PR) desde la bandeja
+        "STACKY_UI_LOG_NOISE_CARD_ENABLED",  # Plan 257 — tarjeta de firmas de log mas repetidas
     ),
     "paridad_proveedores": (
         "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
@@ -5218,6 +5226,137 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 255 - Lo inverso a una huella de regresion: alarma cuando un patron "
             "BUENO deja de aparecer en el log. Lee un tail acotado bajo demanda, sin "
             "loop y sin red. AVISA, nunca arregla ni re-habilita nada."
+        ),
+        group="global",
+        default=True,
+    ),
+    # ── Plan 257 — observabilidad antirruido (throttle / rotacion / purga) ───
+    # 9 entradas. LOG_LEVEL NO se registra aca a proposito (C14): el hot-apply
+    # de este panel solo hace setattr sobre config y no ejecuta efectos, asi que
+    # una FlagSpec diria "aplicado" mientras el logging sigue igual. Va por
+    # api/global_config.py, que es quien llama apply_log_level.
+    FlagSpec(
+        key="STACKY_LOG_THROTTLE_ENABLED",
+        type="bool",
+        label="Agrupar los mensajes repetidos del registro de actividad",
+        description=(
+            "Plan 257 - Emite la PRIMERA aparicion de cada mensaje y agrupa las "
+            "repeticiones dentro de una ventana, con el conteo acumulado. Nunca pierde "
+            "informacion: el conteo se emite siempre. Los mensajes graves y criticos "
+            "quedan exentos. Medido: una sola firma se comio el 71% de los avisos del "
+            "peor dia."
+        ),
+        group="global",
+        default=True,
+        # Se consume UNA vez al arrancar (se instala el filtro compartido en los
+        # tres destinos del registro), asi que un cambio no aplica en caliente.
+        restart_required=True,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_THROTTLE_WINDOW_S",
+        type="float",
+        # SIN default= (numerica; el default EFECTIVO 60.0 vive en config.py).
+        label="Ventana para agrupar mensajes repetidos (segundos)",
+        description=(
+            "Plan 257 - Cuantos segundos se agrupan las repeticiones de un mismo "
+            "mensaje antes de volver a emitirlo con su conteo."
+        ),
+        group="global",
+        requires="STACKY_LOG_THROTTLE_ENABLED",
+        min_value=1,
+        max_value=3600,
+        restart_required=True,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_THROTTLE_MAX_SIGNATURES",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 1000 vive en config.py).
+        label="Maximo de mensajes distintos que se siguen a la vez",
+        description=(
+            "Plan 257 - Cota de memoria del agrupador. Superado el tope, los mensajes "
+            "nuevos pasan sin agrupar: se prefiere ruido antes que silencio."
+        ),
+        group="global",
+        requires="STACKY_LOG_THROTTLE_ENABLED",
+        min_value=10,
+        max_value=100000,
+        restart_required=True,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_THROTTLE_FLUSH_S",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 300 vive en config.py).
+        label="Cada cuanto se vuelca el conteo de repeticiones (segundos)",
+        description=(
+            "Plan 257 - Sin este volcado, el conteo de un mensaje que deja de repetirse "
+            "no se emite nunca y el registro dice '1 vez' de algo que paso 854. 0 = solo "
+            "al apagar el servicio. Lo corre el hilo de mantenimiento compartido."
+        ),
+        group="global",
+        requires="STACKY_LOG_THROTTLE_ENABLED",
+        min_value=0,
+        max_value=86400,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_SIZE_ROTATION_ENABLED",
+        type="bool",
+        label="Abrir un archivo nuevo cuando el del dia crece demasiado",
+        description=(
+            "Plan 257 - Hoy solo hay un archivo por dia y puede crecer sin techo "
+            "(medido: 4,45 MB en un dia). Al llegar al tope se abre una parte nueva. "
+            "Al agotar las partes NO se deja de escribir: se sigue en la ultima."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_MAX_BYTES",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 20971520 vive en config.py).
+        label="Tamano maximo de cada archivo de registro (bytes)",
+        description="Plan 257 - Al superarlo se abre la parte siguiente del mismo dia.",
+        group="global",
+        requires="STACKY_LOG_SIZE_ROTATION_ENABLED",
+        min_value=65536,
+        max_value=1073741824,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_MAX_PARTS_PER_DAY",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 10 vive en config.py).
+        label="Maximo de partes por dia del registro",
+        description=(
+            "Plan 257 - Techo de archivos por dia. Alcanzado el techo se sigue "
+            "escribiendo en la ultima parte, con un unico aviso."
+        ),
+        group="global",
+        requires="STACKY_LOG_SIZE_ROTATION_ENABLED",
+        min_value=1,
+        max_value=1000,
+    ),
+    FlagSpec(
+        key="STACKY_LOG_RETENTION_DAYS",
+        type="int",
+        # SIN default= (numerica; el default EFECTIVO 14 vive en config.py, que
+        # ademas reemplaza a la constante congelada del modulo de registro).
+        label="Dias que se conservan los archivos de registro",
+        description=(
+            "Plan 257 - La retencion declarada de 14 dias casi nunca se aplicaba: solo "
+            "corria al cruzar la medianoche con el servicio vivo. Ahora corre al "
+            "arrancar y cada 6 horas. Fuente unica del valor."
+        ),
+        group="global",
+        min_value=1,
+        max_value=3650,
+    ),
+    FlagSpec(
+        key="STACKY_UI_LOG_NOISE_CARD_ENABLED",
+        type="bool",
+        label="Mostrar los mensajes mas repetidos en Diagnostico",
+        description=(
+            "Plan 257 - Tarjeta de solo lectura con las firmas que mas inundan el "
+            "registro y cuantas se agruparon. Sale de memoria: no vuelve a leer ningun "
+            "archivo y no borra los contadores."
         ),
         group="global",
         default=True,

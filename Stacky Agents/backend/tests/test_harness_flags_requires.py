@@ -118,6 +118,14 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 257: los parametros del agrupado de mensajes repetidos solo se leen
+    # desde el camino que abre su master, y los de rotacion por tamano desde el
+    # suyo. Profundidad 1: ninguno de los dos masters declara requires (R4).
+    "STACKY_LOG_THROTTLE_WINDOW_S": "STACKY_LOG_THROTTLE_ENABLED",
+    "STACKY_LOG_THROTTLE_MAX_SIGNATURES": "STACKY_LOG_THROTTLE_ENABLED",
+    "STACKY_LOG_THROTTLE_FLUSH_S": "STACKY_LOG_THROTTLE_ENABLED",
+    "STACKY_LOG_MAX_BYTES": "STACKY_LOG_SIZE_ROTATION_ENABLED",
+    "STACKY_LOG_MAX_PARTS_PER_DAY": "STACKY_LOG_SIZE_ROTATION_ENABLED",
     # Plan 202: el techo de gasto solo se lee desde el camino que abre el master de
     # la Fragua; sin la arista, tocarlo con la Fragua apagada no haría nada.
     "STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET": "STACKY_NIGHT_FOUNDRY_ENABLED",

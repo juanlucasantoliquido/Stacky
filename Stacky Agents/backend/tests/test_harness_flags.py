@@ -790,6 +790,10 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 237 — inventario de planes visible de fábrica ──
     "STACKY_PLANS_BOARD_ENABLED",
     "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED",
+    # ── Plan 196 — acciones del pipeline: bool default ON; cada corrida exige
+    # click + confirmacion del operador y nunca hace push, asi que ninguna de
+    # las 4 excepciones duras aplica. ──
+    "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED",
     # ── Plan 238 — Bandeja de incidencias: bool default ON; solo lectura,
     # ninguna de las 4 excepciones duras aplica. ──
     "STACKY_INCIDENT_INBOX_ENABLED",

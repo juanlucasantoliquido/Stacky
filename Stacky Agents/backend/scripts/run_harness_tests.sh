@@ -677,6 +677,9 @@ HARNESS_TEST_FILES=(
   tests/test_plan214_qa_browser_playbooks.py
   # -- Plan 172 - Teclado primero: registro de atajos + overlay de ayuda --
   tests/test_plan172_shortcuts_flag.py
+  # -- Plan 196 - Acciones HITL del pipeline de planes sobre el Tablero --
+  tests/test_plan196_pipeline_service.py
+  tests/test_plan196_actions_api.py
   # -- Plan 199 - Cosecha historica de telemetria desde disco --
   tests/test_plan199_telemetry_harvest.py
   tests/test_plan199_harvest_backfill.py

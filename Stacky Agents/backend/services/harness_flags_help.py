@@ -1424,6 +1424,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el tab desaparece y /api/plans-board devuelve 404. Todo lo demás sigue exactamente igual.",
         example="Como un tablero kanban de la evolución de Stacky, pero automático: lee los docs, el ledger de supervisión y git, y te dice qué sigue.",
     ),
+    # ── Plan 196 — acciones del pipeline sobre el Tablero de Planes ──────────
+    "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED": PlainHelp(
+        what="Controla si el Tablero de Planes muestra botones para lanzar las etapas del pipeline (proponer, criticar, implementar, supervisar) sin salir de la app.",
+        on_effect="Si la activás: cada plan muestra su siguiente paso como botón; al confirmarlo se lanza una corrida con el modelo y esfuerzo que elijas.",
+        off_effect="Si la apagás: el tablero queda solo-lectura, como antes, con la acción sugerida copiable a mano.",
+        example="Como pasar de un semáforo que solo te dice 'avanzá' a un botón que arranca el auto por vos — pero siempre apretás vos el botón.",
+    ),
     # ── Plan 238 — Bandeja de incidencias abiertas ───────────────────────────
     "STACKY_INCIDENT_INBOX_ENABLED": PlainHelp(
         what="Una vista aparte que junta solo las incidencias (los tickets de tipo Issue y Bug) y pone primero las que siguen abiertas.",

@@ -70,3 +70,249 @@ def plans_board_detail(number: int):
     if payload is None:
         return jsonify({"ok": False, "error": "plan_not_found"}), 404
     return jsonify(payload)
+
+
+# ── Plan 196 — acciones HITL del pipeline de planes (rutas ADITIVAS) ─────────
+
+
+def _actions_enabled() -> bool:
+    return _enabled() and bool(
+        getattr(config, "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED", False)
+    )
+
+
+def _actions_disabled_resp():
+    return (
+        jsonify(
+            {
+                "ok": False,
+                "error": "plans_pipeline_disabled",
+                "message": (
+                    "Las acciones del pipeline de planes están deshabilitadas "
+                    "(STACKY_PLANS_PIPELINE_ACTIONS_ENABLED)."
+                ),
+            }
+        ),
+        404,
+    )
+
+
+@bp.post("/actions/run")
+def plans_pipeline_run():
+    """Plan 196 §4.2 — lanza UNA etapa del pipeline como corrida one-shot
+    claude_code_cli. Orden de validación congelado; espejo de
+    api/agents.py run_incident para el lanzamiento."""
+    if not _actions_enabled():
+        return _actions_disabled_resp()
+
+    from services import plans_board, plans_pipeline
+
+    payload = request.get_json(force=True, silent=True) or {}
+
+    runtime_raw = (payload.get("runtime") or "claude_code_cli").strip()
+    if runtime_raw != "claude_code_cli":
+        return jsonify({
+            "ok": False, "error": "runtime_not_supported",
+            "supported": ["claude_code_cli"],
+        }), 409
+
+    action = (payload.get("action") or "").strip()
+    if action not in plans_pipeline._ACTION_COMMANDS:
+        return jsonify({"ok": False, "error": "invalid_action"}), 400
+
+    root = plans_board.repo_root()
+    if root is None:
+        return jsonify({
+            "ok": False, "error": "repo_not_available",
+            "message": (
+                "No hay repo git de Stacky en esta instalación; las acciones "
+                "del pipeline requieren el repo de desarrollo."
+            ),
+        }), 409
+
+    skill_file = plans_pipeline.skill_file_for(action, root)
+    if not skill_file.exists():
+        return jsonify({
+            "ok": False, "error": "skills_not_found",
+            "skill": skill_file.parent.name,
+        }), 409
+
+    plan_number = payload.get("plan_number")
+    plan_number_str: str | None = None
+    if action != "proponer":
+        try:
+            plan_number = int(plan_number)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "plan_not_found"}), 404
+        board = plans_board.get_board_cached(refresh=True)
+        cards = [c for c in board["plans"] if c["number"] == plan_number]
+        if not cards:
+            return jsonify({"ok": False, "error": "plan_not_found"}), 404
+        card = cards[0]
+        ledger_info = card.get("ledger") or {}
+        allowed = plans_pipeline.allowed_actions_for(
+            card["estado"], ledger_info.get("doc_drift")
+        )
+        if action not in allowed:
+            return jsonify({
+                "ok": False, "error": "action_not_allowed_for_estado",
+                "estado": card["estado"], "allowed": list(allowed),
+            }), 409
+        plan_number_str = card["number_str"]
+    else:
+        plan_number = None
+
+    prompt_line = plans_pipeline.build_action_prompt(
+        action, plan_number_str, payload.get("idea")
+    )
+
+    # modelo/effort: clamps EXISTENTES (espejo run_incident, api/agents.py)
+    from api.agents import _clamp_effort_for_model
+    from services import llm_router as _llm_router
+
+    _model_raw = (payload.get("model") or "").strip()
+    model_override = _llm_router.clamp_model(_model_raw, allow_opus=True) if _model_raw else None
+    _effort_raw = (payload.get("effort") or "").strip().lower()
+    effort_override = _effort_raw if _effort_raw in {"low", "medium", "high", "xhigh", "max"} else "high"
+    effort_override = _clamp_effort_for_model(effort_override, model_override)
+
+    import agent_runner
+    from api._helpers import current_user  # C6 — definición real
+    from db import session_scope
+    from models import AgentExecution, Ticket
+    from services.plans_pipeline_context import ensure_plans_pipeline_agent_file
+
+    ensure_plans_pipeline_agent_file()
+
+    with plans_pipeline._LAUNCH_LOCK:
+        running_id = plans_pipeline.find_running_pipeline_execution()
+        if running_id is not None:
+            return jsonify({
+                "ok": False, "error": "pipeline_action_already_running",
+                "execution_id": running_id,
+            }), 409
+
+        # C9 — pool ticket + lanzamiento bajo el MISMO try: con DB rota
+        # responde 502 agent_launch_failed, nunca 500 genérico.
+        try:
+            with session_scope() as session:
+                pool_ticket = (
+                    session.query(Ticket)
+                    .filter_by(ado_id=plans_pipeline.PLANS_PIPELINE_ADO_ID, project="default")
+                    .first()
+                )
+                if pool_ticket is None:
+                    pool_ticket = Ticket(
+                        ado_id=plans_pipeline.PLANS_PIPELINE_ADO_ID,
+                        external_id=plans_pipeline.PLANS_PIPELINE_ADO_ID,
+                        project="default",
+                        stacky_project_name="default",
+                        title="Plans Pipeline Pool Ticket",
+                        work_item_type="Task",
+                        ado_state="Active",
+                    )
+                    session.add(pool_ticket)
+                    session.flush()
+                pool_ticket_id = pool_ticket.id
+
+            context_blocks = [{
+                "id": "plans-pipeline-command",
+                "kind": "raw-conversation",
+                "title": "Skill del pipeline a ejecutar",
+                "content": prompt_line,
+                "source": {"type": "plans_board_action", "action": action,
+                           "plan_number": plan_number},
+            }]
+
+            execution_id = agent_runner.run_agent(
+                agent_type="plans_pipeline",
+                ticket_id=pool_ticket_id,
+                context_blocks=context_blocks,
+                user=current_user(),
+                runtime="claude_code_cli",
+                vscode_agent_filename="PlansPipeline.agent.md",
+                project_name=None,
+                use_few_shot=False,
+                use_anti_patterns=False,
+                model_override=model_override,
+                effort_override=effort_override,
+                workspace_root_override=str(root),
+            )
+        except Exception as exc:  # noqa: BLE001 — nunca 500 genérico (patrón Plan 39 B1)
+            return jsonify({
+                "ok": False, "error": "agent_launch_failed", "message": str(exc),
+            }), 502
+
+    # metadata best-effort (§4.7) — fuera del lock, nunca bloquea la respuesta
+    try:
+        with session_scope() as _s:
+            _ex = _s.get(AgentExecution, execution_id)
+            if _ex is not None:
+                _md = dict(_ex.metadata_dict or {})
+                _md["plans_pipeline"] = {
+                    "action": action, "plan_number": plan_number,
+                    "model": model_override, "effort": effort_override,
+                    "prompt_line": prompt_line,
+                }
+                _ex.metadata_dict = _md
+    except Exception:  # noqa: BLE001
+        pass
+
+    return jsonify({
+        "ok": True, "execution_id": execution_id,
+        "status": "running", "prompt_line": prompt_line,
+    }), 202
+
+
+@bp.get("/actions/runs")
+def plans_pipeline_runs():
+    """Plan 196 §4.4 — historial de corridas del pipeline (sin pollers: el
+    frontend refresca a demanda)."""
+    if not _actions_enabled():
+        return _actions_disabled_resp()
+
+    from db import session_scope
+    from models import AgentExecution
+    from services import plans_pipeline
+
+    try:
+        limit = min(max(int(request.args.get("limit", "20")), 1), 50)
+    except ValueError:
+        limit = 20
+
+    with session_scope() as s:
+        rows = (
+            s.query(AgentExecution)
+            .filter(AgentExecution.agent_type == plans_pipeline.PLANS_PIPELINE_AGENT_TYPE)
+            .order_by(AgentExecution.id.desc())
+            .limit(limit)
+            .all()
+        )
+        runs = [plans_pipeline.serialize_run(r) for r in rows]
+
+    running_id = plans_pipeline.find_running_pipeline_execution()
+    return jsonify({
+        "ok": True,
+        "busy": running_id is not None,
+        "running_execution_id": running_id,
+        "working_tree": plans_pipeline.working_tree_status(),
+        "runs": runs,
+    })
+
+
+@bp.get("/commits/<int:number>")
+def plans_board_commits(number: int):
+    """Plan 196 §4.6 — commits recientes del doc del plan (git log read-only)."""
+    if not _enabled():
+        return _disabled_resp()
+
+    from services import plans_board, plans_pipeline
+
+    detail = plans_board.get_detail(number)
+    if detail is None:
+        return jsonify({"ok": False, "error": "plan_not_found"}), 404
+
+    commits = plans_pipeline.recent_commits_for_doc(detail["plan"]["filename"])
+    if commits is None:
+        return jsonify({"ok": True, "git_available": False, "commits": []})
+    return jsonify({"ok": True, "git_available": True, "commits": commits})

@@ -7,8 +7,14 @@
  * sugerida COPIABLE al portapapeles (el operador la pega y ejecuta él mismo).
  */
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { PlansBoard, type PlansBoardDetailDto } from "../api/endpoints";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  PlansBoard,
+  PlansPipeline,
+  type PlanCommitDto,
+  type PlansBoardDetailDto,
+  type RunPipelineActionResponse,
+} from "../api/endpoints";
 import {
   ESTADO_CHIP,
   buildCopyPayload,
@@ -19,6 +25,17 @@ import {
   type PlanCardDto,
   type SuggestedAction,
 } from "../plansBoard/model";
+// Plan 196 — acciones HITL del pipeline (helpers puros, testeados sin DOM).
+import ConfirmButton from "../components/ConfirmButton";
+import { useModelCatalog } from "../hooks/useModelCatalog";
+import {
+  ACTION_LABEL,
+  RUNTIME_ACTION_NOTE,
+  allowedActionsForCard,
+  buildRunPayload,
+  effortsForModel,
+  type PipelineAction,
+} from "../plansBoard/actions";
 import styles from "./PlansBoardPage.module.css";
 
 const ESTADOS: (EstadoPlan | "TODOS")[] = [
@@ -90,6 +107,14 @@ export default function PlansBoardPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
 
+  // Plan 196 — estado del panel de acciones.
+  const [actionModel, setActionModel] = useState("");
+  const [actionEffort, setActionEffort] = useState("");
+  const [proposeIdea, setProposeIdea] = useState("");
+  const [lastLaunch, setLastLaunch] = useState<string | null>(null);
+  const [launching, setLaunching] = useState(false); // C10 — guard anti doble-click
+  const queryClient = useQueryClient();
+
   const boardQuery = useQuery({
     queryKey: ["plans-board-list"],
     queryFn: () => PlansBoard.list(),
@@ -102,6 +127,72 @@ export default function PlansBoardPage() {
     enabled: selectedNumber !== null,
     retry: false,
   });
+
+  // Plan 196 — historial de corridas. Carga on-mount + refresco manual del
+  // operador; cero sondeo periódico (G9). El comentario evita nombrar la API
+  // prohibida porque el criterio binario del plan es un grep sobre este archivo.
+  const runsQuery = useQuery({
+    queryKey: ["plans-pipeline-runs"],
+    queryFn: () => PlansPipeline.runs(),
+    retry: false,
+  });
+
+  const commitsQuery = useQuery({
+    queryKey: ["plans-board-commits", selectedNumber],
+    queryFn: () => PlansPipeline.commits(selectedNumber as number),
+    enabled: selectedNumber !== null,
+    retry: false,
+  });
+
+  const { catalog } = useModelCatalog();
+  const claudeCat = catalog.claude_code_cli;
+
+  // Inicializa modelo/effort con los defaults del catálogo vivo (159) —
+  // cero listas hardcodeadas en este archivo (KPI-2).
+  useEffect(() => {
+    if (!claudeCat) return;
+    setActionModel((m) => m || claudeCat.default_model || "");
+    setActionEffort((e) => e || claudeCat.default_effort || "high");
+  }, [claudeCat]);
+
+  // Si al cambiar de modelo el effort deja de ser válido, cae al primero válido.
+  const availableEfforts = effortsForModel(claudeCat, actionModel);
+  useEffect(() => {
+    if (availableEfforts.length === 0) return;
+    if (!availableEfforts.some((e) => e.id === actionEffort)) {
+      setActionEffort(availableEfforts[0].id);
+    }
+  }, [actionModel, availableEfforts, actionEffort]);
+
+  const pipelineBusy = runsQuery.data?.busy === true;
+  const actionsAvailable = runsQuery.data?.ok === true;
+
+  const launch = (action: PipelineAction, planNumber: number | null) => {
+    if (launching) return;
+    setLaunching(true);
+    void PlansPipeline.run(
+      buildRunPayload(action, planNumber, proposeIdea, actionModel, actionEffort)
+    )
+      .then((r) => {
+        if (r.ok && r.data?.ok && r.data.execution_id) {
+          setLastLaunch(
+            `Corrida #${r.data.execution_id} lanzada: ${r.data.prompt_line ?? action}`
+          );
+        } else {
+          const err = (r.errorBody ?? {}) as Partial<RunPipelineActionResponse>;
+          setLastLaunch(
+            `No se lanzó (${r.status}): ${err.error ?? "error desconocido"}` +
+              (err.message ? ` — ${err.message}` : "")
+          );
+        }
+      })
+      .catch((e) => setLastLaunch(`No se lanzó: ${String(e)}`))
+      .finally(() => {
+        setLaunching(false);
+        void queryClient.invalidateQueries({ queryKey: ["plans-pipeline-runs"] });
+        void queryClient.invalidateQueries({ queryKey: ["plans-board-list"] });
+      });
+  };
 
   const handleCopy = (text: string, key: string) => {
     try {
@@ -236,6 +327,69 @@ export default function PlansBoardPage() {
         </label>
       </div>
 
+      {/* Plan 196 — panel de acciones HITL. Se auto-oculta si el backend no las
+          expone (flag OFF -> 404): la página queda idéntica a la del Plan 128. */}
+      {actionsAvailable && (
+        <div className={styles.actionsPanel}>
+          <div className={styles.actionsRow}>
+            <span className={styles.actionsLabel}>Modelo</span>
+            <select
+              className={styles.actionsSelect}
+              value={actionModel}
+              onChange={(ev) => setActionModel(ev.target.value)}
+            >
+              {(claudeCat?.models ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <span className={styles.actionsLabel}>Esfuerzo</span>
+            <select
+              className={styles.actionsSelect}
+              value={actionEffort}
+              onChange={(ev) => setActionEffort(ev.target.value)}
+            >
+              {availableEfforts.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+            <span className={styles.actionsLabel} title={RUNTIME_ACTION_NOTE}>
+              Runtime: Claude Code CLI
+            </span>
+          </div>
+          <div className={styles.actionsRow}>
+            <input
+              className={styles.actionsInput}
+              placeholder="Idea para el próximo plan (opcional)"
+              value={proposeIdea}
+              onChange={(ev) => setProposeIdea(ev.target.value)}
+            />
+            <ConfirmButton
+              label={ACTION_LABEL.proponer}
+              className={styles.actionBtn}
+              disabled={pipelineBusy || launching}
+              onConfirm={() => launch("proponer", null)}
+            />
+            {pipelineBusy && (
+              <span className={styles.busyChip}>
+                Corrida #{runsQuery.data?.running_execution_id} en curso — el pipeline
+                corre de a una
+              </span>
+            )}
+            {runsQuery.data?.working_tree?.dirty === true && (
+              <span className={styles.wipChip}>
+                WIP: {runsQuery.data.working_tree.changes} cambios sin commitear en el
+                repo — las corridas commitean por pathspec; revisá antes de confirmar
+              </span>
+            )}
+          </div>
+          {lastLaunch && <div className={styles.actionsNote}>{lastLaunch}</div>}
+        </div>
+      )}
+
       {/* Tabla / empty state */}
       {!board.docs_dir_found || board.plans.length === 0 ? (
         <p className={styles.empty}>No se encontraron docs de planes en este deploy</p>
@@ -300,6 +454,42 @@ export default function PlansBoardPage() {
 
       {copyFailed && <div className={styles.copyFailBanner}>No se pudo copiar</div>}
 
+      {/* Plan 196 — historial de corridas del pipeline (refresco manual, G9). */}
+      {actionsAvailable && (
+        <div className={styles.runsSection}>
+          <div className={styles.actionsRow}>
+            <strong>Corridas del pipeline</strong>
+            <button
+              type="button"
+              className={styles.actionBtn}
+              onClick={() => {
+                void queryClient.invalidateQueries({ queryKey: ["plans-pipeline-runs"] });
+                void queryClient.invalidateQueries({ queryKey: ["plans-board-list"] });
+              }}
+            >
+              ↻ Refrescar
+            </button>
+          </div>
+          <div className={styles.runsList}>
+            {(runsQuery.data?.runs ?? []).length === 0 ? (
+              <span className={styles.actionsNote}>Todavía no se lanzó ninguna corrida.</span>
+            ) : (
+              (runsQuery.data?.runs ?? []).map((r) => (
+                <div key={r.id} className={styles.runRow}>
+                  <span>#{r.id}</span>
+                  <span>{r.action ?? "—"}</span>
+                  <span>{r.plan_number ?? "—"}</span>
+                  <span>{r.model ?? "—"}</span>
+                  <span>{r.effort ?? "—"}</span>
+                  <span className={styles.runStatus}>{r.status}</span>
+                  <span>{r.started_at ?? "—"}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Drawer de detalle */}
       {selectedNumber !== null && (
         <div className={styles.drawerOverlay} onClick={() => setSelectedNumber(null)}>
@@ -309,7 +499,15 @@ export default function PlansBoardPage() {
             </button>
             {detailQuery.isLoading && <p>Cargando detalle…</p>}
             {detailQuery.data && (
-              <DrawerContent data={detailQuery.data} copiedKey={copiedKey} onCopy={handleCopy} />
+              <DrawerContent
+                data={detailQuery.data}
+                copiedKey={copiedKey}
+                onCopy={handleCopy}
+                actionsAvailable={actionsAvailable}
+                actionsDisabled={pipelineBusy || launching}
+                onLaunch={launch}
+                commits={commitsQuery.data ?? null}
+              />
             )}
           </div>
         </div>
@@ -322,12 +520,22 @@ function DrawerContent({
   data,
   copiedKey,
   onCopy,
+  actionsAvailable,
+  actionsDisabled,
+  onLaunch,
+  commits,
 }: {
   data: PlansBoardDetailDto;
   copiedKey: string | null;
   onCopy: (text: string, key: string) => void;
+  // Plan 196 — acciones por card + commits del doc.
+  actionsAvailable: boolean;
+  actionsDisabled: boolean;
+  onLaunch: (action: PipelineAction, planNumber: number | null) => void;
+  commits: { ok: boolean; git_available: boolean; commits: PlanCommitDto[] } | null;
 }) {
   const { plan, duplicates, head_excerpt } = data;
+  const cardActions = allowedActionsForCard(plan.estado, plan.ledger?.doc_drift ?? null);
   return (
     <div>
       <h3>
@@ -343,6 +551,34 @@ function DrawerContent({
         <CopyButton action={plan.suggested_action} variant="primary" copiedKey={copiedKey} onCopy={onCopy} />
         <CopyButton action={plan.suggested_action} variant="natural" copiedKey={copiedKey} onCopy={onCopy} />
       </div>
+      {/* Plan 196 — acciones permitidas para el estado de ESTE plan (§4.3). */}
+      {actionsAvailable && cardActions.length > 0 && (
+        <div className={styles.actionsRow}>
+          {cardActions.map((a) => (
+            <ConfirmButton
+              key={a}
+              label={ACTION_LABEL[a]}
+              className={styles.actionBtn}
+              disabled={actionsDisabled}
+              onConfirm={() => onLaunch(a, plan.number)}
+            />
+          ))}
+        </div>
+      )}
+      {/* Plan 196 — commits del doc (git log read-only, on-demand). */}
+      {commits && (
+        <div className={styles.commitsList}>
+          {commits.git_available === false ? (
+            <span>Sin git disponible en esta instalación</span>
+          ) : (
+            commits.commits.map((c) => (
+              <span key={c.hash}>
+                {c.hash} — {c.date} — {c.subject}
+              </span>
+            ))
+          )}
+        </div>
+      )}
       {duplicates.length > 0 && (
         <div className={styles.dupWarning}>
           ⚠️ Número duplicado por: {duplicates.map((d) => d.filename).join(", ")}

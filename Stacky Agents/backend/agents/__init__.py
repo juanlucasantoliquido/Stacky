@@ -9,6 +9,7 @@ from .functional import FunctionalAgent
 from .incident import IncidentAgent
 from .incident_dev import IncidentDevAgent
 from .evolution_mutator import EvolutionMutatorAgent
+from .plans_pipeline import PlansPipelineAgent
 from .qa import QAAgent
 from .technical import TechnicalAgent
 
@@ -27,6 +28,7 @@ registry: dict[str, BaseAgent] = {
         IncidentAgent(),    # Plan 131 — analista unificado de incidencias
         IncidentDevAgent(), # Plan 166 F4 — dev resolutor de incidencias
         EvolutionMutatorAgent(),  # Plan 169 — generador de variantes del optimizador
+        PlansPipelineAgent(),  # Plan 196 — ejecutor del pipeline de planes
         CustomAgent(),      # VS Code / Copilot custom agents
     ]
 }

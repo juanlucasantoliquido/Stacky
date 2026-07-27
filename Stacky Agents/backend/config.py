@@ -1827,6 +1827,13 @@ class Config:
         "STACKY_PLANS_BOARD_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 196 — acciones HITL del pipeline de planes sobre el Tablero (128).
+    #    Cada accion es click+confirmacion del operador; lanza una corrida one-shot
+    #    claude_code_cli con las skills del repo. Nunca hace push. ──
+    STACKY_PLANS_PIPELINE_ACTIONS_ENABLED: bool = os.getenv(
+        "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
     # Panel de aspectos/propuestas/ciclo MAPE con gates humanos. Default ON:
     # solo agrega superficie de lectura + acciones on-click del operador.

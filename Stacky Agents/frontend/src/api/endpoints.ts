@@ -4795,6 +4795,37 @@ export const PlansBoard = {
     api.get<PlansBoardDetailDto>(`/api/plans-board/detail/${number}`),
 };
 
+/** Plan 196 — acciones HITL del pipeline de planes sobre el Tablero (128). */
+export interface PlanCommitDto { hash: string; date: string; subject: string }
+export interface PipelineRunDto {
+  id: number; status: string;
+  started_at: string | null; completed_at: string | null;
+  action: string | null; plan_number: number | null;
+  model: string | null; effort: string | null; prompt_line: string | null;
+}
+export interface WorkingTreeDto { dirty: boolean; changes: number }
+export interface PipelineRunsResponse {
+  ok: boolean; busy: boolean; running_execution_id: number | null;
+  working_tree?: WorkingTreeDto | null;  // null = sin git en esta instalación
+  runs: PipelineRunDto[];
+}
+export interface RunPipelineActionResponse {
+  ok: boolean; execution_id?: number; status?: string; prompt_line?: string;
+  error?: string; message?: string; estado?: string; allowed?: string[];
+}
+export const PlansPipeline = {
+  // C1 — rawPost, NUNCA api.post: el wrapper api.* LANZA en non-2xx y los
+  // 409/404/502 tipados de §4.2 deben leerse del body.
+  run: (payload: unknown) =>
+    rawPost<RunPipelineActionResponse>("/api/plans-board/actions/run", payload),
+  runs: (limit = 20) =>
+    api.get<PipelineRunsResponse>(`/api/plans-board/actions/runs?limit=${limit}`),
+  commits: (number: number) =>
+    api.get<{ ok: boolean; git_available: boolean; commits: PlanCommitDto[] }>(
+      `/api/plans-board/commits/${number}`
+    ),
+};
+
 /** Plan 129 — Paleta global: búsqueda profunda multi-fuente (opt-in, flag OFF por defecto). */
 export interface GlobalSearchHit {
   kind: string;

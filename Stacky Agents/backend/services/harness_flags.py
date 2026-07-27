@@ -311,6 +311,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
         "STACKY_PLANS_BOARD_ENABLED",       # Plan 128 — tablero de evolución de planes
+        "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED",  # Plan 196 — acciones HITL del pipeline
         "STACKY_EVOLUTION_CENTER_ENABLED",              # Plan 167 — Centro de Evolución (panel)
         "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED",        # Plan 237 — triage de planes en el Centro de Evolución
         "STACKY_EVOLUTION_CYCLE_ENABLED",               # Plan 167 — ciclo MAPE on-demand
@@ -4367,6 +4368,21 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         default=True,   # Plan 237: promovido a ON (lectura local, sin egreso). Curado en _CURATED_DEFAULTS_ON.
         # SIN requires= (no tiene master). SIN env_only= (queda UI-editable).
+    ),
+    # ── Plan 196 — acciones HITL del pipeline de planes sobre el Tablero (128) ──
+    FlagSpec(
+        key="STACKY_PLANS_PIPELINE_ACTIONS_ENABLED",
+        type="bool",
+        default=True,
+        label="Acciones del pipeline de planes",
+        description=(
+            "Plan 196 — botones Proponer/Criticar/Implementar/Supervisar en el "
+            "Tablero de Planes: lanzan la corrida (Claude Code CLI + skills del "
+            "repo) con modelo y effort a eleccion. Siempre con click y "
+            "confirmacion; el push sigue siendo manual."
+        ),
+        group="global",
+        requires="STACKY_PLANS_BOARD_ENABLED",
     ),
     # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
     FlagSpec(

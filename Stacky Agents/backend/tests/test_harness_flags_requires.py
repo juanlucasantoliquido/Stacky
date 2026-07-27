@@ -118,6 +118,9 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 196: los botones del pipeline viven DENTRO del Tablero de Planes; sin
+    # la arista, acciones ON + tablero OFF dejaria endpoints sin superficie.
+    "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED": "STACKY_PLANS_BOARD_ENABLED",
     # Plan 214: el autorun vive DENTRO del hook gateado por la otra flag; sin la
     # arista, autorun ON + encolado OFF sería un no-op mudo.
     "STACKY_QA_UAT_AUTORUN_ENABLED": "STACKY_QA_UAT_ON_DEV_COMPLETE_ENABLED",

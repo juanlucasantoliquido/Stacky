@@ -1,6 +1,70 @@
 # Plan 196 — Gestor de Planes accionable: acciones HITL del pipeline (proponer / criticar / implementar / supervisar) con selector dinámico de modelo+effort
 
-**Estado:** CRITICADO — v2 (2026-07-18) · Veredicto: APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky) · **Juez:** `criticar-y-mejorar-plan` (adversarial, 2026-07-18)
+**Estado:** IMPLEMENTADO — F0..F6 (2026-07-26) · Base: CRITICADO v2 (2026-07-18), veredicto APROBADO-CON-CAMBIOS · **Autor:** StackyArchitectaUltraEficientCode (pipeline proponer-plan-stacky) · **Juez:** `criticar-y-mejorar-plan` (adversarial, 2026-07-18) · **Implementador:** `implementar-plan-stacky` (2026-07-26)
+
+### Registro de implementación (2026-07-26) — desvíos del doc y bugs hallados al construir
+
+Fases: **F0 IMPLEMENTADA · F1 VERIFICADA (ya existía) · F2 IMPLEMENTADA · F3 IMPLEMENTADA ·
+F4 IMPLEMENTADA · F5 IMPLEMENTADA · F6 IMPLEMENTADA.** Verificación real:
+159-loader 9 passed · 159-endpoint 5 · 159-flag 4 · **196-service 11** · **196-api 10** ·
+harness_flags 56 · harness_flags_requires 9 · ratchet_meta 4 · vitest actions 9 ·
+vitest modelCatalogFallback 5 · `npx tsc --noEmit` exit 0. Cero rojos.
+
+**Desvíos aplicados (el plan se contradecía con el árbol real):**
+
+1. **F0(a) ya estaba hecho.** El plan pedía flipear `STACKY_PLANS_BOARD_ENABLED` de `false`
+   a `true` e insertar `default=True,` en su `FlagSpec` reemplazando 2 líneas de comentario
+   literales. El **Plan 237 ya lo promovió**: `config.py` ya tenía `"true"`, el `FlagSpec`
+   ya tenía `default=True` y la key ya estaba en `_CURATED_DEFAULTS_ON`. El texto de
+   comentario que C3 mandaba reemplazar ya no existe. Se omitió esa sub-edición; F0 se
+   redujo al alta de la flag nueva.
+2. **F1 fue VERIFICACIÓN, no construcción.** El Plan 159 F0-F3 ya está implementado
+   (`services/model_catalog.py`, `config/model_catalog.json`, `ModelCatalogApi`,
+   `RuntimeModelCatalog`, `useModelCatalog.ts`, `modelCatalogFallback.ts` y sus 3 tests).
+   Se ejecutó el paso 3 del procedimiento (correr los comandos de aceptación) ⇒ por el
+   propio C5 **NO se tocó el doc 159**.
+3. **Sentinel: se mantiene `-9`, sin editar `claude_code_cli_runner.py`.** G11 mandaba
+   re-verificar y, si había hits, pasar a `-10` y registrarlo en `_ONE_SHOT_ADO_IDS`.
+   Hubo hit: `-9` es `_OPTIMIZER_ADO_ID` del Plan 169 (`services/variant_generator.py:42`).
+   Pero `_ONE_SHOT_ADO_IDS` **ya es `frozenset({-1, -7, -8, -9})`**, y ese archivo tiene
+   trabajo de otra sesión sin commitear (prohibido tocarlo). Aplicar G11 habría exigido
+   editarlo; no aplicarlo dejaría la corrida colgada 1800 s. Decisión: reusar `-9`
+   discriminando por `project`/`stacky_project_name="default"` — los dos lookups son
+   disjuntos (el optimizador filtra por `stacky_project_name="stacky-evolution"`) y el
+   índice único `(stacky_project_name, tracker_type, external_id)` tampoco colisiona.
+   Es además lo que el contrato §4.5 y el test 7 del propio plan piden literalmente, y el
+   DoD punto 3 (`frozenset({-1, -7, -8, -9})` → 1 resultado) se cumple sin tocar nada.
+4. **BUG REAL del repo, hallado al construir: el `effort` no llegaba al CLI.**
+   `start_claude_code_cli_run` acepta `effort_override` y lo consume con prioridad sobre el
+   adaptativo (`claude_code_cli_runner.py:110` y `:958-971`), y el call site
+   `_start_cli_runtime` sí se lo pasa — pero la rama `claude_code_cli` inline de
+   `agent_runner.run_agent` **nunca lo pasaba**, así que el esfuerzo elegido se descartaba
+   en silencio en TODA corrida claude_code_cli del repo. Sin el fix, el selector de
+   esfuerzo de este plan sería decorativo (falso verde). Se agregó
+   `effort_override=effort_override` en esa llamada (1 línea, aditiva: los callers que no
+   pasan effort quedan byte-idénticos).
+5. **El criterio binario de F5 `style={{` → 0 líneas es inalcanzable y se corrigió.**
+   `PlansBoardPage.tsx` ya traía **3** inline styles pre-existentes (Plan 128/237), y el
+   baseline de `uiDebtRatchet` los tiene congelados en 3. Criterio real aplicado:
+   **NO AUMENTAR** (quedó en 3, cero nuevos). El CSS del panel se escribió con tokens de
+   `theme.css` y **cero literales hex** — la primera versión con fallbacks `#888`/`#fff`
+   subió `hexByFile` de 39 a 55 y puso el ratchet en rojo.
+6. **G13 se recontró (7ª vez): el comentario chocaba con su propio gate.** El comentario
+   `// … SIN refetchInterval (G9: cero pollers)` hacía que el grep de KPI-5
+   (`setInterval|refetchInterval` → 0 líneas) diera 1. Se reescribió la prosa sin nombrar
+   la API prohibida.
+7. **Bug de test propio: no era idempotente contra la DB viva.**
+   `test_runs_history_serialization` insertaba un `Ticket` fijo y al segundo run rompía por
+   el índice único; y borrar el ticket padre disparaba el cascade que anula un
+   `ticket_id` NOT NULL. Quedó get-or-create del ticket + borrado solo de las ejecuciones.
+   Verificado con 3 corridas consecutivas: 10 passed cada una.
+8. **`export_harness_defaults.py` NO está en `backend/scripts/`** (como dice F0 punto 6)
+   sino en **`deployment/`**, y exige `--seed-registry-defaults --out <ruta>`. Se regeneró
+   `deployment/harness_defaults.env` (337 flags, incluye la flag nueva) pero **no se
+   commitea**: ese archivo está **untracked** en este árbol y nunca estuvo versionado.
+
+**Pendiente (no bloqueante):** el smoke manual E2E de F6 (lanzar una corrida real desde
+`/planes` y ver el doc pasar a v2 en un commit local) — requiere el backend dev levantado.
 
 - **Versión:** v2 (CRITICADO — APROBADO-CON-CAMBIOS; v1 PROPUESTO 2026-07-18)
 - **Fecha:** 2026-07-18

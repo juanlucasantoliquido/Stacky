@@ -95,6 +95,8 @@ def run_agent(
     vscode_agent_filename: str | None = None,
     project_name: str | None = None,
     work_item_type: str = "Epic",
+    # Plan 196 — cwd explicito para corridas del pipeline de planes (repo de Stacky).
+    workspace_root_override: str | None = None,
 ) -> int:
     agent = agents.get(agent_type)
     if agent is None:
@@ -324,6 +326,11 @@ def run_agent(
                     )
                 _ticket_message = _ct.title if _ct else f"ticket_id={ticket_id}"
 
+            # Plan 196 — cwd explicito: las corridas del pipeline de planes deben
+            # correr en la raiz del repo de Stacky (ahi viven .claude/skills/*).
+            if workspace_root_override:
+                workspace_root = workspace_root_override
+
             log_streamer.close(execution_id)  # claude_code_cli_runner abre su propio log_streamer
             _new_exec_id = start_claude_code_cli_run(
                 ticket_id=ticket_id,
@@ -334,6 +341,13 @@ def run_agent(
                 ticket_message=_ticket_message,
                 workspace_root=workspace_root,
                 model_override=model_override,
+                # Plan 196 — BUG REAL hallado al construir: start_claude_code_cli_run
+                # acepta effort_override (claude_code_cli_runner.py:110) y lo consume
+                # con prioridad sobre el adaptativo (:958-971), y el OTRO call site
+                # (_start_cli_runtime) si lo pasa — pero esta rama no, asi que el
+                # effort elegido se descartaba en silencio. Sin esta linea el selector
+                # de esfuerzo del Plan 196 seria decorativo.
+                effort_override=effort_override,
             )
             # start_claude_code_cli_run crea su propia fila de ejecución; la fila
             # original creada aquí queda marcada como reemplazada para evitar

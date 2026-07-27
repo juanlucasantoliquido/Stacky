@@ -27,7 +27,6 @@ import {
   updateStep,
   toSpecDict,
   fromParsedSpec,
-  mergeDraftsIntoProfile,
   validateSpecLocal,
   specsEqual,
   removeSpecVariable,
@@ -36,6 +35,7 @@ import {
   type JobDraft,
   type StepDraft,
 } from '../../devops/specBuilder';
+import { saveProfileKey } from '../../devops/profileKeys'; // Plan 98 F5
 import { PIPELINE_PRESETS, type PipelinePreset, type StackId } from '../../devops/pipelinePresets';
 import { consumePendingPreset } from './deploymentsModel'; // Plan 120 F8 — puente Despliegues -> Pipelines
 import { PIPELINE_STEP_SNIPPETS, SNIPPET_CATEGORIES, STACK_OPTIONS, filterSnippetsByStack, isStackId } from '../../devops/pipelineStepSnippets';
@@ -118,10 +118,14 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
   const currentSpecJson = React.useMemo(() => JSON.stringify(toSpecDict(spec)), [spec]);
   const preflightStale = !lastPreflight || lastPreflight.specJson !== currentSpecJson;
 
-  // Cargar borradores al montar
+  // Plan 98 F4 — con el bootstrap ON el shell ya trajo el perfil.
+  const bootstrapOn = ctx.health.bootstrap_enabled === true;
+
+  // Cargar borradores al montar (y re-hidratar cuando llega el bootstrap)
   useEffect(() => {
     loadDrafts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.bootstrap]);
 
   // Plan 120 F8 — puente "Despliegues -> Pipelines": si el operador vino del
   // CTA "Crear pipeline de deploy", preseleccionar el preset sugerido por el
@@ -180,6 +184,15 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
 
   const loadDrafts = async () => {
     if (!activeProject) return;
+    // Plan 98 F4 — early-path: hidratar desde ctx (0 requests propios).
+    if (bootstrapOn) {
+      if (ctx.bootstrap) {
+        setDrafts(
+          ctx.bootstrap.profile_keys.devops_pipeline_drafts as unknown as typeof drafts,
+        );
+      }
+      return; // en vuelo o ya hidratado: JAMÁS fetch propio con la flag ON
+    }
     try {
       setActionError(null);
       const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
@@ -195,11 +208,9 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
     if (!activeProject) return;
     try {
       setActionError(null);
-      // FIX C1 - riel GET→merge→PUT OBLIGATORIO
-      const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
-      const baseProfile = json.profile ?? {};
-      const mergedProfile = mergeDraftsIntoProfile(baseProfile, newDrafts);
-      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: mergedProfile });
+      // Plan 98 F5 — escritura por clave (antes: riel GET→merge→PUT en línea).
+      // El helper conserva ese riel exacto cuando la flag está OFF.
+      await saveProfileKey(activeProject, 'devops_pipeline_drafts', newDrafts, bootstrapOn);
       setDrafts(newDrafts);
       setLoadedSnapshot(spec); // Actualizar snapshot tras guardar
     } catch (e: unknown) {

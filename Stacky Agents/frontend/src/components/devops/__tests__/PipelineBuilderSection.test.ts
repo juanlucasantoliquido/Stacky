@@ -105,13 +105,21 @@ describe('Criterios binarios F5 (verificables por código)', () => {
     expect(trigger).toContain('STACKY_PIPELINE_TRIGGER_ENABLED');
   });
 
-  it('FIX C1 - borradores usan mergeDraftsIntoProfile (riel GET→merge→PUT)', async () => {
+  it('FIX C1 - guardar borradores NUNCA pisa otras keys del perfil', async () => {
+    // Plan 98 F5 — el invariante NO cambió; cambió DÓNDE vive.
+    // Antes: el componente hacía GET→merge(mergeDraftsIntoProfile)→PUT en línea.
+    // Ahora: delega en `saveProfileKey` (devops/profileKeys.ts), que con la flag ON
+    // manda 1 PATCH (el merge lo hace el backend bajo lock, api/client_profile.py:346)
+    // y con la flag OFF ejecuta EXACTAMENTE el mismo riel GET→merge→PUT de antes.
+    // El riel viejo está cubierto por src/devops/profileKeys.test.ts (5 casos).
     const fs = await import('fs');
     const content = fs.readFileSync(
       'N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend/src/components/devops/PipelineBuilderSection.tsx',
       'utf-8'
     );
-    expect(content).toContain('mergeDraftsIntoProfile');
+    expect(content).toContain('saveProfileKey(');
+    // Y el componente ya no puede pisar el perfil entero por su cuenta.
+    expect(content).not.toContain('api.put(');
     // Verificar que NO hace PUT directo de drafts solo
     const lines = content.split('\n');
     const hasPutDraftsOnly = lines.some(l =>

@@ -16,11 +16,11 @@ import { useWorkbench } from '../../store/workbench';
 import { api } from '../../api/client';
 import { DevOps } from '../../api/endpoints';
 import {
-  mergeKeysIntoProfile,
   upsertPreset,
   emptyPreset,
   type PublicationPreset,
 } from '../../devops/presetsModel';
+import { saveProfileKey } from '../../devops/profileKeys'; // Plan 98 F5
 import { fromParsedSpec, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { SectionDoctorButton } from './SectionDoctorButton';
 import { DirTreePreview } from './DirTreePreview';
@@ -96,13 +96,38 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
   const [materializedDraft, setMaterializedDraft] = useState<PipelineSpecDraft | null>(null);
   const [showCommitModal, setShowCommitModal] = useState(false);
 
+  // Plan 98 F4 — con el bootstrap ON el shell ya trajo el perfil.
+  const bootstrapOn = ctx.health.bootstrap_enabled === true;
+
   useEffect(() => {
     void loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProject]);
+  }, [activeProject, ctx.bootstrap]);
 
   const loadProfile = async () => {
     if (!activeProject) return;
+    // Plan 98 F4 — early-path: hidratar desde ctx (0 requests propios).
+    // La distinción "sin configurar" vs "configurado vacío" se PRESERVA: el
+    // endpoint devuelve `null` (no `{}`) cuando la key está ausente
+    // (api/devops.py:143), así que el else de abajo sigue siendo alcanzable.
+    if (bootstrapOn) {
+      if (ctx.bootstrap) {
+        const k = ctx.bootstrap.profile_keys;
+        const saved = k.devops_environment_settings as EnvironmentSettings | null;
+        if (saved) {
+          setSettings(saved);
+          setHasSavedSettings(true);
+        } else {
+          setSettings(emptyEnvironmentSettings());
+          setHasSavedSettings(false);
+        }
+        const loadedPresets = (k.devops_publication_presets as PublicationPreset[]) ?? [];
+        setPresets(loadedPresets);
+        const firstTodo = loadedPresets.find((p) => p.mode === 'todo');
+        if (firstTodo) setSelectedPresetName(firstTodo.name);
+      }
+      return; // en vuelo o ya hidratado: JAMÁS fetch propio con la flag ON
+    }
     try {
       setActionError(null);
       const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
@@ -129,11 +154,8 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
     if (!activeProject) return;
     try {
       setActionError(null);
-      // C2 — riel GET → merge → PUT OBLIGATORIO.
-      const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
-      const base = json.profile ?? {};
-      const merged = mergeKeysIntoProfile(base, { devops_environment_settings: next });
-      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: merged });
+      // Plan 98 F5 — escritura por clave.
+      await saveProfileKey(activeProject, 'devops_environment_settings', next, bootstrapOn);
       setSettings(next);
       setHasSavedSettings(true);
     } catch (e: unknown) {
@@ -254,8 +276,9 @@ export const EnvironmentsSection: React.FC<EnvironmentsSectionProps> = ({ ctx })
       const base = json.profile ?? {};
       const basePresets = (base.devops_publication_presets as PublicationPreset[]) ?? [];
       const nextPresets = upsertPreset(basePresets, presetTodo);
-      const merged = mergeKeysIntoProfile(base, { devops_publication_presets: nextPresets });
-      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: merged });
+      // Plan 98 F5 — el GET de arriba se CONSERVA a propósito: este caller hace
+      // upsert sobre los presets persistidos, así que necesita leerlos antes.
+      await saveProfileKey(activeProject, 'devops_publication_presets', nextPresets, bootstrapOn);
       setPresets(nextPresets);
       setSelectedPresetName(presetTodo.name);
     } catch (e: unknown) {

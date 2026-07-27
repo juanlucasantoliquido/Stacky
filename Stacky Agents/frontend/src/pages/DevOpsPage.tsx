@@ -50,6 +50,7 @@ export interface DevOpsHealth {
   deployments_execute_enabled?: boolean; // Plan 120 — ejecutar deploy/rollback
   deployments_ai_enabled?: boolean; // Plan 120 — diagnóstico IA de deploys fallidos
   local_doctor_enabled?: boolean; // Plan 127 — doctor local DevOps (IA local)
+  bootstrap_enabled?: boolean; // Plan 98 — hidratación del panel en 1 round-trip
   cockpit_enabled?: boolean; // Plan 239 — cockpit DevOps
   pipeline_inventory_enabled?: boolean; // Plan 246 — Inventario de pipelines
   pipeline_audit_enabled?: boolean; // Plan 248 — Auditoría de pipelines
@@ -75,6 +76,11 @@ export interface DevOpsSectionContext {
    *  DEBEN gatear su refetchInterval con esto. Ausente ⇒ tratar como true
    *  (shells que no lo propaguen degradan al comportamiento de hoy). */
   visible?: boolean;
+  /** Plan 98 F4 — OPCIONAL/aditivo (mismo precedente que `selectedServer` del plan 91
+   *  y `setActiveSection` del 120): hidratación del panel en 1 round-trip. `undefined`
+   *  = en vuelo o flag OFF; `null` = el bootstrap no trajo nada. Las secciones que lo
+   *  consumen NUNCA deben hacer su fetch propio con la flag ON. */
+  bootstrap?: DevOpsBootstrapResponse | null;
 }
 
 // Contrato de sección del registro (§3.12 C20)
@@ -100,7 +106,13 @@ import { EnvironmentsSection } from '../components/devops/EnvironmentsSection';
 import { DevOpsAgentSection } from '../components/devops/DevOpsAgentSection';
 // Importar ServersSection (Plan 91 F5)
 import { ServersSection } from '../components/devops/ServersSection';
-import { DevOpsServers, type ServerSummary } from '../api/endpoints';
+import { DevOpsServers, type ServerSummary, type DevOpsBootstrapResponse } from '../api/endpoints';
+// Plan 98 F4 — el shell necesita el proyecto activo para el bootstrap. El shell NO
+// tenía ninguna fuente de proyecto (C8 del plan v2 daba por sentado un
+// `activeProjectName` inexistente): las 3 secciones DevOps que leen client-profile ya
+// lo resuelven así (PublicationsSection.tsx:62, PipelineBuilderSection.tsx:65,
+// EnvironmentsSection.tsx:61); el shell reusa la MISMA fuente en vez de inventar otra.
+import { useWorkbench } from '../store/workbench';
 // Importar VariablesSection (Plan 94 F4)
 import { VariablesSection } from '../components/devops/VariablesSection';
 // Importar RemoteConsoleSection (Plan 105 F4)
@@ -339,6 +351,20 @@ export const DevOpsPage: React.FC<{ subTab?: string | null }> = ({ subTab = null
     retry: false,
     enabled: healthQuery.data?.servers_enabled === true,
   });
+  // Plan 98 F4 — bootstrap único: UN GET hidrata las 3 secciones que leen
+  // client-profile (Pipelines / Publicaciones / Ambientes). Sin sondeo: `enabled`
+  // gatea por flag, y el endpoint da 404 con la flag OFF (api/devops.py:118) ⇒
+  // `retry: false` para no reintentar un 404 esperado.
+  // Sin sondeo periódico de ningún tipo: el plan 98 no agrega latido y el ratchet de
+  // sondeo del plan 239 no debe cambiar de estado.
+  const activeProjectName = useWorkbench((s) => s.activeProject)?.name ?? '';
+  const bootstrapQuery = useQuery({
+    queryKey: ['devops-bootstrap', activeProjectName],
+    queryFn: () => DevOps.bootstrap(activeProjectName),
+    retry: false,
+    enabled: healthQuery.data?.bootstrap_enabled === true && !!activeProjectName,
+  });
+
   const [selectedAlias, setSelectedAlias] = useState<string | null>(
     () => localStorage.getItem('stacky.devops.selectedServer'),
   );
@@ -420,6 +446,7 @@ export const DevOpsPage: React.FC<{ subTab?: string | null }> = ({ subTab = null
     selectedServer: selected ? { alias: selected.alias, host: selected.host } : null,
     servers: serversQuery.data?.servers ?? [],
     setActiveSection: handleTabClick, // Plan 120 F8 (C7 v2) — precedente selectedServer (plan 91)
+    bootstrap: bootstrapQuery.data ?? null, // Plan 98 F4
   };
 
   // Plan 119 — shell v2 (presentación pura, conmutado por flag; ahora default ON).

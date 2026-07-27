@@ -491,6 +491,20 @@
           "navigation_driver: form_submit OK (attempt 1) -> http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx"
         ]
       }
+    },
+    {
+      "id": "client_profile_key_stomp",
+      "title": "Un guardado del panel DevOps pisa otras keys del client-profile",
+      "class": "client-profile-write",
+      "status": "resolved",
+      "log_pattern": "client_profile_key_patch",
+      "log_guarded": true,
+      "killed_by": "plan 98 F5 (saveProfileKey -> PATCH por clave con merge server-side bajo lock)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-26",
+      "guard_test": "backend/tests/test_plan98_profile_key_patch.py; frontend/src/devops/profileKeys.test.ts",
+      "evidence": "backend/api/client_profile.py:323-368 (_PROFILE_WRITE_LOCK); frontend/src/devops/profileKeys.ts",
+      "note": "El riel viejo era GET del perfil ENTERO -> merge en el cliente -> PUT del perfil entero. Cualquier key escrita entre el GET y el PUT por otra pestana o por otra seccion se perdia en silencio, sin error y sin log. Con el PATCH por clave el cliente solo manda el valor de SU key y el merge lo hace el backend bajo lock de proceso. handleAutoDetect de PublicationsSection queda a proposito en el riel viejo porque escribe process_catalog junto con los presets en una sola operacion atomica y process_catalog no esta en PATCHABLE_PROFILE_KEYS."
     }
   ]
 }

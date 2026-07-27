@@ -24,6 +24,7 @@ import {
   type PublicationPreset,
   type PublishGroup,
 } from '../../devops/presetsModel';
+import { saveProfileKey } from '../../devops/profileKeys'; // Plan 98 F5
 import { fromParsedSpec, toSpecDict, type PipelineSpecDraft } from '../../devops/specBuilder';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { PipelineYamlPreview } from './PipelineYamlPreview';
@@ -80,13 +81,34 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
   const [detecting, setDetecting] = useState(false);
   const [detectHint, setDetectHint] = useState<string | null>(null);
 
+  // Plan 98 F4 — con el bootstrap ON el shell ya trajo el perfil; esta sección
+  // NO hace fetch propio.
+  const bootstrapOn = ctx.health.bootstrap_enabled === true;
+
   useEffect(() => {
     void loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProject]);
+  }, [activeProject, ctx.bootstrap]);
 
   const loadProfile = async () => {
     if (!activeProject) return;
+    // Plan 98 F4 — early-path: hidratar desde ctx (0 requests propios).
+    if (bootstrapOn) {
+      if (ctx.bootstrap) {
+        const k = ctx.bootstrap.profile_keys;
+        const loaded = (k.devops_publication_presets as PublicationPreset[]) ?? [];
+        setPresets(loaded);
+        setLoadedPresets(loaded);
+        setSettings(k.devops_publication_settings ?? {});
+        setCatalog((k.process_catalog as CatalogEntry[]) ?? []);
+        setDrafts(
+          (k.devops_pipeline_drafts as unknown as Array<{
+            name: string; spec: PipelineSpecDraft; updated_at: string;
+          }>) ?? [],
+        );
+      }
+      return; // en vuelo o ya hidratado: JAMÁS fetch propio con la flag ON
+    }
     try {
       setActionError(null);
       const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
@@ -107,11 +129,9 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
     if (!activeProject) return;
     try {
       setActionError(null);
-      // C2 — riel GET → merge → PUT OBLIGATORIO.
-      const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
-      const base = json.profile ?? {};
-      const merged = mergeKeysIntoProfile(base, { devops_publication_presets: nextPresets });
-      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: merged });
+      // Plan 98 F5 — escritura por clave. El merge lo hace el backend bajo lock
+      // (flag ON) o el helper con el riel GET→merge→PUT de siempre (flag OFF).
+      await saveProfileKey(activeProject, 'devops_publication_presets', nextPresets, bootstrapOn);
       setPresets(nextPresets);
       setLoadedPresets(nextPresets);
     } catch (e: unknown) {
@@ -124,10 +144,8 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
     if (!activeProject) return;
     try {
       setActionError(null);
-      const json = await api.get<{ profile?: Record<string, unknown> }>(`/api/projects/${activeProject}/client-profile`);
-      const base = json.profile ?? {};
-      const merged = mergeKeysIntoProfile(base, { devops_publication_settings: nextSettings });
-      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: merged });
+      // Plan 98 F5 — escritura por clave.
+      await saveProfileKey(activeProject, 'devops_publication_settings', nextSettings, bootstrapOn);
       setSettings(nextSettings);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error desconocido';
@@ -248,8 +266,10 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
         ...baseDrafts,
         { name, spec: toSpecDict(materializedDraft), updated_at: new Date().toISOString() },
       ];
-      const merged = mergeKeysIntoProfile(base, { devops_pipeline_drafts: nextDrafts });
-      await api.put(`/api/projects/${activeProject}/client-profile`, { profile: merged });
+      // Plan 98 F5 — el GET de arriba se CONSERVA a propósito: este caller hace
+      // APPEND sobre los borradores persistidos, así que necesita leerlos antes.
+      // Lo que se migra es la escritura: PUT del perfil entero → PATCH de una key.
+      await saveProfileKey(activeProject, 'devops_pipeline_drafts', nextDrafts, bootstrapOn);
       setDrafts(nextDrafts as Array<{ name: string; spec: PipelineSpecDraft; updated_at: string }>);
       setSavedDraftHint(`Borrador '${name}' guardado — abrilo en la sección Pipelines para editarlo bloque a bloque.`);
     } catch (e: unknown) {

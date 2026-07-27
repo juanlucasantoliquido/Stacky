@@ -3866,7 +3866,28 @@ export interface ConnectionsHealthResponse {
   snapshot: ConnectionsSnapshot | null;
 }
 
+/** Plan 98 F3 — payload de `GET /api/devops/bootstrap` (backend ya vivo, api/devops.py:115). */
+export interface DevOpsBootstrapResponse {
+  health: Record<string, boolean | undefined>;
+  has_profile: boolean;
+  profile_keys: {
+    devops_pipeline_drafts: Array<{ name: string; spec: object; updated_at: string }>;
+    devops_publication_presets: object[];
+    devops_publication_settings: { step_templates?: Record<string, string> };
+    /** `null` (no `{}`) si el operador nunca configuró ambientes — api/devops.py:143. */
+    devops_environment_settings: object | null;
+    process_catalog: object[];
+  };
+  servers: { servers: ServerSummary[]; keyring_available: boolean } | null;
+}
+
 export const DevOps = {
+  /** GET /api/devops/bootstrap — Plan 98 F4. Hidratación del panel en 1 round-trip.
+   *  404 si STACKY_DEVOPS_BOOTSTRAP_ENABLED está OFF (guard en api/devops.py:118). */
+  bootstrap: (project: string) =>
+    api.get<DevOpsBootstrapResponse>(
+      `/api/devops/bootstrap?project=${encodeURIComponent(project)}`,
+    ),
   /** GET /api/devops/health — health del panel (keys aditivas por plan: 88/89/90/91). */
   health: () =>
     api.get<{
@@ -3893,6 +3914,7 @@ export const DevOps = {
       deployments_ai_enabled?: boolean; // Plan 120
       local_doctor_enabled?: boolean; // Plan 127
       cockpit_enabled?: boolean; // Plan 239
+      bootstrap_enabled?: boolean; // Plan 98 — hidratación en 1 round-trip
     }>("/api/devops/health"),
   /** Plan 116 — último snapshot del doctor de conexiones (HITL; 404 si flag OFF). */
   connectionsHealth: () =>

@@ -1,9 +1,77 @@
 # Plan 98 — Un viaje, una caché: bootstrap único del panel DevOps + escritura por clave del client-profile
 
-**Estado:** CRITICADO (v2) — **RE-SCOPEADO POR VIGENCIA**
-**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26)
+**Estado:** **IMPLEMENTADO** (F4 · F5 · F5.bis · F6) — 2026-07-26
+**Versión:** v2 (v1: 2026-07-06 · v2: 2026-07-26 · implementado: 2026-07-26)
 **Veredicto del juez:** RECHAZADO (v1) → v2 re-scopeada. 4 BLOQUEANTES, 5 IMPORTANTES, 3 MENORES.
 **Autor v1:** StackyArchitectaUltraEficientCode · **Crítica v2:** StackyArchitectaUltraEficientCode (juez adversarial)
+
+---
+
+## §I — REGISTRO DE IMPLEMENTACIÓN (2026-07-26)
+
+**Los 2 endpoints del 98 dejaron de estar inertes.** `DevOps.bootstrap` se llama desde
+`pages/DevOpsPage.tsx` (query `devops-bootstrap`) y el PATCH por clave desde
+`devops/profileKeys.ts`, consumido por las 3 secciones. Backend: **cero líneas tocadas**.
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| F4 | IMPLEMENTADA | `api/endpoints.ts` (`DevOpsBootstrapResponse` + `DevOps.bootstrap`), `pages/DevOpsPage.tsx` (`bootstrapQuery`, `ctx.bootstrap`), early-path en las 3 secciones |
+| F5 | IMPLEMENTADA | `devops/profileKeys.ts` nuevo; 6 de 7 callers migrados; `api.put(` = **0 / 1 / 0** |
+| F5.bis | IMPLEMENTADA | `components/devops/__tests__/devopsEndpointReach.test.ts`; transición ROJO→VERDE demostrada |
+| F6 | IMPLEMENTADA (salvo smoke) | 4 `test_plan98_*.py` ya estaban en ambas listas del ratchet; huella `client_profile_key_stomp` registrada |
+
+**Tests (corridos de verdad, por archivo):**
+
+| Archivo | Resultado |
+|---|---|
+| `src/devops/profileKeys.test.ts` | **5 passed** |
+| `src/components/devops/__tests__/devopsBootstrapWiring.test.ts` | **10 passed** |
+| `src/components/devops/__tests__/devopsEndpointReach.test.ts` | **4 passed** |
+| `src/components/devops/__tests__/PipelineBuilderSection.test.ts` | **17 passed** (1 aserción re-anclada, ver bug 4) |
+| `src/pages/__tests__/DevOpsPage.test.ts` | **21 passed** |
+| `src/devops/presetsModel.test.ts` | **13 passed** |
+| `backend/tests/test_plan98_*.py` (4) | **5 + 8 + 9 + 7 = 29 passed** |
+| `npx tsc --noEmit` | **0 errores** |
+
+**Rojos AJENOS confirmados (NO tocados):** `devopsPollingRatchet.test.ts` 1 failed
+(`BuildWorkshopSection.tsx:93`, plan 201) y `DevOpsCockpitRegression.test.ts` 1 failed (el
+censo pinea 10 secciones y hoy hay 16, por los planes 201/215/246/248/250/251/252). Ninguno
+de los dos toca nada del 98: el diff de `DevOpsPage.tsx` no incluye `DEVOPS_SECTIONS` ni
+sondeo alguno.
+
+### Bugs del PROPIO plan hallados al construirlo (4)
+
+1. **C8 era falso y volvía F4.2 inimplementable.** C8 ordenaba obtener el proyecto "de la
+   misma fuente que ya usa el resto del shell" y prohibía importar `useWorkbench`. Pero el
+   shell **no tenía ninguna fuente de proyecto**: `activeProjectName` no existe, y las
+   queries que corre (`healthQuery`, `serversQuery`, `overviewQuery`) van sin proyecto o con
+   `project: null`. Criterio aplicado: importar `useWorkbench` — es exactamente la fuente que
+   ya usan las 3 secciones (`PublicationsSection.tsx:62` y hermanas), así que sigue siendo
+   "la misma fuente", que era el espíritu de C8. Costo real: 1 import.
+2. **El criterio rojo→verde de F5.bis era imposible como estaba escrito.** El plan pedía
+   correr el centinela **antes** de F4 y que fallara nombrando `/api/devops/bootstrap`. No
+   puede: antes de F4 esa ruta **no existe en `endpoints.ts`**, y el centinela solo puede ver
+   rutas declaradas. Criterio aplicado: la transición se demuestra en el orden correcto —
+   agregar `DevOps.bootstrap` a `endpoints.ts` **sin** cablear el shell ⇒ el centinela pasa a
+   ROJO nombrando `/api/devops/bootstrap` (verificado); cablear el shell ⇒ VERDE. Es el mismo
+   par rojo→verde y prueba justo el modo de falla que el centinela existe para cazar.
+3. **La allowlist del centinela NO podía nacer vacía.** El plan lo daba por sentado. El censo
+   real encontró **9 rutas `/api/devops/` declaradas y jamás llamadas**, todas anteriores a
+   este plan: `DevOps.parseYaml`, 6 de `DevOpsDeployments` (plan 120),
+   `DevOpsBuildWorkshop.doctor` (plan 201) y `DevOpsRemoteConsole.sendMessage` (plan 105, cuya
+   única referencia es un test que assertea `typeof === 'function'` — el antipatrón exacto que
+   el 98 vino a matar). Criterio aplicado: sellar las 9 como **baseline de deuda heredada**
+   (techo, no permiso) + un test que impide que crezca y que detecta entradas podridas. Un
+   centinela permanentemente rojo por deuda ajena no cazaría nada.
+4. **El plan no previó que F5 rompía un test del plan 87.**
+   `PipelineBuilderSection.test.ts` pineaba el riel por símbolo
+   (`expect(content).toContain('mergeDraftsIntoProfile')`) DENTRO del componente. F5 muda ese
+   riel al helper. El invariante no cambió, cambió de lugar. Criterio aplicado: re-anclar la
+   aserción (`toContain('saveProfileKey(')` + `not.toContain('api.put(')`, que es MÁS fuerte)
+   y dejar el riel viejo cubierto por `profileKeys.test.ts`. No se borró ni se saltó nada.
+
+**Pendiente:** solo la verificación manual HITL de §F6.2 (Network en el navegador). No es
+automatizable: `@testing-library/react` y `jsdom` no están instalados en este repo.
 
 ---
 

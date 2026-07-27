@@ -1,0 +1,10 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "ticket_id": 70,
+  "run_id": "uat-70-20260725T210325Z-fb38e4",
+  "verdict": "BLOCKED",
+  "reason": "NO_EXECUTABLE_SCENARIOS",
+  "content_hash": "bc67981f8d98a85e",
+  "generated_at": "2026-07-25T21:03:42.766405+00:00",
+  "idempotency_key": "uat-70-20260725T210325Z-fb38e4|bc67981f8d98a85e"
+}

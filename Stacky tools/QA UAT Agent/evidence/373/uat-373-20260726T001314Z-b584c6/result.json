@@ -1,0 +1,770 @@
+{
+  "ok": true,
+  "ticket_id": 373,
+  "verdict": "FAIL",
+  "category": "APP",
+  "reason": "ACCEPTANCE_VIOLATED",
+  "runner_summary": {
+    "verdict": "PASS",
+    "category": null,
+    "reason": null,
+    "total": 7,
+    "passed": 7,
+    "failed": 0,
+    "blocked": 0,
+    "skipped": 0,
+    "retries": 2,
+    "duration_ms": 615601,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 2,
+      "screenshots_count": 0,
+      "video_count": 2
+    },
+    "scenario_results": [
+      {
+        "scenario_id": "p01_al_seleccionar_un_contacto",
+        "status": "passed",
+        "duration_ms": 75045,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p02_al_agregar_un_domicilio_nu",
+        "status": "passed",
+        "duration_ms": 82846,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p03_al_modificar_un_domicilio_",
+        "status": "passed",
+        "duration_ms": 74963,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p04_al_eliminar_un_domicilio__",
+        "status": "passed",
+        "duration_ms": 111685,
+        "attempts": 2,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p05_la_grilla_de_domicilios_de",
+        "status": "passed",
+        "duration_ms": 110443,
+        "attempts": 2,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p06_la_funcionalidad_de_tel_fo",
+        "status": "passed",
+        "duration_ms": 76561,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p07_la_migraci_n_de_columnas_d",
+        "status": "passed",
+        "duration_ms": 84058,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Domicilios en pestaña Contactos desaparecen al cambiar de pestaña",
+      "plan_item_count": 7
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 7,
+      "layers": {
+        "uat": 6,
+        "manual_review": 1
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 7,
+      "out_of_scope_count": 0
+    },
+    "compiler_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "module_not_found"
+    },
+    "weak_oracle_filter": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_touched": 0,
+      "weak_total": 0,
+      "by_scenario": {}
+    },
+    "preconditions": {
+      "ok": true,
+      "skipped": true,
+      "total": 7,
+      "ok_count": 7,
+      "blocked": 0,
+      "skip_reason": "Missing env vars: RS_QA_DB_USER, RS_QA_DB_PASS, RS_QA_DB_DSN"
+    },
+    "selector_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_alias_contract_scenarios"
+    },
+    "data_readiness_check": {
+      "ok": true,
+      "skipped": false,
+      "results": [
+        {
+          "scenario_id": "P01",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P02",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P03",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P04",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P05",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P06",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        },
+        {
+          "scenario_id": "P07",
+          "decision": "ALLOW",
+          "category": null,
+          "reason": null,
+          "all_ready": true,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\uat-373-20260726T001314Z-b584c6\\data_readiness.json"
+        }
+      ],
+      "blocked_count": 0
+    },
+    "data_contract_compile": {
+      "ok": true,
+      "skipped": false,
+      "contracts_compiled": 7,
+      "contracts_with_requirements": 7,
+      "total_blocking_requirements": 10
+    },
+    "data_readiness_v2": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_checked": 7,
+      "missing_count": 2,
+      "blocking_missing_count": 2,
+      "results": [
+        {
+          "scenario_id": "P01",
+          "ready": false,
+          "decision": "MISSING",
+          "blocking_missing_count": 1,
+          "missing": [
+            {
+              "requirement_id": "data.req.cliente_con_obligaciones",
+              "entity": "Obligacion",
+              "alias": "cliente_con_obligaciones",
+              "reason": "SCHEMA_UNKNOWN",
+              "blocking": true,
+              "resolution_options": [
+                "ASK_USER_FOR_VALUE",
+                "MARK_MANUAL_REVIEW"
+              ],
+              "db_table": null,
+              "schema_known": false,
+              "notes": null
+            }
+          ],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P01.json"
+        },
+        {
+          "scenario_id": "P02",
+          "ready": false,
+          "decision": "MISSING",
+          "blocking_missing_count": 1,
+          "missing": [
+            {
+              "requirement_id": "data.req.cliente_con_obligaciones",
+              "entity": "Obligacion",
+              "alias": "cliente_con_obligaciones",
+              "reason": "SCHEMA_UNKNOWN",
+              "blocking": true,
+              "resolution_options": [
+                "ASK_USER_FOR_VALUE",
+                "MARK_MANUAL_REVIEW"
+              ],
+              "db_table": null,
+              "schema_known": false,
+              "notes": null
+            }
+          ],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P02.json"
+        },
+        {
+          "scenario_id": "P03",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P03.json"
+        },
+        {
+          "scenario_id": "P04",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P04.json"
+        },
+        {
+          "scenario_id": "P05",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P05.json"
+        },
+        {
+          "scenario_id": "P06",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P06.json"
+        },
+        {
+          "scenario_id": "P07",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_readiness_v2_P07.json"
+        }
+      ]
+    },
+    "data_resolution_broker": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_with_requests": 2,
+      "total_requests": 2,
+      "results": [
+        {
+          "scenario_id": "P01",
+          "pending_request_ids": [
+            "datareq-0-001"
+          ],
+          "decisions_count": 1,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_resolution_request_P01.json"
+        },
+        {
+          "scenario_id": "P02",
+          "pending_request_ids": [
+            "datareq-0-001"
+          ],
+          "decisions_count": 1,
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\data_resolution_request_P02.json"
+        }
+      ]
+    },
+    "sql_seed_proposal": {
+      "ok": true,
+      "skipped": false,
+      "seed_results": [
+        {
+          "scenario_id": "P01",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P01.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P01.sql",
+          "script_sha256": "b2eabbf0aca05c65ed50793b26aa4b796215aa69b342b190bfff3f6bf539fb27",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P02",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P02.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P02.sql",
+          "script_sha256": "5dadbeb0c6b35f68fca6d64073a0237a6018082095ab70ae56fcddc95ebb75b6",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P03",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P03.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P03.sql",
+          "script_sha256": "b187fa04c989f73ac973323f2287c9b2d965da4cff5264b8d8ce61f7e0ec8954",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P04",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P04.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P04.sql",
+          "script_sha256": "23382ccdd030964805abdb6c900b2a20703b773865d28f2f958caefd1af2b67f",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P05",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P05.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P05.sql",
+          "script_sha256": "a5540747446bee31422f200bdb61cceefda0cdffd4146a16c77f93e839d98804",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P06",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P06.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P06.sql",
+          "script_sha256": "7bb1869126e15c2d80ce9172384eaafaa771f4f89621f0829e8aabdde0f8155a",
+          "safety_safe": true
+        },
+        {
+          "scenario_id": "P07",
+          "verdict": "GENERATED",
+          "reason": null,
+          "script_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\seed_proposal_P07.sql",
+          "cleanup_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\373\\cleanup_proposal_P07.sql",
+          "script_sha256": "637ade3d6537440dd51b5825fab3ec38cea539f308754c545b4804cb918f140e",
+          "safety_safe": true
+        }
+      ]
+    },
+    "catalog_readiness": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_catalogs_required"
+    },
+    "seed_cleanup": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_applied_seeds",
+      "cleanup_count": 0
+    },
+    "navigation_contract_validation": {
+      "ok": true,
+      "skipped": false,
+      "lane": "uat_human",
+      "scenarios_checked": 7,
+      "blocked_count": 0,
+      "allowed_count": 7
+    },
+    "generator": {
+      "ok": true,
+      "skipped": false,
+      "generated": 7,
+      "blocked": 0,
+      "total": 7
+    },
+    "generator_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "module_not_found"
+    },
+    "spec_linter": {
+      "ok": true,
+      "skipped": false,
+      "checked": 7,
+      "violations": []
+    },
+    "oracle_evaluation": {
+      "ok": true,
+      "skipped": false,
+      "oracle_publish_blocked": false,
+      "p0_blocked_count": 0,
+      "no_oracle_count": 7,
+      "weak_only_count": 0,
+      "oracle_fail_count": 0,
+      "weak_files": 7,
+      "weak_tests": 7,
+      "no_assertion_tests": 0,
+      "strong_tests": 0
+    },
+    "runner": {
+      "ok": true,
+      "skipped": false,
+      "pass": 7,
+      "fail": 0,
+      "blocked": 0,
+      "total": 7,
+      "verdict": "PASS",
+      "category": null,
+      "reason": null,
+      "runner_summary": {
+        "verdict": "PASS",
+        "category": null,
+        "reason": null,
+        "artifacts": {
+          "junit": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+          "json_results": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+          "html_report": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+          "trace_count": 2,
+          "screenshots_count": 0,
+          "video_count": 2
+        }
+      }
+    },
+    "triage": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "PASS",
+      "category": null,
+      "reason": null,
+      "confidence": 1.0,
+      "owner": "qa_automation",
+      "human_approval_required": false,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\triage.json"
+    },
+    "quarantine_check": {
+      "ok": true,
+      "skipped": false,
+      "checked_count": 7,
+      "quarantined_count": 0,
+      "results": [
+        {
+          "scenario_id": "p01_al_seleccionar_un_contacto",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p02_al_agregar_un_domicilio_nu",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p03_al_modificar_un_domicilio_",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p04_al_eliminar_un_domicilio__",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p05_la_grilla_de_domicilios_de",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p06_la_funcionalidad_de_tel_fo",
+          "quarantined": false
+        },
+        {
+          "scenario_id": "p07_la_migraci_n_de_columnas_d",
+          "quarantined": false
+        }
+      ]
+    },
+    "run_metrics_summary": {
+      "ok": true,
+      "skipped": false,
+      "unknown_count": 0,
+      "lane": null
+    },
+    "annotator": {
+      "ok": true,
+      "skipped": false,
+      "annotated": 0,
+      "errors": []
+    },
+    "test_confidence": {
+      "ok": true,
+      "skipped": false,
+      "total_scenarios": 7,
+      "high_count": 0,
+      "medium_count": 0,
+      "low_count": 7,
+      "blocked_count": 7,
+      "publish_blocked": true,
+      "lineage_entries": 0,
+      "lineage_seeded": 0
+    },
+    "evaluator": {
+      "ok": true,
+      "skipped": false,
+      "pass": 6,
+      "fail": 1,
+      "blocked": 0,
+      "review": 0
+    },
+    "functional_verdict": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "FAIL",
+      "reason": "ACCEPTANCE_VIOLATED",
+      "functional_pass": false,
+      "category": "APP",
+      "verified": 0,
+      "violated": 1,
+      "not_verifiable": 6,
+      "criteria": [
+        {
+          "id": "P01",
+          "kind": null,
+          "status": "not_verifiable",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P01",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          },
+          "downgrade_reason": "NO_DISCRIMINATION"
+        },
+        {
+          "id": "P02",
+          "kind": null,
+          "status": "not_verifiable",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P02",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          },
+          "downgrade_reason": "NO_DISCRIMINATION"
+        },
+        {
+          "id": "P03",
+          "kind": null,
+          "status": "not_verifiable",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P03",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          },
+          "downgrade_reason": "NO_DISCRIMINATION"
+        },
+        {
+          "id": "P04",
+          "kind": null,
+          "status": "violated",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P04",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          }
+        },
+        {
+          "id": "P05",
+          "kind": null,
+          "status": "not_verifiable",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P05",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          },
+          "downgrade_reason": "NO_DISCRIMINATION"
+        },
+        {
+          "id": "P06",
+          "kind": null,
+          "status": "not_verifiable",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P06",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          },
+          "downgrade_reason": "NO_DISCRIMINATION"
+        },
+        {
+          "id": "P07",
+          "kind": null,
+          "status": "not_verifiable",
+          "evidence": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\P07",
+          "detail": null,
+          "screen_verified": {
+            "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+            "title": "Detalle de Cliente",
+            "expected": "FrmDetalleClie.aspx",
+            "anchor_selector": null,
+            "anchor_present": null
+          },
+          "discrimination": {
+            "proven": false,
+            "negative_control": null,
+            "code": "NO_DISCRIMINATION"
+          },
+          "downgrade_reason": "NO_DISCRIMINATION"
+        }
+      ],
+      "test_quality_issues": [],
+      "strict_discrimination": true
+    },
+    "failure_analyzer": {
+      "ok": true,
+      "skipped": false,
+      "analyzed": 1,
+      "categories": {
+        "environment_issue": 1
+      }
+    },
+    "dossier": {
+      "ok": true,
+      "skipped": false,
+      "verdict": "FAIL",
+      "paths": {
+        "dossier_md": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\DOSSIER_UAT.md",
+        "ado_comment_html": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\ado_comment.html"
+      },
+      "run_id": "b9acf40d-a527-475f-a3b6-d241ab243504"
+    },
+    "publisher": {
+      "ok": true,
+      "skipped": false,
+      "publish_state": "stacky_handoff_ready",
+      "mode": "dry-run",
+      "html_output_path": "Agentes/outputs/373/comment.html",
+      "attachments_count": 0
+    },
+    "evidence": {
+      "ok": true,
+      "files": 59,
+      "manifest": "evidence_manifest.json"
+    }
+  },
+  "stacky_handoff": {
+    "html_output_path": "Agentes/outputs/373/comment.html",
+    "output_dir": "C:\\desarrollo\\GIT\\RS\\Agentes\\outputs\\373",
+    "attachments_count": 0
+  },
+  "elapsed_s": 733.98,
+  "run_id": "uat-373-20260726T001314Z-b584c6",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6",
+  "_normalized": true
+}

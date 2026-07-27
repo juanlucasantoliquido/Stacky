@@ -1,0 +1,118 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "total": 4,
+  "pass": 0,
+  "fail": 0,
+  "blocked": 4,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_TESTS_FOUND",
+  "runs": [
+    {
+      "scenario_id": "P01",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202646Z-2d4141\\tests\\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nError: browserType.launch: Executable doesn't exist at C:\\Users\\juanluca\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1217\\chrome-headless-shell-win64\\chrome-headless-shell.exe\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝\n\n   at playwright\\global.setup.ts:134\n\n  132 |   console.log(`[globalSetup] Logging into ${baseURL}FrmLogin.aspx (attempt 1/1) ...`);\n  133 |\n> 134 |   const browser = await chromium.launch({ headless: true });\n      |                                  ^\n  135 |   try {\n  136 |     const context = await browser.newContext();\n  137 |     const page    = await context.newPage();\n    at globalSetup (N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:134:34)\n\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P02",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202646Z-2d4141\\tests\\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nError: browserType.launch: Executable doesn't exist at C:\\Users\\juanluca\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1217\\chrome-headless-shell-win64\\chrome-headless-shell.exe\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝\n\n   at playwright\\global.setup.ts:134\n\n  132 |   console.log(`[globalSetup] Logging into ${baseURL}FrmLogin.aspx (attempt 1/1) ...`);\n  133 |\n> 134 |   const browser = await chromium.launch({ headless: true });\n      |                                  ^\n  135 |   try {\n  136 |     const context = await browser.newContext();\n  137 |     const page    = await context.newPage();\n    at globalSetup (N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:134:34)\n\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P03",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202646Z-2d4141\\tests\\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nError: browserType.launch: Executable doesn't exist at C:\\Users\\juanluca\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1217\\chrome-headless-shell-win64\\chrome-headless-shell.exe\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝\n\n   at playwright\\global.setup.ts:134\n\n  132 |   console.log(`[globalSetup] Logging into ${baseURL}FrmLogin.aspx (attempt 1/1) ...`);\n  133 |\n> 134 |   const browser = await chromium.launch({ headless: true });\n      |                                  ^\n  135 |   try {\n  136 |     const context = await browser.newContext();\n  137 |     const page    = await context.newPage();\n    at globalSetup (N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:134:34)\n\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P04",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202646Z-2d4141\\tests\\P04_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\nError: browserType.launch: Executable doesn't exist at C:\\Users\\juanluca\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1217\\chrome-headless-shell-win64\\chrome-headless-shell.exe\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝\n\n   at playwright\\global.setup.ts:134\n\n  132 |   console.log(`[globalSetup] Logging into ${baseURL}FrmLogin.aspx (attempt 1/1) ...`);\n  133 |\n> 134 |   const browser = await chromium.launch({ headless: true });\n      |                                  ^\n  135 |   try {\n  136 |     const context = await browser.newContext();\n  137 |     const page    = await context.newPage();\n    at globalSetup (N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright\\global.setup.ts:134:34)\n\n",
+      "raw_stderr": "",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "runner_summary": {
+    "verdict": "BLOCKED",
+    "category": "PIP",
+    "reason": "NO_TESTS_FOUND",
+    "total": 4,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 4,
+    "skipped": 0,
+    "retries": 0,
+    "duration_ms": 7757,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 0,
+      "screenshots_count": 0,
+      "video_count": 0
+    },
+    "scenario_results": []
+  },
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.2.0",
+    "duration_ms": 7757,
+    "browser_launch_count": 1,
+    "login_count": 1,
+    "base_url": "http://localhost:35017/AgendaWeb/",
+    "managed_app": false,
+    "credentials_source": "env",
+    "username": "PABLO",
+    "password_present": true,
+    "password_hash_prefix": "81a4e2e6",
+    "max_total_minutes": 6,
+    "max_login_attempts": 1,
+    "max_browser_launches": 1
+  }
+}

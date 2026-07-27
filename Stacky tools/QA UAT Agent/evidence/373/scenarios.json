@@ -1,0 +1,321 @@
+{
+  "ok": true,
+  "ticket_id": 373,
+  "compiled": 7,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Al seleccionar un contacto CORREDOR en la pestaña Contactos, la grilla Domicilios carga correctamente los domicilios existentes de ese contacto.",
+      "precondiciones": [
+        "El usuario ha accedido a la pestaña Contactos.",
+        "Se ha seleccionado un contacto de tipo CORREDOR."
+      ],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridtele",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridobligaciones",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridgestiones",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridtele",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridobligaciones",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridgestiones",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Al agregar un domicilio nuevo al contacto y guardar, el registro aparece en la grilla sin necesidad de refrescar la página completa.",
+      "precondiciones": [
+        "El contacto tipo CORREDOR debe estar seleccionado en la grilla."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnagregardireccion",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_direccion",
+          "valor": "Nueva Dirección Test"
+        },
+        {
+          "accion": "click",
+          "target": "btnGuardarDireccion_Click",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "grid_c_gridobligaciones",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridobligaciones",
+          "valor": "Nueva Dirección Test"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Al modificar un domicilio existente del contacto, el cambio se refleja en la grilla.",
+      "precondiciones": [
+        "El contacto tipo CORREDOR debe existir con al menos un domicilio registrado."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnmodificartelefono",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_direccion",
+          "valor": "Nueva Dirección Modificada"
+        },
+        {
+          "accion": "click",
+          "target": "btnGuardarDireccion",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridtele",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridtele",
+          "valor": "Nueva Dirección Modificada"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      }
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Al eliminar un domicilio, desaparece de la grilla.",
+      "precondiciones": [
+        "El usuario ha accedido a la pestaña de Contactos en FrmDetalleClie.aspx.",
+        "Existen domicilios asociados a un contacto tipo CORREDOR."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btneliminardireccion",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "grid_c_griddomicilios",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_eq",
+          "target": "grid_c_griddomicilios",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores.",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "invisible",
+          "target": "grid_c_gridobligaciones",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    },
+    {
+      "scenario_id": "P06",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La funcionalidad de Teléfonos y eMails en la misma pestaña no presenta regresiones.",
+      "precondiciones": [
+        "El usuario debe estar autenticado en el sistema.",
+        "El contacto tipo CORREDOR debe existir en la base de datos."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updnotas",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnnotas",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregartelefono",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_nro_documento",
+          "valor": "12345678"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnmodificartelefono",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btneliminartelefono",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregaremail",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnmodificaremail",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btneliminaremail",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "panel_c_updmailscontactos",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P06"
+      }
+    },
+    {
+      "scenario_id": "P07",
+      "ticket_id": 373,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La migración de columnas DTDISTRIT / DTURBAN / DTDIRECCION en RDIRE está confirmada en el entorno de pruebas y producción.",
+      "precondiciones": [
+        "Login como PABLO"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P07"
+      }
+    }
+  ],
+  "out_of_scope_items": []
+}

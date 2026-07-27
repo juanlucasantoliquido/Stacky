@@ -1,0 +1,98 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 373,
+  "generated_at": "2026-07-25T23:55:23.657640Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "373-CA-01",
+      "description": "Al seleccionar un contacto CORREDOR en la pestaña Contactos, la grilla Domicilios carga correctamente los domicilios existentes de ese contacto.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "373-CA-02",
+      "description": "Al agregar un domicilio nuevo al contacto y guardar, el registro aparece en la grilla sin necesidad de refrescar la página completa.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "373-CA-03",
+      "description": "Al modificar un domicilio existente del contacto, el cambio se refleja en la grilla.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "373-CA-04",
+      "description": "Al eliminar un domicilio, desaparece de la grilla.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "373-CA-05",
+      "description": "La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "373-CA-06",
+      "description": "La funcionalidad de Teléfonos y eMails en la misma pestaña no presenta regresiones.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "373-CA-07",
+      "description": "La migración de columnas DTDISTRIT / DTURBAN / DTDIRECCION en RDIRE está confirmada en el entorno de pruebas y producción.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto menciona producción, datos sensibles o requiere juicio experto",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "uat": 6,
+    "manual_review": 1
+  }
+}

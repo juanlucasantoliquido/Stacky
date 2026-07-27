@@ -1,0 +1,116 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 65,
+  "generated_at": "2026-07-25T21:07:47.782194Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "65-CA-01",
+      "description": "Débito Automático = Sí ROBLG: todos NULL en dev → 0 filas con 'S' 0 resultados (correcto — no hay débitos activos en dev)",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-02",
+      "description": "Débito Automático = No ROBLG: 441.256 con NULL → incluidos como &quot;No&quot; Todos los lotes agendados",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-03",
+      "description": "Corredor = valor parcial SELECT DISTINCT TOP 5 OGCORREDOR FROM ROBLG WHERE OGCORREDOR IS NOT NULL Solo lotes con corredor que contiene el texto",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-04",
+      "description": "Nombre de Cliente = texto parcial SELECT TOP 1 CLNOMBRE FROM RCLIE WHERE CLNOMBRE IS NOT NULL ORDER BY 1 Lotes agendados cuyo titular contiene el texto",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-05",
+      "description": "RUC = parcial &quot;20&quot; SELECT TOP 1 CLNUMDOC FROM RCLIE WHERE CLNUMDOC LIKE '20%' Lotes agendados cuyos clientes tienen CLNUMDOC que contiene &quot;20&quot;",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-06",
+      "description": "Todos los campos nuevos vacíos — Conteo idéntico al antes del desarrollo",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-07",
+      "description": "AND lógico — NivelMora + NombreCliente NivelMora=&quot;C1&quot;, NombreCliente=&quot;a&quot; Intersección correcta entre ambos filtros",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "65-CA-08",
+      "description": "Botón Avanzar con Corredor activo — FrmDetalleClie navega respetando el filtro de Corredor",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "manual_review": 7,
+    "uat": 1
+  }
+}

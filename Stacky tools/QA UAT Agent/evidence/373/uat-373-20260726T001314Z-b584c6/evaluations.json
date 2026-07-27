@@ -1,0 +1,165 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "evaluations": [
+    {
+      "scenario_id": "P01",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "grid_c_gridtele",
+          "expected": null,
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P01/assertions_P01.json",
+          "evaluated_at": "2026-07-26T00:24:46.286Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "visible",
+          "target": "grid_c_gridobligaciones",
+          "expected": null,
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P01/assertions_P01.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 2,
+          "tipo": "visible",
+          "target": "grid_c_gridgestiones",
+          "expected": null,
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P01/assertions_P01.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    },
+    {
+      "scenario_id": "P02",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "grid_c_gridobligaciones",
+          "expected": "Nueva Dirección Test",
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P02/assertions_P02.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    },
+    {
+      "scenario_id": "P03",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "grid_c_gridtele",
+          "expected": "Nueva Dirección Modificada",
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P03/assertions_P03.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    },
+    {
+      "scenario_id": "P04",
+      "status": "fail",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_eq",
+          "target": "grid_c_griddomicilios",
+          "expected": "0",
+          "actual": "1",
+          "status": "fail",
+          "evidence_ref": "evidence/P04/assertions_P04.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    },
+    {
+      "scenario_id": "P05",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "invisible",
+          "target": "grid_c_gridobligaciones",
+          "expected": null,
+          "actual": false,
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    },
+    {
+      "scenario_id": "P06",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "visible",
+          "target": "panel_c_updtelefonos",
+          "expected": null,
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P06/assertions_P06.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "visible",
+          "target": "panel_c_updmailscontactos",
+          "expected": null,
+          "actual": true,
+          "status": "pass",
+          "evidence_ref": "evidence/P06/assertions_P06.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    },
+    {
+      "scenario_id": "P07",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "1",
+          "status": "pass",
+          "evidence_ref": "evidence/P07/assertions_P07.json",
+          "evaluated_at": "2026-07-26T00:24:46.289Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-26T00:24:46Z"
+    }
+  ]
+}

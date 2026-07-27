@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "ticket_id": 369,
+  "compiled": 2,
+  "out_of_scope": 4,
+  "scenarios": [
+    {
+      "scenario_id": "P05",
+      "ticket_id": 369,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Cuando BGCODMEDIO o HBGCODMEDIO es NULL, la etiqueta muestra \"—\" o cadena vacía sin errores ni excepciones.",
+      "precondiciones": [
+        "Login como PABLO"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "no_console_error",
+          "target": "__page__",
+          "valor": null,
+          "criterio_id": "AC-05",
+          "screen": "FrmDetalleClie.aspx",
+          "discrimination": {
+            "proven": true,
+            "negative_control": null,
+            "code": "",
+            "detail": "kind=no_error no requiere control negativo: su estado contrario ya lo cubre el evaluador",
+            "fuente": "no_aplica"
+          }
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      },
+      "assertion_source": "assertion_catalog"
+    },
+    {
+      "scenario_id": "P06",
+      "ticket_id": 369,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El fix no altera las reglas de acceso existentes; ningún rol que no vea ya el contacto puede verlo tras el cambio.",
+      "precondiciones": [
+        "Login como PABLO"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P06"
+      }
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P01",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "La grilla de gestiones activas muestra la columna \"Etiqueta de contacto\" con el descriptor del medio utilizado en cada fila.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    },
+    {
+      "id": "P02",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "La grilla de gestiones históricas muestra la misma columna con el descriptor correcto para cada gestión.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    },
+    {
+      "id": "P03",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "El popup Notas Gestiones muestra el field \"Etiqueta de contacto\" poblado con el descriptor del medio de la gestión.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    },
+    {
+      "id": "P04",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "El modal dlgGestiones (encabezado de gestión histórica) muestra el field de etiqueta de contacto correctamente asignado.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    }
+  ]
+}

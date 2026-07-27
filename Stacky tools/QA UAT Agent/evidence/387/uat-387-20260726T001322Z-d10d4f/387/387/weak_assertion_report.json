@@ -1,0 +1,109 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "387",
+  "ticket_id": 387,
+  "files_analyzed": 4,
+  "total_tests": 4,
+  "strong_tests": 0,
+  "weak_tests": 4,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P01_en_el_grid_gestiones_de_detalle_de_cliente_datos_g.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p01 en_el_grid_",
+          "file_name": "P01_en_el_grid_gestiones_de_detalle_de_cliente_datos_g.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p02 la_columna_que_expon\u00eda_el_tipo/clasificaci\u00f3n_del_medio_ya_no",
+          "file_name": "P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts",
+          "line_number": 149,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P03_el_excel_generado_por_exportar_desde_el_bloque_ges.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p03 el_excel_generado_por_",
+          "file_name": "P03_el_excel_generado_por_exportar_desde_el_bloque_ges.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p04 no_se_introducen_errores_ni_columnas_vac\u00edas/rotas_en_el_grid",
+          "file_name": "P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts",
+          "line_number": 149,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-26T00:14:00.798252Z"
+}

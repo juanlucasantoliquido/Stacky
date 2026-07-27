@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "run_dir": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260726T003237Z-32caf0",
+  "generated_at": "2026-07-26T00:32:37Z",
+  "files": [
+    {
+      "path": "70/screen_detection.json",
+      "bytes": 309,
+      "sha256": "f9c30c59e0e40e92e96d57a9c1f2b860a2974917cb9b16b6ac862cd2c384f346",
+      "kind": "data"
+    },
+    {
+      "path": "execution.jsonl",
+      "bytes": 5661,
+      "sha256": "ef7a9f730db7609d4a62ce571d74bccc8f7a78c70c3429272fe82f51b02ce204",
+      "kind": "log"
+    },
+    {
+      "path": "uat-70-20260726T003237Z-32caf0/deployment_fingerprint.json",
+      "bytes": 290,
+      "sha256": "148bed24e05472436a998c2a4c1c886bac2700318f84d94e831ed5a46d9032af",
+      "kind": "data"
+    }
+  ],
+  "counts": {
+    "total": 3,
+    "data": 2,
+    "log": 1
+  },
+  "truncated": false
+}

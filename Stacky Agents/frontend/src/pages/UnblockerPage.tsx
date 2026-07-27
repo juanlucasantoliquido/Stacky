@@ -22,7 +22,7 @@ import type { Ticket } from "../types";
 import { useWorkbench } from "../store/workbench";
 import FinishWorkButton from "../components/FinishWorkButton";
 import styles from "./UnblockerPage.module.css";
-import { getWorkItemTypeColor } from "../utils/workItemTypeColor";
+import { formatWorkItemTypeLabel, getWorkItemTypeColor } from "../utils/workItemTypeColor";
 
 const READINESS_LABEL: Record<UnblockerReadiness, string> = {
   task_ready: "Task lista para crear",
@@ -278,7 +278,7 @@ function UnblockerCard({
               className={styles.typeTag}
               style={{ color: getWorkItemTypeColor(item.work_item_type) }}
             >
-              {item.work_item_type}
+              {formatWorkItemTypeLabel(item.work_item_type)}
             </span>
           )}
           {item.running && <span className={styles.runningDot} title="En ejecución">● en ejecución</span>}

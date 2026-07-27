@@ -1,0 +1,29 @@
+{
+  "ok": false,
+  "ticket_id": 366,
+  "verdict": "BLOCKED",
+  "category": "OPS",
+  "reason": "PIPELINE_CRASH",
+  "failed_stage": "pipeline",
+  "error": "pipeline_crash",
+  "message": "'charmap' codec can't encode character '\\u2192' in position 25: character maps to <undefined>",
+  "traceback": "Traceback (most recent call last):\n  File \"N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\qa_uat_pipeline.py\", line 670, in run\n    pipeline_result = _run_pipeline_stages(\n        ticket_result=ticket_result,\n    ...<14 lines>...\n        run_id=_run_id,\n    )\n  File \"N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\qa_uat_pipeline.py\", line 3408, in _run_pipeline_stages\n    runner_result = runner_run(\n        tests_dir=tests_dir,\n    ...<3 lines>...\n        verbose=verbose,\n    )\n  File \"N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\uat_test_runner.py\", line 172, in run\n    runs, browser_launches, login_count = _run_all_specs_once(\n                                          ~~~~~~~~~~~~~~~~~~~^\n        spec_files=spec_files,\n        ^^^^^^^^^^^^^^^^^^^^^^\n    ...<7 lines>...\n        extra_env=_bridge_env,\n        ^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\uat_test_runner.py\", line 418, in _run_all_specs_once\n    print(line, end=\"\", flush=True)\n    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\juanluca\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\encodings\\cp1252.py\", line 19, in encode\n    return codecs.charmap_encode(input,self.errors,encoding_table)[0]\n           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nUnicodeEncodeError: 'charmap' codec can't encode character '\\u2192' in position 25: character maps to <undefined>\n",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Catalogo Tipo de Telefono no incluye Laboral ni Particular",
+      "plan_item_count": 5
+    },
+    "evidence": {
+      "ok": true,
+      "files": 43,
+      "manifest": "evidence_manifest.json"
+    }
+  },
+  "elapsed_s": 70.51,
+  "run_id": "uat-366-20260725T232809Z-f54059",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T232809Z-f54059",
+  "_normalized": true
+}

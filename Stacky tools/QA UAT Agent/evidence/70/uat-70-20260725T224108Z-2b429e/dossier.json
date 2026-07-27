@@ -1,0 +1,39 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-07-25T22:41:08.675765+00:00",
+  "ticket_id": 70,
+  "run_id": "uat-70-20260725T224108Z-2b429e",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "missing_dossier",
+  "failed_stage": "unknown",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'unknown'. [PIP] missing_dossier. dossier.json not found: N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\dossier.json",
+  "human_action_required": "Investigate PIP/missing_dossier and rerun pipeline",
+  "exec_summary": {
+    "session_started_at": "2026-07-25T22:41:08.466307Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 72
+  },
+  "artifacts": {
+    "compiler_contract_result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\compiler_contract_result.json",
+    "data_readiness_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\data_readiness.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\execution.jsonl",
+    "generator_contract_result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\generator_contract_result.json",
+    "navigation_contract_validation_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\navigation_contract_validation.json",
+    "triage_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\70\\uat-70-20260725T224108Z-2b429e\\triage.json"
+  },
+  "evidence_refs": [
+    "compiler_contract_result.json",
+    "data_readiness.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "generator_contract_result.json",
+    "navigation_contract_validation.json",
+    "triage.json"
+  ],
+  "elapsed_build_ms": 1.3
+}

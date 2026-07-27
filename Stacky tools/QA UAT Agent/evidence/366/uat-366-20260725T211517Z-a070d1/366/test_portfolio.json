@@ -1,0 +1,60 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 366,
+  "generated_at": "2026-07-25T21:15:26.725481Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "366-CA-01",
+      "description": "El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes. Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto. | Abrir el mantenedor de Telefonos y hacer clic en \"Agregar Telefono\" (o Modificar uno existente). | Desplegar el combo \"Tipo Telefono\".",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "366-CA-02",
+      "description": "Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto. | Abrir el mantenedor de Telefonos y hacer clic en \"Agregar Telefono\" (o Modificar uno existente). | Desplegar el combo \"Tipo Telefono\".",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "366-CA-03",
+      "description": "Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto. | Abrir el mantenedor de Telefonos y hacer clic en \"Agregar Telefono\" (o Modificar uno existente). | Desplegar el combo \"Tipo Telefono\". 68",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "366-CA-04",
+      "description": "El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto. | Abrir el mantenedor de Telefonos y hacer clic en \"Agregar Telefono\" (o Modificar uno existente). | Desplegar el combo \"Tipo Telefono\".",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "uat": 4
+  }
+}

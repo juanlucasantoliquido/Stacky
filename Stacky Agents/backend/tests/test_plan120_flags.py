@@ -42,18 +42,36 @@ def test_flags_known_and_categorized():
         assert categorize(key) == "devops", f"{key} no está en la categoría devops"
 
 
-def test_defaults_effective_off():
+def test_defaults_effective():
+    """Barrido default-ON 2026-07-27. El master y el diagnóstico IA nacen ON: el
+    master solo muestra la sección y el PLAN (dry-run, determinista, cero LLM) y el
+    diagnóstico es un botón on-demand contra el modelo LOCAL (tokens cero).
+    EXECUTE sigue OFF: es lo único que ESCRIBE en los servidores reales del operador.
+
+    OJO: este assert lee `Config()`, que honra `backend/.env`. Si el operador tiene
+    un override vivo para alguna de estas keys, el valor efectivo será el suyo.
+    """
     cfg = Config()
-    assert cfg.STACKY_DEPLOYMENTS_ENABLED is False
+    assert cfg.STACKY_DEPLOYMENTS_ENABLED is True
     assert cfg.STACKY_DEPLOYMENTS_EXECUTE_ENABLED is False
-    assert cfg.STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED is False
+    assert cfg.STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED is True
     assert cfg.STACKY_DEPLOYMENTS_RETAIN_RELEASES == 3
     assert cfg.STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC == 30
 
 
-def test_flagspec_sin_default_explicito():
-    for key in _BOOL_KEYS:
-        assert _spec(key).default is None, f"{key} declara default= (gotcha plan 63)"
+def test_flagspec_default_declarado_coincide_con_el_set_curado():
+    """Regla del arnés: `spec.default is not None` ⇔ pertenencia a
+    `_CURATED_DEFAULTS_ON`. Las 2 promovidas declaran `default=True` y están en el
+    set; la que sigue OFF no declara `default=` y no está."""
+    from tests.test_harness_flags import _CURATED_DEFAULTS_ON
+
+    for key in ("STACKY_DEPLOYMENTS_ENABLED", "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED"):
+        assert _spec(key).default is True, f"{key} debería declarar default=True"
+        assert key in _CURATED_DEFAULTS_ON, f"{key} falta en el set curado"
+
+    off = "STACKY_DEPLOYMENTS_EXECUTE_ENABLED"
+    assert _spec(off).default is None, f"{off} no declara default= (gotcha plan 63)"
+    assert off not in _CURATED_DEFAULTS_ON
 
 
 def test_requires_edges_frozen():
@@ -74,12 +92,18 @@ def test_bounds_ints():
 
 
 def test_harness_defaults_contains_flags():
+    """ROJO PREEXISTENTE Y AJENO (verificado 2026-07-27 con baseline previo al
+    barrido default-ON): `backend/harness_defaults.env` es un snapshot PARCIAL y
+    no contiene ninguna de las 5 keys del plan 120 — el test ya fallaba acá antes
+    de tocar los defaults. Los valores esperados se actualizaron al nuevo default
+    para que, cuando se regenere el snapshot, el test diga la verdad.
+    """
     env_file = _BACKEND / "harness_defaults.env"
     assert env_file.exists()
     content = env_file.read_text(encoding="utf-8")
-    assert "STACKY_DEPLOYMENTS_ENABLED=false" in content
+    assert "STACKY_DEPLOYMENTS_ENABLED=true" in content
     assert "STACKY_DEPLOYMENTS_EXECUTE_ENABLED=false" in content
-    assert "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED=false" in content
+    assert "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED=true" in content
     assert "STACKY_DEPLOYMENTS_RETAIN_RELEASES=3" in content
     assert "STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC=30" in content
 

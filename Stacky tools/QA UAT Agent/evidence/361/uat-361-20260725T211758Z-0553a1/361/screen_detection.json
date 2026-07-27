@@ -1,0 +1,49 @@
+{
+  "schema_version": "screen_detection/1.0",
+  "run_id": "361",
+  "selected_screens": [
+    "FrmJDemanda.aspx",
+    "FrmDetalleClie.aspx",
+    "FrmGestion.aspx",
+    "FrmBusqueda.aspx",
+    "FrmEstrategia.aspx"
+  ],
+  "matches": [
+    {
+      "screen": "FrmJDemanda.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    },
+    {
+      "screen": "FrmDetalleClie.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    },
+    {
+      "screen": "FrmGestion.aspx",
+      "source": "screen_aliases.yml",
+      "match_type": "alias",
+      "confidence": 0.6
+    },
+    {
+      "screen": "FrmBusqueda.aspx",
+      "source": "screen_aliases.yml",
+      "match_type": "alias",
+      "confidence": 0.6
+    },
+    {
+      "screen": "FrmEstrategia.aspx",
+      "source": "screen_aliases.yml",
+      "match_type": "alias",
+      "confidence": 0.6
+    }
+  ],
+  "fallback_used": false,
+  "ambiguous": true,
+  "blocked": true,
+  "block_reason": "SCREEN_AMBIGUOUS",
+  "confidence": 0.95,
+  "supported_screens_version": "screen_aliases.yml"
+}

@@ -1,0 +1,67 @@
+{
+  "schema_version": "data_contract/1.0",
+  "scenario_id": "P01",
+  "ticket_id": 362,
+  "feature": null,
+  "screen": "FrmDetalleClie.aspx",
+  "data_contract_version": "1.0",
+  "compiled_at": "2026-07-25T20:59:05.411918Z",
+  "compiled_by": "uat_data_contract_compiler/1.0.0",
+  "requirements": [
+    {
+      "requirement_id": "data.req.cliente_existente",
+      "entity": "Cliente",
+      "alias": "cliente_existente",
+      "required_fields": [
+        "CLCOD"
+      ],
+      "constraints": [
+        "cliente existe en BD"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "user_input",
+        "sql_seed"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": true,
+      "db_table": "RCLIE",
+      "db_key_column": "CLCOD",
+      "notes": null
+    },
+    {
+      "requirement_id": "data.req.gestion_en_agenda",
+      "entity": "GestionAgenda",
+      "alias": "gestion_en_agenda",
+      "required_fields": [
+        "AGPERFIL",
+        "AGLOTE"
+      ],
+      "constraints": [
+        "existe al menos una gestion asignada al agente QA"
+      ],
+      "candidate_sources": [
+        "live_db_readonly",
+        "user_input"
+      ],
+      "blocking": true,
+      "inferred_from": "step_keywords",
+      "schema_known": true,
+      "db_table": "RAGEN",
+      "db_key_column": "AGPERFIL",
+      "notes": null
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "blocking": 2,
+    "entities": [
+      "Cliente",
+      "GestionAgenda"
+    ]
+  },
+  "ok": true,
+  "error": null,
+  "artifact_path": null
+}

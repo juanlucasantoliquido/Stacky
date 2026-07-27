@@ -1,0 +1,280 @@
+{
+  "ok": true,
+  "run_dir": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\387\\uat-387-20260726T001322Z-d10d4f",
+  "generated_at": "2026-07-26T00:21:38Z",
+  "files": [
+    {
+      "path": "387/387/confidence_report.json",
+      "bytes": 1018,
+      "sha256": "f977b84a6bc97acd715f278e673028e120ada2a34ef5eb09baaef37dfc3b75c3",
+      "kind": "data"
+    },
+    {
+      "path": "387/387/data_lineage.json",
+      "bytes": 336,
+      "sha256": "90906f710a6469d9afcdb55eb0ddbad4a5e0640abd0ec673953df1025dca714c",
+      "kind": "data"
+    },
+    {
+      "path": "387/387/oracle_result.json",
+      "bytes": 1534,
+      "sha256": "8241c2066b014c88917f65d4248283c6acd96205485e7d3a8222751acffe65e9",
+      "kind": "data"
+    },
+    {
+      "path": "387/387/weak_assertion_report.json",
+      "bytes": 3406,
+      "sha256": "1910be22f56fb6d897bfbc098447b45c35a727970fe071aa404450303aa6d477",
+      "kind": "data"
+    },
+    {
+      "path": "387/cleanup_proposal_P01.sql",
+      "bytes": 1609,
+      "sha256": "af898a321ec81ab9caaa841b38665e0749c023a39e84988bbb169755bc5f0d27",
+      "kind": "other"
+    },
+    {
+      "path": "387/cleanup_proposal_P02.sql",
+      "bytes": 1609,
+      "sha256": "2f4df9efd9f87a439e456f17e520280ccbd6bd0eaab5e8559127f14b07a411b0",
+      "kind": "other"
+    },
+    {
+      "path": "387/cleanup_proposal_P03.sql",
+      "bytes": 1343,
+      "sha256": "247e739d6a9144b20bce06693a4b3c15d160e25f28995f7c83c62a5eb1a2e3c0",
+      "kind": "other"
+    },
+    {
+      "path": "387/cleanup_proposal_P04.sql",
+      "bytes": 1609,
+      "sha256": "b247d86b7d2dadfede08f36ead818af4875c4a32a6cbdc562f93841eeedb6a1c",
+      "kind": "other"
+    },
+    {
+      "path": "387/data_contract_P01.json",
+      "bytes": 1625,
+      "sha256": "970e8ef1e1cbaac491189eae009b930417c603caeb008dfc739ee1babc86d174",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_contract_P02.json",
+      "bytes": 1625,
+      "sha256": "c765df84ebac516d09f039be56098baf0945cbb698e73375fa055f39584c379e",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_contract_P03.json",
+      "bytes": 1720,
+      "sha256": "93824dd33194016aa180401420fc24d2388ad7cc4c1b4ae75d222d3f1b4a354a",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_contract_P04.json",
+      "bytes": 2328,
+      "sha256": "08e22debd02b583d6309af98a0d9d30594ae2e6451f55275eae369f3403346b1",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_readiness_v2_P01.json",
+      "bytes": 736,
+      "sha256": "6dc437d5cc40b3605855b98178cf4cc95ccd5db44fbea36bbd1644c136dfcc04",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_readiness_v2_P02.json",
+      "bytes": 736,
+      "sha256": "6b4c2fe6ba966368327bda8bea38f86901f2fbf0776be9e0003e62ceb8623146",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_readiness_v2_P03.json",
+      "bytes": 900,
+      "sha256": "324be19ccd9c4dbcee721b5c458922e8ce449205dc53ece4015e41d71e802e1b",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_readiness_v2_P04.json",
+      "bytes": 1127,
+      "sha256": "f2257f00085dba06697a32965062edc85c9e2a04e200e5f1c15d166e95246891",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_resolution_request_P03.json",
+      "bytes": 963,
+      "sha256": "1d34120720184efa3adda8945cfd12b9f98d2a595e094adcca4b5e88dde5a3d6",
+      "kind": "data"
+    },
+    {
+      "path": "387/data_resolution_request_P04.json",
+      "bytes": 963,
+      "sha256": "84fcf4405c942a652adbc63fb0dfdfff9aded3d1d8badb7900de4d49dea5a7e8",
+      "kind": "data"
+    },
+    {
+      "path": "387/qa_data_requests.json",
+      "bytes": 971,
+      "sha256": "bab9375c40565d74b7d187a84204ea8435b033831c3b8bbd4b24b1086f87d037",
+      "kind": "data"
+    },
+    {
+      "path": "387/screen_detection.json",
+      "bytes": 464,
+      "sha256": "3fe421e843272db697bb3df4c81d92f895429185a559261972ebd810be019e04",
+      "kind": "data"
+    },
+    {
+      "path": "387/seed_proposal_P01.sql",
+      "bytes": 3181,
+      "sha256": "34454adfc36c1e2e1fd449528fe12b6164cfc0ad753124cd0e4b77d564fb8faf",
+      "kind": "other"
+    },
+    {
+      "path": "387/seed_proposal_P02.sql",
+      "bytes": 3181,
+      "sha256": "82e4260a3e474ea803e1e50ee3574433dedf8b12d1b51b0972a3e50cdb3f1a27",
+      "kind": "other"
+    },
+    {
+      "path": "387/seed_proposal_P03.sql",
+      "bytes": 2381,
+      "sha256": "28ea88361a75bf056bdab31b309b288670710b543254de22b556363c1066fd0a",
+      "kind": "other"
+    },
+    {
+      "path": "387/seed_proposal_P04.sql",
+      "bytes": 3181,
+      "sha256": "dcb8506ec53975a16b162dd7bd746142c7f1cb5799bdf67713f75a981fe4e46a",
+      "kind": "other"
+    },
+    {
+      "path": "387/test_portfolio.json",
+      "bytes": 2888,
+      "sha256": "16db4e5d9cf1f64ab0238e7dbe97abc17ee9425a8bcffe5304d3068155ed2861",
+      "kind": "data"
+    },
+    {
+      "path": "DOSSIER_UAT.md",
+      "bytes": 4036,
+      "sha256": "04bf3e9a145d5d37fdf8111836e1a6258a214c432be132fa67f3e7466b8e5a08",
+      "kind": "other"
+    },
+    {
+      "path": "ado_comment.html",
+      "bytes": 10724,
+      "sha256": "1898bab1f234d54cc9cabe63648b0cf918dcb6060af679d876d74f7cd14c4809",
+      "kind": "report"
+    },
+    {
+      "path": "dossier.json",
+      "bytes": 6298,
+      "sha256": "47b00d102003cd8611794cdf177340aebcfd6648a8168d80be6e00a325ff50d3",
+      "kind": "data"
+    },
+    {
+      "path": "effective_config.json",
+      "bytes": 460,
+      "sha256": "e0a114a1c6f974ddd2e560d2fa0ecc795ca0f5769b2511ddff340a4a700dbd5d",
+      "kind": "data"
+    },
+    {
+      "path": "evaluations.json",
+      "bytes": 582,
+      "sha256": "117fd46ff84049dc1dea0ea14c4ce81edac9bddc86106d34843b4010b022d67d",
+      "kind": "data"
+    },
+    {
+      "path": "execution.jsonl",
+      "bytes": 125034,
+      "sha256": "300989cfd98dd4e709a9fdc04e6548dcdd163b14d6d3be8c557bd752f3563d3b",
+      "kind": "log"
+    },
+    {
+      "path": "navigation_contract_validation.json",
+      "bytes": 1168,
+      "sha256": "b8306f5e19f6aa1c15e7bd0ee68d2bb0495f98683bc637f9e3499b408bff9138",
+      "kind": "data"
+    },
+    {
+      "path": "playwright_output.txt",
+      "bytes": 10089,
+      "sha256": "05f9dbeaf106a096f1014f7943c8a51326d993d7ed00fc84ec6f9d68e91d8411",
+      "kind": "log"
+    },
+    {
+      "path": "runner_output.json",
+      "bytes": 45954,
+      "sha256": "69f263476c66f978409c8d4e88b68cf3235c03995711a63f9202c9ae02e289c1",
+      "kind": "data"
+    },
+    {
+      "path": "scenarios.json",
+      "bytes": 6208,
+      "sha256": "f68bb3b06a11f1755fb432910a5fd8739fc9b3a5209bd1359cdb5dc49e4901ec",
+      "kind": "data"
+    },
+    {
+      "path": "tests/P01_en_el_grid_gestiones_de_detalle_de_cliente_datos_g.spec.ts",
+      "bytes": 20754,
+      "sha256": "26ebc20c991d4f7de94bfd5115eca70257b287a9e72a7750f7f8d3995c319111",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts",
+      "bytes": 20981,
+      "sha256": "340704ebb05bc2d3ea24780e0d3dd7946a0d8171b985fb33e80e6c5d02c3b2d1",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P03_el_excel_generado_por_exportar_desde_el_bloque_ges.spec.ts",
+      "bytes": 20928,
+      "sha256": "8521249575f73092584d77854100b6e1b09b6a13fb94169725d9e4ee488c56d7",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts",
+      "bytes": 21076,
+      "sha256": "bb083633b45179ab78adf5bf9c91ab21cfff34c40cad67df0ebdd49d7ab210c9",
+      "kind": "spec"
+    },
+    {
+      "path": "ticket.json",
+      "bytes": 30931,
+      "sha256": "69e3abc2f101b98df4188c98aa0b7c8e26e59e1cf6fddd8782842c7c9194672e",
+      "kind": "data"
+    },
+    {
+      "path": "triage.json",
+      "bytes": 1004,
+      "sha256": "862417dd49ef1d6eb0c0dd9cb1c8d4e036f53f982da542b91765641628777c8f",
+      "kind": "data"
+    },
+    {
+      "path": "uat-387-20260726T001322Z-d10d4f/data_readiness.json",
+      "bytes": 639,
+      "sha256": "2ccbd043f219d3a46c4891847d6bf83b7bc9ee4060dc78af154399eb521bcdea",
+      "kind": "data"
+    },
+    {
+      "path": "uat-387-20260726T001322Z-d10d4f/deployment_fingerprint.json",
+      "bytes": 290,
+      "sha256": "148bed24e05472436a998c2a4c1c886bac2700318f84d94e831ed5a46d9032af",
+      "kind": "data"
+    },
+    {
+      "path": "ui_map_resolution.json",
+      "bytes": 529,
+      "sha256": "9b090428b4928fd3c54169f4c04f6b44f91c807034240248fb8b83523872d017",
+      "kind": "data"
+    }
+  ],
+  "counts": {
+    "total": 44,
+    "data": 28,
+    "other": 9,
+    "report": 1,
+    "log": 2,
+    "spec": 4
+  },
+  "truncated": false
+}

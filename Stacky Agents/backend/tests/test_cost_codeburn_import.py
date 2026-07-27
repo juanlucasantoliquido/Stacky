@@ -1,8 +1,9 @@
 """Plan 142 F7 (OPCIONAL) — Tests de load_external_codeburn() y su wiring en /cost-summary.
 
-Flag STACKY_COST_CODEBURN_IMPORT_ENABLED default OFF (excepción dura #3: prerequisito
-externo NO garantizado). Sin shell-out, sin dependencia nueva: sólo lectura de un JSONL
-local opcional. Degrada a None en TODO caso de ausencia/error, nunca crashea.
+Flag STACKY_COST_CODEBURN_IMPORT_ENABLED default ON (barrido 2026-07-27: no quema
+tokens en reposo ni escribe en ningún sistema real; con STACKY_COST_CODEBURN_IMPORT_PATH
+vacío —el default— queda inerte). Sin shell-out, sin dependencia nueva: sólo lectura de
+un JSONL local opcional. Degrada a None en TODO caso de ausencia/error, nunca crashea.
 """
 from __future__ import annotations
 

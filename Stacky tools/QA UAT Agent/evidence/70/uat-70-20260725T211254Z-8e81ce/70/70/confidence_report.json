@@ -1,0 +1,33 @@
+{
+  "schema_version": "confidence_report/1.0",
+  "ok": false,
+  "run_id": "70",
+  "ticket_id": 70,
+  "total_scenarios": 2,
+  "high_count": 0,
+  "medium_count": 0,
+  "low_count": 2,
+  "blocked_count": 2,
+  "min_confidence": 60,
+  "publish_blocked": true,
+  "scenario_scores": [
+    {
+      "scenario_id": "P04",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P05",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    }
+  ],
+  "evidence_path": null,
+  "scored_at": "2026-07-25T21:14:30.180335Z"
+}

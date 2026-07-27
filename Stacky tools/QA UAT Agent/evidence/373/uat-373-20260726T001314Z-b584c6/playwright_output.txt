@@ -1,0 +1,86 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 7 tests using 1 worker
+
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  1 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P01_al_seleccionar_un_contacto_corredor_en_la_pestana.spec.ts:139:7 › ADO-373 | P01 — Al seleccionar un contacto CORREDOR en la pestaña Contactos, la grilla Domicilios carga correctamente los domicilios existentes de ese contacto. › p01 al_seleccionar_un_contacto_corredor_en_la_pestaña_contactos, (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  2 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P02_al_agregar_un_domicilio_nuevo_al_contacto_y_guarda.spec.ts:139:7 › ADO-373 | P02 — Al agregar un domicilio nuevo al contacto y guardar, el registro aparece en la grilla sin necesidad de refrescar la página completa. › p02 al_agregar_un_domicilio_nuevo_al_contacto_y_guardar,_el_regi (1.4m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  3 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P03_al_modificar_un_domicilio_existente_del_contacto_e.spec.ts:139:7 › ADO-373 | P03 — Al modificar un domicilio existente del contacto, el cambio se refleja en la grilla. › p03 al_modificar_un_domicilio_existente_del_contacto,_el_cambio_ (1.2m)
+  ✘  4 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts:139:7 › ADO-373 | P04 — Al eliminar un domicilio, desaparece de la grilla. › p04 al_eliminar_un_domicilio,_desaparece_de_la_grilla. (35.9s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  5 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts:139:7 › ADO-373 | P04 — Al eliminar un domicilio, desaparece de la grilla. › p04 al_eliminar_un_domicilio,_desaparece_de_la_grilla. (retry #1) (1.3m)
+  ✘  6 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts:139:7 › ADO-373 | P05 — La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores. › p05 la_grilla_de_domicilios_del_cliente_principal_(sin_selección (34.7s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  7 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts:139:7 › ADO-373 | P05 — La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores. › p05 la_grilla_de_domicilios_del_cliente_principal_(sin_selección (retry #1) (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  8 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P06_la_funcionalidad_de_telefonos_y_emails_en_la_misma.spec.ts:139:7 › ADO-373 | P06 — La funcionalidad de Teléfonos y eMails en la misma pestaña no presenta regresiones. › p06 la_funcionalidad_de_teléfonos_y_emails_en_la_misma_pestaña_n (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  9 evidence\373\uat-373-20260726T001314Z-b584c6\tests\P07_la_migracion_de_columnas_dtdistrit_dturban_dtdirec.spec.ts:139:7 › ADO-373 | P07 — La migración de columnas DTDISTRIT / DTURBAN / DTDIRECCION en RDIRE está confirmada en el entorno de pruebas y producción. › p07 la_migración_de_columnas_dtdistrit_/_dturban_/_dtdireccion_e (1.4m)
+
+
+  1) evidence\373\uat-373-20260726T001314Z-b584c6\tests\P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts:139:7 › ADO-373 | P04 — Al eliminar un domicilio, desaparece de la grilla. › p04 al_eliminar_un_domicilio,_desaparece_de_la_grilla. 
+
+    TimeoutError: page.goto: Timeout 20000ms exceeded.
+    Call log:
+    [2m  - navigating to "http://localhost:35017/AgendaWeb/FrmAgenda.aspx", waiting until "domcontentloaded"[22m
+
+
+      118 |     // For session-dependent targets, hitting them with page.goto crashes the
+      119 |     // ASP.NET app pool. The action_steps below walk the human path from entry.
+    > 120 |     await page.goto(`${BASE_URL}${ENTRY_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+          |                ^
+      121 |     await waitForAgendaStable(page);
+      122 |     const beforeEachUrl = page.url().toLowerCase();
+      123 |     if (beforeEachUrl.includes('frmlogin')) {
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\373\uat-373-20260726T001314Z-b584c6\tests\P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts:120:16
+
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-373-uat-373-20260-2d015-io-desaparece-de-la-grilla-\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-373-uat-373-20260-2d015-io-desaparece-de-la-grilla-\error-context.md
+
+  2) evidence\373\uat-373-20260726T001314Z-b584c6\tests\P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts:139:7 › ADO-373 | P05 — La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores. › p05 la_grilla_de_domicilios_del_cliente_principal_(sin_selección 
+
+    TimeoutError: page.goto: Timeout 20000ms exceeded.
+    Call log:
+    [2m  - navigating to "http://localhost:35017/AgendaWeb/FrmAgenda.aspx", waiting until "domcontentloaded"[22m
+
+
+      118 |     // For session-dependent targets, hitting them with page.goto crashes the
+      119 |     // ASP.NET app pool. The action_steps below walk the human path from entry.
+    > 120 |     await page.goto(`${BASE_URL}${ENTRY_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+          |                ^
+      121 |     await waitForAgendaStable(page);
+      122 |     const beforeEachUrl = page.url().toLowerCase();
+      123 |     if (beforeEachUrl.includes('frmlogin')) {
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\373\uat-373-20260726T001314Z-b584c6\tests\P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts:120:16
+
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-373-uat-373-20260-c2431-nte-principal-sin-selección\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-373-uat-373-20260-c2431-nte-principal-sin-selección\error-context.md
+
+  2 flaky
+    evidence\373\uat-373-20260726T001314Z-b584c6\tests\P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts:139:7 › ADO-373 | P04 — Al eliminar un domicilio, desaparece de la grilla. › p04 al_eliminar_un_domicilio,_desaparece_de_la_grilla. 
+    evidence\373\uat-373-20260726T001314Z-b584c6\tests\P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts:139:7 › ADO-373 | P05 — La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores. › p05 la_grilla_de_domicilios_del_cliente_principal_(sin_selección 
+  5 passed (10.6m)

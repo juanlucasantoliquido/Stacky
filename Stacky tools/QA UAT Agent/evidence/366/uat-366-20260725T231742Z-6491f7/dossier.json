@@ -1,0 +1,43 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-07-25T23:18:46.727960+00:00",
+  "ticket_id": 366,
+  "run_id": "uat-366-20260725T231742Z-6491f7",
+  "verdict": "BLOCKED",
+  "category": "OPS",
+  "reason": "PIPELINE_CRASH",
+  "failed_stage": "pipeline",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'pipeline'. [OPS] PIPELINE_CRASH. 'charmap' codec can't encode character '\\u2192' in position 25: character maps to <undefined>",
+  "human_action_required": "Investigate OPS/PIPELINE_CRASH and rerun pipeline",
+  "exec_summary": {
+    "session_started_at": "2026-07-25T23:17:42.713575Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 87
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\evidence_bundle_manifest.json",
+    "evidence_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\evidence_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\execution.jsonl",
+    "navigation_contract_validation_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\navigation_contract_validation.json",
+    "result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\result.json",
+    "scenarios_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\scenarios.json",
+    "ticket_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\ticket.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "evidence_manifest.json",
+    "execution.jsonl",
+    "navigation_contract_validation.json",
+    "result.json",
+    "scenarios.json",
+    "ticket.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 4.3
+}

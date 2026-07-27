@@ -25,3 +25,33 @@ export function getWorkItemTypeColor(workItemType: string | null | undefined): s
   if (!workItemType) return DEFAULT_COLOR;
   return WORK_ITEM_TYPE_COLORS[workItemType.trim().toLowerCase()] ?? DEFAULT_COLOR;
 }
+
+/**
+ * Tipos de work item que Stacky trata como INCIDENCIA. Mismo conjunto que usaba
+ * `canResolveWithAgent` (plan 166 F5): el tracker publica las incidencias como
+ * "Issue" (o "Bug"), no existe un tipo literal "Incidencia" en ADO.
+ */
+const INCIDENT_TYPES = new Set(["issue", "bug"]);
+
+/** Ícono del distintivo de incidencia (el color NUNCA va solo — a11y). */
+export const INCIDENT_ICON = "🚑";
+
+/**
+ * ¿Este work item es una incidencia? Fuente única de verdad para el resaltado
+ * visual del board y para la disponibilidad del Dev Resolutor.
+ */
+export function isIncidentWorkItemType(workItemType: string | null | undefined): boolean {
+  if (!workItemType) return false;
+  return INCIDENT_TYPES.has(workItemType.trim().toLowerCase());
+}
+
+/**
+ * Etiqueta a mostrar en el badge de tipo. Las incidencias se prefijan con el
+ * ícono para que el distintivo no dependa solo del color (daltonismo, temas de
+ * alto contraste, capturas en blanco y negro).
+ */
+export function formatWorkItemTypeLabel(workItemType: string | null | undefined): string {
+  const raw = (workItemType ?? "").trim();
+  if (!raw) return "";
+  return isIncidentWorkItemType(raw) ? `${INCIDENT_ICON} ${raw}` : raw;
+}

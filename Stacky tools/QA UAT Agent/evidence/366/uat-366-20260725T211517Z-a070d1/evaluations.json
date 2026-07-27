@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "evaluations": [
+    {
+      "scenario_id": "P02",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "1",
+          "status": "pass",
+          "evidence_ref": "evidence/P02/assertions_P02.json",
+          "evaluated_at": "2026-07-25T21:17:00.121Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-25T21:17:00Z"
+    },
+    {
+      "scenario_id": "P03",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "1",
+          "status": "pass",
+          "evidence_ref": "evidence/P03/assertions_P03.json",
+          "evaluated_at": "2026-07-25T21:17:00.123Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-25T21:17:00Z"
+    },
+    {
+      "scenario_id": "P04",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "1",
+          "status": "pass",
+          "evidence_ref": "evidence/P04/assertions_P04.json",
+          "evaluated_at": "2026-07-25T21:17:00.123Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-25T21:17:00Z"
+    }
+  ]
+}

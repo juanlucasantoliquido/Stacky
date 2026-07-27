@@ -1,0 +1,110 @@
+{
+  "ok": true,
+  "ticket_id": 387,
+  "compiled": 2,
+  "out_of_scope": 3,
+  "scenarios": [
+    {
+      "scenario_id": "P02",
+      "ticket_id": 387,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla.",
+      "precondiciones": [
+        "Login como PABLO",
+        "Datos requeridos: Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsq"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 387,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando).",
+      "precondiciones": [
+        "Login como PABLO",
+        "Datos requeridos: Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsq"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P01",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "En el grid \"Gestiones\" de Detalle de Cliente > Datos Generales se muestra una sola columna \"Medio de Contacto\" (la del valor: email o teléfono).",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    },
+    {
+      "id": "P03",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "El Excel generado por \"Exportar\" desde el bloque Gestiones no incluye la columna eliminada, y el resto de columnas conserva su orden y contenido actuales.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    },
+    {
+      "id": "P05",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "Si otras pantallas comparten la misma definición de columnas de gestiones, quedan explícitamente incluidas o excluidas del alcance según lo confirmado con negocio.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    }
+  ],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 11745
+  }
+}

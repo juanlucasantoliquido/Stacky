@@ -1,0 +1,72 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 387,
+  "generated_at": "2026-07-25T21:17:19.152409Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "387-CA-01",
+      "description": "En el grid \"Gestiones\" de Detalle de Cliente > Datos Generales se muestra una sola columna \"Medio de Contacto\" (la del valor: email o teléfono). Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsqueda de Clientes\" (o \"Pooles de Trabajo\" / Agenda) y abrir el Detalle de un cliente con historial de gestiones. | En la pestaña \"Datos Generales\", ubicar el bloque \"Gestiones\" (parte inferior central de la pantalla). Gestiones",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "387-CA-02",
+      "description": "La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla. Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsqueda de Clientes\" (o \"Pooles de Trabajo\" / Agenda) y abrir el Detalle de un cliente con historial de gestiones. | En la pestaña \"Datos Generales\", ubicar el bloque \"Gestiones\" (parte inferior central de la pantalla).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "387-CA-03",
+      "description": "El Excel generado por \"Exportar\" desde el bloque Gestiones no incluye la columna eliminada, y el resto de columnas conserva su orden y contenido actuales. Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsqueda de Clientes\" (o \"Pooles de Trabajo\" / Agenda) y abrir el Detalle de un cliente con historial de gestiones. | En la pestaña \"Datos Generales\", ubicar el bloque \"Gestiones\" (parte inferior central de la pantalla). Exportar",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "387-CA-04",
+      "description": "No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando). Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsqueda de Clientes\" (o \"Pooles de Trabajo\" / Agenda) y abrir el Detalle de un cliente con historial de gestiones. | En la pestaña \"Datos Generales\", ubicar el bloque \"Gestiones\" (parte inferior central de la pantalla).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "387-CA-05",
+      "description": "Si otras pantallas comparten la misma definición de columnas de gestiones, quedan explícitamente incluidas o excluidas del alcance según lo confirmado con negocio. Ingresar a AgendaWeb con un usuario gestor de Cobranza Prejudicial. | Ir a \"Búsqueda de Clientes\" (o \"Pooles de Trabajo\" / Agenda) y abrir el Detalle de un cliente con historial de gestiones. | En la pestaña \"Datos Generales\", ubicar el bloque \"Gestiones\" (parte inferior central de la pantalla).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "uat": 5
+  }
+}

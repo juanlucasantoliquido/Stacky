@@ -1,0 +1,140 @@
+{
+  "ok": false,
+  "ticket_id": 387,
+  "verdict": "BLOCKED",
+  "category": "DATA",
+  "reason": "NAVIGATION_DATA_MISSING",
+  "failed_stage": "navigation_contract_validation",
+  "stage": "navigation_contract_validation",
+  "error": "navigation_data_missing",
+  "message": "Navigation contract validation BLOCKED for scenario P02 targeting 'FrmDetalleClie.aspx': NAVIGATION_DATA_MISSING. Lane: uat_human.",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Columna duplicada \"Medio de Contacto\" en grid Gestiones de Detalle de Cliente",
+      "plan_item_count": 5
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 5,
+      "layers": {
+        "uat": 5
+      },
+      "uat_required": true,
+      "manual_review_required": false,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\387\\uat-387-20260725T211709Z-b958d3\\387\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 2,
+      "out_of_scope_count": 3
+    },
+    "compiler_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "module_not_found"
+    },
+    "weak_oracle_filter": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_touched": 0,
+      "weak_total": 0,
+      "by_scenario": {}
+    },
+    "preconditions": {
+      "ok": true,
+      "skipped": true,
+      "total": 2,
+      "ok_count": 2,
+      "blocked": 0,
+      "skip_reason": "Missing env vars: RS_QA_DB_USER, RS_QA_DB_PASS, RS_QA_DB_DSN"
+    },
+    "selector_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_alias_contract_scenarios"
+    },
+    "data_readiness_check": {
+      "ok": true,
+      "skipped": true,
+      "reason": "error:name '_run_id' is not defined"
+    },
+    "data_contract_compile": {
+      "ok": true,
+      "skipped": false,
+      "contracts_compiled": 2,
+      "contracts_with_requirements": 2,
+      "total_blocking_requirements": 2
+    },
+    "data_readiness_v2": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_checked": 2,
+      "missing_count": 0,
+      "blocking_missing_count": 0,
+      "results": [
+        {
+          "scenario_id": "P02",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\387\\uat-387-20260725T211709Z-b958d3\\387\\data_readiness_v2_P02.json"
+        },
+        {
+          "scenario_id": "P04",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\387\\uat-387-20260725T211709Z-b958d3\\387\\data_readiness_v2_P04.json"
+        }
+      ]
+    },
+    "data_resolution_broker": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_blocking_missing_requirements"
+    },
+    "sql_seed_proposal": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_seed_decisions"
+    },
+    "catalog_readiness": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_catalogs_required"
+    },
+    "seed_cleanup": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_applied_seeds",
+      "cleanup_count": 0
+    },
+    "navigation_contract_validation": {
+      "ok": false,
+      "skipped": false,
+      "lane": "uat_human",
+      "scenarios_checked": 2,
+      "blocked_count": 1,
+      "allowed_count": 1
+    }
+  },
+  "elapsed_s": 21.01,
+  "human_action_required": "Proveer datos faltantes: ['CLCOD']. Son necesarios para navegar via 'open_from_busqueda' a 'FrmDetalleClie.aspx'.",
+  "run_id": "uat-387-20260725T211709Z-b958d3",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\387\\uat-387-20260725T211709Z-b958d3",
+  "_normalized": true
+}

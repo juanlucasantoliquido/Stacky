@@ -1,0 +1,20 @@
+{
+  "scenario_id": "P04",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "grid_c_gridgestiones",
+      "tipo": "page_not_contains_text",
+      "expected": "ETIQCONTACTO",
+      "actual_text": "menu\nlogout\nSALIR\nDetalle de Cliente\nUsuario:\nUSUARIO TEST\nPendiente de Hoy:\n0\nPendiente de otros Días:\n18\nRealizado Hoy:\n0\nTotal en Agenda:\n18\nBarrido Realizado:\n0%\nClientes Asignados:\n10\nPromesas a Vencer en 7 días:\n0\nformat_list_bulleted\nCobranza Prejudicial\nevent\nAgenda Personal\nevent_note\nPooles de Trabajo\nsearch\nBusqueda de Clientes\ndate_range\nAgenda de Grupo\nformat_list_bulleted\nSupervision\nformat_list_bulleted\nReportes Operativos\nformat_list_bulleted\nReportes OBI\nformat_list_bulleted\nCobranza Judicial\nevent\nAgenda De Demandas\nsearch\nBuscar Demandas\nrule\nValidar Gastos\nconfirmation_number\nLiquidar Gastos\nswitch_account\nReasignar Abogado\nformat_list_bulleted\nReportes Operativos\nformat_list_bulleted\nReportes OBI\nformat_list_bulleted\nFacturación y Gastos\nrule\nValidar Facturas\nrule\nValidar Notas de Gastos\nreceipt\nFacturas\nconfirmation_number\nNotas de Gastos\nsettings\nAdministrador\n \nchevron_left\nAGENDA PERSONAL\nchevron_right\nAVANZAR\nNombre del Cliente\nUsuario\nNro Documento\nPerfil\nNúm. Cliente\nNivel de Mora\nTipo Cliente\nAgente\nRiesgo de Cliente:\nFAD\nAtraso Total Dolarizado\nTELÉFONO\nCOMPROMISOS CONVENIOS PASAR A JUDICIAL JUDICIAL DOCUMENTACIÓN FICHA NOTAS\nPVIG PINC DLOC INAC CREF\nDATOS GENERALES\nRELACIONES\nCONTACTOS\nPAGOS\nSCORING\nDATOS HISTORICOS\nObligación *\ngrid_on\nEXPORTAR\n \t \tCÓD. OBLIGACIÓN\tPÓLIZA\tDÍAS MORA\tMONEDA\tMONTO\tFECHA VENC.\tPRODUCTO\tSUCURSAL\tFECHA INICIO\tFECHA MORA\tFECHA ÚLT. PAGO\tMONTO ÚLT. PAGO\tFECHA PROX VENC\tTOTAL VENCER\tMOTIVO NO COBRO\tCANAL DE VENTA\tMEDIO COBRO ÚLT. PAGO\tDÉB. AUTOMÁTICO\tSALDO A FAVOR\tCORREDOR\tNRO. CUOTAS\tTIPO DE CONTRATO\tTIPO DE FACTURACIÓN\nradio_button_checked\t\nassignment\n \tDEUDATEST_UP150\t \t45\t \t3,750.25\t \tTEMPORAL 5 AÑOS\t \t \t \t \t0.00\t \t0,00\t \t \t \tSi\t0.00\t \t0\t005\t \nGestiones\nevent_note\nVER COMENTARIOS\nFECHA\tHORA\tTAR\tNOTA\tMEDIO DE CONTACTO\tFIGURA\tUSUARIO\tOBLIGACIÓN\nDetalle Deuda\nDEUDA\n\n\nFecha de Entrada\n\t\n \n\n\nFecha de Mora\n\t\n \n\n\nDías de Mora\n\t\n \n\n\nSaldo Deuda\n\t\n \n\n\nSaldo Capital\n\t\n \n\n\nAtraso Total\n\t\n \n\n\nAtraso Total (Conv)\n\t\n \n\n\nAtraso Capital\n\t\n \n\n\nAtraso Int. Normal\n\t\n \n\n\nAtraso Gtos. Cobranza\n\t\n \n\n\nAtraso Impuesto\n\t\n \n\n\nMonto mínimo a pagar\n\t\n \n\n\nPrima Neta:\n\t\n \n\n\nIntereses:\n\t\n \n\n\nMonto Cubierto:\n\t\n \n\n\nMonto Min. a Pagar:\n\t\n \nsettings\nAcción / Agendar",
+      "visible": true
+    }
+  ],
+  "screen_verified": {
+    "url": "http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx?q=4hVF9ypabGEudDMcl3cMASSNhFPC7sZ1pqul4wsqj1liKYyF5yCVPxfRka820Xm1nIkVxRnyoNzpVHRuxFkAQVcyuCV1d/Z5+MWKkYelwkw1BVokvsUQbz/Q5GjeOeYXBfjb1bX5yUtRiTJ7DVRY8uLOkIIdt1FyoF+IYxzIQGEya48TA69gj0PSNl+rF+5z2VM2OKClcB5SVdtTTO7snkx2h1poLE/3Xj0U0/PNOcJfVVVVA+YY90rrwpjet1Nf3B2wUufqMsops/FcF4xYoLdHpoXY1Z5cX0DsugcnqCY35eU7Fd2TX67NuBCVUTex7B7z4/l7KvIkWNVBMYZC/L9AlUnUipUwjPPp+t4L6jfT0x9+IU1x/w5MMT9e3j6uQSBBFLFCTyuPTNYQqN4ne6s384XxXcukRLR0L9T8fV5XXkIusVdHC8xxhCUKrtgv",
+    "title": "Detalle de Cliente",
+    "expected": "FrmDetalleClie.aspx",
+    "anchor_selector": null,
+    "anchor_present": null
+  }
+}

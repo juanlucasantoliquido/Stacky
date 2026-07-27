@@ -1,0 +1,398 @@
+{
+  "ok": true,
+  "ticket_id": 366,
+  "compiled": 5,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes.",
+      "precondiciones": [
+        "Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "scroll_into_view",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "cmbDepartamento",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Particular"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El combo Tipo Telefono en AutoGestion (MantenedorTelefonos.ascx) refleja las mismas opciones nuevas, sin necesidad de cambio de codigo (mismo catalogo RTABL/TBNUME=68).",
+      "precondiciones": [
+        "El usuario debe tener acceso a la sección de Detalle de Cliente en Agenda Web o AutoGestion.",
+        "Debe existir al menos un contacto registrado para el cliente."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btnGuardar",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbProvincia",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "tipo": "count_eq",
+          "target": "cmbDepartamento",
+          "valor": "68"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RTELE",
+          "filtro": "TETIPTEL"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE.",
+      "precondiciones": [
+        "Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "scroll_into_view",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "input_nombre",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_nombre",
+          "valor": "Nombre de prueba"
+        },
+        {
+          "accion": "fill",
+          "target": "input_apellido",
+          "valor": "Apellido de prueba"
+        },
+        {
+          "accion": "click",
+          "target": "btnGuardar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "select_value_is",
+          "target": "cmbTipoTelefono",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "cmbTipoTelefono",
+          "valor": "Particular"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RTELE",
+          "filtro": "TETIPTEL = 'Laboral' OR TETIPTEL = 'Particular'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      },
+      "weak_oracles": [
+        {
+          "tipo": "page_contains_text",
+          "target": "msg_titulo_cliente",
+          "valor": "Número de teléfono guardado correctamente"
+        }
+      ],
+      "functional_status": null
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script.",
+      "precondiciones": [
+        "Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "scroll_into_view",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "hover",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "double_click",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "select_radio",
+          "target": "cmbDepartamento",
+          "valor": "Laboral"
+        },
+        {
+          "accion": "select_radio",
+          "target": "cmbDepartamento",
+          "valor": "Particular"
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_eq",
+          "target": "cmbDepartamento",
+          "valor": "4"
+        },
+        {
+          "tipo": "visible",
+          "target": "cmbDepartamento",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "visible",
+          "target": "cmbDepartamento",
+          "valor": "Particular"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RTABL",
+          "filtro": "TBNUME=68"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados.",
+      "precondiciones": [
+        "Ingresar a Detalle de Cliente (Agenda Web) o a la ficha de AutoGestion de un cliente con al menos un contacto."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_agregar_domicilio",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "accion": "scroll_into_view",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "accion": "hover",
+          "target": "btnGuardar",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "cmbDepartamento",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "cmbProvincia",
+          "valor": null
+        },
+        {
+          "tipo": "visible",
+          "target": "cmbDepartamento",
+          "valor": null
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Particular"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RTABL",
+          "filtro": "TBNUME=68"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 37272
+  }
+}

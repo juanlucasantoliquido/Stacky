@@ -1,0 +1,77 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 361,
+  "generated_at": "2026-07-25T21:18:08.138564Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "361-CA-01",
+      "description": "Con al menos una promesa de pago vencida e incumplida (ESTADO de PINC ≠ 0), el chip PINC se muestra en color ROJO, sin importar si el conteo de filas que cumplen la condición es 1, 2 o 3. Ingresar a AgendaWeb → Cobranza Prejudicial → Pooles de Trabajo / Búsqueda de Clientes y abrir el Detalle de Cliente de un deudor con una obligación en mora. | Ir a Compromisos y registrar (o localizar) una promesa de pago con Fecha anterior a la fecha actual y Pagado = 0,00 (o Pagado < 90% de Cantidad), tal como se observa en la captura de la sección \"Promesas de Pago\" (fecha 15/07/2026, Pagado 0",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "361-CA-02",
+      "description": "El color de cada chip de alerta queda determinado por un mapeo fijo asociado a la alerta (PVIG=Verde, PINC=Rojo, DLOC=Rojo, CREF=Ámbar, INAC=Rojo), no por el valor numérico crudo devuelto por ALQUERY. Ingresar a AgendaWeb → Cobranza Prejudicial → Pooles de Trabajo / Búsqueda de Clientes y abrir el Detalle de Cliente de un deudor con una obligación en mora. | Ir a Compromisos y registrar (o localizar) una promesa de pago con Fecha anterior a la fecha actual y Pagado = 0,00 (o Pagado < 90% de Cantidad), tal como se observa en la captura de la sección \"Promesas de Pago\" (fecha 15/07/2026, Pagado 0",
+      "layer": "unit",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida una regla de negocio pura o cálculo sin interacción UI",
+      "owner": "developer",
+      "handoff": "crear test unitario en Developer Agent"
+    },
+    {
+      "id": "361-CA-03",
+      "description": "Cuando ESTADO = 0 (alerta no aplica), el chip correspondiente se muestra en Gris, igual que antes. Ingresar a AgendaWeb → Cobranza Prejudicial → Pooles de Trabajo / Búsqueda de Clientes y abrir el Detalle de Cliente de un deudor con una obligación en mora. | Ir a Compromisos y registrar (o localizar) una promesa de pago con Fecha anterior a la fecha actual y Pagado = 0,00 (o Pagado < 90% de Cantidad), tal como se observa en la captura de la sección \"Promesas de Pago\" (fecha 15/07/2026, Pagado 0 0",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "361-CA-04",
+      "description": "Prueba de regresión: cliente con 1, 2 y 3 promesas incumplidas simultáneas siempre muestra PINC en rojo (no debe cambiar a verde/ámbar por el conteo). Ingresar a AgendaWeb → Cobranza Prejudicial → Pooles de Trabajo / Búsqueda de Clientes y abrir el Detalle de Cliente de un deudor con una obligación en mora. | Ir a Compromisos y registrar (o localizar) una promesa de pago con Fecha anterior a la fecha actual y Pagado = 0,00 (o Pagado < 90% de Cantidad), tal como se observa en la captura de la sección \"Promesas de Pago\" (fecha 15/07/2026, Pagado 0",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "361-CA-05",
+      "description": "No se modifica el comportamiento de alertas ya correctas (validar PVIG sigue en verde tras el fix). Ingresar a AgendaWeb → Cobranza Prejudicial → Pooles de Trabajo / Búsqueda de Clientes y abrir el Detalle de Cliente de un deudor con una obligación en mora. | Ir a Compromisos y registrar (o localizar) una promesa de pago con Fecha anterior a la fecha actual y Pagado = 0,00 (o Pagado < 90% de Cantidad), tal como se observa en la captura de la sección \"Promesas de Pago\" (fecha 15/07/2026, Pagado 0",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "uat": 2,
+    "unit": 1,
+    "manual_review": 2
+  }
+}

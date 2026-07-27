@@ -1,0 +1,27 @@
+[
+  {
+    "run_id": "uat-373-20260726T001314Z-b584c6",
+    "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6",
+    "created_at": "2026-07-26T00:13:14.290213Z"
+  },
+  {
+    "run_id": "uat-373-20260726T000400Z-bb8d8d",
+    "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T000400Z-bb8d8d",
+    "created_at": "2026-07-26T00:04:00.123115Z"
+  },
+  {
+    "run_id": "uat-373-20260725T235513Z-b6e63e",
+    "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T235513Z-b6e63e",
+    "created_at": "2026-07-25T23:55:13.689109Z"
+  },
+  {
+    "run_id": "uat-373-20260725T234453Z-d7f8f3",
+    "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T234453Z-d7f8f3",
+    "created_at": "2026-07-25T23:44:53.978276Z"
+  },
+  {
+    "run_id": "uat-373-20260725T211908Z-c8ee2e",
+    "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e",
+    "created_at": "2026-07-25T21:19:08.744422Z"
+  }
+]

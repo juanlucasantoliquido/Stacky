@@ -1,0 +1,181 @@
+{
+  "ok": false,
+  "ticket_id": 373,
+  "verdict": "BLOCKED",
+  "category": "DATA",
+  "reason": "NAVIGATION_DATA_MISSING",
+  "failed_stage": "navigation_contract_validation",
+  "stage": "navigation_contract_validation",
+  "error": "navigation_data_missing",
+  "message": "Navigation contract validation BLOCKED for scenario P01 targeting 'FrmDetalleClie.aspx': NAVIGATION_DATA_MISSING. Lane: uat_human.",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Domicilios en pestaña Contactos desaparecen al cambiar de pestaña",
+      "plan_item_count": 7
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 7,
+      "layers": {
+        "uat": 6,
+        "manual_review": 1
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 7,
+      "out_of_scope_count": 0
+    },
+    "compiler_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "module_not_found"
+    },
+    "weak_oracle_filter": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_touched": 0,
+      "weak_total": 0,
+      "by_scenario": {}
+    },
+    "preconditions": {
+      "ok": true,
+      "skipped": true,
+      "total": 7,
+      "ok_count": 7,
+      "blocked": 0,
+      "skip_reason": "Missing env vars: RS_QA_DB_USER, RS_QA_DB_PASS, RS_QA_DB_DSN"
+    },
+    "selector_contract": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_alias_contract_scenarios"
+    },
+    "data_readiness_check": {
+      "ok": true,
+      "skipped": true,
+      "reason": "error:name '_run_id' is not defined"
+    },
+    "data_contract_compile": {
+      "ok": true,
+      "skipped": false,
+      "contracts_compiled": 7,
+      "contracts_with_requirements": 7,
+      "total_blocking_requirements": 7
+    },
+    "data_readiness_v2": {
+      "ok": true,
+      "skipped": false,
+      "scenarios_checked": 7,
+      "missing_count": 0,
+      "blocking_missing_count": 0,
+      "results": [
+        {
+          "scenario_id": "P01",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P01.json"
+        },
+        {
+          "scenario_id": "P02",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P02.json"
+        },
+        {
+          "scenario_id": "P03",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P03.json"
+        },
+        {
+          "scenario_id": "P04",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P04.json"
+        },
+        {
+          "scenario_id": "P05",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P05.json"
+        },
+        {
+          "scenario_id": "P06",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P06.json"
+        },
+        {
+          "scenario_id": "P07",
+          "ready": true,
+          "decision": "UNVERIFIED",
+          "blocking_missing_count": 0,
+          "missing": [],
+          "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e\\373\\data_readiness_v2_P07.json"
+        }
+      ]
+    },
+    "data_resolution_broker": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_blocking_missing_requirements"
+    },
+    "sql_seed_proposal": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_seed_decisions"
+    },
+    "catalog_readiness": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_catalogs_required"
+    },
+    "seed_cleanup": {
+      "ok": true,
+      "skipped": true,
+      "reason": "no_applied_seeds",
+      "cleanup_count": 0
+    },
+    "navigation_contract_validation": {
+      "ok": false,
+      "skipped": false,
+      "lane": "uat_human",
+      "scenarios_checked": 7,
+      "blocked_count": 1,
+      "allowed_count": 6
+    }
+  },
+  "elapsed_s": 26.11,
+  "human_action_required": "Proveer datos faltantes: ['CLCOD']. Son necesarios para navegar via 'open_from_busqueda' a 'FrmDetalleClie.aspx'.",
+  "run_id": "uat-373-20260725T211908Z-c8ee2e",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260725T211908Z-c8ee2e",
+  "_normalized": true
+}

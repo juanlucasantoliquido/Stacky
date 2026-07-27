@@ -1,0 +1,97 @@
+{
+  "ok": false,
+  "ticket_id": 361,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "SCREEN_AMBIGUOUS",
+  "failed_stage": "screen_detection",
+  "stage": "screen_detection",
+  "error": "screen_ambiguous",
+  "message": "Deteccion de pantalla bloqueada: SCREEN_AMBIGUOUS. Pantallas candidatas: ['FrmJDemanda.aspx', 'FrmDetalleClie.aspx', 'FrmGestion.aspx', 'FrmBusqueda.aspx', 'FrmEstrategia.aspx']. Accion requerida: Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Chip PINC no cambia a color rojo ante promesa de pago incumplida",
+      "plan_item_count": 5
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 5,
+      "layers": {
+        "uat": 2,
+        "unit": 1,
+        "manual_review": 2
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\361\\test_portfolio.json"
+    },
+    "screen_detection": {
+      "ok": false,
+      "skipped": false,
+      "verdict": "BLOCKED",
+      "category": "PIP",
+      "reason": "SCREEN_AMBIGUOUS",
+      "failed_stage": "screen_detection",
+      "error": "screen_ambiguous",
+      "message": "Deteccion de pantalla bloqueada: SCREEN_AMBIGUOUS. Pantallas candidatas: ['FrmJDemanda.aspx', 'FrmDetalleClie.aspx', 'FrmGestion.aspx', 'FrmBusqueda.aspx', 'FrmEstrategia.aspx']. Accion requerida: Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+      "screen_detection": {
+        "selected_screens": [
+          "FrmJDemanda.aspx",
+          "FrmDetalleClie.aspx",
+          "FrmGestion.aspx",
+          "FrmBusqueda.aspx",
+          "FrmEstrategia.aspx"
+        ],
+        "matches": [
+          {
+            "screen": "FrmJDemanda.aspx",
+            "source": "analisis_tecnico",
+            "match_type": "exact",
+            "confidence": 0.95
+          },
+          {
+            "screen": "FrmDetalleClie.aspx",
+            "source": "analisis_tecnico",
+            "match_type": "exact",
+            "confidence": 0.95
+          },
+          {
+            "screen": "FrmGestion.aspx",
+            "source": "screen_aliases.yml",
+            "match_type": "alias",
+            "confidence": 0.6
+          },
+          {
+            "screen": "FrmBusqueda.aspx",
+            "source": "screen_aliases.yml",
+            "match_type": "alias",
+            "confidence": 0.6
+          },
+          {
+            "screen": "FrmEstrategia.aspx",
+            "source": "screen_aliases.yml",
+            "match_type": "alias",
+            "confidence": 0.6
+          }
+        ],
+        "fallback_used": false,
+        "ambiguous": true,
+        "blocked": true,
+        "block_reason": "SCREEN_AMBIGUOUS",
+        "confidence": 0.95,
+        "supported_screens_version": "screen_aliases.yml",
+        "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\361\\screen_detection.json"
+      },
+      "human_action_required": "Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml"
+    }
+  },
+  "elapsed_s": 9.69,
+  "human_action_required": "Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+  "run_id": "uat-361-20260725T211758Z-0553a1",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1",
+  "_normalized": true
+}

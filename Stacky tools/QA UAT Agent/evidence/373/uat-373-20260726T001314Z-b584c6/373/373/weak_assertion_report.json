@@ -1,0 +1,178 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "373",
+  "ticket_id": 373,
+  "files_analyzed": 7,
+  "total_tests": 7,
+  "strong_tests": 0,
+  "weak_tests": 7,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P01_al_seleccionar_un_contacto_corredor_en_la_pestana.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p01 al_seleccionar_un_contacto_corredor_en_la_pesta\u00f1a_contactos,",
+          "file_name": "P01_al_seleccionar_un_contacto_corredor_en_la_pestana.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P02_al_agregar_un_domicilio_nuevo_al_contacto_y_guarda.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p02 al_agregar_un_domicilio_nuevo_al_contacto_y_guardar,_el_regi",
+          "file_name": "P02_al_agregar_un_domicilio_nuevo_al_contacto_y_guarda.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P03_al_modificar_un_domicilio_existente_del_contacto_e.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p03 al_modificar_un_domicilio_existente_del_contacto,_el_cambio_",
+          "file_name": "P03_al_modificar_un_domicilio_existente_del_contacto_e.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p04 al_eliminar_un_domicilio,_desaparece_de_la_grilla.",
+          "file_name": "P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p05 la_grilla_de_domicilios_del_cliente_principal_(sin_selecci\u00f3n",
+          "file_name": "P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P06_la_funcionalidad_de_telefonos_y_emails_en_la_misma.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p06 la_funcionalidad_de_tel\u00e9fonos_y_emails_en_la_misma_pesta\u00f1a_n",
+          "file_name": "P06_la_funcionalidad_de_telefonos_y_emails_en_la_misma.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P07_la_migracion_de_columnas_dtdistrit_dturban_dtdirec.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p07 la_migraci\u00f3n_de_columnas_dtdistrit_/_dturban_/_dtdireccion_e",
+          "file_name": "P07_la_migracion_de_columnas_dtdistrit_dturban_dtdirec.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-26T00:14:06.560300Z"
+}

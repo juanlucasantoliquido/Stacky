@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "ticket_id": 367,
+  "verdict": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "failed_stage": "ui_map",
+  "stage": "ui_map",
+  "error": "ui_map_missing",
+  "message": "UI map missing for screen(s): ['FrmBusqueda.aspx']. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)",
+      "plan_item_count": 4
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 4,
+      "layers": {
+        "integration": 1,
+        "manual_review": 2,
+        "uat": 1
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202006Z-a6dd6d\\367\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": false,
+      "skipped": false,
+      "screens": [
+        "FrmBusqueda.aspx"
+      ],
+      "missing_screens": [
+        "FrmBusqueda.aspx"
+      ],
+      "reason": "UI_MAP_MISSING"
+    }
+  },
+  "elapsed_s": 9.62,
+  "human_action_required": "UI map missing for: FrmBusqueda.aspx. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "run_id": "uat-367-20260725T202006Z-a6dd6d",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202006Z-a6dd6d",
+  "_normalized": true
+}

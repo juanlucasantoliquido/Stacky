@@ -1,0 +1,313 @@
+{
+  "ok": true,
+  "ticket_id": 65,
+  "compiled": 8,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Débito Automático = Sí",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "select",
+          "target": "select_debito_auto",
+          "valor": "Sí"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_eq",
+          "target": "table_agenda_usu",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Débito Automático = No",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "select",
+          "target": "select_debito_auto",
+          "valor": "No"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "table_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Corredor = valor parcial",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_corredor",
+          "valor": "valor parcial"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [],
+      "datos_requeridos": [
+        {
+          "tabla": "ROBLG",
+          "filtro": "SELECT DISTINCT TOP 5 OGCORREDOR FROM ROBLG WHERE OGCORREDOR IS NOT NULL"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      },
+      "weak_oracles": [
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_usu",
+          "valor": "corredor que contiene el texto"
+        }
+      ],
+      "functional_status": "not_verifiable"
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Nombre de Cliente = texto parcial",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_nombre_cliente",
+          "valor": "texto parcial"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_contains_text",
+          "target": "table_agenda_usu",
+          "valor": "texto parcial"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RCLIE",
+          "filtro": "SELECT TOP 1 CLNOMBRE FROM RCLIE WHERE CLNOMBRE IS NOT NULL ORDER BY 1"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "RUC = parcial &quot;20&quot;",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_ruc",
+          "valor": "20"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "table_agenda_usu",
+          "valor": 0
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RCLIE",
+          "filtro": "CLNUMDOC LIKE '20%'"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    },
+    {
+      "scenario_id": "P06",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Todos los campos nuevos vacíos",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_desde",
+          "valor": null
+        },
+        {
+          "accion": "fill",
+          "target": "input_hasta",
+          "valor": null
+        },
+        {
+          "accion": "clear",
+          "target": "input_corredor",
+          "valor": null
+        },
+        {
+          "accion": "clear",
+          "target": "input_nombre_cliente",
+          "valor": null
+        },
+        {
+          "accion": "clear",
+          "target": "input_ruc",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_debito_auto",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_eq",
+          "target": "table_agenda_usu",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P06"
+      }
+    },
+    {
+      "scenario_id": "P07",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "AND lógico — NivelMora + NombreCliente",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "select_nivel_mora",
+          "valor": "C1"
+        },
+        {
+          "accion": "fill",
+          "target": "input_nombre_cliente",
+          "valor": "a"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P07"
+      },
+      "weak_oracles": [
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "Intersección correcta entre ambos filtros"
+        }
+      ],
+      "functional_status": "not_verifiable"
+    },
+    {
+      "scenario_id": "P08",
+      "ticket_id": 65,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Botón Avanzar con Corredor activo",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "navigate_webforms",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P08"
+      }
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 42751
+  },
+  "prioritization": {
+    "total_candidates": 8,
+    "selected": 8,
+    "excluded": 0,
+    "time_budget_seconds": 720,
+    "estimated_total_seconds": 480
+  }
+}

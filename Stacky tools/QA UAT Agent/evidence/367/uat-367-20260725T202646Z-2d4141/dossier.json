@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "f418d29d-346b-4b18-8102-667326239068",
+  "ticket_id": 0,
+  "ticket_title": "[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "Se ejecutaron 4 escenarios UAT para '[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)'. Resultado: BLOCKED. Escenarios con problemas: P01, P02, P03, P04. Se requiere revisión humana de los ítems marcados.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 4,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 4,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres.",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres.. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).",
+      "status": "blocked",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: BLOCKED.",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "P02",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "P03",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "RUNTIME_ERROR"
+    }
+  ],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "[P01] Error de ejecución — verificar entorno (Node, Playwright, env vars).",
+    "[P02] Error de ejecución — verificar entorno (Node, Playwright, env vars).",
+    "[P03] Error de ejecución — verificar entorno (Node, Playwright, env vars).",
+    "[P04] Error de ejecución — verificar entorno (Node, Playwright, env vars)."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-07-25T20:27:30Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 14585
+  },
+  "comment_hash": "91a94f01e4188833033780d206a83f9f1ac97643cde80586dc90f78d89846148",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202646Z-2d4141\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202646Z-2d4141\\ado_comment.html"
+  }
+}

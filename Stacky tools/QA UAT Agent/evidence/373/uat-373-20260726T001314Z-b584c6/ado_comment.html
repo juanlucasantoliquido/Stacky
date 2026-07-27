@@ -1,0 +1,252 @@
+<!-- stacky-qa-uat:run id="b9acf40d-a527-475f-a3b6-d241ab243504" hash="842cf2a8242da19f8d6e43d8f382a0229cea660cbc840c9803e1914c7c364d13" -->
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #1a1a1a;">
+
+<h2 style="margin: 0 0 8px; font-size: 16px; color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 6px;">
+  🤖 Dossier UAT — ADO-0
+  &nbsp;
+  
+  <span style="background: #a4262c; color: #fff; border-radius: 4px; padding: 2px 10px; font-size: 13px;">❌ FAIL</span>
+  
+</h2>
+
+<p style="margin: 4px 0 12px; color: #555; font-size: 12px;">
+  Run: <code>b9acf40d-a527-475f-a3b6-d241ab243504</code> &nbsp;|&nbsp;
+  Fecha: 2026-07-26T00:25:28Z &nbsp;|&nbsp;
+  Agente: 1.3.0 &nbsp;|&nbsp;
+  Commit: <code>N/A</code>
+</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resumen ejecutivo</h3>
+<p style="margin: 0 0 12px; line-height: 1.5;">Resumen Ejecutivo UAT: La validación del ticket [INC] Domicilios en pestaña Contactos desaparecen al cambiar de pestaña resultó en un FAIL. De 7 escenarios ejecutados, 6 fueron exitosos y 1 presentó problemas (P04). El escenario fallido evidencia que los domicilios no se mantienen visibles al alternar entre pestañas, afectando la experiencia del usuario. Se recomienda revisar y corregir la funcionalidad antes de avanzar a producción.</p>
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Resultados por escenario</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 12px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Título</th>
+      <th style="text-align: center; padding: 6px 10px; border: 1px solid #ddd;">Estado</th>
+      <th style="text-align: right; padding: 6px 10px; border: 1px solid #ddd;">Duración</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P01</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Al seleccionar un contacto CORREDOR en la pestaña Contactos, la grilla Domicilios carga correctamente los domicilios existentes de ese contacto.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P02</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Al agregar un domicilio nuevo al contacto y guardar, el registro aparece en la grilla sin necesidad de refrescar la página completa.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P03</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Al modificar un domicilio existente del contacto, el cambio se refleja en la grilla.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P04</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">Al eliminar un domicilio, desaparece de la grilla.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #a4262c; font-weight: bold;">❌ FAIL</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P05</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+    <tr style="background: #fafafa;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P06</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">La funcionalidad de Teléfonos y eMails en la misma pestaña no presenta regresiones.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+    <tr style="background: #fff;">
+      <td style="padding: 5px 10px; border: 1px solid #ddd;"><code>P07</code></td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd;">La migración de columnas DTDISTRIT / DTURBAN / DTDIRECCION en RDIRE está confirmada en el entorno de pruebas y producción.</td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: center;">
+        
+        <span style="color: #107c10; font-weight: bold;">✅ PASS</span>
+        
+      </td>
+      <td style="padding: 5px 10px; border: 1px solid #ddd; text-align: right;">0 ms</td>
+    </tr>
+    
+  </tbody>
+</table>
+
+
+
+
+<h3 style="margin: 16px 0 6px; font-size: 14px; color: #333;">Lo que se intentó verificar</h3>
+<table style="border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 14px;">
+  <thead>
+    <tr style="background: #f3f2f1;">
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd; width: 90px;">Escenario</th>
+      <th style="text-align: left; padding: 6px 10px; border: 1px solid #ddd;">Qué se intentó verificar</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P01</code>
+        <br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, al seleccionar un contacto de tipo CORREDOR en la pestaña Contactos, la grilla de Domicilios se carga correctamente al asegurarse de que las grillas relacionadas (obligaciones y gestiones) sean visibles. La verificación de que no hay elementos visibles en las grillas indica que la carga de domicilios se realizó sin errores.</td>
+    </tr>
+    
+    <tr style="background: #fafafa; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P02</code>
+        <br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que al agregar un nuevo domicilio a un contacto tipo CORREDOR y guardar la información, el nuevo registro se muestre correctamente en la grilla sin necesidad de refrescar la página. La verificación se realizó comprobando la visibilidad del nuevo domicilio en la interfaz después de la acción de guardar.</td>
+    </tr>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P03</code>
+        <br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado verificó que, al modificar la dirección de un contacto tipo CORREDOR en el sistema, el cambio se refleje correctamente en la grilla de domicilios. Se aseguró que la nueva dirección apareciera visible en la interfaz después de realizar la modificación.</td>
+    </tr>
+    
+    <tr style="background: #fafafa; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P04</code>
+        <br/><span style="color: #a4262c; font-size: 11px;">❌</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, al eliminar un domicilio asociado a un contacto tipo CORREDOR, dicho domicilio desaparezca de la grilla de domicilios en la interfaz de usuario. La verificación falló porque se esperaba que la cantidad de domicilios en la grilla fuera igual a cero tras la eliminación, pero no se cumplió esta condición.</td>
+    </tr>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P05</code>
+        <br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que al acceder a la grilla de Domicilios del cliente principal en la página 'FrmDetalleClie.aspx' sin seleccionar un contacto, no se generen errores y que la grilla se muestre correctamente. La condición de verificación se centró en asegurar que no haya elementos invisibles que puedan indicar un fallo en la carga de la información.</td>
+    </tr>
+    
+    <tr style="background: #fafafa; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P06</code>
+        <br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que la funcionalidad de gestión de teléfonos y correos electrónicos en la pestaña correspondiente no presenta regresiones al realizar acciones de agregar, modificar y eliminar un número de teléfono. Se confirmó que, tras ejecutar estas acciones, no se mostraron errores ni elementos visibles que indicaran un fallo en la interfaz.</td>
+    </tr>
+    
+    <tr style="background: #fff; vertical-align: top;">
+      <td style="padding: 6px 10px; border: 1px solid #ddd; white-space: nowrap;">
+        <code>P07</code>
+        <br/><span style="color: #107c10; font-size: 11px;">✅</span>
+        
+      </td>
+      <td style="padding: 6px 10px; border: 1px solid #ddd; line-height: 1.5; color: #1a1a1a;">Este escenario de prueba automatizado intentó verificar que, tras la migración de las columnas DTDISTRIT, DTURBAN y DTDIRECCION en la tabla RDIRE, el sistema permite realizar una búsqueda en el formulario 'FrmDetalleClie.aspx' y que se obtienen resultados válidos, confirmando que el conteo de resultados es mayor que cero. El resultado "PASS" indica que la funcionalidad de búsqueda está operando correctamente en el entorno de pruebas.</td>
+    </tr>
+    
+  </tbody>
+</table>
+<p style="font-size: 10px; color: #999; margin: -10px 0 14px; text-align: right; font-style: italic;">Narrativas generadas por IA (gpt-4o-mini)</p>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #a4262c;">Fallas detectadas</h3>
+
+<div style="border-left: 3px solid #a4262c; padding: 8px 12px; margin-bottom: 10px; background: #fdf3f3;">
+  <strong style="color: #a4262c;">P04 — P04</strong><br/>
+  <span style="font-size: 12px;">Oracle 'grid_c_griddomicilios' (tipo=count_eq) expected='0' actual='1'</span>
+  
+  <table style="margin-top: 6px; font-size: 11px; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Esperado</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">0</td>
+    </tr>
+    <tr>
+      <td style="padding: 2px 8px; background: #f3f2f1; border: 1px solid #ddd;"><strong>Actual</strong></td>
+      <td style="padding: 2px 8px; border: 1px solid #ddd; font-family: monospace;">1</td>
+    </tr>
+  </table>
+  
+  
+</div>
+
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Recomendaciones para el QA humano</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Verifica si existe un domicilio adicional en el sistema que no debería estar registrado.</li>
+  
+  <li>Revisa la configuración y los datos de entrada para asegurarte de que no se esté generando un domicilio extra por error.</li>
+  
+  <li>Consulta con el equipo de desarrollo si hubo cambios recientes en la lógica de creación de domicilios.</li>
+  
+  <li>Realiza una prueba manual para confirmar si el resultado es consistente y documenta los pasos para identificar la causa.</li>
+  
+</ul>
+
+
+
+<h3 style="margin: 12px 0 6px; font-size: 14px; color: #333;">Próximos pasos</h3>
+<ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.6;">
+  
+  <li>Revisar los escenarios fallidos con el desarrollador.</li>
+  
+  <li>Crear bug tickets para cada fallo confirmado.</li>
+  
+  <li>Planificar re-ejecución tras correcciones.</li>
+  
+</ul>
+
+
+<p style="margin: 16px 0 0; padding: 8px 12px; background: #f3f9ff; border: 1px solid #cce0f5; border-radius: 4px; font-size: 11px; color: #444; line-height: 1.5;">
+  <strong>ℹ️ Postura del agente</strong>: Este comentario fue preparado por QA UAT y publicado por Stacky Agents.
+  El agente <strong>no cambió el estado del ticket</strong>. Mover a "QA Done", "Cerrado" u otro estado es una decisión exclusivamente humana.
+</p>
+
+</div>

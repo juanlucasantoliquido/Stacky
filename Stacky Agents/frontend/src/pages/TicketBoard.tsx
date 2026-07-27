@@ -48,7 +48,7 @@ import { filtersToTicketBoardState, ticketBoardStateToFilters } from "../service
 import { actionsForTicket, quickActions } from "../services/entityActions";
 import { copyText as copiarTexto } from "../services/clipboard";
 import { IconButton } from "../components/ui";
-import { getWorkItemTypeColor } from "../utils/workItemTypeColor";
+import { formatWorkItemTypeLabel, getWorkItemTypeColor, isIncidentWorkItemType } from "../utils/workItemTypeColor";
 
 // Resuelve el tipo del agente. Prioriza el override explícito que el operador
 // fija en EmployeeEditDrawer; cae a heurística sobre el filename si no hay override.
@@ -313,6 +313,10 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
   // Regla de negocio #7/#8 (preservada dentro de resolveSuggestedAgent): Tasks y
   // Épicas nunca proponen Negocio — ya tienen análisis previo / botón Funcional.
   const isEpic  = (ticket.work_item_type ?? "").toLowerCase() === "epic";
+  // Distintivo visual de INCIDENCIA (Issue/Bug): badge de tipo rojo con ícono
+  // + barra roja al costado de la tarjeta. Mismo criterio que habilita el Dev
+  // Resolutor (isIncidentWorkItemType), así lo marcado y lo accionable coinciden.
+  const isIncident = isIncidentWorkItemType(ticket.work_item_type);
 
   // B5 — recomendación con fallback (FlowConfig → pipeline_summary → por tipo).
   // Antes salía sólo de FlowConfig por estado: un Feature/Technical/Task en un
@@ -460,7 +464,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
 
   return (
     <>
-      <div className={`${styles.card} ${expanded ? styles.cardExpanded : ""} ${isRunning ? styles.cardRunning : ""} ${indent ? styles.cardIndented : ""}`}>
+      <div className={`${styles.card} ${expanded ? styles.cardExpanded : ""} ${isRunning ? styles.cardRunning : ""} ${indent ? styles.cardIndented : ""} ${isIncident ? styles.cardIncident : ""}`}>
 
         {/* Banner: INCONSISTENTE (prioridad) o EN EJECUCIÓN */}
         {inconsistency.isInconsistent ? (
@@ -494,6 +498,14 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
             >
               {ticket.ado_state ?? "—"}
             </span>
+            {ticket.work_item_type && !isEpic && (
+              <span
+                className={`${styles.wiTypeBadge} ${isIncident ? styles.wiTypeBadgeIncident : ""}`}
+                title={isIncident ? "Incidencia" : ticket.work_item_type}
+              >
+                {formatWorkItemTypeLabel(ticket.work_item_type)}
+              </span>
+            )}
             {/* Plan 200 F4 — hay SQL para desplegar en este ticket. */}
             <TicketSqlDeployBadge ticketId={ticket.id} className={styles.priority} />
             {ticket.priority != null && (

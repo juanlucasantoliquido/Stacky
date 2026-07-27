@@ -1,0 +1,76 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 366,
+  "generated_at": "2026-07-25T23:19:05.781017Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "366-CA-01",
+      "description": "El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "366-CA-02",
+      "description": "El combo Tipo Telefono en AutoGestion (MantenedorTelefonos.ascx) refleja las mismas opciones nuevas, sin necesidad de cambio de codigo (mismo catalogo RTABL/TBNUME=68). 68",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "366-CA-03",
+      "description": "Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "366-CA-04",
+      "description": "Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. 68",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "366-CA-05",
+      "description": "El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "uat": 2,
+    "manual_review": 3
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "P01",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "input_p_liza",
+      "tipo": "attribute_equals",
+      "expected": "50",
+      "actual_text": "50",
+      "attribute": "maxlength",
+      "visible": true
+    }
+  ],
+  "screen_verified": {
+    "url": "http://localhost:35017/AgendaWeb/FrmBusqueda.aspx",
+    "title": "Búsqueda de Clientes",
+    "expected": "FrmBusqueda.aspx",
+    "anchor_selector": "#c_abfCodObligacion",
+    "anchor_present": true
+  }
+}

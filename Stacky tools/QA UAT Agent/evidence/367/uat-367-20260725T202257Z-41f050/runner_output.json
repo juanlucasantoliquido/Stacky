@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "ticket_id": 367,
+  "runs": [
+    {
+      "scenario_id": "P01",
+      "spec_file": "",
+      "status": "blocked",
+      "reason": "missing_selectors",
+      "duration_ms": 0,
+      "assertion_failures": [],
+      "artifacts": {}
+    },
+    {
+      "scenario_id": "P02",
+      "spec_file": "",
+      "status": "blocked",
+      "reason": "missing_selectors",
+      "duration_ms": 0,
+      "assertion_failures": [],
+      "artifacts": {}
+    },
+    {
+      "scenario_id": "P03",
+      "spec_file": "",
+      "status": "blocked",
+      "reason": "missing_selectors",
+      "duration_ms": 0,
+      "assertion_failures": [],
+      "artifacts": {}
+    },
+    {
+      "scenario_id": "P04",
+      "spec_file": "",
+      "status": "blocked",
+      "reason": "missing_selectors",
+      "duration_ms": 0,
+      "assertion_failures": [],
+      "artifacts": {}
+    }
+  ],
+  "pass_count": 0,
+  "fail_count": 0,
+  "blocked_count": 4,
+  "total_count": 4,
+  "elapsed_s": 0.0
+}

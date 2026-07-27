@@ -1,0 +1,93 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "658a6afe-9b7d-4a73-a4ca-a563b836dc6a",
+  "ticket_id": 0,
+  "ticket_title": "[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "PASS",
+  "executive_summary": "Resumen Ejecutivo UAT: La validación del truncamiento del campo \"Póliza\" en la funcionalidad de Búsqueda de Clientes se completó exitosamente. Se ejecutaron 3 escenarios, todos aprobados sin incidencias. El campo respeta el límite de MaxLength=20, garantizando la integridad de los datos y la experiencia del usuario. No se identificaron escenarios fallidos ni bloqueados. El ticket puede ser considerado resuelto.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 3,
+    "pass": 3,
+    "fail": 0,
+    "blocked": 0,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado verificó que el campo \"Póliza\" en la pantalla de búsqueda de clientes permite ingresar un máximo de 50 caracteres, alineándose con la restricción definida en la base de datos para los campos OGCOD/OCOBLIG. La prueba se consideró exitosa al confirmar que el atributo del campo se ajusta correctamente al límite establecido."
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que al realizar una búsqueda por Póliza utilizando un valor completo de más de 20 caracteres, el sistema retorne correctamente el cliente asociado a dicha Póliza. La prueba se considera exitosa al obtener el resultado esperado, lo que indica que la funcionalidad de búsqueda está operando correctamente."
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que la funcionalidad de búsqueda en la pantalla 'FrmBusqueda.aspx' no afecte el comportamiento de los filtros existentes (Documento, Cliente, Apellidos, Teléfono, Rol) al realizar una búsqueda específica. La verificación se centró en asegurar que no se mostrara ningún resultado inesperado ('None') tras ejecutar la búsqueda con el valor proporcionado."
+    }
+  ],
+  "failures": [],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "Todos los escenarios pasaron. Proceder con aprobación del QA humano."
+  ],
+  "next_steps": [
+    "Comunicar resultado al Tech Lead y PM.",
+    "Adjuntar evidencia al ticket ADO.",
+    "Cerrar sprint item si aplica."
+  ],
+  "generated_at": "2026-07-26T00:37:32Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 19229
+  },
+  "comment_hash": "055aea850c790d6e4c360fc94de2c5209993e4828e68dabf742167d69e29b2fc",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T003533Z-84517c\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T003533Z-84517c\\ado_comment.html"
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "366",
+  "ticket_id": 366,
+  "files_analyzed": 4,
+  "total_tests": 4,
+  "strong_tests": 0,
+  "weak_tests": 4,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p01 el_combo_tipo_telefono_en_agenda_web_(mantenedortelefonos.as",
+          "file_name": "P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p03 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula",
+          "file_name": "P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p04 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_",
+          "file_name": "P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p05 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez",
+          "file_name": "P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-25T23:19:18.215905Z"
+}

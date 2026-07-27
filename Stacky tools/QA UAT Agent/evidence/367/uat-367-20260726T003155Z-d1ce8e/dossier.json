@@ -1,0 +1,93 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "06f3340b-30b0-4049-8e36-2e6e2240562d",
+  "ticket_id": 0,
+  "ticket_title": "[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "PASS",
+  "executive_summary": "Todos los 3 escenarios de la prueba UAT para '[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)' pasaron exitosamente. No se detectaron defectos.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 3,
+    "pass": 3,
+    "fail": 0,
+    "blocked": 0,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: PASS."
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: PASS."
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Se intentó verificar: Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).. Se ejecutaron 2 paso(s) y se evaluaron 1 condición(es). Resultado: PASS."
+    }
+  ],
+  "failures": [],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "Todos los escenarios pasaron. Proceder con aprobación del QA humano."
+  ],
+  "next_steps": [
+    "Comunicar resultado al Tech Lead y PM.",
+    "Adjuntar evidencia al ticket ADO.",
+    "Cerrar sprint item si aplica."
+  ],
+  "generated_at": "2026-07-26T00:33:34Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 9583
+  },
+  "comment_hash": "e3e7cec89bd1db82e1bc0460439357125fb89502e4bbe1473bbdf91b095dd316",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T003155Z-d1ce8e\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T003155Z-d1ce8e\\ado_comment.html"
+  }
+}

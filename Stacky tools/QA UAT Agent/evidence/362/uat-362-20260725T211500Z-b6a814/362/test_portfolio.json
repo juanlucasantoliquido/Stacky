@@ -1,0 +1,63 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 362,
+  "generated_at": "2026-07-25T21:15:09.447027Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "362-CA-01",
+      "description": "En Detalle de Cliente (AgendaWeb/FrmDetalleClie.aspx), el campo antes rotulado \"Atraso Total\" pasa a mostrar \"Atraso Total Dolarizado\" (RIDIOMA ESP IDTEXTO=3165). Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | Ir a Agenda Personal → abrir el Detalle de Cliente de cualquier obligación agendada. | Observar el campo superior derecho \"Atraso Total\" (junto al panel de Teléfono): no indica que el monto está dolarizado. 3165",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "362-CA-02",
+      "description": "El mismo cambio se refleja automáticamente en la grilla Agendados por Motor Experto, ya que comparte el mismo IDTEXTO=9294 vía RCONTROLES. Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | Ir a Agenda Personal → abrir el Detalle de Cliente de cualquier obligación agendada. | Observar el campo superior derecho \"Atraso Total\" (junto al panel de Teléfono): no indica que el monto está dolarizado. 9294",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "362-CA-03",
+      "description": "No se modifica el ancho de columnas ni se rompe el scroll horizontal existente en la grilla de Agenda. Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | Ir a Agenda Personal → abrir el Detalle de Cliente de cualquier obligación agendada. | Observar el campo superior derecho \"Atraso Total\" (junto al panel de Teléfono): no indica que el monto está dolarizado.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "362-CA-04",
+      "description": "[PENDIENTE: confirmar con negocio si corresponde actualizar también ENG ('Premium') y POR ('Prêmio') para IDTEXTO 9294, y si las etiquetas hermanas del panel \"Detalle de Deuda\" (IDTEXTO 3307 \"Atraso Total\" y 3308 \"Atraso Total (Conv)\") deben alinearse en la misma pasada]. Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | Ir a Agenda Personal → abrir el Detalle de Cliente de cualquier obligación agendada. | Observar el campo superior derecho \"Atraso Total\" (junto al panel de Teléfono): no indica que el monto está dolarizado. Premium",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "manual_review": 2,
+    "uat": 2
+  }
+}

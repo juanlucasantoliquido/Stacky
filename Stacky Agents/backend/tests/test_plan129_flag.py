@@ -25,14 +25,17 @@ def test_flag_conocida():
     assert _KEY in keys
 
 
-def test_flag_default_off():
-    assert config.STACKY_PALETTE_DEEP_SEARCH_ENABLED is False
+def test_flag_default_on():
+    """Barrido default-ON 2026-07-27: la búsqueda es LOCAL (sin IA), de solo
+    lectura y solo corre cuando el operador abre la paleta y tipea — no quema
+    tokens en reposo ni escribe en ningún sistema real."""
+    assert config.STACKY_PALETTE_DEEP_SEARCH_ENABLED is True
 
 
-def test_flag_no_curada():
+def test_flag_curada():
     from tests.test_harness_flags import _CURATED_DEFAULTS_ON
-    assert _KEY not in _CURATED_DEFAULTS_ON
-    assert _spec().default is None
+    assert _KEY in _CURATED_DEFAULTS_ON
+    assert _spec().default is True
 
 
 @pytest.fixture
@@ -48,4 +51,6 @@ def test_search_health_siempre_200(app_client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["ok"] is True
-    assert data["flag_enabled"] is False
+    # El health refleja el estado REAL de la flag, no un literal: tras el barrido
+    # default-ON 2026-07-27 nace encendida.
+    assert data["flag_enabled"] is config.STACKY_PALETTE_DEEP_SEARCH_ENABLED

@@ -22,6 +22,7 @@ import FinishWorkButton from "./FinishWorkButton";
 import CreateChildTaskButton from "./CreateChildTaskButton";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
+import { formatWorkItemTypeLabel, isIncidentWorkItemType } from "../utils/workItemTypeColor";
 import styles from "./TicketGraphView.module.css";
 
 // Misma lógica que TicketBoard — infiere tipo de agente desde filename.
@@ -314,6 +315,10 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const memoryBadge = memoryBadges[String(ticket.id)] ?? null;
   const isRunning = !!runningExecution || runningByTicket.has(ticket.id);
   const isClosed = ["Done", "Closed", "Resolved", "Removed", "Completed"].includes(ticket.ado_state);
+  // Distintivo de INCIDENCIA: barra roja en la tarjeta + badge con ícono. El
+  // acento va por box-shadow inset porque `borderColor` se pinta inline (estado)
+  // y una regla de borde en clase perdería contra ese estilo.
+  const isIncident = !isEpic && isIncidentWorkItemType(ticket.work_item_type);
 
   // Detección de INCONSISTENTE: stacky_status=completed + ejecución huérfana activa
   const inconsistency = detectInconsistencyFromRunning(ticket.stacky_status, runningExecution);
@@ -349,7 +354,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   return (
     <>
       <div
-        className={`${styles.nodeCard} ${isEpic ? styles.epicCard : ""} ${expanded ? styles.nodeExpanded : ""} ${isRunning ? styles.nodeRunning : ""}`}
+        className={`${styles.nodeCard} ${isEpic ? styles.epicCard : ""} ${expanded ? styles.nodeExpanded : ""} ${isRunning ? styles.nodeRunning : ""} ${isIncident ? styles.nodeIncident : ""}`}
         style={{ background: colors.bg, borderColor: isRunning ? "#22c55e" : colors.border }}
         onClick={() => setExpanded(x => !x)}
       >
@@ -372,7 +377,12 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
               {ticket.ado_state || "—"}
             </span>
             {!isEpic && ticket.work_item_type && (
-              <span className={styles.wiType}>{ticket.work_item_type}</span>
+              <span
+                className={`${styles.wiType} ${isIncident ? styles.wiTypeIncident : ""}`}
+                title={isIncident ? "Incidencia" : ticket.work_item_type}
+              >
+                {formatWorkItemTypeLabel(ticket.work_item_type)}
+              </span>
             )}
             {!isEpic && memoryBadge && memoryBadge.open_findings > 0 && (
               <span

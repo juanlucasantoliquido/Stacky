@@ -1,0 +1,63 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "369",
+  "ticket_id": 369,
+  "files_analyzed": 2,
+  "total_tests": 2,
+  "strong_tests": 0,
+  "weak_tests": 2,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P05_cuando_bgcodmedio_o_hbgcodmedio_es_null_la_etiquet.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p05 cuando_bgcodmedio_o_hbgcodmedio_es_null,_la_etiqueta_muestra",
+          "file_name": "P05_cuando_bgcodmedio_o_hbgcodmedio_es_null_la_etiquet.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P06_el_fix_no_altera_las_reglas_de_acceso_existentes_n.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p06 el_fix_no_altera_las_reglas_de_acceso_existentes;_ning\u00fan_rol",
+          "file_name": "P06_el_fix_no_altera_las_reglas_de_acceso_existentes_n.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-25T23:41:31.539930Z"
+}

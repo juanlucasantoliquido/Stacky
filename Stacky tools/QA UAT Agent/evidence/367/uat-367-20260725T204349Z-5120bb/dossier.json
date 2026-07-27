@@ -1,0 +1,136 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "f93445b8-acea-4954-8659-33ed89bca9a0",
+  "ticket_id": 0,
+  "ticket_title": "[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "BLOCKED",
+  "executive_summary": "La validación UAT del ticket [INC] Truncamiento del campo Póliza en Búsqueda de Clientes resultó bloqueada. Se ejecutaron 4 escenarios y ninguno fue aprobado; todos presentaron incidencias relacionadas con el truncamiento incorrecto del campo Póliza (MaxLength=20). Se requiere revisión y corrección para garantizar el cumplimiento de la restricción de longitud antes de continuar con la validación.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 4,
+    "pass": 0,
+    "fail": 0,
+    "blocked": 4,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.",
+      "status": "blocked",
+      "duration_ms": 4,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que el campo Póliza en la pantalla de búsqueda de clientes acepta correctamente un valor de hasta 50 caracteres y que, al enviar el formulario, se muestra el texto correspondiente al cliente esperado. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la funcionalidad del sistema.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres.",
+      "status": "blocked",
+      "duration_ms": 4,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que el campo \"Obligación\" en la pantalla de búsqueda judicial permite la entrada de un valor de hasta 50 caracteres, asegurando que el valor ingresado coincida con el esperado y que la página contenga el texto correspondiente al cliente esperado. El resultado \"BLOCKED\" indica que la prueba no pudo completarse, posiblemente debido a un problema en la interfaz o en la funcionalidad del sistema.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.",
+      "status": "blocked",
+      "duration_ms": 4,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que al realizar una búsqueda de cliente utilizando un número de póliza completo (más de 20 caracteres), el sistema retorne correctamente el cliente esperado en la pantalla de resultados. La verificación se centró en asegurar que el texto \"Cliente esperado\" esté presente en la página y que el conteo de resultados sea mayor a cero.",
+      "reason": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).",
+      "status": "blocked",
+      "duration_ms": 4,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que el campo de entrada 'input_p_liza' limite correctamente la cantidad de caracteres a 20, asegurando que no se pueda ingresar un valor que exceda este límite. La verificación se realizó al intentar ingresar un valor más largo y comprobar que se muestra el mensaje de error correspondiente.",
+      "reason": "RUNTIME_ERROR"
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P01",
+      "titulo": "P01",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "P02",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "P03",
+      "message": "RUNTIME_ERROR"
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "RUNTIME_ERROR"
+    }
+  ],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "Revise los registros de errores para identificar la causa exacta del error de ejecución.",
+    "Asegúrese de que todas las dependencias y servicios requeridos estén correctamente configurados y en funcionamiento.",
+    "Ejecute pruebas unitarias en los módulos afectados para aislar el problema antes de volver a ejecutar el flujo completo."
+  ],
+  "next_steps": [
+    "Resolver bloqueos de entorno antes de re-ejecutar.",
+    "Verificar configuración de env vars y base de datos."
+  ],
+  "generated_at": "2026-07-25T20:48:45Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 27457
+  },
+  "comment_hash": "dad027a6c26ae25a09af5c68c1051c1e311f9ae194e9436a9ca449513cd67a08",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T204349Z-5120bb\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T204349Z-5120bb\\ado_comment.html"
+  }
+}

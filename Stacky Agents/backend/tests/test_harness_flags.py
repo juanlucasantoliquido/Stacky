@@ -465,6 +465,28 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Barrido default-ON 2026-07-27 (directiva del operador) ──────────────
+    # Regla aplicada: toda flag va default ON salvo que (a) queme tokens en
+    # REPOSO (loop/daemon que llama a un modelo sin que el operador pida nada) o
+    # (b) escriba en un sistema REAL del operador (ADO/GitLab real, una BD suya,
+    # push a un remoto, borrado de datos) o saltee su decision (HITL).
+    # "Prerequisito no garantizado" DEJO de ser motivo de OFF: lo on-demand
+    # degrada sin romper. Estas 6 se promovieron con ese criterio:
+    "STACKY_COST_CODEBURN_IMPORT_ENABLED",        # Plan 142 F7 — lee un JSONL local; ruta vacia = inerte
+    "STACKY_PALETTE_DEEP_SEARCH_ENABLED",         # Plan 129 — busqueda local sin IA, solo lectura
+    "STACKY_DEPLOYMENTS_ENABLED",                 # Plan 120 — seccion + PLAN (dry-run); la escritura la gatea EXECUTE
+    "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED",    # Plan 120 — boton on-demand contra el modelo LOCAL (tokens cero)
+    "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED",   # Plan 256 — marcador en sidecar; el artefacto queda intacto
+    "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",     # Plan 240 — arranca IIS Express en localhost dentro de una corrida pedida
+    # Evaluadas en el mismo barrido y DEJADAS OFF a proposito (no tocar sin
+    # releer el motivo): STACKY_NIGHT_FOUNDRY_ENABLED y
+    # STACKY_EGRESS_SENTINEL_ENABLED (daemons de fondo que llaman a un modelo →
+    # gasto en reposo); STACKY_SQL_EXEC_ENABLED, STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED,
+    # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED, STACKY_DEPLOYMENTS_EXECUTE_ENABLED
+    # (escriben en sistemas reales del operador); STACKY_DB_COMPACT_ENABLED y
+    # STACKY_LEDGER_PURGE_ENABLED (borran datos); STACKY_SQLITE_SYNCHRONOUS_NORMAL_ENABLED
+    # (reduce durabilidad); STACKY_EVOLUTION_AUTO_APPLY_KNOWLEDGE_ENABLED y
+    # STACKY_QA_UAT_AUTORUN_ENABLED (saltean la decision del operador — HITL).
     # ── Plan 258 — telemetria veraz de los archivos de registro ──
     # Las 4 nacen ON: validar un esquema no borra nada, etiquetar procedencia
     # solo marca EN MEMORIA al leer (no reescribe el archivo), listar corridas
@@ -742,8 +764,8 @@ _CURATED_DEFAULTS_ON = {
     # de las 4 excepciones duras aplica).
     "STACKY_DOCS_DOCUMENTER_V2_ENABLED",
     # Plan 142 — Centro de Costos + Codeburn: vista read-only (C1, v2 CRITICADO).
-    # STACKY_COST_CODEBURN_IMPORT_ENABLED (F7) NO entra acá: excepción dura #3
-    # (prerequisito externo no garantizado), default OFF a propósito.
+    # STACKY_COST_CODEBURN_IMPORT_ENABLED (F7) se promovió a ON en el barrido
+    # 2026-07-27 y figura arriba, en el bloque de ese barrido.
     "STACKY_COST_CENTER_ENABLED",
     "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
     "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
@@ -867,9 +889,9 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239 — cockpit DevOps (solo lectura)
     "STACKY_DEVOPS_UI_V2_ENABLED",  # Plan 239 F0 — promovida a ON (shell v2 del plan 119)
     # ── Plan 240 F8 / Plan 241 F8 — Agente QA UAT E2E ──
-    # NOTA: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED NO va acá: nace OFF por
-    # EXCEPCIÓN DURA #3 (IIS Express + applicationhost.config + solución compilada
-    # no están garantizados en una instalación default).
+    # NOTA: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED se promovió a ON en el barrido
+    # 2026-07-27 y figura arriba, en el bloque de ese barrido (el "prerequisito no
+    # garantizado" dejó de ser motivo de OFF: degrada sin romper).
     "STACKY_QA_UAT_ADO_BRIDGE_ENABLED",            # Plan 240 — PAT cifrado, solo lectura
     "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",    # Plan 240 — prohibido el PASS vacío
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", # Plan 241 — aserciones que saben fallar
@@ -1153,10 +1175,11 @@ def test_cost_center_flag_registered_default_on():
     assert categorize("STACKY_COST_CENTER_ENABLED") == "observabilidad_notif"
     assert "STACKY_COST_CENTER_ENABLED" in _CURATED_DEFAULTS_ON
 
-    # F7 (opcional) — flag de import externo, default OFF (excepción dura #3): NO curada.
+    # F7 (opcional) — flag de import externo. Promovida a default ON en el barrido
+    # 2026-07-27: lee un JSONL local bajo demanda y con la ruta vacía queda inerte.
     assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" in by_key
-    assert by_key["STACKY_COST_CODEBURN_IMPORT_ENABLED"].default is None
-    assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" not in _CURATED_DEFAULTS_ON
+    assert by_key["STACKY_COST_CODEBURN_IMPORT_ENABLED"].default is True
+    assert "STACKY_COST_CODEBURN_IMPORT_ENABLED" in _CURATED_DEFAULTS_ON
     assert categorize("STACKY_COST_CODEBURN_IMPORT_ENABLED") == "observabilidad_notif"
     assert categorize("STACKY_COST_CODEBURN_IMPORT_PATH") == "observabilidad_notif"
 

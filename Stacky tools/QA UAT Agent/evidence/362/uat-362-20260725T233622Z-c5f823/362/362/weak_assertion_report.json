@@ -1,0 +1,86 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "362",
+  "ticket_id": 362,
+  "files_analyzed": 3,
+  "total_tests": 3,
+  "strong_tests": 0,
+  "weak_tests": 3,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P01_en_detalle_de_cliente_agendawebfrmdetalleclieaspx.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p01 en_detalle_de_cliente_(agendaweb/frmdetalleclie.aspx),_el_ca",
+          "file_name": "P01_en_detalle_de_cliente_agendawebfrmdetalleclieaspx.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P02_el_mismo_cambio_se_refleja_automaticamente_en_la_g.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p02 el_mismo_cambio_se_refleja_autom\u00e1ticamente_en_la_grilla_agen",
+          "file_name": "P02_el_mismo_cambio_se_refleja_automaticamente_en_la_g.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P03_no_se_modifica_el_ancho_de_columnas_ni_se_rompe_el.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p03 no_se_modifica_el_ancho_de_columnas_ni_se_rompe_el_scroll_ho",
+          "file_name": "P03_no_se_modifica_el_ancho_de_columnas_ni_se_rompe_el.spec.ts",
+          "line_number": 139,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-25T23:36:40.674998Z"
+}

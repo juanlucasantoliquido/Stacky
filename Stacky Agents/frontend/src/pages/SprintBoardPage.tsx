@@ -15,7 +15,7 @@ import React, { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import styles from "./SprintBoardPage.module.css";
-import { getWorkItemTypeColor } from "../utils/workItemTypeColor";
+import { formatWorkItemTypeLabel, getWorkItemTypeColor } from "../utils/workItemTypeColor";
 
 interface SprintInfo {
   id: string;
@@ -83,7 +83,7 @@ function SprintCard({ item }: { item: SprintItem }) {
     <div className={styles.card}>
       <div className={styles.cardId}>
         <span style={{ color: getWorkItemTypeColor(item.work_item_type) }}>
-          {item.work_item_type}
+          {formatWorkItemTypeLabel(item.work_item_type)}
         </span> &middot; ADO-{item.ado_id}
       </div>
       <div className={styles.cardTitle}>{item.title}</div>

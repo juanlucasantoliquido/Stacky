@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "evaluations": [
+    {
+      "scenario_id": "P05",
+      "status": "review",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "no_console_error",
+          "target": "__page__",
+          "expected": null,
+          "actual": null,
+          "status": "review",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T23:44:27.974Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-25T23:44:27Z"
+    },
+    {
+      "scenario_id": "P06",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "expected": "0",
+          "actual": "1",
+          "status": "pass",
+          "evidence_ref": "evidence/P06/assertions_P06.json",
+          "evaluated_at": "2026-07-25T23:44:27.976Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-25T23:44:27Z"
+    }
+  ]
+}

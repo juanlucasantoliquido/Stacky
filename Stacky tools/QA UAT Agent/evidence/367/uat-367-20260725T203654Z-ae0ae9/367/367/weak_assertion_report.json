@@ -1,0 +1,109 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "367",
+  "ticket_id": 367,
+  "files_analyzed": 4,
+  "total_tests": 4,
+  "strong_tests": 0,
+  "weak_tests": 4,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p01 el_campo_p\u00f3liza_en_frmbusqueda.aspx_admite_hasta_50_caracter",
+          "file_name": "P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts",
+          "line_number": 122,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p02 el_campo_obligaci\u00f3n_en_frmbusquedajudicial.aspx_admite_hasta",
+          "file_name": "P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts",
+          "line_number": 122,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p03 una_b\u00fasqueda_por_p\u00f3liza/obligaci\u00f3n_con_el_valor_completo_(>2",
+          "file_name": "P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts",
+          "line_number": 122,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P04_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p04 sin_regresi\u00f3n_en_el_resto_de_filtros_de_la_pantalla_(documen",
+          "file_name": "P04_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts",
+          "line_number": 122,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 3,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-25T20:37:28.820836Z"
+}

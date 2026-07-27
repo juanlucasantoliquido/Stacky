@@ -5,6 +5,8 @@
  * El wiring del botón se valida en el smoke manual (F6).
  */
 
+import { isIncidentWorkItemType } from "../utils/workItemTypeColor";
+
 export function canResolveWithAgent(args: {
   workItemType?: string | null;
   adoState?: string | null;
@@ -12,7 +14,7 @@ export function canResolveWithAgent(args: {
   enabled: boolean;
   closedStates: string[];
 }): boolean {
-  const isIssue = ["issue", "bug"].includes((args.workItemType ?? "").toLowerCase());
+  const isIssue = isIncidentWorkItemType(args.workItemType);
   const isClosed = args.closedStates.includes(args.adoState ?? "");
   return isIssue && args.enabled && !args.isRunning && !isClosed;
 }

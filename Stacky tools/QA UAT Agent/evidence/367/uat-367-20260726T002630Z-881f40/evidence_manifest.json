@@ -1,0 +1,178 @@
+{
+  "ok": true,
+  "run_dir": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T002630Z-881f40",
+  "generated_at": "2026-07-26T00:28:10Z",
+  "files": [
+    {
+      "path": "367/367/confidence_report.json",
+      "bytes": 856,
+      "sha256": "e9909c7992d716d1fb8bdf5531a9d02131ecd0d51bffb20dc22f0a6cefb03aff",
+      "kind": "data"
+    },
+    {
+      "path": "367/367/data_lineage.json",
+      "bytes": 336,
+      "sha256": "4dcab03b4919fc9760b908eaad8eafb35a22f083c9c03ca7f5f4d63f0776a9ab",
+      "kind": "data"
+    },
+    {
+      "path": "367/367/oracle_result.json",
+      "bytes": 1252,
+      "sha256": "fbba64fa9d246e8b41fcb5fd641af4331ffd4401100f830983434b4ed5cdd6e1",
+      "kind": "data"
+    },
+    {
+      "path": "367/367/weak_assertion_report.json",
+      "bytes": 2712,
+      "sha256": "8f9d8c50e3668eee3d51e2369debdd3b07767ca9ce115235c180a7ee0280e7c7",
+      "kind": "data"
+    },
+    {
+      "path": "367/data_contract_P01.json",
+      "bytes": 443,
+      "sha256": "4d3f093abaf1e77b700ffbd65e7684c956994c1d4b105766e84828b611508dc7",
+      "kind": "data"
+    },
+    {
+      "path": "367/data_contract_P02.json",
+      "bytes": 443,
+      "sha256": "15043869de4cd15885fdd3e9702fb330268253a08a7b8bd4b2f4489b08d002e7",
+      "kind": "data"
+    },
+    {
+      "path": "367/data_contract_P03.json",
+      "bytes": 443,
+      "sha256": "59e2a01e31163ba7a95aa78f56179e391f1f587517e8711b3750f901d75c1e6c",
+      "kind": "data"
+    },
+    {
+      "path": "367/screen_detection.json",
+      "bytes": 458,
+      "sha256": "afcc4b53d6d149f65c329e34af9cb85b240fa6ebbc6d8b9485345587a9eab830",
+      "kind": "data"
+    },
+    {
+      "path": "367/test_portfolio.json",
+      "bytes": 1893,
+      "sha256": "445b38c5c995ad3caab88a386435295e27c76590b76e1a2b31740599b08fac7c",
+      "kind": "data"
+    },
+    {
+      "path": "DOSSIER_UAT.md",
+      "bytes": 2707,
+      "sha256": "3c7666715e45e2bf42e11119404495b1cbe23aef7b781ab78f2de97f2450cebe",
+      "kind": "other"
+    },
+    {
+      "path": "ado_comment.html",
+      "bytes": 7470,
+      "sha256": "feb50d930280a157b74156fad1094e6f3572662eb2b71cbaa33830f45f6c1378",
+      "kind": "report"
+    },
+    {
+      "path": "dossier.json",
+      "bytes": 3903,
+      "sha256": "0b85de5cc23c0b8eca5eb4342258b14623d484f99013b2dbf00f22d0b0cb9d39",
+      "kind": "data"
+    },
+    {
+      "path": "effective_config.json",
+      "bytes": 460,
+      "sha256": "d78e14098afa66581af4c43ea2a11a90a8d6ccd0f8fb0516a3c2e13d5e768365",
+      "kind": "data"
+    },
+    {
+      "path": "evaluations.json",
+      "bytes": 1585,
+      "sha256": "7030439a31e8d2cd5703f26b56c1f8e8961c9e8bc1b934bb379a70775868253f",
+      "kind": "data"
+    },
+    {
+      "path": "execution.jsonl",
+      "bytes": 82750,
+      "sha256": "ede4e66f9fba373cee83a20fd9aa37383fab6e6955cc2202a6e1183dc912677d",
+      "kind": "log"
+    },
+    {
+      "path": "navigation_contract_validation.json",
+      "bytes": 867,
+      "sha256": "f140bb98894dbc51fc3bae6785fdc7b23440b2258d13627acfce3b46d21c9d8a",
+      "kind": "data"
+    },
+    {
+      "path": "playwright_output.txt",
+      "bytes": 1732,
+      "sha256": "6ac3edef3e37dfee253b349b547d35d2ad587fe69c7c31f05a0fb80091d6f8d1",
+      "kind": "log"
+    },
+    {
+      "path": "runner_output.json",
+      "bytes": 9160,
+      "sha256": "318ae5f6e8ecacdbe6148f00ae13bf4b8ed2ef5462c0f0c207a5f3049431cfa6",
+      "kind": "data"
+    },
+    {
+      "path": "scenarios.json",
+      "bytes": 4280,
+      "sha256": "d4c674f21cf9f5ee1c68194dc8635e6cd2e5b8ca5df727a41edf8a721cd01244",
+      "kind": "data"
+    },
+    {
+      "path": "tests/P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts",
+      "bytes": 20754,
+      "sha256": "231ff9cd8c4594ab9335c0df07a250236bcb4e95bb788de4a30776ecc0acae91",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P02_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts",
+      "bytes": 20103,
+      "sha256": "0d17c21a01bfaa718a9ec4c820106ee24b6adebff059a2ec19379db6f49b62c5",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P03_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts",
+      "bytes": 20093,
+      "sha256": "9b74d073f6bbe5aa34bf4a7d489f7cbea80bef2831501e57ec001ee033799775",
+      "kind": "spec"
+    },
+    {
+      "path": "ticket.json",
+      "bytes": 33112,
+      "sha256": "cb8f5c028f66d20c9a4a982fcef32b7ed88f642b4ebd15a03de041c00ec49334",
+      "kind": "data"
+    },
+    {
+      "path": "triage.json",
+      "bytes": 527,
+      "sha256": "623c705fd4eab14f415aa6a35171c365816c32a221e641dcd5f9a6b616d01305",
+      "kind": "data"
+    },
+    {
+      "path": "uat-367-20260726T002630Z-881f40/data_readiness.json",
+      "bytes": 639,
+      "sha256": "9ac8fc4c7e1027c6770905c056813505f04906d4dff827e5a866e284cc193834",
+      "kind": "data"
+    },
+    {
+      "path": "uat-367-20260726T002630Z-881f40/deployment_fingerprint.json",
+      "bytes": 290,
+      "sha256": "148bed24e05472436a998c2a4c1c886bac2700318f84d94e831ed5a46d9032af",
+      "kind": "data"
+    },
+    {
+      "path": "ui_map_resolution.json",
+      "bytes": 523,
+      "sha256": "b7697a6899affe1220dfd03d75221352334dcf85347a0d5b8ba1db8fcca4199c",
+      "kind": "data"
+    }
+  ],
+  "counts": {
+    "total": 27,
+    "data": 20,
+    "other": 1,
+    "report": 1,
+    "log": 2,
+    "spec": 3
+  },
+  "truncated": false
+}

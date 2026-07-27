@@ -1,0 +1,35 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-07-25T21:18:08.177122+00:00",
+  "ticket_id": 361,
+  "run_id": "uat-361-20260725T211758Z-0553a1",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "SCREEN_AMBIGUOUS",
+  "failed_stage": "screen_detection",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'screen_detection'. [PIP] SCREEN_AMBIGUOUS. Deteccion de pantalla bloqueada: SCREEN_AMBIGUOUS. Pantallas candidatas: ['FrmJDemanda.aspx', 'FrmDetalleClie.aspx', 'FrmGestion.aspx', 'FrmBusqueda.aspx', 'FrmEstrategia.aspx']. Accion requerida: Cla",
+  "human_action_required": "Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+  "exec_summary": {
+    "session_started_at": "2026-07-25T21:17:58.480783Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 15
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\execution.jsonl",
+    "result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\result.json",
+    "ticket_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\361\\uat-361-20260725T211758Z-0553a1\\ticket.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "result.json",
+    "ticket.json"
+  ],
+  "elapsed_build_ms": 0.8
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "evidence_bundle/1.0",
+  "run_id": "uat-367-20260725T202905Z-7dc8b9",
+  "evidence_dir": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T202905Z-7dc8b9",
+  "tier": "playwright",
+  "complete": true,
+  "required": [
+    "execution.jsonl",
+    "result.json",
+    "effective_config.json",
+    "dossier.json"
+  ],
+  "present": [
+    "execution.jsonl",
+    "result.json",
+    "effective_config.json",
+    "dossier.json"
+  ],
+  "missing": [],
+  "optional_present": [
+    "runner_output.json",
+    "evaluations.json",
+    "triage.json"
+  ],
+  "elapsed_ms": 0.5
+}

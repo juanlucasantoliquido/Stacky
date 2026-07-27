@@ -1,0 +1,1002 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 8 tests using 1 worker
+
+(node:42900) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:42900) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  1 evidence\65\uat-65-20260725T210732Z-630be1\tests\P01_debito_automatico_si.spec.ts:114:7 › ADO-65 | P01 — Débito Automático = Sí › p01 débito_automático_=_sí (19.4s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  2 evidence\65\uat-65-20260725T210732Z-630be1\tests\P02_debito_automatico_no.spec.ts:114:7 › ADO-65 | P02 — Débito Automático = No › p02 débito_automático_=_no (19.8s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  3 evidence\65\uat-65-20260725T210732Z-630be1\tests\P03_corredor_valor_parcial.spec.ts:114:7 › ADO-65 | P03 — Corredor = valor parcial › p03 corredor_=_valor_parcial (19.8s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✘  4 evidence\65\uat-65-20260725T210732Z-630be1\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:122:7 › ADO-65 | P04 — Nombre de Cliente = texto parcial › p04 nombre_de_cliente_=_texto_parcial (29.3s)
+(node:37368) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37368) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✘  5 evidence\65\uat-65-20260725T210732Z-630be1\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:122:7 › ADO-65 | P04 — Nombre de Cliente = texto parcial › p04 nombre_de_cliente_=_texto_parcial (retry #1) (29.8s)
+(node:14928) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14928) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  6 evidence\65\uat-65-20260725T210732Z-630be1\tests\P05_ruc_parcial_quot20quot.spec.ts:114:7 › ADO-65 | P05 — RUC = parcial &quot;20&quot; › p05 ruc_=_parcial_&quot;20&quot; (19.4s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  7 evidence\65\uat-65-20260725T210732Z-630be1\tests\P06_todos_los_campos_nuevos_vacios.spec.ts:114:7 › ADO-65 | P06 — Todos los campos nuevos vacíos › p06 todos_los_campos_nuevos_vacíos (19.2s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  8 evidence\65\uat-65-20260725T210732Z-630be1\tests\P07_and_logico_nivelmora_nombrecliente.spec.ts:114:7 › ADO-65 | P07 — AND lógico — NivelMora + NombreCliente › p07 and_lógico_—_nivelmora_+_nombrecliente (19.5s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  9 evidence\65\uat-65-20260725T210732Z-630be1\tests\P08_boton_avanzar_con_corredor_activo.spec.ts:114:7 › ADO-65 | P08 — Botón Avanzar con Corredor activo › p08 botón_avanzar_con_corredor_activo (19.4s)
+
+
+  1) evidence\65\uat-65-20260725T210732Z-630be1\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:122:7 › ADO-65 | P04 — Nombre de Cliente = texto parcial › p04 nombre_de_cliente_=_texto_parcial 
+
+    Error: P04: página debe contener "texto parcial"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 217[39m
+
+    [32m- texto parcial[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                             AccionesExportar AgendasClientes Asignados[39m
+    [31m+                             chevron_rightAvanzar[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda Avanzada[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Desde[43m [49m[39m
+    [31m+                                 Hasta[43m [49m[39m
+    [31m+                                 Empresa TodasGeneralesSaludVidaTodas[43m  [49m[39m
+    [31m+                                 Perfil Todos1 - Gerente de Cobranzas150 - Gestion Autopago155 - Soporte AIS156 - Operador de Call Center167 - Backoffice Tarjetas de Credito279 - Nucleo EstrategicoTodos[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Región TodasREGIÓN 00REGIÓN 01REGIÓN 02REGIÓN 03REGIÓN 04REGIÓN 05REGIÓN 06REGIÓN 07REGIÓN 08REGIÓN 09REGIÓN 10REGIÓN 11REGIÓN 12REGIÓN 13REGIÓN 14REGIÓN 15REGIÓN 16REGIÓN 17REGIÓN 18REGIÓN 19REGIÓN 20REGIÓN 21REGIÓN 22REGIÓN 23REGIÓN 24REGIÓN 25REGIÓN 26REGIÓN 27Todas[43m  [49m[39m
+    [31m+                                 Recomendación TodasTRT6 - Llamada advertencia pase a judicialTodas[43m  [49m[39m
+    [31m+                                 Nivel de Mora TodosCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaNo MoraPeriodo de autopagoTodos[43m  [49m[39m
+    [31m+                                 Tipo de Cliente TodosCliente JudicialCliente MixtoCliente VigenteTodos[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Débito Automático TodosNoSíTodos[43m  [49m[39m
+    [31m+                                 Corredor:[43m [49m[39m
+    [31m+                                 Nombre de Cliente[43m [49m[39m
+    [31m+                                 RUC[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 CP Fecha Desde[43m [49m[39m
+    [31m+                                 CP Fecha Hasta[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                                    [49m[39m
+    [31m+                                     searchFiltrar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Agendados por Usuario[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+                     grid_onAgendados por Usuario[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Agendados por Motor Experto[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+                     grid_onAgendados por Motor Experto[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-93500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P04: página debe contener "texto parcial" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    14 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            AccionesExportar AgendasClientes Asignados[22m
+    [2m                            chevron_rightAvanzar[22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda Avanzada[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Desde [22m
+    [2m                                Hasta [22m
+    [2m                                Empresa TodasGeneralesSaludVidaTodas  [22m
+    [2m                                Perfil Todos1 - Gerente de Cobranzas150 - Gestion Autopago155 - Soporte AIS156 - Operador de Call Center167 - Backoffice Tarjetas de Credito279 - Nucleo EstrategicoTodos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Región TodasREGIÓN 00REGIÓN 01REGIÓN 02REGIÓN 03REGIÓN 04REGIÓN 05REGIÓN 06REGIÓN 07REGIÓN 08REGIÓN 09REGIÓN 10REGIÓN 11REGIÓN 12REGIÓN 13REGIÓN 14REGIÓN 15REGIÓN 16REGIÓN 17REGIÓN 18REGIÓN 19REGIÓN 20REGIÓN 21REGIÓN 22REGIÓN 23REGIÓN 24REGIÓN 25REGIÓN 26REGIÓN 27Todas  [22m
+    [2m                                Recomendación TodasTRT6 - Llamada advertencia pase a judicialTodas  [22m
+    [2m                                Nivel de Mora TodosCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaNo MoraPeriodo de autopagoTodos  [22m
+    [2m                                Tipo de Cliente TodosCliente JudicialCliente MixtoCliente VigenteTodos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Débito Automático TodosNoSíTodos  [22m
+    [2m                                Corredor: [22m
+    [2m                                Nombre de Cliente [22m
+    [2m                                RUC [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                CP Fecha Desde [22m
+    [2m                                CP Fecha Hasta [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                    searchFiltrar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Agendados por Usuario[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    grid_onAgendados por Usuario[22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m			[22m
+    [2m[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Agendados por Motor Experto[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    grid_onAgendados por Motor Experto[22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-93500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m			[22m
+    [2m[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      253 |     
+      254 |     
+    > 255 |     await expect(page.locator('body'), 'P04: página debe contener "texto parcial"').toContainText('texto parcial');
+          |                                                                                     ^
+      256 |     
+      257 |     
+      258 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\65\uat-65-20260725T210732Z-630be1\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:255:85
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: P04: página debe contener "texto parcial"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 217[39m
+
+    [32m- texto parcial[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                             AccionesExportar AgendasClientes Asignados[39m
+    [31m+                             chevron_rightAvanzar[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda Avanzada[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Desde[43m [49m[39m
+    [31m+                                 Hasta[43m [49m[39m
+    [31m+                                 Empresa TodasGeneralesSaludVidaTodas[43m  [49m[39m
+    [31m+                                 Perfil Todos1 - Gerente de Cobranzas150 - Gestion Autopago155 - Soporte AIS156 - Operador de Call Center167 - Backoffice Tarjetas de Credito279 - Nucleo EstrategicoTodos[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Región TodasREGIÓN 00REGIÓN 01REGIÓN 02REGIÓN 03REGIÓN 04REGIÓN 05REGIÓN 06REGIÓN 07REGIÓN 08REGIÓN 09REGIÓN 10REGIÓN 11REGIÓN 12REGIÓN 13REGIÓN 14REGIÓN 15REGIÓN 16REGIÓN 17REGIÓN 18REGIÓN 19REGIÓN 20REGIÓN 21REGIÓN 22REGIÓN 23REGIÓN 24REGIÓN 25REGIÓN 26REGIÓN 27Todas[43m  [49m[39m
+    [31m+                                 Recomendación TodasTRT6 - Llamada advertencia pase a judicialTodas[43m  [49m[39m
+    [31m+                                 Nivel de Mora TodosCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaNo MoraPeriodo de autopagoTodos[43m  [49m[39m
+    [31m+                                 Tipo de Cliente TodosCliente JudicialCliente MixtoCliente VigenteTodos[43m  [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Débito Automático TodosNoSíTodos[43m  [49m[39m
+    [31m+                                 Corredor:[43m [49m[39m
+    [31m+                                 Nombre de Cliente[43m [49m[39m
+    [31m+                                 RUC[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 CP Fecha Desde[43m [49m[39m
+    [31m+                                 CP Fecha Hasta[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                                    [49m[39m
+    [31m+                                     searchFiltrar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Agendados por Usuario[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+                     grid_onAgendados por Usuario[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Agendados por Motor Experto[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+                     grid_onAgendados por Motor Experto[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-93500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P04: página debe contener "texto parcial" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    13 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirAgenda PersonalUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            AccionesExportar AgendasClientes Asignados[22m
+    [2m                            chevron_rightAvanzar[22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda Avanzada[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Desde [22m
+    [2m                                Hasta [22m
+    [2m                                Empresa TodasGeneralesSaludVidaTodas  [22m
+    [2m                                Perfil Todos1 - Gerente de Cobranzas150 - Gestion Autopago155 - Soporte AIS156 - Operador de Call Center167 - Backoffice Tarjetas de Credito279 - Nucleo EstrategicoTodos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Región TodasREGIÓN 00REGIÓN 01REGIÓN 02REGIÓN 03REGIÓN 04REGIÓN 05REGIÓN 06REGIÓN 07REGIÓN 08REGIÓN 09REGIÓN 10REGIÓN 11REGIÓN 12REGIÓN 13REGIÓN 14REGIÓN 15REGIÓN 16REGIÓN 17REGIÓN 18REGIÓN 19REGIÓN 20REGIÓN 21REGIÓN 22REGIÓN 23REGIÓN 24REGIÓN 25REGIÓN 26REGIÓN 27Todas  [22m
+    [2m                                Recomendación TodasTRT6 - Llamada advertencia pase a judicialTodas  [22m
+    [2m                                Nivel de Mora TodosCiclo 1Ciclo 2Ciclo 3Ciclo 4Ciclo 5Ciclo 6Ciclo 7Ciclo 8Ciclo 9Cobranza JudicialCobranza preventivaNo MoraPeriodo de autopagoTodos  [22m
+    [2m                                Tipo de Cliente TodosCliente JudicialCliente MixtoCliente VigenteTodos  [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Débito Automático TodosNoSíTodos  [22m
+    [2m                                Corredor: [22m
+    [2m                                Nombre de Cliente [22m
+    [2m                                RUC [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                CP Fecha Desde [22m
+    [2m                                CP Fecha Hasta [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    [22m
+    [2m                                    searchFiltrar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Agendados por Usuario[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    grid_onAgendados por Usuario[22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 225/07/202610:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m			[22m
+    [2m[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Agendados por Motor Experto[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    grid_onAgendados por Motor Experto[22m
+    [2m                [22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					ClienteNro de DocumentoPrima DolarizadaNivel MoraFechaHoraRecomendaciónDébito Auto.[22m
+    [2m				[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1553500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1503500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-13500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1673500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-2793500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-93500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-1563500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m					Pérez González Carlos AlbertoRUT 17654321-3603500,75Ciclo 224/07/202609:00:00AAAI - ASDSI[22m
+    [2m				[22m
+    [2m			[22m
+    [2m[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      253 |     
+      254 |     
+    > 255 |     await expect(page.locator('body'), 'P04: página debe contener "texto parcial"').toContainText('texto parcial');
+          |                                                                                     ^
+      256 |     
+      257 |     
+      258 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\65\uat-65-20260725T210732Z-630be1\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:255:85
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\evidence-65-uat-65-2026072-c9596-re-de-cliente-texto-parcial-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    evidence\65\uat-65-20260725T210732Z-630be1\tests\P04_nombre_de_cliente_texto_parcial.spec.ts:122:7 › ADO-65 | P04 — Nombre de Cliente = texto parcial › p04 nombre_de_cliente_=_texto_parcial 
+  7 passed (3.6m)

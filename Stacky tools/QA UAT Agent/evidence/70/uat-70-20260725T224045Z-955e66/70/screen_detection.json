@@ -1,0 +1,14 @@
+{
+  "schema_version": "screen_detection/1.0",
+  "run_id": "70",
+  "selected_screens": [
+    "FrmAgenda.aspx"
+  ],
+  "matches": [],
+  "fallback_used": true,
+  "ambiguous": false,
+  "blocked": false,
+  "block_reason": null,
+  "confidence": 0.0,
+  "supported_screens_version": "screen_aliases.yml"
+}

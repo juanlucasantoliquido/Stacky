@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "ticket_id": 362,
+  "compiled": 3,
+  "out_of_scope": 1,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 362,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "En Detalle de Cliente (AgendaWeb/FrmDetalleClie.aspx), el campo antes rotulado \"Atraso Total\" pasa a mostrar \"Atraso Total Dolarizado\" (RIDIOMA ESP IDTEXTO=3165).",
+      "precondiciones": [
+        "Login como PABLO",
+        "Datos requeridos: Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | I"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      }
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 362,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El mismo cambio se refleja automáticamente en la grilla Agendados por Motor Experto, ya que comparte el mismo IDTEXTO=9294 vía RCONTROLES.",
+      "precondiciones": [
+        "Login como PABLO",
+        "Datos requeridos: Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | I"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 362,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "No se modifica el ancho de columnas ni se rompe el scroll horizontal existente en la grilla de Agenda.",
+      "precondiciones": [
+        "Login como PABLO",
+        "Datos requeridos: Iniciar sesión en AgendaWeb (Cobranza Prejudicial) con un usuario ejecutivo. | I"
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "btn_buscar",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "count_gt",
+          "target": "grid_agenda_aut",
+          "valor": "0"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      }
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P04",
+      "razon": "PLACEHOLDER_DETECTED",
+      "descripcion": "[PENDIENTE: confirmar con negocio si corresponde actualizar también ENG ('Premium') y POR ('Prêmio') para IDTEXTO 9294, y si las etiquetas hermanas del panel \"Detalle de Deuda\" (IDTEXTO 3307 \"Atraso Total\" y 3308 \"Atraso Total (Conv)\") deben alinearse en la misma pasada]."
+    }
+  ],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 7327
+  }
+}

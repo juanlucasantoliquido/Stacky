@@ -1667,7 +1667,7 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         what="Deja que las pruebas enciendan la aplicación en tu propia máquina si la encuentran apagada, y la apaguen al terminar.",
         on_effect="Si la activás: cuando la aplicación está apagada, se intenta encenderla una vez; hace falta tenerla instalada y compilada.",
         off_effect="Si la apagás: con la aplicación apagada la corrida se detiene y te avisa que la levantes vos.",
-        example="Como un lavarropas con arranque diferido: si no está enchufado no sirve de nada, por eso viene desactivado.",
+        example="Como el arranque automático del auto: te ahorra el paso, pero si la batería no está no arranca y te lo dice.",
     ),
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED": PlainHelp(
         what="Exige que cada comprobación demuestre que sabría detectar el problema, antes de contarla como aprobada.",

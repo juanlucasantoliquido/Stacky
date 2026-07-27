@@ -1,0 +1,132 @@
+{
+  "ok": true,
+  "ticket_id": 70,
+  "compiled": 2,
+  "out_of_scope": 1,
+  "scenarios": [
+    {
+      "scenario_id": "P04",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "FechaDesde=19000101, FechaHasta=19000101, click Buscar - debe aparecer mensaje &quot;No hay lotes agendados que cumplan los criterios seleccionados&quot; como Aviso.",
+      "precondiciones": [
+        "Ejecutar los 3 INSERTs de RIDIOMA (IDTEXTO=9296) del archivo 600804 - Inserts RIDIOMA.sql antes de las pruebas."
+      ],
+      "pasos": [
+        {
+          "accion": "fill",
+          "target": "input_desde",
+          "valor": "19000101"
+        },
+        {
+          "accion": "fill",
+          "target": "input_hasta",
+          "valor": "19000101"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      },
+      "weak_oracles": [
+        {
+          "tipo": "page_contains_text",
+          "target": "None",
+          "valor": "No hay lotes agendados que cumplan los criterios seleccionados"
+        }
+      ],
+      "functional_status": "not_verifiable"
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 70,
+      "pantalla": "FrmAgenda.aspx",
+      "titulo": "Aplicar filtros, navegar fuera, volver - todos los DDL muestran Todos/Todas.",
+      "precondiciones": [
+        "Ejecutar los 3 INSERTs de RIDIOMA (IDTEXTO=9296) del archivo 600804 - Inserts RIDIOMA.sql antes de las pruebas."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmAgenda.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_element",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "select_value_is",
+          "target": "select_empresa",
+          "valor": "Todos"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "select_nivel_mora",
+          "valor": "Todos"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "select_region",
+          "valor": "Todos"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "select_recomendacion",
+          "valor": "Todos"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "select_tipo_cliente",
+          "valor": "Todos"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "select_debito_auto",
+          "valor": "Todos"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      }
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P01",
+      "razon": "ORACLE_TARGETS_DECORATIVE_LAYOUT",
+      "descripcion": "Abrir FrmAgenda.aspx sin click - grillas pueden estar vacias pero NO aparece mensaje de lista vacia.",
+      "details": {
+        "oracle_index": 0,
+        "target": "panel_c_lblcoincidencia",
+        "tipo": "invisible",
+        "alias_kind": "div",
+        "label": null
+      }
+    }
+  ],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 17583
+  },
+  "prioritization": {
+    "total_candidates": 2,
+    "selected": 2,
+    "excluded": 0,
+    "time_budget_seconds": 720,
+    "estimated_total_seconds": 120
+  }
+}

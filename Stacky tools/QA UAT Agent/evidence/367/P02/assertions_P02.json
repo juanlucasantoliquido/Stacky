@@ -1,0 +1,11 @@
+{
+  "scenario_id": "P02",
+  "assertions": [],
+  "screen_verified": {
+    "url": "http://localhost:35017/AgendaWeb/FrmBusqueda.aspx",
+    "title": "Búsqueda de Clientes",
+    "expected": "FrmBusqueda.aspx",
+    "anchor_selector": null,
+    "anchor_present": null
+  }
+}

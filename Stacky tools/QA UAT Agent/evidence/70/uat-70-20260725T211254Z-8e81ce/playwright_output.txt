@@ -1,0 +1,19 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 2 tests using 1 worker
+
+(node:40344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  1 evidence\70\uat-70-20260725T211254Z-8e81ce\tests\P04_fechadesde19000101_fechahasta19000101_click_buscar.spec.ts:114:7 › ADO-70 | P04 — FechaDesde=19000101, FechaHasta=19000101, click Buscar - debe aparecer mensaje &quot;No hay lotes agendados que cumplan los criterios seleccionados&quot; como Aviso. › p04 fechadesde=19000101,_fechahasta=19000101,_click_buscar_-_deb (19.7s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  2 evidence\70\uat-70-20260725T211254Z-8e81ce\tests\P05_aplicar_filtros_navegar_fuera_volver_todos_los_ddl.spec.ts:114:7 › ADO-70 | P05 — Aplicar filtros, navegar fuera, volver - todos los DDL muestran Todos/Todas. › p05 aplicar_filtros,_navegar_fuera,_volver_-_todos_los_ddl_muest (19.3s)
+
+  2 passed (1.1m)

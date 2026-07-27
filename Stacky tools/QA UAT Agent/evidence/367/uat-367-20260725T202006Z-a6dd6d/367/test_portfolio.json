@@ -1,0 +1,65 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 367,
+  "generated_at": "2026-07-25T20:20:15.725897Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "367-CA-01",
+      "description": "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. Ingresar a AgendaWeb > Búsqueda de Clientes (FrmBusqueda.aspx). | En el campo \"Póliza\" escribir o pegar un número de obligación de más de 20 caracteres (ej. el valor de la captura truncado a \"VM12-P-1816961389-60\", o un valor equivalente más largo del formato real de Pacífico). | Ejecutar la búsqueda y observar que el campo no permitió ingresar más de 20 caracteres, cortando el valor antes de busc El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos.",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "367-CA-02",
+      "description": "El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres. Ingresar a AgendaWeb > Búsqueda de Clientes (FrmBusqueda.aspx). | En el campo \"Póliza\" escribir o pegar un número de obligación de más de 20 caracteres (ej. el valor de la captura truncado a \"VM12-P-1816961389-60\", o un valor equivalente más largo del formato real de Pacífico). | Ejecutar la búsqueda y observar que el campo no permitió ingresar más de 20 caracteres, cortando el valor antes de busc El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "367-CA-03",
+      "description": "Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. Ingresar a AgendaWeb > Búsqueda de Clientes (FrmBusqueda.aspx). | En el campo \"Póliza\" escribir o pegar un número de obligación de más de 20 caracteres (ej. el valor de la captura truncado a \"VM12-P-1816961389-60\", o un valor equivalente más largo del formato real de Pacífico). | Ejecutar la búsqueda y observar que el campo no permitió ingresar más de 20 caracteres, cortando el valor antes de busc Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "367-CA-04",
+      "description": "Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol). Ingresar a AgendaWeb > Búsqueda de Clientes (FrmBusqueda.aspx). | En el campo \"Póliza\" escribir o pegar un número de obligación de más de 20 caracteres (ej. el valor de la captura truncado a \"VM12-P-1816961389-60\", o un valor equivalente más largo del formato real de Pacífico). | Ejecutar la búsqueda y observar que el campo no permitió ingresar más de 20 caracteres, cortando el valor antes de busc Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmBusqueda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "integration": 1,
+    "manual_review": 2,
+    "uat": 1
+  }
+}

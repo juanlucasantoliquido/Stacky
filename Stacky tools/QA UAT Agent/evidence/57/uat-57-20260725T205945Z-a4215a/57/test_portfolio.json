@@ -1,0 +1,101 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 57,
+  "generated_at": "2026-07-25T21:00:03.292698Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "57-CA-01",
+      "description": "Agenda con lotes USD - columna Prima visible LOCOD='1011240108601559' (LODEUDA=1355030.88, OGMONEDA='US.D') - agendado activo en DEV Grid muestra Prima=1355030.88 y Moneda=US.D",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "57-CA-02",
+      "description": "Ordenamiento DESC - mayor primero LOCOD 1011240108601559 (1355030.88) vs 4127924112345393 (48882.83) 1011240108601559 en posicion 0 del grid",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "57-CA-03",
+      "description": "Conversion USD a local para sort Tasa US.D=16.86 en RCAMBIO. 1355030.88*16.86=22,843,820 aprox. Sort usa importe convertido como clave de orden",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "57-CA-04",
+      "description": "Moneda local URGP (tasa=1) - sin conversion Lote con OGMONEDA='URGP' (CMVALOR=1.00 en RCAMBIO) LODEUDA usado directamente, sin multiplicacion efectiva",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "57-CA-05",
+      "description": "OGMONEDA sin entry en RCAMBIO - fallback Lote con OGMONEDA='INEXISTENTE' ISNULL/NVL aplica tasa=1; sin error; lote aparece en resultado",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "57-CA-06",
+      "description": "Agenda vacia Usuario sin lotes agendados activos Grids vacios. Boton AVANZAR oculto.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "57-CA-07",
+      "description": "Exportar Excel incluye columnas nuevas Registros del caso P01 Excel contiene columnas LODEUDA y OGMONEDA",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": "FrmAgenda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "uat": 3,
+    "manual_review": 4
+  }
+}

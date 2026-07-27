@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "run_dir": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\999\\uat-999-20260726T003525Z-f47057",
+  "generated_at": "2026-07-26T00:35:25Z",
+  "files": [
+    {
+      "path": "execution.jsonl",
+      "bytes": 5141,
+      "sha256": "1df10735f649bfc98f69ccaf23d67551cca9f182c2a4928256c08d9d1d699a77",
+      "kind": "log"
+    }
+  ],
+  "counts": {
+    "total": 1,
+    "log": 1
+  },
+  "truncated": false
+}

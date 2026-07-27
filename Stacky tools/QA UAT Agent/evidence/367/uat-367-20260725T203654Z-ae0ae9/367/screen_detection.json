@@ -1,0 +1,21 @@
+{
+  "schema_version": "screen_detection/1.0",
+  "run_id": "367",
+  "selected_screens": [
+    "FrmBusqueda.aspx"
+  ],
+  "matches": [
+    {
+      "screen": "FrmBusqueda.aspx",
+      "source": "primary_screen",
+      "match_type": "exact",
+      "confidence": 1.0
+    }
+  ],
+  "fallback_used": false,
+  "ambiguous": false,
+  "blocked": false,
+  "block_reason": null,
+  "confidence": 1.0,
+  "supported_screens_version": "screen_aliases.yml"
+}

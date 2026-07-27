@@ -1,0 +1,49 @@
+{
+  "ok": false,
+  "ticket_id": 386,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_EXECUTABLE_SCENARIOS",
+  "failed_stage": "unknown",
+  "stage": "unknown",
+  "error": "no_executable_scenarios",
+  "message": "El compiler procesó 4 item(s) del plan de pruebas pero ninguno resultó ejecutable. Revisá out_of_scope_items en scenarios.json.",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Codigo de Obligacion no se muestra en modal Detalle Cuota (Prestamos)",
+      "plan_item_count": 4
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 4,
+      "layers": {
+        "uat": 4
+      },
+      "uat_required": true,
+      "manual_review_required": false,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\386\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": true,
+      "skipped": false,
+      "screens": [
+        "FrmDetalleClie.aspx"
+      ]
+    },
+    "compiler": {
+      "ok": true,
+      "skipped": false,
+      "scenario_count": 0,
+      "out_of_scope_count": 4
+    }
+  },
+  "elapsed_s": 9.03,
+  "human_action_required": "review_screen_scope_or_test_plan",
+  "run_id": "uat-386-20260725T211859Z-0da030",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030",
+  "_normalized": true
+}

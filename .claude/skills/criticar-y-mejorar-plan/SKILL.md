@@ -38,7 +38,7 @@ Al ejecutarse, la skill produce:
 ## Restricciones no negociables
 
 - Paridad de los 3 runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro): toda crítica y todo fix deben preservar que cada ítem funcione en los 3 o degrade con fallback explícito. Marcar cualquier cosa atada a un solo runtime.
-- Cero trabajo extra al operador: las mejoras propuestas deben ser invisibles/automáticas u opt-in con default **ON**, salvo que dispare una de las 4 EXCEPCIONES DURAS citada explícitamente: (1) acción automática que bypasea revisión humana — auto-publicar/auto-crear ticket/auto-ejecutar remoto/mensaje externo, única ya aceptada: épica-desde-brief—; (2) destructiva/irreversible; (3) prerequisito no garantizado en instalación default; (4) reduce seguridad por default. Prohibido introducir pasos manuales nuevos o nueva carga de config como parte del "fix".
+- Cero trabajo extra al operador: las mejoras propuestas deben ser invisibles/automáticas u opt-in con default **ON**, salvo que caigan en una de las 2 CATEGORÍAS DE EXCEPCIÓN, citada explícitamente y por escrito: **(A)** quema tokens en REPOSO (loop/daemon/barrido/polling/prefetch/inyección de contexto que llama a un modelo sin que el operador pida nada); **(B)** escribe en un sistema REAL del operador, destruye datos o le saca la decisión (publica/commitea/pushea a su ADO/GitLab/remoto, DDL/DML en una BD suya, despliegue o rollback en sus servidores, borrado de datos, reducción de durabilidad/seguridad, o disparo automático de algo que el operador debería decidir). NO valen como excepción: "prerequisito no garantizado en instalación default" (el operador lo invalidó: lo on-demand degrada sin romper), "default seguro", "por las dudas", ni nada de solo lectura. Prohibido introducir pasos manuales nuevos o nueva carga de config como parte del "fix".
 - Human-in-the-loop innegociable: el operador se amplifica, nunca se reemplaza. La crítica debe RECHAZAR (o exigir cambio en) cualquier feature del plan que saque al humano del lazo o introduzca autonomía proactiva.
 - Mono-operador sin auth real: marcar como sobre-ingeniería cualquier RBAC/multiusuario; `current_user` es un header sin validar, no protege nada.
 - No degradar performance, seguridad, estabilidad ni DX; backward-compatible. Reusar lo existente (memoria colaborativa, flags del arnés, telemetría/observabilidad) en vez de reinventar — y exigirlo en los fixes.
@@ -68,25 +68,42 @@ PASO 2 — RED-TEAM (atacá el plan con ESTE checklist, sin piedad):
 - [ ] Frases vagas: cazá "etc.", "según corresponda", "ajustar lo necesario", "donde aplique" y similares. Cada una es un hallazgo.
 - [ ] TDD / tests primero: ¿cada fase tiene archivo de test NOMBRADO, casos concretos, y comando exacto para correrlo? ¿El criterio de aceptación es BINARIO (pasa/falla), no subjetivo?
 - [ ] Paridad de los 3 runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro): ¿cada ítem funciona en los 3, o degrada con fallback explícito? Marcá cualquier cosa atada a un solo runtime.
-- [ ] Cero trabajo extra al operador: ¿el plan agrega algún paso manual nuevo o nueva carga de config? Debe ser invisible/automático u opt-in con default **ON**, salvo que cite cuál de las 4 excepciones duras aplica (bypass de revisión humana, destructiva/irreversible, prerequisito no garantizado, reduce seguridad). Marcá lo que cargue al operador.
+- [ ] Cero trabajo extra al operador: ¿el plan agrega algún paso manual nuevo o nueva carga de config? Debe ser invisible/automático u opt-in con default **ON**, salvo que cite cuál de las 2 categorías de excepción (A: quema tokens en reposo / B: escribe en un sistema real del operador, destruye datos o le saca la decisión) aplica (bypass de revisión humana, destructiva/irreversible, prerequisito no garantizado, reduce seguridad). Marcá lo que cargue al operador.
 - [ ] Human-in-the-loop: ¿alguna feature saca al humano del lazo o introduce autonomía proactiva? Eso es RECHAZO o cambio obligatorio. El operador se amplifica, nunca se reemplaza.
 - [ ] Mono-operador sin auth real: ¿hay RBAC/multiusuario/roles/403? Es teatro; marcalo como sobre-ingeniería.
 - [ ] No degradar: ¿el plan compromete performance, seguridad, estabilidad o DX? ¿Es backward-compatible?
 - [ ] Reuso: ¿reinventa algo que ya existe (memoria colaborativa, flags del arnés, telemetría/observabilidad)? Exigí reusar.
-- [ ] Flags: ¿toda flag nueva tiene default **ON**? Si el plan la declara OFF, ¿CITA EXPLÍCITAMENTE cuál de
-  las 4 excepciones duras aplica — (1) acción automática que bypasea revisión humana (auto-publicar/
-  auto-crear ticket/auto-ejecutar remoto/mensaje externo; única ya aceptada: épica-desde-brief), (2)
-  destructiva/irreversible, (3) prerequisito no garantizado en instalación default (credenciales externas,
-  servicio local no instalado, catálogo/config sin armar), (4) reduce seguridad por default? Una flag nueva
-  en OFF SIN citar cuál de las 4 aplica es una BRECHA (marcala como hallazgo, no la dejes pasar con un
-  "default seguro" genérico). Marcá también flags sin default declarado.
+- [ ] **Flags: ¿toda flag nueva tiene default `ON`?** El default ON es la regla; el OFF es la excepción y
+  hay que ganárselo POR ESCRITO. Si el plan declara una flag en OFF, tiene que decir en su propia línea
+  **cuál de estas DOS categorías aplica y por qué** (una frase con evidencia):
+  * **(A) Quema tokens en REPOSO** — loop, daemon, barrido, polling, prefetch o inyección de contexto que
+    llama a un modelo (o engorda cada prompt) sin que el operador pida nada.
+  * **(B) Escribe en un sistema REAL del operador, destruye datos, o le saca la decisión** — publica/
+    commitea/pushea a su ADO/GitLab/repo remoto, ejecuta DDL/DML en una BD suya, despliega o hace rollback
+    en sus servidores, borra datos, reduce la durabilidad/seguridad de los datos, o dispara sola una acción
+    que el operador debería decidir (human-in-the-loop).
+  Una flag nueva en OFF **SIN** citar cuál de las dos aplica es una BRECHA: marcala como hallazgo
+  BLOQUEANTE y proponé el fix (pasarla a ON, o escribir la justificación que falta). No la dejes pasar con
+  un "default seguro" genérico.
+- [ ] **Motivos de OFF que tenés que RECHAZAR activamente** (son los errores históricos más frecuentes):
+  * "Prerequisito no garantizado en una instalación default" (modelo local, credenciales, IIS Express,
+    catálogo/config sin armar). El operador **invalidó** este motivo: lo on-demand degrada sin romper.
+    Si el plan lo usa, es hallazgo — la flag va ON.
+  * "Default seguro" / "por las dudas" / "para no cambiar el comportamiento actual" / "que el operador la
+    encienda si quiere": fórmulas vacías, no excepciones. Hallazgo.
+  * Cualquier capacidad de **solo lectura** (leer, calcular, mostrar, diffear, auditar, avisar) declarada
+    OFF: nunca corresponde. Hallazgo.
+- [ ] **Flag mezclada:** si una sola flag cubre a la vez algo inocuo y algo que escribe en un sistema real,
+  exigí **partirla en dos** — la de ver/planear/diffear en ON, la que escribe en OFF citando (B).
+  Precedente: `STACKY_PIPELINE_NL_EDIT_ENABLED` (ON) vs `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (OFF).
+- [ ] Marcá también las flags **sin default declarado** en el plan: son ambiguas para un modelo menor.
 - [ ] Orden de fases y dependencias: ¿alguna fase depende de algo que se hace después? ¿Hay scope creep (cosas fuera del objetivo del plan)?
 - [ ] Casos borde y riesgos no contemplados: zombie/timeout, JSON inválido, mismatch ordinal vs id, runs pegados en "running", BD read-only, etc. (usá tu conocimiento del ecosistema Stacky).
 - [ ] Huella de regresión (planes tipo-fix): si el plan MATA una clase de error, ¿registra su huella en `Stacky Agents/docs/sistema/error_fingerprints.json` (id, patrón, plan/commit, fecha, guard_test)? Es convención, no bloqueante: marcá su ausencia como MENOR.
 Para CADA hallazgo, producí: ID (C1, C2, ...), SEVERIDAD (BLOQUEANTE / IMPORTANTE / MENOR), QUÉ está mal, POR QUÉ importa, FIX concreto. Rankeá la lista por severidad (BLOQUEANTE primero).
 
 PASO 3 — VEREDICTO DE JUEZ (binario, con criterios):
-- RECHAZADO: si hay >=1 hallazgo BLOQUEANTE (saca al humano del lazo, rompe un runtime sin fallback, agrega trabajo manual obligatorio, flag nueva en OFF sin citar cuál de las 4 excepciones duras aplica, o ambigüedad que impide implementar).
+- RECHAZADO: si hay >=1 hallazgo BLOQUEANTE (saca al humano del lazo, rompe un runtime sin fallback, agrega trabajo manual obligatorio, flag nueva en OFF sin citar cuál de las 2 categorías de excepción (A: quema tokens en reposo / B: escribe en un sistema real del operador, destruye datos o le saca la decisión) aplica, o ambigüedad que impide implementar).
 - APROBADO-CON-CAMBIOS: si no hay BLOQUEANTES pero sí >=1 IMPORTANTE.
 - APROBADO: solo si todo es MENOR o cosmético. (Aun así, igual aplicás la regla de oro: agregás al menos una mejora de alto valor.)
 - Declará el veredicto y los criterios binarios que lo justifican.
@@ -104,7 +121,7 @@ FORMATO DE SALIDA (en este orden, denso, sin relleno):
 4. MEJORA APLICADA: el plan v2 (texto completo reescrito) o el bloque de patches; con encabezado v1->v2 + changelog; y la(s) "[ADICIÓN ARQUITECTO]" señaladas.
 5. RESUMEN (5 líneas).
 
-RESTRICCIONES NO NEGOCIABLES (valen para tus críticas Y tus fixes): paridad de 3 runtimes con fallback explícito; cero trabajo extra al operador (invisible u opt-in default ON, salvo excepción dura citada); human-in-the-loop (amplificar, nunca reemplazar; prohibida autonomía proactiva); mono-operador sin auth real (sin RBAC); no degradar performance/seguridad/estabilidad/DX; backward-compatible; reusar lo existente; flags nuevas en default ON salvo que citen cuál de las 4 excepciones duras aplica; literal a prueba de modelos menores; eficiencia de tokens. Nunca cierres con "nada que agregar".
+RESTRICCIONES NO NEGOCIABLES (valen para tus críticas Y tus fixes): paridad de 3 runtimes con fallback explícito; cero trabajo extra al operador (invisible u opt-in default ON, salvo excepción dura citada); human-in-the-loop (amplificar, nunca reemplazar; prohibida autonomía proactiva); mono-operador sin auth real (sin RBAC); no degradar performance/seguridad/estabilidad/DX; backward-compatible; reusar lo existente; flags nuevas en default ON salvo que citen cuál de las 2 categorías de excepción (A: quema tokens en reposo / B: escribe en un sistema real del operador, destruye datos o le saca la decisión) aplica; literal a prueba de modelos menores; eficiencia de tokens. Nunca cierres con "nada que agregar".
 ```
 
 ## Checklist de aceptación

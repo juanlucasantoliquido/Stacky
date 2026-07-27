@@ -1,0 +1,31 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 6 tests using 1 worker
+
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  1 evidence\373\uat-373-20260725T235513Z-b6e63e\tests\P01_al_seleccionar_un_contacto_corredor_en_la_pestana.spec.ts:139:7 › ADO-373 | P01 — Al seleccionar un contacto CORREDOR en la pestaña Contactos, la grilla Domicilios carga correctamente los domicilios existentes de ese contacto. › p01 al_seleccionar_un_contacto_corredor_en_la_pestaña_contactos, (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  2 evidence\373\uat-373-20260725T235513Z-b6e63e\tests\P02_al_agregar_un_domicilio_nuevo_al_contacto_y_guarda.spec.ts:139:7 › ADO-373 | P02 — Al agregar un domicilio nuevo al contacto y guardar, el registro aparece en la grilla sin necesidad de refrescar la página completa. › p02 al_agregar_un_domicilio_nuevo_al_contacto_y_guardar,_el_regi (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  3 evidence\373\uat-373-20260725T235513Z-b6e63e\tests\P03_al_modificar_un_domicilio_existente_del_contacto_e.spec.ts:139:7 › ADO-373 | P03 — Al modificar un domicilio existente del contacto, el cambio se refleja en la grilla. › p03 al_modificar_un_domicilio_existente_del_contacto,_el_cambio_ (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  4 evidence\373\uat-373-20260725T235513Z-b6e63e\tests\P04_al_eliminar_un_domicilio_desaparece_de_la_grilla.spec.ts:139:7 › ADO-373 | P04 — Al eliminar un domicilio, desaparece de la grilla. › p04 al_eliminar_un_domicilio,_desaparece_de_la_grilla. (1.2m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  5 evidence\373\uat-373-20260725T235513Z-b6e63e\tests\P05_la_grilla_de_domicilios_del_cliente_principal_sin.spec.ts:139:7 › ADO-373 | P05 — La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores. › p05 la_grilla_de_domicilios_del_cliente_principal_(sin_selección (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✘  6 evidence\373\uat-373-20260725T235513Z-b6e63e\tests\P07_la_migracion_de_columnas_dtdistrit_dturban_dtdirec.spec.ts:139:7 › ADO-373 | P07 — La migración de columnas DTDISTRIT / DTURBAN / DTDIRECCION en RDIRE está confirmada en el entorno de pruebas y producción. › p07 la_migración_de_columnas_dtdistrit_/_dturban_/_dtdireccion_e (1.0m)

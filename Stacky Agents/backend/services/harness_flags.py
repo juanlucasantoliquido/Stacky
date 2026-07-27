@@ -520,7 +520,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
     FlagSpec(
         key="STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
         type="bool",
-        label="Arrancar AgendaWeb local para validar (opt-in)",
+        label="Arrancar AgendaWeb local para validar",
         description=(
             "Plan 240 — Si AgendaWeb no responde, el pipeline intenta UN arranque local "
             "con IIS Express y lo apaga al terminar. Requiere IIS Express instalado, el "
@@ -528,12 +528,14 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,
-        # Default OFF por EXCEPCION DURA #3: prerequisito NO garantizado en una
-        # instalacion default. NO va en _CURATED_DEFAULTS_ON, y por eso NO declara
-        # `default=`: default_is_known() es `spec.default is not None`, asi que un
-        # `default=False` explicito tambien la marcaria como curada y dejaria rojo
-        # test_default_known_only_for_curated. El OFF efectivo lo da el type-zero
-        # del bool + el getenv("...", "false") de config.py.
+        # Promovida a default ON (barrido del operador 2026-07-27): no quema tokens en
+        # reposo y no escribe en ningun sistema real — arranca un proceso local en
+        # localhost DENTRO de una corrida que el operador ya lanzo, y lo apaga al
+        # terminar. El motivo original de su OFF era "prerequisito no garantizado",
+        # que el operador invalido explicitamente: lo on-demand degrada sin romper
+        # (si falta IIS Express el arranque falla y el pipeline lo dice).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
     FlagSpec(
         key="STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED",
@@ -1041,15 +1043,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 256 — Si ON, el operador puede marcar un artefacto en cuarentena "
             "como descartado (con confirmación explícita). NUNCA borra ni modifica "
-            "el artefacto: el marcador va al sidecar. Default OFF por excepción "
-            "dura: el descarte no se revierte desde la UI."
+            "el artefacto: el marcador va al sidecar y el archivo queda intacto en "
+            "disco."
         ),
         group="global",
         env_only=False,
-        # SIN `default=`: una flag que nace APAGADA no lo declara. `declared_default`
-        # cae al type-zero (False) igual, pero `default_is_known` queda en False y
-        # asi no entra en el set curado de defaults-ON (si no, el centinela
-        # test_default_known_only_for_curated se pone rojo).
+        # Promovida a default ON (barrido del operador 2026-07-27): no quema tokens en
+        # reposo y NO es destructiva — el artefacto queda intacto en disco (api/diag.py
+        # solo escribe un marcador en el sidecar) y la accion exige el interlock de dos
+        # pasos de services/confirm_token.py. Habilitar el boton no descarta nada.
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
     # ── V1.2 — Smart dispatch v1 (advisor) ─────────────────────────────────────
     FlagSpec(
@@ -1983,12 +1987,17 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 142 F7 — Si ON, lee un JSONL externo opcional (ruta en "
             "STACKY_COST_CODEBURN_IMPORT_PATH) y agrega 'external_reconciliation' a "
-            "/cost-summary. Sin shell-out, sin dependencia nueva. OFF por default: "
-            "excepción dura #3 — el archivo/ruta NO está garantizado en una instalación "
-            "default y sólo aplica si el operador YA usa esa herramienta externa."
+            "/cost-summary. Sin shell-out, sin dependencia nueva. Con la ruta vacía "
+            "(el default) no hace nada: degrada sin romper."
         ),
         group="observabilidad",
         pair="STACKY_COST_CODEBURN_IMPORT_PATH",
+        # Promovida a default ON (barrido del operador 2026-07-27): lee un archivo
+        # local bajo demanda, no llama a ningun modelo y no escribe en ningun lado.
+        # Su OFF original citaba "prerequisito no garantizado", motivo que el operador
+        # invalido: con STACKY_COST_CODEBURN_IMPORT_PATH vacio queda inerte.
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
     FlagSpec(
         key="STACKY_COST_CODEBURN_IMPORT_PATH",
@@ -3565,7 +3574,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
-        # SIN default= (gotcha Plan 63): nace OFF; el default vive en config.py.
+        # Promovida a default ON (barrido del operador 2026-07-27): el master solo
+        # muestra la seccion y el PLAN (dry-run). Determinista, cero LLM, cero tokens
+        # en reposo. Lo que ESCRIBE (deploy/rollback real) lo gatea su hija
+        # STACKY_DEPLOYMENTS_EXECUTE_ENABLED, que sigue default OFF.
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
     FlagSpec(
         key="STACKY_DEPLOYMENTS_EXECUTE_ENABLED",
@@ -3593,6 +3607,12 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_DEVOPS_PANEL_ENABLED",  # master del panel (R4 profundidad-1)
+        # Promovida a default ON (barrido del operador 2026-07-27): es un BOTON
+        # on-demand contra el modelo LOCAL (costo de tokens cero) y no escribe nada.
+        # No hay gasto en reposo: sin clic no corre. Si el modelo local no esta,
+        # el boton queda deshabilitado con hint (degrada sin romper).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
     FlagSpec(
         key="STACKY_DEPLOYMENTS_RETAIN_RELEASES",
@@ -4679,7 +4699,11 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Búsqueda profunda en la paleta (Ctrl+K)",
         description="Plan 129 — La paleta de comandos busca también ejecuciones, documentos, servidores DevOps y flags vía /api/search/global (local, sin IA). OFF = paleta actual sin cambios.",
         group="global",
-        # SIN default= (no curada en _CURATED_DEFAULTS_ON; el default efectivo OFF vive en config.py — gotcha Plan 63/81).
+        # Promovida a default ON (barrido del operador 2026-07-27): busqueda LOCAL sin
+        # IA, solo lectura, y solo corre cuando el operador abre la paleta y tipea.
+        # Cero tokens en reposo, cero escritura.
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
     FlagSpec(
         key="STACKY_CODE_INTEGRITY_ENABLED",

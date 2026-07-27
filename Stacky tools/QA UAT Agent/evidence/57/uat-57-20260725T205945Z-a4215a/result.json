@@ -1,0 +1,51 @@
+{
+  "ok": false,
+  "ticket_id": 57,
+  "verdict": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "failed_stage": "ui_map",
+  "stage": "ui_map",
+  "error": "ui_map_missing",
+  "message": "UI map missing for screen(s): ['FrmGestion.aspx', 'FrmParametros.aspx']. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "GAP Menor — Campos Adicionales y Ordenamiento en Resumen de Agenda (REQ-01)",
+      "plan_item_count": 7
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 7,
+      "layers": {
+        "uat": 3,
+        "manual_review": 4
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\57\\test_portfolio.json"
+    },
+    "ui_map": {
+      "ok": false,
+      "skipped": false,
+      "screens": [
+        "FrmAgenda.aspx",
+        "FrmGestion.aspx",
+        "FrmParametros.aspx"
+      ],
+      "missing_screens": [
+        "FrmGestion.aspx",
+        "FrmParametros.aspx"
+      ],
+      "reason": "UI_MAP_MISSING"
+    }
+  },
+  "elapsed_s": 17.76,
+  "human_action_required": "UI map missing for: FrmGestion.aspx, FrmParametros.aspx. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "run_id": "uat-57-20260725T205945Z-a4215a",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a",
+  "_normalized": true
+}

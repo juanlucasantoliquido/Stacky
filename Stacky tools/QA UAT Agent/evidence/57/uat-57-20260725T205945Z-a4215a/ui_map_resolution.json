@@ -1,0 +1,42 @@
+{
+  "ok": false,
+  "decision": "BLOCKED",
+  "reason": "UI_MAP_MISSING",
+  "screens": [
+    {
+      "screen": "FrmAgenda.aspx",
+      "cache_hit": true,
+      "rebuild_attempted": false,
+      "rebuild_ok": false,
+      "available": true,
+      "reason": null,
+      "cache_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\cache\\ui_maps\\FrmAgenda.aspx.json"
+    },
+    {
+      "screen": "FrmGestion.aspx",
+      "cache_hit": false,
+      "rebuild_attempted": false,
+      "rebuild_ok": false,
+      "available": false,
+      "reason": "UI_MAP_MISSING",
+      "cache_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\cache\\ui_maps\\FrmGestion.aspx.json"
+    },
+    {
+      "screen": "FrmParametros.aspx",
+      "cache_hit": false,
+      "rebuild_attempted": false,
+      "rebuild_ok": false,
+      "available": false,
+      "reason": "UI_MAP_MISSING",
+      "cache_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\cache\\ui_maps\\FrmParametros.aspx.json"
+    }
+  ],
+  "missing_screens": [
+    "FrmGestion.aspx",
+    "FrmParametros.aspx"
+  ],
+  "allow_rebuild": false,
+  "elapsed_ms": 0,
+  "human_action_required": "UI map missing for: FrmGestion.aspx, FrmParametros.aspx. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "artifact_path": null
+}

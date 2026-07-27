@@ -1,0 +1,159 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "total": 4,
+  "pass": 4,
+  "fail": 0,
+  "blocked": 0,
+  "verdict": "PASS",
+  "category": null,
+  "reason": null,
+  "runs": [
+    {
+      "scenario_id": "P01",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 4 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  1 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts:139:7 › ADO-366 | P01 — El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes. › p01 el_combo_tipo_telefono_en_agenda_web_(mantenedortelefonos.as (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  2 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts:139:7 › ADO-366 | P03 — Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. › p03 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  3 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts:139:7 › ADO-366 | P04 — Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. › p04 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_ (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  4 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts:139:7 › ADO-366 | P05 — El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. › p05 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez (1.3m)\n\n  4 passed (5.4m)\n",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P03",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 4 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  1 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts:139:7 › ADO-366 | P01 — El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes. › p01 el_combo_tipo_telefono_en_agenda_web_(mantenedortelefonos.as (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  2 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts:139:7 › ADO-366 | P03 — Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. › p03 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  3 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts:139:7 › ADO-366 | P04 — Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. › p04 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_ (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  4 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts:139:7 › ADO-366 | P05 — El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. › p05 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez (1.3m)\n\n  4 passed (5.4m)\n",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P04",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 4 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  1 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts:139:7 › ADO-366 | P01 — El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes. › p01 el_combo_tipo_telefono_en_agenda_web_(mantenedortelefonos.as (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  2 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts:139:7 › ADO-366 | P03 — Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. › p03 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  3 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts:139:7 › ADO-366 | P04 — Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. › p04 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_ (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  4 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts:139:7 › ADO-366 | P05 — El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. › p05 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez (1.3m)\n\n  4 passed (5.4m)\n",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P05",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 4 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  1 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts:139:7 › ADO-366 | P01 — El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes. › p01 el_combo_tipo_telefono_en_agenda_web_(mantenedortelefonos.as (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  2 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts:139:7 › ADO-366 | P03 — Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. › p03 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  3 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts:139:7 › ADO-366 | P04 — Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. › p04 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_ (1.3m)\nAdvanced filters ready: \u001b[33mfalse\u001b[39m\n[STEP 01] navigate FrmAgenda.aspx\n[STEP 02] click pb_step_1\n  ✓  4 evidence\\366\\uat-366-20260725T233006Z-faa2e3\\tests\\P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts:139:7 › ADO-366 | P05 — El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. › p05 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez (1.3m)\n\n  4 passed (5.4m)\n",
+      "raw_stderr": ""
+    }
+  ],
+  "runner_summary": {
+    "verdict": "PASS",
+    "category": null,
+    "reason": null,
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "blocked": 0,
+    "skipped": 0,
+    "retries": 0,
+    "duration_ms": 302287,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 0,
+      "screenshots_count": 0,
+      "video_count": 0
+    },
+    "scenario_results": [
+      {
+        "scenario_id": "p01_el_combo_tipo_telefono_en_",
+        "status": "passed",
+        "duration_ms": 75345,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p03_un_telefono_guardado_con_t",
+        "status": "passed",
+        "duration_ms": 75601,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p04_las_filas_rtabl_preexisten",
+        "status": "passed",
+        "duration_ms": 76095,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p05_el_script_de_carga_es_idem",
+        "status": "passed",
+        "duration_ms": 75246,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.2.0",
+    "duration_ms": 327278,
+    "browser_launch_count": 1,
+    "login_count": 1,
+    "base_url": "http://localhost:35017/AgendaWeb/",
+    "managed_app": false,
+    "credentials_source": "env",
+    "username": "PABLO",
+    "password_present": true,
+    "password_hash_prefix": "81a4e2e6",
+    "max_total_minutes": 6,
+    "max_login_attempts": 1,
+    "max_browser_launches": 1
+  }
+}

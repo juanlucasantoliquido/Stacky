@@ -900,6 +900,34 @@
   border-left: 3px solid rgba(99,102,241,0.45) !important;
 }
 
+/* --- Distintivo de INCIDENCIA (Issue/Bug) ----
+   Barra roja al costado de la tarjeta: se reconoce de un vistazo en una lista
+   mezclada con Tasks/Features. Declarada DESPUES de .cardIndented para ganarle
+   tambien en los hijos indentados (misma especificidad, ambas !important).
+   Acompana al badge .wiTypeBadgeIncident (color + icono, nunca solo color). */
+.cardIncident {
+  border-left: 4px solid var(--status-danger-solid) !important;
+}
+
+/* Badge de tipo de work item en la fila superior de la tarjeta. */
+.wiTypeBadge {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--status-neutral-bg);
+  border: 1px solid var(--status-neutral-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.wiTypeBadgeIncident {
+  color: var(--status-danger-text);
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* --- Tree View ------------------------------- */
 .treeView {
   display: flex;

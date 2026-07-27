@@ -1,0 +1,85 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "evaluations": [
+    {
+      "scenario_id": "P04",
+      "status": "pass",
+      "assertions": [],
+      "evaluated_at": "2026-07-25T21:14:30Z"
+    },
+    {
+      "scenario_id": "P05",
+      "status": "pass",
+      "assertions": [
+        {
+          "oracle_id": 0,
+          "tipo": "select_value_is",
+          "target": "select_empresa",
+          "expected": "Todos",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T21:14:30.187Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 1,
+          "tipo": "select_value_is",
+          "target": "select_nivel_mora",
+          "expected": "Todos",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T21:14:30.189Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 2,
+          "tipo": "select_value_is",
+          "target": "select_region",
+          "expected": "Todos",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T21:14:30.189Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 3,
+          "tipo": "select_value_is",
+          "target": "select_recomendacion",
+          "expected": "Todos",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T21:14:30.189Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 4,
+          "tipo": "select_value_is",
+          "target": "select_tipo_cliente",
+          "expected": "Todos",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T21:14:30.189Z",
+          "eval_duration_ms": 0.0
+        },
+        {
+          "oracle_id": 5,
+          "tipo": "select_value_is",
+          "target": "select_debito_auto",
+          "expected": "Todos",
+          "actual": "__playwright_verified__",
+          "status": "pass",
+          "evidence_ref": "evidence/P05/assertions_P05.json",
+          "evaluated_at": "2026-07-25T21:14:30.189Z",
+          "eval_duration_ms": 0.0
+        }
+      ],
+      "evaluated_at": "2026-07-25T21:14:30Z"
+    }
+  ]
+}

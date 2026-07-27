@@ -1,0 +1,105 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 4 tests using 1 worker
+
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  1 evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P01_en_el_grid_gestiones_de_detalle_de_cliente_datos_g.spec.ts:139:7 › ADO-387 | P01 — En el grid "Gestiones" de Detalle de Cliente > Datos Generales se muestra una sola columna "Medio de Contacto" (la del valor: email o teléfono). › p01 en_el_grid_"gestiones"_de_detalle_de_cliente_>_datos_general (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✘  2 evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts:149:7 › ADO-387 | P02 — La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla. › p02 la_columna_que_exponía_el_tipo/clasificación_del_medio_ya_no (1.1m)
+  ✘  3 evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts:149:7 › ADO-387 | P02 — La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla. › p02 la_columna_que_exponía_el_tipo/clasificación_del_medio_ya_no (retry #1) (55.1s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  4 evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P03_el_excel_generado_por_exportar_desde_el_bloque_ges.spec.ts:139:7 › ADO-387 | P03 — El Excel generado por "Exportar" desde el bloque Gestiones no incluye la columna eliminada, y el resto de columnas conserva su orden y contenido actuales. › p03 el_excel_generado_por_"exportar"_desde_el_bloque_gestiones_n (1.3m)
+  ✘  5 evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts:149:7 › ADO-387 | P04 — No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando). › p04 no_se_introducen_errores_ni_columnas_vacías/rotas_en_el_grid (35.0s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  6 evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts:149:7 › ADO-387 | P04 — No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando). › p04 no_se_introducen_errores_ni_columnas_vacías/rotas_en_el_grid (retry #1) (1.3m)
+
+
+  1) evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts:149:7 › ADO-387 | P02 — La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla. › p02 la_columna_que_exponía_el_tipo/clasificación_del_medio_ya_no 
+
+    TimeoutError: page.goto: Timeout 30000ms exceeded.
+    Call log:
+    [2m  - navigating to "http://localhost:35017/AgendaWeb/FrmAgenda.aspx", waiting until "domcontentloaded"[22m
+
+
+      238 |
+      239 |     console.log('[STEP 01] navigate FrmAgenda.aspx');
+    > 240 |     await page.goto(`${BASE_URL}FrmAgenda.aspx`, { waitUntil: 'domcontentloaded' });
+          |                ^
+      241 |     await waitForAgendaStable(page);
+      242 |
+      243 |     await page.screenshot({ path: 'evidence/387/P02/step_01_after.png' });
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts:240:16
+
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-387-uat-387-20260-a58e2-asificación-del-medio-ya-no\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-387-uat-387-20260-a58e2-asificación-del-medio-ya-no\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    TimeoutError: page.goto: Timeout 20000ms exceeded.
+    Call log:
+    [2m  - navigating to "http://localhost:35017/AgendaWeb/FrmAgenda.aspx", waiting until "domcontentloaded"[22m
+
+
+      128 |     // For session-dependent targets, hitting them with page.goto crashes the
+      129 |     // ASP.NET app pool. The action_steps below walk the human path from entry.
+    > 130 |     await page.goto(`${BASE_URL}${ENTRY_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+          |                ^
+      131 |     await waitForAgendaStable(page);
+      132 |     const beforeEachUrl = page.url().toLowerCase();
+      133 |     if (beforeEachUrl.includes('frmlogin')) {
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts:130:16
+
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-387-uat-387-20260-a58e2-asificación-del-medio-ya-no-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-387-uat-387-20260-a58e2-asificación-del-medio-ya-no-retry1\error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\evidence-387-uat-387-20260-a58e2-asificación-del-medio-ya-no-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\evidence-387-uat-387-20260-a58e2-asificación-del-medio-ya-no-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts:149:7 › ADO-387 | P04 — No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando). › p04 no_se_introducen_errores_ni_columnas_vacías/rotas_en_el_grid 
+
+    TimeoutError: page.goto: Timeout 20000ms exceeded.
+    Call log:
+    [2m  - navigating to "http://localhost:35017/AgendaWeb/FrmAgenda.aspx", waiting until "domcontentloaded"[22m
+
+
+      128 |     // For session-dependent targets, hitting them with page.goto crashes the
+      129 |     // ASP.NET app pool. The action_steps below walk the human path from entry.
+    > 130 |     await page.goto(`${BASE_URL}${ENTRY_SCREEN}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+          |                ^
+      131 |     await waitForAgendaStable(page);
+      132 |     const beforeEachUrl = page.url().toLowerCase();
+      133 |     if (beforeEachUrl.includes('frmlogin')) {
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts:130:16
+
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-387-uat-387-20260-ce8a7-nas-vacías-rotas-en-el-grid\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-387-uat-387-20260-ce8a7-nas-vacías-rotas-en-el-grid\error-context.md
+
+  1 failed
+    evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P02_la_columna_que_exponia_el_tipoclasificacion_del_me.spec.ts:149:7 › ADO-387 | P02 — La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla. › p02 la_columna_que_exponía_el_tipo/clasificación_del_medio_ya_no 
+  1 flaky
+    evidence\387\uat-387-20260726T001322Z-d10d4f\tests\P04_no_se_introducen_errores_ni_columnas_vaciasrotas_e.spec.ts:149:7 › ADO-387 | P04 — No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando). › p04 no_se_introducen_errores_ni_columnas_vacías/rotas_en_el_grid 
+  2 passed (7.1m)

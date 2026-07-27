@@ -23,9 +23,17 @@ _ON_FLAGS = (
     "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED",
     "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+    # Promovida a ON en el barrido default-ON 2026-07-27: arranca un proceso LOCAL
+    # (solo localhost) DENTRO de una corrida que el operador ya pidió, y lo apaga al
+    # terminar. No quema tokens en reposo ni escribe en un sistema real. El motivo
+    # original de su OFF era "prerequisito no garantizado", que el operador invalidó
+    # explícitamente: lo on-demand degrada sin romper.
+    "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
 )
-_OFF_FLAG = "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED"
-_ALL_FLAGS = _ON_FLAGS + (_OFF_FLAG,)
+# La misma flag, referenciada aparte por el test de exportación al entorno, que la
+# fuerza a False a propósito para comprobar el serializado "false".
+_AUTOSTART_FLAG = "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED"
+_ALL_FLAGS = _ON_FLAGS
 
 
 @pytest.fixture(scope="module")
@@ -57,15 +65,12 @@ def test_defaults_de_config():
     cfg = Config()
     for k in _ON_FLAGS:
         assert getattr(cfg, k) is True, k
-    # EXCEPCIÓN DURA #3: prerequisito no garantizado (IIS Express + apphost config).
-    assert getattr(cfg, _OFF_FLAG) is False
 
 
 def test_solo_las_on_en_curated():
     from tests.test_harness_flags import _CURATED_DEFAULTS_ON
     for k in _ON_FLAGS:
         assert k in _CURATED_DEFAULTS_ON, k
-    assert _OFF_FLAG not in _CURATED_DEFAULTS_ON
 
 
 def test_sin_aristas_requires():
@@ -84,15 +89,15 @@ def test_flags_se_exportan_al_entorno(monkeypatch):
 
     monkeypatch.setattr(config_mod.config, "STACKY_QA_UAT_ADO_BRIDGE_ENABLED", True,
                         raising=False)
-    monkeypatch.setattr(config_mod.config, _OFF_FLAG, False, raising=False)
+    monkeypatch.setattr(config_mod.config, _AUTOSTART_FLAG, False, raising=False)
     for k in _ALL_FLAGS:
         monkeypatch.delenv(k, raising=False)
 
     exported = _export_qa_uat_flags()
     assert exported["STACKY_QA_UAT_ADO_BRIDGE_ENABLED"] == "true"
-    assert exported[_OFF_FLAG] == "false"
+    assert exported[_AUTOSTART_FLAG] == "false"
     assert os.environ["STACKY_QA_UAT_ADO_BRIDGE_ENABLED"] == "true"
-    assert os.environ[_OFF_FLAG] == "false"
+    assert os.environ[_AUTOSTART_FLAG] == "false"
 
 
 # ── Endpoint runtime-doctor ──────────────────────────────────────────────────

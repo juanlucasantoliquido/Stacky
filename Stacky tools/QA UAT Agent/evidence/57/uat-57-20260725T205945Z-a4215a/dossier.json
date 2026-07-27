@@ -1,0 +1,37 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-07-25T21:00:03.333108+00:00",
+  "ticket_id": 57,
+  "run_id": "uat-57-20260725T205945Z-a4215a",
+  "verdict": "BLOCKED",
+  "category": "GEN",
+  "reason": "UI_MAP_MISSING",
+  "failed_stage": "ui_map",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'ui_map'. [GEN] UI_MAP_MISSING. UI map missing for screen(s): ['FrmGestion.aspx', 'FrmParametros.aspx']. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "human_action_required": "UI map missing for: FrmGestion.aspx, FrmParametros.aspx. Run: python ui_map_builder.py --screen <screen> --rebuild",
+  "exec_summary": {
+    "session_started_at": "2026-07-25T20:59:45.570255Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 22
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\execution.jsonl",
+    "result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\result.json",
+    "ticket_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\ticket.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\57\\uat-57-20260725T205945Z-a4215a\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "result.json",
+    "ticket.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 1.6
+}

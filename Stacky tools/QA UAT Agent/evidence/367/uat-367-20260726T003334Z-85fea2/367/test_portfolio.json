@@ -1,0 +1,52 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 367,
+  "generated_at": "2026-07-26T00:33:44.500042Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "367-CA-01",
+      "description": "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. VALOR=QAUATABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHI 50",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "367-CA-02",
+      "description": "Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "367-CA-03",
+      "description": "Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmBusqueda.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "integration": 1,
+    "manual_review": 1,
+    "uat": 1
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "schema_version": "weak_assertion_report/1.0",
+  "ok": true,
+  "run_id": "70",
+  "ticket_id": 70,
+  "files_analyzed": 2,
+  "total_tests": 2,
+  "strong_tests": 0,
+  "weak_tests": 2,
+  "trivial_tests": 0,
+  "no_assertion_tests": 0,
+  "publish_blocked": false,
+  "file_analyses": [
+    {
+      "file_name": "P04_fechadesde19000101_fechahasta19000101_click_buscar.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p04 fechadesde=19000101,_fechahasta=19000101,_click_buscar_-_deb",
+          "file_name": "P04_fechadesde19000101_fechahasta19000101_click_buscar.spec.ts",
+          "line_number": 114,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    },
+    {
+      "file_name": "P05_aplicar_filtros_navegar_fuera_volver_todos_los_ddl.spec.ts",
+      "total_tests": 1,
+      "strong_tests": 0,
+      "weak_tests": 1,
+      "trivial_tests": 0,
+      "no_assertion_tests": 0,
+      "has_weak_tests": true,
+      "test_results": [
+        {
+          "test_name": "p05 aplicar_filtros,_navegar_fuera,_volver_-_todos_los_ddl_muest",
+          "file_name": "P05_aplicar_filtros_navegar_fuera_volver_todos_los_ddl.spec.ts",
+          "line_number": 114,
+          "assertion_strength": "WEAK",
+          "expect_call_count": 2,
+          "strong_count": 0,
+          "weak_count": 0,
+          "trivial_count": 0,
+          "is_weak": true,
+          "finding": "Only weak assertions: "
+        }
+      ]
+    }
+  ],
+  "evidence_path": null,
+  "analyzed_at": "2026-07-25T21:13:25.066945Z"
+}

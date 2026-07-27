@@ -43,19 +43,47 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
   desde la UI** — no solo como variable de entorno. Concretamente: backend que lee el valor + endpoint
   para leerlo/setearlo + control en el frontend, **reusando las superficies de configuración que ya
   existen** (p. ej. `api/client_profile.py` + su panel, el modal de settings de Claude Code, o el panel de
-  flags del arnés `services/harness_flags.py`) en vez de inventar una pantalla nueva. **Default: ON**, salvo
-  que la flag dispare una de las 4 EXCEPCIONES DURAS (y si aplica alguna, hay que citarla explícitamente,
-  no alcanza un "default seguro" genérico):
-  1. Acción automática que bypasea la revisión humana (auto-publicar, auto-crear tickets en ADO/tracker,
-     auto-ejecutar comandos remotos/DevOps, enviar mensajes externos). Única excepción ya aceptada:
-     épica-desde-brief auto-publica.
-  2. Acción destructiva o irreversible.
-  3. Depende de un prerequisito NO garantizado en una instalación default (credenciales externas, un
-     servicio local no instalado como Ollama, un catálogo/config que el operador todavía no armó).
-  4. Cambia el comportamiento de seguridad reduciéndolo por default.
+  flags del arnés `services/harness_flags.py`) en vez de inventar una pantalla nueva.
   ÚNICA excepción de forma (no de fondo): un kill-switch puramente INTERNO que el operador nunca toca
   (telemetría, defaults de arnés horneados) puede quedar env-only — pero si hay duda de si el operador
   querría tocarlo, va a la UI.
+
+- **REGLA DE DEFAULT DE FLAGS: toda flag nueva se registra con `default ON` (regla dura).** El ON es el
+  caso por defecto y no se justifica. Una flag solo se registra **OFF** si cae en una de estas **DOS
+  categorías de excepción**, y en ese caso hay que **dejar la justificación POR ESCRITO** en el comentario
+  de la propia `FlagSpec` (cuál de las dos y por qué, en una frase):
+  * **(A) Quema tokens en REPOSO** — enciende un loop, daemon, barrido, polling, prefetch o inyección de
+    contexto que llama a un modelo (o engorda cada prompt) **sin que el operador pida nada**. Ejemplos
+    vivos en OFF: `STACKY_NIGHT_FOUNDRY_ENABLED`, `STACKY_EGRESS_SENTINEL_ENABLED`.
+  * **(B) Escribe en un sistema REAL del operador, destruye datos, o le saca la decisión** — publica/
+    commitea/pushea a su ADO, GitLab o repo remoto; ejecuta DDL/DML en una BD suya; despliega o hace
+    rollback en sus servidores; borra datos; reduce la durabilidad/seguridad de los datos; **o dispara
+    sola una acción que el operador debería decidir** (human-in-the-loop). Ejemplos vivos en OFF:
+    `STACKY_SQL_EXEC_ENABLED`, `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`, `STACKY_DEPLOYMENTS_EXECUTE_ENABLED`,
+    `STACKY_LEDGER_PURGE_ENABLED`, `STACKY_DB_COMPACT_ENABLED`.
+  **NO son motivos válidos para registrar OFF** (si el plan lo pide así, implementá ON y dejalo anotado en
+  el reporte y en la memoria de estado):
+  * "Prerequisito no garantizado en una instalación default" (modelo local, credenciales, IIS Express,
+    catálogo/config sin armar). El operador **invalidó** este motivo: lo on-demand **degrada sin romper**.
+  * "Default seguro", "por las dudas", "para no cambiar el comportamiento actual".
+  * Cualquier cosa de **solo lectura** (leer, calcular, mostrar, diffear, auditar, avisar): va ON.
+  Si una capacidad mezcla algo inocuo con algo que escribe, **partila en dos flags**: ver/planear/diffear
+  en ON, la que escribe en OFF citando (B).
+
+- **CÓMO se registra el default (mecánica exacta del arnés — equivocarse acá deja el arnés en rojo):**
+  * Flag **default ON**: los TRES lugares, o rompe el centinela.
+    1. `backend/config.py`: `os.getenv("LA_KEY", "true")`  ← este es el default **EFECTIVO**.
+    2. `backend/services/harness_flags.py`: la `FlagSpec` declara `default=True`.
+    3. `backend/tests/test_harness_flags.py`: la key se agrega a `_CURATED_DEFAULTS_ON`.
+  * Flag **default OFF**: `os.getenv("LA_KEY", "false")` en `config.py` y **NO declarar `default=` en la
+    `FlagSpec`** ni agregarla al set curado. `default_is_known()` es literalmente `spec.default is not None`
+    (type-agnóstico), así que hasta un `default=False` explícito —o un `default=` numérico— la vuelve
+    "conocida" y pone en rojo `test_default_known_only_for_curated`.
+  * **Al FLIPEAR el default de una flag existente**, los tests del plan que la creó suelen afirmar el
+    default viejo (`assert ... is False`, `_FLAG_OFF`, `not in _CURATED_DEFAULTS_ON`, o el health payload).
+    Buscalos con `grep -rl "LA_KEY" backend/tests/` y actualizalos con el motivo escrito; y si un test
+    probaba el camino apagado apoyándose en el default, hacelo forzar la flag a `False`
+    **explícitamente** en vez de depender de una decisión de configuración.
 - **Test-first de verdad (TDD) y CERO falsos verdes.** Por cada fase: primero el test nombrado en el plan,
   después el código, y se **corre el test realmente** con el intérprete/venv correcto del repo. Un test que
   no se corrió NO está verde. Si falla y no lo podés arreglar, se reporta BLOQUEADA con el output real; no
@@ -65,7 +93,7 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
   que cada cosa funcione en los 3 o degrade con fallback explícito. Nada nuevo atado a un solo runtime
   (ojo deudas reales de paridad: style_memory copilot-only).
 - **Cero trabajo extra al operador:** la feature es invisible/automática u opt-in con default **ON** salvo
-  que dispare una de las 4 excepciones duras (ver arriba); sin pasos manuales nuevos. (No confundir con la
+  que dispare una de las 2 categorías de excepción (A: quema tokens en reposo / B: escribe en un sistema real del operador, destruye datos o le saca la decisión) (ver arriba); sin pasos manuales nuevos. (No confundir con la
   regla de UI: "configurable por UI" ≠ "obligatorio configurar"; el default debe funcionar sin que el
   operador toque nada.)
 - **Human-in-the-loop innegociable:** amplificar al operador, jamás reemplazarlo. Sin autonomía proactiva.
@@ -109,7 +137,7 @@ El número del plan objetivo nunca se hardcodea: se resuelve en cada corrida (ar
 5. **Implementar fase por fase (TDD).** Para CADA fase F0..Fn, en orden:
    a. Escribí/ajustá el test nombrado en el plan (primero).
    b. Implementá el código mínimo de la fase (archivos/símbolos exactos del plan; flags con default ON
-      salvo que citen una de las 4 excepciones duras; config del operador con su control de UI).
+      salvo que citen una de las 2 categorías de excepción (A: quema tokens en reposo / B: escribe en un sistema real del operador, destruye datos o le saca la decisión); config del operador con su control de UI).
    c. **Corré el test de esa fase** con el comando exacto del backend (y `tsc --noEmit` si tocaste UI).
    d. Verificá el criterio binario de la fase. Si pasa, seguí; si no, arreglá o marcá BLOQUEADA con el
       output real y seguí a lo que no dependa de ella. Nunca avances declarando verde lo que no corriste.
@@ -149,17 +177,30 @@ PASO 1 — CONFIG POR UI (regla dura): por cada flag/parámetro del plan que el 
 ajustar, NO basta una env var: tiene que quedar activable/editable desde la UI. Wiring = backend que lee
 el valor + endpoint leer/setear + control en el frontend, REUSANDO una superficie existente
 (api/client_profile.py + su panel, el modal de settings de Claude Code, o el panel de flags del arnés
-services/harness_flags.py). Default: ON, salvo que dispare una de las 4 EXCEPCIONES DURAS (citá cuál
-aplica, no un "default seguro" genérico): (1) acción automática que bypasea revisión humana —
-auto-publicar/auto-crear ticket/auto-ejecutar remoto/mensaje externo, única excepción ya aceptada:
-épica-desde-brief—; (2) destructiva/irreversible; (3) prerequisito no garantizado en instalación default
-(credenciales externas, servicio local no instalado, catálogo/config sin armar); (4) reduce seguridad por
-default. Solo un kill-switch puramente interno que el operador nunca toca puede quedar env-only; ante la
+services/harness_flags.py).
+
+DEFAULT DE LA FLAG: **ON**. Es la regla, no una preferencia. Solo se registra OFF si cae en una de las 2
+CATEGORÍAS DE EXCEPCIÓN, y hay que dejar la justificación POR ESCRITO en el comentario de la FlagSpec:
+(A) quema tokens en REPOSO — loop/daemon/barrido/polling/prefetch o inyección de contexto que llama a un
+modelo sin que el operador pida nada; (B) escribe en un sistema REAL del operador, destruye datos o le
+saca la decisión — publica/commitea/pushea a su ADO/GitLab/repo remoto, DDL/DML en una BD suya, despliegue
+o rollback en sus servidores, borrado de datos, reducción de durabilidad/seguridad, o disparo automático
+de algo que el operador debería decidir (human-in-the-loop). NO valen como excepción: "prerequisito no
+garantizado en instalación default" (invalidado por el operador: lo on-demand degrada sin romper),
+"default seguro", "por las dudas", ni nada de solo lectura. Si una capacidad mezcla algo inocuo con algo
+que escribe, PARTILA EN DOS flags: ver/planear/diffear en ON, la que escribe en OFF citando (B).
+MECÁNICA EXACTA — default ON = los TRES lugares: config.py con os.getenv("LA_KEY","true") (default
+EFECTIVO) + FlagSpec con default=True + la key agregada a _CURATED_DEFAULTS_ON en
+backend/tests/test_harness_flags.py. Default OFF = os.getenv("LA_KEY","false") y NO declarar default= en
+la FlagSpec ni sumarla al set curado (default_is_known() es `spec.default is not None`, así que hasta un
+default=False o un default= numérico rompe test_default_known_only_for_curated).
+
+Solo un kill-switch puramente interno que el operador nunca toca puede quedar env-only; ante la
 duda, va a la UI. Listá qué controles de UI vas a agregar antes de codear.
 
 PASO 2 — IMPLEMENTAR FASE POR FASE (TDD, en orden de dependencia):
 - Por CADA fase: (a) test nombrado del plan PRIMERO; (b) código mínimo (archivos/símbolos EXACTOS del
-  plan; flags default ON salvo que citen una de las 4 excepciones duras); (c) CORRÉ el test de esa fase de
+  plan; flags default ON salvo que citen una de las 2 categorías de excepción (A: quema tokens en reposo / B: escribe en un sistema real del operador, destruye datos o le saca la decisión)); (c) CORRÉ el test de esa fase de
   verdad; (d) verificá el criterio binario.
 - Tests backend (por archivo, venv del repo):
   Stacky Agents/backend/.venv/Scripts/python.exe -m pytest "Stacky Agents/backend/tests/<archivo>.py" -q
@@ -200,9 +241,12 @@ controles de UI agregados; lista de flags + default; hash del commit; pendientes
       implementó y se rebotó a `criticar-y-mejorar-plan`.
 - [ ] **Toda flag/config que el operador deba setear quedó activable/editable desde la UI** (backend +
       endpoint + control de frontend, reusando una superficie existente), con default **ON** salvo que se
-      citara explícitamente cuál de las 4 excepciones duras aplica (bypass de revisión humana,
-      destructiva/irreversible, prerequisito no garantizado, reduce seguridad). Solo kill-switches internos
-      quedaron env-only, justificados.
+      citara POR ESCRITO cuál de las 2 categorías de excepción aplica: (A) quema tokens en reposo, o
+      (B) escribe en un sistema real del operador / destruye datos / le saca la decisión. Solo
+      kill-switches internos quedaron env-only, justificados.
+- [ ] Cada flag nueva quedó en los lugares que le corresponden: si es **ON**, `config.py` con `"true"` +
+      `default=True` en la FlagSpec + la key en `_CURATED_DEFAULTS_ON`; si es **OFF**, `config.py` con
+      `"false"` y SIN `default=` en la FlagSpec. `pytest tests/test_harness_flags.py -q` en verde.
 - [ ] Se trabajó en una rama (no en `main`).
 - [ ] Tras la implementación se hizo un commit en la rama (mensaje `plan-<NN>` + trailer de co-autoría
       `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`, sin `--no-verify`); el `push`

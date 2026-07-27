@@ -1,0 +1,17 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 2 tests using 1 worker
+
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  1 evidence\369\uat-369-20260725T234103Z-3e5e06\tests\P05_cuando_bgcodmedio_o_hbgcodmedio_es_null_la_etiquet.spec.ts:139:7 › ADO-369 | P05 — Cuando BGCODMEDIO o HBGCODMEDIO es NULL, la etiqueta muestra "—" o cadena vacía sin errores ni excepciones. › p05 cuando_bgcodmedio_o_hbgcodmedio_es_null,_la_etiqueta_muestra (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  2 evidence\369\uat-369-20260725T234103Z-3e5e06\tests\P06_el_fix_no_altera_las_reglas_de_acceso_existentes_n.spec.ts:139:7 › ADO-369 | P06 — El fix no altera las reglas de acceso existentes; ningún rol que no vea ya el contacto puede verlo tras el cambio. › p06 el_fix_no_altera_las_reglas_de_acceso_existentes;_ningún_rol (1.2m)
+
+  2 passed (2.9m)

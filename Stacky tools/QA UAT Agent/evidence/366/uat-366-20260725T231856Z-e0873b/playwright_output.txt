@@ -1,0 +1,25 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 4 tests using 1 worker
+
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  1 evidence\366\uat-366-20260725T231856Z-e0873b\tests\P01_el_combo_tipo_telefono_en_agenda_web_mantenedortel.spec.ts:139:7 › ADO-366 | P01 — El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes. › p01 el_combo_tipo_telefono_en_agenda_web_(mantenedortelefonos.as (1.4m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  2 evidence\366\uat-366-20260725T231856Z-e0873b\tests\P03_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts:139:7 › ADO-366 | P03 — Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. › p03 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  3 evidence\366\uat-366-20260725T231856Z-e0873b\tests\P04_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts:139:7 › ADO-366 | P04 — Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. › p04 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_ (1.2m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  4 evidence\366\uat-366-20260725T231856Z-e0873b\tests\P05_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts:139:7 › ADO-366 | P05 — El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. › p05 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez (1.2m)
+
+  4 passed (5.7m)

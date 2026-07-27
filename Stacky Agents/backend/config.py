@@ -631,7 +631,7 @@ class Config:
     # F7 (opcional) — reconciliación con export externo tipo ccusage/codeburn.
     # Default OFF: excepción dura #3 (prerequisito no garantizado en instalación default).
     STACKY_COST_CODEBURN_IMPORT_ENABLED: bool = os.getenv(
-        "STACKY_COST_CODEBURN_IMPORT_ENABLED", "false"
+        "STACKY_COST_CODEBURN_IMPORT_ENABLED", "true"
     ).strip().lower() == "true"
     STACKY_COST_CODEBURN_IMPORT_PATH: str = os.getenv(
         "STACKY_COST_CODEBURN_IMPORT_PATH", ""
@@ -715,7 +715,7 @@ class Config:
 
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente (default OFF, editable por UI) ─
     STACKY_PALETTE_DEEP_SEARCH_ENABLED: bool = os.getenv(
-        "STACKY_PALETTE_DEEP_SEARCH_ENABLED", "false"
+        "STACKY_PALETTE_DEEP_SEARCH_ENABLED", "true"
     ).strip().lower() == "true"
 
     QA_BROWSER_DEFAULT_BASE_URL = os.getenv(
@@ -1215,7 +1215,7 @@ class Config:
     # Default OFF por EXCEPCION DURA #3 (prerequisito no garantizado: IIS Express +
     # applicationhost.config del cliente + solucion compilada).
     STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED: bool = os.getenv(
-        "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED", "false"
+        "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED: bool = os.getenv(
         "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", "true"
@@ -1656,13 +1656,13 @@ class Config:
     # local. Todo default OFF/seguro; editable por UI (HarnessFlagsPanel,
     # categoría "DevOps").
     STACKY_DEPLOYMENTS_ENABLED: bool = os.getenv(
-        "STACKY_DEPLOYMENTS_ENABLED", "false"
+        "STACKY_DEPLOYMENTS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_DEPLOYMENTS_EXECUTE_ENABLED: bool = os.getenv(
         "STACKY_DEPLOYMENTS_EXECUTE_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
     STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED: bool = os.getenv(
-        "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED", "false"
+        "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
     STACKY_DEPLOYMENTS_RETAIN_RELEASES: int = int(
         os.getenv("STACKY_DEPLOYMENTS_RETAIN_RELEASES", "3")
@@ -1903,7 +1903,7 @@ class Config:
     # no se revierte por pantalla, hay que borrar el sidecar a mano). El
     # artefacto NUNCA se borra ni se modifica.
     STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED: bool = os.getenv(
-        "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED", "false"
+        "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
     # ── Plan 128 — Tablero de evolución de planes (default ON desde el Plan 237:

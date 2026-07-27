@@ -1,0 +1,24 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+Error: browserType.launch: Executable doesn't exist at C:\Users\juanluca\AppData\Local\ms-playwright\chromium_headless_shell-1217\chrome-headless-shell-win64\chrome-headless-shell.exe
+╔════════════════════════════════════════════════════════════╗
+║ Looks like Playwright was just installed or updated.       ║
+║ Please run the following command to download new browsers: ║
+║                                                            ║
+║     npx playwright install                                 ║
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝
+
+   at playwright\global.setup.ts:134
+
+  132 |   console.log(`[globalSetup] Logging into ${baseURL}FrmLogin.aspx (attempt 1/1) ...`);
+  133 |
+> 134 |   const browser = await chromium.launch({ headless: true });
+      |                                  ^
+  135 |   try {
+  136 |     const context = await browser.newContext();
+  137 |     const page    = await context.newPage();
+    at globalSetup (N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\playwright\global.setup.ts:134:34)
+

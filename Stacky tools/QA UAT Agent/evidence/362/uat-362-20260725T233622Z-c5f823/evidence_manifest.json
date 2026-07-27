@@ -1,0 +1,196 @@
+{
+  "ok": true,
+  "run_dir": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\362\\uat-362-20260725T233622Z-c5f823",
+  "generated_at": "2026-07-25T23:41:02Z",
+  "files": [
+    {
+      "path": "362/362/confidence_report.json",
+      "bytes": 856,
+      "sha256": "d35a530d8fb61909f90f60bf14dca8e50c7b2e36fb1330d5fb49fc86eb7734ab",
+      "kind": "data"
+    },
+    {
+      "path": "362/362/data_lineage.json",
+      "bytes": 336,
+      "sha256": "ab978b4e8b6615cc1dafa73b7e3cc062f7a7e74fff0f97cb2329e53bd17857f3",
+      "kind": "data"
+    },
+    {
+      "path": "362/362/oracle_result.json",
+      "bytes": 1252,
+      "sha256": "2289b613b1f3683ee8eae2f13a8bddae8cd9983f6e7395bebcd1d308b6e1e10f",
+      "kind": "data"
+    },
+    {
+      "path": "362/362/weak_assertion_report.json",
+      "bytes": 2706,
+      "sha256": "1643f7e7f152537392c7435f59e81695a0148d552d4c103f32ffb85843a8e35e",
+      "kind": "data"
+    },
+    {
+      "path": "362/data_contract_P01.json",
+      "bytes": 1017,
+      "sha256": "37081e1dcc2c8d619d75e6b7a5f0ac4e4572fb8a360c5dedc16492efeb7a559d",
+      "kind": "data"
+    },
+    {
+      "path": "362/data_contract_P02.json",
+      "bytes": 1017,
+      "sha256": "541db01bee2aaec58fcb3c3f86b68cb1b87ac5b5c380a300c0d8dde4bf3e3e5a",
+      "kind": "data"
+    },
+    {
+      "path": "362/data_contract_P03.json",
+      "bytes": 1017,
+      "sha256": "53fa2639b6bffcb39260ba9177774eb261ee1673ff0d1621b186b8e7968f0a55",
+      "kind": "data"
+    },
+    {
+      "path": "362/data_readiness_v2_P01.json",
+      "bytes": 509,
+      "sha256": "960c2bb81e6ed1ba04092bc6b268d15ba2005d0950c25cc2dae927a834415bfa",
+      "kind": "data"
+    },
+    {
+      "path": "362/data_readiness_v2_P02.json",
+      "bytes": 509,
+      "sha256": "ccff4020b42c02a999c9319593a3bd4917387ae8a78dc0c88a1b818c25c03eeb",
+      "kind": "data"
+    },
+    {
+      "path": "362/data_readiness_v2_P03.json",
+      "bytes": 509,
+      "sha256": "c7fb46eb6acfb499bfa81d372ffe1a206760c3352eb367fdeb7d32ac70329dfc",
+      "kind": "data"
+    },
+    {
+      "path": "362/screen_detection.json",
+      "bytes": 464,
+      "sha256": "ea580cff71a5df31240dfb7f6066f8185be3754fa02b467f9fee85b108a1b4ba",
+      "kind": "data"
+    },
+    {
+      "path": "362/test_portfolio.json",
+      "bytes": 2609,
+      "sha256": "a562d86907acb7c49fac773ae39062457a42de9d9b93d93f3414e6c50d4f127b",
+      "kind": "data"
+    },
+    {
+      "path": "DOSSIER_UAT.md",
+      "bytes": 2692,
+      "sha256": "80d59a5c4155d6acb1b75e22a08ebf33b96da6b3aaaef3f86ad978eab80c6bf0",
+      "kind": "other"
+    },
+    {
+      "path": "ado_comment.html",
+      "bytes": 7281,
+      "sha256": "92dc94772ac7c8cddb2f5abe3c3506adf1f48a461e6e405722d276e29de41897",
+      "kind": "report"
+    },
+    {
+      "path": "dossier.json",
+      "bytes": 3915,
+      "sha256": "cbba551cee53cb4a06fe8a37116fc203b17c1c29c7099f0abbd547f073a3476a",
+      "kind": "data"
+    },
+    {
+      "path": "effective_config.json",
+      "bytes": 460,
+      "sha256": "fe5cd44a5e5e55a2afe556cc0e0f4eaf78b4b7f0bc0e01c42f6d13326b4d01b9",
+      "kind": "data"
+    },
+    {
+      "path": "evaluations.json",
+      "bytes": 1574,
+      "sha256": "3aa9cab3fd4c5b27118fd814634e808e66d265e0d2f68e8a43c3b5bb63c1abf3",
+      "kind": "data"
+    },
+    {
+      "path": "execution.jsonl",
+      "bytes": 84225,
+      "sha256": "69b198328c7004b208797978d8b905be17318f651fc5bc625b53c0d535aa633d",
+      "kind": "log"
+    },
+    {
+      "path": "navigation_contract_validation.json",
+      "bytes": 918,
+      "sha256": "c1b52e7ef7b0f924800e3feb28ae414986b922f0816abd4247827bf8adccd73d",
+      "kind": "data"
+    },
+    {
+      "path": "playwright_output.txt",
+      "bytes": 1876,
+      "sha256": "e2d330a8e39068603e1d0e2a41eedbe12c9fc8a8cc5f9f19fd1a5b41d288d927",
+      "kind": "log"
+    },
+    {
+      "path": "runner_output.json",
+      "bytes": 9605,
+      "sha256": "e225e341fed6ad4f3b0cb0504f67c484948c491f963eba060bc68df04391cad9",
+      "kind": "data"
+    },
+    {
+      "path": "scenarios.json",
+      "bytes": 4277,
+      "sha256": "9a04f808fee2dcfa0907820d4f6d8b89b7e807f32cb3da975db26b9ba2ebf915",
+      "kind": "data"
+    },
+    {
+      "path": "tests/P01_en_detalle_de_cliente_agendawebfrmdetalleclieaspx.spec.ts",
+      "bytes": 20874,
+      "sha256": "2daab5997f0d09586c23810e8f235b4043b2f427bb08d7ad13f65c92f7110a06",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P02_el_mismo_cambio_se_refleja_automaticamente_en_la_g.spec.ts",
+      "bytes": 20778,
+      "sha256": "6a522b922659d71596cc1246590be69b63ed98171b61e4c2bdfc9d11a9b2afe7",
+      "kind": "spec"
+    },
+    {
+      "path": "tests/P03_no_se_modifica_el_ancho_de_columnas_ni_se_rompe_el.spec.ts",
+      "bytes": 20701,
+      "sha256": "8b340795a859f2acf2d145f7bdfba0b11352e42de356cbd1fd7874d716f3c6c3",
+      "kind": "spec"
+    },
+    {
+      "path": "ticket.json",
+      "bytes": 43374,
+      "sha256": "4b3fe3ee10603a5bffd151b80cb79c5946cf20c301a54e8925f20f6e8d3242bb",
+      "kind": "data"
+    },
+    {
+      "path": "triage.json",
+      "bytes": 527,
+      "sha256": "11d0c0066d4cc4fbd4897acf82d5525d9b5ed4cc44eb31ebf20df51381905677",
+      "kind": "data"
+    },
+    {
+      "path": "uat-362-20260725T233622Z-c5f823/data_readiness.json",
+      "bytes": 640,
+      "sha256": "28201c180fafb76993705a8bbe1a112da0a1ac4cf6ab8427816a8ec5d514ad60",
+      "kind": "data"
+    },
+    {
+      "path": "uat-362-20260725T233622Z-c5f823/deployment_fingerprint.json",
+      "bytes": 290,
+      "sha256": "148bed24e05472436a998c2a4c1c886bac2700318f84d94e831ed5a46d9032af",
+      "kind": "data"
+    },
+    {
+      "path": "ui_map_resolution.json",
+      "bytes": 529,
+      "sha256": "9b090428b4928fd3c54169f4c04f6b44f91c807034240248fb8b83523872d017",
+      "kind": "data"
+    }
+  ],
+  "counts": {
+    "total": 30,
+    "data": 23,
+    "other": 1,
+    "report": 1,
+    "log": 2,
+    "spec": 3
+  },
+  "truncated": false
+}

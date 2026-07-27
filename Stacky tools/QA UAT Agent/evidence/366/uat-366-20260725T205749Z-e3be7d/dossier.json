@@ -1,0 +1,41 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-07-25T20:58:36.941619+00:00",
+  "ticket_id": 366,
+  "run_id": "uat-366-20260725T205749Z-e3be7d",
+  "verdict": "BLOCKED",
+  "category": "DATA",
+  "reason": "NAVIGATION_DATA_MISSING",
+  "failed_stage": "navigation_contract_validation",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'navigation_contract_validation'. [DATA] NAVIGATION_DATA_MISSING. Navigation contract validation BLOCKED for scenario P01 targeting 'FrmDetalleClie.aspx': NAVIGATION_DATA_MISSING. Lane: uat_human.",
+  "human_action_required": "Proveer datos faltantes: ['CLCOD']. Son necesarios para navegar via 'open_from_busqueda' a 'FrmDetalleClie.aspx'.",
+  "exec_summary": {
+    "session_started_at": "2026-07-25T20:57:49.893287Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 58
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\execution.jsonl",
+    "navigation_contract_validation_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\navigation_contract_validation.json",
+    "result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\result.json",
+    "scenarios_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\scenarios.json",
+    "ticket_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\ticket.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T205749Z-e3be7d\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "navigation_contract_validation.json",
+    "result.json",
+    "scenarios.json",
+    "ticket.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 1.4
+}

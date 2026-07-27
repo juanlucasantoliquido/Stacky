@@ -1,0 +1,39 @@
+{
+  "schema_version": "qa-pipeline-dossier/1.0",
+  "tool_version": "1.0.0",
+  "generated_at": "2026-07-25T21:19:08.546432+00:00",
+  "ticket_id": 386,
+  "run_id": "uat-386-20260725T211859Z-0da030",
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "NO_EXECUTABLE_SCENARIOS",
+  "failed_stage": "unknown",
+  "ok": false,
+  "confidence": 1.0,
+  "root_cause_summary": "Failed at stage 'unknown'. [PIP] NO_EXECUTABLE_SCENARIOS. El compiler procesó 4 item(s) del plan de pruebas pero ninguno resultó ejecutable. Revisá out_of_scope_items en scenarios.json.",
+  "human_action_required": "review_screen_scope_or_test_plan",
+  "exec_summary": {
+    "session_started_at": "2026-07-25T21:18:59.506209Z",
+    "pipeline_verdict_decision_emitted": true,
+    "total_events": 23
+  },
+  "artifacts": {
+    "effective_config_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\effective_config.json",
+    "evidence_bundle_manifest_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\evidence_bundle_manifest.json",
+    "execution_jsonl": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\execution.jsonl",
+    "result_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\result.json",
+    "scenarios_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\scenarios.json",
+    "ticket_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\ticket.json",
+    "ui_map_resolution_json": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\386\\uat-386-20260725T211859Z-0da030\\ui_map_resolution.json"
+  },
+  "evidence_refs": [
+    "effective_config.json",
+    "evidence_bundle_manifest.json",
+    "execution.jsonl",
+    "result.json",
+    "scenarios.json",
+    "ticket.json",
+    "ui_map_resolution.json"
+  ],
+  "elapsed_build_ms": 2.3
+}

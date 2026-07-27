@@ -1,0 +1,87 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 369,
+  "generated_at": "2026-07-25T23:41:12.614100Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "369-CA-01",
+      "description": "La grilla de gestiones activas muestra la columna \"Etiqueta de contacto\" con el descriptor del medio utilizado en cada fila. VALOR=Etiqueta de contacto Etiqueta de contacto",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-02",
+      "description": "La grilla de gestiones históricas muestra la misma columna con el descriptor correcto para cada gestión.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-03",
+      "description": "El popup Notas Gestiones muestra el field \"Etiqueta de contacto\" poblado con el descriptor del medio de la gestión. VALOR=Etiqueta de contacto Etiqueta de contacto",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-04",
+      "description": "El modal dlgGestiones (encabezado de gestión histórica) muestra el field de etiqueta de contacto correctamente asignado.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": false,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-05",
+      "description": "Cuando BGCODMEDIO o HBGCODMEDIO es NULL, la etiqueta muestra \"—\" o cadena vacía sin errores ni excepciones.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    },
+    {
+      "id": "369-CA-06",
+      "description": "El fix no altera las reglas de acceso existentes; ningún rol que no vea ya el contacto puede verlo tras el cambio.",
+      "layer": "manual_review",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "texto ambiguo — ninguna señal clara identificada",
+      "owner": "qa_manual",
+      "handoff": "revisar manualmente — incluir en checklist de release"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "uat": 4,
+    "manual_review": 2
+  }
+}

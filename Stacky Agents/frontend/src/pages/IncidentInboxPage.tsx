@@ -1,14 +1,25 @@
 /**
- * Plan 238 F6 — Bandeja de incidencias abiertas (vista dedicada, SOLO LECTURA).
- * Muestra unicamente incidencias (Issue/Bug) con las abiertas primero. No cierra,
- * no reasigna, no publica y no lanza agentes: eso sigue viviendo en el tablero.
- * Toda la logica esta en incidents/incidentInboxModel (puro y testeado): esta capa
- * solo renderiza. Cero estilos en linea y cero colores literales aca (los exigen
- * los ratchets de deuda de interfaz); el color por tipo viaja por una variable CSS.
+ * Bandeja de incidencias abiertas (vista dedicada).
+ *
+ * Plan 238 F6 la creo como SOLO LECTURA. Detras de la flag
+ * STACKY_INCIDENT_INBOX_ACTIONS_ENABLED la bandeja ademas RESUELVE: cerrar la
+ * incidencia en el tracker (mismo camino que "Terminar trabajo" del tablero) y
+ * lanzar el Dev Resolutor con "Abrir PR" (que al terminar commitea lo que el
+ * agente toco y abre el Pull Request), de a una o en lote.
+ *
+ * Toda la logica de decision vive en incidents/incidentInboxModel y
+ * incidents/incidentInboxActionsModel (puros y testeados): esta capa solo
+ * renderiza y cablea. Las mutaciones NO tienen endpoints propios: reusan
+ * /api/tickets/<id>/finish-work y /api/agents/run-incident-dev, para que la
+ * bandeja y el tablero nunca discrepen.
+ *
+ * Cero estilos en linea y cero colores literales aca (los exigen los ratchets
+ * de deuda de interfaz); el color por tipo viaja por una variable CSS, y los
+ * controles salen del barrel de primitivas (ratchet de formularios).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { IncidentInbox, HarnessFlags } from "../api/endpoints";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IncidentInbox, HarnessFlags, Incidents, Tickets } from "../api/endpoints";
 import {
   filterBySearch,
   sortIncidents,
@@ -21,6 +32,18 @@ import {
   type IncidentInboxItem,
 } from "../incidents/incidentInboxModel";
 import {
+  BULK_FINISH_REASON,
+  DEFAULT_FINISH_STATE,
+  FINISH_STATE_SUGGESTIONS,
+  canFinishIncident,
+  canResolveIncident,
+  normalizeFinishState,
+  partitionSelection,
+  resolveInboxActionsEnabled,
+  skippedNotice,
+} from "../incidents/incidentInboxActionsModel";
+import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
+import {
   copyText,
   resolveCopyExportEnabled,
   COPY_TOAST_SUCCESS,
@@ -31,16 +54,42 @@ import {
   getWorkItemTypeColor,
   formatWorkItemTypeLabel,
 } from "../utils/workItemTypeColor";
+import { useBulkActionsEnabled } from "../services/bulkFlags";
+import {
+  capExecutionBatch,
+  createBulkRunner,
+  summarizeBulk,
+  type BulkWorker,
+} from "../services/bulkModel";
 import { useWorkbench } from "../store/workbench";
 import EmptyState from "../components/EmptyState";
 import LoadErrorState from "../components/LoadErrorState";
 import SkeletonList from "../components/SkeletonList";
 import Toast, { type ToastState } from "../components/Toast";
-import { Button, Input } from "../components/ui";
+import FinishWorkButton from "../components/FinishWorkButton";
+import BulkActionsBar from "../components/bulk/BulkActionsBar";
+import { useRowSelection } from "../components/bulk/useRowSelection";
+import { Button, Checkbox, Input } from "../components/ui";
+import type { Ticket } from "../types";
 import styles from "./IncidentInboxPage.module.css";
 
 const AYUDA_FLAG_OFF =
   "La bandeja de incidencias esta apagada. Activala en Configuracion > Flags del arnes > Interfaz UI > 'Bandeja de incidencias abiertas'.";
+
+/** Ticket minimo para FinishWorkButton (solo usa id / ado_id / title / estado). */
+function ticketShim(item: IncidentInboxItem): Ticket {
+  return {
+    id: item.id,
+    ado_id: item.ado_id,
+    project: "",
+    title: item.title,
+    ado_state: item.ado_state,
+    ado_url: item.ado_url,
+    work_item_type: item.work_item_type,
+    assigned_to_ado: item.assigned_to_ado,
+    stacky_status: item.stacky_status as Ticket["stacky_status"],
+  };
+}
 
 /** Punto de color por tipo de item: el color se aplica con setProperty sobre una
  *  variable CSS, nunca con estilos en linea (lo exige el ratchet de interfaz). */
@@ -60,13 +109,22 @@ function TypeDot({ workItemType }: { workItemType?: string }) {
 }
 
 export default function IncidentInboxPage() {
+  const qc = useQueryClient();
   const [scope, setScope] = useState<IncidentScope>(() =>
     parseScope(new URLSearchParams(window.location.search).get("scope")),
   );
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [finishState, setFinishState] = useState(DEFAULT_FINISH_STATE);
+  const [openPr, setOpenPr] = useState(DEFAULT_OPEN_PR);
+  const [busyRowId, setBusyRowId] = useState<number | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const runnerRef = useRef(createBulkRunner());
+  const headerWrapRef = useRef<HTMLSpanElement>(null);
+  const bulkRunning = bulkProgress !== null;
 
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  const agentRuntime = useWorkbench((s) => s.agentRuntime);
 
   const statusQ = useQuery({
     queryKey: ["incident-inbox-status", activeProjectName],
@@ -91,11 +149,155 @@ export default function IncidentInboxPage() {
   });
   const copiarHabilitado = resolveCopyExportEnabled(flagsQ.data?.flags);
 
+  // ── Acciones (cerrar / resolver+PR / lote) ─────────────────────────────────
+  const actionsEnabled = resolveInboxActionsEnabled(statusQ.data?.data);
+  const bulkEnabled = useBulkActionsEnabled();
+  const selectionEnabled = actionsEnabled && bulkEnabled;
+
+  // Gates del Dev Resolutor y del auto-PR: fuente unica /api/incidents/status,
+  // la MISMA que consume el tablero. Solo se pide si la bandeja puede escribir.
+  const incidentsStatusQ = useQuery({
+    queryKey: ["incidents-status"],
+    queryFn: () => Incidents.status(),
+    enabled: actionsEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+  const devResolverEnabled = Boolean(incidentsStatusQ.data?.dev_resolver_enabled);
+  const devPrEnabled = Boolean(incidentsStatusQ.data?.dev_pr_enabled);
+  const showOpenPr = shouldShowOpenPrCheckbox({
+    canResolve: actionsEnabled && devResolverEnabled,
+    devPrEnabled,
+  });
+
   const dto = itemsQ.data?.data ?? null;
   const raw = useMemo(() => dto?.items ?? [], [dto]);
   const counts = dto?.counts ?? { open: 0, closed: 0, total: 0 };
   const visible = useMemo(() => sortIncidents(filterBySearch(raw, search)), [raw, search]);
   const byState = useMemo(() => countByState(visible), [visible]);
+  const closedStates = useMemo(
+    () => dto?.closed_states ?? statusQ.data?.data?.closed_states ?? [],
+    [dto, statusQ.data],
+  );
+
+  const visibleIds = useMemo(() => visible.map((i) => i.id), [visible]);
+  const sel = useRowSelection({
+    visibleIds,
+    enabled: selectionEnabled,
+    escapeDisabled: bulkRunning,
+  });
+
+  // Tri-estado de la cabecera (propiedad del DOM, NO estilo — Checkbox sin forwardRef).
+  useEffect(() => {
+    const el = headerWrapRef.current?.querySelector("input");
+    if (el) el.indeterminate = sel.header === "some";
+  }, [sel.header]);
+
+  const refrescar = useCallback(async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["incident-inbox-items", activeProjectName, scope] }),
+      qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
+      qc.invalidateQueries({ queryKey: ["executions"] }),
+    ]);
+  }, [qc, activeProjectName, scope]);
+
+  // Cierre de UNA incidencia sin dialogo: es el worker del lote. El boton por
+  // fila usa FinishWorkButton (con dry-run y confirmacion en dos pasos).
+  const cerrarUna: BulkWorker = useCallback(
+    async (ticketId: number) => {
+      const r = await Tickets.finishWork(ticketId, {
+        operator_reason: BULK_FINISH_REASON,
+        publish_to_ado: true,
+        target_ado_state: normalizeFinishState(finishState),
+        dry_run: false,
+        cancel_active_execution: true,
+      });
+      if (!r.ok) {
+        const fallo = r.actions?.find((a) => !a.ok);
+        throw new Error(fallo?.reason ?? "el cierre no se completo");
+      }
+    },
+    [finishState],
+  );
+
+  // Lanzamiento del Dev Resolutor. Con "Abrir PR" tildado, al terminar el agente
+  // el post-hook commitea lo que toco y abre el Pull Request.
+  const resolverUna: BulkWorker = useCallback(
+    async (ticketId: number) => {
+      await Incidents.runDevResolver({
+        ticket_id: ticketId,
+        runtime: agentRuntime,
+        project: activeProjectName,
+        open_pr: showOpenPr ? openPr : false,
+      });
+    },
+    [agentRuntime, activeProjectName, openPr, showOpenPr],
+  );
+
+  const resolverFila = useCallback(
+    async (ticketId: number) => {
+      setBusyRowId(ticketId);
+      try {
+        await resolverUna(ticketId);
+        setToast({
+          variant: "success",
+          body: showOpenPr && openPr
+            ? "Agente lanzado — al terminar deja el Pull Request abierto"
+            : "Agente lanzado sobre la incidencia",
+        });
+        await refrescar();
+      } catch (e) {
+        setToast({ variant: "error", body: String((e as Error)?.message ?? e) });
+      } finally {
+        setBusyRowId(null);
+      }
+    },
+    [resolverUna, refrescar, showOpenPr, openPr],
+  );
+
+  const correrLote = useCallback(
+    async (kind: "finish" | "resolve") => {
+      const predicado = (item: IncidentInboxItem) =>
+        kind === "finish"
+          ? canFinishIncident({ item, actionsEnabled })
+          : canResolveIncident({ item, actionsEnabled, devResolverEnabled, closedStates });
+
+      const { eligible, skipped } = partitionSelection(visible, sel.orderedSelectedIds, predicado);
+      const aviso = skippedNotice(skipped);
+      if (eligible.length === 0) {
+        setToast({
+          variant: "warning",
+          body: aviso ?? "Ninguna de las seleccionadas admite esta accion.",
+        });
+        return;
+      }
+      if (kind === "resolve") {
+        // Freno de costo: lanzar agentes cuesta plata de verdad.
+        const cap = capExecutionBatch(eligible);
+        if (!cap.ok) {
+          setToast(cap.toast);
+          return;
+        }
+      }
+
+      const worker = kind === "finish" ? cerrarUna : resolverUna;
+      const p = runnerRef.current.run(eligible, worker, (done, total) =>
+        setBulkProgress({ done, total }),
+      );
+      if (!p) return; // guard: ya hay un lote corriendo
+      setBulkProgress({ done: 0, total: eligible.length });
+      const result = await p;
+      setBulkProgress(null);
+
+      const resumen =
+        kind === "finish"
+          ? summarizeBulk(result, "incidencia cerrada", "incidencias cerradas")
+          : summarizeBulk(result, "agente lanzado", "agentes lanzados");
+      setToast(aviso ? { ...resumen, body: `${resumen.body} · ${aviso}` } : resumen);
+      sel.retainFailed(result.failed.map((f) => f.id));
+      await refrescar();
+    },
+    [visible, sel, actionsEnabled, devResolverEnabled, closedStates, cerrarUna, resolverUna, refrescar],
+  );
 
   const cambiarScope = (next: IncidentScope) => {
     setScope(next);
@@ -169,6 +371,37 @@ export default function IncidentInboxPage() {
             aria-label="Buscar incidencias"
           />
         </div>
+        {actionsEnabled && (
+          <div className={styles.finishStateBox}>
+            <label className={styles.finishStateLabel} htmlFor="inbox-finish-state">
+              Estado al cerrar en lote
+            </label>
+            <Input
+              id="inbox-finish-state"
+              className={styles.finishStateInput}
+              value={finishState}
+              onChange={(e) => setFinishState(e.target.value)}
+              placeholder={DEFAULT_FINISH_STATE}
+              list="inbox-finish-state-options"
+              disabled={bulkRunning}
+            />
+            <datalist id="inbox-finish-state-options">
+              {FINISH_STATE_SUGGESTIONS.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          </div>
+        )}
+        {showOpenPr && (
+          <Checkbox
+            label="Abrir PR al resolver"
+            labelClassName={styles.inlineToggle}
+            checked={openPr}
+            onChange={(e) => setOpenPr(e.target.checked)}
+            disabled={bulkRunning}
+            title="Al terminar el agente, commitea lo que toco y abre el Pull Request"
+          />
+        )}
         {copiarHabilitado && (
           <Button variant="ghost" size="sm" className={styles.copyBtn} onClick={() => void copiarLista()}>
             Copiar lista
@@ -220,6 +453,21 @@ export default function IncidentInboxPage() {
         </p>
       )}
       <div className={styles.chips}>
+        {selectionEnabled && (
+          <span ref={headerWrapRef} className={styles.selectAll}>
+            <Checkbox
+              label="Seleccionar todo"
+              labelClassName={styles.inlineToggle}
+              checked={sel.header === "all"}
+              onChange={() => {}}
+              onClick={(e) => {
+                e.stopPropagation();
+                sel.onToggleAll();
+              }}
+              disabled={bulkRunning}
+            />
+          </span>
+        )}
         {byState.map((s) => (
           <span key={s.state} className={styles.chip}>
             {s.state} {s.count}
@@ -227,27 +475,94 @@ export default function IncidentInboxPage() {
         ))}
       </div>
       <div className={styles.list}>
-        {visible.map((item: IncidentInboxItem) => (
-          <div key={item.id} className={styles.row}>
-            <TypeDot workItemType={item.work_item_type} />
-            <span className={styles.adoId}>#{item.ado_id}</span>
-            <span className={styles.rowTitle}>{item.title}</span>
-            {item.ado_state && <span className={styles.stateBadge}>{item.ado_state}</span>}
-            <span className={item.is_open ? styles.openBadge : styles.closedBadge}>
-              {item.is_open ? "Abierta" : "Cerrada"}
-            </span>
-            {item.stacky_status === "running" && (
-              <span className={styles.runningDot}>agente corriendo</span>
-            )}
-            <span className={styles.assignee}>{item.assigned_to_ado ?? "sin asignar"}</span>
-            {item.ado_url && (
-              <a className={styles.link} href={item.ado_url} target="_blank" rel="noopener noreferrer">
-                Abrir en el tracker
-              </a>
-            )}
-          </div>
-        ))}
+        {visible.map((item: IncidentInboxItem) => {
+          const puedeCerrar = canFinishIncident({ item, actionsEnabled });
+          const puedeResolver = canResolveIncident({
+            item,
+            actionsEnabled,
+            devResolverEnabled,
+            closedStates,
+          });
+          const corriendo = item.stacky_status === "running";
+          return (
+            <div key={item.id} className={styles.row}>
+              {selectionEnabled && (
+                <Checkbox
+                  label=""
+                  labelClassName={styles.selectCell}
+                  aria-label={`Seleccionar la incidencia #${item.ado_id}`}
+                  checked={sel.isRowSelected(item.id)}
+                  onChange={() => {}}
+                  onClick={(e) => sel.onRowCheckboxClick(item.id, e)}
+                  disabled={bulkRunning}
+                />
+              )}
+              <TypeDot workItemType={item.work_item_type} />
+              <span className={styles.adoId}>#{item.ado_id}</span>
+              <span className={styles.rowTitle}>{item.title}</span>
+              {item.ado_state && <span className={styles.stateBadge}>{item.ado_state}</span>}
+              <span className={item.is_open ? styles.openBadge : styles.closedBadge}>
+                {item.is_open ? "Abierta" : "Cerrada"}
+              </span>
+              {corriendo && <span className={styles.runningDot}>agente corriendo</span>}
+              <span className={styles.assignee}>{item.assigned_to_ado ?? "sin asignar"}</span>
+              <span className={styles.rowActions}>
+                {puedeResolver && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busyRowId === item.id || bulkRunning}
+                    onClick={() => void resolverFila(item.id)}
+                    title={
+                      showOpenPr && openPr
+                        ? "Resolver con un agente y dejar el Pull Request abierto"
+                        : "Resolver esta incidencia con un agente dev"
+                    }
+                  >
+                    {busyRowId === item.id ? "⏳ Lanzando…" : "🔧 Resolver"}
+                  </Button>
+                )}
+                {puedeCerrar && (
+                  <FinishWorkButton
+                    ticket={ticketShim(item)}
+                    disabled={corriendo || bulkRunning}
+                    onCompleted={() => void refrescar()}
+                  />
+                )}
+                {item.ado_url && (
+                  <a className={styles.link} href={item.ado_url} target="_blank" rel="noopener noreferrer">
+                    Abrir en el tracker
+                  </a>
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
+      {selectionEnabled && (
+        <BulkActionsBar
+          count={sel.count}
+          running={bulkRunning}
+          progress={bulkProgress}
+          onClear={sel.clear}
+          actions={[
+            {
+              id: "finish-selected",
+              destructive: true,
+              label: (n) => `Cerrar ${n} en ${normalizeFinishState(finishState)}`,
+              armedLabel: (n) => `¿Cerrar ${n}? Confirmar`,
+              run: () => void correrLote("finish"),
+            },
+            {
+              id: "resolve-selected",
+              destructive: true,
+              label: (n) => (showOpenPr && openPr ? `Resolver ${n} + PR` : `Resolver ${n}`),
+              armedLabel: (n) => `¿Lanzar ${n} agentes? Confirmar`,
+              run: () => void correrLote("resolve"),
+            },
+          ]}
+        />
+      )}
       {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
     </div>
   );

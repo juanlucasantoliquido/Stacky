@@ -1,0 +1,73 @@
+{
+  "schema_version": "confidence_report/1.0",
+  "ok": false,
+  "run_id": "373",
+  "ticket_id": 373,
+  "total_scenarios": 7,
+  "high_count": 0,
+  "medium_count": 0,
+  "low_count": 7,
+  "blocked_count": 7,
+  "min_confidence": 60,
+  "publish_blocked": true,
+  "scenario_scores": [
+    {
+      "scenario_id": "P01",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P02",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P03",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P04",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P05",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P06",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    },
+    {
+      "scenario_id": "P07",
+      "score": 0,
+      "level": "LOW",
+      "is_p0": false,
+      "publish_blocked": true,
+      "factors": []
+    }
+  ],
+  "evidence_path": null,
+  "scored_at": "2026-07-26T00:24:46.276239Z"
+}

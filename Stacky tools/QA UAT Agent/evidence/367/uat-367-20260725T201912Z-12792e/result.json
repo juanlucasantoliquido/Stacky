@@ -1,0 +1,90 @@
+{
+  "ok": false,
+  "ticket_id": 367,
+  "verdict": "BLOCKED",
+  "category": "PIP",
+  "reason": "SCREEN_AMBIGUOUS",
+  "failed_stage": "screen_detection",
+  "stage": "screen_detection",
+  "error": "screen_ambiguous",
+  "message": "Deteccion de pantalla bloqueada: SCREEN_AMBIGUOUS. Pantallas candidatas: ['FrmBusqueda.aspx', 'FrmAsignarLote.aspx', 'FrmBusquedaJudicial.aspx', 'FrmSimulacionUnitaria.aspx']. Accion requerida: Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Truncamiento del campo Póliza en Búsqueda de Clientes (MaxLength=20)",
+      "plan_item_count": 4
+    },
+    "quality_intake": {
+      "ok": true,
+      "skipped": false,
+      "items_total": 4,
+      "layers": {
+        "integration": 1,
+        "manual_review": 2,
+        "uat": 1
+      },
+      "uat_required": true,
+      "manual_review_required": true,
+      "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T201912Z-12792e\\367\\test_portfolio.json"
+    },
+    "screen_detection": {
+      "ok": false,
+      "skipped": false,
+      "verdict": "BLOCKED",
+      "category": "PIP",
+      "reason": "SCREEN_AMBIGUOUS",
+      "failed_stage": "screen_detection",
+      "error": "screen_ambiguous",
+      "message": "Deteccion de pantalla bloqueada: SCREEN_AMBIGUOUS. Pantallas candidatas: ['FrmBusqueda.aspx', 'FrmAsignarLote.aspx', 'FrmBusquedaJudicial.aspx', 'FrmSimulacionUnitaria.aspx']. Accion requerida: Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+      "screen_detection": {
+        "selected_screens": [
+          "FrmBusqueda.aspx",
+          "FrmAsignarLote.aspx",
+          "FrmBusquedaJudicial.aspx",
+          "FrmSimulacionUnitaria.aspx"
+        ],
+        "matches": [
+          {
+            "screen": "FrmBusqueda.aspx",
+            "source": "navigation_path",
+            "match_type": "exact",
+            "confidence": 1.0
+          },
+          {
+            "screen": "FrmAsignarLote.aspx",
+            "source": "analisis_tecnico",
+            "match_type": "exact",
+            "confidence": 0.95
+          },
+          {
+            "screen": "FrmBusquedaJudicial.aspx",
+            "source": "analisis_tecnico",
+            "match_type": "exact",
+            "confidence": 0.95
+          },
+          {
+            "screen": "FrmSimulacionUnitaria.aspx",
+            "source": "analisis_tecnico",
+            "match_type": "exact",
+            "confidence": 0.95
+          }
+        ],
+        "fallback_used": false,
+        "ambiguous": true,
+        "blocked": true,
+        "block_reason": "SCREEN_AMBIGUOUS",
+        "confidence": 1.0,
+        "supported_screens_version": "screen_aliases.yml",
+        "artifact_path": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T201912Z-12792e\\367\\screen_detection.json"
+      },
+      "human_action_required": "Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml"
+    }
+  },
+  "elapsed_s": 9.6,
+  "human_action_required": "Clarify which screen the ticket targets and re-run, or add aliases to screen_aliases.yml",
+  "run_id": "uat-367-20260725T201912Z-12792e",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260725T201912Z-12792e",
+  "_normalized": true
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 365,
+  "generated_at": "2026-07-25T21:18:17.938380Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "365-CA-01",
+      "description": "Definido y documentado junto a negocio el comportamiento esperado del flag \"Mantener Agenda\" respecto a la visibilidad del usuario origen tras reasignar. Iniciar sesión como Supervisor con acceso a AgendaWeb > FrmAsignarLote (módulo Supervisión y Reasignación). | Seleccionar la pestaña \"Reasignar Lotes\" (aplica también a Asignar Lote, Reasignar Lote de Usuario y Equilibrar Cargas). | Elegir un usuario origen con al menos un lote con recomendación de agenda pendiente (AGHECHO='P'). Mantener Agenda",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "365-CA-02",
+      "description": "Si se confirma que el origen debe conservar visibilidad: el usuario origen ve la recomendación de agenda pendiente en su propia vista tras reasignar con \"Mantener Agenda\" activado, sin afectar al destino. Iniciar sesión como Supervisor con acceso a AgendaWeb > FrmAsignarLote (módulo Supervisión y Reasignación). | Seleccionar la pestaña \"Reasignar Lotes\" (aplica también a Asignar Lote, Reasignar Lote de Usuario y Equilibrar Cargas). | Elegir un usuario origen con al menos un lote con recomendación de agenda pendiente (AGHECHO='P'). Mantener Agenda",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "365-CA-03",
+      "description": "El usuario destino sigue viendo la recomendación heredada igual que hoy (sin regresión). Iniciar sesión como Supervisor con acceso a AgendaWeb > FrmAsignarLote (módulo Supervisión y Reasignación). | Seleccionar la pestaña \"Reasignar Lotes\" (aplica también a Asignar Lote, Reasignar Lote de Usuario y Equilibrar Cargas). | Elegir un usuario origen con al menos un lote con recomendación de agenda pendiente (AGHECHO='P').",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "365-CA-04",
+      "description": "Con \"Mantener Agenda\" desactivado, la recomendación pendiente se sigue cancelando (AGHECHO='N') para ambos usuarios, sin cambios. Iniciar sesión como Supervisor con acceso a AgendaWeb > FrmAsignarLote (módulo Supervisión y Reasignación). | Seleccionar la pestaña \"Reasignar Lotes\" (aplica también a Asignar Lote, Reasignar Lote de Usuario y Equilibrar Cargas). | Elegir un usuario origen con al menos un lote con recomendación de agenda pendiente (AGHECHO='P'). Mantener Agenda",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    },
+    {
+      "id": "365-CA-05",
+      "description": "Validado con un lote con más de una recomendación de agenda pendiente, sin generar error falso. Iniciar sesión como Supervisor con acceso a AgendaWeb > FrmAsignarLote (módulo Supervisión y Reasignación). | Seleccionar la pestaña \"Reasignar Lotes\" (aplica también a Asignar Lote, Reasignar Lote de Usuario y Equilibrar Cargas). | Elegir un usuario origen con al menos un lote con recomendación de agenda pendiente (AGHECHO='P').",
+      "layer": "integration",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": false,
+      "needs_ui_map": null,
+      "needs_data_seed": false,
+      "reason": "criterio valida integración con servicio o base de datos",
+      "owner": "developer",
+      "handoff": "crear test de integración en Developer Agent"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "integration": 5
+  }
+}

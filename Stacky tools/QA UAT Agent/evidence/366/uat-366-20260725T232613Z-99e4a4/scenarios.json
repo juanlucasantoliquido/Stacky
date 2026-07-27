@@ -1,0 +1,416 @@
+{
+  "ok": true,
+  "ticket_id": 366,
+  "compiled": 5,
+  "out_of_scope": 0,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El combo Tipo Telefono en Agenda Web (MantenedorTelefonos.ascx) incluye las opciones Laboral y Particular, ademas de las 4 existentes.",
+      "precondiciones": [
+        "El usuario debe tener acceso a la sección de Detalle de Cliente en Agenda Web o AutoGestion.",
+        "Debe existir al menos un contacto registrado para el cliente."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregartelefono",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "select_tipo_telefono",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "select_tipo_telefono",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "visible",
+          "target": "select_tipo_telefono",
+          "valor": "Particular"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "GridData",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El combo Tipo Telefono en AutoGestion (MantenedorTelefonos.ascx) refleja las mismas opciones nuevas, sin necesidad de cambio de codigo (mismo catalogo RTABL/TBNUME=68).",
+      "precondiciones": [
+        "El usuario debe estar autenticado en el sistema.",
+        "El cliente debe tener al menos un contacto registrado."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnficha",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregartelefono",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnmodificartelefono",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_tipo_telefono",
+          "valor": "Particular"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "select_value_is",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "select_value_is",
+          "target": "select_tipo_telefono",
+          "valor": "Particular"
+        },
+        {
+          "tipo": "count_eq",
+          "target": "grid_c_gridtelefonos",
+          "valor": "2"
+        }
+      ],
+      "datos_requeridos": [
+        {
+          "tabla": "RTABL",
+          "filtro": "TBNUME=68"
+        }
+      ],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "GridData",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE.",
+      "precondiciones": [
+        "El usuario debe tener acceso a la sección de Detalle de Cliente en Agenda Web o AutoGestion.",
+        "Debe existir al menos un contacto registrado para el cliente."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregartelefono",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "panel_c_lblsaldodeuda",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "count_eq",
+          "target": "grid_c_gridtele",
+          "valor": "1"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "GridData",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script.",
+      "precondiciones": [
+        "El usuario debe tener acceso a la sección de Detalle de Cliente en Agenda Web o AutoGestion.",
+        "Debe existir al menos un contacto registrado para el cliente."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregartelefono",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        },
+        {
+          "accion": "select",
+          "target": "select_tipo_telefono",
+          "valor": "Particular"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        },
+        {
+          "accion": "wait_networkidle",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "visible",
+          "target": "select_tipo_telefono",
+          "valor": "Particular"
+        },
+        {
+          "tipo": "count_eq",
+          "target": "grid_c_gridtelefonos",
+          "valor": "2"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "GridData",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "P05",
+      "ticket_id": 366,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados.",
+      "precondiciones": [
+        "El usuario debe tener acceso a la sección de Detalle de Cliente en Agenda Web o AutoGestion.",
+        "Debe existir al menos un contacto registrado para el cliente."
+      ],
+      "pasos": [
+        {
+          "accion": "navigate",
+          "target": "FrmDetalleClie.aspx",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnagregartelefono",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "panel_c_updtelefonos",
+          "valor": null
+        },
+        {
+          "accion": "click",
+          "target": "select_tipo_telefono",
+          "valor": null
+        },
+        {
+          "accion": "wait_visible",
+          "target": "select_tipo_telefono",
+          "valor": null
+        },
+        {
+          "accion": "press_key",
+          "target": "select_tipo_telefono",
+          "valor": "ArrowDown"
+        },
+        {
+          "accion": "press_key",
+          "target": "select_tipo_telefono",
+          "valor": "Enter"
+        },
+        {
+          "accion": "click",
+          "target": "link_c_btnok",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "select_tipo_telefono",
+          "valor": "Laboral"
+        },
+        {
+          "tipo": "visible",
+          "target": "select_tipo_telefono",
+          "valor": "Particular"
+        },
+        {
+          "tipo": "count_eq",
+          "target": "grid_c_gridtele",
+          "valor": "1"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P05"
+      },
+      "data_readiness_preconditions": [
+        {
+          "entity": "GridData",
+          "type": "grid",
+          "input_data": {
+            "CLCOD": "{{CLCOD}}"
+          },
+          "expected": {
+            "min_rows": 1
+          }
+        }
+      ]
+    }
+  ],
+  "out_of_scope_items": [],
+  "meta": {
+    "tool": "uat_scenario_compiler",
+    "version": "1.2.0",
+    "duration_ms": 37427
+  },
+  "prioritization": {
+    "total_candidates": 5,
+    "selected": 5,
+    "excluded": 0,
+    "time_budget_seconds": 720,
+    "estimated_total_seconds": 300
+  }
+}

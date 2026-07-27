@@ -272,6 +272,11 @@ def test_metrics_shape(client, st, flags_on):
 
 # ── diagnose ─────────────────────────────────────────────────────────────────
 
-def test_diagnose_404_sin_flag_ai(client, st, flags_on):
+def test_diagnose_404_sin_flag_ai(client, st, flags_on, monkeypatch):
+    # La flag de diagnóstico IA se fuerza a False EXPLÍCITAMENTE: desde el barrido
+    # default-ON 2026-07-27 nace encendida, así que apoyarse en el default para
+    # probar el camino apagado dejaba el test a merced de una decisión de config.
+    monkeypatch.setattr(cfg.config, "STACKY_DEPLOYMENTS_AI_DIAGNOSIS_ENABLED", False,
+                        raising=False)
     r = client.post("/api/devops/deployments/diagnose", json={"run_id": "dr-1"})
     assert r.status_code == 404

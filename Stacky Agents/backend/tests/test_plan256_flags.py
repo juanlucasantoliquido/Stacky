@@ -24,9 +24,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _FLAGS_ON = (
     "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED",
     "STACKY_INTAKE_PRESERVE_ORIGINAL_ENABLED",
+    # Promovida a ON en el barrido default-ON 2026-07-27: el descarte NO borra ni
+    # modifica el artefacto (api/diag.py solo escribe un marcador en el sidecar y el
+    # archivo queda intacto en disco) y exige el interlock de dos pasos de
+    # services/confirm_token.py. No quema tokens en reposo. Habilitar el boton no
+    # descarta nada por si solo.
+    "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED",
 )
-_FLAG_OFF = "STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED"
-_LAS_3 = _FLAGS_ON + (_FLAG_OFF,)
+_LAS_3 = _FLAGS_ON
 _CATEGORIA = "fiabilidad_ciclo_vida"
 
 _CONFIG_PY = Path(__file__).resolve().parents[1] / "config.py"
@@ -68,9 +73,8 @@ def test_defaults_declarados_coinciden_con_config():
     """Si el default declarado miente respecto de config.py, el panel muestra un
     estado y el sistema se comporta con el otro.
 
-    OJO con la de descarte: una flag que nace APAGADA NO declara `default=False`.
-    `declared_default` cae al type-zero (False) igual, pero `default_is_known`
-    tiene que quedar en False o el centinela de defaults curados se pone rojo.
+    Tras el barrido default-ON 2026-07-27 las 3 nacen encendidas, asi que las 3
+    declaran `default=True` y las 3 estan en el set curado.
     """
     from services.harness_flags import declared_default, default_is_known
 
@@ -81,21 +85,15 @@ def test_defaults_declarados_coinciden_con_config():
         assert default_is_known(specs[key]) is True
         assert _default_de_config(key) == "true"
 
-    off = specs[_FLAG_OFF]
-    assert off.default is None, "una flag default-OFF no declara `default=`"
-    assert declared_default(off) is False
-    assert default_is_known(off) is False
-    assert _default_de_config(_FLAG_OFF) == "false"
 
-
-def test_solo_discard_nace_off():
-    """Excepcion dura declarada: accion irreversible desde la UI. Las otras dos
-    no son destructivas y nacen encendidas."""
+def test_las_3_nacen_encendidas():
+    """Ninguna de las 3 quema tokens en reposo ni escribe en un sistema real: el
+    descarte solo agrega un marcador al sidecar (el artefacto queda intacto en
+    disco) y ademas exige confirmacion explicita de dos pasos."""
     from config import config
 
     for key in _FLAGS_ON:
         assert getattr(config, key) is True, f"{key} deberia nacer encendida"
-    assert getattr(config, _FLAG_OFF) is False, "el descarte NO puede nacer encendido"
 
 
 def test_las_3_tienen_ayuda_en_lenguaje_llano():

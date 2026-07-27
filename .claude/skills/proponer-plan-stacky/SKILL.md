@@ -44,12 +44,14 @@ tener que inferir nada.
 - **3 runtimes con paridad:** Codex CLI, Claude Code CLI y GitHub Copilot Pro. Todo ítem funciona en los
   3 o degrada de forma controlada y explícita, con fallback. Nada atado a un solo runtime.
 - **Cero trabajo extra para el operador:** la mejora es invisible/automática o, como mucho, opt-in con
-  default **ON**, salvo que dispare una de las 4 EXCEPCIONES DURAS (citá cuál aplica, no un "default
-  seguro" genérico): (1) acción automática que bypasea revisión humana — auto-publicar/auto-crear
-  ticket/auto-ejecutar remoto/mensaje externo, única excepción ya aceptada: épica-desde-brief—;
-  (2) destructiva/irreversible; (3) prerequisito no garantizado en instalación default (credenciales
-  externas, servicio local no instalado, catálogo/config sin armar); (4) reduce seguridad por default. Sin
-  pasos manuales obligatorios nuevos, sin nueva carga de configuración, backward-compatible.
+  default **ON**, salvo que caiga en una de las 2 CATEGORÍAS DE EXCEPCIÓN (citá cuál aplica y por qué, no
+  un "default seguro" genérico): **(A)** quema tokens en REPOSO — loop/daemon/barrido/polling/prefetch o
+  inyección de contexto que llama a un modelo sin que el operador pida nada; **(B)** escribe en un sistema
+  REAL del operador, destruye datos o le saca la decisión — publica/commitea/pushea a su ADO/GitLab/repo
+  remoto, DDL/DML en una BD suya, despliegue o rollback en sus servidores, borrado de datos, reducción de
+  la durabilidad/seguridad, o disparo automático de algo que el operador debería decidir. **Ya NO vale**
+  "prerequisito no garantizado en instalación default": lo on-demand degrada sin romper. Sin pasos
+  manuales obligatorios nuevos, sin nueva carga de configuración, backward-compatible.
 - **Human-in-the-loop innegociable:** el operador se amplifica, nunca se reemplaza. Prohibida la
   autonomía proactiva que lo saque del lazo.
 - **Mono-operador, sin auth real:** no proponer RBAC ni features multiusuario.
@@ -83,9 +85,9 @@ RESTRICCIONES NO NEGOCIABLES (codificalas dentro del plan):
 - 3 runtimes con paridad: Codex CLI, Claude Code CLI, GitHub Copilot Pro. Cada ítem funciona en los 3
   o degrada controladamente con fallback explícito. Nada atado a un runtime.
 - Cero trabajo extra para el operador: invisible/automático u opt-in con default **ON**, salvo una de las
-  4 excepciones duras (bypass de revisión humana — única aceptada: épica-desde-brief—, destructiva/
-  irreversible, prerequisito no garantizado, reduce seguridad); si aplica, el plan debe citar CUÁL. Sin
-  pasos manuales nuevos, sin nueva carga de config, backward-compatible.
+  2 categorías de excepción — (A) quema tokens en reposo, (B) escribe en un sistema real del operador,
+  destruye datos o le saca la decisión — y si aplica, el plan debe citar CUÁL y por qué (ver REGLA DE
+  DEFAULT DE FLAGS). Sin pasos manuales nuevos, sin nueva carga de config, backward-compatible.
 - Human-in-the-loop innegociable: amplificar al operador, jamás reemplazarlo; prohibida la autonomía
   proactiva.
 - Mono-operador sin auth real: nada de RBAC ni multiusuario.
@@ -102,11 +104,39 @@ NIVEL DE DETALLE (clave: lo implementa un modelo menor, escribí para que NO pue
   * Tests PRIMERO (TDD): nombre exacto del archivo de test, casos a cubrir, y el comando exacto para
     correrlos (con el intérprete/venv correcto del repo).
   * Criterio de aceptación BINARIO (pasa/falla) y el comando que lo verifica.
-  * Flag que la protege (nombre exacto) y su default: **ON** salvo que cite cuál de las 4 excepciones
-    duras aplica (bypass de revisión humana, destructiva/irreversible, prerequisito no garantizado,
-    reduce seguridad).
+  * Flag que la protege (nombre exacto) y su default: **ON** (ver REGLA DE DEFAULT DE FLAGS abajo).
   * Impacto por runtime (Codex / Claude Code / Copilot) y el fallback de cada uno.
   * "Trabajo del operador: ninguno" o "opt-in (default ON salvo excepción citada)".
+
+REGLA DE DEFAULT DE FLAGS (DURA — no es una preferencia, es un requisito del plan):
+- **Toda flag nueva que proponga este plan nace `default ON`.** Es el caso por defecto y no necesita
+  justificación.
+- Una flag solo puede nacer **OFF** si cae en una de estas **DOS categorías de excepción**, y el plan
+  DEBE escribir, en la línea de esa flag, **cuál de las dos aplica y por qué** (una frase, con el
+  archivo:línea del comportamiento que la justifica). Sin esa justificación escrita, el juez
+  (`criticar-y-mejorar-plan`) lo marca como hallazgo BLOQUEANTE y el plan vuelve.
+  * **(A) Quema tokens en REPOSO.** La flag enciende un loop, daemon, barrido, polling, prefetch
+    especulativo o inyección de contexto que llama a un modelo (o engorda cada prompt) **sin que el
+    operador pida nada**. Ejemplos reales que están OFF por esto: `STACKY_NIGHT_FOUNDRY_ENABLED`
+    (orquestador nocturno), `STACKY_EGRESS_SENTINEL_ENABLED` (daemon de barrido con IA).
+  * **(B) Escribe en un sistema REAL del operador, destruye datos, o le saca la decisión.** Publica /
+    commitea / pushea a su Azure DevOps, GitLab o repo remoto; ejecuta DDL/DML contra una BD suya;
+    despliega o hace rollback en sus servidores; borra datos; reduce la durabilidad o la seguridad de
+    los datos; **o dispara sola una acción que el operador debería decidir** (human-in-the-loop).
+    Ejemplos reales que están OFF por esto: `STACKY_SQL_EXEC_ENABLED`, `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`,
+    `STACKY_DEPLOYMENTS_EXECUTE_ENABLED`, `STACKY_LEDGER_PURGE_ENABLED`, `STACKY_DB_COMPACT_ENABLED`.
+- **NO son motivos válidos para nacer OFF** (si el plan usa alguno de estos, está mal y hay que
+  corregirlo antes de mandarlo al juez):
+  * "Prerequisito no garantizado en una instalación default" (modelo local, credenciales, IIS Express,
+    catálogo o config sin armar). El operador invalidó este motivo: lo **on-demand degrada sin romper**
+    — si el prerequisito falta, el botón se deshabilita con hint o la acción falla y lo dice.
+  * "Default seguro", "por las dudas", "para no cambiar el comportamiento actual", "que el operador la
+    encienda si quiere". Son fórmulas vacías, no excepciones.
+- Leer un archivo local, calcular, mostrar, diffear, auditar, avisar o cualquier cosa **de solo lectura**
+  NUNCA es excepción: va ON.
+- Si una capacidad tiene una parte inocua y una parte que escribe, **partila en dos flags**: la de ver /
+  planear / diffear va ON, y la que escribe de verdad va OFF citando (B). Precedente:
+  `STACKY_PIPELINE_NL_EDIT_ENABLED` (ON) vs `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (OFF).
 - Prohibido lo vago: nada de "etc.", "según corresponda", "ajustar lo necesario". Todo concreto.
 - Incluí un Glosario corto de términos del dominio Stacky que un modelo menor podría no conocer.
 - Incluí "Orden de implementación" (lista numerada) y "Definición de Hecho (DoD)" global.
@@ -134,9 +164,11 @@ por qué NO agrega trabajo al operador, cómo respeta los 3 runtimes).
       binario, flag + default, impacto por runtime y línea de "trabajo del operador".
 - [ ] No hay frases vagas ("etc.", "según corresponda"). Todo es ejecutable por un modelo menor.
 - [ ] Valor alto y medible declarado (KPI/impacto).
-- [ ] Cero trabajo extra al operador (o opt-in con default **ON**, salvo que se citara cuál de las 4
-      excepciones duras aplica: bypass de revisión humana, destructiva/irreversible, prerequisito no
-      garantizado, o reduce seguridad).
+- [ ] Cero trabajo extra al operador (o opt-in con default **ON**, salvo que se citara POR ESCRITO cuál de
+      las 2 categorías de excepción aplica: (A) quema tokens en reposo, o (B) escribe en un sistema real
+      del operador / destruye datos / le saca la decisión). "Prerequisito no garantizado" NO vale.
+- [ ] TODA flag nueva del plan declara su default explícitamente, y las que estén en OFF traen su
+      justificación escrita (categoría + por qué). Una flag sin default declarado es ambigua.
 - [ ] Paridad/fallback en Codex, Claude Code y GitHub Copilot Pro, por ítem.
 - [ ] No degrada performance/seguridad/estabilidad/DX; backward-compatible; reusa lo existente.
 - [ ] Incluye Glosario, Orden de implementación y DoD.

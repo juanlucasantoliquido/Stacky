@@ -1,0 +1,178 @@
+{
+  "ok": true,
+  "schema_version": "qa-uat-dossier/1.1",
+  "run_id": "b9acf40d-a527-475f-a3b6-d241ab243504",
+  "ticket_id": 0,
+  "ticket_title": "[INC] Domicilios en pestaña Contactos desaparecen al cambiar de pestaña",
+  "screen": "FrmAgenda.aspx",
+  "verdict": "FAIL",
+  "executive_summary": "Resumen Ejecutivo UAT: La validación del ticket [INC] Domicilios en pestaña Contactos desaparecen al cambiar de pestaña resultó en un FAIL. De 7 escenarios ejecutados, 6 fueron exitosos y 1 presentó problemas (P04). El escenario fallido evidencia que los domicilios no se mantienen visibles al alternar entre pestañas, afectando la experiencia del usuario. Se recomienda revisar y corregir la funcionalidad antes de avanzar a producción.",
+  "context": {
+    "environment": "qa",
+    "agent_version": "1.3.0",
+    "total": 7,
+    "pass": 6,
+    "fail": 1,
+    "blocked": 0,
+    "not_tested": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "titulo": "Al seleccionar un contacto CORREDOR en la pestaña Contactos, la grilla Domicilios carga correctamente los domicilios existentes de ese contacto.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al seleccionar un contacto de tipo CORREDOR en la pestaña Contactos, la grilla de Domicilios se carga correctamente al asegurarse de que las grillas relacionadas (obligaciones y gestiones) sean visibles. La verificación de que no hay elementos visibles en las grillas indica que la carga de domicilios se realizó sin errores."
+    },
+    {
+      "scenario_id": "P02",
+      "titulo": "Al agregar un domicilio nuevo al contacto y guardar, el registro aparece en la grilla sin necesidad de refrescar la página completa.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que al agregar un nuevo domicilio a un contacto tipo CORREDOR y guardar la información, el nuevo registro se muestre correctamente en la grilla sin necesidad de refrescar la página. La verificación se realizó comprobando la visibilidad del nuevo domicilio en la interfaz después de la acción de guardar."
+    },
+    {
+      "scenario_id": "P03",
+      "titulo": "Al modificar un domicilio existente del contacto, el cambio se refleja en la grilla.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado verificó que, al modificar la dirección de un contacto tipo CORREDOR en el sistema, el cambio se refleje correctamente en la grilla de domicilios. Se aseguró que la nueva dirección apareciera visible en la interfaz después de realizar la modificación."
+    },
+    {
+      "scenario_id": "P04",
+      "titulo": "Al eliminar un domicilio, desaparece de la grilla.",
+      "status": "fail",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [
+        {
+          "message": "Oracle 'grid_c_griddomicilios' (tipo=count_eq) expected='0' actual='1'",
+          "expected": "0",
+          "actual": "1"
+        }
+      ],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, al eliminar un domicilio asociado a un contacto tipo CORREDOR, dicho domicilio desaparezca de la grilla de domicilios en la interfaz de usuario. La verificación falló porque se esperaba que la cantidad de domicilios en la grilla fuera igual a cero tras la eliminación, pero no se cumplió esta condición."
+    },
+    {
+      "scenario_id": "P05",
+      "titulo": "La grilla de Domicilios del cliente principal (sin selección de contacto) no regresa errores.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que al acceder a la grilla de Domicilios del cliente principal en la página 'FrmDetalleClie.aspx' sin seleccionar un contacto, no se generen errores y que la grilla se muestre correctamente. La condición de verificación se centró en asegurar que no haya elementos invisibles que puedan indicar un fallo en la carga de la información."
+    },
+    {
+      "scenario_id": "P06",
+      "titulo": "La funcionalidad de Teléfonos y eMails en la misma pestaña no presenta regresiones.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que la funcionalidad de gestión de teléfonos y correos electrónicos en la pestaña correspondiente no presenta regresiones al realizar acciones de agregar, modificar y eliminar un número de teléfono. Se confirmó que, tras ejecutar estas acciones, no se mostraron errores ni elementos visibles que indicaran un fallo en la interfaz."
+    },
+    {
+      "scenario_id": "P07",
+      "titulo": "La migración de columnas DTDISTRIT / DTURBAN / DTDIRECCION en RDIRE está confirmada en el entorno de pruebas y producción.",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "assertion_failures": [],
+      "steps": [],
+      "attempt_narrative": "Este escenario de prueba automatizado intentó verificar que, tras la migración de las columnas DTDISTRIT, DTURBAN y DTDIRECCION en la tabla RDIRE, el sistema permite realizar una búsqueda en el formulario 'FrmDetalleClie.aspx' y que se obtienen resultados válidos, confirmando que el conteo de resultados es mayor que cero. El resultado \"PASS\" indica que la funcionalidad de búsqueda está operando correctamente en el entorno de pruebas."
+    }
+  ],
+  "failures": [
+    {
+      "scenario_id": "P04",
+      "titulo": "P04",
+      "message": "Oracle 'grid_c_griddomicilios' (tipo=count_eq) expected='0' actual='1'",
+      "expected": "0",
+      "actual": "1"
+    }
+  ],
+  "coverage_gaps": [],
+  "recommendation_for_human_qa": [
+    "Verifica si existe un domicilio adicional en el sistema que no debería estar registrado.",
+    "Revisa la configuración y los datos de entrada para asegurarte de que no se esté generando un domicilio extra por error.",
+    "Consulta con el equipo de desarrollo si hubo cambios recientes en la lógica de creación de domicilios.",
+    "Realiza una prueba manual para confirmar si el resultado es consistente y documenta los pasos para identificar la causa."
+  ],
+  "next_steps": [
+    "Revisar los escenarios fallidos con el desarrollador.",
+    "Crear bug tickets para cada fallo confirmado.",
+    "Planificar re-ejecución tras correcciones."
+  ],
+  "generated_at": "2026-07-26T00:25:28Z",
+  "meta": {
+    "tool": "uat_dossier_builder",
+    "version": "1.3.0",
+    "duration_ms": 41961
+  },
+  "comment_hash": "842cf2a8242da19f8d6e43d8f382a0229cea660cbc840c9803e1914c7c364d13",
+  "paths": {
+    "dossier_md": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\DOSSIER_UAT.md",
+    "ado_comment_html": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\373\\uat-373-20260726T001314Z-b584c6\\ado_comment.html"
+  }
+}

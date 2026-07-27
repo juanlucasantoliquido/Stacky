@@ -1,0 +1,84 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 369,
+  "generated_at": "2026-07-25T21:18:44.725146Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "369-CA-01",
+      "description": "La grilla de gestiones activas muestra la columna \"Etiqueta de contacto\" con el descriptor del medio utilizado en cada fila. Ingresar a AgendaWeb con perfil de operador de cobranza. | Abrir el Detalle de un Cliente que tenga gestiones registradas con medio de contacto asignado (teléfono, email o dirección). | Navegar a la sección o solapa de Gestiones del cliente. Etiqueta de contacto",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-02",
+      "description": "La grilla de gestiones históricas muestra la misma columna con el descriptor correcto para cada gestión. Ingresar a AgendaWeb con perfil de operador de cobranza. | Abrir el Detalle de un Cliente que tenga gestiones registradas con medio de contacto asignado (teléfono, email o dirección). | Navegar a la sección o solapa de Gestiones del cliente.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-03",
+      "description": "El popup Notas Gestiones muestra el field \"Etiqueta de contacto\" poblado con el descriptor del medio de la gestión. Ingresar a AgendaWeb con perfil de operador de cobranza. | Abrir el Detalle de un Cliente que tenga gestiones registradas con medio de contacto asignado (teléfono, email o dirección). | Navegar a la sección o solapa de Gestiones del cliente. Etiqueta de contacto",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-04",
+      "description": "El modal dlgGestiones (encabezado de gestión histórica) muestra el field de etiqueta de contacto correctamente asignado. Ingresar a AgendaWeb con perfil de operador de cobranza. | Abrir el Detalle de un Cliente que tenga gestiones registradas con medio de contacto asignado (teléfono, email o dirección). | Navegar a la sección o solapa de Gestiones del cliente.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-05",
+      "description": "Cuando BGCODMEDIO o HBGCODMEDIO es NULL, la etiqueta muestra \"—\" o cadena vacía sin errores ni excepciones. Ingresar a AgendaWeb con perfil de operador de cobranza. | Abrir el Detalle de un Cliente que tenga gestiones registradas con medio de contacto asignado (teléfono, email o dirección). | Navegar a la sección o solapa de Gestiones del cliente.",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "369-CA-06",
+      "description": "El fix no altera las reglas de acceso existentes; ningún rol que no vea ya el contacto puede verlo tras el cambio. Ingresar a AgendaWeb con perfil de operador de cobranza. | Abrir el Detalle de un Cliente que tenga gestiones registradas con medio de contacto asignado (teléfono, email o dirección). | Navegar a la sección o solapa de Gestiones del cliente.",
+      "layer": "uat",
+      "priority": "P0",
+      "business_risk": "high",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "uat": 6
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "scenario_id": "P02",
+  "assertions": [
+    {
+      "oracle_id": 0,
+      "target": "grid_c_gridgestiones",
+      "tipo": "page_not_contains_text",
+      "expected": "ETIQCONTACTO",
+      "actual_text": "menu\nlogout\nSALIR\nAgenda Personal\nUsuario:\nUSUARIO TEST\nPendiente de Hoy:\n0\nPendiente de otros Días:\n18\nRealizado Hoy:\n0\nTotal en Agenda:\n18\nBarrido Realizado:\n0%\nClientes Asignados:\n10\nPromesas a Vencer en 7 días:\n0\nformat_list_bulleted\nCobranza Prejudicial\nevent\nAgenda Personal\nevent_note\nPooles de Trabajo\nsearch\nBusqueda de Clientes\ndate_range\nAgenda de Grupo\nformat_list_bulleted\nSupervision\nformat_list_bulleted\nReportes Operativos\nformat_list_bulleted\nReportes OBI\nformat_list_bulleted\nCobranza Judicial\nevent\nAgenda De Demandas\nsearch\nBuscar Demandas\nrule\nValidar Gastos\nconfirmation_number\nLiquidar Gastos\nswitch_account\nReasignar Abogado\nformat_list_bulleted\nReportes Operativos\nformat_list_bulleted\nReportes OBI\nformat_list_bulleted\nFacturación y Gastos\nrule\nValidar Facturas\nrule\nValidar Notas de Gastos\nreceipt\nFacturas\nconfirmation_number\nNotas de Gastos\nsettings\nAdministrador\n \nACCIONES \nchevron_right\nAVANZAR\nsearch\nBúsqueda Avanzada\nAgendados por Usuario\ngrid_on\nAGENDADOS POR USUARIO\nCLIENTE\tNRO DE DOCUMENTO\tPRIMA DOLARIZADA\tNIVEL MORA\tFECHA\tHORA\tRECOMENDACIÓN\tDÉBITO AUTO.\nPérez González Carlos Alberto\tRUT 17654321-155\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-150\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-1\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-156\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-167\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-279\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-360\t3500,75\tCiclo 2\t25/07/2026\t10:00:00\tAAAI - ASD\tSI\nAgendados por Motor Experto\ngrid_on\nAGENDADOS POR MOTOR EXPERTO\nCLIENTE\tNRO DE DOCUMENTO\tPRIMA DOLARIZADA\tNIVEL MORA\tFECHA\tHORA\tRECOMENDACIÓN\tDÉBITO AUTO.\nPérez González Carlos Alberto\tRUT 17654321-155\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-150\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-1\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-167\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-279\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-9\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-156\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI\nPérez González Carlos Alberto\tRUT 17654321-360\t3500,75\tCiclo 2\t24/07/2026\t09:00:00\tAAAI - ASD\tSI",
+      "visible": true
+    }
+  ],
+  "screen_verified": {
+    "url": "http://localhost:35017/AgendaWeb/FrmAgenda.aspx",
+    "title": "Agenda Personal",
+    "expected": "FrmDetalleClie.aspx",
+    "anchor_selector": null,
+    "anchor_present": null
+  }
+}

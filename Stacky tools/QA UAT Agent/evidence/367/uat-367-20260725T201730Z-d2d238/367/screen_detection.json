@@ -1,0 +1,42 @@
+{
+  "schema_version": "screen_detection/1.0",
+  "run_id": "367",
+  "selected_screens": [
+    "FrmBusquedaJudicial.aspx",
+    "FrmBusqueda.aspx",
+    "FrmSimulacionUnitaria.aspx",
+    "FrmAsignarLote.aspx"
+  ],
+  "matches": [
+    {
+      "screen": "FrmBusquedaJudicial.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    },
+    {
+      "screen": "FrmBusqueda.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    },
+    {
+      "screen": "FrmSimulacionUnitaria.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    },
+    {
+      "screen": "FrmAsignarLote.aspx",
+      "source": "analisis_tecnico",
+      "match_type": "exact",
+      "confidence": 0.95
+    }
+  ],
+  "fallback_used": false,
+  "ambiguous": true,
+  "blocked": true,
+  "block_reason": "SCREEN_AMBIGUOUS",
+  "confidence": 0.95,
+  "supported_screens_version": "screen_aliases.yml"
+}

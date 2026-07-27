@@ -1,0 +1,18 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 3 tests using 1 worker
+
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✓  1 evidence\367\uat-367-20260726T003334Z-85fea2\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:149:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter (15.8s)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✓  2 evidence\367\uat-367-20260726T003334Z-85fea2\tests\P02_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:139:7 › ADO-367 | P02 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p02 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 (15.8s)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✓  3 evidence\367\uat-367-20260726T003334Z-85fea2\tests\P03_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts:149:7 › ADO-367 | P03 — Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol). › p03 sin_regresión_en_el_resto_de_filtros_de_la_pantalla_(documen (15.5s)
+
+  3 passed (1.2m)

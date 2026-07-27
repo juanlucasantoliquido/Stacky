@@ -1,0 +1,60 @@
+{
+  "schema": "test_portfolio/1.0",
+  "ticket_id": 386,
+  "generated_at": "2026-07-25T21:19:08.476712Z",
+  "strategy": "layered_quality_portfolio",
+  "items": [
+    {
+      "id": "386-CA-01",
+      "description": "El campo \"Obligacion\" del modal \"Cuotas\" (seccion Detalle Cuota) muestra siempre el codigo real de la obligacion seleccionada, coincidente con la columna \"Cod. Obligacion\" de la grilla de origen. Ingresar a AgendaWeb, modulo Cobranza Prejudicial, y abrir el Detalle de un cliente con al menos una obligacion vigente. | En la grilla \"Obligacion\" (Datos Generales), identificar el codigo visible en la columna \"Cod. Obligacion\" (ej. 155-S-443760146...). | Hacer clic sobre esa obligacion para abrir el modal \"Cuotas\" (Prestamos). Obligacion",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "386-CA-02",
+      "description": "El comportamiento se valida tanto para obligaciones con TipoAnalitico=1 (prestamo) como TipoAnalitico=4 (convenio). Ingresar a AgendaWeb, modulo Cobranza Prejudicial, y abrir el Detalle de un cliente con al menos una obligacion vigente. | En la grilla \"Obligacion\" (Datos Generales), identificar el codigo visible en la columna \"Cod. Obligacion\" (ej. 155-S-443760146...). | Hacer clic sobre esa obligacion para abrir el modal \"Cuotas\" (Prestamos). 1",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "386-CA-03",
+      "description": "Si la obligacion no tiene datos de prestamo asociados en RPRES, el codigo de obligacion igual se muestra (no depende de la existencia de fila en RPRES). Ingresar a AgendaWeb, modulo Cobranza Prejudicial, y abrir el Detalle de un cliente con al menos una obligacion vigente. | En la grilla \"Obligacion\" (Datos Generales), identificar el codigo visible en la columna \"Cod. Obligacion\" (ej. 155-S-443760146...). | Hacer clic sobre esa obligacion para abrir el modal \"Cuotas\" (Prestamos).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    },
+    {
+      "id": "386-CA-04",
+      "description": "Se valida el mismo comportamiento en el portal AutoGestion para el mismo modal de Cuotas. Ingresar a AgendaWeb, modulo Cobranza Prejudicial, y abrir el Detalle de un cliente con al menos una obligacion vigente. | En la grilla \"Obligacion\" (Datos Generales), identificar el codigo visible en la columna \"Cod. Obligacion\" (ej. 155-S-443760146...). | Hacer clic sobre esa obligacion para abrir el modal \"Cuotas\" (Prestamos).",
+      "layer": "uat",
+      "priority": "P1",
+      "business_risk": "medium",
+      "needs_browser": true,
+      "needs_ui_map": "FrmDetalleClie.aspx",
+      "needs_data_seed": true,
+      "reason": "criterio implica interacción visual o navegación de negocio en pantalla",
+      "owner": "qa_automation"
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "uat": 4
+  }
+}

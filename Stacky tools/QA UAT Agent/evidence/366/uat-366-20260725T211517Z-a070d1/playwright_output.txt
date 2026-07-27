@@ -1,0 +1,22 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 3 tests using 1 worker
+
+(node:43112) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:43112) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  1 evidence\366\uat-366-20260725T211517Z-a070d1\tests\P02_un_telefono_guardado_con_tipo_telefono_laboral_o_p.spec.ts:114:7 › ADO-366 | P02 — Un telefono guardado con Tipo Telefono = Laboral o Particular persiste correctamente TETIPTEL en RTELE con el nuevo TBCODE. › p02 un_telefono_guardado_con_tipo_telefono_=_laboral_o_particula (19.3s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  2 evidence\366\uat-366-20260725T211517Z-a070d1\tests\P03_las_filas_rtabl_preexistentes_de_tbnume68_00_01_02.spec.ts:114:7 › ADO-366 | P03 — Las filas RTABL preexistentes de TBNUME=68 (00, 01, 02, 03) no se modifican, eliminan ni duplican tras aplicar el script. › p03 las_filas_rtabl_preexistentes_de_tbnume=68_(00,_01,_02,_03)_ (19.7s)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+  ✓  3 evidence\366\uat-366-20260725T211517Z-a070d1\tests\P04_el_script_de_carga_es_idempotente_ejecutarlo_mas_d.spec.ts:114:7 › ADO-366 | P04 — El script de carga es idempotente: ejecutarlo mas de una vez no genera duplicados. › p04 el_script_de_carga_es_idempotente:_ejecutarlo_mas_de_una_vez (19.7s)
+
+  3 passed (1.4m)

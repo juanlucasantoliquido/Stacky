@@ -1,0 +1,2403 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 4 tests using 1 worker
+
+(node:35264) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35264) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✘  1 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:122:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter (25.7s)
+(node:28880) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:28880) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✘  2 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:122:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter (retry #1) (25.9s)
+(node:24816) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:24816) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✘  3 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts:122:7 › ADO-367 | P02 — El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres. › p02 el_campo_obligación_en_frmbusquedajudicial.aspx_admite_hasta (25.7s)
+(node:34184) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34184) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✘  4 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts:122:7 › ADO-367 | P02 — El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres. › p02 el_campo_obligación_en_frmbusquedajudicial.aspx_admite_hasta (retry #1) (26.4s)
+(node:31560) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31560) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✘  5 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:122:7 › ADO-367 | P03 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p03 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 (25.7s)
+(node:23588) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:23588) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✘  6 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:122:7 › ADO-367 | P03 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p03 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 (retry #1) (25.9s)
+(node:42764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:42764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Advanced filters ready: [33mtrue[39m
+[STEP 01] navigate FrmBusqueda.aspx
+  ✓  7 evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P04_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts:122:7 › ADO-367 | P04 — Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol). › p04 sin_regresión_en_el_resto_de_filtros_de_la_pantalla_(documen (15.5s)
+
+
+  1) evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:122:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter 
+
+    Error: P01: página debe contener "Cliente esperado"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 174[39m
+
+    [32m- Cliente esperado[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda de Clientes[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione[43m  [49m[39m
+    [31m+                                 Núm[43m [49m[39m
+    [31m+                                 Cliente[43m [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                 Póliza[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Primer Apellido[43m [49m[39m
+    [31m+                                 Segundo Apellido[43m [49m[39m
+    [31m+                                 Nombre[43m [49m[39m
+    [31m+                                 Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione[43m  [49m[39m
+    [31m+                                 Número Tel.[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione[43m  [49m[39m
+    [31m+                                 Perfil Seleccione un RolSeleccione un Rol[43m  [49m[39m
+    [31m+                                 Cant. Resultados[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                     searchBuscar[39m
+    [31m+                                     closeLimpiar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ 		Coincidencias[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					 Cód. ClienteApellidos y NombreDocumento[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Obligaciones[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P01: página debe contener "Cliente esperado" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    14 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda de Clientes[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione  [22m
+    [2m                                Núm [22m
+    [2m                                Cliente [22m
+    [2m                                [22m
+    [2m                                Póliza [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Primer Apellido [22m
+    [2m                                Segundo Apellido [22m
+    [2m                                Nombre [22m
+    [2m                                Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione  [22m
+    [2m                                Número Tel. [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione  [22m
+    [2m                                Perfil Seleccione un RolSeleccione un Rol  [22m
+    [2m                                Cant. Resultados [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    searchBuscar[22m
+    [2m                                    closeLimpiar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m		Coincidencias[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					 Cód. ClienteApellidos y NombreDocumento[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m    [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Obligaciones[22m
+    [2m	[22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      257 |     
+      258 |     
+    > 259 |     await expect(page.locator('body'), 'P01: página debe contener "Cliente esperado"').toContainText('Cliente esperado');
+          |                                                                                        ^
+      260 |     
+      261 |     
+      262 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:259:88
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: P01: página debe contener "Cliente esperado"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 174[39m
+
+    [32m- Cliente esperado[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda de Clientes[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione[43m  [49m[39m
+    [31m+                                 Núm[43m [49m[39m
+    [31m+                                 Cliente[43m [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                 Póliza[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Primer Apellido[43m [49m[39m
+    [31m+                                 Segundo Apellido[43m [49m[39m
+    [31m+                                 Nombre[43m [49m[39m
+    [31m+                                 Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione[43m  [49m[39m
+    [31m+                                 Número Tel.[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione[43m  [49m[39m
+    [31m+                                 Perfil Seleccione un RolSeleccione un Rol[43m  [49m[39m
+    [31m+                                 Cant. Resultados[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                     searchBuscar[39m
+    [31m+                                     closeLimpiar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ 		Coincidencias[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					 Cód. ClienteApellidos y NombreDocumento[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Obligaciones[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P01: página debe contener "Cliente esperado" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    13 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda de Clientes[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione  [22m
+    [2m                                Núm [22m
+    [2m                                Cliente [22m
+    [2m                                [22m
+    [2m                                Póliza [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Primer Apellido [22m
+    [2m                                Segundo Apellido [22m
+    [2m                                Nombre [22m
+    [2m                                Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione  [22m
+    [2m                                Número Tel. [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione  [22m
+    [2m                                Perfil Seleccione un RolSeleccione un Rol  [22m
+    [2m                                Cant. Resultados [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    searchBuscar[22m
+    [2m                                    closeLimpiar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m		Coincidencias[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					 Cód. ClienteApellidos y NombreDocumento[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m    [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Obligaciones[22m
+    [2m	[22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      257 |     
+      258 |     
+    > 259 |     await expect(page.locator('body'), 'P01: página debe contener "Cliente esperado"').toContainText('Cliente esperado');
+          |                                                                                        ^
+      260 |     
+      261 |     
+      262 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:259:88
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\evidence-367-uat-367-20260-c14a3-px-admite-hasta-50-caracter-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts:122:7 › ADO-367 | P02 — El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres. › p02 el_campo_obligación_en_frmbusquedajudicial.aspx_admite_hasta 
+
+    Error: P02: página debe contener "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 174[39m
+
+    [32m- El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda de Clientes[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione[43m  [49m[39m
+    [31m+                                 Núm[43m [49m[39m
+    [31m+                                 Cliente[43m [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                 Póliza[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Primer Apellido[43m [49m[39m
+    [31m+                                 Segundo Apellido[43m [49m[39m
+    [31m+                                 Nombre[43m [49m[39m
+    [31m+                                 Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione[43m  [49m[39m
+    [31m+                                 Número Tel.[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione[43m  [49m[39m
+    [31m+                                 Perfil Seleccione un RolSeleccione un Rol[43m  [49m[39m
+    [31m+                                 Cant. Resultados[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                     searchBuscar[39m
+    [31m+                                     closeLimpiar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ 		Coincidencias[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					 Cód. ClienteApellidos y NombreDocumento[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Obligaciones[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P02: página debe contener "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    14 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda de Clientes[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione  [22m
+    [2m                                Núm [22m
+    [2m                                Cliente [22m
+    [2m                                [22m
+    [2m                                Póliza [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Primer Apellido [22m
+    [2m                                Segundo Apellido [22m
+    [2m                                Nombre [22m
+    [2m                                Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione  [22m
+    [2m                                Número Tel. [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione  [22m
+    [2m                                Perfil Seleccione un RolSeleccione un Rol  [22m
+    [2m                                Cant. Resultados [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    searchBuscar[22m
+    [2m                                    closeLimpiar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m		Coincidencias[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					 Cód. ClienteApellidos y NombreDocumento[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m    [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Obligaciones[22m
+    [2m	[22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      255 |     
+      256 |     
+    > 257 |     await expect(page.locator('body'), 'P02: página debe contener "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres"').toContainText('El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres');
+          |                                                                                                                                      ^
+      258 |     
+      259 |     
+      260 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts:257:134
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: P02: página debe contener "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 174[39m
+
+    [32m- El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda de Clientes[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione[43m  [49m[39m
+    [31m+                                 Núm[43m [49m[39m
+    [31m+                                 Cliente[43m [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                 Póliza[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Primer Apellido[43m [49m[39m
+    [31m+                                 Segundo Apellido[43m [49m[39m
+    [31m+                                 Nombre[43m [49m[39m
+    [31m+                                 Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione[43m  [49m[39m
+    [31m+                                 Número Tel.[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione[43m  [49m[39m
+    [31m+                                 Perfil Seleccione un RolSeleccione un Rol[43m  [49m[39m
+    [31m+                                 Cant. Resultados[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                     searchBuscar[39m
+    [31m+                                     closeLimpiar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ 		Coincidencias[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					 Cód. ClienteApellidos y NombreDocumento[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Obligaciones[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P02: página debe contener "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    14 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda de Clientes[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione  [22m
+    [2m                                Núm [22m
+    [2m                                Cliente [22m
+    [2m                                [22m
+    [2m                                Póliza [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Primer Apellido [22m
+    [2m                                Segundo Apellido [22m
+    [2m                                Nombre [22m
+    [2m                                Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione  [22m
+    [2m                                Número Tel. [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione  [22m
+    [2m                                Perfil Seleccione un RolSeleccione un Rol  [22m
+    [2m                                Cant. Resultados [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    searchBuscar[22m
+    [2m                                    closeLimpiar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m		Coincidencias[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					 Cód. ClienteApellidos y NombreDocumento[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m    [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Obligaciones[22m
+    [2m	[22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      255 |     
+      256 |     
+    > 257 |     await expect(page.locator('body'), 'P02: página debe contener "El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres"').toContainText('El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres');
+          |                                                                                                                                      ^
+      258 |     
+      259 |     
+      260 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts:257:134
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\evidence-367-uat-367-20260-fbfc2-ajudicial-aspx-admite-hasta-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:122:7 › ADO-367 | P03 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p03 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 
+
+    Error: P03: página debe contener "Cliente Esperado"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 174[39m
+
+    [32m- Cliente Esperado[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda de Clientes[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione[43m  [49m[39m
+    [31m+                                 Núm[43m [49m[39m
+    [31m+                                 Cliente[43m [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                 Póliza[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Primer Apellido[43m [49m[39m
+    [31m+                                 Segundo Apellido[43m [49m[39m
+    [31m+                                 Nombre[43m [49m[39m
+    [31m+                                 Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione[43m  [49m[39m
+    [31m+                                 Número Tel.[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione[43m  [49m[39m
+    [31m+                                 Perfil Seleccione un RolSeleccione un Rol[43m  [49m[39m
+    [31m+                                 Cant. Resultados[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                     searchBuscar[39m
+    [31m+                                     closeLimpiar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ 		Coincidencias[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					 Cód. ClienteApellidos y NombreDocumento[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Obligaciones[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P03: página debe contener "Cliente Esperado" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    14 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda de Clientes[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione  [22m
+    [2m                                Núm [22m
+    [2m                                Cliente [22m
+    [2m                                [22m
+    [2m                                Póliza [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Primer Apellido [22m
+    [2m                                Segundo Apellido [22m
+    [2m                                Nombre [22m
+    [2m                                Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione  [22m
+    [2m                                Número Tel. [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione  [22m
+    [2m                                Perfil Seleccione un RolSeleccione un Rol  [22m
+    [2m                                Cant. Resultados [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    searchBuscar[22m
+    [2m                                    closeLimpiar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m		Coincidencias[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					 Cód. ClienteApellidos y NombreDocumento[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m    [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Obligaciones[22m
+    [2m	[22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      257 |     
+      258 |     
+    > 259 |     await expect(page.locator('body'), 'P03: página debe contener "Cliente Esperado"').toContainText('Cliente Esperado');
+          |                                                                                        ^
+      260 |     
+      261 |     
+      262 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:259:88
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2\error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: P03: página debe contener "Cliente Esperado"
+
+    [2mexpect([22m[31mlocator[39m[2m).[22mtoContainText[2m([22m[32mexpected[39m[2m)[22m failed
+
+    Locator: locator('body')
+    Timeout: 10000ms
+    [32m- Expected substring  -   1[39m
+    [31m+ Received string     + 174[39m
+
+    [32m- Cliente Esperado[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+         menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador[43m [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ 		search[39m
+    [31m+ 			Búsqueda de Clientes[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione[43m  [49m[39m
+    [31m+                                 Núm[43m [49m[39m
+    [31m+                                 Cliente[43m [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                 Póliza[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Primer Apellido[43m [49m[39m
+    [31m+                                 Segundo Apellido[43m [49m[39m
+    [31m+                                 Nombre[43m [49m[39m
+    [31m+                                 Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione[43m  [49m[39m
+    [31m+                                 Número Tel.[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+                                 Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione[43m  [49m[39m
+    [31m+                                 Perfil Seleccione un RolSeleccione un Rol[43m  [49m[39m
+    [31m+                                 Cant. Resultados[43m [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                                [49m[39m
+    [31m+                                     searchBuscar[39m
+    [31m+                                     closeLimpiar[39m
+    [31m+ [43m                                [49m[39m
+    [31m+ [43m                            [49m[39m
+    [31m+ [43m                        [49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ 		Coincidencias[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					 Cód. ClienteApellidos y NombreDocumento[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ 		Obligaciones[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m				[49m[39m
+    [31m+ 					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[39m
+    [31m+ [43m				[49m[39m
+    [31m+ [43m			[49m[39m
+    [31m+ [43m		[49m[39m
+    [31m+ [43m	[49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+ [43m    [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m                    [49m[39m
+    [31m+ [43m                [49m[39m
+    [31m+ [43m            [49m[39m
+    [31m+ [43m        [49m[39m
+    [31m+ [43m    [49m[39m
+    [31m+[39m
+    [31m+[39m
+    [31m+[39m
+
+    Call log:
+    [2m  - P03: página debe contener "Cliente Esperado" with timeout 10000ms[22m
+    [2m  - waiting for locator('body')[22m
+    [2m    13 × locator resolved to <body id="bodyTag">…</body>[22m
+    [2m       - unexpected value "[22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m	[22m
+    [2m[22m
+    [2m        [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m            [22m
+    [2m[22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m        menulogoutSalirBúsqueda de ClientesUsuario:USUARIO TESTPendiente de Hoy:7Pendiente de otros Días:11Realizado Hoy:0Total en Agenda:18Barrido Realizado:0%Clientes Asignados:10Promesas a Vencer en 7 días:0    format_list_bulletedCobranza PrejudicialeventAgenda Personalevent_notePooles de TrabajosearchBusqueda de Clientesdate_rangeAgenda de Grupoformat_list_bulletedSupervisionswitch_accountReasignacion Manualformat_list_bulletedReportes OperativosleaderboardInformesleaderboardCall CenterleaderboardDistribución por Rol y Nivel de MoraleaderboardDistribución por Tipologia de ClientesleaderboardDistribución por Estados EspecialesleaderboardDistribución por Estrategialeaderboardotros Reportesformat_list_bulletedReportes OBIleaderboardResumen AgendaleaderboardGestión Rol y N.MoraleaderboardGest. Tipo Cliente y N.MoraleaderboardGest. Estrategia y N.MoraleaderboardPromeas de PagoleaderboardRisk Managementformat_list_bulletedCobranza JudicialeventAgenda De DemandassearchBuscar DemandasruleValidar Gastosconfirmation_numberLiquidar Gastosswitch_accountReasignar Abogadoformat_list_bulletedReportes OperativosleaderboardInformacion de DemandasleaderboardInformesformat_list_bulletedReportes OBIleaderboardInformación de Demandasformat_list_bulletedFacturación y GastosruleValidar FacturasruleValidar Notas de GastosreceiptFacturasconfirmation_numberNotas de GastossettingsAdministrador [22m
+    [2m        [22m
+    [2m            [22m
+    [2m	[22m
+    [2m                    [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                        [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m[22m
+    [2m            [22m
+    [2m    [22m
+    [2m	[22m
+    [2m		search[22m
+    [2m			Búsqueda de Clientes[22m
+    [2m		[22m
+    [2m	[22m
+    [2m		[22m
+    [2m                [22m
+    [2m			[22m
+    [2m                        [22m
+    [2m				[22m
+    [2m                            [22m
+    [2m                                Tipo Doc. SeleccioneDNIDocumento de Identidad UruguayoLibreta de Enrolamiento (certid?#o de casamento)Otro Documento de IdentidadPassaporteRUCRUTSeleccione  [22m
+    [2m                                Núm [22m
+    [2m                                Cliente [22m
+    [2m                                [22m
+    [2m                                Póliza [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Primer Apellido [22m
+    [2m                                Segundo Apellido [22m
+    [2m                                Nombre [22m
+    [2m                                Tipo Tel. SeleccioneFijoLaboralMóvilNo IdentificadoParticularTrabajoSeleccione  [22m
+    [2m                                Número Tel. [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                Rol SeleccioneBackoffice Tarjetas de CreditoCall Center ExternoCobrador SeniorComite JudicialConvenios ExtrajudicialesEjecutivo ComercialEmpresas Externas de CobranzasGerente Casa CentralGerente de CobranzasGerente de SucursalGestion ATM (Cajero Automatico)Gestion AutopagoGestion CartasGestion EmailGestion No MoraGestion SMSGestor de Recuperacion de ActivosJefe Operativo de SucursalMiembro Backoffice TarjetasMiembro Conv ExtrajudicialMiembro de Comite JudicialMiembro Gestion SiniestroNucleo EstrategicoOperador de Call CenterPool de SiniestrosPROGRAMADORRecurso de Apoyo a CobranzasSegurosSkip TraceSoporte AISSupervisor Call CenterSeleccione  [22m
+    [2m                                Perfil Seleccione un RolSeleccione un Rol  [22m
+    [2m                                Cant. Resultados [22m
+    [2m                            [22m
+    [2m                            [22m
+    [2m                                [22m
+    [2m                                    searchBuscar[22m
+    [2m                                    closeLimpiar[22m
+    [2m                                [22m
+    [2m                            [22m
+    [2m                        [22m
+    [2m			[22m
+    [2m                    [22m
+    [2m		[22m
+    [2m            [22m
+    [2m	[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m	[22m
+    [2m                [22m
+    [2m                    [22m
+    [2m		Coincidencias[22m
+    [2m	[22m
+    [2m                [22m
+    [2m                [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					 Cód. ClienteApellidos y NombreDocumento[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m            [22m
+    [2m[22m
+    [2m    [22m
+    [2m    [22m
+    [2m	[22m
+    [2m            [22m
+    [2m                [22m
+    [2m		Obligaciones[22m
+    [2m	[22m
+    [2m            [22m
+    [2m            [22m
+    [2m		[22m
+    [2m			[22m
+    [2m				[22m
+    [2m					EmpresaObligaciónTipoMonedaSaldo AtrasoFiguraGestorDíasNivel Mora[22m
+    [2m				[22m
+    [2m			[22m
+    [2m		[22m
+    [2m	[22m
+    [2m        [22m
+    [2m[22m
+    [2m[22m
+    [2m        [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m[22m
+    [2m    [22m
+    [2m        [22m
+    [2m        [22m
+    [2m            [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m                [22m
+    [2m                    [22m
+    [2m                [22m
+    [2m            [22m
+    [2m        [22m
+    [2m    [22m
+    [2m[22m
+    [2m[22m
+    [2m"[22m
+
+
+      257 |     
+      258 |     
+    > 259 |     await expect(page.locator('body'), 'P03: página debe contener "Cliente Esperado"').toContainText('Cliente Esperado');
+          |                                                                                        ^
+      260 |     
+      261 |     
+      262 |
+        at N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:259:88
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2-retry1\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2-retry1\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2-retry1\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2-retry1\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\evidence-367-uat-367-20260-26d6c-ión-con-el-valor-completo-2-retry1\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:122:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter 
+    evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P02_el_campo_obligacion_en_frmbusquedajudicialaspx_adm.spec.ts:122:7 › ADO-367 | P02 — El campo Obligación en FrmBusquedaJudicial.aspx admite hasta 50 caracteres. › p02 el_campo_obligación_en_frmbusquedajudicial.aspx_admite_hasta 
+    evidence\367\uat-367-20260725T203654Z-ae0ae9\tests\P03_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:122:7 › ADO-367 | P03 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p03 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 
+  1 passed (3.3m)

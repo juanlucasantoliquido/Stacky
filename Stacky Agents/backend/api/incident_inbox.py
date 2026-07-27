@@ -17,6 +17,18 @@ def _enabled() -> bool:
     return bool(getattr(_cfg, "STACKY_INCIDENT_INBOX_ENABLED", True))
 
 
+def _actions_enabled() -> bool:
+    """Acciones de escritura desde la bandeja (cerrar / resolver+PR / lote).
+
+    Depende de la flag padre: con la bandeja apagada no hay acciones posibles,
+    asi que se devuelve False sin mirar la hija (misma semantica que `requires`).
+    """
+    if not _enabled():
+        return False
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED", True))
+
+
 def _feature_disabled_response():
     return jsonify({"ok": False, "error": "feature_disabled"}), 404
 
@@ -58,6 +70,10 @@ def incident_inbox_status():
         # es sticky ante respuestas desconocidas. Sin esta key el tab quedaria
         # siempre oculto.
         "flag_enabled": _enabled(),
+        # Gate de las acciones de escritura de la bandeja (cerrar / resolver+PR
+        # / lote). ADITIVO: un frontend viejo que no lo lea sigue funcionando en
+        # modo solo lectura. False si la bandeja entera esta apagada.
+        "actions_enabled": _actions_enabled(),
         "incident_types": list(types),
         "incident_types_source": types_source,
         "closed_states": list(closed),

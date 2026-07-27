@@ -1,0 +1,132 @@
+{
+  "ok": true,
+  "ticket_id": 0,
+  "total": 3,
+  "pass": 3,
+  "fail": 0,
+  "blocked": 0,
+  "verdict": "PASS",
+  "category": null,
+  "reason": null,
+  "runs": [
+    {
+      "scenario_id": "P01",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 3 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  1 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:139:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter (16.0s)\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  2 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P02_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:139:7 › ADO-367 | P02 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p02 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 (15.5s)\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  3 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P03_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts:139:7 › ADO-367 | P03 — Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol). › p03 sin_regresión_en_el_resto_de_filtros_de_la_pantalla_(documen (15.3s)\n\n  3 passed (2.2m)\n",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P02",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P02_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 3 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  1 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:139:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter (16.0s)\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  2 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P02_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:139:7 › ADO-367 | P02 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p02 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 (15.5s)\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  3 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P03_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts:139:7 › ADO-367 | P03 — Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol). › p03 sin_regresión_en_el_resto_de_filtros_de_la_pantalla_(documen (15.3s)\n\n  3 passed (2.2m)\n",
+      "raw_stderr": ""
+    },
+    {
+      "scenario_id": "P03",
+      "spec_file": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P03_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts",
+      "status": "pass",
+      "duration_ms": 0,
+      "artifacts": {
+        "trace": null,
+        "video": null,
+        "screenshots": [],
+        "console_log": null,
+        "network_log": null,
+        "error_context": null
+      },
+      "raw_stdout": "[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)\n[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)\n[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...\n[globalSetup] Auth saved → N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\.auth\\agenda.json (fingerprint: c4e41ce73783c3de)\n\nRunning 3 tests using 1 worker\n\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  1 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P01_el_campo_poliza_en_frmbusquedaaspx_admite_hasta_50.spec.ts:139:7 › ADO-367 | P01 — El campo Póliza en FrmBusqueda.aspx admite hasta 50 caracteres, alineado al ancho actual de OGCOD/OCOBLIG en base de datos. › p01 el_campo_póliza_en_frmbusqueda.aspx_admite_hasta_50_caracter (16.0s)\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  2 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P02_una_busqueda_por_polizaobligacion_con_el_valor_com.spec.ts:139:7 › ADO-367 | P02 — Una búsqueda por Póliza/Obligación con el valor completo (>20 caracteres) retorna el cliente esperado. › p02 una_búsqueda_por_póliza/obligación_con_el_valor_completo_(>2 (15.5s)\nAdvanced filters ready: \u001b[33mtrue\u001b[39m\n[STEP 01] navigate FrmBusqueda.aspx\n  ✓  3 evidence\\367\\uat-367-20260726T002201Z-5d4e59\\tests\\P03_sin_regresion_en_el_resto_de_filtros_de_la_pantall.spec.ts:139:7 › ADO-367 | P03 — Sin regresión en el resto de filtros de la pantalla (Documento, Cliente, Apellidos, Teléfono, Rol). › p03 sin_regresión_en_el_resto_de_filtros_de_la_pantalla_(documen (15.3s)\n\n  3 passed (2.2m)\n",
+      "raw_stderr": ""
+    }
+  ],
+  "runner_summary": {
+    "verdict": "PASS",
+    "category": null,
+    "reason": null,
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "blocked": 0,
+    "skipped": 0,
+    "retries": 0,
+    "duration_ms": 46849,
+    "artifacts": {
+      "junit": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\junit.xml",
+      "json_results": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\reports\\playwright-results.json",
+      "html_report": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\playwright-report\\index.html",
+      "trace_count": 0,
+      "screenshots_count": 0,
+      "video_count": 0
+    },
+    "scenario_results": [
+      {
+        "scenario_id": "p01_el_campo_p_liza_en_frmbusq",
+        "status": "passed",
+        "duration_ms": 16022,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p02_una_b_squeda_por_p_liza_ob",
+        "status": "passed",
+        "duration_ms": 15502,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      },
+      {
+        "scenario_id": "p03_sin_regresi_n_en_el_resto_",
+        "status": "passed",
+        "duration_ms": 15325,
+        "attempts": 1,
+        "classification": {
+          "verdict": "PASS",
+          "category": null,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "meta": {
+    "tool": "uat_test_runner",
+    "version": "1.2.0",
+    "duration_ms": 133818,
+    "browser_launch_count": 1,
+    "login_count": 1,
+    "base_url": "http://localhost:35017/AgendaWeb/",
+    "managed_app": false,
+    "credentials_source": "env",
+    "username": "PABLO",
+    "password_present": true,
+    "password_hash_prefix": "81a4e2e6",
+    "max_total_minutes": 6,
+    "max_login_attempts": 1,
+    "max_browser_launches": 1
+  }
+}

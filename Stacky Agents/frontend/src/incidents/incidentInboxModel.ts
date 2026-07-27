@@ -42,6 +42,10 @@ export interface IncidentInboxResponse {
 export interface IncidentInboxStatus {
   ok: boolean;
   enabled: boolean;
+  /** Gate de las acciones de escritura de la bandeja (cerrar / resolver+PR /
+   *  lote). OPCIONAL: un backend viejo no la manda y la bandeja queda solo
+   *  lectura. Se lee con resolveInboxActionsEnabled (incidentInboxActionsModel). */
+  actions_enabled?: boolean;
   incident_types: string[];
   incident_types_source: string;
   closed_states: string[];

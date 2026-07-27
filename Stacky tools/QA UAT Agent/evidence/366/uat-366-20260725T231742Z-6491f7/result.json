@@ -1,0 +1,28 @@
+{
+  "ok": false,
+  "ticket_id": 366,
+  "verdict": "BLOCKED",
+  "category": "OPS",
+  "reason": "PIPELINE_CRASH",
+  "failed_stage": "pipeline",
+  "error": "pipeline_crash",
+  "message": "'charmap' codec can't encode character '\\u2192' in position 25: character maps to <undefined>",
+  "stages": {
+    "reader": {
+      "ok": true,
+      "skipped": false,
+      "ticket_id": null,
+      "title": "[INC] Catalogo Tipo de Telefono no incluye Laboral ni Particular",
+      "plan_item_count": 5
+    },
+    "evidence": {
+      "ok": true,
+      "files": 43,
+      "manifest": "evidence_manifest.json"
+    }
+  },
+  "elapsed_s": 63.96,
+  "run_id": "uat-366-20260725T231742Z-6491f7",
+  "artifact_root": "N:\\GIT\\RS\\STACKY\\Stacky\\Stacky tools\\QA UAT Agent\\evidence\\366\\uat-366-20260725T231742Z-6491f7",
+  "_normalized": true
+}

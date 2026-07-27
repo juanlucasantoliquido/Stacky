@@ -1,0 +1,21 @@
+[globalSetup] Credential fingerprint: c4e41ce73783c3de (user=PABLO, url=http://localhost:35017/AgendaWeb/)
+[globalSetup] Auth invalid: PROBE_FAILED — Auth probe failed: Probe timeout (5000ms)
+[globalSetup] Logging into http://localhost:35017/AgendaWeb/FrmLogin.aspx (attempt 1/1) ...
+[globalSetup] Auth saved → N:\GIT\RS\STACKY\Stacky\Stacky tools\QA UAT Agent\.auth\agenda.json (fingerprint: c4e41ce73783c3de)
+
+Running 3 tests using 1 worker
+
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  1 evidence\362\uat-362-20260725T233622Z-c5f823\tests\P01_en_detalle_de_cliente_agendawebfrmdetalleclieaspx.spec.ts:139:7 › ADO-362 | P01 — En Detalle de Cliente (AgendaWeb/FrmDetalleClie.aspx), el campo antes rotulado "Atraso Total" pasa a mostrar "Atraso Total Dolarizado" (RIDIOMA ESP IDTEXTO=3165). › p01 en_detalle_de_cliente_(agendaweb/frmdetalleclie.aspx),_el_ca (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  2 evidence\362\uat-362-20260725T233622Z-c5f823\tests\P02_el_mismo_cambio_se_refleja_automaticamente_en_la_g.spec.ts:139:7 › ADO-362 | P02 — El mismo cambio se refleja automáticamente en la grilla Agendados por Motor Experto, ya que comparte el mismo IDTEXTO=9294 vía RCONTROLES. › p02 el_mismo_cambio_se_refleja_automáticamente_en_la_grilla_agen (1.3m)
+Advanced filters ready: [33mfalse[39m
+[STEP 01] navigate FrmAgenda.aspx
+[STEP 02] click pb_step_1
+  ✓  3 evidence\362\uat-362-20260725T233622Z-c5f823\tests\P03_no_se_modifica_el_ancho_de_columnas_ni_se_rompe_el.spec.ts:139:7 › ADO-362 | P03 — No se modifica el ancho de columnas ni se rompe el scroll horizontal existente en la grilla de Agenda. › p03 no_se_modifica_el_ancho_de_columnas_ni_se_rompe_el_scroll_ho (1.2m)
+
+  3 passed (4.2m)

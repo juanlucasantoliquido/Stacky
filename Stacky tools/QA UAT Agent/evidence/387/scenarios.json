@@ -1,0 +1,160 @@
+{
+  "ok": true,
+  "ticket_id": 387,
+  "compiled": 4,
+  "out_of_scope": 1,
+  "scenarios": [
+    {
+      "scenario_id": "P01",
+      "ticket_id": 387,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "En el grid \"Gestiones\" de Detalle de Cliente > Datos Generales se muestra una sola columna \"Medio de Contacto\" (la del valor: email o teléfono).",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridgestiones",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "target": "panel_c_updatepanelmediocontacto",
+          "criterio_id": "AC-01",
+          "screen": "FrmDetalleClie.aspx",
+          "tipo": "visible",
+          "valor": true,
+          "discrimination": {
+            "proven": true,
+            "negative_control": null,
+            "code": "",
+            "detail": "kind=presence no requiere control negativo: su estado contrario ya lo cubre el evaluador",
+            "fuente": "no_aplica"
+          }
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P01"
+      },
+      "assertion_source": "assertion_catalog"
+    },
+    {
+      "scenario_id": "P02",
+      "ticket_id": 387,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "La columna que exponía el tipo/clasificación del medio ya no se renderiza en pantalla.",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridgestiones",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "page_not_contains_text",
+          "target": "grid_c_gridgestiones",
+          "valor": "ETIQCONTACTO"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P02"
+      }
+    },
+    {
+      "scenario_id": "P03",
+      "ticket_id": 387,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "El Excel generado por \"Exportar\" desde el bloque Gestiones no incluye la columna eliminada, y el resto de columnas conserva su orden y contenido actuales.",
+      "precondiciones": [
+        "El usuario está en la pantalla de Detalle de Cliente.",
+        "El grid de Gestiones muestra una única columna 'Medio de Contacto'."
+      ],
+      "pasos": [
+        {
+          "accion": "click",
+          "target": "link_c_btnexportexcelobligaciones",
+          "valor": null
+        }
+      ],
+      "oraculos": [
+        {
+          "target": "link_c_btnexportarexcelpagos",
+          "criterio_id": "AC-03",
+          "screen": "FrmDetalleClie.aspx",
+          "tipo": "ordered_by",
+          "columna": 1,
+          "valor": "asc",
+          "discrimination": {
+            "proven": true,
+            "negative_control": [
+              "b",
+              "a"
+            ],
+            "code": "",
+            "detail": "ordered_by(esperado='asc') da FAIL contra el control negativo ['b', 'a'] (derivado)",
+            "fuente": "derivado"
+          }
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P03"
+      },
+      "assertion_source": "assertion_catalog"
+    },
+    {
+      "scenario_id": "P04",
+      "ticket_id": 387,
+      "pantalla": "FrmDetalleClie.aspx",
+      "titulo": "No se introducen errores ni columnas vacías/rotas en el grid tras el cambio (paginación y ordenamiento existentes siguen funcionando).",
+      "precondiciones": [],
+      "pasos": [
+        {
+          "accion": "wait_visible",
+          "target": "grid_c_gridgestiones",
+          "valor": null
+        },
+        {
+          "accion": "check_checkbox",
+          "target": "link_c_btnexportexcelobligaciones",
+          "valor": "true"
+        }
+      ],
+      "oraculos": [
+        {
+          "tipo": "visible",
+          "target": "grid_c_gridgestiones",
+          "valor": null
+        },
+        {
+          "tipo": "page_not_contains_text",
+          "target": "grid_c_gridgestiones",
+          "valor": "ETIQCONTACTO"
+        }
+      ],
+      "datos_requeridos": [],
+      "origen": {
+        "ticket_section": "plan_pruebas",
+        "item_id": "P04"
+      }
+    }
+  ],
+  "out_of_scope_items": [
+    {
+      "id": "P05",
+      "razon": "SCOPE_MISMATCH",
+      "descripcion": "Si otras pantallas comparten la misma definición de columnas de gestiones, quedan explícitamente incluidas o excluidas del alcance según lo confirmado con negocio.",
+      "details": {
+        "spec_pantalla": "FrmGestion.aspx",
+        "scope_screen": "FrmDetalleClie.aspx"
+      }
+    }
+  ]
+}

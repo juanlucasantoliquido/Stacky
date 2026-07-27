@@ -1,6 +1,43 @@
 # Plan 202 — La Fragua Nocturna (1/6): Turno Mínimo Viable (TMV) — Orquestador, Planner de cola derivada, Ledger durable y Digest triado
 
-- **Estado:** CRITICADO v2 (v1 RECHAZADO → corregido in place; ahora **APROBADO-CON-CAMBIOS**) — 2026-07-18 · Autor: StackyArchitectaUltraEficientCode
+- **Estado:** CRITICADO v2 (v1 RECHAZADO → corregido in place; ahora **APROBADO-CON-CAMBIOS**) — 2026-07-18 · Autor: StackyArchitectaUltraEficientCode · **SIN IMPLEMENTAR** (pre-flight hecho y verificado el 2026-07-26; ver el bloque de abajo)
+
+### Pre-flight verificado el 2026-07-26 (NO re-derivar: está medido contra el árbol real)
+
+Una corrida de `implementar-plan-stacky` hizo el pre-flight de este plan y **no llegó a
+implementarlo** (se agotó el presupuesto de contexto tras cerrar los planes 196 y 215 en la
+misma sesión). Se dejan acá las mediciones ya verificadas para que la próxima corrida arranque
+desde terreno firme:
+
+1. **C1 (el bloqueante que hundió la v1) está CORRECTAMENTE resuelto en la v2 — comprobado
+   ejecutando, no leyendo.** Con el venv del repo:
+   - `app_root() == backend_root()` en dev ⇒ **True** (`runtime_paths.py:36-45`; en dev
+     `app_root()` cae al `return backend_root()` final).
+   - `app_root()/"docs"` = `…\Stacky Agents\backend\docs` ⇒ **NO existe**. Ese era el bug: la
+     Fragua entera habría sido un no-op en producción con los tests en verde.
+   - `backend_root().parent/"docs"` = `…\Stacky Agents\docs` ⇒ **existe y contiene 211
+     `NNN_PLAN_*.md`**. La corrección de la v2 (`backend_root().parent / "docs"`) es la
+     correcta y el test de anclaje `test_docs_dir_resuelve_a_carpeta_de_planes` es válido.
+   - **Riesgo NO cubierto por el plan (verificar al implementar E2):** en un deploy CONGELADO
+     (PyInstaller) `backend_root()` es el dir del `.exe`, así que `backend_root().parent/"docs"`
+     coincide con `app_root()/"docs"` y puede no existir. El guard `_docs_dir_ok()` cubre el
+     no-crash, pero conviene decidir explícitamente si la Fragua debe correr en deploy congelado
+     o solo en el árbol de desarrollo.
+2. **El plan está 100% sin implementar** (verificado por ausencia de archivos, no por memoria):
+   no existen `services/night_foundry_*.py`, ni `api/night_foundry*`, ni
+   `tests/test_plan202_*.py`; **cero** ocurrencias de `NIGHT_FOUNDRY`/`FRAGUA` en `config.py` y
+   `services/harness_flags.py`; y no hay skill de la Fragua en `.claude/skills/`.
+3. **Los planes 203-207 de la serie NO existen como archivos** (`ls` de `docs/` no devuelve
+   ninguno): este doc es la única pieza escrita de la serie. No buscarlos ni implementarlos.
+4. **Corrección al cableado de flags que este doc arrastra:** una flag del arnés se cablea en
+   **6 lugares**, no en 5. El sexto es `services/harness_flags_help.py` (`PLAIN_HELP`), que es
+   obligatorio o `test_plain_help_covers_all_registry_keys` se pone rojo. Además, una flag
+   **default-OFF NO debe declarar `default=False`** en su `FlagSpec` (eso la vuelve
+   `default_is_known` y rompe `test_default_known_only_for_curated`): el default OFF vive
+   **solo** en `config.py`. Esto aplica directo a E7, cuya flag maestra va **default OFF** por
+   ser un orquestador nocturno que consume tokens en reposo.
+5. **Recordatorio de riel del operador para E5/E7:** de noche la Fragua debe producir **solo
+   papel** (planes/digest) con gate humano; nunca ejecutar cambios sin HITL.
 - **Serie:** "La Fragua Nocturna" (6 piezas: F0..F4 de serie + 1 hoja de ruta). ESTE documento es la **Fase 0 de la serie = Turno Mínimo Viable (TMV)**. Sus fases internas de implementación se numeran **Etapa 1..7 (E1..E7)** para no colisionar con las fases de serie F0..F4.
 - **Nota de numeración:** la serie ocupa 202-207 (no 199-201): al redactar, 199 (cosecha telemetría), 200 (consola por incidencia) y 201 (taller de compilación) YA estaban tomados por planes ajenos. Verificado en frío listando `Stacky Agents/docs/` el 2026-07-18: el próximo `NN_` libre es 202.
 - **Precedentes de formato en la casa:** plan 184 (hoja de ruta DB Compare), plan 195 (hoja de ruta DevOps), plan 197 (hoja de ruta UX), plan 198 (ledger de applies) — mismo rigor de contratos congelados y gates binarios.

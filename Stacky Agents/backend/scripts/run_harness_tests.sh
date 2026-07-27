@@ -828,6 +828,9 @@ HARNESS_TEST_FILES=(
   # Plan 202 — La Fragua Nocturna (TMV)
   tests/test_plan202_ledger.py
   tests/test_plan202_planner.py
+  tests/test_plan202_workers.py
+  tests/test_plan202_orchestrator.py
+  tests/test_plan202_digest.py
 )
 
 pass=0

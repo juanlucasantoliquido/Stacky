@@ -46,6 +46,36 @@ from services.status_vocabulary import TERMINAL_STATUSES
 _GATEWAY_SOURCE = "completion_gateway"
 
 
+def _completion_outcome_meta(payload: "CompletionPayload") -> dict | None:
+    """Plan 254 F2-bis — desenlace clasificado del camino de completion.
+
+    Acá no hay proceso hijo ni `return_code`: el agente AUTO-REPORTA su estado.
+    Se sintetiza `return_code=0` cuando reportó 'completed' (trabajo entregado,
+    cierre limpio) y `return_code=1` en cualquier otro terminal, con el `reason`
+    del payload como texto para detectar cuota agotada.
+
+    Devuelve None con la taxonomía apagada (nada se agrega al metadata).
+    """
+    import config as _config  # noqa: PLC0415 — se lee la INSTANCIA config.config
+
+    if not getattr(_config.config, "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED", True):
+        return None
+    try:
+        from services.run_outcome import classify_outcome_reason  # noqa: PLC0415
+
+        return {
+            "outcome_reason": classify_outcome_reason(
+                return_code=0 if payload.status == "completed" else 1,
+                result_ok_seen=payload.status == "completed",
+                last_result_text=payload.reason or "",
+            ),
+            "outcome_source": "completion_gateway",
+        }
+    except Exception:  # noqa: BLE001 — clasificar jamás rompe el cierre
+        logger.debug("outcome_reason 254 falló (completion gateway)", exc_info=True)
+        return None
+
+
 # ── Payload v1 ────────────────────────────────────────────────────────────────
 
 
@@ -1202,6 +1232,10 @@ def run_on(
                     execution_id=execution.id,
                     final_status=payload.status,
                     agent_type=payload.agent_type,
+                    # Plan 254 F2-bis — el camino de completion también declara
+                    # su desenlace. Acá el agente auto-reportó: si dijo
+                    # 'completed' hay trabajo entregado y el cierre fue limpio.
+                    metadata_override=_completion_outcome_meta(payload),
                 )
             except Exception as exc:
                 logger.error(

@@ -1,0 +1,75 @@
+/* Plan 254 F5 — card "Cierres inconsistentes" del panel de Diagnóstico. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 16px 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runBtn {
+  background: var(--mono-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.runBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.okLine {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ok, #86efac);
+}
+
+.summary {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.falsoRojo {
+  color: var(--warn);
+}
+
+.kindList {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.count {
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.muted {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}

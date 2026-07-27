@@ -1742,6 +1742,37 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si le ponés menos días: se guarda menos historial y la base ocupa menos lugar.",
         example="Como decidir si guardás las facturas tres meses o tres años.",
     ),
+    # ── Plan 254 — fin del falso ROJO ─────────────────────────────────────
+    "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED": PlainHelp(
+        what="Evita que un trabajo que ya quedó terminado con éxito se marque como fallado después.",
+        on_effect="Si la activás: el trabajo terminado se conserva, el intento de pisarlo queda anotado y el caso se marca para que lo mires.",
+        off_effect="Si la apagás: el último aviso manda y un trabajo ya entregado puede quedar figurando como fallado.",
+        example="Como no tachar un pedido ya entregado solo porque el repartidor cerró mal la puerta al salir.",
+    ),
+    "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED": PlainHelp(
+        what="Guarda el motivo por el que terminó cada corrida, no solamente que terminó mal.",
+        on_effect="Si la activás: podés distinguir quedarse sin cupo del plan de un fallo real, que piden acciones opuestas.",
+        off_effect="Si la apagás: todos los finales malos se ven iguales y hay que leer los registros para saber cuál fue.",
+        example="Como que el cajero automático diga 'sin billetes' en vez de un 'no se pudo' que no te dice nada.",
+    ),
+    "STACKY_CLI_STREAM_DRAIN_TIMEOUT_S": PlainHelp(
+        what="Cuántos segundos como mucho se espera a terminar de leer lo que el agente dejó a medio salir.",
+        on_effect="Si le ponés más segundos: se aguantan salidas más lentas y no se pierde lo último que el agente dijo.",
+        off_effect="Si le ponés menos segundos: se corta antes y puede perderse el tramo final de la respuesta.",
+        example="Como esperar a que el fax termine de imprimir la última hoja antes de guardar el documento.",
+    ),
+    "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED": PlainHelp(
+        what="Muestra en la pantalla de detalle por qué terminó así la corrida, en palabras simples.",
+        on_effect="Si la activás: ves un cartelito con la causa y un aviso cuando se conservó un resultado bueno pese a un cierre feo.",
+        off_effect="Si la apagás: la pantalla queda como antes, sin el cartelito de causa.",
+        example="Como el cartel del ascensor que dice 'fuera de servicio por mantenimiento' en vez de solo no andar.",
+    ),
+    "STACKY_RUN_RECONCILIATION_ENABLED": PlainHelp(
+        what="Compara el estado de cada ticket contra lo que de verdad pasó en su corrida y te lista las diferencias.",
+        on_effect="Si la activás: podés consultar cuántos casos quedaron mal marcados. No cambia ninguno: solo te los muestra.",
+        off_effect="Si la apagás: la consulta no responde y no hay forma de saber cuántos casos quedaron mal marcados.",
+        example="Como el arqueo de caja: cuenta y te dice si falta o sobra, pero no mete ni saca plata.",
+    ),
     "STACKY_DB_COMPACT_ENABLED": PlainHelp(
         what="Habilita el botón que comprime la base para recuperar el espacio que dejaron los datos borrados.",
         on_effect="Si la activás: aparece el botón para comprimir. Nada se comprime hasta que vos lo confirmes.",

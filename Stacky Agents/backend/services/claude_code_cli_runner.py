@@ -787,6 +787,7 @@ def _run_in_background(
                 invocation_block=invocation_block,
                 project_knowledge=knowledge_section,
                 skills_section=skills_block,
+                agent_type=agent_type or "",                    # Plan 213 F2
             )
             if _mem_prefix_claude:
                 system_prompt_text = (_mem_prefix_claude.strip() + "\n\n" + system_prompt_text).strip()
@@ -1528,8 +1529,24 @@ def _run_in_background(
                 continue
 
         heartbeat_stop.set()
+        # Plan 254 F3 — el join YA drenaba; lo que faltaba era MEDIRLO.
+        # `readers` es una LISTA de 2 threads daemon (stdout y stderr, :1408-1420).
+        # Si el join vence, los threads siguen vivos y pueden loguear DESPUÉS del
+        # cierre: esa es la hipótesis H-a de E1 y acá queda registrada.
+        # El deadline es COMPARTIDO entre los dos joins (no N s por thread): el
+        # techo total del cierre no cambia de orden de magnitud.
+        _drain_timeout_s = float(config.STACKY_CLI_STREAM_DRAIN_TIMEOUT_S)
+        _drain_deadline = _time.monotonic() + _drain_timeout_s
+        _drain_timed_out = False
         for reader in readers:
-            reader.join(timeout=5)
+            _remaining = max(0.0, _drain_deadline - _time.monotonic())
+            reader.join(timeout=_remaining)
+            if reader.is_alive():
+                _drain_timed_out = True
+        if _drain_timed_out:
+            log("warn",
+                f"254-F3 drenaje del stream VENCIÓ tras {_drain_timeout_s}s — "
+                f"puede haber eventos leídos después de clasificar el desenlace")
         if heartbeat_thread is not None:
             heartbeat_thread.join(timeout=2)
 
@@ -1831,6 +1848,27 @@ def _run_in_background(
             result_ok_seen=_result_ok_seen[0],
             return_code=return_code,
         )
+        # Plan 254 F2-bis — POR QUÉ terminó así, no solo que terminó mal.
+        # Viaja en metadata_override de on_execution_end → metadata_json del
+        # TicketStatusEvent. No hace falta ninguna columna nueva.
+        _outcome_meta: dict = {}
+        if config.STACKY_RUN_OUTCOME_TAXONOMY_ENABLED:
+            try:
+                from services.run_outcome import classify_outcome_reason
+
+                _outcome_meta["outcome_reason"] = classify_outcome_reason(
+                    return_code=return_code,
+                    result_ok_seen=bool(_result_ok_seen[0]),
+                    stall_fired=bool(_stall_fired[0]),
+                    stderr_excerpt=_stderr_excerpt(stderr_tail),
+                    last_result_text=(output or "")[-4000:],
+                )
+                # Plan 254 F3 — el drenaje del stream, medido (H-a de E1).
+                _outcome_meta["drain_timed_out"] = bool(_drain_timed_out)
+                metadata.update(_outcome_meta)
+            except Exception:  # noqa: BLE001 — clasificar jamás rompe el cierre
+                logger.debug("[exec=%s] outcome_reason 254 falló", execution_id, exc_info=True)
+                _outcome_meta = {}
         if _outcome_kind == "failed_stall":
             # Plan 144 F4 (C1) — trust persistido (F2) o lectura on-demand si
             # el preflight estaba OFF (diagnóstico best-effort).
@@ -1858,6 +1896,7 @@ def _run_in_background(
                 final_status="error",
                 agent_type=agent_type,
                 error="stalled",
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id,
@@ -1886,6 +1925,13 @@ def _run_in_background(
             )
             metadata["confidence"] = conf.to_dict()
             metadata["contract_score"] = cv_result.score
+            # Plan 213 F4 — supuestos declarados por los analistas (path claude).
+            from services.assumptions import apply_to_metadata as _assump_apply
+
+            if _assump_apply(agent_type or "", output or "", metadata,
+                             log=log) == "needs_review" and final_status == "completed":
+                final_status = "needs_review"
+                log("warn", "assumption_overload → needs_review")
             # Plan 41 — autopublicar la épica antes de marcar terminal. Puede
             # forzar needs_review si la publicación falla (fallo ruidoso).
             final_status = _maybe_autopublish_epic(final_status)
@@ -1957,6 +2003,7 @@ def _run_in_background(
                 execution_id=execution_id,
                 final_status=final_status,
                 agent_type=agent_type,
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id,
@@ -2026,6 +2073,7 @@ def _run_in_background(
                 final_status="error",
                 agent_type=agent_type,
                 error=error,
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id,
@@ -2485,6 +2533,7 @@ def _build_system_prompt(
     project_knowledge: str = "",
     mcp_enabled: bool = False,
     skills_section: str = "",
+    agent_type: str = "",
 ) -> str:
     """System prompt real para --append-system-prompt-file (Fase C).
 
@@ -2495,8 +2544,9 @@ def _build_system_prompt(
     H3.1: las reglas se obtienen de harness.run_contract.rules_text en call-time.
     H4.3: si skills_section está presente, se inyecta ANTES de _STACKY_RULES.
     """
-    from harness.run_contract import rules_text  # noqa: PLC0415
+    from harness.run_contract import rules_text, with_assumption_policy  # noqa: PLC0415
     rules = rules_text(runtime="claude", mcp_enabled=mcp_enabled)
+    rules = with_assumption_policy(rules, agent_type)          # Plan 213 F2
     invocation_section = f"{invocation_block}\n\n" if invocation_block else ""
     knowledge_section = f"\n\n{project_knowledge.strip()}\n" if project_knowledge.strip() else ""
     skills_block = f"\n\n{skills_section.strip()}\n" if skills_section.strip() else ""

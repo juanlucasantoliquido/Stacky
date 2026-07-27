@@ -25,6 +25,73 @@ bp = Blueprint("executions", __name__, url_prefix="/executions")
 logger = logging.getLogger("stacky_agents.api.executions")
 
 
+def _outcome_badge_enabled() -> bool:
+    """Plan 254 F4 — kill-switch del badge de causa. Se lee la INSTANCIA."""
+    import config as _config  # noqa: PLC0415
+
+    return bool(getattr(_config.config, "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED", True))
+
+
+def _dirty_close_execution_ids(session, execution_ids: list[int]) -> set[int]:
+    """Plan 254 F1-bis — ejecuciones cuyo cierre preservó un terminal de éxito.
+
+    La marca `blocked_downgrade.pending_review` la escribe el guard de F1 en el
+    `TicketStatusEvent` (services/ticket_status.py), NO en el metadata de la
+    ejecución: hay que leerla de ahí o el aviso nunca se vería.
+
+    UNA sola query para todo el lote (nada de N+1). Read-only.
+    """
+    if not execution_ids:
+        return set()
+    from services.ticket_status import TicketStatusEvent  # noqa: PLC0415
+
+    rows = (
+        session.query(TicketStatusEvent.execution_id, TicketStatusEvent.metadata_json)
+        .filter(TicketStatusEvent.execution_id.in_(execution_ids))
+        .filter(TicketStatusEvent.metadata_json.like("%blocked_downgrade%"))
+        .all()
+    )
+    dirty: set[int] = set()
+    for exec_id, raw in rows:
+        try:
+            blocked = (json.loads(raw or "{}") or {}).get("blocked_downgrade")
+        except (ValueError, TypeError):
+            continue
+        if isinstance(blocked, dict) and blocked.get("pending_review"):
+            dirty.add(exec_id)
+    return dirty
+
+
+def _with_outcome(d: dict, dirty_ids: set[int] | None = None) -> dict:
+    """Plan 254 F4 — expone la causa del desenlace donde el operador ya mira.
+
+    `outcome_reason` lo dejó F2 en el `metadata_json` de la ejecución (no hace
+    falta columna nueva); acá solo se promueve al nivel superior del payload para
+    que la UI no tenga que conocer la forma del metadata.
+
+    Con `STACKY_UI_OUTCOME_REASON_BADGE_ENABLED` apagada NO se agrega ninguna
+    clave: la UI simplemente no dibuja el badge (sin hueco ni error).
+    """
+    if not _outcome_badge_enabled():
+        return d
+    meta = d.get("metadata") or {}
+    if isinstance(meta, dict):
+        reason = meta.get("outcome_reason")
+        if reason:
+            d["outcome_reason"] = reason
+            try:
+                from services.run_outcome import is_operator_actionable  # noqa: PLC0415
+
+                d["outcome_actionable"] = is_operator_actionable(str(reason))
+            except Exception:  # noqa: BLE001 — enriquecer jamás rompe el listado
+                logger.debug("outcome_actionable 254 falló", exc_info=True)
+    if dirty_ids and d.get("id") in dirty_ids:
+        # F1-bis — un `completed` preservado sobre un cierre sucio NO puede
+        # presentarse como un éxito limpio.
+        d["dirty_close_pending_review"] = True
+    return d
+
+
 @bp.get("")
 def list_executions():
     ticket_id = request.args.get("ticket_id", type=int)
@@ -83,7 +150,13 @@ def list_executions():
         if days and days > 0:
             q = q.filter(AgentExecution.started_at >= (datetime.utcnow() - timedelta(days=days)))
         rows = q.order_by(AgentExecution.started_at.desc()).limit(limit).all()
-        return jsonify([r.to_dict(include_output=False, include_ticket_context=True) for r in rows])
+        # Plan 254 F4 — causa del desenlace + aviso de cierre sucio.
+        payload = [r.to_dict(include_output=False, include_ticket_context=True) for r in rows]
+        dirty = (
+            _dirty_close_execution_ids(session, [r.id for r in rows])
+            if _outcome_badge_enabled() else set()
+        )
+        return jsonify([_with_outcome(d, dirty) for d in payload])
 
 
 def _query_active_executions(session, *, project_ctx, status_values, limit):
@@ -162,7 +235,12 @@ def get_execution(execution_id: int):
         row = session.get(AgentExecution, execution_id)
         if row is None:
             abort(404)
-        return jsonify(row.to_dict(include_ticket_context=True))
+        # Plan 254 F4 — causa del desenlace + aviso de cierre sucio.
+        dirty = (
+            _dirty_close_execution_ids(session, [row.id])
+            if _outcome_badge_enabled() else set()
+        )
+        return jsonify(_with_outcome(row.to_dict(include_ticket_context=True), dirty))
 
 
 @bp.get("/<int:execution_id>/logs")

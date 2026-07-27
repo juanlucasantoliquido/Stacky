@@ -27,14 +27,44 @@ from typing import Any, Callable
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+import config  # Plan 254 F1 — se lee config.config.<FLAG> (la INSTANCIA, nunca el módulo)
 from db import Base, session_scope
 from models import Ticket
+# Plan 254 F1 — idioma real de la casa para el log estructurado (SystemLog).
+# API real (services/stacky_logger.py:187): warning(source, action, **kwargs).
+from services.stacky_logger import logger as stacky_logger
 
 logger = logging.getLogger("stacky.ticket_status")
 
 from services.status_vocabulary import VALID_TICKET_STATUSES
 
 VALID_STATUSES = VALID_TICKET_STATUSES
+
+# ── Plan 254 F1 — guard anti-degradación (fin del falso ROJO) ─────────────────
+# Estados REALES del vocabulario (services/status_vocabulary.py:11-18).
+# NO existen "published" ni "failed": inventar literales deja el guard INERTE.
+_SUCCESS_TERMINALS = frozenset({"completed"})
+
+# Solo se bloquea la degradación a 'error'.
+# 'cancelled' NO se bloquea a propósito: cancelar es una acción del OPERADOR
+# (api/executions.py) y el guard jamás le saca control al humano.
+# 'needs_review' NO se bloquea: escalar a revisión humana no destruye trabajo.
+_NEVER_DOWNGRADE_TO = frozenset({"error"})
+
+# Invariante verificado por test_guard_solo_usa_estados_del_vocabulario.
+assert (_SUCCESS_TERMINALS | _NEVER_DOWNGRADE_TO) <= VALID_TICKET_STATUSES
+
+
+def _would_degrade(current: str | None, incoming: str) -> bool:
+    """Plan 254 F1 — ¿`incoming` destruiría un terminal de éxito ya alcanzado?
+
+    Asimétrico A PROPÓSITO: bloquea completed→error, y NADA MÁS.
+    No bloquea error→completed, ni completed→needs_review, ni completed→cancelled.
+    Nunca convierte un rojo en verde.
+    """
+    if not current:
+        return False
+    return current in _SUCCESS_TERMINALS and incoming in _NEVER_DOWNGRADE_TO
 
 # Timeout (en minutos) tras el cual una AgentExecution en estado 'running' se
 # considera colgada y el reaper la fuerza a 'error'. Configurable por env.
@@ -119,10 +149,14 @@ def set_status(
     agent_type: str | None = None,
     reason: str | None = None,
     metadata: dict | None = None,
+    guard_downgrade: bool = False,      # Plan 254 F1 — solo on_execution_end lo activa
 ) -> TicketStatusEvent:
     """Actualiza stacky_status en Ticket y registra la transición en el historial.
 
     No lanza excepción si el ticket no existe: loguea advertencia y retorna None.
+
+    `guard_downgrade` (Plan 254 F1) nace en False para preservar el
+    comportamiento de TODOS los call-sites existentes byte por byte.
     """
     if new_status not in VALID_STATUSES:
         raise ValueError(f"Estado inválido: '{new_status}'. Válidos: {sorted(VALID_STATUSES)}")
@@ -134,6 +168,34 @@ def set_status(
             return None  # type: ignore[return-value]
 
         old_status = getattr(ticket, "stacky_status", None)
+
+        # Plan 254 F1 — no destruir un terminal de éxito ya alcanzado.
+        # Atómico: `old_status` se leyó en ESTA sesión, no hay carrera con el
+        # PATCH del agente ni una transacción extra en el camino caliente.
+        if guard_downgrade and _would_degrade(old_status, new_status):
+            blocked = {
+                "from": old_status, "to": new_status,
+                "execution_id": execution_id, "reason": reason,
+                # Plan 254 F1-bis — el verde preservado NO es un verde limpio.
+                "pending_review": True,
+                "kind": "dirty_close_preserved_success",
+            }
+            metadata = {**(metadata or {}), "blocked_downgrade": blocked}
+            reason = f"[254-F1] degradación bloqueada {old_status}→{new_status}; {reason or ''}".strip()
+            logger.warning(
+                "set_status: degradación BLOQUEADA ticket=%s %s→%s (exec=%s) — "
+                "el trabajo ya estaba entregado; se registra sin pisar el estado",
+                ticket_id, old_status, new_status, execution_id,
+            )
+            try:
+                # API REAL (stacky_logger.py:187): warning(source, action, **kwargs).
+                stacky_logger.warning(
+                    "ticket_status", "downgrade_blocked",
+                    ticket_id=ticket_id, **blocked,
+                )
+            except Exception:  # noqa: BLE001 — auditar nunca puede romper el cierre
+                logger.debug("stacky_logger.warning falló en guard 254", exc_info=True)
+            new_status = old_status      # se preserva el estado bueno, YA validado
 
         # Evitar duplicar eventos si el estado no cambió
         if old_status == new_status:
@@ -267,7 +329,7 @@ def on_execution_end(
 
     final_status = _coerce_terminal_status(final_status)
 
-    set_status(
+    event = set_status(
         ticket_id,
         final_status,
         changed_by="system",
@@ -275,11 +337,19 @@ def on_execution_end(
         agent_type=agent_type,
         reason=reason,
         metadata=metadata,
+        guard_downgrade=bool(
+            getattr(config.config, "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED", True)
+        ),
     )
+    # Plan 254 F1 — los post-hooks reciben el estado EFECTIVO (puede diferir del
+    # pedido si el guard preservó un terminal de éxito). `set_status` devuelve None
+    # si el ticket no existe: en ese caso se cae al pedido, como hoy.
+    effective_status = getattr(event, "new_status", None) or final_status
+
     _run_post_hooks(
         ticket_id=ticket_id,
         execution_id=execution_id,
-        final_status=final_status,
+        final_status=effective_status,
         agent_type=agent_type,
         error=error,
     )

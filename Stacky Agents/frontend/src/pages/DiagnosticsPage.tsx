@@ -14,6 +14,7 @@ import HarnessHealthCard from "../components/HarnessHealthCard";
 import PublishLedgerPanel from "../components/PublishLedgerPanel";
 import OperationalHealthCard from "../components/OperationalHealthCard";
 import CodeIntegrityCard from "../components/CodeIntegrityCard";
+import RunReconciliationCard from "../components/RunReconciliationCard";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
@@ -281,6 +282,10 @@ export default function DiagnosticsPage() {
 
       {/* Plan 130 — Verificador de integridad de código (on-demand) */}
       <CodeIntegrityCard />
+
+      {/* Plan 254 F5 — el falso ROJO, medido. READ-ONLY: lista, no cambia nada.
+          No se monta si STACKY_RUN_RECONCILIATION_ENABLED está apagada (404). */}
+      <RunReconciliationCard />
 
       {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
           maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}

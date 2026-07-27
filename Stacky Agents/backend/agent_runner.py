@@ -1031,6 +1031,7 @@ def _run_in_background(
             execution_id=execution_id,
             final_status="completed",
             agent_type=agent_type,
+            metadata_override=_copilot_outcome_meta(return_code=0),  # Plan 254 F2-bis
         )
     except copilot_bridge.CancelledError:
         _mark_terminal(execution_id, status="cancelled")
@@ -1084,12 +1085,43 @@ def _run_in_background(
             final_status="error",
             agent_type=agent_type,
             error=str(exc),
+            metadata_override=_copilot_outcome_meta(  # Plan 254 F2-bis
+                return_code=1, stderr_excerpt=str(exc),
+            ),
         )
     finally:
         _hb_stop.set()
         if _hb_thread is not None and _hb_thread.is_alive():
             _hb_thread.join(timeout=2)
         log_streamer.close(execution_id)
+
+
+def _copilot_outcome_meta(*, return_code: int, stderr_excerpt: str = "") -> dict | None:
+    """Plan 254 F2-bis — desenlace clasificado del runtime GitHub Copilot Pro.
+
+    FALLBACK DECLARADO: `copilot_bridge.py` es request/response, no tiene proceso
+    hijo, ni readers, ni `return_code`, y NO cierra runs (sus 5 `return` son
+    `BridgeResponse`; `grep -c final_status copilot_bridge.py` = 0). El dueño del
+    desenlace de Copilot es ESTE archivo. Por eso se sintetiza `return_code=0` en
+    el camino feliz y `return_code=1` en el `except` → `clean_exit` / `cli_failure`.
+    No se inventa telemetría de stream que el bridge no produce.
+
+    Devuelve None con la taxonomía apagada (nada se agrega al metadata).
+    """
+    if not config.STACKY_RUN_OUTCOME_TAXONOMY_ENABLED:
+        return None
+    try:
+        from services.run_outcome import classify_outcome_reason
+
+        return {
+            "outcome_reason": classify_outcome_reason(
+                return_code=return_code, stderr_excerpt=stderr_excerpt,
+            ),
+            "outcome_source": "github_copilot_fallback",
+        }
+    except Exception:  # noqa: BLE001 — clasificar jamás rompe el cierre
+        logger.debug("outcome_reason 254 falló (copilot)", exc_info=True)
+        return None
 
 
 def _mark_terminal(execution_id: int, *, status: str, error: str | None = None) -> None:

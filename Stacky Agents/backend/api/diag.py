@@ -762,6 +762,38 @@ def operational_health():
     return jsonify(result)
 
 
+@bp.get("/run-reconciliation")
+def run_reconciliation_route():
+    """Plan 254 F5 — el falso ROJO, medido. READ-ONLY absoluto.
+
+    Compara, para cada run terminado, el estado del ticket contra la evidencia
+    objetiva del run y LISTA las discrepancias. No cambia ningún estado, no
+    reintenta y no corre en un loop: es un GET bajo demanda. El operador decide
+    qué hacer con cada línea.
+
+    `red_with_delivered_work` es literalmente el contador del falso rojo.
+    """
+    if not bool(getattr(_config.config, "STACKY_RUN_RECONCILIATION_ENABLED", True)):
+        return jsonify({
+            "ok": False,
+            "error": "run_reconciliation_disabled",
+            "message": "La reconciliación de corridas está deshabilitada (STACKY_RUN_RECONCILIATION_ENABLED).",
+        }), 404
+    from services import run_reconciliation as rr  # import lazy (patrón Plan 109)
+
+    limit = request.args.get("limit", default=200, type=int) or 200
+    try:
+        result = rr.summarize(rr.scan_recent(limit=limit))
+    except Exception as exc:  # noqa: BLE001 — un diagnóstico jamás rompe el panel
+        logger.debug("run-reconciliation falló", exc_info=True)
+        return jsonify({
+            "ok": False, "error": type(exc).__name__,
+            "total": 0, "by_kind": {k: 0 for k in rr.DISCREPANCY_KINDS}, "items": [],
+        }), 200
+    result["ok"] = True
+    return jsonify(result)
+
+
 @bp.get("/code-integrity")
 def code_integrity_route():
     """Plan 130 — gate determinista de sintaxis + imports (read-only, sin IA)."""

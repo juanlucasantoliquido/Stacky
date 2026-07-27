@@ -38,6 +38,47 @@ def scan_text(text: str, fingerprints: list[dict] | None = None) -> list[str]:
     return hits
 
 
+# ── Plan 254 F7 — huella del FALSO ROJO ───────────────────────────────────────
+# La huella tiene DOS mitades y el grep solo cubre una:
+#   (a) en el log: `claude code cli exited with code N` + `'completed' -> 'error'`
+#       → la cubre `log_pattern` de la entrada del catalogo (id de abajo).
+#   (b) en la base: un TicketStatusEvent completed->error para esa execution
+#       → la cuenta esta funcion, porque un regex no puede correlacionar filas.
+FALSO_ROJO_DOWNGRADE_ID = "falso_rojo_downgrade_por_exit_code"
+
+
+def count_falso_rojo_downgrades(since_days: int = 30) -> int:
+    """Cuantos tickets fueron degradados de 'completed' a 'error' en N dias.
+
+    Es el KPI del plan 254 medido sobre la fuente de verdad (el historial de
+    transiciones), no sobre el texto del log. Con el guard de F1 activo tiene
+    que tender a 0. READ-ONLY: no escribe una sola fila. Nunca lanza: ante
+    cualquier fallo devuelve 0 y loguea en debug.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        from db import session_scope
+        from services.ticket_status import TicketStatusEvent
+
+        cutoff = datetime.utcnow() - timedelta(days=max(1, int(since_days)))
+        with session_scope() as session:
+            return int(
+                session.query(TicketStatusEvent)
+                .filter(TicketStatusEvent.old_status == "completed")
+                .filter(TicketStatusEvent.new_status == "error")
+                .filter(TicketStatusEvent.changed_at >= cutoff)
+                .count()
+            )
+    except Exception:  # noqa: BLE001 — un contador de diagnostico nunca rompe nada
+        import logging
+
+        logging.getLogger("stacky.services.error_fingerprints").debug(
+            "count_falso_rojo_downgrades fallo", exc_info=True
+        )
+        return 0
+
+
 def _latest_log_file() -> Path | None:
     """El stacky-*.log mas reciente en logs_dir(), o None si no hay."""
     try:

@@ -153,6 +153,12 @@ export interface AgentExecution {
   ticket_title?: string | null;
   // P2.3: campo portado de WS2 — nombre del .agent.md asociado a la ejecucion
   agent_filename?: string | null;
+  /** Plan 254 F4 — causa del desenlace (uno de OUTCOME_REASONS). */
+  outcome_reason?: string | null;
+  /** Plan 254 F4 — false = el operador solo puede esperar (p. ej. cuota agotada). */
+  outcome_actionable?: boolean;
+  /** Plan 254 F1-bis — se preservó un terminal de éxito sobre un cierre sucio. */
+  dirty_close_pending_review?: boolean;
 }
 
 /** Plan 156 F1 — respuesta del latido unico GET /api/executions/summary. */

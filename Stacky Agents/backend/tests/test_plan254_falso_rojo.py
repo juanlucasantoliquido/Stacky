@@ -1,0 +1,319 @@
+"""Plan 254 F0 — reproduce el FALSO ROJO: trabajo entregado marcado como error.
+
+Evidencia (stacky-2026-07-25.log):
+    11:56:03 ERROR [claude_code_cli] [exec=161] claude code cli exited with code 1
+    11:56:03 INFO  [stacky.ticket_status] ticket_id=673: 'completed' -> 'error'
+
+El ticket estaba en 'completed' (lo puso el propio agente vía PATCH
+/api/tickets/by-ado/{id}/stacky-status) y Stacky lo pisó con el exit code.
+
+Criterio de F0 (rojo primero): 5 de estos casos FALLAN antes de F1 (1, 5, 6, 7 y
+8) y 3 PASAN ya (2, 3 y 4 — describen el comportamiento a PRESERVAR). Si alguno
+de esos tres falla antes de tocar nada, el diagnóstico está mal y hay que frenar.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("LLM_BACKEND", "mock")
+
+
+@pytest.fixture()
+def db(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    from app import create_app  # noqa: F401 — fuerza el wiring de la app/DB
+    from db import init_db
+
+    create_app()
+    init_db()
+    yield
+
+
+_ADO_SEQ = [254_000]
+
+
+# Bajo pytest la base es un shared-cache in-memory (db.py:27-29), donde el
+# thread `stacky-syslog-writer` le devuelve SQLITE_LOCKED
+# ("database table is locked") a cualquier otra conexion que lea o escriba.
+# Ese codigo NO lo cubre el busy_timeout. Toda unidad de trabajo de este archivo
+# va envuelta en run_with_retry (plan 253 F4), que reintenta con una sesion
+# NUEVA por intento. No es un verde blando: si la operacion falla por algo que
+# no es un lock, o si se agotan los intentos, la excepcion se propaga.
+def _con_reintento(fn, label: str):
+    from db import run_with_retry
+
+    return run_with_retry(fn, label=f"plan254 {label}")
+
+
+def _on_execution_end(ticket_status, **kwargs):
+    """`on_execution_end` reintentado como unidad de trabajo completa.
+
+    `set_status` abre su propia `session_scope()` (ticket_status.py:163), asi que
+    si el flush choca contra el lock del shared-cache, la transaccion se revierte
+    entera y los post-hooks NO llegan a correr: reintentar es seguro e idempotente.
+    """
+    return _con_reintento(
+        lambda: ticket_status.on_execution_end(**kwargs), "on_execution_end"
+    )
+
+
+def _new_ticket(stacky_status: str = "completed") -> int:
+    """Ticket fresco con ado_id propio (el discriminador real es (ado_id, project))."""
+    from db import session_scope
+    from models import Ticket
+
+    _ADO_SEQ[0] += 1
+
+    def _unit() -> int:
+        with session_scope() as session:
+            t = Ticket(
+                ado_id=_ADO_SEQ[0],
+                project="PLAN254",
+                title="plan 254 fixture",
+                ado_state="Active",
+                stacky_status=stacky_status,
+            )
+            session.add(t)
+            session.flush()
+            return t.id
+
+    return _con_reintento(_unit, "alta de ticket")
+
+
+def _last_event(ticket_id: int):
+    """Último TicketStatusEvent del ticket, como dict (con metadata parseada)."""
+    from db import session_scope
+    from services.ticket_status import TicketStatusEvent
+
+    def _unit():
+        with session_scope() as session:
+            row = (
+                session.query(TicketStatusEvent)
+                .filter(TicketStatusEvent.ticket_id == ticket_id)
+                .order_by(TicketStatusEvent.id.desc())
+                .first()
+            )
+            if row is None:
+                return None
+            return {
+                "old_status": row.old_status,
+                "new_status": row.new_status,
+                "reason": row.reason,
+                "metadata": json.loads(row.metadata_json) if row.metadata_json else None,
+            }
+
+    return _con_reintento(_unit, "lectura del ultimo evento")
+
+
+# ── 1. EL BUG ─────────────────────────────────────────────────────────────────
+
+
+def test_on_execution_end_no_degrada_completed_a_error(db):
+    """El caso literal del log del 07-25: 'completed' NO puede caer a 'error'."""
+    from services import ticket_status
+
+    tid = _new_ticket("completed")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid,
+        execution_id=1610,
+        final_status="error",
+        agent_type="developer",
+        error="claude code cli exited with code 1",
+    )
+    assert ticket_status.get_current_status(tid) == "completed"
+
+
+# ── 2/3/4. LO QUE HAY QUE PRESERVAR (verde ya, antes de F1) ───────────────────
+
+
+def test_on_execution_end_si_permite_error_desde_running(db):
+    """El guard NO es un cheque en blanco: un run que falla de verdad va a error."""
+    from services import ticket_status
+
+    tid = _new_ticket("running")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid, execution_id=1611, final_status="error",
+        agent_type="developer", error="build roto",
+    )
+    assert ticket_status.get_current_status(tid) == "error"
+
+
+def test_on_execution_end_permite_completed_a_needs_review(db):
+    """Escalar a revisión humana NO destruye trabajo: sigue permitido."""
+    from services import ticket_status
+
+    tid = _new_ticket("completed")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid, execution_id=1612, final_status="needs_review",
+        agent_type="developer",
+    )
+    assert ticket_status.get_current_status(tid) == "needs_review"
+
+
+def test_on_execution_end_permite_completed_a_cancelled(db):
+    """C3 — human-in-the-loop: cancelar es del OPERADOR y siempre gana."""
+    from services import ticket_status
+
+    tid = _new_ticket("completed")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid, execution_id=1613, final_status="cancelled",
+        agent_type="developer",
+    )
+    assert ticket_status.get_current_status(tid) == "cancelled"
+
+
+# ── 5. TAXONOMÍA (F2) ─────────────────────────────────────────────────────────
+
+
+def test_on_execution_end_registra_outcome_reason(db):
+    """El metadata del cambio de estado lleva un outcome_reason del vocabulario."""
+    from services import ticket_status
+    from services.run_outcome import OUTCOME_REASONS, classify_outcome_reason
+
+    reason = classify_outcome_reason(return_code=1, result_ok_seen=True)
+    tid = _new_ticket("running")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid, execution_id=1614, final_status="needs_review",
+        agent_type="developer", metadata_override={"outcome_reason": reason},
+    )
+    ev = _last_event(tid)
+    assert ev is not None
+    assert ev["metadata"]["outcome_reason"] in OUTCOME_REASONS
+
+
+# ── 6. AUDITORÍA DEL BLOQUEO ──────────────────────────────────────────────────
+
+
+def test_degradacion_bloqueada_se_audita(db):
+    """Un guard silencioso sería un falso verde nuevo: tiene que dejar rastro."""
+    from db import run_with_retry, session_scope
+    from models import SystemLog
+    from services import ticket_status
+    from services.stacky_logger import logger as stacky_logger
+
+    tid = _new_ticket("completed")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid, execution_id=1615, final_status="error",
+        agent_type="developer", error="claude code cli exited with code 1",
+    )
+
+    def _leer_auditoria() -> list[tuple[str, str]]:
+        # Unidad de trabajo COMPLETA con sesion propia: es el contrato de
+        # run_with_retry (db.py:178). Los atributos se materializan DENTRO de
+        # la sesion; afuera quedarian expirados.
+        with session_scope() as session:
+            filas = (
+                session.query(SystemLog)
+                .filter(SystemLog.action == "downgrade_blocked")
+                .filter(SystemLog.ticket_id == tid)
+                .all()
+            )
+            return [((r.level or "").lower(), r.context_json or "") for r in filas]
+
+    # El writer de SystemLog es asincronico (thread `stacky-syslog-writer`) y
+    # bajo pytest la base es un shared-cache in-memory, donde su escritura le da
+    # SQLITE_LOCKED al lector: `database table is locked: system_logs`. El
+    # busy_timeout NO cubre ese codigo, por eso la lectura va envuelta en
+    # run_with_retry (plan 253 F4), que reintenta con una sesion nueva.
+    # Poll acotado: NO es un verde blando — si la fila no aparece nunca, falla.
+    rows: list[tuple[str, str]] = []
+    level = ""
+    context = ""
+    for _ in range(20):
+        stacky_logger.flush_now(timeout=2.0)
+        rows = run_with_retry(_leer_auditoria, label="plan254 lectura de auditoria")
+        if rows:
+            level, context = rows[0]
+            break
+        time.sleep(0.1)
+
+    assert rows, "el bloqueo no dejó SystemLog"
+    assert level == "warning"
+    # El estado que se QUISO escribir tiene que quedar registrado.
+    assert "error" in context
+
+
+# ── 7. LOS POST-HOOKS SIGUEN CORRIENDO (C4) ───────────────────────────────────
+
+
+def test_degradacion_bloqueada_corre_los_post_hooks(db):
+    """C4 — si el guard salteara _run_post_hooks se rompería el sync con ADO."""
+    from services import ticket_status
+
+    seen: list[dict] = []
+
+    def _spy(**kwargs):
+        seen.append(kwargs)
+
+    ticket_status.register_post_hook(_spy)
+    try:
+        tid = _new_ticket("completed")
+        _on_execution_end(
+        ticket_status,
+            ticket_id=tid, execution_id=1616, final_status="error",
+            agent_type="developer", error="claude code cli exited with code 1",
+        )
+    finally:
+        ticket_status._POST_HOOKS.remove(_spy)
+
+    assert seen, "el post-hook NO corrió con el guard activo"
+    assert seen[-1]["final_status"] == "completed", (
+        "el post-hook recibió el estado PEDIDO en vez del EFECTIVO"
+    )
+
+
+# ── F1-bis. EL VERDE PRESERVADO NO ES UN VERDE LIMPIO (C6) ────────────────────
+
+
+def test_bloqueo_sella_pending_review(db):
+    """Sin este sello, F1 cambiaría un falso ROJO por un falso VERDE."""
+    from services import ticket_status
+
+    tid = _new_ticket("completed")
+    _on_execution_end(
+        ticket_status,
+        ticket_id=tid, execution_id=1617, final_status="error",
+        agent_type="developer", error="claude code cli exited with code 1",
+    )
+    ev = _last_event(tid)
+    assert ev is not None
+    blocked = (ev["metadata"] or {}).get("blocked_downgrade")
+    assert blocked is not None, "el evento no lleva blocked_downgrade"
+    assert blocked["pending_review"] is True
+    assert blocked["kind"] == "dirty_close_preserved_success"
+    assert blocked["from"] == "completed" and blocked["to"] == "error"
+    # El estado NO se toca: Stacky marca y muestra, decide el humano.
+    assert ev["new_status"] == "completed"
+
+
+# ── 8. CONTRATO CON EL VOCABULARIO (C3) ───────────────────────────────────────
+
+
+def test_guard_solo_usa_estados_del_vocabulario():
+    """Sin esto, un literal inventado ('published'/'failed') deja el guard INERTE."""
+    from services import ticket_status
+    from services.status_vocabulary import VALID_TICKET_STATUSES
+
+    usados = ticket_status._SUCCESS_TERMINALS | ticket_status._NEVER_DOWNGRADE_TO
+    assert usados <= VALID_TICKET_STATUSES, (
+        f"el guard usa estados que NO existen: {sorted(usados - VALID_TICKET_STATUSES)}"
+    )
+    # Riel duro: cancelar es del operador y jamás se bloquea.
+    assert "cancelled" not in ticket_status._NEVER_DOWNGRADE_TO
+    assert "needs_review" not in ticket_status._NEVER_DOWNGRADE_TO

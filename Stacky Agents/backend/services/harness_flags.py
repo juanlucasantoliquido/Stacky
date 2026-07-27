@@ -291,6 +291,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED",  # Plan 208 — auto-sync al completar un agente
         # Plan 253 — barrera de escrituras de arranque + reintento por unidad de trabajo
         "STACKY_STARTUP_WRITE_BARRIER_WAIT_S", "STACKY_SQLITE_LOCK_RETRY_ENABLED",
+        # Plan 254 — fin del falso ROJO: guard anti-degradacion, taxonomia de
+        # desenlaces y drenaje del stream medido.
+        "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED",
+        "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED",
+        "STACKY_CLI_STREAM_DRAIN_TIMEOUT_S",
     ),
     "observabilidad_notif": (
         "STACKY_RELIABILITY_KPIS_ENABLED", "STACKY_QUALITY_KPIS_ENABLED",
@@ -310,6 +315,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Plan 253 — purga por retencion del historial de actividad
         "STACKY_SYSLOG_AUTO_PURGE_ENABLED", "STACKY_SYSLOG_PURGE_INTERVAL_S",
         "STACKY_SYSLOG_RETENTION_DAYS",
+        # Plan 254 — lo que solo se VE: badge de causa y panel de reconciliacion.
+        "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED", "STACKY_RUN_RECONCILIATION_ENABLED",
         "STACKY_COST_CENTER_ENABLED", "STACKY_COST_CODEBURN_IMPORT_ENABLED",
         "STACKY_COST_CODEBURN_IMPORT_PATH",  # Plan 142
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
@@ -5056,6 +5063,72 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "destructiva e irreversible)."
         ),
         group="global",
+    ),
+
+    # ── Plan 254 — fin del falso ROJO: cierre veraz de las corridas ─────────
+    FlagSpec(
+        key="STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED",
+        type="bool",
+        label="No pisar un trabajo ya terminado con un error posterior",
+        description=(
+            "Plan 254 - Si un ticket ya quedo terminado con exito, un cierre posterior "
+            "en error NO lo pisa: se conserva el estado bueno, se registra el intento y "
+            "el caso queda marcado para que lo revise una persona. Asimetrico a proposito: "
+            "cancelar y mandar a revision siguen permitidos."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_RUN_OUTCOME_TAXONOMY_ENABLED",
+        type="bool",
+        label="Clasificar la causa del desenlace de cada corrida",
+        description=(
+            "Plan 254 - Distingue nueve desenlaces (cuota agotada, bloqueo previo, "
+            "quedo ocioso tras entregar, tiempo maximo excedido, perdida de senal, fallo "
+            "real del runtime...) que hoy se ven todos igual. Solo agrega informacion."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_CLI_STREAM_DRAIN_TIMEOUT_S",
+        type="float",
+        # SIN default= (numerica; el default EFECTIVO 15.0 vive en config.py).
+        label="Espera maxima para terminar de leer la salida del agente (segundos)",
+        description=(
+            "Plan 254 - Tope de espera para terminar de leer lo que el agente dejo en "
+            "vuelo antes de decidir como termino. Es un TECHO, no un costo: si ya no "
+            "queda nada por leer, se sigue de largo. El plazo se reparte entre los dos "
+            "lectores, no se cuenta para cada uno."
+        ),
+        group="global",
+        min_value=1,
+        max_value=120,
+    ),
+    FlagSpec(
+        key="STACKY_UI_OUTCOME_REASON_BADGE_ENABLED",
+        type="bool",
+        label="Mostrar la causa del desenlace en el detalle de la corrida",
+        description=(
+            "Plan 254 - Pinta la causa en lenguaje humano y avisa cuando se conservo un "
+            "estado bueno sobre un cierre sucio. Apagada, el detalle no recibe el dato y "
+            "el aviso no se dibuja."
+        ),
+        group="global",
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_RUN_RECONCILIATION_ENABLED",
+        type="bool",
+        label="Contar las corridas cuyo estado no coincide con la evidencia",
+        description=(
+            "Plan 254 - Compara el estado de cada ticket contra lo que de verdad paso en "
+            "su corrida y lista las diferencias. Solo lectura: no cambia ni un estado, no "
+            "reintenta y no corre solo (se consulta a pedido)."
+        ),
+        group="global",
+        default=True,
     ),
 )
 

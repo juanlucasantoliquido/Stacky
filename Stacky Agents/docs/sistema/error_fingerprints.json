@@ -605,6 +605,28 @@
           "2026-07-18 09:12:03 INFO [stacky.syslog] syslog writer started"
         ]
       }
+    },
+    {
+      "id": "falso_rojo_downgrade_por_exit_code",
+      "title": "falso ROJO: un ticket ya 'completed' degradado a 'error' por el exit code del CLI",
+      "class": "false-red-downgrade",
+      "status": "resolved",
+      "log_pattern": "ticket_id=\\d+: 'completed' \\S+ 'error'",
+      "log_guarded": true,
+      "killed_by": "plan 254 F1 (guard anti-degradacion ATOMICO dentro de set_status)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-27",
+      "guard_test": "tests/test_plan254_falso_rojo.py",
+      "evidence": "backend/services/ticket_status.py:_would_degrade + set_status(guard_downgrade=True)",
+      "note": "Correlacion completa de la huella: 'claude code cli exited with code N' seguido de un TicketStatusEvent completed->error para la misma execution. El regex cubre la mitad que vive en el log; la mitad de BD la cuenta run_reconciliation.red_with_delivered_work. Con el guard activo la linea pasa a ser 'completed' -> 'completed' y esta huella deja de aparecer.",
+      "self_test": {
+        "matches": [
+          "2026-07-25 11:56:03 INFO [stacky.ticket_status] ticket_id=673: 'completed' -> 'error' (exec=161, by=system)"
+        ],
+        "clean": [
+          "2026-07-25 11:56:03 INFO [stacky.ticket_status] ticket_id=673: 'running' -> 'error' (exec=161, by=system)"
+        ]
+      }
     }
   ]
 }

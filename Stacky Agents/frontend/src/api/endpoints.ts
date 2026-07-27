@@ -3154,6 +3154,24 @@ export const CodeIntegrity = {
     }),
 };
 
+// ── Plan 254 F5 — reconciliación post-cierre: el falso ROJO, medido ──────────
+export interface RunReconciliationResponse {
+  ok?: boolean;
+  total: number;
+  by_kind: Record<string, number>;
+  items: { execution_id: number; ticket_id: number; kind: string; detail: string }[];
+}
+
+export const RunReconciliation = {
+  /** READ-ONLY: el endpoint no cambia ni un estado. `rawGet` no aplica acá:
+   *  con la flag OFF responde 404 y la card se auto-oculta con el catch. */
+  get: (): Promise<RunReconciliationResponse> =>
+    fetch("/api/diag/run-reconciliation").then((r) => {
+      if (!r.ok) throw new Error(`run reconciliation ${r.status}`);
+      return r.json();
+    }),
+};
+
 // ── Plan 253 F7 — estado de concurrencia de la base, consultable ─────────────
 export interface DbRuntimeInfo {
   sqlite_file: string | null;

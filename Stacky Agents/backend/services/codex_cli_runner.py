@@ -431,6 +431,7 @@ def _run_in_background(
             agent_manifest_file=agent_manifest_file,
             invocation_block=invocation_block,
             skills_section=_codex_skills_block,
+            agent_type=agent_type or "",                        # Plan 213 F2
         )
         if _mem_prefix_codex:
             prompt = (_mem_prefix_codex.strip() + "\n\n" + prompt).strip()
@@ -738,6 +739,27 @@ def _run_in_background(
         except Exception:  # noqa: BLE001
             logger.debug("V1.1 prompt_sha sealing falló (no crítico)", exc_info=True)
 
+        # Plan 254 F2-bis — POR QUÉ terminó así, no solo que terminó mal.
+        # Paridad con claude_code_cli_runner: viaja en metadata_override de
+        # on_execution_end → metadata_json del TicketStatusEvent. Codex no expone
+        # un `result ok` tipado en el stream, así que la evidencia de trabajo
+        # entregado llega por rc==0 y por el texto del último output.
+        _outcome_meta: dict = {}
+        if config.STACKY_RUN_OUTCOME_TAXONOMY_ENABLED:
+            try:
+                from services.run_outcome import classify_outcome_reason
+
+                _outcome_meta["outcome_reason"] = classify_outcome_reason(
+                    return_code=return_code,
+                    stall_fired=bool(_codex_stall_fired[0]),
+                    stderr_excerpt="\n".join(stderr_tail[-20:]),
+                    last_result_text=(output or "")[-4000:],
+                )
+                metadata.update(_outcome_meta)
+            except Exception:  # noqa: BLE001 — clasificar jamás rompe el cierre
+                logger.debug("[exec=%s] outcome_reason 254 falló", execution_id, exc_info=True)
+                _outcome_meta = {}
+
         # R1.1 — si el stall watchdog disparó, marcar failed/stalled y salir.
         if _codex_stall_fired[0]:
             # Plan 144 F4 (C3) — paridad de esquema con claude: mismas 6 keys.
@@ -763,6 +785,7 @@ def _run_in_background(
             ticket_status.on_execution_end(
                 ticket_id=ticket_id, execution_id=execution_id,
                 final_status="error", agent_type=agent_type, error="stalled",
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id, ticket_id=ticket_id,
@@ -796,6 +819,7 @@ def _run_in_background(
             ticket_status.on_execution_end(
                 ticket_id=ticket_id, execution_id=execution_id,
                 final_status="needs_review", agent_type=agent_type,
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id,
@@ -886,6 +910,7 @@ def _run_in_background(
                         ticket_status.on_execution_end(
                             ticket_id=ticket_id, execution_id=execution_id,
                             final_status="needs_review", agent_type=agent_type,
+                            metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
                         )
                         _notify_outcome(
                             execution_id=execution_id,
@@ -1053,6 +1078,7 @@ def _run_in_background(
                 execution_id=execution_id,
                 final_status=final_status,
                 agent_type=agent_type,
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id,
@@ -1105,6 +1131,7 @@ def _run_in_background(
                 final_status="error",
                 agent_type=agent_type,
                 error=error,
+                metadata_override=_outcome_meta or None,  # Plan 254 F2-bis
             )
             _notify_outcome(
                 execution_id=execution_id,
@@ -1374,12 +1401,14 @@ def _build_codex_prompt(
     invocation_block: str = "",
     mcp_enabled: bool = False,
     skills_section: str = "",
+    agent_type: str = "",
 ) -> str:
     """H3.1: las reglas se obtienen de harness.run_contract.rules_text en call-time.
     H4.3: skills_section se inyecta ANTES de las reglas si está presente.
     """
-    from harness.run_contract import rules_text  # noqa: PLC0415
+    from harness.run_contract import rules_text, with_assumption_policy  # noqa: PLC0415
     rules = rules_text(runtime="codex", mcp_enabled=mcp_enabled)
+    rules = with_assumption_policy(rules, agent_type)          # Plan 213 F2
 
     inventory = _format_agent_inventory(all_agents, agent_bundle_dir)
     skills_block = f"\n{skills_section.strip()}\n\n" if skills_section.strip() else ""

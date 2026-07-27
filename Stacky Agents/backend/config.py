@@ -2009,4 +2009,22 @@ class Config:
     STACKY_DB_COMPACT_ENABLED: bool = os.getenv(
         "STACKY_DB_COMPACT_ENABLED", "false").lower() in ("1", "true", "yes")
 
+    # ── Plan 254 — fin del falso ROJO: cierre veraz de las corridas ─────────
+    # Tabla unica de 5 flags (seccion F6 del plan). Los consumidores leen la
+    # INSTANCIA (`config.config.<FLAG>`), nunca el modulo. Todas nacen ON: son
+    # kill-switches, no interruptores de alta. Ninguna cae en las 4 excepciones
+    # duras (no bypasean revision humana, no son destructivas, sin prerequisito
+    # nuevo, no reducen seguridad).
+    STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED: bool = os.getenv(
+        "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_RUN_OUTCOME_TAXONOMY_ENABLED: bool = os.getenv(
+        "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_CLI_STREAM_DRAIN_TIMEOUT_S: float = float(
+        os.getenv("STACKY_CLI_STREAM_DRAIN_TIMEOUT_S", "15")
+    )
+    STACKY_UI_OUTCOME_REASON_BADGE_ENABLED: bool = os.getenv(
+        "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED", "true").lower() in ("1", "true", "yes")
+    STACKY_RUN_RECONCILIATION_ENABLED: bool = os.getenv(
+        "STACKY_RUN_RECONCILIATION_ENABLED", "true").lower() in ("1", "true", "yes")
+
 config = Config()

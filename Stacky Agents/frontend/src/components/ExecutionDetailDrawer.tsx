@@ -11,6 +11,11 @@ import ExecutionErrorAnalysisBlock from "./ExecutionErrorAnalysisBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
 import { formatStallReason, type StallMeta } from "../utils/stallReason";
+import {
+  describeOutcomeReason,
+  dirtyCloseNotice,
+  type BlockedDowngrade,
+} from "../utils/outcomeReason";
 import { formatDuration, formatCostUsd, formatInt } from "../services/format";
 import CopyAsButton, { type CopyAsOption } from "./CopyAsButton";
 import { executionToMarkdown, executionToPlainText } from "../services/copyFormats";
@@ -71,6 +76,22 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
   const stallReason = formatStallReason(metadata.stall as StallMeta | null | undefined);
   // Plan 212 F7 — si lo ejecutado no fue lo elegido, el operador tiene que verlo acá.
   const downgradeNotice = describeDowngrade(metadata);
+  // Plan 254 F4 — POR QUÉ terminó así. Seis causas distintas no pueden verse iguales.
+  const outcome = describeOutcomeReason(
+    content?.outcome_reason ?? (metadata.outcome_reason as string | undefined),
+  );
+  // Plan 254 F1-bis — regla de honestidad: un verde preservado sobre un cierre
+  // sucio NO puede presentarse como un éxito limpio.
+  const dirtyClose = dirtyCloseNotice({
+    dirty_close_pending_review: content?.dirty_close_pending_review,
+    blocked_downgrade: metadata.blocked_downgrade as BlockedDowngrade | null | undefined,
+  });
+  const outcomeToneClass =
+    outcome?.tone === "exito"
+      ? styles.toneExito
+      : outcome?.tone === "error"
+        ? styles.toneError
+        : styles.toneAtencion;
 
   const title = useMemo(() => {
     if (!content) return "Detalle de ejecución";
@@ -102,6 +123,24 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
 
         {content && (
           <>
+            {/* Plan 254 F4 — causa del desenlace y aviso de cierre sucio. */}
+            {(outcome || dirtyClose) && (
+              <section className={styles.section}>
+                <h4>Cómo terminó</h4>
+                {outcome && (
+                  <>
+                    <span className={`${styles.outcomeBadge} ${outcomeToneClass}`}>
+                      {outcome.label}
+                    </span>
+                    {outcome.action && (
+                      <p className={styles.outcomeAction}>{outcome.action}</p>
+                    )}
+                  </>
+                )}
+                {dirtyClose && <p className={styles.dirtyClose}>{dirtyClose}</p>}
+              </section>
+            )}
+
             {content.contract_result && (
               <section className={styles.section}>
                 <ContractBadge result={content.contract_result} />

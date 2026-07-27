@@ -756,7 +756,13 @@ $HarnessTestFiles = @(
   "tests/test_plan253_flags_ui.py",
   "tests/test_plan253_syslog_purge.py",
   "tests/test_plan253_db_compact.py",
-  "tests/test_plan253_health_guard.py"
+  "tests/test_plan253_health_guard.py",
+
+  # Plan 254 - fin del falso ROJO (guard anti-degradacion, taxonomia, drenaje, reconciliacion)
+  "tests/test_plan254_falso_rojo.py",
+  "tests/test_plan254_outcome_reason.py",
+  "tests/test_plan254_stream_drain.py",
+  "tests/test_plan254_reconciliation.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -1,6 +1,21 @@
 # Plan 120 — Centro de Despliegues: deploy multi-destino en 2 clicks, rollback instantáneo, verificación post-deploy y DORA local
 
-> **Estado:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-10
+> **Estado:** **IMPLEMENTADO** — F0..F8 (commits `0f09d7aa`, `b4508c18`, `7dbf0ad3`, `6c2ad6bd`,
+> `ced3dbfd`, `18007189`, `1fd06311`, `e3202e4b`; mergeado en `f1bfee79`).
+> Auditoría solo-lectura 2026-07-26 (supervisar-implementaciones-planes), evidencia contra código:
+> `services/deploy_planner.py`, `deploy_store.py`, `deploy_executor.py`, `deploy_diagnosis.py`,
+> `api/devops_deployments.py` existen; 5 flags en `harness_flags.py:241-245,3418-3475`;
+> F7 montado y NO inerte (`DevOpsPage.tsx:231` → `<DeploymentsSection ctx={ctx} />`);
+> F8 real (`deploymentsModel.ts:210,216,231` = `buildPendingPresetHandoff`/`consumePendingPreset`/
+> `showCreatePipelineCta`; consumido en `PipelineBuilderSection.tsx:130`; `setActiveSection`
+> propagado en `DevOpsPage.tsx:73,422`). Tests corridos de verdad, por archivo:
+> planner 23, store 9, executor 15, api 17, ai_diagnosis 6, remote_exec_deploy 9 = **79 passed**.
+> `test_plan120_flags.py` = 6 passed / **2 failed PREEXISTENTES-AMBIENTALES, no del plan**:
+> `test_defaults_effective_off` (el `.env` del operador fuerza `STACKY_DEPLOYMENTS_ENABLED=true` por la
+> directiva "flags default ON") y `test_harness_defaults_contains_flags` (`backend/harness_defaults.env`
+> congelado el 2026-07-18) — los mismos dos ya documentados en el encabezado del plan 239.
+> Pendiente único: smoke manual del deploy real contra un destino.
+> **Estado previo:** CRITICADO v2 (APROBADO-CON-CAMBIOS) — 2026-07-10
 > **Autor:** StackyArchitectaUltraEficientCode · **Juez v1→v2:** criticar-y-mejorar-plan (inline)
 > **Pipeline:** este documento pasó `proponer` y `criticar-y-mejorar-plan` (este estado). Sigue `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Pedido textual del operador:** "Quiero que me digas cómo mejorarías Stacky Agents para hacer MUCHO

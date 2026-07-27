@@ -26,6 +26,13 @@ import type {
   Catalog as BuildWorkshopCatalog,
   Toolchain as BuildWorkshopToolchain,
 } from "../components/devops/buildWorkshopModel";
+// Plan 215 — Publicador de Soluciones (contratos del backend F5/F6).
+import type {
+  PublishConfig,
+  PublishPlan,
+  PublishRunStatus,
+  PublisherSolution,
+} from "../components/devops/solutionPublisherModel";
 // Plan 171 — telemetría operativa (contratos read-only).
 import type {
   OpsSummaryResponse,
@@ -5241,3 +5248,162 @@ export interface PipelineEditCommitDto {
   stale_check: string;
   stale_check_reason?: string;
 }
+
+// ── Plan 215 — Publicador de Soluciones ──────────────────────────────────────
+// El catálogo es el MISMO del Taller de Compilación (Plan 201): acá se agrega la
+// config de publish por solución, el runner y el puente al asistente DevOps.
+
+export interface SolutionPublisherToolchain {
+  available: boolean;
+  builder: "msbuild" | "dotnet" | null;
+  msbuild_path?: string | null;
+  dotnet_path?: string | null;
+  version: string | null;
+  remediation: { message: string; command: string; url: string } | null;
+}
+
+export interface SolutionPublisherCatalog {
+  scanned_at: string | null;
+  truncated: boolean;
+  solutions: PublisherSolution[];
+}
+
+/** Respuesta de /catalog y /rescan. Campos opcionales porque el backend responde
+ *  200 con `error: "build_workshop_unavailable"` cuando falta el Plan 201. */
+export interface SolutionPublisherCatalogResponse {
+  workspace_root?: string | null;
+  catalog?: SolutionPublisherCatalog;
+  toolchain?: SolutionPublisherToolchain;
+  first_scan_ran?: boolean;
+  warning?: string;
+  error?: string;
+  detail?: string;
+}
+
+export interface SolutionPublisherFailureClass {
+  code: string;
+  hint: string;
+}
+
+export interface SolutionPublisherSummary {
+  run_id: string;
+  slug: string | null;
+  mode_effective: string | null;
+  argv: string[];
+  status: string;
+  returncode: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_sec: number | null;
+  staging_dir: string;
+  zip_path: string | null;
+  toolchain: Record<string, unknown>;
+  failure_class: SolutionPublisherFailureClass | null;
+  files: number;
+  bytes: number;
+}
+
+export interface SolutionPublisherRunStatusResponse {
+  run_id: string;
+  status: PublishRunStatus;
+  slug: string | null;
+  mode_effective: string | null;
+  argv: string[];
+  log: { ts: string; level: string; message: string }[];
+  artifact_ready: boolean;
+  error: string | null;
+  failure_class: SolutionPublisherFailureClass | null;
+  returncode: number | null;
+  summary: SolutionPublisherSummary | null;
+}
+
+export interface SolutionPublisherRunRow {
+  run_id: string;
+  slug: string | null;
+  status: PublishRunStatus;
+  mode_effective: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_sec: number | null;
+  artifact_ready: boolean;
+  failure_class: SolutionPublisherFailureClass | null;
+}
+
+/** POST /run: 200 SIEMPRE para doctor/unsupported (el wrapper api.* lanza en non-2xx). */
+export interface SolutionPublisherRunResponse {
+  run_id?: string;
+  status?: "running" | "toolchain_missing" | "unsupported";
+  toolchain?: SolutionPublisherToolchain;
+  reason?: string;
+  plan?: PublishPlan;
+  error?: string;
+  detail?: string;
+}
+
+export interface SolutionPublisherDeepScanResponse {
+  paths?: string[];
+  new_paths?: string[];
+  timed_out?: boolean;
+  warning?: string;
+  error?: string;
+  detail?: string;
+}
+
+export interface SolutionPublisherImportResponse {
+  added?: string[];
+  rejected?: { path: string; reason: string }[];
+  catalog?: SolutionPublisherCatalog;
+  error?: string;
+  detail?: string;
+}
+
+export const DevOpsSolutionPublisher = {
+  catalog: () =>
+    api.get<SolutionPublisherCatalogResponse>("/api/devops/solution-publisher/catalog"),
+  rescan: () =>
+    api.post<SolutionPublisherCatalogResponse>("/api/devops/solution-publisher/rescan", {}),
+  saveConfig: (slug: string, config: Partial<PublishConfig>) =>
+    api.post<{ config: PublishConfig }>("/api/devops/solution-publisher/config", {
+      slug,
+      config,
+    }),
+  importSolutions: (paths: string[]) =>
+    api.post<SolutionPublisherImportResponse>("/api/devops/solution-publisher/solutions/import", {
+      paths,
+      confirm: true,
+    }),
+  deepScan: () =>
+    api.post<SolutionPublisherDeepScanResponse>("/api/devops/solution-publisher/deep-scan", {}),
+  run: (slug: string) =>
+    api.post<SolutionPublisherRunResponse>("/api/devops/solution-publisher/run", {
+      slug,
+      confirm: true,
+    }),
+  runStatus: (runId: string) =>
+    api.get<SolutionPublisherRunStatusResponse>(
+      `/api/devops/solution-publisher/runs/${encodeURIComponent(runId)}/status`,
+    ),
+  cancelRun: (runId: string) =>
+    api.post<{ cancelled: boolean }>(
+      `/api/devops/solution-publisher/runs/${encodeURIComponent(runId)}/cancel`,
+      { confirm: true },
+    ),
+  runs: (slug?: string) =>
+    api.get<{ runs: SolutionPublisherRunRow[] }>(
+      `/api/devops/solution-publisher/runs${slug ? `?slug=${encodeURIComponent(slug)}` : ""}`,
+    ),
+  registerDeployApp: (runId: string, targets?: Record<string, unknown>) =>
+    api.post<{ app: DeployApp }>("/api/devops/solution-publisher/register-deploy-app", {
+      run_id: runId,
+      confirm: true,
+      ...(targets ? { targets } : {}),
+    }),
+  assistContext: (runId: string) =>
+    api.get<{ project: string; message: string }>(
+      `/api/devops/solution-publisher/runs/${encodeURIComponent(runId)}/assist-context`,
+    ),
+  /** Descarga por navegador (`<a download>`): api.get LANZA en non-2xx y además
+   *  devuelve JSON, no el binario. */
+  artifactDownloadUrl: (runId: string) =>
+    `/api/devops/solution-publisher/runs/${encodeURIComponent(runId)}/artifact/download`,
+};

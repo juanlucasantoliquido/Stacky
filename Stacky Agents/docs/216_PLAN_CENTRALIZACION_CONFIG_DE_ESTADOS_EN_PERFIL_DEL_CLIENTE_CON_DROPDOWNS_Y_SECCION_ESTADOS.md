@@ -3,6 +3,12 @@
 > **ESTADO 2026-07-26: IMPLEMENTADO** — F0/F1 (backend, commit `e4f45c58`), F2/F3 (pestaña Estados, `2b384667`) y F4 (pasada UX + huella, este commit). SIN push.
 >
 > Dos cosas quedaron fuera y están declaradas en los commits: (a) `grep "Config de Flujo"` deja 1 hit en `TicketBoard.tsx:546` — archivo con trabajo sin commitear de la sesión paralela; es un copy de una línea. (b) El criterio pedía 3 archivos `test_plan216_*` registrados en el arnés: existen 2, porque F2/F3 resultaron ser frontend puro (vitest) y no generaron un tercer test backend.
+>
+> **Auditoría solo-lectura 2026-07-26 (`supervisar-implementaciones-planes`): CONFIRMADO IMPLEMENTADO F0..F4, nada pendiente.** Evidencia contra código: F0 — `STACKY_STATE_CONFIG_CENTRALIZED_ENABLED` en `config.py` (2 hits), `harness_flags.py:270` (categoría `flujo_funcional`) y `:1951` (FlagSpec), `state_flow` en `services/client_profile.py` (11 hits). F1 — `services/flow_config_store.py:144` `state_flow_centralized_enabled()` leyendo la INSTANCIA `config.config`, `:154` `_resolve_project`, `:165` `_read_state_flow_from_profile`, consumido en `:234,248,298` (NO inerte). F2/F3 — `pages/StatesConfigPage.tsx` + `.module.css` + `statesConfigModel.ts`, montada de verdad en `SettingsPage.tsx:2,246` (`{sub === "flow" && <StatesConfigPage />}`, id de sub-tab `"flow"` preservado ⇒ deep-links del 165 intactos). F4 — copys fijos presentes (`"Estados del tracker"`, `"Una sola fuente"`), 2 `test_plan216_*` registrados en `run_harness_tests.sh` **y** `.ps1`, huella de regresión en `docs/sistema/error_fingerprints.json` (id real: `state_config_duplicada`, no `plan216-state-typo` como decía F4.6 — desvío nominal, el guard existe).
+>
+> Tests corridos de verdad: `test_plan216_profile_schema.py` **11 passed**, `test_plan216_migration.py` **15 passed**, vitest `statesConfigModel.test.ts` **19 passed**, `test_harness_ratchet_meta.py` **4 passed**, `npx tsc --noEmit` exit 0.
+>
+> El desvío (a) de arriba quedó **RESUELTO**: `grep -rn "Config de Flujo"` sobre `docs/sistema` y `frontend/src` devuelve hoy **0 hits**. Nada del 216 queda bloqueado por trabajo ajeno.
 
 
 **Estado:** CRITICADO v2 — APROBADO-CON-CAMBIOS (2026-07-23)

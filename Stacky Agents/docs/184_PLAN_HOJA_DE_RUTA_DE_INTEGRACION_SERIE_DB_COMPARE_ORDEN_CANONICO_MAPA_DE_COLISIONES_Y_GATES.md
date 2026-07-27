@@ -1,6 +1,36 @@
 # Plan 184 — Hoja de ruta de integración de la serie DB Compare: cierre del portafolio, mapa de colisiones VIVO y gates
 
-**Estado:** CRITICADO v2 — RE-SCOPEADO POR VIGENCIA (v1 -> v2, 2026-07-23, juez StackyArchitectaUltraEficientCode vía `criticar-y-mejorar-plan`). v1 PROPUESTO 2026-07-18.
+**Estado:** **EJECUTADO — GATE-0 CORRIDO 2026-07-26, PASA CON 1 SALVEDAD DE ENTORNO + 1 PASO INEJECUTABLE.** La capa 176 (única pendiente según §3) YA ESTÁ IMPLEMENTADA, así que el DoD §6 queda cumplido salvo el punto 6. Auditoría solo-lectura por `supervisar-implementaciones-planes`.
+
+### Resultado literal de GATE-0 (§1), corrido el 2026-07-26
+
+| Paso | Resultado | Detalle |
+|---|---|---|
+| §1.1 compileall `services api` | **VERDE** | exit 0 |
+| §1.2 `npx tsc --noEmit` | **VERDE** | exit 0, 0 errores |
+| §1.3 greps de contratos congelados | **VERDE — TODOS EXACTOS** | `DbCompareDemo`=1, `DbCompareMasking`=1, `DbCompareWatch`=1, `DbCompareRepo`=1, `export const DbCompare = `=1; `def create_run`=1 con `initiated_by` presente; `data_merge_mode: bool = False`=**2**; `import-config` en `api/db_compare.py`=4 (≥2 pedido); `register_blueprint` de los 4 blueprints=**4** |
+| §1.4 suites por archivo (37 archivos) | **VERDE CON `.venv` (py3.13.5) / 2 ROJOS CON `venv` (py3.11.9)** | ver salvedad abajo |
+| §1.5 regenerar `harness_defaults.env` por script | **INEJECUTABLE** | `backend/scripts/export_harness_defaults.py` **NO EXISTE** en el repo (los scripts presentes son `check_code_integrity.py`, `check_serie_gates.sh`, `check_serie_ux_gates.sh`, `copilot_login.py`, `regen_gitlab_derived_corpus.py`, `rescue_execution.py`, `run_harness_tests.ps1/.sh`). El paso está mal especificado: nombra un generador que nunca se construyó. Proxy corrido en su lugar: `test_harness_flags_bounds.py` → 17 passed / **1 failed** (`test_bounds_map_is_frozen`), rojo AJENO ya conocido y recurrente |
+| §1.6 vitest de los 6 archivos dbcompare | **VERDE** | corridos los 6 + `wizardLogic.test.ts` = **7 files / 49 tests passed** |
+
+**Salvedad de entorno (§1.4) — hallazgo REAL, no cosmético.** GATE-0 dice literalmente `"./venv/Scripts/python.exe"`. En `Stacky Agents/backend/` conviven DOS venvs: `venv` = **py3.11.9** y `.venv` = **py3.13.5**. Corrido con el que el doc ordena (`venv`, 3.11.9):
+
+- `test_plan180_scanner.py` → **8 failed, 4 passed**
+- `test_plan180_api.py` → **3 failed, 8 passed**
+- Causa raíz única: `services/dbcompare_repo_scripts.py:174` usa `os.path.isjunction(full)`, y **`os.path.isjunction` sólo existe desde Python 3.12**. En 3.11 lanza `AttributeError: module 'ntpath' has no attribute 'isjunction'` — o sea el escáner de scripts SQL del plan 180 **está muerto en runtime**, no sólo en tests, en cualquier entorno py<3.12.
+- Con `.venv` (3.13.5) los mismos dos archivos dan **12 passed** y **11 passed**.
+- **Decisión de reporte:** no es un rojo de la consolidación 2026-07-20 (el código está bien contra 3.12+), pero SÍ es una dependencia de versión no declarada. Si el deploy congelado corre py3.11, el puente diff→repo del 180 se cae. Queda como recomendación para un plan futuro (piso de versión declarado o fallback `getattr(os.path, "isjunction", lambda p: False)`); NO se arregló acá por el mandato solo-lectura.
+- Flaky confirmado y descartado: `test_plan181_response.py::test_bundle_dml_byte_identico_con_masking_on` falló 1 vez y pasó **7/7** al re-correrlo aislado en AMBOS venvs. Es el flaky de timing ya conocido del 181, no una regresión.
+
+**Los 35 archivos restantes de §4(b) dieron verde**, entre ellos: plan122 (7+6+7), plan123 (8+6), plan125 (10), plan126 (9+9), plan157 (10+12+8+6), plan178 (4+8+17+9+14+9), plan179 (18+16), plan180 coverage/extract (8+9), plan181 (12+7+11), plan182 (13+8+4), plan183 (7+6+8+3), `test_harness_flags.py` (56), `test_harness_flags_requires.py` (9).
+
+### Capa 176 (§3): YA NO ESTÁ PENDIENTE
+
+Verificado 2026-07-26 contra código: `GatesPanel` montado en `DbComparePage.tsx` (2 hits), `excluded_keys` en `services/dbcompare_scripts.py` (8 hits), firma COMBINADA `create_run(source_alias, target_alias, *, mode="fresh", initiated_by="operator", source_snapshot_id=None, target_snapshot_id=None)` (`dbcompare_runs.py:207-215` — cada kwarg UNA sola vez, §4(c) anti-duplicado **VERDE**), y **12 archivos `test_plan176_*` corridos por archivo = 153 passed, 0 failed**. La numeración de línea del doc (`:130`) drifteó a `:207`, tal como el propio §2 anticipaba: anclar por símbolo, no por línea.
+
+**DoD §6:** 1 ✔ (con la salvedad de §1.5 inejecutable) · 2 ✔ · 3 ✔ · 4 ✔ · 5 (parcial: este encabezado queda EJECUTADO) · 6 ✖ **imposible**: no existe el script que el punto exige. Único trabajo real que sigue abierto del 184: nada de implementación — sólo la decisión del operador sobre el piso de versión de Python y sobre si se construye alguna vez el `export_harness_defaults.py`.
+
+**Estado previo:** CRITICADO v2 — RE-SCOPEADO POR VIGENCIA (v1 -> v2, 2026-07-23, juez StackyArchitectaUltraEficientCode vía `criticar-y-mejorar-plan`). v1 PROPUESTO 2026-07-18.
 
 **Veredicto sobre v1: RECHAZADO por vigencia (C1, C2 BLOQUEANTES) → reescrito a v2.** La premisa central del v1 (ordenar la integración de 8 planes pendientes) quedó obsoleta: **7 de las 8 capas (157, 178-183) ya están IMPLEMENTADAS y MERGEADAS a main (consolidación 2026-07-20)**, verificado contra código el 2026-07-23 (§0). La única capa pendiente es la **176** (en re-crítica v2 por sesión paralela en este momento). Este v2 re-scopea la hoja de ruta a lo que REALMENTE falta: (GATE-0) verificar la coherencia post-merge de lo ya integrado, y (capa única) integrar el 176 contra el main real.
 

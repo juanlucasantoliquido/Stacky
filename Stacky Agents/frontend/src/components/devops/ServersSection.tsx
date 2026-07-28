@@ -9,19 +9,36 @@
  * según healthKey/gateFlagKey/gateMessage. Esta sección NO hand-rollea el gate ni
  * menciona su propia flag: el shell es la única fuente del aviso de flag-off.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Monitor, Check, AlertTriangle } from 'lucide-react';
-import { DevOpsServers, type ServerSummary } from '../../api/endpoints';
+import { DevOpsServers, type ConnectionDiagResult, type ServerSummary } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import styles from './devops.module.css';
 import t from './ServersTable.module.css'; // Plan 119 — tabla v2
 import shell from '../../pages/DevOpsPage.module.css'; // Plan 119 — .link real (F0)
 import { mapTestResultToState } from './serversTable';
+import { RemediationCard } from './RemediationCard'; // Plan 116 F4 — diagnóstico tipificado
 import { useConfirm } from '../ui';
 
 export interface ServersSectionProps {
   ctx: DevOpsSectionContext;
+}
+
+/**
+ * Plan 116 F4 — resultado de "Probar conexión".
+ *
+ * `diag` es ADITIVO: el backend lo agrega SOLO con la flag
+ * STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED en ON (`api/devops_servers.py:126-135`).
+ * El tipo de `DevOpsServers.testConnection` en `endpoints.ts` todavía declara
+ * únicamente `{ok, detail}`, así que el campo se estrecha acá en vez de ensanchar
+ * un contrato de otro archivo. Con la flag OFF `diag` nunca llega y el render
+ * queda idéntico al de hoy.
+ */
+interface ServerTestResult {
+  ok: boolean;
+  detail: string;
+  diag?: ConnectionDiagResult;
 }
 
 interface FormState {
@@ -46,7 +63,8 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingAlias, setEditingAlias] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; detail: string }>>({});
+  const [testResults, setTestResults] = useState<Record<string, ServerTestResult>>({});
+  const aliasInputRef = useRef<HTMLInputElement | null>(null); // Plan 116 F4 — destino del CTA del estado vacío
 
   const uiV2 = ctx.health?.ui_v2_enabled === true; // Plan 119 — solo re-maqueta el listado (v1 intacto)
   const rdpAvailable = ctx.health.rdp_available === true;
@@ -140,7 +158,11 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
     try {
       setActionError(null);
       const res = await DevOpsServers.testConnection(alias);
-      setTestResults((prev) => ({ ...prev, [alias]: res }));
+      // Plan 116 F4 — `diag` viaja aditivo en el payload (ver ServerTestResult).
+      const rawDiag = (res as { diag?: unknown }).diag;
+      const diag =
+        rawDiag && typeof rawDiag === 'object' ? (rawDiag as ConnectionDiagResult) : undefined;
+      setTestResults((prev) => ({ ...prev, [alias]: { ok: res.ok, detail: res.detail, diag } }));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error de red';
       setActionError(`No se pudo probar la conexión: ${msg}`);
@@ -157,6 +179,26 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
       setActionError(`No se pudo conectar por RDP: ${msg}`);
     }
   };
+
+  // Plan 116 F4 — CTA del estado vacío: lleva el foco al form de alta que YA existe
+  // (no abre nada nuevo ni muta configuración; HITL intacto).
+  const focusNewServerForm = () => {
+    aliasInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    aliasInputRef.current?.focus();
+  };
+
+  // Plan 116 F4 — estado vacío guiado (reemplaza el texto mudo en las DOS maquetas).
+  const emptyStateBlock = (
+    <div className={styles.emptyState}>
+      <h5>Sin servidores registrados</h5>
+      <p>
+        Registrá tu primer servidor para habilitar test de conexión, RDP 1-click y consola remota.
+      </p>
+      <button type="button" className={styles.btnPrimary} onClick={focusNewServerForm}>
+        Agregar servidor
+      </button>
+    </div>
+  );
 
   const handleDownloadSetup = async () => {
     try {
@@ -206,6 +248,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
         <h4 style={{ marginTop: 0 }}>{isEditing ? `Editar servidor "${editingAlias}"` : 'Nuevo servidor'}</h4>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
           <input
+            ref={aliasInputRef}
             type="text"
             value={form.alias}
             onChange={(e) => setForm({ ...form, alias: e.target.value })}
@@ -280,7 +323,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
             Windows; nunca vuelven al navegador. Usuarios y hosts no se registran en logs.
           </p>
           {servers.length === 0 ? (
-            <p style={{ opacity: 0.7 }}>Todavía no cargaste ningún servidor.</p>
+            emptyStateBlock
           ) : (
             <table className={t.tbl}>
               <thead>
@@ -292,9 +335,11 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
               <tbody>
                 {servers.map((s) => {
                   const isActive = ctx.selectedServer?.alias === s.alias;
-                  const st = mapTestResultToState(testResults[s.alias]);
+                  const test = testResults[s.alias];
+                  const st = mapTestResultToState(test);
                   return (
-                    <tr key={s.alias}>
+                    <React.Fragment key={s.alias}>
+                    <tr>
                       <td>
                         <div className={t.name}>
                           <span className={t.n}>{s.alias}</span>
@@ -325,6 +370,18 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
                         </div>
                       </td>
                     </tr>
+                    {/* Plan 116 F4 — diagnóstico tipificado en vez del string crudo del test. */}
+                    {test?.diag && !test.ok && (
+                      <tr>
+                        <td colSpan={5}>
+                          <RemediationCard
+                            result={test.diag}
+                            onRetry={() => void handleTest(s.alias)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -335,7 +392,7 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
         <div className={styles.panel}>
           <h4 style={{ marginTop: 0 }}>Servidores</h4>
           {servers.length === 0 ? (
-            <p style={{ opacity: 0.7 }}>Todavía no cargaste ningún servidor.</p>
+            emptyStateBlock
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {servers.map((s) => {
@@ -378,11 +435,19 @@ export const ServersSection: React.FC<ServersSectionProps> = ({ ctx }) => {
                         Última conexión: {new Date(s.last_connected_at).toLocaleString()}
                       </div>
                     )}
-                    {test && (
-                      <div className={test.ok ? styles.textSuccess : styles.textDanger} style={{ fontSize: '0.85em' }}>
-                        {test.detail}
-                      </div>
-                    )}
+                    {/* Plan 116 F4 — con `diag` (flag ON) se muestra la tarjeta de remediación;
+                        sin `diag` (flag OFF) el render es EXACTAMENTE el de hoy. */}
+                    {test &&
+                      (test.diag && !test.ok ? (
+                        <RemediationCard
+                          result={test.diag}
+                          onRetry={() => void handleTest(s.alias)}
+                        />
+                      ) : (
+                        <div className={test.ok ? styles.textSuccess : styles.textDanger} style={{ fontSize: '0.85em' }}>
+                          {test.detail}
+                        </div>
+                      ))}
                   </li>
                 );
               })}

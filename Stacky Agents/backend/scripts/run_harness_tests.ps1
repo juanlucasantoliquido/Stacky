@@ -784,7 +784,16 @@ $HarnessTestFiles = @(
   # Plan 258 - telemetria veraz de los ledgers (procedencia, huerfanos, purga, estanqueidad)
   "tests/test_plan258_ledger_veracidad.py",
   "tests/test_plan258_ledger_purge.py",
-  "tests/test_plan258_estanqueidad_arnes.py"
+  "tests/test_plan258_estanqueidad_arnes.py",
+
+  # Plan 242 - Centro de Costos telemetrico: estadistica + scoring (mitad read-only)
+  "tests/test_plan242_cost_signals.py",
+  "tests/test_plan242_cost_stats.py",
+  "tests/test_plan242_cost_scoring.py",
+  "tests/test_plan242_cost_api.py",
+  "tests/test_plan242_no_new_deps.py",
+  "tests/test_plan242_flags_off.py",
+  "tests/test_plan242_runtime_parity.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

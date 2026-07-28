@@ -769,6 +769,12 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_COST_CENTER_ENABLED",
     "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
     "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
+    # Plan 242 — Centro de Costos telemétrico. Las 2 nacen ON: leen, calculan y
+    # muestran sobre filas ya persistidas; no escriben un archivo, no llaman a
+    # un modelo, no abren red y no le sacan ninguna decisión al operador.
+    # Ninguna de las 2 categorías de excepción dura aplica.
+    "STACKY_COST_STATS_ENABLED",
+    "STACKY_COST_SCORING_ENABLED",
     # Plan 144 F2 — preflight de confianza de workspace (claude): kill-switch
     # default ON (detecta+falla temprano, no reduce seguridad).
     "CLAUDE_CODE_CLI_TRUST_PREFLIGHT_ENABLED",

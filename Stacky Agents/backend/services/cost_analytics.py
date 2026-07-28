@@ -24,6 +24,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from harness.pricing import _MTOK, _load_prices, estimate_cost
+from services.cost_signals import (
+    SignalRow,
+    duration_seconds,
+    extract_signal_row,
+    output_chars,
+)
 
 logger = logging.getLogger("stacky.services.cost_analytics")
 
@@ -151,6 +157,15 @@ class ExecRecord:
     # Plan 171 (aditivo, default None = 100% retrocompatible): fin de la corrida,
     # para duraciones/percentiles en services/run_signals.py.
     completed_at: datetime | None = None
+    # ── Plan 242 F0 — señales enriquecidas. TODAS con default: 100% aditivo.
+    # Ningún caller del Plan 142 las pasa, y todos los tests del 142 siguen verdes.
+    signals: SignalRow | None = None
+    duration_s: float | None = None
+    verdict: str | None = None
+    completion_source: str | None = None
+    output_chars: int | None = None
+    work_item_type: str | None = None      # de Ticket (ya cargado por el outerjoin)
+    priority: int | None = None            # de Ticket — models.py lo declara Mapped[int|None]
 
 
 @dataclass
@@ -228,7 +243,15 @@ def load_records(f: CostFilters) -> list[ExecRecord]:
                 ado_id=getattr(tk, "ado_id", None) if tk else None,
                 project=(tk.stacky_project_name or tk.project) if tk else None,
                 agent_type=ex.agent_type, status=ex.status, started_at=ex.started_at, row=cr,
-                raw_metadata=md, completed_at=ex.completed_at))
+                raw_metadata=md, completed_at=ex.completed_at,
+                # Plan 242 F0 — sin query adicional: ex y tk ya están cargados.
+                signals=extract_signal_row(md),
+                duration_s=duration_seconds(ex.started_at, ex.completed_at),
+                verdict=ex.verdict,
+                completion_source=ex.completion_source,
+                output_chars=output_chars(ex.output),
+                work_item_type=getattr(tk, "work_item_type", None) if tk else None,
+                priority=getattr(tk, "priority", None) if tk else None))
     return out
 
 

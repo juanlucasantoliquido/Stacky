@@ -190,6 +190,95 @@ export interface CostDistribution {
   max: number | null;
 }
 
+/* ─── Plan 242 F6/F7 — estadística profunda y nota de eficiencia ────────────
+ * Aditivos: ninguno modifica un tipo existente. Los 2 endpoints devuelven
+ * SIEMPRE 200 (incluso apagados), así que se consumen con `api.get` y el
+ * discriminante `enabled` narrowea en el call-site — no hace falta `rawGet`. */
+
+/** Estadística descriptiva de UNA métrica. `null` = sin dato, nunca 0 inventado. */
+export interface Distribution {
+  n: number; n_missing: number; total: number | null;
+  minimum: number | null; maximum: number | null;
+  mean: number | null; median: number | null; stdev: number | null;
+  q1: number | null; q3: number | null; iqr: number | null;
+  cv: number | null; mad: number | null;
+  p50: number | null; p75: number | null; p90: number | null;
+  p95: number | null; p99: number | null;
+}
+
+export interface HistBin { lo: number; hi: number; count: number }
+
+export interface OutlierReport {
+  method: "tukey" | "mad";
+  fence_low: number | null; fence_high: number | null;
+  indices: number[]; n_outliers: number;
+  /** false ⇒ no se declara NINGÚN outlier; `reason` explica por qué en español. */
+  applicable: boolean; reason: string;
+}
+
+export interface MetricStats {
+  overall: Distribution; histogram: HistBin[];
+  outliers_tukey: OutlierReport; outliers_mad: OutlierReport;
+}
+
+export interface StatsBlock {
+  metrics: Record<string, MetricStats>;
+  by_dimension: Record<string, Record<string, Distribution>>;
+  cache_efficiency: Record<string, number | null>;
+  rework: Record<string, unknown>;
+  runs_total: number;
+}
+
+export interface CostStats {
+  ok: true; enabled: true; generated_at: string;
+  filters_echo: FiltersEcho; capped: boolean; metric: string;
+  /** G7 — nunca se mezclan: Copilot es suscripción plana y va aparte. */
+  billable_only: StatsBlock; nominal_only: StatsBlock;
+}
+export type CostStatsResponse = CostCenterDisabled | CostStats;
+
+export type Grade = "A" | "B" | "C" | "D" | "E" | "N/D";
+
+export interface ExecutionScore {
+  execution_id: number; ticket_id: number | null; agent_type: string | null;
+  runtime: string | null; model: string | null;
+  cost_usd: number | null; cost_kind: CostKind;
+  /** null ⇒ no había con qué puntuar; se muestra "N/D", no un 0 que parezca malo. */
+  score: number | null; grade: Grade;
+  components: Record<string, number>; weights_used: Record<string, number>;
+  reasons: string[]; cohort_key: string; cohort_n: number;
+  confidence: "alta" | "media" | "baja";
+}
+
+export interface TicketScore {
+  ticket_id: number; ado_id: number | null; runs: number; billable_usd: number;
+  score: number | null; grade: Grade; rework_penalty: number;
+  reasons: string[]; worst_execution_id: number | null;
+}
+
+export interface CostScores {
+  ok: true; enabled: true; generated_at: string;
+  filters_echo: FiltersEcho; capped: boolean;
+  cohorts: Record<string, {
+    n: number; median_cost_usd: number | null; median_unit_cost: number | null;
+  }>;
+  executions: ExecutionScore[]; tickets: TicketScore[];
+  grade_distribution: Record<Grade, number>;
+  runs_total: number; runs_scored: number;
+}
+export type CostScoresResponse = CostCenterDisabled | CostScores;
+
+/** Métricas de `cost_stats._METRICS`, en el mismo orden que el backend. */
+export const COST_STAT_METRICS = [
+  "cost_usd", "tokens_in", "tokens_out", "cache_read_tokens",
+  "cache_creation_tokens", "duration_s", "tokens_total", "usd_per_ktok_out",
+] as const;
+
+/** Dimensiones de `cost_stats._DIMENSIONS`. */
+export const COST_STAT_DIMENSIONS = [
+  "runtime", "model", "agent_type", "project", "work_item_type", "priority",
+] as const;
+
 /* ─── Plan 199 F6 — cosecha histórica de telemetría desde disco ─────────────
  * Los 3 endpoints devuelven SIEMPRE 200 (incluso deshabilitados), así que se
  * consumen con `api.get`/`api.post`; el discriminante `enabled`/`flag_enabled`

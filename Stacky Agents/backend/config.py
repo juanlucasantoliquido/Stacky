@@ -663,6 +663,21 @@ class Config:
         "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 242 — Centro de Costos telemétrico: estadística + scoring ────────
+    # Este es el default EFECTIVO de las dos flags (harness_flags.py sólo
+    # declara el hint de UI). Las DOS nacen ON: son estrictamente read-only
+    # (aritmética sobre filas ya persistidas), sin LLM, sin red, sin escritura
+    # en disco y sin quitarle ninguna decisión al operador — o sea, ninguna de
+    # las 2 categorías de excepción dura aplica. OFF ⇒ el endpoint responde
+    # {"enabled": false} y la UI oculta el sub-tab: comportamiento byte-idéntico
+    # al del Plan 142 + 158.
+    STACKY_COST_STATS_ENABLED: bool = os.getenv(
+        "STACKY_COST_STATS_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_COST_SCORING_ENABLED: bool = os.getenv(
+        "STACKY_COST_SCORING_ENABLED", "true"
+    ).strip().lower() == "true"
+
     # ── Plan 67 — Disciplina de procesos: reutilizar por default ──────────────
     # OFF por defecto: con OFF enrich_blocks es byte-idéntico al plan 64.
     STACKY_PROCESS_DISCIPLINE_ENABLED: bool = os.getenv(

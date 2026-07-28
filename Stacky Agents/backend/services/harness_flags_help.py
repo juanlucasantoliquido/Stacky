@@ -1700,6 +1700,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el detalle de la ejecución queda como está hoy, sin la ficha de traza.",
         example="Como el resumen de un viaje: hora de salida, hora de llegada, cuánto costó y qué tramos no quedaron registrados.",
     ),
+    "STACKY_COST_STATS_ENABLED": PlainHelp(
+        what="Agrega al Centro de Costos una vista de estadística fina del gasto: mediana, percentiles, dispersión y las corridas que se salieron de lo normal.",
+        on_effect="Si la activás: dentro del Centro de Costos aparece la solapa Estadísticas, con la mediana, los percentiles y las corridas fuera de rango.",
+        off_effect="Si la apagás: el Centro de Costos queda igual que antes, solo con totales y promedios, sin la solapa Estadísticas.",
+        example="Un promedio de 40 dólares esconde si fueron 400 corridas parejas o 3 que se comieron casi todo; esta vista te dice cuál de las dos pasó.",
+    ),
+    "STACKY_COST_SCORING_ENABLED": PlainHelp(
+        what="Le pone una nota de 0 a 100 y una letra de la A a la E a cada corrida y a cada incidencia, según qué tan bien se gastó la plata.",
+        on_effect="Si la activás: aparece la solapa Puntaje, con la nota de cada corrida y las razones en castellano que la explican, una por una.",
+        off_effect="Si la apagás: no se calcula ninguna nota y el Centro de Costos queda igual que antes, sin la solapa Puntaje.",
+        example="Una corrida de 80 centavos puede ser barata si resolvió algo grande de una, o cara si fue el tercer intento por un error de tipeo.",
+    ),
     "STACKY_NIGHT_FOUNDRY_ENABLED": PlainHelp(
         what="Un turno de trabajo nocturno que prepara material para revisar a la mañana: críticas de planes, revisiones de ramas y carpetas de trabajo listas para arrancar.",
         on_effect="Si la activás: aparece el panel de la Fragua con el resumen de la última noche y un botón para correr un turno a mano. Nada arranca solo: la corrida nocturna la programás vos.",

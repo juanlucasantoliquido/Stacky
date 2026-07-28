@@ -25,6 +25,9 @@ from config import config as _cfg
 from db import session_scope
 from models import AgentExecution, SystemLog, Ticket
 from services import cost_analytics as ca
+from services import cost_scoring as csc
+from services import cost_stats as cst
+from services.cost_analytics import _billable as cs_billable
 
 logger = logging.getLogger("stacky.metrics")
 
@@ -791,6 +794,102 @@ def cost_reconciliation_audit():
         "delta_usd": round(canonical_billable - legacy_reported, 6),
         "codex_invisible_usd": codex_invisible,
         "runs_audited": len(records),
+    })
+
+
+# ── Plan 242 — Centro de Costos telemétrico: estadística + scoring ───────────
+# Aditivo y estrictamente READ-ONLY: no escribe un archivo, no registra ningún
+# hook, no toca app.py. No modifica ticket-costs/project-costs/_execution_costs
+# (legacy intactos, R3) ni ninguno de los 8 endpoints de costo ya existentes.
+# Reusa `_filters_or_error` y `load_records`: los filtros que el operador puso
+# valen igual acá, y no hay una segunda definición de "filtro de costo".
+
+def _cost_stats_enabled() -> bool:
+    return bool(getattr(_cfg, "STACKY_COST_STATS_ENABLED", False))
+
+
+def _cost_scoring_enabled() -> bool:
+    return bool(getattr(_cfg, "STACKY_COST_SCORING_ENABLED", False))
+
+
+def _split_billable(records: list) -> tuple[list, list]:
+    """G7 — facturable y nominal NUNCA se mezclan en el mismo agregado."""
+    billable, nominal = [], []
+    for r in records:
+        (billable if cs_billable(r.row.cost_kind) else nominal).append(r)
+    return billable, nominal
+
+
+@bp.get("/cost-stats")
+def cost_stats():
+    """Percentiles, dispersión, outliers, eficiencia de cache y rework.
+
+    Un promedio sobre una distribución de cola larga (que es exactamente la
+    forma de los costos de agentes: muchos runs baratos, pocos carísimos)
+    miente sistemáticamente. Esto es lo que distingue "gasté 40 USD en 400 runs
+    parejos" de "gasté 40 USD donde 3 runs se comieron 32".
+    """
+    if not (_cost_center_enabled() and _cost_stats_enabled()):
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+
+    metric = (request.args.get("metric") or "cost_usd").strip()
+    if metric not in cst._METRICS:
+        return jsonify({"ok": False, "error": "invalid_metric"}), 400
+    dimension = (request.args.get("dimension") or "cost_usd").strip()
+    dimension_metric = metric if request.args.get("dimension") is None else dimension
+    if dimension_metric not in cst._METRICS:
+        return jsonify({"ok": False, "error": "invalid_dimension"}), 400
+    try:
+        bins = int(request.args.get("bins", 10))
+    except (TypeError, ValueError):
+        bins = 10
+    bins = max(1, min(bins, 100))
+
+    records = ca.load_records(f)
+    billable, nominal = _split_billable(records)
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "filters_echo": ca.filters_echo(f),
+        "capped": len(records) == ca._MAX_ROWS,
+        "metric": metric,
+        # Las dos claves SIEMPRE presentes: omitir la vacía obligaría a la UI a
+        # adivinar si no hubo datos o si la clave no vino.
+        "billable_only": cst.stats_payload(billable, bins=bins,
+                                           dimension_metric=dimension_metric),
+        "nominal_only": cst.stats_payload(nominal, bins=bins,
+                                          dimension_metric=dimension_metric),
+    })
+
+
+@bp.get("/cost-scores")
+def cost_scores():
+    """Nota 0–100 y letra A–E por ejecución y por ticket, con sus razones.
+
+    Responde "¿este gasto estuvo bien?", que es la pregunta que el operador
+    realmente tiene y que ningún total responde.
+    """
+    if not (_cost_center_enabled() and _cost_scoring_enabled()):
+        return jsonify({"enabled": False}), 200
+    f, err = _filters_or_error(request.args)
+    if err:
+        return err
+    try:
+        top_n = int(request.args.get("top_n", 50))
+    except (TypeError, ValueError):
+        top_n = 50
+    top_n = max(1, min(top_n, 200))
+
+    records = ca.load_records(f)
+    return jsonify({
+        "ok": True, "enabled": True,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "filters_echo": ca.filters_echo(f),
+        "capped": len(records) == ca._MAX_ROWS,
+        **csc.score_payload(records, top_n=top_n),
     })
 
 

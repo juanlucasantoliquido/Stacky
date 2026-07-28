@@ -343,6 +343,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_OPS_TELEMETRY_ENABLED",   # Plan 171 — telemetría operativa (salud/tendencias)
         "STACKY_OPS_BASELINE_ENABLED",    # Plan 171 — baselines y regresiones deterministas
         "STACKY_OPS_TRACE_ENABLED",       # Plan 171 — traza estructurada por corrida
+        # Plan 242 — Centro de Costos telemétrico. Van acá (y no en
+        # "observabilidad" a secas) por consistencia con sus hermanas de costo
+        # del 142/158, que ya viven en esta categoría.
+        "STACKY_COST_STATS_ENABLED",      # Plan 242 — percentiles, outliers, cache, rework
+        "STACKY_COST_SCORING_ENABLED",    # Plan 242 — nota A–E explicable por corrida
         "STACKY_COST_CLAUDE_CLI_TELEMETRY_PARITY_ENABLED",  # Plan 158
         "STACKY_COST_CLAUDE_MODEL_BACKFILL_ENABLED",  # Plan 158
         "STACKY_TYPED_ERROR_ENVELOPE_ENABLED",  # Plan 149 F0 — envelope de errores tipado
@@ -2214,6 +2219,38 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "-> metadata['model'] en ejecuciones históricas de claude_code_cli que ya "
             "tienen la clave vieja pero no la canónica. Idempotente, aditivo, nunca "
             "inventa costo."
+        ),
+        group="observabilidad_notif",
+    ),
+    # ── Plan 242 — Centro de Costos telemétrico: estadística + scoring ─────────
+    # Las DOS default ON: read-only puro sobre filas ya persistidas, sin LLM,
+    # sin red, sin escritura en disco y sin quitarle una decisión al operador.
+    # Ninguna de las 2 categorías de excepción dura aplica (ni gasto en reposo,
+    # ni escritura en un sistema real). El default EFECTIVO vive en config.py.
+    FlagSpec(
+        key="STACKY_COST_STATS_ENABLED",
+        type="bool",
+        default=True,   # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        label="Centro de Costos: estadística profunda",
+        description=(
+            "Plan 242 — Habilita GET /api/metrics/cost-stats: percentiles, desvío, "
+            "IQR, MAD, histograma y outliers por métrica y por dimensión, más "
+            "eficiencia de cache y rework. Read-only, sin LLM y sin red. OFF = el "
+            "endpoint responde {\"enabled\": false} y la UI oculta el sub-tab "
+            "Estadísticas."
+        ),
+        group="observabilidad_notif",
+    ),
+    FlagSpec(
+        key="STACKY_COST_SCORING_ENABLED",
+        type="bool",
+        default=True,   # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        label="Centro de Costos: nota de eficiencia por corrida",
+        description=(
+            "Plan 242 — Habilita GET /api/metrics/cost-scores: puntaje 0–100 y nota "
+            "A–E por ejecución y por ticket, con las razones en español que lo "
+            "justifican. Determinista y sin LLM. OFF = el endpoint responde "
+            "{\"enabled\": false} y la UI oculta el sub-tab Scoring."
         ),
         group="observabilidad_notif",
     ),

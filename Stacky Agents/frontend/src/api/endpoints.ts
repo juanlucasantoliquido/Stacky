@@ -1588,6 +1588,25 @@ export const CostCenter = {
       `/api/metrics/cost-reconciliation-audit${qs ? `?${qs}` : ""}`,
     );
   },
+  /* Plan 242 F6 — estadística profunda y nota de eficiencia. Los 2 devuelven
+     SIEMPRE 200 (incluso con la flag apagada), así que `api.get` alcanza: el
+     wrapper sólo lanza en non-2xx y acá no hay ninguno en el flujo normal. */
+  stats: (params?: CostFiltersParams & { metric?: string; dimension?: string; bins?: number }) => {
+    const p = costFiltersToQuery(params);
+    if (params?.metric) p.set("metric", params.metric);
+    if (params?.dimension) p.set("dimension", params.dimension);
+    if (params?.bins) p.set("bins", String(params.bins));
+    const qs = p.toString();
+    return api.get<import("../lib/costCenterTypes").CostStatsResponse>(
+      `/api/metrics/cost-stats${qs ? `?${qs}` : ""}`,
+    );
+  },
+  scores: (params?: CostFiltersParams) => {
+    const qs = costFiltersToQuery(params).toString();
+    return api.get<import("../lib/costCenterTypes").CostScoresResponse>(
+      `/api/metrics/cost-scores${qs ? `?${qs}` : ""}`,
+    );
+  },
 };
 
 /** Plan 199 F6 — cosecha histórica de telemetría desde disco.

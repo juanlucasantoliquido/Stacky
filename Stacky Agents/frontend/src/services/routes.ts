@@ -86,6 +86,26 @@ function normalizeInitial(s: RouteState): RouteState {
   return s;
 }
 
+// ── Plan 242 F7 — sub-tabs del Centro de Costos (deep-link) ─────────────────
+// Contrato: "/costcenter" y "/costcenter/resumen" son la MISMA pantalla (la de
+// siempre). Un sub-tab desconocido ("/costcenter/pepe") también cae en
+// "resumen": jamás una pantalla en blanco. Backward-compatible por construcción.
+
+export const COST_SUBTABS = ["resumen", "estadisticas", "scoring"] as const;
+export type CostSubTab = typeof COST_SUBTABS[number];
+
+/** Normaliza el 2do segmento a un sub-tab válido. undefined/desconocido ⇒ "resumen". */
+export function costSubTabFrom(subtab: string | null | undefined): CostSubTab {
+  const s = (subtab ?? "").trim().toLowerCase();
+  return (COST_SUBTABS as readonly string[]).includes(s) ? (s as CostSubTab) : "resumen";
+}
+
+/** Segmento a poner en la URL. "resumen" es el default ⇒ NO agrega segmento,
+ *  para que "/costcenter" siga siendo la URL canónica de la pantalla de siempre. */
+export function costSubTabToSegment(sub: CostSubTab): string | undefined {
+  return sub === "resumen" ? undefined : sub;
+}
+
 /** Serializa RouteState a una URL canónica (path + "?" + querystring ordenado). */
 export function serializeRoute(s: RouteState): string {
   const base = TAB_PATHS[s.tab];                          // "/", "/history", "/settings", ...

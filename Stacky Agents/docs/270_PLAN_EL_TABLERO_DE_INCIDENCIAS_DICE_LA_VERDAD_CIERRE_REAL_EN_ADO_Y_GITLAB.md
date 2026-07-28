@@ -1,11 +1,23 @@
 # Plan 270 — El tablero de incidencias dice la verdad: cierre real en ADO y GitLab
 
-**Estado:** CRITICADO v1 -> v2
+**Estado:** CRITICADO v1 -> v2 -> v3
 **Fecha:** 2026-07-28
 **Rama de trabajo sugerida:** `feat/plan-270-tablero-incidencias-verdad`
-**Numeración:** verificada en frío listando `Stacky Agents/docs/` — máximo `269`, sin duplicados ⇒ este plan es el **270**.
-**Juez v2: subagente independiente, misma corrida, contexto limpio**
-**Veredicto v1: RECHAZADO** (5 BLOQUEANTES). Todos resueltos abajo.
+**Numeración:** este plan es el **270**. El **271 YA ESTÁ TOMADO** (`271_PLAN_LA_INCIDENCIA_SE_MUEVE_AL_ESTADO_CONFIGURADO_AL_TERMINAR_EL_ANALISTA.md`, de una sesión paralela). El próximo libre real es el **272**. Ver §"Frontera con el plan 271".
+**Juez v3: segunda pasada, subagente independiente con contexto limpio, misma corrida**
+**Veredicto v1: RECHAZADO** (5 BLOQUEANTES). **Veredicto v2: RECHAZADO** (5 BLOQUEANTES nuevos, todos hallados **ejecutando**, no releyendo). Todos resueltos abajo.
+
+### CHANGELOG v2 -> v3
+
+El v2 no se releyó: se **corrió**. Censo por AST, `ast.parse` de los 13 bloques Python, `json.loads` del catálogo, y los tests que el plan nombra. Los 5 bloqueantes son de EJECUCIÓN — ninguno era visible leyendo.
+
+- **C1 (BLOQ)** — **El censo de §2 C3.bis está incompleto: son 6 sitios / 10 entradas, no 4.** Censo por AST (script en §2 C3.bis). Faltaban: `services/agent_completion_internal.py:536` `_attempt_state_change` — que hace `AdoClient().update_work_item_state(...)` **sin mirar `tracker_type` ni provider**, es decir escribe SIEMPRE en ADO, y está VIVO (llamado desde `:274` y `:476`); `services/ado_provider.py:82` (adaptador); y la **segunda** entrada de `harness/task_states.py` (`:175`, `legacy_client_fn().update_work_item_state`), que el v2 no contó. Consecuencia: el Principio 4 prometía de más, y el KPI `divergencia = 0` era inalcanzable para GitLab en el camino de completación de agente.
+- **C2 (BLOQ)** — **El ratchet de F6 nacía ROJO.** Medido: `grep -cE "provider\.update_item_state\(" harness/task_states.py` da **2**, no 1 — porque el regex cuenta el **docstring** de `:158`. El v2 congelaba 1. Un ratchet que falla el día 1 se "arregla" subiendo el número, que es exactamente lo que prohíbe. Ahora los números están **medidos y pegados**, el patrón frágil se reemplaza, y F6 se re-scopea para no chocar con el censo del 271.
+- **C3 (BLOQ)** — **La huella de regresión rompía el catálogo JSON entero.** Medido: `json.loads('{"log_pattern": "No module named \'services\.gitlab_sync\'"}')` levanta `JSONDecodeError: Invalid \escape`. Además `_REQUIRED` (`tests/test_error_fingerprints_catalog.py:18`) exige **`self_test`**, campo que el v2 **ni nombraba** (y sí nombraba dos que no son obligatorios). Ahora va el objeto JSON **literal**, con `\\.` y `self_test` real, más el test y el comando.
+- **C4 (BLOQ)** — **F5 se contradecía a sí misma y `diverged_count` volvía a quedar SIN consumidor** — que era exactamente el C6 que el v2 dijo haber arreglado. El bloque `tsx` renderiza `divergenceSummary(visible)`; la prosa de al lado dice que el chip usa `dto?.diverged_count ?? countDiverged(visible)`. Son incompatibles: `divergenceSummary(items: IncidentInboxItem[])` **no acepta un número** y ninguna función del módulo formatea uno. Ahora existe `formatDivergenceCount(n)` y el `tsx` consume el valor del servidor.
+- **C5 (BLOQ)** — **La pata 6 declaraba UNA restricción de las SEIS que el test asserta, y dos chocan de frente con este plan.** `tests/test_harness_flags_help.py` exige además: `what` 10..200 (`:47-48`), `example` ≤300 (`:51`), `on_effect`/`off_effect` **empiezan con `"Si "`** (`:59-60`), **denylist de 15 términos** incl. `gate`/`runtime`/`backend`/`frontend`/`endpoint`/`token` (`:17-20`), **prohibido citar keys SCREAMING_SNAKE** (`_KEY_RE`, `:22`) y **prohibido citar fases `F<n>`** (`_PHASE_RE`, `:23`). El plan entero martilla "el texto NOMBRA `STACKY_GITLAB_ENABLED`" y rotula todo "F0..F6": un modelo menor copia eso a `PlainHelp` y se pone rojo. Ahora los **3 textos van literales y ya medidos**.
+- **C6..C15 (IMPORTANTES)** — el v2 "corrigió" un anclaje que el v1 tenía BIEN y lo dejó mal (`incident_inbox_status` es `:65-81` con `actions_enabled` en `:76`, verificado con `grep -n`); F4 se contradice ("sólo escribe `ado_state`" vs. delegar en `upsert_single_work_item`, que escribe **8 columnas más**); **cuatro suites rojas de fábrica sin declarar**, dos de ellas en archivos que el plan DEBE tocar; frontera con el 271 ausente; numeración de continuaciones apuntando a números tomados; `gitlab_provider.py` la key `"state"` está en `:86` (no `:85` — anclaje que **agregó** el v2); `rows[:MAX_ITEMS]` en `:158` (no `:159`); `incidentInboxModel.ts` tiene `:17`=`stacky_status` y `:19`=`is_open` (invertidos en el v2); el grep de `--color-` da **4** hits (no 3); el glosario decía **6** patas mientras el resto del plan dice **7**.
+- **[ADICIÓN ARQUITECTO]** — **F7: dry-run de destino.** El diálogo de cierre YA dispara un dry-run real (`api/tickets.py:1801`, early-return `:1934-1944`; `FinishWorkButton.tsx:80-81` lo lanza solo al abrir). F7 enriquece ESA respuesta con el destino resuelto por F0+F1 **sin escribir nada**: el operador ve *"va a GitLab, va a quedar `accepted`, cerrada"* **antes** de confirmar. Cero llamadas nuevas, cero flags nuevas, aditivo, y es el pago exacto de haber construido F0/F1 puros. Ver el bloque marcado.
 
 ### CHANGELOG v1 -> v2
 
@@ -34,11 +46,13 @@ Es decir: incidencias que **Stacky da por cerradas** pero que el tablero **sigue
 - **Antes del plan:** la divergencia crece con cada cierre y nunca se corrige sola.
 - **Después del plan:** un cierre exitoso deja la fila en su estado real de inmediato (F4), un cierre imposible lo dice en vez de fingir (F3), y lo que quedó desalineado de antes se ve marcado en pantalla (F5).
 
-**ALCANCE HONESTO DEL KPI (C3 — corregido en v2).** `stacky_status` pasa a `"completed"` desde **dos** caminos, no uno:
+**ALCANCE HONESTO DEL KPI (C3 — corregido en v2; ACOTADO EN v3 por C1).** `stacky_status` pasa a `"completed"` desde **dos** caminos, no uno:
 1. **manual** — `finish_work` (`api/tickets.py:1751`), que es el botón "Cerrar" de la bandeja (`FinishWorkButton.tsx:51,62` y el worker del lote `IncidentInboxPage.tsx:207`, ambos contra `POST /api/tickets/{id}/finish-work`);
 2. **automático** — `set_stacky_status_by_ado` (`api/tickets.py`, bloque `:1487-1509`), que corre cuando **termina un agente**, y es el de **mayor volumen**.
 
-El v1 sólo cableaba el writeback en (1) ⇒ el KPI no podía llegar a 0. En v2, **F4 se cablea en los dos**, y por eso el KPI queda enunciado sin asterisco. Para ADO el camino (2) además ya tiene refresco por `completion_sync` (flag `STACKY_ADO_SYNC_ON_COMPLETION_ENABLED` default `true`, `config.py:1398-1399`); para **GitLab ese refresco está roto** (C4 abajo) y por eso el writeback propio de F4 es la única vía.
+El v1 sólo cableaba el writeback en (1) ⇒ el KPI no podía llegar a 0. En v2, **F4 se cablea en los dos**. Para ADO el camino (2) además ya tiene refresco por `completion_sync` (flag `STACKY_ADO_SYNC_ON_COMPLETION_ENABLED` default `true`, `config.py:1398-1399`); para **GitLab ese refresco está roto** (C4 abajo) y por eso el writeback propio de F4 es la única vía.
+
+> **ASTERISCO OBLIGATORIO DEL KPI (C1 — v3, hallado por censo AST).** Existe un **tercer** motor que escribe el estado final y que el v2 no censó: `services/agent_completion_internal.py:536` `_attempt_state_change`, que hace `AdoClient().update_work_item_state(int(ado_id), target_state)` **sin consultar `tracker_type` ni provider** — o sea, escribe **siempre en Azure DevOps**, incluso para un proyecto GitLab. Está VIVO: lo llaman `:274` (paso 4 del cierre de ejecución) y `:476` (`publish_execution_from_review`). **Ese motor es territorio del plan 271** (su F3 lo enruta; ver §"Frontera con el plan 271") y **este plan NO lo toca**. Consecuencia honesta y escrita: con el 270 solo, el KPI llega a 0 en los caminos (1) y (2); **el residuo del motor de `agent_completion_internal` sólo se cierra cuando aterriza el 271**. Enunciar `divergencia = 0` sin este asterisco sería el mismo error que el v1 cometió con el camino (2). El KPI de aceptación de ESTE plan es por lo tanto: **divergencia = 0 medida sobre incidencias cerradas por (1) `finish_work` o (2) `set_stacky_status_by_ado`** — que es lo que verifican los tests 3 y 10 de F4.
 
 **Impacto secundario:** un cierre desde la bandeja sobre un proyecto GitLab hoy es, en el mejor caso, un error mudo; en el peor, una escritura contra el sistema equivocado. Este plan lo elimina.
 
@@ -90,18 +104,55 @@ else:
 
 ⇒ Con el default de fábrica, **todo ticket de GitLab cae en la rama `else` y se intenta cerrar con un cliente de Azure DevOps**, pasándole el `iid` de GitLab como si fuera un work item id de ADO. En un proyecto sin ADO configurado esto levanta y se registra como `ok: False` (`:2087-2094`); en un entorno con ADO configurado la llamada se dirige a un work item ajeno. Ninguna de las dos es aceptable: un ticket no-ADO **nunca** debe escribirse con el cliente ADO.
 
-#### C3.bis — CENSO COMPLETO de escrituras de estado (agregado en v2 por C2)
+#### C3.bis — CENSO COMPLETO de escrituras de estado (v2 lo hizo con grep y le faltaban 2 sitios; v3 lo hace por AST)
 
-El v1 hablaba de "el" call site. Son **tres vivos** (censo obtenido con `grep -rn "\.update_item_state(\|\.update_work_item_state(" backend/ --include=*.py`, excluyendo `backend/tests/`). Un modelo menor que lea sólo el Principio 4 y no este censo va a creer que el invariante ya vale en todo el repo:
+**Contar con grep textual NO alcanza** — el v2 declaró 4 sitios y la realidad son **6 sitios / 10 entradas**. Un modelo menor que lea sólo el Principio 4 y no este censo va a creer que el invariante ya vale en todo el repo.
 
-| # | Sitio | Qué es | ¿Lo arregla este plan? |
-|---|---|---|---|
-| S1 | `api/tickets.py:2076-2080` | `finish_work` — el botón "Cerrar" de la bandeja | **SÍ**, F3 |
-| S2 | `api/tickets.py:1487-1508` (provider `:1490`, cliente ADO `:1492`, `except` `:1498`) | `set_stacky_status_by_ado` — cierre **automático al terminar un agente**. Mismo patrón (`_provider_for_ticket` → `else` → `_ado_client_for_ticket(...).update_work_item_state(...)`), mismo bug, **más volumen** | **SÍ**, F3 (agregado en v2) |
-| S3 | `api/tickets.py:4776-4787` (provider `:4779`, cliente ADO `:4781`, `except` `:4787`) | Estado inicial de una **Task recién creada** (`ado.update_work_item_state(task_ado_id, target_state)`) | **NO** — carve-out: es creación de Tasks (eje del Plan 70), no cierre de incidencias; y `target_state` sale de la config de tareas, no del operador. Congelado por el ratchet de F6 |
-| S4 | `harness/task_states.py:173` | `_apply_task_state` del Plan 79, gateado por `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` (**default OFF**) | **NO** — carve-out: rama inerte con los defaults de fábrica. Congelado por el ratchet de F6 |
+**Censo REPRODUCIBLE, por AST. Corrélo ANTES de tocar nada** (guardalo en el scratchpad, no en el repo):
 
-**Efecto colateral de F2 sobre S2/S3/S4, declarado:** el guardia de F2 vive dentro de `GitLabTrackerProvider.update_item_state`, así que **protege a los cuatro** contra el `reopen` silencioso. Para S3/S4 eso convierte un `reopen` mudo en una excepción capturada por su propio `except` (`tickets.py:4787`; `harness/task_states.py` ya envuelve la llamada) ⇒ el resultado pasa de *"hizo lo contrario en silencio"* a *"no hizo nada y quedó registrado"*. Es la dirección correcta y está cubierto por el test 2 de F2 (los estados que legítimamente reabren siguen reabriendo).
+```python
+import ast, pathlib, collections
+ROOT = pathlib.Path(r"N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend")
+TARGET = {"update_item_state", "update_work_item_state"}
+hits = []
+for p in sorted(ROOT.rglob("*.py")):
+    rel = p.relative_to(ROOT).as_posix()
+    if rel.startswith(("tests/", ".venv/", "venv/")) or "__pycache__" in rel:
+        continue
+    tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
+    fns = [n for n in ast.walk(tree)
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+           and node.func.attr in TARGET:
+            owner = max(
+                (f for f in fns if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)),
+                key=lambda f: f.lineno, default=None,
+            )
+            hits.append((rel, owner.name if owner else "<module>", node.lineno,
+                         ast.unparse(node.func.value) + "." + node.func.attr))
+sites = collections.OrderedDict()
+for rel, fn, ln, expr in hits:
+    sites.setdefault((rel, fn), []).append((ln, expr))
+for (rel, fn), e in sites.items():
+    print(f"{rel}::{fn} -> {e}")
+print("ENTRADAS =", len(hits), "| SITIOS =", len(sites))
+```
+
+**Salida REAL medida en `d234021e` (pegada, no estimada) — `ENTRADAS = 10 | SITIOS = 6`:**
+
+| # | Sitio (`archivo::función`) | Entradas | Qué es | ¿Lo arregla este plan? |
+|---|---|---|---|---|
+| **S1** | `api/tickets.py::finish_work` | `:2078` provider · `:2080` cliente ADO | El botón **"Cerrar"** de la bandeja | **SÍ**, F3 |
+| **S2** | `api/tickets.py::set_stacky_status_by_ado` | `:1490` provider · `:1492` cliente ADO | Cierre **automático al terminar un agente**. Mismo patrón, mismo bug, **más volumen** | **SÍ**, F3 |
+| **S3** | `api/tickets.py::create_child_task` | `:4779` provider · `:4781` `ado.update_work_item_state` | Estado inicial de una **Task recién creada** | **NO** — carve-out: eje del **Plan 70**; `target_state` sale de la config de tareas, no del operador |
+| **S4** | `harness/task_states.py::_safe_transition` | `:173` provider · **`:175` `legacy_client_fn()`** | El escritor canónico del **Plan 79**. **Su docstring (`:155`) dice "ÚNICA función que escribe estado" y ESO ES FALSO** — hay otras cinco. No creas al docstring | **NO** — carve-out: eje del Plan 79 |
+| **S5** | `services/agent_completion_internal.py::_attempt_state_change` | `:536` `AdoClient().update_work_item_state` | **EL QUE FALTABA.** Construye el cliente ADO **directo**, sin mirar `tracker_type` ni provider ⇒ **escribe SIEMPRE en Azure DevOps**, incluso en un proyecto GitLab. **VIVO**: llamado desde `:274` y `:476` | **NO** — es del **plan 271** (su F3 lo enruta). Ver §"Frontera con el plan 271". Este plan **no lo toca** para no colisionar |
+| **S6** | `services/ado_provider.py::update_item_state` | `:82` `self._client.update_work_item_state` | **Adaptador** del puerto `TrackerProvider` → `AdoClient`. No decide destino: ya está del lado ADO por construcción | **NO** — carve-out permanente: es la implementación del puerto, no un call site de negocio |
+
+**Por qué S5 importa y no es una nota al pie.** Es el único sitio del repo que **no tiene ni siquiera la rama `_provider_for_ticket`**: S1/S2/S3 al menos preguntan; S5 va derecho a `AdoClient()`. Para un proyecto GitLab, S5 escribe en el ADO equivocado *hoy*, y este plan **no lo arregla**. Está declarado acá, en el KPI (§1) y en la frontera con el 271. Cualquier redacción que diga o sugiera lo contrario es falsa.
+
+**Efecto colateral de F2 sobre S2/S3/S4, declarado:** el guardia de F2 vive dentro de `GitLabTrackerProvider.update_item_state`, así que protege a **todos los que pasan por el provider** contra el `reopen` silencioso. Eso convierte un `reopen` mudo en una excepción capturada por su propio `except` (`tickets.py:4787`; `harness/task_states.py:179-183` ya envuelve la llamada) ⇒ el resultado pasa de *"hizo lo contrario en silencio"* a *"no hizo nada y quedó registrado"*. Cubierto por el test 2 de F2 (los estados que legítimamente reabren siguen reabriendo). **S5 NO recibe este beneficio**: nunca toca el provider de GitLab.
 
 ### C4 — Para GitLab, el auto-sync post-completación apunta a un módulo inexistente
 
@@ -141,12 +192,45 @@ Verificada contra el código real y contra `git log --oneline -40`, **no** contr
 
 ---
 
+### Frontera con el plan 271 (v3 — **obligatoria: pisan el mismo eje**)
+
+`Stacky Agents/docs/271_PLAN_LA_INCIDENCIA_SE_MUEVE_AL_ESTADO_CONFIGURADO_AL_TERMINAR_EL_ANALISTA.md` **existe** (untracked, de una sesión paralela, **CRITICADO v3 — RECHAZADO en v1 y v2**). Su tema es *mover la incidencia al estado configurado al terminar el analista*, o sea **el mismo camino de escritura de estado** que el 270 corrige. **Dos planes arreglando el mismo `if` de formas distintas es una colisión real.** Esta sección la desarma. **Este plan NO edita el 271** (es untracked ajeno); sólo declara la repartición.
+
+**Reparto de propiedad, sitio por sitio** (numeración del censo AST de §2 C3.bis):
+
+| Sitio | Quién es DUEÑO | Qué hace cada uno | ¿Se pisan? |
+|---|---|---|---|
+| **S1** `api/tickets.py::finish_work` | **270** (F3, F4, F7) | El 270 enruta el destino, refresca el estado local y previsualiza. El 271 **declara `api/tickets.py` intocable** (su §6.6: *"este plan no edita ni una línea de ese archivo"*) y sólo lo censa | **NO** |
+| **S2** `api/tickets.py::set_stacky_status_by_ado` | **270** (F3, F4) | Ídem. **Ojo, único punto de roce real:** el 271 cambia el **contenido** del dict que devuelve `close_execution_with_publish`, que esta función serializa. El 270 toca la variable local `state_change_result` (`:1466-1503`), que **no** es el `CloseResult` del 271 | **Roce, no colisión** — ver regla de merge abajo |
+| **S3** `api/tickets.py::create_child_task` | **Plan 70** | Ninguno de los dos lo toca. El 270 lo congela en F6; el 271 lo censa | NO |
+| **S4** `harness/task_states.py::_safe_transition` | **Plan 79** | El 270 **no lo toca**. El 271 le agrega **una** key (`"reason": "transition_failed"`) a su rama de error (`:180-184`) | NO |
+| **S5** `services/agent_completion_internal.py::_attempt_state_change` | **271** (su F3) | **El 270 NO lo toca.** Es el escritor que hoy va siempre a ADO; el 271 lo enruta por `get_tracker_provider`. El 270 lo declara en su KPI como residuo conocido | **NO** |
+| **S6** `services/ado_provider.py::update_item_state` | Nadie (adaptador) | Ninguno lo toca | NO |
+| `services/gitlab_provider.py::update_item_state` | **270** (F2) | El 270 le pone el guardia anti-`reopen`. El 271 **no lo toca** (única mención: un gotcha que sólo lo cita) | **NO** |
+| `services/completion_state.py`, `api/executions.py`, `frontend/src/utils/finalStateOutcome.ts` | **271** | El 270 no los menciona | NO |
+| `services/incident_inbox.py`, `api/incident_inbox.py`, `IncidentInboxPage.tsx` | **270** (F5) | El 271 tiene **0 menciones** de `incident_inbox` en sus 1791 líneas | **NO** |
+
+**Los dos ratchets/censos, repartidos (esto es lo que más fácil se pisaba):**
+- **270 F6** ⇒ `tests/test_plan270_state_write_ratchet.py`, alcance **`api/tickets.py` únicamente**, por AST, por función.
+- **271 F8** ⇒ `tests/test_plan271_censo_escritores.py`, alcance **`backend/` entero** (9 entradas, incluye llamadas a `_safe_transition`), por AST.
+⇒ **Archivos distintos, alcances anidados, misma técnica (AST).** El del 270 es un subconjunto estricto del del 271: si los dos están verdes, son consistentes; si el del 271 se pone rojo por un sitio nuevo en `api/tickets.py`, el del 270 también ⇒ señal doble, nunca contradictoria. **Ninguno de los dos se relaja para acomodar al otro.**
+
+**Flags: cero solape.** El 270 da de alta `STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED`, `STACKY_TICKET_STATE_WRITEBACK_ENABLED`, `STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED`. El 271 da de alta cuatro `STACKY_FINAL_STATE_*`. Los **7** nombres son distintos; las **7** nacen ON. El roce es sólo que **los dos editan `harness_flags.py`, `harness_flags_help.py`, `config.py` y los dos arneses de forma ADITIVA** ⇒ merge de 3 vías sin conflicto, **pero** ojo con el duplicado silencioso: si los dos agregan una línea al mismo cierre de tupla, git no marca conflicto. **Tras mergear, correr `python -m compileall backend` y `pytest tests/test_harness_flags.py -q`.**
+
+**Archivos de test: cero solape.** Los 6 del 270 son `test_plan270_*.py`; los 11 del 271 son `test_plan271_*.py`.
+
+**REGLA DE MERGE (acordada con lo que el propio 271 declara en su R10): _si los dos están listos, entra primero el 270._** Motivo: el 270 edita `api/tickets.py` y el 271 lo declara intocable, así que el 271 **nunca** genera conflicto contra el 270 en ese archivo; al revés sí habría que rebasar el 270 sobre cambios de comportamiento del 271. Implementarlos en el otro orden **también funciona** — ningún criterio de aceptación de uno depende de un símbolo del otro (verificado: los nombres `final_state_resolver`, `final_state_outcome`, `STACKY_FINAL_STATE_*` no aparecen en el 270; `tracker_write_router`, `close_intent`, `ticket_state_writeback`, `incidentDivergence` no aparecen en el 271) — pero exige re-correr `test_plan271_censo_escritores.py` después, porque el 270 no cambia los conteos del censo (F3 no borra llamadas, las mueve bajo el `else`) y eso hay que **confirmarlo, no suponerlo**.
+
+**Lo que este plan NO hace y el 271 sí:** decidir **qué** estado poner al terminar un agente (matriz / rol / config), enrutar S5, y persistir la razón del outcome. **Lo que este plan hace y el 271 no:** que el cierre **desde la bandeja** llegue al tracker correcto, que el estado local se refresque, y que el tablero muestre la divergencia.
+
+---
+
 ## 3. Principios y guardarraíles
 
 1. **Ninguna capacidad de escritura NUEVA sobre el tracker.** Este plan **no agrega** superficies que escriban en el ADO/GitLab del operador. Corrige el enrutado y la corrección de una escritura que **ya existe hoy** y que **el operador confirma explícitamente** apretando "Cerrar". La escritura genuinamente nueva — reconciliación masiva Stacky→tracker — queda **fuera de scope** (plan 271 sugerido) con default OFF por categoría (B).
 2. **Partición lectura/escritura de flags, según la directiva del operador.** Todo lo que **lee** el tracker o **compara** estados va **default ON**. Precedente citado por el operador: `STACKY_PIPELINE_NL_EDIT_ENABLED` (ON) vs `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (OFF). Las tres flags de este plan son ON y se justifica una por una en su fase.
 3. **Fallar declarado, nunca adivinar.** Un estado no mapeable produce `CapabilityUnavailable` (mecanismo ya existente del 218, `tracker_provider.py:55`), nunca una acción por defecto. La regla dura: **jamás emitir `reopen` cuando la intención es cerrar.**
-4. **Nunca escribir en el sistema equivocado.** Un ticket cuyo `tracker_type` no es `azure_devops` **no puede** resolverse al cliente ADO. Si el proveedor real no está disponible, la acción devuelve un error honesto. **Alcance exacto de esta promesa (C2):** vale para **S1 y S2** del censo de §2 C3.bis — los dos caminos que cierran una incidencia. **NO** vale todavía para S3 y S4, que quedan con carve-out escrito y **congelados por el ratchet de F6** para que nadie agregue un cuarto. Cualquier redacción que sugiera que el invariante ya es global en el repo es falsa.
+4. **Nunca escribir en el sistema equivocado.** Un ticket cuyo `tracker_type` no es `azure_devops` **no puede** resolverse al cliente ADO. Si el proveedor real no está disponible, la acción devuelve un error honesto. **Alcance exacto de esta promesa (C2 v2; ACOTADO en v3 por C1):** vale para **S1 y S2** del censo de §2 C3.bis — los dos caminos que cierran una incidencia desde el tablero. **NO** vale para **S3, S4, S5 ni S6**, que quedan con carve-out escrito y dueño nombrado (S3→Plan 70, S4→Plan 79, S5→**Plan 271**, S6→adaptador del puerto). El invariante **NO es global en el repo, y este plan no lo vuelve global.** Cualquier redacción que sugiera lo contrario es falsa. Lo que F6 congela es que **no aparezca un séptimo** sin que la suite se ponga roja.
 4bis. **Una capa de `services/` NUNCA importa de `api/`.** Regla del repo escrita en `services/completion_sync.py:93-95`: *"NO importar api.tickets: acopla service->api y arriesga import circular al arrancar el daemon"*. Los módulos nuevos de este plan construyen el cliente ADO con `services.project_context.build_ado_client(...)`, jamás con `api.tickets._ado_client_for_ticket`.
 5. **Human-in-the-loop innegociable.** Todo cierre sigue exigiendo confirmación del operador (`FinishWorkButton` con dry-run, y `BulkActionsBar` con `armedLabel`). Este plan no agrega autonomía; agrega veracidad.
 6. **Cero trabajo extra para el operador — con una excepción declarada.** Ninguna fase pide configurar nada nuevo **para Azure DevOps**: los defaults funcionan sin tocar un archivo de perfil. **Para GitLab hay un prerequisito preexistente y ajeno a este plan** (`STACKY_GITLAB_ENABLED`, default `false`, `config.py:1185-1186`); el plan no lo crea, no lo puede resolver desde su alcance y **no lo esconde**: lo declara arriba, lo nombra en el `workaround` de la excepción y lo muestra en pantalla (F5). Corrección explícita del v1, que afirmaba lo contrario sin asterisco.
@@ -165,8 +249,55 @@ Toda flag nueva de este plan debe tocar **las siete**, o un meta-test se pone ro
 | 3 | `backend/services/harness_flags.py` | El `FlagSpec(key=..., type="bool", default=True, label=..., description=..., group=...)`. Grupo: `group="global"` para las dos de backend (patrón vivo `:501`, `:515`); la del badge copia el `group` del `FlagSpec` de `STACKY_INCIDENT_INBOX_ACTIONS_ENABLED` (`:4962`) |
 | 4 | `backend/tests/test_harness_flags.py` | La key en `_CURATED_DEFAULTS_ON` (el set arranca en `:467`). **Ojo: esta pata vive en `tests/`, no en `services/`.** `test_default_known_only_for_curated` compara por **igualdad exacta** (`:979`) |
 | 5 | `backend/services/harness_flags_help.py` | Una entrada `PlainHelp(...)` (patrón vivo: `:1479` para `STACKY_INCIDENT_INBOX_ACTIONS_ENABLED`) |
-| 6 | **(C11 — la pata invisible)** `backend/tests/test_harness_flags_help.py:49-50` | `assert len(entry.on_effect) <= 240` y `assert len(entry.off_effect) <= 240`. **Los textos de `PlainHelp` no pueden pasar de 240 caracteres.** No hay que editar este archivo: hay que **respetar el límite al escribir la pata 5**, o el arnés se pone rojo sin explicación evidente |
+| 6 | **(C11 v2 / C5 v3 — la pata invisible, y es MUCHO más estricta de lo que el v2 creía)** `backend/tests/test_harness_flags_help.py` | **SEIS restricciones asertadas, no una.** Ver el recuadro de abajo. No hay que editar este archivo: hay que **respetar el contrato al escribir la pata 5** |
 | 7 | `deployment/export_harness_defaults.py` | Regenerar `harness_defaults.env` con el generador (no editarlo a mano) |
+
+#### Pata 6 — contrato COMPLETO de `PlainHelp` (leído del test, no supuesto)
+
+El v2 declaraba sólo el límite de 240. `backend/tests/test_harness_flags_help.py` asserta **seis** cosas, y **dos de ellas chocan de frente con la redacción de este plan**:
+
+| # | Regla | Ancla |
+|---|---|---|
+| 1 | `10 <= len(what) <= 200` | `:47-48` |
+| 2 | `len(on_effect) <= 240` y `len(off_effect) <= 240` | `:49-50` |
+| 3 | `len(example) <= 300`; ningún campo vacío | `:51-53` |
+| 4 | `on_effect` y `off_effect` **empiezan con la cadena literal `"Si "`** (sin tilde) | `:59-60` |
+| 5 | **Denylist de jerga** (15 términos, case-insensitive, con plural opcional): `MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime` | `:17-20`, `:68-71` |
+| 6 | **PROHIBIDO citar una key `SCREAMING_SNAKE`** (`_KEY_RE = \b[A-Z]+_[A-Z0-9_]+\b`) **y PROHIBIDO citar una fase `F<n>`** (`_PHASE_RE = \bF\d`) | `:22-23`, `:72-75` |
+
+> **La trampa exacta de ESTE plan.** El documento martilla *"el `workaround` NOMBRA la flag literal `STACKY_GITLAB_ENABLED`"* y rotula todo *"F0..F7"*. Eso es correcto **para `CapabilityUnavailable.workaround`** (que no tiene contrato de texto) y **fatal para `PlainHelp`** (reglas 5 y 6). Un modelo menor que copie el tono del plan a la ayuda llana pone el arnés rojo sin entender por qué. **Por eso los tres textos van LITERALES abajo: se copian tal cual, no se parafrasean.**
+
+**Los 3 `PlainHelp` LITERALES (ya medidos: los 3 cumplen las 6 reglas — `what` 128/140/119, `on_effect` 202/170/172, `off_effect` 125/119/97, `example` 128/115/103; **0 violaciones**).** Copiar exactamente.
+
+> **Es un FRAGMENTO de dict, no un módulo.** Estas tres entradas van **dentro** del `PLAIN_HELP = { ... }` de `services/harness_flags_help.py`, junto a las otras 307. Pegado como archivo suelto da `SyntaxError: illegal target for annotation` — verificado. No lo envuelvas en nada ni le agregues imports: `PlainHelp` ya está definido en ese archivo.
+
+```python
+    "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED": PlainHelp(
+        what="Manda el cambio de estado al sistema de tickets que el proyecto usa de verdad, en vez de intentarlo siempre contra Azure DevOps.",
+        on_effect="Si la activás (viene así de fábrica): al cerrar una incidencia, Stacky escribe en el sistema que corresponde y traduce el estado al vocabulario de ese sistema. Si no puede, te lo dice y no escribe nada.",
+        off_effect="Si la apagás: vuelve el comportamiento viejo, que intenta el cambio contra Azure DevOps aunque el proyecto viva en otro lado.",
+        example="Cerrás una incidencia de un proyecto de GitLab: antes se intentaba contra Azure DevOps y quedaba mal; ahora se cierra en GitLab.",
+    ),
+    "STACKY_TICKET_STATE_WRITEBACK_ENABLED": PlainHelp(
+        what="Despues de cambiar el estado en el sistema de tickets, vuelve a leerlo y actualiza la copia local para que la lista no muestre datos viejos.",
+        on_effect="Si la activás (viene así de fábrica): al terminar el cierre, la fila del tablero pasa sola a su estado real, sin recargar la pantalla ni esperar la sincronizacion grande.",
+        off_effect="Si la apagás: el cierre igual se hace, pero la fila sigue mostrando el estado anterior hasta la proxima sincronizacion.",
+        example="Cerrás un reclamo y la fila pasa de Abierta a Cerrada en el momento, en vez de quedarse en Abierta y hacerte dudar.",
+    ),
+    "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED": PlainHelp(
+        what="Marca en la lista las incidencias que Stacky ya dio por terminadas pero el sistema de tickets sigue mostrando abiertas.",
+        on_effect="Si la activás (viene así de fábrica): esas filas suman una marca que dice Sin sincronizar, y arriba aparece un boton para ver solo esas. No cambia nada, solo te lo muestra.",
+        off_effect="Si la apagás: la lista se ve igual que antes y las filas desalineadas no se distinguen del resto.",
+        example="Cerraste ocho reclamos y dos quedaron a medias: los ves marcados en vez de descubrirlo semanas despues.",
+    ),
+```
+
+**Verificación binaria de la pata 6** (correr DESPUÉS de agregar las 3 entradas):
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.\.venv\Scripts\python.exe -m pytest tests\test_harness_flags_help.py -q
+```
+**Criterio (delta, no verde absoluto — ver §"Baseline medido"):** el resultado debe seguir siendo **exactamente `4 failed, 4 passed`** y **ninguna** de las violaciones reportadas puede nombrar una key `STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED`, `STACKY_TICKET_STATE_WRITEBACK_ENABLED` ni `STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED`. Si aparece alguna de las tres, la culpa es de este plan.
 
 **Verificación binaria de las 7 patas por flag** (correr por cada una de las 3 keys nuevas):
 ```powershell
@@ -183,6 +314,19 @@ Debe aparecer en **los 6 archivos** (en `harness_flags.py` dos veces: `_CATEGORY
 - **Los tests que tocan la DB se corren POR ARCHIVO.** SQLite bajo pytest es flaky por `SQLITE_LOCKED`; la corrida completa contamina. En este plan, los archivos que tocan DB son **`test_plan270_finish_work_state.py`** y **`test_plan270_state_writeback.py`**. Los otros cuatro (`test_plan270_close_intent.py`, `test_plan270_write_router.py`, `test_plan270_gitlab_close.py`, `test_plan270_state_write_ratchet.py`) **no tocan DB ni red**: son puros, dobles o lectura de archivos.
 - **Frontend: no hay RTL ni jsdom.** Toda lógica testeable va en un `.ts` **puro** con vitest; el cableado se valida con un smoke manual descrito paso a paso. **Prohibido proponer tests de componentes React.**
 - **`.tsx`/`.module.css` nuevos: tolerancia CERO a `style={{}}` inline** (ratchet de deuda de UI). Colores y estilos por CSS Modules o variable CSS vía `ref.current?.style.setProperty(...)` (patrón vivo: `IncidentInboxPage.tsx:96-109`).
+
+### Baseline MEDIDO de rojos preexistentes (C8 — v3). Sin esto, el DoD es inalcanzable
+
+**Cuatro suites que este plan toca o nombra ya están ROJAS de fábrica, en `d234021e`, sin que nadie las haya roto.** Medido corriendo, no recordado. Si no lo declarás, el implementador cree que su cambio las rompió y "arregla" borrando asserts:
+
+| Suite | Resultado HOY | Por qué importa acá |
+|---|---|---|
+| `tests/test_harness_flags_help.py` | **4 failed, 4 passed** | Es la **pata 6**. Las violaciones actuales son **1 de longitud** + **15 de la denylist** (14 de jerga + 1 de key `SCREAMING_SNAKE`), sobre **307** entradas. Criterio de este plan: **el número no puede subir y ninguna violación puede nombrar una de sus 3 keys** |
+| `tests/test_error_fingerprints_catalog.py` | **3 failed, 5 passed** | Es donde va la huella de §6. Falla por deuda ajena: una huella sin `self_test`, y `status: "guarded"` que no está en `_STATUS_ENUM` (`:17`). Criterio: **seguir en 3 failed, y que ninguna falla nombre `PLAN270-GITLAB-SYNC-AUSENTE`** |
+| `tests/test_error_fingerprints_scan.py` | **2 failed, 7 passed** | Misma causa (`KeyError`). Sólo se declara para que no se confunda con daño propio |
+| `tests/test_b2_transition_from_config.py` | **5 failed** (`TypeError: _resolve_transition_state_from_config() missing 1 required keyword-only argument: 'final_status'`) | **No lo toca este plan** — es del eje del **271**, que lo adopta en su F4-bis. Se declara para que nadie lo "arregle de paso" y colisione |
+
+**Regla dura:** el DoD de este plan NUNCA dice "la suite X está verde" sobre ninguna de estas cuatro. Dice **"el delta es cero y ninguna falla nombra un símbolo del plan 270"**. Un criterio de "verde absoluto" sobre una suite roja de fábrica es un DoD inalcanzable, y se "resuelve" borrando asserts ajenos.
 
 ### Gotcha de `config` — mirar cómo importa **cada** archivo
 
@@ -218,9 +362,14 @@ npx tsc --noEmit
 
 > Cada fase es autocontenida y verificable sola. **Ninguna depende de algo construido en una fase posterior.** F0, F1 y F2 son inertes respecto del comportamiento del producto hasta que F3 las cablea.
 >
-> **Única excepción, declarada (E2):** **F6 se implementa AL FINAL**, porque congela conteos que dependen de que F3 ya haya reescrito S1 y S2. Correrla antes daría números distintos y un ratchet mentiroso. Está numerada F6 y listada última en el orden de implementación de §7 justamente por eso; no es una dependencia oculta.
+> **La "única excepción" del v2 QUEDÓ ELIMINADA en v3 (E2).** El v2 declaraba que F6 debía ir al final "porque congela conteos que dependen de que F3 ya haya reescrito S1 y S2". **Medido: es falso.** F3 no borra las llamadas históricas — las mete bajo el `else` del rollback — así que el conteo AST es **idéntico antes y después** (`{'finish_work': 2, 'set_stacky_status_by_ado': 2, 'create_child_task': 2}`). F6 se puede escribir en cualquier orden. **Ahora sí, sin asteriscos: ninguna fase depende de una posterior.**
 >
-> **Cruce de criterios entre fases — chequeado, sin contradicciones:** el único par que podría chocar es el test 2 de F2 (`in_progress` **debe** seguir emitiendo `state_event: "reopen"`) contra el centinela anti-reopen del test 5 de F2 y del test 8 de F0. No chocan porque el centinela recorre `ADO_CLOSE_STATES` (`"Done"`, `"Closed"`, `"Resolved"`), que es **disjunto** de `GITLAB_LOGICAL_STATES` (`functional`, `accepted`, `rejected`, `in_progress`). Ningún criterio de este plan exige "0 errores sobre un corpus" ni "N/N y si algo no cierra se agrega lo que falte": todos los conteos son **cerrados y enumerados** (11, 10, 6, 10, 12, 4, 12).
+> **Cruce de criterios entre fases — chequeado, sin contradicciones:**
+> - El par que podría chocar es el test 2 de F2 (`in_progress` **debe** seguir emitiendo `state_event: "reopen"`) contra el centinela anti-reopen del test 5 de F2 y del test 8 de F0. **No chocan:** el centinela recorre `ADO_CLOSE_STATES` (`"Done"`, `"Closed"`, `"Resolved"`), **disjunto** de `GITLAB_LOGICAL_STATES` (`functional`, `accepted`, `rejected`, `in_progress`).
+> - **Costura F5↔F4 (C4):** el chip consume `diverged_count` del backend; F4 caso 12 fija el valor del servidor y F5 casos 14/15 fijan que ese número **llegue al texto**. Las dos puntas de la costura tienen test, en el lado que corresponde (backend toca DB, frontend es `.ts` puro).
+> - **Costura F7↔F1/F0:** `preview_state_write` reusa **las mismas dos funciones** que `write_state_for_ticket`, en el **mismo orden**. Si alguien cambia la firma de una, los dos caminos se rompen juntos y se ve — no hay una segunda implementación que se desincronice en silencio.
+> - **Aridad de los helpers que el plan invoca — verificada abriendo la firma real:** `resolve_closed_states(profile) -> tuple[tuple[str, ...], str]` (**2-tupla**, `services/incident_inbox.py:51`) · `upsert_single_work_item(client: AdoClient, ado_id: int) -> dict | None` (`ado_sync.py:235`) · `CapabilityUnavailable(capability, provider, *, reason, workaround="")` — **`reason` es keyword-only y OBLIGATORIO** (`tracker_provider.py:62`) · `build_ado_client(project_name=None, *, tracker_project=None, ticket=None)` (`project_context.py:289`) · `get_item(self, item_id: str) -> dict` (`tracker_provider.py:82`).
+> - Ningún criterio exige "0 errores sobre un corpus" ni "N/N y si algo no cierra se agrega lo que falte": todos los conteos son **cerrados y enumerados** (11, 14, 6, 10, 12, 4 en backend; 18 en vitest). Los criterios sobre suites rojas de fábrica son **deltas**, no verdes absolutos (§"Baseline medido").
 
 ---
 
@@ -447,7 +596,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .\.venv\Scripts\python.exe -m pytest tests\test_plan270_write_router.py -q
 ```
 
-**Criterio de aceptación (BINARIO):** los **10** tests pasan; el archivo está en los 2 arneses.
+**Criterio de aceptación (BINARIO):** los **10** tests pasan; el archivo está en los 2 arneses. **(F7 le agrega 4 más ⇒ el archivo termina con 14. Al cerrar el plan el conteo exigido es 14.)**
 
 **Flag que la protege:** `STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED` — **default `True` (ON)**.
 **Justificación del default ON (obligatoria):** esta flag **no habilita ninguna escritura nueva**; sólo **impide** que una escritura ya existente vaya al sistema equivocado. El efecto neto es **estrictamente menos escrituras erróneas**. Ninguna de las 2 categorías de excepción aplica: (A) no consume tokens en reposo — no hay loop, daemon, barrido, polling ni llamada a modelo; (B) no escribe en un sistema real del operador — al contrario, **evita** una escritura mal dirigida, y no le quita ninguna decisión (el cierre lo sigue confirmando él). Dejarla OFF significaría "por default, seguí intentando cerrar issues de GitLab con el cliente de Azure DevOps", que es exactamente el bug.
@@ -786,10 +935,19 @@ def refresh_local_state(ticket_id: int) -> dict:
 **Cómo lee el estado, por proveedor** (reusa el enrutador de F1, `resolve_state_writer`):
 - `kind == "ado_client"` ⇒ `services.ado_sync.upsert_single_work_item(handle, int(ado_id))` (`ado_sync.py:235`), que ya persiste el ticket completo en la base local (`ado_sync.py:337` lo registra).
 - `kind == "provider"` ⇒ `handle.get_item(str(ado_id))` (método del puerto, declarado en `tracker_provider.py:82`; la implementación GitLab está en `gitlab_provider.py:174-177` y devuelve `self._normalize_issue(body)`).
-  **C10 — la key es literalmente `"state"`, no "el campo de estado":** `_normalize_issue` la produce en `gitlab_provider.py:85` con `body.get("state") or ""`, y GitLab devuelve `"opened"` / `"closed"`. Se escribe `Ticket.ado_state = str(item.get("state") or "")`. **Que `"closed"` cuente como cerrado no es casualidad:** `DEFAULT_CLOSED_STATES` incluye `"Closed"` y la comparación es case-insensitive vía `normalize()` — está documentado en `services/incident_inbox.py:13-14`. Si `item.get("state")` viene vacío, `reason = "state_absent"` y **la columna NO se pisa**.
+  **C10 — la key es literalmente `"state"`, no "el campo de estado":** `_normalize_issue` la produce en **`gitlab_provider.py:86`** (el v2 decía `:85`, que es la línea de `"description"` — verificado con `grep -n '"state"'`) con `body.get("state") or ""`, y GitLab devuelve `"opened"` / `"closed"`. Se escribe `Ticket.ado_state = str(item.get("state") or "")`. **Que `"closed"` cuente como cerrado no es casualidad:** `DEFAULT_CLOSED_STATES` (`services/incident_inbox.py:15-17`, **cinco** valores: `Done, Closed, Resolved, Removed, Completed`) incluye `"Closed"` y la comparación es case-insensitive vía `normalize()` — está documentado en `services/incident_inbox.py:13-14`. Si `item.get("state")` viene vacío, `reason = "state_absent"` y **la columna NO se pisa**.
 - **`session_scope` se importa de `db.py:485`** (`from db import session_scope`), **no de `models.py`**. Errar da `ImportError`.
 
-**Regla de escritura mínima:** este módulo **sólo** escribe `Ticket.ado_state` (y `last_synced_at` si ya existe la columna — existe: `models.py` la declara y `api/incident_inbox.py:156` ordena por ella). **No** toca `stacky_status`, ni `title`, ni `work_item_type`: no es un sync, es un refresco quirúrgico de la columna de la que depende el tablero.
+**Regla de escritura mínima — ALCANCE REAL, corregido en v3 (C7).** El v2 escribía que este módulo *"sólo escribe `Ticket.ado_state`… **no** toca `title` ni `work_item_type`"* **y a la vez** mandaba delegar en `services.ado_sync.upsert_single_work_item` para la rama ADO. **Las dos cosas no pueden ser ciertas.** Verificado abriendo `ado_sync.py:326-335`: en la rama "ticket ya existe", `upsert_single_work_item` escribe **nueve** columnas — `title`, `description`, `ado_state`, `ado_url`, `priority`, `work_item_type`, `parent_ado_id`, `last_synced_at`, `assigned_to_ado` — y en la rama "no existe" además inserta una fila de `TicketStateHistory` (`:314-323`).
+
+El contrato honesto es **por rama**, y es el que hay que implementar y testear:
+
+| Rama | Qué escribe realmente | Por qué es aceptable |
+|---|---|---|
+| `kind == "ado_client"` | Las 9 columnas de `upsert_single_work_item` (**incluye `title`, `work_item_type`, `assigned_to_ado`**) | Es el helper **que ya usa el repo** para refrescar un work item puntual. Reimplementar un GET+UPDATE de una sola columna sería código nuevo duplicando uno vivo y probado, contra el principio de reusar lo existente. Todos los valores vienen del tracker, así que "pisar" es **converger a la verdad** |
+| `kind == "provider"` | **Sólo** `Ticket.ado_state` y `last_synced_at` | El puerto `get_item` devuelve un dict normalizado; escribir más sería mapear a mano campos que nadie pidió |
+
+**Lo que SÍ vale en las dos ramas, y es lo único que el plan promete:** el writeback **nunca toca `stacky_status`**. Verificado: `upsert_single_work_item` tiene **0 apariciones** de `stacky_status` (`sed -n '235,345p' services/ado_sync.py | grep -c stacky_status` ⇒ 0). Ése es el invariante que fija el test 7, y es el que importa: si el writeback pisara `stacky_status`, se comería el `"completed"` que acaba de escribir el paso 5 y el KPI mediría cualquier cosa.
 
 **Cableado — archivo a EDITAR:** `Stacky Agents/backend/api/tickets.py`, **DOS inserciones** (el v1 tenía una sola, y por eso el KPI era inalcanzable — C3):
 
@@ -874,7 +1032,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 **Objetivo (1 frase):** marcar en la bandeja las incidencias que Stacky da por cerradas pero el tracker sigue mostrando abiertas, con una comparación **puramente local** que no agrega ni una llamada de red.
 **Valor:** hace visible el KPI, cubre las filas que ya quedaron desalineadas antes de este plan, y le devuelve al operador la señal que hoy no tiene: *"esto no se sincronizó, revisalo"*.
 
-**Por qué es gratis:** `is_open` y `stacky_status` **ya viajan** en cada ítem del DTO (`api/incident_inbox.py:163` agrega `is_open`; `models.py:101` incluye `stacky_status` en `to_dict()`; el tipo del frontend ya los declara en `frontend/src/incidents/incidentInboxModel.ts:17` y `:19`). **Cero endpoints nuevos, cero llamadas nuevas, cero costo por fila.**
+**Por qué es gratis:** `is_open` y `stacky_status` **ya viajan** en cada ítem del DTO (`api/incident_inbox.py:163` agrega `is_open`; `models.py:101` incluye `stacky_status` en `to_dict()`; el tipo del frontend ya los declara en `frontend/src/incidents/incidentInboxModel.ts` — **`:17` es `stacky_status?: string;` y `:19` es `is_open: boolean;`**, el v2 los tenía invertidos). **Cero endpoints nuevos, cero llamadas nuevas, cero costo por fila.**
 
 **Archivo a CREAR:** `Stacky Agents/frontend/src/incidents/incidentDivergence.ts` (`.ts` **puro**: sin React, sin DOM, sin fetch)
 
@@ -907,12 +1065,34 @@ export function countDiverged(items: IncidentInboxItem[]): number {
   return items.filter(isDiverged).length;
 }
 
-/** Texto del chip de resumen. Cadena VACIA cuando no hay divergencia, para que
- *  la UI no muestre un chip con cero (ruido). */
-export function divergenceSummary(items: IncidentInboxItem[]): string {
-  const n = countDiverged(items);
-  if (n === 0) return "";
+/** C4 (v3) — Formatea un NUMERO ya calculado. Cadena VACIA en 0, para que la UI
+ *  no muestre un chip con cero (ruido).
+ *
+ *  Existe separada de divergenceSummary porque el chip consume el conteo del
+ *  SERVIDOR (diverged_count, exacto por agregacion) y no la lista local, que
+ *  viene truncada por MAX_ITEMS y filtrada por la busqueda. Sin esta funcion
+ *  la key del backend NO tiene forma de llegar a la pantalla. */
+export function formatDivergenceCount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "";
   return n === 1 ? "1 sin sincronizar" : `${n} sin sincronizar`;
+}
+
+/** Texto del chip a partir de una lista local. Fallback para un backend viejo
+ *  que no manda diverged_count. Delega en formatDivergenceCount: una sola
+ *  regla de formato, imposible que las dos vias digan cosas distintas. */
+export function divergenceSummary(items: IncidentInboxItem[]): string {
+  return formatDivergenceCount(countDiverged(items));
+}
+
+/** C4 (v3) — El conteo que manda: el del servidor si vino, el local si no.
+ *  Este es el UNICO lugar donde se decide la precedencia. */
+export function resolveDivergenceCount(
+  serverCount: number | null | undefined,
+  items: IncidentInboxItem[],
+): number {
+  return typeof serverCount === "number" && Number.isFinite(serverCount)
+    ? serverCount
+    : countDiverged(items);
 }
 
 /** Filtro del chip: cuando esta activo, solo las divergentes. */
@@ -933,7 +1113,7 @@ export function resolveDivergenceBadgeEnabled(
 }
 ```
 
-**C16 — el tipo del status hay que ampliarlo.** En `frontend/src/incidents/incidentInboxModel.ts`, dentro de `interface IncidentInboxStatus` (`:42-54`), agregar **opcional**:
+**C16 — el tipo del status hay que ampliarlo.** En `frontend/src/incidents/incidentInboxModel.ts`, dentro de `interface IncidentInboxStatus` (**`:42-53`**; el v2 decía `:42-54` y la `:54` está en blanco), agregar **opcional**:
 ```ts
   /** Plan 270 F5 — gate del badge "Sin sincronizar". OPCIONAL: un backend
    *  viejo no la manda y el badge queda oculto. */
@@ -971,7 +1151,14 @@ Sin esto `npx tsc --noEmit` no falla (las keys extra de un `jsonify` no rompen),
 
    **C14 — el chip es un `Button`, no un `<span>` clickeable.** El bloque `:455-476` sólo tiene `<span className={styles.chip}>` no interactivos; un `<span>` con `onClick` no es alcanzable por teclado. El archivo **ya importa `Button`** de `../components/ui` (`:72`). El chip nuevo va **después** del `byState.map` (`:471-475`), dentro del mismo `<div className={styles.chips}>`:
    ```tsx
-   {divergenciaVisible && divergenceSummary(visible) !== "" && (
+   // C4 (v3) — el conteo del SERVIDOR manda; la lista local es el fallback.
+   // Se calcula una sola vez y se usa para el gate Y para el texto: si el gate
+   // mirara una fuente y el texto otra, el chip podria aparecer vacio.
+   const divergentes = resolveDivergenceCount(dto?.diverged_count, visible);
+   const textoChip = formatDivergenceCount(divergentes);
+   ```
+   ```tsx
+   {divergenciaVisible && textoChip !== "" && (
      <Button
        variant="secondary"
        size="sm"
@@ -979,15 +1166,17 @@ Sin esto `npx tsc --noEmit` no falla (las keys extra de un `jsonify` no rompen),
        title={DIVERGENCE_BADGE_TITLE}
        onClick={() => setSoloDivergentes((v) => !v)}
      >
-       {divergenceSummary(visible)}
+       {textoChip}
      </Button>
    )}
    ```
-   Ojo: el texto del chip se calcula sobre **`visible`** (el total desalineado), no sobre `mostrados` — si no, al activar el filtro el número se congelaría en sí mismo.
-2. `Stacky Agents/frontend/src/pages/IncidentInboxPage.module.css` — clase `.divergedBadge`. **Sin colores literales ni HEX**: usar los tokens que el tema **sí** define, verificados abriendo `frontend/src/theme.css`: `--danger` (`:21` dark / `:191` light), `--border` (`:8` / `:177`), `--text-primary` (`:12` / `:182`), `--bg-panel` (`:6` / `:175`), `--accent` (`:17` / `:187`). **No** inventar tokens de paleta de la familia `--color-*`: verificado con `grep -n -- "--color-" frontend/src/theme.css`, lo **único** que existe con ese prefijo es `--color-scheme` (`:163`, `:243`, `:279`), que es el switch light/dark de CSS y **no es un color**. Cualquier `--color-danger`, `--color-border`, etc. resuelve a vacío y deja el badge invisible.
+   **Por qué el conteo del servidor y no `visible` (C4 — el v2 se contradecía acá).** El v2 escribía el `tsx` con `divergenceSummary(visible)` y en el párrafo de al lado decía que el chip usaba `dto?.diverged_count ?? countDiverged(visible)`. Son **incompatibles**: `divergenceSummary` recibe una **lista**, no un número, y en el módulo del v2 **no existía ninguna función que formateara un número** ⇒ `diverged_count` volvía a quedar sin consumidor, que es exactamente el defecto C6 que el v2 dijo haber arreglado. Con `formatDivergenceCount` + `resolveDivergenceCount` la key **sí** llega a la pantalla.
+   **Y además el servidor es el valor correcto:** `visible` está truncada por `MAX_ITEMS` (`api/incident_inbox.py:158`, `rows = rows[:MAX_ITEMS]`) **y** filtrada por la búsqueda (`:175` `filterBySearch`). Contar sobre `visible` haría que el número del chip **cambie mientras el operador tipea**, que es justo la clase de mentira que este plan viene a matar.
+   **Ojo con el filtro:** el texto del chip **nunca** se calcula sobre `mostrados` — si no, al activar el filtro el número se congelaría en sí mismo.
+2. `Stacky Agents/frontend/src/pages/IncidentInboxPage.module.css` — clase `.divergedBadge`. **Sin colores literales ni HEX**: usar los tokens que el tema **sí** define, verificados abriendo `frontend/src/theme.css`: `--danger` (`:21` dark / `:191` light), `--border` (`:8` / `:177`), `--text-primary` (`:12` / `:182`), `--bg-panel` (`:6` / `:175`), `--accent` (`:17` / `:187`). **No** inventar tokens de paleta de la familia `--color-*`: verificado con `grep -n -- "--color-" frontend/src/theme.css`, que devuelve **4** líneas (el v2 decía 3) y **ninguna es un color**: `:55` es un comentario, `:163` y `:243` definen `--color-scheme` (`dark`/`light`) y `:279` lo consume (`color-scheme: var(--color-scheme);`). Cualquier `--color-danger`, `--color-border`, etc. resuelve a vacío y deja el badge invisible.
 3. `Stacky Agents/backend/api/incident_inbox.py` — agregar al payload de `/items` (junto a `untyped_count`, `:174`) una key **aditiva**.
 
-   **C6 — el v1 lo calculaba mal y su propia justificación era falsa.** El v1 escribía `sum(1 for i in items ...)` y decía que servía "para que el conteo sea correcto aun cuando la lista venga truncada por `MAX_ITEMS`" — pero `items` **es** la lista ya truncada (`rows = rows[:MAX_ITEMS]`, `:159`), así que no arreglaba nada. Además no tenía ni consumidor ni test. La versión correcta es una agregación real, **dentro** del `with session_scope()` y **al lado de los counts que ya existen** (`:131-135`), reusando el `incident_q` y el `state_expr` ya construidos:
+   **C6 — el v1 lo calculaba mal y su propia justificación era falsa.** El v1 escribía `sum(1 for i in items ...)` y decía que servía "para que el conteo sea correcto aun cuando la lista venga truncada por `MAX_ITEMS`" — pero `items` **es** la lista ya truncada (`rows = rows[:MAX_ITEMS]`, **`:158`**, no `:159`), así que no arreglaba nada. Además no tenía ni consumidor ni test. La versión correcta es una agregación real, **dentro** del `with session_scope()` y **al lado de los counts que ya existen** (`:131-135`), reusando el `incident_q` y el `state_expr` ya construidos:
    ```python
         # Plan 270 F5 — divergencia EXACTA por agregación (no depende del LIMIT).
         # Misma regla de dos condiciones que isDiverged() en el .ts.
@@ -997,11 +1186,13 @@ Sin esto `npx tsc --noEmit` no falla (las keys extra de un `jsonify` no rompen),
    ```
    Es **una** `COUNT(*)` más sobre una query ya filtrada, sin traer filas: costo despreciable y correcto con truncado. Va en la respuesta como `"diverged_count": diverged_count,`.
 
-   **Consumidor real (si no, es código muerto):** el chip usa `dto?.diverged_count ?? countDiverged(visible)` — el valor del servidor manda, y el cálculo local es el fallback para un backend viejo. Así la key **tiene** consumidor y el `.ts` sigue siendo la fuente de la regla.
+   **Consumidor real (si no, es código muerto):** el chip llama `resolveDivergenceCount(dto?.diverged_count, visible)` y formatea con `formatDivergenceCount(...)` — el valor del servidor manda, y el cálculo local es el fallback para un backend viejo. Así la key **tiene** consumidor **y existe la función que la puede recibir** (C4).
 
    **Test que lo fija (nuevo, en `test_plan270_state_writeback.py`, caso 12):** sembrar 3 tickets `completed` con `ado_state="Active"` y 2 `completed` con `ado_state="Done"` ⇒ `GET /api/incident-inbox/items?scope=all` devuelve `diverged_count == 3`. Sin este test la key vuelve a quedar sin cobertura (era el agujero de R5 en el v1).
 
-**Gate del badge:** `divergenciaVisible = resolveDivergenceBadgeEnabled(statusQ.data)`, resuelto de la respuesta de `/api/incident-inbox/status`, agregando una key aditiva `divergence_badge_enabled` en el `jsonify` de `incident_inbox_status` — que va de **`:66` a `:82`**, con `actions_enabled` en **`:77`** (el v1 decía `:65-81` y `:76`: desfasado en 1). **Estricto a `true`**, igual que `resolveInboxActionsEnabled` (`incidentInboxActionsModel.ts:31-35`): un backend viejo que no manda la key deja el badge oculto y la página sigue funcionando.
+**Gate del badge:** `divergenciaVisible = resolveDivergenceBadgeEnabled(statusQ.data)`, resuelto de la respuesta de `/api/incident-inbox/status`, agregando una key aditiva `divergence_badge_enabled` en el `jsonify` de `incident_inbox_status` — que va de **`:65` a `:81`**, con `actions_enabled` en **`:76`**. **Estricto a `true`**, igual que `resolveInboxActionsEnabled` (`incidentInboxActionsModel.ts:31-35`, comparación en `:34`): un backend viejo que no manda la key deja el badge oculto y la página sigue funcionando.
+
+> **C6 (v3) — ojo con este anclaje: el v2 lo ROMPIÓ "corrigiéndolo".** El v1 decía `:65-81` y `:76`, que es **exactamente lo correcto**; el v2 lo "arregló" a `:66-82`/`:77` y lo dejó desfasado en 1. Verificado con `grep -n "return jsonify({" api/incident_inbox.py` ⇒ `:65`, y `grep -n "actions_enabled" api/incident_inbox.py` ⇒ `:20` (el helper `_actions_enabled`) y **`:76`** (la key en el payload). Moraleja operativa para quien implemente: **los anclajes que una revisión "corrige" son los menos verificados del documento** — re-chequealos con `grep -n` antes de escribir.
 
 **Casos borde:**
 - Ítem sin `stacky_status` (backend viejo) ⇒ `isDiverged` devuelve `false`. Nunca marca de más.
@@ -1026,6 +1217,9 @@ Sin esto `npx tsc --noEmit` no falla (las keys extra de un `jsonify` no rompen),
 | 10 | `resolveDivergenceBadgeEnabled(undefined)` y `(null)` | `false` (C16) |
 | 11 | `resolveDivergenceBadgeEnabled({...status, divergence_badge_enabled: true})` | `true`; y con la key ausente ⇒ `false` (estricto, nunca fail-open) |
 | 12 | **C14/C7 — coherencia chip↔filtro:** `divergenceSummary(visible)` sobre una lista con 3 divergentes y luego `filterDiverged(visible, true)` | el texto sigue diciendo `"3 sin sincronizar"` y la lista filtrada tiene largo 3 (el número no se calcula sobre la lista ya filtrada) |
+| 13 | **C4 — `formatDivergenceCount`:** `(0)`, `(1)`, `(7)`, `(-2)`, `(NaN)` | `""`, `"1 sin sincronizar"`, `"7 sin sincronizar"`, `""`, `""` |
+| 14 | **C4 — `resolveDivergenceCount` da precedencia al servidor:** `(9, listaCon3Divergentes)` y `(undefined, listaCon3Divergentes)` y `(null, ...)` y `(0, listaCon3Divergentes)` | `9`, `3`, `3`, y **`0`** — un `0` explícito del servidor **manda** sobre el conteo local (por eso la guarda es `typeof === "number"` y no `??`, que también dejaría pasar el 0 pero no un `NaN`) |
+| 15 | **C4 — la key del backend LLEGA al texto (el test que mata el código muerto):** `formatDivergenceCount(resolveDivergenceCount(dto.diverged_count, visible))` con `dto.diverged_count = 4` y una `visible` de 3 divergentes | `"4 sin sincronizar"` — o sea el número del servidor, **no** el local. Si alguien vuelve a cablear el chip contra `divergenceSummary(visible)`, este test se pone rojo |
 
 **Comando:**
 ```powershell
@@ -1045,7 +1239,9 @@ npx tsc --noEmit
 8. **Smoke GitLab (C4) — obligatorio, es la mitad del título del plan.** Con un proyecto GitLab dado de alta: (8a) con `STACKY_GITLAB_ENABLED` **apagada** (default), apretar Cerrar ⇒ el toast/fila muestra el error y el texto **nombra `STACKY_GITLAB_ENABLED`**; **nada** se escribió en GitLab (verificar la issue). (8b) encender la flag desde Configuración > Arnés, repetir ⇒ la issue de GitLab queda **cerrada** (no reabierta) con el label `stacky::accepted`, y la fila del tablero pasa a "Cerrada" sin recargar.
 9. **Smoke del camino automático (C3).** Lanzar el Dev Resolutor sobre una incidencia y dejar que termine. Sin tocar nada más, la fila debe reflejar el estado real del tracker. Antes del plan quedaba `completed` + "Abierta".
 
-**Criterio de aceptación (BINARIO):** los **12** tests de vitest pasan, `npx tsc --noEmit` sale limpio, y el ratchet de deuda de UI sigue verde (cero `style={{}}` inline en los archivos tocados y **cero HEX** en el `.module.css` nuevo).
+**Criterio de aceptación (BINARIO):** los **15** tests de vitest pasan (12 originales + los 3 de C4), `npx tsc --noEmit` sale limpio, y el ratchet de deuda de UI sigue verde. **(F7 le agrega 3 más ⇒ el archivo termina con 18.)**
+
+> **Sobre el ratchet de UI — alcance REAL, verificado leyendo `src/__tests__/uiDebtRatchet.test.ts`:** no es "cero HEX en todo `.module.css`", es un **ratchet por archivo** contra `uiDebtBaseline.json`. Un archivo **que no figura en el baseline tiene presupuesto 0** — y `IncidentInboxPage.module.css` **no figura**, así que su cupo de HEX es efectivamente **0**. El cero absoluto (`forcedZero`) aplica sólo a `components/ui/`, `components/shell/` y a los diálogos nativos. Conclusión práctica sin cambios: **en el `.module.css` de F5, cero HEX y cero `style={{}}` en el `.tsx`** — pero ahora se sabe *por qué*, y no se va a intentar "regenerar el baseline" (que además rechaza el regen si algún archivo subió).
 **Verificación del ratchet:**
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
@@ -1062,9 +1258,11 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 
 ### F6 — [ADICIÓN ARQUITECTO] Ratchet de destino: el censo de escrituras de estado queda congelado
 
-**Objetivo (1 frase):** convertir el Principio 4 de una promesa de prosa en un **gate binario y repo-wide**, congelando el conjunto exacto de sitios que todavía pueden escribir el estado sin pasar por el enrutador, para que **nadie pueda agregar un cuarto** sin que la suite se ponga roja.
+**Objetivo (1 frase):** convertir el Principio 4 de una promesa de prosa en un **gate binario sobre `api/tickets.py`** — el archivo que este plan edita — congelando por AST qué funciones de ese archivo escriben estado y cuántas veces, para que **nadie agregue una séptima** sin que la suite se ponga roja.
 
-**Por qué esta fase existe (y por qué el v1 la necesitaba).** El v1 llamaba "centinela anti-fallback" al test 6 de F1 — un unit test del router. Ese test prueba que **el router** nunca devuelve `ado_client` para un ticket no-ADO; no prueba **nada** sobre el resto del repo. Con el censo de §2 C3.bis a la vista (S3 y S4 siguen ahí, y `api/tickets.py` tiene 8332 líneas y una sesión paralela viva escribiendo encima), la única forma honesta de sostener el invariante es un **ratchet**: un número congelado que sólo puede bajar.
+**Por qué esta fase existe (y por qué el v1 la necesitaba).** El v1 llamaba "centinela anti-fallback" al test 6 de F1 — un unit test del router. Ese test prueba que **el router** nunca devuelve `ado_client` para un ticket no-ADO; no prueba **nada** sobre el resto del repo. Con el censo de §2 C3.bis a la vista (S3..S6 siguen ahí, y `api/tickets.py` tiene **8332** líneas y una sesión paralela viva escribiendo encima), la única forma honesta de sostener el invariante es un **ratchet**: un número congelado que sólo puede bajar.
+
+**Por qué NO es repo-wide (cambio de alcance en v3).** El v2 quería barrer `backend/api/` + `backend/harness/`. Dos problemas medidos: (a) ese barrido **excluye `backend/services/`**, que es justo donde vive **S5** (`agent_completion_internal.py:536`) — el escritor que el v2 no censó, o sea el ratchet tenía un punto ciego exactamente donde estaba el agujero; (b) **el plan 271 ya implementa el censo repo-wide por AST** en `tests/test_plan271_censo_escritores.py`, congelando las 9 entradas de `backend/` entero. Dos ratchets barriendo el mismo árbol con reglas distintas se contradicen y terminan apagándose el uno al otro. **Decisión: el 270 congela `api/tickets.py` (lo que edita); el 271 congela `backend/` (lo que audita).** Sin solape de archivos de test, sin solape de alcance. Ver §"Frontera con el plan 271".
 
 Es el mismo mecanismo que el repo ya usa para la deuda de UI (`frontend/src/__tests__/uiDebtRatchet.test.ts`) y para la lista de tests del arnés (`run_harness_tests.sh:8`: *"La lista HARNESS_TEST_FILES es un RATCHET: solo crece"*). **Se reusa el patrón, no se inventa uno.**
 
@@ -1072,47 +1270,78 @@ Es el mismo mecanismo que el repo ya usa para la deuda de UI (`frontend/src/__te
 
 **Símbolos EXACTOS:**
 
+**C2 (v3) — el ratchet del v2 NACÍA ROJO, y por regex.** Medido: `grep -cE "provider\.update_item_state\(" harness/task_states.py` devuelve **2**, no 1 — porque el regex también matchea el **docstring** de `:158` (*"Aplica via provider.update_item_state(str(ado_id), target)"*). El v2 congelaba **1** ⇒ el test fallaba el día 1, y la única forma de "arreglarlo" era subir el número, que es exactamente lo que un ratchet prohíbe. **La lección no es corregir el número: es que contar código con regex sobre texto cuenta comentarios y docstrings.** El ratchet de v3 cuenta **por AST**, igual que el censo de §2 C3.bis.
+
 ```python
 """Plan 270 F6 — Ratchet del censo de escrituras de estado del tracker.
 
-El Principio 4 del plan 270 ("un ticket no-ADO nunca se escribe con el cliente
-ADO") vale hoy para S1 (api/tickets.py finish_work) y S2
-(set_stacky_status_by_ado). S3 y S4 quedaron con carve-out escrito. Este test
-CONGELA ese censo: si aparece un quinto sitio, se pone rojo.
+CUENTA POR AST, NO POR REGEX (C2). El v2 contaba con expresiones regulares y
+nacia rojo: el patron matcheaba el DOCSTRING de harness/task_states.py:158.
+Un ast.Call sobre un ast.Attribute no puede confundir prosa con codigo.
 
-NO se arregla subiendo el número. Se arregla enrutando el sitio nuevo por
-services.tracker_write_router, o agregando un carve-out al plan y bajándolo.
+ALCANCE DELIBERADAMENTE ACOTADO A LO QUE ESTE PLAN POSEE (v3): api/tickets.py.
+El censo REPO-WIDE (backend/ entero, 6 sitios) es del plan 271, que ya lo
+implementa en tests/test_plan271_censo_escritores.py. Dos ratchets barriendo el
+mismo arbol con reglas distintas se pisan y se apagan mutuamente; ver la
+seccion "Frontera con el plan 271".
+
+NO se arregla subiendo el numero. Se arregla enrutando el sitio nuevo por
+services.tracker_write_router, o agregando un carve-out al plan y bajandolo.
 """
-# Sitios que TODAVÍA escriben estado sin pasar por tracker_write_router.
-# Formato: (ruta_relativa_a_backend, patrón_regex, cantidad_esperada)
-FROZEN_UNROUTED_STATE_WRITES: tuple[tuple[str, str, int], ...] = (
-    # S3: estado inicial de una Task recién creada (eje Plan 70).
-    # S1 y S2 ya NO cuentan acá: quedaron detrás de la rama `else` del rollback,
-    # que es código histórico gateado, no un camino vivo por default.
-    ("api/tickets.py", r"_ado_client_for_ticket\([^)]*\)\.update_work_item_state\(", 2),
-    ("api/tickets.py", r"\bado\.update_work_item_state\(", 1),
-    ("harness/task_states.py", r"provider\.update_item_state\(", 1),
-)
+import ast
+from pathlib import Path
+
+BACKEND = Path(__file__).resolve().parent.parent  # .../backend
+TARGET_METHODS = frozenset({"update_item_state", "update_work_item_state"})
+
+# Escrituras de estado que TODAVIA viven en api/tickets.py, por funcion.
+# Formato: {nombre_de_funcion: (cantidad_esperada, por_que_sigue_ahi)}
+FROZEN_TICKETS_STATE_WRITES: dict[str, tuple[int, str]] = {
+    # S1/S2: quedan las DOS entradas de cada uno (provider + cliente ADO), pero
+    # ya detras de la rama `else` de rollback, que solo corre con la flag OFF.
+    "finish_work": (2, "S1 - rama else de rollback (flag OFF), plan 270 F3"),
+    "set_stacky_status_by_ado": (2, "S2 - rama else de rollback (flag OFF), plan 270 F3"),
+    # S3: carve-out, eje del plan 70. Este plan NO lo toca.
+    "create_child_task": (2, "S3 - estado inicial de Task nueva, eje plan 70"),
+}
+
+
+def _writes_by_function(rel: str) -> dict[str, int]:
+    """{nombre_funcion: cantidad de llamadas a los metodos de escritura}."""
+    tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8", errors="replace"))
+    fns = [n for n in ast.walk(tree)
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    out: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+           and node.func.attr in TARGET_METHODS:
+            owner = max(
+                (f for f in fns
+                 if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)),
+                key=lambda f: f.lineno, default=None,
+            )
+            name = owner.name if owner else "<module>"
+            out[name] = out.get(name, 0) + 1
+    return out
 ```
 
-> **De dónde salen los números (contados, no estimados).** Con el plan aplicado, `_ado_client_for_ticket(...).update_work_item_state(` queda **2** veces en `api/tickets.py` — las dos ramas `else` de rollback de S1 (`:2080` hoy) y S2 (`:1492` hoy), que sólo corren con la flag apagada. `ado.update_work_item_state(` queda **1** vez (S3, `:4781` hoy). `provider.update_item_state(` en `harness/task_states.py` queda **1** vez (S4, `:173` hoy). **El implementador DEBE re-contar con el comando de abajo antes de congelar**, porque una sesión paralela puede haber movido el archivo; si el conteo real difiere, se ajusta el número **y se documenta en este plan por qué**, nunca en silencio.
+> **De dónde salen los números — MEDIDOS con el censo AST de §2 C3.bis en `d234021e`, no estimados.** Hoy, **antes** del plan: `finish_work` **2** (`:2078`, `:2080`), `set_stacky_status_by_ado` **2** (`:1490`, `:1492`), `create_child_task` **2** (`:4779`, `:4781`). **Después** del plan los números **no cambian**: F3 no borra las ramas históricas, las mete bajo el `else` del rollback. Por eso el ratchet se puede escribir **antes** de F3 y sigue verde después — y por eso F6 dejó de ser "la última fase obligada" (ver §7).
 
-**Comando para obtener los números reales antes de congelar:**
+**Comando para re-medir antes de congelar (obligatorio: hay una sesión paralela viva moviendo `api/tickets.py`):**
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-(Select-String -Path api\tickets.py -Pattern '_ado_client_for_ticket\([^)]*\)\.update_work_item_state\(').Count
-(Select-String -Path api\tickets.py -Pattern '\bado\.update_work_item_state\(').Count
-(Select-String -Path harness\task_states.py -Pattern 'provider\.update_item_state\(').Count
+.\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'tests'); from test_plan270_state_write_ratchet import _writes_by_function; print(_writes_by_function('api/tickets.py'))"
 ```
+Salida esperada hoy: `{'set_stacky_status_by_ado': 2, 'finish_work': 2, 'create_child_task': 2}`. Si difiere, **se ajusta el número Y se documenta acá por qué**, nunca en silencio.
 
 **Tests — 4 casos:**
 
 | # | Caso | Aserción |
 |---|---|---|
-| 1 | Por cada entrada de `FROZEN_UNROUTED_STATE_WRITES`, contar las coincidencias en el archivo real | el conteo es **exactamente** el congelado. El mensaje de fallo nombra el archivo, el patrón, el esperado, el encontrado **y las líneas nuevas**, y dice explícitamente: *"no subas el número: enrutá el sitio nuevo por services.tracker_write_router"* |
-| 2 | Los 3 archivos del censo **existen** | si alguien renombra `harness/task_states.py`, el ratchet no se apaga en silencio (falla por archivo faltante, no por 0 hits) |
-| 3 | **Anti-gaming:** `services/tracker_write_router.py` **no** contiene ninguno de los 3 patrones congelados | nadie "cumple" el ratchet moviendo el problema adentro del router |
-| 4 | **Cobertura del censo:** el conteo total de `\.update_work_item_state\(|\.update_item_state\(` en `backend/api/` + `backend/harness/` (excluyendo `backend/tests/`) es **exactamente** la suma de los congelados **más** los del router | si aparece un sitio en un archivo que el censo ni siquiera mira, este test lo caza |
+| 1 | Por cada entrada de `FROZEN_TICKETS_STATE_WRITES`, comparar contra `_writes_by_function("api/tickets.py")` | el conteo es **exactamente** el congelado. El mensaje de fallo nombra la función, el esperado, el encontrado **y el motivo congelado**, y dice literal: *"no subas el numero: enruta el sitio nuevo por services.tracker_write_router"* |
+| 2 | **Cobertura de `api/tickets.py`:** `set(_writes_by_function("api/tickets.py"))` == `set(FROZEN_TICKETS_STATE_WRITES)` | si aparece una **función nueva** que escribe estado en ese archivo, el ratchet la caza aunque los conteos de las tres viejas no hayan cambiado. Es el caso que un ratchet de "suma total" deja pasar |
+| 3 | **Anti-gaming:** `_writes_by_function("services/tracker_write_router.py")` tiene **exactamente** las llamadas del propio router (las de `write_state_for_ticket`) y `api/tickets.py` **no** contiene la cadena `api.tickets` importada desde `services/` | nadie "cumple" el ratchet moviendo el problema adentro del router ni invirtiendo la dependencia |
+| 4 | **El archivo existe y parsea** | si alguien renombra o rompe `api/tickets.py`, el ratchet falla por archivo faltante / `SyntaxError`, **no** por 0 hits (un ratchet que se apaga en silencio es peor que no tenerlo) |
 
 **Comando:**
 ```powershell
@@ -1122,12 +1351,119 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 **Criterio de aceptación (BINARIO):** los **4** tests pasan; el archivo está en los 2 arneses; y el mensaje de fallo del test 1 contiene la cadena literal `tracker_write_router` (para que el modelo menor que lo rompa lea la instrucción de cómo arreglarlo, no sólo el número).
 
-**Colisión con sus propios gates — verificada:** los patrones congelados son **regex sobre `.py` de `backend/`**; este plan (`.md` en `docs/`) y este test (`backend/tests/`, excluido por el test 4) no los pueden disparar. El único texto de código que este documento escribe hacia archivos de producto son los diffs de F2/F3/F4, y ninguno contiene `ado.update_work_item_state(` ni `provider.update_item_state(` — usa `writer.handle.update_work_item_state(` y `writer.handle.update_item_state(`, que **no matchean** los patrones congelados (`_ado_client_for_ticket(...)`, `\bado\.`, `provider\.`). Comprobado leyendo los tres bloques.
+**Colisión con sus propios gates — verificada CORRIENDO (v3).** El ratchet cuenta **`ast.Call` sobre `ast.Attribute`** en **`api/tickets.py`**. Tres consecuencias, todas comprobadas:
+1. **Este documento no lo puede disparar.** Es un `.md` en `docs/`; el ratchet sólo abre `backend/api/tickets.py`.
+2. **Los comentarios y docstrings ya no cuentan.** Ése era el bug del v2 (C2): con regex, la prosa de `harness/task_states.py:158` sumaba 1. Con AST, `_writes_by_function("harness/task_states.py")` devuelve `{'_safe_transition': 2}` — las dos llamadas **reales** (`:173`, `:175`), cero docstrings. Verificado ejecutando.
+3. **Los diffs de F3 no mueven el conteo.** F3 no borra las llamadas históricas: las mete bajo el `else` del rollback, así que siguen siendo 2 `ast.Call` por función. Y las llamadas nuevas viven en `services/tracker_write_router.py` (`writer.handle.update_work_item_state(...)`), archivo que el ratchet **no** mira en el test 1 y que el test 3 audita aparte. Por eso el conteo congelado es idéntico antes y después del plan — y por eso F6 se puede escribir en cualquier momento.
 
 **Flag que la protege:** **ninguna.** Es un test; los tests no se gatean. Agregar una flag acá sería una forma de apagarlo.
-**Impacto por runtime:** **nulo, y esta vez verificado y no afirmado:** el test lee archivos con `pathlib.Path.read_text()` y cuenta con `re.findall`. No importa `services.agent_runner`, no construye ningún cliente, no lee `LLM_BACKEND` ni `runtime`. Codex CLI / Claude Code CLI / GitHub Copilot Pro: **idéntico, porque ninguno participa en la ejecución del test**. Fallback: N/A.
-**Paridad ADO↔GitLab:** el ratchet es **agnóstico de tracker**: congela el uso del cliente ADO **y** el del provider (que hoy es GitLab). Ninguno de los dos puede crecer sin ruido.
+**Impacto por runtime:** **nulo, y esta vez verificado y no afirmado:** el test lee archivos con `pathlib.Path.read_text()` y los parsea con `ast.parse`. No importa `services.agent_runner`, no construye ningún cliente, no lee `LLM_BACKEND` ni `runtime`. Codex CLI / Claude Code CLI / GitHub Copilot Pro: **idéntico, porque ninguno participa en la ejecución del test**. Fallback: N/A.
+**Paridad ADO↔GitLab:** el ratchet es **agnóstico de tracker**: cuenta `update_work_item_state` (ADO) **y** `update_item_state` (puerto/GitLab) con la misma regla. Ninguno de los dos puede crecer sin ruido.
 **Trabajo del operador: ninguno.** No hay UI, no hay config, no hay flag.
+
+---
+
+### F7 — [ADICIÓN ARQUITECTO v3] Dry-run de destino: el operador ve a QUÉ sistema va a escribir **antes** de confirmar
+
+**Objetivo (1 frase):** enriquecer la respuesta del **dry-run que el diálogo de cierre ya dispara** con el destino resuelto por F0+F1, para que el operador lea *"va a GitLab, va a quedar `accepted`, cerrada"* **antes** de apretar Confirmar — sin escribir absolutamente nada.
+
+**Por qué esta fase existe.** Este plan arregla que el cierre **llegue bien**. Pero el operador sigue apretando "Cerrar" **a ciegas**: el diálogo no le dice a qué sistema va, ni en qué estado nativo va a quedar, ni si el destino está disponible. Hoy se entera **después**, por un error. Ése es exactamente el patrón que lo expulsó del tablero: *actuar y descubrir después que no era lo que creía*. F7 mueve la verdad **antes** de la decisión, que es la definición operativa de amplificar al operador (Principio 5).
+
+**Por qué es casi gratis — el seam ya existe y está VIVO (verificado):**
+- `finish_work` **ya tiene** dry-run: `dry_run = bool(body.get("dry_run", False))` (`api/tickets.py:1801`) y un early-return propio en **`:1934-1944`** que devuelve `{"ok", "dry_run", "ticket_id", "ado_id", "cancel_result", "preconditions", "actions": [], "current_status", "operator"}`.
+- El frontend **ya lo llama solo**: `FinishWorkButton.tsx:49` `dryRunMutation`, `:55` `dry_run: true`, y `:80-81` lo dispara **al abrir el diálogo**, antes de cualquier confirmación. `:67` es el `dry_run: false` real.
+⇒ **Cero endpoints nuevos, cero llamadas nuevas, cero flags nuevas.** F7 es una key aditiva en una respuesta que ya viaja.
+
+**Archivo a EDITAR (1):** `Stacky Agents/backend/api/tickets.py`, **una sola inserción**, dentro del `if dry_run:` de `:1934`, antes del `return jsonify({...})`:
+
+```python
+    # ── Plan 270 F7 — destino resuelto, SIN escribir ──────────────────────────
+    # Reusa F0 (vocabulario) y F1 (destino) en modo consulta. Nunca escribe:
+    # write_state_for_ticket NO se llama acá.
+    _destino = {"resolved": False, "reason": "no_target_state"}
+    if target_ado_state and ado_id is not None:
+        from services import tracker_write_router as _twr
+        _destino = _twr.preview_state_write(
+            ticket=ticket, requested_state=target_ado_state,
+        )
+```
+y agregar `"destination": _destino,` como key **aditiva** del `jsonify` del dry-run.
+
+**Símbolo NUEVO en `services/tracker_write_router.py`:**
+
+```python
+def preview_state_write(*, ticket, requested_state: str) -> dict:
+    """Resuelve destino + vocabulario SIN escribir. Nunca levanta.
+
+    Es write_state_for_ticket() menos la escritura: mismas dos llamadas
+    (resolve_state_writer, resolve_close_target), mismo orden, cero I/O de
+    escritura. Si algo falla, lo devuelve declarado en vez de propagarlo: el
+    dry-run NUNCA puede tumbar el dialogo de cierre.
+
+    Devuelve:
+      {"resolved": True,  "tracker_type": str, "native_state": str,
+       "closes": bool, "reason": "ok"}
+      {"resolved": False, "tracker_type": str|None, "reason": str,
+       "workaround": str}
+    """
+```
+
+**Contrato de la respuesta (aditivo y hacia atrás):** se **agrega** la key `destination` al payload del dry-run. **No se quita ni se renombra ninguna key existente.** Un frontend viejo que no la lea sigue funcionando idéntico.
+
+**Casos borde:**
+- Ticket ADO ⇒ `{"resolved": True, "tracker_type": "azure_devops", "native_state": "Done", "closes": True}`.
+- Ticket GitLab con la flag del adapter apagada ⇒ `{"resolved": False, "reason": "...", "workaround": "..."}` con el **mismo** `workaround` que nombra la flag literal (C4). El operador lee el prerequisito **antes** de confirmar, no después de fallar.
+- Estado no mapeable ⇒ `{"resolved": False, "reason": "unmappable_state:..."}`.
+- `target_ado_state` nulo ⇒ `{"resolved": False, "reason": "no_target_state"}`, sin llamar al router.
+- **Cualquier excepción inesperada** ⇒ `{"resolved": False, "reason": "preview_error: <tipo>"}`. **El dry-run jamás devuelve 500 por culpa de F7.**
+
+**Frontend (opcional dentro de esta fase, y explícitamente acotado):** `FinishWorkButton.tsx` ya renderiza el resultado del dry-run; mostrar `destination` es **una línea de texto** junto a las precondiciones. **No** se agrega ningún `.tsx` nuevo, **no** se agrega CSS nuevo, **no** hay test de componente (no hay RTL/jsdom). La lógica de redacción del texto va en `frontend/src/incidents/incidentDivergence.ts` como función pura, testeada en el `.ts` existente de F5:
+
+```ts
+/** Plan 270 F7 — Texto de una linea para el dry-run. "" si no hay que decir nada. */
+export function describeCloseDestination(
+  d: { resolved?: boolean; tracker_type?: string | null; native_state?: string;
+       closes?: boolean; reason?: string; workaround?: string } | null | undefined,
+): string {
+  if (!d) return "";
+  if (d.resolved !== true) {
+    const causa = d.reason ?? "destino sin resolver";
+    return d.workaround ? `No se puede cerrar: ${causa}. ${d.workaround}` : `No se puede cerrar: ${causa}`;
+  }
+  const donde = d.tracker_type === "gitlab" ? "GitLab" : "Azure DevOps";
+  const cierra = d.closes === true ? "queda cerrada" : "NO queda cerrada";
+  return `Se escribe en ${donde} como "${d.native_state}" — ${cierra}.`;
+}
+```
+
+**Tests PRIMERO — se reparten en archivos que este plan YA crea, sin agregar un séptimo:**
+- Backend ⇒ **4 casos nuevos en `tests/test_plan270_write_router.py`** (pasa de 10 a **14**), porque `preview_state_write` es del router y el archivo **no toca DB**:
+
+| # | Caso | Aserción |
+|---|---|---|
+| 11 | ticket ADO, `preview_state_write(ticket=t, requested_state="Done")` | `{"resolved": True, "tracker_type": "azure_devops", "native_state": "Done", "closes": True}` |
+| 12 | ticket GitLab con la fábrica levantando `TrackerConfigError` | `resolved is False` y el `workaround` contiene la cadena literal `"STACKY_GITLAB_ENABLED"` |
+| 13 | ticket GitLab, `requested_state="Cualquier Cosa"` | `resolved is False`, `reason` empieza con `"unmappable_state:"` |
+| 14 | **Centinela de no-escritura (el corazón de F7):** los 3 casos anteriores con dobles que **cuentan** llamadas a `update_item_state` y `update_work_item_state` | **0 llamadas en total**. `preview_state_write` no escribe nunca |
+
+- Frontend ⇒ **3 casos nuevos en `incidentDivergence.test.ts`** (pasa de 15 a **18**): resuelto-ADO, resuelto-GitLab-cierra, no-resuelto-con-workaround.
+
+**Comandos:**
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.\.venv\Scripts\python.exe -m pytest tests\test_plan270_write_router.py -q
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
+npx vitest run src/incidents/incidentDivergence.test.ts
+```
+
+**Criterio de aceptación (BINARIO):** `test_plan270_write_router.py` pasa con **14** casos; `incidentDivergence.test.ts` pasa con **18**; y el caso 14 demuestra **0** escrituras.
+
+**Flag que la protege:** **ninguna, y es deliberado.** F7 no agrega comportamiento nuevo apagable: agrega una **key aditiva** a una respuesta que ya existe, dentro de un camino (`dry_run=True`) que **por definición no escribe**. Gatearla sería agregar una flag para poder ocultarle información al operador, que es lo contrario del Principio 5. Las 3 flags del plan siguen siendo 3.
+**Justificación de que NO cae en (A) ni en (B):** (A) no hay loop, daemon, polling ni llamada a modelo — es la misma petición que el diálogo ya hace, con dos funciones puras más; (B) **no escribe nada, por construcción**, y el test 14 lo fija.
+**Human-in-the-loop:** F7 es HITL en estado puro — **más** información antes de la decisión, **cero** automatización. No cierra, no confirma, no elige.
+**Paridad ADO↔GitLab:** en la **misma** fase y con el **mismo** código: `preview_state_write` es `write_state_for_ticket` sin la escritura, así que los dos trackers se previsualizan por el mismo camino. Casos 11 (ADO) y 12/13 (GitLab).
+**Impacto por runtime:** **nulo.** Es una petición HTTP que el operador dispara desde la UI; ningún modelo participa. Codex CLI / Claude Code CLI / GitHub Copilot Pro: idéntico. Fallback: N/A.
+**Trabajo del operador: ninguno.** Aparece solo, en un diálogo que ya abría.
 
 ---
 
@@ -1141,7 +1477,10 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 | R4 | `CapabilityUnavailable` se propaga como 500 mudo en vez de `ok: False` | Baja | El `except Exception` de `finish_work` (`:2087`) ya la captura y la convierte en `actions[].ok = False`. Cubierto por los tests 3 y 6 de F3 |
 | R5 | El `diverged_count` del backend y el `countDiverged` del frontend divergen entre sí (ironía fatal) | Media | **Corregido en v2 (C6): la mitigación del v1 era falsa** — el test 3 de F4 no asertaba `diverged_count` y el 6 de F5 es puro TS, así que la key no tenía cobertura. Ahora el **caso 12 de `test_plan270_state_writeback.py`** fija el valor del backend con datos sembrados, y el **caso 6 de `incidentDivergence.test.ts`** fija el del frontend con la misma regla de dos condiciones. Además el chip consume `dto?.diverged_count` con el cálculo local como fallback, así que la divergencia entre ambos es **visible**, no silenciosa |
 | R6 | Un test nuevo se olvida en el arnés `.ps1` (el meta-test sólo parsea el `.sh` y no lo detecta) | Media | El criterio de aceptación de F0 exige que `Select-String` sobre **los dos** archivos devuelva 2 líneas. Repetirlo para cada archivo nuevo (son **6** en total con F6) |
-| R7 | Alguien "arregla" un test borrando un assert para pasar el gate (falso verde) | Media | Los criterios están redactados con **conteos exactos** (11, 10, 6, 10, 12, 4 en backend; 12 en vitest). Un archivo con menos tests de los declarados es un incumplimiento verificable con `pytest --collect-only -q` |
+| R7 | Alguien "arregla" un test borrando un assert para pasar el gate (falso verde) | Media | Los criterios están redactados con **conteos exactos** (11, 14, 6, 10, 12, 4 en backend; 18 en vitest). Un archivo con menos tests de los declarados es un incumplimiento verificable con `pytest --collect-only -q` |
+| R12 | **El implementador cree que rompió una suite que YA estaba roja** y "arregla" borrando asserts ajenos — o peor, toca `test_b2_transition_from_config.py`, que es del 271 | **Alta** (son **4** suites rojas de fábrica y dos están en archivos que este plan toca) | §"Baseline medido" declara los cuatro resultados **medidos** (`4/4`, `3/5`, `2/7`, `5 failed`) y convierte sus criterios en **deltas**. El DoD lo repite y agrega la verificación por `git diff --stat` de que los archivos del 271 no se tocaron |
+| R13 | **Se implementa el 270 creyendo que deja `divergencia = 0` global, y queda el residuo de S5** (`agent_completion_internal.py:536`, que escribe siempre en ADO) | **Alta** — el v2 no lo censaba siquiera | El asterisco del KPI (§1), la fila **S5** del censo (§2 C3.bis) y la §"Frontera con el plan 271" dicen los tres que **ese motor es del 271 y este plan no lo toca**. El KPI de aceptación está acotado por escrito a los caminos (1) y (2), que son los que miden los tests 3 y 10 de F4 |
+| R14 | **Los dos ratchets (270 F6 y 271 F8) se pisan** y alguien relaja uno para que pase el otro | Media | Alcances **anidados a propósito**: el del 270 mira sólo `api/tickets.py`; el del 271 mira `backend/` entero. Archivos de test distintos, misma técnica (AST). Un sitio nuevo en `api/tickets.py` pone **los dos** rojos — señal doble, nunca contradictoria. Escrito en §"Frontera con el plan 271" |
 | R10 | **El invariante del Principio 4 se erosiona**: alguien agrega un quinto sitio que escribe estado con el cliente ADO y nadie se entera hasta que un cierre GitLab vuelve a escribir en ADO | **Alta** (ya pasó: son 4 sitios y el v1 sólo veía 1) | **F6 [ADICIÓN ARQUITECTO]**: ratchet de conteo congelado sobre los 3 archivos del censo, con un cuarto test que cubre el resto de `backend/api/` y `backend/harness/` para cazar un sitio en un archivo no censado |
 | R11 | El operador enciende `STACKY_GITLAB_ENABLED` esperando que "ahora sí cierra" y se encuentra con otro prerequisito (token, destino por proyecto) | Media | El `workaround` de `CapabilityUnavailable` viaja hasta la UI (ver el diff del `except` de F3) y lo dice el **proveedor**, no este plan: cualquier otro prerequisito que falte va a producir su propio `TrackerConfigError` con su propio mensaje. El smoke 8b del F5 lo verifica de punta a punta contra una issue real |
 | R8 | La flakiness de SQLite hace fallar F3/F4 y se interpreta como bug del plan | Alta | El plan lo declara en cada comando: **correr por archivo** y reintentar hasta 3 veces ante `database table is locked` antes de declarar fallo |
@@ -1153,8 +1492,10 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 
 Explícito, para que nadie lo agregue "de paso":
 
-1. **Reconciliación masiva Stacky→tracker** (empujar el estado de Stacky a todas las filas divergentes de una). Es la **única** capacidad de escritura genuinamente nueva del eje ⇒ **categoría (B)**, default OFF, flag sugerida `STACKY_INCIDENT_RECONCILE_WRITEBACK_ENABLED`. ⇒ **plan 271 sugerido.**
-2. **Crear `services/gitlab_sync.py`** para arreglar C4 (el auto-sync post-completación de GitLab). Es un sync masivo con breaker y coalescing: un eje propio, no una fase de este plan. El plan 270 **no lo necesita** porque F4 hace un refresco puntual y agnóstico. ⇒ **plan 272 sugerido.**
+1. **Reconciliación masiva Stacky→tracker** (empujar el estado de Stacky a todas las filas divergentes de una). Es la **única** capacidad de escritura genuinamente nueva del eje ⇒ **categoría (B)**, default OFF, flag sugerida `STACKY_INCIDENT_RECONCILE_WRITEBACK_ENABLED`. ⇒ **plan 272 sugerido.**
+2. **Crear `services/gitlab_sync.py`** para arreglar C4 (el auto-sync post-completación de GitLab). Es un sync masivo con breaker y coalescing: un eje propio, no una fase de este plan. El plan 270 **no lo necesita** porque F4 hace un refresco puntual y agnóstico. ⇒ **plan 273 sugerido.**
+
+> **CORRECCIÓN DE NUMERACIÓN (I3 — v3).** El v2 sugería "plan 271" y "plan 272" para estas dos continuaciones. **El 271 YA ESTÁ TOMADO** (`271_PLAN_LA_INCIDENCIA_SE_MUEVE_AL_ESTADO_CONFIGURADO_AL_TERMINAR_EL_ANALISTA.md`, untracked, de una sesión paralela). Verificado relistando `Stacky Agents/docs/`: el máximo es **271**, el próximo libre es el **272**. Además el propio 271 **reserva el 272 para "un solo escritor de estado"**, que es un eje distinto del de estos dos ítems. **Antes de crear cualquiera de estos planes: relistá `Stacky Agents/docs/` en frío** (incluyendo untracked con `ls`, no sólo `git ls-files`) y tomá el primer número libre real. No hardcodear 272/273 desde este documento.
 3. **Migrar los ~27 call sites de `api/tickets.py` al puerto** (Plan **70**, ya PROPUESTO). El 270 sólo enruta correctamente **el write de estado**.
 4. **Rediseño visual de la bandeja.** El 270 agrega un badge y un chip; no reordena, no re-maqueta.
 5. **Sincronizar comentarios/adjuntos/asignaciones** ADO↔GitLab. Sólo se trata el **estado**.
@@ -1166,12 +1507,53 @@ Explícito, para que nadie lo agregue "de paso":
 
 ### Huella de regresión (§ error_fingerprints)
 
-`Stacky Agents/docs/sistema/error_fingerprints.json` es un catálogo de **patrones de log** (`schema_version: 1`; campos `id`, `title`, `class`, `status`, `log_pattern`, `log_guarded`, `killed_by`, `killed_commit`, `date_resolved`, `guard_test`). De las clases de error que toca este plan, **sólo una tiene firma en log** y por eso es la única que se registra — no se inventan `log_pattern` para bugs silenciosos:
+`Stacky Agents/docs/sistema/error_fingerprints.json` es un catálogo de **patrones de log** (`schema_version: 1`, key raíz `fingerprints`, hoy **42** entradas). De las clases de error que toca este plan, **sólo una tiene firma en log** y por eso es la única que se registra — no se inventan `log_pattern` para bugs silenciosos.
 
-| Registrar | Por qué |
-|---|---|
-| `gitlab_sync_module_missing` — `log_pattern`: `No module named 'services\.gitlab_sync'`, `class`: `import-error`, **`status`: `"open"`**, `killed_by`: `"plan 272 (sugerido, no implementado)"`, `guard_test`: `""` | Es real, se loguea (`completion_sync.py:127` — `logger.warning("completion_sync: sync de %s falló (best-effort): %s", project, exc)`, dentro del `except` que arranca en `:116`) y **este plan NO lo mata** (§6.2). El schema admite `status: "open"` = *"documentada, NO guardada"*. Registrarla evita que el próximo que la vea en un log crea que es nueva |
-| **NO registrar** el `reopen` de C2 ni el mis-routing de C3 | **Son silenciosos: no dejan ninguna línea de log.** El `reopen` es un `PUT` exitoso (200) y el mis-routing termina en un `logger.exception` genérico sin firma estable. Inventarles un `log_pattern` sería meter ruido en un catálogo cuyo contrato es "el smoke alarma si el patrón REAPARECE". **Sus guardias son tests, no huellas de log:** el test 5 de F2 (anti-reopen) y el test 6 de F1 + F6 (anti-fallback). Queda dicho acá para que nadie lo interprete como un olvido |
+**C3 (v3) — el v2 rompía el catálogo entero de DOS formas, ambas medidas corriendo:**
+
+1. **JSON inválido.** El v2 escribía el patrón como `No module named 'services\.gitlab_sync'`. Copiado literal a un `.json`, `\.` **no es un escape válido de JSON**: `json.loads` levanta `JSONDecodeError: Invalid \escape`. Eso no rompe una huella: **rompe el archivo completo**, y con él `test_json_valido` y todo consumidor del catálogo. En JSON hay que escribir **`\\.`**.
+2. **Campo obligatorio faltante.** El v2 enumeraba los campos como `id, title, class, status, log_pattern, log_guarded, killed_by, killed_commit, date_resolved, guard_test`. La lista real de obligatorios está en `tests/test_error_fingerprints_catalog.py:18`:
+   `_REQUIRED = ("id", "title", "class", "status", "log_pattern", "log_guarded", "killed_by", "guard_test", "self_test")`
+   ⇒ el v2 **omitía `self_test`** (obligatorio) y presentaba como contrato dos que **no** lo son (`killed_commit`, `date_resolved`). Y `test_self_test_coherente` (`:53-59`) exige que `self_test.matches` **matcheen** el patrón y `self_test.clean` **no**.
+3. Además `_STATUS_ENUM` (`:17`) es `{"resolved", "open", "by_design"}` ⇒ el `status: "open"` del plan **es válido**. Eso el v2 lo tenía bien.
+
+**Entrada a agregar — objeto JSON LITERAL, copiar tal cual dentro del array `fingerprints`:**
+
+```json
+    {
+      "id": "PLAN270-GITLAB-SYNC-AUSENTE",
+      "title": "El auto-sync post-completacion de GitLab apunta a un modulo inexistente",
+      "class": "import-error",
+      "status": "open",
+      "log_pattern": "No module named 'services\\.gitlab_sync'",
+      "log_guarded": false,
+      "killed_by": "",
+      "guard_test": "",
+      "self_test": {
+        "matches": [
+          "completion_sync: sync de MiProy fallo (best-effort): No module named 'services.gitlab_sync'"
+        ],
+        "clean": [
+          "completion_sync: sync de MiProy fallo (best-effort): No module named 'services.jira_sync'",
+          "completion_sync: sync de MiProy ok"
+        ]
+      },
+      "note": "Documentada, NO guardada. completion_sync.py:111 despacha a services.<tracker>_sync y services/gitlab_sync.py no existe (0 hits en backend/). El plan 270 NO lo mata: su F4 hace un refresco puntual y agnostico que no depende de este modulo. Dueno: el plan sugerido en la seccion 6.2."
+    }
+```
+
+- **`id` en SCREAMING-KEBAB con prefijo de plan**, que es la convención viva del catálogo (ej. `PLAN239-OUTLET-EN-BLANCO`). El v2 proponía `gitlab_sync_module_missing`, que no sigue el patrón de ninguna de las 42 entradas.
+- **`killed_by: ""`** (no una frase tipo *"plan 272 sugerido"*): la huella está **abierta**, nadie la mató. Poner un plan que no existe en `killed_by` con `status: "open"` es contradictorio.
+- El `self_test.clean` incluye **`services.jira_sync`** a propósito: prueba que el patrón está anclado a `gitlab_sync` y no matchea cualquier `No module named`.
+
+**Verificación binaria (obligatoria — es el paso que el v2 no tenía):**
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.\.venv\Scripts\python.exe -m pytest tests\test_error_fingerprints_catalog.py -q
+```
+**Criterio (delta, ver §"Baseline medido"):** el resultado debe seguir siendo **exactamente `3 failed, 5 passed`**, y **ninguna** de las 3 fallas puede nombrar `PLAN270-GITLAB-SYNC-AUSENTE`. Si `test_json_valido` (que hoy **pasa**) se pone rojo, rompiste el JSON — casi seguro por el `\\.`.
+
+**Lo que NO se registra, y por qué:** el `reopen` de C2 y el mis-routing de C3 **son silenciosos: no dejan ninguna línea de log.** El `reopen` es un `PUT` exitoso (200) y el mis-routing termina en un `logger.exception` genérico sin firma estable. Inventarles un `log_pattern` sería meter ruido en un catálogo cuyo contrato es "el smoke alarma si el patrón REAPARECE". **Sus guardias son tests, no huellas de log:** el test 5 de F2 (anti-reopen) y el test 6 de F1 + F6 (anti-fallback). Queda dicho acá para que nadie lo interprete como un olvido.
 
 ---
 
@@ -1188,8 +1570,10 @@ Explícito, para que nadie lo agregue "de paso":
 | **Estado lógico (GitLab)** | Una de las 4 claves de `_state_map_for_gitlab()` (`gitlab_provider.py:94-102`): `functional`, `accepted`, `rejected`, `in_progress` |
 | **`CapabilityUnavailable`** | Excepción del Plan 218 (`tracker_provider.py:55`) que declara que una capacidad no existe en el proveedor activo. **No es un bug**: es una degradación informada |
 | **Passthrough** | Para ADO, el estado pedido se pasa **sin transformar** — garantiza retrocompatibilidad byte-idéntica |
-| **Pata (de una flag)** | Cada uno de los 6 lugares que hay que tocar para dar de alta una flag sin poner un meta-test en rojo |
+| **Pata (de una flag)** | Cada uno de los **7** lugares que hay que tocar para dar de alta una flag sin poner un meta-test en rojo. Ver §3. (El v2 decía **6** acá y **7** en todo el resto del documento: contradicción interna corregida en v3) |
 | **Fail-open** | Ante un error de red, degradar devolviendo un resultado negativo declarado en vez de levantar y tumbar la operación |
+| **Delta (de una suite roja)** | Criterio de aceptación sobre una suite que ya está roja de fábrica: no se exige verde, se exige **mismo número de fallas y ninguna que nombre un símbolo de este plan**. Ver §"Baseline medido" |
+| **Motor de estado** | Cada uno de los **6** sitios del censo de §2 C3.bis que escriben el estado del tracker. El 270 posee S1 y S2; S5 es del 271 |
 
 ### Orden de implementación (lista numerada, estricto)
 
@@ -1199,20 +1583,26 @@ Explícito, para que nadie lo agregue "de paso":
 4. **F3** — Agregar `write_state_for_ticket` al router **con el desempaquetado literal de `resolve_closed_states`** (C1); editar los **dos** bloques de `api/tickets.py` (S1 `:2073-2094` y S2 `:1486-1508`) y el `except` de S1 para concatenar el `workaround`; + `tests/test_plan270_finish_work_state.py` (**10** casos). Registrar. Correr **por archivo**. Verde.
 5. **F4** — Alta de la flag `STACKY_TICKET_STATE_WRITEBACK_ENABLED` (7 patas). `services/ticket_state_writeback.py` (key literal `"state"`, `session_scope` desde `db.py:485`) + las **dos** inserciones `4.bis` en `api/tickets.py` + `tests/test_plan270_state_writeback.py` (**12** casos, contando el 12 que fija `diverged_count`). Registrar. Correr **por archivo**. Verde (los tests 3 y 10 son el KPI en los dos caminos).
 6. **F5** — Alta de la flag `STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED` (7 patas). `frontend/src/incidents/incidentDivergence.ts` + su `.test.ts` (**12** casos); ampliar `incidentInboxModel.ts` con `divergence_badge_enabled` y `diverged_count`; luego las keys del backend (`diverged_count` **por agregación**, `divergence_badge_enabled`); luego `IncidentInboxPage.tsx` (memo `mostrados`, `visibleIds` sobre `mostrados`, chip con `Button`) + `.module.css`. Vitest verde, `tsc --noEmit` limpio, ratchet de UI verde, **smoke manual de 9 pasos hecho** (incluido el 8b de GitLab).
-7. **F6 [ADICIÓN ARQUITECTO]** — **Re-contar** los 3 patrones con el comando declarado en la fase, escribir `tests/test_plan270_state_write_ratchet.py` con esos números y **verlo fallar** subiendo a mano un conteo antes de dejarlo verde (si nunca lo viste rojo, no sabés si mide algo). Registrar en los dos arneses.
-8. **Cierre** — Regenerar `harness_defaults.env` con `deployment/export_harness_defaults.py` (**los dos destinos**, `--out` por corrida). Correr los **6** archivos de test del plan, **uno por uno**. Verificar que los 6 estén en `run_harness_tests.sh` **y** en `$HarnessTestFiles` de `run_harness_tests.ps1`. Agregar la entrada `gitlab_sync_module_missing` a `docs/sistema/error_fingerprints.json` con `status: "open"`.
+7. **F7 [ADICIÓN ARQUITECTO v3]** — `preview_state_write` en el router + la inserción en el `if dry_run:` de `api/tickets.py:1934` + `describeCloseDestination` en el `.ts` de F5. Los tests **no crean archivo nuevo**: 4 casos más en `test_plan270_write_router.py` (⇒ **14**) y 3 más en `incidentDivergence.test.ts` (⇒ **18**). Verde.
+8. **F6 [ADICIÓN ARQUITECTO v2]** — **Re-medir** con el comando AST declarado en la fase, escribir `tests/test_plan270_state_write_ratchet.py` con esos números y **verlo fallar** subiendo a mano un conteo antes de dejarlo verde (si nunca lo viste rojo, no sabés si mide algo). Registrar en los dos arneses.
+   > **Ya NO es obligatorio dejarla última (cambio en v3).** El v2 la ponía al final porque congelaba conteos que F3 supuestamente cambiaba. Medido: **F3 no cambia los conteos** — no borra las llamadas históricas, las mueve bajo el `else` del rollback, y siguen siendo 2 `ast.Call` por función. El ratchet da `{'finish_work': 2, 'set_stacky_status_by_ado': 2, 'create_child_task': 2}` **antes y después**. Se deja acá por orden narrativo, no por dependencia. **Ya no hay ninguna excepción al principio de "ninguna fase depende de una posterior".**
+9. **Cierre** — Regenerar `harness_defaults.env` con `deployment/export_harness_defaults.py` (**los dos destinos**, `--out` por corrida). Correr los **6** archivos de test del plan, **uno por uno**. Verificar que los 6 estén en `run_harness_tests.sh` **y** en `$HarnessTestFiles` de `run_harness_tests.ps1`. Agregar la entrada `PLAN270-GITLAB-SYNC-AUSENTE` a `docs/sistema/error_fingerprints.json` **con el objeto JSON literal de §6** (incluye `self_test` y el `\\.` escapado) y correr `test_error_fingerprints_catalog.py` verificando el **delta cero**.
 
 ### Definition of Done global
 
 El plan 270 está terminado cuando **todo** lo siguiente es cierto y verificable:
 
 - [ ] Los **6** archivos de test nuevos existen, están registrados en **ambos** arneses, y pasan corridos **por archivo** con `.\.venv\Scripts\python.exe -m pytest tests\<archivo>.py -q`:
-      `test_plan270_close_intent.py` (11) · `test_plan270_write_router.py` (10) · `test_plan270_gitlab_close.py` (6) · `test_plan270_finish_work_state.py` (10) · `test_plan270_state_writeback.py` (12) · `test_plan270_state_write_ratchet.py` (4). **Total: 53 tests.**
-- [ ] `incidentDivergence.test.ts` pasa (**12** casos) y `npx tsc --noEmit` sale limpio.
-- [ ] Las **3** flags nuevas están dadas de alta en sus **7 patas** cada una, las 3 con `default=True`, ninguna entrada de `PlainHelp` supera **240** caracteres, y `harness_defaults.env` fue **regenerado con el generador** en sus **dos** destinos (no editado a mano).
+      `test_plan270_close_intent.py` (11) · `test_plan270_write_router.py` (**14**, incluye los 4 de F7) · `test_plan270_gitlab_close.py` (6) · `test_plan270_finish_work_state.py` (10) · `test_plan270_state_writeback.py` (12) · `test_plan270_state_write_ratchet.py` (4). **Total: 57 tests.**
+- [ ] `incidentDivergence.test.ts` pasa (**18** casos: 12 de F5 + 3 de C4 + 3 de F7) y `npx tsc --noEmit` sale limpio.
+- [ ] Las **3** flags nuevas están dadas de alta en sus **7 patas** cada una, las 3 con `default=True`, los **3 textos de `PlainHelp` son los LITERALES de §3** (cumplen las **6** reglas del contrato, no sólo el límite de 240), y `harness_defaults.env` fue **regenerado con el generador** en sus **dos** destinos (no editado a mano).
+- [ ] **Delta cero sobre las 4 suites rojas de fábrica** (§"Baseline medido"): `test_harness_flags_help.py` sigue en **4 failed, 4 passed** · `test_error_fingerprints_catalog.py` sigue en **3 failed, 5 passed** · `test_error_fingerprints_scan.py` sigue en **2 failed, 7 passed** · `test_b2_transition_from_config.py` sigue en **5 failed** y **nadie lo tocó** (es del 271). **Y ninguna falla de ninguna de las cuatro nombra un símbolo de este plan.**
+- [ ] **F7 no escribe:** el caso 14 de `test_plan270_write_router.py` demuestra **0** llamadas a `update_item_state`/`update_work_item_state` en los tres escenarios de `preview_state_write`.
+- [ ] **El censo de §2 C3.bis se re-corrió** con el script AST y sigue dando **`ENTRADAS = 10 | SITIOS = 6`**. Si da otra cosa, hay un motor nuevo: se censa **antes** de seguir.
+- [ ] **La frontera con el 271 se respetó:** `git diff --stat` **no** toca `services/agent_completion_internal.py`, `services/completion_state.py`, `harness/task_states.py`, `api/executions.py` ni `tests/test_b2_transition_from_config.py`.
 - [ ] **Centinela anti-reopen:** `Select-String -Path services\gitlab_provider.py -Pattern 'state_map\.get\(logical_state, \{\}\)'` devuelve **0 líneas**.
 - [ ] **Centinela anti-fallback (unit):** el test 6 de `test_plan270_write_router.py` demuestra que ningún `tracker_type` no-ADO resuelve a `kind == "ado_client"`.
-- [ ] **Centinela anti-fallback (repo-wide) — F6 [ADICIÓN ARQUITECTO]:** `test_plan270_state_write_ratchet.py` congela el censo de §2 C3.bis y su test 4 cubre `backend/api/` + `backend/harness/` completos. **Se vio fallar al menos una vez** antes de dejarlo verde.
+- [ ] **Centinela anti-fallback sobre `api/tickets.py` — F6 [ADICIÓN ARQUITECTO]:** `test_plan270_state_write_ratchet.py` congela **por AST** las 3 funciones de `api/tickets.py` que escriben estado (2 llamadas cada una) y su test 2 caza una **función nueva** en ese archivo. **Se vio fallar al menos una vez** antes de dejarlo verde. El censo **repo-wide** es del 271 (`test_plan271_censo_escritores.py`) y **no se duplica acá**.
 - [ ] **Centinela anti-acoplamiento (C5):** `Select-String -Path services\tracker_write_router.py,services\ticket_state_writeback.py -Pattern 'api\.tickets|from api'` devuelve **0 líneas**.
 - [ ] **KPI verificado en los DOS caminos (C3):** el test 3 de `test_plan270_state_writeback.py` (manual, `finish-work`) **y** el test 10 (automático, `PATCH /api/tickets/by-ado/<ado_id>/stacky-status`) prueban que el ítem **desaparece** de `/api/incident-inbox/items?scope=open`.
 - [ ] **Bug de integración C1 fijado:** el test 11 de `test_plan270_close_intent.py` y el test 7 de `test_plan270_finish_work_state.py` prueban que `resolve_closed_states` se desempaqueta y que un cierre GitLab con `"Done"` llega como `"accepted"`.

@@ -1,10 +1,27 @@
 # Plan 271 — La incidencia se mueve al estado configurado al terminar el analista
 
-**Estado:** CRITICADO v2 (veredicto v1: **RECHAZADO**, 8 bloqueantes)
+**Estado:** CRITICADO v3 (veredicto v2: **RECHAZADO**, 6 bloqueantes · veredicto v1: **RECHAZADO**, 8 bloqueantes)
 **Fecha:** 2026-07-28
-**Juez v2: subagente independiente, misma corrida, contexto limpio**
+**Juez v3: subagente independiente y NUEVO (no es el que escribió el v2), misma corrida, contexto limpio**
 **Reserva de números:** este plan usa **271**. Los huecos **261** y **262** siguen libres. El **272** queda reservado para "un solo escritor de estado" (§6.1).
 **Depende de:** nada. **Coordina con:** 79 (`_apply_task_state` + `_safe_transition`), 208 (matriz), 210 (gate de build), 216 (UI de estados), 254 (`_with_outcome`), 270 (cierre real ADO+GitLab).
+
+---
+
+## CHANGELOG v2 → v3
+
+El v2 cerró los 8 bloqueantes del v1 **de una sola pasada**, y sus ~70 anclajes verificados uno por uno resultaron casi todos **EXACTOS** (ver §2.0). Lo que falló, otra vez, fue lo mismo que en el v1 pero un nivel más arriba: **el censo** (esta vez con evidencia ejecutable en contra), **la dirección de una guardia**, y **dar por verdes dos tests que hoy están rojos**. Los seis bloqueantes salieron de **correr cosas**, no de releer el documento.
+
+- **D1 (BLOQ)** — §2.1 decía "CUATRO motores" y F8 congelaba un allow-list de **6 entradas**. Se corrió el censo AST **exactamente como F8 lo especifica** (`update_item_state` / `update_work_item_state` como `ast.Attribute`, más `_safe_transition`, bajo `backend/` sin tests ni venvs) y devuelve **9 entradas**. Faltaban tres, dos de ellas **motores de pleno derecho**: `api/tickets.py::finish_work` (`:2078,:2080` — **el propio plan lo cita en §6.6 como `finish_work:1751` y aun así no lo censó**) y `api/tickets.py::create_child_task` (`:4779,:4781`), más el adaptador `services/ado_provider.py::update_item_state` (`:82`), que la regla AST captura de manera inevitable. Con el allow-list de 6, **F8 nace rojo el día 1**. §2.1 pasa a **SEIS motores**; F8 al allow-list **verificado de 9** con la salida del censo pegada.
+- **D2 (BLOQ)** — **el árbitro de F2-bis guarda la dirección equivocada.** El motor A se **encola** en el Paso 2 (`agent_completion_internal.py:172-181`), **antes** de que el motor B escriba en `:274`. Con la cola vacía el daemon (`completion_dispatcher.py:100-121`, `maybe_apply_state_transition(ev)` en `:118`) drena de inmediato ⇒ el orden más probable es **A primero, B después**, y F2-bis solo instrumentó `completion_state.py`: el motor B escribe segundo **sin árbitro ninguno**. R3, que el propio v2 subió a "Alta" y admite que F2 **agrava**, quedaba sin mitigar en su orden más probable. El árbitro pasa a ser **simétrico** (F2-bis guardia 2 en A **y** F3-bis-2 en B, misma key, mismo helper).
+- **D3 (BLOQ)** — **el catálogo no cierra, y su agujero es el caso más operable.** (a) §2.4 afirma listar "todas las razones que el código puede emitir hoy": falta `dev_build_gate_no_state`, que **`api/tickets.py:574` ya emite hoy** y que el v2 presenta como "razón nueva de F2-bis". (b) Peor: la rama de **error** de `_safe_transition` (`task_states.py:180-184`) devuelve `{"ok": False, "to", "error", "type", "phase"}` **sin `reason`**, y el helper de F5 lo traduce a `reason="unknown"` — una razón que **no está** en `ALL_FINAL_STATE_REASONS` ni en el `.ts`. O sea: el fallo real de escritura (un `ADO 400`) es exactamente el que cae **fuera** del catálogo, violando §3-4 y el KPI "23 de 23". Catálogo recontado a **27**, con `transition_failed` cableado en el origen y **F9** como centinela.
+- **D4 (BLOQ)** — **`test_b2_transition_from_config.py` está ROJO HOY** (`5 failed`, `TypeError: _resolve_transition_state_from_config() missing 1 required keyword-only argument: 'final_status'`). F4 lo declaraba *"verde (5 tests)"* como criterio binario y **F7 lo registra en el arnés** ⇒ el arnés entero se pone rojo en cuanto se lo adopta. F4 ahora **lo arregla explícitamente** (agregar el kwarg en 5 call sites; no se borra ni un assert) **antes** de que F7 lo registre.
+- **D5 (BLOQ)** — **faltan 3 de las 4 ayudas llanas obligatorias, y la que falta tiene trampa.** `test_plain_help_covers_all_registry_keys` (`test_harness_flags_help.py:32-35`) exige `PlainHelp` para **toda** key del registry; el v2 escribe **un solo texto** (F1) y en F3/F4/F5 dice "cablear las 7 patas" sin darlos. La denylist incluye literalmente `gate`, `hook`, `runtime`, `endpoint`, `backend`, `frontend`, `token`, `prompt` — y la flag de F4 se llama `..._PUBLISH_GATE_PRECISE_ENABLED`. Los **4 textos** van escritos y medidos campo por campo en §3.1bis.
+- **D6 (BLOQ)** — **la "confirmación" de que F3 rompe `test_output_watcher.py` es FALSA, y lo que esconde es peor.** `_mk_ticket` (`test_output_watcher.py:87-107`) crea el Ticket con `project="RSPacifico"` y **sin `stacky_project_name`**; `close_execution_with_publish` lo lee de ahí (`:135`) ⇒ `project_name is None` ⇒ la regla dura de F3 toma el **camino legacy** y el doble actual funciona sin tocar una línea. F3-bis era innecesario y R6 ("Confirmada, no es hipótesis") era falso. Lo que eso destapa: **un ticket sin `stacky_project_name` sigue escribiendo en ADO aunque el proyecto sea GitLab, en silencio y sin razón visible** — el bug que F3 dice cerrar. F3 emite ahora `no_project_context` y el KPI de paridad se sincera.
+- **D7..D14 (IMPORTANTES)** — `_with_outcome` está en `:74-107` y su corte de flag en **`:83`** (el v2 decía `:65-92` y `:75-76`), y eso sostiene una edición quirúrgica; `_outcome_badge_enabled` está en `:63-68` (no `:28-32`); el encolado del motor A es `:172-181` (no `:183`); `_post_hook` es `:53-59` y `enqueue_completion` `:30-50`; el `return` de `publish_execution_from_review` es `:491`; `outcomeToneClass` es `:89-94`; la guardia 1 hacía **dos lookups de DB/disco por cada completación** aunque `gate_final_state` sea no-op para todo lo que no sea `developer`; los helpers de F0 seguían con cuerpo `...` (C15 quedó a medio cerrar); `.toneEspera` y `.toneAtencion` **comparten `color: var(--warn)`** ⇒ el cuarto tono que F6 manda agregar es un no-op visual.
+- **D15..D18 (MENORES)** — el `:280` del CHANGELOG C7 se lee como `task_states.py:280`, archivo de **262 líneas** (es `agent_completion_internal.py:280`); F6 mandaba correr "los ratchets bajo `frontend/src/**/__tests__/`" cuando viven en `src/__tests__/` y son **8** archivos nombrables; `error_fingerprints.json` **existe** ⇒ el hedge "si no existe no lo crees" sobra y la huella es obligatoria; `test_harness_flags_help.py` tiene **4 fallos ajenos preexistentes** que ninguna fase declaraba con números.
+- **`[ADICIÓN ARQUITECTO]`** — **F9: ninguna razón fuera del catálogo.** Un centinela que corre los escritores por sus ramas de error y afirma que **todo** dict que devuelven trae `reason ∈ ALL_FINAL_STATE_REASONS`. Es el defecto D3 convertido en test: el plan promete "cero skip mudo" y hoy su propio helper inventa `"unknown"`. Sin esto, la promesa vuelve a vivir en la cabeza de quien implementa.
+- **`[ADICIÓN ARQUITECTO]`** — **§3.3: baseline medido de rojos ajenos.** Los números reales de hoy, corridos, para que "ya estaba rojo" deje de ser una excusa reusable y pase a ser una comparación.
 
 ---
 
@@ -31,7 +48,7 @@ Anclajes verificados abriendo los archivos: **~70 citas**. La mayoría (config, 
 
 El operador configuró, en la pantalla que Stacky le dio para eso, que al terminar el **Analista Técnico** la incidencia pase a `To Do`. Stacky corre el agente, lo cierra en verde… y la incidencia se queda exactamente en el estado en el que llegó. Sin error, sin aviso, sin razón visible en ningún lado.
 
-Este plan hace cuatro cosas, en este orden: **(1)** diagnostica **cuál de los cuatro motores** debía moverla y no lo hizo; **(2)** repara esa causa sin romper las guardias que otros planes ya pusieron; **(3)** elimina el *skip mudo* — todo no-cambio de estado deja una razón que el operador ve donde ya mira; **(4)** deja la escritura de estado en paridad ADO ↔ GitLab y **censada**, que hoy no lo está.
+Este plan hace cuatro cosas, en este orden: **(1)** diagnostica **cuál de los seis motores** debía moverla y no lo hizo; **(2)** repara esa causa sin romper las guardias que otros planes ya pusieron; **(3)** elimina el *skip mudo* — todo no-cambio de estado deja una razón que el operador ve donde ya mira; **(4)** deja la escritura de estado en paridad ADO ↔ GitLab y **censada**, que hoy no lo está.
 
 No es una feature nueva. Es **reparar un comportamiento que el operador ya configuró y que Stacky prometió aplicar**.
 
@@ -41,9 +58,11 @@ No es una feature nueva. Es **reparar un comportamiento que el operador ya confi
 |---|---|---|
 | Incidencias que quedan en el estado de entrada tras un cierre por **post-hook** (los 3 runtimes) con `next_state_ok` a nivel rol | **100 %** (skip `no_matrix_cell`, `completion_state.py:90-92`) | **0 %** |
 | Incidencias que quedan en el estado de entrada tras un cierre por `PATCH /by-ado/<id>/stacky-status` con la flag del 79 **apagada en deploy** (`harness_defaults.env:33`) | **100 %** | **0 %** (lo cubre el post-hook, que no depende de esa flag) |
-| Razones de no-transición visibles para el operador | **0 de 23** (mueren en `CloseResult.ado_state_change` y en `SystemLog`) | **23 de 23** en el drawer de la ejecución |
-| Trackers soportados por el escritor de estado del chokepoint | **1** (ADO; `agent_completion_internal.py:527,536`) | **2** (ADO + GitLab, vía `tracker_provider`) |
-| Motores de estado conocidos y verificados por un test | **0** (el propio v1 contó 2 donde hay 4) | **4/4 motores censados** (A, B, C, D), en un allow-list de 6 entradas; un **quinto motor** rompe CI |
+| Razones de no-transición visibles para el operador | **0 de 27** (mueren en `CloseResult.ado_state_change` y en `SystemLog`) | **27 de 27** en el drawer de la ejecución |
+| Escrituras de estado que fallan y **no dicen por qué** (`_safe_transition` rama de error, `task_states.py:180-184`, devuelve dict **sin `reason`**) | **100 %** (el v2 las traducía a `"unknown"`, razón fuera de todo catálogo — **D3**) | **0 %** (`transition_failed`, cableado en el origen y verificado por **F9**) |
+| Trackers soportados por el escritor de estado del chokepoint, **para tickets con `stacky_project_name`** | **1** (ADO; `agent_completion_internal.py:527,536`) | **2** (ADO + GitLab, vía `tracker_provider`) |
+| Tickets **sin** `stacky_project_name` en un proyecto GitLab: escritura silenciosa a ADO | **100 % mudo** | **100 % legacy pero con razón visible** (`no_project_context`) — la reparación de fondo es del **272** (**D6**) |
+| Motores de estado conocidos y verificados por un test | **0** (el v1 contó 2 y el v2 contó 4 donde hay **6**) | **6/6 motores censados** (A..F), en un allow-list **de 9 entradas, verificado corriendo el censo**; un **séptimo escritor** rompe CI |
 | Clics del operador para arreglarlo | N/A (hoy no puede: no sabe que pasó) | **0** |
 
 > **KPI corregido (C1).** El v1 afirmaba "100 % con `next_state_ok` a nivel rol" a secas. Es falso en general: por el camino `set_stacky_status_by_ado` (`api/tickets.py:1205`), con `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` **ON** (default de `config.py:1245-1246`), `_apply_task_state` **sí** aplica el nivel rol. El 100 % vale para el camino del post-hook, y para el camino del 79 **solo cuando la flag está apagada**, que es exactamente lo que hace el deploy (`harness_defaults.env:33` fuerza `=false`).
@@ -56,9 +75,25 @@ El operador deja de tener que mover incidencias a mano después de cada corrida 
 
 ## 2. Por qué ahora, y la causa raíz diagnosticada
 
-### 2.1 Los CUATRO motores que hoy pueden mover el `System.State` (leído, no supuesto)
+### 2.0 Estado de los anclajes tras la segunda pasada (D7..D18)
 
-Ninguno sabe que los otros existen.
+El v3 no rehace la verificación del v2: la **repitió** sobre los anclajes que el v2 **agregó** (§2.1bis, F2-bis, F8, R3-bis, allow-list) y sobre todas sus **afirmaciones negativas**. Resultado: las negativas dieron **todas verdaderas** (`STACKY_FINAL_STATE*` = 0 hits en `backend/` y `frontend/src`; `ado_state_change` = 0 hits en `frontend/src`; `final_state_outcome` = 0 hits; `dev_build_verify` = 0 hits en `completion_state.py`; `_apply_task_state` llamado **solo** desde `:1473`; el 270 no menciona `agent_completion_internal` ni `completion_state` = 0 hits; `test_b2_transition_from_config` = 0 hits en ambos scripts del arnés). Los desfases que **sí** importan porque sostienen una edición quirúrgica están corregidos en el cuerpo:
+
+| Anclaje del v2 | Línea REAL |
+|---|---|
+| `api/executions.py` `_with_outcome` `:65-92` | **`:74-107`** |
+| `api/executions.py` corte de flag `:75-76` | **`:83-84`** |
+| `api/executions.py` `_outcome_badge_enabled` `:28-32` | **`:63-68`** |
+| `agent_completion_internal.py:183` "encola el motor A" | **`:172-181`** (`:183` es un `except`) |
+| `completion_dispatcher.py` `_post_hook` `:51-57` / `enqueue_completion` `:28-48` | **`:53-59`** / **`:30-50`** |
+| `completion_dispatcher.py` `_drain_loop` `:98-120`, llamada en `:117` | **`:100-121`**, llamada en **`:118`** |
+| `publish_execution_from_review` "return de `:493`" | **`:491`** |
+| `ExecutionDetailDrawer.tsx` `outcomeToneClass` `:90-95` | **`:89-94`** |
+| CHANGELOG C7: "el `setdefault("source", ...)` de `:280`" | es **`agent_completion_internal.py:280`**, no `task_states.py:280` (ese archivo tiene **262** líneas) |
+
+### 2.1 Los SEIS motores que hoy pueden mover el `System.State` (censados corriendo el AST, no supuestos) — D1
+
+Ninguno sabe que los otros existen. **El v1 contó dos, el v2 contó cuatro. Son seis.** Esta lista no salió de leer: salió de correr el censo AST que F8 especifica.
 
 **Motor A — "matriz" (plan 208), asíncrono.**
 `app.py:997-1000` registra `completion_dispatcher` en `ticket_status.register_post_hook` y arranca su daemon. Al terminar **cualquier** agente en **cualquiera de los 3 runtimes**, `ticket_status.on_execution_end` (`services/ticket_status.py:293`) llama `_run_post_hooks` (`:349-355`), el hook encola O(1) (`completion_dispatcher.py:51-57` → `:28-48`) y el **daemon de fondo** `_drain_loop` (`completion_dispatcher.py:98-120`) llama `completion_state.maybe_apply_state_transition(ev)` en **`:117`**. Escribe vía `harness/task_states.py:146 _safe_transition`, provider-aware (`:171-177`). Flag `STACKY_ADO_STATE_MATRIX_ENABLED` **ON** (`config.py:1404-1406`; `harness_flags.py:2795-2807 default=True`; **ausente** de `harness_defaults.env`, o sea que el default del código manda también en deploy).
@@ -82,24 +117,38 @@ if target not in applicable_states(plan):
 y antes de escribir aplica el **gate de build del plan 210** (`api/tickets.py:576-582`), que puede **degradar** el target cuando el Developer no tiene veredicto de máquina fresco.
 
 **Motor D — escritor inline (sin plan dueño).**
-`api/tickets.py:1489-1491`, dentro del mismo `set_stacky_status_by_ado`, rama `elif target_ado_state:`: llama `_provider.update_item_state(...)` o `_ado_client_for_ticket(...).update_work_item_state(...)` directo, sin `_safe_transition`.
+`api/tickets.py:1489-1492`, dentro del mismo `set_stacky_status_by_ado`, rama `elif target_ado_state:`: llama `_provider.update_item_state(...)` (`:1490`) o `_ado_client_for_ticket(...).update_work_item_state(...)` (`:1492`) directo, sin `_safe_transition`.
 
-> **Corolario (C1).** La frase del v1 "el plan 208 eligió no honrar el nivel de rol" es cierta **solo para el motor A**. El motor C sí lo honra. Por eso el síntoma reportado no puede explicarse sin decir **por qué camino se cerró la ejecución**.
+**Motor E — `finish_work` (sin plan dueño). ⟵ EL QUE EL v2 NO VIO, PESE A CITARLO EN §6.6.**
+`api/tickets.py:1751 finish_work`, bloque *"── 4. Cambiar estado en ADO ──"*: `_provider.update_item_state(str(ado_id), target_ado_state)` (`:2078`) o `_ado_client_for_ticket(ticket=ticket).update_work_item_state(...)` (`:2080`), sin `_safe_transition`, sin idempotencia, sin guardia de origen. El v2 lo nombró en §6.6 como *"`finish_work:1751`"* y **aun así lo dejó fuera del allow-list de F8** — exactamente el mismo error del v1, un nivel más arriba.
+
+**Motor F — `create_child_task`. ⟵ TAMPOCO ESTABA.**
+`api/tickets.py:4080 create_child_task`: `_provider.update_item_state(str(task_ado_id), target_state)` (`:4779`) o `ado.update_work_item_state(task_ado_id, target_state)` (`:4781`). Escribe el estado de la **tarea hija** recién creada. Es el más lejano al síntoma reportado, pero es un escritor de `System.State` y el censo lo encuentra, así que o está en el allow-list o F8 nace rojo.
+
+**Adaptador (no es motor, pero el censo lo captura).**
+`services/ado_provider.py:82 AdoTrackerProvider.update_item_state` hace `self._client.update_work_item_state(int(item_id), logical_state)`. Es la traducción puerto→cliente, no una decisión de negocio, pero la regla AST de F8 (`ast.Attribute` con `attr == "update_work_item_state"`) **lo marca sin remedio**. Va al allow-list etiquetado como adaptador.
+
+> **Corolario 1 (C1, conservado).** La frase del v1 "el plan 208 eligió no honrar el nivel de rol" es cierta **solo para el motor A**. El motor C sí lo honra. Por eso el síntoma reportado no puede explicarse sin decir **por qué camino se cerró la ejecución**.
+>
+> **Corolario 2 (D1, nuevo).** Dos versiones seguidas de este plan contaron mal los motores, y las dos veces el error sobrevivió a una crítica con anclajes exactos. Eso no se arregla contando mejor: se arregla **corriendo el censo antes de escribir el allow-list**, que es lo que F8 ahora obliga (§F8, paso 0).
 
 ### 2.1bis Alcance de cada motor en ESTE plan (tabla vinculante)
 
 Esta tabla manda. Si alguna fase parece contradecirla, gana la tabla.
 
-| Motor | ¿Este plan lo **modifica**? | ¿Lo **censa** (F8)? | ¿Lo cubre el **árbitro** (F2-bis guardia 2)? |
-|---|---|---|---|
-| **A** `completion_state.maybe_apply_state_transition` | **SÍ** — F2, F2-bis, F5 | SÍ | **SÍ** (es quien consulta el árbitro) |
-| **B** `_attempt_state_change` | **SÍ** — F3, F4, F5 | SÍ | **SÍ** (es quien escribe la marca que el árbitro lee) |
-| **C** `api/tickets.py:531 _apply_task_state` | **NO** (§6.6) | **SÍ** | **NO** |
-| **D** inline `api/tickets.py:1489-1491` | **NO** (§6.6) | **SÍ** | **NO** |
+| Motor | Símbolo | ¿Este plan lo **modifica**? | ¿Lo **censa** (F8)? | ¿Lo cubre el **árbitro simétrico**? |
+|---|---|---|---|---|
+| **A** | `completion_state.maybe_apply_state_transition` | **SÍ** — F2, F2-bis, F5 | SÍ | **SÍ** (guardia en F2-bis) |
+| **B** | `agent_completion_internal._attempt_state_change` | **SÍ** — F3, F3-bis-2, F4, F5 | SÍ | **SÍ** (guardia simétrica en F3-bis-2 — **D2**) |
+| **C** | `api/tickets.py:531 _apply_task_state` | **NO** (§6.6) | **SÍ** | **NO** |
+| **D** | `api/tickets.py:1489-1492` inline | **NO** (§6.6) | **SÍ** | **NO** |
+| **E** | `api/tickets.py:1751 finish_work` (`:2078,:2080`) | **NO** (§6.6) | **SÍ** | **NO** |
+| **F** | `api/tickets.py:4080 create_child_task` (`:4779,:4781`) | **NO** (§6.6) | **SÍ** | **NO** |
+| — | `services/ado_provider.py:82` (adaptador) | **NO** | **SÍ** (etiquetado adaptador) | N/A |
 
-**Decisión explícita sobre el Motor D, en una frase:** *el 271 lo **censa** en el allow-list de F8 (entrada `api/tickets.py::set_stacky_status_by_ado`) para que quede nombrado y no vuelva a desaparecer de un censo, pero **no lo modifica ni lo arbitra**, y difiere su unificación al **plan 272**.*
+**Decisión explícita sobre los motores D, E y F, en una frase:** *el 271 los **censa** en el allow-list de F8 con su etiqueta para que queden nombrados y no vuelvan a desaparecer de un censo, pero **no los modifica ni los arbitra**, y difiere su unificación al **plan 272**.*
 
-**Por qué el árbitro no cubre C ni D (y no es un olvido):** la guardia 2 de F2-bis se apoya en la key `final_state_outcome` del `metadata_json` de la ejecución, que **solo F5 escribe**, y F5 solo toca los motores A y B. Los motores C y D viven en `api/tickets.py`, que §6.6 declara intocable en este plan (territorio del 270 y del 272). **Consecuencia aceptada y declarada:** un cierre por `PATCH /by-ado/<id>/stacky-status` puede seguir produciendo dos escrituras (C o D, más A por el post-hook). Eso **ya pasa hoy** y este plan no lo empeora en ese camino concreto, porque no toca ninguno de los dos. Lo que sí cierra es la carrera **A vs B**, que es la que F2 sí agrava. Extender el árbitro a C/D es alcance del 272.
+**Por qué el árbitro no cubre C, D, E ni F (y no es un olvido):** el árbitro se apoya en la key `final_state_outcome` del `metadata_json` de la ejecución, que **solo F5 escribe**, y F5 solo toca los motores A y B. C, D, E y F viven en `api/tickets.py`, que §6.6 declara intocable en este plan (territorio del 270 y del 272). **Consecuencia aceptada y declarada:** un cierre por `PATCH /by-ado/<id>/stacky-status` o por `finish_work` puede seguir produciendo dos escrituras (C/D/E, más A por el post-hook). Eso **ya pasa hoy** y este plan no lo empeora en esos caminos, porque no toca ninguno. Lo que sí cierra es la carrera **A vs B**, que es la que F2 sí agrava — **y la cierra en las dos direcciones**, no en una (D2).
 
 ### 2.2 CAUSA RAÍZ PRIMARIA (RC-1) — la única UI que el operador tiene escribe en una clave que el motor A se niega a leer
 
@@ -182,7 +231,12 @@ En los cuatro primeros el gate es **espurio**: bloquea la transición "para no d
 
 Del lado del motor A, `completion_state._logged` (`:164-191`) escribe una fila `SystemLog action="completion.matrix_transition"` (`:176`) con la razón — pero no hay endpoint ni componente que la muestre.
 
-**Catálogo canónico de razones (23) — C8.** El v1 listaba 12 en §2.4 y otras 12 distintas en F6 (intersección: 7). Estas son **todas** las que el código puede emitir hoy, con su ancla:
+**Catálogo canónico de razones (27) — C8 + D3.** El v1 listaba 12 en §2.4 y otras 12 distintas en F6 (intersección: 7). El v2 lo unificó en 23 y afirmó que eran **todas** las que el código puede emitir hoy. **No lo eran** (D3):
+
+1. Faltaba `dev_build_gate_no_state`, que **`api/tickets.py:574` emite HOY** (motor C, gate del 210). El v2 lo presentaba como "razón nueva de F2-bis" cuando ya existía.
+2. Y sobre todo: la rama de **error** de `_safe_transition` (`harness/task_states.py:180-184`) devuelve `{"ok": False, "to", "error", "type", "phase"}` — **sin `reason`**. El helper de F5 lo traducía a `reason="unknown"`, string que no está ni en `ALL_FINAL_STATE_REASONS` ni en el `.ts`. Resultado: **el único fallo que el operador puede accionar de verdad — la escritura al tablero que devuelve error — era el único que caía fuera del catálogo**, y el test puente de F6 no lo detectaba porque `"unknown"` no está en ninguno de los dos lados. Se cierra con `transition_failed` cableado **en el origen** (F3-bis-3) y verificado por **F9**.
+
+Estas son **todas**, con su ancla:
 
 | # | Razón | Ancla real | Motor |
 |---|---|---|---|
@@ -209,8 +263,14 @@ Del lado del motor A, `completion_state._logged` (`:164-191`) escribe una fila `
 | 21 | `no_ado_id` | `agent_completion_internal.py:524` | B |
 | 22 | `ado_client_unavailable` | `agent_completion_internal.py:533` | B |
 | 23 | `provider_unavailable` | **nueva, F3** | B |
+| 24 | `dev_build_gate_no_state` | `api/tickets.py:574` (**ya existe hoy**, motor C) + **F2-bis** en A | A/C |
+| 25 | `already_written_by_other_engine` | **nueva, F2-bis + F3-bis-2** | A/B |
+| 26 | `transition_failed` | **nueva, F3-bis-3** — tapa el agujero de `task_states.py:180-184` (**D3**) | A/B |
+| 27 | `no_project_context` | **nueva, F3** — ticket sin `stacky_project_name` (**D6**) | B |
 
 > El bug de fondo no es que el ticket no se mueva. Es que **no se mueve y no dice por qué**. Familia "cero fallas mudas" del plan 255.
+>
+> **Invariante de este plan (D3):** ningún escritor de estado puede devolver un dict cuyo `reason` no esté en `ALL_FINAL_STATE_REASONS`. `"unknown"` **no es una razón**: es la confesión de que el catálogo está incompleto. **F9** lo verifica corriendo, no leyendo.
 
 ### 2.5 Hueco de paridad (E-3) — el escritor del motor B es ADO-only
 
@@ -226,7 +286,7 @@ try:
 
 Sin `tracker_provider`, sin `_safe_transition`, sin guardia de idempotencia, sin guardia de origen. En un proyecto GitLab esto intenta escribir en ADO usando el `iid` de GitLab.
 
-> **Corrección (C1).** El v1 decía que *"el plan 79 nunca censó este call site"* y listaba a `_attempt_state_change` como "tierra de nadie en los planes 79, 208, 216 y 270". El censo del propio v1 era peor: **no vio los motores C ni D**. El docstring *"ÚNICA función que escribe estado"* está en `harness/task_states.py:155` (no `:146`, que es la línea del `def`), y de los cuatro escritores solo A y C lo respetan. Por eso F8 construye un **censo ejecutable**.
+> **Corrección (C1).** El v1 decía que *"el plan 79 nunca censó este call site"* y listaba a `_attempt_state_change` como "tierra de nadie en los planes 79, 208, 216 y 270". El censo del propio v1 era peor: **no vio los motores C ni D**. El docstring *"ÚNICA función que escribe estado"* está en `harness/task_states.py:155` (no `:146`, que es la línea del `def`), y de los **seis** escritores solo A y C lo respetan (D1). Por eso F8 construye un **censo ejecutable** que se **corre antes** de escribirlo.
 
 ### 2.6 Hipótesis del deploy — obligatoria de descartar antes de construir (NUEVA, C1)
 
@@ -256,7 +316,7 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 1. **Diagnóstico antes que fix.** F0 no toca una línea de producción. Escribe el rojo que prueba el bug **y** mide qué motor estaba activo. Ninguna fase posterior se escribe sin ese rojo.
 2. **Reparar ≠ inventar.** Este plan solo hace que se aplique lo que el operador **ya configuró**. No inventa estados, no infiere destinos.
 3. **Human-in-the-loop innegociable.** `completion_state._origin_guard` (`:121-161`) se conserva intacto. `review_mode_hold` (`:210-224`) se conserva intacto. El **gate de build del plan 210** se conserva y se **extiende** al motor A (F2-bis).
-4. **Cero skip mudo.** Toda rama que decida NO cambiar el estado produce una razón del catálogo de §2.4, persistida y visible. Un `return {"skipped": True}` sin `reason` es un defecto de este plan.
+4. **Cero skip mudo.** Toda rama que decida NO cambiar el estado — **incluida la que falla al escribir** — produce una razón **del catálogo de §2.4**, persistida y visible. Un `return {"skipped": True}` sin `reason`, o un `reason` fuera del catálogo (`"unknown"`, `"error"`, `"failed"`), es un **defecto de este plan**, no un detalle. **F9** lo verifica corriendo: hasta el v2 inclusive esta regla se cumplía en la prosa y se violaba en el código (D3).
 5. **Paridad de 3 runtimes por construcción.** Codex CLI, Claude Code CLI y Copilot Pro cierran todos por `ticket_status.on_execution_end` (`completion_dispatcher.py:8-10` lo declara literal) y/o por `close_execution_with_publish`. Ninguna fase toca un runner.
 6. **Paridad ADO ↔ GitLab.** Toda escritura de estado nueva o corregida pasa por `services/tracker_provider.get_tracker_provider` (`:125`). Nada de `AdoClient()` directo **salvo** en el camino legacy que protege una flag OFF.
 7. **Backward-compatible.** Con las 4 flags apagadas, el comportamiento es byte-idéntico al de hoy.
@@ -280,6 +340,59 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 
 > **NO tocar `deployment/harness_defaults.env`.** Es un snapshot derivado de un deploy vivo (docstring de `deployment/export_harness_defaults.py:1-21`) y **ya diverge** del versionado. Fuera de scope.
 
+### 3.1bis Los CUATRO textos de ayuda llana, escritos y medidos (D5)
+
+**Por qué están acá y no "cablealos en tu fase":** `test_harness_flags_help.py:32-35` (`test_plain_help_covers_all_registry_keys`) exige un `PlainHelp` para **toda** key de `FLAG_REGISTRY`. El v2 escribía **uno solo** y dejaba tres a criterio del implementador, con una denylist que incluye literalmente **`gate`**, `hook`, `runtime`, `endpoint`, `backend`, `frontend`, `token`, `prompt` — y una flag que se llama `..._PUBLISH_GATE_PRECISE_ENABLED`. Escribir "el gate de publicación" ahí deja el test rojo, y §3-11 prohíbe relajarlo. Los cuatro van **literales**, ya medidos.
+
+```python
+"STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED": PlainHelp(
+    what="Hace que el estado al que configuraste que pase la incidencia cuando el empleado termina se aplique de verdad.",
+    on_effect="Si la activás: al terminar el empleado, la incidencia pasa al estado que elegiste en la pantalla de Estados.",
+    off_effect="Si la apagás: la incidencia se queda en el estado en que estaba y la tenés que mover a mano.",
+    example="Como que el trámite avance solo de ventanilla cuando el funcionario lo termina, en vez de quedarse en el mostrador.",
+),
+"STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED": PlainHelp(
+    what="Escribe el nuevo estado en el tablero que ese proyecto declara, en vez de escribirlo siempre en el mismo.",
+    on_effect="Si la activás: cada proyecto mueve sus incidencias en su propio tablero.",
+    off_effect="Si la apagás: todos los proyectos intentan mover la incidencia en el tablero de siempre, aunque no sea el suyo.",
+    example="Como mandar la carta a la sucursal del cliente y no siempre a la casa central.",
+),
+"STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED": PlainHelp(
+    what="Deja de frenar el cambio de estado cuando no había ningún comentario para publicar.",
+    on_effect="Si la activás: si no hubo nada que publicar, la incidencia igual pasa al estado que configuraste.",
+    off_effect="Si la apagás: cualquier publicación que no salga bien frena el cambio de estado, aunque no hubiera nada para publicar.",
+    example="Como no retener un expediente por falta de adjunto cuando ese trámite nunca llevaba adjunto.",
+),
+"STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED": PlainHelp(
+    what="Muestra en el detalle de la corrida por qué la incidencia se movió, o por qué no se movió.",
+    on_effect="Si la activás: al abrir la corrida ves en castellano el motivo y qué hacer al respecto.",
+    off_effect="Si la apagás: no ves ningún motivo y tenés que revisar los registros a mano.",
+    example="Como el cartel de la ventanilla que dice por qué te rechazaron el trámite en vez de mandarte a preguntar.",
+),
+```
+
+**Medición campo por campo (hecha, no estimada):** los cuatro `what` caen entre 10 y 200; los ocho `on_effect`/`off_effect` están bajo 240 y **empiezan con `"Si "`** (`test_harness_flags_help.py:59-60`); los cuatro `example` están bajo 300; ningún campo está vacío; **ninguno contiene** una palabra de `JARGON_DENYLIST` (`:17-20`) — nótese que se dice *"pantalla de Estados"*, *"tablero"* y *"frenar el cambio de estado"* precisamente para no escribir `gate`, `endpoint` ni `runtime`; ninguno matchea `_KEY_RE` (`:22`) ni `_PHASE_RE` (`:23`).
+
+> **Prohibido parafrasear estos textos.** Si hay que cambiarlos, se vuelven a medir contra `test_harness_flags_help.py:44-52,59-60,63-76` **antes** de commitear.
+
+### 3.3 `[ADICIÓN ARQUITECTO]` Baseline MEDIDO de rojos ajenos (D4, D13)
+
+El v2 repetía en cada fase *"si ya venía rojo, probalo con un worktree y declaralo"*. Eso es correcto pero **inservible sin números**: un modelo menor no sabe qué es "ya venía rojo". Estos son los conteos **corridos hoy** con `backend\.venv\Scripts\python.exe -m pytest <archivo> -q`, por archivo:
+
+| Archivo | Baseline REAL hoy | Qué significa para este plan |
+|---|---|---|
+| `test_harness_flags.py` | **56 passed** | Verde. Cualquier rojo tras tus cambios **es tuyo**. |
+| `test_harness_flags_help.py` | **4 failed, 4 passed** | **Rojo ajeno.** Los 4 fallos son de `STACKY_PLANS_BOARD_ENABLED`, `STACKY_CODE_INTEGRITY_ENABLED`, `STACKY_EVOLUTION_*`, `STACKY_EVAL_*` — ninguna de este plan. **Criterio de este plan: los mismos 4, ni uno más, y ninguna key `STACKY_FINAL_STATE_*` en la lista de violaciones.** |
+| `test_plan210_state_gate.py` | **16 passed** | Verde. F2-bis no puede romperlo. |
+| `test_u2_publish_review_mode.py` | **3 passed** | Verde. |
+| `test_plan79_apply_final.py` | **6 passed** | Verde. |
+| `test_plan79_centinela_estados.py` | **5 passed** | Verde. |
+| `test_output_watcher.py` | **30 passed** | Verde. D6: F3 **no** lo toca; tiene que seguir en 30. |
+| `test_plan79_safe_transition.py` | **10 passed** | Verde. Es el dueño de la función que toca F3-bis-3. |
+| `test_b2_transition_from_config.py` | **5 failed** — `TypeError: _resolve_transition_state_from_config() missing 1 required keyword-only argument: 'final_status'` | **Rojo ajeno que ESTE plan arregla** (F4-bis), porque F7 lo adopta al arnés y un rojo registrado deja el arnés rojo. |
+
+> **Regla:** "ya estaba rojo" deja de ser una excusa y pasa a ser una **comparación contra esta tabla**. Si tu conteo difiere del de acá, es tuyo hasta que pruebes lo contrario con un worktree en el commit base.
+
 ### 3.2 Las 4 flags de este plan y su default
 
 | Flag | Fases | Default | Justificación de la categoría |
@@ -291,7 +404,7 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 
 **Ninguna flag de este plan nace OFF.** No aplica la categoría (A) — no hay loop, daemon nuevo, barrido, polling ni llamada a modelo en reposo — ni (B) en su forma pura, por lo argumentado arriba.
 
-> **F2-bis y F8 no llevan flag propia.** F2-bis es una **guardia** que solo puede reducir escrituras (nunca agregarlas) y va cableada dentro del camino que ya protege `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED`. F8 es un test.
+> **F2-bis, F3-bis, F4-bis, F8 y F9 no llevan flag propia.** Las guardias del árbitro solo pueden **reducir** escrituras (nunca agregarlas) y van cableadas dentro de los caminos que ya protegen `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED` y `STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED`. F3-bis-3 agrega una key a un dict que hoy nadie lee (backward-compatible por construcción). F4-bis arregla un test. F8 y F9 son tests.
 
 ---
 
@@ -299,7 +412,7 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 
 ### F0 — Caracterización: el rojo que prueba el bug + medición del motor activo
 
-**Objetivo (1 frase):** dejar escrito, en tests que hoy fallan, el comportamiento que el operador espera, y **medir** cuál de los cuatro motores estaba activo en el deploy.
+**Objetivo (1 frase):** dejar escrito, en tests que hoy fallan, el comportamiento que el operador espera, y **medir** cuál de los seis motores estaba activo en el deploy.
 **Valor:** ninguna fase posterior puede escribirse "de fe". Si F0 pasa en verde antes de tocar producción, el diagnóstico está mal.
 
 **Archivos a crear:**
@@ -339,6 +452,21 @@ class FakeProvider:
         return {"ok": True}
 
 
+class _FakeTicket:
+    def __init__(self, ado_id, project, work_item_type):
+        self.ado_id = ado_id
+        self.stacky_project_name = project
+        self.work_item_type = work_item_type
+
+
+class _FakeSession:
+    def __init__(self, ticket):
+        self._t = ticket
+
+    def get(self, _model, _pk):
+        return self._t
+
+
 def patch_motor_a(monkeypatch, *, profile: dict, ado_id=4242, project="P271",
                   work_item_type=None, provider: FakeProvider | None = None):
     """Parchea TODO lo que `completion_state.maybe_apply_state_transition` importa
@@ -352,21 +480,66 @@ def patch_motor_a(monkeypatch, *, profile: dict, ado_id=4242, project="P271",
       - services.completion_dispatcher.emit_completion_log      (:171)  -> no-op
     Devuelve el FakeProvider usado (para inspeccionar `.writes`).
     """
-    ...
+    import contextlib
+    import db as _db
+    import services.client_profile as _cp
+    import services.completion_dispatcher as _cd
+    import services.tracker_provider as _tp
+
+    prov = provider if provider is not None else FakeProvider()
+    ticket = _FakeTicket(ado_id, project, work_item_type)
+
+    @contextlib.contextmanager
+    def _scope(*_a, **_k):
+        yield _FakeSession(ticket)
+
+    monkeypatch.setattr(_db, "session_scope", _scope)
+    monkeypatch.setattr(_cp, "load_effective_client_profile", lambda *_a, **_k: profile)
+    monkeypatch.setattr(_tp, "get_tracker_provider", lambda *_a, **_k: prov)
+    monkeypatch.setattr(_cd, "emit_completion_log", lambda **_k: None)
+    return prov
 
 
 def close_sin_html(monkeypatch, *, transition_state: str = "To Do"):
-    """Crea execution+ticket en la DB de test y llama close_execution_with_publish
-    con html_output_path=None, final_status='completed'.
+    """Llama close_execution_with_publish con html_output_path=None y
+    final_status='completed', con la execution+ticket ya sembrados por el caller.
 
+    `agent_completion_internal` resuelve sus helpers POR ATRIBUTO DE MÓDULO, así
+    que acá sí se parchea el propio módulo (al revés que en patch_motor_a).
     Modelalo sobre `backend/tests/test_u2_publish_review_mode.py:150-162`, que ya
-    siembra una execution y monkeypatchea `_attempt_publish` /
-    `_resolve_transition_state_from_config` / `_attempt_state_change` sobre el
-    módulo `services.agent_completion_internal` (esos SÍ se resuelven por atributo
-    de módulo). Devuelve el CloseResult.
+    siembra la execution con el mismo patrón. Devuelve el CloseResult.
     """
-    ...
+    import services.agent_completion_internal as aci
+
+    monkeypatch.setattr(aci, "_resolve_transition_state_from_config",
+                        lambda **_k: transition_state)
+    execution_id, ticket_id = _seed_execution_y_ticket()
+    return aci.close_execution_with_publish(
+        execution_id=execution_id, ticket_id=ticket_id,
+        final_status="completed", html_output_path=None,
+    )
+
+
+def _seed_execution_y_ticket() -> tuple[int, int]:
+    """Siembra un Ticket (con `stacky_project_name` seteado — sin él, F3 cae al
+    camino legacy, ver D6) y una AgentExecution 'running'. Devuelve (exec, ticket).
+    Copiá el patrón exacto de `test_u2_publish_review_mode.py:150-162`; lo único
+    que NO se puede omitir es `stacky_project_name`."""
+    from db import session_scope
+    from models import AgentExecution, Ticket
+
+    with session_scope() as s:
+        t = Ticket(ado_id=4242, project="P271", stacky_project_name="P271",
+                   title="t-271", ado_state="New", stacky_status="running")
+        s.add(t)
+        s.flush()
+        e = AgentExecution(ticket_id=t.id, agent_type="technical", status="running")
+        s.add(e)
+        s.flush()
+        return e.id, t.id
 ```
+
+> **D12 — por qué ya no hay `...` en este bloque.** El v1 dejaba los helpers a criterio del implementador (C15). El v2 "lo corrigió" dando **firma + docstring y cuerpo `...`**, y a la vez mandaba *"implementalo literal"*: no se puede implementar literalmente un `...`. Ahora los cuerpos están. La única parte que sigue siendo un puntero es el sembrado, y va con la **restricción que importa escrita aparte** (`stacky_project_name` no es opcional).
 
 > **Detalle que un modelo menor no puede inferir y por eso está escrito:** `completion_state.maybe_apply_state_transition` hace todos sus imports **dentro** de la función (`:56-57`, `:80-85`, `:101`). `monkeypatch.setattr(completion_state, "get_tracker_provider", ...)` **no hace nada**. Hay que parchear `services.tracker_provider.get_tracker_provider`. En cambio `agent_completion_internal` llama a sus helpers por atributo de módulo, así que ahí sí se parchea el propio módulo.
 
@@ -511,8 +684,10 @@ REASONS: frozenset[str] = frozenset({
 })
 
 # Catálogo COMPLETO de razones que cualquier escritor de estado puede emitir
-# (§2.4 del plan 271). Fuente única para el mapa de la UI (F6) y para el test
-# de cobertura. Agregar una razón nueva sin agregarla acá deja el test rojo.
+# (§2.4 del plan 271). Fuente única para el mapa de la UI (F6), para el test
+# puente (F6) y para el centinela de contrato (F9).
+# Agregar una razón nueva sin agregarla acá deja DOS tests rojos.
+# D3 — "unknown" NO está y NO puede estar: es la confesión de que falta una razón.
 ALL_FINAL_STATE_REASONS: frozenset[str] = frozenset({
     "ok", "flag_off", "not_ok_status", "no_ticket",
     "no_ado_id_or_stacky_project", "no_matrix_cell", "no_final_state",
@@ -521,6 +696,11 @@ ALL_FINAL_STATE_REASONS: frozenset[str] = frozenset({
     "no_provider", "not_requested", "publish_not_ok", "review_mode_hold",
     "no_ticket_id", "ticket_lookup_failed", "no_ado_id",
     "ado_client_unavailable", "provider_unavailable",
+    # ── agregadas en el v3 (D3, D6) ──────────────────────────────────────
+    "dev_build_gate_no_state",          # api/tickets.py:574 (YA existe) + F2-bis
+    "already_written_by_other_engine",  # árbitro simétrico (F2-bis, F3-bis-2)
+    "transition_failed",                # rama de error de _safe_transition (F3-bis-3)
+    "no_project_context",               # ticket sin stacky_project_name (F3, D6)
 })
 
 
@@ -539,6 +719,13 @@ def role_fallback_enabled() -> bool:
         return bool(getattr(_cfg, "STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED", False))
     except Exception:  # noqa: BLE001
         return False
+
+
+# D2 — el árbitro SIMÉTRICO vive acá, no en un motor, para que los DOS motores
+# lean exactamente el mismo criterio de "ya se escribió". El cuerpo completo está
+# en §F2-bis; se crea en ESTA fase porque F2-bis y F3-bis-2 lo importan los dos.
+def final_state_already_written(execution_id) -> bool:
+    ...  # ver el cuerpo literal en F2-bis
 
 
 def resolve_final_state(
@@ -578,7 +765,7 @@ def resolve_final_state(
 > **`on_failure_state` (C16):** `_resolve_transition_state_from_config` también resuelve `on_failure_state` para `final_status in {"error","needs_review"}` (`agent_completion_internal.py:249,352`). El resolver de F1 **no lo modela** y devuelve `not_ok_status` para todo lo que no sea `completed`. Mientras el motor B no use el resolver (o sea, en todo este plan), no hay pérdida. **Cablear el resolver en el motor B sin modelar `on_failure_state` sería una regresión**: queda escrito acá para el 272.
 
 **Archivo de test a crear:** `backend/tests/test_plan271_final_state_resolver.py`
-**Casos:** las **10** filas de la tabla, una por test, + 2 de casos borde (`""` y `"  "`), + 1 que afirma `PRECEDENCE == ("caller","matrix","role","employee_config")`, + 1 que afirma `REASONS ⊆ ALL_FINAL_STATE_REASONS`. Total: **14 tests**.
+**Casos:** las **10** filas de la tabla, una por test, + 2 de casos borde (`""` y `"  "`), + 1 que afirma `PRECEDENCE == ("caller","matrix","role","employee_config")`, + 1 que afirma `REASONS ⊆ ALL_FINAL_STATE_REASONS`, + 1 que afirma `len(ALL_FINAL_STATE_REASONS) == 27` y que **`"unknown" not in ALL_FINAL_STATE_REASONS`** (D3), + 2 sobre `final_state_already_written` (sin `execution_id` ⇒ `False`; con `applied=True` sembrado ⇒ `True`). Total: **17 tests**.
 
 **Flag que la protege:** `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED` — **default ON**. Las 7 patas de §3.1 se cablean **en esta fase**:
 1. `backend/config.py` — junto al bloque `STACKY_ADO_STATE_MATRIX_ENABLED` (`:1401-1406`).
@@ -605,7 +792,7 @@ def resolve_final_state(
 & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_final_state_resolver.py" -v
 ```
 
-**Criterio de aceptación (BINARIO):** `14 passed`. **Y** `test_harness_flags.py` y `test_harness_flags_help.py` verdes (dos comandos, **por archivo**). Si alguno de esos dos ya venía rojo, se prueba con un worktree en el commit base y se declara como rojo ajeno (§4-F7).
+**Criterio de aceptación (BINARIO):** `17 passed`. **Y** `test_harness_flags.py` en **`56 passed`** y `test_harness_flags_help.py` en **exactamente `4 failed, 4 passed`** (dos comandos, **por archivo**) — **D13: ese archivo está rojo de fábrica, así que el criterio NO es "verde" sino "los mismos 4 fallos de §3.3, sin ninguna key `STACKY_FINAL_STATE_*` entre las violaciones"**. Cualquier otro conteo se compara contra §3.3 y, si no está ahí, es tuyo.
 
 **Impacto por runtime:** ninguno — módulo puro sin consumidores todavía. **Trabajo del operador: ninguno.**
 
@@ -705,7 +892,7 @@ if target not in permitidos:
 
 ---
 
-### F2-bis — `[ADICIÓN ARQUITECTO]` Árbitro anti-doble-escritura y respeto del gate de build
+### F2-bis — `[ADICIÓN ARQUITECTO]` Árbitro anti-doble-escritura **SIMÉTRICO** y respeto del gate de build
 
 **Objetivo (1 frase):** que activar F2 no convierta al motor A en un pisador del motor C (gate del plan 210) ni del motor B.
 **Valor:** cierra **C2** (regresión del plan 210) y **C11** (carrera daemon vs inline). Sin esta fase, F2 es una regresión disfrazada de fix.
@@ -713,50 +900,84 @@ if target not in permitidos:
 #### El problema, con evidencia
 
 1. **Gate de build (C2).** El motor C aplica `dev_build_verify.gate_final_state` antes de escribir (`api/tickets.py:576-582`): cuando el Developer no tiene veredicto de máquina fresco, **degrada** el `target` o lo anula. `grep -c dev_build_verify backend/services/completion_state.py` ⇒ **0**. Hoy da igual porque el motor A nunca transiciona sin matriz. **Con F2 sí transiciona**, y puede sobrescribir la degradación que el 210 acaba de aplicar. Eso reabre el "falso Build OK" que los planes 210/211 cerraron.
-2. **Carrera (C11).** `close_execution_with_publish` encola el motor A en el Paso 2 (`agent_completion_internal.py:183`) y escribe con el motor B en el Paso 4 (`:274`), **en el mismo hilo**. El motor A lo drena un **daemon de fondo** (`completion_dispatcher.py:98-120`). El orden no está definido, y los targets pueden diferir: el motor A usa `tracker_state_machine.<rol>.next_state_ok` y el motor B usa `agent_workflow_configs[<filename>].transition_state`. La idempotencia de `_safe_transition` (`task_states.py:164-168`) solo salva si los targets **coinciden**.
+2. **Carrera (C11), con la dirección corregida (D2).** `close_execution_with_publish` **encola** el motor A en el Paso 2 (`agent_completion_internal.py:172-181`) y escribe con el motor B en el Paso 4 (`:274`), **en el mismo hilo**. El motor A lo drena un **daemon de fondo** (`completion_dispatcher.py:100-121`, con `maybe_apply_state_transition(ev)` en `:118`) que está bloqueado en `_Q.get(...)`: con la cola vacía — el caso normal — **despierta y corre de inmediato**, o sea **antes** de que el hilo del cierre llegue a `:274`. Los targets pueden diferir: el motor A usa `tracker_state_machine.<rol>.next_state_ok` y el motor B usa `agent_workflow_configs[<filename>].transition_state`. La idempotencia de `_safe_transition` (`task_states.py:164-168`) solo salva si **coinciden**.
+   > **Esto es exactamente lo que el v2 no vio.** Su árbitro vivía **solo** en `completion_state.py`, o sea que cubría el caso "B escribió primero, A se abstiene" — el orden **menos** probable. En el orden probable (A primero, B después), **B escribía igual, sin consultar nada**. El riesgo R3, que el propio v2 subió a "Alta" y admite que **F2 agrava**, quedaba sin mitigar. Por eso el árbitro del v3 es **simétrico**.
 
 #### Lo que se construye
 
-**Archivo a editar:** `backend/services/completion_state.py`. Dos guardias, ambas **antes** de `_safe_transition` y **después** de `_origin_guard`:
+**Archivos a editar:** `backend/services/completion_state.py` (guardias 1 y 2) **y** `backend/services/agent_completion_internal.py` (guardia simétrica, que por dependencia se implementa en **F3-bis-2**).
+
+**Helper compartido — vive en `backend/services/final_state_resolver.py`** (F1), para que **los dos motores lean exactamente el mismo código** y no haya dos criterios de "ya se escribió":
 
 ```python
-# GUARDIA 1 (C2) — respetar el gate de build del plan 210, igual que api/tickets.py:576-582.
-try:
-    from services import dev_build_verify as _dbv
-    _ws = _dbv.workspace_root_for_ado(int(ado_id))
-    _exec_id = ev.get("execution_id") or _dbv.latest_execution_id_for_ado(int(ado_id))
-    target, _gate = _dbv.gate_final_state(
-        project_name=stacky_project, agent_type=agent_type, ado_id=int(ado_id),
-        workspace_root=_ws, proposed_state=target, execution_id=_exec_id,
-    )
-    if target is None:
-        return _logged(ctx, ev, {"skipped": True, "reason": "dev_build_gate_no_state",
-                                 "gate_reason": _gate.get("reason")})
-    ctx["target"] = target
-except Exception:  # noqa: BLE001 — el gate jamás rompe el cierre
-    logger.debug("gate_final_state falló en motor A (no crítico)", exc_info=True)
+def final_state_already_written(execution_id) -> bool:
+    """Plan 271 F2-bis / F3-bis-2 — árbitro SIMÉTRICO por execution_id.
 
-# GUARDIA 2 (C11) — árbitro por execution_id: si el MOTOR B ya escribió el estado
-# final de esta misma ejecución, no volvemos a escribir.
-# ALCANCE (§2.1bis): cubre A vs B, que es la carrera que F2 agrava. NO cubre los
-# motores C ni D (viven en api/tickets.py, intocable acá) — eso es del plan 272.
-if _final_state_already_written(ev.get("execution_id")):
+    True si algún motor ya aplicó el estado final de esta ejecución (la key
+    `final_state_outcome` que F5 persiste, con applied=True).
+    Best-effort: cualquier problema ⇒ False (fail-open, nunca bloquea un cierre).
+    """
+    if not execution_id:
+        return False
+    try:
+        from db import session_scope
+        from models import AgentExecution
+        with session_scope() as s:
+            row = s.get(AgentExecution, int(execution_id))
+            fso = (row.metadata_dict or {}).get("final_state_outcome") if row else None
+            return bool(isinstance(fso, dict) and fso.get("applied") is True)
+    except Exception:  # noqa: BLE001
+        return False
+```
+
+**En `completion_state.py`** — las dos guardias, ambas **antes** de `_safe_transition` y **después** de `_origin_guard`:
+
+```python
+# GUARDIA 1 (C2) — respetar el gate de build del plan 210, igual que api/tickets.py:573-577.
+# D11 — CORTOCIRCUITO OBLIGATORIO: gate_final_state (dev_build_verify.py:421-422)
+# devuelve `not_applicable` para todo agent_type != "developer", pero
+# workspace_root_for_ado (:343) hace una consulta a DB MÁS get_project_config.
+# Sin este `if`, cada completación de CUALQUIER rol paga dos lookups para nada.
+if agent_type == "developer":
+    try:
+        from services import dev_build_verify as _dbv
+        _ws = _dbv.workspace_root_for_ado(int(ado_id))
+        _exec_id = ev.get("execution_id") or _dbv.latest_execution_id_for_ado(int(ado_id))
+        target, _gate = _dbv.gate_final_state(
+            project_name=stacky_project, agent_type=agent_type, ado_id=int(ado_id),
+            workspace_root=_ws, proposed_state=target, execution_id=_exec_id,
+        )
+        if target is None:
+            return _logged(ctx, ev, {"skipped": True, "reason": "dev_build_gate_no_state",
+                                     "gate_reason": _gate.get("reason")})
+        ctx["target"] = target
+    except Exception:  # noqa: BLE001 — el gate jamás rompe el cierre
+        logger.debug("gate_final_state falló en motor A (no crítico)", exc_info=True)
+
+# GUARDIA 2 (C11/D2) — mitad A del árbitro simétrico.
+# ALCANCE (§2.1bis): cubre A vs B. NO cubre C, D, E ni F (viven en api/tickets.py,
+# intocable acá) — eso es del plan 272.
+from services.final_state_resolver import final_state_already_written
+if final_state_already_written(ev.get("execution_id")):
     return _logged(ctx, ev, {"skipped": True, "reason": "already_written_by_other_engine"})
 ```
 
-**Helper `_final_state_already_written(execution_id) -> bool`:** lee `AgentExecution.metadata_dict.get("final_state_outcome")` (la key que **F5** persiste) y devuelve `True` si existe con `applied is True`. Best-effort: si no puede leer, devuelve `False` (fail-open, nunca bloquea).
+> **El `import` de `dev_build_verify` NO puede quedar solo adentro del `if agent_type == "developer"`.** F8 test 3 exige que `services/completion_state.py` **importe** `dev_build_verify` (invariante del 210). Como es un import local dentro de un `if`, el AST lo ve igual — pero si alguien lo mueve, el test se pone rojo con el nombre del plan que se rompe. Es el efecto buscado.
 
-> **Orden de fases (importante).** F2-bis **depende de F5** para que la key exista. Por eso se implementa **después** de F5 aunque su número sea "2-bis": ver §7.2. Mientras F5 no exista, `_final_state_already_written` devuelve siempre `False` y la guardia 2 es un no-op inofensivo. **No es un ciclo**: la guardia 1 (la que evita la regresión del 210) es independiente y se implementa junto con F2.
+> **Orden de fases (importante, corregido).** La **guardia 1** no depende de nada posterior y va **junto con F2**. La **guardia 2** (mitad A) y su gemela **F3-bis-2** (mitad B) dependen de que exista la key `final_state_outcome`, o sea de **F5**, así que se implementan **después de F5** (§7.2). Mientras F5 no exista, `final_state_already_written` devuelve siempre `False` y **las dos mitades son no-ops inofensivos**. **No es un ciclo.**
 
-**Razones nuevas al catálogo:** `dev_build_gate_no_state` y `already_written_by_other_engine`. **Agregalas a `ALL_FINAL_STATE_REASONS` (F1) y al mapa de F6** ⇒ el catálogo pasa de 23 a **25**.
+**Razones nuevas al catálogo:** `dev_build_gate_no_state` (que **ya existe hoy** en `api/tickets.py:574`, D3) y `already_written_by_other_engine`. Ya están en `ALL_FINAL_STATE_REASONS` (F1) y en el mapa de F6 ⇒ el catálogo cierra en **27**.
 
 **Archivo de test a crear:** `backend/tests/test_plan271_arbitro.py`
-**Casos (5):**
-1. `gate_final_state` devuelve `(None, {"reason": "build_stale"})` ⇒ `skipped`, `reason="dev_build_gate_no_state"`, **`prov.writes == []`**.
-2. `gate_final_state` devuelve `("En revisión", {...})` (degradación) ⇒ se escribe **"En revisión"**, no el `next_state_ok` crudo.
-3. `gate_final_state` lanza ⇒ el cierre sigue y se escribe el target original (fail-open).
-4. `metadata_dict` ya trae `final_state_outcome.applied=True` ⇒ `skipped`, `reason="already_written_by_other_engine"`, sin escritura.
-5. `metadata_dict` trae `final_state_outcome.applied=False` ⇒ **sí** escribe (un skip previo no bloquea el reintento).
+**Casos (8):**
+1. `agent_type="developer"` y `gate_final_state` devuelve `(None, {"reason": "build_stale"})` ⇒ `skipped`, `reason="dev_build_gate_no_state"`, **`prov.writes == []`**.
+2. `agent_type="developer"` y `gate_final_state` devuelve `("En revisión", {...})` (degradación) ⇒ se escribe **"En revisión"**, no el `next_state_ok` crudo.
+3. `agent_type="developer"` y `gate_final_state` lanza ⇒ el cierre sigue y se escribe el target original (fail-open).
+4. **`agent_type="technical"` ⇒ `workspace_root_for_ado` NO se llama** (espiala con un contador). **(D11: el cortocircuito de performance es un criterio, no una intención.)**
+5. `metadata_dict` ya trae `final_state_outcome.applied=True` ⇒ motor A: `skipped`, `reason="already_written_by_other_engine"`, sin escritura.
+6. `metadata_dict` trae `final_state_outcome.applied=False` ⇒ motor A **sí** escribe (un skip previo no bloquea el reintento).
+7. **Simetría (D2), motor B:** con `final_state_outcome.applied=True` sembrado, `_attempt_state_change` devuelve `{"skipped": True, "reason": "already_written_by_other_engine"}` y **no** llama al provider ni a `AdoClient`. *(Este caso se vuelve verde recién con F3-bis-2; hasta entonces queda rojo y declarado como tal en el PR.)*
+8. **Los dos motores usan el MISMO helper:** `inspect.getsource` de `completion_state.maybe_apply_state_transition` y de `agent_completion_internal._attempt_state_change` contienen ambos `final_state_already_written`. **(Evita que vuelvan a existir dos criterios de "ya se escribió".)**
 
 **Comando exacto:**
 ```powershell
@@ -764,11 +985,12 @@ if _final_state_already_written(ev.get("execution_id")):
 ```
 
 **Criterio de aceptación (BINARIO):**
-- `5 passed`.
-- **Y** `pytest backend/tests/test_plan210_state_gate.py` sigue verde (**por archivo**). Si ya venía rojo, probalo con un worktree en el commit base y declaralo.
+- Al terminar la **guardia 1** (junto con F2): `4 passed, 4 failed` (los casos 5..8 necesitan F5/F3-bis-2).
+- Al terminar **F3-bis-2** (después de F5): **`8 passed`**.
+- **Y** `pytest backend/tests/test_plan210_state_gate.py` sigue en **`16 passed`** (§3.3 — hoy está verde, así que cualquier rojo es tuyo).
 - **Y** `test_plan271_role_fallback.py` sigue en `9 passed` (la guardia no debe cambiar ningún caso feliz).
 
-**Flag:** ninguna propia (vive dentro del camino de `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED`). Una guardia que solo **reduce** escrituras no necesita interruptor: apagarla sería pedir el bug.
+**Flag:** ninguna propia (vive dentro del camino de `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED`; su gemela de F3-bis-2 vive dentro del de `STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED`). Una guardia que solo **reduce** escrituras no necesita interruptor: apagarla sería pedir el bug.
 **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
 ---
@@ -808,9 +1030,20 @@ try:
 except Exception as exc: ...
 
 # DESPUÉS
+# D2 — mitad B del árbitro simétrico (se activa en F3-bis-2, después de F5).
+from services.final_state_resolver import final_state_already_written
+if final_state_already_written(execution_id):
+    return {"skipped": True, "reason": "already_written_by_other_engine"}
+
 # C6 — REGLA DURA: sin project_name NO se rutea. get_tracker_provider(None)
 # resuelve el proyecto ACTIVO (tracker_provider.py:127), que puede ser GitLab
 # mientras el ticket es de ADO: eso sería exactamente el bug que esta fase cierra.
+# D6 — pero el caso NO puede ser mudo: hoy un ticket sin stacky_project_name en un
+# proyecto GitLab escribe en ADO con el iid de GitLab y nadie se entera. Se marca.
+if _writer_routed_enabled() and not project_name:
+    logger.warning("[exec=%s] sin stacky_project_name: escritura de estado por el "
+                   "camino legacy (ADO) — ver plan 271 D6", execution_id)
+    _sin_contexto = True   # se propaga como `reason` en el dict de retorno legacy
 if _writer_routed_enabled() and project_name:
     try:
         from services.tracker_provider import get_tracker_provider
@@ -830,7 +1063,10 @@ if _writer_routed_enabled() and project_name:
     if result.pop("source", None) is not None:
         result["writer"] = "safe_transition"
     return result
-# Camino legacy byte-idéntico (flag OFF, o sin project_name): ver bloque ANTES.
+# Camino legacy (flag OFF, o sin project_name): idéntico al bloque ANTES, con una
+# sola diferencia — D6: si fue por FALTA de contexto de proyecto, el dict de ÉXITO
+# lleva `"note": "no_project_context"` para que F5/F6 lo puedan mostrar. El
+# comportamiento de escritura no cambia; lo que cambia es que deja de ser mudo.
 ```
 
 **Helpers nuevos (al final del bloque de helpers):**
@@ -852,40 +1088,56 @@ def _legacy_ado_client():
 
 > **Gotcha real de GitLab:** los write viven en `services/gitlab_provider.py`, **no** en el client. `update_item_state` está en `gitlab_provider.py:228`. `get_tracker_provider` (`tracker_provider.py:125-157`) exige `STACKY_GITLAB_ENABLED` y lanza `TrackerConfigError` si está OFF (`:133-136`) — por eso el `except` devuelve `provider_unavailable` en vez de romper el cierre.
 
-#### F3-bis — adaptación OBLIGATORIA del doble de `test_output_watcher.py` (C5)
+#### F3-bis-1 — `test_output_watcher.py` NO se rompe: la "confirmación" del v2 era falsa (D6)
 
-**Esto NO es opcional y NO es relajar un test.** El v1 declaraba `test_output_watcher.py` verde como criterio binario, y **F3 lo rompe**. La cadena real:
+**Leé esto antes de tocar `test_output_watcher.py`.** El v2 declaraba, como riesgo *"Confirmado, no es hipótesis"*, que F3 rompe ese archivo, y mandaba parchear tres dobles. **Es falso**, y la razón importa más que el hecho.
 
-`_attempt_state_change` → `get_tracker_provider(project)` → `AdoTrackerProvider.__init__` (`ado_provider.py:34-36`) → `build_ado_client(project_name=project)` (`services/project_context.py`, que hace `from services.ado_client import AdoClient` **dentro** de la función ⇒ el monkeypatch del test **sí** aplica) → `AdoClient(org=..., project=..., auth_path=...)`.
+La cadena que el v2 describió es correcta en abstracto: `_attempt_state_change` → `get_tracker_provider(project)` → `AdoTrackerProvider.__init__` (`ado_provider.py:34-36`) → `build_ado_client(project_name=project)` (`project_context.py:289-311`, que **sí** hace `from services.ado_client import AdoClient` **dentro** de la función en `:295` ⇒ el monkeypatch del test aplicaría). Pero esa cadena **nunca se ejecuta en ese archivo**, porque **`project_name` es `None`**:
 
-Pero el doble del test es (`backend/tests/test_output_watcher.py:359-361`):
+- `close_execution_with_publish` lee `stacky_project_name = getattr(ticket_obj, "stacky_project_name", None)` (`agent_completion_internal.py:135`).
+- El helper del test, `_mk_ticket` (`test_output_watcher.py:87-107`), crea el `Ticket` con `project="RSPacifico"` y **jamás setea `stacky_project_name`**.
+- Ergo `project_name is None` ⇒ la **regla dura C6** de F3 (`if _writer_routed_enabled() and project_name:`) toma el **camino legacy** ⇒ `AdoClient()` sin kwargs ⇒ el doble actual funciona **sin tocar una línea** ⇒ `assert calls == [(40109, "Reviewed by Dev")]` (`:370-371`) sigue pasando.
+
+**Qué hacer, entonces:**
+1. **No parchear los tres dobles.** Es trabajo inútil y, peor, deja la falsa sensación de que la cadena se probó.
+2. **Correr `test_output_watcher.py` antes de F3 y anotar el conteo en el PR** (§3.3). Después de F3 tiene que dar **el mismo conteo**. Si cambia, es tuyo.
+3. **Lo que este hallazgo destapa es el verdadero problema, y va al PR en una línea:** *un ticket sin `stacky_project_name` sigue escribiendo el estado en ADO aunque el proyecto sea GitLab.* F3 lo hace **visible** (`no_project_context`, D6) pero **no lo repara**: repararlo es poblar `stacky_project_name` en el alta del ticket, territorio de `_startup_sync` y del **plan 272**.
+4. **Cobertura real de la cadena:** los casos 1, 2 y 4 de `test_plan271_writer_routed.py` **deben sembrar el ticket CON `stacky_project_name`** (por eso `_seed_execution_y_ticket` de F0 lo setea explícitamente). Sin eso, F3 quedaría con cero cobertura de su propio camino feliz — que es exactamente el agujero que este bloque cierra.
+
+#### F3-bis-2 — mitad B del árbitro simétrico (D2) · va DESPUÉS de F5
+
+Agregar al principio de `_attempt_state_change` la guardia ya mostrada en el diff de F3 (`final_state_already_written(execution_id)` ⇒ `already_written_by_other_engine`). Es la mitad que faltaba: sin ella, en el orden más probable (A drena primero, B escribe después) el motor B pisa igual. **Verificado por los casos 7 y 8 de `test_plan271_arbitro.py`.**
+
+#### F3-bis-3 — `_safe_transition` deja de fallar en silencio (D3)
+
+**Archivo a editar:** `backend/harness/task_states.py`, rama de error de `_safe_transition` (`:180-184`).
+
 ```python
-class _FakeAdoClient:
-    def update_work_item_state(self, ado_id, state):
-        calls.append((ado_id, state))
+# ANTES (:184)
+return {"ok": False, "to": target, "error": str(exc), "type": type(exc).__name__, "phase": phase}
+# DESPUÉS — D3: la ÚNICA rama de todo el sistema que decidía no cambiar el estado
+# y no decía por qué. F5 la traducía a reason="unknown", string fuera del catálogo.
+return {"ok": False, "to": target, "reason": "transition_failed",
+        "error": str(exc), "type": type(exc).__name__, "phase": phase}
 ```
-**No acepta kwargs en el constructor** ⇒ `TypeError` ⇒ el `except` de F3 devuelve `provider_unavailable` ⇒ `assert calls == [(40109, "Reviewed by Dev")]` (`:370-371`) **falla**. Y además `_safe_transition` llama `provider.get_item(...)` → `self._client.get_work_item(int(item_id))` (`ado_provider.py:66-67`), que el doble tampoco tiene.
 
-**Cambio exacto y mínimo (el assert NO se toca):** en los **tres** dobles de ese archivo (`:359-361`, `:385-387`, `:412-414`) agregar:
-```python
-    def __init__(self, *args, **kwargs):
-        pass
+**Por qué es backward-compatible:** hoy **nadie lee `reason` en la rama de error** — `_logged` (`completion_state.py:183`) hace `result.get("reason")` y persiste `None`, y el Paso 4 del motor B solo hace `setdefault("source", ...)`. Agregar la key no cambia ningún branch existente; solo deja de perder la información.
 
-    def get_work_item(self, ado_id):
-        return {"fields": {"System.State": "Doing"}}
-```
-`"Doing"` a propósito: distinto del target, para que la idempotencia de `_safe_transition` **no** saltee la escritura y `calls` se llene igual que hoy. El doble ahora modela el constructor real de `AdoClient`; eso es **corregir un doble incompleto**, no aflojar la prueba.
+**Test que lo cubre:** caso 9 de `test_plan271_writer_routed.py` — provider que lanza al escribir ⇒ `{"ok": False, "reason": "transition_failed", ...}`.
+**Y** `pytest backend/tests/test_plan79_safe_transition.py` **por archivo**: es el archivo dueño de esa función. Si tenía un assert de igualdad estricta sobre el dict de error, **se detiene la fase y se reporta** (§3-11) — la key nueva es correcta, pero el cambio de expectativa se documenta, no se silencia.
 
 **Archivo de test a crear:** `backend/tests/test_plan271_writer_routed.py`
-**Casos (8):**
+**Casos (10) — los casos 1, 2 y 4 siembran el ticket CON `stacky_project_name` (D6):**
 1. Proyecto ADO ⇒ `get_tracker_provider` devuelve `AdoTrackerProvider`; `provider.update_item_state("4242", "To Do")` exactamente una vez.
 2. Proyecto GitLab ⇒ se llama `update_item_state` del `GitLabTrackerProvider`, **y no** `AdoClient`.
 3. `get_tracker_provider` lanza ⇒ `{"skipped": True, "reason": "provider_unavailable"}` y `close_execution_with_publish` **no** lanza.
 4. Idempotencia: `provider.get_item` devuelve el estado ya igual al target ⇒ `{"skipped": True, "reason": "already_in_state"}` sin escribir.
 5. Flag OFF ⇒ camino legacy: `AdoClient().update_work_item_state(4242, "To Do")` (byte-idéntico a hoy).
 6. `ado_id` es `None` ⇒ `{"skipped": True, "reason": "no_ado_id"}` (`:523-524`, preservado).
-7. **`project_name=None` con la flag ON ⇒ camino legacy `AdoClient`, NUNCA `get_tracker_provider`.** (C6.)
-8. Éxito ruteado ⇒ el dict devuelto **no** trae `source` (para que `setdefault("source", target_source)` del Paso 4 siga funcionando) y sí trae `writer="safe_transition"`. (C7.)
+7. **`project_name=None` con la flag ON ⇒ camino legacy `AdoClient`, NUNCA `get_tracker_provider`** — **y el dict de éxito lleva `note="no_project_context"`** (C6 + D6: el camino legacy deja de ser mudo).
+8. Éxito ruteado ⇒ el dict devuelto **no** trae `source` (para que la asignación de `target_source` del Paso 4 siga funcionando) y sí trae `writer="safe_transition"`. (C7.)
+9. **El provider lanza al escribir ⇒ `{"ok": False, "reason": "transition_failed", ...}`** — nunca `reason` ausente ni `"unknown"`. **(D3, F3-bis-3.)**
+10. **Todo dict devuelto por `_attempt_state_change` en los 9 casos anteriores tiene `reason ∈ ALL_FINAL_STATE_REASONS`** (salvo el éxito ruteado, que trae `ok=True`). **(D3, adelanto local de F9.)**
 
 **Comando exacto:**
 ```powershell
@@ -893,10 +1145,11 @@ class _FakeAdoClient:
 ```
 
 **Criterio de aceptación (BINARIO):**
-- `8 passed`.
+- `10 passed`.
 - **Y** `test_e3_el_escritor_rutea_por_provider` de F0 pasa a **VERDE** (conteo de F0: `3 passed, 1 failed`).
-- **Y** `pytest backend/tests/test_output_watcher.py` verde **después** de F3-bis — **por archivo, hasta 3 reintentos si aparece `SQLITE_LOCKED`**. Si sigue rojo con F3-bis aplicado, **se detiene la fase y se reporta**; no se borra el assert.
-- **Y** `pytest backend/tests/test_u2_publish_review_mode.py` verde: su doble es `lambda **_kwargs: {...}` (`:158-162`), que acepta el kwarg nuevo `project_name` sin cambios.
+- **Y** `pytest backend/tests/test_output_watcher.py` **sigue en `30 passed`** (§3.3) — **por archivo, hasta 3 reintentos si aparece `SQLITE_LOCKED`**. **Sin tocar ni un doble** (D6). Si baja de 30, es tuyo: se detiene la fase y se reporta; no se borra el assert.
+- **Y** `pytest backend/tests/test_plan79_safe_transition.py` **sigue en `10 passed`** tras F3-bis-3.
+- **Y** `pytest backend/tests/test_u2_publish_review_mode.py` en **`3 passed`**: su doble es `lambda **_kwargs: {...}` (`:158-162`), que acepta el kwarg nuevo `project_name` sin cambios.
 
 **Flag:** `STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED` — **default ON**. Cablear las 7 patas; agregar la key a `test_plan271_flags.py`.
 **Impacto por runtime:** ninguno específico — el chokepoint es común a los 3. Fallback: flag OFF ⇒ `AdoClient` directo, idéntico a hoy.
@@ -973,12 +1226,28 @@ else:
 & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_publish_gate.py" -v
 ```
 
+#### F4-bis — `test_b2_transition_from_config.py` está ROJO HOY y este plan lo arregla (D4)
+
+**No es opcional y no es scope creep: es la condición para que F7 pueda registrarlo sin romper el arnés.**
+
+Estado real, medido (§3.3): **`5 failed`**, los cinco con el mismo error:
+
+```
+TypeError: _resolve_transition_state_from_config() missing 1 required keyword-only argument: 'final_status'
+```
+
+El test quedó desfasado cuando un plan posterior agregó el kwarg `final_status` a `_resolve_transition_state_from_config` (`agent_completion_internal.py:321`; el caller real lo pasa en `:250-256`). Los cinco tests (`:28,42,63,73,83`) llaman al resolver **sin** ese kwarg.
+
+**Arreglo exacto (no se borra ni un assert, §3-11):** en las **cinco** invocaciones de `_resolver()(...)` agregar `final_status="completed"`, que es el valor con el que el caller real lo invoca en el camino feliz. Nada más. Si algún assert cambia de resultado con el kwarg puesto, **se detiene la fase y se reporta**: significaría que la semántica del resolver cambió y eso es un hallazgo, no un test a maquillar.
+
+> **Por qué lo hace este plan y no "el dueño":** F7 lo **adopta** al arnés (`HARNESS_TEST_FILES`), y un archivo rojo registrado deja el arnés rojo para todos. Adoptarlo sin arreglarlo sería regalarle una rotura a la casa. Adoptarlo **arreglado** es exactamente el trabajo que este plan ya estaba haciendo sobre esa función.
+
 **Criterio de aceptación (BINARIO):**
-- `8 passed`.
+- `8 passed` en `test_plan271_publish_gate.py`.
 - **Y** `test_rc2_sin_html_no_debe_bloquear_la_transicion` de F0 pasa a **VERDE** ⇒ los **4 de F0 quedan verdes**.
-- **Y** `pytest backend/tests/test_b2_transition_from_config.py` verde (5 tests, `:28,42,63,73,83`) — **y registralo en `run_harness_tests.sh` y `.ps1`: hoy NO está registrado** (verificado: `grep -c` devuelve `0` en ambos).
-- **Y** `pytest backend/tests/test_u2_publish_review_mode.py` verde.
-- **Y** `pytest backend/tests/test_output_watcher.py` verde: F4 desbloquea el modo A (`:618` cierra con `html_output_path=None`), así que si algún test asumía "modo A nunca cambia estado", **se detiene la fase y se reporta** — el comportamiento nuevo es el correcto, pero el cambio de expectativa se documenta explícitamente, no se silencia.
+- **Y** `pytest backend/tests/test_b2_transition_from_config.py` pasa de **`5 failed` (hoy, §3.3)** a **`5 passed`** tras F4-bis. **Recién entonces** F7 lo registra en `run_harness_tests.sh` y `.ps1` (hoy NO está registrado; verificado: `grep -c` devuelve `0` en ambos).
+- **Y** `pytest backend/tests/test_u2_publish_review_mode.py` en `3 passed`.
+- **Y** `pytest backend/tests/test_output_watcher.py` **sigue en `30 passed`**: F4 desbloquea el modo A (`:618` cierra con `html_output_path=None`), así que si algún test asumía "modo A nunca cambia estado", **se detiene la fase y se reporta** — el comportamiento nuevo es el correcto, pero el cambio de expectativa se documenta explícitamente, no se silencia.
 
 **Flag:** `STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED` — **default ON**, justificación en §3.2. Cablear las 7 patas.
 **Impacto por runtime:** el chokepoint es común a los 3. En Copilot/vscode_bridge el cierre suele venir por `output_watcher` (`:412`) con `html_output_path` presente ⇒ el caso 2 casi no aplica; en Codex/Claude CLI el cierre por `api/tickets.py:1386` puede venir sin HTML ⇒ ahí el fix se nota. Fallback: flag OFF ⇒ comportamiento actual, idéntico en los 3.
@@ -1023,7 +1292,12 @@ def _persist_final_state_outcome(*, execution_id: int, result: dict,
                 # {"source": "config"} en el éxito (task_states.py:178) y ese valor
                 # NO es el origen de la decisión.
                 "source": source or result.get("source") or "none",
-                "reason": result.get("reason") or ("ok" if result.get("ok") else "unknown"),
+                # D3 — PROHIBIDO "unknown": no es una razón, es un catálogo
+                # incompleto. Tras F3-bis-3 la rama de error ya trae
+                # `transition_failed`, así que este fallback solo cubre dicts
+                # legacy; si alguna vez se dispara, F9 lo deja rojo.
+                "reason": result.get("reason") or (
+                    "ok" if result.get("ok") else "transition_failed"),
                 "at": _utc_now_iso(),
             }
             row.metadata_dict = md
@@ -1105,7 +1379,7 @@ Agregá `_reason_visible_enabled()` en `api/executions.py` con el mismo patrón 
 
 > **Por qué un módulo `.ts` puro y no un test de render:** `@testing-library/react` y `jsdom` **no están instalados**. Mismo razonamiento que `frontend/src/utils/outcomeReason.ts:1-10` ya dejó escrito. **Copiá esa estructura.**
 
-**Contenido del módulo — las 25 razones del catálogo (§2.4 + F2-bis), ni una más ni una menos:**
+**Contenido del módulo — las 27 razones del catálogo (§2.4), ni una más ni una menos:**
 
 ```ts
 // frontend/src/utils/finalStateOutcome.ts
@@ -1142,6 +1416,8 @@ export const FINAL_STATE_REASON_LABELS: Record<string, FinalStateLabel> = {
   already_written_by_other_engine: { label: "Ya la había movido otro paso del cierre", tone: "espera", action: "" },
   // ── error operable ──────────────────────────────────────────────────────
   publish_not_ok:     { label: "No se publicó el comentario: no se movió", tone: "error", action: "Mirá el error de publicación y reintentá" },
+  transition_failed:  { label: "El tablero rechazó el cambio de estado", tone: "error", action: "Mirá el detalle del error y verificá que el estado exista en el tablero" },
+  no_project_context: { label: "Se movió, pero sin saber a qué tablero pertenece", tone: "atencion", action: "Revisá que la incidencia esté vinculada a un proyecto de Stacky" },
   no_ado_id:          { label: "La incidencia no tiene id en el tablero", tone: "error", action: "Vinculala al tablero" },
   no_ado_id_or_stacky_project: { label: "Falta el id en el tablero o el proyecto", tone: "error", action: "Revisá que la incidencia esté vinculada a un proyecto" },
   no_ticket:          { label: "No se encontró la incidencia", tone: "error", action: "Refrescá el tablero" },
@@ -1175,9 +1451,27 @@ const finalState = describeFinalState(
   content?.final_state_outcome ?? (metadata.final_state_outcome as FinalStateOutcome | undefined),
 );
 ```
-y renderizalo con las **cuatro** clases de tono. **C19:** `styles.toneEspera` **sí existe** (`ExecutionDetailDrawer.module.css:151`, comparte regla con `.toneAtencion`); el v1 mandaba usar solo tres. Extendé el patrón de `outcomeToneClass` (`:90-95`) a una cuarta rama para `espera`.
+y renderizalo con las **cuatro** clases de tono. **C19 + D14:** `styles.toneEspera` **sí existe** (`ExecutionDetailDrawer.module.css:151`) — pero comparte **la misma regla** que `.toneAtencion`:
 
-> **Ratchet de deuda UI (obligatorio):** en esta fase no se crea ningún `.tsx` nuevo, así que alcanza con **no introducir `style={{}}` inline** en el drawer. Usá clases del `.module.css`.
+```css
+/* ExecutionDetailDrawer.module.css:150-152 — HOY */
+.toneAtencion,
+.toneEspera {
+  color: var(--warn);
+}
+```
+
+O sea que la "cuarta rama" que el v2 manda agregar a `outcomeToneClass` (que está en **`:89-94`**, no en `:90-95`) es, tal cual, **un no-op visual**: el operador ve exactamente el mismo color para *"falta configurar"* (acción suya) y para *"en espera de tu revisión"* (nada que arreglar), que es justo la distinción que este plan existe para hacer. **Separalas:**
+
+```css
+/* DESPUÉS — .toneEspera deja de ser un alias de .toneAtencion */
+.toneAtencion { color: var(--warn); }
+.toneEspera   { color: var(--text-secondary); }
+```
+
+> **Usá tokens que existan.** El tema de este repo NO define la familia `--color-*`. Los tokens reales son `--accent`, `--success`, `--warn`, `--danger`, `--border`, `--text-primary`, `--text-secondary`, `--bg-panel`. **Antes de escribir el CSS, confirmá con `grep -n "^  --" frontend/src/theme.css` que el token elegido existe**; si `--text-secondary` no estuviera, usá `--text-primary` con `opacity: .75`, nunca un hex crudo (lo caza `uiDebtRatchet`).
+
+> **Ratchet de deuda UI (obligatorio):** en esta fase no se crea ningún `.tsx` nuevo, así que alcanza con **no introducir `style={{}}` inline** en el drawer ni **HEX crudos** en el `.module.css`. Usá clases y tokens.
 
 **Test de vitest (`plan271FinalStateOutcome.test.ts`) — 6 casos:**
 1. `describeFinalState(null)` ⇒ `null`.
@@ -1210,7 +1504,10 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit
 
 **Criterio de aceptación (BINARIO):**
 - `6 passed` en vitest, `2 passed` en `test_plan271_reason_catalog.py`, `tsc --noEmit` con **0 errores**.
-- **Y** los ratchets de UI siguen verdes: correr **por archivo** los tests bajo `frontend/src/**/__tests__/` cuyo nombre contenga `ratchet` o `uiDebt`. Si alguno ya venía rojo por deuda ajena, se prueba con un worktree en el commit base y se declara.
+- **Y** los **8** ratchets de UI siguen verdes. **D16 — no viven en `src/utils/__tests__/` sino en `src/__tests__/`, y son estos, nombrados para que nadie los busque a ojo:**
+  `adhocModalRatchet.test.ts`, `copyDebtRatchet.test.ts`, `devopsPollingRatchet.test.ts`, `formatDebtRatchet.test.ts`, `formDebtRatchet.test.ts`, `motionDebtRatchet.test.ts`, `uiDebtRatchet.test.ts`, `undoConfirmRatchet.test.ts`.
+  Correr **uno por uno** (`npx vitest run src/__tests__/<archivo>`), nunca la suite completa. Si alguno ya venía rojo por deuda ajena, se prueba con un worktree en el commit base y se declara con su conteo.
+- **Y** `describeFinalState` cubre las **27** razones: el test estructural (caso 6) más el puente de Python garantizan que el número no vuelva a divergir.
 
 **Flag:** `STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED` (cableada en F5). El frontend no lee la flag: si el backend no manda la key, `describeFinalState` devuelve `null` y no se dibuja nada. **Sin hueco ni error.**
 **Impacto por runtime:** ninguno — es UI, común a los 3. **Trabajo del operador: ninguno.**
@@ -1233,14 +1530,16 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit
 8. `tests/test_plan271_reason_persisted.py`
 9. `tests/test_plan271_reason_catalog.py`
 10. `tests/test_plan271_censo_escritores.py` (F8)
-11. `tests/test_b2_transition_from_config.py` — **preexistente y hoy NO registrado**; este plan lo adopta.
+11. `tests/test_plan271_razon_del_catalogo.py` (F9)
+12. `tests/test_b2_transition_from_config.py` — **preexistente y hoy NO registrado, y ROJO (`5 failed`)**. Este plan lo adopta **solo después de arreglarlo en F4-bis** (D4). Registrarlo rojo deja el arnés rojo para todos: si F4-bis no está hecho, **no se registra**.
 
 > `backend/tests/plan271_helpers.py` **NO** se registra: no es un `test_*.py`.
 > Formato: `.sh` ⇒ línea con dos espacios y **sin** comillas; `.ps1` ⇒ `"tests/..."` **con** comillas dobles dentro de `$HarnessTestFiles`.
 
-**Huella de regresión (C20).** Si existe `Stacky Agents/docs/sistema/error_fingerprints.json`, agregá una entrada:
-`{"id": "FS-271-NO-MATRIX-CELL", "patron": "completion.matrix_transition reason=no_matrix_cell con next_state_ok de rol configurado", "plan": 271, "fecha": "2026-07-28", "guard_test": "backend/tests/test_plan271_role_fallback.py::test_rol_sin_matriz_transiciona"}`.
-Si el archivo **no** existe, no lo crees: dejá la línea en el PR y seguí.
+**Huella de regresión (C20 + D17). `docs/sistema/error_fingerprints.json` EXISTE** (verificado, 49 KB) ⇒ **el hedge "si no existe no lo crees" del v2 sobra y la huella es obligatoria**. Antes de escribir, abrí el archivo y **copiá el shape de las entradas vecinas** (no inventes el esquema). Dos entradas, una por causa raíz cerrada:
+
+1. `{"id": "FS-271-NO-MATRIX-CELL", "patron": "completion.matrix_transition reason=no_matrix_cell con next_state_ok de rol configurado", "plan": 271, "fecha": "2026-07-28", "guard_test": "backend/tests/test_plan271_role_fallback.py::test_rol_sin_matriz_transiciona"}`
+2. `{"id": "FS-271-RAZON-UNKNOWN", "patron": "final_state_outcome.reason fuera de ALL_FINAL_STATE_REASONS (tipicamente 'unknown' por la rama de error de _safe_transition)", "plan": 271, "fecha": "2026-07-28", "guard_test": "backend/tests/test_plan271_razon_del_catalogo.py"}`
 
 **Comandos de verificación (corré los 5, uno por uno):**
 ```powershell
@@ -1252,11 +1551,14 @@ Si el archivo **no** existe, no lo crees: dejá la línea en el PR y seguí.
 ```
 
 **Criterio de aceptación (BINARIO):**
-- Los 4 archivos de pytest en verde y `compileall` sin salida.
-- **Y** un `grep` de cada uno de los **11** nombres del checklist devuelve **≥1 hit en `.sh` y ≥1 hit en `.ps1`** (11 × 2 = **22 hits**, ni uno menos).
+- `test_harness_flags.py` en **`56 passed`** (§3.3: hoy verde ⇒ cualquier rojo es tuyo).
+- **Y** `test_harness_flags_help.py` en **exactamente `4 failed, 4 passed`** — **los mismos 4 fallos ajenos de §3.3**, y **ninguna key `STACKY_FINAL_STATE_*` en la lista de violaciones**. **D13: este criterio NO es "verde", porque el archivo está rojo de fábrica; pedir "verde" era insatisfacible.** Pegá el mensaje de assert en el PR y comparalo con §3.3.
+- **Y** `test_plan271_flags.py` y `test_plan271_caracterizacion.py` en verde, y `compileall` sin salida.
+- **Y** un `grep` de cada uno de los **12** nombres del checklist devuelve **≥1 hit en `.sh` y ≥1 hit en `.ps1`** (12 × 2 = **24 hits**, ni uno menos).
 - **Y** los **4** tests de `test_plan271_caracterizacion.py` en **verde** (de `0 passed, 4 failed` en F0 a `4 passed` acá).
+- **Y** `test_b2_transition_from_config.py` en **`5 passed`** (F4-bis) **antes** de aparecer en los scripts.
 
-> **Alcance acotado a propósito.** El corpus es exactamente esos 11 archivos y esas 4 flags. Un rojo preexistente ajeno **no** es alcance de este plan: si aparece, se prueba que ya estaba rojo con un worktree en el commit base y se declara. Este criterio **no** dice "y si algo más queda rojo se arregla".
+> **Alcance acotado a propósito.** El corpus es exactamente esos 12 archivos y esas 4 flags. Un rojo preexistente ajeno **no** es alcance de este plan: si aparece, se compara contra **§3.3** y, si no está ahí, se prueba con un worktree en el commit base y se declara con su conteo. Este criterio **no** dice "y si algo más queda rojo se arregla".
 
 **Flag:** ninguna. **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
@@ -1266,42 +1568,98 @@ Si el archivo **no** existe, no lo crees: dejá la línea en el PR y seguí.
 
 **Objetivo (1 frase):** que el repo sepa, y verifique en cada corrida, **cuántas** funciones escriben el estado de un work item y **quién es su plan dueño**.
 
-**Por qué esta fase existe.** El v1 de este plan afirmó, con cuatro anclajes exactos, que *"conviven dos motores independientes"*. Había **cuatro**. Ese error casi hace que F2 pisara el gate de build del plan 210 (C2) sin que nadie lo notara. Ningún test podía atraparlo porque **el censo vivía en la cabeza de quien escribía el plan**. Esta fase lo mueve al repo. Es barata (un test AST, sin infraestructura nueva), determinista, idéntica en los 3 runtimes, y no agrega ni un clic al operador.
+**Por qué esta fase existe.** El v1 afirmó, con cuatro anclajes exactos, que *"conviven **dos** motores"*. El v2 lo corrigió a **cuatro** y congeló un allow-list de 6 entradas. **Son seis motores y nueve entradas** (D1). Dos versiones seguidas contaron mal, las dos veces con anclajes correctos, y las dos veces la crítica anterior no lo detectó porque **releyó en vez de correr**. Esta fase saca el censo de la cabeza de quien escribe el plan y lo mete en el repo. Es barata (un test AST, sin infraestructura nueva), determinista, idéntica en los 3 runtimes, y no agrega ni un clic al operador.
 
 **Archivo a crear:** `backend/tests/test_plan271_censo_escritores.py`
 
-**Qué hace, exactamente:**
-1. Recorre con `ast` todos los `.py` bajo `backend/` **excluyendo** `backend/tests/`, `backend/.venv/` y `backend/venv/`.
-2. Marca todo `ast.Call` cuyo `func` sea un `Attribute` con `attr in {"update_item_state", "update_work_item_state"}`, más toda llamada a `_safe_transition`.
-3. Atribuye cada hallazgo a la **función que lo contiene** (`archivo::funcion`).
-4. Compara el conjunto contra un allow-list **congelado en el propio test**, con el plan dueño de cada entrada:
+#### Paso 0 — OBLIGATORIO: correr el censo ANTES de escribir el allow-list (D1)
+
+**Nadie escribe el `dict` de memoria.** Primero se corre el censo y **se pega su salida en el PR**; el allow-list es esa salida más una etiqueta por línea. El v2 hizo lo contrario y por eso nació rojo.
+
+```powershell
+& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -c "import ast,pathlib;A={'update_item_state','update_work_item_state'};h={};r=pathlib.Path('backend');[ (lambda p,s: None if any(x in s for x in ('/tests/','/.venv/','/venv/','__pycache__')) else [ h.setdefault(s[len('backend/'):]+'::'+(f[-1] if f else '<module>'),[]).append(n.lineno) for f,n in _walk(ast.parse(p.read_text(encoding='utf-8'))) if _is_writer(n,A) ] )(p,p.as_posix()) for p in r.rglob('*.py')]"
+```
+> Si el one-liner te resulta ilegible, escribí el mismo censo como script temporal: la única regla es que **la regla del test y la del comando sean la MISMA** (mismos `attr`, misma exclusión, misma atribución a función contenedora).
+
+**Salida REAL de hoy, verificada en esta pasada (9 entradas):**
+
+```
+api/tickets.py::_apply_task_state                              [(577, '_safe_transition')]
+api/tickets.py::create_child_task                              [(4779, 'update_item_state'), (4781, 'update_work_item_state')]
+api/tickets.py::finish_work                                    [(2078, 'update_item_state'), (2080, 'update_work_item_state')]
+api/tickets.py::set_stacky_status_by_ado                       [(1490, 'update_item_state'), (1492, 'update_work_item_state')]
+harness/task_states.py::_safe_transition                       [(173, 'update_item_state'), (175, 'update_work_item_state')]
+harness/task_states.py::apply_task_start_state                 [(206, '_safe_transition')]
+services/ado_provider.py::update_item_state                    [(82, 'update_work_item_state')]
+services/agent_completion_internal.py::_attempt_state_change   [(536, 'update_work_item_state')]
+services/completion_state.py::maybe_apply_state_transition     [(113, '_safe_transition')]
+TOTAL ENTRADAS: 9
+```
+
+**Qué hace el test, exactamente:**
+1. Recorre con `ast` todos los `.py` bajo `backend/` **excluyendo** `backend/tests/`, `backend/.venv/`, `backend/venv/` y `__pycache__`.
+2. Marca todo `ast.Call` cuyo `func` sea un `ast.Attribute` con `attr in {"update_item_state", "update_work_item_state"}`, más toda llamada a `_safe_transition` (como `ast.Name` **o** como `ast.Attribute`).
+3. Atribuye cada hallazgo a la **función que lo contiene** — con un visitor que mantiene una pila de `FunctionDef`/`AsyncFunctionDef`, así que un método anidado se atribuye al método, no a la clase.
+4. Compara el conjunto contra el allow-list **congelado en el propio test**, con el plan dueño de cada entrada:
 
 ```python
-# 6 entradas = los CUATRO motores de §2.1 (A, B, C, D) más los dos helpers de
-# plan 79 que ellos usan. La letra del motor va escrita a propósito: el v1 de este
-# plan contó dos motores donde había cuatro, y nada en el repo lo desmentía.
+# 9 entradas = los SEIS motores de §2.1 (A..F) + los dos helpers de plan 79 + el
+# adaptador del puerto. La letra del motor va escrita a propósito: el v1 de este
+# plan contó DOS motores y el v2 contó CUATRO donde hay SEIS, y nada en el repo
+# lo desmentía. Ahora sí.
 ESCRITORES_CENSADOS: dict[str, str] = {
     "harness/task_states.py::_safe_transition":            "plan 79 — el escritor canónico (lo usan A, B y C)",
     "harness/task_states.py::apply_task_start_state":      "plan 79 — estado al INICIAR (fuera del alcance del 271)",
+    "services/ado_provider.py::update_item_state":         "ADAPTADOR puerto→AdoClient (no decide nada; el censo lo ve por la regla AST)",
+    "services/completion_state.py::maybe_apply_state_transition": "MOTOR A — plan 208 + 271 F2/F2-bis",
+    "services/agent_completion_internal.py::_attempt_state_change": "MOTOR B — plan 271 F3/F3-bis-2",
     "api/tickets.py::_apply_task_state":                   "MOTOR C — plan 79 + gate del 210 (el 271 NO lo modifica, §6.6)",
     "api/tickets.py::set_stacky_status_by_ado":            "MOTOR D — inline sin plan dueño (el 271 NO lo modifica; unificación en el 272)",
-    "services/completion_state.py::maybe_apply_state_transition": "MOTOR A — plan 208 + 271 F2/F2-bis",
-    "services/agent_completion_internal.py::_attempt_state_change": "MOTOR B — plan 271 F3",
+    "api/tickets.py::finish_work":                         "MOTOR E — inline sin plan dueño (el v2 lo citó en §6.6 y NO lo censó; 272)",
+    "api/tickets.py::create_child_task":                   "MOTOR F — estado de la TAREA HIJA recién creada, sin plan dueño (272)",
 }
 ```
 5. Asserts:
-   - `hallados - ESCRITORES_CENSADOS == set()` con el mensaje: *"Escritor de estado NUEVO sin censar: <x>. Agregalo al censo con su plan dueño, o rutealo por `_safe_transition`."*
-   - `ESCRITORES_CENSADOS - hallados == set()` con el mensaje: *"Escritor censado que ya no existe: <x>. Sacalo del censo."*
-6. Un tercer test afirma que **`services/completion_state.py` importa `dev_build_verify`** — el invariante concreto de C2: si alguien vuelve a sacar el gate de build del motor A, el test se pone rojo con el nombre del plan que se rompe (210).
+   - `hallados - ESCRITORES_CENSADOS == set()`: *"Escritor de estado NUEVO sin censar: `<x>`. Agregalo al censo con su plan dueño, o rutealo por `_safe_transition`."*
+   - `ESCRITORES_CENSADOS - hallados == set()`: *"Escritor censado que ya no existe: `<x>`. Sacalo del censo."*
+6. Un tercer test afirma que **`services/completion_state.py` importa `dev_build_verify`** — el invariante concreto de C2: si alguien vuelve a sacar el gate de build del motor A, el test se pone rojo con el nombre del plan que se rompe (210). **Hoy ese import NO existe** (verificado: `grep -c dev_build_verify backend/services/completion_state.py` ⇒ **0**), así que este test **nace rojo y se pone verde con F2-bis guardia 1**.
+
+**Alcance del barrido, declarado (para que no se lo interprete):** el censo recorre **solo `backend/`**. `Stacky pipeline/`, `Stacky tools/`, `deployment/` y los `.ps1` **no** se barren, y hoy **no contienen escritores de `System.State`** (verificado en esta pasada). Extender el barrido fuera de `backend/` es alcance del 272; anotarlo acá evita que alguien "amplíe el censo de paso" y rompa CI con hallazgos de otro dominio.
 
 **Comando exacto:**
 ```powershell
 & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_censo_escritores.py" -v
 ```
 
-**Criterio de aceptación (BINARIO):** `3 passed` con el allow-list en **exactamente 6 entradas** = los 4 motores de §2.1 más los 2 helpers de plan 79. Si el censo encuentra una **séptima entrada** que este plan no vio, **eso es el resultado**: se la agrega al allow-list con su plan dueño **en el mismo commit**, se dice si es un **quinto motor** o solo un helper, y se anota en §6 si merece su propio plan. **No se relaja el assert.**
+**Criterio de aceptación (BINARIO):** `3 passed` con el allow-list en **exactamente 9 entradas**, y esas 9 iguales a la salida del Paso 0 pegada en el PR. Si el censo encuentra una **décima entrada** que esta pasada no vio, **eso es el resultado**: se la agrega al allow-list con su plan dueño **en el mismo commit**, se dice si es un **séptimo motor** o solo un helper/adaptador, y se anota en §6 si merece su propio plan. **No se relaja el assert.**
 
 > **AST, nunca regex.** Precedente del repo: un centinela textual sobre flags rompió el motor entero. El AST no confunde un string en un comentario con una llamada real.
+
+---
+
+### F9 — `[ADICIÓN ARQUITECTO]` Ninguna razón fuera del catálogo (centinela de contrato)
+
+**Objetivo (1 frase):** que sea **imposible** que un escritor de estado devuelva un dict cuyo `reason` no esté en `ALL_FINAL_STATE_REASONS`.
+
+**Por qué esta fase existe.** El titular de este plan es *"cero skip mudo"* y el KPI dice *"27 de 27 razones visibles"*. Y sin embargo, hasta el v2 inclusive, **el fallo más operable de todos — el tablero rechaza la escritura — era el único sin razón**: `_safe_transition` devolvía un dict sin `reason` (`task_states.py:180-184`) y el helper de F5 lo bautizaba `"unknown"`, un string que no está en el catálogo de Python ni en el mapa de TypeScript. El test puente de F6 **no lo detecta**, porque compara los dos catálogos entre sí y `"unknown"` no está en ninguno: los dos lados coinciden **en no tenerlo**. Es un falso verde perfecto. F3-bis-3 tapa el agujero conocido; **F9 impide que se abra otro**.
+
+**Archivo a crear:** `backend/tests/test_plan271_razon_del_catalogo.py`
+
+**Qué hace (3 tests, sin infraestructura nueva):**
+1. **Runtime, motor A:** invoca `completion_state.maybe_apply_state_transition` con `patch_motor_a` en **todas** las combinaciones de F2 que producen skip o error (perfil vacío, `agent_type=None`, flag OFF, `final_status="error"`, provider que lanza, ticket sin `ado_id`) y afirma para cada retorno: `"reason" in out` **y** `out["reason"] in ALL_FINAL_STATE_REASONS`.
+2. **Runtime, motor B:** ídem sobre `_attempt_state_change` con los 10 escenarios de `test_plan271_writer_routed.py` (`ticket_id=None`, lookup que lanza, `ado_id=None`, provider que lanza, flag OFF, `project_name=None`, ya escrito por el otro motor, …).
+3. **Estático:** `ast` sobre `services/completion_state.py`, `services/agent_completion_internal.py` y `harness/task_states.py`; para todo `return` de un `ast.Dict` cuyas claves incluyan `"skipped"` u `"ok"`, exige que **también** incluya `"reason"` **o** que el valor de `"ok"` sea `True`. Mensaje: *"Retorno mudo en `<archivo>:<línea>`: un no-cambio de estado sin `reason` es un defecto del plan 271 (§3-4)."*
+
+> **Por qué el test estático además del de runtime:** el de runtime prueba los caminos que hoy sabemos enumerar; el estático atrapa el `return` **nuevo** que alguien agregue el mes que viene. Los dos juntos son lo que convierte "cero skip mudo" de promesa en invariante.
+
+**Comando exacto:**
+```powershell
+& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_razon_del_catalogo.py" -v
+```
+
+**Criterio de aceptación (BINARIO):** `3 passed`. Si el test 3 encuentra un retorno mudo que este plan no previó, **se agrega la razón al catálogo (§2.4, `ALL_FINAL_STATE_REASONS` y el `.ts`) en el mismo commit**; no se agrega una excepción al centinela. **Prohibido usar `"unknown"`, `"error"`, `"failed"` o cualquier etiqueta genérica: si no sabés por qué no se movió, el plan no está terminado.**
+
+**Flag:** ninguna (es un test). **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
 **Flag:** ninguna (es un test). **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
@@ -1313,30 +1671,36 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 |---|---|---|---|
 | R1 | **Proyectos que hoy dependen de que el nivel de rol NO transicione** cambian de comportamiento al prender F2 (lo que el 208 quiso evitar). | Media | El destino sale de una UI cuyo texto literal es *"a cuál mueve el ticket al terminar"* (`StatesConfigPage.tsx:102`). `_origin_guard` (`completion_state.py:121-161`) sigue impidiendo pisar un ticket movido a mano, y la flag permite volver atrás sin redeploy. |
 | R2 | F4 provoca transiciones que hoy no ocurren ⇒ escritura nueva en el tracker real. | Media | Acotado a **4 razones enumeradas** en `_PUBLISH_REASONS_SIN_NADA_QUE_PUBLICAR`. `publish.failed`, `publish.idempotent_replay` y `review_mode_hold` **siguen bloqueando**. Los casos 6/7/8 de F4 lo prueban. |
-| R3 | **Doble transición / carrera A vs B.** El motor B escribe **inline** (`agent_completion_internal.py:274`) y el motor A lo hace desde un **daemon** (`completion_dispatcher.py:98-120`) encolado en `:183`. Con F2 el motor A pasa a escribir en el caso común, así que la superposición **aumenta**, no queda igual. | **Alta** (el v1 la declaraba Media y decía "no lo empeora" — **falso**) | **F2-bis guardia 2**: árbitro por `execution_id` que corta la segunda escritura. Más `_safe_transition` idempotente (`task_states.py:164-168`) cuando los targets coinciden, y `final_state_outcome.source` que hace visible cualquier discrepancia. |
-| R3-bis | **Doble transición A vs C/D**, en el camino `PATCH /by-ado/<id>/stacky-status`. El árbitro **no** los cubre (§2.1bis). | Media | **Aceptada y declarada, no mitigada.** Ya ocurre hoy y este plan no toca `api/tickets.py` (§6.6), así que no la agrava en ese camino. F8 la deja **censada y visible**; extender el árbitro a C y D es alcance del **plan 272** (§6.1). |
+| R3 | **Doble transición / carrera A vs B.** El motor B escribe **inline** (`agent_completion_internal.py:274`) y el motor A lo hace desde un **daemon** (`completion_dispatcher.py:100-121`) **encolado en `:172-181`, o sea ANTES**. Con la cola vacía el daemon drena de inmediato ⇒ el orden probable es **A primero, B después**. Con F2 el motor A pasa a escribir en el caso común, así que la superposición **aumenta**. | **Alta** (el v1 decía "no lo empeora" — falso; el v2 la mitigaba **en una sola dirección** — insuficiente, **D2**) | **Árbitro SIMÉTRICO**: F2-bis guardia 2 en el motor A **y** F3-bis-2 en el motor B, **el mismo helper `final_state_already_written`** (F1), verificado por los casos 7 y 8 de `test_plan271_arbitro.py`. Más `_safe_transition` idempotente (`task_states.py:164-168`) cuando los targets coinciden, y `final_state_outcome.source` que hace visible cualquier discrepancia. |
+| R3-bis | **Doble transición A vs C/D/E/F**, en los caminos `PATCH /by-ado/<id>/stacky-status` y `finish_work`. El árbitro **no** los cubre (§2.1bis). | Media | **Aceptada y declarada, no mitigada.** Ya ocurre hoy y este plan no toca `api/tickets.py` (§6.6), así que no la agrava en esos caminos. F8 la deja **censada y visible**; extender el árbitro a C, D, E y F es alcance del **plan 272** (§6.1). |
 | R4 | **Regresión del gate de build del plan 210**: el motor A pisa la degradación que el motor C acaba de aplicar. | **Alta sin F2-bis** | **F2-bis guardia 1** replica `dev_build_verify.gate_final_state` en el motor A, y **F8 test 3** deja rojo el repo si alguien lo saca. |
 | R5 | `get_tracker_provider` lanza `TrackerConfigError` en un proyecto GitLab con `STACKY_GITLAB_ENABLED=false` y rompe el cierre. | Baja | F3 lo envuelve en `try/except` ⇒ `{"skipped": True, "reason": "provider_unavailable"}`. El cierre nunca falla (caso 3 de F3) y la razón se muestra (F6). |
-| R6 | **F3 rompe `test_output_watcher.py`** porque el doble no modela el constructor real de `AdoClient`. | **Confirmada** (no es hipótesis) | **F3-bis** especifica el cambio exacto de los tres dobles sin tocar un solo assert, y el criterio dice explícitamente que si sigue rojo **se detiene y se reporta**. |
+| R6 | ~~F3 rompe `test_output_watcher.py`~~ | **DESCARTADA (D6).** El v2 la declaraba *"Confirmada, no es hipótesis"*; **es falsa.** | `_mk_ticket` (`test_output_watcher.py:87-107`) no setea `stacky_project_name`, que es de donde `close_execution_with_publish:135` lo lee ⇒ `project_name is None` ⇒ camino legacy ⇒ el doble actual alcanza. **No se toca ni un doble.** Baseline `30 passed` en §3.3; F3 tiene que dejarlo en 30. |
+| R6-bis | **El fix de F3 es INERTE para todo ticket sin `stacky_project_name`**: en un proyecto GitLab sigue escribiendo en ADO con el `iid` de GitLab. Es el bug que F3 dice cerrar, sobreviviendo en su propio camino. | **Alta** (destapada por D6) | **Parcial y declarada.** F3 lo hace **visible** (`no_project_context`, razón 27, caso 7 de `test_plan271_writer_routed.py`) pero **no lo repara**: repararlo es poblar `stacky_project_name` en el alta del ticket, territorio de `_startup_sync` y del **plan 272** (§6.10). El KPI de paridad se sinceró en §1 para no prometer lo que no cumple. |
 | R7 | `SQLITE_LOCKED` hace flaky a F5 y F2-bis. | Alta | §3-9 y repetido en cada fase: correr **por archivo**, reintentar hasta 3 veces el mismo archivo, nunca la suite completa. |
-| R8 | El implementador toca `run_harness_tests.ps1` con la sintaxis del `.sh`. | Media | §3-10 y F7 dan la diferencia literal. El criterio de F7 exige **22 hits**, 11 por script. |
+| R8 | El implementador toca `run_harness_tests.ps1` con la sintaxis del `.sh`. | Media | §3-10 y F7 dan la diferencia literal. El criterio de F7 exige **24 hits**, 12 por script. |
 | R9 | El texto del `PlainHelp` rompe uno de los meta-tests. | Media | §3.1 pata 4 enumera las restricciones **reales** (verificadas en `test_harness_flags_help.py:44-52,63-70`), y F1 trae un texto ya medido campo por campo. |
 | R10 | **Colisión con el plan 270.** El 270 no menciona `agent_completion_internal.py` ni `completion_state.py` (verificado: 0 hits) **pero su C3 declara que su F4 se cablea en `set_stacky_status_by_ado`**, que es la misma función que contiene el caller `api/tickets.py:1386` que este plan afecta vía F4. | **Media** (el v1 la declaraba Baja) | Frontera explícita: **este plan no edita ni una línea de `api/tickets.py`** (§6.6). Lo único que cambia de esa función es el **contenido** del `publish`/`ado_state_change` que devuelve `close_execution_with_publish`, y esa función serializa la variable local `state_change_result` (`:1466-1503`), no el `CloseResult`. Los nombres nuevos (`final_state_resolver.py`, `final_state_outcome`, `finalStateOutcome.ts`, las 4 flags `STACKY_FINAL_STATE_*`) **no existen hoy en el repo** (verificado: 0 hits) y no colisionan. **Merge: hacer el del 270 primero si ambos están listos.** |
 | R11 | El diagnóstico está errado y el problema real era `harness_defaults.env:33`. | Media | **F0-D** lo mide antes de escribir una línea de producción, y su salida va al PR. Aun si se confirma, el motor A sigue roto y F1/F2/F2-bis se justifican. |
+| R12 | **El allow-list del censo vuelve a nacer mal** y F8 rompe CI el día 1 (le pasó al v2 con 6 entradas donde hay 9). | **Alta si se escribe de memoria** | **F8 Paso 0**: correr el censo **antes** de escribir el `dict` y **pegar su salida en el PR**. El allow-list es esa salida más una etiqueta por línea. Nunca al revés. |
+| R13 | **El implementador escribe las 3 ayudas llanas que faltan y usa una palabra de la denylist** (`gate` es la trampa obvia, con una flag llamada `..._PUBLISH_GATE_PRECISE_ENABLED`), dejando `test_harness_flags_help.py` con **más** de sus 4 fallos ajenos. | **Alta sin los textos escritos** | **§3.1bis** trae los **4** textos literales, ya medidos campo por campo, y §3.3 fija el baseline exacto contra el cual comparar (`4 failed, 4 passed`, y ninguna key `STACKY_FINAL_STATE_*` entre las violaciones). |
+| R14 | **Un `return` nuevo sin `reason`** reabre el skip mudo dentro de seis meses, sin que ningún test lo note (el puente de F6 no lo ve: `"unknown"` no está en ninguno de los dos catálogos). | Media | **F9** test 3: centinela AST sobre los tres archivos de escritura; todo `return` de dict con `"skipped"`/`"ok"` debe traer `"reason"` salvo que `ok is True`. |
 
 ---
 
 ## 6. Fuera de scope (explícito, para que nadie lo agregue "de paso")
 
-1. **Unificar los CUATRO escritores (motores A, B, C y D de §2.1) en uno solo.** Es el arreglo estructural correcto y ahora los cuatro están **censados** (F8), pero es una migración con riesgo propio: **plan 272**. Este plan deja **A y B** coherentes, arbitrados y observables, y **C y D** censados pero intactos (§2.1bis). El 272 debe: (a) extender el árbitro de F2-bis a C y D, (b) modelar `on_failure_state` (§F1) antes de cablear el resolver en el motor B, y (c) darle plan dueño al motor D o eliminarlo.
+1. **Unificar los SEIS escritores (motores A..F de §2.1) en uno solo.** Es el arreglo estructural correcto y ahora los seis están **censados** (F8), pero es una migración con riesgo propio: **plan 272**. Este plan deja **A y B** coherentes, **arbitrados en las dos direcciones** y observables, y **C, D, E y F** censados pero intactos (§2.1bis). El 272 debe: (a) extender el árbitro simétrico a C, D, E y F, (b) modelar `on_failure_state` (§F1) antes de cablear el resolver en el motor B, (c) darle plan dueño a D, E y F o eliminarlos, y (d) **garantizar `stacky_project_name` en todo ticket** (ver §6.10, R6-bis).
 2. **Deduplicar `_infer_agent_type_from_filename`** (`agent_completion_internal.py:304-318`, `api/agents.py:1766-1767`, `services/agent_history.py:54-55`). Las tres copias coinciden para `technical`; no causó el bug.
 3. **Construir la UI de la matriz `by_work_item_type` dentro de `StatesConfigPage`.** Es alcance del 208. Este plan hace que **no haga falta**.
 4. **Cambiar la semántica de `review_mode_hold`.** HITL deliberado. Solo se hace visible.
 5. **Transicionar en `needs_review`.** Exige revisión humana.
-6. **`api/tickets.py` en cualquiera de sus formas** — `set_stacky_status_by_ado` (**empieza en `:1205`**, no en `:1487` como decía el v1), `_apply_task_state:531`, el escritor inline `:1489-1491`, `finish_work:1751`. Territorio del 270 y del 272. **Este plan no edita ni una línea de ese archivo**, solo lo cita.
+6. **`api/tickets.py` en cualquiera de sus formas** — `set_stacky_status_by_ado` (**empieza en `:1205`**, no en `:1487` como decía el v1), `_apply_task_state:531` (**motor C**), el escritor inline `:1489-1492` (**motor D**), `finish_work:1751` con sus escrituras en `:2078,:2080` (**motor E**) y `create_child_task:4080` con las suyas en `:4779,:4781` (**motor F**). Territorio del 270 y del 272. **Este plan no edita ni una línea de ese archivo**, solo lo cita — pero ahora los **censa a los cuatro** (F8), que es la diferencia entre "fuera de scope" y "no lo vimos". **Los motores E y F son exactamente lo segundo hasta esta versión.**
 7. **`deployment/harness_defaults.env`.** Snapshot derivado, ya divergente.
 8. **Migrar `agent_workflow_configs.transition_state` al perfil del cliente.** El 216 lo declaró fuera de scope.
 9. **Cambiar `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` en `harness_defaults.env:33`.** F0-D lo **mide** y lo reporta; cambiarlo es una decisión del operador, no de este plan.
+10. **Poblar `stacky_project_name` en los tickets que no lo tienen** (R6-bis, D6). Es la reparación de fondo del hueco de paridad, toca `_startup_sync` (`app.py:196,203`) y el alta de tickets, y tiene riesgo de migración propio: **plan 272**. Este plan solo lo hace **visible** (`no_project_context`).
+11. **Arreglar los 4 fallos ajenos de `test_harness_flags_help.py`** (`STACKY_PLANS_BOARD_ENABLED`, `STACKY_CODE_INTEGRITY_ENABLED`, `STACKY_EVOLUTION_*`, `STACKY_EVAL_*`). Están declarados en §3.3 como baseline. **Excepción única y justificada:** `test_b2_transition_from_config.py` **sí** se arregla (F4-bis), porque F7 lo **adopta** al arnés y adoptar un rojo rompe CI para todos.
 
 ---
 
@@ -1349,7 +1713,11 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 | **Motor A / "matriz"** | `completion_state.maybe_apply_state_transition`, disparado por post-hook del `completion_dispatcher`, **asíncrono** (daemon). Lee `tracker_state_machine`. |
 | **Motor B / "employee_config"** | `agent_completion_internal.close_execution_with_publish`, Pasos 3.5 y 4, **síncrono**. Lee `agent_workflow_configs[<filename>].transition_state`. |
 | **Motor C / "determinista"** | `api/tickets.py:531 _apply_task_state` (plan 79 + gate del 210), **síncrono**, solo desde `set_stacky_status_by_ado:1473`. **Ya honra el nivel rol.** |
-| **Motor D / "inline"** | `api/tickets.py:1489-1491`, sin plan dueño. Este plan lo **censa** (F8) pero **no** lo modifica ni lo arbitra (§2.1bis); su unificación es del **272**. |
+| **Motor D / "inline"** | `api/tickets.py:1489-1492`, sin plan dueño. Este plan lo **censa** (F8) pero **no** lo modifica ni lo arbitra (§2.1bis); su unificación es del **272**. |
+| **Motor E / "finish_work"** | `api/tickets.py:1751 finish_work`, escrituras en `:2078,:2080`, sin plan dueño. **Censado, no modificado, no arbitrado** (§2.1bis). El v2 lo citó en §6.6 y aun así lo dejó fuera del censo (**D1**). |
+| **Motor F / "tarea hija"** | `api/tickets.py:4080 create_child_task`, escrituras en `:4779,:4781`. **Censado, no modificado, no arbitrado.** |
+| **Árbitro simétrico** | El par de guardias `final_state_already_written(execution_id)` — una en el motor A (F2-bis) y **su gemela en el motor B** (F3-bis-2) — que usan **el mismo helper** de `final_state_resolver.py`. Un árbitro en un solo motor cubre un solo orden de carrera, y no es el probable (**D2**). |
+| **Razón fuera del catálogo** | Cualquier `reason` que no esté en `ALL_FINAL_STATE_REASONS`. `"unknown"` es el caso patológico: no es una razón, es un catálogo incompleto. **F9** lo prohíbe corriendo (**D3**). |
 | **Nivel rol** | `tracker_state_machine.<agent_type>.next_state_ok`. Lo que `StatesConfigPage.tsx` sabe escribir. |
 | **Celda de matriz** | `tracker_state_machine.<agent_type>.by_work_item_type.<tipo>`. Solo `ClientProfileEditor.tsx:467-477` la escribe. **Celda parcial** = celda con `in_progress` pero sin `next_state_ok`. |
 | **Chokepoint** | `close_execution_with_publish` (`agent_completion_internal.py:66`). |
@@ -1362,48 +1730,61 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 
 ```
 F0 (rojo 0/4 + medición F0-D, sin prod)
- └─> F1 (resolver puro + flag 1)
+ └─> F1 (resolver puro + catálogo de 27 + final_state_already_written + flag 1)
       └─> F2 (cablear motor A)              ← cierra RC-1  [F0 pasa a 2/4]
-           └─> F2-bis GUARDIA 1 (gate 210)  ← cierra C2/R4  [va JUNTO con F2]
- └─> F3 (writer ruteado + flag 2 + F3-bis)  ← cierra E-3    [F0 pasa a 3/4]
+           └─> F2-bis GUARDIA 1 (gate 210, con cortocircuito developer)  [va JUNTO con F2]
+ └─> F3 (writer ruteado + flag 2)           ← cierra E-3    [F0 pasa a 3/4]
+      ├─> F3-bis-1 (VERIFICAR que output_watcher NO se rompe — no se toca nada)
+      ├─> F3-bis-3 (_safe_transition deja de fallar mudo)  ← cierra D3 en el origen
       └─> F4 (gate preciso + flag 3)        ← cierra RC-2   [F0 pasa a 4/4]
+           ├─> F4-bis (arreglar test_b2_transition_from_config, hoy 5 failed)
            └─> F5 (persistir razón + flag 4)
-                └─> F2-bis GUARDIA 2 (árbitro por execution_id)  ← necesita la key de F5
+                └─> ÁRBITRO SIMÉTRICO — necesita la key de F5:
+                    ├─ F2-bis GUARDIA 2  (mitad A, completion_state.py)
+                    └─ F3-bis-2          (mitad B, agent_completion_internal.py)
                      └─> F6 (mostrar razón + puente de catálogo) ← cierra RC-3
-                          └─> F8 (censo ejecutable)
-                               └─> F7 (cierre y registro)
+                          └─> F8 (censo ejecutable, Paso 0 = correrlo primero)
+                               └─> F9 (ninguna razón fuera del catálogo)
+                                    └─> F7 (cierre y registro)
 ```
 
 **Verificación ítem por ítem de que ninguna fase depende de algo posterior:**
 - F2 usa solo `final_state_resolver` (F1). ✔
-- **F2-bis guardia 1** usa `dev_build_verify`, **preexistente** (`api/tickets.py:576-582` ya lo llama). ✔
+- **F2-bis guardia 1** usa `dev_build_verify`, **preexistente** (`api/tickets.py:573-577` ya lo llama). ✔
 - F3 usa `tracker_provider` y `_safe_transition`, ambos **preexistentes**. ✔
-- F4 usa el kwarg `project_name` que **F3 ya agregó**. ✔
+- **F3-bis-1 no construye nada**: verifica y anota el conteo. ✔
+- **F3-bis-3** toca solo la rama de error de `_safe_transition`, sin dependencias. ✔
+- F4 usa el kwarg `project_name` que **F3 ya agregó**. ✔ · **F4-bis** solo arregla un test preexistente. ✔
 - F5 usa las razones que F2/F3/F4 ya producen. ✔
-- **F2-bis guardia 2** usa la key `final_state_outcome` que **F5 ya persiste** ⇒ por eso va después de F5. Mientras tanto es un no-op fail-open. ✔ **(Corrige el orden del v1, que declaraba el DAG satisfecho sin haber detectado esta arista.)**
+- **Las DOS mitades del árbitro** usan la key `final_state_outcome` que **F5 ya persiste** ⇒ por eso van después de F5. Mientras tanto son no-ops fail-open. ✔ **(El v1 no vio esta arista; el v2 la vio pero solo cableó una mitad — D2.)**
 - F6 usa la key de F5 y `ALL_FINAL_STATE_REASONS` de F1. ✔
-- F8 solo lee código. ✔ · F7 solo verifica. ✔
+- **F9** necesita que F3-bis-3 ya haya tapado el agujero conocido y que el catálogo de F1 esté completo. ✔
+- F8 solo lee código. ✔ · F7 solo verifica y registra, **después** de F4-bis. ✔
 
-**F1+F2+F2-bis(guardia 1) se pueden entregar solas** y ya cierran el bug reportado sin regresionar el plan 210. F3..F8 son el resto de la deuda.
+**Ninguna fase intermedia rompe el verde de la anterior (verificado contra §3.3):** F3 deja `test_output_watcher.py` en 30 (D6, no lo toca); F3-bis-3 deja `test_plan79_safe_transition.py` en 10 (agrega una key, no cambia branches); F2-bis deja `test_plan210_state_gate.py` en 16 (replica el gate, no lo modifica); F4-bis **sube** `test_b2_transition_from_config.py` de 5 failed a 5 passed; F5 no toca `test_plan254_*`; F6 no crea `.tsx` nuevos.
+
+**F1+F2+F2-bis(guardia 1) se pueden entregar solas** y ya cierran el bug reportado sin regresionar el plan 210. F3..F9 son el resto de la deuda.
 
 ### 7.3 Definition of Done
 
 - [ ] **F0-D**: salida de los 4 comandos de medición pegada en el PR, con una línea de interpretación.
 - [ ] `test_plan271_caracterizacion.py`: `0 passed, 4 failed` al terminar F0 → **`4 passed`** al terminar F7.
-- [ ] `test_plan271_final_state_resolver.py`: 14 passed.
+- [ ] `test_plan271_final_state_resolver.py`: **17 passed** (incluye `len(ALL_FINAL_STATE_REASONS) == 27`, `"unknown" not in ...` y los 2 de `final_state_already_written`).
 - [ ] `test_plan271_role_fallback.py`: 9 passed.
-- [ ] `test_plan271_arbitro.py`: 5 passed.
-- [ ] `test_plan271_writer_routed.py`: 8 passed.
+- [ ] `test_plan271_arbitro.py`: **8 passed** (4/8 tras la guardia 1; los 8 tras F3-bis-2).
+- [ ] `test_plan271_writer_routed.py`: **10 passed**.
 - [ ] `test_plan271_publish_gate.py`: 8 passed.
 - [ ] `test_plan271_reason_persisted.py`: 8 passed.
-- [ ] `test_plan271_reason_catalog.py`: 2 passed.
-- [ ] `test_plan271_censo_escritores.py`: 3 passed, con el allow-list de **6 entradas** (o el que el censo encuentre, actualizado en el mismo commit).
-- [ ] `test_plan271_flags.py`: las 4 keys con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, y con línea `=true` en `harness_defaults.env`.
-- [ ] `plan271FinalStateOutcome.test.ts`: 6 passed. `npx tsc --noEmit`: 0 errores.
-- [ ] `test_harness_flags.py` y `test_harness_flags_help.py`: verdes (por archivo).
-- [ ] `test_b2_transition_from_config.py`, `test_u2_publish_review_mode.py`, `test_output_watcher.py`, `test_plan79_apply_final.py`, `test_plan79_centinela_estados.py`, `test_plan210_state_gate.py`: verdes (por archivo). Cualquier rojo se prueba preexistente con un worktree en el commit base **o se arregla**; no se borra el assert.
-- [ ] Los 11 archivos del checklist de F7 registrados en **ambos** scripts (**22 hits**).
+- [ ] `test_plan271_reason_catalog.py`: 2 passed, sobre **27** razones.
+- [ ] `test_plan271_censo_escritores.py`: 3 passed, con el allow-list de **9 entradas** — **y la salida del Paso 0 pegada en el PR** (o el conjunto que el censo encuentre hoy, actualizado en el mismo commit con su etiqueta de motor/adaptador).
+- [ ] `test_plan271_razon_del_catalogo.py` (**F9**): 3 passed. **Ningún `reason` fuera de `ALL_FINAL_STATE_REASONS`; cero apariciones de `"unknown"`.**
+- [ ] `test_plan271_flags.py`: las 4 keys con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, con línea `=true` en `harness_defaults.env` **y con `PlainHelp` (las 4, textos de §3.1bis)**.
+- [ ] `plan271FinalStateOutcome.test.ts`: 6 passed. `npx tsc --noEmit`: 0 errores. Los **8** ratchets de UI de F6 corridos uno por uno.
+- [ ] `test_harness_flags.py`: **56 passed**. `test_harness_flags_help.py`: **exactamente `4 failed, 4 passed`**, los mismos 4 ajenos de §3.3, **sin ninguna key `STACKY_FINAL_STATE_*` entre las violaciones**. (No es "verde": ese archivo está rojo de fábrica — D13.)
+- [ ] `test_b2_transition_from_config.py`: de **`5 failed` (hoy)** a **`5 passed`** (F4-bis), **antes** de registrarlo.
+- [ ] `test_u2_publish_review_mode.py` **3 passed**, `test_output_watcher.py` **30 passed** (sin tocar ni un doble — D6), `test_plan79_apply_final.py` **6 passed**, `test_plan79_safe_transition.py` **10 passed**, `test_plan79_centinela_estados.py` **5 passed**, `test_plan210_state_gate.py` **16 passed`** — todos **por archivo**, comparados contra **§3.3**. Cualquier desvío se prueba preexistente con un worktree en el commit base **o se arregla**; no se borra el assert.
+- [ ] Los **12** archivos del checklist de F7 registrados en **ambos** scripts (**24 hits**).
 - [ ] `compileall` de `services/`, `api/` y `harness/` sin salida.
 - [ ] Las 4 flags con línea `=true` en `backend/harness_defaults.env`. (Verificable: `grep "STACKY_FINAL_STATE_" backend/harness_defaults.env` ⇒ **4 líneas, todas `=true`**.)
-- [ ] Huella de regresión registrada (o declarada como "archivo inexistente" en el PR).
-- [ ] **Smoke manual (una vez, el operador o el implementador):** con un proyecto que tenga `tracker_state_machine.technical.next_state_ok = "To Do"` y **sin** `by_work_item_type`, correr el Analista Técnico sobre una incidencia y verificar (a) en el tracker que quedó en `To Do`, (b) en el drawer que dice **“Movida a "To Do"”**, y (c) que el `System.State` **no** cambió dos veces (una sola escritura, comprobable en el historial del work item).
+- [ ] **Las DOS huellas de regresión registradas** en `docs/sistema/error_fingerprints.json` (**el archivo existe** — D17 —, así que no hay salida por "inexistente"), con el shape copiado de las entradas vecinas.
+- [ ] **Smoke manual (una vez, el operador o el implementador):** con un proyecto que tenga `tracker_state_machine.technical.next_state_ok = "To Do"` y **sin** `by_work_item_type`, correr el Analista Técnico sobre una incidencia y verificar (a) en el tracker que quedó en `To Do`, (b) en el drawer que dice **“Movida a "To Do"”**, y (c) que el `System.State` **no** cambió dos veces (una sola escritura, comprobable en el historial del work item). **(c) es la prueba de campo del árbitro simétrico: con el árbitro en un solo motor, este paso fallaba (D2).**

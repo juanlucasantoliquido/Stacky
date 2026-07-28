@@ -1,10 +1,50 @@
 # Plan 259 — Alta de proyecto GitLab de primera clase + guía de configuración verificable (botón INFO)
 
-**Estado:** CRITICADO — **v1 → v2**
+**Estado:** CRITICADO — **v2 → v3** (juez independiente; v2 **RECHAZADO**, 7 bloqueantes)
 **Serie:** Paridad multi-proveedor (65 → 218 → 249 → **259**). Cierra el último tramo que quedó a mitad de camino: el **alta**.
 **Fuente:** pedido del operador ("al crear un nuevo proyecto debe de darme la opción de GitLab y un botón de INFO que podamos abrir y nos dé info muy detallada de cómo configurarlo exactamente"), **verificado contra el árbol de trabajo** en la rama `feat/plan-217-migrador-mantis-gitlab`.
 
 > **Hallazgo central de la verificación:** GitLab está implementado en el motor (7 módulos `services/gitlab_*.py`, fábrica en `tracker_provider.py:130-148`, tipo declarado en `frontend/src/types.ts:245`) y **está ofrecido en el modal de EDICIÓN** (`EditProjectModal.tsx:449-452`) — pero **no existe en el modal de ALTA** y **el backend no sabe crearlo**. Peor: apretar ese botón de GitLab en Edición y guardar **convierte el proyecto en Azure DevOps en silencio**. El pedido del operador no es una feature nueva: es cerrar un agujero que hoy corrompe datos.
+
+---
+
+## CHANGELOG v2 → v3
+
+Veredicto de la crítica sobre v2: **RECHAZADO** (7 hallazgos BLOQUEANTES). Juez **independiente**, en corrida aparte del arquitecto que escribió v2.
+
+> **Método de esta pasada — se criticó EJECUTANDO, no leyendo.** Precedente de la casa: 4 de 4 críticas hechas releyendo volvieron RECHAZADAS por bloqueantes que solo aparecen corriendo, y hay casos donde el propio v2 introdujo bloqueantes invisibles a la lectura. Acá: cada anclaje se verificó con `grep`/`ast` contra el símbolo (los números de línea son orientativos, la verdad es el símbolo); el módulo `setup_guides.py` de F0 se **extrajo del plan, se escribió a disco y se corrieron contra él los 10 tests verificables que F0 propone** (los 10 en verde); el `.ps1` se pasó por el **parser real de PowerShell y además se evaluó en runtime**; el catálogo de huellas, el gate de ayuda llana y los 8 archivos de test del DoD se **corrieron de verdad** con `.venv\Scripts\python.exe` (py3.13.5) para medir el baseline en números. **6 de los 7 bloqueantes salieron de ejecutar, no de leer.**
+
+**Bloqueantes NUEVOS (v3)**
+
+- **B1 — La huella de F8 vuelve a romper el catálogo: `match` vs `matches`.** *(v2 introdujo este bloqueante al "arreglar" C3.)* El gate real, `tests/test_error_fingerprints_catalog.py::test_self_test_coherente`, lee `fp["self_test"]["matches"]` — **plural**. Las **42** huellas vivas del catálogo usan `matches`. La entrada de v2 escribe `"match"` (singular) ⇒ `KeyError: 'matches'`. Ejecutado: con `"match"` el gate explota; con `"matches"` pasa (el `log_pattern` y los samples de v2 son correctos, el error es **solo** la clave anidada). v2 acertó los 9 campos de primer nivel y erró el único campo anidado. F8 corregida.
+- **B2 — La DoD exige VERDE en 3 gates que están ROJOS de fábrica.** Baseline medido corriendo, por archivo, 2 repeticiones idénticas (deterministas, sin `SQLITE_LOCKED`):
+  | Gate que la DoD exige en verde | Baseline REAL medido |
+  |---|---|
+  | `tests/test_error_fingerprints_catalog.py` (F8 pide "los 8 en verde") | **3 failed / 5 passed** — la huella `PLAN239-OUTLET-EN-BLANCO` tiene `status:"guarded"` (fuera de `_STATUS_ENUM`) y **no tiene `self_test`** |
+  | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` (F5 y F6 piden "en verde sin regenerar la línea base") | **1 failed / 2 passed** — `ExecutionDetailDrawer.module.css` 23 > 21 y `RunReconciliationCard.module.css` 1 > 0 |
+  | `tests/test_harness_flags_help.py` (ni siquiera está en la DoD, y las 3 flags nuevas lo tocan) | **4 failed / 4 passed** |
+  Verde real hoy: `test_harness_flags.py` 56 passed · `test_harness_ratchet_meta.py` 4 · `test_plan208_profile_schema.py` 10 · `test_plan218_gitlab_reachable.py` 13 · `test_plan70_smoke_gitlab.py` 5 · `test_harness_flags_requires.py` 9 · `npx tsc --noEmit` **0 errores**. La DoD de v3 distingue **"pasa"** (tests nuevos del plan) de **"no empeora contra el baseline numerado"** (gates rojos ajenos), y prohíbe arreglar rojo ajeno adentro de este plan.
+- **B3 — El guardián de F9 es rojo por diseño: `initialize_azure_devops_project` no existe.** Ejecutado sobre `project_manager`: los helpers reales son `initialize_ado_project`, `initialize_jira_project`, `initialize_mantis_project`. v2 declara tabla de alias **solo** para `write_{t}_auth` y deja `initialize_{t}_project` sin alias ⇒ `test_cada_tracker_tiene_helper_de_alta` falla en `azure_devops` **antes** de llegar a GitLab. La [ADICIÓN ARQUITECTO] de v2 no podía pasar su propio criterio. F9 ahora declara **una sola** tabla `_ALIAS` que cubre las dos familias.
+- **B4 — El `FakeRequests` que F4 prescribe rompe el manejo de excepciones.** `services/gitlab_setup_check.py` hace `except requests.RequestException`, y el test monkeypatchea el **símbolo** `requests` del módulo. Ejecutado: con un `FakeRequests` que no expone `RequestException`, los 4 escenarios de red del plan (instancia caída, token, scope, proyecto) mueren con `AttributeError: type object 'FakeRequests' has no attribute 'RequestException'` en vez de devolver `unknown`. F4 ahora congela el contrato mínimo del doble.
+- **B5 — El bloque de 7 líneas de F8 deja el ratchet `.ps1` VACÍO, y parsea sin error.** El plan da la lista **una sola vez**, en sintaxis `.sh` (rutas peladas), y para el `.ps1` dice solo *"el equivalente Windows, misma lista"*. Ejecutado con el parser real (`[Parser]::ParseInput`) y evaluado en runtime: el `.ps1` actual parsea con **0 errores**, y con las 7 líneas peladas dentro de `@( )` **sigue dando 0 errores de parseo** pero el array evalúa a **`Count = 0`** — la lista se vacía en silencio. Con la sintaxis correcta (`"ruta",`) evalúa a `Count = N`. Es la misma clase de bug que la coma colgante que rompió el `.ps1` del plan 266. F8 ahora escribe las 7 líneas **dos veces**, una por sintaxis.
+- **B6 — F1.0 manda escribir `initialize_gitlab_project` en el archivo equivocado.** v2 insertó la subsección `F1.0 — Template GitLab embebido`, cuyo único archivo nombrado es `services/client_profile_default_templates.py`, e inmediatamente después escribió *"Agregar al final del archivo, **antes** de `__all__`"* seguido del código de `project_manager.py`, **sin abrir subsección nueva**. Verificado ejecutando: ese archivo **no tiene `__all__`** (`'__all__' in src` → `False`). Un modelo menor mete el helper de alta en el archivo de templates. F1 partida en `F1.0` (templates) y `F1.a` (project_manager), cada una con su archivo en el encabezado.
+- **B7 — `flags` no existe en `NewProjectModal.tsx`, y leerlo de `/api/diag/health` no compila.** F5.c punto 2 y F6.d condicionan el botón GitLab y el botón INFO a `flags.STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED` / `flags.STACKY_SETUP_GUIDE_ENABLED` *"leído de `/api/diag/health`"*. Verificado: (a) el componente **no importa ningún mecanismo de flags** — sus únicos imports son `react`, `../api/endpoints`, `../types`, `./ui`, `../hooks/useOptimisticPending` y su CSS; (b) `HealthResponse` (`api/endpoints.ts:3290-3302`) tiene claves **fijas y sin index signature**, así que `flags.STACKY_...` **no compila** — y `npx tsc --noEmit` está hoy en **0 errores**, o sea que este plan lo rompería; (c) las 3 flags **no se emiten** en `/api/diag/health` (0 hits en código: solo existen dentro de este `.md`). Faltaban 4 piezas que v2 nunca nombró. Se agrega **F4.c** (el backend las emite) y **F5.0** (el hook + el tipo).
+
+**Importantes NUEVOS (v3)**
+
+- **B8 — `_project_to_dict` filtra el path de GitLab por `ado_project`.** `api/projects.py:96` hace `"ado_project": tracker.get("project", "")` **sin condicionar por tracker**. Para un proyecto GitLab, `issue_tracker.project` vale `acme/api` ⇒ el listado emite `ado_project:"acme/api"`, `EditProjectModal.tsx:25` lo semilla **incondicionalmente** en el form y `buildPayload()` lo reenvía en cada PATCH. v2 agrega los 4 campos `gitlab_*` condicionados pero deja esta fuga. Corregido en F2 Cambio 3.
+- **B9 — `styles.btnInfo` no existe, y el CSS del modal está congelado.** Grep sobre **todo** `frontend/src`: **0 matches** de `btnInfo`. Y `uiDebtBaseline.json:41` congela `components/NewProjectModal.module.css` en **24** hex: agregar un color literal rompe `uiDebtRatchet` (que además ya está rojo, B2). F6.d ahora nombra la clase a crear y obliga a tokens de `theme.css`.
+- **B10 — Las 3 flags nuevas no se cablean en `services/harness_flags_help.py`.** Regla de la casa: una flag toca varios lugares, y `test_harness_flags_help.py::test_plain_help_covers_all_registry_keys` exige cobertura **100 %** de `FLAG_REGISTRY`. F0.b de v2 toca 3 archivos y omite `harness_flags_help.py`. Atenuante medido: ese gate **ya está rojo** (79 flags sin ayuda, incluida `STACKY_PROVIDER_PARITY_ENABLED` del plan 218), así que no lo pone rojo — pero sí degrada, y el plan ni siquiera lo corre. F0.b agrega las 3 entradas `PLAIN_HELP` con las **5 restricciones reales** que el gate impone.
+- **B11 — `api.post` lanza en non-2xx: el "rechazo explícito" de la flag OFF se ve como JSON crudo.** `Projects.init` usa `api.post`, que en `api/client.ts:206-209` hace `throw new Error(\`${status} ${statusText}: ${text}\`)`. La rama `else` de `handleSubmit` (`result.ok === false`) es **inalcanzable**: un 400 cae en el `catch` y el operador lee `400 BAD REQUEST: {"ok": false, "error": ...}`. F5 ahora extrae el mensaje.
+- **B12 — `Dialog` anidado dentro de un overlay ad-hoc.** `NewProjectModal.tsx:253-254` es un overlay a mano (`styles.backdrop`/`styles.panel`), **no** usa `Dialog`. Montar `SetupGuideDialog` con el `Dialog` canónico **adentro** anida un portal: doble backdrop y doble `inert` sobre `#root` vía `openDialogCount`. F6.c fija dónde se monta.
+- **B13 — `gitlab_client.py` no tiene `logger`.** Verificado: **0** ocurrencias de la cadena `logger` en el archivo. F3 afirma *"`json` y `logger` ya están disponibles"* y solo después lo matiza. Corregido a instrucción única.
+- **B14 — F7.a mueve `_write_env` y el hot-apply DENTRO del `try/except ValueError`.** v2 dice "cero cambio funcional", pero hoy el `try` solo envuelve `apply_updates`: un `ValueError` de `_write_env` da **500** y con el fix daría **400**. Se acota el `try`.
+
+**Menores (v3):** anclajes corridos con el símbolo verificado presente — `handleSubmit` está en `:225` (no `:229`), `rawPost` en `:47` (el `:88` del plan es su `return`), el bloque GitLab de Edición en `:695-753` y su campo de ruta en `:737-748` (no `:735-750`), el botón GitLab en `:447-453`, `_read_default_template` en `:88`, `_tracker_project_for` en `:90`, `get_project_credentials` en `:544`, `json.loads` en `:87`, `def update_project` en `:407`. Se marcan como orientativos en §2.
+
+**[ADICIÓN ARQUITECTO v3] — F8.b, guardián de paridad `.sh` ↔ `.ps1` del ratchet.** El bloqueante B5 fue posible porque **nada guarda el `.ps1`**: verificado, `test_harness_ratchet_meta.py:19-21` parsea **solo** el `.sh`, y la única garantía del gemelo Windows es un comentario que dice *"Mantener en sync"*. Ya falló dos veces (plan 266 con una coma colgante que sí rompía el parser; este plan con comillas faltantes que **no** lo rompen y vacían el array en silencio). F8.b agrega un test que compara los dos archivos por conjunto de rutas y **rechaza específicamente la forma pelada dentro del `.ps1`** — el modo de falla exacto que ningún parser detecta. Es texto puro (`re` + `pathlib`), **no ejecuta PowerShell**, así que corre igual en los 3 runtimes y también fuera de Windows. Sin flag, sin trabajo del operador, sin tocar producto.
+
+**Lo que v2 hizo BIEN y v3 conserva intacto** (verificado ejecutando, no por cortesía): E8 es exacto (`apply_updates` en `services/harness_flags.py:5709` dice textual *"No persiste ni aplica"*, y `put_harness_flags` en `api/harness_flags.py:118-176` hace los 3 pasos, con `logger` en `:19` y `_write_env` en `:32`) — la extracción `set_flag_values` de F7.a es correcta; E9 es exacto (`DEFAULT_TEMPLATES` tiene exactamente `['azure_devops','jira','mantis']`, sin `gitlab`, y `gitlab.json` difiere de `azure_devops.json` en 8 claves incluida `tracker_state_machine`); E11 es exacto (`read_secret_from_file` reescribe si `result.migrated`); los 4 guards de `ci_*` están en las líneas exactas que E6 cita; `set_encrypted_secret(payload, "token", token, format_field="token_format")` coincide byte por byte con la firma real; el `test_sin_jerga` determinista de v2 **pasa** contra su propia guía; y los 5 chequeos de F4 devuelven **siempre 5 resultados** en los 7 caminos de salida (trazado uno por uno).
 
 ---
 
@@ -58,6 +98,10 @@ Que crear un proyecto GitLab sea tan directo como crear uno de Azure DevOps, y q
 ## 2. Evidencia real (anclaje anti-alucinación)
 
 Todo lo que sigue fue leído del árbol, no inferido.
+
+> **Cómo leer los `archivo:línea` de este documento *(v3)*.** Los **símbolos** son la verdad y fueron verificados uno por uno con `grep`/`ast` contra el árbol en la rama `feat/plan-217-migrador-mantis-gitlab`; los **números de línea son orientativos** y se corren solos cuando una sesión paralela toca el archivo. Antes de editar, localizá el símbolo (`grep -n "<simbolo>" <archivo>`), no confíes en el número. Anclajes que en v2 estaban corridos y v3 corrige: `handleSubmit` está en `NewProjectModal.tsx:225` (v2 decía `:229`); `rawPost` en `api/client.ts:47` (el `:88` de v2 es su `return`); el bloque GitLab de Edición en `EditProjectModal.tsx:695-753` con su campo de ruta en `:737-748` (v2 decía `:695-750` y `:735-750`); el botón GitLab de Edición en `:447-453` (v2 decía `:449-452`); `_read_default_template` en `client_profile.py:88` (v2 decía `:102-116`); `_tracker_project_for` en `project_context.py:90` (v2 decía `:98`); `get_project_credentials` en `api/projects.py:544` (v2 decía `:543`); `json.loads` del lector GitLab en `gitlab_client.py:87` (v2 decía `:86`); `def update_project` en `api/projects.py:407` (v2 citaba el rango `:424-521`). **En los 9 casos el símbolo existe** — ninguno es una alucinación, todos son deriva de líneas.
+>
+> **Anclajes verificados EXACTOS** (sin corrimiento): `NewProjectModal.tsx` `EMPTY:13-38`, `buildPayload:79-85`, `validate:199-220`, `NP_FIELD_DOM_ORDER:223`, `trackerRow:372-394`, `isAdo/isJira/isMantis:248-250`; `types.ts` `TrackerType:245`, `InitProjectPayload:296-329` con su bloque GitLab en `:324-328`; `api/client.ts` `rawGet:96`; `api/projects.py` `_has_credentials:69-77`, `_project_to_dict:80-109`, `else # azure_devops:360`, `if tracker_type == "jira":290`; `config.py:1185-1187` (y el literal `"STACKY_GITLAB_ENABLED", "false"` **sí** aparece contiguo, o sea que el test de F7 funciona), `STACKY_CAPABILITY_DEGRADATION_ENABLED:1203`; `harness_flags.py` `apply_updates:5699` con su docstring en `:5709`, `_CATEGORY_KEYS["paridad_proveedores"]:478-484`; `api/harness_flags.py` `logger:19`, `_write_env:32`, `put_harness_flags:118`; `tracker_provider.py:130-136`; `ci_provider.py:121`, `ci_variables.py:82`, `ci_preflight.py:39`, `ci_logs_provider.py:38` (los 4 exactos); `test_harness_ratchet_meta.py` `_ALLOWLIST_MAX = 197`; `test_harness_flags.py` `_CURATED_DEFAULTS_ON:467`; `harness_flags_help.py` `plain_help_for:1915`.
 
 ### E1 — El alta no ofrece GitLab; la edición sí (y miente)
 
@@ -494,6 +538,45 @@ y 3 `FlagSpec` al final de `FLAG_REGISTRY`, con `group="global"`, `env_only=Fals
 
 `tests/test_harness_flags.py` — agregar las 3 keys a `_CURATED_DEFAULTS_ON` (hoy `:467`), encabezadas por el bloque de comentario del plan 259 igual que hacen los planes 254-258.
 
+##### F0.b.4 — `services/harness_flags_help.py` *(v3, hallazgo B10 — OBLIGATORIO, v2 lo omitía)*
+
+`tests/test_harness_flags_help.py:33-35` exige que `PLAIN_HELP` cubra el **100 %** de `FLAG_REGISTRY`. Agregar las 3 entradas al dict `PLAIN_HELP`. **Las 5 restricciones son del gate, no son estilo** (verificadas en el fuente del test, no inferidas):
+
+| # | Restricción | Test que la impone |
+|---|---|---|
+| 1 | `10 <= len(what) <= 200` | `test_plain_help_fields_non_empty_and_bounded` |
+| 2 | `len(on_effect) <= 240` y `len(off_effect) <= 240`; `example <= 300`; ningún campo vacío | ídem |
+| 3 | `on_effect` y `off_effect` arrancan **literalmente** con `"Si "` | `test_plain_help_on_off_start_with_si` |
+| 4 | **Prohibido** citar una key SCREAMING_SNAKE en cualquier campo (`_KEY_RE = r"\b[A-Z]+_[A-Z0-9_]+\b"`) | `test_plain_help_avoids_jargon_denylist` |
+| 5 | **Prohibido** referenciar una fase de plan (`_PHASE_RE = r"\bF\d"`) y toda palabra de `JARGON_DENYLIST` (con plural opcional, case-insensitive: `token`/`tokens`, `endpoint`, `gate`, `prompt`, `backend`, …) | ídem |
+
+> **Trampa concreta:** las `description` que este plan propone para `FLAG_REGISTRY` (tabla de arriba) **violan las reglas 4 y 5** — dicen `STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false` y `Plan 259 — …`. Eso está **bien** ahí (el gate solo mira `PLAIN_HELP`), pero **no se pueden copiar** a `PLAIN_HELP`. Hay que redactarlas de nuevo. Texto exacto a usar:
+
+```python
+    "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED": PlainHelp(
+        what="Permite elegir GitLab como sistema de tickets al crear un proyecto nuevo.",
+        on_effect="Si está encendida, la pantalla de alta ofrece GitLab y el servidor guarda el proyecto como GitLab.",
+        off_effect="Si está apagada, GitLab no aparece al crear y el servidor rechaza el pedido con un aviso claro.",
+        example="Crear un proyecto contra tu GitLab de empresa sin pasar por la pantalla de edición.",
+    ),
+    "STACKY_SETUP_GUIDE_ENABLED": PlainHelp(
+        what="Muestra un botón de información con la guía de configuración paso a paso.",
+        on_effect="Si está encendida, aparece el botón que abre la guía con los pasos exactos para dejar la conexión andando.",
+        off_effect="Si está apagada, el botón no aparece y hay que configurar la conexión sin la ayuda en pantalla.",
+        example="Abrir la guía y seguir los doce pasos sin salir de la pantalla de alta.",
+    ),
+    "STACKY_SETUP_GUIDE_VERIFY_ENABLED": PlainHelp(
+        what="Agrega un boton que prueba la conexion en vivo desde adentro de la guia.",
+        on_effect="Si está encendida, podés probar los datos que escribiste y ver cuál de los cinco controles falla.",
+        off_effect="Si está apagada, la guía se ve igual pero sin el botón que prueba la conexión.",
+        example="Apretar el botón de probar y descubrir que al permiso del acceso le falta el nivel de escritura.",
+    ),
+```
+
+> Redacción validada contra el gate: cero SCREAMING_SNAKE, cero `F<n>`, cero términos de la denylist (por eso dice *"acceso"* y no *"token"*, *"servidor"* y no *"backend"*, *"control"* y no *"gate"*), y `on_effect`/`off_effect` arrancan con `"Si "`.
+
+**Baseline honesto de este archivo** *(v3, B2)*: `test_harness_flags_help.py` está **ROJO de fábrica** — medido corriendo: **4 failed / 4 passed**, con 79 flags del registro sin ayuda (entre ellas `STACKY_PROVIDER_PARITY_ENABLED` del plan 218). Agregar estas 3 entradas **no lo pone en verde** y **no es responsabilidad de este plan ponerlo en verde**. El criterio binario es el de abajo: **las 3 keys de este plan no pueden figurar en la lista de faltantes**, y el número de fallos no puede subir de 4.
+
 #### Tests (PRIMERO)
 
 `backend/tests/test_plan259_setup_guide_data.py`:
@@ -515,13 +598,24 @@ y 3 `FlagSpec` al final de `FLAG_REGISTRY`, con `group="global"`, `env_only=Fals
 ```
 .venv\Scripts\python.exe -m pytest tests/test_plan259_setup_guide_data.py -v
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -v
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -v
 ```
 
-**Criterio de aceptación BINARIO:** los dos comandos en verde y
-```
-.venv\Scripts\python.exe -c "from services.setup_guides import guide_as_dict; d=guide_as_dict('gitlab'); print(len(d['steps']), len(d['checks']))"
-```
-imprime exactamente `12 5`.
+**Criterio de aceptación BINARIO** *(v3, B2 — separa "pasa" de "no empeora")*:
+
+1. `test_plan259_setup_guide_data.py` — **todos en verde** (archivo nuevo, no tiene baseline).
+2. `test_harness_flags.py` — **56 passed**, igual que el baseline medido. Ni uno menos.
+3. `test_harness_flags_help.py` — **rojo ajeno preexistente**: el baseline medido es **4 failed / 4 passed**. Criterio: sigue en **4 failed** (no 5) y este comando imprime `[]`:
+   ```
+   .venv\Scripts\python.exe -c "from services.harness_flags import FLAG_REGISTRY; from services.harness_flags_help import PLAIN_HELP; print(sorted({'STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED','STACKY_SETUP_GUIDE_ENABLED','STACKY_SETUP_GUIDE_VERIFY_ENABLED'} - set(PLAIN_HELP)))"
+   ```
+   **Prohibido** arreglar los otros 79 faltantes acá: es rojo ajeno y es alcance de otro plan.
+4. ```
+   .venv\Scripts\python.exe -c "from services.setup_guides import guide_as_dict; d=guide_as_dict('gitlab'); print(len(d['steps']), len(d['checks']))"
+   ```
+   imprime exactamente `12 5`.
+
+> **Nota de verificación (v3):** el módulo `services/setup_guides.py` tal como está escrito arriba fue extraído del plan, escrito a disco y sometido a los **10 tests verificables** de esta fase con el venv py3.13.5 — **los 10 pasaron**, incluido `test_sin_jerga` (la única ocurrencia de un término de la denylist es `'scopes'` en `gl-02-token`, cubierta por `_JERGA_PERMITIDA_LITERAL`) y `test_menciona_los_anclajes_operativos` (los 5 anclajes presentes). Esta fase se implementa **tal cual**, sin retocar el texto: cualquier reescritura del `detail` de un paso tiene que volver a pasar por `test_sin_jerga`.
 
 **Flag:** `STACKY_SETUP_GUIDE_ENABLED` (default **ON**). El módulo de datos en sí no se gatea (es inerte sin consumidor).
 **Impacto por runtime:** ninguno — módulo puro sin LLM. **Fallback Codex / Claude Code / Copilot:** idéntico, el dato es el mismo.
@@ -550,7 +644,17 @@ GITLAB: dict = { ... }   # contenido = el de services/client_profile_defaults/gi
 
 y sumar `"gitlab": GITLAB` a `DEFAULT_TEMPLATES`. El contenido **se copia literalmente** del JSON que ya existe en disco (`services/client_profile_defaults/gitlab.json`): no se inventa nada, no se traduce nada. Sin este paso, en el deploy congelado todo proyecto GitLab arranca con la máquina de estados de Azure DevOps (E9).
 
-Agregar al final del archivo, **antes** de `__all__`:
+> **Verificado ejecutando (v3):** `sorted(DEFAULT_TEMPLATES)` devuelve hoy exactamente `['azure_devops', 'jira', 'mantis']` — falta `gitlab`, tal como dice E9. Y `gitlab.json` **sí** difiere de `azure_devops.json`: 8 claves distintas (`build`, `code_layout`, `conventions`, `database`, `docs_indexes`, `language`, `port_residue`, `tracker_state_machine`), así que el test de F1.a puede comparar por `tracker_state_machine` sin ambigüedad.
+>
+> **ATENCIÓN — este archivo NO tiene `__all__`.** Verificado ejecutando: `'__all__' in src` → `False` (276 líneas, sin bloque de exports). En `client_profile_default_templates.py` se agrega **solo** la constante `GITLAB` y su entrada en `DEFAULT_TEMPLATES`. **Nada más.** Todo lo que sigue (F1.a) va en **otro archivo**.
+
+#### F1.a — `project_manager.py` (ARCHIVO DISTINTO) *(v3, hallazgo B6)*
+
+> **Corte explícito de archivo.** Todo lo de acá abajo se agrega a **`Stacky Agents/backend/project_manager.py`**, al final, **antes de su `__all__`** (que sí existe, hoy en `project_manager.py:628-649`). **No** va en `client_profile_default_templates.py`. v2 encadenaba este bloque adentro de la subsección F1.0 sin abrir una nueva, y el archivo que F1.0 nombra ni siquiera tiene `__all__`: un modelo menor metía el helper de alta en el archivo de templates.
+>
+> **Símbolos verificados presentes en `project_manager.py` — no hay que importar nada nuevo:** `Path` (`:27`), `PROJECTS_DIR` (`:33`), `get_project_config` (`:55`), `initialize_project` (`:105`), y `set_encrypted_secret` + `write_json_file` (`:30`, ambos desde `services.secrets_store`). La firma real es `set_encrypted_secret(payload, field, value, *, format_field=None, preencoded=False)`, o sea que la llamada de abajo es correcta byte por byte. Precedente idéntico: `write_mantis_auth` (`:599-624`), que también resuelve con `PROJECTS_DIR / name.upper() / "auth"`.
+
+Agregar al final de `project_manager.py`, **antes** de su `__all__`:
 
 ```python
 # ── GitLab ────────────────────────────────────────────────────────────────────
@@ -720,6 +824,20 @@ def _has_credentials(name: str, tracker_type: str) -> bool:
         "gitlab_auth_file":  tracker.get("auth_file", "") if t_type == "gitlab" else "",
 ```
 
+**Cambio 3-bis — tapar la fuga de `ado_project`** *(v3, hallazgo B8 — NO opcional)*. `api/projects.py:96` hace hoy:
+
+```python
+        "ado_project":       tracker.get("project", ""),
+```
+
+**sin condicionar por tracker.** La clave `issue_tracker.project` es compartida: para GitLab vale `acme/api` (es la forma canónica que fija F1.a). Consecuencia verificada en el árbol: un proyecto GitLab se lista con `ado_project:"acme/api"`, `EditProjectModal.tsx:25` lo semilla **incondicionalmente** (`ado_project: project.ado_project ?? ""`, fuera de cualquier `{isAdo && …}`) y `buildPayload()` lo reenvía en **cada** PATCH. Es la misma clase de mezcla de campos que este plan viene a matar. Cambiarlo por:
+
+```python
+        "ado_project":       tracker.get("project", "") if t_type == "azure_devops" else "",
+```
+
+**Backward-compat:** para los 3 trackers preexistentes el valor no se mueve — Jira guarda su clave en `project_key` y Mantis en `project_id`, así que `tracker.get("project")` ya venía vacío en ambos; el único tipo cuyo valor cambia es el que este plan estrena. Cubierto por `test_listado_no_filtra_ado_project_en_gitlab`.
+
 **Cambio 4 — helper de guard, nuevo, después de `_has_credentials`:**
 
 ```python
@@ -847,10 +965,12 @@ Cliente Flask de test + `monkeypatch` de `PROJECTS_DIR` a `tmp_path` en `project
 | `test_alta_ado_jira_mantis_sigue_ok` | *(v2, C2 — el test que atrapa el `NameError`.)* `POST /api/init_project` con `tracker_type` en `azure_devops`, `jira` y `mantis` responde **200** y el cuerpo **no** trae la clave `gitlab_engine`. Falla con la F7 de v1 tal como estaba escrita. |
 | `test_patch_preserva_auth_file_custom` | *(v2, C4.)* Proyecto GitLab con `auth_file="C:/secretos/gl.json"` + `PATCH {"display_name":"X"}` ⇒ el `config.json` **conserva** esa ruta. |
 | `test_patch_cambia_auth_file_si_viene_en_el_body` | `PATCH {"gitlab_auth_file":"auth/otro.json"}` ⇒ queda `auth/otro.json` (el operador manda, el default no). |
+| `test_listado_no_filtra_ado_project_en_gitlab` | *(v3, B8.)* Proyecto GitLab con `issue_tracker.project == "acme/api"` ⇒ `GET /api/projects` devuelve `ado_project == ""` y `gitlab_project == "acme/api"`. **Falla contra el árbol actual: es la prueba de la fuga.** |
+| `test_listado_conserva_ado_project_en_ado` | No-regresión del Cambio 3-bis: un proyecto Azure DevOps sigue trayendo su `ado_project` con el valor de siempre. |
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan259_api_projects_gitlab.py -v`
 
-**Criterio de aceptación BINARIO:** 15 tests en verde, y esta verificación de no-regresión de los otros trackers, también en verde:
+**Criterio de aceptación BINARIO:** **17** tests en verde *(v3: 15 + los 2 de la fuga `ado_project`)*, y esta verificación de no-regresión de los otros trackers en **10 passed**, que es el baseline medido:
 ```
 .venv\Scripts\python.exe -m pytest tests/test_plan208_profile_schema.py -v
 ```
@@ -922,7 +1042,11 @@ Reemplazar `_load_token_from_file` (`gitlab_client.py:75-93`) por:
 ```
 
 > **No se toca** la precedencia `env > archivo` de `:62-64`: cambiarla rompería instalaciones que hoy dependen de `GITLAB_TOKEN`. La trampa queda **documentada** en el paso `gl-10-env-precedencia` y **detectada** por el chequeo `chk-token` de F4, que no usa esa precedencia.
-> **Nota de implementación:** `json` y `logger` ya están disponibles en `gitlab_client.py` (el lector actual usa `json.loads` en `:86`); si el módulo no tuviera `logger`, se crea con `logging.getLogger("stacky_agents.services.gitlab_client")` junto a los imports, sin tocar nada más.
+> **Nota de implementación *(v3, hallazgo B13 — corregida)*.** Verificado ejecutando sobre el archivo real: `json` (`:15`) y `Path` (`:19`) **sí** están importados, pero **`logger` NO existe** — la cadena `logger` aparece **0 veces** en `services/gitlab_client.py`. v2 afirmaba que ya estaba. Paso obligatorio, no condicional: agregar `import logging` junto a los imports de `:13-19` y, después del bloque de imports, la línea
+> ```python
+> logger = logging.getLogger(__name__)
+> ```
+> (mismo patrón que `api/harness_flags.py:19`). Sin esto, el `logger.warning` del fallback tira `NameError` justo en el camino de recuperación — es decir, cuando el archivo es de solo lectura, que es exactamente el caso que `test_archivo_solo_lectura_sigue_dando_el_token` cubre.
 
 #### Tests (PRIMERO) — `test_plan259_gitlab_token_dpapi.py`
 
@@ -1146,9 +1270,57 @@ POST /api/setup-guide/gitlab/verify       → { ok, checks: [...] }
 - El handler envuelve todo en `try/except Exception` y **nunca** loguea el body. La línea de log es exactamente:
   `logger.info("setup-guide verify gitlab: %s", {c["id"]: c["status"] for c in checks})`.
 
+#### F4.c — Exponer las 3 flags en `/api/diag/health` *(v3, hallazgo B7 — fase nueva, sin ella F5/F6 no compilan)*
+
+**Archivo a EDITAR:** `Stacky Agents/backend/api/diag.py` (handler `health`).
+
+F5 y F6 condicionan el botón GitLab y el botón INFO al valor de las 3 flags, y la regla de la casa es que **las flags de UI se leen de `/api/diag/health`**. Verificado: hoy ese endpoint **no las emite** (las 3 keys tienen 0 hits en código; solo existen dentro de este `.md`). Agregar al cuerpo de la respuesta un sub-objeto `flags`, leyendo de la **instancia** `config.config` (nunca del módulo — gotcha de la casa):
+
+```python
+        "flags": {
+            "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED": bool(
+                getattr(config.config, "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED", True)),
+            "STACKY_SETUP_GUIDE_ENABLED": bool(
+                getattr(config.config, "STACKY_SETUP_GUIDE_ENABLED", True)),
+            "STACKY_SETUP_GUIDE_VERIFY_ENABLED": bool(
+                getattr(config.config, "STACKY_SETUP_GUIDE_VERIFY_ENABLED", True)),
+        },
+```
+
+**Aditivo y backward-compatible:** es una clave nueva; ningún consumidor actual de `/api/diag/health` la lee. El default del `getattr` es `True` para que la UI falle **hacia la funcionalidad** (fail-open), igual que el resto del plan.
+
+Tests, en `test_plan259_setup_guide_api.py`:
+
+| Test | Qué asegura |
+|---|---|
+| `test_health_expone_las_3_flags` | `GET /api/diag/health` → `body["flags"]` tiene las 3 keys y las 3 en `True` por default. **Estado observable, no una llamada.** |
+| `test_health_refleja_la_flag_apagada` | Con `monkeypatch.setattr(config.config, "STACKY_SETUP_GUIDE_ENABLED", False)` ⇒ `body["flags"]["STACKY_SETUP_GUIDE_ENABLED"] is False`. |
+| `test_health_no_rompe_las_claves_viejas` | El cuerpo sigue trayendo `version`, `ok`, `healthy` y `source_commit`. **No-regresión.** |
+
 #### Tests (PRIMERO) — `test_plan259_setup_guide_api.py`
 
 `monkeypatch.setattr(services.gitlab_setup_check, "requests", FakeRequests)` — **cero red real** (guard de red del plan 154).
+
+> **Contrato OBLIGATORIO del doble `FakeRequests`** *(v3, hallazgo B4).* El módulo hace `except requests.RequestException`, y ese `requests` es el **símbolo del módulo**, que el test acaba de reemplazar. Ejecutado con el patrón que v2 prescribía: si el doble no expone `RequestException`, los 4 escenarios de red mueren con `AttributeError: type object 'FakeRequests' has no attribute 'RequestException'` en vez de devolver `unknown` — o sea que `test_verify_devuelve_siempre_5_chequeos` y los 3 casos de fallo de red son **rojos por construcción**. El doble tiene que ser, como mínimo:
+>
+> ```python
+> class FakeRequests:
+>     """Doble de `requests` para services.gitlab_setup_check.
+>
+>     RequestException es OBLIGATORIO: el módulo bajo prueba lo usa en su
+>     `except`, y tras el monkeypatch se resuelve contra ESTA clase, no
+>     contra el paquete real (Plan 259 v3, hallazgo B4).
+>     """
+>     RequestException = Exception          # <-- sin esto, AttributeError
+>     calls: list[dict] = []
+>
+>     @classmethod
+>     def get(cls, url, **kw):
+>         cls.calls.append({"url": url, **kw})
+>         return cls._next(url)             # 200/401/404/302, o raise cls.RequestException(...)
+> ```
+>
+> Como los escenarios de caída se simulan con `raise FakeRequests.RequestException(...)`, alcanza con que sea `Exception`; **no** hace falta importar `requests` en el test. Un test que afirme esto en su primera línea (`assert hasattr(FakeRequests, "RequestException")`) evita que alguien "simplifique" el doble más adelante.
 
 | Test | Qué asegura |
 |---|---|
@@ -1223,6 +1395,70 @@ export interface GitlabEngineResult {
 
 `EditProjectModal` ya tipa su form con los 4 campos GitLab (`:41-44`); agregarle `gitlab_token?: string` al tipo del form local para F5.d.
 
+#### F5.0 — De dónde sale `flags` *(v3, hallazgo B7 — BLOQUEANTE de v2; sin esto F5.c y F6.d no compilan)*
+
+v2 escribía *"leído de `/api/diag/health` (las flags de UI viven ahí, gotcha de la casa)"* y daba por hecho que existía un objeto `flags`. **No existe.** Verificado sobre el árbol:
+
+- `NewProjectModal.tsx` importa **solo** `react`, `../api/endpoints`, `../types`, `./ui`, `../hooks/useOptimisticPending` y su `.module.css`. **Cero** `fetch`, cero react-query, cero context de flags.
+- `HealthResponse` (`api/endpoints.ts:3290-3302`) tiene claves **fijas** (`version, ok, healthy, shell_v2_enabled, source_commit, built_at, repo_head, build_drift, warnings, db_runtime`) y **no tiene index signature** ⇒ `flags.STACKY_...` **no compila**. Y `npx tsc --noEmit` está hoy en **0 errores**: este plan lo rompería.
+- Las 3 flags no se emiten en `/api/diag/health` — eso lo arregla **F4.c**, que es prerequisito de esta fase.
+
+**Archivo a CREAR:** `Stacky Agents/frontend/src/hooks/usePlan259Flags.ts`
+**Archivo a EDITAR:** `Stacky Agents/frontend/src/api/endpoints.ts` (extender `HealthResponse`)
+
+1. En `endpoints.ts`, agregar a `HealthResponse` (`:3290-3302`) el campo opcional — **opcional, para no romper ningún consumidor actual**:
+   ```ts
+     /** Plan 259 F4.c — flags de UI expuestas por el backend. */
+     flags?: Record<string, boolean>;
+   ```
+   `Record<string, boolean>` y no una interfaz cerrada: así la próxima flag de UI no obliga a tocar el tipo.
+
+2. `hooks/usePlan259Flags.ts`, calcado del precedente `hooks/useUiPerfFlags.ts:19-41` (react-query + `staleTime: Infinity` + fail-open):
+   ```ts
+   import { useQuery } from "@tanstack/react-query";
+   import { Health } from "../api/endpoints";
+
+   export interface Plan259Flags {
+     onboardingGitlab: boolean;
+     setupGuide: boolean;
+     setupGuideVerify: boolean;
+   }
+
+   /** Fail-open: si /api/diag/health no responde, TODO se muestra.
+    *  El backend igual valida (F2), así que mostrar de más nunca corrompe datos. */
+   export const PLAN259_FLAGS_FALLBACK: Plan259Flags = {
+     onboardingGitlab: true, setupGuide: true, setupGuideVerify: true,
+   };
+
+   export function usePlan259Flags(): Plan259Flags {
+     const { data } = useQuery({
+       queryKey: ["plan259-flags"],
+       queryFn: () => Health.get(),
+       staleTime: Infinity,
+       retry: false,
+     });
+     const f = data?.flags;
+     if (!f) return PLAN259_FLAGS_FALLBACK;
+     return {
+       onboardingGitlab:  f.STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED !== false,
+       setupGuide:        f.STACKY_SETUP_GUIDE_ENABLED !== false,
+       setupGuideVerify:  f.STACKY_SETUP_GUIDE_VERIFY_ENABLED !== false,
+     };
+   }
+   ```
+   `!== false` y no `=== true`: una clave ausente (backend viejo) se comporta como encendida.
+
+3. La **decisión** de mostrar u ocultar vive en el módulo puro, para que sea testeable sin jsdom. En `newProjectGitlabModel.ts`:
+   ```ts
+   export function showGitlabTrackerButton(f: { onboardingGitlab?: boolean }): boolean {
+     return f.onboardingGitlab !== false;
+   }
+   export function showInfoButton(trackerType: string, f: { setupGuide?: boolean }): boolean {
+     return trackerType === "gitlab" && f.setupGuide !== false;
+   }
+   ```
+   `NewProjectModal.tsx` hace `const flags = usePlan259Flags();` y llama a estas dos. El `.tsx` no decide nada.
+
 #### F5.b — `newProjectGitlabModel.ts` (PURO — sin React, sin fetch)
 
 ```ts
@@ -1282,8 +1518,9 @@ export const GITLAB_FIELD_DOM_ORDER = ["gitlab_url", "gitlab_project", "gitlab_t
      className={`${styles.trackerBtn} ${isGitlab ? styles.trackerBtnActive : ""}`}
      onClick={() => setTrackerType("gitlab")}>🦊 GitLab</button>
    ```
-   Renderizado solo si `flags.STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED !== false`, leído de `/api/diag/health` (las flags de UI viven ahí, gotcha de la casa). Si la lectura falla, se **muestra** (fail-open hacia la funcionalidad; el backend igual valida).
-3. `const isGitlab = form.tracker_type === "gitlab";` junto a `:248-250`.
+   Renderizado solo si `showGitlabTrackerButton(flags)` — la función pura de **F5.0**, alimentada por `usePlan259Flags()`. Si `/api/diag/health` no responde, se **muestra** (fail-open hacia la funcionalidad; el backend igual valida). *(v3: v2 escribía `flags.STACKY_...` sin que `flags` existiera ni compilara — hallazgo B7.)*
+   **Clase CSS:** reusar `styles.trackerBtn` + `styles.trackerBtnActive`, igual que hace el botón GitLab de Edición (`EditProjectModal.tsx:449`). **No** crear un `.trackerBtnGitlab` con el naranja del zorro: `uiDebtBaseline.json:41` congela `NewProjectModal.module.css` en **24** hex y un color literal más rompe `uiDebtRatchet`. Si se quisiera color propio, va con un token de `theme.css`, nunca con un hex.
+3. `const isGitlab = form.tracker_type === "gitlab";` junto a `:248-250` (donde ya viven `isAdo`, `isJira`, `isMantis`).
 4. Bloque `{isGitlab && (...)}` con `Field` + `Input`, ids `np-gitlab_url`, `np-gitlab_project`, `np-gitlab_token`, `np-gitlab_group`:
    - URL base — placeholder `Ej: https://gitlab.com`
    - Path del proyecto — placeholder `Ej: grupo/subgrupo/proyecto`
@@ -1295,14 +1532,31 @@ export const GITLAB_FIELD_DOM_ORDER = ["gitlab_url", "gitlab_project", "gitlab_t
 6. `NP_FIELD_DOM_ORDER` (`:223`): insertar `"gitlab_url","gitlab_project","gitlab_token"` después de `"mantis_token"`.
 7. `buildPayload` (`:79-85`): si es GitLab, normalizar con `normalizeGitlabUrl` / `normalizeGitlabProjectPath` antes de enviar.
 8. **Cero `style={{}}`**: todo por clases de `NewProjectModal.module.css` (ratchet `uiDebtRatchet`).
-9. **Dónde se pinta `gitlab_engine`** *(v2, hallazgo C9 — v1 decía "F5 lo pinta" sin decir cómo, y el modal se cierra).* `handleSubmit` (`:229-246`) hoy hace `onCreated(...); onClose();` en el camino feliz: cualquier mensaje pintado adentro del modal sería invisible. Regla exacta:
+9. **Dónde se pinta `gitlab_engine`** *(v2, hallazgo C9 — v1 decía "F5 lo pinta" sin decir cómo, y el modal se cierra).* `handleSubmit` (**`:225-246`**, v3: v2 lo anclaba en `:229`) hoy hace `onCreated(...); onClose();` en el camino feliz (`:238-239`): cualquier mensaje pintado adentro del modal sería invisible. Regla exacta:
    - Si `result.gitlab_engine` **no existe** o trae `changed === true` / `already_on === true` / `skipped === true`, el flujo **no cambia**: `onCreated(...); onClose();`.
    - Si trae `error`, el modal **no se cierra**: se setea `setError("El proyecto se creó, pero no se pudo activar el motor GitLab. Activalo en Configuración → Paridad de proveedores.")` y se muestra un botón "Listo" que llama `onCreated(...)` + `onClose()`. El proyecto YA existe: el mensaje informa, no bloquea.
    - La decisión de qué texto corresponde vive en el módulo puro, testeada: `export function engineNoticeFor(r: GitlabEngineResult | undefined): { level: "none" | "info" | "warn"; text: string }`.
 
+10. **El rechazo de la flag OFF llega como excepción, no como `result.ok === false`** *(v3, hallazgo B11).* `Projects.init` usa `api.post`, que en `api/client.ts:206-209` hace `throw new Error(\`${res.status} ${res.statusText}: ${text}\`)` para **cualquier** respuesta no-2xx. O sea que la rama `else` de `handleSubmit` (`result.ok === false`, `:241`) es **inalcanzable en la práctica**: el 400 de `test_flag_off_rechaza_explicito` cae en el `catch` y hoy el operador leería, literal, `400 BAD REQUEST: {"ok": false, "error": "El alta de proyectos GitLab está apagada (...)"}`. Un mensaje "explícito" servido como JSON crudo no es explícito. Fix, en el módulo puro para que sea testeable:
+    ```ts
+    /** Saca el mensaje humano de un Error de api.* ("400 BAD REQUEST: {json}").
+     *  Devuelve el texto crudo si no hay JSON parseable. */
+    export function humanizeApiError(raw: string): string {
+      const i = raw.indexOf("{");
+      if (i < 0) return raw;
+      try {
+        const body = JSON.parse(raw.slice(i));
+        return String(body.error || body.message || raw);
+      } catch { return raw; }
+    }
+    ```
+    y en el `catch` de `handleSubmit`: `setError(humanizeApiError(e?.message || "Error de conexión"))`.
+    **No** se cambia `Projects.init` a `rawPost`: tocar el camino que usan los otros 3 trackers está fuera del alcance de este plan y sería una regresión de superficie mucho mayor que el fix.
+    Tests en `plan259GitlabOnboarding.test.ts`: `humanizeApiError('400 BAD REQUEST: {"ok":false,"error":"X"}') === "X"`; `humanizeApiError("Error de conexión") === "Error de conexión"`; `humanizeApiError('500 X: no-json{') === '500 X: no-json{'`.
+
 #### F5.d — `EditProjectModal.tsx`: cerrar la trampa que ya estaba ahí *(v2, hallazgo C4/E10)*
 
-El modal de edición ya ofrece GitLab (`:449-452`) y sus 4 campos (`:695-750`), pero:
+El modal de edición ya ofrece GitLab (botón en **`:447-453`**) y sus 4 campos (bloque **`:695-753`**), pero: *(v3: anclajes corregidos; v2 decía `:449-452` y `:695-750`. Los símbolos existen, los rangos estaban corridos.)*
 
 1. **Falta el campo Token.** Agregar, dentro del bloque `{isGitlab && (...)}`, después de "Proyecto (namespace/repo)":
    ```tsx
@@ -1316,7 +1570,9 @@ El modal de edición ya ofrece GitLab (`:449-452`) y sus 4 campos (`:695-750`), 
    </Field>
    ```
    El backend ya lo acepta (F2, Cambio 6) y solo escribe si viene no vacío.
-2. **La nota de `:750-751` es falsa y hay que reemplazarla.** Hoy dice *"El archivo debe contener solo el token en texto plano (sin comillas ni saltos de línea extra)"*, pero `gitlab_client._load_token_from_file` hace `json.loads` (`gitlab_client.py:86`): un `.txt` con el token pelado **nunca** funcionó. Texto nuevo, exacto:
+   > *(v3)* `patch` está tipado `patch(key: keyof InitProjectPayload, value: unknown)` (`EditProjectModal.tsx:191`), así que `patch("gitlab_token", …)` **no compila** hasta que F5.a agregue `gitlab_token?: string` a `InitProjectPayload`. Por eso **F5.a va antes que F5.d**, sin excepción. El form local es `useState<Partial<InitProjectPayload>>` (`:18`): con la clave en el tipo base alcanza, no hay tipo local aparte que tocar.
+
+2. **La nota de `:750` es falsa y hay que reemplazarla.** *(v3: el texto está en la línea `:750`, dentro del `<p className={styles.note}>` de `:749-751`.)* Hoy dice *"El archivo debe contener solo el token en texto plano (sin comillas ni saltos de línea extra)"*, pero `gitlab_client._load_token_from_file` hace `json.loads` (`gitlab_client.py:87`): un `.txt` con el token pelado **nunca** funcionó. Texto nuevo, exacto:
    ```
    Es un archivo JSON con la forma {"token": "..."} . Si lo dejás vacío, Stacky usa
    auth/gitlab_auth.json dentro de la carpeta del proyecto y guarda ahí el token cifrado.
@@ -1349,15 +1605,22 @@ El modal de edición ya ofrece GitLab (`:449-452`) y sus 4 campos (`:695-750`), 
 
 **Comando (desde `Stacky Agents/frontend`):** `npx vitest run src/__tests__/plan259GitlabOnboarding.test.ts`
 
-**Criterio de aceptación BINARIO:** 17 tests en verde,
-```
-npx tsc --noEmit
-```
-con **0 errores**, y
-```
-npx vitest run src/__tests__/uiDebtRatchet.test.ts
-```
-en verde sin regenerar la línea base (implica **cero** `style={{}}` nuevo).
+**Criterio de aceptación BINARIO** *(v3, hallazgo B2 — el de v2 era inalcanzable)*:
+
+1. **20** tests en verde *(17 + los 3 de `humanizeApiError`)*.
+2. ```
+   npx tsc --noEmit
+   ```
+   con **0 errores**. El baseline medido es **0**, así que acá sí vale "verde absoluto" — y es el criterio que atrapa el hallazgo B7 si alguien saltea F5.0.
+3. ```
+   npx vitest run src/__tests__/uiDebtRatchet.test.ts
+   ```
+   **NO "en verde"**: ese test está **ROJO de fábrica**, baseline medido **1 failed / 2 passed**, por dos regresiones ajenas a este plan (`components/ExecutionDetailDrawer.module.css` 23 > 21 y `components/RunReconciliationCard.module.css` 1 > 0). Criterio real, en dos partes:
+   - la salida del test **no nombra ningún archivo de este plan** (`NewProjectModal.tsx`, `NewProjectModal.module.css`, `EditProjectModal.tsx`, `SetupGuideDialog.tsx`, `SetupGuideDialog.module.css`);
+   - sigue habiendo **exactamente 2** archivos excedidos, los dos de arriba.
+   **Prohibido** correr `UI_DEBT_REGEN=1`: regenerar el baseline taparía tanto la deuda ajena como la propia.
+   > Recordatorio de por qué esto importa: `NewProjectModal.tsx` **no figura** en `inlineStyleByFile`, así que su presupuesto de `style={{` es **0**; y `EditProjectModal.tsx` figura con **9**, que es un techo, no una licencia para sumar.
+4. `npx vitest run src/__tests__/adhocModalRatchet.test.ts` sin fallos nuevos: su allowlist está topada en `FROZEN_MAX = 11` y **no puede crecer**. Cualquier `.tsx` nuevo con `role="dialog"`, `aria-modal` o `createPortal(` que no importe `Dialog` del barrel `ui` lo rompe.
 
 **Flag:** `STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED` (default **ON**).
 **Impacto por runtime:** ninguno — es la UI del backend, común a los 3. **Fallback:** si `/api/diag/health` no responde, el botón se muestra igual y el backend valida.
@@ -1394,7 +1657,18 @@ export const SetupGuide = {
 ```
 
 > **`rawGet`/`rawPost`, no `api.get`/`api.post`**: el wrapper `api.*` **lanza** en cualquier respuesta no-2xx (gotcha de la casa), y acá un `403` (flag apagada) y un `404` (sin guía) son respuestas normales que hay que pintar, no excepciones.
-> **Forma del retorno** *(v2, C12 — para que `npx tsc --noEmit` dé 0):* `rawGet<T>` / `rawPost<T>` devuelven `RawResponse<T> = { status, ok, data: T | null, errorBody }` (`api/client.ts:88, :96`), **no** el cuerpo. El consumidor escribe `const res = await SetupGuide.get("gitlab"); const guide = res.ok ? res.data?.guide ?? null : null;` — nunca `res.guide`.
+> **Forma del retorno** *(v2, C12 — para que `npx tsc --noEmit` dé 0):* `rawGet<T>` / `rawPost<T>` devuelven `RawResponse<T>`, **no** el cuerpo. El consumidor escribe `const res = await SetupGuide.get("gitlab"); const guide = res.ok ? res.data?.guide ?? null : null;` — nunca `res.guide`.
+> *(v3 — anclajes corregidos y tipo verificado textual.)* `rawPost<T>` se declara en **`api/client.ts:47`** (el `:88` que citaba v2 es su `return`, no su firma) y `rawGet<T>` en **`:96`** (exacto). El tipo, textual de `api/client.ts:28-34`:
+> ```ts
+> export interface RawResponse<T> {
+>   status: number;
+>   ok: boolean;
+>   data: T | null;
+>   /** Error parseado del cuerpo si la respuesta no es ok. */
+>   errorBody: GatewayErrorBody | null;
+> }
+> ```
+> con `GatewayErrorBody = { error?, message?, correlation_id?, detail? }` (`:36-41`). Detalle que importa para el fallback de F6.c: `raw*` **no lanza** en 4xx/5xx (deja `data: null` y llena `errorBody`), pero **sí re-lanza** errores de red y abort (`:63-66`, `:110-113`) — o sea que el consumidor necesita `try/catch` **además** de mirar `res.ok`.
 
 #### F6.b — `setupGuideModel.ts` (PURO)
 
@@ -1440,7 +1714,17 @@ export function isServerGuide(g: SetupGuideDoc | null): boolean {
 
 #### F6.c — `SetupGuideDialog.tsx`
 
-- Usa `Dialog` canónico con `size="lg"`, `title={`Cómo configurar ${guide.display_name}`}`. **No** reimplementa portal, focus-trap ni Escape.
+- Usa `Dialog` canónico con `size="lg"`, `title={`Cómo configurar ${guide.display_name}`}`. **No** reimplementa portal, focus-trap ni Escape. Props verificadas contra `components/ui/Dialog.tsx:17-45`: `open`, `onClose`, `title`, `size?: "sm"|"md"|"lg"`, `children`, `footer?`, `closeGuard?`, `bare?`. **Ojo:** `size` se **ignora** si `bare === true` (`Dialog.tsx:183-185`) — no pasar `bare`.
+- **DÓNDE SE MONTA** *(v3, hallazgo B12 — v2 no lo decía y el default rompía la UX)*. `NewProjectModal.tsx` y `EditProjectModal.tsx` **no usan `Dialog`**: son overlays a mano (`<div className={styles.backdrop}>` / `styles.panel`, `NewProjectModal.tsx:253-254`), sin `role="dialog"` ni `aria-modal` — por eso escapan del `adhocModalRatchet`. Montar `<SetupGuideDialog>` **adentro** del JSX de esos modales anida un portal dentro de un overlay ad-hoc: doble backdrop, y doble `inert` sobre `#root` por el `openDialogCount` de `Dialog`. Regla: `SetupGuideDialog` se renderiza como **hermano** del modal, no como hijo —
+  ```tsx
+  return (
+    <>
+      <div className={styles.backdrop}> …el modal de siempre… </div>
+      <SetupGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} … />
+    </>
+  );
+  ```
+  El estado `guideOpen` sigue viviendo en el modal (es quien tiene los valores del formulario para "Verificar ahora"); lo único que cambia es el punto de montaje. Verificación manual, una sola vez: abrir la guía y confirmar **un solo** backdrop y que Escape cierra la guía sin cerrar el modal de alta.
 - Estructura: resumen → lista numerada de pasos (badge `where`: `GitLab` / `Stacky` / `Windows`; la `trap` en una tira `⚠️`) → bloque "Verificar ahora".
 - Un paso resaltado por `stepsToHighlight` lleva la clase `stepHighlight` y un `aria-current="step"`.
 - Botón "Verificar ahora" `disabled={!canVerify(values)}`; mientras corre, `aria-busy`.
@@ -1462,7 +1746,9 @@ En la fila del selector, después de los 4 botones:
 )}
 ```
 
-`guideAvailable` = `form.tracker_type === "gitlab" && flags.STACKY_SETUP_GUIDE_ENABLED !== false`. En este plan **solo GitLab tiene guía**; el botón no aparece para los otros 3 (honesto: nada de un INFO que abre un panel vacío).
+`guideAvailable` = `showInfoButton(form.tracker_type, flags)` — la función pura de **F5.0**, con `flags` de `usePlan259Flags()`. En este plan **solo GitLab tiene guía**; el botón no aparece para los otros 3 (honesto: nada de un INFO que abre un panel vacío).
+
+> **`styles.btnInfo` NO EXISTE** *(v3, hallazgo B9)*. Grep sobre **todo** `frontend/src`: **0 matches** de `btnInfo`, ni en `NewProjectModal.module.css` ni en ningún otro `.module.css`. Hay que crearla en `NewProjectModal.module.css`, y **sin un solo hex nuevo**: `uiDebtBaseline.json:41` congela ese archivo en **24** colores literales y el ratchet no admite 25. Regla: la clase se define con las variables que `theme.css` ya expone (`var(--accent)`, `var(--fg)`, `var(--border)`, `var(--radius)`) y con las mismas medidas que `.trackerBtn` (`:155`), del que puede heredar por composición. Cero `style={{}}` inline: `NewProjectModal.tsx` no figura en `inlineStyleByFile`, o sea presupuesto **0**.
 
 #### Tests (PRIMERO) — `plan259SetupGuideModel.test.ts`
 
@@ -1482,7 +1768,7 @@ En la fila del selector, después de los 4 botones:
 
 **Comando:** `npx vitest run src/__tests__/plan259SetupGuideModel.test.ts`
 
-**Criterio de aceptación BINARIO:** 11 tests en verde, `npx tsc --noEmit` en 0 errores, y `npx vitest run src/__tests__/uiDebtRatchet.test.ts` en verde **sin regenerar la línea base**.
+**Criterio de aceptación BINARIO** *(v3, B2)*: 11 tests en verde; `npx tsc --noEmit` en **0 errores**; y `uiDebtRatchet` / `adhocModalRatchet` bajo la **misma regla de baseline** que fija F5 (el `uiDebtRatchet` está rojo de fábrica con 2 archivos ajenos excedidos: el criterio es que ningún archivo de este plan aparezca en la salida y que sigan siendo exactamente 2). **Prohibido** `UI_DEBT_REGEN=1`.
 
 **Flag:** `STACKY_SETUP_GUIDE_ENABLED` (panel) y `STACKY_SETUP_GUIDE_VERIFY_ENABLED` (botón verificar), ambas **ON**.
 **Impacto por runtime:** ninguno. **Fallback:** guía embebida si el servidor no responde; el botón de verificar se oculta si su flag está OFF.
@@ -1538,7 +1824,19 @@ def set_flag_values(raw_updates: dict) -> dict:
     return typed
 ```
 
-`put_harness_flags` queda con su cuerpo reemplazado por `typed = set_flag_values(raw_updates)` dentro del `try/except ValueError` ya existente; **no se toca** su contrato HTTP ni su respuesta (`applied`, `restart_required_keys`).
+`put_harness_flags` queda con su cuerpo reemplazado por `typed = set_flag_values(raw_updates)`; **no se toca** su contrato HTTP ni su respuesta (`applied`, `restart_required_keys`).
+
+> **Alcance EXACTO del `try` (v3, hallazgo B14).** v2 decía "dentro del `try/except ValueError` ya existente" y afirmaba "cero cambio funcional". No es lo mismo: hoy ese `try` envuelve **solo** `apply_updates` (`api/harness_flags.py:139-142`); `_write_env` y el hot-apply quedan **afuera**, así que un `ValueError` de la persistencia sale por el manejador genérico y da **500**. Metiendo todo adentro del `try`, ese mismo fallo pasaría a dar **400** — un cambio de contrato silencioso en el endpoint que usa medio sistema. Escritura correcta, que sí es cero-cambio:
+> ```python
+>     try:
+>         typed = apply_updates(raw_updates)      # el ÚNICO paso que puede dar 400
+>     except ValueError as exc:
+>         return jsonify({"ok": False, "error": str(exc)}), 400
+>     set_flag_values(raw_updates, typed=typed)   # persistir + hot-apply, FUERA del try
+> ```
+> es decir, `set_flag_values(raw_updates, typed=None)` acepta el dict ya casteado para no validar dos veces, y cuando se la llama desde `_enable_gitlab_engine` (F7.b) valida ella misma. Cubierto por `test_endpoint_de_flags_sigue_igual` y por `test_endpoint_500_si_falla_persistir` (nuevo): con `_write_env` lanzando `ValueError`, `PUT /api/harness-flags` responde **500**, no 400.
+>
+> **Símbolos verificados presentes (v3):** `logger` en `api/harness_flags.py:19`, `_write_env` en `:32`, `put_harness_flags` en `:118`, y `from services.harness_flags import apply_updates, _REGISTRY_INDEX` ya se hace en `:130`. Los 3 pasos que `set_flag_values` extrae están textualmente en `:139-176`. La extracción de v2 es **correcta**; lo único que se corrige es el borde del `try`.
 
 #### F7.b — El disparo desde el alta
 
@@ -1585,6 +1883,8 @@ La respuesta de `init_project` para GitLab suma `"gitlab_engine": engine_result`
 | `test_no_se_dispara_en_otros_trackers` | Alta ADO / Jira / Mantis ⇒ la flag sigue en `False` **y** la respuesta no trae `gitlab_engine` (cubre también C2). |
 | `test_no_se_dispara_en_patch` | `PATCH` a un proyecto GitLab ⇒ la flag sigue en `False`. Encender es del alta, no de la edición. |
 | `test_endpoint_de_flags_sigue_igual` | *(v2 — no-regresión de la extracción F7.a.)* `PUT /api/harness-flags` con `{"updates": {"STACKY_SETUP_GUIDE_ENABLED": false}}` responde 200, trae `applied` y `restart_required_keys`, y deja `config.config.STACKY_SETUP_GUIDE_ENABLED is False`. |
+| `test_endpoint_400_si_key_desconocida` | *(v3, B14.)* `PUT /api/harness-flags` con una key inexistente ⇒ **400** (el `ValueError` de `apply_updates` sigue siendo el único camino a 400). |
+| `test_endpoint_500_si_falla_persistir` | *(v3, B14 — congela el borde del `try`.)* Con `_write_env` monkeypatcheado para lanzar `ValueError("disco lleno")` ⇒ el endpoint responde **500**, no 400. Sin este test, meter la persistencia adentro del `try` pasa desapercibido. |
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan259_enable_engine.py -v`
 
@@ -1608,7 +1908,7 @@ def test_default_de_config_no_se_movio():
 
 ### F8 — Cierre: registro en el arnés, huella de regresión y documentación
 
-**Objetivo:** que los **7** archivos de test nuevos queden bajo el ratchet del arnés y que el bug de degradación silenciosa quede huellado.
+**Objetivo:** que los **8** archivos de test nuevos *(v3: 7 + el de F8.b)* queden bajo el ratchet del arnés — **en los dos scripts, cada uno con su sintaxis** — y que el bug de degradación silenciosa quede huellado.
 **Valor:** sin esto, la cobertura del arnés se encoge en silencio y `test_ratchet_clasifica_todos_los_tests` (`tests/test_harness_ratchet_meta.py:43-53`) queda **ROJO**.
 
 **Archivos a EDITAR:**
@@ -1621,8 +1921,28 @@ def test_default_de_config_no_se_movio():
   tests/test_plan259_setup_guide_api.py
   tests/test_plan259_enable_engine.py
   tests/test_plan259_tracker_parity_guard.py
+  tests/test_plan259_ratchet_script_parity.py
   ```
-- `Stacky Agents/backend/scripts/run_harness_tests.ps1` — el equivalente Windows, misma lista. *(v2, C16: el meta-ratchet solo parsea el `.sh` (`test_harness_ratchet_meta.py:19`); mantener el `.ps1` en paridad es convención de la casa, no está guardado por un test.)*
+- `Stacky Agents/backend/scripts/run_harness_tests.ps1` — **SINTAXIS DISTINTA, no es "la misma lista"** *(v3, hallazgo B5 — BLOQUEANTE de v2)*. El array es `$HarnessTestFiles = @(` (línea **13**) y sus elementos van **entre comillas y separados por coma**. Las 7 líneas, en la forma exacta que hay que pegar:
+  ```powershell
+  "tests/test_plan259_setup_guide_data.py",
+  "tests/test_plan259_project_manager_gitlab.py",
+  "tests/test_plan259_api_projects_gitlab.py",
+  "tests/test_plan259_gitlab_token_dpapi.py",
+  "tests/test_plan259_setup_guide_api.py",
+  "tests/test_plan259_enable_engine.py",
+  "tests/test_plan259_tracker_parity_guard.py",
+  "tests/test_plan259_ratchet_script_parity.py",
+  ```
+  **Por qué esto es bloqueante y no cosmético** (verificado ejecutando, no razonando): el `.ps1` actual parsea con **0 errores**; pegándole las 7 rutas *peladas* del bloque `.sh` de arriba **sigue parseando con 0 errores** — pero el array evalúa a **`Count = 0`**. PowerShell interpreta cada ruta pelada como un **nombre de comando**, no como un string: el ratchet queda vacío **en silencio**, sin una sola línea de error. Con la sintaxis de arriba evalúa a `Count = N`. Es exactamente la clase de bug que rompió el `.ps1` del plan 266 (coma colgante), solo que al revés: allá el parser gritaba, acá no grita nadie.
+
+  **Verificación obligatoria después de editar el `.ps1`** (no alcanza con mirarlo):
+  ```powershell
+  powershell -NoProfile -Command ". { $c = Get-Content 'scripts/run_harness_tests.ps1' -Raw; $e=$null; [System.Management.Automation.Language.Parser]::ParseInput($c,[ref]$null,[ref]$e) | Out-Null; Write-Output \"errores=$($e.Count)\" }"
+  ```
+  tiene que decir `errores=0`, **y además** el conteo de rutas `test_plan259` dentro de `$HarnessTestFiles` tiene que ser **7**, no 0.
+
+  *(v2, C16: el meta-ratchet solo parsea el `.sh` (`test_harness_ratchet_meta.py:19`, regex `^\s*(tests/[\w/]+\.py)\s*$`); mantener el `.ps1` en paridad es convención de la casa y **ningún test lo guarda** — por eso el fallo es mudo y por eso la verificación de arriba es obligatoria.)*
 - `Stacky Agents/docs/sistema/error_fingerprints.json` — entrada nueva.
 
 > **v2 — la huella de v1 rompía un guardián y además no huellaba nada (hallazgo C3, BLOQUEANTE).** `tests/test_error_fingerprints_catalog.py:18` exige **9 campos**: `id, title, class, status, log_pattern, log_guarded, killed_by, guard_test, self_test`. v1 proponía `id/pattern/meaning/fix` ⇒ `test_campos_obligatorios` **ROJO**. Y el patrón elegido era el mensaje del guard **preexistente** del plan 65, no el bug que este plan mata: la degradación a ADO es silenciosa, **no escribe ninguna línea**, así que no hay patrón que buscar. Lo que sí es huellable es el **rechazo explícito** que F2 introduce en su lugar. Entrada completa a agregar dentro de `d["fingerprints"]`:
@@ -1640,7 +1960,7 @@ def test_default_de_config_no_se_movio():
   "date_resolved": "PENDIENTE — completar con la fecha de implementación",
   "guard_test": "tests/test_plan259_api_projects_gitlab.py",
   "self_test": {
-    "match": ["El alta de proyectos GitLab está apagada (STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false)."],
+    "matches": ["El alta de proyectos GitLab está apagada (STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false)."],
     "clean": ["issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"]
   },
   "evidence": "backend/api/projects.py (rama gitlab de init_project y update_project); antes de este plan el mismo caso caía al else de azure_devops SIN loguear nada",
@@ -1648,11 +1968,15 @@ def test_default_de_config_no_se_movio():
 }
 ```
 
-**Reglas duras de esta entrada** (las verifica el catálogo, no son opcionales): `status` tiene que estar en el enum del test; `log_pattern` tiene que **compilar** como regex (`test_patrones_compilan`); cada string de `self_test.match` tiene que **matchear** ese patrón y cada uno de `self_test.clean` **no** debe matchearlo (`test_self_test_coherente`); y el archivo no puede tener bytes de control crudos (`test_sin_control_chars_crudos`, gotcha del byte ESC de la casa).
+**Reglas duras de esta entrada** (las verifica el catálogo, no son opcionales): `status` tiene que estar en `_STATUS_ENUM = {"resolved","open","by_design"}`; `log_pattern` tiene que **compilar** como regex (`test_patrones_compilan`); cada string de **`self_test.matches`** tiene que matchear ese patrón vía `re.search` y cada uno de `self_test.clean` **no** debe matchearlo (`test_self_test_coherente`); y el archivo no puede tener bytes de control crudos (`test_sin_control_chars_crudos`, gotcha del byte ESC de la casa).
+
+> **La clave anidada es `matches`, en PLURAL** *(v3, hallazgo B1 — v2 escribía `"match"`)*. El gate hace, textual, `for sample in fp["self_test"]["matches"]:`. Verificado ejecutando contra el catálogo vivo: las **42** huellas existentes usan `matches`, y con la entrada de v2 el test muere con `KeyError: 'matches'` **antes** de comprobar nada. Corregido arriba. Comprobado también que, con la clave corregida, el `log_pattern` y los dos samples de v2 **sí** son coherentes: `re.search` acierta en el `matches` y no acierta en el `clean`.
+
+> **BASELINE DEL CATÁLOGO — este archivo está ROJO DE FÁBRICA** *(v3, hallazgo B2)*. Medido corriendo, 2 repeticiones idénticas: `tests/test_error_fingerprints_catalog.py` da hoy **3 failed / 5 passed** sobre 8 tests. Causa **ajena a este plan**: la huella `PLAN239-OUTLET-EN-BLANCO` tiene `status: "guarded"` (valor fuera del enum) y **no tiene `self_test`**, lo que rompe `test_campos_obligatorios`, `test_status_enum` y `test_self_test_coherente`. **No es el gotcha del plan 266** (`log_pattern: null`), es otra rotura. **Prohibido arreglarla en este plan**: es alcance de quien sembró esa huella. Consecuencia para F8: el criterio de aceptación **no puede ser "los 8 en verde"** (era inalcanzable en v2) — ver abajo.
 
 - `Stacky Agents/backend/api/projects.py` — docstring del módulo con el bloque de campos GitLab (Cambio 8 de F2).
 
-**Prohibido:** agregar cualquiera de los 7 a `tests/harness_ratchet_allowlist.txt`. Son tests nuevos que pasan aislados; la allowlist solo puede **bajar** (`_ALLOWLIST_MAX = 197`, `test_harness_ratchet_meta.py:64-77`).
+**Prohibido:** agregar cualquiera de los **8** a `tests/harness_ratchet_allowlist.txt`. Son tests nuevos que pasan aislados; la allowlist solo puede **bajar** (`_ALLOWLIST_MAX = 197`, verificado exacto en `test_harness_ratchet_meta.py:64-77`).
 
 **Tests:**
 ```
@@ -1660,7 +1984,52 @@ def test_default_de_config_no_se_movio():
 .venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_catalog.py -v
 ```
 
-**Criterio de aceptación BINARIO:** los 4 tests del meta-ratchet **y los 8 del catálogo de huellas** en verde. *(v2, C3+C13: el comando `python -c` de v1 solo miraba si la cadena `plan259` aparecía en el JSON — daba verde con una entrada de esquema inválido que dejaba `test_campos_obligatorios` en rojo, y encima resolvía `../docs/...` contra el `cwd`. El guardián real es `test_error_fingerprints_catalog.py`, que ahora es parte del criterio.)*
+**Criterio de aceptación BINARIO** *(v3, hallazgos B1+B2+B5 — el de v2 era inalcanzable)*:
+
+1. `tests/test_harness_ratchet_meta.py` → **4 passed** (baseline medido: 4 passed; acá sí vale verde absoluto).
+2. `tests/test_error_fingerprints_catalog.py` → **exactamente 3 failed / 5 passed**, los **mismos 3** del baseline (`test_campos_obligatorios`, `test_status_enum`, `test_self_test_coherente`, todos por `PLAN239-OUTLET-EN-BLANCO`). Si aparece un 4º fallo, o si el mensaje de alguno de los 3 nombra `plan259_gitlab_onboarding_off`, **la entrada está mal** — es el detector del hallazgo B1.
+3. La entrada propia pasa el gate **aislada del rojo ajeno**, con este comando determinista:
+   ```
+   .venv\Scripts\python.exe -c "import json,re,pathlib; d=json.loads(pathlib.Path('../docs/sistema/error_fingerprints.json').read_text(encoding='utf-8')); fp=[x for x in d['fingerprints'] if x['id']=='plan259_gitlab_onboarding_off'][0]; p=fp['log_pattern']; print(all(re.search(p,s) for s in fp['self_test']['matches']) and not any(re.search(p,s) for s in fp['self_test']['clean']))"
+   ```
+   imprime `True`. Es el mismo código que corre `test_self_test_coherente`, aplicado **solo** a la huella de este plan.
+4. El `.ps1` verifica `errores=0` **y 7 rutas `test_plan259`** en `$HarnessTestFiles` (comando en el bullet del `.ps1`).
+
+*(v2, C3+C13: el comando `python -c` de v1 solo miraba si la cadena `plan259` aparecía en el JSON — daba verde con una entrada de esquema inválido, y encima resolvía `../docs/...` contra el `cwd`. v3 conserva la idea de v2 de usar el guardián real, pero lo acota al baseline medido y le agrega el chequeo aislado de la huella propia, que es el que hubiera atrapado el `match`/`matches`.)*
+
+#### F8.b — [ADICIÓN ARQUITECTO v3] Guardián de paridad `.sh` ↔ `.ps1` del ratchet
+
+**Archivo a CREAR:** `Stacky Agents/backend/tests/test_plan259_ratchet_script_parity.py` (y registrarlo en las dos listas, igual que los otros 7 ⇒ pasan a ser **8**).
+
+**Por qué.** El hallazgo B5 fue posible porque **nada guarda el `.ps1`**: `test_harness_ratchet_meta.py:19-21` parsea **solo** el `.sh`, y el comentario del propio `.ps1` (*"Mantener en sync con run_harness_tests.sh"*) es una convención escrita, no un test. Verificado ejecutando: con las rutas peladas el `.ps1` parsea con 0 errores y el array queda en `Count = 0` — la lista se vacía sin que nada avise. Arreglar el caso de este plan (F8) no impide que el próximo plan repita el error; de hecho ya pasó dos veces (plan 266 con la coma colgante, este con las comillas). Esta fase lo cierra para siempre, y es **barata**: un solo archivo de test, sin tocar producto.
+
+**Diseño — texto, no PowerShell.** El test **no invoca** PowerShell: sería atarlo a un runtime. Parsea los dos archivos con `re` y compara conjuntos. Corre igual en Codex CLI, Claude Code CLI y GitHub Copilot Pro, en Windows y fuera.
+
+```python
+_SH  = _BACKEND / "scripts" / "run_harness_tests.sh"
+_PS1 = _BACKEND / "scripts" / "run_harness_tests.ps1"
+
+# .sh:  rutas peladas, una por línea       -> tests/foo.py
+_SH_RE  = re.compile(r"^\s*(tests/[\w/]+\.py)\s*$", re.M)
+# .ps1: rutas ENTRECOMILLADAS, con coma    -> "tests/foo.py",
+_PS1_RE = re.compile(r'^\s*"(tests/[\w/]+\.py)"\s*,?\s*$', re.M)
+```
+
+| Test | Qué asegura |
+|---|---|
+| `test_las_dos_listas_tienen_el_mismo_contenido` | `_SH_RE` sobre el `.sh` y `_PS1_RE` sobre el `.ps1` devuelven **el mismo conjunto**. El mensaje de error imprime `solo_en_sh` y `solo_en_ps1` por separado, para que el fallo diga qué falta y dónde. |
+| `test_el_ps1_no_tiene_rutas_sin_comillas` | Ninguna línea del `.ps1` matchea `_SH_RE` (la forma pelada del `.sh`). **Este es el test que hubiera atrapado B5**: es el modo de falla exacto — parsea bien, evalúa a nada. |
+| `test_las_dos_listas_son_no_vacias` | Ambas tienen `>= 100` entradas. Un regex que deja de matchear por un cambio de formato daría dos conjuntos vacíos e **iguales**, y el primer test pasaría en falso. Este lo tapa. |
+| `test_ninguna_ruta_apunta_a_un_archivo_inexistente` | Toda ruta de **ambas** listas existe en disco. `test_harness_ratchet_meta.py` ya lo hace para el `.sh`; acá se extiende al `.ps1`, que no lo tenía. |
+
+**Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan259_ratchet_script_parity.py -v`
+**Criterio de aceptación BINARIO:** los 4 en verde. Y la prueba de que el guardián **sirve**: borrar las comillas de **una** línea del `.ps1` tiene que poner en rojo `test_el_ps1_no_tiene_rutas_sin_comillas` **y** `test_las_dos_listas_tienen_el_mismo_contenido`. *(Verificación manual de una sola vez durante la implementación; se restauran las comillas inmediatamente.)*
+
+**Flag:** ninguna — es un test, no tiene superficie que conmutar ni camino de ejecución en producción.
+**Impacto por runtime:** ninguno; `re` y `pathlib` son stdlib y el test **no ejecuta PowerShell**. **Fallback:** N/A.
+**Trabajo del operador:** ninguno. **Human-in-the-loop:** intacto — no decide nada, solo avisa.
+
+#### Metadatos de F8 (fase completa)
 
 **Flag:** ninguna (infraestructura de tests y documentación).
 **Impacto por runtime:** ninguno. **Fallback:** N/A.
@@ -1668,7 +2037,7 @@ def test_default_de_config_no_se_movio():
 
 ---
 
-### F9 — [ADICIÓN ARQUITECTO] Guardián de paridad de trackers: que este agujero no pueda volver
+### F9 — [ADICIÓN ARQUITECTO v2] Guardián de paridad de trackers: que este agujero no pueda volver
 
 **Objetivo:** que sea **imposible** agregar (o dejar a medias) un tracker sin que un test lo diga.
 **Valor:** este plan entero existe porque GitLab quedó cableado a medias — botón en Edición, tipo en `types.ts`, 7 módulos de motor — y el alta y el PATCH nunca se enteraron, degradando proyectos a Azure DevOps **durante ~194 planes sin que nada avisara**. Arreglar el caso de GitLab (F1-F8) no impide que pase de nuevo con el quinto tracker. Esta fase sí.
@@ -1678,14 +2047,29 @@ def test_default_de_config_no_se_movio():
 
 **Diseño — AST, no regex.** El chequeo recorre el árbol sintáctico de `api/projects.py` y `project_manager.py` con `ast.parse` + `ast.walk`. Está **prohibido** el centinela textual: la casa ya se quemó con eso (gotcha "exigir `config.config` en masa rompe el motor de flags: AST, nunca regex").
 
+**Tabla de nombres — OBLIGATORIA, y cubre las DOS familias** *(v3, hallazgo B3)*.
+
+v2 declaraba la tabla de alias **solo** para `write_{t}_auth` y dejaba `initialize_{t}_project` a la fórmula literal. Verificado ejecutando sobre `project_manager`: los helpers reales son `initialize_ado_project`, `initialize_jira_project`, `initialize_mantis_project` — **`initialize_azure_devops_project` NO existe**. Con la especificación de v2, `test_cada_tracker_tiene_helper_de_alta` fallaba en `azure_devops` **antes de llegar a GitLab**: la [ADICIÓN ARQUITECTO] no pasaba su propio criterio de aceptación. La tabla va **una sola vez** y la usan los dos tests:
+
 ```python
-TRACKERS = ("azure_devops", "jira", "mantis", "gitlab")   # fuente: frontend/src/types.ts TrackerType
+TRACKERS = ("azure_devops", "jira", "mantis", "gitlab")   # fuente: frontend/src/types.ts:245 TrackerType
+
+# El producto usa "ado" como abreviatura histórica de azure_devops en project_manager.
+# Tabla EXPLÍCITA, no heurística: si mañana se agrega un tracker con nombre corto,
+# se declara acá y el guardián sigue siendo honesto.
+_SLUG = {"azure_devops": "ado", "jira": "jira", "mantis": "mantis", "gitlab": "gitlab"}
+
+def _init_fn(t: str) -> str:  return f"initialize_{_SLUG[t]}_project"
+def _auth_fn(t: str) -> str:  return f"write_{_SLUG[t]}_auth"
 ```
+
+Con esta tabla, los nombres esperados son `initialize_ado_project` / `write_ado_auth` para `azure_devops`, y `initialize_gitlab_project` / `write_gitlab_auth` para GitLab — que es exactamente lo que F1.a crea. **Verificación del estado actual, ejecutada:** `initialize_{ado,jira,mantis}_project` y `write_{ado,jira,mantis}_auth` existen y están en `__all__`; los dos de `gitlab` no existen todavía (los crea F1.a) — o sea que estos dos tests son **rojos hoy y verdes después de F1.a**, que es la definición de un guardián útil.
 
 | Test | Qué asegura |
 |---|---|
-| `test_cada_tracker_tiene_helper_de_alta` | Para cada `t` en `TRACKERS`, `project_manager` expone `initialize_{t}_project` **y** está en `__all__`. |
-| `test_cada_tracker_tiene_escritor_de_credencial` | Ídem con `write_{t}_auth` (`write_azure_devops_auth` se mapea a `write_ado_auth` por una tabla explícita de alias declarada en el test, no por heurística). |
+| `test_cada_tracker_tiene_helper_de_alta` | Para cada `t` en `TRACKERS`, `project_manager` expone `_init_fn(t)` **y** ese nombre está en `__all__`. |
+| `test_cada_tracker_tiene_escritor_de_credencial` | Ídem con `_auth_fn(t)`. |
+| `test_la_tabla_de_slugs_cubre_todos_los_trackers` | *(v3.)* `set(_SLUG) == set(TRACKERS)`. Evita que alguien agregue un tracker a `TRACKERS` y se olvide del slug, dejando un `KeyError` en vez de un fallo legible. |
 | `test_init_project_ramifica_por_cada_tracker` | Parseando el AST de la función `init_project`: el conjunto de literales string comparados contra `tracker_type` en sus `if/elif` **más** el tracker del `else` cubre exactamente `TRACKERS`. |
 | `test_update_project_ramifica_por_cada_tracker` | Ídem sobre `update_project`. **Este es el test que hubiera atrapado el bug original.** |
 | `test_has_credentials_conoce_todos_los_trackers` | Llamando la función real: para cada `t`, `_has_credentials("X", t)` mira un archivo **distinto** (4 nombres únicos). Hoy GitLab comparte el de Mantis. |
@@ -1696,7 +2080,9 @@ TRACKERS = ("azure_devops", "jira", "mantis", "gitlab")   # fuente: frontend/src
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan259_tracker_parity_guard.py -v`
 Aislamiento: `monkeypatch` de `PROJECTS_DIR` a `tmp_path` en `project_manager` **y** en `api.projects`. Si aparece `SQLITE_LOCKED`, correr el archivo 8-12 veces (gotcha de la casa).
 
-**Criterio de aceptación BINARIO:** los 8 tests en verde. Y la prueba de que el guardián **sirve**: comentar la rama `elif tracker_type == "gitlab"` de `update_project` tiene que poner en rojo `test_update_project_ramifica_por_cada_tracker` y `test_ningun_patch_degrada_el_tipo`. *(Verificación manual de una sola vez durante la implementación; se deshace el comentario inmediatamente.)*
+> **Nota sobre `_has_credentials` (v3).** `api/projects.py:77` resuelve `PROJECTS_DIR / name / "auth" / …` **sin** `.upper()`, mientras que todos los `write_*_auth` escriben en `PROJECTS_DIR / name.upper() / "auth"`. No es un bug hoy porque `initialize_project` hace `name = name.upper()` (`project_manager.py:120`) y guarda ese valor en `cfg["name"]` (`:153`), que es lo que `_project_to_dict` le pasa. `test_has_credentials_conoce_todos_los_trackers` debe llamar la función con el nombre **en mayúsculas**, igual que hace el código de producción; llamarla en minúsculas daría un falso rojo que no prueba nada.
+
+**Criterio de aceptación BINARIO:** los **9** tests en verde *(v3: 8 + `test_la_tabla_de_slugs_cubre_todos_los_trackers`)*. Y la prueba de que el guardián **sirve**: comentar la rama `elif tracker_type == "gitlab"` de `update_project` tiene que poner en rojo `test_update_project_ramifica_por_cada_tracker` y `test_ningun_patch_degrada_el_tipo`. *(Verificación manual de una sola vez durante la implementación; se deshace el comentario inmediatamente.)*
 
 **Flag:** ninguna. Es un test; no tiene camino de ejecución en producción ni superficie que conmutar.
 **Impacto por runtime:** ninguno — `ast` es stdlib y el test corre igual en los 3. **Fallback:** N/A.
@@ -1721,7 +2107,11 @@ Aislamiento: `monkeypatch` de `PROJECTS_DIR` a `tmp_path` en `project_manager` *
 | R12 | *(v2)* Al preservar `auth_file`, un proyecto con una ruta vieja e inválida queda con ella y el token nuevo se escribe en un lugar raro. | Media | `resolve_gitlab_auth_path` es explícita y testeada en los 3 casos (vacío / relativo / absoluto); `write_gitlab_auth` crea el directorio padre; F5.d corrige la nota del modal para que la ruta que se cargue tenga la forma correcta. Preservar es siempre mejor que pisar en silencio: el operador ve la ruta en pantalla y la puede cambiar. |
 | R13 | *(v2)* La migración a DPAPI de un `gitlab_auth.json` plano rompe una instalación compartida entre usuarios de Windows. | Media | Está **declarada** en el paso `gl-09-donde-queda` (el operador se entera antes), y el fallback de F3 evita el modo de falla duro: si el archivo no se puede reescribir, se sigue leyendo plano como hoy (`test_archivo_solo_lectura_sigue_dando_el_token`). |
 | R14 | *(v2)* Alguien "simplifica" F7 volviendo a `apply_updates` a secas y reintroduce el falso verde. | Media | `test_apply_updates_solo_no_alcanza` es un centinela explícito: afirma que `apply_updates` **no** cambia `config.config` ni el `.env`. Si alguien revierte, ese test lo dice con su propio nombre. |
-| R10 | Los tests que tocan la DB fallan con `SQLITE_LOCKED` bajo pytest. | Alta (gotcha conocido) | Correr cada archivo 8-12 veces y envolver la unidad de trabajo en `run_with_retry`. Declarado en F1. |
+| R10 | Los tests que tocan la DB fallan con `SQLITE_LOCKED` bajo pytest. | Alta (gotcha conocido) | Correr cada archivo 8-12 veces y envolver la unidad de trabajo en `run_with_retry`. Declarado en F1. **Medido en esta pasada:** los 8 archivos del DoD corrieron 2 veces cada uno **sin un solo `SQLITE_LOCKED`**; los rojos que aparecieron son deterministas, no flaky. |
+| R15 | *(v3, B2)* El implementador ve `test_error_fingerprints_catalog` / `uiDebtRatchet` en rojo, cree que los rompió él, y "arregla" rojo ajeno — o peor, regenera el baseline visual y tapa deuda de otros. | **Alta** (los 3 gates ya están rojos) | La DoD trae la tabla de baselines **con números**, y la palabra clave es *"exactamente N failed, los mismos N"*. `UI_DEBT_REGEN=1` está prohibido por escrito en F5, F6 y la DoD. |
+| R16 | *(v3, B7)* Se implementa F5/F6 sin F4.c y sin F5.0: `flags` no existe, `HealthResponse` no tiene la clave, y `npx tsc --noEmit` pasa de 0 a N errores. | **Certeza si se saltea el orden** | F4.c y F5.0 son fases propias, y el orden de implementación las pone **antes** de F5.c/F6.d. El criterio `tsc --noEmit == 0 errores` es el detector: el baseline es 0, así que cualquier error nuevo es de este plan. |
+| R17 | *(v3, B5)* El `.ps1` queda con el array vacío y nadie se entera, porque ningún test lo parsea y PowerShell no protesta. | **Alta** (fallo mudo, ya pasó en el plan 266) | F8 escribe las 7 líneas **dos veces**, una por sintaxis, y agrega una verificación ejecutable que exige `errores=0` **y** 7 rutas `test_plan259` dentro de `$HarnessTestFiles`. |
+| R18 | *(v3, B1)* La huella se escribe con una clave anidada equivocada y el catálogo se rompe, igual que en v1 y v2. | **Alta** (van 2 de 2) | El criterio de F8 no es "el catálogo en verde" (imposible: rojo de fábrica) sino un comando que corre **el mismo `re.search` del gate** sobre la huella de este plan, aislado del rojo ajeno. Es el chequeo que hubiera atrapado `match` vs `matches`. |
 
 ---
 
@@ -1759,17 +2149,21 @@ Aislamiento: `monkeypatch` de `PROJECTS_DIR` a `tmp_path` en `project_manager` *
 
 ## 8. Orden de implementación
 
-1. **F0** — `services/setup_guides.py` + las 3 flags (`config.py`, `harness_flags.py`, `_CURATED_DEFAULTS_ON`) + su test.
-2. **F1** — **F1.0 primero** (template GitLab embebido en `client_profile_default_templates.py`, no condicional — ver R5/E9), después `initialize_gitlab_project` + `resolve_gitlab_auth_path` + `write_gitlab_auth` en `project_manager.py` + su test.
-3. **F3** — lector DPAPI + fallback plano en `gitlab_client.py` + su test. **Va antes que F2**: sin esto, todo lo que F2 cree nace con 401.
-4. **F7.a** — extraer `set_flag_values` en `api/harness_flags.py` y dejar el endpoint llamándola. *(v2: va **antes** de F2 porque F2 ya referencia `_enable_gitlab_engine`, y así el camino real existe desde el primer momento; correr `tests/test_harness_flags.py` acá como no-regresión.)*
-5. **F2** — cableado de `api/projects.py` (`engine_result` declarada antes de la cadena, init, patch, `_has_credentials`, `_project_to_dict`, credentials, docstring) + su test.
-6. **F7.b** — `_enable_gitlab_engine` + su test.
-7. **F4** — `services/gitlab_setup_check.py` + `api/setup_guide.py` + registro del blueprint + su test.
-8. **F5** — `newProjectGitlabModel.ts` + `types.ts` + `NewProjectModal.tsx` + **F5.d `EditProjectModal.tsx`** + su test vitest.
-9. **F6** — `setupGuideModel.ts` + `SetupGuideDialog.tsx` + `.module.css` + `endpoints.ts` + botón INFO + su test vitest.
-10. **F9** — guardián de paridad de trackers. *(Va acá y no antes: sus 8 tests son la verificación independiente de que F1-F7 quedaron bien. Si algo sale rojo, se arregla el producto.)*
-11. **F8** — `run_harness_tests.sh` / `.ps1` (7 archivos) + `error_fingerprints.json` + meta-ratchet + catálogo de huellas.
+> **PASO 0 (v3, obligatorio antes de escribir una línea): tomar el baseline.** Correr los 10 comandos de la tabla de la DoD y anotar los números. Sin eso no se puede distinguir "lo rompí yo" de "ya estaba roto", y 3 de esos 10 **están rojos de fábrica**.
+
+1. **F0** — `services/setup_guides.py` (copiar el módulo **tal cual**: ya pasó sus 10 tests) + las 3 flags en los **4** archivos: `config.py`, `services/harness_flags.py` (`_CATEGORY_KEYS` + `FLAG_REGISTRY`), `tests/test_harness_flags.py` (`_CURATED_DEFAULTS_ON`) y **`services/harness_flags_help.py`** (`PLAIN_HELP`, F0.b.4 — v3, hallazgo B10) + su test.
+2. **F1.0** — template GitLab embebido en `services/client_profile_default_templates.py` (solo la constante `GITLAB` y su entrada en `DEFAULT_TEMPLATES`; ese archivo **no tiene `__all__`**).
+3. **F1.a** — `initialize_gitlab_project` + `resolve_gitlab_auth_path` + `write_gitlab_auth` en **`project_manager.py`** (archivo distinto, antes de su `__all__`) + su test. *(v3, B6: v2 encadenaba los dos pasos en una sola subsección y mandaba el helper al archivo equivocado.)*
+4. **F3** — lector DPAPI + fallback plano en `gitlab_client.py`, **agregando `import logging` y `logger`** (no existen — v3, B13) + su test. **Va antes que F2**: sin esto, todo lo que F2 cree nace con 401.
+5. **F7.a** — extraer `set_flag_values` en `api/harness_flags.py`, con el `try/except ValueError` acotado a `apply_updates` (v3, B14), y dejar el endpoint llamándola. Correr `tests/test_harness_flags.py` acá: tiene que seguir en **56 passed**.
+6. **F2** — cableado de `api/projects.py` (`engine_result` declarada antes de la cadena, init, patch, `_has_credentials`, `_project_to_dict` **incluido el Cambio 3-bis que tapa la fuga de `ado_project`**, credentials, docstring) + su test.
+7. **F7.b** — `_enable_gitlab_engine` + su test.
+8. **F4** — `services/gitlab_setup_check.py` + `api/setup_guide.py` + registro del blueprint + **F4.c (`api/diag.py` emite las 3 flags)** + su test, con el `FakeRequests` que expone `RequestException` (v3, B4).
+9. **F5.0** — `HealthResponse.flags?` en `endpoints.ts` + `hooks/usePlan259Flags.ts`. *(v3, B7: va **antes** de tocar los `.tsx`, o `npx tsc --noEmit` pasa de 0 errores a N.)*
+10. **F5** — `newProjectGitlabModel.ts` + `types.ts` (`gitlab_token`, `gitlab_enable_engine`, `GitlabEngineResult`) + `NewProjectModal.tsx` + **F5.d `EditProjectModal.tsx`** + su test vitest.
+11. **F6** — `setupGuideModel.ts` + `SetupGuideDialog.tsx` (montado como **hermano**, no como hijo — v3, B12) + `.module.css` (incluida la clase `btnInfo`, que **no existe** — v3, B9) + `endpoints.ts` + botón INFO + su test vitest.
+12. **F9** — guardián de paridad de trackers, con la tabla `_SLUG` única (v3, B3). *(Va acá y no antes: sus 9 tests son la verificación independiente de que F1-F7 quedaron bien. Si algo sale rojo, se arregla el producto, nunca el guardián.)*
+13. **F8** — `run_harness_tests.sh` **y** `.ps1` con **su propia sintaxis** (v3, B5) + `error_fingerprints.json` con `self_test.matches` en **plural** (v3, B1) + las verificaciones acotadas al baseline.
 
 ---
 
@@ -1777,7 +2171,7 @@ Aislamiento: `monkeypatch` de `PROJECTS_DIR` a `tmp_path` en `project_manager` *
 
 El plan está hecho cuando **todo** lo siguiente es cierto y verificado corriendo:
 
-- [ ] Los **7 archivos de test backend** en verde, corridos **de a uno**:
+- [ ] Los **8 archivos de test backend** en verde, corridos **de a uno** *(v3: 7 + el de F8.b)*. Son archivos **nuevos**: acá sí vale "verde absoluto", no tienen baseline.
   ```
   .venv\Scripts\python.exe -m pytest tests/test_plan259_setup_guide_data.py -v
   .venv\Scripts\python.exe -m pytest tests/test_plan259_project_manager_gitlab.py -v
@@ -1786,23 +2180,30 @@ El plan está hecho cuando **todo** lo siguiente es cierto y verificado corriend
   .venv\Scripts\python.exe -m pytest tests/test_plan259_enable_engine.py -v
   .venv\Scripts\python.exe -m pytest tests/test_plan259_setup_guide_api.py -v
   .venv\Scripts\python.exe -m pytest tests/test_plan259_tracker_parity_guard.py -v
+  .venv\Scripts\python.exe -m pytest tests/test_plan259_ratchet_script_parity.py -v
   ```
 - [ ] Los **2 archivos de test frontend** en verde:
   ```
   npx vitest run src/__tests__/plan259GitlabOnboarding.test.ts
   npx vitest run src/__tests__/plan259SetupGuideModel.test.ts
   ```
-- [ ] **Sin regresiones** en los guardianes que este plan toca:
-  ```
-  .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -v
-  .venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -v
-  .venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_catalog.py -v
-  .venv\Scripts\python.exe -m pytest tests/test_plan208_profile_schema.py -v
-  .venv\Scripts\python.exe -m pytest tests/test_plan218_gitlab_reachable.py -v
-  .venv\Scripts\python.exe -m pytest tests/test_plan70_smoke_gitlab.py -v
-  npx vitest run src/__tests__/uiDebtRatchet.test.ts
-  ```
-- [ ] `npx tsc --noEmit` con **0 errores**.
+- [ ] **Sin regresiones contra el BASELINE MEDIDO** *(v3, hallazgo B2 — la DoD de v2 exigía "verde" en 3 gates que están rojos de fábrica, o sea que era inalcanzable).* Baseline tomado corriendo cada archivo **de a uno** con `.venv\Scripts\python.exe` (py3.13.5), 2 repeticiones idénticas, cero `SQLITE_LOCKED`, cero flakiness. La regla es **"igual o mejor que este número"**, nunca "verde" a secas:
+
+  | Comando | Baseline medido | Criterio de la DoD |
+  |---|---|---|
+  | `pytest tests/test_harness_flags.py -v` | **56 passed** | 56 passed |
+  | `pytest tests/test_harness_ratchet_meta.py -v` | **4 passed** | 4 passed |
+  | `pytest tests/test_plan208_profile_schema.py -v` | **10 passed** | 10 passed |
+  | `pytest tests/test_plan218_gitlab_reachable.py -v` | **13 passed** | 13 passed |
+  | `pytest tests/test_plan70_smoke_gitlab.py -v` | **5 passed** | 5 passed |
+  | `pytest tests/test_harness_flags_requires.py -v` | **9 passed** | 9 passed |
+  | `pytest tests/test_error_fingerprints_catalog.py -v` | **3 failed / 5 passed** (rojo ajeno: `PLAN239-OUTLET-EN-BLANCO`) | **3 failed**, los mismos 3, ninguno nombrando `plan259_*` |
+  | `pytest tests/test_harness_flags_help.py -v` | **4 failed / 4 passed** (rojo ajeno: 79 flags sin ayuda) | **4 failed**, y las 3 keys de este plan **fuera** de la lista de faltantes |
+  | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` | **1 failed / 2 passed** (`ExecutionDetailDrawer.module.css` 23>21, `RunReconciliationCard.module.css` 1>0) | **1 failed**, exactamente esos 2 archivos, ninguno de este plan |
+  | `npx tsc --noEmit` | **0 errores** | **0 errores** |
+
+  **Prohibido, y es parte de la DoD:** arreglar cualquiera de esos 3 rojos ajenos adentro de este plan (es alcance de otro), y correr `UI_DEBT_REGEN=1` (taparía la deuda propia junto con la ajena).
+- [ ] `npx vitest run src/__tests__/adhocModalRatchet.test.ts` sin fallos nuevos (`FROZEN_MAX = 11`, ya topado: `SetupGuideDialog.tsx` **tiene** que usar el `Dialog` canónico).
 - [ ] `.venv\Scripts\python.exe -m compileall -q backend` sin errores.
 - [ ] `config.py` sigue teniendo `STACKY_GITLAB_ENABLED` con default `"false"` (`test_default_de_config_no_se_movio`, F7).
 - [ ] **El motor se enciende de verdad** *(v2, C1)*: `test_enciende_de_verdad` verde — es decir, `config.config.STACKY_GITLAB_ENABLED is True` y la línea en el `.env`, no una llamada espiada.

@@ -1,6 +1,7 @@
 # Plan 268 — Explorador del grafo documental: filtros, foco por vecindario, búsqueda navegable, agrupación y peek de contenido
 
-> **Estado:** CRITICADO — v1 → **v2** — 2026-07-27. **Veredicto del juez: RECHAZADO en v1** (5 bloqueantes). Esta versión los corrige.
+> **Estado:** CRITICADO — v2 → **v3** — 2026-07-28. **Veredicto del juez independiente sobre el v2: RECHAZADO** (9 bloqueantes, todos hallados **CORRIENDO** los gates, no leyéndolos). Esta versión los corrige.
+> **Historial de veredictos:** v1 RECHAZADO (5 bloqueantes, fallas de **costura entre fases**) → v2 RECHAZADO (9 bloqueantes; **el v2 introdujo 5 propios**, cuatro de ellos otra vez en las costuras F(n)→F(n+1)) → v3 (esta).
 > **Serie:** Documentación agéntica Obsidian (109 grafo backend → 111 graph view canvas → 114 staleness → **268 explorador**). Este plan NO toca el motor de grafo del backend: consume el mismo contrato `GET /api/docs/graph` del 109.
 > **Pipeline:** este documento pasó `proponer`. Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
 > **Depende de:** Plan 109 (endpoint `GET /api/docs/graph`, contrato de `DocGraphResponse`/`DocGraphNode`/`DocGraphEdge`, flag `STACKY_DOCS_GRAPH_ENABLED`), Plan 111 (`forceLayout.ts`, `graphViewport.ts`, `DocGraphView.tsx`, pestaña "Grafo" en `DocsPage`), Plan 114 (campos `has_stale` / `edge.stale` / `stale_stats`).
@@ -8,7 +9,35 @@
 
 ---
 
-## 0. CHANGELOG v1 → v2 (qué corrigió el juez)
+## 0. CHANGELOG v2 → v3 (segunda pasada del juez, INDEPENDIENTE — todo verificado CORRIENDO)
+
+> **Método.** Esta pasada **no releyó** el plan: ejecutó sus gates. Cada bloqueante de abajo trae el comando que lo produjo y su salida real. Motivo: en este repo hay un gotcha registrado de que **4 de 4 críticas hechas releyendo volvieron RECHAZADAS**, y el propio v2 metió bloqueantes invisibles a la lectura.
+>
+> **Lo que el v2 hizo BIEN y se conserva intacto** (verificado corriendo, no se re-discute):
+> - **C1 quedó bien resuelto.** `grep -n "^\s*--" src/theme.css` confirma que los 13 tokens que `graphPalette.ts` pide (`--accent`, `--accent-hot`, `--success`, `--warn`, `--danger`, `--border`, `--text-primary`, `--text-muted`, `--bg-panel`, `--bg-elev`, `--agent-business`, `--agent-functional`, `--agent-custom`) **existen los 13 en el bloque oscuro (`:root`, líneas 3-164) y en el claro (`:root[data-theme="light"]`, líneas 172-244)**. El v3 **no** vuelve a pedir tokens fantasma. El diagnóstico del bug vivo también es exacto: `DocGraphView.tsx:52-69` lee 6 nombres `--color-*` que no existen y el `interface Palette` (líneas 40-50) tiene exactamente los 9 campos que F0.6 mapea.
+> - **C6 quedó bien resuelto y se comprobó.** Desde `Stacky Agents/frontend`: `git ls-files -- "Stacky Agents/frontend/package.json"` → **0 archivos**; `git ls-files -- ":/Stacky Agents/frontend/package.json"` → **1**. Y `git diff --stat` **nunca** setea código de salida. El pathspec `:/` + `--exit-code` es el fix correcto por partida doble.
+> - **Grapify:** `grep -rni "grapify\|graphify"` sobre el árbol → **0 hits**. El veredicto de §3 (inviable: son charts de Node.js, sin nodos ni aristas) queda **firme y cerrado**. No se re-discute.
+> - **Anclajes:** se verificaron por símbolo (no por número) `DocGraphView.tsx` 52/71/77/85/89-95/97/100/106/108/111-112/122/135/148/149/151/261/266/305-306/316/357/406/417/422/446/459/463/464, `docGraphModel.ts` 8/13/19/38/127, `forceLayout.ts` 11/47/62/89/101/203, `graphViewport.ts` 20/21/23/30/35/43/55/91, `endpoints.ts` 3317/3356/3461, `DocsPage.tsx` 76/140/146/230, `config.py` 672-675, `harness_flags.py` 400/404/2280-2295, `harness_flags_help.py` 274-**279** (cierra en la 279, el v2 acertó), `test_harness_flags.py` 467, `test_harness_flags_requires.py` 120/316, `harness_defaults.env` 158-159, `api/docs.py` 53-61. **Todos OK.** Único drift: `--text-primary` está en la línea **12**, no en la 11 (M3).
+>
+> **Los 9 BLOQUEANTES del v2 (con la evidencia de haberlos corrido):**
+>
+> - **B1 — El intérprete de TODOS los comandos de backend no existe.** El v2 escribe, en la regla transversal de §6, en F0 y en F8: `# desde "Stacky Agents"` + `.venv\Scripts\python.exe -m pytest ...`. **`Stacky Agents/.venv` NO EXISTE.** Corrido: `.venv/Scripts/python.exe -m pytest backend/tests/test_docs_api.py -q` → `No such file or directory`. El intérprete real es **`Stacky Agents/backend/.venv/Scripts/python.exe` (Python 3.13.5)**; con él, `test_docs_api.py` da **10 passed**. Un modelo menor siguiendo el comando literal no puede correr **ni un solo** test de backend. **Fix:** ruta corregida en §6, F0 y F8, y advertencia de que el `backend/venv/` (sin punto) es Python **3.11.9** y NO se usa.
+> - **B2 — El código de `graphPalette.ts` que el plan manda copiar NO COMPILA.** El bloque de F0.6 trae dos funciones **con** cuerpo (`allGraphTokenNames`, `definedTokenNames`) y una **sin** cuerpo (`splitThemeBlocks`). Compilado tal cual con el `tsc` del repo: `error TS2391: Function implementation is missing or not immediately following the declaration.` Como el gate de **toda** fase es `npx tsc --noEmit` con 0 errores, F0 no puede cerrar. **Fix:** `splitThemeBlocks` se entrega **con cuerpo completo**.
+> - **B3 — COSTURA F0.6→F5 rota: `interface Palette` nunca gana el campo `groups`.** F0.6 reescribe `readPalette` devolviendo `groups: GROUP_SLOT_TOKENS.map(...)` y dice "el campo `groups: string[]` se agrega **acá, en F0.6**", pero **nunca instruye editar el `interface Palette`** (`DocGraphView.tsx:40-50`, que hoy tiene 9 campos y ninguno se llama `groups`). Compilado el snippet verbatim: `error TS2353: Object literal may only specify known properties, and 'groups' does not exist in type 'Palette'.` **Fix:** F0.6 declara explícitamente la línea a agregar al `interface Palette`.
+> - **B4 — COSTURA F1→F2/F5 rota: el efecto de sincronización de I2 referencia variables que en F1 no existen.** F1.3-3 manda escribir, **entero en F1**, un `useEffect` que lee `activeMatchId` (nace en F2) y `groupSlots` (nace en F5), con el comentario "null hasta F2 / Map vacío hasta F5" — pero **sin instrucción de declararlos**. Compilado verbatim: **4 errores** `TS2552: Cannot find name 'activeMatchId'` / `Cannot find name 'groupSlots'`. El gate de F1 es `tsc --noEmit` 0 errores ⇒ **F1 no puede cerrar**. La nota de dependencia cruzada de §9.2 cubre F4↔F5 (`collapseGroups`) pero **no** esta. Es el mismo modo de falla por el que el v1 fue rechazado, reintroducido por el propio fix de C2. **Fix:** F1 declara los dos placeholders con su tipo y su valor de F1.
+> - **B5 — COSTURA F2→F3 rota: `setViewport` es inalcanzable desde donde el plan lo manda llamar.** F3 lo define como **función interna del efecto de layout** ("una sola función dentro del efecto"), pero F2.2-4 ordena que **otro `useEffect`, de scope distinto**, "debe usar `setViewport(...)`". Un efecto no puede ver el closure de otro: `TS2304`. El repo ya resuelve exactamente esto con refs (`resetViewRef` línea 95, asignado en la 305, invocado desde el JSX en la 522; `drawRef` línea 93). **Fix:** se canoniza **`setViewportRef`** (más `zoomInRef`/`zoomOutRef`/`fitRef`, que el v2 usaba sin declarar nunca) y **todo** llamador externo pasa por el ref.
+> - **B6 — Los DOS ratchets ya están ROJOS por deuda AJENA, y el plan los usa como criterio binario en 7 lugares.** Corrido en limpio, antes de tocar nada: `npx vitest run src/__tests__/uiDebtRatchet.test.ts` → **1 failed** (`components/ExecutionDetailDrawer.module.css: 23 > 21`, `components/RunReconciliationCard.module.css: 1 > 0`); `npx vitest run src/__tests__/motionDebtRatchet.test.ts` → **2 failed**, 7 regresiones ajenas (`HarnessFlagsPanel` 9>8, `IncidentInboxEntryButton` 1>0, `IncidentResolverModal` 1>0, `IntegrationHealthBanner` 1>0, `ui/Dialog` 5>0, `PlansBoardPage` 1>0, `TicketBoard` 22>21). **Ninguno de esos 9 archivos lo toca el plan 268.** K7, F0, F1, F3, F5, F6 y DoD-3 exigen "verde sin regenerar baseline" ⇒ **son insatisfacibles**, y el único camino que le queda a un modelo menor es regenerar el baseline, que es justo lo que el plan prohíbe (y que además absorbería en silencio la deuda **propia** del plan). El v2 previó el rojo ajeno para `test_harness_flags_help.py` (R9) y lo olvidó para sus gates más citados. **Fix:** criterio **delta por archivo** (los archivos del plan no aparecen en la lista de regresiones) + baseline rojo medido y congelado en la nueva **F0.0**.
+> - **B7 — DoD-11 es insatisfacible y contradice a DoD-9.** El comando literal de DoD-11, corrido: `grep -rn -- "var(--color-" src/components/docs/ src/docs/` → **32 hits**, de los cuales **32 están en archivos que el plan NO toca**: `DocBacklinksPanel.module.css` (5), `DocCoveragePanel.module.css` (26 — e incluye `--color-success-bg`, `--color-warning`, `--color-warning-bg`, `--color-danger-bg`, que ni siquiera están en la tabla de sustitución de 6 filas), `DocumenterResultPanel.tsx` (1). DoD-11 pide **0 hits**; DoD-9 prohíbe tocar esos archivos. **Fix:** DoD-11 se acota a los archivos que el plan **posee** y se deja la deuda ajena registrada como tal, con su propio candidato a plan siguiente.
+> - **B8 — DoD-12 (huellas de regresión) es inimplementable y volvería ROJO un test que hoy está VERDE.** El esquema real de `docs/sistema/error_fingerprints.json` (dict `{schema_version, description, fingerprints}`, 42 huellas) exige por huella: `class, date_resolved, evidence, guard_test, id, killed_by, killed_commit, log_guarded, log_pattern, note, self_test, status, title`. Y `backend/tests/test_error_fingerprints_catalog.py` hace `re.compile(fp["log_pattern"])` (**no admite `null`** — gotcha ya registrado en la casa) y `test_self_test_coherente` exige que cada `self_test.matches` matchee y cada `self_test.clean` no. Las **4 clases** que DoD-12 manda registrar son **puramente visuales** ("el swatch se ve transparente", "el contador avanza pero el dibujo no se mueve") y **no tienen línea de log**: no existe `log_pattern` honesto para ellas. Corrido: el catálogo hoy da **3 failed / 5 passed**, y `test_patrones_compilan` está entre los que **PASAN** ⇒ agregar una huella con `log_pattern` nulo o falso lo pone rojo. Además DoD-12 es el único DoD **sin comando de verificación**. **Fix:** DoD-12 se reescribe a huellas con `log_pattern` real (o se declara N/A con justificación), nombra el test guardián, exige correrlo y documenta su rojo ajeno.
+> - **B9 — El límite de `PlainHelp` que el plan declara es FALSO, y su propio texto está a 1 carácter del real.** El v2 dice: "cada campo de `PlainHelp` tiene un tope de **240 caracteres**". Los topes reales (`backend/tests/test_harness_flags_help.py:47-51`) son: `what` **≤ 200** (y ≥ 10), `on_effect` ≤ 240, `off_effect` ≤ 240, `example` ≤ 300. Medido con Python, el `what` que el propio plan propone tiene **199** caracteres: entra por **1**, mientras el plan le dice al implementador que tiene 41 de margen. Cualquier reescritura "más corta" que agregue una palabra lo pone rojo. **Fix:** los 4 topes reales, la medición hecha, y un `what` acortado a 154 con margen.
+>
+> **IMPORTANTES corregidos en el v3:** I1 los "gap (a)…(g)" que 7 fases citan **no están definidos en ningún lado** (§2 es una lista **numerada** 1-9, con un "8bis" y **sin** ítem 8) → §2 pasa a numerar Y letrar. I2 F8 dice "**27** pasos (20 del v1 + los **7** nuevos 18b-18g)" pero 18b→18g son **6** y la tabla tiene **26** filas → es el mismo error que C15 decía haber matado; ahora dice 26 y se cuenta. I3 F8 se contradice a sí misma sobre el esfuerzo del operador ("27 pasos / ~13 min" vs "los **20** pasos, ~10 min" vs §9.2 "20 pasos") → unificado. I4 F0.6 declara **opcional** ("sí se puede y conviene") corregir los 3 `style={{ background: "var(--color-accent, …)" }}` de `DocGraphView.tsx:507/511/515`, pero DoD-11 lo exige **binario** → pasa a obligatorio. I5 el grep-gate de F1 es `grep -n "graph\."`, que es **case-sensitive** y por lo tanto **jamás** puede reportar `visibleGraph.` (G mayúscula) — corrido: `echo 'visibleGraph.nodes' | grep -c "graph\."` → **0** — así que su regla "todos los hits deben ser `visibleGraph.…`" describe un resultado imposible → gate reescrito. I6 F2.2 tiene **dos ítems numerados 6** → renumerado. I7 F3 usa `zoomInRef`/`zoomOutRef`/`fitRef` sin declararlos nunca → declarados.
+>
+> **[ADICIÓN ARQUITECTO #2] — nueva fase F0.0 "Foto del rojo ajeno" (ver §6).** Antes de escribir una línea, el implementador corre los 5 gates compartidos y **congela su rojo preexistente en una tabla dentro de este mismo documento**. Sin eso, B6 y B8 se repiten en cada plan que use estos gates: es imposible distinguir "lo rompí yo" de "ya estaba roto", y el atajo siempre es regenerar el baseline. Cuesta ~2 minutos, es 100% read-only, no le pide nada al operador y **convierte 7 criterios insatisfacibles en 7 criterios delta que sí pueden fallar de verdad**.
+
+---
+
+## 0-bis. CHANGELOG v1 → v2 (histórico — qué corrigió la primera pasada)
 
 Cada bullet cita el hallazgo que resuelve. **Nada del v1 se borró**: todo lo que era correcto se conserva.
 
@@ -51,7 +80,7 @@ Cada bullet cita el hallazgo que resuelve. **Nada del v1 se borró**: todo lo qu
 | K4 | **Encuadre determinista** | `fitViewport(points, w, h)` deja **todos** los puntos dentro del rectángulo `[0,w]×[0,h]` con al menos `padding` px de margen, para 1, 2 y 500 puntos. | `npx vitest run src/docs/graphViewport.test.ts` |
 | K5 | **Cero dependencias nuevas** | `frontend/package.json` byte-idéntico al de HEAD al terminar el plan. | `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con **código 0**. ⚠️ (C6) **NO** usar `git diff --stat -- "Stacky Agents/frontend/package.json"`: los comandos del plan corren desde `Stacky Agents/frontend` y ahí ese pathspec **no matchea ningún archivo**, así que devuelve vacío aunque el archivo esté modificado — un falso verde perfecto. El prefijo `:/` ancla el pathspec a la raíz del repo desde cualquier CWD. |
 | K6 | **Cero regresión de compilación** | `npx tsc --noEmit` sale con 0 errores desde `Stacky Agents/frontend`. | comando literal |
-| K7 | **Cero deuda visual nueva** | `uiDebtRatchet` y `motionDebtRatchet` en verde sin regenerar baseline (⇒ 0 `style={{` en `.tsx` nuevos, 0 hex y 0 tiempos literales en el `.module.css` nuevo y en las líneas nuevas del existente). | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `.../motionDebtRatchet.test.ts` |
+| K7 | **Cero deuda visual nueva** (B6/v3) | **DELTA, no verde absoluto:** los dos ratchets **ya están rojos por deuda AJENA** (2 y 7 regresiones, F0.0). La meta binaria es: **ningún** archivo del plan 268 aparece en la lista de `REGRESION`, el conteo de regresiones **no sube** respecto de F0.0, y **no se regeneró ningún baseline**. (⇒ 0 `style={{` en `.tsx` nuevos, 0 hex y 0 tiempos literales en el `.module.css` nuevo y en las líneas nuevas del existente). | `npx vitest run src/__tests__/uiDebtRatchet.test.ts 2>&1 \| grep "REGRESION"` y su gemelo de motion |
 | K8 | **Performance no degradada** | El dibujo de labels deja de hacer `Array.findIndex` por label por frame (O(n·L)) y pasa a `Map.get` (O(L)); el tope `MAX_ANIMATED_NODES = 300` y `prefers-reduced-motion` siguen respetados sin cambios de semántica. | F0 + revisión de diff |
 | K9 | **Acceso rápido al contenido** | Seleccionar un nodo nota muestra el peek con las primeras ~600 caracteres del documento **sin** cambiar de pestaña, usando **exactamente la misma `queryKey`** que el Lector (`DocsPage.tsx:146`). ⚠️ (C8) El *hit* de cache es **deseable, no binario**: el Lector arma el 3.º campo de la clave con `selectedNode?.source_id ?? selectedSourceId` y `DocNode.source_id` es **opcional** (`endpoints.ts:3323`), así que si el índice no trae `source_id` las claves difieren legítimamente y se hace un `GET` de más (costo: una lectura de disco local). Lo binario es que la clave sea la misma expresión y que el peek muestre texto real. | Verificación visual F8, paso 9 |
 | K10 | **El canvas es de verdad theme-aware** (C1) | Todo token de color que el grafo lee existe en `frontend/src/theme.css` **en el bloque oscuro y en el claro**. Test puro que lee el archivo de disco. | `npx vitest run src/docs/graphPalette.test.ts` |
@@ -60,13 +89,14 @@ Cada bullet cita el hallazgo que resuelve. **Nada del v1 se borró**: todo lo qu
 
 ## 2. Por qué ahora / gap que cierra (con archivo:línea)
 
-1. **La búsqueda existente no navega.** `frontend/src/components/docs/DocGraphView.tsx:97` declara `const [query, setQuery] = useState("")` y `:112` hace `filterRef.current = filterNodeIds(graph, query)`. `filterNodeIds` (`frontend/src/docs/docGraphModel.ts:127-138`) solo devuelve un `Set` de ids; el dibujo lo usa en `:176` para bajar el alpha de lo que no matchea. **No hay conteo de resultados, no hay "siguiente", no hay zoom al resultado.** Si el nodo que buscás quedó fuera del viewport, buscarlo no sirve de nada.
-2. **No hay ningún filtro.** No existe ni el concepto: el componente recibe `graph` (`DocGraphView.tsx:34-38`) y lo dibuja entero. Con varias fuentes de docs (`DocsPage.tsx:295-310` ofrece un `<select>` de fuentes; el grafo del 109 mezcla TODAS) el canvas es un hairball.
-3. **La agrupación existe pero es invisible.** `frontend/src/docs/forceLayout.ts:62-64` tiene `groupOf(kind, sourceId)` **privado**, usado solo para el color y para las columnas del `staticLayout` (`forceLayout.ts:203-231`). Peor: `colorForGroup` (`DocGraphView.tsx:71-75`) devuelve `pal.note` para **cualquier** grupo `note:<source>` ⇒ **todas las notas de todas las fuentes se pintan del mismo color**. La agrupación no se ve, no se puede colapsar y no se puede filtrar por ella.
-4. **No hay navegación por relaciones.** El hover resalta vecinos (`DocGraphView.tsx:151-158`, `neighborsOf`) pero es efímero: al mover el mouse se pierde. No se puede fijar un nodo como raíz, ver su vecindario a profundidad 2, ni volver al nodo anterior.
-5. **No hay acceso al contenido desde el grafo.** El único acceso es `onOpenNoteById` (`DocGraphView.tsx:422`), que **abandona la vista** (`DocsPage.tsx:230` hace `setDocsView("reader")`). No hay forma de espiar una nota y seguir explorando.
-6. **El zoom no es descubrible.** Solo rueda (`DocGraphView.tsx:434-444`) y doble click para resetear (`:446-448`). El único botón de la toolbar es "Centrar" (`:519-526`). No hay `+`, `−`, "Ajustar a pantalla", ni teclado. Un operador que use trackpad o teclado no descubre el zoom.
-7. **Hay un costo O(n) escondido por label y por frame.** `DocGraphView.tsx:266` hace `graph.nodes.findIndex((n) => n.id === c.id)` **dentro del loop de dibujo de labels**, que corre hasta 60 veces por frame (`pickVisibleLabels(candidates, 60)`, `:261`). Con 300 nodos son hasta 18.000 comparaciones por frame gratis. Se arregla con un `Map` en F0.
+1. **(gap e) La búsqueda existente no navega.** `frontend/src/components/docs/DocGraphView.tsx:97` declara `const [query, setQuery] = useState("")` y `:112` hace `filterRef.current = filterNodeIds(graph, query)`. `filterNodeIds` (`frontend/src/docs/docGraphModel.ts:127-138`) solo devuelve un `Set` de ids; el dibujo lo usa en `:176` para bajar el alpha de lo que no matchea. **No hay conteo de resultados, no hay "siguiente", no hay zoom al resultado.** Si el nodo que buscás quedó fuera del viewport, buscarlo no sirve de nada.
+2. **(gap a) No hay ningún filtro.** No existe ni el concepto: el componente recibe `graph` (`DocGraphView.tsx:34-38`) y lo dibuja entero. Con varias fuentes de docs (`DocsPage.tsx:295-310` ofrece un `<select>` de fuentes; el grafo del 109 mezcla TODAS) el canvas es un hairball.
+3. **(gap b) La agrupación existe pero es invisible.** `frontend/src/docs/forceLayout.ts:62-64` tiene `groupOf(kind, sourceId)` **privado**, usado solo para el color y para las columnas del `staticLayout` (`forceLayout.ts:203-231`). Peor: `colorForGroup` (`DocGraphView.tsx:71-75`) devuelve `pal.note` para **cualquier** grupo `note:<source>` ⇒ **todas las notas de todas las fuentes se pintan del mismo color**. La agrupación no se ve, no se puede colapsar y no se puede filtrar por ella.
+4. **(gap c) No hay navegación por relaciones.** El hover resalta vecinos (`DocGraphView.tsx:151-158`, `neighborsOf`) pero es efímero: al mover el mouse se pierde. No se puede fijar un nodo como raíz, ver su vecindario a profundidad 2, ni volver al nodo anterior.
+5. **(gap d) No hay acceso al contenido desde el grafo.** El único acceso es `onOpenNoteById` (`DocGraphView.tsx:422`), que **abandona la vista** (`DocsPage.tsx:230` hace `setDocsView("reader")`). No hay forma de espiar una nota y seguir explorando.
+6. **(gap f) El zoom no es descubrible.** Solo rueda (`DocGraphView.tsx:434-444`) y doble click para resetear (`:446-448`). El único botón de la toolbar es "Centrar" (`:519-526`). No hay `+`, `−`, "Ajustar a pantalla", ni teclado. Un operador que use trackpad o teclado no descubre el zoom.
+7. **(sin letra — es el KPI K8) Hay un costo O(n) escondido por label y por frame.** `DocGraphView.tsx:266` hace `graph.nodes.findIndex((n) => n.id === c.id)` **dentro del loop de dibujo de labels**, que corre hasta 60 veces por frame (`pickVisibleLabels(candidates, 60)`, `:261`). Con 300 nodos son hasta 18.000 comparaciones por frame gratis. Se arregla con un `Map` en F0.
+8. **(gap g) Alejado, el grafo es ilegible y uno se pierde.** No hay minimapa, así que al acercarse no se sabe en qué parte del corpus se está; y no hay nivel de detalle por escala, así que alejarse muestra *todas* las aristas de golpe (un plato de fideos) en vez de la estructura troncal. `DocGraphView.tsx` dibuja siempre todo: el único ajuste por escala es `zoomedIn` para los labels (`:237`). **Lo cierra F7.**
 8bis. **(C1 — hallazgo del juez, bug VIVO) El grafo NO es theme-aware, aunque el código lo aparente.** `readPalette` (`DocGraphView.tsx:52-69`) lee `--color-accent`, `--color-success`, `--color-danger`, `--color-border`, `--color-text`, `--color-surface`; el tema (`frontend/src/theme.css`) define `--accent` (línea 17), `--success` (19), `--danger` (21), `--border` (8), `--text-primary` (11), `--bg-panel` (6) — y **ningún** `--color-*` salvo `--color-scheme` (163/243/279). `grep -rn -- "--color-accent:" src` → **0 hits**. Como `readPalette` hace `raw || fallback` (línea 56), el canvas dibuja **siempre** los hex hardcodeados y no se entera del tema claro. Peor: `DocGraphView.module.css` usa **6** tokens inexistentes (`--color-accent`, `--color-border`, `--color-surface`, `--color-surface-2`, `--color-text`, `--color-text-muted`), que en CSS resuelven a *unset*. **F0.6 lo arregla y deja un test que impide que vuelva.**
 
 9. **`docsView` ya soporta tres vistas** (`DocsPage.tsx:76`: `"reader" | "coverage" | "graph"`) y la pestaña "Grafo" ya está cableada (`DocsPage.tsx:392-400`, `:410-416`). Este plan **no** agrega una pestaña nueva: mejora la que ya está.
@@ -107,7 +137,7 @@ El operador pidió, textualmente, *"siempre que sea técnicamente viable, integr
 
 ## 4. Principios y guardarraíles (NO negociables — codificados en cada fase)
 
-- **G1 — Cero dependencias nuevas.** Está **PROHIBIDO** tocar `Stacky Agents/frontend/frontend/package.json`… (ruta correcta: `Stacky Agents/frontend/package.json`). Si una fase parece necesitar un paquete, la fase se rediseña. Gate: K5.
+- **G1 — Cero dependencias nuevas.** Está **PROHIBIDO** tocar `Stacky Agents/frontend/package.json` (esa es la ruta, una sola vez `frontend`; el v2 la escribía duplicada). Si una fase parece necesitar un paquete, la fase se rediseña. Gate: K5.
 - **G2 — Toda la lógica en módulos `.ts` PUROS.** En este repo **no hay React Testing Library ni jsdom instalados** (gotcha estructural conocido). Por lo tanto: **prohibido** proponer tests de componente React. Cada `.tsx` es un **cascarón delgado** que solo llama helpers puros de `frontend/src/docs/*.ts`; toda la decisión (qué filtrar, qué está seleccionado, a dónde saltar) vive en esos helpers y se prueba con vitest sin DOM.
 - **G3 — Read-only absoluto.** Ninguna fase escribe un documento, un ticket, una rama ni una fila de BD. El único verbo HTTP usado es `GET` (`/api/docs/graph`, `/api/docs/content`, `/api/docs/sources`).
 - **G4 — Human-in-the-loop.** Nada se decide solo: los filtros, el foco, el colapso y el peek son acciones explícitas del operador. No hay auto-foco, no hay auto-filtrado "inteligente", no hay llamadas a modelos. El grafo nunca "decide" qué es importante en lugar del operador.
@@ -116,7 +146,7 @@ El operador pidió, textualmente, *"siempre que sea técnicamente viable, integr
 - **G12 — Todo lo que lee `draw()` va por `useRef` (nuevo por C2).** `draw()` se define **dentro** del efecto de layout, cuyas deps son `[visibleGraph, selectedNodeId]`. Por lo tanto **cualquier** valor de React que `draw()` lea y que pueda cambiar sin que esas deps cambien **queda congelado** (closure stale). El archivo ya usa este patrón: `filterRef`, `hoverRef`, `paletteRef`, `viewportRef` (`DocGraphView.tsx:89-95`). **Consecuencia dura:** cada valor nuevo que `draw()` necesite se guarda en un `useRef` y se sincroniza con un `useEffect` de dos líneas (`ref.current = valor; if (stateRef.current && !stateRef.current.animated) drawRef.current();`). **Prohibido** leer un `useState` o una variable derivada del render directamente dentro de `draw()`.
 - **G13 — Ningún estado del explorador puede dejar el canvas vacío (nuevo por C3).** Filtrar, colapsar y enfocar componen; cualquier composición que dé `nodes: []` teniendo el operador un grafo cargado es un **bug**, no un estado válido. La única forma legítima de ver 0 nodos es que el operador haya puesto filtros que efectivamente no dejan nada (y ahí el `EmptyState` de `DocGraphView.tsx:529-533` lo dice, con el botón "Limpiar filtros" a mano).
 - **G7 — Respetar `prefers-reduced-motion` y `MAX_ANIMATED_NODES = 300`.** Ninguna fase toca esa lógica (`forceLayout.ts:11`, `:101`; `DocGraphView.tsx:127-130`). Cualquier redibujo nuevo en modo estático debe llamar `drawRef.current()` explícitamente, igual que hoy (`DocGraphView.tsx:114`, `:119`).
-- **G8 — Ratchets de deuda visual.** `frontend/src/__tests__/uiDebtRatchet.test.ts` congela **por archivo** la cantidad de `style={{` en `*.tsx` y de colores **hex** en `*.module.css`; `motionDebtRatchet.test.ts` congela tiempos literales (`120ms`, `0.2s`) y `cubic-bezier(` en `*.module.css`. **Consecuencia dura:** los `.tsx` nuevos van con **cero** `style={{`, y **toda línea CSS nueva** (tanto en el `.module.css` nuevo como en las que se agreguen a `DocGraphView.module.css`) usa `var(--token)` **sin fallback hex** y `var(--duration-*)` / `var(--ease-*)` para tiempos. Ambos ratchets deben quedar verdes **sin regenerar baseline**.
+- **G8 — Ratchets de deuda visual.** `frontend/src/__tests__/uiDebtRatchet.test.ts` congela **por archivo** la cantidad de `style={{` en `*.tsx` y de colores **hex** en `*.module.css`; `motionDebtRatchet.test.ts` congela tiempos literales (`120ms`, `0.2s`) y `cubic-bezier(` en `*.module.css`. **Consecuencia dura:** los `.tsx` nuevos van con **cero** `style={{`, y **toda línea CSS nueva** (tanto en el `.module.css` nuevo como en las que se agreguen a `DocGraphView.module.css`) usa `var(--token)` **sin fallback hex** y `var(--duration-*)` / `var(--ease-*)` para tiempos. ⚠️ **(B6/v3) El criterio NO es "ambos ratchets verdes": los dos YA ESTÁN ROJOS por deuda ajena** (medido en F0.0: `uiDebtRatchet` 2 regresiones, `motionDebtRatchet` 7, repartidas en 9 archivos que este plan no toca). El criterio es **DELTA**: ningún archivo tocado o creado por el plan 268 puede aparecer en una línea `REGRESION`, el conteo de regresiones no puede subir respecto de F0.0, y **está prohibido regenerar cualquier baseline** (regenerar absorbería en silencio la deuda propia del plan, que es peor que no tener ratchet).
 - **G9 — Backward-compatible.** Con `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` en OFF, la pestaña "Grafo" se comporta **exactamente** como hoy (toolbar de 111: buscar + leyenda + "Centrar"). Con `STACKY_DOCS_GRAPH_ENABLED` en OFF, la pestaña ni siquiera se monta (comportamiento del 109/111, intacto).
 - **G10 — Reusar, no reinventar.** Se reusan: `initLayout`/`stepLayout`/`staticLayout` (111), `Viewport`/`zoomAt`/`panBy`/`toWorld`/`toScreen`/`pickVisibleLabels` (111), `filterNodeIds`/`backlinksOf`/`buildNameIndex` (109/111), `Docs.getGraph`/`Docs.getContent` (109), el motor de flags del arnés, y el patrón de pestañas de `DocsPage`.
 - **G11 — Sin ambigüedad para modelos menores.** Cada fase declara archivo exacto, símbolo exacto, firma exacta, casos borde, test nombrado y comando literal.
@@ -164,7 +194,10 @@ El operador pidió, textualmente, *"siempre que sea técnicamente viable, integr
 | **Paleta canónica del grafo** (C1) | `frontend/src/docs/graphPalette.ts` | **F0.6** |
 | Lista de tokens que el canvas lee | `GRAPH_PALETTE_TOKENS` | F0.6 |
 | Tokens de color por slot de grupo | `GROUP_SLOT_TOKENS` | F0.6 |
-| Escritor único de viewport (ref + estado + redibujo) | `setViewport` | F3 (helper local de `DocGraphView`) |
+| Escritor único de viewport (ref + estado + redibujo) | `setViewport` | F3 (función **interna** del efecto de layout de `DocGraphView`) |
+| **Ref de comando del viewport** (única forma de llamarlo desde afuera del efecto) | `setViewportRef` | **F1** (declarado) / F3 (llenado) |
+| Refs de comando del zoom | `zoomInRef`, `zoomOutRef`, `fitRef` | **F1** (declarados) / F3 (llenados) |
+| Map vacío de slots, constante módulo (identidad referencial estable) | `EMPTY_GROUP_SLOTS` | F1 (arriba de `DocGraphView`) |
 | Resolución del foco tras filtrar/agrupar (C3) | `resolveFocusId` | F4 (en `graphNeighborhood.ts`) |
 | Predicado puro de nivel de detalle (C13) | `shouldDrawEdge` | F7 (en `graphMinimap.ts`) |
 | Módulo del minimapa | `frontend/src/docs/graphMinimap.ts` | F7 |
@@ -181,7 +214,57 @@ El operador pidió, textualmente, *"siempre que sea técnicamente viable, integr
 > **Regla transversal de tests (aplica a TODAS las fases):** los tests se escriben **ANTES** del código (TDD). Se corre **por archivo** (hay contaminación cross-file conocida en la corrida completa de vitest).
 > - Frontend, desde `Stacky Agents/frontend`: `npx vitest run src/docs/<archivo>.test.ts`
 > - Gate de tipos, desde `Stacky Agents/frontend`: `npx tsc --noEmit`
-> - Backend, desde `Stacky Agents`: `.venv\Scripts\python.exe -m pytest backend/tests/<archivo>.py -q`
+> - Backend, desde `Stacky Agents`: **`backend\.venv\Scripts\python.exe -m pytest backend/tests/<archivo>.py -q`**
+>   [!] **(B1/v3) La ruta del interprete es `backend\.venv\`, NO `.venv\`.** Verificado corriendo: `Stacky Agents/.venv` **no existe** y el comando del v2 devuelve `No such file or directory`. El interprete correcto es `Stacky Agents/backend/.venv/Scripts/python.exe` -> **Python 3.13.5**. Existe ademas `Stacky Agents/backend/venv/` (sin punto) que es **Python 3.11.9**: **NO se usa**. Comprobalo una vez con `backend\.venv\Scripts\python.exe --version`.
+> - **Gates compartidos con rojo AJENO preexistente (ver F0.0):** `uiDebtRatchet`, `motionDebtRatchet`, `test_harness_flags_help.py` y `test_error_fingerprints_catalog.py` **ya estan rojos** por deuda de otros planes. Para todos ellos el criterio de este plan es **DELTA**, nunca "verde absoluto": ningun archivo tocado por el plan 268 puede aparecer en la lista de regresiones, y el conteo de fallos no puede subir respecto de la foto de F0.0.
+
+---
+
+### F0.0 — **[ADICIÓN ARQUITECTO #2]** Foto del rojo AJENO (antes de escribir una sola línea)
+
+**Objetivo.** Medir y **congelar en este documento** el estado rojo preexistente de los 5 gates compartidos, para que ninguna fase posterior confunda "lo rompí yo" con "ya estaba roto".
+
+**Por qué esto es una fase y no una nota al pie.** El v2 fue **RECHAZADO** en gran parte por esto (B6 y B8): daba por verdes dos ratchets que ya estaban rojos por deuda ajena, y mandaba escribir en un catálogo cuyo test guardián ya fallaba. Cuando un criterio binario es insatisfacible, un modelo menor no se traba: **regenera el baseline**, y con eso absorbe en silencio la deuda propia del plan. Esta fase convierte 7 criterios imposibles en 7 criterios **delta** que sí pueden fallar de verdad. Es 100% read-only, no toca código, no le pide nada al operador y cuesta ~2 minutos.
+
+**Comandos exactos (correr TODOS antes de F0.1).**
+```
+# desde "Stacky Agents/frontend"
+npx tsc --noEmit ; echo "tsc_exit=$?"
+npx vitest run src/__tests__/uiDebtRatchet.test.ts 2>&1 | grep -c "REGRESION"
+npx vitest run src/__tests__/motionDebtRatchet.test.ts 2>&1 | grep -c "REGRESION"
+git diff --exit-code -- ":/Stacky Agents/frontend/package.json" ; echo "pkg_exit=$?"
+```
+```
+# desde "Stacky Agents"
+backend\.venv\Scripts\python.exe --version
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_docs_api.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_help.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_error_fingerprints_catalog.py -q
+```
+
+**Foto de referencia (medida por el juez el 2026-07-28 — si tu medición difiere, gana la TUYA y la escribís acá).**
+
+| Gate | Estado al empezar | Detalle |
+|---|---|---|
+| `npx tsc --noEmit` | **VERDE** (exit 0) | limpio; cualquier error es tuyo |
+| `uiDebtRatchet` | **ROJO ajeno** — 1 failed / 2 passed, **2** líneas `REGRESION` | `components/ExecutionDetailDrawer.module.css` 23>21; `components/RunReconciliationCard.module.css` 1>0 |
+| `motionDebtRatchet` | **ROJO ajeno** — 2 failed, **7** líneas `REGRESION` | `HarnessFlagsPanel` 9>8; `IncidentInboxEntryButton` 1>0; `IncidentResolverModal` 1>0; `IntegrationHealthBanner` 1>0; `ui/Dialog` 5>0; `PlansBoardPage` 1>0; `TicketBoard` 22>21 |
+| `git diff --exit-code -- ":/…package.json"` | **VERDE** (exit 0) | el pathspec relativo matchea **0** archivos desde `frontend/`; el `:/` matchea **1** |
+| `test_docs_api.py` | **VERDE** — 10 passed | tu test nuevo lo deja en 11 |
+| `test_harness_flags.py` | **VERDE** | |
+| `test_harness_flags_requires.py` | **VERDE** | |
+| `test_harness_flags_help.py` | **ROJO ajeno** — **4 failed / 4 passed** | `covers_all_registry_keys`, `fields_non_empty_and_bounded`, `on_off_start_with_si`, `avoids_jargon_denylist` |
+| `test_error_fingerprints_catalog.py` | **ROJO ajeno** — **3 failed / 5 passed** | `campos_obligatorios` (`PLAN239-OUTLET-EN-BLANCO` sin `self_test`), `status_enum`, `self_test_coherente`. **`test_patrones_compilan` PASA** — no lo rompas (DoD-12) |
+
+**Criterio de aceptación binario.** La tabla de arriba está rellenada con **tu** medición, en este mismo documento. **Cero archivos modificados** por esta fase (`git status --porcelain` no muestra nada nuevo salvo este `.md`).
+
+**Flag.** N/A — no hay código.
+
+**Impacto por runtime.** Ninguno en los tres (Codex CLI / Claude Code CLI / GitHub Copilot Pro): son lecturas locales, cero LLM.
+
+**Trabajo del operador: ninguno.**
 
 ---
 
@@ -238,13 +321,29 @@ Editar, **en este orden**:
 4. **`Stacky Agents/backend/services/harness_flags_help.py`** — agregar la entrada de ayuda llana justo después de la **entrada completa** de `"STACKY_DOCS_GRAPH_ENABLED"`. ⚠️ (C16) Esa entrada **empieza** en la línea 274 y **cierra** con `),` en la línea **279**: hay que insertar **después de la 279**, no después de la 274 (si insertás en la 275 partís el `PlainHelp` del 109 al medio y el módulo no importa):
 ```python
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": PlainHelp(
-        what="Agrega herramientas para explorar el mapa de documentos: filtros, buscador que salta al resultado, foco en los vecinos de una nota, colores por carpeta, zoom con botones y una vista previa del texto.",
+        what="Agrega herramientas para explorar el mapa de documentos: filtros, buscador que salta al resultado, foco en los vecinos de una nota y vista previa.",
         on_effect="Si la activás: la pestaña 'Grafo' de Docs suma barra de filtros, buscador con contador, botones de zoom, minimapa y un panel que muestra el principio del documento del nodo elegido.",
         off_effect="Si la apagás: la pestaña 'Grafo' se ve como antes, con el buscador simple y el botón Centrar.",
         example="Como pasar de una foto del mapa a un mapa con lupa, filtros y buscador.",
     ),
 ```
-   ⚠️ **Límite duro:** cada campo de `PlainHelp` tiene un tope de **240 caracteres** verificado por `backend/tests/test_harness_flags_help.py`. Si un texto se pasa, **reescribilo más corto**; jamás toques el test. ⚠️ Ese archivo de test tiene **4 fallos preexistentes ajenos**: validá **solo** tu entrada leyendo el output; no lo cuentes como rojo tuyo.
+   [!] **(B9/v3) LIMITES REALES — el v2 decía "240 para todos" y era FALSO.** Verificados en `backend/tests/test_harness_flags_help.py:47-51`:
+
+   | Campo | Tope real | Piso | El texto de arriba mide |
+   |---|---|---|---|
+   | `what` | **<= 200** | >= 10 | **154** OK |
+   | `on_effect` | <= 240 | — | 179 OK |
+   | `off_effect` | <= 240 | — | 91 OK |
+   | `example` | <= 300 | — | 71 OK |
+
+   El `what` que proponía el v2 medía **199 de 200**: entraba por **un** carácter mientras el plan le decía al implementador que tenía 41 de margen. El de arriba está acortado a 154 a propósito. **Antes de commitear, medí de verdad:**
+```
+# desde "Stacky Agents"
+backend\.venv\Scripts\python.exe -c "from services.harness_flags_help import PLAIN_HELP as P; e=P['STACKY_DOCS_GRAPH_EXPLORER_ENABLED']; print(len(e.what),len(e.on_effect),len(e.off_effect),len(e.example))"
+```
+   -> debe imprimir 4 numeros dentro de `200/240/240/300`.
+   [!] **Denylist de jerga CONGELADA** (`JARGON_DENYLIST`, mismo archivo, verificada): prohibido usar `MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime`, y prohibido citar keys `SCREAMING_SNAKE` o fases (`F1.1`). El texto propuesto no usa ninguno — no lo "mejores" agregando uno.
+   [!] Ese archivo de test tiene **4 fallos preexistentes ajenos** (medidos en F0.0: `test_plain_help_covers_all_registry_keys`, `test_plain_help_fields_non_empty_and_bounded`, `test_plain_help_on_off_start_with_si`, `test_plain_help_avoids_jargon_denylist`; **4 failed / 4 passed**). Validá **solo** tu entrada con el comando de arriba; no lo cuentes como rojo tuyo, y verificá que el conteo siga siendo **4 failed** y no 5.
 
 5. **`Stacky Agents/backend/tests/test_harness_flags.py`** — agregar la key al set `_CURATED_DEFAULTS_ON` (línea 467), en el bloque de docs:
 ```python
@@ -585,13 +684,41 @@ export function definedTokenNames(css: string): Set<string> {
   return out;
 }
 
-/** Corta el CSS del tema en sus dos bloques: el `:root` base (oscuro) y el bloque
- *  del tema claro. Devuelve `{ dark, light }` con el TEXTO de cada uno.
- *  Criterio: el bloque claro es el que contiene `--color-scheme: light`. */
-export function splitThemeBlocks(css: string): { dark: string; light: string };
+/**
+ * Corta el CSS del tema en sus dos bloques: el `:root` base (oscuro) y el bloque
+ * del tema claro. Devuelve `{ dark, light }` con el TEXTO de cada uno.
+ * Criterio: el bloque claro arranca en el selector que contiene `data-theme="light"`.
+ * Si no se encuentra ese selector, `light` queda vacio (y el test correspondiente
+ * falla, que es el comportamiento deseado: significa que el tema claro se rompio).
+ */
+export function splitThemeBlocks(css: string): { dark: string; light: string } {
+  const marker = css.indexOf('[data-theme="light"]');
+  if (marker < 0) return { dark: css, light: "" };
+  const open = css.indexOf("{", marker);
+  const close = css.indexOf("}", open);
+  return {
+    dark: css.slice(0, marker),
+    light: open < 0 || close < 0 ? "" : css.slice(open + 1, close),
+  };
+}
 ```
+[!] **(B2/v3) Este bloque se copia TAL CUAL y compila.** El v2 dejaba `splitThemeBlocks` como una firma **sin cuerpo** en medio de un archivo que ya traía dos funciones **con** cuerpo. Compilado con el `tsc` del repo daba `error TS2391: Function implementation is missing or not immediately following the declaration`, y como el gate de toda fase es `npx tsc --noEmit` con 0 errores, **F0 no podía cerrar**. Regla para el resto del plan: los bloques de F1/F4/F5/F6/F7 que muestran **solo firmas** son *contrato* (llevan su pseudocódigo aparte y así están rotulados); los que dicen "Crear `<archivo>`:" son **código literal completo**.
 
-**Cablear en `DocGraphView.tsx`** — `readPalette` (líneas 52-69) pasa a:
+**Referencia de los bloques del tema (verificada 2026-07-28):** `:root { ... }` = líneas **3-164** (oscuro, con `--color-scheme: dark` en la 163); `:root[data-theme="light"] { ... }` = líneas **172-244** (claro, con `--color-scheme: light` en la 243). Los 13 tokens de `GRAPH_PALETTE_TOKENS` + `GROUP_SLOT_TOKENS` están definidos **en los dos**.
+
+**Cablear en `DocGraphView.tsx`** — **DOS ediciones, ninguna opcional.**
+
+**(a) [!] (B3/v3) PRIMERO el `interface Palette` (líneas 40-50), o nada compila.** Hoy tiene exactamente 9 campos (`note, code, missing, edge, stale, label, labelBg, halo, ring`) y **ninguno se llama `groups`**. El v2 mandaba devolver `groups` desde `readPalette` sin tocar la interfaz; compilado verbatim da `error TS2353: Object literal may only specify known properties, and 'groups' does not exist in type 'Palette'`. Agregar **una línea**, antes del `}` de la línea 50:
+```diff
+   halo: string;
+   ring: string;
++  /** Plan 268 F0.6 — un color por SLOT de grupo (F5). Orden = GROUP_SLOT_TOKENS. */
++  groups: string[];
+ }
+```
+**Esta es la costura F0.6->F5 y se paga entera en F0.6**: F5 solo consume `pal.groups`, no vuelve a tocar ni la interfaz ni `readPalette`.
+
+**(b) DESPUES** `readPalette` (líneas 52-69) pasa a:
 ```ts
 import { GRAPH_PALETTE_TOKENS, GROUP_SLOT_TOKENS } from "../../docs/graphPalette";
 
@@ -626,7 +753,16 @@ function readPalette(el: HTMLElement): Palette {
 | `var(--color-text)` | `var(--text-primary)` |
 | `var(--color-text-muted)` | `var(--text-muted)` |
 
-⚠️ **No** tocar los 3 `style={{ background: "var(--color-accent, #4a9eff)" }}` de la leyenda vieja (`DocGraphView.tsx:507`, `:511`, `:515`): **ya están contados en el baseline de `uiDebtRatchet`** y son el camino flag-OFF. Sí se puede (y conviene) corregirles el nombre del token dejando el fallback: `"var(--accent, #388bfd)"` — el conteo de `style={{` no cambia y el ratchet sigue verde.
+[!] **(I4/v3) Los 3 `style={{ background: "var(--color-…)" }}` de la leyenda vieja (`DocGraphView.tsx:507`, `:511`, `:515`) SE CORRIGEN — es OBLIGATORIO, no opcional.** El v2 lo dejaba como "sí se puede (y conviene)" mientras DoD-11 lo exigía **binario** (0 hits de `var(--color-` en los archivos del plan): opcional contra binario es una contradicción que un modelo menor resuelve salteándolo. Sustitución exacta, **conservando el fallback** (no se **quitan** los tres `style={{`: ya están contados en el baseline de `uiDebtRatchet`, quitarlos bajaría el conteo y eso está permitido pero cambia el camino flag-OFF; mantenerlos deja el conteo **igual** y el ratchet en delta 0):
+```diff
+-<span className={styles.swatch} style={{ background: "var(--color-accent, #4a9eff)" }} />
++<span className={styles.swatch} style={{ background: "var(--accent, #388bfd)" }} />
+-<span className={styles.swatch} style={{ background: "var(--color-success, #3fb950)" }} />
++<span className={styles.swatch} style={{ background: "var(--success, #3fb950)" }} />
+-<span className={styles.swatch} style={{ background: "var(--color-danger, #f85149)" }} />
++<span className={styles.swatch} style={{ background: "var(--danger, #f85149)" }} />
+```
+El conteo de `style={{` **no cambia** (3 antes, 3 después) ⇒ `uiDebtRatchet` no se mueve, y la leyenda del camino flag-OFF pasa a acompañar el tema igual que el canvas.
 
 **Test nuevo `Stacky Agents/frontend/src/docs/graphPalette.test.ts`** (puro, lee el archivo con `fs`, igual que hacen los ratchets — no necesita DOM):
 - `it("todos los tokens del grafo estan definidos en el bloque OSCURO de theme.css")`
@@ -635,7 +771,8 @@ function readPalette(el: HTMLElement): Palette {
 - `it("los 6 slots de grupo son tokens DISTINTOS entre si")`
 - `it("definedTokenNames encuentra una custom property y ignora un var() de uso")`
 - `it("splitThemeBlocks separa el bloque claro por --color-scheme: light")`
-- `it("DocGraphView.module.css no usa ningun token inexistente")` — lee `src/components/docs/DocGraphView.module.css` y `src/components/docs/DocGraphExplorer.module.css` (si ya existe), extrae todos los `var(--x)` **usados** y verifica que cada uno esté en `definedTokenNames(theme.css)`. **Este caso es el que impide que el bug vuelva.**
+- `it("DocGraphView.module.css no usa ningun token inexistente")` — lee `src/components/docs/DocGraphView.module.css`, `src/components/docs/DocGraphExplorer.module.css` (si ya existe) **y `src/components/docs/DocGraphView.tsx`** (I4/v3: ahí viven los 3 `style={{ background: "var(--…)" }}` de la leyenda), extrae todos los `var(--x)` **usados** y verifica que cada uno esté en `definedTokenNames(theme.css)`. **Este caso es el que impide que el bug vuelva.**
+  [!] **Alcance CERRADO (B7/v3): esos 3 archivos y nada más.** El test **no** barre `src/components/docs/` entero: `DocBacklinksPanel.module.css`, `DocCoveragePanel.module.css` y `DocumenterResultPanel.tsx` arrastran **32 hits** de `var(--color-*)` de deuda ajena que este plan no puede tocar (DoD-9, y hay 6 agentes en el mismo árbol). Ampliar el alcance deja el test rojo para siempre. Queda anotado en DoD-11 como candidato al plan siguiente.
 
 ⚠️ El último caso empieza en **ROJO** (los 6 tokens actuales de `DocGraphView.module.css` no existen) y pasa a verde con la sustitución de la tabla. Eso es TDD correcto: el test reproduce un bug **real y vivo** antes de arreglarlo.
 
@@ -687,14 +824,30 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 ```
 ```
-# desde "Stacky Agents"
-.venv\Scripts\python.exe -m pytest backend/tests/test_docs_api.py -q
-.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -q
-.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -q
-.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_help.py -q
+# desde "Stacky Agents"  --  OJO: backend\.venv\ , NO .venv\   (B1/v3)
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_docs_api.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -q
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_help.py -q
 ```
+**Baseline medido (F0.0, 2026-07-28):** `test_docs_api.py` -> **10 passed** (verde limpio; tu test nuevo debe dejarlo en **11 passed**). `test_harness_flags_help.py` -> **4 failed / 4 passed** (rojo ajeno; no puede pasar a 5 failed).
 
-**Criterio de aceptación binario.** Los **5** archivos de test frontend en verde (`graphViewport`, `graphExplorerState`, `docGraphModel`, `graphPalette`, y `uiDebtRatchet` sin regenerar baseline), `npx tsc --noEmit` con 0 errores, `test_docs_api.py` / `test_harness_flags.py` / `test_harness_flags_requires.py` en verde, y en `test_harness_flags_help.py` la entrada nueva sin fallos (los 4 fallos ajenos preexistentes NO cuentan). Además: `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con código 0.
+**Criterio de aceptación binario.** Los **4** archivos de test frontend **propios** en verde absoluto (`graphViewport`, `graphExplorerState`, `docGraphModel`, `graphPalette`); `npx tsc --noEmit` con **0 errores**; `test_docs_api.py` en **11 passed** (los 10 del baseline + el tuyo); `test_harness_flags.py` y `test_harness_flags_requires.py` en **verde absoluto**; `test_harness_flags_help.py` en **4 failed / 4 passed exactos** (mismo conteo que F0.0) y los 4 largos dentro de `200/240/240/300`; **`uiDebtRatchet` y `motionDebtRatchet` en DELTA** (regla de abajo). Además: `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con código 0.
+
+> **(B6/v3) REGLA DELTA DE LOS RATCHETS — aplica a F0, F1, F3, F5, F6 y al DoD.** Los dos ratchets **ya están rojos por deuda AJENA** (medido en F0.0). Exigir "verde sin regenerar baseline", como hacía el v2 en 7 lugares, es **insatisfacible**, y el único atajo que le deja a un modelo menor es regenerar el baseline — justo lo prohibido, y que además absorbería en silencio la deuda **propia** del plan. El criterio correcto es:
+> 1. Correr el ratchet y **leer la lista de archivos** de la salida.
+> 2. **Ningún** archivo tocado o creado por el plan 268 puede aparecer en esa lista.
+> 3. El **número de líneas `REGRESION`** no puede ser mayor que el de F0.0.
+> 4. **Prohibido** regenerar el baseline (`UI_DEBT_RE...`) por cualquier motivo.
+>
+> Comando de verificación del delta, desde `Stacky Agents/frontend`:
+> ```
+> npx vitest run src/__tests__/uiDebtRatchet.test.ts 2>&1 | grep -c "REGRESION"
+> npx vitest run src/__tests__/motionDebtRatchet.test.ts 2>&1 | grep -c "REGRESION"
+> npx vitest run src/__tests__/uiDebtRatchet.test.ts 2>&1 | grep "REGRESION" | grep -E "DocGraph|docs/"
+> npx vitest run src/__tests__/motionDebtRatchet.test.ts 2>&1 | grep "REGRESION" | grep -E "DocGraph|docs/"
+> ```
+> Los dos primeros no pueden **subir** respecto de F0.0; los dos últimos deben dar **0 líneas**.
 
 **Flag que la protege.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**. (Los helpers puros no están gateados: son código muerto hasta que F1+ los use; el gate está en el montaje de la UI.)
 
@@ -884,11 +1037,35 @@ const visibleGraph = useMemo(
 
    **⚠️ INVARIANTE CRÍTICA I2 — refs para todo lo que lee `draw()` (C2, guardarraíl G12).** `draw()` vive **dentro** del efecto de deps `[visibleGraph, selectedNodeId]`. Cualquier valor que cambie sin cambiar esas deps queda **congelado en el closure**. El archivo ya resuelve esto con `filterRef`/`hoverRef`/`paletteRef` (líneas 89-95). A partir de acá se agregan estos refs, **todos declarados en F1 aunque los llene una fase posterior** (así ninguna fase tiene que tocar la firma del efecto de nuevo):
 ```ts
+  // --- refs que lee draw() (I2) ---
   const activeMatchIdRef   = useRef<string | null>(null);   // F2 — resultado de búsqueda activo
   const groupSlotsRef      = useRef<Map<string, number>>(new Map()); // F5 — slot de color por grupo
   const explorerEnabledRef = useRef<boolean>(false);        // F7 — gatea el LOD y el minimapa
   const canvasSizeRef      = useRef<{ w: number; h: number }>({ w: 0, h: 0 }); // F2/F3 — encuadre
+
+  // --- refs de COMANDO: funciones definidas DENTRO del efecto de layout y
+  //     llamadas desde afuera (JSX u otros efectos). Patrón ya usado por el
+  //     archivo: resetViewRef (línea 95) y drawRef (93). (B5/v3) ---
+  const setViewportRef = useRef<(next: Viewport) => void>(() => {});
+  const zoomInRef      = useRef<() => void>(() => {});
+  const zoomOutRef     = useRef<() => void>(() => {});
+  const fitRef         = useRef<() => void>(() => {});
 ```
+[!] **(B5/v3) Los cuatro refs de COMANDO son obligatorios y nacen en F1**, aunque F1 no los llene. El v2 definía `setViewport` como función **interna** del efecto de layout (F3) y después ordenaba, desde **otro** `useEffect` (F2.2-4), "este efecto **debe** usar `setViewport(...)`". Un efecto **no puede ver el closure de otro**: eso es `TS2304` y rompe el gate `tsc --noEmit` de F2. La regla, sin excepciones: **desde afuera del efecto de layout siempre se llama `xxxRef.current(...)`**; el nombre pelado `setViewport` solo existe **dentro** del efecto.
+
+[!] **(B4/v3) Placeholders obligatorios en F1 — sin esto F1 NO COMPILA.** El efecto de sincronización de abajo lee `activeMatchId` (nace en **F2**) y `groupSlots` (nace en **F5**). El v2 lo mandaba escribir entero en F1 con el comentario "null hasta F2 / Map vacío hasta F5" pero **sin declararlos**; compilado verbatim da **4 errores** `TS2552: Cannot find name 'activeMatchId'` / `Cannot find name 'groupSlots'`, y el criterio de F1 exige `tsc --noEmit` con 0 errores. En F1 se declaran así, **inmediatamente antes** del efecto:
+```ts
+  // Plan 268 — placeholders de F1. F2 REEMPLAZA la primera línea por el matchAt real
+  // y F5 la segunda por assignGroupColorSlots(...). El tipo NO cambia en ninguna fase,
+  // así que el efecto de sincronización de abajo se escribe UNA sola vez y nunca se toca.
+  const activeMatchId: string | null = null;                  // F2 lo reemplaza
+  const groupSlots: Map<string, number> = EMPTY_GROUP_SLOTS;  // F5 lo reemplaza
+```
+y arriba del componente, al lado de `LABEL_FONT_PX` (línea 77), **una constante módulo** para que la identidad referencial no cambie por render (si no, el efecto de sincronización se dispara en **cada** render):
+```ts
+const EMPTY_GROUP_SLOTS: Map<string, number> = new Map();
+```
+**Contrato de la costura F1->F2->F5:** F2 sustituye la línea de `activeMatchId` por `const activeMatchId = matchAt(matches, ui.matchIndex);` y F5 la de `groupSlots` por `const groupSlots = useMemo(() => assignGroupColorSlots(groupKeysOf(visibleGraph)), [visibleGraph]);`. **Ninguna de las dos toca el efecto de sincronización ni la lista de refs.**
    y **un** efecto de sincronización (uno solo, no cuatro), que además fuerza el redibujo en modo estático:
 ```ts
   useEffect(() => {
@@ -970,12 +1147,14 @@ npx tsc --noEmit
 git diff --exit-code -- ":/Stacky Agents/frontend/package.json"
 ```
 
-**Criterio de aceptación binario.** `graphFilters.test.ts` verde (**21 casos**: los 18 del v1 + los 3 de C11), ambos ratchets verdes **sin regenerar baseline**, `graphPalette.test.ts` verde (incluido el caso que valida `DocGraphExplorer.module.css`), `tsc --noEmit` con 0 errores, `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` con código 0, **y** el grep-gate de la invariante I1:
+**Criterio de aceptación binario.** `graphFilters.test.ts` verde (**21 casos**: los 18 del v1 + los 3 de C11); `graphPalette.test.ts` verde (incluido el caso que valida `DocGraphExplorer.module.css`); `tsc --noEmit` con **0 errores**; los dos ratchets **en DELTA** (regla de F0, B6/v3); `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` con código 0; **y** el grep-gate de la invariante I1:
 ```
-# desde "Stacky Agents/frontend"
-grep -n "graph\." src/components/docs/DocGraphView.tsx
+# desde "Stacky Agents/frontend"  --  el \b evita matchear visibleGraph
+grep -nE "(^|[^a-zA-Z])graph\." src/components/docs/DocGraphView.tsx
 ```
-Todos los hits deben ser: (a) `visibleGraph.…`, (b) `graph.nodes.length` como **denominador** del contador, o (c) el argumento de `availableFilterOptions(graph, …)`. **Cualquier otro hit de `graph.` es el bug R1 y se corrige antes de cerrar la fase.**
+[!] **(I5/v3) El gate del v2 estaba mal escrito.** Decía `grep -n "graph\."` y después "todos los hits deben ser `visibleGraph.…`" — imposible: `grep` es **case-sensitive** y `visibleGraph.` lleva **G mayúscula**, así que ese patrón **jamás** puede reportarlo. Comprobado: `echo 'visibleGraph.nodes' | grep -c "graph\."` -> **0**. El patrón de arriba busca a propósito **solo** el `graph.` pelado, que es exactamente el bug R1.
+
+**Salida esperada al cerrar F1: EXACTAMENTE UN hit**, el denominador del contador (`totalNodes={graph.nodes.length}` en el JSX). **Cualquier otro hit es el bug R1** y se corrige antes de cerrar la fase. Para referencia, el baseline **antes** de F1 tiene **6 hits** (líneas 102, 106, 108, 247, 266, 267): los 6 tienen que migrar a `visibleGraph` salvo el del contador. `availableFilterOptions(graph, ...)` **no** aparece en esta salida (es `graph,` con coma, no `graph.`) y es una referencia legítima igual.
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -1086,10 +1265,14 @@ useEffect(() => {
 }, [explorerEnabled, activeMatchId]);
 ```
    ⚠️ `canvasSizeRef` ya quedó declarado en F1.3-3 (I2). El efecto de layout lo actualiza en **dos** lugares: dentro de `sizeCanvas()` antes del `return` (líneas 135-145) y en el callback del `ResizeObserver` (líneas 459-475). **Sin ese ref el encuadre usa 0×0 y el nodo se va del canvas.**
-   ⚠️ Además, este efecto **debe** usar `setViewport(...)` (F3) en vez de escribir `viewportRef.current` a mano, para que el `%` de zoom no se desincronice (C7).
+   [!] **(B5/v3) Este efecto NO puede llamar a `setViewport` a secas.** `setViewport` vive **dentro** del efecto de layout (F3) y este es **otro** efecto: referenciarlo por nombre da `TS2304` y rompe el gate de F2. Se llama **`setViewportRef.current(...)`**, que ya quedó declarado en F1.3-3 y que F3 llena. La línea del bloque de arriba pasa a:
+```ts
+  setViewportRef.current(centerOn(viewportRef.current, n.x, n.y, canvasSizeRef.current.w, canvasSizeRef.current.h));
+```
+   y se **borra** el `drawRef.current()` siguiente: `setViewport` ya redibuja (si no, se dibuja dos veces por salto). En F2, antes de que F3 exista, `setViewportRef.current` es el no-op del `useRef` inicial — el encuadre no hace nada todavía, la fase compila y pasa sus tests puros, y **F3 lo enciende sin tocar F2**. Eso es la costura F2->F3, y es lo único que se difiere.
 5. **Resaltado del activo:** en `draw()`, el nodo cuyo id es **`activeMatchIdRef.current`** (I2 — **NO** la variable `activeMatchId` del render: quedaría congelada en el primer resultado y el anillo no se movería nunca al apretar Enter, C2) se dibuja con el mismo anillo que el hovered (líneas 223-229) usando `palette.halo` en lugar de `palette.ring`, y su label recibe `priority: 950` en el array de candidatos (línea 258), entre `isSelected` (900) y `isHover` (1000).
 6. **(C3) Coherencia del contador.** `matches` se calcula sobre `visibleGraph`, así que buscar **estando enfocado o con filtros** busca dentro de lo visible — es lo correcto y hay que decírselo al operador: si `ui.focusRootId` o los filtros no son `EMPTY_FILTERS`, el contador se muestra como `n de m (en lo visible)`. Así nadie interpreta que "no está" una nota que sí está pero filtrada.
-6. **UI de la búsqueda** (dentro de `DocGraphFilterBar` o inmediatamente al lado, misma barra):
+7. **UI de la búsqueda** (dentro de `DocGraphFilterBar` o inmediatamente al lado, misma barra):
    - el `<input type="search">` existente,
    - `<span>{matches.length ? ui.matchIndex + 1 : 0} de {matches.length}</span>`,
    - `<button type="button" title="Coincidencia anterior" aria-label="Coincidencia anterior" disabled={!matches.length} onClick={() => dispatch({type:"PREV_MATCH", total: matches.length})}>` con el glifo `▲`,
@@ -1161,7 +1344,8 @@ Render: 4 `<button type="button">` con `title` y `aria-label` en español (`Acer
 
 **(C7) ESCRITOR ÚNICO DEL VIEWPORT — obligatorio.** El v1 dejaba `viewportRef.current = …` esparcido por 6 lugares y el `%` de zoom en un `useState` que solo se actualizaba "al terminar una interacción de zoom". Eso miente en dos casos **reales y frecuentes**: (i) el `ResizeObserver` ya hace `viewportRef.current = IDENTITY` (línea 464) sin avisarle a nadie; (ii) a partir de F1 **cada cambio de filtro re-ejecuta el efecto de layout** (deps `[visibleGraph, …]`) y la línea 149 vuelve a poner `IDENTITY` — el grafo vuelve a 100% mientras el indicador sigue diciendo 195%. Se resuelve con **una sola función** dentro del efecto:
 ```ts
-    // ÚNICO lugar del componente donde se escribe viewportRef.current.
+    // UNICO lugar del componente donde se escribe viewportRef.current.
+    // Vive DENTRO del efecto de layout; los llamadores externos usan setViewportRef.
     function setViewport(next: Viewport) {
       if (next === viewportRef.current) return;   // zoomAt devuelve el MISMO objeto si clampeó
       viewportRef.current = next;
@@ -1171,6 +1355,9 @@ Render: 4 `<button type="button">` con `title` y `aria-label` en español (`Acer
 ```
 y **todos** los escritores pasan por ahí: `onWheel` (línea 438-443), `onPointerMove` del pan (línea 382), `resetViewRef` (línea 306), el `ResizeObserver` (línea 464), el encuadre de F2, y los handlers de abajo.
 ```ts
+// Los 4 refs YA están declarados en F1.3-3 (B5/v3). Acá solo se LLENAN, dentro
+// del efecto de layout, junto a resetViewRef (línea 305):
+setViewportRef.current = setViewport;                       // <- lo que usan F2 y F7
 zoomInRef.current  = () => setViewport(zoomAtCenter(viewportRef.current, ZOOM_STEP, w, h));
 zoomOutRef.current = () => setViewport(zoomAtCenter(viewportRef.current, 1 / ZOOM_STEP, w, h));
 fitRef.current     = () => {
@@ -1179,6 +1366,7 @@ fitRef.current     = () => {
 };
 // resetViewRef (línea 305) se conserva, pero pasa a llamar setViewport(IDENTITY).
 ```
+[!] **(B5/v3) `setViewportRef.current = setViewport;` es la línea que cierra la costura F2->F3 y F7->F3.** Sin ella, el encuadre al resultado de búsqueda (F2.2-4) y el click en el minimapa (F7.2-4) quedan como no-ops silenciosos: no fallan, simplemente **no hacen nada** — y no hay ningún test de componente en este repo que lo note. Se verifica en F8 pasos 8 y 16.
 ⚠️ `setViewScale` **nunca** se llama desde `tick()`: eso re-renderizaría React 60 veces por segundo (regresión de performance, prohibida). `tick()` llama `draw()` a secas, que **no** toca estado de React. `setViewport` solo se invoca en respuesta a un gesto o a un re-init — como mucho unas pocas veces por segundo.
 
 **(C7) Re-encuadre tras cada re-init en modo explorador.** Al final del efecto de layout, en modo explorador y **solo** si `visibleGraph.nodes.length > 0`, se llama una vez a `fitRef.current()` (dentro de un `requestAnimationFrame` para que `staticLayout`/el primer `stepLayout` ya hayan corrido). Así, cuando el operador toca un filtro, el subgrafo aparece **encuadrado** en vez de aparecer a escala 1 con la mitad fuera de pantalla. Con la flag OFF esto **no** se hace (comportamiento del 111). Esto no es autonomía (G4): es la consecuencia visual directa del click del operador.
@@ -1220,7 +1408,7 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación binario.** `graphViewport.test.ts` verde, `uiDebtRatchet` verde sin regenerar, `tsc --noEmit` 0 errores, y verificación visual F8 pasos 4-6.
+**Criterio de aceptación binario.** `graphViewport.test.ts` verde, **los dos ratchets en DELTA** (regla B6/v3 de F0: ningún archivo del plan en la lista de `REGRESION` y el conteo no sube respecto de F0.0; **prohibido** regenerar baseline), `tsc --noEmit` 0 errores, y verificación visual F8 pasos 4-6.
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -1580,7 +1768,7 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación binario.** `graphGrouping.test.ts` verde (18 casos), `forceLayout.test.ts` verde **con todos sus casos previos intactos** (la refactorización no cambió nada), `uiDebtRatchet` verde sin regenerar, `tsc --noEmit` 0 errores (prueba que no hay ciclo de imports).
+**Criterio de aceptación binario.** `graphGrouping.test.ts` verde (18 casos), `forceLayout.test.ts` verde **con sus 7 casos previos intactos** (baseline medido: 7 passed — la refactorización no cambió nada), **los dos ratchets en DELTA** (regla B6/v3), `tsc --noEmit` 0 errores (prueba que no hay ciclo de imports).
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**. (El movimiento de `groupOf` → `groupKeyOf` NO está gateado: es un refactor de identidad semántica cubierto por test.)
 
@@ -1695,7 +1883,7 @@ npx vitest run src/__tests__/uiDebtRatchet.test.ts
 npx tsc --noEmit
 ```
 
-**Criterio de aceptación binario.** `graphPreview.test.ts` verde (17 casos), `uiDebtRatchet` verde sin regenerar, `tsc --noEmit` 0 errores, y verificación visual F8 paso 9 (el peek muestra **texto real** del documento correcto, y hacer click 3 veces sobre el mismo nodo dispara **como mucho un** `GET /api/docs/content`). ⚠️ (C8) Que además reuse la entrada de cache del Lector es deseable pero **no** es criterio de aceptación.
+**Criterio de aceptación binario.** `graphPreview.test.ts` verde (17 casos), **los dos ratchets en DELTA** (regla B6/v3), `tsc --noEmit` 0 errores, y verificación visual F8 paso 9 (el peek muestra **texto real** del documento correcto, y hacer click 3 veces sobre el mismo nodo dispara **como mucho un** `GET /api/docs/content`). ⚠️ (C8) Que además reuse la entrada de cache del Lector es deseable pero **no** es criterio de aceptación.
 
 **Flag.** `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` — **default ON**.
 
@@ -1837,7 +2025,7 @@ npx tsc --noEmit
 **Por qué es una fase y no un apéndice.** En `Stacky Agents/frontend` **no están instalados** React Testing Library ni jsdom (`package.json`: devDeps = `@types/react`, `@types/react-dom`, `@vitejs/plugin-react`, `typescript`, `vite`, `vitest` — nada más). Por lo tanto **ningún test automatizado puede tocar el DOM ni el canvas**. La única verificación posible del render es humana. Esta fase existe para que quede escrito qué mirar, y para que nadie declare "listo" sin haberlo mirado.
 
 **Preparación.**
-1. Desde `Stacky Agents`, levantar el backend con `.venv\Scripts\python.exe backend/app.py` (o el launcher habitual).
+1. Desde `Stacky Agents`, levantar el backend con **`backend\.venv\Scripts\python.exe backend/app.py`** (o el launcher habitual). [!] **(B1/v3)** El v2 decía `.venv\Scripts\python.exe` y esa ruta **no existe**.
 2. Confirmar en `http://localhost:5050/api/docs/sources` que el JSON trae `"graph_enabled": true` y `"graph_explorer_enabled": true`.
 3. Desde `Stacky Agents/frontend`, `npm run dev` y abrir la app.
 4. Ir a **Docs** → pestaña **Grafo**.
@@ -1873,15 +2061,15 @@ npx tsc --noEmit
 | 19 | Apagar `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` desde el panel de flags y recargar | La pestaña Grafo vuelve **exactamente** a la del plan 111: buscador simple, leyenda, botón "Centrar"; click abre la nota; doble click resetea la vista. |
 | 20 | Apagar `STACKY_DOCS_GRAPH_ENABLED` y recargar | Las tres pestañas (Lector/Cobertura/Grafo) desaparecen y la página Docs se comporta como antes del plan 109. |
 
-**Criterio de aceptación binario.** Los **27** pasos (20 del v1 + los 7 nuevos 18b-18g que verifican los bloqueantes corregidos) dan el resultado esperado. Cualquier desvío se anota **en este mismo documento**, en una sección `## 10. Desvíos de la verificación visual`, con el paso, lo observado y si se corrigió.
+**Criterio de aceptación binario.** Los **26** pasos de la tabla dan el resultado esperado. [!] **(I2/v3) El v2 decía "27 pasos (20 del v1 + los 7 nuevos 18b-18g)" y las dos cifras estaban mal**: `18b, 18c, 18d, 18e, 18f, 18g` son **6**, no 7, y la tabla tiene **26** filas (1-18 = 18, + 6 intercaladas, + 19 y 20). Es exactamente el error que C15 decía haber matado en el v1 ("DoD-1 decía 8 y listaba 10"), reintroducido. **Contá las filas antes de firmar.** Cualquier desvío se anota **en este mismo documento**, en una sección `## 10. Desvíos de la verificación visual`, con el paso, lo observado y si se corrigió.
 
-**Trabajo del operador (recuento honesto).** ~13 minutos, una sola vez, al final. Es la única fase que le pide algo y es inevitable (no hay RTL ni jsdom en el repo). Los 7 pasos nuevos suman ~3 minutos y cada uno caza un bloqueante concreto que el v1 hubiera dejado pasar.
+**Trabajo del operador (recuento honesto y ÚNICO — I3/v3).** **26 pasos, ~13 minutos**, una sola vez, al final. Es la **única** fase del plan que le pide algo al operador, y es inevitable: no hay RTL ni jsdom en el repo. Los 6 pasos nuevos (18b-18g) suman ~3 minutos y cada uno caza un bloqueante concreto. [!] El v2 decía tres cifras distintas en el mismo documento ("27 pasos / ~13 min", "los 20 pasos, ~10 minutos" y "20 pasos" en §9.2). **La cifra correcta, y la única que aparece de acá en adelante, es 26 pasos / ~13 minutos.**
 
 **Flag.** N/A (se verifican los dos estados de `STACKY_DOCS_GRAPH_EXPLORER_ENABLED`).
 
 **Impacto por runtime.** Ninguno en los tres: la verificación es del navegador contra el backend local.
 
-**Trabajo del operador: SÍ — esta fase es explícitamente suya** (los 20 pasos, ~10 minutos). Es la única del plan que lo requiere, y es inevitable: el repo no tiene entorno de test de DOM. Ninguna otra fase le pide nada.
+**Trabajo del operador: SÍ — esta fase es explícitamente suya** (los **26** pasos, **~13 minutos**; misma cifra que el recuento de arriba, I3/v3). Es la única del plan que lo requiere, y es inevitable: el repo no tiene entorno de test de DOM. Ninguna otra fase le pide nada.
 
 ---
 
@@ -1903,7 +2091,9 @@ npx tsc --noEmit
 | R12 | **(C2) Closure stale en `draw()`**: el anillo del resultado de búsqueda, los colores de grupo o el LOD quedan congelados en el valor del primer render. Es **silencioso**: nada falla, simplemente no se actualiza. | **Alta** (el v1 lo tenía) | Alto | Guardarraíl **G12** + invariante **I2** en F1.3 (lista cerrada de refs + un único efecto de sincronización) + F8 paso 18e, que lo caza en 5 segundos. |
 | R13 | **(C3) Canvas vacío por composición**: colapsar el grupo del nodo enfocado o filtrarlo deja `nodes: []`. | **Alta** (el v1 lo tenía) | Alto (parece que la app se rompió) | Guardarraíl **G13** + `resolveFocusId` (F4.1) con 5 tests + el caso de propiedad "componer nunca devuelve vacío" + F8 paso 18d. |
 | R14 | **(C1) Colores que no existen**: se agregan tokens `var(--algo)` que el tema no define. En el canvas se ve el fallback; en el CSS se ve **nada**. | Media (es el estado ACTUAL del 111) | Medio | `graphPalette.ts` es la única lista de tokens y `graphPalette.test.ts` lee `theme.css` de disco y falla si un token no está en el bloque oscuro **y** en el claro; incluye un caso que barre los `.module.css` de `components/docs/`. |
-| R15 | **(C6) Gates que no pueden fallar** (falso verde). El `git diff --stat` con pathspec relativo era el caso concreto. | Media | Alto (da confianza falsa) | Todo gate del plan se ejecuta al menos una vez **esperando ROJO** antes de darlo por bueno: el `git diff --exit-code` se prueba tocando el `package.json` y revirtiendo; el caso de tokens de F0.6 **nace rojo** por diseño. |
+| R15 | **(C6) Gates que no pueden fallar** (falso verde). El `git diff --stat` con pathspec relativo era el caso concreto. | Media | Alto (da confianza falsa) | Todo gate del plan se ejecuta al menos una vez **esperando ROJO** antes de darlo por bueno: el `git diff --exit-code` se prueba tocando el `package.json` y revirtiendo; el caso de tokens de F0.6 **nace rojo** por diseño. Verificado: `git ls-files -- "Stacky Agents/frontend/package.json"` desde `frontend/` matchea **0** archivos; con `:/` matchea **1**. |
+| R16 | **(B6/B8/v3) Gates que NO PUEDEN PASAR** (el espejo de R15): un criterio binario que exige "verde" sobre un gate compartido **que ya está rojo por deuda ajena**. El v2 lo tenía en 7 lugares con los dos ratchets y en DoD-12 con el catálogo de huellas. | **Alta** (el v2 lo tenía) | **Alto**: el modelo menor no se traba, **regenera el baseline** — y con eso absorbe en silencio la deuda propia del plan, que es peor que no tener ratchet. | **F0.0** mide y congela el rojo ajeno **antes** de escribir código; todos los criterios pasan a **delta** (ningún archivo del plan en la lista, conteo que no sube, baseline intacto). Regla general para planes futuros: **un gate compartido nunca se pide "en verde", siempre "sin empeorar"**. |
+| R17 | **(B3/B4/B5/v3) Costura entre fases que no compila**: F(n) escribe código que referencia símbolos que recién nacen en F(n+1) o F(n+2). El v2 lo tenía **tres** veces (`Palette.groups`, `activeMatchId`/`groupSlots`, `setViewport`), y las tres son invisibles leyendo: solo aparecen compilando. | **Alta** (el v2 lo tenía; es el motivo por el que el v1 fue rechazado) | **Alto**: la fase no cierra, y el gate que lo detecta (`tsc --noEmit`) es el mismo que la fase declara como criterio ⇒ deadlock. | Regla dura: **toda fase compila sola**. Si necesita un símbolo futuro, F(n) declara el **placeholder tipado** y F(n+1) lo sustituye **sin tocar nada más** (contratos escritos en F1.3-3 para `activeMatchId`/`groupSlots`, en F0.6 para `Palette.groups`, y en F1.3-3 + F3 para `setViewportRef`). Verificación: al cerrar cada fase, `npx tsc --noEmit` con **0** errores, y el diff de la fase siguiente **no** debe tocar la lista de refs ni el efecto de sincronización. |
 
 ---
 
@@ -1946,6 +2136,7 @@ npx tsc --noEmit
 
 ### 9.2 Orden de implementación (estricto — cada fase depende de las anteriores)
 
+0. **F0.0** — **[ADICIÓN ARQUITECTO #2]** Foto del rojo AJENO de los 5 gates compartidos, escrita en la tabla de F0.0. **Cero código.** Sin esto, B6 y B8 se repiten y el atajo siempre es regenerar el baseline.
 1. **F0** — Flag (7 patas) + `nodeIndexById` + fix del `findIndex` + `fitViewport`/`centerOn`/`zoomAtCenter`/`ZOOM_STEP` + `graphExplorerState.ts` + **F0.6 `graphPalette.ts` (paleta REAL, C1)** + tests. **Lo único visible que cambia acá:** el grafo pasa a acompañar el tema, que es un bug vivo del 111 que este plan arregla de paso.
 2. **F1** — `graphFilters.ts` + `DocGraphFilterBar.tsx` + `DocGraphExplorer.module.css` + cableado de `visibleGraph` en `DocGraphView` y de `explorerEnabled` en `DocsPage`.
 3. **F2** — `graphSearch.ts` + contador `n de m` + Enter/Shift+Enter/Escape + encuadre al resultado activo (necesita `canvasSizeRef`).
@@ -1954,7 +2145,7 @@ npx tsc --noEmit
 6. **F5** — `graphGrouping.ts` + mover `groupOf` → `groupKeyOf` + color por grupo + leyenda accionable + colapso.
 7. **F6** — `graphPreview.ts` + `DocGraphPeek.tsx` + lista `Relaciones` + layout en grid.
 8. **F7** — `graphMinimap.ts` + segundo canvas + LOD por escala.
-9. **F8** — Verificación visual manual del operador (20 pasos).
+9. **F8** — Verificación visual manual del operador (**26** pasos, ~13 min; I3/v3).
 
 > **Nota de dependencia cruzada F4↔F5:** F4 escribe la composición `filtros → agrupación → resolución del foco → foco` y por lo tanto **referencia** `collapseGroups`, que recién existe en F5. Para que F4 compile sola: en F4 la línea de `collapseGroups` se omite (`const grouped = filtered;`) y **`resolveFocusId` se implementa COMPLETO desde F4** — su regla 3 (remapeo al super-nodo) simplemente no se dispara todavía, y sus tests que dependen de `collapseGroups` quedan `it.skip` con el comentario `// se activa en F5`. F5 hace **dos** cosas: inserta `collapseGroups` en el medio y des-skippea esos casos. **Prohibido** escribir un `collapseGroups` provisorio en F4.
 >
@@ -1967,22 +2158,82 @@ El plan 268 está HECHO cuando **todas** estas condiciones se cumplen y se puede
 - [ ] **DoD-1.** (C15 — el v1 decía "8" y listaba 10) Los **11** archivos de test frontend nombrados en el plan están en verde, corridos **uno por uno** desde `Stacky Agents/frontend` (hay contaminación cross-file conocida en la corrida completa):
   `graphViewport.test.ts`, `graphExplorerState.test.ts`, `docGraphModel.test.ts`, **`graphPalette.test.ts`**, `graphFilters.test.ts`, `graphSearch.test.ts`, `graphNeighborhood.test.ts`, `graphGrouping.test.ts`, `graphPreview.test.ts`, `graphMinimap.test.ts`, `forceLayout.test.ts`.
 - [ ] **DoD-2.** `npx tsc --noEmit` desde `Stacky Agents/frontend` sale con **0 errores**.
-- [ ] **DoD-3.** `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `npx vitest run src/__tests__/motionDebtRatchet.test.ts` en verde **sin haber regenerado ningún baseline**.
+- [ ] **DoD-3.** (B6/v3 — **DELTA**, no verde absoluto) Los dos ratchets **ya están rojos por deuda AJENA** medida en F0.0 (`uiDebtRatchet` 2 regresiones, `motionDebtRatchet` 7, en 9 archivos que este plan **no toca**). Se cumple cuando, con `npx vitest run src/__tests__/uiDebtRatchet.test.ts` y `.../motionDebtRatchet.test.ts`:
+  1. **ningún** archivo tocado o creado por el plan 268 aparece en una línea `REGRESION`,
+  2. el conteo de líneas `REGRESION` **no superó** el de F0.0,
+  3. **no se regeneró ningún baseline**.
+  Exigir "verde absoluto" (lo que hacía el v2) es insatisfacible y empuja a regenerar el baseline, que absorbería en silencio la deuda propia del plan.
 - [ ] **DoD-4.** (C6) `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` sale con **código 0** (KPI K5). El prefijo `:/` es obligatorio: sin él, corrido desde `Stacky Agents/frontend`, el pathspec no matchea nada y el gate **nunca puede fallar**. Verificar el gate una vez a propósito: tocar el `package.json`, confirmar que sale con código 1, y revertir.
 - [ ] **DoD-5.** Backend en verde desde `Stacky Agents`: `test_docs_api.py`, `test_harness_flags.py`, `test_harness_flags_requires.py`; y en `test_harness_flags_help.py` la entrada nueva sin fallos (los 4 fallos ajenos preexistentes documentados como tales).
 - [ ] **DoD-6.** Las **7 patas** de `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` están puestas: `config.py`, `FlagSpec`, `_CATEGORY_KEYS`, `harness_flags_help.py`, `_CURATED_DEFAULTS_ON`, `_REQUIRES_MAP_FROZEN`, `harness_defaults.env`. Verificable con `grep -rn "STACKY_DOCS_GRAPH_EXPLORER_ENABLED"` → **≥ 8 hits** (7 patas + `backend/api/docs.py`).
-- [ ] **DoD-7.** Los **27** pasos de F8 (incluidos 18b-18g) verificados por el operador; los desvíos anotados en `## 10` de este documento.
-- [ ] **DoD-11.** (C1) Ningún archivo bajo `frontend/src/components/docs/` usa un token CSS que `frontend/src/theme.css` no defina. Verificable con el caso `it("DocGraphView.module.css no usa ningun token inexistente")` de `graphPalette.test.ts`, y a mano con:
+- [ ] **DoD-7.** Los **26** pasos de F8 (1-18, 18b-18g, 19 y 20) verificados por el operador; los desvíos anotados en `## 10` de este documento. (I2/v3: el v2 decía 27.)
+- [ ] **DoD-11.** (C1, reescrito por **B7/v3**) Ningún archivo **que este plan posee** usa un token CSS que `frontend/src/theme.css` no defina. Los archivos poseídos son exactamente **cuatro**: `DocGraphView.module.css`, `DocGraphView.tsx`, `DocGraphExplorer.module.css` (nuevo) y los `.tsx` nuevos de `components/docs/` que crea el plan. Verificable con el caso `it("DocGraphView.module.css no usa ningun token inexistente")` de `graphPalette.test.ts`, y a mano con:
   ```
   # desde "Stacky Agents/frontend"
-  grep -rn -- "var(--color-" src/components/docs/ src/docs/
+  grep -rn -- "var(--color-" src/components/docs/DocGraphView.module.css src/components/docs/DocGraphView.tsx src/components/docs/DocGraphExplorer.module.css src/docs/
   ```
-  → **0 hits** (la familia `--color-*` no existe en el tema; el único `--color-scheme` vive en `theme.css` y no se usa acá).
-- [ ] **DoD-12.** (C18 — huella de regresión) Se agrega a `Stacky Agents/docs/sistema/error_fingerprints.json` una entrada por cada clase de error que este plan mata, respetando el esquema que ya usa el archivo (leerlo antes de escribir; **no** inventar campos):
+  → **0 hits**.
+
+  [!] **(B7/v3) El comando del v2 era insatisfacible y además contradecía a DoD-9.** Corrido tal cual: `grep -rn -- "var(--color-" src/components/docs/ src/docs/` devuelve **32 hits**, y **todos los que sobreviven al plan están en archivos AJENOS** que DoD-9 prohíbe tocar: `DocBacklinksPanel.module.css` (**5**), `DocCoveragePanel.module.css` (**26** — y usa además `--color-success-bg`, `--color-warning`, `--color-warning-bg`, `--color-danger-bg`, que ni figuran en la tabla de sustitución de 6 filas de F0.6), `DocumenterResultPanel.tsx` (**1**, y es un `style={{}}` inline). Pedir 0 hits sobre todo el directorio obligaba a tocar 3 archivos ajenos — con 6 agentes trabajando en este mismo árbol, eso es una colisión asegurada.
+
+  **Deuda ajena registrada (no se arregla acá):** esos 3 archivos arrastran el mismo bug que C1 encontró en `DocGraphView` — tokens `--color-*` inexistentes que resuelven a *unset* o al fallback. **Candidato claro para el plan siguiente**, con el mismo `graphPalette.ts` + `definedTokenNames()` que este plan deja construido: el fix sería mecánico y el test ya existiría. Anotarlo, no hacerlo.
+- [ ] **DoD-12.** (C18, reescrito por **B8/v3** — huella de regresión) Se agrega a `Stacky Agents/docs/sistema/error_fingerprints.json` una entrada **solo por las clases que tienen una firma de log REAL**.
+
+  [!] **(B8/v3) El DoD-12 del v2 era inimplementable y además rompía un test que hoy está VERDE.** Evidencia corrida:
+  * El archivo es un **dict** `{schema_version, description, fingerprints}` con **42** huellas; las entradas van dentro de la lista `fingerprints`, no en la raíz.
+  * Campos obligatorios por huella (verificados): `class, date_resolved, evidence, guard_test, id, killed_by, killed_commit, log_guarded, log_pattern, note, self_test, status, title`.
+  * `backend/tests/test_error_fingerprints_catalog.py::test_patrones_compilan` hace **`re.compile(fp["log_pattern"])`**: `log_pattern` **NO puede ser `null`** (gotcha ya registrado en la casa: un `log_pattern: null` rompe el catálogo entero). Y `test_self_test_coherente` exige que **cada** `self_test.matches` matchee el patrón y **cada** `self_test.clean` no.
+  * Ese archivo hoy da **3 failed / 5 passed** (rojo ajeno: `campos_obligatorios` por `PLAN239-OUTLET-EN-BLANCO` sin `self_test`, `status_enum`, `self_test_coherente`) — pero **`test_patrones_compilan` PASA**. Meter una huella con `log_pattern` nulo o inventado lo pondría **rojo por culpa de este plan**.
+  * De las 4 clases que el v2 mandaba registrar, **tres son puramente visuales** ("el swatch se ve transparente", "el contador avanza pero el dibujo no se mueve", "la pantalla queda en blanco"): **no existe línea de log** para ellas, así que no hay `log_pattern` honesto posible.
+
+  **Regla del v3:** una clase de error entra al catálogo **si y solo si** se puede escribir un `log_pattern` real y un `self_test` con `matches` y `clean` de verdad. Las que no, se registran **como prosa en la sección `## 10` de este documento**, que es donde ya viven los desvíos, y **no** se tocan el `.json`.
+
+  | # | Clase | ¿Tiene firma de log? | Dónde se registra |
+  |---|---|---|---|
+  | 1 | Token CSS inexistente en un `.module.css` o en `readPalette` | **No** (defecto visual, sin log) | `## 10` + el test `graphPalette.test.ts` es la guardia real |
+  | 2 | Closure stale en un `draw()` de canvas | **No** (silencioso por definición) | `## 10` + guardarraíl G12 + F8 paso 18e |
+  | 3 | Canvas vacío por composición de filtros | **No** | `## 10` + G13 + `resolveFocusId` |
+  | 4 | Gate de `git diff` con pathspec relativo | **No** (falso verde, no hay excepción) | `## 10` + R15 |
+
+  ⇒ **En este plan, el `.json` NO se toca.** Se elimina de la lista de archivos del diff (ver DoD-9). Si en la implementación aparece una clase **con** firma de log, recién ahí se agrega, y el criterio de cierre es:
+  ```
+  # desde "Stacky Agents"
+  backend\.venv\Scripts\python.exe -m pytest backend/tests/test_error_fingerprints_catalog.py -q
+  ```
+  → debe seguir dando **exactamente 3 failed / 5 passed** (mismo conteo que F0.0). Cualquier número distinto es daño propio.
+
+  <details><summary>Texto original del v2 (conservado por trazabilidad; NO ejecutar)</summary>
+
+  respetando el esquema que ya usa el archivo (leerlo antes de escribir; **no** inventar campos):
   1. **Token CSS inexistente en un `.module.css` o en `readPalette`** → síntoma: "el componente se ve casi bien pero los colores no cambian con el tema / un swatch se ve transparente"; causa: se usó `var(--color-x)` y el tema define `--x`; detección: `graphPalette.test.ts`.
   2. **Closure stale en un `draw()` de canvas** → síntoma: "el contador avanza pero el dibujo no se mueve"; causa: `draw()` definido dentro de un `useEffect` lee una variable del render que no está en las deps; detección: F8 paso 18e / guardarraíl G12.
   3. **Canvas vacío por composición de filtros** → síntoma: "la pantalla queda en blanco después de filtrar/colapsar"; causa: un id de selección sobrevive a una transformación que lo eliminó; detección: G13 + `resolveFocusId`.
   4. **Gate de `git diff` con pathspec relativo** → síntoma: "el gate siempre pasa"; causa: pathspec relativo al CWD; detección: probar el gate esperando rojo (R15).
+
+  </details>
 - [ ] **DoD-8.** Con la flag nueva en OFF, la pestaña Grafo se comporta **exactamente** como el plan 111 (F8 paso 19), y con `STACKY_DOCS_GRAPH_ENABLED` en OFF la página Docs se comporta como antes del 109 (F8 paso 20).
-- [ ] **DoD-9.** Ninguna fase escribió en un documento, ticket, rama, BD ni sistema del operador: el diff completo del plan toca **solo** `frontend/src/**` (incluido `frontend/src/components/docs/DocGraphView.module.css`, cuyos 6 nombres de token se corrigen en F0.6; **`frontend/src/theme.css` NO se toca**), `backend/api/docs.py`, `backend/config.py`, `backend/services/harness_flags*.py`, `backend/tests/test_docs_api.py`, `backend/tests/test_harness_flags.py`, `backend/tests/test_harness_flags_requires.py`, `deployment/harness_defaults.env`, `docs/sistema/error_fingerprints.json` y este documento. **Cero archivos `test_*.py` nuevos** ⇒ no hay que registrar nada en `HARNESS_TEST_FILES` del arnés `.sh` ni en `$HarnessTestFiles` del `.ps1` (verificado: el plan solo **edita** archivos de test ya registrados).
+- [ ] **DoD-9.** Ninguna fase escribió en un documento, ticket, rama, BD ni sistema del operador: el diff completo del plan toca **solo** `frontend/src/**` (incluido `frontend/src/components/docs/DocGraphView.module.css`, cuyos 6 nombres de token se corrigen en F0.6; **`frontend/src/theme.css` NO se toca**), `backend/api/docs.py`, `backend/config.py`, `backend/services/harness_flags*.py`, `backend/tests/test_docs_api.py`, `backend/tests/test_harness_flags.py`, `backend/tests/test_harness_flags_requires.py`, `deployment/harness_defaults.env` y este documento. [!] **(B8/v3) `docs/sistema/error_fingerprints.json` SALE de la lista**: ver DoD-12 — las 4 clases que este plan mata no tienen firma de log y el catálogo no admite `log_pattern` nulo. **Cero archivos `test_*.py` nuevos** ⇒ no hay que registrar nada en `HARNESS_TEST_FILES` del arnés `.sh` ni en `$HarnessTestFiles` del `.ps1` (verificado: el plan solo **edita** archivos de test ya registrados).
 - [ ] **DoD-10.** El estado de este documento se actualiza a `IMPLEMENTADO — <fecha>` con el detalle de qué fases quedaron cerradas y con qué evidencia (conteos de tests y comandos corridos), para que `supervisar-implementaciones-planes` pueda auditarlo.
+
+---
+
+## 10. Desvíos de la verificación visual y huellas SIN firma de log
+
+### 10.1 Desvíos de F8 (lo completa el operador)
+
+| Paso | Lo esperado | Lo observado | ¿Se corrigió? |
+|---|---|---|---|
+| _(vacío hasta correr F8)_ | | | |
+
+### 10.2 Huellas de regresión SIN firma de log (B8/v3)
+
+Estas 4 clases de error las **mata** este plan, pero **no tienen línea de log**, así que **no entran** en `docs/sistema/error_fingerprints.json` (su test guardián hace `re.compile(log_pattern)` y no admite `null`). Se registran acá, en prosa, con su guardia real:
+
+| # | Clase de error | Síntoma | Causa | Guardia que la mata |
+|---|---|---|---|---|
+| 1 | **Token CSS inexistente** en un `.module.css` o en `readPalette` | "se ve casi bien pero los colores no cambian con el tema"; un swatch transparente | se usó `var(--color-x)` y el tema define `--x` | `graphPalette.test.ts` (lee `theme.css` de disco; falla si el token no está en el bloque oscuro **y** en el claro) |
+| 2 | **Closure stale en un `draw()` de canvas** | "el contador avanza pero el dibujo no se mueve" | `draw()` definido dentro de un `useEffect` lee una variable del render que no está en sus deps | guardarraíl **G12** + invariante **I2** (todo por `useRef`) + F8 paso 18e |
+| 3 | **Canvas vacío por composición** | "la pantalla queda en blanco después de filtrar/colapsar" | un id de selección sobrevive a una transformación que lo eliminó | guardarraíl **G13** + `resolveFocusId` (F4.1, 5 tests + 1 de propiedad) + F8 paso 18d |
+| 4 | **Gate de `git diff` con pathspec relativo** | "el gate siempre pasa" | pathspec relativo al CWD (matchea 0 archivos) y/o `--stat` sin `--exit-code` | pathspec `:/` + `--exit-code`, probado **esperando rojo** (R15) |
+| 5 | **(B6/v3) Criterio binario sobre un gate compartido ya rojo** | "es imposible cerrar la fase" → se regenera el baseline | se pidió "verde absoluto" sobre un ratchet con deuda ajena | **F0.0** + criterio **delta** en todos lados (R16) |
+| 6 | **(B3/B4/B5/v3) Costura entre fases que no compila** | `TS2353` / `TS2552` / `TS2304` al cerrar una fase | F(n) referencia símbolos que nacen en F(n+1) | placeholders tipados + refs de comando; `tsc --noEmit` al cerrar **cada** fase (R17) |

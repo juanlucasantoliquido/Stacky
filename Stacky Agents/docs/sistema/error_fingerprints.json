@@ -786,6 +786,26 @@
           "otro-archivo.txt"
         ]
       }
+    },
+    {
+      "id": "PLAN270-GITLAB-SYNC-AUSENTE",
+      "title": "El auto-sync post-completacion de GitLab apunta a un modulo inexistente",
+      "class": "import-error",
+      "status": "open",
+      "log_pattern": "No module named 'services\\.gitlab_sync'",
+      "log_guarded": false,
+      "killed_by": "",
+      "guard_test": "",
+      "self_test": {
+        "matches": [
+          "completion_sync: sync de MiProy fallo (best-effort): No module named 'services.gitlab_sync'"
+        ],
+        "clean": [
+          "completion_sync: sync de MiProy fallo (best-effort): No module named 'services.jira_sync'",
+          "completion_sync: sync de MiProy ok"
+        ]
+      },
+      "note": "Documentada, NO guardada. completion_sync.py:111 despacha a services.<tracker>_sync y services/gitlab_sync.py no existe (0 hits en backend/). El plan 270 NO lo mata: su F4 hace un refresco puntual y agnostico que no depende de este modulo."
     }
   ]
 }

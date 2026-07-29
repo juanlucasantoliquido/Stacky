@@ -22,6 +22,8 @@ import type {
   CostSummaryResponse,
   BreakdownDimension,
 } from "../lib/costCenterTypes";
+// Plan 269 — veredicto por evidencia de una corrida (tipo del .ts puro de F3).
+import type { RunVerdictPayload } from "../utils/runVerdict";
 // Plan 201 — Taller de Compilación (contratos del backend).
 import type {
   BuildStatus as BuildWorkshopStatus,
@@ -136,9 +138,23 @@ export interface FinishWorkResponse {
     status?: string | null;
     html_sha256?: string | null;
     record_id?: number | null;
+    /** Plan 270 F3 — estado tal como lo pidio el operador (antes de traducir). */
+    requested?: string | null;
+    /** Plan 270 F3 — tracker al que realmente se escribio. */
+    tracker_type?: string | null;
   }[];
   current_status: string;
   operator: string;
+  /** Plan 270 F7 — destino resuelto del dry-run (a que sistema y en que estado
+   *  va a quedar), SIN escribir nada. OPCIONAL: un backend viejo no la manda. */
+  destination?: {
+    resolved?: boolean;
+    tracker_type?: string | null;
+    native_state?: string;
+    closes?: boolean;
+    reason?: string;
+    workaround?: string;
+  } | null;
   /** Resultado de la cancelación de la ejecución activa (Fase 5.B). null si no había ejecución activa. */
   cancel_result: {
     execution_id: number;
@@ -1321,6 +1337,11 @@ export interface ExecutionHistoryItem {
   produced_files_count: number;
   error_message: string | null;
   local_insight?: ExecutionLocalInsight | null; // Plan 117
+  /** Plan 269 F2 — veredicto por evidencia de la corrida. OPCIONAL: con la flag
+   *  OFF (o en un backend viejo) la clave NO viaja y la celda queda vacia.
+   *  OJO: es `run_verdict`, NO `verdict` — `verdict` es la columna de revision
+   *  humana de AgentExecution y vive en otro payload. */
+  run_verdict?: RunVerdictPayload | null;
 }
 
 export const Executions = {
@@ -3185,6 +3206,28 @@ export interface RunReconciliationResponse {
    *  botón de corrección manual). OPCIONAL: un backend viejo no la manda.
    *  Pre-declarado por la costura P0 (2026-07-28). */
   hitl_enabled?: boolean;
+  /** Plan 269 F8 — conteo por nivel de veredicto de una MUESTRA acotada.
+   *  `falso_rojo_probable` puede ser `null`: eso significa "no pude mirar"
+   *  (colectores OFF), y NUNCA se reporta como 0, porque 0 afirmaria que no hay
+   *  falsos rojos. OPCIONAL: un backend viejo no la manda. */
+  verdict_counts?: {
+    days: number;
+    limit: number;
+    sampled: boolean;
+    exito: number;
+    advertencia: number;
+    error_real: number;
+    falso_rojo_probable: number | null;
+  } | null;
+  /** Plan 269 F8 — precision OBSERVADA del veredicto `falso_rojo_probable`.
+   *  `ratio` es `null` cuando no hay propuestos: 0 de 0 no es "0% de acierto",
+   *  es "no se". */
+  verdict_agreement?: {
+    days: number;
+    propuestos: number;
+    confirmados: number;
+    ratio: number | null;
+  } | null;
 }
 
 export const RunReconciliation = {

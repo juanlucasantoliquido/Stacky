@@ -154,6 +154,19 @@
   padding: 0 var(--space-1);
 }
 
+/* Plan 270 F5 — "Sin sincronizar": Stacky la dio por cerrada y el tracker no.
+   Solo tokens que el tema define de verdad (--danger, --border, --radius-sm):
+   la familia --color-* NO existe en este repo y dejaria el badge invisible.
+   Cero HEX y cero estilos en linea (los exigen los ratchets de deuda visual). */
+.divergedBadge {
+  font-size: var(--text-xs);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  white-space: nowrap;
+}
+
 .runningDot {
   font-size: var(--text-xs);
   color: var(--accent);
@@ -216,4 +229,36 @@
 
 .finishStateInput {
   width: 110px;
+}
+
+/* Plan 269 F5 — veredicto de la ultima corrida de la incidencia. El tono viaja
+   por data-tone (cero estilo inline: lo exige el ratchet de deuda visual) y los
+   colores son tokens que el tema SI define: la familia --color-* no existe. */
+.verdictBadge {
+  font-size: var(--text-xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.verdictBadge[data-tone="exito"] {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.verdictBadge[data-tone="atencion"] {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.verdictBadge[data-tone="espera"] {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.verdictBadge[data-tone="error"] {
+  color: var(--danger);
+  border-color: var(--danger);
 }

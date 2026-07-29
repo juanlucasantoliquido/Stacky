@@ -5,7 +5,15 @@ por los planes 212/213 y por una sesion paralela viva).
 """
 from __future__ import annotations
 
+import logging
+
 from flask import Blueprint, jsonify, request
+
+# Plan 269 F5 paso 1 — ESTE MODULO NO TENIA LOGGER (0 ocurrencias, ni importaba
+# logging). Un `logger.debug(...)` dentro de un `except` sin esto lanza NameError
+# DESDE el handler de excepcion y convierte una degradacion silenciosa en un 500
+# en la bandeja: exactamente lo contrario de lo que se promete.
+logger = logging.getLogger("stacky_agents.api.incident_inbox")
 
 bp = Blueprint("incident_inbox", __name__, url_prefix="/incident-inbox")
 
@@ -27,6 +35,79 @@ def _actions_enabled() -> bool:
         return False
     from config import config as _cfg
     return bool(getattr(_cfg, "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED", True))
+
+
+def _inbox_verdict_enabled() -> bool:
+    """Plan 269 F5 — veredicto de la ultima corrida en la fila de la bandeja.
+
+    Se usa EL PATRON QUE YA VIVE EN ESTE ARCHIVO (`from config import config as
+    _cfg` + getattr), igual que _enabled() y _actions_enabled(). El comentario de
+    :14-15 advierte de este gotcha exacto: mezclar dos patrones en el archivo que
+    lo documenta es pedir el error. Un solo patron por archivo.
+    """
+    from config import config as _cfg  # noqa: PLC0415
+
+    return (
+        bool(getattr(_cfg, "STACKY_INCIDENT_INBOX_VERDICT_ENABLED", True))
+        and bool(getattr(_cfg, "STACKY_RUN_VERDICT_ENABLED", True))
+    )
+
+
+def _last_execution_by_ticket(session, ticket_ids: list[int]) -> dict:
+    """UNA query ACOTADA para todo el lote: como mucho 1 fila por ticket.
+
+    Un `.filter(ticket_id.in_(ids)).all()` que se queda con la primera de cada
+    ticket EN MEMORIA no es N+1, pero trae TODAS las ejecuciones historicas de
+    todos los tickets del lote: un fetch sin cota que crece con la antiguedad del
+    proyecto, no con el tamano de la pagina.
+
+    La subconsulta `max(started_at) GROUP BY ticket_id` deja el trabajo en el
+    motor y devuelve <= len(ticket_ids) filas. El indice ix_exec_ticket_started
+    (models.py:278, sobre (ticket_id, started_at)) cubre exactamente este acceso.
+    """
+    if not ticket_ids:
+        return {}
+    from sqlalchemy import func  # noqa: PLC0415
+
+    from models import AgentExecution  # noqa: PLC0415
+
+    sub = (
+        session.query(
+            AgentExecution.ticket_id.label("tid"),
+            func.max(AgentExecution.started_at).label("ult"),
+        )
+        .filter(AgentExecution.ticket_id.in_(ticket_ids))
+        .group_by(AgentExecution.ticket_id)
+        .subquery()
+    )
+    filas = (
+        session.query(AgentExecution)
+        .join(
+            sub,
+            (AgentExecution.ticket_id == sub.c.tid)
+            & (AgentExecution.started_at == sub.c.ult),
+        )
+        .all()
+    )
+    out: dict = {}
+    for ex in filas:
+        # Empate exacto de started_at (posible en SQLite): gana el id mayor.
+        prev = out.get(ex.ticket_id)
+        if prev is None or ex.id > prev.id:
+            out[ex.ticket_id] = ex
+    return out
+
+
+def _divergence_badge_enabled() -> bool:
+    """Plan 270 F5 — marca "Sin sincronizar" en la bandeja (solo lectura).
+
+    Depende de la flag padre igual que las acciones: con la bandeja apagada no
+    hay nada que marcar.
+    """
+    if not _enabled():
+        return False
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED", True))
 
 
 def _feature_disabled_response():
@@ -74,6 +155,10 @@ def incident_inbox_status():
         # / lote). ADITIVO: un frontend viejo que no lo lea sigue funcionando en
         # modo solo lectura. False si la bandeja entera esta apagada.
         "actions_enabled": _actions_enabled(),
+        # Plan 270 F5 — gate del badge "Sin sincronizar". ADITIVO y estricto a
+        # true del lado del frontend: un backend viejo que no lo manda deja el
+        # badge oculto y la pagina sigue funcionando.
+        "divergence_badge_enabled": _divergence_badge_enabled(),
         "incident_types": list(types),
         "incident_types_source": types_source,
         "closed_states": list(closed),
@@ -135,6 +220,13 @@ def incident_inbox_items():
         closed_count = incident_q.filter(state_expr.in_(closed_norm)).count()
         counts = build_counts(total, closed_count)
 
+        # Plan 270 F5 — divergencia EXACTA por agregación (no depende del LIMIT).
+        # Misma regla de dos condiciones que isDiverged() en el .ts: Stacky la da
+        # por cerrada pero el tablero la sigue pintando abierta.
+        diverged_count = incident_q.filter(
+            Ticket.stacky_status == "completed"
+        ).filter(~state_expr.in_(closed_norm)).count()
+
         # (2) DEGRADACION POR PROVEEDOR (Plan 238 4.1.4): tickets del proyecto
         # SIN tipo sincronizado. En GitLab el tipo viaja como label, no como
         # columna, asi que work_item_type queda NULL y el filtro de (1) los
@@ -157,10 +249,42 @@ def incident_inbox_items():
         truncated = len(rows) > MAX_ITEMS
         rows = rows[:MAX_ITEMS]
 
+        # Plan 269 F5 — veredicto de la ULTIMA ejecucion de cada incidencia.
+        # La restriccion heredada del comentario de arriba ("Sin N+1") se
+        # CONSERVA: se agrega UNA sola query acotada para todo el lote.
+        verdicts: dict = {}
+        if _inbox_verdict_enabled():
+            try:
+                ultimas = _last_execution_by_ticket(session, [t.id for t in rows])
+                from services.run_evidence import collect_for_executions
+                from services.run_verdict import evaluate_verdict
+                señales = collect_for_executions(session, list(ultimas.values()))
+                # Se usa `by_tid` armado desde `rows`, que YA estan en memoria, en
+                # vez de getattr(ex, "ticket", None): esa relacion es lazy="select"
+                # (models.py:275), asi que tocarla por fila seria un N+1 encubierto
+                # — exactamente lo que el comentario del endpoint prohibe.
+                by_tid = {t.id: t for t in rows}
+                for tid, ex in ultimas.items():
+                    meta = ex.metadata_dict if isinstance(ex.metadata_dict, dict) else {}
+                    # El run manda, el ticket solo EMPEORA (ver F2).
+                    v = evaluate_verdict(
+                        run_status=(ex.status or ""),
+                        ticket_status=getattr(by_tid.get(tid), "stacky_status", None),
+                        outcome_reason=meta.get("outcome_reason"),
+                        signals=señales.get(ex.id),
+                    )
+                    if v is not None:      # un run no terminado NO tiene veredicto
+                        verdicts[tid] = v.to_dict()
+            except Exception:  # noqa: BLE001 — la bandeja JAMAS se rompe por esto
+                logger.debug("run_verdict 269 en la bandeja fallo", exc_info=True)
+                verdicts = {}
+
         items = []
         for t in rows:
             payload = t.to_dict()  # 218 F5: canonico + alias legacy, nunca quita keys
             payload["is_open"] = is_open_state(t.ado_state, closed)
+            if t.id in verdicts:
+                payload["run_verdict"] = verdicts[t.id]  # OPCIONAL: nunca vacia
             items.append(payload)
 
     # Abiertas primero; dentro de cada grupo se conserva el orden de la query.
@@ -172,6 +296,9 @@ def incident_inbox_items():
         "counts": counts,
         "truncated": truncated,
         "untyped_count": untyped_count,
+        # Plan 270 F5 — incidencias completed en Stacky pero abiertas en el
+        # tracker. ADITIVA: un frontend viejo que no la lea sigue funcionando.
+        "diverged_count": diverged_count,
         "provider": provider,
         "incident_types": list(types),
         "closed_states": list(closed),

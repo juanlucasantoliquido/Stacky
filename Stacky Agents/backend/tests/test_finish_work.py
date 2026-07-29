@@ -75,6 +75,16 @@ def fake_ado(monkeypatch):
     monkeypatch.setattr(ado_client_mod, "AdoClient", FakeAdoClient)
     monkeypatch.setattr(pub_mod, "_default_client", lambda: FakeAdoClient())
     monkeypatch.setattr(tickets_mod, "_ado_client_for_ticket", lambda *a, **kw: FakeAdoClient())
+    # Plan 270 F3 — el SEAM de construccion del cliente ADO se movio. El paso 4
+    # de finish_work ya no llama a _ado_client_for_ticket: enruta por
+    # services.tracker_write_router, que (para no acoplar services -> capa web)
+    # construye el cliente con services.project_context.build_ado_client. Es la
+    # MISMA llamada que hace ese helper (api/tickets.py:358-367), asi que el
+    # comportamiento de produccion es identico; lo que cambia es donde hay que
+    # poner el doble. Sin esta linea el test llega al build_ado_client real y
+    # muere con ProjectContextError (verificado corriendolo).
+    from services import project_context as _pctx
+    monkeypatch.setattr(_pctx, "build_ado_client", lambda *a, **kw: FakeAdoClient())
     return FakeAdoClient
 
 

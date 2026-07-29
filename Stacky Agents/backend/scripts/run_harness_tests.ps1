@@ -793,7 +793,21 @@ $HarnessTestFiles = @(
   "tests/test_plan242_cost_api.py",
   "tests/test_plan242_no_new_deps.py",
   "tests/test_plan242_flags_off.py",
-  "tests/test_plan242_runtime_parity.py"
+  "tests/test_plan242_runtime_parity.py",
+  # Plan 270 - El tablero de incidencias dice la verdad: cierre real en ADO y GitLab
+  "tests/test_plan270_close_intent.py",
+  "tests/test_plan270_write_router.py",
+  "tests/test_plan270_gitlab_close.py",
+  "tests/test_plan270_finish_work_state.py",
+  "tests/test_plan270_state_writeback.py",
+  "tests/test_plan270_state_write_ratchet.py",
+  # Plan 269 - Veredicto por evidencia: tres niveles y fin del falso error visible
+  "tests/test_plan269_run_verdict.py",
+  "tests/test_plan269_run_evidence.py",
+  "tests/test_plan269_executions_payload.py",
+  "tests/test_plan269_inbox_verdict.py",
+  "tests/test_plan269_hitl_correccion.py",
+  "tests/test_plan269_flags.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

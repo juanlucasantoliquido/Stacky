@@ -1,10 +1,71 @@
 # Plan 264 — Herramienta, modelo y effort elegibles en TODO punto de uso: una sola matriz de capacidades, una sola resolución, un solo selector
 
-**Estado:** MEJORADO **v3 -> v4** (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez v1→v2:** `criticar-y-mejorar-plan` (v1 RECHAZADO, 4 BLOQUEANTES) · **Juez v2→v3:** `criticar-y-mejorar-plan` en corrida independiente (v2 RECHAZADO, 5 BLOQUEANTES) · **Juez v3→v4:** `criticar-y-mejorar-plan` en corrida **independiente**, abriendo el árbol real de HOY — **v3 RECHAZADO** (2 BLOQUEANTES), v4 con los fixes aplicados.
+**Estado:** MEJORADO **v4 -> v5** (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez v1→v2:** `criticar-y-mejorar-plan` (v1 RECHAZADO, 4 BLOQUEANTES) · **Juez v2→v3:** `criticar-y-mejorar-plan` en corrida independiente (v2 RECHAZADO, 5 BLOQUEANTES) · **Juez v3→v4:** `criticar-y-mejorar-plan` en corrida independiente, abriendo el árbol real de HOY (v3 RECHAZADO, 2 BLOQUEANTES) · **Juez v4→v5:** `criticar-y-mejorar-plan` en corrida **independiente** (segunda ronda del mismo día), re-midiendo los 11 anclajes del v4 + corriendo de verdad `test_error_fingerprints_catalog.py` y `test_harness_flags_help.py` contra el árbol de HOY — **v4 APROBADO-CON-CAMBIOS** (0 BLOQUEANTES, 1 IMPORTANTE), v5 con los fixes aplicados. **Este plan queda en condiciones de pasar a implementación.**
 
 ---
 
-## 0. CHANGELOG v3 -> v4
+## 0. CHANGELOG v4 -> v5
+
+> Esta ronda es una **segunda auditoría independiente el mismo día** (2026-07-29), con la misma
+> exigencia que pidió el v3→v4: abrir el árbol real de HOY y no confiar en ningún número heredado.
+> Se re-midieron los 11 anclajes que el v4 dice haber corregido (`config.py` x4, `harness_flags.py`
+> x3 — `_CATEGORY_KEYS`, nota Plan-63, `FLAG_REGISTRY`, `default_is_known` —, `test_harness_flags.py`,
+> `test_harness_flags_requires.py`, `RuntimeModelCatalog` en `endpoints.ts`, `PlansBoardPage.tsx`)
+> abriendo cada archivo: **los 11 coinciden EXACTO con el v4, letra por línea**. Se corrió de verdad
+> `test_error_fingerprints_catalog.py` (venv `backend/.venv`, nunca `backend/venv`): **3 failed / 5
+> passed**, mismo `PLAN239-OUTLET-EN-BLANCO` ajeno que citaba el v4 — el criterio delta de F7 sigue
+> siendo válido hoy, y se confirmó a mano que la entrada nueva del plan cubre los 9 campos
+> obligatorios y es vacuamente coherente. Se corrió también `test_harness_flags_help.py`: **4 failed
+> / 4 passed**, los 4 ajenos (ninguno de las 4 flags nuevas de este plan). Se verificó el TIPO de
+> `RuntimeModelCatalog` (no sólo la línea, por el precedente de los hermanos 263/265 con
+> `endpoints.ts`): las 10 keys actuales no incluyen `effort_mode` ni `effort_effective_now` — el plan
+> los **agrega** como opcionales, aditivo puro, sin colisión de forma. Se rastreó a mano la cadena
+> completa `DocsPage.tsx → Docs.stalenessFix → api/docs.py → doc_documenter.py:383` que el v4 había
+> dejado "por confirmar" (ver C6). **Resultado: 0 BLOQUEANTES.** Los IDs `C#` de abajo **continúan la
+> numeración del v3→v4** (que llegó a `C3`) por instrucción explícita de esta ronda — no reinician a
+> `C1`.
+
+- **C4 (MENOR) — el fix de anclajes del v3→v4 no fue exhaustivo: quedan 3 citas de prosa con el
+  mismo desvío de 1 línea que sobrevivieron a esa ronda.** Verificado abriendo el código de hoy:
+  | Símbolo | v4 citaba | Real hoy (2026-07-29) |
+  |---|---|---|
+  | `model_override=model_override` (rama Codex de `_start_cli_runtime`, "última línea de kwargs") | `agent_runner.py:449` | `agent_runner.py:450` (`:449` es `workspace_root=workspace_root,`) |
+  | Bloque `runtimes = {...}` del endpoint del catálogo | `api/agents.py:1382-1386` | `api/agents.py:1381-1385` |
+  | `set(CLI_VALID_EFFORTS)` en la caracterización del 212 | `test_plan212_characterization.py:169` | `test_plan212_characterization.py:170` |
+  Ninguno de los 3 es el ancla de un diff literal (los diffs reales de F1(c)/F2 ya se ubican por
+  **contenido**, con líneas de contexto), así que **no bloquean ninguna edición** — pero es
+  exactamente la erosión de confianza que el propio C2 del v3→v4 describió, y demuestra que "re-medí
+  los 11 anclajes que edité" no es lo mismo que "re-medí todo el documento". v5: los 3 números
+  corregidos arriba, y una regla explícita al pie de F(-1) (ver más abajo): todo diff de este plan se
+  ubica por contenido, nunca por el número de línea suelto en la prosa.
+- **C5 (IMPORTANTE) — el one-liner de validación de `PLAIN_HELP` en F0 valida 3 de las ≥5 reglas
+  reales de `test_harness_flags_help.py`; dos quedan sin chequeo automático.** Corrido de verdad hoy:
+  **4 failed / 4 passed, los 4 ajenos.** Además de cobertura/huérfanas/longitud≤240 (que el one-liner
+  SÍ chequea), el archivo real exige que `on_effect`/`off_effect` empiecen con una variante de "Si la
+  activás"/"Si la apagás" (`test_plain_help_on_off_start_with_si`) y **cero jerga técnica**
+  (`test_plain_help_avoids_jargon_denylist`: nada de `backend`/`endpoint`/`gate`/`prompt`/`token`, ni
+  citas de la propia key, ni referencias a fase `F<n>`) — ninguna de las dos está en el one-liner de
+  F0. Verificado a mano: las 4 entradas que este plan escribe **hoy cumplen ambas reglas** (las 4
+  empiezan con "Si la activás:"/"Si la apagás:" y no usan ninguna palabra vetada) — **no hay bug
+  vivo** — pero si alguien retoca la redacción de una entrada durante la implementación, el one-liner
+  de F0 diría "todo limpio" mientras el archivo real pasaría de 4 a 5 fallos sin que el plan lo
+  detecte. v5: F0 agrega un segundo chequeo delta (mismo patrón que F7 ya usa para
+  `error_fingerprints.json`) — ver el fix dentro de F0 más abajo.
+- **C6 (MENOR — cierra una ambigüedad del v4, no es un defecto) — el candidato de F5(c) queda
+  CONFIRMADO end-to-end, no sólo "plausible".** El v4 dejó `DocsPage.tsx` como "candidato plausible,
+  confirmalo [el implementador]". Esta ronda siguió la cadena completa: `DocsPage.tsx:445`
+  (`handleProposeUpdate`, definido en `:217-223` como `Docs.stalenessFix(selectedNode.path,
+  projectName)`) → `frontend/src/api/endpoints.ts:3616-3623` (`POST /api/docs/staleness/fix`) →
+  `backend/api/docs.py:332-333` (`staleness_fix()`) → línea `:355` llama a
+  `doc_documenter.start_documenter_run(...)` → esa función **es** la que contiene el call site F3 #4
+  (`services/doc_documenter.py:383`, `agent_runner.run_agent(agent_type="Documentador", ...)`).
+  Cadena confirmada, sin eslabones faltantes. v5: F5(c) deja de decir "sujeto a confirmación", y el
+  **[ADICIÓN ARQUITECTO] F5.5** la convierte en centinela ejecutable para que no dependa de que
+  alguien la vuelva a rastrear a mano.
+
+---
+
+## 0.bis CHANGELOG v3 -> v4
 
 > El v3 fue anclado el 2026-07-27. Entre esa fecha y hoy (2026-07-29) se mergearon a `main` los
 > planes hermanos 259/267/268/269/270 (`git log` confirma `1a04944e "merge(p2): plan 259 F0..F9"`,
@@ -80,7 +141,7 @@
 
 ---
 
-## 0.bis CHANGELOG v2 -> v3
+## 0.ter CHANGELOG v2 -> v3
 
 > La v2 fue escrita y criticada **por el mismo agente en la misma corrida**, así que nunca tuvo
 > revisión independiente. Esta ronda abrió **todos** los archivos citados. Resultado: el v2 tenía
@@ -210,7 +271,7 @@
 
 ---
 
-## 0.ter CHANGELOG v1 -> v2 (se conserva íntegro para trazabilidad de las 4 versiones)
+## 0.quater CHANGELOG v1 -> v2 (se conserva íntegro para trazabilidad de las 5 versiones)
 
 - **C1 (BLOQUEANTE) — el presupuesto de turnos de Codex estaba INVERTIDO y era destructivo.** `STACKY_RUNAWAY_MAX_TURNS` vale **`"0"` por default** (`config.py:471-473`) y `RunLimits(max_turns=0)` significa **sin límite** (`harness/runaway_guard.py:8,20,45`). Con la fórmula del v1 (`base + {low:0…max:3}`), elegir **`max`** convertía "ilimitado" en **un cap de 3 turnos** (el guard mataba el run al turno 3) y elegir `low` dejaba el run ilimitado. Y con cap configurado (p. ej. 40), `max` lo subía a **43**, *por encima* del techo de seguridad que puso el operador. Peor: el **test 5 del v1 salía VERDE** con ese comportamiento invertido (`0 < 3` es numéricamente cierto) ⇒ falso verde perfecto. v2: `codex_turn_budget` es **monótono hacia abajo desde el cap**, `0` es sagrado, y hay 4 aserciones que blindan la inversión (§5 F2).
 - **C2 (BLOQUEANTE) — el fix de F2 vivía DENTRO de un `if` de dos flags ajenas, así que no cerraba el hueco.** El bloque de `codex_cli_runner.py:582` está gateado por `STACKY_ADAPTIVE_EFFORT_ENABLED` **y** por `_codex_complexity` (que sólo se llena si `STACKY_COMPLEXITY_ESTIMATION_ENABLED`). Con cualquiera OFF, el effort del operador se seguía descartando en silencio — exactamente el bug que el plan dice cerrar. v2: la resolución del effort explícito sale **fuera y antes** del bloque adaptativo, replicando el patrón real de Claude (`claude_code_cli_runner.py:958-961`), + test con las dos flags en OFF.
@@ -422,6 +483,14 @@ entre que se escribe este plan y se implementa. Es la misma filosofía que el pl
 
 **Trabajo del operador: ninguno** (comando de una vez, para quien implementa, no una flag ni una
 pantalla nueva).
+
+> **[FIX C4 v4→v5] Regla adicional, la más barata de todas: ubicá los diffs de este documento por
+> CONTENIDO (las líneas de contexto que trae cada hunk), nunca por el número de línea suelto en una
+> frase de prosa.** La ronda v4→v5 encontró 3 citas de prosa con 1 línea de desvío que la propia
+> ronda v3→v4 no había re-medido (`agent_runner.py:449`→real `:450`; `api/agents.py:1382-1386`→real
+> `:1381-1385`; `test_plan212_characterization.py:169`→real `:170`). Ninguna bloqueaba una edición
+> porque los diffs reales ya se ubican por contenido; esta nota lo deja como regla explícita en vez
+> de confiar en que la próxima lectura tampoco los necesite.
 
 ---
 
@@ -644,6 +713,23 @@ que el v1 dejaba rojo) y `test_requires_map_is_frozen` **verde** (el que el v2 d
 "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.harness_flags import FLAG_REGISTRY; from services.harness_flags_help import PLAIN_HELP; ks={s.key for s in FLAG_REGISTRY}; miss=sorted(ks-set(PLAIN_HELP)); orph=sorted(set(PLAIN_HELP)-ks); bad=[k for k,v in PLAIN_HELP.items() if len(v.on_effect)>240 or len(v.off_effect)>240]; print('missing',miss); print('orphans',orph); print('too_long',bad); assert not miss and not orph and not bad"
 ```
 debe imprimir las tres listas **vacías** y no lanzar.
+
+> **[FIX C5 v4→v5] Este one-liner NO cubre las otras dos reglas que `test_harness_flags_help.py`
+> también exige** (`test_plain_help_on_off_start_with_si`, `test_plain_help_avoids_jargon_denylist`)
+> — verificado corriendo el archivo hoy: **4 failed / 4 passed, los 4 ajenos** (ninguno de las 4 keys
+> de este plan). Mismo patrón "delta" que F7 ya usa para `error_fingerprints.json`: corré esto ANTES
+> y DESPUÉS de agregar las 4 entradas de `PLAIN_HELP`:
+> ```powershell
+> "Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "Stacky Agents\backend\tests\test_harness_flags_help.py" -k "avoids_jargon_denylist or on_off_start_with_si" -q
+> ```
+> Criterio: el número total de fallos **no puede subir**, y ninguna de las 4 keys nuevas
+> (`STACKY_RUNTIME_CAPABILITIES_ENABLED`, `STACKY_CODEX_EFFORT_PARITY_ENABLED`,
+> `STACKY_RUN_SELECTION_PREFS_ENABLED`, `STACKY_MODEL_PICKER_EVERYWHERE_ENABLED`) puede aparecer en
+> ningún mensaje de fallo. Verificado a mano en esta ronda: las 4 entradas redactadas en el paso 3 de
+> arriba YA cumplen las dos reglas (empiezan con "Si la activás:"/"Si la apagás:" y no usan
+> `backend`/`endpoint`/`gate`/`prompt`/`token`) — este chequeo es para que seguir cumpliéndolo no
+> dependa de la memoria de quien implemente.
+
 **Impacto por runtime:** ninguno (configuración). **Trabajo del operador: ninguno.**
 
 ---
@@ -1580,19 +1666,25 @@ crear un campo nuevo.**
 > - **`components/devops/DeploymentsSection.tsx`: NO califica** (misma prueba, mismo resultado: cero
 >   `run_agent`/`POST run`). Por nombre y estructura es del mismo catálogo de acciones DevOps que
 >   `TriggerPipelineSection`.
-> - **`pages/DocsPage.tsx`: SÍ es candidato plausible.** Usa `documenterEnabled` y
->   `handleProposeUpdate` (`DocsPage.tsx:159,445`), que encaja con el call site F3 #4
->   (`services/doc_documenter.py:383`, uno de los 11 que esta fase cablea). Confirmalo mirando qué
->   endpoint llama `handleProposeUpdate` y si ese endpoint es el que termina en
->   `agent_runner.run_agent(...)`.
+> - **`pages/DocsPage.tsx`: CONFIRMADO end-to-end [FIX C6 v4→v5] — ya no es "candidato", es la
+>   pantalla que engancha.** Usa `documenterEnabled` y `handleProposeUpdate` (`DocsPage.tsx:159,445`,
+>   definido en `:217-223`), que encaja con el call site F3 #4 (`services/doc_documenter.py:383`, uno
+>   de los 11 que esta fase cablea). Cadena verificada completa el 2026-07-29:
+>   `handleProposeUpdate` → `Docs.stalenessFix(selectedNode.path, projectName)` →
+>   `endpoints.ts:3616-3623` (`POST /api/docs/staleness/fix`) → `api/docs.py:332-355`
+>   (`staleness_fix()` llama a `doc_documenter.start_documenter_run(...)`) → esa función **es** la que
+>   contiene el `agent_runner.run_agent(agent_type="Documentador", ...)` de `:383`. Sin eslabones
+>   faltantes: no hace falta reconfirmar nada al implementar — ver **F5.5** para el centinela que
+>   blinda esta cadena hacia adelante.
 > **La prueba concreta para cualquier candidato futuro** (no sólo estos 3): `grep -n
 > "run_agent\|/api/.*run\b" <archivo>` en el componente, y si hay POST, seguí la cadena hasta el
 > blueprint de `api/` que lo atiende — si ese blueprint termina en `agent_runner.run_agent(...)`,
 > califica; si termina en un catálogo de acciones DevOps/CI (`runDevOpsAction` u otro disparador que
 > no sea un agente LLM), NO califica, sin importar que "dispare" algo.
-> **Conclusión para esta fase:** sólo `pages/DocsPage.tsx` es candidato a picker nuevo, sujeto a la
-> confirmación de arriba; los otros 2 quedan **descartados** por evidencia, no por omisión. Registrá
-> en §10 el veredicto final de los 3 (con el resultado de seguir la cadena de `DocsPage.tsx`).
+> **Conclusión para esta fase [FIX C6 v4→v5]:** `pages/DocsPage.tsx` es el ÚNICO candidato a picker
+> nuevo y su cadena hacia `agent_runner.run_agent` está **confirmada**, no sólo plausible; los otros 2
+> quedan **descartados** por evidencia, no por omisión. Registrá en §10 la fecha en que se implementó
+> el picker en `DocsPage.tsx` (el veredicto de los 3 candidatos ya no es un pendiente).
 
 **Tests (vitest, lógica pura):** crear
 `Stacky Agents/frontend/src/services/__tests__/modelEffortOptions.plan264.test.ts`:
@@ -1643,6 +1735,48 @@ grep -c "ModelEffortPicker" \
 Codex lo muestra con la nota de presupuesto de turnos (y la advertencia si no hay cap), Copilot **no lo
 muestra**.
 **Trabajo del operador: ninguno** (todo preseleccionado por catálogo/preferencia).
+
+---
+
+### F5.5 — [ADICIÓN ARQUITECTO] Centinela ejecutable: la cadena DocsPage → Documentador no queda huérfana
+
+**Objetivo.** El F5(c) de esta ronda (v4→v5, fix C6) confirmó a mano la cadena completa
+`DocsPage.tsx:handleProposeUpdate` → `Docs.stalenessFix` → `POST /api/docs/staleness/fix` →
+`api/docs.py:staleness_fix()` → `doc_documenter.start_documenter_run()` →
+`agent_runner.run_agent(agent_type="Documentador", ...)`. Confirmarla en prosa una vez no la protege
+de romperse la próxima vez que alguien toque `api/docs.py` o `doc_documenter.py` sin saber que un
+picker de modelo/effort depende de ella. Mismo principio que F2.5 (§2: "instala los centinelas que
+hacen imposible el caso" en vez de repetir la prosa).
+
+**No hay código de producción nuevo en esta fase.** Es un test más en
+`Stacky Agents/backend/tests/test_plan264_paridad_ejecutable.py` (mismo archivo de F2.5 — misma
+familia de centinelas; ya está en las dos `HARNESS_TEST_FILES` desde F2.5, no hace falta re-registrarlo):
+
+**Test F — "el picker de DocsPage no queda huérfano".**
+1. Monkeypatchear `services.doc_documenter.start_documenter_run` con un mock.
+2. Invocar `POST /api/docs/staleness/fix` vía `app.test_client()` (con `STACKY_DOCS_STALENESS_ENABLED`
+   y `STACKY_DOCS_DOCUMENTER_ENABLED` en `True` y un proyecto activo de prueba).
+3. Afirmar que el mock fue invocado, con `only_note=` igual al `note_path` del body.
+4. Test estático (AST, mismo mecanismo que el Test A de F2.5): parsear
+   `services/doc_documenter.py`, localizar la función `start_documenter_run`, y afirmar que su cuerpo
+   contiene un `ast.Call` cuyo `func` matchee `run_agent`.
+
+**El valor real:** si mañana alguien refactoriza `staleness_fix` para llamar a otra función, o
+`start_documenter_run` deja de invocar `run_agent` (p. ej. lo mueve a un worker async), este test
+rompe **antes** de que el picker de `DocsPage.tsx` quede mostrando un control que ya no lanza nada —
+exactamente la clase de bug que todo este plan existe para cerrar, aplicada a la superficie que F5(c)
+acaba de agregar.
+
+**Comando de test:**
+```powershell
+"Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "Stacky Agents\backend\tests\test_plan264_paridad_ejecutable.py" -q
+```
+(mismo archivo y comando de F2.5).
+
+**Criterio binario.** El Test F pasa después de F5(c). Control negativo (verificar una vez en una
+copia de scratch, dejar anotado en §10, mismo protocolo que F2.5 Test A): reemplazar la llamada real
+por un mock que NO invoque `run_agent` debe hacer fallar el paso 4.
+**Flag:** ninguna (es un test). **Trabajo del operador: ninguno.**
 
 ---
 
@@ -1876,6 +2010,10 @@ ese archivo ya está rojo por deuda ajena, ver el FIX C1 más arriba).
       `STACKY_RUNAWAY_MAX_TURNS` y la nota lo dice (test 25 de F1).
 - [ ] **KPI-4**: el grep **negativo** da 0 en los dos archivos **y** el **positivo** da ≥1 en los dos;
       superficies extra de F5(c) registradas con su veredicto.
+- [ ] **[FIX C6 v4→v5] F5.5**: el Test F de la cadena `DocsPage → Documentador` verde, y su control
+      negativo (invertido a mano) confirmado en §10.
+- [ ] **[FIX C5 v4→v5]** el delta-check de `test_harness_flags_help.py -k "avoids_jargon_denylist or
+      on_off_start_with_si"` no sumó fallos nuevos ni citó ninguna de las 4 keys de este plan.
 - [ ] **KPI-5**: `EFFORT_MODE` cubre los 3 runtimes y el trace se persiste en los 3, **con `downgraded`
       y `reason` intactos**.
 - [ ] **KPI-6**: `test_plan264_paridad_ejecutable.py` verde, y verificado a mano que su Test A sale

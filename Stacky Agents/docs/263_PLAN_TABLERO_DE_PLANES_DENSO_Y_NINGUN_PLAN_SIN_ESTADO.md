@@ -1,10 +1,72 @@
 # Plan 263 — Tablero de planes denso y ningún plan sin estado: fallback único, migración con evidencia y guardia anti-regresión
 
-**Estado:** CRITICADO v3 (2026-07-27) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3 in place
+**Estado:** CRITICADO v4 (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3; **v3 RECHAZADO** (1 BLOQUEANTE, verificado abriendo el árbol real del 2026-07-29) → v4 in place
 
 ---
 
-## 0. CHANGELOG v2 → v3
+## 0. CHANGELOG v3 → v4
+
+El v3 fue **RECHAZADO** por un juez independiente (`criticar-y-mejorar-plan`, corrida 2026-07-29) que
+abrió el árbol real en vez de confiar en la prosa. **El diseño de v3 no cambia ni una decisión**: los
+19 casos de F1, las 24 reglas/tests de F3, el contrato de la transacción de F2.5 y las 8 flags/reglas de
+F0 siguen siendo correctos. Lo que falló fue algo más simple y más peligroso: **el tiempo pasó**. Entre
+el 2026-07-27 (fecha de este v3) y el 2026-07-29 (fecha de esta crítica), los planes hermanos
+267/268/269/270 se mergearon a `main` (`consolidación 9 ramas`, 2026-07-29) y cada uno dio de alta sus
+propias flags en los DOS archivos de mayor concurrencia del arnés — exactamente el gotcha ya conocido de
+este repo ("la costura corre los anclajes de los planes pendientes"), reproducido ahora sobre el propio
+263.
+
+- **C1 (BLOQUEANTE)** — **los anclajes de inserción de F0.1 (`config.py`) y F0.2 (`harness_flags.py`)
+  cayeron en drift real, MEDIDO abriendo el árbol de hoy.** F0.1 decía "insertar después de la línea
+  1920 (fin del bloque `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED`); `:1922` ya es el comentario del Plan
+  167". Medido el 2026-07-29: `config.py:1920` cae **dentro de la llamada `os.getenv(...)` de un flag
+  totalmente distinto** (`STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED`, que hoy ocupa `:1916-1922`) —
+  insertar ahí de forma literal **parte una llamada a función en dos** y produce un `SyntaxError` que
+  tira abajo **todo `config.py`**, y con él todo el backend (cualquier módulo que hace `import config`
+  deja de poder importar). El bloque real de `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED` vive hoy en
+  `:1930-1935`, y el comentario del Plan 167 en `:1937` (drift de +15/+17 líneas en dos días). Mismo
+  fenómeno, mayor magnitud, en `harness_flags.py`: F0.2 anclaba "inmediatamente después de
+  `:4544-4558`"; medido hoy, ese `FlagSpec` cierra en `:4616` (**+58 líneas** — la magnitud exacta que
+  ya predecía el gotcha del repo sobre `_REQUIRES_MAP_FROZEN`, 143→146). Un tercer punto de datos
+  confirma que no es casualidad: la cita de precedente dentro de F0.2
+  (`STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`, "`harness_flags.py:3166-3173`") hoy empieza en `:3224`
+  (mismo orden de magnitud de drift). **Los anclajes de contenido, en cambio, no fallaron**: F0.4
+  (`:467`), F0.5 (`:25`/`:1459`), los seis puntos internos de `plans_board.py` que usa F1
+  (`:546-612`, verificados línea por línea, incluida la línea en blanco entre `:568` y `:570` que el
+  propio v3 advertía), el esquema de `error_fingerprints.json`, el schema de `ledger.json` (47
+  entradas, `version`+`planes`), y las 9 líneas de tokens de `theme.css` (`:100-108`/`:251-259`) — los
+  siete coinciden EXACTO con la medición del 2026-07-29. El patrón es preciso: **drift sólo en los dos
+  puntos de inserción por número crudo en los dos archivos que edita CADA plan del repo** (todo plan
+  nuevo pasa por F0), nunca en los anclajes que ya citaban una estructura (`_CURATED_DEFAULTS_ON`,
+  `PLAIN_HELP`) o una constante importada. Corregido: F0.1 y F0.2 pasan de "línea N" a **marcador
+  semántico + verificación obligatoria con `Select-String`/grep antes de insertar** — el mismo patrón
+  que F0.6 ya usaba ("antes del `}` de cierre") — con los números de hoy como valor ilustrativo, no
+  autoritativo.
+- **C2 (IMPORTANTE)** — la Regla 1 de F3 hardcodeaba en prosa el vocabulario de veredictos del ledger
+  (`"APROBADO"`, `"TERMINADO-POR-SUPERVISOR"`) en vez de importar `_LEDGER_OK_VEREDICTOS`
+  (`services/plans_board.py:34`) — la MISMA tupla que ya usan `ledger_ok` en `build_board` (`:566`) y en
+  `suggest_next_action` (`:475`), verificado. Es exactamente el pecado que C6/C9 (v2→v3) ya mataron para
+  `_PLAN_FILE_RE`/`_ESTADO_RE`: si el día de mañana alguien agrega un tercer veredicto válido tocando
+  sólo `_LEDGER_OK_VEREDICTOS`, la Regla 1 de F3 queda desincronizada en silencio. Corregido: Regla 1
+  importa la constante, no reescribe la tupla; nuevo caso 25 de F3 congela la identidad de objeto.
+- **[ADICIÓN ARQUITECTO 6]** F1(e) — `totals["por_origen"]`: a costo marginal cero (mismo loop que ya
+  computa `estado_origen` por card), agrega el desglose agregado `{"declarado": n, "inferido": n,
+  "ledger": n}` a los totales del tablero. Fortalece la tesis central del plan ("nunca mentir en
+  silencio") a nivel de portafolio: el operador ve de un vistazo qué porción de "todo implementado" es
+  verificable y cuál es supuesta, sin abrir el panel de F6 ni pedir un segundo request. Cero I/O nuevo,
+  cero flag nueva, cero endpoint nuevo, aditivo y retrocompatible.
+
+*(Re-medido en esta crítica, 2026-07-29: el comando de §1.1 da `total 222 | sin estado 79`. El total
+volvió a moverse — nacieron 270 y 271 — pero el 79 no: los dos planes nuevos ya declaran su propio
+**Estado:**, confirmando en vivo la tesis del propio v3 de que "el total es una variable, el 79 es el
+dato". Los dos "rojos ajenos" también se re-verificaron EXACTOS: `test_harness_flags_help.py` → 4
+failed / 4 passed; `test_error_fingerprints_catalog.py` → 3 failed / 5 passed. Y los tres archivos que
+el v3 daba por verdes lo siguen estando: `test_harness_flags.py` + `test_harness_flags_requires.py` +
+`test_harness_ratchet_meta.py` → 69 passed combinados, 0 failed.)*
+
+---
+
+## 0.1 CHANGELOG v2 → v3
 
 El v2 fue **RECHAZADO**. La v2 no había tenido revisión independiente (la escribió el mismo agente en
 la misma corrida), y al abrir los archivos que anclaba aparecieron **cinco bloqueantes**. Los anclajes
@@ -83,7 +145,7 @@ relación entre los dos campos nuevos, el criterio binario de F0 y el contrato d
 
 ---
 
-## 0.1 CHANGELOG v1 → v2
+## 0.2 CHANGELOG v1 → v2
 
 El v1 fue **RECHAZADO**: su F0 tenía **cinco rojos garantizados** (el arnés se ponía rojo antes de
 escribir una sola línea de producto) y su F3 **des-aprobaba** planes que el supervisor ya había
@@ -276,18 +338,44 @@ auditoría que la resuelve**. Ese es el argumento arquitectónico central de est
 |---|---|---|---|
 | 1 | `backend/config.py` | los 3 `os.getenv` (default efectivo) | ninguno directo, pero la flag no existe |
 | 2 | `backend/services/harness_flags.py` (`FLAG_REGISTRY`) | las 3 `FlagSpec` | ninguno directo |
-| 3 | `backend/services/harness_flags.py` (`_CATEGORY_KEYS`, cat. `"observabilidad_notif"`, abre en `:305`) | las **3** keys | `test_every_registry_flag_is_categorized` (`tests/test_harness_flags.py:902`) |
-| 4 | **`backend/tests/test_harness_flags.py`** (`_CURATED_DEFAULTS_ON`, abre en **`:467`**) | **sólo las 2 ON** | `test_default_known_only_for_curated` (`tests/test_harness_flags.py:974`) |
+| 3 | `backend/services/harness_flags.py` (`_CATEGORY_KEYS`, cat. `"observabilidad_notif"`, abre en `:309`) | las **3** keys | `test_every_registry_flag_is_categorized` (`tests/test_harness_flags.py:929`) |
+| 4 | **`backend/tests/test_harness_flags.py`** (`_CURATED_DEFAULTS_ON`, abre en **`:467`**) | **sólo las 2 ON** | `test_default_known_only_for_curated` (`tests/test_harness_flags.py:1001`) |
 | 5 | `backend/services/harness_flags_help.py` (`PLAIN_HELP`, abre en `:25`) | las **3** entradas | `test_plain_help_covers_all_registry_keys` (`tests/test_harness_flags_help.py:32`) |
-| 6 | `backend/tests/test_harness_flags_requires.py` (`_REQUIRES_MAP_FROZEN`) | las **3** aristas | `test_requires_map_is_frozen` (`tests/test_harness_flags_requires.py:312`) |
+| 6 | `backend/tests/test_harness_flags_requires.py` (`_REQUIRES_MAP_FROZEN`) | las **3** aristas | `test_requires_map_is_frozen` (`tests/test_harness_flags_requires.py:326`) |
+
+> **v4 / C1 — toda la columna de números de esta tabla se re-midió el 2026-07-29** (ver CHANGELOG). Tres
+> de las seis celdas de línea habían corrido (`:305`→`:309`, `:902`→`:929`, `:974`→`:1001`); una más
+> corrió dentro del propio archivo de requires (`:312`→`:326`, la vieja cifra ya no apunta ni siquiera a
+> ese archivo: cae en un comentario de la costura de la OLA 1/P0). **Ninguno de estos números es
+> load-bearing**: son para ubicarte rápido, no para copiar-pegar un offset. Confirmá con
+> `Select-String -Pattern "def test_nombre"` antes de asumir que el número de esta tabla sigue vigente.
 
 ---
 
 #### F0.1 — `backend/config.py`
 
-Insertar **después de la línea 1920** (fin del bloque `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED`, que va
-de `:1918` a `:1920`; **`:1922` ya es el comentario del Plan 167** y meterse ahí parte ese comentario
-de su flag):
+> **v4 / C1 — este archivo lo edita CADA plan del repo; el número de línea es ilustrativo, no
+> autoritativo.** `config.py` es, junto con `harness_flags.py`, el archivo de mayor concurrencia del
+> arnés. Medido el **2026-07-29** (dos días después de escrito este documento): el bloque
+> `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED` ya no está en `:1918-1920` — vive en `:1930-1935`, corrido
+> por las flags que sumaron los planes 267/268/269/270 al mergearse a `main` en el ínterin. Insertar de
+> forma literal "después de la línea 1920" **hoy caería dentro de la llamada `os.getenv(...)` de
+> `STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED`** (ese bloque ocupa hoy `:1916-1922`) y partiría una
+> llamada a función en dos: `SyntaxError` que tira abajo **todo `config.py`** y, con él, todo el
+> backend. Por eso la ubicación se busca por marcador de texto, **nunca por número crudo**:
+
+**Paso 1 — ubicar el marcador real con el archivo abierto o con el comando, nunca de memoria:**
+
+```powershell
+Select-String -Path "Stacky Agents\backend\config.py" -Pattern "Plan 167 .. Centro de Evolucion|STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"
+```
+
+Insertar el bloque nuevo **inmediatamente antes** de la línea que matchea `# ── Plan 167 —` (encabezado
+del bloque `STACKY_EVOLUTION_CENTER_ENABLED`) — es decir, justo después de que termine el bloque
+`STACKY_PLANS_PIPELINE_ACTIONS_ENABLED` (su última línea es `).strip().lower() == "true"`, seguida de
+una línea en blanco). Medido hoy 2026-07-29 eso cae entre `:1935` y `:1937`; **ese número puede haber
+vuelto a correrse para cuando vos lo implementes** — por eso el criterio es el comando de arriba, no el
+número:
 
 ```python
     # ── Plan 263 — el tablero nunca muestra un plan con estado nulo. Calculo
@@ -308,14 +396,29 @@ de su flag):
     ).strip().lower() == "true"
 ```
 
-> **v2 / C15:** el patrón real vigente en ese bloque es `.strip().lower() == "true"` (ver
-> `config.py:1911-1920`), **no** `in ("1", "true", "yes")` como decía el v1. Copiá el de arriba tal cual.
-> Si el archivo real difiere del snippet, **gana el archivo**.
+> **v2 / C15:** el patrón real vigente en ese bloque es `.strip().lower() == "true"` (re-verificado el
+> 2026-07-29 sobre `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED`, hoy en `:1933-1935`), **no**
+> `in ("1", "true", "yes")` como decía el v1 — aunque **las dos formas conviven** en el archivo real
+> (p. ej. `STACKY_INTAKE_QUARANTINE_DISCARD_ENABLED`, hoy en `:1920-1922`, sigue usando
+> `in ("1", "true", "yes")`). Copiá el patrón `.strip().lower() == "true"` de arriba tal cual: es el que
+> corresponde a este bloque. Si el archivo real difiere del snippet, **gana el archivo**.
 
 #### F0.2 — `backend/services/harness_flags.py` · las 3 `FlagSpec`
 
-Agregar **inmediatamente después** del bloque `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED`
-(`harness_flags.py:4544-4558`):
+> **v4 / C1 (continuación) — mismo drift, mismo tipo de archivo.** El `FlagSpec` de
+> `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED` que este plan usa como ancla ya no cierra en `:4544-4558`:
+> medido el 2026-07-29 cierra en `:4616` (**+58 líneas** — la misma magnitud que ya había anticipado el
+> gotcha del repo sobre `_REQUIRES_MAP_FROZEN`, 143→146, y sobre este mismo eje en F0.1). Ubicá el
+> punto de inserción por texto:
+
+```powershell
+Select-String -Path "Stacky Agents\backend\services\harness_flags.py" -Pattern 'key="STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"|Plan 167 .. Centro de Evolucion'
+```
+
+Agregar **inmediatamente después** del `),` que cierra el `FlagSpec` de
+`STACKY_PLANS_PIPELINE_ACTIONS_ENABLED` (su última línea antes del cierre es
+`requires="STACKY_PLANS_BOARD_ENABLED",`) y **antes** del comentario `# ── Plan 167 —`. Medido hoy
+2026-07-29 eso cae entre `:4616` y `:4617`; de nuevo, el comando de arriba es el criterio, no el número:
 
 ```python
     # ── Plan 263 — ningun plan sin estado + migracion con evidencia ──────────
@@ -353,7 +456,9 @@ Agregar **inmediatamente después** del bloque `STACKY_PLANS_PIPELINE_ACTIONS_EN
         # (services/harness_flags.py: `spec.default is not None`; False NO es None) y
         # pondria ROJO a test_default_known_only_for_curated, que exige igualdad EXACTA
         # con el conjunto curado. Precedente identico y ya vivo en este archivo:
-        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED (harness_flags.py:3166-3173, Plan 250).
+        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED (Plan 250). v4/C1: NO ancles por numero
+        # de linea (empieza en :3166 en el v3, en :3224 medido 2026-07-29): ubicalo con
+        # Select-String -Pattern 'STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED'.
         #
         # OFF por CATEGORIA (B): escribe en un sistema REAL del operador — los .md de
         # "Stacky Agents"/docs/ en su working tree, que ademas suele tener cambios sin
@@ -380,8 +485,9 @@ Agregar **inmediatamente después** del bloque `STACKY_PLANS_PIPELINE_ACTIONS_EN
 
 #### F0.3 — `backend/services/harness_flags.py` · `_CATEGORY_KEYS`
 
-Agregar las **3** keys en la categoría `"observabilidad_notif"` (abre en `harness_flags.py:305`),
-junto a `"STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"` (`harness_flags.py:350`):
+Agregar las **3** keys en la categoría `"observabilidad_notif"` (abre en `harness_flags.py:309`,
+re-medido 2026-07-29 — drift menor de +4 líneas respecto del v3; anclá por el nombre de la categoría,
+no por el número), junto a `"STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"` (`harness_flags.py:359`):
 
 ```python
         "STACKY_PLANS_ESTADO_FALLBACK_ENABLED",      # Plan 263 — ningun plan sin estado
@@ -535,6 +641,7 @@ exactos:
 | 16 | *(v2)* `build_planned_cards` (bucket `SIN_DOCUMENTO`) | cada card trae `estado_inferido is False` y `estado_origen == "declarado"` — **todas** las cards tienen la misma forma |
 | 17 | *(v2)* `suggest_next_action("IMPLEMENTADO", None, None, "07")` llamado **posicionalmente con 4 args** | no lanza `TypeError` y devuelve `kind == "supervisar"` (prueba de que el parámetro nuevo es keyword-only con default) |
 | 18 | **[v3/C3 — INVARIANTE]** `build_board` sobre un `tmp_path` con los 4 tipos de card a la vez (uno declarado, uno sin estado, uno sin estado + ledger aprobado, uno `SIN_DOCUMENTO` del roadmap) | para **TODAS** las cards del board: `card["estado_inferido"] == (card["estado_origen"] == "inferido")`, y `card["estado_origen"] in ("declarado","inferido","ledger")`. Un solo `for` sobre `board["plans"]`. Este test es el que impide que los dos campos vuelvan a divergir. |
+| 19 | **[v4/ADICIÓN 6]** sobre el mismo board de 4 cards del caso 18 | `sum(board["totals"]["por_origen"].values()) == len(board["plans"])` — todas las cards tienen `estado_origen` (invariante ya fijada por el caso 18), así que el desglose es una partición completa sin resto. |
 
 > **v2 / C12:** el v1 escribía el caso 15 con una corrección tachada adentro ("vuelve a
 > `"IMPLEMENTADO"`… **NO**: vuelve a `"SIN_ESTADO"`"). Un modelo menor no puede saber cuál gana. La
@@ -678,6 +785,16 @@ claves aditivas:
 
 ```python
     totals["inferidos"] = sum(1 for c in plans if c.get("estado_inferido"))
+    # [ADICIÓN ARQUITECTO 6, v4] Desglose agregado de DÓNDE salió cada estado. Mismo
+    # loop, mismo dato ya calculado por card (estado_origen, F1(d)): costo marginal
+    # cero, sin I/O nuevo, sin flag nueva, aditivo. Fortalece la tesis del plan a
+    # nivel portafolio: el operador ve de un vistazo cuánto de "todo implementado"
+    # es verificable vs. supuesto, sin abrir el panel de F6 ni pedir un 2do request.
+    totals["por_origen"] = {
+        ORIGEN_DECLARADO: sum(1 for c in plans if c.get("estado_origen") == ORIGEN_DECLARADO),
+        ORIGEN_INFERIDO: sum(1 for c in plans if c.get("estado_origen") == ORIGEN_INFERIDO),
+        ORIGEN_LEDGER: sum(1 for c in plans if c.get("estado_origen") == ORIGEN_LEDGER),
+    }
 ```
 
 > **Cuidado:** las cards `SIN_DOCUMENTO` que arma `build_planned_cards()` (`plans_board.py:397-422`)
@@ -697,7 +814,7 @@ claves aditivas:
 > funciones puras), así que no es flaky y **no necesita** `run_with_retry`. Si aun así aparece un
 > `SQLITE_LOCKED`, es contaminación de otro archivo: corré **este archivo solo**, nunca la suite completa.
 
-**Criterio binario.** 18 passed, 0 failed. Y:
+**Criterio binario.** 19 passed, 0 failed. Y:
 
 ```powershell
 & "Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.plans_board import get_board_cached; b=get_board_cached(refresh=True); print(sum(1 for p in b['plans'] if p['estado_efectivo']=='SIN_ESTADO'))"
@@ -1013,7 +1130,7 @@ def infer_estado_con_evidencia(plan_card: dict, docs_dir: Path) -> dict:
 
 | Orden | Condición (verificable, sin modelo, sin heurística de número) | `estado_propuesto` | `confianza` | Evidencia que se agrega |
 |---|---|---|---|---|
-| 1 | El ledger tiene entrada para este número con `veredicto` en `("APROBADO","TERMINADO-POR-SUPERVISOR")`. **Sólo alcanzable con `doc_drift is True`**: los aprobados sin drift ni llegan acá (los filtró `ya_resueltos_por_ledger`, F1.5). | `IMPLEMENTADO` | `alta` | `"El supervisor lo aprobó el <fecha> y el documento cambió después (ledger.json)."` |
+| 1 | El ledger tiene entrada para este número con `veredicto` en `_LEDGER_OK_VEREDICTOS` (**v4/C2 — importada** de `services.plans_board`, `:34`; NO se re-escribe la tupla a mano — es la MISMA constante que ya usan `ledger_ok` en `build_board` (`:566`) y `suggest_next_action` (`:475`), hoy `("APROBADO","TERMINADO-POR-SUPERVISOR")`). **Sólo alcanzable con `doc_drift is True`**: los aprobados sin drift ni llegan acá (los filtró `ya_resueltos_por_ledger`, F1.5). | `IMPLEMENTADO` | `alta` | `"El supervisor lo aprobó el <fecha> y el documento cambió después (ledger.json)."` |
 | 2 | El doc trae un **marcador estructural** de implementación en los primeros 8000 chars: `re.search(r"^#{1,4}\s*.*Registro de implementaci", texto, re.M)` **o** `re.search(r"^\|[^|\n]*\|\s*IMPLEMENTADA\s*\|", texto, re.M)` (una fila de tabla cuya celda **completa** dice `IMPLEMENTADA`). | `IMPLEMENTADO` | `alta` | `"El documento trae su registro de implementacion (<marcador>)."` |
 | 3 | El doc trae `"veredicto"` **y** (`"APROBADO"` o `"RECHAZADO"`) en los primeros 8000 chars. | `CRITICADO` | `media` | `"El documento trae un veredicto del juez, pero no registro de implementacion."` |
 | 4 | Ninguna de las anteriores. | **`None`** | **`sin_evidencia`** | `"Sin evidencia en el documento ni en el ledger. El tablero lo muestra como implementado (inferido), pero NO hay nada verificable que escribir: decidilo vos."` |
@@ -1037,6 +1154,16 @@ def infer_estado_con_evidencia(plan_card: dict, docs_dir: Path) -> dict:
 > **`_umbral_reciente` se elimina.** No queda ninguna heurística basada en el número del plan: era la
 > única regla que dependía de una constante arbitraria (`- 20`) y medía **cero**. Con ella se va el
 > problema de C19 (claves string del ledger) y una función menos que testear.
+
+> **v4 / C2 — Regla 1 importa, no reimplementa.** `plans_estado_migration.py` agrega
+> `from services.plans_board import _LEDGER_OK_VEREDICTOS` en su encabezado (mismo principio que F2 ya
+> aplica para `_ESTADO_RE`/`_HEADER_READ_CHARS`/`_PLAN_FILE_RE`, y que F0 aplica para `_CATEGORY_KEYS`).
+> Escribir la tupla de veredictos a mano en la Regla 1 era el mismo riesgo de desincronización que C6/C9
+> (v2→v3) ya cerraron para la regex de estado y de archivo: un tercer veredicto agregado el día de
+> mañana que sólo toque `_LEDGER_OK_VEREDICTOS` dejaría a la Regla 1 de F3 ciega a planes que el resto
+> del tablero ya trata como resueltos. Caso 25 de F3 lo congela con identidad de objeto (mismo patrón
+> que `test_regla_de_archivo_unica` de F2): `from services import plans_board, plans_estado_migration;
+> assert plans_estado_migration._LEDGER_OK_VEREDICTOS is plans_board._LEDGER_OK_VEREDICTOS`.
 
 > **[ADICIÓN ARQUITECTO 4] — Prohibido escribir sin evidencia.**
 >
@@ -1095,7 +1222,7 @@ def apply_estado_migration(
     """
 ```
 
-**Casos de test (mínimo 24):**
+**Casos de test (mínimo 25):**
 
 1. `infer_estado_con_evidencia` con ledger APROBADO **y drift** → `IMPLEMENTADO`/`alta`, `aplicable is True`.
 2. …con doc que trae un encabezado `## Registro de implementación` → `IMPLEMENTADO`/`alta`.
@@ -1121,6 +1248,7 @@ def apply_estado_migration(
 22. **v3/ADICIÓN 4 vocabulario cerrado:** `estado_elegido: "LO_QUE_SEA"` ⇒ `omitidos` con razón `"estado elegido invalido"`, archivo intacto.
 23. **v3/ADICIÓN 4 centinela sobre el CORPUS VIVO** (`test_ninguna_propuesta_alta_sin_marcador_estructural`): corre `preview_estado_migration(plans_board.docs_dir_default())` sobre `Stacky Agents/docs` **real** y asserta, para cada propuesta con `confianza == "alta"`, que su lista `evidencia` nombra el marcador estructural o el ledger (`any("Registro de implementaci" in e or "ledger.json" in e for e in p["evidencia"])`). Es el único test del plan que toca el corpus real: es **solo lectura**, no escribe nada, y es el que impide que una regla laxa vuelva a producir un `alta` de aire. Si `docs/` no existe (deploy congelado), `pytest.skip`.
 24. **v3/ADICIÓN 4 ninguna propuesta miente por default:** sobre el mismo corpus vivo, `preview["por_confianza"].get("sin_evidencia", 0) == sum(1 for p in preview["propuestas"] if not p["aplicable"])` y **toda** propuesta con `aplicable is False` tiene `estado_propuesto is None`. Invariante, no número: no se congela el 45.
+25. **v4/C2 la Regla 1 importa, no reescribe:** `from services import plans_board, plans_estado_migration; assert plans_estado_migration._LEDGER_OK_VEREDICTOS is plans_board._LEDGER_OK_VEREDICTOS` — identidad de objeto (`is`), no igualdad de valor. Si alguien vuelve a copiar la tupla a mano, este test falla al instante.
 
 **Endpoints (editar `Stacky Agents/backend/api/plans_board.py`):**
 
@@ -1192,7 +1320,7 @@ def plans_normalize_apply():
 > `run_with_retry`. Los casos 23-24 **jamás** escriben en `docs/`; si alguien los ve mutar algo, es un
 > bug de la implementación, no del test.
 
-**Criterio binario.** 24 passed, 0 failed. Además, con `STACKY_PLANS_NORMALIZE_APPLY_ENABLED=false`,
+**Criterio binario.** 25 passed, 0 failed. Además, con `STACKY_PLANS_NORMALIZE_APPLY_ENABLED=false`,
 `POST /api/plans-board/normalize/apply` responde 404 con el envelope de deshabilitado y **no** modifica
 ningún archivo — verificable comparando la salida de
 `git status --porcelain "Stacky Agents/docs"` **antes y después** (debe ser idéntica, carácter por
@@ -1660,6 +1788,9 @@ fallo **nuevo** en ellos es tuyo.
 - [ ] **KPI-7:** ninguna propuesta con `confianza == "sin_evidencia"` se escribió sin `estado_elegido` del operador (casos 21-22 de F3 verdes; centinela del corpus vivo, caso 23, verde).
 - [ ] **KPI-8:** tras un apply, `ledger.json` conserva `version`, las 47 entradas, y las entradas ajenas byte-idénticas (casos 19-20 de F3 verdes).
 - [ ] `estado_inferido == (estado_origen == "inferido")` para **todas** las cards (caso 18 de F1) y el chip de una card `estado_origen: "ledger"` **no** dice "(inferido)" (casos 4 y 4b de F4).
+- [ ] **[v4/ADICIÓN 6]** `sum(totals["por_origen"].values()) == totals["total"] menos las SIN_DOCUMENTO`... en la práctica, `sum(totals["por_origen"].values()) == len(board["plans"])` (caso 19 de F1).
+- [ ] **[v4/C2]** `plans_estado_migration._LEDGER_OK_VEREDICTOS is plans_board._LEDGER_OK_VEREDICTOS` (caso 25 de F3): la Regla 1 no reescribió la tupla de veredictos a mano.
+- [ ] **[v4/C1]** Ni `config.py` ni `harness_flags.py` quedaron con un bloque de Plan 263 insertado a mitad de otra flag: `python -c "import ast; ast.parse(open('Stacky Agents/backend/config.py', encoding='utf-8').read())"` y el mismo chequeo sobre `harness_flags.py` no lanzan `SyntaxError` (verificación mínima de que el punto de inserción se ubicó por marcador, no por número stale).
 - [ ] `api/plans_board.py` lee las flags con `getattr(config, …)` y **no** contiene la cadena `config.config` (`Select-String -Path "Stacky Agents\backend\api\plans_board.py" -Pattern "config\.config"` no devuelve nada).
 - [ ] `sum(1 for p in board['plans'] if p['estado_efectivo']=='SIN_ESTADO')` ⇒ **0** (KPI-3).
 - [ ] `grep -cE '^\s*(padding|margin|gap)[^:]*:\s*[^;]*(rem|px)' PlansBoardPage.module.css` ⇒ **0** (KPI-2).
@@ -1687,6 +1818,14 @@ Los cuatro planes de esta tanda editan **los mismos 5 archivos compartidos**. El
 documentado del repo: **git hace 3-way merge SIN marcar conflicto cuando dos ramas agregan la misma
 línea de cierre a una estructura existente**, dejando un duplicado silencioso que ni los marcadores ni
 el compilador atrapan.
+
+> **v4 / C1 — nota de alcance.** El drift medido en el CHANGELOG v3→v4 **no vino de 260/264/265**
+> (los tres siguen `NO IMPLEMENTADO`, re-verificado el 2026-07-29 en sus propios encabezados) sino de
+> los planes 267/268/269/270, ya mergeados a `main` en el ínterin, que también dan de alta flags en
+> `config.py` y `harness_flags.py`. La mitigación de F0.1/F0.2 (anclar por marcador de texto, no por
+> número) es general: aplica ante **cualquier** plan que se mergee después, no sólo ante los 3 hermanos
+> nombrados en esta sección — `config.py` y `harness_flags.py` los edita prácticamente todo plan del
+> repo, así que su línea de inserción nunca es una constante de confiar a ciegas.
 
 **Reglas de convivencia para este plan:**
 

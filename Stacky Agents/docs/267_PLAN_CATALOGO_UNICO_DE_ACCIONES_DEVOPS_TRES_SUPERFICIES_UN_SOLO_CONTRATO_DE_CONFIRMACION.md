@@ -1,6 +1,6 @@
 # Plan 267 — Catálogo único de acciones DevOps: una sola declaración, tres superficies, un solo contrato de confirmación
 
-**Estado:** **CRITICADO v2 → v3** (2026-07-28) · **Autor:** pipeline proponer-plan-stacky · **Juez v2:** criticar-y-mejorar-plan (Opus 5) · **Juez v3: revisión INDEPENDIENTE** (juez nuevo, contexto limpio) · **Veredicto v1: RECHAZADO** (5 bloqueantes) · **Veredicto v2: RECHAZADO** (5 bloqueantes nuevos, 4 de ellos hallados CORRIENDO)
+**Estado:** **CRITICADO v3 → v4** (2026-07-28) · **Autor:** pipeline proponer-plan-stacky · **Juez v2:** criticar-y-mejorar-plan (Opus 5) · **Juez v3: revisión INDEPENDIENTE** (juez nuevo, contexto limpio) · **Juez v4: SEGUNDA pasada independiente sobre el v3** (juez nuevo, otra corrida) · **Veredicto v1: RECHAZADO** (5 bloqueantes) · **Veredicto v2: RECHAZADO** (5 bloqueantes nuevos, 4 hallados CORRIENDO) · **Veredicto v4: APROBADO-CON-CAMBIOS** — los 5 bloqueantes del v2 quedaron **realmente cerrados** (verificado corriendo, uno por uno), pero la **[ADICIÓN ARQUITECTO v3] introdujo 2 bloqueantes propios** y quedó al descubierto 1 bloqueante estructural que **ninguna de las 3 pasadas anteriores había medido**. Los 4 están corregidos **en esta misma versión**
 
 > **Nota de numeración.** Este plan nació como **266** y se renumeró a **267**: mientras se escribía, una
 > sesión paralela commiteó `9281ca75 docs(plan-266): cero pantalla rota en el comparador de BD`, que tomó
@@ -8,6 +8,46 @@
 > superposición de archivos con este**. Los números **261 y 262** siguen libres (huecos preexistentes).
 > *Verificado en la crítica v2:* no quedó **ninguna** referencia interna stale al número viejo — ni flags,
 > ni archivos, ni tests, ni fases. Las únicas apariciones son las de esta misma nota.
+
+### CHANGELOG v3 → v4 (SEGUNDA pasada independiente — foco: ¿cerró el v3, y qué rompió al cerrar?)
+
+El v3 lo escribió otro agente en otra corrida (`a064d1ed`). Esta pasada tuvo dos objetivos, en orden:
+**(1)** verificar CORRIENDO que los 5 bloqueantes del v2 estén de verdad cerrados; **(2)** cazar los
+bloqueantes que el propio v3 introdujo, mirando con lupa su `[ADICIÓN ARQUITECTO]` — porque ahí es donde
+aparecieron los bloqueantes nuevos en los otros planes de esta serie.
+
+**(1) Los 5 bloqueantes del v2: CERRADOS, los 5.** Verificado ejecutando, no leyendo:
+
+| # | Cómo se verificó el cierre | Resultado |
+|---|---|---|
+| **C21** | `grep -n` sobre `frontend/src/api/client.ts` | `rawGet` existe en **`:96`** y `api.get`→`request<T>()` hace `if (!res.ok) { throw new Error(...) }` en **`:206-209`**. El v3 nombra el wrapper, da el código exacto, y **F5 test 11** es un grep-gate que exige `rawGet(` y prohíbe `api.get(`. **CERRADO** |
+| **C22** | leyendo `paletteMode()` del v3 y su test | El chequeo de `effect` va **primero** (`if (a.effect === 'write') return … 'nav'`), y **F4 test 15** lo prueba con un `DevOpsActionMeta` **falsificado** (`effect:'write'` + `palette-run`). La defensa se movió al plano del **consumo**, que era exactamente el reclamo. R12 reescrito y sin la afirmación falsa. **CERRADO** |
+| **C23** | leyendo `canonical_reach` | `return REACH_WRITE if effect == "write" else REACH_READ` — **total** (todo valor distinto de `"write"` cae en lectura), **nunca lanza**, y las 23 entradas la usan en vez de tuplas literales. I-REACH pasa a ser cierta por construcción. **CERRADO** (ver C40 por los tests tautológicos que sobraron) |
+| **C24** | corriendo el matcher del plan sobre las 23 `phrases` **+ los 23 `label`** declarados | los 23 `label` y `summary` están **literales** en F0, y **F8 t12** ahora inspecciona `(*phrases, label)` — el mismo universo que puntúa `match_intent` (`for candidate in (*a.phrases, a.label)`, F2). **0 colisiones**. **CERRADO** |
+| **C28** | extrayendo el cuerpo del verificador a un `.py` y corriéndolo con el venv real | `backend\.venv\Scripts\python.exe <archivo>.py` imprime **exactamente** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED: FALTA` + las otras dos y sale **1**. El cuerpo es Python válido tal cual, sin el envoltorio `-c`. **CERRADO** |
+
+**(2) Y la `[ADICIÓN ARQUITECTO v3]` metió 2 bloqueantes propios.** `toneBaseline.json` es una buena idea
+—convertir un paso manual en un dato y un test— **implementada contra una foto equivocada del código**:
+
+| # | Severidad | Qué está mal en el v3 | Cómo se detectó | Dónde se corrige |
+|---|-----------|------------------------|-----------------|------------------|
+| **C32** | BLOQUEANTE | §4.11 manda contar **`tone: 'danger'`** (comilla simple). Medido sobre los 6 archivos: 2 de las 6 confirmaciones peligrosas están escritas **`tone: "danger"`** (comilla DOBLE, objeto multilínea): `BuildWorkshopSection.tsx:167` y `SolutionPublisherSection.tsx:395`. El censo congelado saldría **2/0/1/0/1/0 = 4** cuando la verdad es **2/1/1/0/1/1 = 6**, y quedaría en **`danger: 0`** justo en `SolutionPublisherSection` — el archivo con **más** confirmaciones (5) y el que publica en el ADO/GitLab **real** del operador. Para esos dos archivos el assert es `N >= 0`: **vacuo para siempre**. El único test que hace binario "el `tone` no puede aflojarse" nace ciego donde más importa | `grep -cE "tone:[[:space:]]*['\"]danger['\"]"` vs el patrón literal del plan, archivo por archivo | §4.11 (regex agnóstico de comillas + **baseline literal escrito en el plan**) |
+| **C33** | BLOQUEANTE | El assert de F7 t4 (*"cuántos ids del catálogo con `impact:'high'` aparecen referenciados en ese archivo ≥ su `danger` congelado"*) es **insatisfacible en 3 de los 6 archivos**. Medido: `ServersSection` congela **2** y sus únicas acciones del catálogo son `devops.servers.list`/`.doctor`, ambas `read`/`none` ⇒ **`0 >= 2` FALSO**. `BuildWorkshopSection` congela 1 (con C32 corregido) y su única `write` es `devops.build.run`, **`impact:'low'`** ⇒ **`0 >= 1` FALSO**. `PipelineBuilderSection` congela 1 y el botón de `devops.pipeline.trigger` vive en **`TriggerPipelineSection.tsx`**, que F7 no toca ⇒ **`0 >= 1` FALSO**. Un DoD que exige ese test en verde es insatisfacible el día 1 | cruzando el censo real con la columna `impact` de las 23 y con el inventario de `components/devops/` | §4.11 y F7 t4 (invariante **por sitio de llamada**, no por conteo de archivo) |
+| **C34** | BLOQUEANTE | **KPI-6 y F7 t2 son aritméticamente insatisfacibles, y esto sobrevivió a las 3 pasadas anteriores.** De las **16** confirmaciones a mano, **solo 2** corresponden a una acción del catálogo (`devops.build.run` ← *"Compilar en Release"*; `devops.solution.publish` ← *"Publicar &lt;sol&gt;"*). Las **otras 14** protegen operaciones que **no existen en las 23**: *Quitar contraseña, Eliminar servidor, Cancelar build, Eliminar borrador, Crear variable segura, Reemplazar pipeline* (×2), *Crear MR/PR, Crear pipeline definition, Activar escritura, Agregar soluciones al catálogo, Cancelar publicación, Registrar como app de despliegue, Abrir conversación con el agente*. KPI-6 exige **0 `askConfirm({` en esos 6 archivos**; no hay de dónde derivar 14 de las 16. La única línea que lo cubre (*"se agrega al catálogo en esta fase"*) convierte F7 en **"diseñar 14 acciones nuevas"** con `label`+`summary`+≥3 `phrases`+`impact`+`reach` **y un `flag_key` que ya tiene que existir en `FLAG_REGISTRY`** (F8 t5 y t7) — y **no hay flag** para *"eliminar servidor"* ni para *"activar escritura"* | leyendo los 16 `title:` reales y buscando cada uno en la tabla de 23 | KPI-6, F7 (tabla de mapeo sitio-por-sitio + alcance del grep-gate) |
+| C35 | IMPORTANTE | **El censo es de 7 archivos y 18 confirmaciones, no de 6 y 16.** `components/devops/VariablesSection.tsx` tiene **2** (`Guardar variable`, y `Borrar variable` con `tone: 'danger'`) y no aparece en KPI-6, ni en los 6 archivos de F7, ni en el baseline de §4.11. **El v2 y el v3 "re-verificaron" el censo grepeando los 6 archivos que ya tenían, en vez de barrer el directorio** — por eso el séptimo fue invisible a las dos pasadas | `grep -rc "askConfirm({" components/devops/*.tsx` (barrido, no lista) | KPI-6, §4.11, F7, [ADICIÓN ARQUITECTO v4] |
+| C36 | IMPORTANTE | F6 y F7 exigen `uiDebtRatchet.test.ts` **"verde"** / *"sigue verde"*. Medido hoy: **1 failed \| 2 passed** (deuda ajena preexistente). Criterio binario insatisfacible. La DoD global (§11) ya usa la redacción correcta (*"sin regresion"*); las dos fases, no | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` | F6, F7 |
+| C37 | IMPORTANTE | Los 7 ids de `FALLBACK_META` se justifican como *"uno por cada sección de F7"* y **no lo son**: `devops.pipeline.trigger`, `devops.deployment.execute` y `devops.publication.run` viven en `TriggerPipelineSection.tsx`, `DeploymentsSection.tsx` y `PublicationsSection.tsx` — **ninguno de los 6 archivos de F7** (y los tres tienen **0** `askConfirm({`), mientras `ServersSection.tsx` y `ProductionFlow.tsx`, que **sí** están en F7, no reciben entrada | `ls components/devops/` + el censo | F4 |
+| C38 | IMPORTANTE | La huella de F8 **inventa claves y omite 5 de las 9 obligatorias**. Medido en `test_error_fingerprints_catalog.py`: `_REQUIRED = (id, title, class, status, log_pattern, log_guarded, killed_by, guard_test, self_test)`, `_STATUS_ENUM = {resolved, open, by_design}`, `log_pattern` se pasa por `re.compile` (**no puede ser `null`**) y `self_test` es `{matches:[…], clean:[…]}` de líneas de log **literales**. El plan prescribe `plan` y `date` (**no existen**), un `guard_test` con prefijo `backend/` y sufijo `::test_…` (el archivo usa `tests/<archivo>.py`, sin prefijo ni nodo), y describe un síntoma **que no deja ninguna línea de log** | `grep -n` sobre el test + `json.load` de la última entrada | F8 |
+| C39 | MENOR | F5 dice **"(10 casos)"** y lista **11**; la aceptación pide 11. Es **el mismo defecto C27** que el v3 arregló en F4 y F6 y reintrodujo acá al agregar el test 11 de C21 | contando los ítems | F5 |
+| C40 | MENOR | Con `canonical_reach()` en su lugar, **4** tests vigilan la misma tautología imposible de violar (F0 t17b, F0 t19, F8 t11, F8 t14). Dos como red de seguridad está bien; cuatro infla los conteos de la DoD a cambio de cero información | leyendo los 4 asserts contra la derivación | §4.10, F0, F8 |
+
+**[ADICIÓN ARQUITECTO v4] — el censo se BARRE, no se transcribe.**
+C35 es el mismo error dos veces: el v2 y el v3 confirmaron *"16 en 6 archivos"* grepeando **la lista que ya
+tenían**, y `VariablesSection.tsx` quedó fuera las dos veces. La corrección no es agregar el séptimo archivo
+a mano (mañana aparece el octavo): es que `gen_tone_baseline.py` **enumere el directorio** y que un test
+compare el conjunto de claves del baseline contra el barrido. Ver §4.11 pasos 1 y 3.
+
+---
 
 ### CHANGELOG v2 → v3 (juez independiente — crítica EJECUTADA, no leída)
 
@@ -100,12 +140,12 @@ Hoy el panel DevOps tiene 17 secciones y decenas de acciones, y **cada acción e
 | KPI-3 | Entidades cubiertas por el registro de acciones | **2** — `EntityKind = Extract<CommandKind,"execution"\|"ticket">` (`frontend/src/services/entityActions.ts:15`) | **3** (se suma `devops-action` como tercer vocabulario, sin tocar los 2 existentes) | dos corridas **separadas** (regla §4.2, un archivo por invocación): `npx vitest run src/services/entityActions.test.ts` y `npx vitest run src/services/devopsActionRunner.test.ts` [C8] |
 | KPI-4 | Respuestas del agente DevOps que son una acción tipada | **0** — `api/devops_agent.py` lanza un turno de CLI y devuelve prosa (`backend/api/devops_agent.py:136-140`) | **100 %** de las frases que superan el umbral del matcher devuelven `ActionProposal` con `action_id` | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v` |
 | KPI-5 | Runtimes soportados por el camino "lenguaje natural → acción" | **2 de 3** — `_CLI_RUNTIMES = ("claude_code_cli","codex_cli")` (`backend/api/devops_agent.py:14`) y Copilot recibe **400** `devops_chat_requires_cli_runtime` (`backend/api/devops_agent.py:69-78`) | **3 de 3**: el matcher determinista no usa modelo, así que Copilot obtiene propuesta y vista previa completas | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -k copilot -v` |
-| KPI-6 | Confirmaciones de acciones DevOps construidas a mano fuera de `confirmGateway` | **16 construcciones en 6 archivos** — medido con `grep -c 'askConfirm({'`: `ServersSection` 2, `BuildWorkshopSection` 2, `PipelineBuilderSection` 4, `ProductionFlow` 2, `RemoteConsoleSection` 1, `SolutionPublisherSection` 5 | **0 en esos 6 archivos**: todas derivan su `ConfirmRequest` del catálogo | `npx vitest run src/__tests__/plan267Adoption.test.ts` — es **este** el test que mira `askConfirm({`, no el ratchet de catálogo [C8] |
+| KPI-6 | Confirmaciones de acciones DevOps **que corresponden a una acción del catálogo** y se construyen a mano | **18 construcciones en 7 archivos** — medido el 2026-07-28 **barriendo** `components/devops/*.tsx` (no una lista): `SolutionPublisherSection` 5, `PipelineBuilderSection` 4, `BuildWorkshopSection` 2, `ProductionFlow` 2, `ServersSection` 2, **`VariablesSection` 2 [C35]**, `RemoteConsoleSection` 1. De esas 18, **sólo 2** tienen acción en el catálogo [C34] | **0 de las 2 mapeadas** (`devops.build.run`, `devops.solution.publish`) + **4 botones `write`/`high` que hoy NO confirman pasan a confirmar** (`pipeline.trigger`, `deployment.execute`, `publication.run`, `remote_console.run`). Residual declarado y verificado exacto: **16** `askConfirm({` en 7 archivos (tabla de F7). **El v3 exigía "0 en esos 6 archivos": insatisfacible, no hay de dónde derivar 14 de 18** | `npx vitest run src/__tests__/plan267Adoption.test.ts` — casos 2 y 4; es **este** el test que mira `askConfirm({`, no el ratchet de catálogo [C8] |
 | KPI-7 | Deriva backend↔frontend de acciones | **N/A** (no hay contrato que derive) | **0**: igualdad exacta de conjuntos entre ids del catálogo y claves de `DEVOPS_ACTION_BINDINGS` | `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts` |
 | KPI-8 | Acciones con `effect:"write"` sin declarar impacto ni entorno | **N/A** | **0**: `targets_environment=True` ⇒ param `environment` obligatorio; `effect="write"` ⇒ `impact != "none"` | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v` |
 | **KPI-9** *(v2, C5)* | Acciones de escritura **ejecutables desde la paleta global** | **N/A** (hoy la paleta no ejecuta nada) | **0**: `effect=="write"` ⇒ `"palette-run" not in reach`. Una acción de alto impacto nunca queda a un fuzzy-match + Enter de distancia | `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v` (caso `test_write_no_es_ejecutable_desde_la_paleta`) |
 
-Cómo se obtuvo cada "Antes": KPI-1 por ausencia del archivo (`backend/services/devops_action_catalog.py` no existe); KPI-2 contando las entradas del array literal en `commandPaletteData.ts:59-76` (el comentario de `:58` dice "13 tabs" — quedó desactualizado, hay 14); KPI-3 leyendo `entityActions.ts:15`; KPI-4 y KPI-5 leyendo `api/devops_agent.py`; KPI-6 por `grep -c "askConfirm({"` sobre los 6 archivos de `frontend/src/components/devops/` (los 6 conteos están arriba, medidos el 2026-07-27).
+Cómo se obtuvo cada "Antes": KPI-1 por ausencia del archivo (`backend/services/devops_action_catalog.py` no existe); KPI-2 contando las entradas del array literal en `commandPaletteData.ts:59-76` (el comentario de `:58` dice "13 tabs" — quedó desactualizado, hay 14); KPI-3 leyendo `entityActions.ts:15`; KPI-4 y KPI-5 leyendo `api/devops_agent.py`; KPI-6 **[corregido en v4]** por `grep -rc "askConfirm({" frontend/src/components/devops/*.tsx` — **barriendo el directorio**, medido el 2026-07-28: son **7 archivos y 18 confirmaciones**, no 6 y 16. El v2 y el v3 "re-verificaron" este número grepeando la lista de 6 que ya traían, y `VariablesSection.tsx` (2 confirmaciones) quedó invisible en las dos pasadas [C35]. Y de esas 18, **sólo 2** tienen una acción en el catálogo de F0 [C34] — ver la tabla de mapeo de F7.
 
 ---
 
@@ -227,6 +267,15 @@ párrafos más abajo [C23]). El vocabulario completo sigue siendo
 Con `canonical_reach()` esto es cierto **por construcción** en el backend; el ratchet de F8 queda como red
 de seguridad por si alguien vuelve a escribir una tupla a mano.
 
+> **Nota v4 [C40] — cuántos tests vigilan la tautología.** Con `canonical_reach()` en su lugar, la
+> invariante en el **origen** es imposible de violar, y el v3 dejó **4** tests asserteándola (F0 t17b, F0
+> t19, F8 t11, F8 t14). Se conservan los **2 que aportan algo distinto**: **F0 t17b**
+> (`a.reach == canonical_reach(a.effect)`, que caza a quien vuelva a escribir una tupla literal) y **F8 t11**
+> (I-REACH nombrando los ids ofensores, que es el ratchet que un plan futuro tendría que borrar a
+> propósito). **F0 t19 y F8 t14 son duplicados exactos de esos dos y se eliminan** — inflaban los conteos de
+> la DoD a cambio de cero información. Los conteos quedan: F0 **22 tests** (no 23), F8 backend **13** (no
+> 14). El plano del **consumo** (F4 t15) es el que de verdad no era redundante, y ése se queda.
+
 **I-REACH se verifica en DOS planos, no en uno [C22].** Ésta es la corrección más importante del v3, y sale
 de seguir el dato en vez de leer el plan:
 
@@ -248,38 +297,94 @@ Esto **no le saca nada al operador**: la acción de escritura sigue apareciendo 
 buscando), y elegirla lo deja en la pantalla correcta con los datos cargados, a un click del botón de
 siempre. Es la misma filosofía de `denyByDefault`: el camino peligroso existe, pero nunca es el accidental.
 
-### 4.11 Censo de severidad congelado (`toneBaseline.json`) [ADICIÓN ARQUITECTO v3]
+### 4.11 Censo de severidad congelado (`toneBaseline.json`) [ADICIÓN ARQUITECTO v3, **rehecha en v4** (C32, C33, C35)]
 
-**El problema.** F7 recablea **16 confirmaciones escritas a mano** (censo medido: `ServersSection` 2,
-`BuildWorkshopSection` 2, `PipelineBuilderSection` 4, `ProductionFlow` 2, `RemoteConsoleSection` 1,
-`SolutionPublisherSection` 5) a confirmaciones **derivadas del catálogo**. El `tone` deja de estar escrito
-al lado del botón y pasa a salir de `a.impact === 'high' ? 'danger' : 'default'`. Si al declarar una acción
-alguien pone `impact:'low'` donde el código de hoy dice `tone:'danger'`, **la confirmación se afloja en
-silencio** y ningún test lo nota: `plan267Adoption.test.ts` sólo verifica que ya no exista `askConfirm({`,
-no que la severidad se haya conservado. Es el riesgo R1, y el v2 lo mitigaba con un **paso manual**
-("verificación previa obligatoria, archivo por archivo… y **anotar** a qué acción corresponde cada uno") —
-prohibido por los rieles, y encima en el punto de mayor consecuencia del plan.
+**El problema.** F7 recablea confirmaciones escritas a mano a confirmaciones **derivadas del catálogo**. El
+`tone` deja de estar escrito al lado del botón y pasa a salir de `a.impact === 'high' ? 'danger' :
+'default'`. Si al declarar una acción alguien pone `impact:'low'` donde el código de hoy dice
+`tone:'danger'`, **la confirmación se afloja en silencio** y ningún test lo nota: `plan267Adoption.test.ts`
+sólo verifica que ya no exista `askConfirm({`, no que la severidad se haya conservado. Es el riesgo R1, y el
+v2 lo mitigaba con un **paso manual** ("verificación previa obligatoria, archivo por archivo… y **anotar** a
+qué acción corresponde cada uno") — prohibido por los rieles, y encima en el punto de mayor consecuencia del
+plan.
 
-**La solución.** Congelar el censo **antes** de tocar nada y verificarlo **después**, con el mismo patrón de
-baseline que el repo ya usa en `frontend/src/__tests__/uiDebtBaseline.json`:
+> **Corrección v4 — la v3 congelaba el número equivocado y lo comparaba contra la cosa equivocada.**
+> Se midió el árbol real y aparecieron **tres** errores en esta misma sección:
+>
+> - **[C32] El patrón `tone: 'danger'` no ve la mitad de los casos.** El repo escribe la severidad de **dos**
+>   maneras, según si el objeto es de una línea o multilínea:
+>   `tone: 'danger'` (comilla simple) en `ServersSection.tsx:127`, `:145`, `PipelineBuilderSection.tsx:244`,
+>   `RemoteConsoleSection.tsx:215`; y `tone: "danger"` (comilla **doble**) en `BuildWorkshopSection.tsx:167`
+>   y `SolutionPublisherSection.tsx:395`. Contar sólo la primera forma congela **`danger: 0`** en
+>   `SolutionPublisherSection` — el archivo con **más** confirmaciones (5) y el que publica en el ADO/GitLab
+>   **real** del operador — y en `BuildWorkshopSection`. En esos dos el assert queda `N >= 0`: **vacuo**.
+> - **[C33] El assert era insatisfacible.** "Contar los ids `impact:'high'` referenciados en el archivo" no
+>   mide la severidad de **esa** confirmación: mide una coincidencia de archivo. Medido, falla el día 1 en
+>   `ServersSection` (`0 >= 2`), `BuildWorkshopSection` (`0 >= 1`, porque `devops.build.run` es
+>   `impact:'low'`) y `PipelineBuilderSection` (`0 >= 1`, porque el botón de `devops.pipeline.trigger` vive
+>   en `TriggerPipelineSection.tsx`, que F7 no toca).
+> - **[C35] El censo era de 7 archivos, no de 6.** `VariablesSection.tsx` tiene 2 confirmaciones (una con
+>   `tone: 'danger'`) y no figuraba en ninguna parte del plan. El v2 y el v3 lo "re-verificaron" grepeando
+>   **la lista de 6 que ya tenían**; el barrido del directorio da 7.
+
+**Censo REAL, medido el 2026-07-28 con un barrido de `frontend/src/components/devops/*.tsx`** (patrón
+agnóstico de comillas `tone:\s*['"]danger['"]`). Este es el contenido **literal** que debe tener
+`toneBaseline.json`; está escrito acá a propósito, para que un generador con un bug **no pueda
+autocertificarse**:
+
+| archivo | `askConfirm({` | `danger` | sitios `danger` (`archivo:línea`) |
+|---|---|---|---|
+| `BuildWorkshopSection.tsx` | 2 | **1** | `:167` (`"danger"`, doble) |
+| `PipelineBuilderSection.tsx` | 4 | **1** | `:244` |
+| `ProductionFlow.tsx` | 2 | **0** | — |
+| `RemoteConsoleSection.tsx` | 1 | **1** | `:215` |
+| `ServersSection.tsx` | 2 | **2** | `:127`, `:145` |
+| `SolutionPublisherSection.tsx` | 5 | **1** | `:395` (`"danger"`, doble) |
+| `VariablesSection.tsx` **[C35]** | 2 | **1** | `:96` |
+| **total** | **18** | **7** | |
+
+**La solución (v4).** Congelar el censo **antes** de tocar nada y verificarlo **después**, con el mismo
+patrón de baseline que el repo ya usa en `frontend/src/__tests__/uiDebtBaseline.json` (verificado: existe,
+junto a otros 6 `*Baseline.json` en ese directorio):
 
 1. **Antes de F7**, generar `frontend/src/__tests__/toneBaseline.json` con este comando exacto (se corre una
    sola vez, desde `Stacky Agents`, y su salida se commitea tal cual):
    ```
    backend\.venv\Scripts\python.exe backend/scripts/gen_tone_baseline.py
    ```
-   `backend/scripts/gen_tone_baseline.py` (nuevo, ~25 líneas, sin dependencias): para cada uno de los 6
-   archivos cuenta las ocurrencias de `tone: 'danger'` y de `askConfirm({`, y escribe
-   `{"<archivo>": {"danger": N, "askConfirm": M}, ...}` con `sort_keys=True` e `indent=2`.
-2. **Después de F7**, `plan267Adoption.test.ts` agrega el test 4: para cada archivo del baseline, la
-   cantidad de acciones del catálogo **con `impact:'high'`** referenciadas en ese archivo es **≥** su
-   `danger` congelado. El mensaje de fallo nombra el archivo y los dos números.
+   `backend/scripts/gen_tone_baseline.py` (nuevo, ~30 líneas, sin dependencias). **Tres reglas duras, cada
+   una es un bloqueante corregido:**
+   - **[C35] BARRE el directorio, no una lista.** Enumera `frontend/src/components/devops/*.tsx` con
+     `pathlib.Path(...).glob("*.tsx")` y **emite una entrada por cada archivo con ≥1 `askConfirm({`**.
+     Prohibido hardcodear los nombres: es exactamente el error que dejó `VariablesSection.tsx` invisible en
+     dos pasadas seguidas.
+   - **[C32] El patrón de severidad es agnóstico de comillas:**
+     `re.findall(r"tone:\s*['\"]danger['\"]", src)`. Con la comilla simple sola pierde 2 de 7.
+     *No* usar `"danger"` a secas: `BuildWorkshopSection.tsx:277` y `SolutionPublisherSection.tsx:712`
+     tienen un `tone={… : "danger"}` de un `StatusChip` (un badge de estado, no una confirmación) que el
+     patrón con `tone:` **no** matchea — verificado, por eso el conteo da 1 y no 2 en esos dos archivos.
+   - Escribe `{"<nombre del archivo>": {"danger": N, "askConfirm": M}, …}` con `sort_keys=True` e
+     `indent=2`, claves = **nombre de archivo pelado** (sin ruta), para que el `.json` sea diffeable.
+2. **Verificación inmediata del generador (obligatoria, antes de seguir):** el `.json` producido debe ser
+   **idéntico** a la tabla de arriba: 7 claves, `danger` = 1/1/0/1/2/1/1 y `askConfirm` = 2/4/2/1/2/5/2.
+   Si no coincide, **el bug está en el generador, no en el repo**: se arregla el generador. Un baseline
+   generado por un script con un bug es un falso verde permanente.
+3. **Después de F7**, `plan267Adoption.test.ts` agrega **dos** tests (ver F7 t4 y t5):
+   - **t4 — invariante por SITIO DE LLAMADA, no por archivo [C33].** Para cada uno de los 7 sitios `danger`
+     enumerados arriba, si ese sitio quedó recableado a `runDevOpsAction`, la acción a la que se recableó
+     debe declarar `impact:'high'` en el catálogo; si **no** quedó recableado (porque su operación no está
+     en las 23 — ver la tabla de mapeo de F7), debe **seguir teniendo su `tone: 'danger'` literal**. Las dos
+     ramas son verificables sobre el texto del archivo, y ninguna es vacua.
+   - **t5 — el censo no puede encogerse ni perder un archivo [C35].** El conjunto de claves de
+     `toneBaseline.json` es **exactamente** el conjunto de archivos de `components/devops/*.tsx` con ≥1
+     `askConfirm({`, y para cada archivo `danger_actual + danger_recableado_a_high == danger_congelado`.
+     Es el test que impide que un octavo `VariablesSection` vuelva a ser invisible.
 
-**Por qué respeta los rieles:** no agrega trabajo al operador (es un script y un test, cero configuración);
-es irrelevante para los 3 runtimes (no llama a ningún modelo); no toca human-in-the-loop salvo para
-**protegerlo** (impide debilitar una confirmación); reusa el patrón de baseline existente en vez de
-inventar uno; y es puramente aditivo. **Es la única forma de que "el `tone` no puede aflojarse" deje de ser
-una instrucción de lectura y pase a ser un criterio binario.**
+**Por qué respeta los rieles:** no agrega trabajo al operador (es un script y dos tests, cero
+configuración); es irrelevante para los 3 runtimes (no llama a ningún modelo); no toca human-in-the-loop
+salvo para **protegerlo** (impide debilitar una confirmación); reusa el patrón de baseline existente en vez
+de inventar uno; y es puramente aditivo. **Con las correcciones de v4, "el `tone` no puede aflojarse" pasa a
+ser un criterio binario y satisfacible** — en la v3 era binario e **imposible**.
 
 ### 4.1 Receta obligatoria de cableado de flags (7 patas)
 
@@ -727,12 +832,12 @@ es **exactamente** el universo que `match_intent` evalúa (el v2 sólo miraba `p
 17b. **`test_reach_es_canonico_para_su_effect` [C23]** — para toda acción, `a.reach == canonical_reach(a.effect)`. Es el test que convierte a `reach` en un derivado verificado en vez de 23 tuplas escritas a mano; el mensaje de fallo nombra el id y las dos tuplas.
 18. **`test_todas_alcanzan_el_boton`** — `"button" in a.reach` para las 23 (el botón manual nunca se pierde; **principio 3 de §4**, "cero trabajo extra al operador" — el v2 citaba un "§4.3" que no existe como sección [C30]).
 18b. **`test_label_y_summary_no_vacios` [C24]** — para las 23, `a.label.strip()` y `a.summary.strip()` no están vacíos. Son campos obligatorios que el v2 nunca declaró, y `label` entra al ranking del matcher.
-19. **`test_write_nunca_es_palette_run` (I-REACH)** — `effect=="write"` ⇒ `"palette-run" not in a.reach`. El mensaje de fallo **nombra los ids ofensores**.
+19. *(eliminado en v4 [C40] — `test_write_nunca_es_palette_run` era un duplicado exacto de t17b y del test 11 de F8, sobre una propiedad que `canonical_reach()` vuelve imposible de violar. La I-REACH del origen la cubre el test 11 de F8, que además nombra los ids ofensores; la del consumo, el test 15 de F4.)*
 20. **`test_palette_actions_excluye_ejecucion_de_escritura`** — con todo el health en `True`, `palette_actions(health)` contiene las 7 de escritura (se ofrecen) y `[a for a in palette_actions(health) if "palette-run" in a.reach]` tiene **0** con `effect=="write"`.
 21. **`test_assistant_actions_es_el_universo_del_matcher`** — `assistant_actions(health)` con todo ON devuelve las 23; ninguna acción queda fuera del asistente por accidente.
 
 **Comando:** `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v`
-**Aceptación binaria:** **23 passed** (21 del v2 + `test_reach_es_canonico_para_su_effect` y `test_label_y_summary_no_vacios`), 0 failed. Además `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` (**56 passed** — medido hoy: 56; verificado que este archivo **no tiene ningún `parametrize` sobre `FLAG_REGISTRY`**, así que agregar flags no cambia el número) y `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v` (**4 passed** — medido hoy: 4).
+**Aceptación binaria:** **22 passed** (21 del v2 + `test_reach_es_canonico_para_su_effect` + `test_label_y_summary_no_vacios` − el t19 eliminado por duplicado [C40]), 0 failed. Además `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` (**56 passed** — medido hoy: 56; verificado que este archivo **no tiene ningún `parametrize` sobre `FLAG_REGISTRY`**, así que agregar flags no cambia el número) y `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v` (**4 passed** — medido hoy: 4).
 
 **Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` — **default ON**.
 **Runtimes:** Codex / Claude Code / Copilot — **idéntico**; el módulo es datos puros, no ejecuta nada. Sin fallback necesario.
@@ -1385,7 +1490,17 @@ export function bindingFor(id: string): DevOpsActionBinding | undefined {
  *  igual. NO es el catalogo completo: son EXACTAMENTE los 7 ids de abajo. */
 export const FALLBACK_META: Record<string, DevOpsActionMeta> = { /* 7 entradas */ };
 ```
-Los **7 ids exactos** (uno por cada sección de F7, más `devops.build.status` que `BuildWorkshopSection` también usa): `devops.remote_console.run`, `devops.build.run`, `devops.build.status`, `devops.pipeline.trigger`, `devops.deployment.execute`, `devops.publication.run`, `devops.solution.publish`. **Ni uno más ni uno menos** — "6+" no es un criterio.
+Los **7 ids exactos**: `devops.remote_console.run`, `devops.build.run`, `devops.build.status`, `devops.pipeline.trigger`, `devops.deployment.execute`, `devops.publication.run`, `devops.solution.publish`. **Ni uno más ni uno menos** — "6+" no es un criterio.
+
+> **Corrección v4 [C37] — la regla de selección no es "uno por sección de F7".** El v3 justificaba los 7 así,
+> y es falso: `devops.pipeline.trigger`, `devops.deployment.execute` y `devops.publication.run` viven en
+> `TriggerPipelineSection.tsx`, `DeploymentsSection.tsx` y `PublicationsSection.tsx` — que en el v3 **no
+> estaban** entre los 6 archivos de F7 — mientras `ServersSection.tsx` y `ProductionFlow.tsx`, que **sí**
+> estaban, no reciben ninguna entrada (ninguna de sus 4 confirmaciones tiene acción en el catálogo, ver la
+> tabla de F7 [C34]). **La regla real, y la que hay que aplicar:** `FALLBACK_META` contiene exactamente los
+> ids que **algún archivo recablea en F7** — los 6 de la lista corregida de F7 — **más `devops.build.status`**,
+> que `BuildWorkshopSection.tsx` también consume para pintar el estado. Con la lista de F7 ya corregida en
+> v4, los 7 ids salen de ahí por construcción, y el test 4 los verifica uno por uno.
 
 **Tests — `frontend/src/services/devopsActionBindings.test.ts`** (**6 casos**)
 1. Toda clave del record cumple `/^devops\.[a-z_]+\.[a-z_]+$/`.
@@ -1467,7 +1582,7 @@ En `CommandPalette.tsx`: cargar el catálogo **una sola vez al abrir la paleta**
 > Con `acciones = []`, `devopsActionCommands([], …)` devuelve `[]` (test 1) y la paleta queda **exactamente
 > como hoy**, sin banner y sin error — que es lo que el plan promete.
 
-**Tests — `commandPaletteDevopsActions.test.ts`** (10 casos)
+**Tests — `commandPaletteDevopsActions.test.ts`** (**11 casos** — el v3 dejó escrito "(10 casos)" al agregar el test 11 de C21, que es **el mismo defecto C27** que arregló en F4 y F6 [C39]; la aceptación y §10 ya decían 11)
 1. `devopsActionCommands([], noop, noop)` ⇒ `[]`.
 2. Con 12 acciones de lectura ⇒ 12 comandos, todos con `kind === 'devops-action'`.
 3. Todos los `id` empiezan con `devops-action-` y son únicos.
@@ -1570,7 +1685,7 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 10. **`test_ver_en_el_panel_lleva_los_datos` [C20]** — dado un `ProposalView` con `environment:'prod'` y `project:'Pacifico'`, la ruta del botón "Ver en el panel" es `'/devops/despliegues?environment=prod&project=Pacifico'`. Sin este test, la frase obligatoria de abajo es una promesa que el código no cumple.
 
 **Comando:** desde `frontend/`: `npx vitest run src/components/devops/devopsActionConsoleModel.test.ts`; y backend, en invocaciones separadas: `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v` y `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v`, más el verificador de 3 claves de `PLAIN_HELP` de §4.1.
-**Aceptación binaria:** **10 passed** en vitest; 56 passed y 9 passed en los dos de flags; el verificador de `PLAIN_HELP` imprime `OK`; `npx tsc --noEmit` limpio; `npx vitest run src/__tests__/uiDebtRatchet.test.ts` verde (los 2 `.tsx` nuevos suman **0** a la deuda) y `npx vitest run src/__tests__/devopsPollingRatchet.test.ts` verde (**este sí aplica en F6**: los componentes nuevos viven en `components/devops/`, que es el alcance real del ratchet — a diferencia de F5, ver C11).
+**Aceptación binaria:** **10 passed** en vitest; 56 passed y 9 passed en los dos de flags; el verificador de `PLAIN_HELP` imprime `OK`; `npx tsc --noEmit` limpio; `npx vitest run src/__tests__/uiDebtRatchet.test.ts` **sin regresión contra su foto de hoy — `1 failed | 2 passed`, medido el 2026-07-28** (los 2 `.tsx` nuevos suman **0** a la deuda, así que el conteo de fallos debe quedar **igual**; el v3 pedía "verde", que en ese archivo es **insatisfacible** por deuda ajena [C36]) y `npx vitest run src/__tests__/devopsPollingRatchet.test.ts` sin regresión (**este sí aplica en F6**: los componentes nuevos viven en `components/devops/`, que es el alcance real del ratchet — a diferencia de F5, ver C11).
 
 **Flag:** `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` — **default OFF, categoría (B)** (razón y `archivo:línea` arriba).
 **Runtimes:**
@@ -1584,15 +1699,16 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 
 **Objetivo.** Que el botón de siempre y la acción del asistente sean **el mismo código**. **Valor:** cierra KPI-6; a partir de acá "coherente" deja de ser una opinión.
 
-**Archivos a editar** (uno por vez, en este orden, verificando después de cada uno):
-1. `frontend/src/components/devops/ServersSection.tsx`
-2. `frontend/src/components/devops/BuildWorkshopSection.tsx`
-3. `frontend/src/components/devops/PipelineBuilderSection.tsx`
-4. `frontend/src/components/devops/ProductionFlow.tsx`
-5. `frontend/src/components/devops/RemoteConsoleSection.tsx`
-6. `frontend/src/components/devops/SolutionPublisherSection.tsx`
+**Archivos a editar: ver la lista corregida en v4, más abajo** (después de la tabla de mapeo). **NO es la
+lista que traían el v1/v2/v3** (`ServersSection`, `BuildWorkshopSection`, `PipelineBuilderSection`,
+`ProductionFlow`, `RemoteConsoleSection`, `SolutionPublisherSection`): medido, **4 de esos 6 archivos no
+tienen ni una sola confirmación que corresponda a una acción del catálogo**, y en cambio 3 archivos que esa
+lista no incluía (`TriggerPipelineSection`, `DeploymentsSection`, `PublicationsSection`) tienen los botones
+de las 3 acciones `write`/`high` más importantes **sin ninguna confirmación** [C34].
 
-**Transformación exacta, idéntica en los 6** (ejemplo con `ServersSection.tsx`):
+**Transformación exacta, idéntica en los 6** (ejemplo real con `RemoteConsoleSection.tsx`, que sí cablea
+`devops.remote_console.run`; el v3 usaba este mismo diff atribuyéndoselo a `ServersSection.tsx`, que **no
+ejecuta comandos remotos** — su `askConfirm` de `:215` es *"Activar escritura"*):
 
 ```diff
 -const ok = await askConfirm({
@@ -1612,23 +1728,98 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 +if (!receipt.ok) return;
 ```
 
+> **CORRECCIÓN v4 [C34] — la aritmética de esta fase estaba mal, y sobrevivió a las 3 pasadas anteriores.**
+> El v1, el v2 y el v3 dijeron todos "F7 recablea las **16** confirmaciones al catálogo". Se midió leyendo
+> los 16 `title:` reales y buscando cada uno en la tabla de 23 de F0: **sólo 2 de las 16 corresponden a una
+> acción del catálogo.** Las otras 14 protegen operaciones que **no existen en las 23** y para las que, en
+> varios casos, **no existe ninguna flag** en `FLAG_REGISTRY` (lo que las vuelve indeclarables sin violar
+> F8 t5 y t7, que exigen `write ⇒ flag_key != ""` y `flag_key ∈ FLAG_REGISTRY`). El v3 tapaba el hueco con
+> una sola línea ("se agrega al catálogo en esta fase"), que en la práctica convierte F7 en *"diseñá 14
+> acciones nuevas, con `label`, `summary`, ≥3 `phrases`, `impact`, `reach`, `section_id`, `nav_path`,
+> `health_key` y una `flag_key` preexistente"* — un plan entero escondido en un renglón.
+> **Por eso F7 pasa a declarar el mapeo sitio por sitio, y KPI-6 se mide sobre los sitios mapeados.**
+
+**Mapeo REAL de las 18 confirmaciones a mano (medido el 2026-07-28, barriendo `components/devops/*.tsx`).**
+Ésta es la tabla normativa de la fase: un modelo menor recablea **exactamente** las filas marcadas
+`RECABLEAR` y **no toca** las marcadas `FUERA DE ALCANCE`.
+
+| # | sitio (`archivo:línea`) | `title` de hoy | `danger` | acción del catálogo | qué hace F7 |
+|---|---|---|---|---|---|
+| 1 | `BuildWorkshopSection.tsx:137` | Compilar en Release | no | **`devops.build.run`** (`write`/`low`) | **RECABLEAR** |
+| 2 | `SolutionPublisherSection.tsx:362` | Publicar &lt;sol&gt; | no | **`devops.solution.publish`** (`write`/`high`) | **RECABLEAR** |
+| 3 | `ServersSection.tsx:127` | Quitar contraseña | **sí** | — | FUERA DE ALCANCE |
+| 4 | `ServersSection.tsx:145` | Eliminar servidor | **sí** | — | FUERA DE ALCANCE |
+| 5 | `BuildWorkshopSection.tsx:164` | Cancelar build | **sí** | — | FUERA DE ALCANCE |
+| 6 | `PipelineBuilderSection.tsx:244` | Eliminar borrador | **sí** | — | FUERA DE ALCANCE |
+| 7 | `PipelineBuilderSection.tsx:261` | Crear variable segura | no | — | FUERA DE ALCANCE |
+| 8 | `PipelineBuilderSection.tsx:288` | Reemplazar pipeline | no | — | FUERA DE ALCANCE |
+| 9 | `PipelineBuilderSection.tsx:341` | Reemplazar pipeline (preset) | no | — | FUERA DE ALCANCE |
+| 10 | `ProductionFlow.tsx:93` | Crear MR/PR | no | — | FUERA DE ALCANCE |
+| 11 | `ProductionFlow.tsx:117` | Crear pipeline definition | no | — | FUERA DE ALCANCE |
+| 12 | `RemoteConsoleSection.tsx:215` | Activar escritura | **sí** | — (`devops.remote_console.run` es *correr un comando*, no *activar el modo escritura*) | FUERA DE ALCANCE |
+| 13 | `SolutionPublisherSection.tsx:295` | Agregar soluciones al catálogo | no | — | FUERA DE ALCANCE |
+| 14 | `SolutionPublisherSection.tsx:392` | Cancelar publicación | **sí** | — | FUERA DE ALCANCE |
+| 15 | `SolutionPublisherSection.tsx:406` | Registrar como app de despliegue | no | — | FUERA DE ALCANCE |
+| 16 | `SolutionPublisherSection.tsx:434` | Abrir conversación con el agente DevOps | no | — | FUERA DE ALCANCE |
+| 17 | `VariablesSection.tsx:81` **[C35]** | Guardar variable | no | — | FUERA DE ALCANCE |
+| 18 | `VariablesSection.tsx:96` **[C35]** | Borrar variable | **sí** | — | FUERA DE ALCANCE |
+
+**Además hay 3 botones del catálogo que NO tienen confirmación hoy** y que F7 **sí** debe cablear, porque son
+`write`/`high` y sus archivos existen: `devops.pipeline.trigger` → `TriggerPipelineSection.tsx`,
+`devops.deployment.execute` → `DeploymentsSection.tsx`, `devops.publication.run` → `PublicationsSection.tsx`
+(verificado: los 3 archivos existen en `components/devops/` y tienen **0** `askConfirm({`). Recablearlos
+**agrega** una confirmación que hoy no existe para tres operaciones de alto impacto — es una mejora de
+seguridad, no una regresión, y hay que declararla como tal. **`RemoteConsoleSection.tsx`** aporta el cuarto:
+`devops.remote_console.run`.
+
+**Archivos a editar (lista corregida en v4), uno por vez, en este orden:**
+1. `frontend/src/components/devops/BuildWorkshopSection.tsx` (sitio 1)
+2. `frontend/src/components/devops/SolutionPublisherSection.tsx` (sitio 2)
+3. `frontend/src/components/devops/RemoteConsoleSection.tsx` (cablea `devops.remote_console.run`)
+4. `frontend/src/components/devops/TriggerPipelineSection.tsx` (cablea `devops.pipeline.trigger`)
+5. `frontend/src/components/devops/DeploymentsSection.tsx` (cablea `devops.deployment.execute`)
+6. `frontend/src/components/devops/PublicationsSection.tsx` (cablea `devops.publication.run`)
+
 **Reglas duras del recableado:**
 - **No se borra ningún botón.** El operador ve exactamente los mismos controles.
 - **El texto de la confirmación cambia, y eso es lo que el plan viene a hacer [C4].** El v1 decía a la vez, en §4.7, que el panel quedaba "byte-idéntico ... con el mismo texto de confirmación", y acá, que "el texto cambia". Las dos no pueden ser ciertas; vale esta. Lo que **no** cambia: el mismo botón, el mismo efecto, la misma severidad y el mismo `tone`.
-- **El `tone` no puede aflojarse**: si hoy una confirmación es `'danger'`, su acción debe declarar `impact:'high'` en el catálogo. **[ADICIÓN ARQUITECTO v3, §4.11] Esto dejó de ser una instrucción de lectura y pasó a ser un dato y un test.** El v2 pedía "verificación previa obligatoria, archivo por archivo… y **anotar** a qué acción corresponde cada uno" — un **paso manual**, prohibido por los rieles, en el punto de mayor consecuencia del plan. Ahora: **paso 0 de F7**, antes de tocar el primer archivo, correr `backend\.venv\Scripts\python.exe backend/scripts/gen_tone_baseline.py` y commitear `frontend/src/__tests__/toneBaseline.json`; **al cerrar F7**, el test 4 de `plan267Adoption.test.ts` verifica que ninguna severidad bajó. Censo medido y **re-verificado en la crítica v3** con `grep -c "askConfirm({"`: `ServersSection` 2, `BuildWorkshopSection` 2, `PipelineBuilderSection` 4, `ProductionFlow` 2, `RemoteConsoleSection` 1, `SolutionPublisherSection` 5 = **16 en total** (exacto). Si al terminar F7 el catálogo no cubre las 16, falta una acción.
-- Si una sección tiene una acción con efecto que **no** está en el catálogo, se agrega al catálogo en esta fase (F0 quedó con 23; F7 puede llegar a más) — **nunca** se deja fuera.
+- **Las 16 filas `FUERA DE ALCANCE` se dejan intactas, con su `askConfirm({` y su `tone` de hoy.** No se
+  "aproximan" a una acción parecida del catálogo: eso es exactamente cómo se afloja una severidad. Declararlas
+  en el catálogo es un plan posterior (ver §7.9), porque varias necesitan una `flag_key` que todavía no
+  existe.
+- **El `tone` no puede aflojarse**: si un sitio recableado hoy es `'danger'`, su acción debe declarar
+  `impact:'high'`. **[ADICIÓN ARQUITECTO v3, §4.11, rehecha en v4] Es un dato y dos tests, no una
+  instrucción de lectura.** **Paso 0 de F7**, antes de tocar el primer archivo: correr
+  `backend\.venv\Scripts\python.exe backend/scripts/gen_tone_baseline.py`, **comparar su salida contra la
+  tabla literal de §4.11** (7 claves; `danger` 1/1/0/1/2/1/1) y commitear `toneBaseline.json`.
 - Si un binding no puede reproducir exactamente el comportamiento del botón, **se detiene la fase y se reporta**; no se aproxima.
 
 **Test — `frontend/src/__tests__/plan267Adoption.test.ts`** (patrón calcado de `plan175Adoption.test.ts`, que ya existe en `frontend/src/__tests__/`)
-1. Los 6 archivos de la lista **importan** `runDevOpsAction` desde `../../services/devopsActionRunner`.
-2. Ninguno de los 6 contiene la cadena `askConfirm({` (construcción de `ConfirmRequest` a mano). **Verificado: hoy los 6 SÍ la contienen (2/2/4/2/1/5), así que este test es rojo antes del recableado y verde después — no es un verde vacío.**
+1. Los **6 archivos de la lista corregida** **importan** `runDevOpsAction` desde `../../services/devopsActionRunner`.
+2. **[C34] Alcance por SITIO, no por archivo.** Los 2 sitios `RECABLEAR` de la tabla ya no existen: el texto
+   de `BuildWorkshopSection.tsx` **no** contiene `title: "Compilar en Release"` dentro de un `askConfirm({`,
+   y el de `SolutionPublisherSection.tsx` **no** contiene `title: \`Publicar ${`. **Y el conteo residual de
+   `askConfirm({` es EXACTAMENTE el declarado**: `BuildWorkshopSection` **1**, `SolutionPublisherSection`
+   **4**, `PipelineBuilderSection` **4**, `ProductionFlow` **2**, `RemoteConsoleSection` **1**,
+   `ServersSection` **2**, `VariablesSection` **2** = **16**. Números exactos, no "0": exigir 0 era
+   insatisfacible (14 de 18 no tienen acción de dónde derivar) y un `>=` sería un verde vacío.
 3. `frontend/src/services/devopsActionRunner.ts` es el **único** archivo de `src/` (excluyendo `*.test.ts` y `__tests__/`) que contiene la cadena **`export function confirmRequestFor`**. Se busca esa cadena literal, no `confirmRequestFor` a secas, para no cazar a los que la importan.
-4. **`test_ninguna_severidad_se_afloja` [ADICIÓN ARQUITECTO v3, §4.11]** — lee `frontend/src/__tests__/toneBaseline.json` (congelado en el paso 0 de esta fase) y, para cada uno de los 6 archivos, cuenta cuántos ids del catálogo con **`impact:'high'`** aparecen referenciados en ese archivo y afirma que ese número es **≥** el `danger` congelado. El mensaje de fallo nombra el archivo, el número congelado y el actual. **Es el único test que impide que recablear 16 confirmaciones a mano degrade una de ellas en silencio** — el riesgo R1, que el v2 mitigaba con un paso manual.
+4. **`test_ninguna_severidad_se_afloja` [§4.11 paso 3, corregido en v4 — C33]** — para cada uno de los **7
+   sitios `danger`** de la tabla de §4.11: si el sitio fue recableado, la acción destino declara
+   `impact:'high'` en el catálogo (leyendo el `.py` como texto, mismo patrón que el ratchet de F8); si no fue
+   recableado, su `tone:` `'danger'`/`"danger"` **sigue presente** en el archivo. El mensaje de fallo nombra
+   el sitio y qué rama falló. **Ninguna de las dos ramas es vacua, y las dos son satisfacibles hoy** — el
+   assert de la v3 (`ids high referenciados ≥ danger congelado`) fallaba el día 1 en 3 de 6 archivos.
+5. **`test_el_censo_no_pierde_un_archivo` [C35]** — el conjunto de claves de `toneBaseline.json` es
+   **exactamente** el de los `components/devops/*.tsx` con ≥1 `askConfirm({` (barrido con `readdirSync`,
+   nunca una lista hardcodeada), y su `danger` congelado coincide con `danger_actual +
+   sitios_recableados_a_high`. Es el test que impide que un octavo archivo con confirmación a mano vuelva a
+   ser invisible, como le pasó a `VariablesSection.tsx` en las pasadas v2 y v3.
 
 **Comando:** desde `frontend/`: `npx vitest run src/__tests__/plan267Adoption.test.ts` + `npx tsc --noEmit`
-**Aceptación binaria:** **4 passed**, `tsc` sin errores, y `npx vitest run src/__tests__/uiDebtRatchet.test.ts` sigue verde. (`undoConfirmRatchet.test.ts` también debe seguir verde, pero **es informativo**: cuenta `window.confirm(` y `[^.\w]confirm\(` y su propio encabezado aclara que `askConfirm(` **no** matchea ninguno de los dos, así que este plan no puede moverlo.)
+**Aceptación binaria:** **5 passed**, `tsc` sin errores, y `uiDebtRatchet.test.ts` **sin regresión respecto de su foto de hoy — que es `1 failed | 2 passed` por deuda ajena** (medido el 2026-07-28; exigirlo "verde" era insatisfacible [C36]: se compara el conteo de fallos antes y después, no se pide verde). (`undoConfirmRatchet.test.ts` también debe seguir igual, pero **es informativo**: cuenta `window.confirm(` y `[^.\w]confirm\(` y su propio encabezado aclara que `askConfirm(` **no** matchea ninguno de los dos, así que este plan no puede moverlo.)
 
-**Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED`. **Nota de degradación:** los bindings y `runDevOpsAction` funcionan con el catálogo **embebido en el frontend como fallback** si el `GET /catalog` falla o la flag está OFF, para que apagar la flag **nunca** rompa un botón que hoy funciona. El fallback embebido se genera copiando los metadatos de las acciones de las 6 secciones tocadas (no las 23) — se declara en `devopsActionBindings.ts` como `FALLBACK_META: Record<string, DevOpsActionMeta>` y un test verifica que sus 6+ entradas coinciden campo a campo con el catálogo backend.
+**Flag:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED`. **Nota de degradación:** los bindings y `runDevOpsAction` funcionan con el catálogo **embebido en el frontend como fallback** si el `GET /catalog` falla o la flag está OFF, para que apagar la flag **nunca** rompa un botón que hoy funciona. El fallback embebido se declara en `devopsActionBindings.ts` como `FALLBACK_META: Record<string, DevOpsActionMeta>` con **exactamente los 7 ids enumerados en F4** — no "las 6 secciones tocadas", no "6+ entradas": ese texto del v3 quedó stale respecto de su propio fix de C25 y contradecía el "ni uno más ni uno menos" de F4 [C37]. Los tests 4 y 5 de `devopsActionBindings.test.ts` verifican los 7 ids y que su `effect`/`impact` coincidan campo a campo con el catálogo backend.
 **Runtimes:** irrelevante (UI). Idéntico en los 3.
 **Trabajo del operador: ninguno.** Los mismos botones, en el mismo lugar, con el mismo efecto.
 
@@ -1656,7 +1847,7 @@ Texto obligatorio para `agent_write_disabled` (no se negocia, porque es lo que e
 11. **`test_write_no_es_ejecutable_desde_la_paleta` (I-REACH, KPI-9) [C5]** — para toda acción con `effect=="write"`, `"palette-run" not in a.reach`. El mensaje de fallo **lista los ids ofensores por nombre**. Es el ratchet que impide que un plan futuro reabra el agujero sin que nadie lo note.
 12. **`test_frases_no_colisionan_entre_read_y_write` [C3 + C24]** — para todo par (`r` de lectura, `w` de escritura), ningún elemento de **`(*r.phrases, r.label)`** tiene su conjunto de **tokens de contenido** (usando `_content_tokens` del matcher) contenido en el de algún elemento de **`(*w.phrases, w.label)`**, ni al revés. **El v2 sólo inspeccionaba `phrases`, pero `match_intent` puntúa `(*a.phrases, a.label)`: la superficie protegida no era la superficie evaluada [C24].** Sin este test, agregar `"desplegar"` como `label` del historial de despliegues volvería ambiguo el ranking y nadie se enteraría hasta que el operador confirmara la acción equivocada. *Verificado en la crítica v3 corriendo el matcher sobre las 23 listas + los 23 `label` de F0: **0 colisiones**.*
 13. **`test_reach_incluye_button_siempre`** — `"button" in a.reach` para las 23: ninguna acción puede volverse *solo* del asistente. Es el guardarraíl de "sin eliminar la posibilidad de hacerlo manualmente", verificado.
-14. **`test_reach_es_canonico` [C23]** — `a.reach == canonical_reach(a.effect)` para las 23. Es la red de seguridad por si alguien vuelve a escribir una tupla literal en la semilla; con `canonical_reach()` en su lugar, no puede fallar.
+14. *(eliminado en v4 [C40] — `test_reach_es_canonico` duplicaba exactamente el t17b de F0. La red de seguridad contra una tupla escrita a mano vive ahí; acá quedaba el mismo assert por segunda vez.)*
 
 **`frontend/src/__tests__/devopsActionCatalogRatchet.test.ts`** (paridad backend↔frontend, leyendo el `.py` como texto — patrón calcado de `devopsPollingRatchet.test.ts:17-21`)
 ```ts
@@ -1687,9 +1878,18 @@ function catalogIds(): string[] {
 - desde `frontend/`: `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts`
 - `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v`
 
-**Aceptación binaria:** **14 passed (backend) + 7 passed (frontend) + 4 passed (meta-ratchet)**.
+**Aceptación binaria:** **13 passed (backend, v4: −t14 duplicado [C40]) + 7 passed (frontend) + 4 passed (meta-ratchet)**.
 
-**Huella de regresión [C18 + C31].** Al cerrar F8, agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` la huella del modo de falla que este plan introduce y que no existía antes. **El v2 no daba ni el `id` ni el esquema [C31]**; van explícitos: `id` = **`plan267-propuesta-permanentemente-bloqueada`**, `plan` = `"267"`, `guard_test` = `"backend/tests/test_devops_action_ratchet.py::test_flag_key_existe_en_el_registro"`, `date` = la del cierre de F8, y los campos restantes con **la misma forma que la última entrada del archivo** (leerla antes de escribir; no inventar claves). Descripción: *"el asistente propone una acción DevOps que nunca se puede ejecutar"* — síntoma: `blocked_reason` distinto de `""` de forma permanente; causas ordenadas por probabilidad: (1) `health_key` de la acción apagado o master `flag_enabled` en `False`; (2) `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` OFF (esperado, no es bug: la tarjeta lo explica); (3) `flag_key` que ya no existe en el registro (lo caza el test 7 de este mismo archivo). Sin la huella, el primer reporte de "propone y no hace nada" se investiga desde cero.
+**Huella de regresión [C18 + C31].** Al cerrar F8, agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` la huella del modo de falla que este plan introduce y que no existía antes. **El v2 no daba ni el `id` ni el esquema [C31], y el v3 dio un esquema que NO EXISTE [C38]:** prescribía las claves `plan` y `date`, que **no están** en el archivo, y un `guard_test` con prefijo `backend/` y sufijo `::test_…`, cuando el archivo usa `tests/<archivo>.py` pelado. Medido en `backend/tests/test_error_fingerprints_catalog.py` y sobre la última de las 42 entradas reales, el esquema **obligatorio** es:
+
+> - **`_REQUIRED` (9 claves, `:18`)** — `id`, `title`, `class`, `status`, `log_pattern`, `log_guarded`, `killed_by`, `guard_test`, `self_test`. El v3 nombraba 2 de las 9 e inventaba 2 que no existen.
+> - **`status` ∈ `{"resolved","open","by_design"}`** (`_STATUS_ENUM`, `:17`). **`"guarded"` NO es válido** — es la causa de uno de los 3 fallos ajenos que ese archivo ya arrastra. No copiar esa entrada.
+> - **`log_pattern` se pasa por `re.compile()`** (`:50`): tiene que ser una regex válida y **no puede ser `null` ni faltar**. Como el síntoma de esta huella (`blocked_reason` permanentemente distinto de `""`) **no deja ninguna línea de log**, hay que anclar el patrón a algo que sí aparezca en el log; si no existe nada, **esta huella no corresponde** y se declara así en el commit en vez de inventar una regex que nunca matchea.
+> - **`self_test`** es `{"matches": [<líneas que DEBEN matchear>], "clean": [<líneas que NO deben>]}`, con strings **literales**.
+> - **`guard_test`** = `"tests/test_devops_action_ratchet.py"` (forma real: sin `backend/`, sin `::nodo`).
+> - Opcionales de la última entrada que conviene mantener: `killed_commit`, `date_resolved`, `evidence`, `note`.
+
+Valores: `id` = **`plan267-propuesta-permanentemente-bloqueada`**, `class` = `"ux-dead-end"`, `status` = `"by_design"` (la causa 2 es esperada, no un bug), `killed_by` = `"plan 267 F8"`, `guard_test` = `"tests/test_devops_action_ratchet.py"`, `date_resolved` = la del cierre de F8. **`test_error_fingerprints_catalog.py` arrastra 3 fallos ajenos (medido: 3 failed / 5 passed), así que NO es criterio binario de F8:** se cuentan los fallos antes y después y deben ser **los mismos 3**. Descripción: *"el asistente propone una acción DevOps que nunca se puede ejecutar"* — síntoma: `blocked_reason` distinto de `""` de forma permanente; causas ordenadas por probabilidad: (1) `health_key` de la acción apagado o master `flag_enabled` en `False`; (2) `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` OFF (esperado, no es bug: la tarjeta lo explica); (3) `flag_key` que ya no existe en el registro (lo caza el test 7 de este mismo archivo). Sin la huella, el primer reporte de "propone y no hace nada" se investiga desde cero.
 
 **Flag:** ninguna (son tests).
 **Runtimes:** irrelevante.
@@ -1701,7 +1901,8 @@ function catalogIds(): string[] {
 
 | # | Riesgo | Probabilidad | Mitigación (concreta) |
 |---|--------|--------------|------------------------|
-| R1 | El recableado de F7 cambia el comportamiento de un botón que hoy funciona | Media | F7 se hace **un archivo por vez**; regla dura "el `tone` no puede aflojarse"; `FALLBACK_META` embebido para que la flag OFF nunca rompa un botón; `plan267Adoption.test.ts` verifica la adopción y `tsc --noEmit` la compilación |
+| R1 | El recableado de F7 cambia el comportamiento de un botón que hoy funciona | Media | F7 se hace **un archivo por vez**; `FALLBACK_META` embebido para que la flag OFF nunca rompa un botón; `plan267Adoption.test.ts` verifica la adopción y `tsc --noEmit` la compilación. **[v4] La regla "el `tone` no puede aflojarse" es un dato + 2 tests (§4.11), no una instrucción**: `toneBaseline.json` congela los **7** sitios `danger` con un patrón agnóstico de comillas y el test 4 los verifica **sitio por sitio**. En la v3 esta mitigación **no funcionaba**: contaba sólo `tone: 'danger'` (ciega en `BuildWorkshopSection` y `SolutionPublisherSection`) y su assert era insatisfacible en 3 de 6 archivos [C32, C33] |
+| **R15** *(v4, C34)* | Un modelo menor lee "F7 recablea las 16 confirmaciones", encuentra que 14 no tienen acción, y **las aproxima a la acción del catálogo más parecida** — aflojando la severidad justo donde el plan prometía protegerla | **Alta** si no se declara | La tabla de mapeo sitio-por-sitio de F7 marca cada una de las 18 como `RECABLEAR` o `FUERA DE ALCANCE`, y F7 t2 congela el **conteo residual exacto** por archivo (16). Aproximar rompe el test en vez de pasar desapercibido. §7.9 declara por qué las 16 no entran en este plan |
 | R2 | El ratchet frontend da **falso verde** si la regex deja de matchear (archivo movido o formato cambiado) | Alta si no se previene | Tests 4 y 5 del ratchet: existencia del archivo + mínimo de 23 ids. Dos listas vacías iguales ya no pasan |
 | R3 | El matcher determinista confunde dos acciones y propone la equivocada | Media | `is_ambiguous` + `blocked_reason == "ambiguous"` deshabilita `[Ejecutar]` y ofrece elegir. Además `MIN_SCORE = 0.6` y `needs_confirmation` obligatorio para `write` |
 | R4 | Una flag queda mal cableada y rompe tests ajenos | Alta (histórico) | §4.1: las 7 patas tabuladas, la regla "OFF no declara `default=False`", la regla R4 de la estrella, y el comando de verificación por flag |
@@ -1728,6 +1929,7 @@ function catalogIds(): string[] {
 6. **Enriquecimiento por LLM de la propuesta** (mejorar `what_will_happen` o inferir parámetros con un modelo). El seam está listo (`describe()` es reemplazable y `PreflightRuntimeUnavailable` es el fallback), pero el 267 entrega **solo el camino determinista**, que es el que da paridad de 3 runtimes.
 7. **Persistir un historial de recibos.** Los recibos se muestran en sesión. Persistirlos es del eje de telemetría (plan 171).
 8. **Traducir el catálogo a otros idiomas.** Todo en español rioplatense, como el resto del producto.
+9. **[v4, C34] Declarar en el catálogo las 16 confirmaciones que hoy no tienen acción.** Medido: de las 18 confirmaciones a mano de `components/devops/`, **sólo 2** corresponden a una de las 23 acciones. Las otras 16 (*Quitar contraseña, Eliminar servidor, Cancelar build, Eliminar borrador, Crear variable segura, Reemplazar pipeline ×2, Crear MR/PR, Crear pipeline definition, Activar escritura, Agregar soluciones al catálogo, Cancelar publicación, Registrar como app de despliegue, Abrir conversación, Guardar variable, Borrar variable*) **quedan fuera de este plan a propósito**: varias son `write` y **no tienen ninguna `flag_key` en `FLAG_REGISTRY`** que las gatee, y F8 t5/t7 exigen que toda `write` declare una flag **existente**. Meterlas acá obligaría a crear ~8 flags nuevas en el mismo plan que crea el catálogo — dos cambios estructurales a la vez. Se cierran en un plan posterior, que tiene que empezar por las flags. El 267 deja el ratchet que las hace visibles (F7 t2 congela el residual exacto: **16**), así que no pueden crecer en silencio.
 
 ---
 
@@ -1758,7 +1960,7 @@ function catalogIds(): string[] {
 - **`targets_environment`** — si la acción actúa sobre un entorno concreto del operador. Obliga a declarar el param `environment`.
 - **`reach`** *(v2, corregido en v3)* — desde qué superficies puede **dispararse** una acción: `button`, `palette-run`, `palette-nav`, `assistant`. **No se escribe a mano: lo calcula `canonical_reach(effect)`** (§4.10). El v2 lo declaraba como dato libre en las 23 entradas, pero su propia semilla sólo admitía 2 combinaciones y las dos quedaban determinadas por `effect` — o sea 23 tuplas de deriva y ~10 tests para patrullarlas, a cambio de cero información [C23].
 - **I-REACH** *(v2, endurecida en v3)* — `effect == "write"` ⇒ `"palette-run" not in reach`. Una acción que escribe nunca queda a un fuzzy-match + Enter de distancia. Es el doble cerrojo de `entityActions.ts:44-46` aplicado a las tres superficies en vez de a una. **Se verifica en dos planos**: en el **origen** por construcción (`canonical_reach`) más los ratchets de F8, y en el **consumo** por el chequeo de `effect` de `paletteMode()` — porque `reach` llega por HTTP y ningún ratchet observa el payload [C22].
-- **`toneBaseline.json`** *(v3)* — censo congelado de cuántas confirmaciones `tone:'danger'` tenía cada uno de los 6 archivos **antes** de F7. Impide que recablearlas al catálogo afloje una severidad en silencio (§4.11).
+- **`toneBaseline.json`** *(v3, rehecho en v4)* — censo congelado de cuántas confirmaciones `tone:'danger'` / `tone:"danger"` tenía cada uno de los **7** archivos de `components/devops/` con confirmaciones a mano, **antes** de F7. Impide que recablearlas al catálogo afloje una severidad en silencio (§4.11). En la v3 contaba sólo la comilla simple (ciego en 2 de 7) y se comparaba contra un conteo de ids por archivo que era **insatisfacible en 3 de 6** [C32, C33, C35].
 - **Ratchet** — test que solo permite mejorar: impide que nazca una acción fuera del catálogo, que el catálogo y los bindings diverjan, o que una escritura se vuelva ejecutable desde la paleta.
 - **Las 7 patas** — los 7 lugares donde se cablea una flag del arnés (§4.1).
 
@@ -1766,15 +1968,15 @@ function catalogIds(): string[] {
 
 ## 10. Orden de implementación
 
-1. **F0** — `devops_action_catalog.py` + `canonical_reach()` + catálogo de 23 acciones (con `reach` **derivado**, las 23 listas de `phrases` y los 23 `label`+`summary` literales) + flag `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (7 patas) + `test_devops_action_catalog.py` (**23 tests**).
+1. **F0** — `devops_action_catalog.py` + `canonical_reach()` + catálogo de 23 acciones (con `reach` **derivado**, las 23 listas de `phrases` y los 23 `label`+`summary` literales) + flag `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (7 patas) + `test_devops_action_catalog.py` (**22 tests**, v4: −t19 duplicado [C40]).
 2. **F1** — `api/devops_actions.py` con `GET /catalog` y el seam `_health_payload_for_catalog()` + 3 keys nuevas en `_health_payload()` + los 3 atributos en `config.py` + `test_devops_actions_api.py` (5 tests).
 3. **F2** — `devops_action_matcher.py` (con `_STOPWORDS` y `_content_tokens`) + `test_devops_action_matcher.py` (**15 tests**).
 4. **F3** — `devops_action_proposal.py` + `POST /propose` (con `from dataclasses import replace`) + `POST /preview` + flag `STACKY_DEVOPS_ACTION_NL_ENABLED` (7 patas, incluye `_REQUIRES_MAP_FROZEN` y su `PLAIN_HELP` literal) + **14 tests más** en `test_devops_actions_api.py`.
 5. **F4** — `devopsActionTypes.ts` + `devopsActionRunner.ts` (con `navPathWithParams` y `paletteMode` **que chequea `effect` primero**) + `devopsActionBindings.ts` (con `FALLBACK_META` de **7 ids**) + **21 tests de vitest** (15 + 6).
 6. **F5** — `commandPaletteData.ts` (aditivo) + `CommandPalette.tsx` (**con `rawGet`, nunca `api.get`**) + `commandPaletteDevopsActions.test.ts` (**11 tests**).
 7. **F6** — `devopsActionConsoleModel.ts` + `DevOpsActionProposalCard.tsx` + `DevOpsActionConsole.tsx` (**cero `style={{}}`**) + `DevOpsAgentSection.tsx` + flag `STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED` (default **OFF**, 7 patas, con su `PLAIN_HELP` literal) + **10 tests**.
-8. **F7** — **paso 0: congelar `toneBaseline.json`** con `gen_tone_baseline.py` (§4.11) + recableado de los 6 archivos de secciones, **uno por vez** + `plan267Adoption.test.ts` (**4 tests**).
-9. **F8** — `test_devops_action_ratchet.py` (**14 tests**) + `devopsActionCatalogRatchet.test.ts` (**7 tests**) + la huella `plan267-propuesta-permanentemente-bloqueada` en `error_fingerprints.json`.
+8. **F7** — **paso 0: congelar `toneBaseline.json`** con `gen_tone_baseline.py` (que **barre** el directorio) y **compararlo contra la tabla literal de §4.11** + recableado de los **6 archivos de la lista corregida en v4** (`BuildWorkshopSection`, `SolutionPublisherSection`, `RemoteConsoleSection`, `TriggerPipelineSection`, `DeploymentsSection`, `PublicationsSection`), **uno por vez**, dejando intactas las 16 confirmaciones `FUERA DE ALCANCE` + `plan267Adoption.test.ts` (**5 tests**) [C32, C33, C34, C35].
+9. **F8** — `test_devops_action_ratchet.py` (**13 tests**, v4: −t14 duplicado [C40]) + `devopsActionCatalogRatchet.test.ts` (**7 tests**) + la huella `plan267-propuesta-permanentemente-bloqueada` en `error_fingerprints.json`.
 
 **Registro de los 4 archivos backend nuevos, con la sintaxis de cada runner [C1]** — `tests/test_devops_action_catalog.py`, `tests/test_devops_actions_api.py`, `tests/test_devops_action_matcher.py`, `tests/test_devops_action_ratchet.py`:
 - en `backend/scripts/run_harness_tests.sh`, array **`HARNESS_TEST_FILES=(`** en **`:20`** ⇒ 4 líneas **desnudas** (`  tests/test_devops_action_catalog.py`)
@@ -1789,10 +1991,10 @@ Verificación de que el registro quedó en los dos: `grep -c "test_devops_action
 Todos estos comandos, corridos **por archivo** desde la raíz `Stacky Agents` (backend) o desde `frontend/` (vitest), en verde:
 
 ```
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v      # 23 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_catalog.py -v      # 22 passed (v4: -t19 duplicado)
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_matcher.py -v      # 15 passed
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_actions_api.py -v         # 19 passed
-backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v      # 14 passed
+backend\.venv\Scripts\python.exe -m pytest backend/tests/test_devops_action_ratchet.py -v      # 13 passed (v4: -t14 duplicado)
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags.py -v              # 56 passed (re-medido en la critica v3: 56)
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_requires.py -v     #  9 passed (re-medido en la critica v3: 9)
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_ratchet_meta.py -v       #  4 passed (re-medido en la critica v3: 4)
@@ -1807,13 +2009,13 @@ npx vitest run src/components/devops/devopsActionConsoleModel.test.ts        # 1
 npx vitest run src/components/__tests__/commandPaletteDevopsActions.test.ts  # 11 passed
 npx vitest run src/components/__tests__/commandPaletteData.test.ts           # sin regresion
 npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts              #  7 passed
-npx vitest run src/__tests__/plan267Adoption.test.ts                         #  4 passed
+npx vitest run src/__tests__/plan267Adoption.test.ts                         #  5 passed (v4: +test_el_censo_no_pierde_un_archivo)
 npx vitest run src/__tests__/devopsPollingRatchet.test.ts                    # sin regresion (cubre F6, NO F5)
-npx vitest run src/__tests__/uiDebtRatchet.test.ts                           # sin regresion (los .tsx nuevos suman 0; verificado: uiDebtRatchet.test.ts:102 hace `?? 0` para un archivo sin baseline)
+npx vitest run src/__tests__/uiDebtRatchet.test.ts                           # DELTA, no verde: hoy es 1 failed | 2 passed por deuda ajena (medido 2026-07-28). Debe quedar en 1 failed | 2 passed (los .tsx nuevos suman 0; uiDebtRatchet.test.ts:102 hace `?? 0` para un archivo sin baseline) [C36]
 npx vitest run src/services/entityActions.test.ts                            # sin regresion
 npx tsc --noEmit                                                             # 0 errores
 ```
-**Total de tests nuevos: 71 backend (23+15+19+14) + 53 frontend (15+6+10+11+7+4).**
+**Total de tests nuevos: 69 backend (22+15+19+13) + 54 frontend (15+6+10+11+7+5).** *(v4: −2 backend por los duplicados de `reach` [C40], +1 frontend por `test_el_censo_no_pierde_un_archivo` [C35].)*
 
 Y estos criterios cualitativos, verificables leyendo el diff:
 
@@ -1830,5 +2032,7 @@ Y estos criterios cualitativos, verificables leyendo el diff:
 - [ ] **`CommandPalette.tsx` usa `rawGet`, no `api.get`** — el 404 de la flag OFF no puede tirar una promesa rechazada [C21].
 - [ ] Las 23 acciones tienen `label` y `summary` **literales de este plan** (no inventados), y el guard de colisión de F8 inspecciona `(*phrases, label)` — el mismo universo que puntúa `match_intent` [C24].
 - [ ] `FALLBACK_META` tiene **exactamente los 7 ids enumerados en F4**, y su `effect`/`impact` coinciden campo a campo con el catálogo backend [C25].
-- [ ] **`toneBaseline.json` fue congelado ANTES de F7 y el test 4 de `plan267Adoption.test.ts` está verde**: ninguna de las 16 confirmaciones bajó de severidad al recablearse [ADICIÓN ARQUITECTO v3, §4.11].
+- [ ] **`toneBaseline.json` fue congelado ANTES de F7, su contenido coincide con la tabla literal de §4.11** (7 claves; `danger` 1/1/0/1/2/1/1; `askConfirm` 2/4/2/1/2/5/2) **y los tests 4 y 5 de `plan267Adoption.test.ts` están verdes**: ninguno de los 7 sitios `danger` bajó de severidad, y el censo no perdió ningún archivo [§4.11; C32, C33, C35].
+- [ ] **El generador `gen_tone_baseline.py` BARRE `components/devops/*.tsx`** (nunca una lista hardcodeada) y usa el patrón **agnóstico de comillas** `tone:\s*['"]danger['"]` — con la comilla simple sola pierde 2 de 7, incluido `SolutionPublisherSection` [C32, C35].
+- [ ] **F7 recableó exactamente los 2 sitios `RECABLEAR` + los 4 botones `write`/`high` que hoy no confirman**, y las 16 confirmaciones `FUERA DE ALCANCE` quedaron intactas con su `tone` de hoy. El residual de `askConfirm({` es **16 en 7 archivos**, con los conteos exactos por archivo de F7 t2 [C34].
 - [ ] **Con las 3 flags apagadas: los mismos botones, en los mismos lugares, con el mismo efecto y el mismo `tone`. Lo único distinto es el TEXTO de la confirmación, que ahora sale del catálogo — que es el objetivo del plan [C4].** (El v1 pedía "se comporta igual que antes", un checkbox falso por construcción tras F7.)

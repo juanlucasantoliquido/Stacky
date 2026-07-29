@@ -55,6 +55,8 @@ def _launch_stage(*, pipeline_id: int, stage_index: int, runtime: str = "github_
         }
     ]
 
+    from services.runtime_capabilities import resolve_run_selection
+    _sel = resolve_run_selection(runtime=runtime, project_name=project_name)
     execution_id = agent_runner.run_agent(
         agent_type=stage,
         ticket_id=ticket_id_value,
@@ -63,6 +65,8 @@ def _launch_stage(*, pipeline_id: int, stage_index: int, runtime: str = "github_
         user="pipeline_orchestrator",
         runtime=runtime,
         project_name=project_name,
+        model_override=_sel["model"],
+        effort_override=_sel["effort"],
     )
 
     with session_scope() as session:

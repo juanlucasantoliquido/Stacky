@@ -62,12 +62,23 @@ export function buildModelOptions(
  *  runtime: agregar un runtime nuevo no debería obligar a tocar este archivo. */
 export function pickerCapabilities(
   runtimeCatalog: RuntimeModelCatalog | undefined,
-): { showModels: boolean; showEfforts: boolean; note: string } {
+): { showModels: boolean; showEfforts: boolean; note: string; effortMode: string; effortEffectiveNow: boolean } {
   const showModels = (runtimeCatalog?.models?.length ?? 0) > 0;
-  const showEfforts = (runtimeCatalog?.efforts?.length ?? 0) > 0;
+  // Plan 264 — un runtime que no expone esfuerzo NO debe mostrar el selector:
+  // "prohibido mostrar un selector que no hace nada" (§3.1 del plan).
+  const effortMode = runtimeCatalog?.effort_mode ?? "nativo";
+  // [C8] Un runtime que SÍ expone esfuerzo pero hoy no produce efecto (Codex
+  // sin cap de turnos) muestra el selector CON la nota que lo explica: la
+  // elección se guarda y valdrá cuando haya cap. Ocultarlo sería peor: se
+  // perdería la elección.
+  const effortEffectiveNow = runtimeCatalog?.effort_effective_now ?? true;
+  const showEfforts =
+    (runtimeCatalog?.efforts?.length ?? 0) > 0 && effortMode !== "no_aplica";
   return {
     showModels,
     showEfforts,
     note: runtimeCatalog?.effort_note ?? runtimeCatalog?.note ?? "",
+    effortMode,
+    effortEffectiveNow,
   };
 }

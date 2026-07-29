@@ -648,6 +648,11 @@ $HarnessTestFiles = @(
   "tests/test_plan213_unblocker_assumptions.py",
   # Plan 212 - Selector vivo de modelo/effort y cumplimiento real de la eleccion
   "tests/test_plan212_characterization.py",
+  "tests/test_plan264_runtime_capabilities.py",
+  "tests/test_plan264_codex_effort_parity.py",
+  "tests/test_plan264_paridad_ejecutable.py",
+  "tests/test_plan264_run_selection.py",
+  "tests/test_plan264_selection_history.py",
   "tests/test_plan212_opus_end_to_end.py",
   "tests/test_plan212_effort_channel.py",
   "tests/test_plan212_effort_matrix_parity.py",

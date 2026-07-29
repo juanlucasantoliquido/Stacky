@@ -1100,6 +1100,11 @@ export interface RuntimeModelCatalog {
   effort_note?: string;
   note?: string;
   error?: string | null;
+  /** Plan 264 — cómo materializa el effort este runtime: "nativo" |
+   *  "presupuesto_turnos" | "no_aplica". Aditivo: ausente en catálogos viejos. */
+  effort_mode?: string;
+  /** Plan 264 [C8] — si con la config vigente el effort produce efecto real. */
+  effort_effective_now?: boolean;
 }
 export interface ModelCatalogResponse {
   ok: boolean;
@@ -5079,6 +5084,8 @@ export interface PipelineRunDto {
   started_at: string | null; completed_at: string | null;
   action: string | null; plan_number: number | null;
   model: string | null; effort: string | null; prompt_line: string | null;
+  /** Plan 264 F6 — qué herramienta corrió (aditivo; ausente en runs viejos). */
+  tool?: string | null;
 }
 export interface WorkingTreeDto { dirty: boolean; changes: number }
 export interface PipelineRunsResponse {

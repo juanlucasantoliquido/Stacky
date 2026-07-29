@@ -208,9 +208,10 @@ def create_conversation():
 
     # Overrides con el MISMO clamp del plan 90 (api/devops_agent.py:48-53)
     from services import llm_router as _llm_router
+    from services.runtime_capabilities import is_valid_effort  # Plan 264 KPI-1
     model_override = _llm_router.clamp_model(model.strip()) if model else None
-    effort_override = effort.strip().lower() if effort and effort.strip().lower() in {
-        "low", "medium", "high", "xhigh", "max"} else None
+    _e = (effort or "").strip().lower()
+    effort_override = _e if is_valid_effort(_e) else None
 
     # Construir mensaje con header de consola
     from services.remote_console_prompt import build_console_prompt
@@ -309,9 +310,10 @@ def conversation_message(cid: int):
 
     # 2) Camino NUEVO TURNO sobre el mismo ticket
     from services import llm_router as _llm_router
+    from services.runtime_capabilities import is_valid_effort  # Plan 264 KPI-1
     model_override = _llm_router.clamp_model(model.strip()) if model else None
-    effort_override = effort.strip().lower() if effort and effort.strip().lower() in {
-        "low", "medium", "high", "xhigh", "max"} else None
+    _e = (effort or "").strip().lower()
+    effort_override = _e if is_valid_effort(_e) else None
 
     base_url = request.host_url.rstrip("/")
     from services.remote_console_prompt import build_console_prompt

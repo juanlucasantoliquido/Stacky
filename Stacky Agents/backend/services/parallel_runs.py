@@ -53,6 +53,11 @@ def parallel_explore(
             {"model": "claude-opus-4-7", "label": "exhaustivo"},
         ]
 
+    from services.runtime_capabilities import resolve_run_selection
+    # Plan 264 — el modelo lo define la VARIANTE y manda (v.get("model")); acá
+    # sólo se agrega el effort resuelto (la variante no declara effort propio).
+    _sel = resolve_run_selection(runtime="github_copilot", project_name=None)
+
     exec_ids: list[int] = []
     for v in variants:
         eid = agent_runner.run_agent(
@@ -61,6 +66,7 @@ def parallel_explore(
             context_blocks=context_blocks,
             user=user,
             model_override=v.get("model"),
+            effort_override=_sel["effort"],
             use_few_shot=True,
             use_anti_patterns=True,
         )
@@ -123,11 +129,15 @@ def chain_refinement(
         "content": prompts[0],
         "source": {"type": "refinement", "step": 1},
     }
+    from services.runtime_capabilities import resolve_run_selection
+    _sel = resolve_run_selection(runtime="github_copilot", project_name=None)
     eid = agent_runner.run_agent(
         agent_type=agent_type,
         ticket_id=ticket_id,
         context_blocks=current_blocks + [first_prompt_block],
         user=user,
+        model_override=_sel["model"],
+        effort_override=_sel["effort"],
     )
     exec_ids.append(eid)
 
@@ -171,6 +181,8 @@ def chain_refinement(
                 ticket_id=ticket_id,
                 context_blocks=new_blocks,
                 user=user,
+                model_override=_sel["model"],
+                effort_override=_sel["effort"],
             )
             exec_ids.append(new_eid)
 

@@ -8,6 +8,7 @@ import { Incidents, Executions, type IncidentDTO, type IncidentPreviewDTO } from
 import { useWorkbench } from "../store/workbench";
 import { isCliRuntime, openConsoleIfCliRuntime, runtimeDisplayLabel } from "../services/agentLaunch";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
+import { ModelEffortPicker } from "./ModelEffortPicker";
 import {
   validateFiles,
   canAnalyze,
@@ -25,7 +26,6 @@ import {
 } from "../incidents/incidentQueue";
 import type { AgentRuntime } from "../types";
 import { useModelCatalog } from "../hooks/useModelCatalog";
-import { EMERGENCY_MODEL_CATALOG } from "../services/modelCatalogFallback";
 import { Dialog } from "./ui";
 import { resolveModalInit } from "./incidentModalInit";
 import { AgentConsole } from "./IncidentAgentConsole";
@@ -82,14 +82,17 @@ export default function IncidentResolverModal({ onClose, initialText, initialFil
 
   // Plan 159 — modelos/efforts del catálogo único; arranca desde el fallback
   // embebido (síncrono) y se sincroniza cuando el fetch resuelve.
+  // Plan 264 [F5] — useModelCatalog() YA siembra `catalog` síncronamente con
+  // el catálogo de emergencia (resolveModelCatalog(null) en el primer render
+  // de ese hook): un segundo fallback acá era una copia redundante de la
+  // misma fuente. selectedModel arranca vacío y el efecto de abajo lo
+  // corrige de inmediato con claudeDefaultModel (ya disponible desde el
+  // primer render).
   const { catalog } = useModelCatalog();
   const claudeModels = catalog.claude_code_cli?.models ?? [];
-  const claudeEfforts = catalog.claude_code_cli?.efforts ?? [];
   const claudeDefaultModel = catalog.claude_code_cli?.default_model ?? null;
 
-  const [selectedModel, setSelectedModel] = useState(
-    EMERGENCY_MODEL_CATALOG.claude_code_cli.default_model ?? "claude-sonnet-5"
-  );
+  const [selectedModel, setSelectedModel] = useState("");
   const [selectedEffort, setSelectedEffort] = useState<EffortLevel>("high");
 
   useEffect(() => {
@@ -409,22 +412,19 @@ export default function IncidentResolverModal({ onClose, initialText, initialFil
 
             {agentRuntime === "claude_code_cli" && (
               <div className={styles.runtimeSection}>
-                <label className={styles.label}>
-                  Modelo
-                  <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
-                    {claudeModels.map((m) => (
-                      <option key={m.id} value={m.id}>{m.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className={styles.label}>
-                  Esfuerzo
-                  <select value={selectedEffort} onChange={(e) => setSelectedEffort(e.target.value as EffortLevel)}>
-                    {claudeEfforts.map((eff) => (
-                      <option key={eff.id} value={eff.id}>{eff.label}</option>
-                    ))}
-                  </select>
-                </label>
+                {/* Plan 264 — selector único (Plan 212 F4) en vez de los dos
+                    <select> hechos a mano. Se guarda concreto siempre (nunca
+                    "Automático"): mismo comportamiento previo, el contrato
+                    del POST no cambia (:243-244 siguen mandando strings). */}
+                <ModelEffortPicker
+                  catalog={catalog.claude_code_cli}
+                  model={selectedModel}
+                  effort={selectedEffort}
+                  onChange={({ model, effort }) => {
+                    if (model) setSelectedModel(model);
+                    if (effort) setSelectedEffort(effort as EffortLevel);
+                  }}
+                />
               </div>
             )}
 

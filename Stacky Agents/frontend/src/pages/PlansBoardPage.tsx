@@ -27,13 +27,13 @@ import {
 } from "../plansBoard/model";
 // Plan 196 — acciones HITL del pipeline (helpers puros, testeados sin DOM).
 import ConfirmButton from "../components/ConfirmButton";
+import { ModelEffortPicker } from "../components/ModelEffortPicker";
 import { useModelCatalog } from "../hooks/useModelCatalog";
 import {
   ACTION_LABEL,
   RUNTIME_ACTION_NOTE,
   allowedActionsForCard,
   buildRunPayload,
-  effortsForModel,
   type PipelineAction,
 } from "../plansBoard/actions";
 import styles from "./PlansBoardPage.module.css";
@@ -154,15 +154,6 @@ export default function PlansBoardPage() {
     setActionModel((m) => m || claudeCat.default_model || "");
     setActionEffort((e) => e || claudeCat.default_effort || "high");
   }, [claudeCat]);
-
-  // Si al cambiar de modelo el effort deja de ser válido, cae al primero válido.
-  const availableEfforts = effortsForModel(claudeCat, actionModel);
-  useEffect(() => {
-    if (availableEfforts.length === 0) return;
-    if (!availableEfforts.some((e) => e.id === actionEffort)) {
-      setActionEffort(availableEfforts[0].id);
-    }
-  }, [actionModel, availableEfforts, actionEffort]);
 
   const pipelineBusy = runsQuery.data?.busy === true;
   const actionsAvailable = runsQuery.data?.ok === true;
@@ -332,30 +323,17 @@ export default function PlansBoardPage() {
       {actionsAvailable && (
         <div className={styles.actionsPanel}>
           <div className={styles.actionsRow}>
-            <span className={styles.actionsLabel}>Modelo</span>
-            <select
-              className={styles.actionsSelect}
-              value={actionModel}
-              onChange={(ev) => setActionModel(ev.target.value)}
-            >
-              {(claudeCat?.models ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <span className={styles.actionsLabel}>Esfuerzo</span>
-            <select
-              className={styles.actionsSelect}
-              value={actionEffort}
-              onChange={(ev) => setActionEffort(ev.target.value)}
-            >
-              {availableEfforts.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.label}
-                </option>
-              ))}
-            </select>
+            {/* Plan 264 — selector único (Plan 212 F4), en vez del <select>
+                hecho a mano: se auto-adapta a lo que el catálogo declara. */}
+            <ModelEffortPicker
+              catalog={claudeCat}
+              model={actionModel || null}
+              effort={actionEffort || null}
+              onChange={({ model, effort }) => {
+                setActionModel(model ?? "");
+                setActionEffort(effort ?? "");
+              }}
+            />
             <span className={styles.actionsLabel} title={RUNTIME_ACTION_NOTE}>
               Runtime: Claude Code CLI
             </span>
@@ -479,6 +457,7 @@ export default function PlansBoardPage() {
                   <span>#{r.id}</span>
                   <span>{r.action ?? "—"}</span>
                   <span>{r.plan_number ?? "—"}</span>
+                  <span>{r.tool ?? "—"}</span>
                   <span>{r.model ?? "—"}</span>
                   <span>{r.effort ?? "—"}</span>
                   <span className={styles.runStatus}>{r.status}</span>

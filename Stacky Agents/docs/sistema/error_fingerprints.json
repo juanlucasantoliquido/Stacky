@@ -852,6 +852,24 @@
       },
       "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
       "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
+    },
+    {
+      "id": "seleccion-aceptada-nunca-materializada",
+      "title": "Seleccion de modelo/effort aceptada por el runner y nunca materializada",
+      "class": "silent-param-drop",
+      "status": "resolved",
+      "log_pattern": "$^",
+      "log_guarded": false,
+      "killed_by": "plan 264 (matriz unica de capacidades runtime/modelo/effort)",
+      "killed_commit": "PENDIENTE — completar en Registro de implementacion (§10) con el hash real",
+      "date_resolved": "2026-07-29",
+      "guard_test": "backend/tests/test_plan264_paridad_ejecutable.py",
+      "evidence": "backend/agent_runner.py:442-450 (rama viva); backend/agent_runner.py:256-265 (rama muerta, higiene)",
+      "note": "Sintoma: el operador elige un modelo o un esfuerzo y la corrida se comporta igual que si no hubiera elegido nada. Causa raiz: un parametro de seleccion aceptado por la firma del runner y (a) nunca consumido, (b) consumido dentro de una rama gateada por otra flag, (c) consumido en una rama MUERTA por un return anterior, o (d) consumido sin efecto observable con la config vigente. Antecedentes: Plan 196 (claude_code_cli, rama muerta agent_runner.py:350) y Plan 264 (codex_cli, rama viva agent_runner.py:442). log_guarded=false a proposito: este bug no tiene firma de log (es un no-evento silencioso); el unico detector real es el AST de guard_test (Test A: parametros decorativos y las 4 llamadas de agent_runner; Test D: efecto observable, no solo consumo simbolico).",
+      "self_test": {
+        "matches": [],
+        "clean": []
+      }
     }
   ]
 }

@@ -82,7 +82,12 @@ export function ModelEffortPicker({
           {elegido.label}: {elegido.note}
         </span>
       )}
-      {caps.note && <span className={styles.note}>{caps.note}</span>}
+      {/* Plan 264 — sólo se muestra cuando el modo NO es nativo, o cuando es
+          nativo pero hoy no tiene efecto (ver capabilities_for). Reusa
+          caps.note (no se crea un campo nuevo). */}
+      {(caps.effortMode !== "nativo" || !caps.effortEffectiveNow) && caps.note && (
+        <span className={styles.note}>{caps.note}</span>
+      )}
     </div>
   );
 }

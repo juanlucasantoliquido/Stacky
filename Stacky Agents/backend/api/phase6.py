@@ -189,11 +189,15 @@ def ci_webhook():
             "content": f"SHA: {p['commit_sha']}\nDiff:\n{p.get('commit_diff','')[:5000]}",
         })
 
+    from services.runtime_capabilities import resolve_run_selection
+    _sel = resolve_run_selection(runtime="github_copilot", project_name=None)
     eid = agent_runner.run_agent(
         agent_type="debug",
         ticket_id=ticket_id,
         context_blocks=blocks,
         user="ci-bot",
+        model_override=_sel["model"],
+        effort_override=_sel["effort"],
     )
     return jsonify({"execution_id": eid, "status": "running"})
 
@@ -226,11 +230,15 @@ def pr_review_webhook():
          "content": p.get("description", "")},
     ]
 
+    from services.runtime_capabilities import resolve_run_selection
+    _sel = resolve_run_selection(runtime="github_copilot", project_name=None)
     eid = agent_runner.run_agent(
         agent_type="pr_review",
         ticket_id=ticket_id,
         context_blocks=blocks,
         user="pr-bot",
+        model_override=_sel["model"],
+        effort_override=_sel["effort"],
     )
     return jsonify({"execution_id": eid, "status": "running"})
 

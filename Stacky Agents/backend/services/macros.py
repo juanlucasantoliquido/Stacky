@@ -170,6 +170,11 @@ def run(macro_id: int, ticket_id: int, user: str,
     options = definition.get("options", {})
     stop_on_error = options.get("stop_on_first_error", True)
 
+    from services.runtime_capabilities import resolve_run_selection
+    # Plan 264 — el modelo lo define el PASO de la macro y manda
+    # (step.get("model")); acá sólo se agrega el effort resuelto.
+    _sel = resolve_run_selection(runtime="github_copilot", project_name=None)
+
     exec_ids: list[int] = []
     initial_context = initial_context or []
 
@@ -180,6 +185,7 @@ def run(macro_id: int, ticket_id: int, user: str,
             context_blocks=initial_context,
             user=user,
             model_override=step.get("model"),
+            effort_override=_sel["effort"],
             use_few_shot=step.get("use_few_shot", True),
             use_anti_patterns=step.get("use_anti_patterns", True),
         )

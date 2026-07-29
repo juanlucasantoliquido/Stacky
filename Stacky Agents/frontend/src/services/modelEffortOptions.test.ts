@@ -123,6 +123,14 @@ describe("pickerCapabilities", () => {
   });
 
   it("sin catálogo no se ofrece nada", () => {
-    expect(pickerCapabilities(undefined)).toEqual({ showModels: false, showEfforts: false, note: "" });
+    // Plan 264 — el contrato creció de forma ADITIVA (effortMode/effortEffectiveNow);
+    // ninguna clave existente se perdió, sólo se agregaron dos nuevas.
+    expect(pickerCapabilities(undefined)).toEqual({
+      showModels: false,
+      showEfforts: false,
+      note: "",
+      effortMode: "nativo",
+      effortEffectiveNow: true,
+    });
   });
 });

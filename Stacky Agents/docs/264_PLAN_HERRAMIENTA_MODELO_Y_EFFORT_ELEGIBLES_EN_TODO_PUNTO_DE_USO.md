@@ -28,10 +28,13 @@
   además, un problema de fondo: esta clase de bug (parámetro aceptado y nunca materializado) **no
   tiene firma de log** — es un no-evento, no un patrón que aparezca en texto — así que `log_pattern`
   no puede ser un detector real como el de las huellas existentes (`pipeline_status_404`,
-  `ansi_in_file_log`); el `guard_test` (AST) es el único detector posible. v4: entrada reescrita con
-  los campos reales, `log_guarded: false` declarado explícitame con la razón, y `self_test` vacío
-  (vacuamente coherente: `test_self_test_coherente` no itera nada si `matches`/`clean` son `[]`) en
-  vez de fingir un patrón de log que no existe.
+  `ansi_in_file_log`); el `guard_test` (AST) es el único detector posible. **Y el archivo YA está
+  rojo hoy** (medido: `test_error_fingerprints_catalog.py` = 3 failed/5 passed, por una huella ajena
+  con `status: "guarded"` fuera del enum) — el criterio de F7 no puede pedir "verde", tiene que ser
+  delta (mismos 3 failed, ninguno con el id de este plan). v4: entrada reescrita con los campos
+  reales, `log_guarded: false` declarado con la razón, `self_test` vacío (vacuamente coherente:
+  `test_self_test_coherente` no itera nada si `matches`/`clean` son `[]`) en vez de fingir un patrón
+  de log que no existe, y el criterio de F7 pasado a delta.
 - **C2 (BLOQUEANTE) — 11 anclajes archivo:línea quedaron viejos por la costura de planes hermanos;
   exactamente el gotcha que este mismo plan advierte en su propio C11, reaparecido.** Verificado
   abriendo cada archivo real hoy (no de memoria). Los anclajes que son **objetivo de un diff/edición
@@ -1706,7 +1709,6 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
-& $py -m pytest "Stacky Agents\backend\tests\test_error_fingerprints_catalog.py" -q
 & $py -m compileall -q "Stacky Agents\backend\services" "Stacky Agents\backend\api"
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/modelEffortOptions.plan264.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/modelEffortTrace.test.ts
@@ -1746,6 +1748,17 @@ defecto que este plan cierra.
 > (`test_self_test_coherente` no itera nada si las dos listas están vacías), sin fingir un patrón.
 > El contenido narrativo del v3 (síntoma, causa raíz, antecedentes) **no se pierde**: se conserva en
 > `note` y `title`, que sí son parte del esquema real (o son campos libres que ya usan otras huellas).
+>
+> **[FIX C1 — el archivo YA está rojo por deuda ajena; el criterio no puede pedir "verde".]** Medido
+> hoy (2026-07-29): `pytest backend/tests/test_error_fingerprints_catalog.py -q` da **3 failed, 5
+> passed**, por una huella ajena (`class: "shell-navigation"`, `date_resolved: "2026-07-25"`) que
+> tiene `status: "guarded"` (fuera del enum `{"resolved","open","by_design"}`) y no trae `self_test`.
+> Ese rojo es de otro plan y está **fuera de alcance** de este (regla del repo: nunca adoptar deuda
+> ajena). Por eso el criterio de esta huella es **delta**, no "el archivo entero en verde": correr el
+> comando ANTES de tocar el archivo, anotar el 3/5, agregar la entrada nueva con el esquema real de
+> arriba, correr DE NUEVO, y el criterio de aceptación es "**los mismos 3 failed** (ninguno con el
+> `id` `seleccion-aceptada-nunca-materializada` en el mensaje) **y los mismos o más passed**" — nunca
+> "0 failed".
 
 **Leé primero el esquema real del archivo** (`Get-Content` de las primeras 40 líneas, o el `_REQUIRED`
 de `test_error_fingerprints_catalog.py:18`) antes de tocarlo. El contenido a registrar es:
@@ -1777,8 +1790,9 @@ de `test_error_fingerprints_catalog.py:18`) antes de tocarlo. El contenido a reg
 
 **Criterio binario.** 18 comandos exit 0 + los greps de KPI-1, KPI-4 (los **dos**, negativo y positivo)
 y `style={{` + el test AST de KPI-2 + el de KPI-6 + el one-liner de `PLAIN_HELP` de F0 + el one-liner
-del endpoint de F5 + **`test_error_fingerprints_catalog.py` verde** (los 7 tests del archivo, no sólo
-los que tocan la entrada nueva).
+del endpoint de F5 + **`test_error_fingerprints_catalog.py` con el criterio delta de F7** (mismos 3
+failed preexistentes, ninguno con el `id` de este plan, passed igual o mayor a 5 — **no** exit 0 llano:
+ese archivo ya está rojo por deuda ajena, ver el FIX C1 más arriba).
 **Trabajo del operador: ninguno.**
 
 ---
@@ -1846,9 +1860,10 @@ los que tocan la entrada nueva).
 
 - [ ] **[ADICIÓN ARQUITECTO] F(-1) corrida antes de F0**, con la salida real pegada en §10 y los
       números re-medidos usados en vez de los citados en el documento donde difieran.
-- [ ] Los 19 comandos de F7 salen **exit 0**, cero rojos (incluye
-      `test_error_fingerprints_catalog.py`, que valida la huella nueva contra el esquema real —
-      **[FIX C1 v3→v4]**).
+- [ ] Los 18 comandos de F7 salen **exit 0**, cero rojos. **Aparte** (no exit-0 llano, criterio
+      delta — **[FIX C1 v3→v4]**): `test_error_fingerprints_catalog.py` sigue en **3 failed / 5
+      passed** (baseline ajeno medido 2026-07-29, `class: "shell-navigation"`), con la huella nueva
+      de este plan agregada y **sin** aparecer en ninguno de los 3 mensajes de fallo.
 - [ ] **F0 tocó los 5 archivos**; `test_default_known_only_for_curated` **y**
       `test_requires_map_is_frozen` **verdes**; el one-liner de `PLAIN_HELP` imprime las 3 listas vacías.
 - [ ] **KPI-1**: el "antes" se midió con el grep **antes** de editar (esperado **10**) y el "después"

@@ -910,6 +910,7 @@ HARNESS_TEST_FILES=(
   tests/test_devops_actions_api.py
   tests/test_devops_action_matcher.py
   tests/test_devops_action_ratchet.py
+  tests/test_plan267_help.py
 )
 
 pass=0

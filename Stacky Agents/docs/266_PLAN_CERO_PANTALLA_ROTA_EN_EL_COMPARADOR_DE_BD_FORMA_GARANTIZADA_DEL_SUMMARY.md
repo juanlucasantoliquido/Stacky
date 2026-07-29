@@ -1,13 +1,187 @@
 # Plan 266 — Cero pantalla rota en el Comparador de BD: forma garantizada del `summary`
 
-**Estado:** CRITICADO v3
-**Fecha:** 2026-07-28 (v3) · 2026-07-27 (v1, v2)
+**Estado:** CRITICADO v4
+**Fecha:** 2026-07-29 (v4) · 2026-07-28 (v3) · 2026-07-27 (v1, v2)
 **Rama sugerida:** `feat/plan-266-summary-shape`
 **Serie:** independiente (cierra una incidencia REAL reportada por el operador)
 
 ---
 
-## 0. Changelog v2 → v3 (segunda pasada, revisión INDEPENDIENTE)
+## 0. Changelog v3 → v4 (tercera pasada, juez INDEPENDIENTE que EJECUTÓ los gates)
+
+Veredicto del v3: **RECHAZADO (5 BLOQUEANTES)**. Todo lo de abajo está aplicado.
+
+Esta pasada no releyó el v3: **corrió** los gates, los greps, los conteos y los parsers, contra el
+árbol en el commit `760ac455` (que ya incluye la costura P0 `05398601`). Los 5 bloqueantes salieron
+de **ejecutar**, no de razonar, y **ninguno** lo había visto una crítica anterior. Tres de ellos son
+gates que el propio plan rompe o que nacen rojos; uno es un gate que **no mide nada y sale verde**.
+
+### Lo que la ejecución CONFIRMÓ como correcto (no se tocó)
+
+Se re-midió con el criterio exacto del plan, no con el número del documento:
+
+- **El censo de F4 es exacto:** las dos regex sobre `frontend/src/components/dbcompare/` devuelven
+  **8 violaciones** en **57 archivos** censados, y **0** violaciones en el resto de `src/` (o sea
+  que el alcance de una carpeta no deja nada afuera). KPI-1 y el umbral `>= 45` del test 12 quedan.
+- **La huella de F6.4 es válida:** el bloque de código JSON se extrajo **del propio documento** y se
+  pasó por `json.loads` → OK; `re.compile` → OK; los 2 `matches` dan `True`, los 2 `clean` dan
+  `False`; `_REQUIRED` completo; `status` en el enum. El baseline del catálogo es **exactamente
+  `3 failed, 5 passed`** y `test_patrones_compilan` está VERDE. C13 estaba bien resuelto.
+- **La tabla de verdad de F1.5 es válida:** el bloque JSON parsea, 18 casos. Y las 4 clases de
+  C16/C21 están confirmadas ejecutando: `Number("0x10")=16`, `Number("0b101")=5`,
+  `Number("1_0")=NaN`, `Number("")=0`, `JSON.parse("1e400")=Infinity`.
+- **C14 es correcto:** `undefined.danger` produce `Cannot read properties of undefined (reading
+  'danger')` y la regex del plan lo matchea; `({})["danger"]` da `undefined` y el caso 4 **no lanza**.
+- **La premisa de C12 es correcta:** el parser real de PowerShell sobre `@("x.py",\n"y.py",\n)` da
+  `1 ParserError: Falta una expresión después de ','`. (Lo que está mal es el anclaje del fix: C23.)
+- **Anclajes correctos, verificados abriendo el archivo:** todos los de `dbcompare_runs.py`
+  (`:68` `_write_run`, `:109` `_read_run`, `:127` `_is_stale`, `:131`, `:265`, `:304`, `:316`
+  `get_run`, `:326` `list_runs`, `:336` `meta`), y que **no** importa config (`:19-28`); todos los
+  de `PageErrorBoundary.tsx` (`:12-16`, `:18-21`, `:24`, `:30-43`, `:32`, `:40`, `:47`, `:52`,
+  `:55-72`, `:60`, `:61-63`, `:64-66`, `:67-69`); `config.py:203` (cierra
+  `STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES`, punto de inserción limpio);
+  `_CURATED_DEFAULTS_ON` en `test_harness_flags.py:467`; y el idiom de lectura de
+  `dbcompare_masking.py:206-208` (import dentro de la función + `getattr(_config.config, …)`).
+- **`STACKY_DB_COMPARE_ENABLED` existe, `default=True` y `requires is None`** ⇒ la profundidad 1
+  (R4) se cumple: colgar la flag nueva de ella no forma cadena.
+- **El intérprete `.venv\Scripts\python.exe` es el correcto** (py3.13; `venv` sin punto es py3.11) y
+  es la convención de los 6 planes de la serie 259-271. No se cambia.
+- **No hay 7ª pata.** `harness_defaults.env` solo se audita por *bounds*
+  (`test_harness_flags_bounds.py:254`, que además hace `skip` si el archivo no está) y ningún test
+  exige que cubra el registry. Para esta flag el cableado son **SEIS** lugares, ni más ni menos.
+
+### Los 5 bloqueantes
+
+- **C22 (BLOQUEANTE)** — **falta la SEXTA pata del cableado: `_REQUIRES_MAP_FROZEN`.** El plan
+  declara `requires="STACKY_DB_COMPARE_ENABLED"` y su tabla de F3 lista **5** lugares; las cadenas
+  `_REQUIRES_MAP_FROZEN` y `test_harness_flags_requires.py` aparecen **0 veces en 1972 líneas**.
+  Pero `tests/test_harness_flags_requires.py:316` es `assert actual == _REQUIRES_MAP_FROZEN`,
+  **igualdad de conjuntos** con reporte de `Extras` en `:318`. Medido hoy: el archivo está en
+  **9 passed**, `len(actual) == len(FROZEN) == 146` y `actual == FROZEN → True`. Simulando el plan
+  verbatim (agregar la arista sin tocar el mapa): `sim == FROZEN → False`,
+  `Extras = ['STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED']`, `AssertionError` reproducida. El plan
+  **pone en rojo un gate que hoy está verde** → §F3 tabla (ahora 6 filas), §F3.5, §F6.3, §7.3, R15.
+- **C23 (BLOQUEANTE)** — **F6.1(b) es inejecutable: el bloque que manda reemplazar NO existe.** El
+  v3 dicta *"Reemplazar el bloque `  "tests/test_plan258_estanqueidad_arnes.py"` + `)`"* y
+  *"agregarle una coma al final de la línea del 258, que hoy no la tiene"*. Medido sobre el archivo
+  real: `Contains(...)` → **False**. La línea del 258 está en **`:787`** y **ya termina en coma**
+  (`-match '…py",'` → **True**); la última entrada es **`:796`
+  `"tests/test_plan242_runtime_parity.py"`** (sin coma) y el `)` está en **`:797`** (el plan dice
+  `:788`). O sea que la "regla general" del v3 —*la que era última recibe la coma que le faltaba*—
+  es falsa en las dos mitades. Un implementador literal no encuentra el bloque, la edición no pasa,
+  y el test nuevo **nunca entra al arnés en silencio**; o improvisa, que es justo lo que §1
+  prohíbe. Ahora la instrucción está re-anclada a la última entrada real y es **una sola línea
+  nueva sin coma** (verificado con el parser: parsea OK) → §F6.1(b), R12.
+- **C24 (BLOQUEANTE)** — **F6.5 test 2 nace ROJO con 206 violaciones, y sobre una premisa falsa de
+  PowerShell.** El v3 pide que "ninguna línea de entrada del `.ps1` que no sea la última del array
+  venga sin coma". Medido: **207** líneas de entrada **no** llevan coma y solo **1** es la última
+  del array (`:796`) ⇒ **206 violaciones el día 1**. Y la premisa es falsa: el parser real acepta
+  `@("x.py"\n"y.py")` **sin ninguna coma** (0 errores), igual que acepta el archivo real completo
+  con sus 207 entradas desnudas. PowerShell **no** exige coma entre elementos separados por salto
+  de línea. La afirmación del v3 "las entradas intermedias van entrecomilladas y con coma" es falsa
+  para 206 de 623. El test 2 codificaba una regla que no existe → **se elimina** y se explica por
+  qué; el test 1 (coma colgante) **se conserva** porque su premisa sí está confirmada → §F6.5.
+- **C25 (BLOQUEANTE)** — **F5.2 rompe el `copyDebtRatchet`, y el plan no lo corre.** Existe
+  `frontend/src/__tests__/copyDebtRatchet.test.ts` (Plan 194 F5) que congela **por archivo** la
+  cantidad de escrituras directas al portapapeles (`/\.writeText\s*\(/`) bajo `src/`, y declara en
+  su encabezado: *"El único lugar legítimo de escritura al portapapeles es services/copyService"*.
+  Medido: el ratchet está **VERDE hoy (3 passed)**; el baseline `copyByFile` tiene 11 entradas y
+  `components/PageErrorBoundary.tsx` **NO figura** ⇒ su cupo es **0**. El `handleCopy` del v3
+  escribe `navigator.clipboard?.writeText(` **en ese archivo** ⇒ deuda nueva sobre cupo 0 ⇒ **ROJO**.
+  Y ni F5.2 ni F6.3 corren ese ratchet (corren `uiDebtRatchet`), así que el plan no se enteraba.
+  Regenerar el baseline no es opción (solo baja). El fix es **reusar el módulo canónico**
+  `services/copyService.copyText()` —verificado: no está detrás de ninguna flag, devuelve
+  `CopyResult` y trae fallback a `execCommand` para contexto no-seguro, más las constantes
+  `COPY_TOAST_SUCCESS`/`COPY_TOAST_ERROR`—, que además es estrictamente mejor que la llamada cruda
+  → §F5.1, §F5.2, §F6.3, §7.3, R16.
+- **C26 (BLOQUEANTE)** — **el único gate del plan para la entrada nueva de `PLAIN_HELP` es un falso
+  verde perfecto.** F3 dice: *"Para validar solo la entrada nueva:
+  `pytest tests/test_harness_flags_help.py -q -k SUMMARY_SHAPE`"*. Ejecutado:
+  **`8 deselected in 0.19s`, exit code `0`**. Los 8 tests se llaman `test_plain_help_*`; ninguno
+  contiene `SUMMARY_SHAPE`, así que `-k` **deselecciona todo, corre CERO tests y sale 0**: parece
+  verde y no mide nada. Es exactamente el patrón que esta casa prohíbe (precedente del plan 270: 15
+  casos que también pasaban con la implementación prohibida). Además el archivo está en **4 failed /
+  4 passed** ajenos, así que "esperar verde" es insatisfacible. El criterio pasa a ser **delta sobre
+  el contrato real**: correr el archivo completo y exigir que el conteo siga en 4 y que **ninguna**
+  violación mencione la key nueva → §F3, §F6.3, §7.3, R17.
+  (El **contenido** de la entrada sí se verificó ejecutando el contrato completo —son **SEIS**
+  reglas, no solo longitudes— y pasa las seis: `what`=132≤200, `on_effect`=109≤240,
+  `off_effect`=122≤240, `example`=166≤300, los dos empiezan con `"Si "`, cero términos de
+  `JARGON_DENYLIST`, cero keys `SCREAMING_SNAKE`, cero referencias `F<n>`. Lo roto era el gate, no
+  el texto.)
+
+### Los importantes y menores
+
+- **C27 (IMPORTANTE)** — **categoría equivocada y contradicción dentro de la propia tabla de F3.**
+  El v3 manda poner la key en `_CATEGORY_KEYS["capacidades_optin"]` y su test asserta
+  `categorize(...) == "capacidades_optin"`. Medido: `capacidades_optin` (abre en `:415`) tiene
+  **una sola** key de DB Compare —el master `STACKY_DB_COMPARE_ENABLED`—, mientras que
+  `comparador_bd` (abre en `:454`) tiene **20**, incluida `STACKY_DB_COMPARE_MASKING_ENABLED` en
+  `:464`; y `categorize("STACKY_DB_COMPARE_MASKING_ENABLED")` devuelve `comparador_bd`. La tabla se
+  contradice sola: el ítem 2 dice "junto al `FlagSpec` de MASKING" (cuyo `group` es
+  `comparador_bd`) y el ítem 3 la manda a otra categoría. Una flag que declara
+  `requires=STACKY_DB_COMPARE_ENABLED` es por definición **hija** y va donde están sus 20 hermanas,
+  o el operador la busca en la sección equivocada de la UI de flags → §F3 (categoría, `group=`, y
+  la aserción del test).
+- **C28 (IMPORTANTE)** — **anclajes derivados que el v3 declaró explícitamente "CONFIRMADOS".**
+  Medido: el `FlagSpec` de `STACKY_DB_COMPARE_MASKING_ENABLED` está en **`:4255`**, no en
+  `4196-4204` (ese rango es del Plan 157: `CONFIG_IN_PLACE` / `WEBCONFIG_IMPORT`). Y el par
+  `default=True` ⇔ pertenencia al set lo verifican `test_declared_default_true_set` (**`:990`**) y
+  `test_default_known_only_for_curated` (**`:1001`**), no `:965-983` (ese rango es
+  `test_read_current_includes_category_and_default`). `_CATEGORY_KEYS` se define en **`:120`**.
+  Corregidos, y con la regla de la casa escrita al lado: **el símbolo manda, el número es
+  orientativo** → §F3, R6.
+- **C29 (IMPORTANTE)** — **el CSS de F5 rompe el `uiDebtRatchet` y el plan solo prohíbe estilos
+  inline.** Medido: el ratchet congela por archivo la cantidad de **colores hex** en `*.module.css`
+  (`HEX_RE = /#[0-9a-fA-F]{3,8}\b/g`), y el baseline de
+  `components/PageErrorBoundary.module.css` es **2** (los dos que ya tiene: `#fca5a5` y `#fecaca`).
+  El v3 manda agregar 4 clases nuevas sin decir nada de color: **un solo hex nuevo lo pone en 3 y el
+  gate en ROJO**. Además la familia de tokens `--color-*` **no existe** en el tema (los reales son
+  `--accent`, `--danger`, `--success`, `--border`, `--text-primary`, `--bg-panel`), así que "usá
+  tokens" a secas también es una trampa. Ahora las 4 clases van **literales**, con `rgba()` como el
+  resto del archivo y **cero hex nuevo** → §F5.2, R18.
+- **C30 (IMPORTANTE — DATOS PERSONALES)** — **el diagnóstico copiable no tiene cota ni declaración
+  de egreso.** Este plan opera sobre un comparador de **bases de datos reales**, así que un mensaje
+  de error puede arrastrar un valor de fila. Medido lo bueno: `services/activityCenter.ts` persiste
+  en **`localStorage`** (`:35`) y **no hace ningún `fetch`/POST** ⇒ el `body` no sale del navegador;
+  y `dbcompare_masking.apply_to_run_response` se aplica en `api/db_compare.py:447`, o sea **aguas
+  abajo** de `get_run`, por lo que la normalización de F3 —que se inserta **dentro** de `get_run`—
+  queda **antes** del enmascarado y **no lo anula** (no falla abierto). Eso hay que decirlo, no
+  suponerlo. Lo que falta: `buildDiagnosticText` embute `message` + `componentStack` **sin cota** y
+  el `body` queda en `localStorage` para siempre; y `dbcompare_masking.py` es del backend y
+  pattern-based sobre el data-diff: **no puede ver** un crash de render del navegador, así que no
+  cubre esto ni podría. Ahora hay cota explícita, tests que la fijan, y la declaración de egreso
+  con su anclaje → §3.10, §F5.1, §F5.2, §6 ítem 10, R19.
+- **C31 (MENOR)** — **los conteos del arnés están corridos en 7.** Medido hoy: el `.sh` tiene
+  **687** entradas y el `.ps1` **623** (el v3 dice 680 y 616). Lo que sí se confirma es el
+  invariante: `ps1 − sh = ∅` y `sh − ps1 = 64`. Los umbrales `>= 600` siguen válidos, pero un plan
+  que presenta sus números como medidos no puede traerlos corridos → §F6.5, §6 ítem 8.
+- **C32 (MENOR)** — el `FIXTURE_HISTORICO` de F4 se declara *"copia textual de las 8 líneas"* y no
+  lo es: la línea real de `RunsTimeline.tsx:37` es
+  `{run.summary.parity_score}% · 🔴{run.summary.by_severity.danger} 🟠` (con emojis y
+  `parity_score`). El fixture **sí** produce las 8 detecciones (verificado línea por línea contra
+  R1/R2), así que el test funciona; lo falso es la palabra "textual" → §F4.3.
+- **C33 (MENOR)** — F6.5 test 1 se especifica en prosa ("para cada `)` que cierra un array"), que es
+  una inferencia y §1 las prohíbe. Medido: hay **exactamente 1** línea que es solo `)` (`:797`), así
+  que la implementación literal es trivial y nace verde. Ahora está dada en código → §F6.5.
+- **[ADICIÓN ARQUITECTO] A4** — **F3.5 nueva: gate de cableado COMPLETO de la flag.** La causa raíz
+  de C22 no es que alguien se olvidó de una fila: es que **la receta de 6 patas vive en una tabla de
+  un documento** y el único que la verifica es el juez. F3.5 agrega un test que asserta las **seis**
+  patas de esta flag en un solo lugar (atributo en `config.py`, `FlagSpec` con `default=True` +
+  `requires`, `_CATEGORY_KEYS`, `_CURATED_DEFAULTS_ON`, `PLAIN_HELP`, y la arista en
+  `_REQUIRES_MAP_FROZEN`). Cuesta ~30 líneas, es Python puro, y convierte en gate ejecutable la
+  clase de error que hizo rechazar esta versión → §F3.5, KPI-7.
+- **[ADICIÓN ARQUITECTO] A5** — **F6.3 pasa de "correr y esperar verde" a una TABLA DE BASELINE
+  MEDIDO con criterio DELTA.** Cuatro de los archivos que el plan toca tienen rojos ajenos
+  preexistentes (`test_harness_flags_help.py` 4, `test_error_fingerprints_catalog.py` 3) y otros
+  cuatro están verdes y **el plan los puede romper** (`test_harness_flags_requires.py`,
+  `copyDebtRatchet`, `uiDebtRatchet`, `test_harness_flags.py`). Pedir "verde" es insatisfacible y
+  pedir "que pase" es inauditable. La tabla nueva trae, por archivo, el **número medido hoy** y el
+  número exigido después → §F6.3.
+
+---
+
+## 0.1. Changelog v2 → v3 (segunda pasada, revisión INDEPENDIENTE)
 
 La crítica que produjo el v2 se corrió en la **misma sesión** que la propuesta: eso no equivale a
 revisión independiente (gotcha conocido de la casa). Esta segunda pasada re-verificó los anclajes
@@ -99,7 +273,7 @@ que `STACKY_DB_COMPARE_ENABLED` existe (`requires=` válido); y los anclajes del
 
 ---
 
-## 0.1. Changelog v1 → v2
+## 0.2. Changelog v1 → v2
 
 Crítica adversarial verificada contra el repo (2026-07-27). Veredicto del v1: **RECHAZADO
 (3 BLOQUEANTES)**. Todo lo de abajo está aplicado en este documento.
@@ -182,6 +356,7 @@ diagnóstico accionable (superficie + componente + stack copiable en 1 click).
 | KPI-4 | El fallback del boundary pasa de 1 dato (mensaje) a 4 (superficie, componente, mensaje, stack copiable) | test puro F5 | `npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts` |
 | KPI-5 | Gate de tipos verde con todos los cambios | `tsc --noEmit` | `npm run build` (en `Stacky Agents/frontend`) |
 | KPI-6 | La tabla de verdad de la normalización es **una sola** (≥17 casos) y la recorren los **dos** lados con el mismo resultado caso por caso: `toCount` (TS) y `_count` (Python) no pueden divergir — incluidas las 3 clases medidas que el v2 no cubría (`"0x10"`, `"0b101"`, `"1_0"`) | fixture compartido F1.5 | `npx vitest run src/components/dbcompare/summaryShape.test.ts` **y** `.venv\Scripts\python.exe -m pytest tests/test_plan266_summary_shape.py -q` |
+| KPI-7 | La flag nueva está en **las 6 patas** del cableado (no en 5): `config.py`, `FLAG_REGISTRY`, `_CATEGORY_KEYS`, `_CURATED_DEFAULTS_ON`, `PLAIN_HELP` **y `_REQUIRES_MAP_FROZEN`**; y el gate lo verifica un test, no una tabla de este documento (**A4**, C22) | test de cableado F3.5 | `.venv\Scripts\python.exe -m pytest tests/test_plan266_flag_cableado.py -q` |
 
 ---
 
@@ -323,6 +498,25 @@ sesión entera de investigación para esta incidencia; es deuda de diagnóstico,
 9. **Este documento vive en `Stacky Agents/docs/`, FUERA del alcance del centinela** (que solo
    escanea `frontend/src/components/dbcompare/`), así que la prosa de acá no puede disparar el
    gate. Gotcha recurrente de la casa: un comentario que contiene su propia cadena prohibida.
+   Lo mismo vale para el `copyDebtRatchet` (alcance `frontend/src/`) y el `uiDebtRatchet`
+   (alcance `frontend/src/**/*.module.css` y `*.tsx`): este `.md` no está bajo `src/`.
+10. **Datos personales: el diagnóstico no puede convertirse en una fuga (C30).** Este plan opera
+    sobre un comparador de **bases de datos reales**: un mensaje de error del navegador puede
+    arrastrar un valor de fila. Tres reglas, las tres verificables:
+    **(a) el enmascarado va ANTES del egreso, nunca después.** La normalización de F3 se inserta
+    **dentro** de `dbcompare_runs.get_run`, y `dbcompare_masking.apply_to_run_response` se aplica
+    **aguas abajo**, en `backend/api/db_compare.py:447`. Ese orden es el correcto y **no se
+    invierte**: enmascarar después de la comprobación anularía la comprobación (falla abierto).
+    Ninguna fase de este plan mueve, envuelve ni saltea esa llamada.
+    **(b) nada de F5 sale del navegador.** `publishActivity` escribe en el store en memoria y en
+    `localStorage` (`frontend/src/services/activityCenter.ts:35`) y el módulo **no hace ningún
+    `fetch` ni POST** (verificado: cero llamadas de red en el archivo). El stack **solo** llega al
+    portapapeles cuando el operador **hace click** (human-in-the-loop; no hay envío automático).
+    **(c) lo que se muestra y se copia está ACOTADO.** `message` y `stack` se truncan
+    (§F5.1), así que ni el cartel ni `localStorage` pueden acumular un payload de diff completo.
+    `dbcompare_masking.py` **no cubre esto y no podría**: es del backend y trabaja por patrones
+    sobre el data-diff, nunca ve un `throw` de render del navegador. Por eso la defensa acá es la
+    cota, no el masking.
 
 ---
 
@@ -1141,17 +1335,42 @@ cubre la ruta `/radar` (`db_compare_watch.py:145-161`) y **solo** esa. La otra r
 archivo, `/baseline-diff` (`:125-133`), no lee runs persistidos y por lo tanto **no** la toca
 F3; su tratamiento está en §6 ítem 7.
 
-**Flag nueva — CINCO lugares de cableado obligatorios (1 a 5) + un sexto lugar donde
-explícitamente NO se cablea (6):**
+**Flag nueva — SEIS lugares de cableado obligatorios (1 a 6) + un séptimo lugar donde
+explícitamente NO se cablea (7):**
+
+> **Regla de anclaje (C28).** Los números de línea de esta tabla se midieron el 2026-07-29 sobre
+> `760ac455` y **derivan** cada vez que alguien toca esos archivos. **El símbolo manda; el número es
+> orientativo.** Si el número no coincide, buscá el símbolo (`FLAG_REGISTRY`, `_CATEGORY_KEYS`,
+> `_CURATED_DEFAULTS_ON`, `PLAIN_HELP`, `_REQUIRES_MAP_FROZEN`) — no "adaptes" la instrucción.
 
 | # | Archivo | Qué agregar |
 |---|---|---|
-| 1 | `Stacky Agents/backend/config.py`, junto al bloque DB Compare (después de `:203`) | ver bloque de abajo |
-| 2 | `Stacky Agents/backend/services/harness_flags.py`, en `FLAG_REGISTRY` (junto al `FlagSpec` de `STACKY_DB_COMPARE_MASKING_ENABLED`, `harness_flags.py:4196-4204`) | `FlagSpec` con `default=True` y `requires="STACKY_DB_COMPARE_ENABLED"` |
-| 3 | `Stacky Agents/backend/services/harness_flags.py`, en `_CATEGORY_KEYS["capacidades_optin"]` (junto a `harness_flags.py:447`) | la key |
+| 1 | `Stacky Agents/backend/config.py`, junto al bloque DB Compare (después de `:203`, la línea que cierra `STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES`) | ver bloque de abajo |
+| 2 | `Stacky Agents/backend/services/harness_flags.py`, en `FLAG_REGISTRY`, junto al `FlagSpec` de `STACKY_DB_COMPARE_MASKING_ENABLED` (**`harness_flags.py:4255`** — el v3 decía `4196-4204`, que es el `FlagSpec` de otro plan: C28) | `FlagSpec` con `default=True`, `requires="STACKY_DB_COMPARE_ENABLED"` y **`group="comparador_bd"`** (el mismo `group` que sus 20 hermanas) |
+| 3 | `Stacky Agents/backend/services/harness_flags.py`, en **`_CATEGORY_KEYS["comparador_bd"]`** (el dict se define en `:120`; esa categoría abre en `:454` y ahí está `STACKY_DB_COMPARE_MASKING_ENABLED` en `:464`) | la key |
 | 4 | `Stacky Agents/backend/tests/test_harness_flags.py`, en `_CURATED_DEFAULTS_ON` (`test_harness_flags.py:467`) | la key |
 | 5 | `Stacky Agents/backend/services/harness_flags_help.py`, en `PLAIN_HELP` (`harness_flags_help.py:25`) | entrada `PlainHelp(what=…, on_effect=…, off_effect=…, example=…)` |
-| 6 | — | **NO** se agrega campo a `GET /api/db-compare/health` (`backend/api/db_compare.py:71-91`): esta flag no gatea nada del frontend. Agregarlo sería ruido. |
+| **6** | **`Stacky Agents/backend/tests/test_harness_flags_requires.py`, en `_REQUIRES_MAP_FROZEN`** (el dict cierra en `:~322`; la última sección es "Costura de flags de la OLA 1") | **la arista `"STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED": "STACKY_DB_COMPARE_ENABLED",`** con su comentario `# Plan 266`. **OBLIGATORIA — ver el recuadro de abajo.** |
+| 7 | — | **NO** se agrega campo a `GET /api/db-compare/health` (`backend/api/db_compare.py:71-91`): esta flag no gatea nada del frontend. Agregarlo sería ruido. |
+
+> **La SEXTA pata no es opcional (C22 — BLOQUEANTE del v3).** `tests/test_harness_flags_requires.py`
+> mantiene `_REQUIRES_MAP_FROZEN`, un mapa **congelado** de todas las aristas `requires` del
+> registry, y en `:316` hace `assert actual == _REQUIRES_MAP_FROZEN` — **igualdad de conjuntos**,
+> con reporte de `Extras` en `:318`. Medido el 2026-07-29: el archivo está en **`9 passed`**,
+> `len(actual) == len(_REQUIRES_MAP_FROZEN) == 146`, y `actual == FROZEN` es `True`.
+> Declarar `requires=` en la `FlagSpec` **sin** sumar la arista acá deja `Extras =
+> ['STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED']` y el test **ROJO** — un gate que hoy está verde,
+> roto por este plan. El v3 no mencionaba `_REQUIRES_MAP_FROZEN` ni una vez en 1972 líneas.
+>
+> **Profundidad 1 (R4) verificada, hay que declararla en el comentario:**
+> `STACKY_DB_COMPARE_ENABLED` **no** declara `requires` (medido: `requires is None`, `default=True`),
+> así que la arista nueva **no forma cadena**. Comentario exacto a poner arriba de la arista:
+>
+> ```python
+>     # Plan 266: la forma garantizada del summary cuelga del master del Comparador
+>     # (profundidad 1: STACKY_DB_COMPARE_ENABLED no declara `requires`, no hay cadena).
+>     "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED": "STACKY_DB_COMPARE_ENABLED",
+> ```
 
 `config.py`:
 
@@ -1167,11 +1386,18 @@ explícitamente NO se cablea (6):**
     ).strip().lower() == "true"
 ```
 
-`PLAIN_HELP` — **topes REALES, los que asserta el test, no los del comentario (C15):**
-`what` **≤ 200**, `on_effect` ≤ 240, `off_effect` ≤ 240, `example` ≤ 300
-(`tests/test_harness_flags_help.py:48-51`). El v2 declaraba `what ≤ 240`, que es **falso** y
-habilita a escribir 220 y quedar en rojo. Longitudes del texto de abajo, medidas: `what` **132**,
-`on_effect` **109**, `off_effect` **122**, `example` **166** — los 4 entran con margen.
+`PLAIN_HELP` — **el contrato son SEIS reglas, no solo las longitudes.** El v3 solo hablaba de
+topes; el archivo `tests/test_harness_flags_help.py` exige además formato y una denylist de jerga.
+Las seis, con su anclaje, y el texto de abajo **verificado contra las seis ejecutando el contrato**:
+
+| # | Regla | Anclaje | El texto de abajo |
+|---|---|---|---|
+| 1 | `what` ≥ 10 y ≤ **200** (NO 240 — C15); `on_effect` ≤ 240; `off_effect` ≤ 240; `example` ≤ 300 | `:47-51` | 132 / 109 / 122 / 166 ✔ |
+| 2 | `on_effect` y `off_effect` empiezan **exactamente** con `"Si "` | `:59-60` | ✔ los dos |
+| 3 | cero términos de `JARGON_DENYLIST` (incluye plural): `MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime` | `:17-20`, `:70` | ✔ ninguno |
+| 4 | cero keys `SCREAMING_SNAKE` citadas (`\b[A-Z]+_[A-Z0-9_]+\b`) | `:22`, `:72` | ✔ ninguna |
+| 5 | cero referencias a fases de plan (`\bF\d`) | `:23`, `:74` | ✔ ninguna |
+| 6 | la key debe existir en el registry (sin huérfanas) | `:38-41` | ✔ la agrega la pata 2 |
 
 ```python
     "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED": PlainHelp(
@@ -1189,24 +1415,107 @@ depende de `_count` y recién acá tiene con qué correr. Agregar en el mismo ar
 | Test | Aserción |
 |---|---|
 | `test_flag_off_deja_el_payload_crudo` | con `monkeypatch.setattr(config.config, "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED", False)`, `list_runs()[0]["summary"] == {"parity_score": 91.7}` (sin claves agregadas) |
-| `test_flag_registrada_default_on` | `harness_flags._REGISTRY_INDEX["STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED"].default is True` y `harness_flags.categorize("STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED") == "capacidades_optin"` |
+| `test_flag_registrada_default_on` | `harness_flags._REGISTRY_INDEX["STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED"].default is True` y `harness_flags.categorize("STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED") == "comparador_bd"` (**C27**: el v3 asertaba `"capacidades_optin"`, donde no vive ninguna hija de DB Compare) |
 
 **Comandos:**
 ```
 .venv\Scripts\python.exe -m pytest tests/test_plan266_summary_shape.py -q
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_requires.py -q
 ```
-El segundo verifica los pares `_CURATED_DEFAULTS_ON` ↔ `default=True` y la categorización
-(`test_harness_flags.py:965-983`).
+El segundo verifica el par `_CURATED_DEFAULTS_ON` ↔ `default=True`
+(`test_declared_default_true_set`, `test_harness_flags.py:990`, y su recíproco
+`test_default_known_only_for_curated` en `:1001` — **C28**: el v3 citaba `:965-983`, que es otro
+test) y la bijección con `_CATEGORY_KEYS` (`:930`). El **tercero** es el gate de la SEXTA pata.
 
-**Criterio de aceptación (binario):** ambos comandos en `0 failed`.
-**Nota de entorno:** `tests/test_harness_flags_help.py` tiene **4 fallos ajenos preexistentes**;
-NO se corren como gate de este plan. Para validar solo la entrada nueva:
-`.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q -k SUMMARY_SHAPE`
+**Criterio de aceptación (binario):** los tres comandos en `0 failed`; el tercero **exactamente en
+`9 passed`** (baseline medido hoy: `9 passed`; si baja a `8 passed, 1 failed`, falta la arista de la
+pata 6).
+
+**Cómo se valida la entrada de `PLAIN_HELP` — y cómo NO (C26).**
+`tests/test_harness_flags_help.py` tiene **4 fallos ajenos preexistentes** (baseline medido
+2026-07-29: **`4 failed, 4 passed`**), así que "esperar verde" es insatisfacible. Y el comando que
+proponía el v3 —`-q -k SUMMARY_SHAPE`— es un **falso verde**: ejecutado, devuelve
+**`8 deselected in 0.19s` con exit code `0`**. Los 8 tests se llaman `test_plain_help_*`; `-k` filtra
+por **nombre de test**, no por contenido, así que corre **CERO** tests y sale 0. Parece verde y no
+mide nada. **Prohibido usarlo.**
+
+El criterio correcto es **delta sobre el contrato real**:
+
+```
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q
+```
+
+debe seguir dando **exactamente `4 failed, 4 passed`** —los mismos 4 tests
+(`covers_all_registry_keys`, `fields_non_empty_and_bounded`, `on_off_start_with_si`,
+`avoids_jargon_denylist`)—, y **ninguno** de los mensajes de fallo puede mencionar
+`STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED`. Comando que lo verifica de forma binaria:
+
+```
+.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q 2>&1 | findstr /C:"SUMMARY_SHAPE"
+```
+
+**No debe imprimir nada** (`findstr` sale con código 1 = sin coincidencias, que acá es el éxito). Si
+imprime algo, la entrada nueva viola una de las seis reglas de la tabla de arriba.
 
 **Flag:** `STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED` — **default ON**.
 **Impacto por runtime:** neutro/idéntico en los 3.
 **Trabajo del operador:** ninguno (opt-out disponible en la UI de flags, default ON).
+
+---
+
+### F3.5 — [ADICIÓN ARQUITECTO] Gate de cableado COMPLETO de la flag (A4)
+
+**Objetivo (1 frase):** que las **seis** patas del cableado las verifique un test, no una tabla de
+este documento.
+
+**Por qué existe esta fase.** El bloqueante que hizo rechazar el v3 (C22) no fue un descuido
+aislado: fue que **la receta de 6 patas vive en prosa** y el único que la audita es el juez. El
+mismo error ya pasó en esta casa con otras flags. Un test de ~30 líneas convierte la receta en gate
+ejecutable y hace imposible que la próxima flag de este plan (o un refactor) pierda una pata en
+silencio. No es scope creep: es el guard de F3, la fase que agrega la flag.
+
+**Archivo nuevo:** `Stacky Agents/backend/tests/test_plan266_flag_cableado.py`
+
+Python puro, sin Flask, sin DB, sin red — corre igual en los 3 runtimes. Lee
+`_CURATED_DEFAULTS_ON` y `_REQUIRES_MAP_FROZEN` **importándolos de los módulos de test donde viven**
+(son constantes de test, no de producción), y el resto del registry de `services.harness_flags`.
+
+```python
+"""Plan 266 F3.5 (A4) — las SEIS patas del cableado de la flag, en un solo gate.
+
+El v3 de este plan listaba CINCO y se olvidaba de `_REQUIRES_MAP_FROZEN`
+(test_harness_flags_requires.py:316 es una igualdad de conjuntos), lo que ponía
+en ROJO un gate que estaba verde. Este test existe para que esa clase de error
+no dependa de que alguien lea una tabla.
+"""
+import config
+from services.harness_flags import FLAG_REGISTRY, _CATEGORY_KEYS, categorize
+from services.harness_flags_help import PLAIN_HELP
+from tests.test_harness_flags import _CURATED_DEFAULTS_ON
+from tests.test_harness_flags_requires import _REQUIRES_MAP_FROZEN
+
+KEY = "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED"
+MADRE = "STACKY_DB_COMPARE_ENABLED"
+```
+
+| # | Test | Aserción |
+|---|------|----------|
+| 1 | `test_pata1_config_declara_el_atributo` | `hasattr(config.config, KEY)` y `getattr(config.config, KEY) is True` (default ON efectivo) |
+| 2 | `test_pata2_flagspec_con_default_on_y_requires` | el `FlagSpec` de `KEY` existe en `FLAG_REGISTRY`, con `default is True`, `type == "bool"`, `requires == MADRE` y `group == "comparador_bd"` |
+| 3 | `test_pata3_categoria_comparador_bd` | `KEY in _CATEGORY_KEYS["comparador_bd"]` y `categorize(KEY) == "comparador_bd"` (**C27**) |
+| 4 | `test_pata4_curada_en_defaults_on` | `KEY in _CURATED_DEFAULTS_ON` |
+| 5 | `test_pata5_tiene_ayuda_llana` | `KEY in PLAIN_HELP`, los 4 campos no vacíos, y `len(PLAIN_HELP[KEY].what) <= 200` |
+| 6 | `test_pata6_arista_requires_congelada` | `_REQUIRES_MAP_FROZEN.get(KEY) == MADRE` — **el que faltaba** |
+| 7 | `test_profundidad_1_la_madre_no_declara_requires` | el `FlagSpec` de `MADRE` tiene `requires is None` ⇒ R4 cumplido, no hay cadena |
+
+**Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan266_flag_cableado.py -q`
+**Criterio de aceptación (binario):** `0 failed`, 7 tests.
+**Nace ROJO en 6 de 7 antes de F3** (la flag no existe todavía) y pasa a verde cuando F3 completa
+las seis patas. Ese rojo es deliberado: es la reproducción del bloqueante C22.
+**Registro:** este archivo también va en las **dos** listas del arnés (§F6.1).
+**Flag:** ninguna (es un test). **Impacto por runtime:** neutro/idéntico en los 3.
+**Trabajo del operador:** ninguno.
 
 ---
 
@@ -1279,8 +1588,15 @@ realidad). El umbral es `>= 45`, y el test lleva este comentario textual:
 // que mueva la carpeta y deje el censo vacío (que es lo que este test caza).
 ```
 
-El test 2 usa este fixture, **copia textual de las 8 líneas de la §2.3 antes de F2**, embebido
-como string en el archivo de test (no como archivo aparte):
+El test 2 usa este fixture, con **las 8 expresiones de la §2.3** (una por línea), embebido como
+string en el archivo de test (no como archivo aparte).
+
+**C32 — no es copia *textual* de las líneas del árbol, y no hace falta que lo sea.** El v3 lo
+declaraba "copia textual" y es falso: la línea real de `RunsTimeline.tsx:37` es
+`{run.summary.parity_score}% · 🔴{run.summary.by_severity.danger} 🟠` (con emojis y `parity_score`).
+Lo que importa es que cada línea del fixture **contenga la expresión prohibida**, y eso está
+verificado ejecutando R1/R2 contra las 8 filas de abajo: dan **8** detecciones, una por línea. No
+metas los emojis: agregan ruido y ninguna regla los mira.
 
 ```ts
 const FIXTURE_HISTORICO = [
@@ -1357,7 +1673,23 @@ export function buildDiagnosticText(input: {
 
 /** Línea corta para el Centro de Actividad. */
 export function buildActivityBody(surface: string, componentName: string | null, message: string): string;
+
+/** Cotas de datos personales (C30). Exportadas para que el test las fije, no las adivine. */
+export const MAX_MESSAGE_CHARS: number;   // 500
+export const MAX_STACK_CHARS: number;     // 4000
 ```
+
+**Cotas obligatorias (C30 — datos personales, NO cosmético).** El Comparador trabaja contra bases
+de datos **reales**: un `message` de error puede arrastrar un valor de fila, y el `body` que publica
+`buildActivityBody` queda en `localStorage` **para siempre**
+(`frontend/src/services/activityCenter.ts:35`). Por eso:
+
+- `MAX_MESSAGE_CHARS = 500` y `MAX_STACK_CHARS = 4000`, **exportadas** (no números mágicos adentro).
+- `buildActivityBody` y `buildDiagnosticText` truncan `message` a `MAX_MESSAGE_CHARS` y `stack` a
+  `MAX_STACK_CHARS`, agregando el sufijo literal `" …[truncado]"` cuando truncan (así el operador
+  sabe que falta texto y no cree que el error era corto).
+- Nada más entra al texto: **solo** los 5 campos nombrados. Está prohibido meter el run, el diff,
+  el payload de la respuesta o cualquier objeto de dominio — ni "por conveniencia". El test lo fija.
 
 Semántica:
 
@@ -1392,8 +1724,17 @@ Semántica:
 **Archivo de test nuevo:**
 `Stacky Agents/frontend/src/components/__tests__/errorBoundaryDiagnostics.test.ts`
 Casos: los 5 de `firstComponentFromStack`, los 3 de `buildActivityBody` (con y sin componente,
-mensaje vacío), y 3 de `buildDiagnosticText` (con stack, sin stack, con `componentName: null`).
-Mínimo **11 tests**.
+mensaje vacío), y 3 de `buildDiagnosticText` (con stack, sin stack, con `componentName: null`),
+**más los 4 de la cota (C30)**:
+
+| Test | Aserción |
+|---|---|
+| `buildDiagnosticText trunca un stack gigante` | con `stack = "x".repeat(20000)`, el resultado tiene `length < MAX_STACK_CHARS + 400` y **contiene** `…[truncado]` |
+| `buildDiagnosticText trunca un mensaje gigante` | con `message = "y".repeat(5000)`, el bloque `Mensaje:` no supera `MAX_MESSAGE_CHARS` + el sufijo |
+| `buildActivityBody trunca el mensaje` | idem sobre el `body` que va a `localStorage` |
+| `buildDiagnosticText no filtra nada más que los 5 campos` | dado `{surface:"s", message:"m", componentName:"c", stack:"k", iso:"i"}`, el resultado, quitadas las 5 etiquetas fijas y esos 5 valores, **no contiene** ninguna otra subcadena de más de 3 caracteres que no sea de la plantilla — control anti-filtración: si alguien "enriquece" la función con el run, este test se pone rojo |
+
+Mínimo **15 tests**.
 
 **Comando:** `npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts`
 
@@ -1457,7 +1798,7 @@ Mínimo **11 tests**.
 
   ```ts
   handleCopy = (): void => {
-    void navigator.clipboard?.writeText(
+    void copyText(
       buildDiagnosticText({
         surface: this.props.surface ?? this.props.resetKey,
         message: String(this.state.error?.message || this.state.error || ""),
@@ -1469,23 +1810,94 @@ Mínimo **11 tests**.
   };
   ```
 
+  e import nuevo `import { copyText } from "../services/copyService";`.
+
+> **C25 (BLOQUEANTE del v3) — PROHIBIDO `navigator.clipboard.writeText` acá.** El v3 escribía
+> `void navigator.clipboard?.writeText(…)` directamente en `PageErrorBoundary.tsx`, y eso **pone en
+> ROJO** `frontend/src/__tests__/copyDebtRatchet.test.ts` (Plan 194 F5), que congela **por archivo**
+> la cantidad de escrituras directas al portapapeles (`/\.writeText\s*\(/`) bajo `src/` y declara en
+> su encabezado: *"El único lugar legítimo de escritura al portapapeles es services/copyService"*.
+> Medido el 2026-07-29: el ratchet está **VERDE (`3 passed`)**, su baseline `copyByFile` tiene 11
+> entradas y **`components/PageErrorBoundary.tsx` NO figura** ⇒ su cupo es **0**. Una escritura
+> nueva ahí es deuda nueva sobre cupo 0 ⇒ rojo. **Regenerar el baseline NO es opción** (solo puede
+> bajar, y un DoD que regenera un baseline de ratchet es un defecto en esta casa).
+>
+> El módulo canónico `frontend/src/services/copyService.ts` ya existe y es **estrictamente mejor**:
+> `copyText(text): Promise<CopyResult>` intenta `navigator.clipboard.writeText` y **cae a
+> `document.execCommand`** si el permiso se niega o el contexto no es seguro (el `?.` del v3
+> simplemente no copiaba, en silencio). Verificado: **no está detrás de ninguna flag**, y expone
+> `COPY_TOAST_SUCCESS` / `COPY_TOAST_ERROR` si más adelante se quiere avisar. Esto es la regla de
+> reuso de la casa aplicada, no una preferencia de estilo.
+
   El nombre `Copiar diagnóstico` **no colisiona** con el `getByRole("button", { name: /reintentar/i })`
   de `PageErrorBoundary.test.tsx:46`.
 
-- **CSS:** agregar las clases `origin`, `details`, `stack` y `secondaryAction` a
+- **CSS (C29 — el `uiDebtRatchet` congela HEX, no solo estilos inline):** agregar las 4 clases a
   `Stacky Agents/frontend/src/components/PageErrorBoundary.module.css`.
-  **CERO estilos inline** (`style={{…}}`): el `uiDebtRatchet` tiene alcance 0 en archivos
-  tocados y lo rechazaría. `.stack` debe llevar `overflow: auto; max-height: 40vh;
-  white-space: pre-wrap; word-break: break-word;` para que un stack largo no reviente el layout.
 
-**Comandos:**
+  Medido el 2026-07-29: el ratchet cuenta **colores hex por archivo** en `*.module.css`
+  (`HEX_RE = /#[0-9a-fA-F]{3,8}\b/g`) y el baseline de `components/PageErrorBoundary.module.css` es
+  **2** — exactamente los dos que ya tiene (`#fca5a5` en `.title`, `#fecaca` en `.action`). **Un solo
+  hex nuevo lo pone en 3 y el gate en ROJO.** Y "usá tokens" a secas es otra trampa: la familia
+  `--color-*` **no existe** en el tema (los reales son `--accent`, `--danger`, `--success`,
+  `--border`, `--text-primary`, `--bg-panel`). Para no depender de ninguna de las dos cosas, las 4
+  clases van **literales, con `rgba()` como el resto del archivo y CERO hex nuevo**:
+
+  ```css
+  .origin {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.35);
+  }
+  .details {
+    margin-top: 4px;
+    max-width: 640px;
+    width: 100%;
+    text-align: left;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .stack {
+    margin: 6px 0 0;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.25);
+    font-size: 11px;
+    line-height: 1.45;
+    overflow: auto;
+    max-height: 40vh;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .secondaryAction {
+    margin-top: 8px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .secondaryAction:hover { background: rgba(255, 255, 255, 0.12); }
+  ```
+
+  **CERO estilos inline** (`style={{…}}`) además: el `uiDebtRatchet` también los cuenta por archivo
+  y `PageErrorBoundary.tsx` tiene cupo 0.
+
+**Comandos (los TRES — el del portapapeles no estaba y es el que atrapa C25):**
 ```
 npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts
 npx vitest run src/__tests__/uiDebtRatchet.test.ts
+npx vitest run src/__tests__/copyDebtRatchet.test.ts
 ```
 
-**Criterio de aceptación (binario):** ambos en `0 failed`, y
-`grep -c "Esta pestaña falló al renderizar" src/components/PageErrorBoundary.tsx` = 1.
+**Criterio de aceptación (binario):** los tres en `0 failed` —el de copia **exactamente en
+`3 passed`**, su baseline medido hoy—, `grep -c "Esta pestaña falló al renderizar"
+src/components/PageErrorBoundary.tsx` = 1, y
+`grep -c "navigator.clipboard" src/components/PageErrorBoundary.tsx` = **0**.
 
 **Flag:** ninguna. Es diagnóstico **solo-lectura** de un error que ya ocurrió; la regla de la
 casa dice que leer/mostrar/avisar va ON, y acá el "ON" es incondicional porque el fallback ya
@@ -1505,8 +1917,10 @@ existe y solo se enriquece.
 El v1 decía "agregar a `HARNESS_TEST_FILES` también en el `.ps1`" y "mirar cómo está declarada
 la lista en cada uno y seguir su forma". Las dos cosas están mal: el `.ps1` **no contiene**
 ninguna variable llamada `HARNESS_TEST_FILES`, y "mirar y seguir la forma" es exactamente la
-inferencia que §1 prohíbe. Acá van las **dos líneas literales**, con su ancla y su forma exacta.
-No hay nada que deducir.
+inferencia que §1 prohíbe. Acá van las líneas **literales**, con su ancla y su forma exacta.
+No hay nada que deducir. Son **TRES** archivos de test, no uno:
+`test_plan266_summary_shape.py` (F0.2/F3), `test_plan266_flag_cableado.py` (F3.5) y
+`test_plan266_harness_runner_paridad.py` (F6.5).
 
 **(a) `Stacky Agents/backend/scripts/run_harness_tests.sh`** — la lista se declara en `:20` como
 `HARNESS_TEST_FILES=(` y sus entradas van **DESNUDAS: sin comillas y sin coma**, así:
@@ -1515,52 +1929,73 @@ No hay nada que deducir.
   tests/test_plan258_ledger_purge.py
 ```
 
-Agregar, **inmediatamente después** de la línea `  tests/test_plan258_estanqueidad_arnes.py`
-(`run_harness_tests.sh:874`, última entrada de la serie 253-258), esta línea **exacta**:
+Agregar las **tres** líneas al **FINAL del array**: inmediatamente después de
+`  tests/test_plan242_runtime_parity.py` (`run_harness_tests.sh:883`, la **última** entrada real —
+medido el 2026-07-29; el `)` está en `:884`), estas líneas **exactas**:
 
 ```
   tests/test_plan266_summary_shape.py
+  tests/test_plan266_flag_cableado.py
+  tests/test_plan266_harness_runner_paridad.py
 ```
 
 (dos espacios de indentación, sin comillas, sin coma, sin nada más en la línea).
 
+> **Ojo con el ancla (C23).** El v3 mandaba insertar después de
+> `  tests/test_plan258_estanqueidad_arnes.py` (`:874`) llamándola "última entrada de la serie
+> 253-258". Medido: `:874` es correcto para esa línea, pero **no es la última del array** — después
+> vienen 9 entradas más y la última es `:883`. En el `.sh` la posición es indiferente (la regex del
+> meta-test acepta la línea desnuda esté donde esté), pero se unifica al final para que la
+> instrucción sea **la misma** que en el `.ps1`, donde la posición **sí** importa.
+
 **(b) `Stacky Agents/backend/scripts/run_harness_tests.ps1`** — acá la variable se llama
 `$HarnessTestFiles` (NO `HARNESS_TEST_FILES`) y se declara en `run_harness_tests.ps1:13` como
-`$HarnessTestFiles = @(`. Las entradas **intermedias** van entrecomilladas y con coma, así:
+`$HarnessTestFiles = @(`.
+
+> **C23 (BLOQUEANTE del v3) — la instrucción del v3 era inejecutable y su premisa de estilo era
+> falsa. Los dos hechos, medidos el 2026-07-29 sobre `760ac455`:**
+>
+> 1. **El bloque que el v3 mandaba reemplazar NO existe.** `Contains('  "tests/test_plan258_
+>    estanqueidad_arnes.py"' + newline + ')')` → **False**. La entrada del 258 está en **`:787`**
+>    y **ya termina en coma**; la **última** entrada del array es **`:796`
+>    `"tests/test_plan242_runtime_parity.py"`** (sin coma), y el `)` está en **`:797`** (el v3 decía
+>    `:788`). O sea que la "regla general" del v3 —*la que era última recibe la coma que le
+>    faltaba*— es falsa en las dos mitades: el 258 no es la última y ya tiene su coma.
+>    Un implementador literal no encuentra el bloque, **la edición no ocurre**, el test nuevo nunca
+>    entra al arnés (pérdida de cobertura en silencio) y el test 4 de F6.5 queda rojo.
+> 2. **PowerShell NO exige coma entre elementos separados por salto de línea.** Verificado con el
+>    parser real: `@("x.py"` + newline + `"y.py")` **parsea con 0 errores**, igual que el archivo
+>    real completo, que tiene **207** entradas sin coma. La afirmación del v3 "las entradas
+>    intermedias van entrecomilladas y con coma" es falsa para **206 de 623**.
+>
+> **Lo que sí se confirma es la premisa de C12:** una coma **colgante** antes del `)` es un
+> `ParserError` real (`@("x.py",` + newline + `"y.py",` + newline + `)` → *"Falta una expresión
+> después de ','"*). Por eso la entrada nueva va **sin** coma.
+
+Entonces la edición es **UNA sola línea nueva**, no dos. Las entradas van entrecomilladas y con
+dos espacios de indentación; la coma es **opcional** entre elementos y **prohibida** antes del `)`.
+
+Agregar, **inmediatamente después** de la línea `  "tests/test_plan242_runtime_parity.py"`
+(la ÚLTIMA entrada del array, `run_harness_tests.ps1:796`) y **antes** del `)` de `:797`, estas
+**tres** líneas exactas, **ninguna con coma**:
 
 ```powershell
-  "tests/test_harness_flags.py",
-```
-
-…pero la **ÚLTIMA entrada NO lleva coma**. Hoy la última es
-`  "tests/test_plan258_estanqueidad_arnes.py"` (sin coma), inmediatamente antes del `)` de
-`run_harness_tests.ps1:788`.
-
-> **C12 — PowerShell no admite coma colgante.** El v2 mandaba agregar la línea nueva al final
-> **con** coma final; eso deja `…,` justo antes del `)` y **el archivo entero deja de parsear**.
-> Verificado ejecutando el parser real sobre esa forma exacta:
-> `ParserError: Falta una expresión después de ','`. No es estilo: es el arnés de PowerShell
-> caído.
-
-Por eso este paso son **DOS ediciones sobre líneas contiguas**, no una. Reemplazar el bloque
-
-```powershell
-  "tests/test_plan258_estanqueidad_arnes.py"
-)
-```
-
-por exactamente este:
-
-```powershell
-  "tests/test_plan258_estanqueidad_arnes.py",
   "tests/test_plan266_summary_shape.py"
-)
+  "tests/test_plan266_harness_runner_paridad.py"
+  "tests/test_plan266_flag_cableado.py"
 ```
 
-Es decir: **(1)** agregarle una coma al final de la línea del 258, que hoy no la tiene, y
-**(2)** agregar la línea nueva **SIN** coma (dos espacios de indentación, comillas dobles, y nada
-después de la comilla de cierre). La regla general, para que no haya nada que inferir: *la entrada
-nueva siempre va última y sin coma; la que era última recibe la coma que le faltaba.*
+**Regla general, sin nada que inferir:** *las entradas nuevas van al final del array, con dos
+espacios de indentación, entre comillas dobles, y SIN coma. No se le agrega ni se le quita coma a
+ninguna línea existente.* (Verificado con el parser: agregar entradas sin coma al final deja el
+archivo parseando con 0 errores.)
+
+(Las mismas tres, en su forma desnuda, van en el `.sh` — eso es el paso **(a)** de arriba. Las dos
+formas son distintas y **ninguna se deriva de la otra**; ver el porqué más abajo.)
+
+**Orden obligatorio:** esta fase va **AL FINAL**, después de que los tres archivos de test existan.
+`tests/test_harness_ratchet_meta.py:79` es `test_ratchet_no_referencia_archivos_inexistentes`:
+registrar una ruta antes de crear el archivo pone ese gate en ROJO (medido: hoy está en `4 passed`).
 
 Lo verifica automáticamente el guard de F6.5 (que existe justamente porque el `.ps1` no tenía
 **ningún** gate de sintaxis).
@@ -1582,26 +2017,42 @@ lo rompe. Por eso hay dos líneas distintas y ninguna se deriva de la otra.
 npm run build     # desde Stacky Agents/frontend → tsc --noEmit && vite build
 ```
 
-#### F6.3 — Suite de verificación de la fase (correr por archivo, en este orden)
+#### F6.3 — [ADICIÓN ARQUITECTO A5] Suite de cierre con BASELINE MEDIDO y criterio DELTA
 
-```
-# backend (desde Stacky Agents/backend)
-.venv\Scripts\python.exe -m pytest tests/test_plan266_summary_shape.py -q
-.venv\Scripts\python.exe -m pytest tests/test_plan266_harness_runner_paridad.py -q
-.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q
-.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
-.venv\Scripts\python.exe -m pytest tests/test_error_fingerprints_catalog.py -q   # esperado: 3 failed, 5 passed (rojos AJENOS)
+**Por qué cambia.** El v3 listaba comandos y pedía "verde". Eso es insatisfacible en 2 de los
+archivos (tienen rojos ajenos) e inauditable en los otros: un "pasó" sin número no distingue
+"corrió y pasó" de "no corrió". Los números de la columna **HOY** se midieron ejecutando cada
+comando el **2026-07-29** sobre `760ac455`, antes de tocar nada. El criterio es la columna
+**DESPUÉS**: si un archivo empeora respecto de su baseline, el plan lo rompió; si un rojo ajeno
+"desaparece", alguien tocó algo que no era de este plan.
 
-# frontend (desde Stacky Agents/frontend)
-npx vitest run src/components/dbcompare/summaryShape.test.ts
-npx vitest run src/components/dbcompare/__tests__/summaryShapeCrash.test.ts
-npx vitest run src/components/dbcompare/radarLogic.test.ts
-npx vitest run src/components/dbcompare/__tests__/svgMath.test.ts
-npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts
-npx vitest run src/__tests__/dbcompareSummaryShapeRatchet.test.ts
-npx vitest run src/__tests__/uiDebtRatchet.test.ts
-npm run build
-```
+| # | Comando (backend: desde `Stacky Agents/backend`) | HOY (medido) | DESPUÉS (exigido) |
+|---|---|---|---|
+| 1 | `pytest tests/test_plan266_summary_shape.py -q` | no existe | `0 failed` |
+| 2 | `pytest tests/test_plan266_flag_cableado.py -q` | no existe | `0 failed`, 7 tests |
+| 3 | `pytest tests/test_plan266_harness_runner_paridad.py -q` | no existe | `0 failed`, 4 tests |
+| 4 | `pytest tests/test_harness_flags.py -q` | **56 passed** | `0 failed` (≥ 56 passed) |
+| 5 | `pytest tests/test_harness_flags_requires.py -q` | **9 passed** | **`9 passed`** ← el gate de la SEXTA pata (C22) |
+| 6 | `pytest tests/test_harness_ratchet_meta.py -q` | **4 passed** | `0 failed` |
+| 7 | `pytest tests/test_harness_flags_help.py -q` | **4 failed, 4 passed** (ajenos) | **`4 failed, 4 passed`**, y `findstr /C:"SUMMARY_SHAPE"` sobre su salida **no imprime nada** (C26) |
+| 8 | `pytest tests/test_error_fingerprints_catalog.py -q` | **3 failed, 5 passed** (ajenos) | **`3 failed, 5 passed`**; si sube a 4 o si `test_patrones_compilan` se pone rojo, la huella está mal (C13) |
+
+| # | Comando (frontend: desde `Stacky Agents/frontend`) | HOY (medido) | DESPUÉS (exigido) |
+|---|---|---|---|
+| 9 | `npx vitest run src/components/dbcompare/summaryShape.test.ts` | no existe | `0 failed`, ≥31 tests |
+| 10 | `npx vitest run src/components/dbcompare/__tests__/summaryShapeCrash.test.ts` | no existe | `0 failed` |
+| 11 | `npx vitest run src/components/dbcompare/radarLogic.test.ts` | existe y pasa | `0 failed`, **sin tocar el archivo de test** |
+| 12 | `npx vitest run src/components/dbcompare/__tests__/svgMath.test.ts` | existe y pasa | `0 failed`, **sin tocar el archivo de test** |
+| 13 | `npx vitest run src/components/dbcompare/__tests__/runHistory.test.ts` | existe y pasa | `0 failed` |
+| 14 | `npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts` | no existe | `0 failed`, ≥15 tests |
+| 15 | `npx vitest run src/__tests__/dbcompareSummaryShapeRatchet.test.ts` | no existe | `0 failed`, 12 tests, censo `[]` |
+| 16 | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` | verde | `0 failed` — el hex de `PageErrorBoundary.module.css` sigue en **2** (C29) |
+| 17 | `npx vitest run src/__tests__/copyDebtRatchet.test.ts` | **3 passed** | **`3 passed`** ← el gate que atrapa C25; `PageErrorBoundary.tsx` **no** puede aparecer en el baseline |
+| 18 | `npm run build` (`tsc --noEmit && vite build`) | verde | exit 0 |
+
+**PROHIBIDO como parte de este plan:** `npm install` / `npm ci`, tocar `frontend/package.json`, y
+**regenerar cualquier baseline de ratchet** (`COPY_DEBT_REGEN`, `UI_DEBT_REGEN` o equivalente). Los
+baselines solo bajan; si un ratchet se pone rojo, el arreglo es el código, no el baseline.
 
 #### F6.4 — [ADICIÓN ARQUITECTO] Registrar la huella de regresión del error
 
@@ -1749,11 +2200,21 @@ def _ps1_files() -> set[str]:
 
 | # | Test | Aserción |
 |---|------|----------|
-| 1 | `test_ps1_sin_coma_colgante` | **el corazón de C12.** Para cada `)` que cierra un array en el `.ps1`, la última línea no vacía anterior **no** termina en `,`. PowerShell no admite coma colgante y el archivo entero deja de parsear. |
-| 2 | `test_ps1_sin_entradas_pegadas` | ninguna línea de entrada del `.ps1` que **no** sea la última del array puede venir **sin** coma (el error simétrico del anterior) |
-| 3 | `test_ps1_es_subconjunto_del_sh` | `_ps1_files() - _sh_files() == set()` — invariante **medido y cierto hoy** (2026-07-28: 616 en el `.ps1`, 680 en el `.sh`, diferencia `.ps1 − .sh` = ∅). Cazaría un archivo agregado al `.ps1` y olvidado en el `.sh`, que es el que rompe el meta-test. |
-| 4 | `test_el_test_de_este_plan_esta_en_los_dos` | `"tests/test_plan266_summary_shape.py"` ∈ `_sh_files()` **y** ∈ `_ps1_files()` — el gate directo de F6.1 |
-| 5 | `test_ambas_listas_no_estan_vacias` | `len(_sh_files()) >= 600` y `len(_ps1_files()) >= 600` — anti-censo-vacío, calibrado contra los 680/616 reales de hoy (mismo criterio que C6 le exigió al test 12 de F4: el umbral se calibra contra la realidad medida, no contra un número cómodo) |
+| 1 | `test_ps1_sin_coma_colgante` | **el corazón de C12.** Implementación **literal** (C33 — nada que inferir): `lineas = _PS1.read_text(encoding="utf-8").splitlines()`; para cada `i` tal que `lineas[i].strip() == ")"`, retroceder al índice `j` de la última línea **no vacía** anterior y assertar `not lineas[j].rstrip().endswith(",")`. Medido hoy: hay **exactamente 1** línea que es solo `)` (`:797`) y su anterior (`:796`) **no** termina en coma ⇒ **nace verde**. |
+| 2 | `test_ps1_es_subconjunto_del_sh` | `_ps1_files() - _sh_files() == set()` — invariante **medido y cierto hoy** (2026-07-29: **623** en el `.ps1`, **687** en el `.sh`, diferencia `.ps1 − .sh` = ∅). Cazaría un archivo agregado al `.ps1` y olvidado en el `.sh`, que es el que rompe el meta-test. |
+| 3 | `test_los_tests_de_este_plan_estan_en_los_dos` | las **tres** rutas (`tests/test_plan266_summary_shape.py`, `tests/test_plan266_harness_runner_paridad.py`, `tests/test_plan266_flag_cableado.py`) ∈ `_sh_files()` **y** ∈ `_ps1_files()` — el gate directo de F6.1 |
+| 4 | `test_ambas_listas_no_estan_vacias` | `len(_sh_files()) >= 600` y `len(_ps1_files()) >= 600` — anti-censo-vacío, calibrado contra los **687/623** reales de hoy (mismo criterio que C6 le exigió al test 12 de F4: el umbral se calibra contra la realidad medida, no contra un número cómodo) |
+
+> **C24 (BLOQUEANTE del v3) — el test "sin entradas pegadas" se ELIMINA porque codificaba una regla
+> que no existe, y habría nacido ROJO con 206 violaciones.** El v3 pedía que "ninguna línea de
+> entrada del `.ps1` que no sea la última del array venga sin coma". Medido el 2026-07-29:
+> **207** líneas de entrada **no** llevan coma y solo **1** es la última del array (`:796`) ⇒
+> **206 violaciones el día 1**. Y la premisa es falsa: el parser real de PowerShell acepta
+> `@("x.py"` + newline + `"y.py")` **sin ninguna coma** (0 errores), igual que acepta el archivo
+> real completo. En un array literal de PowerShell el salto de línea **ya es** separador; la coma es
+> opcional. Un gate que exige un estilo inexistente sobre 206 líneas ajenas es exactamente el falso
+> rojo que esta casa prohíbe, y además habría empujado a "arreglar" 206 líneas que están bien.
+> Lo que **sí** se conserva es el test 1, porque su premisa está confirmada ejecutando el parser.
 
 **Deliberadamente NO se exige `_sh_files() == _ps1_files()`.** Hoy hay **64 archivos que están
 solo en el `.sh`** (la serie `test_mg_*` del migrador, `test_plan70_*`, `test_plan72_*`,
@@ -1767,18 +2228,22 @@ plan.
 cierra.
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan266_harness_runner_paridad.py -q`
-**Criterio de aceptación (binario):** `0 failed`, 5 tests. **Nace verde** (los 5 invariantes se
-verificaron contra el árbol real antes de escribir esta fase); si nace rojo, la edición de F6.1
-se hizo mal y hay que corregirla **antes** de seguir.
+**Criterio de aceptación (binario):** `0 failed`, **4 tests** (eran 5 en el v3; el test 2 se
+eliminó por C24). **Nace verde** una vez hecha la edición de F6.1 — los 4 invariantes se verificaron
+ejecutándolos contra el árbol real; si nace rojo, la edición de F6.1 se hizo mal y hay que corregirla
+**antes** de seguir.
 **Flag:** ninguna (es un test). **Impacto por runtime:** neutro/idéntico en los 3 — Python puro,
 sin `pwsh`, sin red. **Trabajo del operador:** ninguno.
 
 ---
 
-**Criterio de aceptación de F6 (binario):** los 11 comandos de F6.3 en verde, más los checks de
-F6.4 y F6.5. Si `uiDebtRatchet` o `test_harness_flags` fallan por deuda **ajena** preexistente, hay que
-demostrarlo con un worktree en el commit base — no argumentarlo.
-(`test_harness_flags_help.py` tiene 4 fallos ajenos conocidos y NO es gate de este plan; ver F3.)
+**Criterio de aceptación de F6 (binario):** las **18** filas de la tabla de F6.3 cumplen su columna
+**DESPUÉS**, más los checks de F6.4 y F6.5. El criterio es **delta contra el baseline medido**, no
+"verde": pedir verde es insatisfacible en las filas 7 y 8 (rojos ajenos) y no auditable en el resto.
+Si un ratchet o un test que hoy está verde se pone rojo, es de este plan hasta que se demuestre lo
+contrario **con un worktree en el commit base** — no se argumenta, se prueba.
+(`test_harness_flags_help.py` tiene 4 fallos ajenos conocidos: el gate es que sigan siendo **4** y
+que ninguno mencione la key nueva; ver F3.)
 
 **Flag:** ninguna. **Impacto por runtime:** neutro/idéntico en los 3.
 **Trabajo del operador:** ninguno.
@@ -1803,6 +2268,11 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
 | R12 | La edición del `.ps1` (F6.1b) rompe el runner del arnés en Windows y nadie se entera hasta que el operador lo corre | **era certeza en el v2** (la forma que dictaba es un `ParserError`) | Corregido en F6.1(b): la entrada nueva va **sin** coma y la anterior la recibe. Y se agrega el gate que faltaba: **F6.5** test 1 (`test_ps1_sin_coma_colgante`) hace imposible que la clase entera vuelva, sin depender de que alguien corra PowerShell. |
 | R13 | La huella de F6.4 pone en rojo el catálogo de errores (`test_patrones_compilan`) | **era certeza en el v2** (`re.compile(None)` ⇒ `TypeError`) | Corregido: `log_pattern` compilable + `self_test`, validados contra los 5 tests del catálogo antes de escribirlos. El criterio de F6.4 dejó de ser "el JSON es válido" y pasó a ser **el conteo de fallos del catálogo no sube de 3** (los 3 ajenos de hoy). |
 | R14 | Alguien "simplifica" el guard de decimales de `toCount`/`_count` volviendo al `Number(value)` / `float(value)` desnudo | media (parece código defensivo redundante) | Los 4 casos `"0x10"`, `"0b101"`, `"1_0"`, `"1e2"` están en la tabla de verdad compartida: sacar el guard de **cualquiera** de los dos lados da rojo en T3 (vitest) o T6 (pytest). El comentario de cada implementación dice explícitamente que la otra existe. |
+| R15 | La flag declara `requires=` y nadie suma la arista a `_REQUIRES_MAP_FROZEN` ⇒ `test_harness_flags_requires.py` pasa de `9 passed` a rojo | **era certeza en el v3** (la tabla listaba 5 patas y no mencionaba el mapa ni una vez) | Corregido: la pata **6** es obligatoria en la tabla de F3, con el comentario y la nota de profundidad 1 literales. Y **A4/F3.5** lo convierte en gate propio (`test_pata6_arista_requires_congelada`), más la fila 5 de F6.3 que exige `9 passed` exactos. Tres capas: la instrucción, el test de cableado y el baseline delta. |
+| R16 | La copia del diagnóstico se escribe con `navigator.clipboard` directo y rompe el `copyDebtRatchet` | **era certeza en el v3** (cupo 0 en ese archivo, ratchet verde hoy con `3 passed`) | Corregido: se usa `services/copyService.copyText()`, el único lugar legítimo según el propio encabezado del ratchet. Gate agregado a F5.2 y a F6.3 (fila 17), más `grep -c "navigator.clipboard" = 0` en el criterio de F5.2. Bonus real: `copyText` cae a `execCommand` cuando el permiso se niega, algo que el `?.` del v3 no hacía. |
+| R17 | El gate de la ayuda llana se satisface sin correr nada (`-k` que deselecciona todo y sale 0) | **era certeza en el v3** (medido: `8 deselected`, exit `0`) | Corregido: el criterio es delta sobre el archivo completo (`4 failed, 4 passed`) más un `findstr` que debe NO imprimir la key nueva. Y el contenido se validó contra las **seis** reglas del contrato, no solo las longitudes. |
+| R18 | Un color hex nuevo en `PageErrorBoundary.module.css` pone el `uiDebtRatchet` en rojo (baseline congelado en 2) | alta si el CSS se improvisa | Corregido: las 4 clases van **literales** en F5.2, todas con `rgba()`, cero hex nuevo. Trampa adicional declarada: la familia de tokens `--color-*` **no existe** en el tema, así que "usá tokens" sin nombrarlos también fallaba. |
+| R19 | El diagnóstico copiable / el Centro de Actividad arrastran un valor de fila de una BD real del operador | media (el `message` de un error es texto arbitrario y el Comparador trabaja contra bases reales) | Tres mitigaciones verificables, §3.10: **(a)** orden de egreso — la normalización de F3 va **dentro** de `get_run`, y el masking (`dbcompare_masking.apply_to_run_response`, `api/db_compare.py:447`) queda **aguas abajo**; el plan no mueve ni envuelve esa llamada, así que no puede fallar abierto; **(b)** cero egreso de red — `activityCenter` solo usa `localStorage` (`:35`), sin `fetch`/POST, y la copia es HITL (solo al click); **(c)** cota — `MAX_MESSAGE_CHARS=500` y `MAX_STACK_CHARS=4000` con 4 tests que la fijan, incluido el control anti-filtración que se pone rojo si alguien "enriquece" el texto con el run. `dbcompare_masking.py` **no cubre** este camino y no podría (es backend y por patrones sobre el data-diff): la defensa acá es la cota, y está dicho. |
 
 ---
 
@@ -1842,8 +2312,9 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
    bug. Y aun así queda cubierta en el frontend: F2 hace que ese consumidor pase por
    `safeSummary(r.diff?.summary)`. Normalizar además en el backend sería trabajo sin defecto
    observable que lo justifique.
-8. **Cerrar el desfasaje entre las dos listas del arnés.** Medido el 2026-07-28: el `.sh` tiene
-   **680** entradas y el `.ps1` **616**; hay **64 archivos que están solo en el `.sh`** (la serie
+8. **Cerrar el desfasaje entre las dos listas del arnés.** Medido el **2026-07-29** sobre
+   `760ac455`: el `.sh` tiene **687** entradas y el `.ps1` **623** (el v3 decía 680/616 — C31);
+   hay **64 archivos que están solo en el `.sh`** (la serie
    `test_mg_*` del migrador, `test_plan70_*`, `test_plan72_*`, `test_rag_*`,
    `test_plan237/238/239_*`, entre otros). Es deuda **ajena y preexistente**, de planes que
    registraron su test en un solo runner. **F6.5 no la cierra**: congela el invariante que hoy sí
@@ -1853,6 +2324,18 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
 9. **Los 3 rojos preexistentes de `test_error_fingerprints_catalog.py`** (16 de las 42 huellas
    del catálogo no traen `self_test`). Ajenos, anteriores a este plan, verificados con el
    baseline de F6.4. Este plan solo se compromete a **no sumar un cuarto**.
+10. **Enmascarar el mensaje de error del navegador, y cerrar el masking de los otros
+    `get_run` (DATOS PERSONALES — decisión declarada, no omisión).** Medido: `get_run` se llama en
+    **9** lugares de `backend/api/db_compare.py` y solo el de `:439` pasa por
+    `dbcompare_masking.apply_to_run_response` (`:447`); los otros 8 (`:455`, `:488`, `:680`, `:713`,
+    `:796`, `:925`, `:1016`) consumen el run para triage/gates/scripts y **no devuelven el run
+    completo al cliente**. Es deuda **ajena y preexistente** del Plan 181, y este plan **no la
+    toca**: su cambio se inserta **antes** del masking, así que no lo empeora ni lo saltea
+    (§3.10 (a)). Y del lado del navegador **no se propone enmascarar el `message`**: un
+    enmascarador por patrones en el frontend daría falsa seguridad (no sabe qué es un dato de
+    negocio y qué es parte del mensaje del motor de JS) y el camino no sale del navegador
+    (§3.10 (b)). La defensa que sí se implementa es la **cota** (§3.10 (c)). Cerrar el masking de
+    los otros 8 call-sites, si algún día devuelven el run entero, es un plan aparte.
 
 ---
 
@@ -1886,14 +2369,21 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
    `svgMath.ts`, `SummaryHero.tsx`. **F0.1 pasa a verde.**
 6. **F3** — `_normalize_summary` + `_count` (con el corte de `bool` y el `OverflowError`) +
    cableado en `list_runs` y en `get_run` (**incluido el summary anidado de `diff`**) + flag en
-   los 5 lugares obligatorios de la tabla de F3 (el ítem 6 de esa tabla es un "no se toca", no
-   un cableado). **F0.2 pasa a verde, y el T6 de F1.5 también.**
-7. **F4** — centinela `dbcompareSummaryShapeRatchet.test.ts`. Verde (12 tests).
-8. **F5** — `errorBoundaryDiagnostics.ts` + tests + cableado en `PageErrorBoundary.tsx` + CSS.
-9. **F6** — registro en `run_harness_tests.sh` (línea desnuda) **y** en `run_harness_tests.ps1`
-   (**dos** ediciones: coma AGREGADA a la entrada del 258 + entrada nueva **SIN** coma — C12),
-   huella en `error_fingerprints.json` con `log_pattern` compilable y `self_test` (F6.4 — C13),
-   guard del runner `.ps1` (**F6.5**, nace verde), `npm run build`, suite de cierre.
+   los **SEIS** lugares obligatorios de la tabla de F3 —**la 6.ª es la arista en
+   `_REQUIRES_MAP_FROZEN`, C22**— con categoría `comparador_bd` (C27). El ítem 7 de esa tabla es
+   un "no se toca", no un cableado. **F0.2 pasa a verde, y el T6 de F1.5 también.**
+7. **F3.5** — `test_plan266_flag_cableado.py` (**A4**). Verde (7 tests). Si alguna de las 6 patas
+   quedó afuera, esta fase lo dice acá y no 3 fases después.
+8. **F4** — centinela `dbcompareSummaryShapeRatchet.test.ts`. Verde (12 tests).
+9. **F5** — `errorBoundaryDiagnostics.ts` (con `MAX_MESSAGE_CHARS`/`MAX_STACK_CHARS`) + tests
+   (≥15) + cableado en `PageErrorBoundary.tsx` usando **`copyService.copyText`, nunca
+   `navigator.clipboard` — C25** + las 4 clases CSS literales sin hex nuevo (C29).
+10. **F6** — registro de los **tres** archivos de test en `run_harness_tests.sh` (líneas desnudas)
+    **y** en `run_harness_tests.ps1` (líneas entrecomilladas **SIN coma, al final del array, después
+    de `:796`** — C23; NO se le toca la coma a ninguna línea existente), huella en
+    `error_fingerprints.json` con `log_pattern` compilable y `self_test` (F6.4 — C13), guard del
+    runner `.ps1` (**F6.5**, 4 tests, nace verde — el 5.º se eliminó por C24), `npm run build`, y la
+    suite de cierre de F6.3 **contra su tabla de baseline medido** (A5).
 
 ### 7.3 Definición de Hecho (DoD global) — binaria
 
@@ -1913,7 +2403,17 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
 - [ ] `npx vitest run src/__tests__/dbcompareSummaryShapeRatchet.test.ts` → `0 failed`, 12 tests,
       censo = `[]`, el fixture histórico detecta **8**, y el test 12 exige **`>= 45`** archivos
       censados (no 12).
-- [ ] `npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts` → `0 failed`, ≥11 tests.
+- [ ] `npx vitest run src/components/__tests__/errorBoundaryDiagnostics.test.ts` → `0 failed`,
+      **≥15 tests**, incluidos los 4 de la cota de datos personales (C30): stack gigante truncado
+      con `…[truncado]`, mensaje gigante truncado, `buildActivityBody` truncado, y el control
+      anti-filtración que exige que el texto no contenga nada más que los 5 campos nombrados.
+- [ ] `npx vitest run src/__tests__/copyDebtRatchet.test.ts` → **`3 passed`** (su baseline medido) y
+      `components/PageErrorBoundary.tsx` **NO** figura en `src/__tests__/copyDebtBaseline.json`
+      (C25). Verificación directa:
+      `grep -c "navigator.clipboard" src/components/PageErrorBoundary.tsx` = **0** y
+      `grep -c "copyService" src/components/PageErrorBoundary.tsx` = **1**.
+- [ ] El hex de `src/components/PageErrorBoundary.module.css` sigue en **2** (C29):
+      `grep -o -E "#[0-9a-fA-F]{3,8}" src/components/PageErrorBoundary.module.css | wc -l` = 2.
 - [ ] `npx vitest run src/components/dbcompare/radarLogic.test.ts` y
       `npx vitest run src/components/dbcompare/__tests__/svgMath.test.ts` → `0 failed`,
       **sin haber modificado esos archivos de test**.
@@ -1925,22 +2425,41 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
       `test_count_booleano_es_cero` (**C2**),
       `test_get_run_normaliza_tambien_el_summary_anidado_del_diff` y
       `test_get_run_no_reescribe_el_archivo_en_disco` (**C4**).
-- [ ] `.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` → `0 failed`.
-- [ ] `.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q` → `0 failed`.
+- [ ] `.venv\Scripts\python.exe -m pytest tests/test_harness_flags.py -q` → `0 failed`
+      (baseline hoy: 56 passed).
+- [ ] `.venv\Scripts\python.exe -m pytest tests/test_harness_flags_requires.py -q` →
+      **exactamente `9 passed`** (baseline medido hoy: `9 passed`). Es el gate de la **SEXTA** pata:
+      si da `8 passed, 1 failed` con `Extras: ['STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED']`, falta la
+      arista en `_REQUIRES_MAP_FROZEN` (**C22**).
+- [ ] `.venv\Scripts\python.exe -m pytest tests/test_harness_flags_help.py -q` →
+      **exactamente `4 failed, 4 passed`** (los 4 rojos ajenos de hoy) **y** ninguna línea de la
+      salida menciona `SUMMARY_SHAPE`. **PROHIBIDO** usar `-k SUMMARY_SHAPE` como gate: ejecutado da
+      `8 deselected` con exit `0` — cero tests corridos y falso verde (**C26**).
+- [ ] `.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q` → `0 failed`
+      (baseline hoy: 4 passed).
 - [ ] `npm run build` (`tsc --noEmit && vite build`) → exit 0.
-- [ ] `STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED` presente en los 5 lugares de F3
-      (`config.py`, `FLAG_REGISTRY`, `_CATEGORY_KEYS`, `_CURATED_DEFAULTS_ON`, `PLAIN_HELP`)
-      con `default=True` y `requires="STACKY_DB_COMPARE_ENABLED"`.
-- [ ] `tests/test_plan266_summary_shape.py` **y** `tests/test_plan266_harness_runner_paridad.py`
+- [ ] `.venv\Scripts\python.exe -m pytest tests/test_plan266_flag_cableado.py -q` → `0 failed`,
+      **7 tests** (**A4**): las **SEIS** patas de
+      `STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED` —`config.py`, `FLAG_REGISTRY` (con `default=True`,
+      `requires="STACKY_DB_COMPARE_ENABLED"`, `group="comparador_bd"`),
+      `_CATEGORY_KEYS["comparador_bd"]`, `_CURATED_DEFAULTS_ON`, `PLAIN_HELP` y
+      **`_REQUIRES_MAP_FROZEN`**— más la verificación de profundidad 1 (la madre no declara
+      `requires`). `categorize(...)` devuelve **`"comparador_bd"`**, NO `"capacidades_optin"` (**C27**).
+- [ ] Los **tres** archivos `tests/test_plan266_summary_shape.py`,
+      `tests/test_plan266_harness_runner_paridad.py` y `tests/test_plan266_flag_cableado.py`
       figuran en **los dos scripts, con la forma de cada uno**: en
       `backend/scripts/run_harness_tests.sh` (variable `HARNESS_TEST_FILES`, `:20`) como líneas
       **desnudas** (sin comillas, sin coma — es lo único que acepta la regex del meta-test), y en
       `backend/scripts/run_harness_tests.ps1` (variable `$HarnessTestFiles`, `:13`)
-      entrecomilladas, **con coma en todas menos en la última** (C12: una coma antes del `)` es
-      un `ParserError` de PowerShell y tira abajo el runner entero).
+      entrecomilladas y **SIN coma, al final del array, después de la última entrada real
+      (`:796`)**. **No** se le agrega ni se le quita coma a ninguna línea existente (**C23**: la del
+      258 ya tiene la suya y no es la última; **C24**: PowerShell no exige coma entre elementos
+      separados por salto de línea — 207 entradas del archivo real no la llevan y parsea con 0
+      errores). Lo único prohibido es una coma **colgante** justo antes del `)`.
       Y **no** figuran en `backend/tests/harness_ratchet_allowlist.txt`.
 - [ ] `.venv\Scripts\python.exe -m pytest tests/test_plan266_harness_runner_paridad.py -q` →
-      `0 failed`, 5 tests (**F6.5**, nace verde).
+      `0 failed`, **4 tests** (**F6.5**; eran 5 en el v3 — el de "entradas pegadas" se eliminó
+      porque nacía rojo con 206 violaciones sobre una regla de PowerShell inexistente, C24).
 - [ ] `docs/sistema/error_fingerprints.json` contiene **exactamente una** entrada con
       `"id": "dbcompare-summary-shape-render-crash"`, con `status: "resolved"`,
       `log_guarded: false`, un **`log_pattern` compilable** (NO `null` — C13), su `self_test`
@@ -1959,6 +2478,11 @@ demostrarlo con un worktree en el commit base — no argumentarlo.
       las 5 líneas + stack.
 - [ ] Ningún archivo de corridas en disco fue modificado por la app durante el smoke
       (comparar `Get-FileHash` antes/después de la carpeta de runs).
+- [ ] **Datos personales (HITL, lo confirma el operador en el smoke):** el texto que copió el botón
+      contiene **solo** las 5 líneas nombradas más el stack, **ningún valor de fila** de la base
+      comparada, y si el stack era largo termina en `…[truncado]`. Y en la pestaña Red del navegador
+      **no hay ninguna petición** disparada por el cartel de error (el diagnóstico no sale del
+      navegador: §3.10 (b)).
 
 ---
 

@@ -140,3 +140,15 @@ class TestDocsContent:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "README" in data["content"]
+
+
+# ── Tests: GET /api/docs/sources (Plan 268 F0.2) ──────────────────────────────
+
+class TestDocsSourcesFlags:
+    def test_sources_expone_graph_explorer_enabled(self, client):
+        """Plan 268 F0.2 — el payload de /sources transporta la flag del explorador."""
+        resp = client.get("/api/docs/sources")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "graph_explorer_enabled" in data
+        assert isinstance(data["graph_explorer_enabled"], bool)

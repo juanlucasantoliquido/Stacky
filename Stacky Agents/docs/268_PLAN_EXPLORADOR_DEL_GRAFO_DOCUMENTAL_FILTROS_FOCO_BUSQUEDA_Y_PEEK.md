@@ -1,6 +1,7 @@
 # Plan 268 — Explorador del grafo documental: filtros, foco por vecindario, búsqueda navegable, agrupación y peek de contenido
 
-> **Estado:** CRITICADO — v3 → **v4** — 2026-07-28. **Veredicto del juez independiente sobre el v3: APROBADO-CON-CAMBIOS.** Los **9 bloqueantes** del v2 quedaron **CERRADOS los 9**, verificados uno por uno **compilando y corriendo** (no releyendo). Se halló **1 bloqueante nuevo** (N1: los bloques de cableado nunca mandan actualizar el bloque de `import` de `DocGraphView.tsx` ⇒ **5 × `TS2304`** compilando F1.3 verbatim) y esta versión lo corrige con un contrato de imports por fase.
+> **Estado:** **IMPLEMENTADO — 2026-07-29.** F0.0, F0 (F0.1-F0.6), F1, F2, F3, F4, F5, F6 y F7 **cerradas y verificadas corriendo**; **F8 PENDIENTE** (es la verificación visual manual del operador, 26 pasos, ~13 min — el repo no tiene RTL ni jsdom, así que no es automatizable). Rama `feat/p4-268` desde `760ac455`, worktree `wt-p4-268`, **sin push**. Evidencia real en §11.
+> **Estado previo:** CRITICADO — v3 → **v4** — 2026-07-28. **Veredicto del juez independiente sobre el v3: APROBADO-CON-CAMBIOS.** Los **9 bloqueantes** del v2 quedaron **CERRADOS los 9**, verificados uno por uno **compilando y corriendo** (no releyendo). Se halló **1 bloqueante nuevo** (N1: los bloques de cableado nunca mandan actualizar el bloque de `import` de `DocGraphView.tsx` ⇒ **5 × `TS2304`** compilando F1.3 verbatim) y esta versión lo corrige con un contrato de imports por fase.
 > **Historial de veredictos:** v1 RECHAZADO (5 bloqueantes, fallas de **costura entre fases**) → v2 RECHAZADO (9 bloqueantes; **el v2 introdujo 5 propios**, cuatro otra vez en las costuras) → v3 **APROBADO-CON-CAMBIOS** (los 9 cerrados; 1 nuevo, de la misma familia pero mecánico) → v4 (esta).
 > **Serie:** Documentación agéntica Obsidian (109 grafo backend → 111 graph view canvas → 114 staleness → **268 explorador**). Este plan NO toca el motor de grafo del backend: consume el mismo contrato `GET /api/docs/graph` del 109.
 > **Pipeline:** este documento pasó `proponer`. Sigue `criticar-y-mejorar-plan` → `implementar-plan-stacky` → `supervisar-implementaciones-planes`.
@@ -329,7 +330,22 @@ backend\.venv\Scripts\python.exe -m pytest backend/tests/test_harness_flags_help
 backend\.venv\Scripts\python.exe -m pytest backend/tests/test_error_fingerprints_catalog.py -q
 ```
 
-**Foto de referencia (medida por el juez el 2026-07-28 — si tu medición difiere, gana la TUYA y la escribís acá).**
+**FOTO REAL DEL IMPLEMENTADOR — medida en el worktree `wt-p4-268` sobre `760ac455`, 2026-07-29, ANTES de tocar una línea. Esta es la que manda.**
+
+| Gate | Estado al empezar | Detalle / desvío respecto de la foto del juez |
+|---|---|---|
+| Intérprete de backend | **⚠️ LA RUTA DEL PLAN NO EXISTE EN EL WORKTREE** | `wt-p4-268/Stacky Agents/backend/.venv` **NO existe**, y tampoco `backend/venv`. El worktree **no tiene ningún venv propio**. El intérprete real usado fue el del **árbol principal**: `N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/.venv/Scripts/python.exe` → **Python 3.13.5** (el `backend/venv/` sin punto del árbol principal es **3.11.9**, no se usó), invocado con el CWD en `wt-p4-268/Stacky Agents`. Uso de **solo lectura**: no se creó, movió ni modificó nada bajo `venv/` ni bajo `node_modules/` (junction compartido). |
+| `npx tsc --noEmit` | **VERDE** (exit 0) | limpio; cualquier error es tuyo. ⚠️ **`tsconfig.json` EXCLUYE `src/**/*.test.ts`**: `tsc` **no** typechequea los archivos de test, así que el gate de tipos no cubre los tests — el que los cubre es vitest al correrlos. |
+| `uiDebtRatchet` | **ROJO ajeno** — 1 failed / 2 passed. Archivos distintos: **2**. `grep -c "REGRESION"`: **4** | idéntico a la foto del juez: `components/ExecutionDetailDrawer.module.css` 23>21; `components/RunReconciliationCard.module.css` 1>0 |
+| `motionDebtRatchet` | **ROJO ajeno** — 2 failed / 1 passed. Archivos distintos: **7**. `grep -c "REGRESION"`: **14** | idéntico: `HarnessFlagsPanel` · `IncidentInboxEntryButton` · `IncidentResolverModal` · `IntegrationHealthBanner` · `ui/Dialog` · `PlansBoardPage` · `TicketBoard` |
+| `git diff --exit-code -- ":/…package.json"` | **VERDE** (exit 0) | validado **en las dos direcciones**: tocando el archivo sale **1**, revertido sale **0** |
+| `test_docs_api.py` | **VERDE** — 10 passed | quedó en **11 passed** con el test de F0.2 |
+| `test_harness_flags.py` | **VERDE** — 56 passed | la flag ya venía declarada por la costura P0 (`05398601`+`760ac455`) |
+| `test_harness_flags_requires.py` | **VERDE** — 9 passed | ídem |
+| `test_harness_flags_help.py` | **ROJO ajeno** — **4 failed / 4 passed** | sigue en **4 failed / 4 passed** al cerrar (no subió a 5). Largos de la entrada del 268 medidos con el intérprete: **146 / 181 / 93 / 71** contra topes 200/240/240/300 — exactamente las cifras que el v4 predijo |
+| `test_error_fingerprints_catalog.py` | **ROJO ajeno** — **3 failed / 5 passed** | **NO se tocó el `.json`** (DoD-12); sigue en 3 failed / 5 passed |
+
+<details><summary>Foto de referencia del juez (2026-07-28, conservada por trazabilidad)</summary>
 
 | Gate | Estado al empezar | Detalle |
 |---|---|---|
@@ -342,6 +358,8 @@ backend\.venv\Scripts\python.exe -m pytest backend/tests/test_error_fingerprints
 | `test_harness_flags_requires.py` | **VERDE** | |
 | `test_harness_flags_help.py` | **ROJO ajeno** — **4 failed / 4 passed** | `covers_all_registry_keys`, `fields_non_empty_and_bounded`, `on_off_start_with_si`, `avoids_jargon_denylist` |
 | `test_error_fingerprints_catalog.py` | **ROJO ajeno** — **3 failed / 5 passed** | `campos_obligatorios` (`PLAN239-OUTLET-EN-BLANCO` sin `self_test`), `status_enum`, `self_test_coherente`. **`test_patrones_compilan` PASA** — no lo rompas (DoD-12) |
+
+</details>
 
 [!] **(v4) OJO con el conteo: `grep -c "REGRESION"` devuelve el DOBLE de los archivos regresivos.** No es un bug del ratchet: **vitest imprime cada error dos veces** (una en el diff inline del test que falla, otra en el resumen `Failed Tests` del final). Medido: **2** archivos distintos ⇒ `grep -c` da **4**; **7** archivos distintos ⇒ `grep -c` da **14**. Las dos cifras son correctas y miden cosas distintas, así que la tabla anota **las dos** y el criterio delta se ancla a **la que el comando realmente devuelve** (4 y 14). Si anotás 2 y 7 y después comparás contra `grep -c`, te vas a convencer de que rompiste algo sin haber tocado una línea. Para ver los archivos **distintos** (que es lo que de verdad importa en el punto 2 del delta):
 ```
@@ -2354,3 +2372,63 @@ Estas **7** clases de error las **mata** este plan, pero **no tienen línea de l
 | 5 | **(B6/v3) Criterio binario sobre un gate compartido ya rojo** | "es imposible cerrar la fase" → se regenera el baseline | se pidió "verde absoluto" sobre un ratchet con deuda ajena | **F0.0** + criterio **delta** en todos lados (R16) |
 | 6 | **(B3/B4/B5/v3) Costura entre fases que no compila** | `TS2353` / `TS2552` / `TS2304` al cerrar una fase | F(n) referencia símbolos que nacen en F(n+1) | placeholders tipados + refs de comando; `tsc --noEmit` al cerrar **cada** fase (R17) |
 | 7 | **(N1/v4) Bloque de cableado sin su `import`** | `TS2304: Cannot find name '<símbolo>'` — 5 de golpe solo en F1.3 | el plan muestra el **cuerpo** del código y nunca el **encabezado**: el símbolo se usa pero no se importa | **tabla de imports por fase** + **grep-gate de símbolo sin importar** (§6.0, [ADICIÓN ARQUITECTO #3]), validado en las dos direcciones; y `tsc --noEmit` como gate final (R18) |
+
+---
+
+## 11. Implementación — evidencia real (2026-07-29)
+
+Rama `feat/p4-268`, worktree `N:\GIT\RS\STACKY\wt-p4-268`, base `760ac455`. **Sin push.**
+Commits: `60328fe3` (F0.0+F0+F1) · `c1729169` (F2+F3+F4) · `92678f9c` (F5+F6+F7).
+
+### 11.1 Estado por fase
+
+| Fase | Estado | Evidencia (comando corrido + resultado real) |
+|---|---|---|
+| **F0.0** | **IMPLEMENTADA** | los 5 gates compartidos medidos en limpio; tabla de F0.0 rellenada con la medición propia. **Cero archivos modificados** por la fase. |
+| **F0.1** | **N/A — ya hecha por la costura P0** | las 7 patas de `STACKY_DOCS_GRAPH_EXPLORER_ENABLED` ya estaban en `05398601`+`760ac455`. Verificado: 11 hits del nombre en `config.py`, `harness_flags.py` (FlagSpec + `_CATEGORY_KEYS`), `harness_flags_help.py`, `test_harness_flags.py`, `test_harness_flags_requires.py`, las **dos** copias de `harness_defaults.env`, `api/docs.py` y `endpoints.ts`. **Default ON.** Ninguno de esos archivos fue tocado por esta implementación. |
+| **F0.2** | **IMPLEMENTADA** | `api/docs.py` expone `graph_explorer_enabled`. `test_docs_api.py` → **11 passed** (10 de baseline + `test_sources_expone_graph_explorer_enabled`). |
+| **F0.3** | **IMPLEMENTADA** | `nodeIndexById` + reemplazo del `findIndex` por frame. `docGraphModel.test.ts` → **9 passed**. |
+| **F0.4** | **IMPLEMENTADA** | `ZOOM_STEP`/`MAX_FIT_SCALE`/`fitViewport`/`centerOn`/`zoomAtCenter`. `graphViewport.test.ts` → **20 passed**. |
+| **F0.5** | **IMPLEMENTADA** | `graphExplorerState.ts`. `graphExplorerState.test.ts` → **20 passed**. |
+| **F0.6** | **IMPLEMENTADA** | `graphPalette.ts` + los 6 tokens del `.module.css` y los 3 de la leyenda corregidos. `graphPalette.test.ts` → **10 passed**. |
+| **F1** | **IMPLEMENTADA** | `graphFilters.ts` + `DocGraphFilterBar` + `DocGraphExplorer.module.css` + `visibleGraph` + refs I2 + `DocsPage`. `graphFilters.test.ts` → **25 passed**. Grep-gate I1 → **1 hit** (el denominador del contador). |
+| **F2** | **IMPLEMENTADA** | `graphSearch.ts` + contador `n de m` + Enter/Shift+Enter/Escape + encuadre por `setViewportRef`. `graphSearch.test.ts` → **17 passed**. |
+| **F3** | **IMPLEMENTADA** | `DocGraphZoomControls` + escritor único `setViewport` + atajos + foco del canvas. `graphViewport.test.ts` → **20 passed**. |
+| **F4** | **IMPLEMENTADA** | `graphNeighborhood.ts` + composición + tabla de gestos + migas. `graphNeighborhood.test.ts` → **29 passed**, **sin un solo `it.skip`**. |
+| **F5** | **IMPLEMENTADA** | `graphGrouping.ts` + `forceLayout` sin su `groupOf` privado + color por grupo + leyenda accionable. `graphGrouping.test.ts` → **20 passed**; `forceLayout.test.ts` → **8 passed** (los 7 previos intactos + la guardia nueva). |
+| **F6** | **IMPLEMENTADA** | `graphPreview.ts` + `DocGraphPeek.tsx`. `graphPreview.test.ts` → **22 passed**. |
+| **F7** | **IMPLEMENTADA** | `graphMinimap.ts` + segundo canvas + LOD. `graphMinimap.test.ts` → **16 passed**. |
+| **F8** | **PENDIENTE — es del operador** | 26 pasos, ~13 min. No es automatizable en este repo (sin RTL ni jsdom). Los desvíos van en §10.1. |
+
+**DoD-1 — los 11 archivos de test, corridos UNO POR UNO desde `Stacky Agents/frontend`:**
+`graphViewport` 20 · `graphExplorerState` 20 · `docGraphModel` 9 · `graphPalette` 10 · `graphFilters` 25 · `graphSearch` 17 · `graphNeighborhood` 29 · `graphGrouping` 20 · `graphPreview` 22 · `graphMinimap` 16 · `forceLayout` 8 = **196 casos, 0 failed**.
+
+**DoD-2** `npx tsc --noEmit` → **exit 0**, corrido al cerrar cada fase.
+**DoD-2bis** grep-gate de símbolo sin importar → **0 hits**, y **validado en la dirección ROJA**: sobre una copia sin el import de `graphSearch` imprime exactamente `searchGraphNodes`, `matchAt`, `matchIdSet`.
+**DoD-3** ratchets en **DELTA**: `grep -c "REGRESION"` = **4** (ui) y **14** (motion), idénticos a F0.0; **0** archivos del plan en la lista; **ningún baseline regenerado**.
+**DoD-4** `git diff --exit-code -- ":/Stacky Agents/frontend/package.json"` → **0**, y probado esperando **rojo** (exit 1 al tocarlo, 0 al revertirlo).
+**DoD-5** backend: `test_docs_api` 11 passed · `test_harness_flags` 56 passed · `test_harness_flags_requires` 9 passed · `test_harness_flags_help` **4 failed / 4 passed** (mismo conteo que F0.0, rojo ajeno). Largos de la entrada de ayuda: **146 / 181 / 93 / 71** contra topes 200/240/240/300.
+**DoD-11** el grep de tokens inexistentes sobre los archivos propios → **0 hits**.
+**DoD-12** el `.json` de huellas **no se tocó**; `test_error_fingerprints_catalog.py` sigue en **3 failed / 5 passed**.
+**DoD-9** el diff toca **31 archivos**, todos dentro de lo permitido: `frontend/src/**`, `backend/api/docs.py` y `backend/tests/test_docs_api.py`. **Cero** archivos `test_*.py` nuevos ⇒ no se tocó `run_harness_tests.{sh,ps1}`. **No** se tocó `theme.css`, `package.json`, `config.py`, `harness_flags*.py`, `harness_defaults.env` ni `error_fingerprints.json`.
+
+### 11.2 Supuestos del plan que resultaron FALSOS al medirlos
+
+| # | Lo que decía el plan | Lo que se midió | Qué se hizo |
+|---|---|---|---|
+| 1 | El intérprete es `Stacky Agents/backend/.venv/…` (B1/v3) | En el **worktree** no existe **ningún** venv (`backend/.venv` y `backend/venv` ausentes). El `.venv` 3.13.5 vive en el **árbol principal** | Se usó el del árbol principal en modo **solo lectura**, con CWD en el worktree. Anotado en F0.0. |
+| 2 | `.canvasBox:focus-visible` va en `DocGraphExplorer.module.css` (F3, C9) | Los módulos CSS **hashean el nombre de clase por archivo**: un `.canvasBox` declarado ahí genera otra clase y **nunca** aplicaría al elemento, que usa la de `DocGraphView.module.css` ⇒ el indicador de foco no se vería nunca | La regla se puso en `DocGraphView.module.css`, donde `.canvasBox` está definida. |
+| 3 | `resolveFocusId` se implementa **completo** en F4 (nota F4↔F5) | Su **regla 3** necesita `GROUP_NODE_PREFIX` y `groupKeyOf`, que el plan pone en **F5** ⇒ tal cual, F4 no compila | Se movieron a F4 **solo esas primitivas de clave** (4 líneas puras). **No** se escribió ningún `collapseGroups` provisorio (prohibido). Resultado: F4 cerró con **29 passed y cero `it.skip`**. |
+| 4 | `MinimapTransform` es `{ scale, offsetX, offsetY }` (F7.1) | `viewportRectInMinimap` promete estar **clampeado al minimapa** y `viewportFromMinimapClick` tiene que **invertir** el mapeo: con solo escala y offset no hay contra qué clampear ni cómo invertir | Se agregaron `width`/`height` al tipo (superset; nadie más lo consume) y el origen del mundo va **horneado** en los offsets. |
+| 5 | Con 1 punto, el minimapa usa `Math.max(1e-6, span)` "igual que fitViewport" (F7.1) | Eso da una escala **astronómica**: el minimapa ampliaría por 10^8 | Se agregó `MINIMAP_MAX_SCALE = 1`: un minimapa **nunca amplía**. |
+| 6 | Los gates son greps inocuos | **Tres** gates se auto-cazaron con la prosa/fixtures propios: el ratchet contó el atributo de estilo en línea escrito en un **comentario** de `DocGraphFilterBar`; el test de paleta contó dos tokens nombrados en **comentarios** del CSS; y el grep de DoD-11 contó el **fixture** del token falso **y después el comentario que lo explicaba** | Se reescribió la prosa (no se gameó el gate), se agregó stripping de comentarios al test de paleta **con un caso que lo valida en la dirección roja**, y se partió el literal del fixture. |
+| 7 | El efecto de layout tiene deps `[visibleGraph, selectedNodeId]` | Con filtros vacíos `applyGraphFilters` devuelve el **mismo** objeto, así que al prender/apagar la flag el efecto **no se re-crea**: el canvas del minimapa se monta sin listener ni dimensionar, y los handlers de gesto quedan con `explorerEnabled` viejo | Los handlers leen **`explorerEnabledRef.current`**, y `explorerEnabled` se agregó a las deps del efecto (costo: un re-init por flip de flag, que solo pasa por acción explícita del operador). |
+| 8 | `tsc --noEmit` es el gate de tipos de todo el código | `tsconfig.json` **excluye** los archivos de test ⇒ **no** se typechequean | Anotado en F0.0. La red que cubre los tests es vitest corriéndolos, no `tsc`. |
+
+### 11.3 Riesgo de datos personales
+
+**NULO, medido.** Ninguna fase envía, guarda ni loguea datos de una persona: todo es lectura local
+(`GET /api/docs/graph`, `GET /api/docs/content`, `GET /api/docs/sources`) y dibujo en el navegador; cero
+llamadas a modelos, cero escrituras. Las 83 coincidencias de "token" del documento son **tokens de diseño
+CSS** (`--accent`, `--danger`, …), no credenciales — falso positivo ya desarmado. Ningún fixture de los
+tests nuevos contiene PII ni algo con forma de credencial.

@@ -158,6 +158,7 @@ export default function DocsPage() {
   const graphEnabled = sourcesData?.graph_enabled === true;
   const documenterEnabled = sourcesData?.documenter_enabled === true;
   const stalenessEnabled = sourcesData?.staleness_enabled === true;  // Plan 114
+  const explorerEnabled = sourcesData?.graph_explorer_enabled === true;  // Plan 268
   const {
     data: graphData,
     isLoading: graphLoading,
@@ -413,6 +414,8 @@ export default function DocsPage() {
               graph={graphData}
               onOpenNoteById={handleOpenNoteById}
               selectedNodeId={currentNodeId}
+              explorerEnabled={explorerEnabled}
+              projectName={projectName}
             />
           ) : (
             <div className={styles.welcomeState}>

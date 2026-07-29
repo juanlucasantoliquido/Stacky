@@ -18,9 +18,9 @@
   max-width: 320px;
   padding: 0.4rem 0.6rem;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #333);
-  background: var(--color-surface-2, #1b1b1b);
-  color: var(--color-text, #ddd);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-primary);
   font-size: 0.85rem;
 }
 
@@ -29,7 +29,7 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   font-size: 0.72rem;
-  color: var(--color-text-muted, #999);
+  color: var(--text-muted);
 }
 
 .legendItem {
@@ -48,16 +48,16 @@
 .resetBtn {
   padding: 0.3rem 0.7rem;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #333);
-  background: var(--color-surface-2, #1b1b1b);
-  color: var(--color-text, #ddd);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-primary);
   font-size: 0.78rem;
   cursor: pointer;
 }
 
 .resetBtn:hover {
-  border-color: var(--color-accent, #4a9eff);
-  color: var(--color-accent, #4a9eff);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .hint {
@@ -65,8 +65,8 @@
   left: 0.6rem;
   bottom: 0.45rem;
   font-size: 0.7rem;
-  color: var(--color-text-muted, #888);
-  background: color-mix(in srgb, var(--color-surface, #141414) 78%, transparent);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
   border-radius: 6px;
   padding: 0.15rem 0.5rem;
   pointer-events: none;
@@ -77,10 +77,21 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 240px;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--color-surface, #141414);
+  background: var(--bg-panel);
+}
+
+/* Plan 268 F3 (C9) — indicador visible del foco de teclado del grafo. Un elemento
+   enfocable sin indicador visible es una regresión de accesibilidad.
+   OJO: esta regla NO puede vivir en DocGraphExplorer.module.css como decía el plan.
+   Los módulos CSS hashean el nombre de clase POR ARCHIVO, así que un `.canvasBox`
+   declarado allá genera otra clase distinta y nunca aplicaría a este elemento, que
+   usa la de este archivo. Va donde está definida `.canvasBox`. */
+.canvasBox:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .canvas {
@@ -95,7 +106,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-text-muted, #999);
+  color: var(--text-muted);
   font-size: 0.85rem;
   padding: 1rem;
   text-align: center;

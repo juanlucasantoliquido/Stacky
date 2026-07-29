@@ -56,6 +56,32 @@ describe("estadoChip", () => {
     const c = card({ estado_efectivo: "ALGO_RARO" as unknown as PlanCardDto["estado_efectivo"] });
     expect(estadoChip(c)).toEqual(ESTADO_CHIP.SIN_ESTADO);
   });
+
+  // Plan 263 F4 — fallback único + estado_origen.
+  it("agrega '(inferido)' cuando estado_origen === 'inferido'", () => {
+    const c = card({ estado_efectivo: "IMPLEMENTADO", estado_origen: "inferido" });
+    expect(estadoChip(c).label).toBe("Implementado (inferido)");
+  });
+
+  it("agrega '(inferido)' con estado_inferido=true sin estado_origen (servidor intermedio)", () => {
+    const c = card({ estado_efectivo: "IMPLEMENTADO", estado_inferido: true });
+    expect(estadoChip(c).label).toBe("Implementado (inferido)");
+  });
+
+  it("sin ninguna clave nueva (deploy viejo) no agrega sufijo", () => {
+    const c = card({ estado_efectivo: "IMPLEMENTADO" });
+    expect(estadoChip(c).label).toBe("Implementado");
+  });
+
+  it("card real con las DOS claves: origen 'ledger' no es inferencia", () => {
+    const c = card({ estado_efectivo: "APROBADO", estado_origen: "ledger", estado_inferido: false });
+    expect(estadoChip(c).label).toBe(ESTADO_CHIP.APROBADO.label);
+  });
+
+  it("estado_origen MANDA sobre estado_inferido (payload imposible del servidor real)", () => {
+    const c = card({ estado_efectivo: "APROBADO", estado_origen: "ledger", estado_inferido: true });
+    expect(estadoChip(c).label).toBe(ESTADO_CHIP.APROBADO.label);
+  });
 });
 
 describe("sinSupervisar", () => {
@@ -99,6 +125,16 @@ describe("filterPlans", () => {
     const before = JSON.parse(JSON.stringify(plans));
     filterPlans(plans, { ...baseFilters, texto: "x" });
     expect(plans).toEqual(before);
+  });
+
+  // Plan 263 F4 — el filtro sigue funcionando con una card inferida.
+  it("incluye una card inferida al filtrar por estado", () => {
+    const conInferido = [
+      card({ number: 7, estado_efectivo: "IMPLEMENTADO", estado_origen: "inferido", estado_inferido: true }),
+    ];
+    expect(
+      filterPlans(conInferido, { ...baseFilters, estado: "IMPLEMENTADO" }).map((c) => c.number),
+    ).toEqual([7]);
   });
 
   // Plan 237 F6 — el tab "Planes" hereda el triage del backend.

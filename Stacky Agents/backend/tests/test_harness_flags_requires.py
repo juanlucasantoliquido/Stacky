@@ -320,6 +320,13 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
     # Plan 268: el explorador solo tiene sentido si el grafo documental existe.
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",
+    # Plan 263: las tres capas del tablero de planes cuelgan del master del tablero
+    # (profundidad 1; STACKY_PLANS_BOARD_ENABLED no declara `requires`). El candado
+    # real "APPLY exige PREVIEW" lo chequea api/plans_board.py por su cuenta (patron
+    # del Plan 250): la arista es INFORMATIVA para la UI.
+    "STACKY_PLANS_ESTADO_FALLBACK_ENABLED": "STACKY_PLANS_BOARD_ENABLED",
+    "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED": "STACKY_PLANS_BOARD_ENABLED",
+    "STACKY_PLANS_NORMALIZE_APPLY_ENABLED": "STACKY_PLANS_BOARD_ENABLED",
 }
 
 

@@ -5063,6 +5063,41 @@ export interface PlansBoardDetailDto {
   head_excerpt: string;
 }
 
+/** Plan 263 — normalización de estado con evidencia (preview + apply HITL). */
+export interface NormalizePropuestaDto {
+  number: number;
+  filename: string;
+  estado_propuesto: string | null;
+  confianza: "alta" | "media" | "sin_evidencia";
+  aplicable: boolean;
+  evidencia: string[];
+  linea_a_insertar: string | null;
+  insert_after_line: number;
+  sha256_visto: string;
+  resella_ledger: boolean;
+}
+export interface NormalizePreviewDto {
+  ok: boolean;
+  total: number;
+  propuestas: NormalizePropuestaDto[];
+  por_confianza: { alta: number; media: number; sin_evidencia: number };
+  aplicables: number;
+  ya_resueltos_por_ledger: string[];
+}
+export interface NormalizeItem {
+  filename: string;
+  sha256_visto: string;
+  estado_elegido?: string | null;
+}
+export interface NormalizeApplyDto {
+  ok: boolean;
+  aplicados: string[];
+  omitidos: { filename: string; razon: string }[];
+  diffs: Record<string, string>;
+  ledger_resellado: string[];
+  baseline_podado: string[];
+}
+
 export const PlansBoard = {
   /** Siempre 200; incluye next_free_number sin gate de flag. */
   health: () => api.get<{ ok: boolean; flag_enabled: boolean; next_free_number: number | null }>("/api/plans-board/health"),
@@ -5070,6 +5105,16 @@ export const PlansBoard = {
     api.get<BoardDto>(`/api/plans-board/list${refresh ? "?refresh=1" : ""}`),
   detail: (number: number) =>
     api.get<PlansBoardDetailDto>(`/api/plans-board/detail/${number}`),
+  /** Plan 263 — vista previa de normalización. `rawGet` obligatorio: con la flag
+   *  OFF el servidor responde 404 (_disabled_resp) y `api.get` LANZA en non-2xx,
+   *  así que el panel explotaría en vez de mostrar el hint. */
+  normalizePreview: () =>
+    rawGet<NormalizePreviewDto>("/api/plans-board/normalize/preview"),
+  /** Plan 263 — escritura HITL. `rawPost`, NUNCA `api.post`, por lo mismo. */
+  normalizeApply: (items: NormalizeItem[], dryRun: boolean) =>
+    rawPost<NormalizeApplyDto>("/api/plans-board/normalize/apply", {
+      items, dry_run: dryRun, confirm: true,
+    }),
 };
 
 /** Plan 196 — acciones HITL del pipeline de planes sobre el Tablero (128). */

@@ -1934,6 +1934,23 @@ class Config:
         "STACKY_PLANS_PIPELINE_ACTIONS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 263 — el tablero nunca muestra un plan con estado nulo. Calculo
+    #    puro en memoria sobre datos ya parseados: sin I/O, sin red, sin costo. ──
+    STACKY_PLANS_ESTADO_FALLBACK_ENABLED: bool = os.getenv(
+        "STACKY_PLANS_ESTADO_FALLBACK_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 263 — vista previa de normalizacion de estados (SOLO LECTURA). ──
+    STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED: bool = os.getenv(
+        "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 263 — escritura de la linea de estado en los .md del operador.
+    #    Nace OFF por CATEGORIA (B): escribe en un sistema REAL del operador. ──
+    STACKY_PLANS_NORMALIZE_APPLY_ENABLED: bool = os.getenv(
+        "STACKY_PLANS_NORMALIZE_APPLY_ENABLED", "false"
+    ).strip().lower() == "true"
+
     # ── Plan 167 — Centro de Evolución (serie auto-mejora recursiva 1/4) ──
     # Panel de aspectos/propuestas/ciclo MAPE con gates humanos. Default ON:
     # solo agrega superficie de lectura + acciones on-click del operador.

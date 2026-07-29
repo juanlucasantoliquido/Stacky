@@ -923,6 +923,8 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED",  # Plan 270 — enruta un cierre YA pedido
     "STACKY_TICKET_STATE_WRITEBACK_ENABLED",       # Plan 270 — re-lee y refresca la copia local
     "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED",    # Plan 270 — aviso visual, no cambia nada
+    "STACKY_PLANS_ESTADO_FALLBACK_ENABLED",     # Plan 263 — calculo puro en memoria, solo lectura
+    "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED",   # Plan 263 — vista previa, no escribe nada
 }
 
 

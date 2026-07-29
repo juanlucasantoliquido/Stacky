@@ -24,6 +24,11 @@ export interface PlanCardDto {
   estado: string;
   estado_raw: string | null;
   estado_efectivo: EstadoPlan;
+  /** Plan 263 — el servidor infirió el estado porque el doc no lo declara.
+      Opcional: un deploy viejo del servidor no manda la clave. */
+  estado_inferido?: boolean;
+  /** Plan 263 — de dónde salió el estado: "declarado" | "inferido" | "ledger". */
+  estado_origen?: "declarado" | "inferido" | "ledger";
   veredicto: string | null;
   version: string | null;
   fecha: string | null;
@@ -67,7 +72,16 @@ export interface BoardFilters {
 }
 
 export function estadoChip(card: PlanCardDto): { label: string; color: string } {
-  return ESTADO_CHIP[card.estado_efectivo] ?? ESTADO_CHIP.SIN_ESTADO;
+  const chip = ESTADO_CHIP[card.estado_efectivo] ?? ESTADO_CHIP.SIN_ESTADO;
+  // Plan 263 v3/C3 — `estado_origen` MANDA. `estado_inferido` sólo se mira
+  // cuando el servidor no mandó `estado_origen` (deploy intermedio). Mirar los
+  // dos con `||` pintaba "Aprobado (inferido)" en las cards que el ledger ya
+  // había resuelto: el servidor manda origen "ledger" en esa card.
+  const inferido =
+    card.estado_origen !== undefined
+      ? card.estado_origen === "inferido"
+      : card.estado_inferido === true;
+  return inferido ? { ...chip, label: `${chip.label} (inferido)` } : chip;
 }
 
 export function sinSupervisar(card: PlanCardDto): boolean {

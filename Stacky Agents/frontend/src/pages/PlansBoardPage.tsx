@@ -9,8 +9,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Health,
   PlansBoard,
   PlansPipeline,
+  type NormalizePropuestaDto,
   type PlanCommitDto,
   type PlansBoardDetailDto,
   type RunPipelineActionResponse,
@@ -36,6 +38,16 @@ import {
   effortsForModel,
   type PipelineAction,
 } from "../plansBoard/actions";
+// Plan 263 F6 — panel de normalización de estado con evidencia (HITL).
+import { Checkbox, Select, useConfirm } from "../components/ui";
+import {
+  ESTADOS_ELEGIBLES,
+  esSeleccionable,
+  itemsParaApply,
+  puedeAplicar,
+  resumenConfianza,
+  textoConfirmacion,
+} from "../plansBoard/normalize";
 import styles from "./PlansBoardPage.module.css";
 
 const ESTADOS: (EstadoPlan | "TODOS")[] = [
@@ -97,6 +109,181 @@ function CopyButton({
   );
 }
 
+/** Plan 263 F6 — panel plegable "Planes sin estado declarado (N)". Se
+ * auto-oculta si la flag de preview está OFF (404) o si no hay nada que
+ * proponer (total === 0): la página queda idéntica a la de antes del 263. */
+function NormalizePanel({ applyFlagOn }: { applyFlagOn: boolean }) {
+  const queryClient = useQueryClient();
+  const askConfirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [elegidos, setElegidos] = useState<Record<string, string>>({});
+  const [diffs, setDiffs] = useState<Record<string, string> | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [resultNote, setResultNote] = useState<string | null>(null);
+
+  const previewQuery = useQuery({
+    queryKey: ["plans-board-normalize-preview"],
+    queryFn: () => PlansBoard.normalizePreview(),
+    retry: false,
+  });
+
+  const toggle = (filename: string) => {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(filename)) next.delete(filename);
+      else next.add(filename);
+      return next;
+    });
+    setDiffs(null);
+  };
+
+  const preview = previewQuery.data?.ok ? previewQuery.data.data : null;
+  if (!preview || preview.total === 0) return null;
+
+  const propuestas = preview.propuestas;
+  const resumen = resumenConfianza(propuestas);
+  const seleccionadosArr = Array.from(seleccionados);
+  const puedeEscribir = puedeAplicar(applyFlagOn, seleccionadosArr);
+
+  const verDiff = () => {
+    const items = itemsParaApply(propuestas, seleccionadosArr, elegidos);
+    void PlansBoard.normalizeApply(items, true).then((r) => {
+      if (r.ok && r.data) setDiffs(r.data.diffs);
+    });
+  };
+
+  const escribir = async () => {
+    const items = itemsParaApply(propuestas, seleccionadosArr, elegidos);
+    if (items.length === 0) return;
+    const confirmado = await askConfirm({
+      title: "Escribir estado en los .md",
+      message: textoConfirmacion(items.map((i) => i.filename)),
+      tone: "danger",
+      confirmLabel: "Escribir",
+    });
+    if (!confirmado) return;
+    setApplying(true);
+    try {
+      const r = await PlansBoard.normalizeApply(items, false);
+      if (r.ok && r.data) {
+        setResultNote(
+          `Aplicado en ${r.data.aplicados.length} archivo(s). Omitidos: ${r.data.omitidos.length}.`
+        );
+        setSeleccionados(new Set());
+        setDiffs(null);
+        void queryClient.invalidateQueries({ queryKey: ["plans-board-normalize-preview"] });
+        void queryClient.invalidateQueries({ queryKey: ["plans-board-list"] });
+      } else {
+        setResultNote("No se pudo aplicar la normalización.");
+      }
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <div className={styles.actionsPanel}>
+      <div className={styles.actionsRow}>
+        <button type="button" className={styles.actionBtn} onClick={() => setOpen((o) => !o)}>
+          {open ? "▾" : "▸"} Planes sin estado declarado ({preview.total})
+        </button>
+        <span className={styles.actionsNote}>
+          alta: {resumen.alta} · media: {resumen.media} · sin evidencia: {resumen.sin_evidencia}
+        </span>
+      </div>
+      {open && (
+        <>
+          {preview.ya_resueltos_por_ledger.length > 0 && (
+            <div className={styles.actionsNote}>
+              Ya resuelto por el supervisor — no hace falta normalizar:{" "}
+              {preview.ya_resueltos_por_ledger.join(", ")}
+            </div>
+          )}
+          <div className={styles.runsList}>
+            {propuestas.map((p: NormalizePropuestaDto) => {
+              const elegido = elegidos[p.filename] ?? "";
+              const seleccionable = esSeleccionable(p, elegido || null);
+              return (
+                <div key={p.filename} className={styles.runRow}>
+                  {p.aplicable ? (
+                    <Checkbox
+                      label={`${p.number} — ${p.filename}`}
+                      checked={seleccionados.has(p.filename)}
+                      onChange={() => toggle(p.filename)}
+                    />
+                  ) : (
+                    <>
+                      <span>
+                        {p.number} — {p.filename} — sin evidencia — elegí vos la etapa
+                      </span>
+                      <Select
+                        value={elegido}
+                        onChange={(ev) => {
+                          const val = ev.target.value;
+                          setElegidos((prev) => ({ ...prev, [p.filename]: val }));
+                          if (!val) toggle(p.filename); // no-op si no estaba marcada
+                        }}
+                      >
+                        <option value="">(sin decidir)</option>
+                        {ESTADOS_ELEGIBLES.map((e) => (
+                          <option key={e} value={e}>
+                            {e}
+                          </option>
+                        ))}
+                      </Select>
+                      {seleccionable && (
+                        <Checkbox
+                          label="Aplicar esta etapa"
+                          checked={seleccionados.has(p.filename)}
+                          onChange={() => toggle(p.filename)}
+                        />
+                      )}
+                    </>
+                  )}
+                  <span className={styles.subCell}>{p.confianza}</span>
+                  <span className={styles.subCell}>{p.evidencia.join(" ")}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className={styles.actionsRow}>
+            <button
+              type="button"
+              className={styles.actionBtn}
+              disabled={seleccionadosArr.length === 0}
+              onClick={verDiff}
+            >
+              Ver diff
+            </button>
+            <button
+              type="button"
+              className={styles.actionBtn}
+              disabled={!puedeEscribir || applying}
+              title={
+                applyFlagOn
+                  ? undefined
+                  : "Activá 'Aplicar la normalizacion de estados a los .md' en Configuración del arnés para habilitarlo."
+              }
+              onClick={() => void escribir()}
+            >
+              Escribir estado en los .md seleccionados
+            </button>
+          </div>
+          {diffs && (
+            <pre className={styles.headExcerpt}>
+              {Object.entries(diffs)
+                .map(([f, d]) => `--- ${f} ---\n${d}`)
+                .join("\n\n")}
+            </pre>
+          )}
+          {resultNote && <div className={styles.actionsNote}>{resultNote}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function PlansBoardPage() {
   const [texto, setTexto] = useState("");
   const [estado, setEstado] = useState<EstadoPlan | "TODOS">("TODOS");
@@ -143,6 +330,20 @@ export default function PlansBoardPage() {
     enabled: selectedNumber !== null,
     retry: false,
   });
+
+  // Plan 263 F6 — la app NO calcula ningún hash ni duplica el fallback: sólo
+  // refleja si el servidor tiene la escritura habilitada. Clave propia
+  // (staleTime Infinity, patrón usePlan259Flags) para no sumar un GET nuevo
+  // en cada refresco de esta página.
+  const healthQuery = useQuery({
+    queryKey: ["plans-board-health-flags"],
+    queryFn: () => Health.get(),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const applyFlagOn = healthQuery.data?.flags?.["STACKY_PLANS_NORMALIZE_APPLY_ENABLED"] ?? false;
 
   const { catalog } = useModelCatalog();
   const claudeCat = catalog.claude_code_cli;
@@ -389,6 +590,10 @@ export default function PlansBoardPage() {
           {lastLaunch && <div className={styles.actionsNote}>{lastLaunch}</div>}
         </div>
       )}
+
+      {/* Plan 263 — panel de normalización de estado con evidencia (HITL).
+          Se auto-oculta si la flag de preview está OFF o no hay propuestas. */}
+      <NormalizePanel applyFlagOn={applyFlagOn} />
 
       {/* Tabla / empty state */}
       {!board.docs_dir_found || board.plans.length === 0 ? (

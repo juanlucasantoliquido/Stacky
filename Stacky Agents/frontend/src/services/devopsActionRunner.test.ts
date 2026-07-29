@@ -151,6 +151,28 @@ describe('Plan 267 F4 — runDevOpsAction (orden de guardas inviolable)', () => 
     expect(ask).toHaveBeenCalledTimes(0);
     expect(spy).toHaveBeenCalledTimes(0);
   });
+
+  it('16. F7 — el receipt propaga `data` del binding en exito', async () => {
+    const spy = vi.fn(async () => ({ ok: true, summary: 's', data: { build_id: 'b-1' } }));
+    const r = await runDevOpsAction(
+      meta({ effect: 'read', impact: 'none' }),
+      { project: 'P', environment: 'qa' },
+      okBinding(spy),
+      ctx(),
+    );
+    expect(r.data).toEqual({ build_id: 'b-1' });
+  });
+
+  it('17. F7 — sin `data` en la resolucion del binding, el receipt no la inventa', async () => {
+    const spy = vi.fn(async () => ({ ok: true, summary: 's' }));
+    const r = await runDevOpsAction(
+      meta({ effect: 'read', impact: 'none' }),
+      { project: 'P', environment: 'qa' },
+      okBinding(spy),
+      ctx(),
+    );
+    expect(r.data).toBeUndefined();
+  });
 });
 
 describe('Plan 267 F4 — navPathWithParams / paletteMode', () => {

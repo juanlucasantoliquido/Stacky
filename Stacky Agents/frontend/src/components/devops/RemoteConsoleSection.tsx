@@ -10,6 +10,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DevOpsRemoteConsole, type RemoteConsoleConversation } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { useConfirm } from '../ui';
+// Plan 267 F7 — "Ejecutar" pasa por el mismo ejecutor que la paleta y el
+// asistente (devops.remote_console.run). Antes corria sin ninguna confirmacion.
+import { actionMeta, bindingFor } from '../../services/devopsActionBindings';
+import { runDevOpsAction } from '../../services/devopsActionRunner';
 import styles from './devops.module.css';
 
 export interface RemoteConsoleSectionProps {
@@ -54,14 +58,37 @@ export const RemoteConsoleSection: React.FC<RemoteConsoleSectionProps> = ({ ctx 
   });
 
   // Mutations
+  // Plan 267 F7 — antes llamaba DevOpsRemoteConsole.exec directo, SIN pedir
+  // confirmacion: correr un comando arbitrario en un servidor real quedaba a
+  // un click. Ahora pasa por runDevOpsAction (mismo endpoint, cablea el
+  // catalogo devops.remote_console.run: impact "high" => tone danger),
+  // agregando la confirmacion que hoy no existia [F7 R15: mejora, no regresion].
   const execMutation = useMutation({
-    mutationFn: (params: { command: string; conversationId?: number }) =>
-      DevOpsRemoteConsole.exec(selectedServer!, params.command, params.conversationId),
-    onSuccess: (data, variables) => {
+    mutationFn: async (params: { command: string; conversationId?: number }) => {
+      const receipt = await runDevOpsAction(
+        actionMeta('devops.remote_console.run'),
+        {
+          server_alias: selectedServer ?? '',
+          command: params.command,
+          conversation_id: params.conversationId ? String(params.conversationId) : '',
+        },
+        bindingFor('devops.remote_console.run'),
+        { askConfirm, navigate: () => {}, now: () => Date.now() },
+      );
+      return { receipt, variables: params };
+    },
+    onSuccess: ({ receipt, variables }) => {
+      if (!receipt.confirmed) return; // cancelado por el operador: silencioso
+      const data = receipt.data as { stdout?: string; stderr?: string } | undefined;
       setOutput((prev) => [
         ...prev,
         { role: 'user', content: variables.command },
-        { role: 'assistant', content: `stdout: ${data.stdout}\nstderr: ${data.stderr}` },
+        {
+          role: 'assistant',
+          content: receipt.ok
+            ? `stdout: ${data?.stdout ?? ''}\nstderr: ${data?.stderr ?? ''}`
+            : `error: ${receipt.detail || receipt.summary}`,
+        },
       ]);
       if (!variables.conversationId) {
         queryClient.invalidateQueries({ queryKey: ['devops-console-conversations'] });

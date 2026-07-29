@@ -1,7 +1,9 @@
 // Plan 267 F4 — 7 casos (6 del plan + el que congela la clase de cada binding).
+// F7 agrega el test 8: el passthrough de `data` que las secciones recableadas
+// necesitan para conservar su seguimiento (build_id, pipeline_id, stdout...).
 import fs from 'fs';
 import path from 'path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DELEGATED_ACTION_IDS,
   DEVOPS_ACTION_BINDINGS,
@@ -9,6 +11,22 @@ import {
   NAVIGATE_ONLY_ACTION_IDS,
   bindingFor,
 } from './devopsActionBindings';
+
+vi.mock('../api/endpoints', () => ({
+  CIPipeline: { trigger: vi.fn() },
+  DevOps: { overview: vi.fn(), environmentPlan: vi.fn(), detectStack: vi.fn() },
+  DevOpsBuildWorkshop: {
+    catalog: vi.fn(),
+    compile: vi.fn(async () => ({ build_id: 'b-mock-1' })),
+  },
+  DevOpsDeployments: { execute: vi.fn() },
+  DevOpsRemoteConsole: { exec: vi.fn() },
+  DevOpsServers: { list: vi.fn(), connectionsCheck: vi.fn() },
+  DevOpsSolutionPublisher: { run: vi.fn() },
+  DevOpsVariables: { list: vi.fn() },
+  PipelineInventory: { list: vi.fn() },
+  PrReview: { list: vi.fn() },
+}));
 
 const CATALOG_PY = path.resolve(
   __dirname,
@@ -79,6 +97,16 @@ describe('Plan 267 F4 — DEVOPS_ACTION_BINDINGS', () => {
     for (const id of LOS_7) {
       expect(bindingFor(id), id).toBeDefined();
     }
+  });
+
+  it('8. F7 — callEndpoint (clase a) propaga en `data` lo que resuelve el endpoint real', async () => {
+    const binding = bindingFor('devops.build.run');
+    expect(binding).toBeDefined();
+    const res = await binding!.run(
+      { solution_path: 'a.sln', unified: 'true' },
+      { askConfirm: async () => true, navigate: () => {}, now: () => 0 },
+    );
+    expect(res.data).toEqual({ build_id: 'b-mock-1' });
   });
 
   it('7. la clase de cada binding esta congelada: 13 ejecutan / 2 navegan / 8 delegan', () => {

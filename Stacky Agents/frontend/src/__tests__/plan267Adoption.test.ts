@@ -1,44 +1,39 @@
 // Plan 267 F7 — Adopcion del ejecutor unico y censo de severidad congelado.
 //
 // =========================================================================
-// ALCANCE HONESTO DE ESTE ARCHIVO — leer antes de agregarle un test.
+// ESTADO REAL (actualizado tras terminar F7) — leer antes de agregarle un test.
 //
-// El plan pedia 5 tests. Estan escritos 4. Los tests 1, 2 y 4 del plan
-// (`los 6 archivos importan runDevOpsAction`, `los 2 sitios RECABLEAR ya no
-// existen`, `ninguna severidad se afloja en un sitio recableado`) NO estan
-// escritos A PROPOSITO: el recableado de F7 quedo BLOQUEADO, medido, y escribir
-// esos tests como si hubiera pasado seria exactamente el falso verde que el plan
-// prohibe.
+// F7 quedo bloqueada una noche por un motivo de DISENO: el catalogo declaraba
+// `environment` como param REQUERIDO uniforme de las 7 escrituras, y era
+// vocabulario inventado (ningun endpoint lo recibia). Ese bloqueo se resolvio
+// en devops_action_catalog.py declarando los params POR ACCION (`targets`
+// reemplaza a `environment` donde el endpoint lo consume; `project` pasa a
+// no-required donde el endpoint no lo recibe) — ver el comentario "CORRECCION
+// F7" en ese archivo. Con eso resuelto, los 6 archivos SI se recablearon,
+// exactamente per la tabla sitio-por-sitio de §4.11 del plan (medida el
+// 2026-07-28): 2 sitios que YA confirmaban una accion del catalogo
+// (`BuildWorkshopSection.tsx` "Compilar en Release", `SolutionPublisherSection.tsx`
+// "Publicar <sol>") pasaron a usar `runDevOpsAction`, y 4 sitios que NO
+// confirmaban nada (`RemoteConsoleSection.tsx` exec, `TriggerPipelineSection.tsx`
+// disparo, `DeploymentsSection.tsx` ejecucion, `PublicationsSection.tsx` "Publicar
+// en un paso...") ganaron la confirmacion derivada del catalogo que no tenian —
+// una mejora de seguridad, no una regresion (R15 del plan).
 //
-// POR QUE quedo bloqueado, medido archivo por archivo: el catalogo declara
-// `project` y `environment` como params REQUERIDOS de las acciones de escritura,
-// y `runDevOpsAction` corta con ok:false ANTES de confirmar cuando falta un
-// requerido (es su guarda 2, verificada por el test 11 de F4). Pero NINGUNO de
-// los 6 botones manuales tiene un `environment` en alcance, y 2 no tienen ni
-// `project`:
-//   - BuildWorkshopSection  : 0 fuentes de project; compile(slugs, unified) no
-//                             recibe proyecto ni entorno.
-//   - RemoteConsoleSection  : 0 fuentes de project; exec(alias, command) opera
-//                             sobre un SERVIDOR, no sobre un entorno.
-//   - TriggerPipelineSection: tiene project (prop), pero lo que elige el
-//                             operador es una RAMA, no un entorno.
-//   - SolutionPublisherSection: tiene project; run(slug) no recibe entorno.
-//   - PublicationsSection   : la publicacion es una cadena de pasos con su
-//                             propio modal, no una llamada.
-//   - DeploymentsSection    : tiene project y app.id, pero sus destinos son
-//                             claves de tarjeta, no los valores del entorno
-//                             declarados en el catalogo.
-// Recablear igual dejaria los 6 botones MUERTOS ("Faltan datos obligatorios")
-// en vez de hacer lo que hacen hoy. Las tres salidas posibles eran aproximar
-// (pasar un entorno inventado en una accion de impacto alto), debilitar la
-// guarda de requeridos, o volver `environment` opcional y romper el ratchet que
-// exige que sea obligatorio. Las tres estan prohibidas, y F7 tiene su propia
-// regla para este caso: "si un binding no puede reproducir exactamente el
-// comportamiento del boton, se detiene la fase y se reporta; no se aproxima".
+// Los otros 16 `askConfirm({` de `components/devops/*.tsx` (Quitar contraseña,
+// Eliminar servidor, Cancelar build, Eliminar borrador, Crear variable segura,
+// Reemplazar pipeline x2, Crear MR/PR, Crear pipeline definition, Activar
+// escritura, Agregar soluciones al catalogo, Cancelar publicacion, Registrar
+// como app de despliegue, Abrir conversacion, Guardar variable, Borrar
+// variable) quedan FUERA DE ALCANCE a proposito: no corresponden a ninguna de
+// las 23 acciones del catalogo, y varias son `write` sin `flag_key` en
+// FLAG_REGISTRY (F8 t5/t7 lo exigen). Se declaran en un plan posterior (§7.9).
 //
-// Lo que SI se hizo, y es lo que protege el riesgo R1: congelar el censo de
-// severidad ANTES de cualquier recableado, con un barrido del directorio, para
-// que cuando F7 se descongele no pueda aflojar una severidad en silencio.
+// PublicationsSection es un caso particular: `devops.publication.run` es una
+// accion DELEGADA (ver devopsActionBindings.ts DELEGATED_ACTION_IDS) porque la
+// publicacion real es la cadena materializar -> commit -> trigger de
+// OneClickPublishModal.tsx, no una llamada unica. F7 NO reemplaza esa cadena
+// (seria aproximar con params equivocados, prohibido) sino que agrega la
+// confirmacion derivada del catalogo ANTES de abrir el modal de siempre.
 // =========================================================================
 import fs from 'fs';
 import path from 'path';
@@ -73,6 +68,59 @@ function baseline(): Record<string, { askConfirm: number; danger: number }> {
   return JSON.parse(fs.readFileSync(BASELINE, 'utf8'));
 }
 
+// Los 6 archivos de la lista corregida en v4 del plan (§ F7).
+const RECABLEADOS = [
+  'BuildWorkshopSection.tsx',
+  'SolutionPublisherSection.tsx',
+  'RemoteConsoleSection.tsx',
+  'TriggerPipelineSection.tsx',
+  'DeploymentsSection.tsx',
+  'PublicationsSection.tsx',
+];
+
+describe('Plan 267 F7 — test 1: los 6 archivos adoptan runDevOpsAction', () => {
+  it('1. los 6 archivos de la lista corregida importan y usan runDevOpsAction', () => {
+    for (const nombre of RECABLEADOS) {
+      const src = fs.readFileSync(path.join(DEVOPS_DIR, nombre), 'utf8');
+      expect(src, `${nombre} no importa runDevOpsAction`).toMatch(
+        /import\s*\{[^}]*\brunDevOpsAction\b[^}]*\}\s*from\s*['"]\.\.\/\.\.\/services\/devopsActionRunner['"]/,
+      );
+      // Import solo no alcanza: tiene que invocarse de verdad (no un import muerto).
+      const invocaciones = cuenta(src, /runDevOpsAction\(/g);
+      expect(invocaciones, `${nombre} importa runDevOpsAction pero no la invoca`).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('Plan 267 F7 — test 2 [C34]: alcance por sitio, residual exacto', () => {
+  it('2a. los 2 sitios RECABLEAR de la tabla de F7 ya no existen', () => {
+    const build = fs.readFileSync(path.join(DEVOPS_DIR, 'BuildWorkshopSection.tsx'), 'utf8');
+    const pub = fs.readFileSync(path.join(DEVOPS_DIR, 'SolutionPublisherSection.tsx'), 'utf8');
+    // sitio 1: title: "Compilar en Release" dentro de un askConfirm({ propio.
+    expect(build).not.toContain('Compilar en Release');
+    // sitio 2: title: `Publicar ${sol.friendly_name}` armado a mano.
+    expect(pub).not.toMatch(/title:\s*`Publicar \$\{/);
+  });
+
+  it('2b. el residual de askConfirm({ es EXACTAMENTE el declarado (16 en 7 archivos)', () => {
+    const RESIDUAL_ESPERADO: Record<string, number> = {
+      'BuildWorkshopSection.tsx': 1,
+      'SolutionPublisherSection.tsx': 4,
+      'PipelineBuilderSection.tsx': 4,
+      'ProductionFlow.tsx': 2,
+      'RemoteConsoleSection.tsx': 1,
+      'ServersSection.tsx': 2,
+      'VariablesSection.tsx': 2,
+    };
+    const actual: Record<string, number> = {};
+    for (const [archivo] of Object.entries(RESIDUAL_ESPERADO)) {
+      actual[archivo] = cuenta(fs.readFileSync(path.join(DEVOPS_DIR, archivo), 'utf8'), ASK_CONFIRM);
+    }
+    expect(actual).toEqual(RESIDUAL_ESPERADO);
+    expect(Object.values(actual).reduce((a, v) => a + v, 0)).toBe(16);
+  });
+});
+
 describe('Plan 267 F7 — un solo lugar declara la confirmacion', () => {
   it('3. devopsActionRunner.ts es el UNICO que exporta confirmRequestFor', () => {
     // Se busca la cadena LITERAL de la declaracion, no `confirmRequestFor` a
@@ -105,17 +153,20 @@ describe('Plan 267 §4.11 — el censo de severidad no puede encogerse ni perder
     expect(Object.keys(baseline()).sort()).toEqual(Object.keys(censoActual()).sort());
   });
 
-  it('5b. ningun archivo perdio una confirmacion danger sin recablearla', () => {
+  it('4/5b. test_ninguna_severidad_se_afloja — ningun archivo perdio una confirmacion danger sin recablearla', () => {
     const b = baseline();
     const actual = censoActual();
     const perdidas: string[] = [];
     for (const [archivo, congelado] of Object.entries(b)) {
       const hoy = actual[archivo];
       if (!hoy) continue; // lo caza 5a
-      // Mientras F7 este bloqueado, `recableado_a_high` es 0 por definicion:
-      // ningun sitio se recableo. Cuando F7 se descongele, este test hay que
-      // extenderlo con los sitios recableados a una accion de impacto alto, y
-      // la igualdad tiene que seguir valiendo.
+      // Medido tras terminar F7 (no un placeholder): de los 7 sitios `danger`
+      // de la tabla de §4.11, NINGUNO fue recableado — los 2 sitios que F7
+      // recablea (BuildWorkshopSection "Compilar en Release",
+      // SolutionPublisherSection "Publicar <sol>") tenian `danger: no`. Por
+      // construccion, `recableadoAHigh` es 0 para los 7 archivos de este censo;
+      // si un plan futuro recablea alguno de los 7 sitios danger, tiene que
+      // sumar aca su aporte y seguir cumpliendo la igualdad.
       const recableadoAHigh = 0;
       if (hoy.danger + recableadoAHigh !== congelado.danger) {
         perdidas.push(

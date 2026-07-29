@@ -4,6 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DevOpsBuildWorkshop } from "../../api/endpoints";
 import type { DevOpsSectionContext } from "../../pages/DevOpsPage";
 import { copyText } from "../../services/copyService";
+// Plan 267 F7 — el boton "Compilar" pasa por el mismo ejecutor que la paleta y
+// el asistente (devops.build.run); actionMeta/bindingFor traen el fallback
+// embebido si el catalogo no llego (flag OFF => 404).
+import { actionMeta, bindingFor } from "../../services/devopsActionBindings";
+import { runDevOpsAction } from "../../services/devopsActionRunner";
 import { Button, Checkbox, SectionHeader, Skeleton, StatusChip, useConfirm } from "../ui";
 import LoadErrorState from "../LoadErrorState";
 import Toast, { type ToastState } from "../Toast";
@@ -133,30 +138,36 @@ export const BuildWorkshopSection: React.FC<{ ctx: DevOpsSectionContext }> = () 
       .catch(() => setToast({ variant: "error", body: "No se pudo guardar la selección" }));
   };
 
+  // Plan 267 F7 [site 1] — antes armaba su propio askConfirm y llamaba
+  // DevOpsBuildWorkshop.compile directo; ahora pasa por runDevOpsAction, que
+  // deriva el texto de confirmacion y el tone del catalogo (devops.build.run:
+  // impact "low"). El binding sigue llamando exactamente al mismo endpoint
+  // (devopsActionBindings.ts) y el `data` que devuelve conserva build_id/status
+  // para que el seguimiento (polling de build-status) no cambie.
   const compilar = async () => {
-    const ok = await askConfirm({
-      title: "Compilar en Release",
-      message: `¿Compilar ${seleccionados.length} solución(es) en Release? Se creará una carpeta nueva de artefactos; nada existente se sobrescribe.`,
-      confirmLabel: "Compilar",
-    });
-    if (!ok) return;
     setBusy(true);
-    void DevOpsBuildWorkshop.compile(seleccionados, unified)
-      .then((res) => {
-        if (res.status === "toolchain_missing") {
-          void qc.invalidateQueries({ queryKey: ["build-catalog"] });
-          setToast({ variant: "warning", body: "Falta el toolchain de compilación" });
-          return;
-        }
-        setBuildId(res.build_id);
-      })
-      .catch((err: unknown) =>
-        setToast({
-          variant: "error",
-          body: err instanceof Error ? err.message : "No se pudo iniciar el build",
-        }),
-      )
-      .finally(() => setBusy(false));
+    try {
+      const r = await runDevOpsAction(
+        actionMeta("devops.build.run"),
+        { solution_path: seleccionados.join(","), unified: String(unified) },
+        bindingFor("devops.build.run"),
+        { askConfirm, navigate: () => {}, now: () => Date.now() },
+      );
+      if (!r.confirmed) return; // cancelado por el operador: silencioso, como antes
+      if (!r.ok) {
+        setToast({ variant: "error", body: r.detail || r.summary });
+        return;
+      }
+      const data = r.data as { status?: string; build_id?: string } | undefined;
+      if (data?.status === "toolchain_missing") {
+        void qc.invalidateQueries({ queryKey: ["build-catalog"] });
+        setToast({ variant: "warning", body: "Falta el toolchain de compilación" });
+        return;
+      }
+      if (data?.build_id) setBuildId(data.build_id);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const cancelar = async () => {

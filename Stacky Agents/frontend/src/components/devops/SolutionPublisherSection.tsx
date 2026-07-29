@@ -45,7 +45,6 @@ import {
   MAX_EXTRA_ARGS,
   PUBLISH_MODES,
   canPublish,
-  commandPreview,
   formatBytes,
   isValidExtraArg,
   needsAttention,
@@ -57,12 +56,12 @@ import {
   type PublisherSolution,
 } from "./solutionPublisherModel";
 import styles from "./SolutionPublisherSection.module.css";
+// Plan 267 F7 [site 2] — el boton "Publicar <solucion>" pasa por el mismo
+// ejecutor que la paleta y el asistente (devops.solution.publish).
+import { actionMeta, bindingFor } from "../../services/devopsActionBindings";
+import { runDevOpsAction } from "../../services/devopsActionRunner";
 
 type CliRuntime = "claude_code_cli" | "codex_cli";
-
-/** Marcador visible del destino real: el artefacto SIEMPRE va al staging propio
- *  de Stacky, jamás al workspace del cliente. */
-const STAGING_PLACEHOLDER = "<carpeta de artefactos de Stacky>";
 
 function mensajeDeError(err: unknown, fallback: string): string {
   if (!(err instanceof Error)) return fallback;
@@ -76,32 +75,6 @@ function mensajeDeError(err: unknown, fallback: string): string {
     }
   }
   return err.message || fallback;
-}
-
-/** argv previsto, SOLO como evidencia para el confirm. Espeja `_build_argv` del
- *  runner; el comando real lo arma el backend como lista. */
-function argvPrevisto(
-  sol: PublisherSolution,
-  toolchain: SolutionPublisherToolchain | undefined,
-): string[] {
-  const cola = sol.plan?.argv_tail ?? [];
-  const extra = sol.config?.extra_args ?? [];
-  const configuracion = sol.config?.configuration || "Release";
-  const dotnet = toolchain?.dotnet_path || "dotnet";
-  const msbuild = toolchain?.msbuild_path || "MSBuild.exe";
-  if (sol.plan?.mode_effective === "dotnet_publish") {
-    return [dotnet, ...cola, "-o", STAGING_PLACEHOLDER, ...extra];
-  }
-  if (sol.plan?.mode_effective === "msbuild_pubxml") {
-    return [msbuild, ...cola, `/p:publishUrl=${STAGING_PLACEHOLDER}`, ...extra];
-  }
-  if (toolchain?.builder === "dotnet") {
-    return [dotnet, "build", sol.plan?.target ?? "", "-c", configuracion,
-      "-o", STAGING_PLACEHOLDER, "--nologo", ...extra];
-  }
-  return [msbuild, sol.plan?.target ?? "", "/t:Build",
-    `/p:Configuration=${configuracion}`, `/p:OutDir=${STAGING_PLACEHOLDER}`,
-    "/nologo", ...extra];
 }
 
 function ToolchainBanner({ toolchain, onCopied }: {
@@ -357,31 +330,38 @@ export const SolutionPublisherSection: React.FC<{ ctx: DevOpsSectionContext }> =
     }
   };
 
+  // Plan 267 F7 [site 2] — antes armaba el argv previsto SOLO como evidencia
+  // del askConfirm propio; ahora el texto de confirmacion sale del catalogo
+  // (devops.solution.publish: impact "high" => tone danger) via
+  // runDevOpsAction, que llama al MISMO endpoint (devopsActionBindings.ts) y
+  // devuelve la misma respuesta en `data` para no perder el seguimiento del run.
   const publicar = async (sol: PublisherSolution) => {
-    const preview = commandPreview(argvPrevisto(sol, toolchain));
-    const ok = await askConfirm({
-      title: `Publicar ${sol.friendly_name}`,
-      message: `Se va a ejecutar exactamente esto:\n\n${preview}\n\nLa salida va a una carpeta propia de Stacky; tu workspace no se toca.`,
-      confirmLabel: "Publicar",
-    });
-    if (!ok) return;
     setBusy(true);
     setNoSoportado(null);
     setRunPerdido(false);
     try {
-      const res = await DevOpsSolutionPublisher.run(sol.slug);
-      if (res.status === "toolchain_missing") {
+      const r = await runDevOpsAction(
+        actionMeta("devops.solution.publish"),
+        { solution_path: sol.slug },
+        bindingFor("devops.solution.publish"),
+        { askConfirm, navigate: () => {}, now: () => Date.now() },
+      );
+      if (!r.confirmed) return; // cancelado por el operador: silencioso, como antes
+      if (!r.ok) {
+        errorToast(new Error(r.detail || r.summary), "No se pudo iniciar la publicación");
+        return;
+      }
+      const data = r.data as { status?: string; reason?: string; run_id?: string } | undefined;
+      if (data?.status === "toolchain_missing") {
         await qc.invalidateQueries({ queryKey: ["solution-publisher-catalog"] });
         setToast({ variant: "warning", body: "Falta el toolchain .NET en esta máquina" });
         return;
       }
-      if (res.status === "unsupported") {
-        setNoSoportado({ slug: sol.slug, reason: res.reason ?? "" });
+      if (data?.status === "unsupported") {
+        setNoSoportado({ slug: sol.slug, reason: data.reason ?? "" });
         return;
       }
-      if (res.run_id) setRunId(res.run_id);
-    } catch (err) {
-      errorToast(err, "No se pudo iniciar la publicación");
+      if (data?.run_id) setRunId(data.run_id);
     } finally {
       setBusy(false);
     }

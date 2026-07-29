@@ -17,6 +17,11 @@ export interface DevOpsActionReceipt {
   finishedAt: number;
   /** false = el operador dijo que no, o no habia gateway cableado. */
   confirmed: boolean;
+  /** F7 — payload crudo que devolvio el binding (p.ej. build_id, pipeline_id,
+   *  stdout). Ausente si el binding no devolvio nada o la accion no llego a
+   *  ejecutarse. Las secciones recableadas lo usan para conservar el mismo
+   *  seguimiento (polling, links) que tenian antes de F7. */
+  data?: unknown;
 }
 
 export interface DevOpsActionRunContext {
@@ -31,7 +36,7 @@ export interface DevOpsActionBinding {
   run: (
     params: Record<string, string>,
     ctx: DevOpsActionRunContext
-  ) => Promise<{ ok: boolean; summary: string; detail?: string }>;
+  ) => Promise<{ ok: boolean; summary: string; detail?: string; data?: unknown }>;
 }
 
 export const IMPACT_TEXT: Record<string, string> = {
@@ -191,6 +196,7 @@ export async function runDevOpsAction(
       confirmed: true,
       summary: res.summary,
       detail: res.detail ?? '',
+      data: res.data,
     });
   } catch (e) {
     return emit({

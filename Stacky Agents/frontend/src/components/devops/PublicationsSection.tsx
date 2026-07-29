@@ -10,6 +10,16 @@ import React, { useEffect, useState } from 'react';
 import { useWorkbench } from '../../store/workbench';
 import { api } from '../../api/client';
 import { DevOps } from '../../api/endpoints';
+import { useConfirm } from '../ui';
+// Plan 267 F7 — "Publicar en un paso…" pasa primero por el mismo ejecutor que
+// la paleta y el asistente (devops.publication.run: impact "high"). El binding
+// de esa accion es DELEGADO (navega a esta misma pantalla; ver
+// devopsActionBindings.ts DELEGATED_ACTION_IDS): la publicación en sí sigue
+// siendo la cadena materializar→commit→trigger de OneClickPublishModal, que
+// F7 no toca. Lo que se agrega es la confirmación derivada del catálogo ANTES
+// de abrir el modal — hoy el botón lo abría sin pedir nada.
+import { actionMeta, bindingFor } from '../../services/devopsActionBindings';
+import { runDevOpsAction } from '../../services/devopsActionRunner';
 import {
   emptyPreset,
   upsertPreset,
@@ -63,6 +73,7 @@ interface MaterializeResult {
 export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx }) => {
   const activeProjectObj = useWorkbench((s) => s.activeProject);
   const activeProject = activeProjectObj?.name ?? '';
+  const askConfirm = useConfirm();
 
   const [presets, setPresets] = useState<PublicationPreset[]>([]);
   const [loadedPresets, setLoadedPresets] = useState<PublicationPreset[]>([]);
@@ -281,6 +292,20 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
     }
   };
 
+  // Plan 267 F7 — antes `setOneClickOpen(true)` abría el modal sin pedir nada.
+  // Ahora pasa primero por runDevOpsAction (devops.publication.run): si el
+  // operador confirma, se abre el mismo modal de siempre; si no, no pasa nada.
+  const abrirPublicarEnUnPaso = async () => {
+    const r = await runDevOpsAction(
+      actionMeta('devops.publication.run'),
+      { project: activeProject, publication_id: editing.name },
+      bindingFor('devops.publication.run'),
+      { askConfirm, navigate: () => {}, now: () => Date.now() },
+    );
+    if (!r.confirmed) return; // cancelado por el operador: el modal no se abre
+    setOneClickOpen(true);
+  };
+
   const toggleGroup = (group: PublishGroup) => {
     const groups = editing.groups.includes(group)
       ? editing.groups.filter((g) => g !== group)
@@ -484,7 +509,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
           && ctx.health.generator_enabled === true
           && ctx.health.trigger_enabled === true && (
           <button
-            onClick={() => setOneClickOpen(true)}
+            onClick={() => void abrirPublicarEnUnPaso()}
             disabled={catalogEmpty || !editing.name}
             title={catalogEmpty ? 'El catálogo de procesos está vacío' : undefined}
             className={styles.btnSuccess}

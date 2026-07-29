@@ -185,15 +185,19 @@ def test_propose_write_bloqueada_si_run_flag_off(client, flags, health_all_on):
 
 
 def test_propose_param_faltante_genera_pregunta(client, flags, health_all_on):
+    """Reescrito tras F7: `environment` ya no es un param del catalogo (era
+    vocabulario inventado, ver devops_action_catalog.py). El mismo
+    comportamiento (falta un required -> missing_params) se prueba ahora
+    contra `pipeline_id`, el param REAL y required de devops.pipeline.trigger
+    (label "Rama o pipeline")."""
     flags(STACKY_DEVOPS_ACTION_CATALOG_ENABLED=True,
           STACKY_DEVOPS_ACTION_NL_ENABLED=True,
           STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED=True)
-    r = _propose(client, text="disparar la pipeline",
-                 params={"project": "P", "pipeline_id": "7"})
+    r = _propose(client, text="disparar la pipeline", params={"project": "P"})
     p = r.get_json()["proposal"]
     assert p["blocked_reason"] == "missing_params", p["blocked_reason"]
     assert len(p["open_questions"]) == 1, p["open_questions"]
-    assert "Entorno" in p["open_questions"][0], p["open_questions"][0]
+    assert "Rama o pipeline" in p["open_questions"][0], p["open_questions"][0]
 
 
 def test_propose_sin_match_no_lanza(client, flags, health_all_on):
@@ -271,18 +275,29 @@ def test_preview_no_ejecuta_nada(client, flags, health_all_on, monkeypatch):
     assert r.status_code == 200, r.get_json()
 
 
-def test_what_will_happen_nombra_entorno_e_impacto(client, flags, health_all_on):
+def test_what_will_happen_nombra_impacto_y_efecto_de_escritura(client, flags,
+                                                                 health_all_on):
+    """Reescrito tras F7: ya no hay concepto de entorno (`environment` era
+    vocabulario inventado), asi que el preview no puede nombrar "prod". Lo que
+    SI nombra siempre es el impacto y si escribe en un sistema real; `targets`
+    es el dato real que reemplaza a `environment` en devops.deployment.execute
+    y viaja en `params`, no en la frase."""
     flags(STACKY_DEVOPS_ACTION_CATALOG_ENABLED=True,
           STACKY_DEVOPS_ACTION_NL_ENABLED=True,
           STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED=True)
     r = client.post("/api/devops/actions/preview", json={
         "action_id": "devops.deployment.execute",
-        "params": {"project": "P", "environment": "prod", "deployment_id": "9"},
+        "params": {"deployment_id": "9", "targets": "srv-1"},
     })
-    frase = r.get_json()["proposal"]["what_will_happen"]
-    assert "prod" in frase, frase
+    p = r.get_json()["proposal"]
+    frase = p["what_will_happen"]
     assert any(t in frase for t in
                ("sin impacto", "impacto bajo", "impacto alto")), frase
+    assert "Escribe en un sistema real del operador." in frase, frase
+    assert p["environment"] == "", p
+    assert p["blocked_reason"] == "", p["blocked_reason"]
+    targets_param = next(pp for pp in p["params"] if pp["name"] == "targets")
+    assert targets_param["value"] == "srv-1", targets_param
 
 
 def test_propose_ambiguo_devuelve_alternativas(client, flags, monkeypatch,

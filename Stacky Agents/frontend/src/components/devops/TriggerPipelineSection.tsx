@@ -15,6 +15,11 @@ import {
 import { FlagGateBanner } from './FlagGateBanner';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { PipelineDoctorPanel } from './PipelineDoctorPanel';
+import { useConfirm } from '../ui';
+// Plan 267 F7 — "Disparar" pasa por el mismo ejecutor que la paleta y el
+// asistente (devops.pipeline.trigger). Antes disparaba sin ninguna confirmacion.
+import { actionMeta, bindingFor } from '../../services/devopsActionBindings';
+import { runDevOpsAction } from '../../services/devopsActionRunner';
 import {
   pollTargets,
   retriggerPayload,
@@ -143,6 +148,7 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
   // Plan 103 — con el monitor ON, el sondeo y el texto los maneja el shell.
   const monitorOn = ctx.health.pipeline_monitor_enabled === true;
   const setLastPipeline = useDevopsMonitorStore((st) => st.setLast);
+  const askConfirm = useConfirm();
   const [ref, setRef] = useState(lastBranch);
   const [previewData, setPreviewData] = useState<CIPreviewResponse | null>(null);
   const [triggerResult, setTriggerResult] = useState<CITriggerResponse | null>(null);
@@ -258,6 +264,12 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
     }
   };
 
+  // Plan 267 F7 — antes llamaba CIPipeline.trigger directo, SIN pedir
+  // confirmacion: disparar una pipeline real quedaba a un click. Ahora pasa
+  // por runDevOpsAction (mismo endpoint, cablea devops.pipeline.trigger:
+  // impact "high" => tone danger) [F7 R15: agrega la confirmacion que hoy no
+  // existia — mejora, no regresion]. El `data` del recibo conserva
+  // pipeline_id/status/web_url para que el monitor y la bitácora sigan igual.
   const handleTrigger = async () => {
     if (!ref.trim()) {
       setError('El ref es obligatorio');
@@ -266,24 +278,35 @@ export const TriggerPipelineSection: React.FC<TriggerPipelineSectionProps> = ({ 
     setLoading(true);
     setError(null);
     try {
-      const result = await CIPipeline.trigger(project, ref, '', '', true);
-      setTriggerResult(result);
-      if (result.pipeline_id) {
-        setPipelineId(result.pipeline_id);
-        setPolling(true);
-        // Plan 103 — registrar el pipeline para el badge persistente del header.
-        setLastPipeline({
-          project,
-          pipelineId: result.pipeline_id,
-          ref,
-          status: null,
-          webUrl: result.web_url ?? null,
-          updatedAt: new Date().toISOString(),
-        });
+      const r = await runDevOpsAction(
+        actionMeta('devops.pipeline.trigger'),
+        { project, pipeline_id: ref },
+        bindingFor('devops.pipeline.trigger'),
+        { askConfirm, navigate: () => {}, now: () => Date.now() },
+      );
+      if (!r.confirmed) return; // cancelado por el operador: silencioso
+      if (!r.ok) {
+        setError(r.detail || r.summary);
+        return;
+      }
+      const result = r.data as CITriggerResponse | undefined;
+      if (result) {
+        setTriggerResult(result);
+        if (result.pipeline_id) {
+          setPipelineId(result.pipeline_id);
+          setPolling(true);
+          // Plan 103 — registrar el pipeline para el badge persistente del header.
+          setLastPipeline({
+            project,
+            pipelineId: result.pipeline_id,
+            ref,
+            status: null,
+            webUrl: result.web_url ?? null,
+            updatedAt: new Date().toISOString(),
+          });
+        }
       }
       void loadRuns(); // Plan 191 — refrescar la bitácora tras el disparo
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error al disparar');
     } finally {
       setLoading(false);
     }

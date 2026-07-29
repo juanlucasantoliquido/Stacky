@@ -60,7 +60,15 @@ function goToPanel(
   };
 }
 
-/** (a) — envuelve una llamada real y normaliza el resultado a recibo. */
+/** (a) — envuelve una llamada real y normaliza el resultado a recibo.
+ *
+ *  F7 — el valor que resuelve `fn` se conserva en `data`: las secciones
+ *  recableadas (BuildWorkshopSection, RemoteConsoleSection,
+ *  TriggerPipelineSection, SolutionPublisherSection, DeploymentsSection) lo
+ *  necesitan para seguir mostrando lo mismo que mostraban antes de F7
+ *  (build_id, pipeline_id, stdout/stderr, run_id): `runDevOpsAction` normaliza
+ *  el resultado a un recibo generico (ok/summary/detail), y sin este passthrough
+ *  esa informacion se perdia en el camino. */
 function callEndpoint(
   id: string,
   summary: string,
@@ -69,8 +77,8 @@ function callEndpoint(
   return {
     id,
     run: async (params: Params, ctx: DevOpsActionRunContext) => {
-      await fn(params, ctx);
-      return { ok: true, summary };
+      const data = await fn(params, ctx);
+      return { ok: true, summary, data };
     },
   };
 }

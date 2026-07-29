@@ -10,8 +10,15 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DevOpsDeployments, DevOps, Incidents, type DeployApp, type DeployOverviewApp } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
-import { useTextPrompt, Dialog } from '../ui';
+import { useTextPrompt, useConfirm, Dialog } from '../ui';
 import { useWorkbench } from '../../store/workbench';
+// Plan 267 F7 — la ejecucion final del despliegue pasa por el mismo ejecutor
+// que la paleta y el asistente (devops.deployment.execute). El gate propio de
+// la seccion (checkbox / type-to-confirm en destinos protegidos, `canConfirmExecute`)
+// se CONSERVA intacto por encima; esto solo agrega la confirmacion derivada del
+// catalogo antes de llamar al mismo endpoint.
+import { actionMeta, bindingFor } from '../../services/devopsActionBindings';
+import { runDevOpsAction } from '../../services/devopsActionRunner';
 import {
   buildTargetCards, rollbackChoices, confirmRequirement, waveOrder, formatDora,
   buildPendingPresetHandoff, showCreatePipelineCta, type TargetCard,
@@ -56,6 +63,7 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
     () => localStorage.getItem(STORAGE_SELECTED_APP),
   );
   const askText = useTextPrompt();
+  const askConfirm = useConfirm();
   const [showNewApp, setShowNewApp] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [planResult, setPlanResult] = useState<Awaited<ReturnType<typeof DevOpsDeployments.plan>> | null>(null);
@@ -153,12 +161,24 @@ export const DeploymentsSection: React.FC<DeploymentsSectionProps> = ({ ctx }) =
     setBusy(true);
     setActionError(null);
     try {
-      await DevOpsDeployments.execute(app.id, selectedTargets, true, confirmReq.kind === 'text' ? confirmTextInput : undefined);
+      const r = await runDevOpsAction(
+        actionMeta('devops.deployment.execute'),
+        {
+          deployment_id: app.id,
+          targets: selectedTargets.join(','),
+          confirm_text: confirmReq.kind === 'text' ? confirmTextInput : '',
+        },
+        bindingFor('devops.deployment.execute'),
+        { askConfirm, navigate: () => {}, now: () => Date.now() },
+      );
+      if (!r.confirmed) return; // cancelado por el operador: silencioso
+      if (!r.ok) {
+        setActionError(r.detail || r.summary);
+        return;
+      }
       setPlanResult(null);
       setSelectedTargets([]);
       void qc.invalidateQueries({ queryKey: ['devops-deployments-overview'] });
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'error al desplegar');
     } finally {
       setBusy(false);
     }

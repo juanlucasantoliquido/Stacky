@@ -32,6 +32,70 @@ def _outcome_badge_enabled() -> bool:
     return bool(getattr(_config.config, "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED", True))
 
 
+def _verdict_badge_enabled() -> bool:
+    """Plan 269 F2 — kill-switch del veredicto en el payload. Se lee la INSTANCIA.
+
+    Dependencia resuelta EN CÓDIGO, no con `requires=` en la FlagSpec: el
+    veredicto solo se sirve si están ON la flag de UI Y la del núcleo.
+    """
+    import config as _config  # noqa: PLC0415
+
+    return (
+        bool(getattr(_config.config, "STACKY_UI_RUN_VERDICT_BADGE_ENABLED", True))
+        and bool(getattr(_config.config, "STACKY_RUN_VERDICT_ENABLED", True))
+    )
+
+
+def _verdicts_for_batch(session, executions: list) -> dict[int, dict]:
+    """Plan 269 F2 — veredicto de TODO el lote. Read-only, sin N+1.
+
+    Nunca lanza: cualquier fallo devuelve {} y el listado sale como antes.
+    """
+    if not _verdict_badge_enabled():
+        return {}
+    try:
+        from services.run_evidence import collect_for_executions  # noqa: PLC0415
+        from services.run_verdict import evaluate_verdict  # noqa: PLC0415
+
+        signals_by_id = collect_for_executions(session, executions)
+        out: dict[int, dict] = {}
+        for ex in executions:
+            ticket = getattr(ex, "ticket", None)
+            # DOS argumentos, NO uno colapsado. Está PROHIBIDO el patrón que
+            # toma el estado del ticket con el del run como respaldo: dejaba que
+            # un ticket `completed` blanqueara un run `error`, y el historial
+            # pintaba "Terminó bien" al lado del chip "Error" en TODAS las
+            # corridas fallidas de un ticket ya cerrado.
+            # El run manda; el ticket solo puede EMPEORAR (nunca mejorar).
+            meta = ex.metadata_dict if isinstance(ex.metadata_dict, dict) else {}
+            v = evaluate_verdict(
+                run_status=(ex.status or ""),
+                ticket_status=getattr(ticket, "stacky_status", None),
+                outcome_reason=meta.get("outcome_reason"),
+                signals=signals_by_id.get(ex.id),
+            )
+            if v is None:          # run no terminado: NO tiene veredicto
+                continue
+            out[ex.id] = v.to_dict()
+        return out
+    except Exception:  # noqa: BLE001 — enriquecer JAMÁS rompe el listado
+        logger.debug("run_verdict 269 falló", exc_info=True)
+        return {}
+
+
+def _with_verdict(d: dict, verdicts: dict[int, dict]) -> dict:
+    """Agrega `run_verdict` si hay uno. Con la flag OFF no agrega NINGUNA clave:
+    la UI simplemente no dibuja el chip (sin hueco ni error).
+
+    La clave es `run_verdict`, NO `verdict`: `verdict` ya lo emite
+    AgentExecution.to_dict() (models.py:327) con la revisión humana.
+    """
+    v = verdicts.get(d.get("id"))
+    if v:
+        d["run_verdict"] = v
+    return d
+
+
 def _dirty_close_execution_ids(session, execution_ids: list[int]) -> set[int]:
     """Plan 254 F1-bis — ejecuciones cuyo cierre preservó un terminal de éxito.
 
@@ -156,7 +220,10 @@ def list_executions():
             _dirty_close_execution_ids(session, [r.id for r in rows])
             if _outcome_badge_enabled() else set()
         )
-        return jsonify([_with_outcome(d, dirty) for d in payload])
+        # Plan 269 F2 — `rows` ya viene con joinedload(AgentExecution.ticket),
+        # así que getattr(ex, "ticket", None) NO dispara N+1 acá.
+        verdicts = _verdicts_for_batch(session, rows)
+        return jsonify([_with_verdict(_with_outcome(d, dirty), verdicts) for d in payload])
 
 
 def _query_active_executions(session, *, project_ctx, status_values, limit):
@@ -524,6 +591,7 @@ def executions_history():
 
         # Para cada ejecución construimos el item del contrato.
         items = []
+        rows_servidas = []            # solo las que sobrevivieron el filtro de runtime
         for row in rows:
             meta = row.metadata_dict or {}
             row_runtime = meta.get("runtime") or ""
@@ -557,6 +625,17 @@ def executions_history():
                 "error_message": row.error_message or None,
                 "local_insight": meta.get("local_insight") or None,  # Plan 117 (aditivo)
             })
+            rows_servidas.append(row)
+
+        # Plan 269 F2 — el historial es la superficie de F4, y este handler arma
+        # los items A MANO (no pasa por _with_outcome): cablear solo el otro
+        # endpoint dejaba toda F4 inerte. Misma función de lote, mismo
+        # try/except: si falla, `items` sale exactamente como hoy. Se inyecta
+        # ANTES del `if include_total` para que las DOS formas de respuesta lo
+        # lleven.
+        verdicts = _verdicts_for_batch(session, rows_servidas)
+        for d in items:
+            _with_verdict(d, verdicts)
 
     if include_total:
         return jsonify({"items": items, "total": total})

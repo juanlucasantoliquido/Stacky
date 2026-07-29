@@ -4,6 +4,8 @@
  * (el repo no tiene @testing-library/react ni jsdom instalados).
  */
 
+import type { RunVerdictPayload } from "../utils/runVerdict";
+
 export type IncidentScope = "open" | "all";
 
 export interface IncidentInboxItem {
@@ -17,6 +19,10 @@ export interface IncidentInboxItem {
   stacky_status?: string;
   last_synced_at?: string;
   is_open: boolean;
+  /** Plan 269 F5 — veredicto de la ULTIMA corrida de esta incidencia. OPCIONAL:
+   *  una incidencia sin ejecuciones (o con la flag OFF) no trae la clave, y
+   *  entonces no se dibuja chip. Es `run_verdict`, NO `verdict`. */
+  run_verdict?: RunVerdictPayload | null;
 }
 
 export interface IncidentInboxCounts {

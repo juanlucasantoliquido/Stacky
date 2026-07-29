@@ -30,6 +30,10 @@ export const HISTORY_COLUMNS: ColumnDef[] = [
   { id: "runtime", label: "Runtime" },
   { id: "modelo", label: "Modelo" },
   { id: "estado", label: "Estado", sortKey: "status" },
+  // Plan 269 F4 — segunda dimension: el veredicto por evidencia. SIN `sortKey`:
+  // el veredicto se calcula al leer y el backend no puede ordenar por el (mismo
+  // criterio que `duracion` y `costo`, justo abajo).
+  { id: "veredicto", label: "Veredicto" },
   // Duración y costo NO son ordenables: la primera se calcula por fila y el
   // segundo vive dentro de metadata_json. Ofrecer el sort sería prometer un
   // orden que el backend no puede dar.

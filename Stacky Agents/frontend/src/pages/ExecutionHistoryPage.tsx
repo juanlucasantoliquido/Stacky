@@ -26,8 +26,9 @@ import {
 import GroundingObservatoryCard from "../components/GroundingObservatoryCard";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
-import { StatusChip, Checkbox, IconButton } from "../components/ui";
+import { StatusChip, Checkbox, IconButton, Select } from "../components/ui";
 import { runStatusTone, runStatusLabel } from "../utils/runStatus";
+import { describeVerdict, matchesVerdictLevel, verdictChipTone } from "../utils/runVerdict";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import { formatDuration, formatCostUsd } from "../services/format";
 import { useWorkbench } from "../store/workbench";
@@ -73,6 +74,11 @@ interface Filters {
   agent_type: string;
   runtime: string;
   status: string;
+  /** Plan 269 F4 — filtro de PRESENTACION por nivel de veredicto. El backend no
+   *  lo conoce: el veredicto se calcula al leer. OPCIONAL a proposito: los
+   *  filtros que el operador ya tiene persistidos en localStorage no traen esta
+   *  clave, y resolveMountFilters devuelve el objeto sin ella. */
+  verdict_level?: string;
   days: string;
   limit: number;
   offset: number;
@@ -82,6 +88,7 @@ const DEFAULT_FILTERS: Filters = {
   agent_type: "",
   runtime: "",
   status: "",
+  verdict_level: "",
   days: "",
   limit: 50,
   offset: 0,
@@ -90,6 +97,13 @@ const DEFAULT_FILTERS: Filters = {
 const AGENT_TYPES = ["", "developer", "business", "qa", "critic", "debug", "custom"];
 const RUNTIMES = ["", "claude_code_cli", "codex_cli", "github_copilot"];
 const STATUSES = ["", "completed", "error", "needs_review", "running", "cancelled"];
+// Plan 269 F4 — los 3 niveles de VERDICT_LEVELS (services/run_verdict.py) + "sin filtro".
+const VERDICT_LEVEL_FILTERS: { value: string; label: string }[] = [
+  { value: "", label: "Todos los veredictos" },
+  { value: "exito", label: "Terminó bien" },
+  { value: "advertencia", label: "Con advertencias" },
+  { value: "error_real", label: "Error real" },
+];
 
 // ---------------------------------------------------------------------------
 // Componente principal
@@ -189,7 +203,20 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
     placeholderData: instantNav ? keepPreviousData : undefined,
   });
 
-  const items: ExecutionHistoryItem[] = historyQ.data ?? [];
+  const itemsCrudos: ExecutionHistoryItem[] = historyQ.data ?? [];
+  // Plan 269 F4 — filtro de PRESENTACION por nivel de veredicto. Se aplica ACA y
+  // no dentro del .map para que TODOS los consumidores de `items` (las filas, la
+  // seleccion en lote y el copiado) vean exactamente lo mismo: si el filtro
+  // viviera solo en el render, "seleccionar todo" marcaria filas ocultas.
+  // Interaccion con la paginacion, declarada: la lista viene paginada del
+  // servidor, asi que filtrar en cliente puede dejar una pagina con menos filas
+  // que `limit`. Es el MISMO comportamiento que ya tiene el filtro `runtime`
+  // (que el backend aplica en Python despues de paginar): no se introduce una
+  // anomalia nueva, se hereda una conocida.
+  const items: ExecutionHistoryItem[] = useMemo(
+    () => itemsCrudos.filter((i) => matchesVerdictLevel(i.run_verdict, filters.verdict_level)),
+    [itemsCrudos, filters.verdict_level],
+  );
 
   useEffect(() => {
     let vivo = true;
@@ -395,6 +422,25 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
           ))}
         </select>
 
+        {/* Plan 269 F4 — filtro por nivel de veredicto. Es de PRESENTACION: se
+            aplica en cliente sobre lo que el servidor ya trajo.
+            Usa la primitiva Select de components/ui, nunca el tag crudo: el
+            ratchet de deuda de formularios cuenta los tags crudos por archivo y
+            este archivo ya tiene su cupo lleno en 4 (medido: agregar uno crudo lo
+            subia a 5 y ponia el ratchet rojo con deuda PROPIA). Ojo: ese ratchet
+            cuenta por texto, asi que este comentario tampoco puede nombrar el tag
+            con su sintaxis literal. */}
+        <Select
+          className={styles.filterSelect}
+          value={filters.verdict_level ?? ""}
+          onChange={(e) => setFilter("verdict_level", e.target.value)}
+          aria-label="Filtrar por veredicto"
+        >
+          {VERDICT_LEVEL_FILTERS.map((v) => (
+            <option key={v.value} value={v.value}>{v.label}</option>
+          ))}
+        </Select>
+
         <select
           className={styles.filterSelect}
           value={filters.status}
@@ -447,7 +493,7 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
             status: DEFAULT_FILTERS.status,
             days: DEFAULT_FILTERS.days,
           }}
-          urlFilterKeys={["agent_type", "runtime", "status", "days"]}
+          urlFilterKeys={["agent_type", "runtime", "status", "verdict_level", "days"]}
         />
         {/* Plan 173 F4 — qué columnas ve este operador. */}
         <TableColumnsMenu
@@ -547,6 +593,12 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                     Estado{sortMarca("estado")}
                   </th>
                 )}
+                {/* Plan 269 F4 — sin onClick de sort y sin sortMarca A PROPOSITO:
+                    `veredicto` no tiene sortKey, y ofrecer un orden que el backend
+                    no puede dar seria prometer algo falso. */}
+                {isColVisible(tablePrefs, "veredicto") && (
+                  <th data-col="veredicto">Veredicto</th>
+                )}
                 {isColVisible(tablePrefs, "duracion") && (
                   <th data-col="duracion" onClick={() => cambiarPrefs(cycleSort(tablePrefs, "duracion", HISTORY_COLUMNS))}>
                     Duración{sortMarca("duracion")}
@@ -631,6 +683,23 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                   )}
                   {isColVisible(tablePrefs, "estado") && (
                   <td><StatusChip tone={runStatusTone(item.status)} size="sm">{runStatusLabel(item.status)}</StatusChip></td>
+                  )}
+                  {isColVisible(tablePrefs, "veredicto") && (
+                  <td>
+                    {(() => {
+                      // run_verdict, NO verdict: `verdict` ya existe y guarda la
+                      // revision humana (models.py:255).
+                      const v = describeVerdict(item.run_verdict);
+                      // Un run en curso no trae veredicto, asi que la celda queda
+                      // vacia en vez de decir "Con advertencias".
+                      if (!v) return null;
+                      return (
+                        <StatusChip tone={verdictChipTone(v.tone)} size="sm" title={v.detail}>
+                          {v.label}
+                        </StatusChip>
+                      );
+                    })()}
+                  </td>
                   )}
                   {isColVisible(tablePrefs, "duracion") && (
                   <td className={styles.numCell}>{formatDuration(item.duration_ms)}</td>

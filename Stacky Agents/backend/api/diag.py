@@ -1011,7 +1011,25 @@ def run_reconciliation_route():
         return jsonify({
             "ok": False, "error": type(exc).__name__,
             "total": 0, "by_kind": {k: 0 for k in rr.DISCREPANCY_KINDS}, "items": [],
+            # Plan 269 F6 — en la rama de ERROR la clave va en false: ausencia o
+            # false ⇒ la card no dibuja botones. Falla CERRADO, nunca abierto.
+            "hitl_enabled": False,
         }), 200
+    # Plan 269 F6 — la card decide si dibuja botones desde el BACKEND, sin que el
+    # frontend tenga que conocer flags. Se escribe SOLO acá: summarize() es una
+    # función PURA (recibe una lista y no lee configuración) y meterle un getattr
+    # la ensuciaría y rompería sus tests del 254.
+    result["hitl_enabled"] = bool(
+        getattr(_config.config, "STACKY_RUN_RECONCILIATION_HITL_ENABLED", True)
+    )
+    # Plan 269 F8 — KPI medido del veredicto. Read-only, bajo demanda, nunca en
+    # un loop: se calcula dentro del GET que el operador ya estaba pidiendo.
+    try:
+        from services.run_verdict import count_by_level, verdict_agreement  # noqa: PLC0415
+        result["verdict_counts"] = count_by_level(days=30)
+        result["verdict_agreement"] = verdict_agreement(days=30)
+    except Exception:  # noqa: BLE001
+        logger.debug("verdict_counts 269 falló", exc_info=True)
     result["ok"] = True
     return jsonify(result)
 

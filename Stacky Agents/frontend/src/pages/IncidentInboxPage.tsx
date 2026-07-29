@@ -31,6 +31,7 @@ import {
   type IncidentScope,
   type IncidentInboxItem,
 } from "../incidents/incidentInboxModel";
+import { describeVerdict } from "../utils/runVerdict";
 import {
   DIVERGENCE_BADGE_LABEL,
   DIVERGENCE_BADGE_TITLE,
@@ -549,6 +550,16 @@ export default function IncidentInboxPage() {
                   {DIVERGENCE_BADGE_LABEL}
                 </span>
               )}
+              {/* Plan 269 F5 — veredicto de la ultima corrida. run_verdict, NO
+                  verdict. Sin veredicto (o sin ejecuciones) no se dibuja nada. */}
+              {(() => {
+                const v = describeVerdict(item.run_verdict);
+                return v ? (
+                  <span className={styles.verdictBadge} data-tone={v.tone} title={v.detail}>
+                    {v.label}
+                  </span>
+                ) : null;
+              })()}
               {corriendo && <span className={styles.runningDot}>agente corriendo</span>}
               <span className={styles.assignee}>{item.assigned_to_ado ?? "sin asignar"}</span>
               <span className={styles.rowActions}>

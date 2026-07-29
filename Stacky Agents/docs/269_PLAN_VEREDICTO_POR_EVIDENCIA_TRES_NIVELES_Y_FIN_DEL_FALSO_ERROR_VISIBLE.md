@@ -1,9 +1,10 @@
 # Plan 269 — Veredicto por evidencia: tres niveles y fin del falso error VISIBLE
 
-> **Estado:** CRITICADO v3 — **RECHAZADO por el juez independiente (5 BLOQUEANTES). NO implementar hasta aplicar los fixes D1..D5.**
+> **Estado:** CRITICADO v4 — **APROBADO-CON-CAMBIOS. La prohibición "NO implementar" queda LEVANTADA: los cambios ya están aplicados en este v4.**
 > **Autor:** StackyArchitectaUltraEficientCode
 > **Juez v1→v2:** StackyArchitectaUltraEficientCode (misma corrida)
 > **Juez v2→v3:** revisión INDEPENDIENTE, contexto limpio, **criticando CORRIENDO** (no releyendo): invariante simulado con el código literal del plan, censo por AST, tests ejecutados con el venv py3.13, greps sobre el árbol vivo.
+> **Juez v3→v4:** **SEGUNDA pasada independiente sobre el v3**, otra corrida, otro contexto. Mandato: verificar CORRIENDO que D1..D5 estén realmente cerrados y cazar los bloqueantes que el propio v3 haya introducido. Resultado: **D1, D2, D3 y D5 cerrados** (verificados ejecutando, no releyendo); **D4 NO estaba cerrado** (su fix repetía el error que arreglaba) y se corrigió; **4 defectos IMPORTANTES introducidos por el v3** hallados y corregidos, 5 menores más.
 > **Fecha:** 2026-07-28
 > **Depende de:** Plan 254 (IMPLEMENTADO, commit `92e593f2`). Este plan **se apoya** en 254, **no lo reemplaza** ni lo duplica.
 > **Se implementa DESPUÉS de:** Plan **271** y Plan **270** (ver §0). El 269 es **CONSUMIDOR** del estado final que esos dos definen y escriben.
@@ -40,15 +41,72 @@ Hay tres planes vivos sobre el mismo subsistema y el orden de implementación **
   cd "Stacky Agents/backend"
   grep -n "Sin N+1" api/incident_inbox.py
   grep -n "for t in rows" api/incident_inbox.py
-  grep -n "def set_stacky_status" api/tickets.py
+  grep -n "def set_stacky_status(" api/tickets.py         # ← EL PARÉNTESIS ES OBLIGATORIO (v4, E4)
   grep -n "def set_stacky_status_by_ado" api/tickets.py
   cd "Stacky Agents/frontend"
   grep -n "className={styles.row}" src/pages/IncidentInboxPage.tsx
   ```
+> ⚠ **v4 (E4) — POR QUÉ ESE PARÉNTESIS NO ES COSMÉTICO.** `grep -n "def set_stacky_status"` **sin** el paréntesis devuelve **DOS** líneas, porque el patrón es prefijo del otro símbolo: `:1166` (`set_stacky_status`, el endpoint **PERMITIDO**, que llama `ts.set_status` y **no publica**) y `:1205` (`set_stacky_status_by_ado`, el **PROHIBIDO**, que **publica en el ADO real del operador** y le cambia el estado del work item). Medido: sin paréntesis **2 hits**, con paréntesis **1 hit**. Una regla de anclaje que devuelve dos candidatos —y donde el candidato equivocado escribe en el tracker del operador— es peor que no tener regla. **Cada grep de anclaje de este plan tiene que devolver EXACTAMENTE 1 hit; si devuelve 2, el patrón está mal, no el árbol.**
+
 - **Si un símbolo no aparece**, el 270 lo renombró: **PARAR** y re-anclar el plan, no improvisar.
+- **Si un símbolo aparece MÁS DE UNA VEZ**, el patrón es ambiguo: **afinarlo** (agregar el `(`, el `def `, el `class `) hasta que dé 1 hit. Nunca elegir "el primero que salga".
 - Los anclajes de `api/executions.py`, `services/run_verdict.py`, `services/run_outcome.py`, `models.py`, `tablePrefs.ts` y `ExecutionHistoryPage.tsx` **no** están en la zona de colisión: ahí los números valen.
 
-**Numeración (D4):** los números **270 y 271 están OCUPADOS** por planes reales y distintos. El corte de scope que este documento sugería mandaba F6+F8 "al 270" — eso era una **colisión de numeración**, el mismo error que ya forzó el renumerado 267→269. **El corte, si se aplica, va al 272** (primer número libre verificado el 2026-07-28).
+**Numeración (D4 → CORREGIDO en v4, E3):** los números **270 y 271 están OCUPADOS** por planes reales y distintos. El corte de scope que el v1/v2 sugería mandaba F6+F8 "al 270" — eso era una **colisión de numeración**, el mismo error que ya forzó el renumerado 267→269.
+
+> ⚠ **El v3 "arregló" esto mandando el corte al 272. Eso era la MISMA colisión un nivel más arriba.** Verificado con `grep -n "272"` sobre los dos vecinos:
+> - **Plan 271, línea 6:** *"El **272** queda reservado para «un solo escritor de estado» (§6.1)"* — y lo referencia otras 10 veces como dueño de esa migración (extender el árbitro a los motores C..F, modelar `on_failure_state`, poblar `stacky_project_name`).
+> - **Plan 270, línea 1517:** *"⇒ **plan 272 sugerido**"* para la reconciliación masiva Stacky→tracker.
+> - **Plan 270, línea 1520, textual:** *"**No hardcodear 272/273 desde este documento.**"*
+>
+> **REGLA DE NUMERACIÓN DEL CORTE (la única que no caduca):** este documento **NO asigna un número** a la segunda mitad. Si se aplica el corte, en el momento de crear el archivo:
+> 1. `ls "Stacky Agents/docs/"` **en frío** (con `ls`, no `git ls-files`: los planes de sesiones paralelas llegan untracked).
+> 2. `grep -rn "plan 27[0-9]\|27[0-9]_PLAN" "Stacky Agents/docs/"` para cazar los números **reservados por texto**, que no tienen archivo todavía. **Hoy el 272 está reservado dos veces** (271 §6.1 y 270 §continuaciones): **saltarlo.**
+> 3. Tomar el primer número **sin archivo y sin reserva escrita**.
+>
+> Un número escrito en un plan envejece mal; el procedimiento no.
+
+---
+
+## CHANGELOG v3 → v4 (SEGUNDA pasada independiente sobre el v3, criticando CORRIENDO)
+
+**VEREDICTO: APROBADO-CON-CAMBIOS. 0 BLOQUEANTES, 4 IMPORTANTES, 5 MENORES.** La prohibición *"NO implementar hasta aplicar los fixes D1..D5"* **se levanta**: los cambios están aplicados acá.
+
+### Estado real de D1..D5, uno por uno, verificado EJECUTANDO
+
+| ID | ¿Cerrado? | Evidencia CORRIDA en esta pasada |
+|---|---|---|
+| **D1** | **SÍ, y es sólido** | Se extrajo a disco el módulo F0 **literal del v3** y se barrió la **grilla COMPLETA** (no la del doc): 243 combinaciones de evidencia × **7** `ticket_status` × **10** `outcome_reason` (los **9** reales de `run_outcome.OUTCOME_REASONS` + `None`) = **17.010 casos ⇒ 0 violaciones de I1**. Monotonicidad del ticket: **68.040 casos ⇒ el ticket mejoró el nivel en 0**. No terminales (`idle`/`running`/`""`/`"   "`): **0** veredictos espurios. El caso testigo `run=error` + `ticket=completed` + `publicado=True` da **`advertencia` / `falso_rojo_probable`** ✓. Además el gate de borde **A3 existe y cubre los dos endpoints**, y se verificó que el cableado es viable: en `executions_history()` la variable `rows` **es una lista de `AgentExecution`** (`q = session.query(AgentExecution).join(Ticket, ...)`), así que `row.id/.status/.metadata_dict/.ticket` existen. **Pero los dos GATES del fix estaban rotos: ver E1 y E2.** |
+| **D2** | **SÍ, y el censo está completo** | Censo de literales corrido sobre `services/ado_publisher.py`: `failed`×6, **`idempotent_replay`×3 (`:399`, `:446`, `:541`)**, `ok`×1 (`:508`), más `skipped` condicional en `:326` ⇒ **4 valores**, exactamente lo que D2 afirma. Persistencia sin filtrar: `status=result.status` (`:895`). Dedupe en `:387-397`: `(ado_id, html_sha256, status=="ok")` — **por contenido y ado_id, NO por ejecución**, así que la fila `ok` queda pegada a la PRIMERA ejecución y la re-corrida solo tiene `idempotent_replay`: el diagnóstico de D2 es correcto al 100%. **Dato nuevo que cierra el censo:** en todo `backend/` hay **UN SOLO** escritor de filas (`AgentHtmlPublish(` aparece solo en `:889`), así que no hay un 5º valor escondido en otro módulo. Fix `status IN ('ok','idempotent_replay')` correcto. |
+| **D3** | **SÍ** | §0 existe con el orden 271→270→269 y la tabla de colisión. Los 5 anclajes por símbolo se **corrieron**: `"Sin N+1"`→`:149` (1 hit), `"for t in rows"`→`:161` (1 hit), `"def set_stacky_status_by_ado"`→`:1205` (1 hit), `"className={styles.row}"`→`:488` (1 hit). **Pero el 5º grep es ambiguo y peligroso: ver E4.** |
+| **D4** | **NO. El fix repetía el error que venía a arreglar.** | Corregido en este v4: ver **E3**. |
+| **D5** | **SÍ en el diseño** | La cota es real: `scan_recent(limit: int = 200)` **verificado** en `services/run_reconciliation.py:168`, así que reusar `limit=200` es coherente. Reusar `collect_for_executions` + `_Budget` propio + `falso_rojo_probable: null` (nunca `0`) con los colectores OFF es exactamente lo correcto, y los 3 tests que lo fijan están bien planteados. **Pero la aritmética de claves está declarada de tres formas distintas: ver E5.** |
+
+### Lo que introdujo el v3 (los defectos nuevos, todos medidos)
+
+| ID | Sev | Qué está mal en v3 | Evidencia de haberlo CORRIDO | Fix en v4 |
+|---|---|---|---|---|
+| **E1** | **IMP** | **La segunda afirmación de A3 —la adición estrella del v3— es FALSA, y con ella el test estrella nace ROJO.** A3 dice: *"se asegura que el item de la ejecución `error` … mientras el item de la `completed` **sí puede ser `exito`**"*. Pero A3 solo siembra evidencia (`una fila ok en agent_html_publish`) para la ejecución **`error`**. La `completed` del mismo ticket queda **sin ninguna señal**, y con los colectores reales eso da `publicado=False`, `cambio_en_repo=False`, `gate=None`, `verificacion=None`, `entregable=False` ⇒ **`strength=0`**, muy por debajo de `UMBRAL_ENTREGA=2`. Un modelo menor que escriba el assert que la frase sugiere (`level == "exito"`) obtiene un test **ROJO** en el gate más importante del plan. | Corrido con el módulo F0 literal: la ejecución `completed` sin evidencia sembrada da **`level='advertencia'`, `cause='evidencia_indeterminada'`, `strength=0`**. `exito` es **inalcanzable** con los datos que A3 siembra. | A3 pasa a sembrar **DOS** filas en `agent_html_publish` (una por ejecución) y el test asserta el **contraste exacto**: la `error` → `advertencia`/`falso_rojo_probable`; la `completed` → `exito`/`cierre_limpio_con_entrega`. Así el test prueba lo que la adición promete (que el run manda) en vez de una frase con "puede". |
+| **E2** | **IMP** | **El gate que el DoD llama "EL GATE MÁS IMPORTANTE DEL PLAN" no atrapa 2 de las 3 formas de reintroducir el bug — incluida la que el propio v3 cita textualmente.** El DoD exige `grep -rn 'stacky_status", None) or ex.status' backend/api/` = 0 hits. Ese literal tiene **espacios después de las comas**, así que matchea la variante de F2 pero **NO** la de F5, que el propio v3 transcribe en D1 **sin espacios**: `getattr(by_tid.get(tid),"stacky_status",None) or ex.status or ""`. Tampoco atrapa la reescritura más natural, por atributo: `ticket.stacky_status or ex.status`. Es **exactamente el defecto D6** (`verdictTone` vs `verdictChipTone`) reintroducido en el gate de máxima criticidad. | Probado con 3 archivos sonda en `sonda/api/`: gate del DoD → `v2_f2_variant.py` **1 hit**, `v2_f5_variant.py` **0 hits (IMPUNE)**, `v2_attr_variant.py` **0 hits (IMPUNE)**. | El gate negativo frágil se **reemplaza por un gate POSITIVO** (que no depende de adivinar la ortografía del pecado): los dos call-sites deben pasar `run_status=` explícito. Más un centinela negativo robusto con `grep -rEn` insensible a espacios. Y el fondo del problema se ataca con la **[ADICIÓN ARQUITECTO A4]**: los centinelas del DoD se auto-testean. |
+| **E3** | **IMP** | **D4 no cerró: su fix repite el error que arregla.** D4 movió el corte de scope del 270 (ocupado) al **272** "primer número libre verificado". Pero el **272 está reservado por escrito por los DOS vecinos**, para dos ejes distintos, y uno de ellos **prohíbe explícitamente hardcodearlo**. Asignarle F6+F8 al 272 desde este documento es la misma colisión que forzó el renumerado 267→269, un nivel más arriba. | `grep -n "272"` sobre los vecinos: **plan 271 línea 6** — *"El **272** queda reservado para 'un solo escritor de estado' (§6.1)"*, y lo referencia 10 veces más como dueño de esa migración. **Plan 270 línea 1517** — *"**plan 272 sugerido**"* para la reconciliación masiva Stacky→tracker. **Plan 270 línea 1520**, textual: *"**No hardcodear 272/273 desde este documento**"*. | El corte **no lleva número hardcodeado**. Se escribe la regla operativa (relistar en frío, tomar el primer libre real, y **saltar el 272** porque está doblemente reservado), que es la única forma que no caduca. |
+| **E4** | **IMP** | **El anclaje por símbolo de §0 devuelve DOS hits en el único lugar donde confundirse escribe en el ADO REAL del operador.** §0 manda correr `grep -n "def set_stacky_status" api/tickets.py` y *"usar la línea que devuelva"*. Ese patrón es **prefijo** de `set_stacky_status_by_ado`, así que devuelve **2** líneas: `:1166` (el endpoint PERMITIDO, que no publica) y `:1205` (el **PROHIBIDO**, que publica en ADO y cambia el work item). Un modelo menor recibe una respuesta ambigua justo en el riesgo R5, que el plan blinda en tres lugares… y después se lo desarma solo con este grep. | Corrido: `grep -c "def set_stacky_status" api/tickets.py` = **2**; `grep -c "def set_stacky_status("` (con paréntesis) = **1** → `:1166`. | El grep de §0 pasa a llevar el paréntesis de apertura: `grep -n "def set_stacky_status(" api/tickets.py`. Se agrega la advertencia de por qué. |
+| **E5** | MEN | **`count_by_level` declara su contrato con TRES conteos de claves distintos.** El JSON de D5 tiene **7** claves; la línea siguiente dice *"Declarando siempre las **6** claves"*; el test se llama `test_count_by_level_declara_las_6_claves_siempre` con la lista *"(`days`, `limit`, `sampled`, y los 3 niveles)"* = 6 (sin `falso_rojo_probable`); y el pie de F8 dice *"devuelve las **4** claves en 0"*. Si el test se implementa por igualdad de conjuntos contra 6, es **ROJO** (hay 7). | Contado sobre el JSON literal del doc: `len({days, limit, sampled, exito, advertencia, error_real, falso_rojo_probable})` = **7**. | Se congela en **7** en los tres lugares y el test se renombra a `test_count_by_level_declara_las_7_claves_siempre`, con la lista explícita. |
+| **E6** | MEN | **La grilla de `test_I1b` está declarada más chica que la real y no es reproducible.** Dice *"× los **6** `outcome_reason` = 10.206 casos"*, pero `OUTCOME_REASONS` tiene **9** entradas y no existe ningún subconjunto de 6 nombrado. El test hermano (`test_todo_nivel_pertenece_al_vocabulario`) usa correctamente *"los 9 + None"*: el doc se contradice. | Corrido: `len(OUTCOME_REASONS)` = **9** (`clean_exit, dirty_exit_after_work, quota_exhausted, stall_after_work, stall_no_work, preflight_blocked, reaper_timeout, reaper_heartbeat, cli_failure`). Grilla honesta = 243 × 7 × **10** = **17.010**, corrida acá con **0 violaciones**. | La grilla pasa a **17.010** (9 reasons + `None`) en el test y en P1/R1/R19. Un número más grande y, sobre todo, **reproducible**. |
+| **E7** | MEN | **§3.2 sigue afirmando los 3 valores que D2 desmintió.** La tabla de evidencia dice `status ∈ ok/skipped/failed (:144)` — que es exactamente el **comentario obsoleto de la columna**, la fuente que D2 declara no confiable. La sección que un modelo menor lee para entender el modelo de datos contradice a F1. | `services/ado_publisher.py:144` → `status: Mapped[str] = mapped_column(String(20), nullable=False)  # ok \| skipped \| failed`. El comentario MIENTE: falta `idempotent_replay`. | §3.2 corregida a los **4** valores, con la advertencia de que el comentario de la columna está desactualizado. |
+| **E8** | MEN | **El anclaje de fixtures de A3 es falso.** A3 dice reusar *"el patrón de fixtures que ya usan `test_plan254_falso_rojo.py` y `test_plan238_incident_inbox_api.py`"*, pero **ninguno de los dos siembra `agent_html_publish`** — y A3 lo necesita. | `grep -rln "AgentHtmlPublish" tests/` → `test_publish_ledger.py`, `test_agent_completion_gateway.py`, `test_output_watcher.py`, `test_rescue_execution.py`, `test_plan_creacion_tareas_fase0_fase1.py`. En `test_plan254_falso_rojo.py`: **0 hits**. | Se ancla en el helper REAL, `tests/test_publish_ledger.py:47-54`, y se listan las **7 columnas NOT NULL** que hay que sembrar. **Verificado además que no hay riesgo de tabla ausente:** `AgentHtmlPublish` está registrada en `init_db` (`db.py:239`), así que `create_all` la crea. |
+| **E9** | MEN | El módulo F0 importa `field` de `dataclasses` y **nunca lo usa** (F401). | Leído el cuerpo entero del módulo: 0 usos de `field`. | Import reducido a `dataclass`. |
+| **A4** | — | **[ADICIÓN ARQUITECTO] Los centinelas del DoD se auto-testean.** Ver F7. | — | — |
+
+### Lo que esta pasada CONFIRMÓ como correcto (además de D1/D2/D3/D5)
+
+- **D7 exacto, regrepeado:** los `<th data-col>` están en **526, 531, 536, 541, 546 (`estado`), 551, 556, 561, 566, 571**, `<thead>` en **507** y `</thead>` en **579**. El remapeo del v3 es correcto línea por línea; el rango `:526-576` y la posición del `<th>` nuevo (entre `estado` y `duracion`) son válidos.
+- **D13 exacto:** `api/incident_inbox.py` usa `from config import config as _cfg` + `getattr(_cfg, ...)` en `_enabled()` y `_actions_enabled()`, con el comentario-gotcha literal en `:14-15`. El patrón que el v3 eligió para `_inbox_verdict_enabled()` es el que ya vive en el archivo. Correcto.
+- **D6 cerrado:** el gate de K3 ya grepea `verdictChipTone`, que es el símbolo que F3/F4 crean.
+- **D11 exacto:** `ExecutionHistoryItem` tiene **20** campos (`endpoints.ts:1303-1324`) y **no** trae `verdict`; `AgentHistoryPage.tsx` vive en `components/`; el literal de `IncidentInboxPage.tsx:488` es `<div key={item.id} className={styles.row}>`.
+- **`StatusChip` acepta `title`** (`StatusChipProps.title?: string`, `StatusChip.tsx:13`) y su `StatusTone` es `success|warning|danger|info|neutral`: el puente `verdictChipTone` devuelve un subconjunto ⇒ **compila**.
+- **F2 punto 1 encaja literal:** `list_executions()` tiene las variables `rows`, `payload` y `dirty`, y su return es exactamente `return jsonify([_with_outcome(d, dirty) for d in payload])`. El diff del plan aplica tal cual.
+- **La receta de flag apunta bien:** `_CURATED_DEFAULTS_ON` se declara en `test_harness_flags.py:467` (**247** keys contadas) y el assert de `:985` es **por igualdad de conjuntos** (`known_keys == _CURATED_DEFAULTS_ON`), así que agregar las 5 keys es necesario **y** suficiente. El default ON de las 5 no es hallazgo: es la directiva vigente.
+- **Las 9 causas del veredicto son TODAS alcanzables** (barrido completo: 9/9, cero causas muertas) y `set(_STATUS_TO_BASE) | _NO_TERMINALES == VALID_TICKET_STATUSES` (los 6 estados reales) ⇒ `test_no_agrega_estados_al_vocabulario` **cuadra**.
 
 ---
 
@@ -117,8 +175,8 @@ La metodología que encontró estos 5: **no se releyó el plan, se ejecutó.** S
 
 **Lo que la crítica CONFIRMÓ como correcto en v1 (no se toca):** la aritmética de tests de las 9 fases (contadas fila por fila: 15/12/6/11+2/6/5+6/8/15+3 — todas cuadraban); la elección del endpoint HITL (`PATCH /api/tickets/<ticket_id>/stacky-status`, `api/tickets.py:1165`, **verificado**: llama `ts.set_status` y **no** publica; el `by-ado` de `:1204` **sí** publica en `:1406` y **sí** cambia el work item en `:1495`) — por lo tanto **`STACKY_RUN_RECONCILIATION_HITL_ENABLED` default ON queda APROBADO**, no cae en la excepción (B); la regla de no declarar `requires=` (`test_harness_flags_requires.py:316` solo compara specs con `requires` truthy); los topes 200/240/240 (`test_harness_flags_help.py:47-50`); el nombre de la variable del array en cada script (`HARNESS_TEST_FILES` en el `.sh:20`, `$HarnessTestFiles` en el `.ps1:13` — v1 nunca la nombró mal); los anclajes de `agent_runner.py:1029/1055/1082` y los 0 hits de `final_status` en `copilot_bridge.py`; y que los invariantes I1 e I2 **sí** se cumplen con el código escrito (I1 estructuralmente: la única regla que produce `exito` es inalcanzable desde base `error_real`).
 
-**Corte recomendado (scope) — CORREGIDO en v3 (D4):** 9 fases / 6 archivos de test backend / 2 frontend / 5 flags / 3 `.tsx` es grande. Si hay que partirlo: **269 = F0..F5 + F7** (el veredicto y su superficie) y **272 = F6 + F8** (HITL de reconciliación y calibración). El corte es limpio porque F6 no depende de F0-F5.
-> ⚠ **v2 decía "270 = F6 + F8". Eso era una COLISIÓN:** el 270 y el 271 son planes reales y distintos, vivos sobre este mismo subsistema (§0). El primer número libre verificado el 2026-07-28 es el **272**. Es el mismo error que ya obligó a renumerar este plan de 267 a 269: **antes de escribir un número, `ls "Stacky Agents/docs/"`.**
+**Corte recomendado (scope) — CORREGIDO otra vez en v4 (E3):** 9 fases / 6 archivos de test backend / 2 frontend / 5 flags / 3 `.tsx` es grande. Si hay que partirlo: **269 = F0..F5 + F7** (el veredicto y su superficie) y **`<primer número libre real>` = F6 + F8** (HITL de reconciliación y calibración). El corte es limpio porque F6 no depende de F0-F5.
+> ⚠ **Historia de esta línea, porque se equivocó DOS veces:** el v2 decía "270 = F6 + F8" (270 ocupado). El v3 lo "arregló" diciendo **272** — que está **reservado por escrito** por el 271 (§6.1, *"un solo escritor de estado"*) **y** por el 270 (reconciliación masiva), y que el propio 270 **prohíbe hardcodear**. **La tercera versión no escribe ningún número:** se aplica el procedimiento de §0 (relistar en frío + grepear reservas por texto + saltar el 272). **Antes de escribir un número de plan, `ls "Stacky Agents/docs/"` Y `grep -rn "plan 27[0-9]"`.**
 > **Numeración:** este plan nació como **267** y se **renumeró a 269** por colisión con una sesión paralela viva sobre el mismo árbol. Secuencia real verificada tras el renumerado: `267_PLAN_CATALOGO_UNICO_DE_ACCIONES_DEVOPS_...md` (sesión paralela, que a su vez renumeró de 266 a 267 en `07e3eae7`/`fc29e7cb`) y `268_PLAN_EXPLORADOR_DEL_GRAFO_DOCUMENTAL_...md` (`00704dee`). **269 es el primer número libre.** Todos los identificadores internos del plan (los 6 `test_plan269_*.py` y `plan269RunVerdict.test.ts`) se renumeraron junto con el archivo.
 
 ---
@@ -198,7 +256,7 @@ Toda ruta es relativa a `Stacky Agents/`. Todo símbolo fue abierto y leído.
 | Señal | Fuente verificada | Anclaje |
 |---|---|---|
 | `entregable_presente` | Columna `AgentExecution.html_output_path` (String 500) y columna `AgentExecution.output` (Text) | `backend/models.py:272` y `backend/models.py:258` |
-| `publicado_en_tracker` | Tabla `agent_html_publish`, modelo `AgentHtmlPublish` con `execution_id` (`:135`), `status` ∈ `ok/skipped/failed` (`:144`) y `comment_id` (`:153`) | `backend/services/ado_publisher.py:122-184` (la clase va hasta `:184`; las columnas terminan en `:154`) |
+| `publicado_en_tracker` | Tabla `agent_html_publish`, modelo `AgentHtmlPublish` con `execution_id` (`:135`), `status` (`:144`) y `comment_id` (`:153`). ⚠ **v4 (E7): `status` tiene CUATRO valores — `ok`, `failed`, `skipped` e `idempotent_replay` — y el comentario de la columna en `:144` (`# ok \| skipped \| failed`) está DESACTUALIZADO.** No creerle al comentario: el censo de los literales que el escritor produce está en F1 (D2). Escritor **único** en todo `backend/`: `:889`. | `backend/services/ado_publisher.py:122-184` (la clase va hasta `:184`; las columnas terminan en `:154`) |
 | `cambio_en_repo` | Sidecar JSON por ejecución; campos escritos por `mark_intent(...)`: `pr_id, pr_url, branch, status, error, files_committed, origin`. **(C7/C14 v2)** La ruta se arma en `_intent_dir()` (`:192-196`) + `_intent_path()` (`:199-200`) = `data_dir()/incident_dev_pr/{execution_id}.json`. **NO se usa `get_intent()`**: `_intent_dir()` hace `mkdir(parents=True, exist_ok=True)` y eso **crea un directorio**, violando el riel P4. F1 lee el archivo directo. | `backend/services/incident_dev_pr.py:192-196`, `:199-200`, `:223-228` (escritor) |
 | `gate_aceptacion_ok` | Columna `AgentExecution.contract_result_json` + property `contract_result` | `backend/models.py:261` y `backend/models.py:309` |
 | `verificacion_ok` | **HECHO, ya no hipótesis (C5 v2).** Clave `metadata["exec_verification"]`, campo **`passed`** (`bool \| None`). Lo produce `VerificationReport.to_metadata()` en `backend/services/exec_verification.py:79-96`; el campo se declara en `:70` con el comentario literal *"None = no hay nada que verificar / could-not-verify"*. **NO es `ok`.** | Productor: `services/exec_verification.py:70,81`. Consumidores que lo confirman: `api/exec_verification.py:43`, `harness/post_run.py:189-191`, `services/harness_health.py:848`, `tests/test_exec_verification.py:330-331`. Lectura desde el modelo: `backend/models.py:301` (`metadata_dict`) |
@@ -303,7 +361,7 @@ Toda flag nueva se da de alta en **5 lugares de código + 2 archivos de arnés**
 
 ## 4. Principios y guardarraíles
 
-- **P1 — Prohibido crear un falso VERDE nuevo.** Invariante `I1`, codificado en test: para **toda** combinación de evidencia, si el estado terminal del run es `error`, el nivel del veredicto **nunca** es `exito`. **(v3, D1) Y se prueba en la SUPERFICIE, no solo en el módulo:** el veredicto se ancla en `run_status`; el `stacky_status` del ticket es una señal secundaria que solo puede **empeorar** el nivel. Un ticket verde **jamás** blanquea un run rojo. Verificado corriendo sobre 10.206 combinaciones (0 violaciones) y con un test de borde contra los dos endpoints (A3). El techo al que puede subir un rojo es `advertencia` ("probable falso rojo, revisalo"). Esto es la lección C6 del 254 llevada a código ejecutable.
+- **P1 — Prohibido crear un falso VERDE nuevo.** Invariante `I1`, codificado en test: para **toda** combinación de evidencia, si el estado terminal del run es `error`, el nivel del veredicto **nunca** es `exito`. **(v3, D1) Y se prueba en la SUPERFICIE, no solo en el módulo:** el veredicto se ancla en `run_status`; el `stacky_status` del ticket es una señal secundaria que solo puede **empeorar** el nivel. Un ticket verde **jamás** blanquea un run rojo. Verificado corriendo sobre la grilla completa de **17.010** combinaciones (**0** violaciones) más **68.040** casos de monotonicidad (el ticket mejoró el nivel en **0**), y con un test de borde contra los dos endpoints (A3). El techo al que puede subir un rojo es `advertencia` ("probable falso rojo, revisalo"). Esto es la lección C6 del 254 llevada a código ejecutable.
 - **P2 — La ignorancia nunca mejora el veredicto.** Invariante `I2`, codificado en test: una señal `None` (desconocida) produce un nivel **igual o peor** que la misma señal en `False`. Nunca mejor. Si una fuente no está disponible, el veredicto degrada; jamás fabrica confianza.
 - **P3 — Lectura, no cierre.** El veredicto se computa **en tiempo de lectura del payload**, no en el sitio de cierre. Consecuencias: (a) paridad de los 3 runtimes gratis, porque los tres escriben `AgentExecution` y de ahí lee el veredicto; (b) cero riesgo de regresión sobre el cierre que 254 acaba de estabilizar; (c) backward-compatible por construcción — nada existente cambia de forma.
 - **P4 — Solo lectura absoluta en los colectores.** Ningún colector escribe, crea, mueve ni borra. Todos tienen tope de tiempo y degradan a `None`. Un colector que falla **jamás** rompe el listado.
@@ -346,7 +404,7 @@ es un estado nuevo y NUNCA cambia uno.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass          # v4 (E9): `field` NO se usa — importarlo es F401
 
 # Los 3 niveles, de mejor a peor. Cerrado: no se agregan niveles.
 VERDICT_LEVELS = ("exito", "advertencia", "error_real")
@@ -592,7 +650,7 @@ def evaluate_verdict(
 
 > **Cambio de contrato v2 → v3 (D1), EL MÁS IMPORTANTE DE ESTE PLAN:** la firma pasa de `evaluate_verdict(ticket_status=..., ...)` a **`evaluate_verdict(run_status=..., ticket_status=..., ...)`**, donde **`run_status` es obligatorio** y `ticket_status` es opcional y **solo puede empeorar**. Todo call-site pasa `run_status=ex.status` y, si lo tiene a mano sin costo, `ticket_status=<stacky_status del ticket>`. **Está PROHIBIDO el patrón de v2** `estado = (ticket.stacky_status or ex.status)`: colapsaba las dos dimensiones en una y dejaba que un ticket verde blanqueara un run rojo.
 >
-> **Verificado corriendo, no razonado:** con la firma v3, sobre **10.206** combinaciones (`run_status="error"` × los 7 `ticket_status` posibles × las 243 combinaciones de evidencia × los 6 `outcome_reason`), las violaciones de I1 son **0**. El caso concreto que rompía v2 —`run=error` + `ticket=completed` + `publicado_en_tracker=True`— ahora devuelve **`advertencia` / `falso_rojo_probable`**, que es exactamente el resultado que este plan existe para producir.
+> **Verificado corriendo, no razonado (números de la 2ª pasada, v4 E6):** con la firma v3/v4, sobre la grilla **COMPLETA** de **17.010** combinaciones (`run_status="error"` × los **7** `ticket_status` posibles × las **243** combinaciones de evidencia × los **9 `OUTCOME_REASONS` + `None`**), las violaciones de I1 son **0**. La monotonicidad del ticket se barrió aparte: **68.040** casos, el ticket **mejoró el nivel en 0**. Los no terminales (`idle`, `running`, `""`, `"   "`) devolvieron `None` en el 100%. El caso concreto que rompía v2 —`run=error` + `ticket=completed` + `publicado_en_tracker=True`— devuelve **`advertencia` / `falso_rojo_probable`**, que es exactamente el resultado que este plan existe para producir. *(El v3 declaraba 10.206 usando 6 reasons; el número real y reproducible es 17.010.)*
 
 > **Nota de diseño para el implementador (actualizada en v2):** la regla 6 (`base == "advertencia"`) ahora captura **solo `needs_review`**, porque `cancelled` sale antes por la regla 5 (C8). Si el `outcome_reason` era `dirty_exit_after_work` o `stall_after_work`, el 254 ya mapeó el estado a `needs_review` (`services/run_outcome.py:36,38`), así que llegan acá y reciben `cierre_sucio_pendiente_de_revision`. **No** hay que replicar esa lógica.
 
@@ -602,7 +660,7 @@ def evaluate_verdict(
 |---|---|
 | `test_todo_nivel_pertenece_al_vocabulario` | Barre `itertools.product` sobre `(True, False, None)^5` × los 4 estados de `_STATUS_TO_BASE` + `"basura"` × los 9 `OUTCOME_REASONS` + `None`; asegura `v is not None`, `v.level in VERDICT_LEVELS` y `v.cause in VERDICT_CAUSES` **siempre**. Nunca `KeyError`. (v2: la grilla excluye `idle`/`running`, que tienen su test propio.) |
 | `test_I1_un_error_jamas_recibe_exito` | **INVARIANTE DURO.** Sobre la misma grilla, con `run_status="error"`, asegura `v.level != "exito"` en el 100% de los casos. |
-| `test_I1b_el_ticket_completed_no_blanquea_un_run_error` | **v3 D1 — EL TEST QUE FALTABA, y el que hundió a v2.** Barre `run_status="error"` × **los 7 `ticket_status` posibles** (los 6 de `VALID_TICKET_STATUSES` + `"basura"`) × las 243 combinaciones de evidencia × los 6 `outcome_reason` = **10.206 casos**, y asegura `v.level != "exito"` en todos. El caso testigo explícito: `run_status="error", ticket_status="completed", publicado_en_tracker=True` → `cause == "falso_rojo_probable"`, `level == "advertencia"`. **Con la firma de v2 este test es ROJO** — es su razón de existir. |
+| `test_I1b_el_ticket_completed_no_blanquea_un_run_error` | **v3 D1 — EL TEST QUE FALTABA, y el que hundió a v2. Grilla corregida en v4 (E6).** Barre `run_status="error"` × **los 7 `ticket_status` posibles** (los 6 de `VALID_TICKET_STATUSES` + `"basura"`) × las **243** combinaciones de evidencia × **los 9 `OUTCOME_REASONS` + `None` = 10** ⇒ **17.010 casos**, y asegura `v.level != "exito"` en todos. *(El v3 decía "los 6 `outcome_reason` = 10.206". `OUTCOME_REASONS` tiene **9** entradas y no hay ningún subconjunto de 6 nombrado en el repo: el número no era reproducible. El test hermano `test_todo_nivel_pertenece_al_vocabulario` ya usaba bien "los 9 + None".)* El caso testigo explícito: `run_status="error", ticket_status="completed", publicado_en_tracker=True` → `cause == "falso_rojo_probable"`, `level == "advertencia"`. **Con la firma de v2 este test es ROJO** — es su razón de existir. **Medido en la crítica v4 sobre la grilla de 17.010: 0 violaciones.** |
 | `test_el_ticket_solo_empeora_nunca_mejora` | **v3 D1.** Para cada `run_status` terminal, cada `ticket_status` y cada combinación de evidencia, el nivel con `ticket_status` debe ser **igual o peor** que sin él. El ticket nunca mejora el veredicto. |
 | `test_I2_desconocido_nunca_mejora` | Para cada señal `s` y cada estado base, compara `evaluate_verdict(signals=... s=None ...)` contra `... s=False ...`: el índice del nivel en `VERDICT_LEVELS` con `None` debe ser **≥** (igual o peor) que con `False`. |
 | `test_falso_rojo_probable_con_publicacion` | `run_status="error"`, `publicado_en_tracker=True` → `cause == "falso_rojo_probable"`, `level == "advertencia"`, `strength == 2`. |
@@ -1001,7 +1059,7 @@ def _with_verdict(d: dict, verdicts: dict[int, dict]) -> dict:
 | `test_colector_que_lanza_no_rompe_ninguno_de_los_dos` | `collect_for_executions` monkeypatcheado a lanzar → **ambos** endpoints siguen dando 200, y las claves del 254 (`outcome_reason`, `outcome_actionable`) siguen presentes en `/api/executions`. |
 | `test_no_pisa_claves_del_254` | `outcome_reason` y `outcome_actionable` conservan exactamente el mismo valor con la flag del 269 en ON y en OFF. |
 | `test_run_en_curso_no_trae_veredicto` | **v2 C9.** Una ejecución con `ex.status = "running"` → `"run_verdict" not in item`, en **ambos** endpoints. |
-| `test_ticket_completed_no_blanquea_un_run_error` | **[ADICIÓN ARQUITECTO A3] — v3 D1. EL GATE DEL FALSO VERDE, EN EL BORDE.** Se siembra en la base un `Ticket` con `stacky_status="completed"` y **dos** `AgentExecution` bajo él: una `completed` y otra `error` con una fila `ok` en `agent_html_publish`. Se piden **los dos** endpoints (`GET /api/executions` y `GET /api/executions/history`) y se asegura que el item de la ejecución **`error`** tiene `run_verdict["level"] != "exito"` y `run_verdict["cause"] == "falso_rojo_probable"`, mientras el item de la `completed` sí puede ser `exito`. **Con el cableado de v2 este test es ROJO.** Ver el bloque A3 abajo. |
+| `test_ticket_completed_no_blanquea_un_run_error` | **[ADICIÓN ARQUITECTO A3] — v3 D1, corregido en v4 (E1). EL GATE DEL FALSO VERDE, EN EL BORDE.** Se siembra un `Ticket` con `stacky_status="completed"` y **dos** `AgentExecution` bajo él, **CADA UNA con su propia fila `ok` en `agent_html_publish`** (dos filas, no una — ver E1): la ejecución **A** con `status="completed"` y la **B** con `status="error"`. Se piden **los dos** endpoints (`GET /api/executions` y `GET /api/executions/history`) y se asertan **los dos lados del contraste**, que es lo que prueba que el run manda: el item de **B** (`error`) → `run_verdict["level"] == "advertencia"` y `run_verdict["cause"] == "falso_rojo_probable"`; el item de **A** (`completed`) → `run_verdict["level"] == "exito"` y `cause == "cierre_limpio_con_entrega"`. **Con el cableado de v2 este test es ROJO** (B daría `exito`). Ver el bloque A3 abajo. |
 | `test_sin_n_mas_uno` | Se cuenta el **delta** de queries entre la flag ON y la flag OFF sobre el MISMO lote, con 3 y con 30 ejecuciones. El delta debe ser **el mismo número** en los dos casos (no crece con el tamaño del lote). Se mide el delta y no el absoluto para no cargarle a este plan el lazy-load preexistente de `executions_history` (`:534`). |
 
 **Comando de aceptación (BINARIO):**
@@ -1019,7 +1077,23 @@ cd "Stacky Agents/backend"
 
 **Qué se agrega — un solo test, cero archivos nuevos, cero flags:** `test_ticket_completed_no_blanquea_un_run_error` en `test_plan269_executions_payload.py` (el archivo que F2 ya crea). Recorre **el camino completo**: base sembrada → handler → JSON. Cubre **los dos** endpoints, porque son dos armados de payload distintos (C2) y el invariante tiene que valer en los dos.
 
-**Por qué sale gratis y respeta todos los rieles:** no agrega archivo (va en uno que F2 ya registra en el arnés), no agrega flag, no agrega dependencia, no corre en producción, no toca los 3 runtimes (es un test de backend), y reusa el patrón de fixtures que ya usan `test_plan254_falso_rojo.py` y `test_plan238_incident_inbox_api.py` — **los dos verificados verdes** en este árbol (9 passed y 12 passed respectivamente).
+> ⚠ **v4 (E1) — EL TEST DEL v3 NACÍA ROJO. Lo que hay que sembrar, exacto.**
+> El v3 sembraba **una sola** fila `ok` en `agent_html_publish` (para la ejecución `error`) y después afirmaba que *"el item de la `completed` sí puede ser `exito`"*. **No puede.** Medido con el módulo F0 literal: una ejecución `completed` **sin evidencia sembrada** recibe de los colectores `publicado=False, cambio_en_repo=False, gate=None, verificacion=None, entregable=False` ⇒ **`strength = 0`**, contra `UMBRAL_ENTREGA = 2` ⇒ el veredicto es **`advertencia` / `evidencia_indeterminada`**, no `exito`. Un modelo menor que escriba el assert que la frase sugiere obtiene un **ROJO en el gate más importante del plan**, y va a "arreglarlo" bajando el assert — perdiendo justo la mitad que demuestra el contraste.
+>
+> **Siembra correcta: DOS filas `ok`, una por ejecución.** Así el único factor que difiere entre A y B es `AgentExecution.status`, que es **exactamente** la variable que el test quiere aislar. Con evidencia idéntica y ticket idéntico, si B sale `error_real`/`advertencia` y A sale `exito`, queda probado que **el nivel lo manda el run** y que el `stacky_status="completed"` del ticket **no blanqueó** a B.
+>
+> **Helper de siembra — el anclaje REAL (v4, E8).** El v3 decía reusar *"el patrón de fixtures de `test_plan254_falso_rojo.py`"*, pero ese archivo tiene **0 ocurrencias** de `AgentHtmlPublish`. El helper que sí existe y que hay que copiar es `_add_html_publish` en **`backend/tests/test_publish_ledger.py:47-54`**:
+> ```python
+> from services.ado_publisher import AgentHtmlPublish
+> with session_scope() as s:
+>     s.add(AgentHtmlPublish(
+>         execution_id=exec_id, ticket_id=1, ado_id=ado_id, html_path="x",
+>         html_sha256=f"sha{exec_id}", status=status, triggered_by="test",
+>     ))
+> ```
+> Esas **7** columnas son las `nullable=False` del modelo (`services/ado_publisher.py:134-149`): omitir cualquiera es un `IntegrityError`. **No hay riesgo de tabla ausente:** `AgentHtmlPublish` está registrada en `init_db` (`db.py:239`), así que `Base.metadata.create_all` la crea como cualquier otra. El mismo helper sirve para `test_publicado_cuenta_idempotent_replay` (D2), porque ya recibe `status` como parámetro.
+
+**Por qué sale gratis y respeta todos los rieles:** no agrega archivo (va en uno que F2 ya registra en el arnés), no agrega flag, no agrega dependencia, no corre en producción, no toca los 3 runtimes (es un test de backend), y reusa el patrón de fixtures de `test_plan254_falso_rojo.py` / `test_plan238_incident_inbox_api.py` para el `Ticket` + `AgentExecution` (**los dos verificados verdes** en este árbol: 9 passed y 12 passed) y el de `test_publish_ledger.py:47-54` para las filas de `agent_html_publish`.
 
 **Comando de aceptación (BINARIO):**
 ```
@@ -1711,6 +1785,84 @@ tests/test_plan269_flags.py
 | `test_las_5_estan_en_config` | `hasattr(config.config, key)` y el valor por defecto es `True`. |
 | `test_ninguna_declara_requires` | `getattr(spec, "requires", None)` es falsy para las 5 (así `_REQUIRES_MAP_FROZEN` no cambia). |
 | `test_los_6_tests_estan_en_los_dos_scripts` | Lee `scripts/run_harness_tests.sh` y `scripts/run_harness_tests.ps1` como texto y asegura que cada uno de los 6 nombres de archivo aparece en **ambos**. |
+| `test_los_centinelas_del_dod_si_pueden_disparar` | **[ADICIÓN ARQUITECTO A4].** Ver abajo. |
+
+#### [ADICIÓN ARQUITECTO A4] — Los centinelas del DoD se auto-testean
+
+**El agujero que tapa, con nombre, apellido y reincidencia.** Este plan defiende sus invariantes con **~20 gates de `grep`** en el DoD. Los gates de `grep` de este documento **ya fallaron dos veces, en dos versiones distintas, cada una encontrada por una pasada de juez diferente**:
+
+| Versión | Gate roto | Por qué no disparaba | Quién lo encontró |
+|---|---|---|---|
+| v2 | `grep -c "verdictTone"` (KPI K3) | El símbolo real es `verdictChipTone`, y `"verdictTone"` **no** es substring de `"verdictChipTone"` | juez v2→v3 (**D6**) |
+| v3 | `grep -rn 'stacky_status", None) or ex.status'` (**"el gate más importante del plan"**) | El literal lleva **espacios** tras las comas; la variante de F5 —que el propio v3 transcribe— **no** los tiene. 1 de 3 reintroducciones atrapada | juez v3→v4 (**E2**) |
+| v3 | `grep -n "def set_stacky_status"` (anclaje §0) | Es **prefijo** de `set_stacky_status_by_ado` ⇒ **2 hits**, y el hit equivocado publica en el ADO real | juez v3→v4 (**E4**) |
+
+Un gate que no puede disparar es **peor que no tener gate**: da confianza falsa y ocupa el lugar del test que sí haría falta. Y el patrón es sistemático, no mala suerte: **nadie prueba los centinelas.** Se escriben mirando el código correcto y se asume que atraparían al incorrecto.
+
+**La regla que queda escrita:**
+
+> **Un centinela textual no está terminado hasta que se lo corrió contra el pecado que dice prohibir.** Si el gate es negativo (*"esto NO debe aparecer"*), tiene que existir una sonda que lo haga disparar. Si no se puede construir esa sonda, el gate correcto es **positivo** (*"esto SÍ debe aparecer"*), que no depende de adivinar la ortografía del error.
+
+**Qué se agrega — un solo test, cero archivos nuevos, cero flags:** `test_los_centinelas_del_dod_si_pueden_disparar` en `test_plan269_flags.py` (archivo que F7 **ya** crea y **ya** registra en los 2 scripts del arnés). El test lleva una tabla de `(centinela, sondas_que_deben_matchear, sondas_que_NO_deben_matchear)` y verifica **las dos direcciones** con `re`, en memoria, sin tocar el disco ni el árbol:
+
+```python
+import re
+
+# (regex del centinela del DoD, sondas POSITIVAS, sondas NEGATIVAS)
+_CENTINELAS = [
+    (
+        # D1/E2 — el anti-patrón que colapsa run y ticket, en sus 3 ortografías.
+        r'stacky_status"? *,? *(None)?\)? *or *[a-z_]+\.status',
+        [
+            'estado = (getattr(ticket, "stacky_status", None) or ex.status or "")',
+            'estado = getattr(by_tid.get(tid),"stacky_status",None) or ex.status or ""',
+            'estado = ticket.stacky_status or ex.status or ""',
+        ],
+        [
+            'run_status=(ex.status or ""),',
+            'ticket_status=getattr(ticket, "stacky_status", None),',
+        ],
+    ),
+    (
+        # D6 — el chip del veredicto. El símbolo REAL es verdictChipTone.
+        r"verdictChipTone",
+        ["  const t = verdictChipTone(v.tone);"],
+        ["  const t = runStatusTone(item.status);"],
+    ),
+    (
+        # E4 — el endpoint PERMITIDO, sin arrastrar el prohibido `_by_ado`.
+        r"def set_stacky_status\(",
+        ["def set_stacky_status(ticket_id: int):"],
+        ["def set_stacky_status_by_ado(ado_id: int):"],
+    ),
+]
+
+
+def test_los_centinelas_del_dod_si_pueden_disparar():
+    """A4 — cada gate de grep del DoD se prueba en LAS DOS direcciones.
+
+    Un centinela que no matchea el pecado que prohíbe es confianza falsa: ya
+    pasó en v2 (D6) y dos veces en v3 (E2, E4). Este test lo hace imposible.
+    """
+    for patron, deben, no_deben in _CENTINELAS:
+        rx = re.compile(patron)
+        for s in deben:
+            assert rx.search(s), f"centinela {patron!r} NO atrapa el pecado: {s!r}"
+        for s in no_deben:
+            assert not rx.search(s), f"centinela {patron!r} da FALSO POSITIVO en: {s!r}"
+```
+
+**Verificado corriendo en la crítica v4, no propuesto a ciegas:** las 3 sondas positivas del primer centinela dan **3/3 match** con esa regex, y las 2 negativas dan **0/2** — medido con `grep -rEn` sobre archivos sonda reales antes de escribirlo acá.
+
+**Por qué sale gratis y respeta todos los rieles:** no agrega archivo (va en uno que F7 ya registra), no agrega flag, no agrega dependencia (`re` es stdlib), no toca los 3 runtimes (es un test de backend puro, sin DB ni disco), cero trabajo del operador, no corre en producción ni en ningún loop, y **reusa** el patrón de "validar texto con `re` en memoria" que el propio plan ya usa en `test_los_6_tests_estan_en_los_dos_scripts` y en `test_espejo_ts_no_tiene_drift` (A2). Cuando alguien agregue un gate nuevo al DoD, agrega su fila acá: el costo marginal es una línea.
+
+**Comando de aceptación (BINARIO):**
+```
+cd "Stacky Agents/backend"
+.venv\Scripts\python.exe -m pytest tests/test_plan269_flags.py::test_los_centinelas_del_dod_si_pueden_disparar -v
+```
+
+---
 
 **Comando de aceptación (BINARIO):**
 ```
@@ -1721,7 +1873,8 @@ cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags_requires.py -v
 .venv\Scripts\python.exe -m pytest tests/test_harness_flags_bounds.py -v
 ```
-**Criterio:** 8/8 verdes en el nuevo. En los otros 4: **cero fallos nuevos respecto a HEAD**.
+**Criterio:** **9/9** verdes en el nuevo (v3 declaraba 8; **v4 suma `test_los_centinelas_del_dod_si_pueden_disparar` (A4) → 9**). En los otros 4: **cero fallos nuevos respecto a HEAD**.
+> **Medido en la crítica v4:** el cuerpo de A4 tal como está escrito arriba se corrió con `.venv\Scripts\python.exe -m pytest` (py 3.13.5) y da **1 passed**. No es pseudocódigo.
 > **Gotcha conocido y cómo tratarlo:** `test_harness_flags_help.py` tiene fallos ajenos preexistentes en este árbol. **No se argumenta "ya estaba rojo": se prueba.** Antes de tocar nada, correr esos 4 archivos y guardar la salida; después de F7, comparar. Si aparece un fallo que menciona una key de este plan, es propio y hay que arreglarlo; si menciona otra key, es ajeno y se documenta con el diff de salidas.
 
 **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno (todas ON de fábrica).
@@ -1785,7 +1938,9 @@ Devuelve exactamente (**v3 D5**: 2 claves nuevas de honestidad, y `falso_rojo_pr
 {"days": 30, "limit": 200, "sampled": true,
  "exito": 0, "advertencia": 0, "error_real": 0, "falso_rojo_probable": null}
 ```
-Declarando **siempre** las 6 claves aunque valgan 0 (mismo criterio que `run_reconciliation.summarize()`, `services/run_reconciliation.py:223`: *"un contador que desaparece cuando vale cero no sirve para mirar una tendencia"*).
+Declarando **siempre** las **SIETE** claves aunque valgan 0 o `null` (mismo criterio que `run_reconciliation.summarize()`, `services/run_reconciliation.py:223`: *"un contador que desaparece cuando vale cero no sirve para mirar una tendencia"*).
+
+> ⚠ **v4 (E5) — el v3 declaraba este contrato con TRES conteos distintos y el test nacía ambiguo.** El JSON de arriba tiene **7** claves (`days`, `limit`, `sampled`, `exito`, `advertencia`, `error_real`, `falso_rojo_probable`), pero el v3 escribía *"las **6** claves"* acá, `test_count_by_level_declara_las_**6**_claves_siempre` en la tabla de tests (listando solo `days, limit, sampled` + los 3 niveles, es decir **sin** `falso_rojo_probable`) y *"devuelve las **4** claves en 0"* en el pie de F8. Un test implementado por igualdad de conjuntos contra 6 es **ROJO**. **El número congelado es 7**, en los tres lugares, y `falso_rojo_probable` **siempre** está presente (con valor `null` si los colectores están OFF — ése es justamente el punto de D5).
 
 **En `api/diag.py`,** justo antes de `result["ok"] = True` (`:1015`), agregar:
 ```python
@@ -1846,8 +2001,8 @@ Devuelve **siempre** las 3 claves, aunque valgan 0 (mismo criterio que `run_reco
 
 | Test | Qué prueba |
 |---|---|
-| `test_count_by_level_declara_las_6_claves_siempre` | Con base vacía devuelve las **6** claves (`days`, `limit`, `sampled`, y los 3 niveles), nunca un dict parcial. |
-| `test_count_by_level_nunca_lanza` | Con `session_scope` monkeypatcheado a lanzar → las 6 claves presentes, los 3 niveles en 0. |
+| `test_count_by_level_declara_las_7_claves_siempre` | **v4 E5 (el v3 decía 6 y el dict tiene 7 ⇒ test ROJO).** Con base vacía, `set(count_by_level()) == {"days", "limit", "sampled", "exito", "advertencia", "error_real", "falso_rojo_probable"}` — las **7**, por igualdad de conjuntos, nunca un dict parcial. `falso_rojo_probable` está presente **siempre** (puede valer `null`). |
+| `test_count_by_level_nunca_lanza` | Con `session_scope` monkeypatcheado a lanzar → **las 7 claves** presentes (v4 E5), los 3 niveles en 0 y `falso_rojo_probable` en `null` (no se pudo mirar). |
 | `test_count_by_level_no_escribe` | Sesión falsa cuyos `add/commit/flush` lanzan `AssertionError` → pasa. |
 | `test_count_by_level_usa_los_colectores` | **v3 D5.** `collect_for_executions` monkeypatcheado para devolver una señal fuerte sobre una ejecución `error` → `falso_rojo_probable == 1`. **Sin llamar a los colectores este test es ROJO** y demuestra que el KPI no es un cero estructural. |
 | `test_count_by_level_esta_acotado` | **v3 D5.** Con 500 ejecuciones sembradas y `limit=200`, la query materializa **≤ 200** filas y `collect_for_executions` recibe **≤ 200** objetos. El conteo no crece con la antigüedad del proyecto. |
@@ -1866,7 +2021,7 @@ cd "Stacky Agents/backend"
 .venv\Scripts\python.exe -c "from services.run_verdict import count_by_level, verdict_agreement; print(count_by_level(30)); print(verdict_agreement(30))"
 ```
 
-**Flag:** `STACKY_RUN_VERDICT_ENABLED` (la de F0). Con ella OFF, `count_by_level` devuelve las 4 claves en 0 y la card no muestra la línea.
+**Flag:** `STACKY_RUN_VERDICT_ENABLED` (la de F0). Con ella OFF, `count_by_level` devuelve **las 7 claves** con los 3 niveles en 0 y `falso_rojo_probable` en **`null`** (*v4 E5: el v3 decía "las 4 claves en 0" — eran 7, y `falso_rojo_probable` nunca se reporta como 0*), y la card no muestra la línea.
 **Impacto por runtime:** ninguno. **Trabajo del operador:** ninguno.
 
 ---
@@ -1875,7 +2030,7 @@ cd "Stacky Agents/backend"
 
 | # | Riesgo | Mitigación (concreta y verificable) |
 |---|---|---|
-| R1 | **Crear un falso VERDE nuevo** — el peor resultado posible; convertiría este plan en un retroceso. | Invariante `I1` codificado en `test_I1_un_error_jamas_recibe_exito`, que barre la grilla **completa** de combinaciones. Estructuralmente: la **regla 7** (única que produce `exito`; v2 decía "regla 6", número heredado de la numeración de v1 — **D8**) es inalcanzable desde `base == "error_real"`. **Y desde v3 (D1) `base` se ancla en `run_status`**, así que la garantía vale en TODO call-site, no solo adentro de la función: probado con **10.206** combinaciones, 0 violaciones. |
+| R1 | **Crear un falso VERDE nuevo** — el peor resultado posible; convertiría este plan en un retroceso. | Invariante `I1` codificado en `test_I1_un_error_jamas_recibe_exito`, que barre la grilla **completa** de combinaciones. Estructuralmente: la **regla 7** (única que produce `exito`; v2 decía "regla 6", número heredado de la numeración de v1 — **D8**) es inalcanzable desde `base == "error_real"`. **Y desde v3 (D1) `base` se ancla en `run_status`**, así que la garantía vale en TODO call-site, no solo adentro de la función: probado con **17.010** combinaciones (grilla completa, v4 E6), **0** violaciones. |
 | R2 | **La ignorancia se lee como éxito** — una fuente caída hace parecer que todo entregó. | Invariante `I2` codificado. `None` suma 0 en `delivery_strength` (igual que `False`) y, en la rama verde, dispara `evidencia_indeterminada` (advertencia). Nunca mejora el nivel. |
 | R3 | **Los colectores degradan la performance del listado** — lecturas de disco por fila. | `_Budget` es un presupuesto **TOTAL del lote** (`COLLECTOR_BUDGET_S = 2.0`), consultado antes de cada lectura; agotado ⇒ `None` y sigue. `publicado_en_tracker` es **1 query** para todo el lote. `test_publicado_en_una_sola_query` y `test_sin_n_mas_uno` lo prueban. La bandeja agrega **exactamente 1** query indexada (`ix_exec_ticket_started`, `models.py:278`), probado por `test_una_sola_query_extra`. |
 | R4 | **Se rompe el listado si un colector falla.** | Todo el bloque de veredicto está envuelto en `try/except Exception` que degrada a `{}` y loguea en `debug`. Probado por `test_colector_que_lanza_no_rompe_ninguno_de_los_dos` (F2; v2 lo nombraba mal - D9) y `test_excepcion_en_el_veredicto_no_rompe_la_bandeja` (F5). |
@@ -1886,7 +2041,10 @@ cd "Stacky Agents/backend"
 | R16 | **(v2, C3) Desalinear una tabla con columnas configurables.** | La columna se registra en `HISTORY_COLUMNS` y las dos celdas se guardan con `isColVisible`. Gate: el `grep` de `isColVisible(tablePrefs, "veredicto")` debe dar **exactamente 2**. |
 | R17 | **(v2, C4) Que el manejador de errores sea el que rompa.** Un `logger` inexistente convierte una degradación silenciosa en un 500. | F5 paso 1 declara el logger con gate de grep. Regla general para el implementador: **antes de escribir `logger.` en un módulo, verificá que ese módulo tenga logger.** |
 | R18 | **(v2, A1) Que la calibración se convierta en auto-tuneo.** Un número de acierto invita a "ajustar solo el umbral". | Riel duro en el docstring + `test_agreement_no_muta_los_pesos`. El número se muestra; mover `_PESO`/`UMBRAL_ENTREGA` es una decisión humana de un plan futuro. |
-| R19 | **(v3, D1) EL RIESGO MÁS GRAVE DEL PLAN: crear un falso VERDE desde el CABLEADO, con el test del núcleo en verde.** Un invariante probado solo sobre la función pura no ve un bug de costura. | Firma `evaluate_verdict(run_status=..., ticket_status=...)` donde el ticket **solo empeora** (`_peor`). Tres tests: dos de núcleo (`test_I1b_...`, `test_el_ticket_solo_empeora_nunca_mejora`) **y uno de BORDE** (`test_ticket_completed_no_blanquea_un_run_error`, A3) que pide el JSON a los dos endpoints. Gate de grep que prohíbe el patrón colapsado en `backend/api/`. Verificado corriendo: **10.206 combinaciones, 0 violaciones**. |
+| R19 | **(v3, D1) EL RIESGO MÁS GRAVE DEL PLAN: crear un falso VERDE desde el CABLEADO, con el test del núcleo en verde.** Un invariante probado solo sobre la función pura no ve un bug de costura. | Firma `evaluate_verdict(run_status=..., ticket_status=...)` donde el ticket **solo empeora** (`_peor`). Tres tests: dos de núcleo (`test_I1b_...`, `test_el_ticket_solo_empeora_nunca_mejora`) **y uno de BORDE** (`test_ticket_completed_no_blanquea_un_run_error`, A3) que pide el JSON a los dos endpoints y —desde v4 (E1)— asserta **los dos lados del contraste** con evidencia sembrada en las dos ejecuciones. Gate **positivo** (`run_status=` presente en los dos call-sites) más centinela negativo `-E` **verificado 3/3 con 0 falsos positivos** (v4, E2: el del v3 atrapaba 1 de 3). Verificado corriendo: **17.010 combinaciones, 0 violaciones**. |
+| R24 | **(v4, E2/E4/D6) Un gate de `grep` que NO PUEDE DISPARAR** — confianza falsa que ocupa el lugar del test que hacía falta. Ya pasó 3 veces en este mismo documento. | Gates **positivos** siempre que sea posible ("la línea correcta está presente" no depende de adivinar cómo se escribirá el error). Centinelas negativos con `-E` e insensibles a espacios. Y **[ADICIÓN ARQUITECTO A4]**: `test_los_centinelas_del_dod_si_pueden_disparar` prueba cada centinela contra sondas positivas **y** negativas. Regla: **todo grep de anclaje debe devolver EXACTAMENTE 1 hit**; si devuelve 2, el patrón está mal (E4: `def set_stacky_status` devolvía también el endpoint que publica en ADO). |
+| R25 | **(v4, E3) Reservar un número de plan que otro plan ya reservó POR TEXTO** — sin archivo, así que `ls` no lo ve. | Este documento **no asigna número** a la segunda mitad. Procedimiento de §0: `ls` en frío **más** `grep -rn "plan 27[0-9]\|27[0-9]_PLAN"` para cazar reservas escritas. **Hoy el 272 está reservado dos veces** (271 §6.1 y 270). |
+| R26 | **(v4, E1) Un test de gate que nace ROJO porque asserta un resultado que sus propios datos no pueden producir.** | A3 siembra evidencia en **las dos** ejecuciones y asserta el contraste completo. Regla: **antes de escribir el assert, calculá el valor esperado con la función real** — para el veredicto eso significa calcular el `strength` de la fila sembrada contra `UMBRAL_ENTREGA`, no suponerlo. |
 | R20 | **(v3, D2) El colector reintroduce el falso rojo que el plan viene a matar**, por filtrar `status='ok'` en una tabla que tiene **4** valores. | `status IN ('ok','idempotent_replay')` + `test_publicado_cuenta_idempotent_replay`. Regla general: **antes de filtrar por un valor de una columna de estado, censá los literales que el escritor puede producir** (`grep -n 'status="' <escritor>.py`), no los que dice el comentario de la columna. |
 | R21 | **(v3, D3/D4) Implementar contra una foto vieja del repo** — anclar por número en archivos que otros dos planes vivos van a mover, y numerar un plan nuevo con un número ya ocupado. | §0: orden 271→270→269, tabla de colisión, **regla de anclaje por SÍMBOLO** con los greps exactos, y `ls "Stacky Agents/docs/"` en frío antes de escribir cualquier número. |
 | R22 | **(v3, D5) Un KPI que es cero por construcción** y una calibración que nunca tiene datos: el plan se declararía exitoso midiendo una constante. | `count_by_level`/`verdict_agreement` reusan `collect_for_executions` con cota `limit=200` y `_Budget`; sin colectores reportan **`null`**, no `0`. Tres tests lo fijan. |
@@ -1945,7 +2103,7 @@ F6 (independiente de F0-F5: solo necesita el `items` del 254 F5 que YA existe)
 F7 (después de F0..F6: registra las 5 flags y los 6 tests)
 F8 (después de F0, F6 y F7; NO vuelve a escribir `hitl_enabled` — C6)
 ```
-**F6 se puede implementar en paralelo** con F0-F5 si conviene: no depende de la capa de veredicto, solo del `items` que `run_reconciliation.summarize()` **ya** devuelve hoy. **Ojo (v3):** `RunReconciliationCard.tsx` tiene **0 ocurrencias** de `items` — F6 tiene que **crear** ese render, no modificarlo. **Única atadura nueva de v2:** F8 lee el marcador de `reason` que F6 escribe (`[269] corrección manual de falso rojo`), así que la métrica de calibración A1 solo tiene datos después de F6. Si se aplica el corte sugerido (**269 = F0..F5+F7 / 272 = F6+F8** — v3 D4: **NO 270, que está ocupado**), F6 y F8 viajan **juntas** — es por eso que el corte es ahí y no en otro lado.
+**F6 se puede implementar en paralelo** con F0-F5 si conviene: no depende de la capa de veredicto, solo del `items` que `run_reconciliation.summarize()` **ya** devuelve hoy. **Ojo (v3):** `RunReconciliationCard.tsx` tiene **0 ocurrencias** de `items` — F6 tiene que **crear** ese render, no modificarlo. **Única atadura nueva de v2:** F8 lee el marcador de `reason` que F6 escribe (`[269] corrección manual de falso rojo`), así que la métrica de calibración A1 solo tiene datos después de F6. Si se aplica el corte sugerido (**269 = F0..F5+F7** / **F6+F8 al primer número libre REAL**, resuelto con el procedimiento de §0 — **v4 E3: NO 270 (ocupado) y NO 272 (doblemente reservado)**), F6 y F8 viajan **juntas** — es por eso que el corte es ahí y no en otro lado.
 
 ### Definición de Hecho (DoD) global
 
@@ -1964,26 +2122,31 @@ F8 (después de F0, F6 y F7; NO vuelve a escribir `hitl_enabled` — C6)
 - [ ] **(C7)** El colector no usa el lector que crea directorios: `grep -c "get_intent" backend/services/run_evidence.py` = **0**; `test_cambio_en_repo_no_crea_directorios` verde.
 - [ ] **(C9)** Un run en `running`/`idle` **no** trae la clave: `test_run_en_curso_no_trae_veredicto` y `test_no_terminal_no_tiene_veredicto` verdes.
 - [ ] La fila del historial muestra el chip de veredicto: `grep -c "verdictChipTone" frontend/src/pages/ExecutionHistoryPage.tsx` ≥ 1.
-- [ ] **(D1) EL GATE MÁS IMPORTANTE DEL PLAN.** `evaluate_verdict` exige `run_status` y **ningún call-site colapsa las dos dimensiones**:
+- [ ] **(D1) EL GATE MÁS IMPORTANTE DEL PLAN — reescrito en v4 (E2), porque el del v3 no atrapaba el bug.**
+      **(a) Gate POSITIVO (el que vale). Los dos call-sites tienen que pasar `run_status=` explícito:**
+      `grep -c "run_status=" backend/api/executions.py` ≥ **1**
+      `grep -c "run_status=" backend/api/incident_inbox.py` ≥ **1**
       `grep -c "run_status" backend/services/run_verdict.py` ≥ 3
-      `grep -rn 'stacky_status", None) or ex.status' backend/api/` = **0 hits**
-      `grep -rn 'stacky_status", None) or ex.status or ""' backend/api/` = **0 hits**
-      Tests verdes: `test_I1b_el_ticket_completed_no_blanquea_un_run_error`, `test_el_ticket_solo_empeora_nunca_mejora` (núcleo) **y `test_ticket_completed_no_blanquea_un_run_error` (A3 — en el BORDE, sobre los dos endpoints)**. Los tres son ROJOS con el cableado de v2: ésa es la prueba de que el fix entró.
+      **(b) Centinela NEGATIVO robusto** (insensible a espacios y a `getattr` vs atributo), con `-E`:
+      `grep -rEn 'stacky_status"? *,? *(None)?\)? *or *[a-z_]+\.status' backend/api/` = **0 hits**
+      **(c) Los tests, que son la defensa REAL:** `test_I1b_el_ticket_completed_no_blanquea_un_run_error` y `test_el_ticket_solo_empeora_nunca_mejora` (núcleo) **y `test_ticket_completed_no_blanquea_un_run_error` (A3 — en el BORDE, sobre los dos endpoints)**. Los tres son ROJOS con el cableado de v2: ésa es la prueba de que el fix entró.
+      > ⚠ **Por qué se reemplazó el gate del v3 (medido con archivos sonda).** El v3 exigía `grep -rn 'stacky_status", None) or ex.status' backend/api/` = 0. Ese literal lleva **espacios después de las comas**, así que atrapa la variante de F2 pero **NO** la de F5 — que el propio v3 transcribe en su changelog D1 **sin** espacios: `getattr(by_tid.get(tid),"stacky_status",None) or ex.status or ""`. Tampoco atrapa la reescritura más natural, por atributo: `ticket.stacky_status or ex.status`. Probado con 3 sondas: **1 hit de 3 variantes; 2 quedaban impunes.** Es el defecto **D6** (`verdictTone` vs `verdictChipTone`) otra vez, en el gate de máxima criticidad. **Lección que queda escrita: un centinela negativo tiene que probarse contra el pecado que dice prohibir, y un gate POSITIVO —"la línea correcta está presente"— es siempre más robusto que uno negativo, porque no depende de adivinar cómo se escribirá el error.** Operacionalizado en la **[ADICIÓN ARQUITECTO A4]** (F7).
 - [ ] **(D2)** El colector cuenta las publicaciones idempotentes: `grep -c "idempotent_replay" backend/services/run_evidence.py` ≥ 1 y `test_publicado_cuenta_idempotent_replay` verde.
 - [ ] **(D5)** `count_by_level` está acotado y usa los colectores: `test_count_by_level_usa_los_colectores`, `test_count_by_level_esta_acotado` y `test_count_by_level_sin_colectores_reporta_null` verdes. Con los colectores OFF, `falso_rojo_probable` es **`null`**, nunca `0`.
 - [ ] **(D7)** El `<th>` nuevo quedó **entre `estado` (`:546-548`) y `duracion` (`:551`)**: el orden de los `data-col` del `<thead>` coincide con el de `HISTORY_COLUMNS` y con el de los `<td>`. Verificación visual manual (el render no es automatizable acá, §3.8 punto 2).
 - [ ] **(D10)** `grep -c "VERDICT_CAUSE_TONE" frontend/src/utils/runVerdict.ts` ≥ 1 y el test `espera_cuota se pinta con tono espera` verde.
 - [ ] **(§0 / D3)** Los anclajes de la zona de colisión se **re-greppearon después** de que entraron el 271 y el 270: `api/tickets.py`, `api/incident_inbox.py`, `IncidentInboxPage.tsx`. **Ningún número de línea de esos 3 archivos se usó a ciegas.**
-- [ ] **(§0 / D4)** Si se aplicó el corte de scope, la segunda mitad se numeró **272** (no 270, que está ocupado). Verificado con `ls "Stacky Agents/docs/"` **en frío**, en el momento de escribir el archivo.
+- [ ] **(§0 / D4 / v4 E3)** Si se aplicó el corte de scope, la segunda mitad se numeró con el **primer número sin archivo Y sin reserva escrita**, resuelto en el momento de crear el archivo con los **dos** comandos de §0: `ls "Stacky Agents/docs/"` **en frío** y `grep -rn "plan 27[0-9]\|27[0-9]_PLAN" "Stacky Agents/docs/"`. **No se usó 270 (ocupado) ni 272 (reservado por el 271 §6.1 y por el 270).**
 - [ ] La bandeja de incidencias muestra el chip: `grep -c "describeVerdict" frontend/src/pages/IncidentInboxPage.tsx` ≥ 1.
 - [ ] **[ADICIÓN ARQUITECTO A1]** `verdict_agreement(30)` devuelve las 3 claves y `ratio` es `None` (no `0.0`) cuando `propuestos == 0`; `test_agreement_no_muta_los_pesos` verde.
 - [ ] **[ADICIÓN ARQUITECTO A2]** `test_espejo_ts_no_tiene_drift` verde (no `skipped`) una vez implementada F3.
+- [ ] **[ADICIÓN ARQUITECTO A4]** `test_los_centinelas_del_dod_si_pueden_disparar` verde, y **cada gate de `grep` que se agregue al DoD de acá en adelante tiene su fila en `_CENTINELAS`** con al menos una sonda positiva y una negativa. Ningún centinela textual se da por bueno sin haberlo hecho disparar.
 - [ ] La card de reconciliación renderiza items con acción: `grep -c "actionForItem" frontend/src/components/RunReconciliationCard.tsx` ≥ 1.
 - [ ] El HITL usa **solo** el endpoint por `ticket_id`: `grep -c "by-ado" frontend/src/components/reconciliationActions.ts` = **0**.
 - [ ] Las **5 flags** están en los 5 lugares con `default=True` (`test_plan269_flags.py` 8/8 verde).
 - [ ] Los **6 archivos de test** están registrados en `run_harness_tests.sh` **y** en `run_harness_tests.ps1`.
 - [ ] Los 6 archivos de test de backend corren **por archivo** y dan verde (conteos actualizados en v2):
-      `test_plan269_run_verdict.py` (**29**) . `test_plan269_run_evidence.py` (**15**) . `test_plan269_executions_payload.py` (**10**) . `test_plan269_inbox_verdict.py` (**7**) . `test_plan269_hitl_correccion.py` (**6**) . `test_plan269_flags.py` (8).
+      `test_plan269_run_verdict.py` (**29**) . `test_plan269_run_evidence.py` (**15**) . `test_plan269_executions_payload.py` (**10**) . `test_plan269_inbox_verdict.py` (**7**) . `test_plan269_hitl_correccion.py` (**6**) . `test_plan269_flags.py` (**9** — v4: +A4).
 - [ ] Los 2 archivos de test de frontend corren **por archivo** y dan verde:
       `plan269RunVerdict.test.ts` (**14**) . `reconciliationActions.test.ts` (**7**).
 - [ ] `cd "Stacky Agents/frontend" && npx tsc --noEmit` sin errores nuevos.
@@ -1996,9 +2159,64 @@ F8 (después de F0, F6 y F7; NO vuelve a escribir `hitl_enabled` — C6)
 
 ---
 
-## 9. VEREDICTO DEL JUEZ v2 → v3 (revisión independiente, 2026-07-28)
+## 9-bis. VEREDICTO DEL JUEZ v3 → v4 (SEGUNDA pasada independiente, 2026-07-28)
 
-### RECHAZADO — 5 BLOQUEANTES
+### APROBADO-CON-CAMBIOS — 0 BLOQUEANTES · 4 IMPORTANTES · 5 MENORES · los cambios YA están aplicados en este v4
+
+> ## ✅ LA PROHIBICIÓN "NO IMPLEMENTAR" QUEDA LEVANTADA
+> El v3 llevaba escrito *"NO implementar hasta aplicar los fixes D1..D5"*. Esta pasada verificó **corriendo** que **D1, D2, D3 y D5 están cerrados**, encontró que **D4 no lo estaba** (su fix repetía el error que arreglaba) y lo corrigió, y cazó **4 defectos IMPORTANTES que el propio v3 introdujo** (E1..E4) más 5 menores — **todos aplicados en este documento**. No queda ningún bloqueante. **El plan es implementable a partir de F0**, con la única condición de orden que ya declaraba §0: **va después del 271 y del 270**, y los anclajes de los 3 archivos de la zona caliente se re-greppean **por símbolo** en ese momento.
+
+**Criterios binarios que lo sustentan:**
+
+| Criterio | Resultado en v4 |
+|---|---|
+| ¿El invariante de negocio ("un `error` nunca da `exito`") se sostiene en **todos** los caminos? | **SÍ.** Grilla completa de **17.010** casos ⇒ **0** violaciones. Monotonicidad del ticket: **68.040** casos ⇒ el ticket mejoró el nivel en **0**. No terminales: **0** veredictos espurios. Y el gate de **borde** (A3) existe, cubre los **dos** endpoints y ahora asserta **los dos lados del contraste** (E1). |
+| ¿El fix de D1 está además **protegido** por gates que funcionan? | **SÍ, tras E2.** El centinela del v3 atrapaba **1 de 3** reintroducciones (probado con sondas). Reemplazado por un gate **positivo** (`run_status=` presente en los dos call-sites) + un centinela negativo `-E` verificado **3/3 con 0 falsos positivos**. |
+| ¿Algún colector produce evidencia FALSA (no solo desconocida)? | **NO.** Censo corrido: 4 literales de `status`, un **único** escritor de filas (`ado_publisher.py:889`), dedupe por `(ado_id, sha256, 'ok')` ⇒ el diagnóstico de D2 es exacto y el filtro `IN ('ok','idempotent_replay')` es el correcto. |
+| ¿El plan está escrito como CONSUMIDOR del 271 y del 270? | **SÍ.** §0 con orden, tabla de colisión y anclaje por símbolo — con el grep ambiguo corregido (E4: `def set_stacky_status(` con paréntesis, porque sin él devolvía también el endpoint **prohibido** que publica en ADO). |
+| ¿Todos los números de plan que el documento asigna están libres? | **SÍ, y ahora no asigna ninguno.** El v3 mandaba el corte al **272**, que está **reservado por escrito** por el 271 (§6.1) y por el 270 — que además **prohíbe hardcodearlo**. El v4 reemplaza el número por el **procedimiento** (relistar en frío + grepear reservas + saltar el 272). |
+| ¿Los KPI que el plan promete medir son medibles? | **SÍ.** D5 reusa `collect_for_executions` con cota `limit=200` (**verificada** contra `scan_recent(limit=200)`, `run_reconciliation.py:168`) y reporta `null` —no `0`— sin colectores. Contrato de claves congelado en **7** (el v3 lo declaraba 4, 6 y 7 en tres lugares distintos: E5). |
+| ¿Toda flag nueva es default ON, o cita una de las 2 categorías de excepción? | **SÍ.** Las 5 en ON, alineadas con la directiva vigente. La única que habilita una escritura (`..._HITL_ENABLED`) queda **ratificada por tercera vez**: `api/tickets.py` `def set_stacky_status(` en `:1166` llama `ts.set_status` y **no publica**; el prohibido `set_stacky_status_by_ado` (`:1205`) sí. |
+| ¿Human-in-the-loop intacto? | **SÍ.** El veredicto nunca cambia un estado; la corrección la dispara un click con `useConfirm`; A1 **muestra** el acierto y `test_agreement_no_muta_los_pesos` prohíbe el auto-tuneo. |
+| ¿Paridad de los 3 runtimes? | **SÍ, estructural.** P3: se calcula al leer; los 3 escriben `AgentExecution`. Ninguna fase toca un runner. |
+| ¿Cero trabajo extra al operador? | **SÍ.** Todo invisible, 5 flags ON de fábrica, el filtro arranca en "Todos". |
+| ¿Mono-operador sin auth (sin RBAC)? | **SÍ.** |
+| ¿Backward-compatible? | **SÍ.** `run_verdict` es clave nueva y opcional; con las flags OFF el payload es byte-idéntico. Verificado que no pisa la columna viva `verdict` (`models.py:255/327`) ni los 20 campos de `ExecutionHistoryItem`. |
+| ¿Reusa lo existente? | **SÍ.** Cero tablas y cero columnas nuevas. Y el helper de siembra de `agent_html_publish` ahora apunta al que **existe de verdad** (`test_publish_ledger.py:47-54`; el del v3 no seedeaba esa tabla — E8). |
+
+### Qué encontró esta pasada que la anterior no podía encontrar
+
+El v3 hizo bien lo difícil: encontró un bug de **costura** simulando el cableado. Su punto ciego fue el **opuesto**: dio por buenos **sus propios gates**. Los 4 IMPORTANTES tienen una firma común: **el fix era correcto y la verificación del fix no lo era.**
+
+- **E1**: el test estrella del v3 afirmaba un resultado (`exito`) que sus propios datos **no pueden producir**. Solo aparece si se **calcula el strength** de la fila que el test siembra.
+- **E2**: el centinela del bug más grave del plan atrapaba **1 de 3** ortografías. Solo aparece si se **corre el grep contra el pecado**, no contra el código correcto.
+- **E3**: el fix de numeración eligió un número que dos vecinos **reservaron por texto** (sin archivo). Solo aparece si se **grepea el número**, no si se lista el directorio.
+- **E4**: la regla de anclaje por símbolo devolvía **2 hits** en el único símbolo donde equivocarse escribe en el ADO real. Solo aparece si se **corre el grep y se cuentan los hits**.
+
+**La regla que sale de acá, y que vale para la próxima pasada:** *criticar corriendo* no alcanza si se corre solo el **código**. Hay que correr también **los gates, los greps, los conteos y los números de plan** — o sea, todo lo que el documento afirma que va a verificar por uno. Un plan tiene dos capas de verdad: lo que construye y **cómo dice que va a comprobar que lo construyó bien**. La segunda capa falló en v2 (D6) y tres veces en v3 (E2, E4, E5). La **[ADICIÓN ARQUITECTO A4]** la convierte en un test.
+
+### Método aplicado en esta pasada (para que la próxima lo repita y lo supere)
+
+1. Se extrajo a disco el módulo F0 **literal del v3** y se barrió la grilla **COMPLETA** (17.010) — no la que el doc declaraba (10.206, con 6 reasons de 9 reales).
+2. Se **calculó el strength** de las filas que A3 siembra, en vez de leer su prosa. Ahí apareció E1.
+3. Se escribieron **archivos sonda** con las 3 ortografías del anti-patrón y se corrió el gate del DoD contra ellas. Ahí apareció E2. Después se **verificó el gate de reemplazo** (3/3, 0 falsos positivos) antes de escribirlo.
+4. Se corrieron **los 5 greps de anclaje de §0 contando los hits**. Ahí apareció E4.
+5. Se hizo `grep -n "272"` **sobre los vecinos**, no `ls`. Ahí apareció E3 (reservas por texto, sin archivo).
+6. Se **contaron las claves** del JSON de D5 y se compararon con las tres afirmaciones del doc. Ahí apareció E5.
+7. Se censó el **único escritor** de `agent_html_publish` para cerrar el censo de D2, y se buscó qué test **realmente** siembra esa tabla (E8).
+8. Se corrió el cuerpo del test de A4 con el venv (**1 passed**) para no proponer pseudocódigo.
+
+### Baseline REVERIFICADO en esta pasada
+
+Los números del baseline del v3 se mantienen (no se re-corrieron todos: el v3 los midió y siguen siendo la referencia de R8). Lo que **sí** se reverificó acá, por ser lo que sustenta los fixes: `scan_recent(limit=200)` en `run_reconciliation.py:168`; `_CURATED_DEFAULTS_ON` en `test_harness_flags.py:467` con assert por **igualdad de conjuntos** en `:985`; `AgentHtmlPublish` registrada en `init_db` (`db.py:239`); los 10 `<th data-col>` en 526/531/536/541/**546**/551/556/561/566/571 con `<thead>` 507→579; `StatusChipProps.title` en `StatusChip.tsx:13`; `ExecutionHistoryItem` con **20** campos y sin `verdict`.
+
+> **Nota sobre los rojos de fábrica (vale para el DoD entero):** en este árbol hay gates ROJOS **preexistentes y ajenos** — `test_harness_flags_help.py` (**4 failed / 4 passed**), `uiDebtRatchet`, `motionDebtRatchet`, `test_error_fingerprints_catalog.py`. **Ningún criterio de este plan exige verde absoluto ahí**: todos los criterios sobre archivos ajenos son de **delta** ("cero fallos **nuevos** respecto a HEAD", "`grep -c "style={{"` **no aumenta**"). Un DoD que pidiera verde absoluto en esos 4 sería insatisfacible por causas ajenas.
+
+---
+
+## 9. VEREDICTO DEL JUEZ v2 → v3 (revisión independiente, 2026-07-28) — HISTÓRICO
+
+### RECHAZADO — 5 BLOQUEANTES *(superado por la pasada v3→v4: ver §9-bis)*
 
 **Criterios binarios que lo sustentan:**
 

@@ -1,13 +1,106 @@
 # Plan 266 — Cero pantalla rota en el Comparador de BD: forma garantizada del `summary`
 
-**Estado:** CRITICADO v4
-**Fecha:** 2026-07-29 (v4) · 2026-07-28 (v3) · 2026-07-27 (v1, v2)
+**Estado:** CRITICADO v5
+**Fecha:** 2026-07-29 (v5) · 2026-07-29 (v4) · 2026-07-28 (v3) · 2026-07-27 (v1, v2)
 **Rama sugerida:** `feat/plan-266-summary-shape`
 **Serie:** independiente (cierra una incidencia REAL reportada por el operador)
 
 ---
 
-## 0. Changelog v3 → v4 (tercera pasada, juez INDEPENDIENTE que EJECUTÓ los gates)
+## 0. Changelog v4 → v5 (cuarta pasada, juez INDEPENDIENTE — el mismo par de archivos volvió a fallar)
+
+Veredicto del v4: **RECHAZADO (1 BLOQUEANTE)**. Todo lo de abajo está aplicado.
+
+Esta pasada no releyó el v4: abrió el árbol real en `HEAD` (`6f451db8`, siete commits después del
+`760ac455` que el v4 usó como referencia) y corrió los mismos gates, greps y conteos que el v4 dice
+haber corrido, para ver si seguían dando lo mismo.
+
+### Lo que la ejecución CONFIRMÓ como correcto (no se tocó)
+
+El bug sigue **VIVO y line-a-línea idéntico** a como lo describe el plan:
+`frontend/src/components/dbcompare/radarLogic.ts:60` es hoy, textual,
+`const sev = r.summary!.by_severity;` y `:63` es `danger: sev.danger || 0,`. Se verificó, con
+`git log <760ac455>..HEAD -- <archivo>`, que **ninguno** de los 20 archivos de producción que
+este plan toca (`radarLogic.ts`, `RunsTimeline.tsx`, `EnvironmentRadar.tsx`, `SummaryHero.tsx`,
+`svgMath.ts`, `PageErrorBoundary.tsx`/`.module.css`, `App.tsx`, `copyService.ts`,
+`activityCenter.ts`, `dbcompare_runs.py`, `api/db_compare.py`, `api/db_compare_watch.py`,
+`dbcompare_masking.py`, `harness_flags.py`, `harness_flags_help.py`, `config.py`,
+`test_harness_flags.py`, `test_harness_flags_requires.py`, `test_harness_ratchet_meta.py`,
+`error_fingerprints.json`) recibió un solo commit entre `760ac455` y `HEAD` — **cero drift** ahí,
+a diferencia de lo que le pasó a los planes hermanos 260/263/264/265 con `config.py`/
+`harness_flags.py`/`endpoints.ts`/`executions.py`. Re-ejecutados: `test_harness_flags_requires.py`
+→ **9 passed** (idéntico, la SEXTA pata de C22 sigue viva); `test_harness_flags.py` → **56 passed**
+(idéntico); `test_harness_ratchet_meta.py` → **4 passed** (idéntico, y su línea `:79` sigue siendo
+`test_ratchet_no_referencia_archivos_inexistentes`); `copyDebtRatchet.test.ts` → **3 passed**,
+`PageErrorBoundary.tsx` sigue sin figurar en `copyDebtBaseline.json` (cupo 0 intacto);
+`uiDebtRatchet` → el `.module.css` real tiene exactamente los 2 hex del baseline;
+`test_harness_flags_help.py` → **4 failed, 4 passed**, idéntico, con los mismos 4 nombres de test.
+Recontada `comparador_bd` (`harness_flags.py:454-475`): la tupla tiene 21 elementos, pero 20 con
+prefijo `STACKY_DB_COMPARE_` (el 21º, `STACKY_MODEL_PROBE_ENABLED` en `:471`, es una
+miscategorización ajena y anterior a este plan) — el "20" del v4 es exacto leído como "20
+hermanas DB Compare" y no hace falta tocarlo.
+
+### El bloqueante
+
+- **C34 (BLOQUEANTE)** — **F6.1(a)/(b) volvió a anclar la edición a "la última entrada de hoy" en
+  `run_harness_tests.sh`/`.ps1`, y esa entrada volvió a dejar de ser la última: la MISMA clase de
+  error que ya fue BLOQUEANTE en C23/C24, reproducida un commit-cycle después, en el mismo par de
+  archivos.** El v4 midió sobre `760ac455` y declaró `tests/test_plan242_runtime_parity.py` como
+  "la ÚLTIMA entrada del array" (`.sh:883`, cierre `:884`; `.ps1:796`, cierre `:797`). Entre
+  `760ac455` y `HEAD` se mergearon **7 commits que tocan exactamente esos dos archivos**
+  (`f1c7a221`, `b6ecf6ed`, `87ddf289` — plan 267; `3ed110f8` — plan 259; `64088830` — plan 269;
+  `77627239` — plan 270), cada uno agregando sus propios tests al final. Medido hoy sobre `HEAD`:
+  `test_plan242_runtime_parity.py` **ya no es la última entrada en ninguno de los dos archivos** —
+  la siguen **30 entradas más** en el `.sh` (última real hoy: `tests/test_plan267_help.py` en
+  `:913`, cierre `)` en `:914`; 712 entradas desnudas en total, no 687) y **34 entradas más** en el
+  `.ps1` (última real hoy: `"tests/test_plan267_help.py"` en `:830`, cierre `)` en `:831`; 648
+  entradas entrecomilladas en total, no 623). En las líneas exactas que el v4 señala como el cierre
+  (`.ps1:796-797`, `.sh:883-884`) hoy hay, literalmente, el bloque de tests del plan 270
+  (`"tests/test_plan270_close_intent.py",` y siguientes) — nada de un `)`. Un implementador que
+  confíe en el número, o en la afirmación "es la última entrada", en vez de re-verificar antes de
+  editar, inserta en medio de un bloque ajeno (en el mejor caso, si busca por el nombre del test y
+  el resultado igual parsea) o corrompe la línea equivocada (en el peor, si algo edita por número
+  de línea literal). Esto no es una hipótesis nueva: es la reproducción, casi calcada, de lo que
+  esta misma casa ya marcó BLOQUEANTE en C23 — con el agravante de que el v4 **ya sabía**, por
+  haber sufrido C23/C24, que este par de archivos es el punto de fusión más caliente del repo (les
+  cae una línea por cada plan que se mergea) y aun así anclo la edición a un vecino con nombre en
+  vez de a la estructura del array. **Fix (estructural, no un número nuevo):** ver F6.1(a)/(b) y
+  **A6** más abajo → §F6.1(a), §F6.1(b), §7.2 paso 10, §7.3, R12.
+
+### Los menores
+
+- **C35 (MENOR)** — F6.4 dice "16 de las 42 huellas actuales no traen `self_test`". Medido hoy:
+  `docs/sistema/error_fingerprints.json` tiene **45** huellas, no 42 (3 más, de huellas
+  agregadas por planes mergeados entre medio). El gate no cambia — `test_error_fingerprints_catalog.py`
+  sigue dando **3 failed, 5 passed**, confirmado corriéndolo de nuevo — así que el criterio de
+  aceptación de F6.4 sigue siendo válido tal cual; lo impreciso era solo la cifra de la prosa.
+  Corregida, con la advertencia de que este archivo también crece con cada plan hermano → §F6.4.
+- **C36 (MENOR)** — la huella nueva trae `"date_resolved": "2026-07-28"` fija, un día ANTES de
+  esta misma crítica y sin que el plan esté implementado. Igual que `killed_commit` (que el v4 ya
+  dejaba como `"TODO-completar-al-implementar"`), `date_resolved` pasa a ser un placeholder
+  explícito que se completa recién al cerrar F6.4 → §F6.4.
+- **C37 (MENOR)** — el conteo de call-sites de `get_run` en `api/db_compare.py` (§6 ítem 10,
+  datos personales) dice "**9** lugares... los otros **8**" pero enumera 7 líneas
+  (`:455, :488, :680, :713, :796, :925, :1016`). Medido con `grep -n "get_run(" api/db_compare.py`:
+  son **8** call-sites en total (`:439, :455, :488, :680, :713, :796, :925, :1016`) — 1 enmascarado
+  + 7 sin enmascarar, no 9/8. No cambia la conclusión (solo `:439` enmascara; los otros 7 no
+  devuelven el run completo al cliente), pero una sección de datos personales que se apoya en
+  "medido" no puede traer un conteo que no cierra con su propia lista → §6 ítem 10.
+- **[ADICIÓN ARQUITECTO] A6** — **F6.1 pasa de "vecino con nombre" a "cierre localizado por
+  búsqueda"**, y la regla queda escrita para cualquier plan futuro, no solo el 266. La causa de
+  fondo de C23, C24 y ahora C34 es la misma: `run_harness_tests.sh`/`.ps1` son los dos archivos que
+  **todo** plan de esta casa toca (cada uno registra sus tests nuevos), así que cualquier
+  instrucción de la forma "insertá después de la entrada del plan N" caduca apenas se mergea un
+  plan N+1 — y en esta serie eso pasa cada 1-2 días, no cada mes. F6.1(a)/(b) ahora dan el comando
+  de localización (`Select-String`/`grep` buscando la línea que es únicamente `)`) que encuentra el
+  cierre real **en el momento de implementar**, sin importar cuántos planes se hayan mergeado entre
+  la crítica y la implementación. Es la misma técnica que F6.5 (`test_ps1_sin_coma_colgante`) ya usa
+  para vigilar el archivo — ahora la instrucción de edición tiene la misma robustez que el test que
+  la audita → §F6.1(a), §F6.1(b).
+
+---
+
+## 0.1. Changelog v3 → v4 (tercera pasada, juez INDEPENDIENTE que EJECUTÓ los gates)
 
 Veredicto del v3: **RECHAZADO (5 BLOQUEANTES)**. Todo lo de abajo está aplicado.
 
@@ -181,7 +274,7 @@ Se re-midió con el criterio exacto del plan, no con el número del documento:
 
 ---
 
-## 0.1. Changelog v2 → v3 (segunda pasada, revisión INDEPENDIENTE)
+## 0.2. Changelog v2 → v3 (segunda pasada, revisión INDEPENDIENTE)
 
 La crítica que produjo el v2 se corrió en la **misma sesión** que la propuesta: eso no equivale a
 revisión independiente (gotcha conocido de la casa). Esta segunda pasada re-verificó los anclajes
@@ -273,7 +366,7 @@ que `STACKY_DB_COMPARE_ENABLED` existe (`requires=` válido); y los anclajes del
 
 ---
 
-## 0.2. Changelog v1 → v2
+## 0.3. Changelog v1 → v2
 
 Crítica adversarial verificada contra el repo (2026-07-27). Veredicto del v1: **RECHAZADO
 (3 BLOQUEANTES)**. Todo lo de abajo está aplicado en este documento.
@@ -1929,9 +2022,19 @@ No hay nada que deducir. Son **TRES** archivos de test, no uno:
   tests/test_plan258_ledger_purge.py
 ```
 
-Agregar las **tres** líneas al **FINAL del array**: inmediatamente después de
-`  tests/test_plan242_runtime_parity.py` (`run_harness_tests.sh:883`, la **última** entrada real —
-medido el 2026-07-29; el `)` está en `:884`), estas líneas **exactas**:
+**Localizá el cierre, no cuentes desde un vecino (C34).** Este archivo recibe una línea nueva de
+**cada** plan que se mergea a `main` — entre la medición del v3→v4 (`760ac455`) y la de esta pasada
+se mergearon 7 commits que le agregaron 30 líneas más, y el "vecino" que el v4 usaba de referencia
+(`tests/test_plan242_runtime_parity.py`, entonces la última entrada) dejó de serlo. Por eso la
+instrucción ya no ancla a un nombre de test ni a un número de línea: localizá la línea que contiene
+**únicamente** `)` y que cierra el array abierto en `HARNESS_TEST_FILES=(` —
+
+```
+grep -n '^)$' scripts/run_harness_tests.sh
+```
+
+— debe dar **una sola** coincidencia en todo el archivo (es el cierre de este array). Agregá las
+**tres** líneas siguientes **inmediatamente antes** de esa línea, sea cual sea su número hoy:
 
 ```
   tests/test_plan266_summary_shape.py
@@ -1939,14 +2042,18 @@ medido el 2026-07-29; el `)` está en `:884`), estas líneas **exactas**:
   tests/test_plan266_harness_runner_paridad.py
 ```
 
-(dos espacios de indentación, sin comillas, sin coma, sin nada más en la línea).
+(dos espacios de indentación, sin comillas, sin coma, sin nada más en la línea). En el `.sh` la
+posición dentro del array es indiferente para el parser y para el meta-test (la regex acepta la
+línea desnuda esté donde esté); se elige "justo antes del cierre" solo para que la instrucción
+tenga la misma forma que la del `.ps1`, donde sí importa no depender de qué línea sea hoy la última
+(ver (b)).
 
-> **Ojo con el ancla (C23).** El v3 mandaba insertar después de
-> `  tests/test_plan258_estanqueidad_arnes.py` (`:874`) llamándola "última entrada de la serie
-> 253-258". Medido: `:874` es correcto para esa línea, pero **no es la última del array** — después
-> vienen 9 entradas más y la última es `:883`. En el `.sh` la posición es indiferente (la regex del
-> meta-test acepta la línea desnuda esté donde esté), pero se unifica al final para que la
-> instrucción sea **la misma** que en el `.ps1`, donde la posición **sí** importa.
+> **Por qué esta instrucción ya no nombra una línea (C34).** El v3 (C23) y el v4 (esta misma
+> pasada) cometieron la MISMA clase de error en el MISMO par de archivos: anclar la edición al
+> nombre o a la línea de "la última entrada de hoy", que dejó de serlo apenas se mergeó el
+> siguiente plan. `run_harness_tests.sh`/`.ps1` son, medido, de los archivos que más planes tocan
+> de todo el repo — cualquier ancla que no sea "buscar el cierre en el momento de editar" caduca en
+> días. Por eso F6.1 no vuelve a fijar una línea.
 
 **(b) `Stacky Agents/backend/scripts/run_harness_tests.ps1`** — acá la variable se llama
 `$HarnessTestFiles` (NO `HARNESS_TEST_FILES`) y se declara en `run_harness_tests.ps1:13` como
@@ -1975,9 +2082,24 @@ medido el 2026-07-29; el `)` está en `:884`), estas líneas **exactas**:
 Entonces la edición es **UNA sola línea nueva**, no dos. Las entradas van entrecomilladas y con
 dos espacios de indentación; la coma es **opcional** entre elementos y **prohibida** antes del `)`.
 
-Agregar, **inmediatamente después** de la línea `  "tests/test_plan242_runtime_parity.py"`
-(la ÚLTIMA entrada del array, `run_harness_tests.ps1:796`) y **antes** del `)` de `:797`, estas
-**tres** líneas exactas, **ninguna con coma**:
+> **C34 (BLOQUEANTE del v4) — el v4 volvió a anclar por vecino ("después de
+> `test_plan242_runtime_parity.py`, la última entrada, `:796`") y ese vecino volvió a dejar de ser
+> el último.** Entre la medición del v4 y esta pasada se mergearon 4 planes más (267/259/269/270)
+> que le agregaron 34 líneas al `.ps1`. Hoy, en la línea `:796` que el v4 señala, hay en realidad
+> una entrada intermedia con coma (porque ya no es la última), y en la `:797` que señala como el
+> cierre hay el bloque de tests del plan 270, no un `)`. Anclar por el nombre de "la última entrada
+> de hoy" en este archivo específico caduca en días: cada plan de esta casa le agrega líneas.
+
+**Localizá el cierre, no cuentes desde un vecino.** Buscá la línea que contiene **únicamente** `)`
+y que cierra el array abierto en `$HarnessTestFiles = @(` — debe haber **una sola** línea así en
+todo el archivo:
+
+```powershell
+Select-String -Path scripts/run_harness_tests.ps1 -Pattern '^\)$'
+```
+
+Agregá, **inmediatamente antes** de esa línea (sea cual sea su número hoy), estas **tres** líneas
+exactas, **ninguna con coma**:
 
 ```powershell
   "tests/test_plan266_summary_shape.py"
@@ -1985,13 +2107,20 @@ Agregar, **inmediatamente después** de la línea `  "tests/test_plan242_runtime
   "tests/test_plan266_flag_cableado.py"
 ```
 
-**Regla general, sin nada que inferir:** *las entradas nuevas van al final del array, con dos
-espacios de indentación, entre comillas dobles, y SIN coma. No se le agrega ni se le quita coma a
-ninguna línea existente.* (Verificado con el parser: agregar entradas sin coma al final deja el
-archivo parseando con 0 errores.)
+La línea que hoy sea la última entrada real (sea cual sea) **no se toca**: si ya termina en coma
+(porque hoy no es la última), se queda con su coma tal cual está; no le agregues ni le saques nada.
+Vos solo agregás tres líneas nuevas sin coma, justo antes del cierre.
 
-(Las mismas tres, en su forma desnuda, van en el `.sh` — eso es el paso **(a)** de arriba. Las dos
-formas son distintas y **ninguna se deriva de la otra**; ver el porqué más abajo.)
+**Regla general, sin nada que inferir:** *las entradas nuevas van inmediatamente antes del `)` que
+cierra el array —localizado por búsqueda, nunca por número fijo ni por el nombre de la entrada que
+hoy resulte ser la última—, con dos espacios de indentación, entre comillas dobles, y SIN coma. No
+se le agrega ni se le quita coma a ninguna línea existente.* (Verificado con el parser: agregar
+entradas sin coma inmediatamente antes del cierre deja el archivo parseando con 0 errores, sin
+importar cuántas entradas ajenas haya antes.)
+
+(Las mismas tres, en su forma desnuda, van en el `.sh` — eso es el paso **(a)** de arriba, con la
+misma búsqueda del cierre. Las dos formas son distintas y **ninguna se deriva de la otra**; ver el
+porqué más abajo.)
 
 **Orden obligatorio:** esta fase va **AL FINAL**, después de que los tres archivos de test existan.
 `tests/test_harness_ratchet_meta.py:79` es `test_ratchet_no_referencia_archivos_inexistentes`:
@@ -2073,7 +2202,8 @@ Verificado contra `backend/tests/test_error_fingerprints_catalog.py`:
 
 Baseline **ejecutado** hoy sobre ese archivo: `3 failed, 5 passed`. Los 3 rojos
 (`test_campos_obligatorios`, `test_status_enum`, `test_self_test_coherente`) son **ajenos y
-preexistentes** —16 de las 42 huellas actuales ya no traen `self_test`—, pero
+preexistentes** —16 de las 45 huellas actuales (**C35**: eran 42 al medir el v4; el catálogo
+también crece con cada plan hermano, igual que el arnés) no traen `self_test`—, pero
 **`test_patrones_compilan` está VERDE** porque hoy **ninguna** huella tiene `log_pattern: null`.
 La entrada del v2 lo habría puesto en rojo: un plan que mata una clase de error rompiendo el
 gate del catálogo de errores.
@@ -2107,7 +2237,7 @@ implementar, con el SHA corto del commit del fix):
   },
   "killed_by": "plan-266",
   "killed_commit": "TODO-completar-al-implementar",
-  "date_resolved": "2026-07-28",
+  "date_resolved": "TODO-completar-al-implementar",
   "guard_test": "frontend/src/__tests__/dbcompareSummaryShapeRatchet.test.ts",
   "evidence": [
     "frontend/src/components/dbcompare/radarLogic.ts:60",
@@ -2145,9 +2275,9 @@ para que no cace cualquier `reading '…'` ajeno — lo prueba el `clean` con `'
 
 El primero imprime `1`. El segundo **debe terminar exactamente en `3 failed, 5 passed`**, con los
 3 fallos siendo **los mismos 3 de hoy** (`test_campos_obligatorios`, `test_status_enum`,
-`test_self_test_coherente`), que son rojos **ajenos y preexistentes** —16 de las 42 huellas
+`test_self_test_coherente`), que son rojos **ajenos y preexistentes** —16 de las 45 huellas
 actuales no traen `self_test`— y **no** los causa este plan. Baseline medido el 2026-07-28 antes
-de tocar nada: `3 failed, 5 passed`.
+de tocar nada: `3 failed, 5 passed` (re-confirmado el 2026-07-29: sigue igual).
 
 **Si aparece un 4.º fallo, o si `test_patrones_compilan` pasa a rojo, la entrada nueva está mal y
 NO se sigue.** Ese es el gate real de esta fase: el conteo de fallos no puede subir de 3.
@@ -2200,10 +2330,10 @@ def _ps1_files() -> set[str]:
 
 | # | Test | Aserción |
 |---|------|----------|
-| 1 | `test_ps1_sin_coma_colgante` | **el corazón de C12.** Implementación **literal** (C33 — nada que inferir): `lineas = _PS1.read_text(encoding="utf-8").splitlines()`; para cada `i` tal que `lineas[i].strip() == ")"`, retroceder al índice `j` de la última línea **no vacía** anterior y assertar `not lineas[j].rstrip().endswith(",")`. Medido hoy: hay **exactamente 1** línea que es solo `)` (`:797`) y su anterior (`:796`) **no** termina en coma ⇒ **nace verde**. |
-| 2 | `test_ps1_es_subconjunto_del_sh` | `_ps1_files() - _sh_files() == set()` — invariante **medido y cierto hoy** (2026-07-29: **623** en el `.ps1`, **687** en el `.sh`, diferencia `.ps1 − .sh` = ∅). Cazaría un archivo agregado al `.ps1` y olvidado en el `.sh`, que es el que rompe el meta-test. |
+| 1 | `test_ps1_sin_coma_colgante` | **el corazón de C12.** Implementación **literal** (C33 — nada que inferir): `lineas = _PS1.read_text(encoding="utf-8").splitlines()`; para cada `i` tal que `lineas[i].strip() == ")"`, retroceder al índice `j` de la última línea **no vacía** anterior y assertar `not lineas[j].rstrip().endswith(",")`. La implementación **busca** la línea `)`, no asume su número — por diseño no le afecta que la posición se mueva (**C34**: medido el 2026-07-29 esa línea estaba en `:797`; re-medido el mismo día, 7 commits después, está en `:831` — en los dos casos la anterior no termina en coma ⇒ **nace verde** igual). |
+| 2 | `test_ps1_es_subconjunto_del_sh` | `_ps1_files() - _sh_files() == set()` — invariante **medido y cierto hoy** (2026-07-29: **623** en el `.ps1`, **687** en el `.sh`, diferencia `.ps1 − .sh` = ∅; re-medido 7 commits después: **648/712**, la diferencia sigue en ∅ — **C34**: el número absoluto no importa, el invariante sí). Cazaría un archivo agregado al `.ps1` y olvidado en el `.sh`, que es el que rompe el meta-test. |
 | 3 | `test_los_tests_de_este_plan_estan_en_los_dos` | las **tres** rutas (`tests/test_plan266_summary_shape.py`, `tests/test_plan266_harness_runner_paridad.py`, `tests/test_plan266_flag_cableado.py`) ∈ `_sh_files()` **y** ∈ `_ps1_files()` — el gate directo de F6.1 |
-| 4 | `test_ambas_listas_no_estan_vacias` | `len(_sh_files()) >= 600` y `len(_ps1_files()) >= 600` — anti-censo-vacío, calibrado contra los **687/623** reales de hoy (mismo criterio que C6 le exigió al test 12 de F4: el umbral se calibra contra la realidad medida, no contra un número cómodo) |
+| 4 | `test_ambas_listas_no_estan_vacias` | `len(_sh_files()) >= 600` y `len(_ps1_files()) >= 600` — anti-censo-vacío, calibrado contra los **687/623** reales de 2026-07-29 (mismo criterio que C6 le exigió al test 12 de F4: el umbral se calibra contra la realidad medida, no contra un número cómodo). El umbral es deliberadamente **holgado** (600 contra ~650-700 reales) para no romperse con el crecimiento normal de cada plan nuevo — **C34** lo confirma: 7 commits después el real es 648/712 y el test sigue verde. |
 
 > **C24 (BLOQUEANTE del v3) — el test "sin entradas pegadas" se ELIMINA porque codificaba una regla
 > que no existe, y habría nacido ROJO con 206 violaciones.** El v3 pedía que "ninguna línea de
@@ -2313,7 +2443,10 @@ que ninguno mencione la key nueva; ver F3.)
    `safeSummary(r.diff?.summary)`. Normalizar además en el backend sería trabajo sin defecto
    observable que lo justifique.
 8. **Cerrar el desfasaje entre las dos listas del arnés.** Medido el **2026-07-29** sobre
-   `760ac455`: el `.sh` tiene **687** entradas y el `.ps1` **623** (el v3 decía 680/616 — C31);
+   `760ac455`: el `.sh` tenía **687** entradas y el `.ps1` **623** (el v3 decía 680/616 — C31); al
+   re-medir sobre `HEAD` para esta pasada (7 commits después) son **712/648** — el número sigue
+   subiendo con cada plan que se mergea (**C34**), por eso el gate real de F6.5 no es el número
+   sino el umbral `>= 600` y el invariante `⊆`, ninguno de los dos afectado por el corrimiento;
    hay **64 archivos que están solo en el `.sh`** (la serie
    `test_mg_*` del migrador, `test_plan70_*`, `test_plan72_*`, `test_rag_*`,
    `test_plan237/238/239_*`, entre otros). Es deuda **ajena y preexistente**, de planes que
@@ -2326,8 +2459,10 @@ que ninguno mencione la key nueva; ver F3.)
    baseline de F6.4. Este plan solo se compromete a **no sumar un cuarto**.
 10. **Enmascarar el mensaje de error del navegador, y cerrar el masking de los otros
     `get_run` (DATOS PERSONALES — decisión declarada, no omisión).** Medido: `get_run` se llama en
-    **9** lugares de `backend/api/db_compare.py` y solo el de `:439` pasa por
-    `dbcompare_masking.apply_to_run_response` (`:447`); los otros 8 (`:455`, `:488`, `:680`, `:713`,
+    **8** lugares de `backend/api/db_compare.py` (**C37**: el v4 decía 9/8 y solo enumeraba 7 —
+    contado con `grep -n "get_run(" api/db_compare.py`, son 8 exactos: `:439, :455, :488, :680,
+    :713, :796, :925, :1016`) y solo el de `:439` pasa por
+    `dbcompare_masking.apply_to_run_response` (`:447`); los otros 7 (`:455`, `:488`, `:680`, `:713`,
     `:796`, `:925`, `:1016`) consumen el run para triage/gates/scripts y **no devuelven el run
     completo al cliente**. Es deuda **ajena y preexistente** del Plan 181, y este plan **no la
     toca**: su cambio se inserta **antes** del masking, así que no lo empeora ni lo saltea
@@ -2379,8 +2514,9 @@ que ninguno mencione la key nueva; ver F3.)
    (≥15) + cableado en `PageErrorBoundary.tsx` usando **`copyService.copyText`, nunca
    `navigator.clipboard` — C25** + las 4 clases CSS literales sin hex nuevo (C29).
 10. **F6** — registro de los **tres** archivos de test en `run_harness_tests.sh` (líneas desnudas)
-    **y** en `run_harness_tests.ps1` (líneas entrecomilladas **SIN coma, al final del array, después
-    de `:796`** — C23; NO se le toca la coma a ninguna línea existente), huella en
+    **y** en `run_harness_tests.ps1` (líneas entrecomilladas **SIN coma, inmediatamente antes del
+    `)` que cierra el array, localizado por búsqueda —no por número fijo, C23/C34— al momento de
+    implementar; NO se le toca la coma a ninguna línea existente), huella en
     `error_fingerprints.json` con `log_pattern` compilable y `self_test` (F6.4 — C13), guard del
     runner `.ps1` (**F6.5**, 4 tests, nace verde — el 5.º se eliminó por C24), `npm run build`, y la
     suite de cierre de F6.3 **contra su tabla de baseline medido** (A5).
@@ -2451,11 +2587,14 @@ que ninguno mencione la key nueva; ver F3.)
       `backend/scripts/run_harness_tests.sh` (variable `HARNESS_TEST_FILES`, `:20`) como líneas
       **desnudas** (sin comillas, sin coma — es lo único que acepta la regex del meta-test), y en
       `backend/scripts/run_harness_tests.ps1` (variable `$HarnessTestFiles`, `:13`)
-      entrecomilladas y **SIN coma, al final del array, después de la última entrada real
-      (`:796`)**. **No** se le agrega ni se le quita coma a ninguna línea existente (**C23**: la del
-      258 ya tiene la suya y no es la última; **C24**: PowerShell no exige coma entre elementos
-      separados por salto de línea — 207 entradas del archivo real no la llevan y parsea con 0
-      errores). Lo único prohibido es una coma **colgante** justo antes del `)`.
+      entrecomilladas y **SIN coma, inmediatamente antes del `)` que cierra el array** — ese `)`
+      se localiza por búsqueda (`Select-String`/`grep -n '^)$'`) al momento de implementar, **nunca**
+      por un número de línea fijo ni por el nombre de "la entrada que hoy es la última": la
+      última entrada real cambia con cada plan que se mergea (**C23** con el v3, **C34** con el v4
+      — dos veces el mismo archivo). **No** se le agrega ni se le quita coma a ninguna línea
+      existente (**C24**: PowerShell no exige coma entre elementos separados por salto de línea —
+      207 entradas del archivo real no la llevan y parsea con 0 errores). Lo único prohibido es una
+      coma **colgante** justo antes del `)`.
       Y **no** figuran en `backend/tests/harness_ratchet_allowlist.txt`.
 - [ ] `.venv\Scripts\python.exe -m pytest tests/test_plan266_harness_runner_paridad.py -q` →
       `0 failed`, **4 tests** (**F6.5**; eran 5 en el v3 — el de "entradas pegadas" se eliminó

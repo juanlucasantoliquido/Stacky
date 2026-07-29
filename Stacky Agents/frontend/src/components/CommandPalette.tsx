@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Agents, GlobalSearchApi, Packs, Projects, Tickets } from "../api/endpoints";
+// Plan 267 F5 [C21] — rawGet, NUNCA api.get: api.get delega en request<T>(), que
+// hace `if (!res.ok) throw` en todo non-2xx, y el 404 NO es un caso raro acá: es
+// el camino DOCUMENTADO de STACKY_DEVOPS_ACTION_CATALOG_ENABLED en OFF. Con
+// api.get, cada apertura de la paleta con la flag apagada tiraría una promesa
+// rechazada sin capturar. rawGet devuelve { status, ok, data } y solo lanza ante
+// un fallo de red.
+import { rawGet } from "../api/client";
 import LoadErrorState from "./LoadErrorState";
 import type { RemoteGroup } from "./commandPaletteData";
-import { NAV_COMMANDS, fuzzyScore, mergeDeepResults } from "./commandPaletteData";
+import {
+  NAV_COMMANDS,
+  devopsActionCommands,
+  fuzzyScore,
+  mergeDeepResults,
+} from "./commandPaletteData";
 import type { Command } from "./commandPaletteData";
+import { bindingFor } from "../services/devopsActionBindings";
+import { runDevOpsAction } from "../services/devopsActionRunner";
+import type { DevOpsActionMeta } from "../services/devopsActionTypes";
+import { useConfirm } from "./ui";
 import { useOnboardingStore } from "../store/onboardingStore";
 import styles from "./CommandPalette.module.css";
 
@@ -34,6 +50,10 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
   const [loadFailed, setLoadFailed] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Plan 267 F5 — acciones DevOps. Se piden UNA SOLA VEZ al abrir la paleta,
+  // NUNCA en un intervalo (§4 principio 9: ninguna fase introduce sondeo).
+  const [devopsActions, setDevopsActions] = useState<DevOpsActionMeta[]>([]);
+  const askConfirm = useConfirm();
 
   useEffect(() => {
     if (!open) return;
@@ -66,6 +86,12 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
         setProjects(list.map((p: any) => ({ name: p.name })));
       })
       .catch(() => { setProjects([]); setLoadFailed((p) => [...p, "proyectos"]); });
+    // Plan 267 F5 [C21] — con la flag apagada el GET da 404 y rawGet NO lanza:
+    // acciones = [] y la paleta queda EXACTAMENTE como hoy, sin banner y sin
+    // error. Por eso este camino no suma nada a loadFailed.
+    rawGet<{ ok: boolean; actions: DevOpsActionMeta[] }>("/devops/actions/catalog")
+      .then((r) => setDevopsActions(r.ok && r.data ? r.data.actions ?? [] : []))
+      .catch(() => setDevopsActions([]));
   }, [open, reloadKey]);
 
   useEffect(() => {
@@ -154,8 +180,25 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
         run: () => onNavigate(`/?project=${encodeURIComponent(pr.name)}`),
       });
     }
+    // Plan 267 F5 — las acciones DevOps van DESPUES de NAV_COMMANDS y del resto:
+    // la paleta pasa de ser un ascensor a ser tambien un panel de mandos, sin
+    // desplazar nada de lo que ya habia. paletteMode() garantiza que ninguna
+    // ESCRITURA se ejecute desde aca: como maximo navega a su seccion.
+    commands.push(
+      ...devopsActionCommands(
+        devopsActions,
+        (a) => {
+          void runDevOpsAction(a, {}, bindingFor(a.id), {
+            askConfirm,
+            navigate: onNavigate,
+            now: () => Date.now(),
+          });
+        },
+        onNavigate,
+      ),
+    );
     return commands;
-  }, [tickets, agents, packs, projects, onNavigate, onOpenShortcuts]);
+  }, [tickets, agents, packs, projects, devopsActions, askConfirm, onNavigate, onOpenShortcuts]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) {

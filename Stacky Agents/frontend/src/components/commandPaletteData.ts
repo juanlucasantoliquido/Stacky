@@ -5,7 +5,17 @@
  * CommandPalette.tsx, lo que rompía tsc al no poder reusarlos acá — C3 de la
  * crítica v2 del plan), la navegación total (13 tabs) y el merge de
  * resultados remotos de búsqueda profunda. Testeable sin jsdom.
+ *
+ * Plan 267 F5 — se agrega el vocabulario "devops-action" y la funcion pura
+ * devopsActionCommands(). Edicion ADITIVA: no se reordena CommandKind, ni se
+ * modifica NAV_COMMANDS, fuzzyScore o mergeDeepResults.
  */
+import {
+  IMPACT_TEXT,
+  navPathWithParams,
+  paletteMode,
+} from "../services/devopsActionRunner";
+import type { DevOpsActionMeta } from "../services/devopsActionTypes";
 
 export type CommandKind =
   | "ticket"
@@ -16,7 +26,11 @@ export type CommandKind =
   | "execution"
   | "doc"
   | "server"
-  | "flag";
+  | "flag"
+  // Plan 267 F5 — va AL FINAL a proposito, para no alterar el orden que otros
+  // modulos puedan asumir. EntityKind (services/entityActions.ts) usa
+  // Extract<CommandKind, "execution" | "ticket">, asi que NO se ve afectado.
+  | "devops-action";
 
 export interface Command {
   id: string;
@@ -94,7 +108,52 @@ const DEEP_ICONS: Record<string, string> = {
   doc: "📄",
   server: "🖥️",
   flag: "🚩",
+  "devops-action": "⚡", // Plan 267 F5
 };
+
+/**
+ * Plan 267 F5 — Convierte el catalogo de acciones DevOps en Command[].
+ *
+ * DOBLE CERROJO (§4.10, calcado de entityActions.ts, que ya resolvio esto para
+ * 2 entidades): una accion de ESCRITURA nunca queda a un fuzzy-match + Enter de
+ * distancia. `paletteMode(a)` decide, y mira `effect` ANTES que `reach`:
+ *   - 'run'    => el Command EJECUTA (via onRun). Solo effect 'read'.
+ *   - 'nav'    => el Command NAVEGA a navPathWithParams(a, {}) y NO ejecuta.
+ *                 El label lo dice: "Ir a <accion>".
+ *   - 'hidden' => no entra a la paleta.
+ * La paleta jamas confirma sola, y jamas dispara una escritura.
+ */
+export function devopsActionCommands(
+  actions: DevOpsActionMeta[],
+  onRun: (a: DevOpsActionMeta) => void,
+  onNavigate: (path: string) => void
+): Command[] {
+  const out: Command[] = [];
+  for (const a of actions ?? []) {
+    const mode = paletteMode(a);
+    if (mode === "hidden") continue;
+    if (mode === "run") {
+      out.push({
+        id: `devops-action-${a.id}`,
+        kind: "devops-action",
+        icon: "⚡",
+        label: a.label,
+        hint: a.summary,
+        run: () => onRun(a),
+      });
+      continue;
+    }
+    out.push({
+      id: `devops-action-nav-${a.id}`,
+      kind: "devops-action",
+      icon: "⚠️",
+      label: `Ir a ${a.label}`,
+      hint: `Escribe · ${IMPACT_TEXT[a.impact]} · se hace desde el panel`,
+      run: () => onNavigate(navPathWithParams(a, {})),
+    });
+  }
+  return out;
+}
 
 /**
  * Aplana los grupos remotos de /api/search/global a Command[], descartando

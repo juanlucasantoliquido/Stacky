@@ -871,7 +871,7 @@
         ]
       },
       "killed_by": "plan-266",
-      "killed_commit": "TODO-completar-al-implementar",
+      "killed_commit": "a38beb16",
       "date_resolved": "2026-07-29",
       "guard_test": "frontend/src/__tests__/dbcompareSummaryShapeRatchet.test.ts",
       "evidence": [

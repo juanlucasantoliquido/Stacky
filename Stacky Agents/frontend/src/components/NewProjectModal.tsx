@@ -1,8 +1,21 @@
 import React, { useState } from "react";
 import { Projects, Mantis, type MantisProject, type MantisListParams } from "../api/endpoints";
-import type { InitProjectPayload, TrackerType } from "../types";
+import type { GitlabEngineResult, InitProjectPayload, TrackerType } from "../types";
 import { Field, Input, Select, Textarea, Checkbox, firstErrorFieldId } from "./ui";
 import useOptimisticPending from "../hooks/useOptimisticPending";
+import usePlan259Flags from "../hooks/usePlan259Flags";
+// Plan 259 F5 — el .tsx NO decide nada: la lógica vive en el módulo puro.
+import {
+  GITLAB_FIELD_DOM_ORDER,
+  engineNoticeFor,
+  humanizeApiError,
+  normalizeGitlabProjectPath,
+  normalizeGitlabUrl,
+  showGitlabTrackerButton,
+  showInfoButton,
+  validateGitlabFields,
+} from "../projects/newProjectGitlabModel";
+import SetupGuideDialog from "./SetupGuideDialog";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -35,6 +48,12 @@ const EMPTY: InitProjectPayload = {
   mantis_token: "",
   mantis_username: "",
   mantis_password: "",
+  // Plan 259 F5.c
+  gitlab_url: "",
+  gitlab_project: "",
+  gitlab_group: "",
+  gitlab_token: "",
+  gitlab_enable_engine: true,
 };
 
 export default function NewProjectModal({ onClose, onCreated }: Props) {
@@ -44,6 +63,12 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [docsChecking, setDocsChecking] = useState(false);
   const [docsCheckMessage, setDocsCheckMessage] = useState<string | null>(null);
+
+  // Plan 259 — flags de UI (fail-open) + panel de la guía + aviso del motor.
+  const flags = usePlan259Flags();
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [engineNotice, setEngineNotice] = useState<string | null>(null);
+  const [createdArgs, setCreatedArgs] = useState<[string, string] | null>(null);
 
   // Mantis: listar proyectos disponibles
   const [mantisProjects, setMantisProjects] = useState<MantisProject[]>([]);
@@ -81,7 +106,15 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
       technical: docsPath("technical").trim(),
       functional: docsPath("functional").trim(),
     };
-    return { ...form, docs_paths };
+    const base = { ...form, docs_paths };
+    if (base.tracker_type !== "gitlab") return base;
+    // Plan 259 F5.c punto 7 — normalizar ANTES de enviar: el operador puede pegar
+    // la URL del proyecto o dejar el /api/v4.
+    return {
+      ...base,
+      gitlab_url: normalizeGitlabUrl(base.gitlab_url ?? ""),
+      gitlab_project: normalizeGitlabProjectPath(base.gitlab_project ?? ""),
+    };
   }
 
   async function browseAgentsDir() {
@@ -206,6 +239,10 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
     } else if (f.tracker_type === "jira") {
       if (!f.jira_url?.trim()) errs.jira_url = "Ingresá la URL de Jira";
       if (!f.jira_key?.trim()) errs.jira_key = "Ingresá la clave del proyecto Jira";
+    } else if (f.tracker_type === "gitlab") {
+      // Plan 259 F5.c punto 5 — ANTES del `else`, que es el catch-all de Mantis y
+      // le aplicaría reglas de Mantis a un formulario GitLab.
+      return { ...errs, ...validateGitlabFields(f) };
     } else {
       if (!f.mantis_url?.trim()) errs.mantis_url = "Ingresá la URL de Mantis";
       if (!f.mantis_project_id?.trim()) errs.mantis_project_id = "Seleccioná un proyecto de Mantis";
@@ -220,7 +257,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
   }
 
   // [ADICIÓN ARQUITECTO] Orden VISUAL del form (para foco-al-primer-error).
-  const NP_FIELD_DOM_ORDER = ["name", "workspace_root", "organization", "ado_project", "jira_url", "jira_key", "mantis_url", "mantis_project_id", "mantis_username", "mantis_token"] as const;
+  const NP_FIELD_DOM_ORDER = ["name", "workspace_root", "organization", "ado_project", "jira_url", "jira_key", "mantis_url", "mantis_project_id", "mantis_username", "mantis_token", ...GITLAB_FIELD_DOM_ORDER] as const;
 
   async function handleSubmit() {
     setError(null);
@@ -235,21 +272,41 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
     try {
       const result = await run(() => Projects.init(buildPayload()));
       if (result.ok) {
+        // Plan 259 F5.c punto 9 — el modal se cierra en el camino feliz, así que
+        // un mensaje pintado adentro sería invisible. Solo el nivel "warn" (el
+        // motor no se pudo activar) justifica NO cerrar: el proyecto YA existe,
+        // el aviso informa, no bloquea.
+        const notice = engineNoticeFor(
+          (result as { gitlab_engine?: GitlabEngineResult }).gitlab_engine
+        );
+        if (notice.level === "warn") {
+          setEngineNotice(notice.text);
+          setCreatedArgs([result.project.name, result.project.display_name]);
+          return;
+        }
         onCreated(result.project.name, result.project.display_name);
         onClose();
       } else {
         setError((result as any).error || "Error desconocido");
       }
     } catch (e: any) {
-      setError(e?.message || "Error de conexión");
+      // Plan 259 F5.c punto 10 — `api.post` LANZA en cualquier non-2xx, así que
+      // el rechazo explícito de la flag apagada cae ACÁ y sin humanizar el
+      // operador leería `400 BAD REQUEST: {"ok":false,...}`.
+      setError(humanizeApiError(e?.message || "Error de conexión"));
     }
   }
 
     const isAdo    = form.tracker_type === "azure_devops";
   const isJira   = form.tracker_type === "jira";
   const isMantis = form.tracker_type === "mantis";
+  const isGitlab = form.tracker_type === "gitlab";
+  // Plan 259 — la DECISIÓN vive en el módulo puro (testeable sin jsdom).
+  const showGitlab    = showGitlabTrackerButton(flags);
+  const guideAvailable = showInfoButton(form.tracker_type, flags);
 
   return (
+    <>
     <div className={styles.backdrop} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={styles.panel}>
         <h2 className={styles.title}>📁 Inicializar Nuevo Proyecto</h2>
@@ -391,6 +448,30 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
             >
               🟢 Mantis BT
             </button>
+            {/* Plan 259 F5.c — reusa .trackerBtn/.trackerBtnActive igual que el
+                botón GitLab de Edición. NO crear un .trackerBtnGitlab con el
+                naranja del zorro: uiDebtBaseline congela este .module.css en 24
+                colores literales y un hex más rompe uiDebtRatchet. */}
+            {showGitlab && (
+              <button
+                type="button"
+                className={`${styles.trackerBtn} ${isGitlab ? styles.trackerBtnActive : ""}`}
+                onClick={() => setTrackerType("gitlab")}
+              >
+                🦊 GitLab
+              </button>
+            )}
+            {guideAvailable && (
+              <button
+                type="button"
+                className={styles.btnInfo}
+                onClick={() => setGuideOpen(true)}
+                title="Cómo configurar este sistema de tickets"
+                aria-label="Información de configuración"
+              >
+                ℹ️ INFO
+              </button>
+            )}
           </div>
 
           {/* Campos ADO */}
@@ -707,27 +788,136 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
             </div>
           )}
 
+          {/* Campos GitLab (Plan 259 F5.c) */}
+          {isGitlab && (
+            <div className={styles.trackerFields}>
+              <span className={styles.trackerHeading}>🦊 GitLab</span>
+              <Field label="URL base de GitLab" labelClassName={styles.label} error={fieldErrors.gitlab_url} id="np-gitlab_url">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.gitlab_url)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: https://gitlab.com"
+                    value={form.gitlab_url ?? ""}
+                    onChange={(e) => patch("gitlab_url", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Path del proyecto" labelClassName={styles.label} error={fieldErrors.gitlab_project} id="np-gitlab_project">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.gitlab_project)}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: grupo/subgrupo/proyecto"
+                    value={form.gitlab_project ?? ""}
+                    onChange={(e) => patch("gitlab_project", e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Token de acceso" labelClassName={styles.label} error={fieldErrors.gitlab_token} id="np-gitlab_token">
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    invalid={Boolean(fieldErrors.gitlab_token)}
+                    className={styles.input}
+                    type="password"
+                    placeholder="Pegá el token con permiso 'api'"
+                    value={form.gitlab_token ?? ""}
+                    onChange={(e) => patch("gitlab_token", e.target.value)}
+                  />
+                )}
+              </Field>
+
+              <details className={styles.advanced}>
+                <summary>🔍 Opciones avanzadas GitLab</summary>
+                <div className={styles.advancedBody}>
+                  <Field label="Grupo (solo para épicas nativas)" labelClassName={styles.label} id="np-gitlab_group">
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="text"
+                        placeholder="Ej: acme"
+                        value={form.gitlab_group ?? ""}
+                        onChange={(e) => patch("gitlab_group", e.target.value)}
+                      />
+                    )}
+                  </Field>
+                </div>
+              </details>
+
+              <Checkbox
+                labelClassName={styles.checkboxRow}
+                checked={form.gitlab_enable_engine !== false}
+                onChange={(e) => patch("gitlab_enable_engine", e.target.checked)}
+                label="Activar el motor GitLab (necesario para que sincronice)"
+              />
+
+              <p className={styles.note}>
+                Las credenciales se guardan cifradas en <code>backend/projects/{"{nombre}"}/auth/gitlab_auth.json</code>.
+              </p>
+            </div>
+          )}
+
           <p className={styles.hint}>
             Se creará <code>backend/projects/{"{nombre}"}/config.json</code> con la configuración del proyecto.
           </p>
 
           {error && <div className={styles.error}>{error}</div>}
+          {engineNotice && <div className={styles.error}>{engineNotice}</div>}
         </div>
 
         <div className={styles.footer}>
-          <button className={styles.btnGhost} onClick={onClose} disabled={saving}>
-            Cancelar
-          </button>
-          <button
-            className={`${styles.btnAccent} ${pendingClass}`.trim()}
-            onClick={handleSubmit}
-            disabled={saving}
-            aria-busy={saving || undefined}
-          >
-            {saving ? "Inicializando…" : "Crear e inicializar"}
-          </button>
+          {engineNotice && createdArgs ? (
+            /* El proyecto YA se creó: el único camino es reconocer el aviso. */
+            <button
+              className={styles.btnAccent}
+              onClick={() => {
+                onCreated(createdArgs[0], createdArgs[1]);
+                onClose();
+              }}
+            >
+              Listo
+            </button>
+          ) : (
+            <>
+              <button className={styles.btnGhost} onClick={onClose} disabled={saving}>
+                Cancelar
+              </button>
+              <button
+                className={`${styles.btnAccent} ${pendingClass}`.trim()}
+                onClick={handleSubmit}
+                disabled={saving}
+                aria-busy={saving || undefined}
+              >
+                {saving ? "Inicializando…" : "Crear e inicializar"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
+
+    {/* Plan 259 F6.c (v3, hallazgo B12) — HERMANO, no hijo. Este modal es un
+        overlay a mano (styles.backdrop/styles.panel), no usa el Dialog canónico;
+        montar el Dialog ADENTRO anida un portal dentro del overlay: doble
+        backdrop y doble `inert` sobre #root por el openDialogCount de Dialog. */}
+    <SetupGuideDialog
+      open={guideOpen}
+      onClose={() => setGuideOpen(false)}
+      provider={form.tracker_type}
+      values={{
+        gitlab_url: form.gitlab_url ?? "",
+        gitlab_project: form.gitlab_project ?? "",
+        gitlab_token: form.gitlab_token ?? "",
+        gitlab_enable_engine: form.gitlab_enable_engine !== false,
+      }}
+      canRunVerify={flags.setupGuideVerify}
+    />
+    </>
   );
 }

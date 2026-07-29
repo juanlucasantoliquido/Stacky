@@ -642,6 +642,22 @@ def health():
         "ui_context_menu_enabled": bool(getattr(_config.config, "STACKY_UI_CONTEXT_MENU_ENABLED", False)),  # Plan 175
         "watchers": {"output_watcher": output_watcher_info},
         "db_runtime": db_runtime,   # Plan 253 F7 — concurrencia de la base, consultable
+        # Plan 259 F4.c — flags de UI, en un sub-objeto para que la proxima no
+        # obligue a tocar el tipo del frontend. Aditivo: ningun consumidor actual
+        # de /api/diag/health lee esta clave. El default del getattr es True para
+        # que la UI falle HACIA la funcionalidad (fail-open); el servidor igual
+        # valida (F2), asi que mostrar de mas nunca corrompe datos.
+        # OJO: en ESTE archivo la instancia se escribe `_config.config`
+        # (`import config as _config`, arriba). Copiar `config.config` de otra fase
+        # de este plan tira NameError — v4, hallazgo N3.
+        "flags": {
+            "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED": bool(
+                getattr(_config.config, "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED", True)),
+            "STACKY_SETUP_GUIDE_ENABLED": bool(
+                getattr(_config.config, "STACKY_SETUP_GUIDE_ENABLED", True)),
+            "STACKY_SETUP_GUIDE_VERIFY_ENABLED": bool(
+                getattr(_config.config, "STACKY_SETUP_GUIDE_VERIFY_ENABLED", True)),
+        },
         "warnings": warnings,
     })
 

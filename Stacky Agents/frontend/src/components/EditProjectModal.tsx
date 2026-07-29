@@ -5,6 +5,9 @@ import { formatLoadErrorMessage } from "../utils/loadError";
 import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import { Field, Input, Select, Textarea, Checkbox, firstErrorFieldId } from "./ui";
 import useOptimisticPending from "../hooks/useOptimisticPending";
+import usePlan259Flags from "../hooks/usePlan259Flags";
+import { showInfoButton } from "../projects/newProjectGitlabModel";
+import SetupGuideDialog from "./SetupGuideDialog";
 import styles from "./NewProjectModal.module.css";
 
 interface Props {
@@ -288,6 +291,10 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   const isMantis = form.tracker_type === "mantis";
   const isGitlab = form.tracker_type === "gitlab";
 
+  // Plan 259 F5.d — flags de UI (fail-open) + panel de la guía.
+  const flags259 = usePlan259Flags();
+  const [guideOpen, setGuideOpen] = useState(false);
+
   function validate(f: typeof form): Record<string, string> {
     const errs: Record<string, string> = {};
     if (!String(f.workspace_root ?? "").trim()) errs.workspace_root = "Ingresá el workspace root";
@@ -320,6 +327,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
   }
 
   return (
+    <>
     <div className={styles.backdrop} onClick={(e) => { if (e.target === e.currentTarget && shouldCloseOnBackdrop({ dirty, busy: saving })) onClose(); }}>
       <div className={styles.panel}>
         <h2 className={styles.title}>✎ Editar Proyecto: {project.display_name || project.name}</h2>
@@ -451,6 +459,19 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
             >
               🦊 GitLab
             </button>
+            {/* Plan 259 F5.d punto 4 — el INFO también acá, para que la guía esté
+                donde el operador está mirando. */}
+            {showInfoButton(form.tracker_type ?? "", flags259) && (
+              <button
+                type="button"
+                className={styles.btnInfo}
+                onClick={() => setGuideOpen(true)}
+                title="Cómo configurar este sistema de tickets"
+                aria-label="Información de configuración"
+              >
+                ℹ️ INFO
+              </button>
+            )}
           </div>
 
           {isAdo && (
@@ -696,7 +717,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
             <div className={styles.trackerFields}>
               <span className={styles.trackerHeading}>🦊 GitLab</span>
               <p className={styles.note}>
-                El token de acceso se lee del archivo de autenticación. Nunca se guarda en el perfil.
+                El token de acceso se guarda cifrado en el archivo de autenticación. Nunca se guarda en el perfil.
               </p>
               <Field label="URL base del GitLab" labelClassName={styles.label}>
                 {(ctl) => (
@@ -722,6 +743,21 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                   />
                 )}
               </Field>
+              {/* Plan 259 F5.d — este campo NO existía: convertir un proyecto a
+                  GitLab desde acá no podía guardar credencial por el camino de la
+                  casa. El servidor solo escribe si viene no vacío. */}
+              <Field label="Token de acceso (dejalo vacío para no cambiarlo)" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="password"
+                    placeholder="Pegá el token con permiso 'api'"
+                    value={form.gitlab_token ?? ""}
+                    onChange={(e) => patch("gitlab_token", e.target.value)}
+                  />
+                )}
+              </Field>
               <Field label="Grupo (opcional, para Epics nativos)" labelClassName={styles.label}>
                 {(ctl) => (
                   <Input
@@ -740,14 +776,19 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                     {...ctl}
                     className={styles.input}
                     type="text"
-                    placeholder="Ej: C:\secrets\gitlab_token.txt"
+                    placeholder="Ej: C:\secrets\gitlab_auth.json"
                     value={form.gitlab_auth_file ?? ""}
                     onChange={(e) => patch("gitlab_auth_file", e.target.value)}
                   />
                 )}
               </Field>
+              {/* Plan 259 F5.d — la nota anterior MENTÍA: decía "solo el token en
+                  texto plano", pero el lector hace json.loads, así que un .txt con
+                  el token pelado NUNCA funcionó. */}
               <p className={styles.note}>
-                El archivo debe contener solo el token en texto plano (sin comillas ni saltos de línea extra).
+                Es un archivo JSON con la forma <code>{'{"token": "..."}'}</code> . Si lo dejás vacío,
+                Stacky usa <code>auth/gitlab_auth.json</code> dentro de la carpeta del proyecto y
+                guarda ahí el token cifrado.
               </p>
             </div>
           )}
@@ -879,5 +920,22 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
         </div>
       </div>
     </div>
+
+    {/* Plan 259 F6.c (v3, hallazgo B12) — HERMANO, no hijo: este modal es un
+        overlay a mano, y montar el Dialog adentro anidaría un portal (doble
+        backdrop + doble `inert` sobre #root). */}
+    <SetupGuideDialog
+      open={guideOpen}
+      onClose={() => setGuideOpen(false)}
+      provider={form.tracker_type ?? ""}
+      values={{
+        gitlab_url: String(form.gitlab_url ?? ""),
+        gitlab_project: String(form.gitlab_project ?? ""),
+        gitlab_token: String(form.gitlab_token ?? ""),
+        gitlab_enable_engine: false,
+      }}
+      canRunVerify={flags259.setupGuideVerify}
+    />
+    </>
   );
 }

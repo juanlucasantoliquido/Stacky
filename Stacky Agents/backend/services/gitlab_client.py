@@ -13,6 +13,7 @@ NUNCA escribe tokens a disco. Solo lee de las fuentes declaradas.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.parse
@@ -23,6 +24,8 @@ import requests
 
 from services.tracker_provider import TrackerConfigError, TrackerApiError
 
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_PAGE_CAP = 40
 _RETRY_MAX = 3
@@ -73,7 +76,24 @@ class GitLabClient:
     # ── Configuración ─────────────────────────────────────────────────────────
 
     def _load_token_from_file(self, auth_path: Optional[str]) -> str:
-        """Busca el token en auth/gitlab_auth.json bajo auth_path."""
+        """Busca el token en el archivo de credencial GitLab bajo auth_path.
+
+        Plan 259 F3: usa read_secret_from_file, que descifra DPAPI cuando el
+        archivo declara token_format y devuelve el valor tal cual cuando está en
+        texto plano.
+
+        ATENCIÓN (Plan 259 v2, hallazgo C7): read_secret_from_file NO es solo
+        lectura. Cuando encuentra el secreto en claro lo cifra y REESCRIBE el
+        archivo (services/secrets_store.py:277-279), lo que además ata el archivo
+        al usuario de Windows que corrió la migración (DPAPI es por-usuario y
+        solo-Windows). Eso es lo que queremos —el archivo queda al nivel de los
+        otros 3 trackers— pero significa que un archivo no escribible haría
+        fallar la lectura. Por eso, si el camino cifrado lanza, se cae al lector
+        plano EXACTO de hoy: una configuración que funciona no puede dejar de
+        funcionar por este plan.
+        """
+        from services.secrets_store import read_secret_from_file  # import local: evita ciclo
+
         candidates: list[Path] = []
         if auth_path:
             candidates.append(Path(auth_path) / "auth" / "gitlab_auth.json")
@@ -82,14 +102,28 @@ class GitLabClient:
         candidates.append(Path("auth") / "gitlab_auth.json")
 
         for path in candidates:
-            if path.exists():
+            if not path.exists():
+                continue
+            for field, fmt in (("token", "token_format"), ("private_token", "private_token_format")):
                 try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                    tok = str(data.get("token") or data.get("private_token") or "").strip()
-                    if tok:
-                        return tok
+                    tok = (read_secret_from_file(path, field, format_field=fmt).value or "").strip()
                 except Exception:
-                    pass
+                    tok = ""
+                if tok:
+                    return tok
+            # Fallback literal al comportamiento previo a este plan (archivo de
+            # solo lectura, disco lleno, JSON con el token plano que no se pudo
+            # migrar). NO se pierde ninguna instalación que hoy anda.
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                tok = str(data.get("token") or data.get("private_token") or "").strip()
+                if tok:
+                    logger.warning(
+                        "GitLab: token leído en texto plano de %s (no se pudo migrar a DPAPI)", path
+                    )
+                    return tok
+            except Exception:
+                pass
         return ""
 
     def _headers(self) -> dict:

@@ -114,6 +114,48 @@ def post_harness_profile():
     })
 
 
+def set_flag_values(raw_updates: dict, typed: dict | None = None) -> dict:
+    """Plan 259 F7 — valida + persiste + hot-aplica flags del arnés.
+
+    Es EXACTAMENTE lo que hacía inline put_harness_flags (pasos 1-3 de su
+    docstring), extraído para que se pueda encender una perilla desde código sin
+    hacer un POST a nuestro propio servidor. `apply_updates` por sí sola NO
+    persiste ni aplica (services/harness_flags.py, su propio docstring).
+
+    `typed` es el dict YA validado y casteado. Si viene, se reusa y NO se vuelve
+    a validar: así el endpoint puede dejar `apply_updates` adentro de su
+    try/except ValueError (que es lo único que debe dar 400) y llamar a esta
+    función afuera, sin cambiar el contrato HTTP (Plan 259 v3, hallazgo B14).
+    Si viene None, esta función valida.
+
+    ALCANCE: SOLO keys registradas en FLAG_REGISTRY. Una key que no esté ahí hace
+    que `apply_updates` lance ValueError — es a propósito. Ver
+    api/projects.py::_enable_gitlab_engine para el caso de una key de
+    global_config (STACKY_GITLAB_ENABLED), que NO vive en este registro.
+
+    Devuelve el dict tipado de lo aplicado. Propaga ValueError si una key no
+    existe o el valor no castea (el endpoint lo traduce a 400).
+    """
+    from services.harness_flags import apply_updates, _REGISTRY_INDEX
+    from config import config
+
+    if typed is None:                                      # 1. validar + castear
+        typed = apply_updates(raw_updates)
+
+    env_strings: dict[str, str] = {}
+    for key, val in typed.items():
+        env_strings[key] = ("true" if val else "false") if isinstance(val, bool) else str(val)
+    _write_env(env_strings)                                # 2. persistir .env + os.environ
+
+    for key, val in typed.items():                         # 3. hot-apply al singleton
+        if not _REGISTRY_INDEX[key].env_only:
+            try:
+                setattr(config, key, val)
+            except (AttributeError, TypeError) as exc:
+                logger.warning("hot-apply fallback para %s: %s", key, exc)
+    return typed
+
+
 @bp.put("/harness-flags")
 def put_harness_flags():
     """Actualiza uno o más flags del arnés.
@@ -136,32 +178,17 @@ def put_harness_flags():
     if not raw_updates:
         return jsonify({"ok": True, "applied": {}}), 200
 
+    # Plan 259 F7.a — los pasos 2-3 viven en set_flag_values (reusable desde
+    # código). El `try` envuelve SOLO apply_updates, que es el único paso que debe
+    # dar 400: si _write_env lanza, eso es un 500 y así era antes de la
+    # extracción. Cambiar ese borde alteraría el contrato HTTP en silencio
+    # (hallazgo B14, congelado por test_endpoint_500_si_falla_persistir).
     try:
         typed = apply_updates(raw_updates)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
-    # Serializar a strings para el .env
-    env_strings: dict[str, str] = {}
-    for key, val in typed.items():
-        if isinstance(val, bool):
-            env_strings[key] = "true" if val else "false"
-        else:
-            env_strings[key] = str(val)
-
-    # Persistir al .env (reutiliza la lógica existente de global_config)
-    _write_env(env_strings)
-
-    # Hot-apply: actualizar os.environ y el atributo del config singleton
-    for key, val in typed.items():
-        spec = _REGISTRY_INDEX[key]
-        # os.environ: ya actualizado por _write_env (para valores no vacíos)
-        # Para env_only=False también actualizamos el atributo del singleton
-        if not spec.env_only:
-            try:
-                setattr(config, key, val)
-            except (AttributeError, TypeError) as exc:
-                logger.warning("hot-apply fallback para %s: %s", key, exc)
+    set_flag_values(raw_updates, typed=typed)
 
     applied_keys = list(typed.keys())
     logger.info("harness-flags actualizado: %s", applied_keys)

@@ -625,8 +625,100 @@ def write_mantis_auth(
     return auth_file
 
 
+# ── GitLab ────────────────────────────────────────────────────────────────────
+
+DEFAULT_GITLAB_AUTH_FILE = "auth/gitlab_auth.json"
+
+
+def initialize_gitlab_project(
+    name: str,
+    url: str,
+    project_path: str,
+    workspace_root: str,
+    display_name: str = "",
+    group: str = "",
+    auth_file: str = "",
+    docs_paths: dict | None = None,
+    agents_dir: str | None = None,
+) -> dict:
+    """Helper de alto nivel para dar de alta un proyecto GitLab (Plan 259 F1).
+
+    `project_path` es 'grupo/subgrupo/proyecto' o el ID numérico. Se guarda en
+    `issue_tracker.project` y `issue_tracker.base_url`, que son las claves que ya
+    leen services/project_context.py `_tracker_project_for` y `_base_url_for`.
+
+    `auth_file` vacío NO significa "poné el default": significa "conservá el que
+    ya tenga el proyecto" (Plan 259 v2, hallazgo C4). El modal de edición expone
+    ese campo como ruta editable; pisarlo con el default sería la misma
+    degradación silenciosa que este plan viene a matar.
+    Solo cuando el proyecto no tiene ninguno se usa DEFAULT_GITLAB_AUTH_FILE.
+    """
+    previous = (get_project_config(name) or {}).get("issue_tracker") or {}
+    resolved_auth = (
+        (auth_file or "").strip()
+        or str(previous.get("auth_file") or "").strip()
+        or DEFAULT_GITLAB_AUTH_FILE
+    )
+    tracker: dict = {
+        "type":      "gitlab",
+        "base_url":  url.rstrip("/"),
+        "project":   project_path.strip(),
+        "auth_file": resolved_auth,
+    }
+    if group:
+        tracker["group"] = group.strip()
+
+    return initialize_project(
+        name=name,
+        display_name=display_name or name,
+        workspace_root=workspace_root,
+        issue_tracker=tracker,
+        docs_paths=docs_paths,
+        agents_dir=agents_dir,
+    )
+
+
+def resolve_gitlab_auth_path(name: str, auth_file: str = "") -> Path:
+    """Ruta ABSOLUTA del archivo de credencial GitLab de un proyecto (Plan 259).
+
+    `auth_file` puede ser: vacío (se usa el del config.json, y si tampoco hay,
+    DEFAULT_GITLAB_AUTH_FILE), una ruta relativa (se resuelve bajo la carpeta del
+    proyecto) o una ruta absoluta que el operador cargó en el campo "Ruta al
+    archivo de token" del modal de edición (se respeta tal cual).
+    """
+    declared = (auth_file or "").strip()
+    if not declared:
+        tracker = (get_project_config(name) or {}).get("issue_tracker") or {}
+        declared = str(tracker.get("auth_file") or "").strip() or DEFAULT_GITLAB_AUTH_FILE
+    candidate = Path(declared)
+    if candidate.is_absolute():
+        return candidate
+    return PROJECTS_DIR / name.upper() / candidate
+
+
+def write_gitlab_auth(name: str, url: str, token: str,
+                      project_path: str = "", auth_file: str = "") -> Path:
+    """Escribe el archivo de credencial GitLab del proyecto con el token cifrado.
+
+    El campo se llama `token` y el formato queda declarado en `token_format`
+    (DPAPI), igual que Jira y Mantis. El lector se adapta en F3.
+    La ruta sale de `resolve_gitlab_auth_path`: por default
+    backend/projects/{NAME}/auth/gitlab_auth.json, pero se respeta la ruta que el
+    operador haya declarado (Plan 259 v2, hallazgo C4).
+    """
+    auth_path = resolve_gitlab_auth_path(name, auth_file)
+    auth_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict = {"url": url.rstrip("/")}
+    if project_path:
+        payload["project"] = project_path.strip()
+    set_encrypted_secret(payload, "token", token, format_field="token_format")
+    write_json_file(auth_path, payload)
+    return auth_path
+
+
 __all__ = [
     "PROJECTS_DIR",
+    "DEFAULT_GITLAB_AUTH_FILE",
     "get_all_projects",
     "get_project_config",
     "get_active_project",
@@ -636,12 +728,15 @@ __all__ = [
     "initialize_ado_project",
     "initialize_jira_project",
     "initialize_mantis_project",
+    "initialize_gitlab_project",
+    "resolve_gitlab_auth_path",
     "validate_workspace_root",
     "validate_docs_paths",
     "validate_agents_dir",
     "write_ado_auth",
     "write_jira_auth",
     "write_mantis_auth",
+    "write_gitlab_auth",
     "delete_project",
     "get_project_pinned_agents",
     "set_project_pinned_agents",

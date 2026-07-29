@@ -267,10 +267,99 @@ MANTIS: dict = {
 }
 
 
+# Plan 259 F1.0 — Sin este template embebido, en el deploy congelado (PyInstaller
+# no empaqueta los *.json) `_read_default_template` cae a DEFAULT_TEMPLATES
+# ["azure_devops"] y TODO proyecto GitLab arranca con la maquina de estados de
+# Azure DevOps, en silencio. Contenido copiado literal de
+# services/client_profile_defaults/gitlab.json (el test de drift los compara 1:1).
+GITLAB: dict = {
+    "schema_version": 1,
+    "code_layout": {
+        "online_path": "",
+        "batch_path": "",
+        "db_scripts_path": "",
+        "lib_path": "",
+        "test_path": "",
+        "file_extensions": {
+            "ui": "",
+            "ui_code_behind": "",
+            "code": "",
+        },
+        "architecture_layers": [],
+    },
+    "language": {
+        "primary": "",
+        "comment_traceability": "// {ticket_token} | {YYYY-MM-DD} | {description}",
+        "ticket_token_pattern": "GL-{id}",
+        "languages_in_ridioma": [],
+    },
+    "database": {
+        "type": "",
+        "server": "",
+        "readonly_auth_ref": "auth/db_readonly.json",
+        "readonly_user_hint": "",
+        "connection_kind": "",
+        "dml_policy": "prohibited_runtime_must_emit_sql",
+        "catalog_master_files": {},
+        "naming_conventions": {},
+    },
+    "build": {
+        "tool": "",
+        "msbuild_path": "",
+        "configuration": "Release",
+        "online_solutions": [],
+        "batch_proj_glob": "",
+    },
+    "conventions": {
+        "ridioma_helper": "",
+        "ridioma_message_const": "",
+        "string_sanitizer": "",
+        "error_helpers": [],
+    },
+    "docs_indexes": {
+        "technical_master": "",
+        "functional_online": "",
+        "functional_batch": "",
+    },
+    "tracker_state_machine": {
+        "_comment": "GitLab no tiene estados de work item: se modelan con etiquetas stacky::* + open/closed, coherente con gitlab_provider._state_map_for_gitlab. El Plan 216 centraliza esto en el perfil del cliente; 224 lo consume.",
+        "functional": {
+            "input_states": [
+                "stacky::to-do"
+            ],
+            "blocked_state": "stacky::blocked",
+            "next_state_ok": "stacky::review",
+        },
+        "technical": {
+            "input_states": [
+                "stacky::review"
+            ],
+            "blocked_state": "stacky::blocked",
+            "next_state_ok": "stacky::to-do",
+        },
+        "developer": {
+            "input_states": [
+                "stacky::to-do"
+            ],
+            "in_progress": "stacky::doing",
+            "blocked_state": "stacky::blocked",
+            "next_state_ok": "stacky::review",
+        },
+    },
+    "terminology": {
+        "product_name": "",
+        "client_label": "",
+        "domain_glossary_ref": "",
+    },
+    "extensions": {},
+}
+
+
 # Mapa tracker → template. La clave debe coincidir con el nombre del JSON
 # (`{tracker}.json`) para que el test de drift los compare 1:1.
 DEFAULT_TEMPLATES: dict[str, dict] = {
     "azure_devops": AZURE_DEVOPS,
     "jira": JIRA,
     "mantis": MANTIS,
+    "gitlab": GITLAB,
 }

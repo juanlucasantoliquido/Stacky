@@ -1,4 +1,7 @@
 import { api, apiBase, rawPost, rawGet, rawPut, type RawResponse, type GatewayErrorBody } from "./client";
+// Plan 259 F6.a — los tipos de la guía viven en el módulo PURO de projects/
+// (RTL/jsdom no están instalados: la lógica testeable no puede vivir en un .tsx).
+import type { GuideCheckResult, SetupGuideDoc } from "../projects/setupGuideModel";
 // Plan 238 — Bandeja de incidencias abiertas (los import type van AL TOPE).
 import type {
   IncidentInboxResponse,
@@ -3375,6 +3378,31 @@ export interface HealthResponse {
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
 export const Health = {
   get: (): Promise<HealthResponse> => api.get<HealthResponse>("/api/diag/health"),
+};
+
+// ── Plan 259 F6.a — Guía de configuración verificable ────────────────────────
+// `rawGet`/`rawPost`, NUNCA `api.get`/`api.post`: el wrapper `api.*` LANZA en
+// cualquier respuesta non-2xx, y acá un 403 (flag apagada) y un 404 (proveedor
+// sin guía) son respuestas NORMALES que hay que pintar, no excepciones.
+// Devuelven `RawResponse<T>`, no el cuerpo: el consumidor escribe
+// `res.ok ? res.data?.guide ?? null : null`, nunca `res.guide`.
+// `raw*` no lanza en 4xx/5xx pero SÍ re-lanza errores de red y abort, así que el
+// consumidor necesita try/catch ADEMÁS de mirar `res.ok`.
+export const SetupGuide = {
+  get: (provider: string) =>
+    rawGet<{ ok: boolean; guide?: SetupGuideDoc; error?: string }>(
+      `/api/setup-guide/${provider}`
+    ),
+  verifyGitlab: (payload: {
+    gitlab_url: string;
+    gitlab_project: string;
+    gitlab_token: string;
+    gitlab_enable_engine: boolean;
+  }) =>
+    rawPost<{ ok: boolean; checks?: GuideCheckResult[]; error?: string }>(
+      "/api/setup-guide/gitlab/verify",
+      payload
+    ),
 };
 
 // ── Feature #3: Docs — árbol de documentación ────────────────────────────────

@@ -13,7 +13,7 @@ Body de POST /api/init_project (campos comunes):
     "name":           "RSPACIFICO",
     "display_name":   "RS Pacífico",
     "workspace_root": "C:/Repos/RSPacifico/trunk",
-    "tracker_type":   "azure_devops" | "jira" | "mantis"
+    "tracker_type":   "azure_devops" | "jira" | "mantis" | "gitlab"
   }
 
 Campos adicionales para Azure DevOps:
@@ -25,6 +25,17 @@ Campos adicionales para Jira:
   { "jira_url": "https://empresa.atlassian.net", "jira_key": "B2IM",
     "api_version": "3", "jql": "...", "verify_ssl": true,
     "jira_user": "me@company.com", "jira_token": "ATATT..." }
+
+Campos adicionales para GitLab (Plan 259 F2):
+  { "gitlab_url": "https://gitlab.com",        # base_url, SIN /api/v4 ni barra final
+    "gitlab_project": "acme/backend/api",      # path completo o ID numerico
+    "gitlab_group": "acme",                    # opcional, solo para epicas nativas
+    "gitlab_token": "TOKEN_AQUI",              # se guarda CIFRADO (DPAPI), nunca se devuelve
+    "gitlab_auth_file": "",                    # vacio = conservar el actual (v2, C4)
+    "gitlab_enable_engine": true }             # tildado: enciende el motor al crear (F7)
+  Se guardan como issue_tracker.{base_url, project, group, auth_file}: son las
+  claves que ya leen services/project_context.py. Usar otros nombres dejaria el
+  proyecto creado pero INALCANZABLE.
 """
 
 from __future__ import annotations
@@ -45,6 +56,7 @@ from project_manager import (
     get_project_config,
     get_project_pinned_agents,
     initialize_ado_project,
+    initialize_gitlab_project,
     initialize_jira_project,
     initialize_mantis_project,
     set_active_project,
@@ -54,6 +66,7 @@ from project_manager import (
     validate_docs_paths,
     validate_workspace_root,
     write_ado_auth,
+    write_gitlab_auth,
     write_jira_auth,
     write_mantis_auth,
 )
@@ -72,9 +85,65 @@ def _has_credentials(name: str, tracker_type: str) -> bool:
         auth_filename = "ado_auth.json"
     elif tracker_type == "jira":
         auth_filename = "jira_auth.json"
+    elif tracker_type == "gitlab":            # Plan 259 F2 — antes caía en mantis_auth.json
+        auth_filename = "gitlab_auth.json"
     else:  # mantis
         auth_filename = "mantis_auth.json"
     return (PROJECTS_DIR / name / "auth" / auth_filename).exists()
+
+
+def _gitlab_onboarding_enabled() -> bool:
+    """Plan 259 F2 — la flag vive en la INSTANCIA (config.config), no en el módulo.
+    Mismo idioma que services/tracker_provider.py y services/ci_provider.py."""
+    try:
+        import config as _config
+        return bool(getattr(_config.config, "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED", False))
+    except Exception:
+        return False
+
+
+def _enable_gitlab_engine() -> dict:
+    """Plan 259 F7 — enciende STACKY_GITLAB_ENABLED en el mismo acto de creación.
+
+    Se dispara SOLO desde init_project con tracker_type="gitlab" y la casilla
+    `gitlab_enable_engine` tildada — es decir, tras un clic explícito del operador
+    en "Crear e inicializar". NO hay ningún camino automático que llegue acá.
+    Best-effort: si falla, el proyecto igual se crea y se informa en la respuesta.
+
+    ── POR QUÉ NO USA api.harness_flags.set_flag_values ──────────────────────────
+    El plan 259 F7.b manda encenderla con `set_flag_values({...})`. MEDIDO
+    ejecutando: eso NO puede funcionar. `STACKY_GITLAB_ENABLED` **no está en
+    FLAG_REGISTRY** (403 flags, ninguna es esta), así que `apply_updates` la
+    rechaza con `ValueError: Flag desconocida` y esta función devolvería SIEMPRE
+    `{"changed": False, "error": ...}` — el mismo falso verde que el hallazgo C1
+    del propio plan vino a matar, entrando por otra puerta.
+
+    Su dueño canónico es `api/global_config.py` (`_MANAGED_KEYS`), y el docstring
+    de `api/harness_flags.py` prohíbe explícitamente que una key esté en los dos
+    registros ("dos endpoints no deben escribir la misma key"). Por eso se usa el
+    writer de global_config.
+
+    El `setattr` extra NO es redundante: `put_global_config` persiste el archivo y
+    `os.environ`, pero **no** hot-aplica al singleton, así que sin esta línea el
+    motor recién quedaría encendido tras reiniciar — y "sincroniza al primer
+    intento", que es la razón de existir de esta fase, seguiría en 0 %.
+
+    Congelado por tests/test_plan259_enable_engine.py::
+    test_gitlab_enabled_no_esta_en_el_registro_del_arnes — si algún día la flag se
+    registra en el arnés, ese test se pone rojo y avisa que esto se simplifica.
+    """
+    try:
+        import config as _config
+        if bool(getattr(_config.config, "STACKY_GITLAB_ENABLED", False)):
+            return {"changed": False, "already_on": True}
+        from api.global_config import _write_env as _write_global_env
+        _write_global_env({"STACKY_GITLAB_ENABLED": "true"})   # .env + os.environ
+        setattr(_config.config, "STACKY_GITLAB_ENABLED", True)  # hot-apply al singleton
+        logger.info("Plan 259 F7: STACKY_GITLAB_ENABLED encendido al crear un proyecto GitLab")
+        return {"changed": True, "already_on": False}
+    except Exception as exc:
+        logger.warning("Plan 259 F7: no se pudo encender STACKY_GITLAB_ENABLED: %s", exc)
+        return {"changed": False, "already_on": False, "error": str(exc)}
 
 
 def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
@@ -93,7 +162,13 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
         "tracker_type":      t_type,
         # ADO fields
         "organization":      tracker.get("organization", ""),
-        "ado_project":       tracker.get("project", ""),
+        # Plan 259 F2 Cambio 3-bis (v3, hallazgo B8) — `issue_tracker.project` es
+        # una clave COMPARTIDA: para GitLab vale "acme/api". Sin condicionar por
+        # tracker, un proyecto GitLab se listaba con ado_project="acme/api",
+        # EditProjectModal lo semillaba INCONDICIONALMENTE y buildPayload lo
+        # reenviaba en cada PATCH. Backward-compat: Jira guarda su clave en
+        # project_key y Mantis en project_id, asi que para ellos ya venia vacio.
+        "ado_project":       tracker.get("project", "") if t_type == "azure_devops" else "",
         # Jira fields
         "jira_url":          tracker.get("url", "") if t_type == "jira" else "",
         "jira_key":          tracker.get("project_key", ""),
@@ -102,6 +177,12 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
         "mantis_project_id": tracker.get("project_id", ""),
         "mantis_project_name": tracker.get("project_name", ""),
         "mantis_protocol":   tracker.get("protocol", "rest") if t_type == "mantis" else "rest",
+        # GitLab fields (Plan 259 F2) — EditProjectModal ya los lee; hoy llegaban
+        # siempre vacios porque nadie los emitia.
+        "gitlab_url":        tracker.get("base_url", "") if t_type == "gitlab" else "",
+        "gitlab_project":    tracker.get("project", "")  if t_type == "gitlab" else "",
+        "gitlab_group":      tracker.get("group", "")    if t_type == "gitlab" else "",
+        "gitlab_auth_file":  tracker.get("auth_file", "") if t_type == "gitlab" else "",
         "active":            cfg["name"] == active_name,
         "initialized":       True,
         "has_credentials":   _has_credentials(cfg["name"], t_type),
@@ -287,6 +368,12 @@ def init_project():
         docs_paths = validate_docs_paths(docs_paths)
         agents_dir = validate_agents_dir(agents_dir)
 
+        # Plan 259 F7 — declarada ANTES de la cadena: init_project tiene UN SOLO
+        # `return` compartido por los 4 trackers (v2, hallazgo C2). Si esta
+        # variable solo existiera dentro de la rama GitLab, el alta de ADO / Jira
+        # / Mantis reventaria con NameError.
+        engine_result: dict | None = None
+
         if tracker_type == "jira":
             jira_url    = (data.get("jira_url") or "").strip()
             jira_key    = (data.get("jira_key") or "").strip()
@@ -357,6 +444,44 @@ def init_project():
                     token=mantis_token, project_id=mantis_project_id,
                 )
 
+        elif tracker_type == "gitlab":
+            if not _gitlab_onboarding_enabled():
+                return jsonify({"ok": False, "error":
+                    "El alta de proyectos GitLab está apagada "
+                    "(STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false)."}), 400
+            gitlab_url     = (data.get("gitlab_url") or "").strip()
+            gitlab_project = (data.get("gitlab_project") or "").strip()
+            gitlab_group   = (data.get("gitlab_group") or "").strip()
+            gitlab_token   = (data.get("gitlab_token") or "").strip()
+            enable_engine  = bool(data.get("gitlab_enable_engine", True))
+
+            if not gitlab_url:
+                return jsonify({"ok": False, "error": "gitlab_url requerida"}), 400
+            if not gitlab_project:
+                return jsonify({"ok": False, "error": "gitlab_project requerido"}), 400
+
+            # v2 C4: vacío = "conservá el que ya tenga", NO "poné el default".
+            gitlab_auth_file = (data.get("gitlab_auth_file") or "").strip()
+
+            cfg = initialize_gitlab_project(
+                name=name,
+                display_name=display_name or name,
+                workspace_root=workspace_root,
+                url=gitlab_url,
+                project_path=gitlab_project,
+                group=gitlab_group,
+                auth_file=gitlab_auth_file,
+                docs_paths=docs_paths,
+                agents_dir=agents_dir,
+            )
+            if gitlab_token:
+                write_gitlab_auth(name=name, url=gitlab_url,
+                                  token=gitlab_token, project_path=gitlab_project,
+                                  auth_file=gitlab_auth_file)
+            engine_result = _enable_gitlab_engine() if enable_engine else {
+                "changed": False, "already_on": False, "skipped": True
+            }   # F7
+
         else:  # azure_devops
             organization = (data.get("organization") or "").strip()
             ado_project  = (data.get("ado_project") or "").strip()
@@ -383,7 +508,10 @@ def init_project():
                 write_ado_auth(name=name, pat=pat)
 
         active_name = get_active_project()
-        return jsonify({"ok": True, "project": _project_to_dict(cfg, active_name)})
+        payload = {"ok": True, "project": _project_to_dict(cfg, active_name)}
+        if engine_result is not None:       # Plan 259 F7 — solo en el alta GitLab
+            payload["gitlab_engine"] = engine_result
+        return jsonify(payload)
 
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
@@ -501,6 +629,40 @@ def update_project(project_name: str):
                 except Exception:
                     pass
 
+        elif tracker_type == "gitlab":
+            # Plan 259 F2 Cambio 6 — SIN esta rama, tracker_type="gitlab" caia al
+            # `else` y llamaba initialize_ado_project, CONVIRTIENDO el proyecto a
+            # Azure DevOps en silencio (bug de corrupcion de datos, E2).
+            if not _gitlab_onboarding_enabled():
+                return jsonify({"ok": False, "error":
+                    "La edición de proyectos GitLab está apagada "
+                    "(STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false)."}), 400
+            tracker        = cfg.get("issue_tracker") or {}
+            gitlab_url     = _resolve_text_field(data, "gitlab_url",     tracker.get("base_url", ""))
+            gitlab_project = _resolve_text_field(data, "gitlab_project", tracker.get("project", ""))
+            gitlab_group   = _resolve_text_field(data, "gitlab_group",   tracker.get("group", ""))
+            # v2 C4: el modal de edicion YA expone este campo como ruta editable.
+            # Hardcodearlo pisaria en silencio lo que el operador escribio.
+            gitlab_auth_file = _resolve_text_field(data, "gitlab_auth_file", tracker.get("auth_file", ""))
+            gitlab_token   = (data.get("gitlab_token") or "").strip()
+            new_cfg = initialize_gitlab_project(
+                name=project_name,
+                display_name=(data.get("display_name") or cfg.get("display_name", project_name)).strip(),
+                workspace_root=workspace_root,
+                url=gitlab_url,
+                project_path=gitlab_project,
+                group=gitlab_group,
+                auth_file=gitlab_auth_file,
+                docs_paths=docs_paths,
+                agents_dir=agents_dir,
+            )
+            if gitlab_token:
+                write_gitlab_auth(name=project_name, url=gitlab_url,
+                                  token=gitlab_token, project_path=gitlab_project,
+                                  auth_file=gitlab_auth_file)
+            # update_project NO enciende el motor: encender una perilla global es
+            # del ALTA, donde el operador ve y tilda la casilla (test_no_se_dispara_en_patch).
+
         else:
             tracker      = cfg.get("issue_tracker") or {}
             organization = _resolve_text_field(data, "organization", tracker.get("organization", ""))
@@ -556,12 +718,18 @@ def get_project_credentials(project_name: str):
     result: dict = {"ok": True, "tracker_type": t_type, "has_credentials": False,
                     "jira_user": None, "ado_user": None,
                     "mantis_token_saved": False, "mantis_username_saved": False,
-                    "mantis_protocol": "rest"}
+                    "mantis_protocol": "rest",
+                    # Plan 259 F2 Cambio 7 — solo si EXISTE; NUNCA el token.
+                    "gitlab_token_saved": (
+                        PROJECTS_DIR / project_name / "auth" / "gitlab_auth.json"
+                    ).exists()}
 
     if t_type == "mantis":
         auth_filename = "mantis_auth.json"
     elif t_type == "jira":
         auth_filename = "jira_auth.json"
+    elif t_type == "gitlab":
+        auth_filename = "gitlab_auth.json"
     else:
         auth_filename = "ado_auth.json"
 

@@ -1,0 +1,203 @@
+/* Plan 267 F6 — Consola de acciones del agente DevOps.
+ *
+ * CERO colores literales: uiDebtRatchet congela por archivo el conteo de colores
+ * escritos en notación numérica y un archivo nuevo tiene presupuesto CERO. Todo
+ * va por tokens del tema (--bg, --bg-elevated, --border, --text, --text-muted,
+ * --accent, --success, --warning, --danger). Ojo: la familia --color-* NO existe
+ * en este tema.
+ */
+
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+.askRow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.askInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.askButton {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.askButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+/* ------------------------------ la tarjeta ------------------------------ */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 1.05em;
+}
+
+.cardSummary {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+.toneOk {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.toneWarn {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.toneBad {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.toneFaint {
+  color: var(--text-muted);
+}
+
+.whatWillHappen {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-elevated);
+}
+
+.paramsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.paramsTable th,
+.paramsTable td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.paramInput {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.sourceMissing {
+  color: var(--danger);
+}
+
+.questions,
+.alternatives {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.blocked {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.actionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secondaryButton,
+.altButton {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dangerButton {
+  padding: 6px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  background: var(--danger);
+  color: var(--bg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dangerButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.receipt {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}

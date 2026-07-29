@@ -1,10 +1,83 @@
 # Plan 264 — Herramienta, modelo y effort elegibles en TODO punto de uso: una sola matriz de capacidades, una sola resolución, un solo selector
 
-**Estado:** MEJORADO **v2 -> v3** (2026-07-27) · **Autor:** pipeline `proponer-plan-stacky` · **Juez v1→v2:** `criticar-y-mejorar-plan` (v1 RECHAZADO, 4 BLOQUEANTES) · **Juez v2→v3:** `criticar-y-mejorar-plan` en corrida **independiente** con verificación obligatoria de anclajes contra el código real — **v2 RECHAZADO** (5 BLOQUEANTES), v3 con los fixes aplicados.
+**Estado:** MEJORADO **v3 -> v4** (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez v1→v2:** `criticar-y-mejorar-plan` (v1 RECHAZADO, 4 BLOQUEANTES) · **Juez v2→v3:** `criticar-y-mejorar-plan` en corrida independiente (v2 RECHAZADO, 5 BLOQUEANTES) · **Juez v3→v4:** `criticar-y-mejorar-plan` en corrida **independiente**, abriendo el árbol real de HOY — **v3 RECHAZADO** (2 BLOQUEANTES), v4 con los fixes aplicados.
 
 ---
 
-## 0. CHANGELOG v2 -> v3
+## 0. CHANGELOG v3 -> v4
+
+> El v3 fue anclado el 2026-07-27. Entre esa fecha y hoy (2026-07-29) se mergearon a `main` los
+> planes hermanos 259/267/268/269/270 (`git log` confirma `1a04944e "merge(p2): plan 259 F0..F9"`,
+> 2026-07-29), cada uno agregando sus propias flags a los mismos registros compartidos
+> (`FLAG_REGISTRY`, `_CATEGORY_KEYS`, `_CURATED_DEFAULTS_ON`, `_REQUIRES_MAP_FROZEN`). Es la MISMA
+> clase de gotcha que el propio v3 documenta en su C11 (anclajes con desvío de línea), pero esta vez
+> le pasó al v3 mismo mientras esperaba turno de crítica — el riesgo es estructural, no un error
+> puntual de un autor. Los IDs `C#` de abajo son de **esta** ronda (v3→v4).
+
+- **C1 (BLOQUEANTE) — la huella de regresión de F7 usa un esquema INVENTADO; rompe
+  `test_error_fingerprints_catalog.py` (Plan 163 F4), que SÍ corre hoy contra `error_fingerprints.json`.**
+  Verificado abriendo `backend/tests/test_error_fingerprints_catalog.py:18`: los campos obligatorios
+  reales son `("id", "title", "class", "status", "log_pattern", "log_guarded", "killed_by",
+  "guard_test", "self_test")`, con `status` en `{"resolved","open","by_design"}` y `self_test` con
+  `matches`/`clean` coherentes contra `log_pattern` (test que además compila el pattern como regex).
+  El JSON que el v3 proponía en F7 traía `sintoma`, `causa_raiz`, `deteccion`, `antecedentes`, `plan`,
+  `fecha` — **ninguno de estos existe en el schema real** y **faltan 7 de los 9 campos
+  obligatorios** (`title`, `class`, `status`, `log_pattern`, `log_guarded`, `killed_by`, `self_test`).
+  Aplicado tal cual, `test_campos_obligatorios` sale **rojo** el día que se agrega la entrada — el v3
+  pedía "leé primero el esquema real del archivo" pero sus propios autores no lo hicieron. Hay,
+  además, un problema de fondo: esta clase de bug (parámetro aceptado y nunca materializado) **no
+  tiene firma de log** — es un no-evento, no un patrón que aparezca en texto — así que `log_pattern`
+  no puede ser un detector real como el de las huellas existentes (`pipeline_status_404`,
+  `ansi_in_file_log`); el `guard_test` (AST) es el único detector posible. v4: entrada reescrita con
+  los campos reales, `log_guarded: false` declarado explícitame con la razón, y `self_test` vacío
+  (vacuamente coherente: `test_self_test_coherente` no itera nada si `matches`/`clean` son `[]`) en
+  vez de fingir un patrón de log que no existe.
+- **C2 (BLOQUEANTE) — 11 anclajes archivo:línea quedaron viejos por la costura de planes hermanos;
+  exactamente el gotcha que este mismo plan advierte en su propio C11, reaparecido.** Verificado
+  abriendo cada archivo real hoy (no de memoria). Los anclajes que son **objetivo de un diff/edición
+  literal siguen siendo pixel-perfect** (los 6 de `api/agents.py`, los 2 de
+  `api/devops_remote_console.py`, los 17 call sites de `run_agent(`, `codex_cli_runner.py:87-97`,
+  `agent_runner.py:144-465`, `claude_code_cli_runner.py:516/543/958-961/2224/2301`,
+  `preferences.py:14/65/71/75/89`, `model_catalog.py:111/135`, `PlansBoardPage.tsx:336/348`,
+  `IncidentResolverModal.tsx:414/422`, `modelEffortOptions.ts:63-73` — todos re-verificados letra por
+  letra). El drift está **sólo** en citas de prosa/evidencia en los archivos "calientes" que crecen
+  con cada plan hermano:
+  | Símbolo | v3 citaba | Real hoy (2026-07-29) |
+  |---|---|---|
+  | `STACKY_COMPLEXITY_ESTIMATION_ENABLED` | `config.py:774` | `config.py:789-790` |
+  | `STACKY_ADAPTIVE_EFFORT_ENABLED` | `config.py:905` | `config.py:920-921` |
+  | `STACKY_MODEL_PROBE_ENABLED` | `config.py:1258` | `config.py:1273-1274` |
+  | `STACKY_UI_SAVED_VIEWS_ENABLED` | `config.py:1810` | `config.py:1825-1826` |
+  | nota Plan 63 (`test_every_registry_flag_is_categorized`) | `harness_flags.py:488-489` | `harness_flags.py:515` |
+  | `FLAG_REGISTRY` (apertura) | `harness_flags.py:490` | `harness_flags.py:516` |
+  | `default_is_known(spec)` | `harness_flags.py:5503` | `harness_flags.py:5814` |
+  | `test_default_known_only_for_curated` | `test_harness_flags.py:974-982` | `test_harness_flags.py:~1001` |
+  | `test_requires_map_is_frozen` | `test_harness_flags_requires.py:312-320` | `test_harness_flags_requires.py:~326` |
+  | `RuntimeModelCatalog` (interface) | `endpoints.ts:1071-1084` | `endpoints.ts:1090-1103` |
+  | historial `r.model`/`r.effort` | `PlansBoardPage.tsx:481`/`:482` | `PlansBoardPage.tsx:482`/`:483` |
+  Ninguno de estos 11 es el objetivo de una edición literal (son citas de "por qué" en prosa), así
+  que **no bloquean el diff en sí** — pero una cita de línea que no matchea erosiona exactamente la
+  confianza que este plan pide para sus propios anclajes, y para un modelo menor "no encuentro esto
+  en la línea que dice el plan" es indistinguible de "el plan está mal". v4: los 11 números
+  corregidos arriba, y las citas dentro de `harness_flags.py`/`config.py` (los dos archivos que un
+  plan hermano nuevo vuelve a mover cada vez que se mergea) llevan ahora la misma coletilla
+  "verificar con `grep -n <símbolo>`" que F0 ya usaba para `STACKY_MODEL_PROBE_ENABLED` — no se puede
+  evitar que vuelvan a moverse, sí se puede dejar de fingir que un número fijo sobrevive.
+- **C3 (IMPORTANTE) — F5(c) delega en "verificalo vos mismo" sin dar la prueba concreta, y uno de
+  los 3 candidatos verificablemente NO califica.** Medido: `TriggerPipelineSection.tsx` no llama a
+  `run_agent`; dispara `devops.pipeline.trigger` vía `runDevOpsAction` (Plan 267 F7) — un **catálogo
+  de acciones DevOps/CI**, sin ninguna dimensión de modelo/effort. `DeploymentsSection.tsx` tampoco
+  tiene ningún `run_agent`/`POST run`/`rawPost` — incompatible con "esta pantalla lanza una corrida
+  de agente". `DocsPage.tsx` sí es un candidato plausible: usa `documenterEnabled` y
+  `handleProposeUpdate` (`DocsPage.tsx:159,445`), que encaja con el call site F3 #4
+  (`services/doc_documenter.py:383`). Pedirle a un modelo menor "verificá si lanza una corrida" sin
+  decir CÓMO verificarlo invita a confundir "dispara una acción" (CI/deploy) con "lanza un agente
+  LLM con modelo/effort elegible" — exactamente los dos primeros no son lo segundo. v4: regla
+  concreta y verdicto explícito por candidato.
+
+---
+
+## 0.bis CHANGELOG v2 -> v3
 
 > La v2 fue escrita y criticada **por el mismo agente en la misma corrida**, así que nunca tuvo
 > revisión independiente. Esta ronda abrió **todos** los archivos citados. Resultado: el v2 tenía
@@ -134,7 +207,7 @@
 
 ---
 
-## 0.bis CHANGELOG v1 -> v2 (se conserva íntegro para trazabilidad de las 3 versiones)
+## 0.ter CHANGELOG v1 -> v2 (se conserva íntegro para trazabilidad de las 4 versiones)
 
 - **C1 (BLOQUEANTE) — el presupuesto de turnos de Codex estaba INVERTIDO y era destructivo.** `STACKY_RUNAWAY_MAX_TURNS` vale **`"0"` por default** (`config.py:471-473`) y `RunLimits(max_turns=0)` significa **sin límite** (`harness/runaway_guard.py:8,20,45`). Con la fórmula del v1 (`base + {low:0…max:3}`), elegir **`max`** convertía "ilimitado" en **un cap de 3 turnos** (el guard mataba el run al turno 3) y elegir `low` dejaba el run ilimitado. Y con cap configurado (p. ej. 40), `max` lo subía a **43**, *por encima* del techo de seguridad que puso el operador. Peor: el **test 5 del v1 salía VERDE** con ese comportamiento invertido (`0 < 3` es numéricamente cierto) ⇒ falso verde perfecto. v2: `codex_turn_budget` es **monótono hacia abajo desde el cap**, `0` es sagrado, y hay 4 aserciones que blindan la inversión (§5 F2).
 - **C2 (BLOQUEANTE) — el fix de F2 vivía DENTRO de un `if` de dos flags ajenas, así que no cerraba el hueco.** El bloque de `codex_cli_runner.py:582` está gateado por `STACKY_ADAPTIVE_EFFORT_ENABLED` **y** por `_codex_complexity` (que sólo se llena si `STACKY_COMPLEXITY_ESTIMATION_ENABLED`). Con cualquiera OFF, el effort del operador se seguía descartando en silencio — exactamente el bug que el plan dice cerrar. v2: la resolución del effort explícito sale **fuera y antes** del bloque adaptativo, replicando el patrón real de Claude (`claude_code_cli_runner.py:958-961`), + test con las dos flags en OFF.
@@ -298,22 +371,85 @@ instala los centinelas que hacen imposible el caso.
 
 ## 5. Fases
 
+### F(-1) — [ADICIÓN ARQUITECTO] Pre-flight de anclajes: verificar antes de confiar
+
+**Objetivo.** El C2 de esta ronda (v3→v4) encontró 11 citas archivo:línea viejas por la costura de
+los planes 259/267/268/269/270, mergeados a `main` DESPUÉS de que este plan se ancló. Ese drift no es
+un accidente de este plan puntual: `config.py` y `services/harness_flags.py` son estructuras que
+CUALQUIER plan hermano en curso puede volver a mover entre el momento en que leés este documento y el
+momento en que lo implementás — incluso si lo implementás mañana mismo. En vez de prometer (otra vez)
+que los números de línea son correctos, este paso los **vuelve a medir** antes de tocar nada.
+
+**No hay código de producción en esta fase. No es una flag ni un test nuevo del arnés — es un
+comando de una línea que corré vos, a mano, antes de F0**, exactamente como F0 ya hace con
+`STACKY_MODEL_PROBE_ENABLED` y F1 con la verificación de imports:
+
+```powershell
+"Stacky Agents\backend\.venv\Scripts\python.exe" -c "
+import re
+CHECKS = {
+    'Stacky Agents/backend/config.py': ['STACKY_RUNAWAY_MAX_TURNS', 'STACKY_COMPLEXITY_ESTIMATION_ENABLED', 'STACKY_ADAPTIVE_EFFORT_ENABLED', 'STACKY_MODEL_PROBE_ENABLED', 'STACKY_UI_SAVED_VIEWS_ENABLED'],
+    'Stacky Agents/backend/services/harness_flags.py': ['_CATEGORY_KEYS', 'FLAG_REGISTRY', 'def default_is_known'],
+    'Stacky Agents/backend/tests/test_harness_flags.py': ['_CURATED_DEFAULTS_ON', 'def test_default_known_only_for_curated'],
+    'Stacky Agents/backend/tests/test_harness_flags_requires.py': ['_REQUIRES_MAP_FROZEN', 'def test_requires_map_is_frozen'],
+    'Stacky Agents/frontend/src/api/endpoints.ts': ['interface RuntimeModelCatalog'],
+}
+for path, symbols in CHECKS.items():
+    lines = open(path, encoding='utf-8').read().splitlines()
+    for sym in symbols:
+        hits = [i + 1 for i, l in enumerate(lines) if sym in l]
+        print(f'{path} :: {sym!r} -> lineas {hits}')
+"
+```
+
+**Qué hacer con la salida:** para cada símbolo, comparalo contra el número que este documento cita en
+la sección correspondiente (F0, F1, F2, F4, F5). Si difiere, **usá el número que acabás de medir, no
+el del documento** — y seguí adelante: ningún fix de este plan depende de que el número fuera exacto
+(los diffs reales anclan por contenido/símbolo, nunca por línea fija), así que un desvío acá **no**
+bloquea F0; sólo actualiza tu propia referencia mental antes de editar. Si algún símbolo da **cero**
+líneas (no **movió**, sino que **desapareció**), ahí sí parar: eso es señal de que el archivo cambió
+de forma más profunda que un simple corrimiento de línea, y merece revisar el drift a mano antes de
+seguir.
+
+**Por qué esto es una mejora real y no ceremonia:** convierte una promesa de prosa ("los anclajes son
+correctos a tal fecha") en un chequeo ejecutable de 15 segundos que cualquier runtime (Claude Code,
+Codex CLI, Copilot) puede correr igual, sin ambigüedad, y que sigue siendo útil aunque pasen semanas
+entre que se escribe este plan y se implementa. Es la misma filosofía que el plan ya aplica en F2.5
+("instala los centinelas que hacen imposible el caso") aplicada a la propia vigencia del documento.
+
+**Trabajo del operador: ninguno** (comando de una vez, para quien implementa, no una flag ni una
+pantalla nueva).
+
+---
+
 ### F0 — Flags (la receta completa: 5 archivos, 5 estructuras)
 
 **Objetivo.** Dar de alta las 4 flags del plan **sin poner en rojo ninguno de los guards del arnés**.
 
 > **[FIX C5] Lección: una flag son CINCO patas, no tres.** El v1 acertó una, el v2 tres, y las dos que
 > faltaban ponen rojo un archivo que el propio F0 corre como criterio binario:
-> - `default_is_known(spec)` es `spec.default is not None` (`services/harness_flags.py:5503`) y
->   `test_default_known_only_for_curated` (`tests/test_harness_flags.py:974-982`) exige **igualdad
->   exacta de conjuntos** contra `_CURATED_DEFAULTS_ON` (`tests/test_harness_flags.py:467`).
-> - `_CATEGORY_KEYS` abre en `harness_flags.py:120`; sin la key ahí,
+> - `default_is_known(spec)` es `spec.default is not None` (`services/harness_flags.py:5814` —
+>   **[FIX C2 v3→v4]** el v3 citaba `:5503`; el archivo creció ~311 líneas entre el 2026-07-27 del v3
+>   y hoy por la costura de los planes 259/267/268/269/270. **Re-verificá con
+>   `grep -n "def default_is_known" services/harness_flags.py` antes de confiar en el número**: este
+>   archivo se mueve cada vez que se mergea un plan hermano) y
+>   `test_default_known_only_for_curated` (`tests/test_harness_flags.py:~1001` — v3 citaba
+>   `:974-982`, mismo motivo) exige **igualdad exacta de conjuntos** contra `_CURATED_DEFAULTS_ON`
+>   (`tests/test_harness_flags.py:467` — este SÍ verificado estable, no drifted).
+> - `_CATEGORY_KEYS` abre en `harness_flags.py:120` (verificado estable); sin la key ahí,
 >   **`test_every_registry_flag_is_categorized`** rompe a propósito (así lo dice la nota de
->   `harness_flags.py:488-489`, Plan 63). **[C12]** ese es el nombre real del test; el v2 lo llamaba
+>   `harness_flags.py:515`, Plan 63 — **[FIX C2 v3→v4]** v3 citaba `:488-489`; `FLAG_REGISTRY` abre
+>   hoy en `:516`, no `:490`). **[C12]** ese es el nombre real del test; el v2 lo llamaba
 >   `test_flag_registry_categorization`, que **no existe**.
-> - **`_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py:120`)** se compara por
->   **igualdad exacta** en `test_requires_map_is_frozen` (`:312-320`): toda flag con `requires=` debe
->   estar ahí o el test la reporta como *"Extras"*.
+> - **`_REQUIRES_MAP_FROZEN` (`tests/test_harness_flags_requires.py:120`, estable)** se compara por
+>   **igualdad exacta** en `test_requires_map_is_frozen` (`tests/test_harness_flags_requires.py:~326`
+>   — **[FIX C2 v3→v4]** v3 citaba `:312-320`): toda flag con `requires=` debe estar ahí o el test la
+>   reporta como *"Extras"*.
+> **Regla para el implementador:** `harness_flags.py` y `config.py` son los dos archivos que CADA
+> plan hermano vuelve a mover (crecen con cada FlagSpec/_CURATED_DEFAULTS_ON/_REQUIRES_MAP_FROZEN
+> nuevos). Cualquier número de línea citado en este documento para esos dos archivos puede volver a
+> estar viejo el día que lo implementes: confirmá con `grep -n "<símbolo>" <archivo>` antes de asumir
+> la línea exacta. Los símbolos en sí (los nombres) sí son estables; los números, no.
 > - **`PLAIN_HELP` (`services/harness_flags_help.py:25`)** debe cubrir el **100 %** de
 >   `FLAG_REGISTRY` sin huérfanas (`tests/test_harness_flags_help.py:33-40`), y cada entrada tiene
 >   `on_effect`/`off_effect` de **≤ 240 caracteres** (`:49-50`).
@@ -322,8 +458,8 @@ instala los centinelas que hacen imposible el caso.
 
 | # | Archivo | Estructura | Dónde |
 |---|---|---|---|
-| 1 | `Stacky Agents/backend/config.py` | los 4 `os.getenv(...)` | junto a `STACKY_MODEL_PROBE_ENABLED` (`config.py:1258`) |
-| 2 | `Stacky Agents/backend/services/harness_flags.py` | los 4 `FlagSpec` **y** las 4 keys en `_CATEGORY_KEYS` | `FLAG_REGISTRY` (abre en `:490`); `_CATEGORY_KEYS` abre en `:120` |
+| 1 | `Stacky Agents/backend/config.py` | los 4 `os.getenv(...)` | junto a `STACKY_MODEL_PROBE_ENABLED` (`config.py:1273-1274` — **[FIX C2 v3→v4]** v3 citaba `:1258`; re-ubicalo con el grep de abajo, no confíes en el número) |
+| 2 | `Stacky Agents/backend/services/harness_flags.py` | los 4 `FlagSpec` **y** las 4 keys en `_CATEGORY_KEYS` | `FLAG_REGISTRY` (abre hoy en `:516`, **[FIX C2 v3→v4]** v3 decía `:490`); `_CATEGORY_KEYS` abre en `:120` (estable) |
 | 3 | `Stacky Agents/backend/services/harness_flags_help.py` | **[C5]** las 4 entradas de `PLAIN_HELP` | el dict abre en `:25` |
 | 4 | `Stacky Agents/backend/tests/test_harness_flags.py` | las 4 keys en `_CURATED_DEFAULTS_ON` | `:467` |
 | 5 | `Stacky Agents/backend/tests/test_harness_flags_requires.py` | **[C5]** las **3** keys con `requires=` en `_REQUIRES_MAP_FROZEN` | `:120` |
@@ -853,8 +989,11 @@ registrado — sin tocar el techo de seguridad de turnos y sin recortar el presu
 `codex_cli_runner.py:579` (*"Q0.2 — Esfuerzo adaptativo…"*), la frase *"Codex no tiene --effort"* está
 en **`:580`**, `_codex_adaptive_turns = config.STACKY_RUNAWAY_MAX_TURNS` en **`:581`**, el `if` del
 adaptativo en **`:582`** y el bloque cierra en **`:597`**. `_codex_complexity` se declara en **`:444`**
-y se llena en `:460` sólo si `STACKY_COMPLEXITY_ESTIMATION_ENABLED` (default `true`, `config.py:774`).
-`STACKY_ADAPTIVE_EFFORT_ENABLED` también es default `true` (`config.py:905`) — **pero las dos son
+y se llena en `:460` sólo si `STACKY_COMPLEXITY_ESTIMATION_ENABLED` (default `true`,
+`config.py:789-790` — **[FIX C2 v3→v4]** v3 citaba `:774`; verificado hoy con
+`grep -n "STACKY_COMPLEXITY_ESTIMATION_ENABLED" config.py`).
+`STACKY_ADAPTIVE_EFFORT_ENABLED` también es default `true` (`config.py:920-921` — v3 citaba `:905`,
+mismo motivo) — **pero las dos son
 flags ajenas que el operador puede apagar por UI**, y por eso el override va **fuera** del `if`
 (lección C2 de la ronda v1→v2). Compará con el código real antes de editar:
 
@@ -1229,8 +1368,8 @@ el paso 2.
 > **Verificado en el repo (2026-07-27):**
 > 1. El endpoint `GET/PUT /api/preferences/ui/<key>` **existe** (`preferences.py:75` y `:89`) **pero
 >    está gateado** por `STACKY_UI_SAVED_VIEWS_ENABLED` (`preferences.py:71`, leído de
->    `config.config`; default `true` en `config.py:1810`) y devuelve **404 `feature_disabled`** si está
->    OFF.
+>    `config.config`; default `true` en `config.py:1825-1826` — **[FIX C2 v3→v4]** v3 citaba `:1810`;
+>    re-verificado hoy) y devuelve **404 `feature_disabled`** si está OFF.
 > 2. La clave se valida con `_UI_KEY_RE = ^[A-Za-z0-9._-]{1,128}$` (`preferences.py:65`). Un
 >    `project_name` con **espacio, acento o paréntesis** (lo normal en este repo) ⇒ **400
 >    `invalid_key`**.
@@ -1398,7 +1537,9 @@ Diff sobre el cuerpo **real**:
  }
 ```
 (y agregar `effort_mode?: string;` y `effort_effective_now?: boolean;` al tipo `RuntimeModelCatalog` en
-`frontend/src/api/endpoints.ts:1071-1084`).
+`frontend/src/api/endpoints.ts:1090-1103` — **[FIX C2 v3→v4]** v3 citaba `:1071-1084`; `endpoints.ts`
+es exactamente uno de los archivos "calientes" que otros planes también editan (§9.2): confirmá con
+`grep -n "interface RuntimeModelCatalog" frontend/src/api/endpoints.ts` antes de editar).
 
 En `components/ModelEffortPicker.tsx`, renderizar `caps.note` como texto de ayuda debajo del select de
 esfuerzo cuando `caps.effortMode !== "nativo" || !caps.effortEffectiveNow`. **Reusar `caps.note`, no
@@ -1422,11 +1563,33 @@ crear un campo nuevo.**
 > `PlansBoardPage.tsx` — ver **§9.2**: este archivo también lo edita el Plan 263. Leé el protocolo de
 > convivencia **antes** de tocarlo.
 
-**(c) Agregar el picker donde no había** (las superficies de F3 que ahora aceptan selección):
-`components/devops/DeploymentsSection.tsx`, `components/devops/TriggerPipelineSection.tsx` y
-`pages/DocsPage.tsx` (los 3 existen, verificado), **sólo si esas pantallas efectivamente lanzan una
-corrida** — **verificalo leyendo cada archivo antes de agregar nada**. Si una no lanza corridas, no le
-pongas selector: un selector que no hace nada es peor que ninguno. Registrá en §10 cuáles calificaron.
+**(c) Agregar el picker donde no había** (las superficies de F3 que ahora aceptan selección).
+
+> **[FIX C3 v3→v4] "Verificalo vos mismo" no alcanza — la prueba concreta y el veredicto ya
+> medidos.** El v3 nombraba 3 candidatos y delegaba en el implementador decidir cuál "lanza una
+> corrida", sin decir CÓMO. Medido con grep sobre los 3 archivos reales (2026-07-29):
+> - **`components/devops/TriggerPipelineSection.tsx`: NO califica.** Cero ocurrencias de
+>   `run_agent`/`rawPost`/`api.post` hacia un endpoint de ejecución. Dispara
+>   `devops.pipeline.trigger` vía `runDevOpsAction` (comentario propio del archivo: *"Plan 267 F7 —
+>   antes llamaba CIPipeline.trigger directo, SIN pedir confirmacion... ahora por runDevOpsAction"*).
+>   Es el **catálogo de acciones DevOps/CI** del Plan 267: dispara una pipeline externa, no un agente
+>   LLM. No tiene ninguna dimensión de modelo/effort que mostrar.
+> - **`components/devops/DeploymentsSection.tsx`: NO califica** (misma prueba, mismo resultado: cero
+>   `run_agent`/`POST run`). Por nombre y estructura es del mismo catálogo de acciones DevOps que
+>   `TriggerPipelineSection`.
+> - **`pages/DocsPage.tsx`: SÍ es candidato plausible.** Usa `documenterEnabled` y
+>   `handleProposeUpdate` (`DocsPage.tsx:159,445`), que encaja con el call site F3 #4
+>   (`services/doc_documenter.py:383`, uno de los 11 que esta fase cablea). Confirmalo mirando qué
+>   endpoint llama `handleProposeUpdate` y si ese endpoint es el que termina en
+>   `agent_runner.run_agent(...)`.
+> **La prueba concreta para cualquier candidato futuro** (no sólo estos 3): `grep -n
+> "run_agent\|/api/.*run\b" <archivo>` en el componente, y si hay POST, seguí la cadena hasta el
+> blueprint de `api/` que lo atiende — si ese blueprint termina en `agent_runner.run_agent(...)`,
+> califica; si termina en un catálogo de acciones DevOps/CI (`runDevOpsAction` u otro disparador que
+> no sea un agente LLM), NO califica, sin importar que "dispare" algo.
+> **Conclusión para esta fase:** sólo `pages/DocsPage.tsx` es candidato a picker nuevo, sujeto a la
+> confirmación de arriba; los otros 2 quedan **descartados** por evidencia, no por omisión. Registrá
+> en §10 el veredicto final de los 3 (con el resultado de seguir la cadena de `DocsPage.tsx`).
 
 **Tests (vitest, lógica pura):** crear
 `Stacky Agents/frontend/src/services/__tests__/modelEffortOptions.plan264.test.ts`:
@@ -1494,7 +1657,8 @@ muestra**.
    Marcalo con el `ModelDecisionChip` **ya existente** (`components/ModelDecisionChip.tsx`, verificado)
    — no crees un chip nuevo.
 2. `Stacky Agents/frontend/src/pages/PlansBoardPage.tsx:478-486` — el historial de corridas ya muestra
-   `r.model` (`:481`) y `r.effort` (`:482`); agregar la **herramienta** (`r.tool ?? "—"`) como columna.
+   `r.model` (`:482`) y `r.effort` (`:483` — **[FIX C2 v3→v4]** v3 citaba `:481`/`:482`, off por 1);
+   agregar la **herramienta** (`r.tool ?? "—"`) como columna.
    **Es la misma zona que toca el 263** — ver §9.2.
 
 **Test:** crear `Stacky Agents/frontend/src/services/__tests__/modelEffortTrace.test.ts` sobre un
@@ -1542,6 +1706,7 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
+& $py -m pytest "Stacky Agents\backend\tests\test_error_fingerprints_catalog.py" -q
 & $py -m compileall -q "Stacky Agents\backend\services" "Stacky Agents\backend\api"
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/modelEffortOptions.plan264.test.ts
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/modelEffortTrace.test.ts
@@ -1559,25 +1724,61 @@ cd "Stacky Agents\frontend"; npx tsc --noEmit
 > rojos ajenos) y dejá su salida en §10.
 
 **Huella de regresión.** Agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` la huella del
-defecto que este plan cierra. **Leé primero el esquema real del archivo** (`Get-Content` de las primeras
-40 líneas) y respetá sus claves exactas; el contenido a registrar es:
+defecto que este plan cierra.
+
+> **[FIX C1 v3→v4 — BLOQUEANTE] El JSON del v3 usaba un esquema INVENTADO y rompía el gate real.**
+> El v3 traía `sintoma`/`causa_raiz`/`deteccion`/`antecedentes`/`plan`/`fecha` — ninguno de esos
+> nombres existe en el esquema real. Verificado abriendo
+> `Stacky Agents/backend/tests/test_error_fingerprints_catalog.py:17-18` (Plan 163 F4, corre HOY
+> contra este mismo archivo): los campos **obligatorios** son
+> `("id", "title", "class", "status", "log_pattern", "log_guarded", "killed_by", "guard_test",
+> "self_test")`, `status` debe estar en `{"resolved","open","by_design"}`, `log_pattern` debe compilar
+> como regex (`test_patrones_compilan`) y `self_test.matches`/`.clean` deben ser coherentes contra ese
+> patrón (`test_self_test_coherente`). El JSON del v3 sólo tenía 2 de los 9 campos obligatorios
+> (`id`, `guard_test`) ⇒ `test_campos_obligatorios` sale **rojo** apenas se agrega la entrada tal cual
+> estaba escrita.
+> **Y hay un problema de fondo, no sólo de nombres:** esta clase de bug (un parámetro aceptado y
+> nunca materializado) **no tiene firma de log** — es un no-evento silencioso, no un patrón de texto
+> como los 404 de `pipeline_status_404` o los ANSI de `ansi_in_file_log`. Por eso el propio plan
+> necesitó un test AST (F2.5) en vez de un scan de logs. Fingir un `log_pattern` sería el mismo pecado
+> que el plan viene a matar (aparentar una capacidad que no existe). v4: `log_guarded: false`
+> declarado con la razón, y `self_test` con `matches`/`clean` **vacíos** — coherente por vacuidad
+> (`test_self_test_coherente` no itera nada si las dos listas están vacías), sin fingir un patrón.
+> El contenido narrativo del v3 (síntoma, causa raíz, antecedentes) **no se pierde**: se conserva en
+> `note` y `title`, que sí son parte del esquema real (o son campos libres que ya usan otras huellas).
+
+**Leé primero el esquema real del archivo** (`Get-Content` de las primeras 40 líneas, o el `_REQUIRED`
+de `test_error_fingerprints_catalog.py:18`) antes de tocarlo. El contenido a registrar es:
 
 ```json
 {
   "id": "seleccion-aceptada-nunca-materializada",
-  "sintoma": "El operador elige un modelo o un esfuerzo y la corrida se comporta igual que si no hubiera elegido nada.",
-  "causa_raiz": "Un parametro de seleccion aceptado por la firma del runner y (a) nunca consumido, (b) consumido dentro de una rama gateada por otra flag, (c) consumido en una rama MUERTA por un return anterior, o (d) consumido pero sin efecto observable con la configuracion vigente.",
-  "deteccion": "backend/tests/test_plan264_paridad_ejecutable.py (Test A: AST de parametros decorativos y de las 4 llamadas de agent_runner; Test D: efecto observable)",
-  "antecedentes": ["Plan 196 (claude_code_cli, rama muerta agent_runner.py:350)", "Plan 264 (codex_cli, rama viva agent_runner.py:442)"],
-  "plan": 264,
-  "fecha": "2026-07-27",
-  "guard_test": "backend/tests/test_plan264_paridad_ejecutable.py"
+  "title": "Seleccion de modelo/effort aceptada por el runner y nunca materializada",
+  "class": "silent-param-drop",
+  "status": "resolved",
+  "log_pattern": "$^",
+  "log_guarded": false,
+  "killed_by": "plan 264 (matriz unica de capacidades runtime/modelo/effort)",
+  "killed_commit": "PENDIENTE — completar en Registro de implementacion (§10) con el hash real",
+  "date_resolved": "PENDIENTE — completar en §10 con la fecha real de implementacion",
+  "guard_test": "backend/tests/test_plan264_paridad_ejecutable.py",
+  "evidence": "backend/agent_runner.py:442-450 (rama viva); backend/agent_runner.py:256-265 (rama muerta, higiene)",
+  "note": "Sintoma: el operador elige un modelo o un esfuerzo y la corrida se comporta igual que si no hubiera elegido nada. Causa raiz: un parametro de seleccion aceptado por la firma del runner y (a) nunca consumido, (b) consumido dentro de una rama gateada por otra flag, (c) consumido en una rama MUERTA por un return anterior, o (d) consumido sin efecto observable con la config vigente. Antecedentes: Plan 196 (claude_code_cli, rama muerta agent_runner.py:350) y Plan 264 (codex_cli, rama viva agent_runner.py:442). log_guarded=false a proposito: este bug no tiene firma de log (es un no-evento silencioso); el unico detector real es el AST de guard_test (Test A: parametros decorativos y las 4 llamadas de agent_runner; Test D: efecto observable, no solo consumo simbolico).",
+  "self_test": {
+    "matches": [],
+    "clean": []
+  }
 }
 ```
 
+> `log_pattern: "$^"` es el idiom estándar de "nunca matchea" (ancla de fin de línea inmediatamente
+> tras la de inicio) — compila como regex válida (satisface `test_patrones_compilan`) sin fingir una
+> detección de log que no existe. No reemplazarlo por un patrón "real": no lo hay.
+
 **Criterio binario.** 18 comandos exit 0 + los greps de KPI-1, KPI-4 (los **dos**, negativo y positivo)
 y `style={{` + el test AST de KPI-2 + el de KPI-6 + el one-liner de `PLAIN_HELP` de F0 + el one-liner
-del endpoint de F5.
+del endpoint de F5 + **`test_error_fingerprints_catalog.py` verde** (los 7 tests del archivo, no sólo
+los que tocan la entrada nueva).
 **Trabajo del operador: ninguno.**
 
 ---
@@ -1627,6 +1828,8 @@ del endpoint de F5.
 
 **Orden (estricto):**
 
+0. **F(-1)** — [ADICIÓN ARQUITECTO] pre-flight de anclajes (re-medir, no confiar en los números
+   citados en este documento para `config.py`/`harness_flags.py`/`endpoints.ts`).
 1. **F0** — flags (**5 archivos**).
 2. **F1** — `runtime_capabilities.py` + normalización + enriquecido del endpoint + deduplicación (12
    ediciones). **Verificar imports antes de seguir.**
@@ -1641,7 +1844,11 @@ del endpoint de F5.
 
 **Definición de Hecho (DoD):**
 
-- [ ] Los 18 comandos de F7 salen **exit 0**, cero rojos.
+- [ ] **[ADICIÓN ARQUITECTO] F(-1) corrida antes de F0**, con la salida real pegada en §10 y los
+      números re-medidos usados en vez de los citados en el documento donde difieran.
+- [ ] Los 19 comandos de F7 salen **exit 0**, cero rojos (incluye
+      `test_error_fingerprints_catalog.py`, que valida la huella nueva contra el esquema real —
+      **[FIX C1 v3→v4]**).
 - [ ] **F0 tocó los 5 archivos**; `test_default_known_only_for_curated` **y**
       `test_requires_map_is_frozen` **verdes**; el one-liner de `PLAIN_HELP` imprime las 3 listas vacías.
 - [ ] **KPI-1**: el "antes" se midió con el grep **antes** de editar (esperado **10**) y el "después"
@@ -1748,7 +1955,11 @@ algún día".
 
 ## 10. Registro de implementación
 
-_(a completar por `implementar-plan-stacky`: salida real de cada comando, el número del grep de KPI-1
-**antes** de editar, call sites que quedaron pendientes por trabajo ajeno, resultado del control
-negativo de F2.5 Test A revirtiendo **las dos** líneas, salida del one-liner de `PLAIN_HELP`, salida del
-one-liner del endpoint enriquecido, y veredicto de las superficies extra de F5(c).)_
+_(a completar por `implementar-plan-stacky`: salida real del pre-flight de anclajes de **F(-1)** (y
+los números corregidos que se usaron si volvieron a moverse), salida real de cada comando, el número
+del grep de KPI-1 **antes** de editar, call sites que quedaron pendientes por trabajo ajeno, resultado
+del control negativo de F2.5 Test A revirtiendo **las dos** líneas, salida del one-liner de
+`PLAIN_HELP`, salida del one-liner del endpoint enriquecido, veredicto final de los 3 candidatos de
+F5(c) (incluida la confirmación de a qué endpoint llama `DocsPage.tsx:handleProposeUpdate` y si ese
+endpoint cae en `doc_documenter.py`), y `killed_commit`/`date_resolved` reales para la huella de
+`error_fingerprints.json`.)_

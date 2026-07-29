@@ -1,27 +1,92 @@
 # Plan 260 — Ninguna pipeline corre a ciegas: nombres declarados, faltantes visibles y disparo bloqueado
 
-> ## ESTADO: **CRITICADO v4 -> v5 — NO IMPLEMENTADO**
+> ## ESTADO: **CRITICADO v5 -> v6 — APROBADO-CON-CAMBIOS (0 bloqueantes, 2 importantes) — LISTO PARA IMPLEMENTAR**
 >
 > Escrito el 2026-07-27 sobre la rama `feat/plan-217-migrador-mantis-gitlab` (HEAD `cd20f646`).
 > Criticado adversarialmente el 2026-07-27 sobre `83d3b8e0` (v1 -> v2), **re-criticado el
 > 2026-07-27 sobre `53276284` por un juez independiente (v2 -> v3)**, **re-criticado de nuevo el
-> 2026-07-29 sobre `cbff8d3f` por un tercer juez independiente (v3 -> v4)**, y **re-criticado una
+> 2026-07-29 sobre `cbff8d3f` por un tercer juez independiente (v3 -> v4)**, **re-criticado una
 > cuarta vez el 2026-07-29 (mismo día, horas después) sobre el HEAD vigente de
-> `docs/plan-263-critica-v3-v4` por un cuarto juez independiente (v4 -> v5)**. Toda la evidencia de
-> este documento fue leída del código de esos commits y, donde dice **MEDIDO**, ejecutada/grepeada
-> de verdad con `backend/.venv/Scripts/python.exe` (py3.13.5).
+> `docs/plan-263-critica-v3-v4` por un cuarto juez independiente (v4 -> v5, RECHAZADO por C5)**, y
+> **re-criticado una quinta vez el mismo día sobre `28835201` por un quinto juez independiente
+> (v5 -> v6) — primer veredicto que NO es RECHAZADO en 6 rondas.** Toda la evidencia de este
+> documento fue leída del código de esos commits y, donde dice **MEDIDO**, ejecutada/grepeada de
+> verdad con `backend/.venv/Scripts/python.exe` (py3.13.5).
 >
-> **Advertencia estructural confirmada en la v4 y re-verificada íntegra en la v5 (ver CHANGELOG):**
-> los archivos compartidos que F0 edita (`config.py`, `harness_flags.py`,
-> `test_harness_flags_requires.py`) tienen un ritmo de cambio medido de **+15 a +58 líneas en 2
-> días** por costuras de planes hermanos. **Re-medidos todos hoy en la v5: ni uno solo drifteó** —
-> la disciplina de anclar por símbolo de la v4 se sostuvo. Lo que sí falló en la v4 no fue un
-> anclaje: fue un caso de diseño sin test en su propia adición nueva (ver C5). Cualquier anclaje de
-> línea de este documento puede volver a quedar viejo antes de implementarse. **Regla dura para el
-> implementador:** localizar SIEMPRE por símbolo (`grep -n`) antes de insertar; un número de línea
-> de este documento es una pista, nunca la verdad.
+> **Re-verificación completa de la v6: CERO drift en los 30+ anclajes de los 12 archivos backend
+> citados** (`config.py`, `harness_flags.py`, `harness_flags_help.py`, `test_harness_flags.py`,
+> `test_harness_flags_requires.py`, `run_harness_tests.sh`/`.ps1`, `pipeline_environments.py`,
+> `pipeline_env_resolver.py`, `ado_variables.py`, `gitlab_variables.py`, `api/ci.py`,
+> `pipeline_diff.py`, `cicd_audit_core.py`, `pipeline_lint.py`, `ci_run_ledger.py`), incluido
+> `_record_trigger` en `api/ci.py:130`, no re-verificado en rondas previas. **15 tests base
+> corridos de verdad con `backend/.venv`, los 15 dieron el número exacto que este documento
+> declara** (`test_harness_flags.py` 56, `test_harness_flags_requires.py` 9,
+> `test_harness_ratchet_meta.py` 4, `test_plan251_env_matrix_resolve.py` 15,
+> `test_plan251_env_matrix_build.py` 14, `test_plan94_variables_providers.py` 13, y 9 baselines más
+> de F1/F3/F4/F5). `error_fingerprints.json` sigue en **45** (re-medido hoy, tercera vez). **Lo que
+> sí quedó corto en 5 rondas anteriores: el frente frontend, auditado a fondo por primera vez en
+> esta v6 (ver C9) — hay 6 ratchets rojos de fábrica, no 2.**
+>
+> **Advertencia estructural confirmada en la v4, re-verificada en la v5 y otra vez en esta v6 (ver
+> CHANGELOG):** los archivos compartidos que F0 edita (`config.py`, `harness_flags.py`,
+> `test_harness_flags_requires.py`, `run_harness_tests.sh`/`.ps1`) tienen un ritmo de cambio medido
+> de **+15 a +58 líneas en 2 días** por costuras de planes hermanos. **Re-medidos todos hoy en la
+> v6: ni uno solo drifteó** — la disciplina de anclar por símbolo de la v4/ADICIÓN 6 se sostiene
+> tres rondas después. Cualquier anclaje de línea de este documento puede volver a quedar viejo
+> antes de implementarse. **Regla dura para el implementador:** localizar SIEMPRE por símbolo
+> (`grep -n`) antes de insertar; un número de línea de este documento es una pista, nunca la verdad.
 >
 > Siguiente eslabón del pipeline de la casa: `implementar-plan-stacky`.
+
+---
+
+## CHANGELOG v5 -> v6
+
+**Veredicto del juez sobre el v5: APROBADO-CON-CAMBIOS (0 bloqueantes, 2 importantes) — primera
+vez en 6 rondas que este plan NO es rechazado.** Quinta ronda de re-verificación completa: se
+releyó el snippet `_elegir_entrada`/`_resolver_celda` línea por línea (§4.7, F1 ítem 4) contra el
+código vivo de hoy y se confirmó que implementa "exacto gana, `"*"` es fallback" sin ambigüedad de
+tipos ni de `None` — incluida la distinción correcta entre `elegida is None` (ninguna entrada
+aplica) y `elegida = (scope, None)` (una entrada aplica pero su `has_value` es desconocido, caso
+ADO+secreto). Se re-midieron los 30+ anclajes de los 12 archivos backend citados (todos exactos,
+incluido `_record_trigger` en `api/ci.py:130`, no grepeado en rondas previas) y se corrieron de
+verdad 15 tests base (los 6 obligatorios más 9 baselines adicionales de F1/F3/F4/F5): **los 15
+dieron el número exacto que el documento declara.** `error_fingerprints.json` sigue en **45**.
+**No hay bloqueantes.** Lo que sí quedó corto, y es la primera vez que se audita en 5 rondas: el
+frente frontend. Lo corregido:
+
+- **C8 (IMPORTANTE) — el corpus `scope_conflict_matrix.json` (§4.7) y su test de completitud dicen
+  cubrir "los 3 casos posibles de `_elegir_entrada`", y en rigor hay una cuarta forma de entrada:
+  scope exacto presente y NINGÚN `"*"` en absoluto** (ej. `entries=[("prod", False)]`, sin
+  comodín). Verificado en runtime que el código la resuelve bien (la rama `elif` de
+  `_elegir_entrada` retorna apenas encuentra el match exacto, exista o no un `"*"` en la lista), y
+  que el caso YA está probado — pero por `test_f1_mismo_key_distinto_has_value_por_entorno`, un test
+  de OTRO archivo (`test_plan260_has_value_veraz.py`, heredado de la v4), no por este corpus. No es
+  un bug vivo: es la misma clase de sobre-afirmación de completitud que ya tumbó a este plan cuatro
+  veces (C1 v1->v2, C1 v2->v3, C5 v4->v5) — la diferencia es que esta vez el caso faltante SÍ está
+  cubierto, solo que en el lugar equivocado, y el comentario del test miente sobre cuántos casos
+  hay. **v6:** cuarta fila `solo_exacto_sin_comodin` agregada al corpus; el test de completitud
+  pasa a exigir las 4; `test_f1_precedencia_scope_exacto_vs_comodin` pasa a parametrizarse x4.
+- **C9 (IMPORTANTE, con evidencia medida en esta misma sesión) — F6 dice "8 ratchets del frontend"
+  con 2 rojos ajenos conocidos; MEDIDO HOY hay 9 archivos `*Ratchet*.test.ts` y 6 están en rojo, no
+  2.** Además de los 2 ya documentados (`formDebtRatchet`, `devopsPollingRatchet` por
+  `BuildWorkshopSection.tsx:93`), fallan hoy `uiDebtRatchet` (deuda ajena en
+  `ExecutionDetailDrawer.module.css` 23>21 y `RunReconciliationCard.module.css` 1>0 — la MISMA
+  familia de deuda que el plan hermano 266 encontró horas antes hoy, por los planes 254/269),
+  `adhocModalRatchet` (2/4 tests) y `motionDebtRatchet` (2/3 tests). Ninguno de los 4 nuevos toca un
+  archivo que el 260 modifique. Con el criterio tal como estaba escrito, un implementador vería 4
+  rojos no documentados y perdería un ciclo diagnosticando (o, peor, "arreglando") deuda ajena.
+  **v6:** el criterio deja de nombrar un número fijo de ratchets ([ADICIÓN ARQUITECTO 8]): se
+  enumeran con un glob, se corren todos, y el criterio binario pasa a ser "ningún archivo que este
+  plan toca aparece en los mensajes de error de ningún ratchet" — invariante que sobrevive a
+  cuántos ratchets existan o cuánta deuda ajena acumulen mañana. Se documentan los 6 rojos de hoy
+  como baseline informativo, no como número a mantener.
+
+**Adición del arquitecto (no estaba en la v5):**
+- **[ADICIÓN ARQUITECTO 8]** — *F6 deja de contar ratchets, los enumera*: mismo principio que la
+  ADICIÓN 6 (no confiar en un número fijo en un archivo que otros planes tocan) aplicado por primera
+  vez al lado frontend. El criterio pasa de "N ratchets en verde" a "cero archivos propios en los
+  errores", con el comando exacto para correrlo (§5 F6).
 
 ---
 
@@ -1053,14 +1118,18 @@ se habría caído en F1, antes de escribir el endpoint. Es exactamente el mismo 
 repo ya aplica con `repro` en `cicd_audit_core.py:106-115` — declarar un comportamiento sin un
 reproductor que lo pruebe es declarar verde falso.
 
-### 4.7 **[ADICIÓN ARQUITECTO 7] (v5, C5 — NUEVA)** Corpus de precedencia `scope exacto vs comodín`
+### 4.7 **[ADICIÓN ARQUITECTO 7] (v5, C5 — NUEVA; 4ª fila v6, C8)** Corpus de precedencia `scope exacto vs comodín`
 
 **El problema que resuelve:** C5 (v4->v5) no fue un typo — fue dejar en prosa, sin dato ni test,
 la regla que decide quién gana cuando una misma key llega con **dos** entradas simultáneas:
 una `"*"` (comodín) y una de scope exacto. La v4 ya demostró (§4.6, ADICIÓN 4) que esta casa
 tiene el patrón correcto para esto: **si la regla no está congelada en un archivo y recorrida por
 un test parametrizado, un caso se cae del razonamiento y nadie se entera** — es exactamente lo
-que le pasó a la propia v4 con este caso.
+que le pasó a la propia v4 con este caso, y (v6, C8) lo que casi le vuelve a pasar a la propia
+ADICIÓN 7: sus 3 filas originales no incluían el caso "hay scope exacto y NINGÚN comodín en toda
+la lista" — cubierto en la práctica por `test_f1_mismo_key_distinto_has_value_por_entorno` (otro
+archivo), pero ausente de ESTE corpus pese a que el propio test de completitud afirmaba cubrir
+"los 3 casos posibles".
 
 **Archivo NUEVO (dato, no código):** `backend/tests/plan260_corpus/scope_conflict_matrix.json`
 
@@ -1073,7 +1142,9 @@ que le pasó a la propia v4 con este caso.
     {"caso": "exacto_gana_al_comodin_cargado", "entries": [["*", true], ["prod", false]],
      "env": "prod", "gana_scope": "prod", "has_value_esperado": false},
     {"caso": "comodin_es_fallback_de_otro_entorno", "entries": [["*", true], ["dev", false]],
-     "env": "prod", "gana_scope": "*", "has_value_esperado": true}
+     "env": "prod", "gana_scope": "*", "has_value_esperado": true},
+    {"caso": "solo_exacto_sin_comodin", "entries": [["prod", false]],
+     "env": "prod", "gana_scope": "prod", "has_value_esperado": false}
   ]
 }
 ```
@@ -1084,21 +1155,35 @@ cargado (`has_value=True`) y, a la vez, una entrada `prod` recién declarada vac
 `"*"` primero" —que es como está el código HOY, antes de este plan—, esta fila pasa a esperar
 `True` y el test se cae con un mensaje que nombra la fila, no un fallo mudo.
 
-**Quién lo consume:** `test_f1_precedencia_scope_exacto_vs_comodin` (F1, parametrizado x3, §5).
+**(v6, C8) La fila `solo_exacto_sin_comodin`** cierra el hueco que el propio corpus decía no
+tener: una key con **una sola** entrada, de scope exacto, **sin ningún `"*"` en la lista**. El
+código ya la resuelve bien hoy (la rama `elif` de `_elegir_entrada` retorna apenas encuentra el
+match exacto, exista o no un comodín), y el caso ya estaba probado por
+`test_f1_mismo_key_distinto_has_value_por_entorno` — pero en OTRO archivo
+(`test_plan260_has_value_veraz.py`), no en este corpus. Sin esta fila, el comentario de
+`test_f1_scope_conflict_corpus_no_esta_vacio` afirmaba cubrir "los 3 casos posibles" siendo en
+realidad 4 formas de entrada distintas (2 de ellas colapsando al mismo caso "solo comodín
+aplica"); dejarlo así habría repetido, un nivel más abajo, el mismo patrón de sobre-afirmación de
+completitud que ya causó C1 (v1->v2, v2->v3) y C5 (v4->v5).
+
+**Quién lo consume:** `test_f1_precedencia_scope_exacto_vs_comodin` (F1, parametrizado **x4**, §5).
 **Test de completitud**, mismo criterio que §4.6:
 
 ```python
 def test_f1_scope_conflict_corpus_no_esta_vacio():
-    """3 filas, ni una menos: solo_comodin, exacto_gana_al_comodin_cargado y
-    comodin_es_fallback_de_otro_entorno son los 3 casos posibles de _elegir_entrada."""
+    """4 filas, ni una menos: solo_comodin, exacto_gana_al_comodin_cargado,
+    comodin_es_fallback_de_otro_entorno y solo_exacto_sin_comodin son las 4 formas de entrada
+    que _elegir_entrada puede recibir (v6, C8: la v5 tenia 3 y dejaba afuera la ultima)."""
     rows = _scope_conflict_corpus()["rows"]
     assert {r["caso"] for r in rows} == {
-        "solo_comodin", "exacto_gana_al_comodin_cargado", "comodin_es_fallback_de_otro_entorno"}
+        "solo_comodin", "exacto_gana_al_comodin_cargado", "comodin_es_fallback_de_otro_entorno",
+        "solo_exacto_sin_comodin"}
 ```
 
-**Costo:** un JSON de 3 filas y un `@pytest.mark.parametrize`. **Valor:** el bug de C5 se habría
+**Costo:** un JSON de 4 filas y un `@pytest.mark.parametrize`. **Valor:** el bug de C5 se habría
 caído en F1, antes de mergear la v4, con un mensaje que dice exactamente qué fila falló — en vez
 de sobrevivir 4 versiones de crítica porque el único test nuevo no incluía ninguna entrada `"*"`.
+Y (v6) la propia completitud del corpus deja de ser una afirmación de prosa sin verificar.
 
 ---
 
@@ -1329,11 +1414,12 @@ días, no en meses (los últimos 2, en horas: se movieron mientras se escribía 
    `por_key[key] = has_value` (sobrescribiendo en vez de acumular por scope) pasa los 4 casos del
    corpus de §4.6 —que son de un solo entorno cada uno— y falla en producción la primera vez que
    una pipeline real tenga 2+ entornos.
-   **Test dedicado nuevo (v5, C5, ADICIÓN ARQUITECTO 7):**
-   `test_f1_precedencia_scope_exacto_vs_comodin` — parametrizado sobre las 3 filas de
-   `plan260_corpus/scope_conflict_matrix.json` (§4.7): una key con **ambas** entradas (`"*"` y una
-   exacta) a la vez. Es el test que se cae si alguien "simplifica" `_elegir_entrada` volviendo a
-   mirar `"*"` primero.
+   **Test dedicado nuevo (v5, C5, ADICIÓN ARQUITECTO 7; extendido v6, C8):**
+   `test_f1_precedencia_scope_exacto_vs_comodin` — parametrizado sobre las **4** filas de
+   `plan260_corpus/scope_conflict_matrix.json` (§4.7): dos con **ambas** entradas (`"*"` y una
+   exacta) a la vez, una con solo comodín y una con solo scope exacto **sin ningún comodín**
+   (v6). Es el test que se cae si alguien "simplifica" `_elegir_entrada` volviendo a mirar `"*"`
+   primero.
 5. `services/pipeline_environments.py:24-25` — **(v3, C1)** `SOURCES` gana **DOS** elementos
    **al final**: `"declarada_sin_valor"` y `"declarada_sin_valor_verificable"`.
 
@@ -1364,13 +1450,13 @@ días, no en meses (los últimos 2, en horas: se movieron mientras se escribía 
 - **`test_f1_mismo_key_distinto_has_value_por_entorno`** *(v4, C3)* — ver F1 item 4: mismo key,
   dos entornos, `has_value` distinto por scope; cada celda resuelve con el valor de **su propio**
   entorno, nunca el de otro.
-- **`test_f1_precedencia_scope_exacto_vs_comodin`** *(v5, C5, ADICIÓN ARQUITECTO 7)* —
-  parametrizado sobre las 3 filas de `plan260_corpus/scope_conflict_matrix.json` (§4.7): una key
-  con **ambas** entradas (`"*"` y una exacta) a la vez. **Este es el test que se cae si
-  `_elegir_entrada` vuelve a mirar `"*"` antes que el scope exacto** — el bug concreto que hundió
-  a la v4.
-- **`test_f1_scope_conflict_corpus_no_esta_vacio`** *(v5, ADICIÓN ARQUITECTO 7)* — completitud:
-  las 3 filas del corpus de §4.7 siguen presentes.
+- **`test_f1_precedencia_scope_exacto_vs_comodin`** *(v5, C5, ADICIÓN ARQUITECTO 7; x4 desde v6,
+  C8)* — parametrizado sobre las **4** filas de `plan260_corpus/scope_conflict_matrix.json`
+  (§4.7): dos con **ambas** entradas (`"*"` y una exacta) a la vez, una con solo comodín y una con
+  solo scope exacto sin comodín. **Este es el test que se cae si `_elegir_entrada` vuelve a mirar
+  `"*"` antes que el scope exacto** — el bug concreto que hundió a la v4.
+- **`test_f1_scope_conflict_corpus_no_esta_vacio`** *(v5, ADICIÓN ARQUITECTO 7; 4 filas desde v6,
+  C8)* — completitud: las 4 filas del corpus de §4.7 siguen presentes.
 
 **Criterio BINARIO:** los 14 propios verdes **y** las baselines **medidas hoy** intactas
 (re-verificadas por el juez de la v3 corriendo cada archivo con `backend/.venv`):
@@ -2085,12 +2171,61 @@ npx tsc --noEmit
 ```
 **Correr por archivo:** la corrida completa de vitest contamina cross-file en este repo.
 
+#### **[ADICIÓN ARQUITECTO 8] (v6, C9 — NUEVA)** Los ratchets del frontend se enumeran, no se cuentan
+
+**El problema que resuelve:** la v5 escribía "los 8 ratchets del frontend sin crecer" con 2 rojos
+ajenos nombrados. **MEDIDO hoy:** `frontend/src/__tests__/*Ratchet*.test.ts` son **9** archivos, no
+8, y **6** están en rojo, no 2 — mismo patrón que ya tumbó a este plan con
+`error_fingerprints.json` (C2/C6): un número escrito a mano en un archivo que **cualquier** plan
+hermano con UI puede tocar queda viejo en días. Corrida real de hoy:
+
+| Ratchet | Estado | Causa (si es roja) |
+|---|---|---|
+| `devopsActionCatalogRatchet` | verde (7/7) | — |
+| `devopsPollingRatchet` | **rojo** (1/10) | `BuildWorkshopSection.tsx:93` — ya documentado |
+| `adhocModalRatchet` | **rojo** (2/4) | ajena, no toca archivos del 260 |
+| `copyDebtRatchet` | verde (3/3) | — |
+| `undoConfirmRatchet` | verde (2/2) | — |
+| `uiDebtRatchet` | **rojo** (1/3) | `ExecutionDetailDrawer.module.css` 23>21 y `RunReconciliationCard.module.css` 1>0 — la misma familia de deuda (planes 254/269) que encontró el plan hermano 266 en su propia 2ª ronda hoy |
+| `formatDebtRatchet` | **rojo** (1/3) | ajena, no toca archivos del 260 |
+| `formDebtRatchet` | **rojo** (1/3) | `BuildWorkshopSection.tsx:93` — ya documentado |
+| `motionDebtRatchet` | **rojo** (2/3) | ajena, no toca archivos del 260 |
+
+Ninguno de los 4 rojos no documentados (`adhocModalRatchet`, `uiDebtRatchet`, `formatDebtRatchet`,
+`motionDebtRatchet`) menciona un archivo que este plan cree o modifique. Con el criterio "8
+ratchets, 2 rojos conocidos" tal como estaba escrito, un implementador que corra la suite completa
+vería 4 fallos no previstos y podría perder un ciclo diagnosticando —o, peor, "arreglando"— deuda
+ajena de otros planes.
+
+**v6:** el criterio deja de nombrar un número fijo. Se enumeran los archivos con un glob, se corre
+cada uno, y el criterio binario es **"ningún archivo que este plan toca aparece en los mensajes de
+error de ningún ratchet"** — invariante que no depende de cuántos ratchets existan mañana ni de
+cuánta deuda ajena acumulen otros planes:
+
+```powershell
+# enumerar (no hardcodear la lista ni el conteo):
+Get-ChildItem frontend/src/__tests__/*Ratchet*.test.ts | ForEach-Object {
+    npx vitest run --root frontend $_.FullName.Replace((Get-Location).Path + '\frontend\', '')
+}
+```
+
+Archivos propios de este plan a buscar en los `errs`/mensajes de cualquier ratchet que falle:
+`PipelineEnvMatrixPanel.tsx`, `PipelineEnvMatrixPanel.module.css`, `VariablesSection.tsx`,
+`PipelineTriggerCard.tsx`, `pipelineEnvMatrixModel.ts`, `pipelineDeclareModel.ts`,
+`triggerGateModel.ts`. Si ninguno aparece, el rojo es ajeno (mismo principio que "un rojo ajeno se
+prueba con un worktree en el commit base, no se argumenta" — con la lista de archivos de HOY como
+punto de partida, no como techo).
+
+---
+
 **Criterio BINARIO:** los 12 verdes, **el archivo del 251
 (`pipelineEnvMatrixModel.test.ts`) en su baseline previa sin tocarlo**,
-`npx tsc --noEmit` en **0 errores**, y los 8 ratchets del
-frontend sin crecer (medir el baseline **antes** de tocar nada: hay rojos **ajenos** conocidos —
-`formDebtRatchet` y `devopsPollingRatchet` por `BuildWorkshopSection.tsx:93`. Un rojo ajeno se
-prueba con un **worktree en el commit base**, no se argumenta).
+`npx tsc --noEmit` en **0 errores**, y **ningún archivo propio de este plan (ver lista de
+ADICIÓN 8) mencionado en los errores de ninguno de los ratchets del frontend** — no "N ratchets en
+verde": medido hoy hay 6 de 9 ya rojos por deuda ajena (`formDebtRatchet`/`devopsPollingRatchet`
+por `BuildWorkshopSection.tsx:93`; `uiDebtRatchet`/`adhocModalRatchet`/`formatDebtRatchet`/
+`motionDebtRatchet` por otras causas ajenas), y ese número puede volver a moverse. Un rojo que SÍ
+nombra un archivo propio se prueba con un **worktree en el commit base**, no se argumenta.
 
 **Pendiente declarado (no automatizable):** smoke visual — abrir DevOps -> *Matriz de entornos*,
 pegar una pipeline real **con al menos un secreto** *(v3, C1: es el caso que se rompía)*, apretar
@@ -2221,6 +2356,8 @@ la última entrada existente (ni una más, ni una menos). El nombre de la funci�
 | **R20** *(v5, C5 — el bloqueante de esta ronda)* | **Una key con entrada `"*"` (cargada) Y entrada de scope exacto (recién declarada vacía) a la vez resuelve por la entrada equivocada**, reabriendo KPI-2 por la precedencia en vez de por el tri-estado de `has_value` | `_elegir_entrada` (F1 ítem 4) fija exacto-gana-siempre-que-exista, `"*"` es fallback, con el orden **invertido a propósito** respecto del código pre-260; `scope_conflict_matrix.json` (§4.7, ADICIÓN 7) congela los 3 casos y `test_f1_precedencia_scope_exacto_vs_comodin` es rojo si alguien revierte el orden |
 | **R21** *(v5, C6)* | **`test_f7_json_valido_y_solo_crecio` queda rojo por una F7 ajena en cuanto un plan hermano agregue otra huella al mismo `error_fingerprints.json`** | El test deja de asertar longitud total exacta; verifica prefijo byte-idéntico contra un fixture congelado (`fingerprints_baseline.json`) más presencia por `id` de las 2 huellas propias — invariante que no depende de cuántos hermanos toquen el archivo después |
 | **R22** *(v5, C7 — evidencia en vivo)* | **`run_harness_tests.sh`/`.ps1` rotan tan rápido como los 3 archivos que ya blindaba ADICIÓN 6, y quedaban afuera de esa disciplina** (medido: el `.ps1` cambió sin commitear, en vivo, mientras se escribía esta v5) | ADICIÓN 6 se extiende a 5 archivos: 2 comandos `rg -n "^\)" ... \| tail -1` más, uno por script, para ubicar el cierre real del array sin depender de un "patrón" por línea |
+| **R23** *(v6, C8)* | **El corpus `scope_conflict_matrix.json` (ADICIÓN 7) se declaraba completo con 3 filas y le faltaba una forma de entrada real** (scope exacto sin ningún comodín) | 4ª fila `solo_exacto_sin_comodin`; `test_f1_scope_conflict_corpus_no_esta_vacio` exige las 4; el propio patrón de "corpus congelado + test de completitud" (§4.6/§4.7) se aplica a sí mismo |
+| **R24** *(v6, C9 — evidencia medida en esta misma sesión)* | **F6 asumía que solo 2 de los ratchets del frontend estaban rojos por deuda ajena; medido hoy son 6 de 9**, y ese número puede volver a moverse mañana | ADICIÓN 8: el criterio deja de contar ratchets y pasa a "ningún archivo propio en los errores de ninguno", invariante a cuántos ratchets existan o cuánta deuda ajena acumulen otros planes |
 
 ---
 
@@ -2319,14 +2456,17 @@ operador, que es precisamente la **F0 del Plan 261**. Se documenta acá para que
 **`frontend/src/devops/pipelineEnvMatrixModel.ts`** *(v3, C1)*,
 `Stacky Agents/docs/sistema/error_fingerprints.json` *(v2, F7)*.
 
-**Total de tests nuevos esperados: 82 backend + 12 frontend** (v4: 80 + 12; v3: 79 + 12; v2: 66 + 8;
-v1: 52 + 6). El crecimiento del v3 fue casi todo **parametrización sobre el corpus de §4.6**, no
-funciones nuevas escritas a mano: 4 filas x 3 fases + los 8 controles de los bloqueantes. El único
-test nuevo de la v4 fue `test_f1_mismo_key_distinto_has_value_por_entorno` (C3: cubre el eje
-multi-entorno que el corpus `proveedor x kind` no cruza) — **pero ese test, sin ninguna entrada
-`"*"`, fue exactamente el que no atrapó a C5.** Los 2 tests nuevos de la v5 son
-`test_f1_precedencia_scope_exacto_vs_comodin` y `test_f1_scope_conflict_corpus_no_esta_vacio`
-(ADICIÓN 7, §4.7): parametrización sobre un segundo corpus de 3 filas, no lógica nueva a mano.
+**Total de tests nuevos esperados: 82 backend + 12 frontend** (v5/v6: 82 + 12 — la v6 no agrega
+funciones nuevas, extiende el corpus de §4.7 de 3 a 4 filas dentro de las 2 funciones que ya
+parametrizaba la v5; v4: 80 + 12; v3: 79 + 12; v2: 66 + 8; v1: 52 + 6). El crecimiento del v3 fue
+casi todo **parametrización sobre el corpus de §4.6**, no funciones nuevas escritas a mano: 4 filas
+x 3 fases + los 8 controles de los bloqueantes. El único test nuevo de la v4 fue
+`test_f1_mismo_key_distinto_has_value_por_entorno` (C3: cubre el eje multi-entorno que el corpus
+`proveedor x kind` no cruza) — **pero ese test, sin ninguna entrada `"*"`, fue exactamente el que
+no atrapó a C5.** Los 2 tests nuevos de la v5 son `test_f1_precedencia_scope_exacto_vs_comodin` y
+`test_f1_scope_conflict_corpus_no_esta_vacio` (ADICIÓN 7, §4.7): parametrización sobre un segundo
+corpus, de 3 filas en la v5 y **4 desde la v6** (C8: faltaba el caso "solo scope exacto, sin
+comodín"), no lógica nueva a mano.
 
 ---
 

@@ -1,10 +1,48 @@
 # Plan 259 — Alta de proyecto GitLab de primera clase + guía de configuración verificable (botón INFO)
 
-**Estado:** CRITICADO — **v2 → v3** (juez independiente; v2 **RECHAZADO**, 7 bloqueantes)
+**Estado:** CRITICADO — **v3 → v4** (SEGUNDA pasada de juez independiente; v3 **APROBADO-CON-CAMBIOS**, 4 bloqueantes, los 4 introducidos por v3)
 **Serie:** Paridad multi-proveedor (65 → 218 → 249 → **259**). Cierra el último tramo que quedó a mitad de camino: el **alta**.
 **Fuente:** pedido del operador ("al crear un nuevo proyecto debe de darme la opción de GitLab y un botón de INFO que podamos abrir y nos dé info muy detallada de cómo configurarlo exactamente"), **verificado contra el árbol de trabajo** en la rama `feat/plan-217-migrador-mantis-gitlab`.
 
 > **Hallazgo central de la verificación:** GitLab está implementado en el motor (7 módulos `services/gitlab_*.py`, fábrica en `tracker_provider.py:130-148`, tipo declarado en `frontend/src/types.ts:245`) y **está ofrecido en el modal de EDICIÓN** (`EditProjectModal.tsx:449-452`) — pero **no existe en el modal de ALTA** y **el backend no sabe crearlo**. Peor: apretar ese botón de GitLab en Edición y guardar **convierte el proyecto en Azure DevOps en silencio**. El pedido del operador no es una feature nueva: es cerrar un agujero que hoy corrompe datos.
+
+---
+
+## CHANGELOG v3 → v4
+
+Veredicto de la crítica sobre v3: **APROBADO-CON-CAMBIOS** (4 hallazgos BLOQUEANTES, **los 4 introducidos por v3**). Juez **independiente**, segunda pasada, en corrida aparte del agente que escribió v3 (commit `b07527a3`).
+
+> **Método — se criticó EJECUTANDO.** Se extrajeron del `.md` y se corrieron: el módulo `gitlab_setup_check.py` de F4.a (escrito a disco y monkeypatcheado con los dos dobles), la entrada de huella de F8 (pasada por los **4** chequeos reales del catálogo), los **3** textos `PlainHelp` de F0.b.4 (pasados por las **5** reglas reales del gate), el test de F8.b (escrito a disco y corrido contra los dos scripts reales), y los dos bloques del `.ps1` (evaluados con el parser **y** el runtime de PowerShell, contando `$HarnessTestFiles.Count`). Los **10** baselines de la DoD se remidieron de cero. **Los 4 bloqueantes salieron de ejecutar; ninguno de leer.**
+
+**Los 7 bloqueantes de v2 están REALMENTE cerrados** — verificado corriendo, uno por uno:
+
+| # | Cómo se verificó | Resultado |
+|---|---|---|
+| B1 `match`→`matches` | Entrada de F8 extraída literal del `.md` y pasada por los 4 chequeos del gate (`_REQUIRED` de 9 campos, `_STATUS_ENUM`, `re.compile`, `self_test["matches"]`/`["clean"]`) | **CERRADO** — usa `matches`, los 4 pasan. Control: de las **42** huellas vivas, **26** tienen `self_test.matches` y **0** usan `match` singular |
+| B2 DoD contra gates rojos | Los **10** comandos de la tabla remedidos de cero con el venv py3.13.5 | **CERRADO** — los 10 coinciden **exactos**: 56·4·10·13·5·9 passed, `error_fingerprints` **3f/5p**, `flags_help` **4f/4p**, `uiDebtRatchet` **1f/2p** con esos **2** archivos, `tsc --noEmit` **0** |
+| B3 `initialize_azure_devops_project` | Introspección sobre `project_manager` | **CERRADO** — solo existen `initialize_ado_project` y `write_ado_auth`; `initialize_azure_devops_project` y `write_azure_devops_auth` **no existen**, o sea que la tabla `_SLUG` única de F9 tenía que cubrir las dos familias, y las cubre |
+| B4 `FakeRequests` | Módulo de F4.a extraído a disco y monkeypatcheado con los dos dobles | **CERRADO** — sin `RequestException`: `AttributeError: type object 'FakeSinExc' has no attribute 'RequestException'`; con `RequestException = Exception`: **5** chequeos, ids únicos |
+| B5 `.ps1` con rutas peladas | Los dos bloques pegados en copias del `.ps1` y **evaluados** en runtime | **CERRADO en sustancia** — peladas: **0 errores de parseo** y `Count` se queda en **623** (las 8 líneas se pierden mudas); entrecomilladas: `Count = 631` y **8** rutas `test_plan259`. *(Precisión: v3 dice "el array evalúa a `Count = 0`"; medido, lo que da 0 es un array hecho **solo** de líneas peladas — en el archivo real las 623 entradas previas sobreviven y lo que desaparece son las 8 nuevas. El modo de falla —pérdida silenciosa, cero errores— es el que v3 describe.)* |
+| B6 `__all__` en el archivo equivocado | Lectura del fuente | **CERRADO** — `client_profile_default_templates.py` **no tiene `__all__`** (276 líneas) y `project_manager.py` sí, en `:628`. F1.0/F1.a quedan partidas con su archivo en el encabezado y un corte explícito |
+| B7 `flags` / `HealthResponse` / `tsc` | Lectura del árbol + `tsc --noEmit` | **CERRADO en diseño** — `HealthResponse` (`endpoints.ts:3309-3321`) tiene claves fijas **sin index signature**; `NewProjectModal.tsx` importa solo 6 cosas y ninguna es de flags; las 3 flags tienen **0 hits** en código; `btnInfo` **0 matches**; `@tanstack/react-query ^5.59.0` instalado y `useUiPerfFlags` existe como precedente. F4.c + F5.0 tapan las 4 piezas — **pero F4.c trae el bloqueante N3** |
+
+**Bloqueantes NUEVOS (v4) — los 4 nacieron en material que v3 estrenó**
+
+- **N1 — F8 se contradice a sí misma: escribe 8 rutas y su criterio binario exige 7.** *(v3 introdujo esto al agregar F8.b.)* v3 sumó el 8º archivo de test (`test_plan259_ratchet_script_parity.py`), actualizó los **dos** bloques (el `.sh` y el `.ps1` tienen **8** líneas cada uno, contadas) y la DoD (*"los **8** archivos de test backend"*), pero dejó en **7** el número de la prosa (*"Las 7 líneas"*), el de la verificación obligatoria (*"tiene que ser **7**, no 0"*), el del criterio de aceptación 4 (*"**7** rutas `test_plan259`"*) y el de R17. Medido evaluando el `.ps1` con las 8 líneas pegadas: `rutas_test_plan259 = 8`. O sea que **quien implemente el plan bien falla su propio criterio binario**. Es la misma clase que B2: un criterio insatisfacible por construcción. Corregido a 8 en los 4 lugares.
+- **N2 — El guardián de paridad de F8.b nace ROJO por deuda ajena, y su criterio exige "los 4 en verde".** *(Bloqueante de la propia [ADICIÓN ARQUITECTO v3].)* Se escribió el test **tal como lo especifica F8.b** y se corrió contra los dos scripts reales: `test_el_ps1_no_tiene_rutas_sin_comillas` **pasa**, `test_las_dos_listas_son_no_vacias` **pasa**, `test_ninguna_ruta_apunta_a_un_archivo_inexistente` **pasa**, y `test_las_dos_listas_tienen_el_mismo_contenido` **FALLA**: el `.sh` tiene **687** rutas y el `.ps1` **623** — hay **64** archivos que están solo en el `.sh` (`test_mg_*`, `test_plan70_group_*`, `test_plan237/238/239_*`, `test_rag_*`, …), **cero** solo en el `.ps1`. Es deriva **preexistente y ajena** a este plan. El criterio *"los 4 en verde"* obliga entonces a una de dos cosas prohibidas: agregar 64 rutas ajenas al `.ps1` (alcance de otro plan, y el propio plan escribe *"Prohibido arreglar rojo ajeno adentro de este plan"*), o aflojar el guardián. v3 midió en números el baseline de **5** gates ajenos y después **estrenó un gate nuevo sin correrlo**. F8.b reescrita en forma de **delta contra el rojo medido**, que es la forma que el propio plan usa para los otros gates.
+- **N3 — F4.c no compila: en `api/diag.py` el módulo se llama `_config`, no `config`.** *(Fase estrenada por v3.)* El snippet de F4.c escribe `getattr(config.config, "STACKY_SETUP_GUIDE_ENABLED", True)`. Verificado ejecutando dentro del namespace real del módulo: `hasattr(api.diag, "config")` → **`False`**, `hasattr(api.diag, "_config")` → **`True`** (el import es `import config as _config`, `api/diag.py:26`), y evaluar el snippet del plan da **`NameError: name 'config' is not defined`**; con `_config.config` devuelve `True`. Las **10** lecturas de flag que ya tiene ese handler usan todas `_config.config` (`:633-640`). Es el gotcha de la casa *"`config.config` vs módulo"* reintroducido, y F4.c es **prerequisito duro** de F5/F6 (R16 y el paso 8 del orden), así que la UI se quedaría sin las flags. Corregido a `_config.config`.
+- **N4 — F7.a define `set_flag_values` con 1 parámetro y la nota B14 la llama con 2.** *(La nota B14 es material nuevo de v3.)* El bloque de código de F7.a dice `def set_flag_values(raw_updates: dict) -> dict:` y su cuerpo llama `apply_updates(raw_updates)` sin condición; la nota de B14, 38 líneas más abajo, prescribe el call site `set_flag_values(raw_updates, typed=typed)` y la prosa habla de `set_flag_values(raw_updates, typed=None)`. Verificado ejecutando esa firma con ese call site: **`TypeError: set_flag_values() got an unexpected keyword argument 'typed'`**. Como `put_harness_flags` es el endpoint que *"usa medio sistema"* (R11 del propio plan), copiar los dos bloques al pie de la letra rompe **toda** escritura de flags con un 500. Atenuante: lo atrapa `test_endpoint_de_flags_sigue_igual`, que es de este plan. Corregido: la firma pasa a `(raw_updates, typed=None)` y el cuerpo reusa el dict ya casteado.
+
+**Lo que v3 hizo BIEN y v4 conserva intacto** (verificado ejecutando, no por cortesía):
+
+- La **tabla de 10 baselines de la DoD es exacta al número** en las 10 filas. Es la primera vez en esta serie que un plan mide el rojo ajeno y escribe el criterio como delta; los 5 gates ajenos quedan bien encuadrados.
+- Los **3 textos `PlainHelp`** de F0.b.4 pasan las **5 reglas reales** del gate: cero `SCREAMING_SNAKE`, cero `F<n>`, cero términos de `JARGON_DENYLIST` (los 15 verificados, incluidos `token`/`backend`/`gate` con el plural opcional), `on_effect`/`off_effect` arrancan con `"Si "`, y los largos entran (`what` 72-73 ≤ 200, `on` 97-106 ≤ 240, `off` 78-95 ≤ 240, `example` 71-96 ≤ 300).
+- El **módulo de F4.a corre**: extraído a disco y llamado con el doble correcto devuelve **5** resultados con ids únicos en el escenario de instancia caída.
+- Las **3 flags default ON son correctas** y no son un hallazgo: `_CURATED_DEFAULTS_ON` (`test_harness_flags.py:467`) tiene **261** keys, su cabecera dice *"Barrido default-ON 2026-07-27 (directiva del operador)"*, y el assert de `:985` es **igualdad de conjuntos** — agregar la key en los dos lados queda verde. Ninguna de las 3 escribe en un sistema real del operador con la flag en ON.
+- **Anclajes verificados EXACTOS en esta pasada** (símbolo presente en la línea citada): `_project_to_dict:80` con su `t_type` y el `"ado_project": tracker.get("project", "")` **sin condicionar** (B8 real), `_has_credentials:69` con la cadena `if ado / elif jira / else mantis` textual, `if tracker_type == "jira":290`, `else: # azure_devops:360`, `def update_project:407`, `get_project_credentials:544`, `_resolve_text_field:120`, el `return jsonify` **único y compartido** de `init_project`, `api/harness_flags.py` `logger:19` · `_write_env:32` · `put_harness_flags:118` · el import de `:130` · el `try` que hoy envuelve **solo** `apply_updates` (B14 bien diagnosticado), `config.py:1201` con `"STACKY_GITLAB_ENABLED", "false"` contiguo, `STACKY_CAPABILITY_DEGRADATION_ENABLED:1218`, `_CATEGORY_KEYS["paridad_proveedores"]`, `client.ts` `RawResponse:28` · `rawPost:47` · `rawGet:96` · el `throw new Error` de `:208`, las **12** props de `DialogProps` (las 8 que el plan nombra existen), `uiDebtBaseline.json:41` = `"components/NewProjectModal.module.css": 24` **exacto**, `EditProjectModal.tsx: 9`, `FROZEN_MAX = 11`. Cero colisiones de nombre para `SetupGuide`, `SetupGuideDoc`, `GuideCheckResult`, `usePlan259Flags`.
+- **Cero `SQLITE_LOCKED`** en toda la pasada: los rojos medidos son deterministas.
+
+**Menor (v4):** la nota de F8 sobre las **42** huellas se precisa — el catálogo tiene 42 entradas, de las cuales **26** traen `self_test.matches` y **0** usan `match`; la afirmación operativa (*el plural es el correcto*) es la que importa y es cierta.
 
 ---
 
@@ -1274,17 +1312,24 @@ POST /api/setup-guide/gitlab/verify       → { ok, checks: [...] }
 
 **Archivo a EDITAR:** `Stacky Agents/backend/api/diag.py` (handler `health`).
 
-F5 y F6 condicionan el botón GitLab y el botón INFO al valor de las 3 flags, y la regla de la casa es que **las flags de UI se leen de `/api/diag/health`**. Verificado: hoy ese endpoint **no las emite** (las 3 keys tienen 0 hits en código; solo existen dentro de este `.md`). Agregar al cuerpo de la respuesta un sub-objeto `flags`, leyendo de la **instancia** `config.config` (nunca del módulo — gotcha de la casa):
+F5 y F6 condicionan el botón GitLab y el botón INFO al valor de las 3 flags, y la regla de la casa es que **las flags de UI se leen de `/api/diag/health`**. Verificado: hoy ese endpoint **no las emite** (las 3 keys tienen 0 hits en código; solo existen dentro de este `.md`). Agregar al cuerpo de la respuesta un sub-objeto `flags`, leyendo de la **instancia** (nunca del módulo — gotcha de la casa):
+
+> **EL NOMBRE DEL MÓDULO EN ESTE ARCHIVO ES `_config`, NO `config`** *(v4, hallazgo N3 — BLOQUEANTE de v3)*. `api/diag.py:26` hace `import config as _config`, así que dentro de **este** archivo la instancia es **`_config.config`**. Verificado ejecutando sobre el namespace real del módulo: `hasattr(api.diag, "config")` → **`False`**; evaluar `getattr(config.config, "STACKY_SETUP_GUIDE_ENABLED", True)` ahí da **`NameError: name 'config' is not defined`**; con `_config.config` devuelve `True`. Las **10** lecturas de flag que ya viven en este mismo handler usan todas `_config.config` (`api/diag.py:633-640`, p. ej. `"shell_v2_enabled": bool(getattr(_config.config, "STACKY_UI_SHELL_V2_ENABLED", False))`). **Copiar el prefijo de otra fase de este plan rompe el endpoint**: en `api/projects.py` (F2, Cambio 4) el import es local y se llama `_config` también, pero en `services/*` el idioma es `config.config`. La regla operativa es: **mirá cómo importa el archivo que estás editando**, no copies el prefijo de otro.
 
 ```python
         "flags": {
             "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED": bool(
-                getattr(config.config, "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED", True)),
+                getattr(_config.config, "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED", True)),
             "STACKY_SETUP_GUIDE_ENABLED": bool(
-                getattr(config.config, "STACKY_SETUP_GUIDE_ENABLED", True)),
+                getattr(_config.config, "STACKY_SETUP_GUIDE_ENABLED", True)),
             "STACKY_SETUP_GUIDE_VERIFY_ENABLED": bool(
-                getattr(config.config, "STACKY_SETUP_GUIDE_VERIFY_ENABLED", True)),
+                getattr(_config.config, "STACKY_SETUP_GUIDE_VERIFY_ENABLED", True)),
         },
+```
+
+**Criterio extra de F4.c** *(v4, N3)*: además de los 3 tests de abajo, este comando tiene que imprimir `True` — es el detector directo del `NameError`:
+```
+.venv\Scripts\python.exe -c "from app import create_app; a=create_app(); c=a.test_client(); b=c.get('/api/diag/health').get_json(); print(sorted(b.get('flags',{}))==['STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED','STACKY_SETUP_GUIDE_ENABLED','STACKY_SETUP_GUIDE_VERIFY_ENABLED'])"
 ```
 
 **Aditivo y backward-compatible:** es una clave nueva; ningún consumidor actual de `/api/diag/health` la lee. El default del `getattr` es `True` para que la UI falle **hacia la funcionalidad** (fail-open), igual que el resto del plan.
@@ -1793,8 +1838,10 @@ En la fila del selector, después de los 4 botones:
 
 En `api/harness_flags.py`, **antes** de `put_harness_flags` (`:118`), agregar la función que hoy está inlineada en el handler, y hacer que el handler la llame (mismo comportamiento, cero cambio funcional para el endpoint):
 
+> **FIRMA DE DOS PARÁMETROS — no es opcional** *(v4, hallazgo N4 — BLOQUEANTE de v3)*. v3 definía `def set_flag_values(raw_updates: dict) -> dict:` (**un** parámetro) y, 38 líneas más abajo, su propia nota de B14 prescribía el call site `set_flag_values(raw_updates, typed=typed)` (**dos**). Verificado ejecutando esa firma con ese call site: **`TypeError: set_flag_values() got an unexpected keyword argument 'typed'`**. Como esta función queda en el camino de `PUT /api/harness-flags` —el endpoint que *"usa medio sistema"* (R11)— copiar los dos bloques al pie de la letra rompe **toda** escritura de flags con un 500. La firma correcta, que satisface a la vez a F7.a y a B14, es la de abajo: `typed=None` significa *"validá vos"* (así la llama `_enable_gitlab_engine` en F7.b) y `typed=<dict>` significa *"ya validó el endpoint, no valides dos veces"*.
+
 ```python
-def set_flag_values(raw_updates: dict) -> dict:
+def set_flag_values(raw_updates: dict, typed: dict | None = None) -> dict:
     """Plan 259 F7 — valida + persiste + hot-aplica flags del arnés.
 
     Es EXACTAMENTE lo que hacía inline put_harness_flags (pasos 1-3 de su
@@ -1802,13 +1849,20 @@ def set_flag_values(raw_updates: dict) -> dict:
     hacer un POST a nuestro propio servidor. `apply_updates` por sí sola NO
     persiste ni aplica (services/harness_flags.py:5709).
 
+    `typed` es el dict YA validado y casteado. Si viene, se reusa y NO se vuelve
+    a validar: así el endpoint puede dejar `apply_updates` adentro de su
+    try/except ValueError (que es lo único que debe dar 400) y llamar a esta
+    función afuera, sin cambiar el contrato HTTP (Plan 259 v3, hallazgo B14).
+    Si viene None, esta función valida — es como la llama _enable_gitlab_engine.
+
     Devuelve el dict tipado de lo aplicado. Propaga ValueError si una key no
     existe o el valor no castea (el endpoint lo traduce a 400).
     """
     from services.harness_flags import apply_updates, _REGISTRY_INDEX
     from config import config
 
-    typed = apply_updates(raw_updates)                     # 1. validar + castear
+    if typed is None:                                      # 1. validar + castear
+        typed = apply_updates(raw_updates)
 
     env_strings: dict[str, str] = {}
     for key, val in typed.items():
@@ -1824,7 +1878,7 @@ def set_flag_values(raw_updates: dict) -> dict:
     return typed
 ```
 
-`put_harness_flags` queda con su cuerpo reemplazado por `typed = set_flag_values(raw_updates)`; **no se toca** su contrato HTTP ni su respuesta (`applied`, `restart_required_keys`).
+`put_harness_flags` queda con los pasos 1-3 de su cuerpo reemplazados por **dos** líneas —`apply_updates` adentro del `try`, `set_flag_values(raw_updates, typed=typed)` afuera, exactamente como fija la nota de B14 de abajo—; **no se toca** su contrato HTTP ni su respuesta (`applied`, `restart_required_keys`). *(v4, N4: no es una sola línea `typed = set_flag_values(raw_updates)`, porque eso metería la validación afuera del `try` y el 400 se perdería.)*
 
 > **Alcance EXACTO del `try` (v3, hallazgo B14).** v2 decía "dentro del `try/except ValueError` ya existente" y afirmaba "cero cambio funcional". No es lo mismo: hoy ese `try` envuelve **solo** `apply_updates` (`api/harness_flags.py:139-142`); `_write_env` y el hot-apply quedan **afuera**, así que un `ValueError` de la persistencia sale por el manejador genérico y da **500**. Metiendo todo adentro del `try`, ese mismo fallo pasaría a dar **400** — un cambio de contrato silencioso en el endpoint que usa medio sistema. Escritura correcta, que sí es cero-cambio:
 > ```python
@@ -1834,7 +1888,7 @@ def set_flag_values(raw_updates: dict) -> dict:
 >         return jsonify({"ok": False, "error": str(exc)}), 400
 >     set_flag_values(raw_updates, typed=typed)   # persistir + hot-apply, FUERA del try
 > ```
-> es decir, `set_flag_values(raw_updates, typed=None)` acepta el dict ya casteado para no validar dos veces, y cuando se la llama desde `_enable_gitlab_engine` (F7.b) valida ella misma. Cubierto por `test_endpoint_de_flags_sigue_igual` y por `test_endpoint_500_si_falla_persistir` (nuevo): con `_write_env` lanzando `ValueError`, `PUT /api/harness-flags` responde **500**, no 400.
+> es decir, el parámetro `typed` de la firma `set_flag_values(raw_updates, typed=None)` **(ver F7.a arriba — v4, N4: v3 la definía con un solo parámetro y este call site tiraba `TypeError`)** recibe el dict ya casteado para no validar dos veces; cuando se la llama desde `_enable_gitlab_engine` (F7.b) se omite y valida ella misma. Cubierto por `test_endpoint_de_flags_sigue_igual` y por `test_endpoint_500_si_falla_persistir` (nuevo): con `_write_env` lanzando `ValueError`, `PUT /api/harness-flags` responde **500**, no 400.
 >
 > **Símbolos verificados presentes (v3):** `logger` en `api/harness_flags.py:19`, `_write_env` en `:32`, `put_harness_flags` en `:118`, y `from services.harness_flags import apply_updates, _REGISTRY_INDEX` ya se hace en `:130`. Los 3 pasos que `set_flag_values` extrae están textualmente en `:139-176`. La extracción de v2 es **correcta**; lo único que se corrige es el borde del `try`.
 
@@ -1923,7 +1977,7 @@ def test_default_de_config_no_se_movio():
   tests/test_plan259_tracker_parity_guard.py
   tests/test_plan259_ratchet_script_parity.py
   ```
-- `Stacky Agents/backend/scripts/run_harness_tests.ps1` — **SINTAXIS DISTINTA, no es "la misma lista"** *(v3, hallazgo B5 — BLOQUEANTE de v2)*. El array es `$HarnessTestFiles = @(` (línea **13**) y sus elementos van **entre comillas y separados por coma**. Las 7 líneas, en la forma exacta que hay que pegar:
+- `Stacky Agents/backend/scripts/run_harness_tests.ps1` — **SINTAXIS DISTINTA, no es "la misma lista"** *(v3, hallazgo B5 — BLOQUEANTE de v2)*. El array es `$HarnessTestFiles = @(` (línea **13**) y sus elementos van **entre comillas y separados por coma**. Las **8** líneas *(v4, N1: v3 decía "7" acá, en su verificación y en su criterio 4, pero escribía 8 rutas en los dos bloques y su DoD pide 8 archivos — el criterio binario quedaba insatisfacible para quien implementara bien)*, en la forma exacta que hay que pegar:
   ```powershell
   "tests/test_plan259_setup_guide_data.py",
   "tests/test_plan259_project_manager_gitlab.py",
@@ -1934,13 +1988,13 @@ def test_default_de_config_no_se_movio():
   "tests/test_plan259_tracker_parity_guard.py",
   "tests/test_plan259_ratchet_script_parity.py",
   ```
-  **Por qué esto es bloqueante y no cosmético** (verificado ejecutando, no razonando): el `.ps1` actual parsea con **0 errores**; pegándole las 7 rutas *peladas* del bloque `.sh` de arriba **sigue parseando con 0 errores** — pero el array evalúa a **`Count = 0`**. PowerShell interpreta cada ruta pelada como un **nombre de comando**, no como un string: el ratchet queda vacío **en silencio**, sin una sola línea de error. Con la sintaxis de arriba evalúa a `Count = N`. Es exactamente la clase de bug que rompió el `.ps1` del plan 266 (coma colgante), solo que al revés: allá el parser gritaba, acá no grita nadie.
+  **Por qué esto es bloqueante y no cosmético** (verificado ejecutando, no razonando — remedido en v4): el `.ps1` actual parsea con **0 errores** y su array evalúa a **`Count = 623`**; pegándole las 8 rutas *peladas* del bloque `.sh` de arriba **sigue parseando con 0 errores** y el array **se queda en `Count = 623`** con **0** rutas `test_plan259` — las 8 líneas nuevas se pierden **mudas**. PowerShell interpreta cada ruta pelada como un **nombre de comando**, no como un string (al evaluarla tira `CommandNotFoundException` en tiempo de ejecución, no de parseo). Con la sintaxis de arriba el array evalúa a **`Count = 631`** y **8** rutas `test_plan259`. Es exactamente la clase de bug que rompió el `.ps1` del plan 266 (coma colgante), solo que al revés: allá el parser gritaba, acá no grita nadie. *(v4: v3 decía "el array evalúa a `Count = 0`" — eso vale para un array hecho **solo** de líneas peladas; en el archivo real lo que desaparece son las 8 nuevas, que es igual de grave y más difícil de notar.)*
 
-  **Verificación obligatoria después de editar el `.ps1`** (no alcanza con mirarlo):
+  **Verificación obligatoria después de editar el `.ps1`** (no alcanza con mirarlo, ni con parsearlo: **hay que EVALUAR el array y contar**):
   ```powershell
-  powershell -NoProfile -Command ". { $c = Get-Content 'scripts/run_harness_tests.ps1' -Raw; $e=$null; [System.Management.Automation.Language.Parser]::ParseInput($c,[ref]$null,[ref]$e) | Out-Null; Write-Output \"errores=$($e.Count)\" }"
+  powershell -NoProfile -Command "$c = Get-Content 'scripts/run_harness_tests.ps1' -Raw; $e=$null; $ast=[System.Management.Automation.Language.Parser]::ParseInput($c,[ref]$null,[ref]$e); Write-Output ('errores=' + @($e).Count); $a=$ast.FindAll({param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$HarnessTestFiles'},$true)[0]; $arr=Invoke-Expression $a.Right.Extent.Text; Write-Output ('count=' + @($arr).Count); Write-Output ('plan259=' + @($arr | Where-Object { $_ -like '*test_plan259*' }).Count)"
   ```
-  tiene que decir `errores=0`, **y además** el conteo de rutas `test_plan259` dentro de `$HarnessTestFiles` tiene que ser **7**, no 0.
+  tiene que decir `errores=0`, `count=631` (era 623) y **`plan259=8`** *(v4, N1: v3 pedía 7 acá y escribía 8 líneas)*. **El número que importa es `plan259`, no `errores`:** con las rutas peladas `errores` también da 0.
 
   *(v2, C16: el meta-ratchet solo parsea el `.sh` (`test_harness_ratchet_meta.py:19`, regex `^\s*(tests/[\w/]+\.py)\s*$`); mantener el `.ps1` en paridad es convención de la casa y **ningún test lo guarda** — por eso el fallo es mudo y por eso la verificación de arriba es obligatoria.)*
 - `Stacky Agents/docs/sistema/error_fingerprints.json` — entrada nueva.
@@ -1970,7 +2024,7 @@ def test_default_de_config_no_se_movio():
 
 **Reglas duras de esta entrada** (las verifica el catálogo, no son opcionales): `status` tiene que estar en `_STATUS_ENUM = {"resolved","open","by_design"}`; `log_pattern` tiene que **compilar** como regex (`test_patrones_compilan`); cada string de **`self_test.matches`** tiene que matchear ese patrón vía `re.search` y cada uno de `self_test.clean` **no** debe matchearlo (`test_self_test_coherente`); y el archivo no puede tener bytes de control crudos (`test_sin_control_chars_crudos`, gotcha del byte ESC de la casa).
 
-> **La clave anidada es `matches`, en PLURAL** *(v3, hallazgo B1 — v2 escribía `"match"`)*. El gate hace, textual, `for sample in fp["self_test"]["matches"]:`. Verificado ejecutando contra el catálogo vivo: las **42** huellas existentes usan `matches`, y con la entrada de v2 el test muere con `KeyError: 'matches'` **antes** de comprobar nada. Corregido arriba. Comprobado también que, con la clave corregida, el `log_pattern` y los dos samples de v2 **sí** son coherentes: `re.search` acierta en el `matches` y no acierta en el `clean`.
+> **La clave anidada es `matches`, en PLURAL** *(v3, hallazgo B1 — v2 escribía `"match"`)*. El gate hace, textual, `for sample in fp["self_test"]["matches"]:` (`tests/test_error_fingerprints_catalog.py:56`). Verificado ejecutando contra el catálogo vivo: de sus **42** huellas, **26** traen `self_test.matches` y **0** usan `match` singular *(v4: v3 decía "las 42 usan `matches`"; el número exacto es 26 de 42 — el resto no tiene `self_test` o está incompleta, que es justamente el rojo ajeno de `PLAN239-OUTLET-EN-BLANCO`)*. Con la entrada de v2 el test muere con `KeyError: 'matches'` **antes** de comprobar nada. Corregido arriba. **Verificado en v4 pasando la entrada de este plan por los 4 chequeos reales del gate** (`_REQUIRED` de 9 campos, `_STATUS_ENUM`, `re.compile` del patrón, y el `re.search` de `matches`/`clean`): los **4 pasan**.
 
 > **BASELINE DEL CATÁLOGO — este archivo está ROJO DE FÁBRICA** *(v3, hallazgo B2)*. Medido corriendo, 2 repeticiones idénticas: `tests/test_error_fingerprints_catalog.py` da hoy **3 failed / 5 passed** sobre 8 tests. Causa **ajena a este plan**: la huella `PLAN239-OUTLET-EN-BLANCO` tiene `status: "guarded"` (valor fuera del enum) y **no tiene `self_test`**, lo que rompe `test_campos_obligatorios`, `test_status_enum` y `test_self_test_coherente`. **No es el gotcha del plan 266** (`log_pattern: null`), es otra rotura. **Prohibido arreglarla en este plan**: es alcance de quien sembró esa huella. Consecuencia para F8: el criterio de aceptación **no puede ser "los 8 en verde"** (era inalcanzable en v2) — ver abajo.
 
@@ -1993,7 +2047,7 @@ def test_default_de_config_no_se_movio():
    .venv\Scripts\python.exe -c "import json,re,pathlib; d=json.loads(pathlib.Path('../docs/sistema/error_fingerprints.json').read_text(encoding='utf-8')); fp=[x for x in d['fingerprints'] if x['id']=='plan259_gitlab_onboarding_off'][0]; p=fp['log_pattern']; print(all(re.search(p,s) for s in fp['self_test']['matches']) and not any(re.search(p,s) for s in fp['self_test']['clean']))"
    ```
    imprime `True`. Es el mismo código que corre `test_self_test_coherente`, aplicado **solo** a la huella de este plan.
-4. El `.ps1` verifica `errores=0` **y 7 rutas `test_plan259`** en `$HarnessTestFiles` (comando en el bullet del `.ps1`).
+4. El `.ps1` verifica `errores=0`, `count=631` **y `plan259=8`** en `$HarnessTestFiles` (comando en el bullet del `.ps1`). *(v4, N1: v3 pedía 7 y escribía 8.)*
 
 *(v2, C3+C13: el comando `python -c` de v1 solo miraba si la cadena `plan259` aparecía en el JSON — daba verde con una entrada de esquema inválido, y encima resolvía `../docs/...` contra el `cwd`. v3 conserva la idea de v2 de usar el guardián real, pero lo acota al baseline medido y le agrega el chequeo aislado de la huella propia, que es el que hubiera atrapado el `match`/`matches`.)*
 
@@ -2013,17 +2067,39 @@ _PS1 = _BACKEND / "scripts" / "run_harness_tests.ps1"
 _SH_RE  = re.compile(r"^\s*(tests/[\w/]+\.py)\s*$", re.M)
 # .ps1: rutas ENTRECOMILLADAS, con coma    -> "tests/foo.py",
 _PS1_RE = re.compile(r'^\s*"(tests/[\w/]+\.py)"\s*,?\s*$', re.M)
+
+_PLAN259 = (
+    "tests/test_plan259_setup_guide_data.py",
+    "tests/test_plan259_project_manager_gitlab.py",
+    "tests/test_plan259_api_projects_gitlab.py",
+    "tests/test_plan259_gitlab_token_dpapi.py",
+    "tests/test_plan259_setup_guide_api.py",
+    "tests/test_plan259_enable_engine.py",
+    "tests/test_plan259_tracker_parity_guard.py",
+    "tests/test_plan259_ratchet_script_parity.py",
+)
+
+# Plan 259 v4 (N2) — DEUDA AJENA MEDIDA, no un objetivo. Al escribir este plan el
+# .sh tenía 687 rutas y el .ps1 623: el .ps1 viene 64 archivos atrás por deriva
+# de planes anteriores (test_mg_*, test_plan70_group_*, test_plan237/238/239_*,
+# test_rag_*, …). Exigir igualdad de conjuntos haría este test ROJO DE FÁBRICA y
+# obligaría a arreglar rojo ajeno, que este plan prohíbe. Es un RATCHET: solo baja.
+_PS1_LAG_MAX = 64
 ```
+
+> **POR QUÉ ESTE TEST NO COMPARA POR IGUALDAD** *(v4, hallazgo N2 — BLOQUEANTE de v3)*. v3 especificó `test_las_dos_listas_tienen_el_mismo_contenido` (igualdad de conjuntos) y puso como criterio *"los 4 en verde"*. Se escribió el test **tal como v3 lo especifica** y se corrió contra los dos scripts reales: 3 de los 4 pasan, y el de igualdad **FALLA** — `.sh` = **687** rutas, `.ps1` = **623**, `solo_en_sh` = **64**, `solo_en_ps1` = **0**. Es deriva **preexistente y ajena** a este plan. v3 midió en números el baseline de 5 gates ajenos y después estrenó un gate nuevo **sin correrlo**, cayendo en su propio hallazgo B2. La forma correcta es la que el resto de este plan ya usa para los gates rojos: **delta contra el rojo medido**. Lo que de verdad hay que blindar son tres cosas, y ninguna necesita igualdad: (1) que los 8 archivos **de este plan** entren en las **dos** listas; (2) que el `.ps1` **no tenga rutas peladas** (el modo de falla mudo de B5); (3) que el atraso del `.ps1` **no crezca**.
 
 | Test | Qué asegura |
 |---|---|
-| `test_las_dos_listas_tienen_el_mismo_contenido` | `_SH_RE` sobre el `.sh` y `_PS1_RE` sobre el `.ps1` devuelven **el mismo conjunto**. El mensaje de error imprime `solo_en_sh` y `solo_en_ps1` por separado, para que el fallo diga qué falta y dónde. |
-| `test_el_ps1_no_tiene_rutas_sin_comillas` | Ninguna línea del `.ps1` matchea `_SH_RE` (la forma pelada del `.sh`). **Este es el test que hubiera atrapado B5**: es el modo de falla exacto — parsea bien, evalúa a nada. |
-| `test_las_dos_listas_son_no_vacias` | Ambas tienen `>= 100` entradas. Un regex que deja de matchear por un cambio de formato daría dos conjuntos vacíos e **iguales**, y el primer test pasaría en falso. Este lo tapa. |
-| `test_ninguna_ruta_apunta_a_un_archivo_inexistente` | Toda ruta de **ambas** listas existe en disco. `test_harness_ratchet_meta.py` ya lo hace para el `.sh`; acá se extiende al `.ps1`, que no lo tenía. |
+| `test_los_8_de_este_plan_estan_en_las_dos_listas` | Los **8** de `_PLAN259` están en `_sh()` **y** en `_ps1()`. Rojo antes de F8, verde después. **Este es el criterio propio del plan**, y es el que hubiera atrapado B5 y N1 juntos: si alguien pega las rutas peladas, no aparecen en `_ps1()` y el test lo dice por nombre. |
+| `test_el_ps1_no_tiene_rutas_sin_comillas` | Ninguna línea del `.ps1` matchea `_SH_RE` (la forma pelada del `.sh`). **Verde hoy** (medido). Es el modo de falla exacto de B5: parsea bien, evalúa a nada. |
+| `test_el_ps1_no_pierde_terreno` | *(delta contra el rojo medido.)* `solo_en_ps1 == set()` (**0** hoy: el `.ps1` nunca tiene algo que el `.sh` no tenga) **y** `len(solo_en_sh) <= _PS1_LAG_MAX` (**64** hoy). El mensaje de error imprime las dos listas por separado. Verde hoy, y como es un ratchet, cualquier plan futuro que agregue al `.sh` sin agregar al `.ps1` lo pone rojo. **Bajar `_PS1_LAG_MAX` es alcance de quien salde esa deuda, no de este plan.** |
+| `test_las_dos_listas_son_no_vacias` | `>= 100` entradas cada una (medido: 687 y 623). Un regex que deja de matchear por un cambio de formato daría dos conjuntos vacíos y los otros tests pasarían en falso. Este lo tapa. |
+| `test_ninguna_ruta_apunta_a_un_archivo_inexistente` | Toda ruta de **ambas** listas existe en disco. **Verde hoy** (medido). `test_harness_ratchet_meta.py` ya lo hace para el `.sh`; acá se extiende al `.ps1`, que no lo tenía. |
 
 **Comando:** `.venv\Scripts\python.exe -m pytest tests/test_plan259_ratchet_script_parity.py -v`
-**Criterio de aceptación BINARIO:** los 4 en verde. Y la prueba de que el guardián **sirve**: borrar las comillas de **una** línea del `.ps1` tiene que poner en rojo `test_el_ps1_no_tiene_rutas_sin_comillas` **y** `test_las_dos_listas_tienen_el_mismo_contenido`. *(Verificación manual de una sola vez durante la implementación; se restauran las comillas inmediatamente.)*
+
+**Criterio de aceptación BINARIO** *(v4, N2)*: los **5** en verde después de F8. **Baseline medido antes de F8** (corrido, no supuesto): con este diseño, 4 de los 5 ya pasan y el único rojo es `test_los_8_de_este_plan_estan_en_las_dos_listas`, que es **el propio de este plan** y se pone verde al editar los dos scripts. *(Con el diseño de v3, en cambio, quedaba rojo `test_las_dos_listas_tienen_el_mismo_contenido` por 64 archivos ajenos y era insatisfacible.)* Y la prueba de que el guardián **sirve**: borrar las comillas de **una** de las 8 líneas del `.ps1` tiene que poner en rojo `test_el_ps1_no_tiene_rutas_sin_comillas` **y** `test_los_8_de_este_plan_estan_en_las_dos_listas`. *(Verificación manual de una sola vez durante la implementación; se restauran las comillas inmediatamente.)*
 
 **Flag:** ninguna — es un test, no tiene superficie que conmutar ni camino de ejecución en producción.
 **Impacto por runtime:** ninguno; `re` y `pathlib` son stdlib y el test **no ejecuta PowerShell**. **Fallback:** N/A.
@@ -2110,7 +2186,9 @@ Aislamiento: `monkeypatch` de `PROJECTS_DIR` a `tmp_path` en `project_manager` *
 | R10 | Los tests que tocan la DB fallan con `SQLITE_LOCKED` bajo pytest. | Alta (gotcha conocido) | Correr cada archivo 8-12 veces y envolver la unidad de trabajo en `run_with_retry`. Declarado en F1. **Medido en esta pasada:** los 8 archivos del DoD corrieron 2 veces cada uno **sin un solo `SQLITE_LOCKED`**; los rojos que aparecieron son deterministas, no flaky. |
 | R15 | *(v3, B2)* El implementador ve `test_error_fingerprints_catalog` / `uiDebtRatchet` en rojo, cree que los rompió él, y "arregla" rojo ajeno — o peor, regenera el baseline visual y tapa deuda de otros. | **Alta** (los 3 gates ya están rojos) | La DoD trae la tabla de baselines **con números**, y la palabra clave es *"exactamente N failed, los mismos N"*. `UI_DEBT_REGEN=1` está prohibido por escrito en F5, F6 y la DoD. |
 | R16 | *(v3, B7)* Se implementa F5/F6 sin F4.c y sin F5.0: `flags` no existe, `HealthResponse` no tiene la clave, y `npx tsc --noEmit` pasa de 0 a N errores. | **Certeza si se saltea el orden** | F4.c y F5.0 son fases propias, y el orden de implementación las pone **antes** de F5.c/F6.d. El criterio `tsc --noEmit == 0 errores` es el detector: el baseline es 0, así que cualquier error nuevo es de este plan. |
-| R17 | *(v3, B5)* El `.ps1` queda con el array vacío y nadie se entera, porque ningún test lo parsea y PowerShell no protesta. | **Alta** (fallo mudo, ya pasó en el plan 266) | F8 escribe las 7 líneas **dos veces**, una por sintaxis, y agrega una verificación ejecutable que exige `errores=0` **y** 7 rutas `test_plan259` dentro de `$HarnessTestFiles`. |
+| R17 | *(v3, B5)* El `.ps1` pierde en silencio las rutas nuevas y nadie se entera, porque ningún test lo parsea y PowerShell no protesta en tiempo de parseo. | **Alta** (fallo mudo, ya pasó en el plan 266) | F8 escribe las **8** líneas **dos veces**, una por sintaxis, y agrega una verificación ejecutable que **evalúa el array** y exige `count=631` y `plan259=8` (no alcanza `errores=0`: con las rutas peladas también da 0). F8.b lo convierte en test permanente. |
+| R19 | *(v4, N1)* Un criterio de aceptación numérico queda desincronizado del contenido que el propio plan escribe (v3 pedía 7 rutas y escribía 8), y el implementador que hace todo bien "falla" su DoD. | **Media** (pasó en v3) | Los conteos de F8 y de la DoD se derivan de **una sola** lista de 8 archivos; el comando de verificación imprime los 3 números (`errores`, `count`, `plan259`) para que el desvío se vea en vez de deducirse. |
+| R20 | *(v4, N3)* Se copia el prefijo `config.config` de una fase a otra sin mirar cómo importa el archivo destino, y el handler tira `NameError` (o peor, `AttributeError` mudo). | **Certeza si se copia a ciegas** (pasó en la F4.c de v3) | F4.c dice explícito que `api/diag.py` usa `_config` y cita las 10 lecturas vecinas que ya lo hacen; el criterio extra de F4.c es un `GET /api/diag/health` real que compara las 3 claves. La regla general está en el glosario (`config.config`). |
 | R18 | *(v3, B1)* La huella se escribe con una clave anidada equivocada y el catálogo se rompe, igual que en v1 y v2. | **Alta** (van 2 de 2) | El criterio de F8 no es "el catálogo en verde" (imposible: rojo de fábrica) sino un comando que corre **el mismo `re.search` del gate** sobre la huella de este plan, aislado del rojo ajeno. Es el chequeo que hubiera atrapado `match` vs `matches`. |
 
 ---
@@ -2205,6 +2283,12 @@ El plan está hecho cuando **todo** lo siguiente es cierto y verificado corriend
   **Prohibido, y es parte de la DoD:** arreglar cualquiera de esos 3 rojos ajenos adentro de este plan (es alcance de otro), y correr `UI_DEBT_REGEN=1` (taparía la deuda propia junto con la ajena).
 - [ ] `npx vitest run src/__tests__/adhocModalRatchet.test.ts` sin fallos nuevos (`FROZEN_MAX = 11`, ya topado: `SetupGuideDialog.tsx` **tiene** que usar el `Dialog` canónico).
 - [ ] `.venv\Scripts\python.exe -m compileall -q backend` sin errores.
+- [ ] **Las 3 flags salen de verdad por `/api/diag/health`** *(v4, N3 — el detector del `NameError` de F4.c; sin esto F5/F6 se quedan sin flags y la UI no compila)*:
+  ```
+  .venv\Scripts\python.exe -c "from app import create_app; a=create_app(); c=a.test_client(); b=c.get('/api/diag/health').get_json(); print(sorted(b.get('flags',{}))==['STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED','STACKY_SETUP_GUIDE_ENABLED','STACKY_SETUP_GUIDE_VERIFY_ENABLED'])"
+  ```
+  imprime `True`. **En `api/diag.py` la instancia se escribe `_config.config`, no `config.config`** (`import config as _config`, `:26`).
+- [ ] **El `.ps1` del ratchet EVALÚA lo que dice tener** *(v4, N1)*: el comando de F8 imprime `errores=0`, `count=631` y **`plan259=8`**. Parsear no alcanza — con las rutas peladas `errores` también da 0.
 - [ ] `config.py` sigue teniendo `STACKY_GITLAB_ENABLED` con default `"false"` (`test_default_de_config_no_se_movio`, F7).
 - [ ] **El motor se enciende de verdad** *(v2, C1)*: `test_enciende_de_verdad` verde — es decir, `config.config.STACKY_GITLAB_ENABLED is True` y la línea en el `.env`, no una llamada espiada.
 - [ ] **Smoke manual (HITL, lo corre el operador):** abrir "Nuevo Proyecto" → aparece **🦊 GitLab** → aparece **ℹ️ INFO** → el panel abre con **12 pasos** → "Verificar ahora" con datos falsos marca en rojo el chequeo correcto y señala el paso que lo arregla → con datos reales y la casilla del motor tildada, los 5 controles quedan **sin ningún rojo**: cuatro en verde y `chk-flag` en verde con el texto *"se va a activar al crear el proyecto"* si la perilla todavía está apagada *(v2, C5: exigir "los 5 en verde" antes de crear era imposible, porque F7 recién enciende el motor al crear)* → "Crear e inicializar" → el proyecto aparece en la lista con tipo **GitLab** y `has_credentials` en true → el `config.json` en disco dice `"type": "gitlab"` → volver a abrir "Verificar ahora" desde Edición muestra ahora `chk-flag` en verde por estado real.

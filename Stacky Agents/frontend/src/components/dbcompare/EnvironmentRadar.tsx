@@ -15,6 +15,7 @@ import {
 } from "./radarLogic";
 import type { RadarCell, RadarPayload } from "./radarTypes";
 import { DriftEventsPanel } from "./DriftEventsPanel";
+import { safeBySeverity, safeSummary } from "./summaryShape";
 import styles from "./dbcompare.module.css";
 
 const STATE_CLASS: Record<"green" | "amber" | "red" | "gray", string> = {
@@ -141,9 +142,10 @@ export function EnvironmentRadar({ runs, onOpenRun, onChanged }: Props) {
   const showBaselineDiff = (alias: string) => {
     DbCompareWatch.baselineDiff(alias)
       .then((r) => {
-        const sev = r.diff.summary.by_severity;
+        const sum = safeSummary(r.diff?.summary);
+        const sev = sum.by_severity;
         setBaselineDiffText(
-          `Drift vs baseline de ${alias}: ${sev.danger} danger / ${sev.warn} warn / ${sev.info} info (paridad ${r.diff.summary.parity_score})`,
+          `Drift vs baseline de ${alias}: ${sev.danger} danger / ${sev.warn} warn / ${sev.info} info (paridad ${sum.parity_score})`,
         );
       })
       .catch(() => setBaselineDiffText(`No se pudo comparar contra el baseline de ${alias}.`));
@@ -204,6 +206,7 @@ export function EnvironmentRadar({ runs, onOpenRun, onChanged }: Props) {
                       </td>
                     );
                   }
+                  const sevCell = safeBySeverity(cell.by_severity);
                   return (
                     <td
                       key={colEnv.alias}
@@ -212,7 +215,7 @@ export function EnvironmentRadar({ runs, onOpenRun, onChanged }: Props) {
                       onClick={() => setSelected({ source: cell.source_alias, target: cell.target_alias })}
                     >
                       {cell.watched ? <span className={styles.radarWatchDot}>👁 </span> : null}
-                      {(cell.by_severity.danger || 0) + (cell.by_severity.warn || 0)}
+                      {sevCell.danger + sevCell.warn}
                     </td>
                   );
                 })}

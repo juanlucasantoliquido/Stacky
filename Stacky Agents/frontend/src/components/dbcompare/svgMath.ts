@@ -1,5 +1,6 @@
 // Plan 124 — Comparador de BD: helpers puros de SVG para el gauge de paridad (doc §F3).
 import type { SchemaDiff, Severity, DiffAction } from "./dbcompareTypes";
+import { safeByAction, safeBySeverity } from "./summaryShape";
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
@@ -40,9 +41,11 @@ const SEVERITY_ORDER: Severity[] = ["danger", "warn", "info"];
 const ACTION_ORDER: DiffAction[] = ["added", "removed", "changed"];
 
 export function severityCounters(diff: SchemaDiff): { severity: Severity; count: number }[] {
-  return SEVERITY_ORDER.map((severity) => ({ severity, count: diff.summary.by_severity[severity] }));
+  const sev = safeBySeverity(diff.summary?.by_severity);
+  return SEVERITY_ORDER.map((severity) => ({ severity, count: sev[severity] }));
 }
 
 export function actionCounters(diff: SchemaDiff): { action: DiffAction; count: number }[] {
-  return ACTION_ORDER.map((action) => ({ action, count: diff.summary.by_action[action] }));
+  const act = safeByAction(diff.summary?.by_action);
+  return ACTION_ORDER.map((action) => ({ action, count: act[action] }));
 }

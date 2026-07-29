@@ -5,6 +5,7 @@ import type { DiffFilters } from "./filterLogic";
 import { arcPath, gaugeSweep, severityCounters, actionCounters } from "./svgMath";
 import { previousRunDelta } from "./runHistory";
 import { relativeTimeEs } from "./relativeTime";
+import { safeSummary } from "./summaryShape";
 import styles from "./dbcompare.module.css";
 
 const SEVERITY_LABEL: Record<Severity, string> = { danger: "Danger", warn: "Warn", info: "Info" };
@@ -64,7 +65,9 @@ export function SummaryHero({
 
   if (!diff || !summary) return null;
 
-  const score = summary.parity_score;
+  const sum = safeSummary(summary);
+  const score = sum.parity_score;
+  const objTypes = sum.by_object_type;
   const sweep = gaugeSweep(score);
   const cx = 100;
   const cy = 100;
@@ -142,9 +145,9 @@ export function SummaryHero({
         </div>
         <div className={styles.recency}>
           {(["table", "view", "sequence"] as const)
-            .map((t) => `${summary.by_object_type[t]} ${OBJECT_TYPE_LABEL[t]}`)
+            .map((t) => `${objTypes[t]} ${OBJECT_TYPE_LABEL[t]}`)
             .join(" · ")}{" "}
-          comparados — {summary.objects_unchanged} sin diferencias
+          comparados — {sum.objects_unchanged} sin diferencias
         </div>
         <div className={styles.heroActions}>
           <a href={DbCompare.exportUrl(run.run_id)} download className={styles.chip}>

@@ -1,0 +1,20 @@
+[
+  { "in": 3, "out": 3, "why": "entero positivo: pasa tal cual" },
+  { "in": "3", "out": 3, "why": "string numerico: se coerce" },
+  { "in": "abc", "out": 0, "why": "string no numerico: 0" },
+  { "in": "", "out": 0, "why": "string vacio: 0 (JS lo coerce a 0, Python lanza ValueError; ambos deben dar 0)" },
+  { "in": -5, "out": 0, "why": "negativo: se clampea a 0" },
+  { "in": 2.9, "out": 2, "why": "float: se trunca hacia abajo" },
+  { "in": 0, "out": 0, "why": "cero: se preserva" },
+  { "in": null, "out": 0, "why": "ausente: 0" },
+  { "in": true, "out": 0, "why": "booleano: NO es un contador; en Python bool es int y daria 1, prohibido" },
+  { "in": false, "out": 0, "why": "booleano: NO es un contador" },
+  { "in": [], "out": 0, "why": "array: 0" },
+  { "in": {}, "out": 0, "why": "objeto: 0" },
+  { "in": 1e400, "out": 0, "why": "desborda a infinito al parsear el JSON: 0, y NO puede lanzar" },
+  { "in": { "raw": "NaN" }, "out": 0, "why": "NaN materializado por cada lado: 0" },
+  { "in": "0x10", "out": 0, "why": "C16 hexadecimal en string: Number() da 16 y float() lanza; la spec manda 0" },
+  { "in": "0b101", "out": 0, "why": "C16 binario en string: Number() da 5 y float() lanza; la spec manda 0" },
+  { "in": "1e2", "out": 100, "why": "C16 notacion cientifica: los dos lados dan 100; es el control positivo de la familia" },
+  { "in": "1_0", "out": 0, "why": "C21 guion bajo: float() de Python da 10.0 y Number() da NaN; la spec manda 0" }
+]

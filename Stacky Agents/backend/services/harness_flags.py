@@ -462,6 +462,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_SNAPSHOT_V2_ENABLED",  # Plan 179 — fidelidad snapshot v2 (tipos exactos)
         "STACKY_DB_COMPARE_DATA_MERGE_ENABLED",   # Plan 182 — scripts de datos v2 (MERGE idempotente)
         "STACKY_DB_COMPARE_MASKING_ENABLED",      # Plan 181 — masking de secretos en el data-diff (presentación)
+        "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED",  # Plan 266 — forma garantizada del summary (normalización solo-lectura)
         "STACKY_DB_COMPARE_RADAR_ENABLED",        # Plan 178 — radar de ambientes (matriz/baseline/tendencia/avisos)
         "STACKY_DB_COMPARE_WATCH_INTERVAL_MIN",   # Plan 178 — intervalo del vigía de drift
         "STACKY_DB_COMPARE_WATCH_MAX_RUNS_PER_DAY",  # Plan 178 — presupuesto diario del vigía
@@ -4258,6 +4259,16 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Comparador BD: masking de secretos en el data-diff",
         description="Enmascara por default los valores de columnas sensibles (password/token/connection string) en las respuestas de presentación del data-diff; el motor, el disco y los scripts DML del bundle quedan intactos. Revelar una columna es 1 click humano persistido. OFF = respuesta cruda byte-idéntica a v1.",
         group="global",
+        requires="STACKY_DB_COMPARE_ENABLED",
+    ),
+    # ── Plan 266 — Forma garantizada del summary de las corridas ───────────────
+    FlagSpec(
+        key="STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED",
+        type="bool",
+        default=True,  # normalización SOLO-LECTURA y en memoria; no escribe disco ni sistema del operador ⇒ ON. OFF = payload byte-idéntico a antes del plan 266. Curada en _CURATED_DEFAULTS_ON.
+        label="Comparador BD: forma garantizada del summary",
+        description="Completa en memoria los contadores faltantes del resumen de una comparación (by_severity/by_action/by_object_type) antes de devolverlo, para que una corrida vieja o interrumpida no rompa la pestaña. OFF = summary tal cual está guardado en disco.",
+        group="comparador_bd",
         requires="STACKY_DB_COMPARE_ENABLED",
     ),
     # ── Plan 178 — Radar de ambientes (vigía de drift + matriz N×N + baseline) ──

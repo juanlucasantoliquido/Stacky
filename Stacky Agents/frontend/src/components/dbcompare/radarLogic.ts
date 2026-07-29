@@ -1,6 +1,7 @@
 // Plan 178 — Lógica pura del radar de ambientes (testeable con vitest, sin RTL/jsdom).
 import type { CompareRun } from "./dbcompareTypes";
 import type { RadarCell, RadarEnvironment } from "./radarTypes";
+import { safeBySeverity, safeSummary } from "./summaryShape";
 
 /** Clave ordenada de un par (agrupa tendencia en cualquier dirección).
  * Se redefine local porque runHistory.ts no la exporta (no se toca ese archivo). */
@@ -28,7 +29,7 @@ export function buildMatrix(
 
 export function cellStateClass(cell: RadarCell | null): "green" | "amber" | "red" | "gray" {
   if (cell === null) return "gray";
-  const sev = cell.by_severity || { info: 0, warn: 0, danger: 0 };
+  const sev = safeBySeverity(cell.by_severity);
   if ((sev.danger || 0) > 0) return "red";
   if ((sev.warn || 0) > 0 || (sev.info || 0) > 0) return "amber";
   return "green";
@@ -57,7 +58,7 @@ export function trendSeries(
     )
     .sort((a, b) => (a.finished_at || "").localeCompare(b.finished_at || ""))
     .map((r) => {
-      const sev = r.summary!.by_severity;
+      const sev = safeSummary(r.summary).by_severity;
       return {
         t: r.finished_at || "",
         danger: sev.danger || 0,
@@ -101,7 +102,7 @@ export function relativeFromIso(iso: string, nowMs: number): string {
 }
 
 export function formatCellTitle(cell: RadarCell, nowMs: number): string {
-  const sev = cell.by_severity || { info: 0, warn: 0, danger: 0 };
+  const sev = safeBySeverity(cell.by_severity);
   const parity = cell.parity_score == null ? "?" : cell.parity_score;
   const when = relativeFromIso(cell.finished_at || "", nowMs);
   const rel = when ? ` · ${when}` : "";

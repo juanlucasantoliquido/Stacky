@@ -1,10 +1,84 @@
 # Plan 263 — Tablero de planes denso y ningún plan sin estado: fallback único, migración con evidencia y guardia anti-regresión
 
-**Estado:** CRITICADO v4 (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3; **v3 RECHAZADO** (1 BLOQUEANTE, verificado abriendo el árbol real del 2026-07-29) → v4 in place
+**Estado:** CRITICADO v5 (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3; **v3 RECHAZADO** (1 BLOQUEANTE, verificado abriendo el árbol real del 2026-07-29) → v4; **v4 RECHAZADO** (2 BLOQUEANTES, juez independiente, corrida distinta, verificado abriendo el árbol real horas más tarde el mismo 2026-07-29) → v5 in place
 
 ---
 
-## 0. CHANGELOG v3 → v4
+## 0. CHANGELOG v4 → v5
+
+**Segunda ronda del mismo día.** El v4 fue rechazado por drift de anclajes en `config.py`/`harness_flags.py`
+y corrigió eso con marcadores semánticos + `Select-String`. Esta ronda (juez independiente, corrida nueva,
+mismo árbol horas después) re-midió **todos** los anclajes del documento — no sólo los que el v4 ya había
+tocado — porque la propia tesis del v4 ("el patrón es preciso: drift sólo en los dos archivos que edita
+CADA plan del repo") es una afirmación de alcance que había que poner a prueba, no aceptar de fe. Resultado:
+**el patrón de F0 aguanta perfecto** (los 6 anclajes de `config.py`, `harness_flags.py`,
+`test_harness_flags.py`, `test_harness_flags_help.py`, `test_harness_flags_requires.py` y
+`plans_board.py` re-miden EXACTOS, cero drift adicional desde el v4 — confirmado con `git log` que
+ningún commit tocó esos archivos desde la crítica anterior), **pero el mismo defecto que el v4 creía haber
+erradicado seguía vivo, sin corregir, en F6**, que depende de `frontend/src/api/endpoints.ts` — un archivo
+tan concurrido como `config.py`/`harness_flags.py` (259/267/268/269/270 le agregan endpoints cada uno) y
+que el v4 nunca re-verificó porque su propio C1 se enfocó sólo en los dos archivos Python.
+
+- **C3 (BLOQUEANTE)** — **F6 le dice al implementador que lea la flag con un método que no existe sobre
+  el tipo real, citando además el símbolo equivocado.** El texto dice: "las flags de UI se exponen en
+  `/api/diag/health`, ya envuelto en `endpoints.ts:3306` (`Diag.get(): Promise<HealthResponse>`)... el
+  patrón de lectura vigente es `const f = r.flags.find((x) => x.key === …)` — copiá la forma de
+  `App.tsx:211`". Verificado hoy: (1) el símbolo real es **`Health.get()`**, no `Diag.get()`
+  (`endpoints.ts:3379-3380`: `export const Health = { get: (): Promise<HealthResponse> => api.get<HealthResponse>("/api/diag/health") }`);
+  (2) `HealthResponse.flags` (`endpoints.ts:3371-3375`) es **`Record<string, boolean>`** — un diccionario
+  plano, agregado por la costura P0 del Plan 259 el 2026-07-28/29 (el propio comentario del código lo dice:
+  *"Pre-declarado por la costura P0 (2026-07-28)... `Record<string, boolean>` y no una interfaz cerrada"*)
+  — es decir, **nació DESPUÉS de que este plan (v3, 27-07) se escribiera** y se mergeó a `main` el
+  2026-07-29 (`git log -1 -- frontend/src/api/endpoints.ts` → `1a04944e`, "merge(p2): plan 259"), en la
+  misma ventana de dos días que ya rompió los anclajes de F0.1/F0.2. `Record<string, boolean>` **no tiene
+  método `.find`**: copiar el snippet literal no compila (`npx tsc --noEmit` — que es criterio binario
+  propio de F6 — falla). Y `App.tsx:211` es real, pero lee **otra** superficie
+  (`HarnessFlags.list()`, array de objetos con `.key`), no `Health.get()`: la cita apunta al idiom
+  equivocado para esta llamada. Corregido: símbolo, línea y patrón de acceso (ver F6).
+- **C4 (BLOQUEANTE)** — **el mismo defecto de C1 (v3→v4), sin corregir, en un tercer archivo.** F6 manda
+  insertar los dos métodos nuevos "al objeto `PlansBoard` existente (`endpoints.ts:4964`)". Medido hoy:
+  `export const PlansBoard = {` está en **`:5066`** — **+102 líneas** de drift respecto del número citado,
+  y la línea `:4964` de HOY cae dentro de un método de un objeto totalmente distinto (`generateScripts` del
+  Plan 125/DB Compare, en medio de una llamada `api.post<...>(url, {})`). Es exactamente el fenómeno que
+  el propio v4 diagnosticó para `config.py`/`harness_flags.py` — un archivo de alta concurrencia editado por
+  cada plan que agrega un endpoint (259/267/268/269/270 lo hicieron) — pero el v4 nunca extendió su propia
+  mitigación (marcador semántico + `Select-String`, ya usada en F0.1/F0.2) a `endpoints.ts`, y su CHANGELOG
+  afirma que el drift ocurre "sólo... en los dos archivos que edita CADA plan del repo": esa afirmación de
+  alcance queda refutada por esta medición. A diferencia de C1 (Python: `SyntaxError` silenciosa que tumba
+  TODO `config.py` y con él el backend), acá el daño lo atrapa `tsc --noEmit` (ya exigido por F6/F7) — pero
+  cuesta el mismo tiempo de un modelo menor que el propio v4 declaró inaceptable. Corregido: mismo patrón
+  de F0.1/F0.2 aplicado a F6.
+- **C5 (MENOR)** — las dos `Select-String -Pattern "... | Plan 167 .. Centro de Evolucion"` de F0.1/F0.2
+  tienen una segunda alternativa muerta: el texto real es "Centro de **Evolución**" (con tilde), y la
+  regex literal `Evolucion` (sin tilde) nunca matchea. Los comandos igual funcionan HOY porque la primera
+  mitad de la alternancia (el símbolo `STACKY_PLANS_PIPELINE_ACTIONS_ENABLED` / `key="..."`) sí matchea —
+  pero el propósito de tener DOS anclas redundantes (defenderse de que una sola se vuelva stale) queda sin
+  efecto real si algún día la primera mitad deja de estar. Corregido: acentuada.
+- **C6 (MENOR)** — cita `tests/test_error_fingerprints_catalog.py:19` para el esquema `_REQUIRED`; medido
+  hoy, `_REQUIRED` está en `:18` (`:17` es `_STATUS_ENUM`). Drift de una línea, sin impacto de contenido.
+  Corregido.
+- **C7 (re-medición, no bloqueante)** — *(VERIFICACIÓN OBLIGATORIA #2)* el comando de §1.1, corrido de
+  nuevo horas después del propio re-cálculo del v4, da **`total 223 | sin estado 80`** (el v4 ya había
+  registrado 222/79 esa misma mañana; nacieron el 271 y volvió a moverse). Los dos rojos ajenos y el
+  ledger **no** cambiaron: `test_harness_flags_help.py` → 4 failed/4 passed; `test_error_fingerprints_catalog.py`
+  → 3 failed/5 passed; `ledger.json` → 47 entradas — los tres re-verificados EXACTOS. Esto **no** es un
+  bloqueante: es la tercera confirmación en el mismo día de la propia tesis del plan ("el total es una
+  variable, el criterio final es el 0"). Corregido: números actualizados, disclaimers reforzados.
+- **C8 (oportunidad de convivencia, no bloqueante)** — el plan hermano **264** (crítica v3→v4 de HOY)
+  declara en su R10 una disciplina explícita que el 263 no tenía con la misma precisión: *"tras cada
+  merge: `compileall` + `tsc --noEmit` + grep de duplicados por key en `FLAG_REGISTRY` /
+  `_CURATED_DEFAULTS_ON` / `_REQUIRES_MAP_FROZEN` / `PLAIN_HELP` / `HARNESS_TEST_FILES`"* — exactamente
+  las 5 estructuras que el propio §5/F0 del 263 edita. El §9 del 263 ya declaraba las reglas de
+  convivencia (bloques propios, orden) pero no el paso de verificación posterior al merge. Ver
+  **[ADICIÓN ARQUITECTO 7]**.
+
+*(Nota de numeración: esta ronda continúa la numeración de hallazgos del v4 (C1, C2) en vez de reiniciar
+en C1, para que ambas críticas del mismo día — v3→v4 y v4→v5 — se puedan citar sin ambigüedad en la misma
+conversación.)*
+
+---
+
+## 0.1 CHANGELOG v3 → v4
 
 El v3 fue **RECHAZADO** por un juez independiente (`criticar-y-mejorar-plan`, corrida 2026-07-29) que
 abrió el árbol real en vez de confiar en la prosa. **El diseño de v3 no cambia ni una decisión**: los
@@ -66,7 +140,7 @@ el v3 daba por verdes lo siguen estando: `test_harness_flags.py` + `test_harness
 
 ---
 
-## 0.1 CHANGELOG v2 → v3
+## 0.2 CHANGELOG v2 → v3
 
 El v2 fue **RECHAZADO**. La v2 no había tenido revisión independiente (la escribió el mismo agente en
 la misma corrida), y al abrir los archivos que anclaba aparecieron **cinco bloqueantes**. Los anclajes
@@ -145,7 +219,7 @@ relación entre los dos campos nuevos, el criterio binario de F0 y el contrato d
 
 ---
 
-## 0.2 CHANGELOG v1 → v2
+## 0.3 CHANGELOG v1 → v2
 
 El v1 fue **RECHAZADO**: su F0 tenía **cinco rojos garantizados** (el arnés se ponía rojo antes de
 escribir una sola línea de producto) y su F3 **des-aprobaba** planes que el supervisor ya había
@@ -367,7 +441,7 @@ auditoría que la resuelve**. Ese es el argumento arquitectónico central de est
 **Paso 1 — ubicar el marcador real con el archivo abierto o con el comando, nunca de memoria:**
 
 ```powershell
-Select-String -Path "Stacky Agents\backend\config.py" -Pattern "Plan 167 .. Centro de Evolucion|STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"
+Select-String -Path "Stacky Agents\backend\config.py" -Pattern "Plan 167 .. Centro de Evoluci.n|STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"
 ```
 
 Insertar el bloque nuevo **inmediatamente antes** de la línea que matchea `# ── Plan 167 —` (encabezado
@@ -412,7 +486,7 @@ número:
 > punto de inserción por texto:
 
 ```powershell
-Select-String -Path "Stacky Agents\backend\services\harness_flags.py" -Pattern 'key="STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"|Plan 167 .. Centro de Evolucion'
+Select-String -Path "Stacky Agents\backend\services\harness_flags.py" -Pattern 'key="STACKY_PLANS_PIPELINE_ACTIONS_ENABLED"|Plan 167 .. Centro de Evoluci.n'
 ```
 
 Agregar **inmediatamente después** del `),` que cierra el `FlagSpec` de
@@ -1525,8 +1599,21 @@ obedecerlo).
 
 **Archivos a editar (2) + 2 archivos nuevos de lógica pura.**
 
-1. `Stacky Agents/frontend/src/api/endpoints.ts` — agregar al objeto `PlansBoard` existente
-   (`endpoints.ts:4964`):
+1. `Stacky Agents/frontend/src/api/endpoints.ts` — agregar al objeto `PlansBoard` existente.
+
+> **v5 / C4 — `endpoints.ts` es tan concurrido como `config.py`/`harness_flags.py`: NO ANCLES POR
+> NÚMERO CRUDO.** Este archivo lo edita cada plan que agrega un endpoint (259/267/268/269/270 lo
+> hicieron); medido el 2026-07-29, el objeto `PlansBoard` se corrió **+102 líneas** en dos días (de la
+> cita original `:4964` a su posición real hoy). Ubicalo por marcador, nunca por línea:
+>
+> ```powershell
+> Select-String -Path "Stacky Agents\frontend\src\api\endpoints.ts" -Pattern 'export const PlansBoard = \{'
+> ```
+>
+> Insertar las dos claves nuevas **inmediatamente antes** del `};` que cierra ese objeto (hoy cae unas
+> pocas líneas después del marcador — comprobalo abriendo el archivo en el punto que indique el comando,
+> no de memoria). El número de esta nota (`:5066` medido hoy) es ilustrativo, no autoritativo: por eso
+> el criterio es el comando de arriba.
 
 ```ts
   /** Plan 263 — vista previa de normalización. `rawGet` obligatorio: con la flag
@@ -1579,13 +1666,26 @@ obedecerlo).
    - tras un apply exitoso, refrescar el tablero (el servidor ya invalidó su cache en F2.5, así que un
      `refresh=1` devuelve el estado nuevo de inmediato).
 
-> **Cómo sabe la app si la flag está OFF (v3/C12 — literal, no "leé de ahí").** Las flags de UI se
-> exponen en **`/api/diag/health`**, ya envuelto en `endpoints.ts:3306`
-> (`Diag.get(): Promise<HealthResponse>`), y el patrón de lectura vigente en el repo es
-> `const f = r.flags.find((x) => x.key === "STACKY_PLANS_NORMALIZE_APPLY_ENABLED");` — copiá la forma
-> de `App.tsx:211`. **No inventes un endpoint nuevo ni agregues una llamada nueva**: si la página ya
-> tiene el health cargado, reusá ese estado. Si la clave no aparece (servidor viejo), tratá la flag
-> como **apagada** y mostrá el hint: nunca habilites un botón de escritura por falta de información.
+> **Cómo sabe la app si la flag está OFF (v5/C3 — el v3/v4 citaban un símbolo y un tipo que NO son los
+> reales; corregido con evidencia).** Las flags de UI se exponen en **`/api/diag/health`**, envuelto en
+> **`Health.get(): Promise<HealthResponse>`** (`endpoints.ts:3379-3380` — **no** `Diag.get()`: ese símbolo
+> no existe en el archivo). Y `HealthResponse.flags` (`endpoints.ts:3371-3375`) es
+> **`Record<string, boolean>`** — un diccionario plano, agregado por la costura P0 del Plan 259
+> (2026-07-28/29, después de escrito este plan) — **no** un array de objetos `{key, ...}`. El patrón
+> `r.flags.find((x) => x.key === …)` de una versión anterior de este documento **no compila** contra ese
+> tipo (`Record` no tiene `.find`) y `npx tsc --noEmit` (criterio binario propio de esta fase) lo
+> atraparía. El patrón correcto, más simple que el descartado:
+> ```ts
+> const r = await Health.get();                      // Promise<HealthResponse> directo (usa api.get)
+> const applyOn = r.flags?.["STACKY_PLANS_NORMALIZE_APPLY_ENABLED"] ?? false;
+> ```
+> **`App.tsx:211`** (`const f = r.flags.find((x) => x.key === "STACKY_NOTIFICATION_CENTER_ENABLED")`) es
+> código real, pero lee **otra** superficie (`HarnessFlags.list()`, que sí devuelve un array con `.key`):
+> no es el patrón a copiar para `Health.get()` — se cita acá sólo para que no se confunda con la fuente
+> correcta si se lo ve de pasada en otro archivo. **No inventes un endpoint nuevo ni agregues una llamada
+> nueva**: si la página ya tiene el health cargado, reusá ese estado. Si la clave no aparece (servidor
+> viejo), tratá la flag como **apagada** y mostrá el hint: nunca habilites un botón de escritura por falta
+> de información.
 
 **`sha256_visto` en el cliente:** la app **no calcula** ningún hash. Toma el `sha256_visto` que vino en
 cada propuesta del preview y lo devuelve tal cual en el item del apply. Si el operador deja el panel
@@ -1630,8 +1730,9 @@ devuelve el **mismo** número que antes de empezar (ver §9 si el 264 ya se merg
 `Stacky Agents/docs/sistema/error_fingerprints.json`.
 
 > **v3 / C7 — los campos que pedía el v2 NO EXISTEN.** El v2 mandaba escribir "síntoma / causa raíz /
-> detección / fix". El esquema real, congelado por `tests/test_error_fingerprints_catalog.py:19`,
-> exige **exactamente** estas 9 claves: `id`, `title`, `class`, `status`, `log_pattern`, `log_guarded`,
+> detección / fix". El esquema real, congelado por `tests/test_error_fingerprints_catalog.py:18`
+> (`_REQUIRED = (...)`; re-medido 2026-07-29, v3 citaba `:19`, drift de una línea sin impacto de
+> contenido — v5/C6), exige **exactamente** estas 9 claves: `id`, `title`, `class`, `status`, `log_pattern`, `log_guarded`,
 > `killed_by`, `guard_test`, `self_test` — con `status ∈ {"resolved","open","by_design"}`, un
 > `log_pattern` que **compile** como regex, y un `self_test` = `{"matches": [...], "clean": [...]}`
 > cuyos `matches` **tienen que matchear** el patrón y cuyos `clean` **no**. Es un catálogo de
@@ -1791,6 +1892,8 @@ fallo **nuevo** en ellos es tuyo.
 - [ ] **[v4/ADICIÓN 6]** `sum(totals["por_origen"].values()) == totals["total"] menos las SIN_DOCUMENTO`... en la práctica, `sum(totals["por_origen"].values()) == len(board["plans"])` (caso 19 de F1).
 - [ ] **[v4/C2]** `plans_estado_migration._LEDGER_OK_VEREDICTOS is plans_board._LEDGER_OK_VEREDICTOS` (caso 25 de F3): la Regla 1 no reescribió la tupla de veredictos a mano.
 - [ ] **[v4/C1]** Ni `config.py` ni `harness_flags.py` quedaron con un bloque de Plan 263 insertado a mitad de otra flag: `python -c "import ast; ast.parse(open('Stacky Agents/backend/config.py', encoding='utf-8').read())"` y el mismo chequeo sobre `harness_flags.py` no lanzan `SyntaxError` (verificación mínima de que el punto de inserción se ubicó por marcador, no por número stale).
+- [ ] **[v5/C4]** El objeto `PlansBoard` de `endpoints.ts` se ubicó con `Select-String -Pattern 'export const PlansBoard = \{'` (no con un número de línea copiado del documento) y `npx tsc --noEmit` sale exit 0 con las dos claves nuevas adentro de **ese** objeto.
+- [ ] **[v5/C3]** El panel de F6 lee la flag de apply con `Health.get()` (no `Diag.get()`, que no existe) y con `r.flags?.["STACKY_PLANS_NORMALIZE_APPLY_ENABLED"]` (no `.find(...)`, que no compila contra `Record<string, boolean>`): `Select-String -Path "Stacky Agents\frontend\src\pages\PlansBoardPage.tsx" -Pattern "Diag\.get|flags\.find"` no devuelve nada.
 - [ ] `api/plans_board.py` lee las flags con `getattr(config, …)` y **no** contiene la cadena `config.config` (`Select-String -Path "Stacky Agents\backend\api\plans_board.py" -Pattern "config\.config"` no devuelve nada).
 - [ ] `sum(1 for p in board['plans'] if p['estado_efectivo']=='SIN_ESTADO')` ⇒ **0** (KPI-3).
 - [ ] `grep -cE '^\s*(padding|margin|gap)[^:]*:\s*[^;]*(rem|px)' PlansBoardPage.module.css` ⇒ **0** (KPI-2).
@@ -1861,6 +1964,45 @@ debe copiar las dos claves nuevas (forma uniforme).
 
 **Sin dependencia de orden:** el 263 **no** necesita que 260/264/265 estén implementados, ni al revés.
 Los 4 pueden implementarse en cualquier orden respetando las reglas de arriba.
+
+### 9.1 Verificación post-merge de duplicados **[ADICIÓN ARQUITECTO 7, v5]**
+
+**Por qué.** El riesgo ya documentado arriba (git 3-way merge sin marcar conflicto cuando dos ramas
+agregan la misma línea de cierre a una estructura existente) es silencioso por diseño: ni los marcadores
+`<<<<<<<` ni siempre el compilador lo atrapan, porque una entrada de dict duplicada o una `FlagSpec`
+repetida puede seguir siendo Python/TypeScript sintácticamente válido. El plan hermano **264** (crítica
+v3→v4 del propio 2026-07-29, R10) ya declara el mismo chequeo para las mismas 5 estructuras que el 263
+edita en F0 — el 263 no lo tenía con esa precisión. Se adopta acá, sin esperar a que 264 se implemente
+primero (§9 ya establece que no hay dependencia de orden entre hermanos).
+
+**Comando (correr después de mergear con CUALQUIERA de 260/264/265/266/271, no sólo al final):**
+
+```powershell
+$py = "Stacky Agents\backend\.venv\Scripts\python.exe"
+& $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.harness_flags import FLAG_REGISTRY, _CATEGORY_KEYS; import collections; keys=[f.key for f in FLAG_REGISTRY]; dups=[k for k,c in collections.Counter(keys).items() if c>1]; print('FLAG_REGISTRY dup:', dups or 'OK')"
+& $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend/tests'); from test_harness_flags import _CURATED_DEFAULTS_ON; print('_CURATED_DEFAULTS_ON OK (set, no duplica por definicion)')"
+& $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend/tests'); from test_harness_flags_requires import _REQUIRES_MAP_FROZEN; print('_REQUIRES_MAP_FROZEN OK (dict, no duplica por definicion)')"
+& $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.harness_flags_help import PLAIN_HELP; print('PLAIN_HELP OK (dict, no duplica por definicion)')"
+& $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
+& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
+& $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
+npx tsc --noEmit
+```
+
+> **Nota honesta:** en Python, un `dict`/`set` literal con una key repetida no "duplica en silencio" — la
+> segunda definición pisa a la primera y el propio intérprete no avisa, pero tampoco hay DOS entradas.
+> El daño real de un merge silencioso en estas estructuras no es "quedan dos", es **"una de las dos
+> pisa a la otra sin que nadie lo note"** (p. ej. dos `FlagSpec` con la misma `key=` en `FLAG_REGISTRY`,
+> que es una `list`, sí puede tener dos entradas con la misma key — por eso el primer comando cuenta
+> ocurrencias sobre `FLAG_REGISTRY`, que es la única de las cinco que es lista y no dict/set). Para las
+> otras cuatro (dict/set), la defensa real ya la dan `test_harness_flags.py` /
+> `test_harness_flags_requires.py` / `test_harness_ratchet_meta.py`, que fallan si el conjunto resultante
+> no es el esperado — por eso el comando de arriba los corre a todos juntos, no reemplaza los tests: los
+> agrupa en un solo paso post-merge para no olvidarse ninguno.
+
+**Costo:** cero líneas de producto nuevas, cero flags nuevas — son comandos de verificación que reusan
+símbolos ya importados en otras fases de este mismo plan. **Trabajo del operador: ninguno** (lo corre
+quien mergea, una vez por merge con un hermano).
 
 ---
 

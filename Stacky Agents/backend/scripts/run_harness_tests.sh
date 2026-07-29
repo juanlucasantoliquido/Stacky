@@ -881,6 +881,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan242_no_new_deps.py
   tests/test_plan242_flags_off.py
   tests/test_plan242_runtime_parity.py
+
+  # Plan 267 - Catalogo unico de acciones DevOps (3 superficies, 1 confirmacion)
+  tests/test_devops_action_catalog.py
+  tests/test_devops_actions_api.py
+  tests/test_devops_action_matcher.py
+  tests/test_devops_action_ratchet.py
 )
 
 pass=0

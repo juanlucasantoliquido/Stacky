@@ -105,6 +105,15 @@ def _health_payload() -> dict:
         "handoff_bundle_enabled": bool(
             getattr(cfg, "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED", False)
         ),  # Plan 252 — paquete de entrega
+        "action_catalog_enabled": bool(
+            getattr(cfg, "STACKY_DEVOPS_ACTION_CATALOG_ENABLED", False)
+        ),  # Plan 267 — catálogo de acciones (solo lectura)
+        "action_nl_enabled": bool(
+            getattr(cfg, "STACKY_DEVOPS_ACTION_NL_ENABLED", False)
+        ),  # Plan 267 — lenguaje natural -> propuesta de acción
+        "agent_action_run_enabled": bool(
+            getattr(cfg, "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED", False)
+        ),  # Plan 267 — ejecutar desde una propuesta lo que ESCRIBE (default OFF)
     }
 
 

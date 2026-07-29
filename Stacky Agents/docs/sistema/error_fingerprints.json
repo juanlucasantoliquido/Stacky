@@ -861,7 +861,7 @@
       "log_pattern": "$^",
       "log_guarded": false,
       "killed_by": "plan 264 (matriz unica de capacidades runtime/modelo/effort)",
-      "killed_commit": "PENDIENTE — completar en Registro de implementacion (§10) con el hash real",
+      "killed_commit": "752b842f",
       "date_resolved": "2026-07-29",
       "guard_test": "backend/tests/test_plan264_paridad_ejecutable.py",
       "evidence": "backend/agent_runner.py:442-450 (rama viva); backend/agent_runner.py:256-265 (rama muerta, higiene)",

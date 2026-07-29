@@ -2202,9 +2202,9 @@ algún día".
   2 vitest (`modelEffortOptions.plan264` + `modelEffortTrace`): 6+6 passed. `tsc --noEmit`: exit 0.
   Huella `seleccion-aceptada-nunca-materializada` agregada a `error_fingerprints.json` con el esquema
   real de 9 campos; delta confirmado ANTES/DESPUÉS: **3 failed/5 passed** en ambos momentos, mi id
-  NO aparece en ningún mensaje de fallo. `killed_commit` real: ver hash del commit de este plan más
-  abajo en el historial de git (`git log --oneline -1 -- "Stacky Agents/docs/sistema/error_fingerprints.json"`
-  tras el commit).
+  NO aparece en ningún mensaje de fallo. `killed_commit`: **`752b842f`** (commit principal de esta
+  implementación; este ajuste de `killed_commit` va en un commit de seguimiento, `752b842f` no podía
+  autoreferenciarse).
 - **Pendiente/fuera de este alcance**: smoke manual visual del Dev Resolutor (R5) — requiere UI
   interactiva, queda para el operador (sin RTL/jsdom en este repo, es el único gate real de los
   `.tsx`); la deuda ajena confirmada arriba (test_runtime_dispatch.py G0.1, test_pipelines_endpoint_

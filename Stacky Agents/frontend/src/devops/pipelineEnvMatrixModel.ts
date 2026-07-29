@@ -60,20 +60,40 @@ export function cellKey(requirement: string, environment: string): string {
   return `${requirement}${SEP}${environment}`;
 }
 
-/** pendingByEnvironment — {env: cuántas celdas "falta"}. Puro. */
+/** (Plan 260) trabajo que el operador TODAVIA tiene que hacer, incluido lo que
+ *  el proveedor no puede verificar (ADO + secreto declarado sin valor).
+ *  `pending_count` NO se toca: es el contrato congelado del 251 (solo 'falta').
+ *  Es el único lugar donde el sistema se mentía: una celda 'manual' recién
+ *  declarada desaparecía del titular aunque el operador siguiera con trabajo
+ *  pendiente (§2.5 del plan 260, MEDIDO). */
+export function pendienteVisible(m: EnvMatrixResponse): number {
+  let n = 0;
+  for (const c of m.cells || []) {
+    if (c.state === 'falta') n += 1;
+    else if (c.state === 'manual' && c.source === 'declarada_sin_valor_verificable') n += 1;
+  }
+  return n;
+}
+
+/** pendingByEnvironment — {env: pendiente VISIBLE por entorno}. Puro.
+ *  (Plan 260) mismo criterio que `pendienteVisible`, o el titular y la tabla
+ *  por entorno dirían números distintos. */
 export function pendingByEnvironment(m: EnvMatrixResponse): Record<string, number> {
   const out: Record<string, number> = {};
   for (const env of m.environments || []) out[env] = 0;
   for (const c of m.cells || []) {
-    if (c.state !== 'falta') continue;
+    const cuenta = c.state === 'falta'
+      || (c.state === 'manual' && c.source === 'declarada_sin_valor_verificable');
+    if (!cuenta) continue;
     out[c.environment] = (out[c.environment] || 0) + 1;
   }
   return out;
 }
 
-/** headline — el titular único. Es, literalmente, todo el trabajo que le queda. */
+/** headline — el titular único. Es, literalmente, todo el trabajo que le queda.
+ *  (Plan 260) pasa a contar el pendiente VISIBLE, no `pending_count` a secas. */
 export function headline(m: EnvMatrixResponse): string {
-  const n = m?.pending_count ?? 0;
+  const n = pendienteVisible(m);
   if (n === 0) return 'No falta nada: esta pipeline tiene todo lo que necesita.';
   if (n === 1) return 'Te falta 1 valor para que esta pipeline pueda correr.';
   return `Te faltan ${n} valores para que esta pipeline pueda correr.`;

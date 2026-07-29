@@ -69,6 +69,25 @@ def commit_route():
         return jsonify({"error": str(e)}), 400
     path = "azure-pipelines.yml" if target == "ado" else ".gitlab-ci.yml"
     branch = body.get("branch") or f"feature/pipeline-{_slug(spec.name)}"
+
+    # Plan 260 F5.2 — gate de secretos ANTES de escribir. MISMA decision binaria
+    # que arriba elige el renderer/la ruta (`target == "ado"`): `target` NO esta
+    # validado (viene de body.get pelado), pasarlo crudo al motor de reglas
+    # apagaria SEC003/SEC005/SEC007 en silencio (cicd_security_rules.py).
+    if getattr(_config.config, "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED", False):
+        from services.ci_env_gate import evaluar_gate_secretos  # noqa: PLC0415
+
+        prov_reglas = "ado" if target == "ado" else "gitlab"
+        duros, auditado = evaluar_gate_secretos(yaml_str, provider=prov_reglas)
+        if not auditado:
+            return jsonify({"error": "no se pudo auditar el YAML: no se commitea",
+                            "kind": "secret_gate_indeterminado"}), 422
+        if duros:
+            return jsonify({"error": "el YAML contiene un secreto literal",
+                            "kind": "secret_in_yaml",
+                            "findings": [{"code": c, "location": loc, "message": m}
+                                        for c, loc, m in duros]}), 422
+
     try:
         writer = get_repo_writer(body.get("project"))
     except Exception as e:

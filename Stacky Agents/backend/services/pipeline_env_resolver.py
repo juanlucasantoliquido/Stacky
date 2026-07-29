@@ -106,7 +106,8 @@ def resolve(requirements: tuple, environments: tuple, provider: str,
     for v in variables:
         key = str(v.get("key") or "")
         if key:
-            por_key.setdefault(key, []).append(str(v.get("environment_scope") or "*"))
+            por_key.setdefault(key, []).append(
+                (str(v.get("environment_scope") or "*"), v.get("has_value")))
 
     declaradas: dict = {}
     if yaml_text:
@@ -128,6 +129,25 @@ def resolve(requirements: tuple, environments: tuple, provider: str,
     return resoluciones, tuple(degradaciones)
 
 
+def _elegir_entrada(entries: list, env: str):
+    """(Plan 260) Una sola regla para los DOS proveedores: el scope EXACTO
+    (case-insensitive) gana siempre que exista; "*" es el fallback. ADO nunca
+    tiene mas de una entrada (list_variables_scoped fija environment_scope="*"
+    siempre - ado_variables.py), asi que para ADO esto simplemente devuelve esa
+    unica entrada por la rama de fallback. Orden INVERTIDO a proposito respecto
+    del codigo pre-260 (que miraba "*" primero): antes de este plan el orden no
+    importaba (mismo resultado los dos casos); ahora si, porque cada entrada
+    trae su propio has_value (una key puede estar cargada en general y, a la
+    vez, recien declarada vacia en un entorno especifico)."""
+    comodin = None
+    for scope, hv in entries:
+        if scope == "*":
+            comodin = (scope, hv)
+        elif str(scope).lower() == str(env).lower():
+            return (scope, hv)          # match exacto: gana siempre, sin excepcion
+    return comodin                       # None si no hay ni exacto ni "*"
+
+
 def _resolver_celda(req, env: str, provider: str, por_key: dict, declaradas: dict,
                     servidores: list):
     if req.kind == "parameter" and req.declared_default is not None:
@@ -137,15 +157,21 @@ def _resolver_celda(req, env: str, provider: str, por_key: dict, declaradas: dic
     if req.kind in ("variable", "secret"):
         if req.name in declaradas or req.declared_default is not None:
             return ("definido", "yaml_variables", None)
-        scopes = por_key.get(req.name)
-        if scopes:
-            if provider == PROVIDER_ADO:
-                return ("definido", "caja_fuerte", None)
-            if "*" in scopes:
-                return ("definido", "caja_fuerte", None)
-            if any(s.lower() == str(env).lower() for s in scopes):
-                return ("definido", "scope_proveedor", None)
-            return None
+        entradas = por_key.get(req.name)
+        if entradas:
+            elegida = _elegir_entrada(entradas, env)
+            if elegida is None:
+                return None
+            _, hv = elegida
+            if hv is True:
+                fuente = "caja_fuerte" if provider == PROVIDER_ADO else (
+                    "caja_fuerte" if elegida[0] == "*" else "scope_proveedor")
+                return ("definido", fuente, None)
+            if hv is False:
+                return ("falta", "declarada_sin_valor",
+                        "el nombre existe en el proveedor pero no tiene valor")
+            return ("manual", "declarada_sin_valor_verificable",
+                    "el proveedor no informa si este secreto tiene valor: verificalo vos")
     if req.kind == "server":
         objetivo = str(req.name or "").strip().lower()
         for s in servidores:

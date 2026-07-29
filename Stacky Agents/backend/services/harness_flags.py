@@ -268,6 +268,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",  # Plan 267 — catálogo único de acciones DevOps
         "STACKY_DEVOPS_ACTION_NL_ENABLED",  # Plan 267 — pedir la acción en castellano
         "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED",  # Plan 267 — el asistente EJECUTA (nace OFF)
+        "STACKY_PIPELINE_ENV_DECLARE_ENABLED",       # Plan 260 — declarar nombres (OFF, escribe)
+        "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED",  # Plan 260 — bloquear disparo con faltantes
+        "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED",  # Plan 260 — bloquear commit con secreto
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -3200,6 +3203,64 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # R4 profundidad 1: cuelga del master del panel, NUNCA de
         # STACKY_DEVOPS_VARIABLES_ENABLED (esa ya declara requires y encadenar rompe
         # validate_requires_graph).
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+    ),
+    # ── Plan 260 — Ninguna pipeline corre a ciegas ─────────────────────────────
+    FlagSpec(
+        key="STACKY_PIPELINE_ENV_DECLARE_ENABLED",
+        type="bool",
+        # SIN `default=`: el default EFECTIVO es el de config.py ("false"). Declararlo
+        # aca (aunque sea `default=False`) haria default_is_known()==True y rompe
+        # test_default_known_only_for_curated (mismo patron que
+        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED, arriba).
+        # EXCEPCION DURA (B): es la UNICA ruta nueva que ESCRIBE en un sistema externo
+        # real del operador — crea variables vacias en su ADO/GitLab via el puerto
+        # del Plan 94 (services/ci_variables.py, set_variable).
+        label="Declarar nombres de variables faltantes",
+        description=(
+            "Plan 260 - crea, con valor vacio, los nombres de variables/secretos que la "
+            "matriz de entornos detecto como faltantes, para que el operador solo tenga "
+            "que pegar el valor. Requiere confirmacion explicita (HITL) y nunca escribe "
+            "un valor. OFF: el boton de declarar no aparece y /declare responde 404."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_DEVOPS_PANEL_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED",
+        type="bool",
+        default=True,   # default ON: solo LEE (mismo resolve() que ya corre /analyze),
+                        # corre a pedido dentro del request de disparo (sin loop ni
+                        # daemon), y solo bloquea con evidencia POSITIVA de faltantes;
+                        # nunca bloquea por no haber podido resolver. Curada en
+                        # _CURATED_DEFAULTS_ON (test_harness_flags.py).
+        label="Bloquear el disparo si faltan valores",
+        description=(
+            "Plan 260 - antes de disparar una pipeline, verifica que los valores "
+            "obligatorios ya esten cargados en el proveedor y frena el disparo si "
+            "falta alguno con evidencia positiva (nunca por no haber podido verificar). "
+            "OFF: el disparo funciona exactamente como hoy, sin ninguna verificacion previa."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_PIPELINE_TRIGGER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED",
+        type="bool",
+        default=True,   # default ON: solo puede IMPEDIR una fuga (nunca escribe nada,
+                        # no consume tokens). Apagarlo es la decision rara, no
+                        # encenderlo. Curada en _CURATED_DEFAULTS_ON.
+        label="Bloquear el commit de un secreto literal",
+        description=(
+            "Plan 260 - antes de guardar una canalizacion (generador o editor), revisa "
+            "que no tenga un secreto escrito en claro y frena el guardado si lo "
+            "encuentra. OFF: el guardado funciona exactamente como antes, sin esta "
+            "revision."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         requires="STACKY_DEVOPS_PANEL_ENABLED",
     ),
     # ── Plan 250 — Edicion quirurgica de pipelines existentes ─────────────────

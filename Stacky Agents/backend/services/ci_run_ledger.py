@@ -31,6 +31,10 @@ ENTRY_FIELDS: tuple[str, ...] = (
     "project", "tracker_type", "ref", "sha", "pipeline_id",
     "web_url", "triggered_at", "source", "last_status", "finished_at",
     "env", "schema_version",
+    # Plan 260 — ADITIVO al final: consecuencia declarada (§3.7): TODAS las
+    # filas (incluso las que no vienen de este plan) pasan a llevar estas dos
+    # claves en null, porque _clean_entry proyecta el conjunto completo.
+    "env_ack", "pending_fingerprint",
 )
 
 

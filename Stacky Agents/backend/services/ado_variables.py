@@ -36,10 +36,15 @@ class AdoVariablesProvider:
         result = []
         for key, var_def in variables.items():
             is_secret = bool(var_def.get("isSecret"))
+            # Plan 260: ADO NO devuelve el value de un secreto (isSecret=true ->
+            # value: null) => None = DESCONOCIDO. Para una variable normal, la
+            # ausencia de la clave "value" tambien es DESCONOCIDO, nunca False.
+            has_value = (None if is_secret or "value" not in var_def
+                         else bool(var_def.get("value")))
             result.append({
                 "key": key,
                 "is_secret": is_secret,
-                "has_value": True,  # Si está en la definition, tiene valor
+                "has_value": has_value,  # True=cargado, False=vacio, None=no se sabe
                 "masked": None,  # ADO no tiene concepto de masking
             })
         return result

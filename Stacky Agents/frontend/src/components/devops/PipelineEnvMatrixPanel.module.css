@@ -127,3 +127,35 @@
   gap: 6px;
   align-items: center;
 }
+
+/* Plan 260 F6 — declarar nombres faltantes. Mismo patrón: todo el estilado acá. */
+.declareBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.declareSummary {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.declareWarn {
+  font-size: 12px;
+  color: var(--warning, var(--text-muted));
+}
+
+.declareSkipped {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+  padding-left: 16px;
+}
+
+.declareActions {
+  display: flex;
+  gap: 8px;
+}

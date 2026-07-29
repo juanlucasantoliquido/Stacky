@@ -78,8 +78,12 @@ def test_f3_no_pide_lo_que_ya_existe(monkeypatch):
 
 # ── 2 ────────────────────────────────────────────────────────────────────────
 def test_f3_gitlab_scope_por_entorno(monkeypatch):
+    # Plan 260: has_value=True explícito — antes del tri-estado, la mera PRESENCIA
+    # de la key ya resolvía "definido"; ahora hace falta declarar que el proveedor
+    # confirma un valor cargado (si no, sin la clave, resuelve "manual").
     _mockear(monkeypatch, _ProviderFake([
-        {"key": "API_URL", "is_secret": False, "environment_scope": "Test"}]))
+        {"key": "API_URL", "is_secret": False, "environment_scope": "Test",
+         "has_value": True}]))
     reqs = (_req("API_URL", provider=GL),)
     resol, _d = per.resolve(reqs, ("Test", "Production"), GL, project="P")
     m = pe.build_matrix(reqs, ("Test", "Production"), resol, GL)
@@ -90,8 +94,10 @@ def test_f3_gitlab_scope_por_entorno(monkeypatch):
 
 # ── 3 ────────────────────────────────────────────────────────────────────────
 def test_f3_gitlab_scope_estrella_cubre_todo(monkeypatch):
+    # Plan 260: has_value=True explícito (ver nota de test_f3_gitlab_scope_por_entorno).
     _mockear(monkeypatch, _ProviderFake([
-        {"key": "API_URL", "is_secret": False, "environment_scope": "*"}]))
+        {"key": "API_URL", "is_secret": False, "environment_scope": "*",
+         "has_value": True}]))
     reqs = (_req("API_URL", provider=GL),)
     resol, _d = per.resolve(reqs, ("Test", "Production"), GL, project="P")
     m = pe.build_matrix(reqs, ("Test", "Production"), resol, GL)
@@ -100,8 +106,10 @@ def test_f3_gitlab_scope_estrella_cubre_todo(monkeypatch):
 
 # ── 4 ────────────────────────────────────────────────────────────────────────
 def test_f3_ado_definido_en_todos_los_entornos_con_nota(monkeypatch):
+    # Plan 260: has_value=True explícito (ver nota de test_f3_gitlab_scope_por_entorno).
     _mockear(monkeypatch, _ProviderFake([
-        {"key": "API_URL", "is_secret": False, "environment_scope": "*"}]))
+        {"key": "API_URL", "is_secret": False, "environment_scope": "*",
+         "has_value": True}]))
     reqs = (_req("API_URL"),)
     resol, _d = per.resolve(reqs, ("Test", "Production"), ADO, project="P")
     m = pe.build_matrix(reqs, ("Test", "Production"), resol, ADO)

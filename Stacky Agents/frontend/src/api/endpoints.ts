@@ -3871,6 +3871,8 @@ export interface CITriggerResponse {
   web_url: string;
   pipeline_id?: string;
   message?: string;
+  /** Plan 260 (ADICIÓN 5) — aditivo: viaja siempre que el gate corrió. */
+  readiness?: EnvReadinessDto;
 }
 
 export interface CIPreviewResponse {
@@ -3879,6 +3881,33 @@ export interface CIPreviewResponse {
   last_pipeline: { id: string; status: string; sha: string; ref: string; web_url?: string } | null;
   would_reuse: boolean;
   existing_pipeline_id: string | null;
+  /** Plan 260 F4 — aditivo: solo si STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED. */
+  readiness?: EnvReadinessDto;
+}
+
+/** Plan 260 — espejo de services/ci_env_gate.py::Readiness (serializado). */
+export interface EnvReadinessDto {
+  verdict: "ok" | "bloquea" | "advierte" | "degradado";
+  pending_count: number;
+  unknown_count: number;
+  pending_fingerprint: string;
+  missing: Array<{ name: string; environment: string }>;
+  resolved: boolean;
+  source: string;
+  elapsed_ms: number;
+}
+
+/** Plan 260 — cuerpo de error de POST /api/ci/<project>/trigger. `kind`
+ *  distingue el 409 del gate de entornos (`env_pending`) de cualquier otro
+ *  error del endpoint (credenciales, tracker, etc.), que solo trae `error`. */
+export interface EnvPendingErrorBody {
+  error?: string;
+  message?: string;
+  kind?: "env_pending" | string;
+  missing?: Array<{ name: string; environment: string }>;
+  pending_fingerprint?: string;
+  elapsed_ms?: number;
+  hint?: string;
 }
 
 export interface CIMonitorResponse {
@@ -3892,25 +3921,57 @@ export interface CIMonitorResponse {
 }
 
 export const CIPipeline = {
-  /** Preview read-only: muestra ref resuelto + ultimo pipeline + would_reuse. */
-  preview: (project: string, ref: string): Promise<CIPreviewResponse> =>
-    api.get<CIPreviewResponse>(
-      `/api/ci/${encodeURIComponent(project)}/trigger-preview?ref=${encodeURIComponent(ref)}`
-    ),
+  /** Preview read-only: muestra ref resuelto + ultimo pipeline + would_reuse.
+   *  Plan 260 F4 — `yamlPath` (opcional) es una RUTA relativa del workspace,
+   *  nunca el YAML entero (violaría KPI-5 por la puerta de atrás: quedaría en
+   *  los logs de acceso del servidor). Sin ella, el preview usa el inventario
+   *  del Plan 246 y, si tampoco, `readiness.verdict === "degradado"`. */
+  preview: (project: string, ref: string, yamlPath?: string): Promise<CIPreviewResponse> => {
+    const qs = yamlPath ? `&yaml_path=${encodeURIComponent(yamlPath)}` : "";
+    return api.get<CIPreviewResponse>(
+      `/api/ci/${encodeURIComponent(project)}/trigger-preview?ref=${encodeURIComponent(ref)}${qs}`
+    );
+  },
 
-  /** Dispara pipeline CI. confirm DEBE ser true (HITL). */
+  /** Dispara pipeline CI. confirm DEBE ser true (HITL).
+   *  `acknowledgeMissing` (Plan 260, 6º parámetro OPCIONAL con default false):
+   *  los otros call-sites de este método siguen compilando sin cambios. */
   trigger: (
     project: string,
     ref: string,
     sha: string,
     itemId: string,
-    confirm: true
+    confirm: true,
+    acknowledgeMissing = false
   ): Promise<CITriggerResponse> =>
     api.post<CITriggerResponse>(`/api/ci/${encodeURIComponent(project)}/trigger`, {
       ref,
       sha,
       item_id: itemId,
       confirm,
+      acknowledge_missing: acknowledgeMissing,
+    }),
+
+  /** Plan 260 — gemelo de `trigger` que NO LANZA en 409 (`env_pending`): el
+   *  gate de entornos devuelve `missing`/`pending_fingerprint` en el cuerpo,
+   *  que `api.post` (via `trigger`) colapsaría a un string plano
+   *  (`"409 ...: {json}"`). Usado SOLO por PipelineTriggerCard, que necesita
+   *  leer ese cuerpo para mostrar el bloqueo (mensajeDeBloqueo). Los otros
+   *  2 call-sites de `trigger` no cambian: siguen usando la versión que lanza. */
+  triggerRaw: (
+    project: string,
+    ref: string,
+    sha: string,
+    itemId: string,
+    confirm: true,
+    acknowledgeMissing = false
+  ): Promise<RawResponse<CITriggerResponse>> =>
+    rawPost<CITriggerResponse>(`/api/ci/${encodeURIComponent(project)}/trigger`, {
+      ref,
+      sha,
+      item_id: itemId,
+      confirm,
+      acknowledge_missing: acknowledgeMissing,
     }),
 
   /** Estado actual del pipeline. */
@@ -5481,7 +5542,57 @@ export interface HandoffFrontierActionDto {
 export const PipelineEnvironments = {
   analyze: (body: { yaml_text: string; provider: string; project?: string; resolve?: boolean }) =>
     api.post<EnvMatrixResponseDto>("/api/pipeline-environments/analyze", body),
+
+  /** Plan 260 F3 — SOLO LECTURA: proyecta qué se declararía, sin escribir nada.
+   *  `rawPost` porque el llamador necesita el cuerpo aunque la flag de declarar
+   *  esté OFF (404) o el YAML sea inválido (400): `api.post` los colapsaría. */
+  declarePreview: (
+    body: { yaml_text: string; provider: string; project?: string }
+  ): Promise<RawResponse<DeclarePreviewResponseDto>> =>
+    rawPost<DeclarePreviewResponseDto>("/api/pipeline-environments/declare-preview", body),
+
+  /** Plan 260 F3 — crea, con valor VACÍO, los nombres que faltan. HITL:
+   *  confirm=true obligatorio. `rawPost`: el 409 (`proveedor_sin_variables`) y
+   *  el 400 (`keys_fuera_del_plan`) traen cuerpo útil que `api.post` perdería. */
+  declare: (
+    body: {
+      yaml_text: string;
+      provider: string;
+      project?: string;
+      confirm: true;
+      keys?: string[];
+    }
+  ): Promise<RawResponse<DeclareResponseDto>> =>
+    rawPost<DeclareResponseDto>("/api/pipeline-environments/declare", body),
 };
+
+export interface DeclareItemDto {
+  key: string;
+  secret: boolean;
+  reason: string;
+  note: string;
+}
+
+export interface DeclarePlanDto {
+  items: DeclareItemDto[];
+  skipped: Array<{ key: string; motivo: string }>;
+  provider: string;
+}
+
+export interface DeclarePreviewResponseDto {
+  plan: DeclarePlanDto;
+  pendiente_visible_actual: number;
+  pendiente_visible_proyectado: number;
+}
+
+export interface DeclareResponseDto {
+  declared: Array<{ key: string; secret: boolean }>;
+  skipped: Array<{ key: string; motivo: string }>;
+  failed: Array<{ key: string; error: string }>;
+  needs_masking: string[];
+  pending_count_after: number;
+  pendiente_visible_after: number;
+}
 
 export interface EnvMatrixResponseDto {
   environments: string[];

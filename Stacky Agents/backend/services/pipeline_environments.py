@@ -22,7 +22,9 @@ ENV_MATRIX_VERSION = "251.1"
 VALUE_KINDS = ("variable", "secret", "service_connection", "server", "deploy_path", "parameter")
 CELL_STATES = ("definido", "default", "falta", "manual")
 SOURCES = ("predefinida", "yaml_variables", "yaml_parameter_default",
-           "caja_fuerte", "registro_servidores", "scope_proveedor", "ninguna")
+           "caja_fuerte", "registro_servidores", "scope_proveedor", "ninguna",
+           # Plan 260 — DOS fuentes nuevas, ADITIVAS al final (tri-estado has_value):
+           "declarada_sin_valor", "declarada_sin_valor_verificable")
 CONFIDENCE = ("alta", "baja")
 
 PROVIDER_ADO = "azure_devops"

@@ -60,6 +60,11 @@ class CIVariablesProvider(Protocol):
         ...
 
 
+# Plan 260 — documentación del puerto (la tupla NO cambia): cada dict de
+# list_variables()/list_variables_scoped() trae "has_value" tri-estado:
+#   True  -> el proveedor confirma que hay un valor cargado
+#   False -> el proveedor confirma que el valor esta VACIO
+#   None  -> el proveedor NO puede saberlo (ADO + isSecret) -> tratar como DESCONOCIDO
 VARIABLES_PORT_METHODS = ("list_variables", "set_variable", "delete_variable")
 
 

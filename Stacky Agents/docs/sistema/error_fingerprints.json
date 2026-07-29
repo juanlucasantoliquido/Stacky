@@ -852,6 +852,34 @@
       },
       "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
       "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
+    },
+    {
+      "id": "declarar_apaga_la_alerta",
+      "title": "Declarar los nombres apago la alerta de faltantes",
+      "class": "false-green",
+      "status": "resolved",
+      "log_pattern": "pendiente_visible.*bajo de \\d+ a \\d+",
+      "log_guarded": false,
+      "killed_by": "plan 260 F1+F3",
+      "killed_commit": null,
+      "date_resolved": "2026-07-29",
+      "guard_test": "tests/test_plan260_declare_endpoint.py",
+      "evidence": "has_value hardcodeado a True (services/ado_variables.py, services/gitlab_variables.py) + _resolver_celda resolviendo por mera presencia de la key (services/pipeline_env_resolver.py) + pending_count contando solo 'falta' (services/pipeline_environments.py)",
+      "note": "test_f3_pendiente_visible_no_baja_al_declarar, parametrizado sobre los 4 casos proveedor x kind; el caso (azure_devops, secret) es el mas dificil: declarar un secreto en ADO no debe bajar el pendiente visible aunque pending_count si baje a 0."
+    },
+    {
+      "id": "gate_de_secretos_inerte",
+      "title": "Un gate de secretos declarado contra un motor que no produce sus codigos",
+      "class": "false-green",
+      "status": "resolved",
+      "log_pattern": "esta declarado bloqueante pero .*no (?:lo dispara|lo produce)",
+      "log_guarded": false,
+      "killed_by": "plan 260 F5",
+      "killed_commit": null,
+      "date_resolved": "2026-07-29",
+      "guard_test": "tests/test_plan260_secret_commit_gate.py",
+      "evidence": "audit_yaml corre solo SEC*+OPT* (services/cicd_audit_core.py) y las PL de secreto son SEV_WARNING (services/pipeline_lint.py); filtrar por severity=='error' las descarta a las tres",
+      "note": "test_f5_cada_codigo_bloqueante_dispara_de_verdad exige que cada codigo del conjunto bloqueante (SECRET_BLOCKING_AUDIT/SECRET_BLOCKING_LINT) dispare de verdad contra el repro que el propio catalogo declara (AUDIT_RULES[code].repro y pipeline_lint._RULES), nunca con un fixture escrito a mano."
     }
   ]
 }

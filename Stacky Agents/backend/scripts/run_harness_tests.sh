@@ -911,6 +911,16 @@ HARNESS_TEST_FILES=(
   tests/test_devops_action_matcher.py
   tests/test_devops_action_ratchet.py
   tests/test_plan267_help.py
+
+  # Plan 260 - Ninguna pipeline corre a ciegas: nombres declarados, faltantes
+  # visibles y disparo bloqueado (registro incremental, fase por fase)
+  tests/test_plan260_env_gate_flags.py
+  tests/test_plan260_has_value_veraz.py
+  tests/test_plan260_declare_core.py
+  tests/test_plan260_declare_endpoint.py
+  tests/test_plan260_trigger_gate.py
+  tests/test_plan260_secret_commit_gate.py
+  tests/test_plan260_fingerprints.py
 )
 
 pass=0

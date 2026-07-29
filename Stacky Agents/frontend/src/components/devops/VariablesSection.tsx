@@ -9,7 +9,7 @@
  * (DevOpsPage) según healthKey/gateFlagKey/gateMessage. Esta sección NO
  * hand-rollea el gate ni menciona su propia flag.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWorkbench } from '../../store/workbench';
 import { DevOpsVariables, type CIVariableSummary } from '../../api/endpoints';
@@ -17,6 +17,25 @@ import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { looksSecret, validateVariableKey, canBeMasked } from '../../devops/variablesModel';
 import { useConfirm } from '../ui';
 import styles from './devops.module.css';
+
+/** Plan 260 F6 — mismo nombre de clave que PipelineEnvMatrixPanel.tsx (handoff
+ *  liviano vía localStorage, sin tocar DevOpsSectionContext). */
+const ALMACEN_DECLARAR = 'stacky.devops.envMatrix.declararKey';
+
+function leerYBorrarKeyParaDeclarar(): { key: string; secret: boolean } | null {
+  try {
+    const crudo = window.localStorage.getItem(ALMACEN_DECLARAR);
+    if (!crudo) return null;
+    window.localStorage.removeItem(ALMACEN_DECLARAR);
+    const parsed = JSON.parse(crudo);
+    if (typeof parsed?.key === 'string') {
+      return { key: parsed.key, secret: !!parsed.secret };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export interface VariablesSectionProps {
   ctx: DevOpsSectionContext;
@@ -62,29 +81,47 @@ export const VariablesSection: React.FC<VariablesSectionProps> = ({ ctx }) => {
   const [secret, setSecret] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<CIVariableSummary | null>(null);
+  // Plan 260 F6 — true cuando se llegó acá vía el CTA "Completar" de la matriz
+  // de entornos: permite guardar SIN valor (declarar el nombre nada más). El
+  // alta manual (sin este handoff) sigue exigiendo valor, sin degradarse.
+  const [modoDeclarar, setModoDeclarar] = useState(false);
+
+  useEffect(() => {
+    const pre = leerYBorrarKeyParaDeclarar();
+    if (pre) {
+      setKey(pre.key);
+      setSecret(pre.secret);
+      setModoDeclarar(true);
+    }
+  }, []);
 
   const variables = listQuery.data?.variables ?? [];
   const provider = listQuery.data?.provider;
   const { unavailable, message: unavailableMessage } = parseVariablesError(listQuery.error);
 
   const keyError = key ? validateVariableKey(key) : null;
-  const canSubmit = !!key.trim() && !keyError && !!value;
+  const canSubmit = !!key.trim() && !keyError && (!!value || modoDeclarar);
   const maskingWarning = provider === 'gitlab' && secret && value && !canBeMasked(value);
 
   const handleKeyChange = (v: string) => {
     setKey(v);
     setSecret(looksSecret(v) || secret);
+    setModoDeclarar(false); // tocar la key a mano vuelve al alta manual de siempre
   };
 
   const handleCreate = async () => {
     if (!canSubmit) return;
-    if (!(await askConfirm({ title: 'Guardar variable', message: `¿Guardar la variable '${key}' en el tracker?`, confirmLabel: 'Guardar' }))) return;
+    const mensaje = modoDeclarar && !value
+      ? `¿Declarar el nombre '${key}' con valor vacío en el tracker? Vas a poder cargar el valor real después.`
+      : `¿Guardar la variable '${key}' en el tracker?`;
+    if (!(await askConfirm({ title: 'Guardar variable', message: mensaje, confirmLabel: 'Guardar' }))) return;
     try {
       setActionError(null);
       const result = await DevOpsVariables.create({ project: activeProject, key, value, secret, confirm: true });
       setLastResult(result);
       setKey('');
       setValue(''); // value NUNCA se guarda en estado tras el submit
+      setModoDeclarar(false);
       void listQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error de red';
@@ -118,6 +155,12 @@ export const VariablesSection: React.FC<VariablesSectionProps> = ({ ctx }) => {
       {!unavailable && (
         <div className={styles.panel}>
           <h4 style={{ marginTop: 0 }}>Nueva variable{provider ? ` (${provider})` : ''}</h4>
+          {modoDeclarar && (
+            <p className={styles.textWarn}>
+              Viniste desde la matriz de entornos: podés guardar este nombre sin valor todavía
+              (Stacky lo va a seguir marcando como pendiente hasta que cargues el valor real).
+            </p>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'center' }}>
             <input
               type="text"

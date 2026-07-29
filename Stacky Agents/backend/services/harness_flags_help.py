@@ -724,6 +724,24 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagas: esa tabla no se calcula ni se muestra, y seguis descubriendo lo que falta cuando la corrida se cae.",
         example="Te dice que para el ambiente de pruebas ya estan los 6 valores, y que para produccion faltan la contrasena de la base y la carpeta donde se copia la aplicacion.",
     ),
+    "STACKY_PIPELINE_ENV_DECLARE_ENABLED": PlainHelp(
+        what="Crea, con el valor vacio, los nombres de variables o contrasenas que le faltan a una canalizacion, para que vos despues solo pegues el valor real.",
+        on_effect="Si la activas: aparece el boton para declarar los nombres que faltan; antes de crear nada te muestra la lista exacta y pedis confirmar.",
+        off_effect="Si la apagas: ese boton no aparece y vos seguis creando cada nombre a mano en el proveedor, como hoy.",
+        example="Te faltan dos valores para produccion: con un clic Stacky crea esos dos nombres vacios en tu proveedor y vos solo cargas los valores reales.",
+    ),
+    "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED": PlainHelp(
+        what="Antes de disparar una canalizacion, revisa que los valores obligatorios ya esten cargados y frena el disparo si falta alguno.",
+        on_effect="Si la activas: un disparo con valores obligatorios sin cargar queda bloqueado, y te dice exactamente cuales faltan.",
+        off_effect="Si la apagas: el disparo funciona exactamente igual que hoy, sin ninguna revision previa.",
+        example="Vas a disparar una canalizacion a produccion y todavia no cargaste la contrasena de la base: Stacky frena el disparo y te dice cual es la que falta.",
+    ),
+    "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED": PlainHelp(
+        what="Antes de guardar una canalizacion, revisa que no tenga una contrasena o clave escrita tal cual en el archivo, y frena el guardado si la encuentra.",
+        on_effect="Si la activas: guardar una canalizacion con una clave escrita en claro queda bloqueado, con el detalle de donde esta.",
+        off_effect="Si la apagas: el guardado funciona exactamente como antes, sin esta revision.",
+        example="Pegaste sin querer una clave real dentro del archivo de la canalizacion: Stacky frena el guardado antes de que quede escrita ahi para siempre.",
+    ),
     "STACKY_PIPELINE_NL_EDIT_ENABLED": PlainHelp(
         what="Te deja cambiar una canalizacion que ya existe describiendo el cambio, y te muestra exactamente que lineas se tocan antes de decidir nada.",
         on_effect="Si la activas: aparece el panel para editar una canalizacion, con el detalle de las lineas que cambian y un aviso de si algo se perderia.",

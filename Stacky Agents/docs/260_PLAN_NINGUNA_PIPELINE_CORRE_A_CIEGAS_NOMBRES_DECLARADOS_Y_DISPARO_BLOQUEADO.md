@@ -1,15 +1,98 @@
 # Plan 260 — Ninguna pipeline corre a ciegas: nombres declarados, faltantes visibles y disparo bloqueado
 
-> ## ESTADO: **CRITICADO v2 -> v3 — NO IMPLEMENTADO**
+> ## ESTADO: **CRITICADO v3 -> v4 — NO IMPLEMENTADO**
 >
 > Escrito el 2026-07-27 sobre la rama `feat/plan-217-migrador-mantis-gitlab` (HEAD `cd20f646`).
-> Criticado adversarialmente el 2026-07-27 sobre `83d3b8e0` (v1 -> v2) y **re-criticado el
-> 2026-07-27 sobre `53276284` por un juez independiente (v2 -> v3)**, porque la v2 la produjo el
-> mismo agente que escribió el plan y eso NO es revisión independiente. Toda la evidencia de este
-> documento fue leída del código de esos commits y, donde dice **MEDIDO**, ejecutada de verdad con
-> `backend/.venv/Scripts/python.exe` (py3.13.5).
+> Criticado adversarialmente el 2026-07-27 sobre `83d3b8e0` (v1 -> v2), **re-criticado el
+> 2026-07-27 sobre `53276284` por un juez independiente (v2 -> v3)**, y **re-criticado de nuevo el
+> 2026-07-29 sobre `cbff8d3f` por un tercer juez independiente (v3 -> v4)**. Toda la evidencia de
+> este documento fue leída del código de esos commits y, donde dice **MEDIDO**, ejecutada/grepeada
+> de verdad con `backend/.venv/Scripts/python.exe` (py3.13.5).
+>
+> **Advertencia estructural confirmada en la v4 (ver CHANGELOG):** los archivos compartidos que F0
+> edita (`config.py`, `harness_flags.py`, `test_harness_flags_requires.py`) tienen un ritmo de
+> cambio medido de **+15 a +58 líneas en 2 días** por costuras de planes hermanos. Cualquier
+> anclaje de línea de este documento —incluidos los que esta v4 acaba de corregir— puede volver a
+> quedar viejo antes de implementarse. **Regla dura para el implementador:** localizar SIEMPRE por
+> símbolo (`grep -n`) antes de insertar; un número de línea de este documento es una pista, nunca
+> la verdad.
 >
 > Siguiente eslabón del pipeline de la casa: `implementar-plan-stacky`.
+
+---
+
+## CHANGELOG v3 -> v4
+
+**Veredicto del juez sobre el v3: RECHAZADO (1 bloqueante).** La v3 es la más precisa de las tres
+versiones — de ~35 citas archivo:línea re-verificadas contra el código vivo del commit `cbff8d3f`
+(resolver, ado/gitlab variables, environments, audit core, lint, security rules, ci.py, pipeline_
+diff, pipeline_generator, ci_run_ledger), **todas dieron exactas salvo las que la costura de OTRO
+paquete de planes movió después de escrita esta v3**. Ese es exactamente el hallazgo bloqueante:
+no un error de diseño nuevo, sino que el propio riesgo que el plan describe en su §10 ("git hace
+3-way merge sin marcar conflicto... hermanos que editan los mismos archivos") **ya le pasó a este
+plan a sí mismo**, medido con evidencia, no argumentado. Lo corregido:
+
+- **C1 (BLOQUEANTE) — los anclajes de línea de F0 y §10 en `config.py`, `harness_flags.py` y
+  `test_harness_flags_requires.py` quedaron viejos por una costura ajena que ya corrió.** La v3
+  fue escrita el 2026-07-27 citando `config.py:1461-1466` (bloque del Plan 251),
+  `harness_flags.py:3123` / `:3166` (FlagSpec de 251/250) y
+  `test_harness_flags_requires.py` "cierra en `:309`". **MEDIDO hoy (29/07, HEAD `cbff8d3f`):**
+  el bloque del Plan 251 en `config.py` está en **`:1476-1481`** (+15 líneas); los dos `FlagSpec`
+  están en **`:3181`** y **`:3224`** (+58 líneas cada uno — coincide exacto con el ritmo que la
+  memoria de la casa ya tenía anotado para este archivo); y `_REQUIRES_MAP_FROZEN` **no cierra en
+  `:309`**: ese archivo documenta en un comentario, en la propia línea 309, que ya corrió una
+  *"Costura de flags de la OLA 1 (paquete P0, 2026-07-28)"* —un día después de escrita la v3— que
+  agregó 3 aristas ajenas (259/269/270) y que **después** los planes 267 y 268 agregaron 3 más
+  (líneas 317-322): el dict cierra hoy en **`:323`**. Seguir la v3 al pie de la letra insertaría
+  las 3 aristas del 260 **en medio de las de otro plan**, exactamente la colisión que el propio
+  §10 existe para prevenir. **v4:** todos los anclajes de estas 3 rutas se re-miden contra
+  `cbff8d3f` y, además, la instrucción deja de ser "insertar en la línea N" y pasa a ser "ubicar
+  por símbolo con `grep -n` inmediatamente antes de insertar" (ver F0 y §10) — porque el problema
+  no es que el número esté mal *hoy*, es que este archivo demostró que vuelve a estar mal en
+  **días**, no en meses. Ver también **[ADICIÓN ARQUITECTO 6]**.
+- **C2 (IMPORTANTE) — F7 hardcodea un conteo de huellas que ya es falso.** La v3 dice
+  *"42 huellas"* y su test exige `len(fingerprints) == 44`. **MEDIDO hoy:**
+  `docs/sistema/error_fingerprints.json` tiene **45** huellas, no 42 — los planes 259, 267 y 270
+  (hermanos ya implementados) agregaron cada uno la suya (`plan259_gitlab_onboarding_off`,
+  `plan267-propuesta-permanentemente-bloqueada`, `PLAN270-GITLAB-SYNC-AUSENTE`) con el mismo
+  patrón F7 que usa este plan. Implementado tal cual, el test sale **rojo desde el primer commit**
+  (45+2=47 ≠ 44) — a diferencia de C1 falla ruidoso, no en silencio, pero es el mismo mecanismo de
+  anclaje caduco por costura de hermanos, aplicado a un archivo que **todo plan con fase F7
+  toca**. **v4:** F7 deja de hardcodear el número; el criterio se re-expresa en términos relativos
+  (`N` medido al implementar, `N+2` después) y se instruye re-contar con
+  `rg -c "\"id\":" docs/sistema/error_fingerprints.json` antes de escribir el test.
+- **C3 (IMPORTANTE) — `_resolver_celda`/`por_key` no dice qué pasa cuando la MISMA key tiene
+  distinto `has_value` en dos entornos.** `services/pipeline_env_resolver.py:105-109` construye
+  hoy `por_key: dict[key] -> list[scope]` (una key puede tener **varias filas**, una por scope:
+  GitLab scopea la misma variable a "dev" y a "prod" con valores distintos, y el propio código ya
+  itera scopes en `:144-147` para decidir *si* resuelve). La v3 dice, en una sola línea, que
+  `por_key` "pasa a guardar `(environment_scope, has_value)`" pero **no dice cuál `has_value` gana
+  cuando dos filas de la misma key difieren por entorno** (ej.: `dev` cargada, `prod` vacía). El
+  corpus de la ADICIÓN 4 (§4.6) cruza `proveedor x kind` — nunca "mismo key, dos entornos,
+  distinto valor" — así que un modelo menor puede tomar el primer/último `has_value` de la lista y
+  reproducir, en un eje nuevo que ningún test cubre, el mismo bug de clase que este plan existe
+  para matar (KPI-2: declarar/cargar en un entorno apaga la alerta de OTRO). **v4:** §4.1 y F1
+  especifican la estructura exacta (`list[tuple[scope, has_value]]`) y la regla de desempate (se
+  usa la tupla cuya `scope` matchea el entorno de la celda, o `"*"`; nunca la primera/última de la
+  lista), con un test dedicado.
+- **C4 (MENOR) — `nuevos` se reasigna 2 veces más dentro de `review_patch`; insertar el gate de
+  secretos en el lugar "natural" (agrupado con el resto de los cambios del 260, cerca de
+  G-PRESERVACION) lee la variable equivocada y el gate queda **silenciosamente inerte**.**
+  `services/pipeline_diff.py` reasigna `nuevos` en la sección G-LINT (`:205`) y otra vez en G-SEM
+  audit (`:220`); el snippet de la v3 para el gate de secretos usa `nuevos` asumiendo que sigue
+  siendo el de LINT, pero solo es así si el bloque se inserta **antes** de la línea 212. Hay un
+  test (`test_f5_editor_rechaza_secreto_literal`) que lo detectaría, pero cuesta un ciclo de
+  implementación perderlo por un nombre reutilizado. **v4:** el snippet de F5 5.3 ahora captura
+  `nuevos_lint = nuevos` inmediatamente después de la sección G-LINT y usa ese nombre, con una nota
+  explícita de por qué. También se corrige el docstring de `review_patch` ("Los 4 gates" -> "Los 5
+  gates").
+
+**Adición del arquitecto (no estaba en la v3):**
+- **[ADICIÓN ARQUITECTO 6]** — *Anclaje por símbolo, no por línea, para los 3 archivos que más
+  rotan*: F0 pasa a abrir con un mini-procedimiento de 3 comandos `rg` que resuelve, EN EL MOMENTO
+  de implementar, dónde insertar en `config.py`, `harness_flags.py` y
+  `test_harness_flags_requires.py` — el mismo patrón que habría evitado escribir C1 en esta misma
+  v4 (§F0, antes de la tabla de flags).
 
 ---
 
@@ -209,8 +292,10 @@ cuatro cables de producción estaban conectados al módulo equivocado**. Lo corr
 ## 0. Frontera de superficie — enmienda declarada al §3.2 del Plan 251
 
 El Plan 251 declaró, textualmente y por escrito, *"SOLO LECTURA: no escribe en el repo, ni en
-el proveedor, ni en el servidor"* (`backend/config.py:1461-1462`), y su panel lo repite como
-decisión de diseño (`frontend/src/components/devops/PipelineEnvMatrixPanel.tsx:23-25`:
+el proveedor, ni en el servidor"* (`backend/config.py:1476-1477`, **re-medido v4**: el v3 citaba
+`:1461-1462` — el bloque se corrió +15 líneas por la costura del paquete P0 del 2026-07-28; ver
+CHANGELOG v3->v4 C1), y su panel lo repite como decisión de diseño
+(`frontend/src/components/devops/PipelineEnvMatrixPanel.tsx:23-25`:
 *"acá no hay una segunda superficie de escritura"*).
 
 **Este plan enmienda esa frontera de forma explícita y acotada**, y no en silencio:
@@ -906,38 +991,65 @@ ponen rojo ningún meta-test.
 > "default seguro", "por las dudas", "no cambiar el comportamiento actual", "prerequisito no
 > garantizado".
 
+**[ADICIÓN ARQUITECTO 6] (v4) — anclaje por símbolo antes de tocar los 3 archivos que más rotan**
+
+Antes de escribir una línea en `config.py`, `harness_flags.py` o `test_harness_flags_requires.py`,
+correr estos 3 comandos y usar el número que devuelven **hoy**, no el que cita este documento
+(medido v4: estos 3 archivos se movieron +15/+58/+14 líneas en los 2 días entre la v3 y esta v4,
+por costuras de los planes hermanos 259/267/268/269/270 — ver CHANGELOG v3->v4, C1):
+
+```powershell
+rg -n "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED" backend/config.py                 # ultimo bloque de flags devops en config.py -> insertar despues
+rg -n "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED" backend/services/harness_flags.py # ultimo FlagSpec del eje pipelines -> insertar despues
+rg -n "^\}" backend/tests/test_harness_flags_requires.py | tail -1               # linea real de cierre de _REQUIRES_MAP_FROZEN
+```
+
+**Regla dura:** un número de línea en este documento es una pista para orientarse, nunca la
+verdad — verificarlo siempre con el símbolo, porque estos 3 archivos ya demostraron que rotan en
+días, no en meses.
+
 **Las 7 patas:**
 
 1. **`backend/config.py`** — los tres atributos, con el patrón exacto del archivo, junto a
-   `STACKY_PIPELINE_ENV_MATRIX_ENABLED` (`:1464-1466`) y `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`
-   (`:1478-1480`). Los dos ON con `"true"`, el OFF con `"false"`.
+   `STACKY_PIPELINE_ENV_MATRIX_ENABLED` (**`:1476-1481`** — re-medido v4; la v3 citaba
+   `:1464-1466`, ver ADICIÓN 6) y `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (buscar por símbolo,
+   inmediatamente después del bloque anterior). Los dos ON con `"true"`, el OFF con `"false"`.
    **Gotcha dura:** el consumidor lee **la instancia** (`getattr(_config.config, KEY, False)`).
    `getattr` del **módulo** devuelve el default y mata el branch OFF: falso verde perfecto.
 2. **`backend/services/harness_flags.py`** — dos ediciones:
-   - las 3 keys en `_CATEGORY_KEYS["devops"]`, después de `:213` (la tupla cierra en `:214`);
-   - 3 `FlagSpec` junto a los de `:3123` (251) y `:3166` (250).
+   - las 3 keys en `_CATEGORY_KEYS["devops"]`, después de `:213` (la tupla cierra en `:214`;
+     **esta cita SÍ sigue exacta hoy**, verificada v4);
+   - 3 `FlagSpec` junto a los de **`:3181`** (251) y **`:3224`** (250) — **re-medido v4; la v3
+     citaba `:3123`/`:3166`, +58 líneas de drift cada uno (ADICIÓN 6)**.
    **Gotcha `requires` (R4, profundidad 1):** **prohibido** poner
    `requires="STACKY_PIPELINE_ENV_MATRIX_ENABLED"`, porque esa flag **ya** declara
-   `requires="STACKY_DEVOPS_PANEL_ENABLED"` (`test_harness_flags_requires.py:308`) y encadenar
-   rompe `validate_requires_graph`. El master legal de raíz es `STACKY_DEVOPS_PANEL_ENABLED`.
+   `requires="STACKY_DEVOPS_PANEL_ENABLED"` (`test_harness_flags_requires.py:308`, cita verificada
+   vigente) y encadenar rompe `validate_requires_graph`. El master legal de raíz es
+   `STACKY_DEVOPS_PANEL_ENABLED`.
    **Gotcha default-OFF:** `STACKY_PIPELINE_ENV_DECLARE_ENABLED` **NO debe declarar
    `default=False`** en su `FlagSpec`. `default_is_known(spec)` es `spec.default is not None`, y
    `False is not None` ⇒ `True` ⇒ exige estar en el conjunto curado ⇒ rompe
    `test_default_known_only_for_curated`. Se **omite el kwarg** y se copia textualmente el patrón
-   ya escrito en `harness_flags.py:3169-3173`.
+   del `FlagSpec` de `STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED` (el mismo que se acaba de ubicar por
+   símbolo dos líneas arriba, en esta misma pata — no por línea fija).
 3. **`backend/services/harness_flags_help.py`** — 3 `PlainHelp`, junto a `:721` y `:733`.
    **Gotcha:** el texto llano tiene tope de **240 caracteres** y hay un ratchet que castiga
    ciertas palabras en la prosa. Si el gate salta, **se reescribe el texto, jamás el gate**.
 4. **`backend/tests/test_harness_flags.py`** — las **dos** flags ON van al conjunto
-   `_CURATED_DEFAULTS_ON` (abre en `:467`; el bloque de pipelines está en `:537-545`); la OFF se
-   menciona en el **comentario de excepciones duras** de `:483-489`.
+   `_CURATED_DEFAULTS_ON` (abre en `:467`, verificado vigente v4; el bloque de pipelines está
+   alrededor de `:537-545`, verificar por símbolo `STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED`); la
+   OFF se menciona en el **comentario de excepciones duras** de `:483-489`.
    **(v2, C15)** Ese comentario es **prosa**, no una tupla: no busques una estructura para
    apendear. Lo que hace verde el meta-test es la **ausencia** de la flag OFF en el conjunto
    curado, que se logra omitiendo `default=` en su `FlagSpec` (pata 2). Sin las dos ON en el
    conjunto, `test_default_known_only_for_curated` queda rojo con "Extras (no curadas)".
 5. **`backend/tests/test_harness_flags_requires.py`** — 3 aristas nuevas en
-   `_REQUIRES_MAP_FROZEN`, junto a `:296-308` (el dict cierra en `:309`). Sin esto
-   `test_requires_map_is_frozen` queda rojo **en silencio**.
+   `_REQUIRES_MAP_FROZEN`, **inmediatamente antes del `}` de cierre** (v4: el dict **NO** cierra
+   en `:309` como decía la v3 — ese archivo ya documenta en un comentario, en su propia línea 309,
+   que la "Costura de flags de la OLA 1 (paquete P0, 2026-07-28)" agregó 3 aristas ajenas y que
+   267/268 agregaron 3 más después; el cierre real medido hoy es `:323`, y va a volver a moverse:
+   **ubicar el `}` por búsqueda, no por línea**, ver ADICIÓN 6). Sin esto `test_requires_map_is_frozen`
+   queda rojo **en silencio**.
 6. **`backend/scripts/run_harness_tests.sh`** — los **7** archivos de test nuevos (6 del v1 + el
    de F7) en `HARNESS_TEST_FILES` (`:20`), al FINAL, con la sintaxis del `.sh` (sin comillas, sin
    coma; patrón `:820-825`).
@@ -1005,10 +1117,33 @@ ponen rojo ningún meta-test.
    **Prohibido** guardar, loguear o retornar `v["value"]`: solo se consume el `bool()`.
 3. `services/ci_variables.py` — documentar el tri-estado en el docstring del puerto.
    `VARIABLES_PORT_METHODS` (`:63`) **no se toca**.
-4. `services/pipeline_env_resolver.py:105-109` — `por_key` pasa a guardar
-   `(environment_scope, has_value)`; `_resolver_celda:137-148` aplica la tabla de §4.1.
-   **Ojo:** el branch que hoy devuelve `("definido", "caja_fuerte", None)` para ADO está en
-   `:142-143` y el de GitLab en `:144-147`; **los dos** tienen que consultar `has_value`.
+4. `services/pipeline_env_resolver.py:105-109` — **(v4, C3 — contrato explícito, la v3 lo dejaba
+   en una línea)** `por_key` deja de ser `dict[key] -> list[scope_str]` y pasa a ser
+   **`dict[key] -> list[tuple[scope_str, has_value]]`**:
+   ```python
+   por_key: dict = {}
+   for v in variables:
+       key = str(v.get("key") or "")
+       if key:
+           por_key.setdefault(key, []).append(
+               (str(v.get("environment_scope") or "*"), v.get("has_value")))
+   ```
+   `_resolver_celda:137-148` aplica la tabla de §4.1, pero **NO** toma el primer ni el último
+   `has_value` de la lista: busca la tupla cuyo `scope` matchea (exacto, case-insensitive, igual
+   que la comparación que ya existe en `:146`) o, si no hay match exacto, la de scope `"*"`. Una
+   misma key puede llegar con `has_value` **distinto por entorno** (GitLab scopea la misma
+   variable a "dev" cargada y a "prod" vacía; el propio código de hoy ya itera scopes en
+   `:144-147` para decidir si resuelve, así que el dato YA varía por fila — lo único que faltaba
+   era leerlo). **Gotcha explícito:** el branch que hoy devuelve `("definido", "caja_fuerte",
+   None)` para ADO está en `:142-143` y el de GitLab en `:144-147`; **los dos** tienen que
+   consultar el `has_value` **de la tupla que matchea ese `env`**, nunca un valor agregado de la
+   key entera.
+   **Test dedicado:** `test_f1_mismo_key_distinto_has_value_por_entorno` — GitLab con
+   `API_KEY` scopeada a `dev` (`has_value=True`) y a `prod` (`has_value=False`): la celda
+   `(API_KEY, dev)` resuelve `definido` y `(API_KEY, prod)` resuelve `falta`/`declarada_sin_valor`.
+   Sin este test, una implementación que agrega `por_key[key] = has_value` (sobrescribiendo en
+   vez de acumular por scope) pasa los 4 casos del corpus de §4.6 —que son de un solo entorno cada
+   uno— y falla en producción la primera vez que una pipeline real tenga 2+ entornos.
 5. `services/pipeline_environments.py:24-25` — **(v3, C1)** `SOURCES` gana **DOS** elementos
    **al final**: `"declarada_sin_valor"` y `"declarada_sin_valor_verificable"`.
 
@@ -1036,8 +1171,11 @@ ponen rojo ningún meta-test.
 - `test_f1_desconocido_cae_en_manual_no_en_definido`.
 - `test_f1_sources_solo_crecio` — `SOURCES[:7]` es byte-idéntica a la tupla anterior **y**
   `len(SOURCES) == 9`.
+- **`test_f1_mismo_key_distinto_has_value_por_entorno`** *(v4, C3)* — ver F1 item 4: mismo key,
+  dos entornos, `has_value` distinto por scope; cada celda resuelve con el valor de **su propio**
+  entorno, nunca el de otro.
 
-**Criterio BINARIO:** los 11 propios verdes **y** las baselines **medidas hoy** intactas
+**Criterio BINARIO:** los 12 propios verdes **y** las baselines **medidas hoy** intactas
 (re-verificadas por el juez de la v3 corriendo cada archivo con `backend/.venv`):
 `test_plan94_variables_providers.py` **13**, `test_plan94_variables_endpoints.py` **14**,
 `test_plan94_variables_pure.py` **3**, `test_plan251_env_matrix_resolve.py` **15**,
@@ -1461,7 +1599,19 @@ falso y manda al archivo equivocado:
 - Lo que las hace inocuas es `:206`: `lint_err = tuple(f for f in nuevos if f.severity == SEV_ERROR)`
   y `passed=not lint_err`.
 
-**Fix, en `services/pipeline_diff.py`, aditivo y mínimo — REESCRITO (v3, C8):**
+**Fix, en `services/pipeline_diff.py`, aditivo y mínimo — REESCRITO (v3, C8; gotcha de variable
+añadido en v4, C4):**
+
+> **(v4, C4) `nuevos` NO es una variable estable: `review_patch` la reasigna 2 veces más después
+> de G-LINT** (`:220`, dentro de la sección G-SEM audit). El snippet de abajo solo lee los
+> findings de LINT si se inserta **inmediatamente después** de la sección G-LINT (después de la
+> línea que hoy es `:210`) y **antes** de que G-SEM la reasigne. Insertarlo más abajo —por
+> ejemplo agrupado con el resto de los cambios del 260, cerca de G-PRESERVACION, que es donde
+> "aditivo y al final" invitaría a ponerlo— hace que `f.code in SECRET_BLOCKING_LINT` filtre
+> sobre hallazgos de auditoría semántica (códigos `SEC*`/`OPT*`), que **nunca** matchean
+> `SECRET_BLOCKING_LINT` (códigos `PL*`): el gate queda **`passed=True` siempre**, en silencio.
+> Por eso el snippet captura el valor en una variable con nombre propio ANTES de que se reasigne,
+> en vez de reusar `nuevos` a distancia:
 
 ```python
 # services/pipeline_diff.py — junto a las constantes de gate (:26-29)
@@ -1472,14 +1622,31 @@ def review_patch(before: str, after: str, hunks: tuple, *, profile: str,
                  repo_root: Optional[str] = None, verb: str = "",
                  secret_gate: bool = True) -> EditReview:
     ...
-    # dentro de review_patch, DESPUES del gate G-LINT actual (que no se toca)
+    # ── G-LINT (delta) ── (bloque EXISTENTE, no se toca)
+    ...
+    gates.append(GateDelta(gate=GATE_LINT, ...))
+    nuevos_lint = nuevos     # (v4, C4) capturado ACA, antes de que G-SEM reasigne `nuevos`
+
+    # ── G-SECRET — INSERTAR ACA, antes de la sección G-SEM (que reasigna `nuevos`) ──
     from services.ci_env_gate import SECRET_BLOCKING_LINT   # noqa: PLC0415
 
-    _fuga = tuple(f for f in nuevos if f.code in SECRET_BLOCKING_LINT) if secret_gate else ()
+    _fuga = tuple(f for f in nuevos_lint if f.code in SECRET_BLOCKING_LINT) if secret_gate else ()
     gates.append(GateDelta(
         gate=GATE_SECRET, passed=not _fuga, new_errors=_fuga,
         new_warnings=(), resolved=()))
+
+    # ── G-SEM (audit, documento completo, delta) ── (bloque EXISTENTE, reasigna `nuevos`)
+    ...
 ```
+
+También: el docstring de `review_patch` dice hoy *"Los 4 gates sobre (before, after). Nunca
+lanza."* (`:198`) — pasa a **"Los 5 gates"**; dejarlo en 4 es basura documental que confunde al
+próximo que lea el módulo.
+
+**Test que blinda este gotcha:** `test_f5_editor_gate_lint_intacto` (ya en la lista de abajo)
+falla si `GATE_SECRET` nunca dispara para un YAML con un secreto literal detectable solo por
+`PL012`/`PL014` — pero **la única forma de perder ese ciclo de implementación gratis es leer esta
+nota antes**, no después de que el test salga rojo.
 
 > **(v3, C8) Por qué la flag NO se lee acá.** `services/pipeline_diff.py` declara en su docstring
 > *"PURO salvo la verificacion opcional de rutas contra `repo_root`"* (`:9`) y **verificado: tiene
@@ -1745,17 +1912,28 @@ que el próximo que los reintroduzca los vea nombrados.
 #### **(v3, C10) El schema REAL del archivo — el v2 inventaba campos**
 
 **Verificado:** el archivo es un objeto `{"schema_version", "description", "fingerprints": [...]}`
-con **42** huellas, y cada huella usa **estas** claves:
+y cada huella usa **estas** claves:
 
 ```
 id · title · class · status · log_pattern · log_guarded · killed_by · killed_commit
    · date_resolved · guard_test · evidence · note
 ```
 
-**No existe un campo `test`** — es **`guard_test`**, y en las 42 entradas es una **ruta de
-archivo** (`"tests/test_plan258_estanqueidad_arnes.py"`), **sin** `::funcion`. El v2 hablaba de
+**No existe un campo `test`** — es **`guard_test`**, y en (casi) todas las entradas es una **ruta
+de archivo** (`"tests/test_plan258_estanqueidad_arnes.py"`), **sin** `::funcion`. El v2 hablaba de
 "síntoma / causa / Test que lo cubre" y su test decía *"el `test` de cada huella"*: con eso, un
-modelo menor inventa un campo nuevo y rompe la homogeneidad de un corpus de 42 entradas.
+modelo menor inventa un campo nuevo y rompe la homogeneidad del corpus.
+
+> **(v4, C2) El conteo "42" de la v3 ya es falso, y el "casi todas" de arriba no es un matiz
+> cosmético.** **MEDIDO hoy (29/07, `cbff8d3f`):** `rg -c "\"id\":" error_fingerprints.json` da
+> **45**, no 42 — los planes hermanos 259, 267 y 270 (`plan259_gitlab_onboarding_off`,
+> `plan267-propuesta-permanentemente-bloqueada`, `PLAN270-GITLAB-SYNC-AUSENTE`) ya corrieron su
+> propia fase F7 sobre este mismo archivo desde que se escribió la v3. Y al menos una huella
+> existente (`pipeline_status_404`, la primera) tiene una clave `self_test` de más, que no está en
+> la lista de arriba: el schema no es 100% uniforme. **Por eso la v4 deja de hardcodear el
+> conteo** (ver los tests de abajo) — cualquier plan con fase F7, incluido este, tiene que MEDIR
+> el archivo en el momento de implementar, nunca confiar en un número escrito en un documento que
+> otros planes hermanos tocan con el mismo patrón.
 
 Se agregan **dos entradas al final de `fingerprints`**, con **exactamente** las mismas claves que
 la última entrada existente (ni una más, ni una menos). El nombre de la función de guardia va en
@@ -1779,15 +1957,22 @@ la última entrada existente (ni una más, ni una menos). El nombre de la funci�
    de secreto son `SEV_WARNING` (`services/pipeline_lint.py:703,731,749`).
 
 **Tests PRIMERO** — `backend/tests/test_plan260_fingerprints.py`:
-- `test_f7_json_valido_y_solo_crecio` — el archivo parsea, `len(fingerprints) == 44` y las
-  **42** entradas previas son **byte-idénticas** (se compara el `json.dumps(sort_keys=True)` de
-  cada una contra un baseline capturado antes de tocar el archivo).
+- **`test_f7_json_valido_y_solo_crecio`** *(v4, C2: ya NO hardcodea el conteo)* — al importar el
+  módulo de test, se lee `N = len(json.load(...)["fingerprints"])` **una vez, al inicio del
+  archivo de test**, ANTES de que este plan agregue nada (o se congela `N` en un fixture leído
+  del baseline capturado antes de tocar el archivo); el test asserta `len(fingerprints) == N + 2`
+  y que las **primeras `N`** entradas (`fingerprints[:N]`, no un literal `42` ni `44`) son
+  **byte-idénticas** contra ese mismo baseline (`json.dumps(sort_keys=True)` por entrada).
+  **Al momento de escribir el código, medir `N` real con
+  `rg -c "\"id\":" docs/sistema/error_fingerprints.json`** — hoy (v4) da **45**; puede volver a
+  cambiar si otro plan hermano corre F7 antes que este.
 - **`test_f7_las_huellas_nuevas_usan_el_schema_existente`** *(v3, C10)* — para cada huella nueva,
-  `set(nueva.keys()) == set(fingerprints[-3].keys())` (la última existente). **Este test es el
-  que impide inventar campos.**
+  `set(nueva.keys()) == set(fingerprints[-3].keys())` (la última existente **antes** de las 2 que
+  agrega este plan — el índice `-3` es relativo y no depende de `N`, así que **no** hay que
+  tocarlo aunque `N` cambie). **Este test es el que impide inventar campos.**
 - **`test_f7_guard_test_apunta_a_un_archivo_que_existe`** *(v3, C10)* — el `guard_test` de cada
   huella nueva se resuelve contra `backend/` y el archivo **existe**. (No se exige `::funcion`:
-  ninguna de las 42 existentes la usa y romper esa forma es deuda gratis.)
+  casi ninguna huella existente la usa y romper esa forma es deuda gratis.)
 
 **Criterio BINARIO:** los 3 verdes y el archivo parseable con `json.loads`.
 
@@ -1814,6 +1999,8 @@ la última entrada existente (ni una más, ni una menos). El nombre de la funci�
 | **R13** *(v2, C4)* | El gate agrega latencia perceptible al botón de disparo | Presupuesto duro de 1500 ms (KPI-7) + reuso del veredicto del preview; excedido ⇒ `degradado`, nunca espera indefinida |
 | **R16** *(v3, C4)* | **Un veredicto `degradado` del preview se reusa y abre el gate** | Solo entra al almacén un veredicto con `resolved=True` y `yaml_sha256` no vacío; el sha es parte de la **clave**, no una comparación posterior. Test dedicado |
 | **R17** *(v3, C6)* | **El gate de secretos falla abierto con un YAML no parseable** | `auditado` se calcula con `AUD000` + `isinstance(doc, dict)`, no con `findings == ()`; los **tres** casos tienen test |
+| **R18** *(v4, C3)* | **Una variable con la misma key resuelve `has_value` distinto en dos entornos y el resolver mezcla el valor de uno con la celda de otro** | `por_key` pasa a `dict[key] -> list[tuple[scope, has_value]]`; `_resolver_celda` lee el `has_value` de la tupla cuyo scope matchea, nunca la primera/última de la lista; `test_f1_mismo_key_distinto_has_value_por_entorno` dedicado (§F1) |
+| **R19** *(v4, C1/C2)* | **Los anclajes de línea de este documento sobre `config.py`, `harness_flags.py`, `test_harness_flags_requires.py` y `error_fingerprints.json` vuelven a quedar viejos antes de implementarse** (ya pasó dos veces en 2 días) | F0 abre con [ADICIÓN ARQUITECTO 6] (ubicar por `rg`/símbolo, nunca por línea fija) y F7 dejó de hardcodear el conteo de huellas; ningún criterio binario de este plan depende de un número de línea sin re-medir |
 
 ---
 
@@ -1908,24 +2095,30 @@ operador, que es precisamente la **F0 del Plan 261**. Se documenta acá para que
 **`frontend/src/devops/pipelineEnvMatrixModel.ts`** *(v3, C1)*,
 `Stacky Agents/docs/sistema/error_fingerprints.json` *(v2, F7)*.
 
-**Total de tests nuevos esperados: 79 backend + 12 frontend** (v2: 66 + 8; v1: 52 + 6). El
-crecimiento del v3 es casi todo **parametrización sobre el corpus de §4.6**, no funciones nuevas
-escritas a mano: 4 filas x 3 fases + los 8 controles de los bloqueantes.
+**Total de tests nuevos esperados: 80 backend + 12 frontend** (v3: 79 + 12; v2: 66 + 8; v1: 52 + 6).
+El crecimiento del v3 fue casi todo **parametrización sobre el corpus de §4.6**, no funciones
+nuevas escritas a mano: 4 filas x 3 fases + los 8 controles de los bloqueantes. El único test
+nuevo de la v4 es `test_f1_mismo_key_distinto_has_value_por_entorno` (C3: cubre el eje
+multi-entorno que el corpus `proveedor x kind` no cruza).
 
 ---
 
 ## 10. **(v2, C11 — NUEVO) Frontera de merge con los planes hermanos 263, 264 y 265**
 
-Los cuatro planes de esta camada editan **los mismos seis archivos**. El gotcha real de este repo
-es que **git hace 3-way merge SIN marcar conflicto cuando dos ramas agregan la misma línea de
-cierre a una estructura existente**, dejando un duplicado silencioso que ni los marcadores ni el
-compilador atrapan. Reglas de convivencia, obligatorias:
+Los cuatro planes de esta camada editan **los mismos archivos compartidos** (siete, contando
+`.sh`/`.ps1` por separado — **v4: la tabla de abajo suma la fila de
+`test_harness_flags_requires.py`**, que la v2/v3 tocaban en F0 pata 5 pero no habían listado acá
+pese a ser, medido, uno de los archivos que otros hermanos ya escriben — ver CHANGELOG v3->v4,
+C1). El gotcha real de este repo es que **git hace 3-way merge SIN marcar conflicto cuando dos
+ramas agregan la misma línea de cierre a una estructura existente**, dejando un duplicado
+silencioso que ni los marcadores ni el compilador atrapan. Reglas de convivencia, obligatorias:
 
 | Archivo compartido | Regla para el 260 |
 |---|---|
-| `backend/config.py` | Los 3 atributos van **contiguos, en un bloque propio, encabezado por el comentario literal `# Plan 260 — …`**, insertado **inmediatamente después** del bloque del Plan 251 (`:1461-1466`). Nunca intercalados entre atributos de otro plan |
-| `backend/services/harness_flags.py` | Las 3 keys van **al final** de la tupla `_CATEGORY_KEYS["devops"]` (que hoy cierra en `:214`), en 3 líneas consecutivas con el sufijo `# Plan 260`. Los 3 `FlagSpec` van **contiguos, después** del del Plan 250 (`:3166`) |
-| `backend/tests/test_harness_flags.py` | Las 2 keys ON van **al final** del conjunto `_CURATED_DEFAULTS_ON`, con su comentario `# ── Plan 260 …` propio, **después** del bloque del 252 (`:544-545`) |
+| `backend/config.py` | Los 3 atributos van **contiguos, en un bloque propio, encabezado por el comentario literal `# Plan 260 — …`**, insertado **inmediatamente después** del bloque del Plan 251 (medido v4: **`:1476-1481`**; ubicar por `rg -n "STACKY_PIPELINE_ENV_MATRIX_ENABLED"`, no por el número — ya se movió +15 líneas desde la v3, ver ADICIÓN 6). Nunca intercalados entre atributos de otro plan |
+| `backend/services/harness_flags.py` | Las 3 keys van **al final** de la tupla `_CATEGORY_KEYS["devops"]` (que hoy cierra en `:214`, cita vigente), en 3 líneas consecutivas con el sufijo `# Plan 260`. Los 3 `FlagSpec` van **contiguos, después** del del Plan 250 (medido v4: **`:3224`**, +58 líneas desde la v3; ubicar con `rg -n "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED"`) |
+| `backend/tests/test_harness_flags.py` | Las 2 keys ON van **al final** del conjunto `_CURATED_DEFAULTS_ON`, con su comentario `# ── Plan 260 …` propio, **después** del bloque del 252 (alrededor de `:544-545`; confirmar por símbolo `STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED`) |
+| `backend/tests/test_harness_flags_requires.py` | Las 3 aristas nuevas van **inmediatamente antes del `}` de cierre** de `_REQUIRES_MAP_FROZEN` (medido v4: **`:323`**, no `:309` como decía la v3 — la "Costura OLA 1, paquete P0" del 2026-07-28 y los planes 267/268 ya agregaron 6 aristas ahí en medio; ubicar con `rg -n "^\}" backend/tests/test_harness_flags_requires.py \| tail -1`, nunca por línea fija) |
 | `backend/scripts/run_harness_tests.sh` y `.ps1` | Los 7 archivos van **al final** de la lista, en un bloque con el comentario `# Plan 260 …`, **después** del bloque del 252. Recordar que la sintaxis de los dos archivos **es distinta** (`.sh` sin comillas ni coma; `.ps1` con comillas y coma) |
 | `frontend/src/api/endpoints.ts` | Los wrappers nuevos van **al final del objeto/namespace correspondiente**, agrupados bajo un comentario `// Plan 260`. Nunca reordenar ni reformatear lo existente |
 

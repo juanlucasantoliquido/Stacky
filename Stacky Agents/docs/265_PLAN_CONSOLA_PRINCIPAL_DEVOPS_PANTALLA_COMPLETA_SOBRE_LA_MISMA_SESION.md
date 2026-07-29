@@ -1,11 +1,15 @@
 # Plan 265 — La consola como experiencia principal: pantalla completa sobre la MISMA sesión, con contexto de repo, diffs y auditoría
 
-**Estado:** MEJORADO **v3 -> v4** (2026-07-29) · **Autor v1:** pipeline `proponer-plan-stacky` · **Juez v2:** `criticar-y-mejorar-plan` (misma corrida que el v1) · **Juez v3:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE · **Juez v4:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE (StackyArchitectaUltraEficientCode, 2026-07-29)
+**Estado:** MEJORADO **v4 -> v5** (2026-07-29) · **Autor v1:** pipeline `proponer-plan-stacky` · **Juez v2:** `criticar-y-mejorar-plan` (misma corrida que el v1) · **Juez v3:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE · **Juez v4:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE (StackyArchitectaUltraEficientCode, 2026-07-29) · **Juez v5:** `criticar-y-mejorar-plan`, SEGUNDA RONDA independiente (StackyArchitectaUltraEficientCode, 2026-07-29)
 **Veredicto del v1:** **RECHAZADO** (5 BLOQUEANTES). **Veredicto del v2:** **RECHAZADO** (5 BLOQUEANTES nuevos).
 **Veredicto del v3:** **RECHAZADO** (4 BLOQUEANTES — cero hallazgos de diseño; los anclajes numéricos hacia
 `harness_flags.py`, `endpoints.ts` y `executions.py` quedaron viejos porque los Planes 267/268/269/270 se
 mergearon a `main` entre el 27 y el 29/07, más una fila de §4.bis que contradecía al DoD).
-Este documento es el **v4** con los anclajes re-verificados hoy y la contradicción corregida.
+**Veredicto del v4:** **APROBADO-CON-CAMBIOS** (0 BLOQUEANTES — los 4 del v3 quedaron corregidos y los anclajes
+re-verificados hoy contra el código real siguen exactos: cero drift adicional, cero commits de código desde el
+commit del v4; 1 hallazgo IMPORTANTE nuevo y 1 MENOR, ninguno de diseño ni de anclaje roto).
+Este documento es el **v5**: cierra el gap de cobertura de F0.0, corrige un conteo del DoD, y agrega **F8.0**
+(segunda pasada del barrido de anclajes, ahora al cierre).
 
 > **Por qué hubo una cuarta ronda.** El v3 (2026-07-27) abrió cada archivo citado y verificó línea por línea —
 > bien hecho en su momento: los 16 anclajes que el v2 había roto **seguían verificando**. Pero **48 horas y
@@ -18,6 +22,61 @@ Este documento es el **v4** con los anclajes re-verificados hoy y la contradicci
 > lógica que el v3 describe sigue siendo exactamente correcta, sólo cambió dónde vive. La lección operativa sigue
 > en §4.ter (ahora fechada dos veces) y el fix sistémico es la **F0.0** nueva: un barrido de anclajes que se corre
 > en 10 segundos ANTES de tocar código, en vez de confiar en un número escrito hace 48 horas.
+>
+> **Por qué hubo una quinta ronda — y por qué esta vez NO fue por anclajes.** La ronda v5 (2026-07-29, mismo día)
+> volvió a abrir los mismos archivos que barre F0.0, más los 6 puntos de `api/executions.py`, más
+> `endpoints.ts:1117/1350/1154-1155/1417-1418`, más `harness_flags.py:477/497/498`. **Cero drift**: `git diff
+> --stat` entre el commit del v4 (`6f451db8`) y `HEAD` sobre los 9 archivos más citados del documento devuelve
+> **vacío** — nadie tocó código desde que se escribió el v4, sólo se apilaron críticas de planes hermanos (docs).
+> `pytest test_harness_flags_help.py` repite el baseline exacto (**4 failed, 4 passed**, mismos 15 nombres). La
+> F0.0 del v4 cumplió lo que prometía. Lo que esta ronda encontró fue distinto: **F0.0 no vigila
+> `run_harness_tests.sh`/`.ps1`**, pese a ser dos de los archivos compartidos de §4.bis y a que, medido HOY, están
+> **con cambios sin commitear en este mismo momento** (otra sesión les está agregando entradas de Plan 217 al
+> vuelo). Y el DoD contaba "12" pasos de smoke donde el propio DoD enumera 13. Ninguno de los dos bloquea: es la
+> primera ronda de este plan sin un solo hallazgo de anclaje roto. Fix: **G1** extiende F0.0 con los dos archivos
+> que le faltaban; **G2** corrige el conteo; nace **F8.0**, la contraparte de cierre de F0.0.
+
+---
+
+## CHANGELOG v4 -> v5 (ronda independiente, 2026-07-29, mismo día)
+
+> **Veredicto de esta ronda: APROBADO-CON-CAMBIOS.** Cero bloqueantes. Es la primera ronda de este plan sin un
+> solo hallazgo de anclaje roto: los tres archivos más volátiles del documento (`harness_flags.py`, `endpoints.ts`,
+> `api/executions.py`) fueron reabiertos hoy uno por uno y **verifican exactos, línea por línea**, incluidos los
+> dos `cancel` de D1/E2 (`:1154-1155` y `:1417-1418`, con `Agents`/`Executions` abriendo en `:1117`/`:1350`) y las
+> seis citas de `api/executions.py` (`:509`, `:527`, `:682-683`, `:695-696`, `:707-721`). `git diff --stat
+> 6f451db8..HEAD` sobre los 9 archivos más citados (`harness_flags.py`, `endpoints.ts`, `api/executions.py`,
+> `run_harness_tests.sh`, `run_harness_tests.ps1`, `test_harness_flags.py`, `test_harness_flags_requires.py`,
+> `harness_flags_help.py`, `config.py`) es **vacío**, y `git log 6f451db8..HEAD -- ':!docs'` no devuelve una sola
+> línea: nadie tocó código desde que se escribió el v4. `pytest backend/tests/test_harness_flags_help.py -q`
+> (venv correcto, `backend/.venv/Scripts/python.exe`) repite el baseline exacto: **4 failed, 4 passed**, los
+> mismos 15 nombres de violación, cero mención de `CONSOLE`. La forma de `FlagSpec`
+> (`key/type/label/description/group/pair/env_only/default/requires/min_value/max_value/restart_required`)
+> tampoco cambió: los 4 `FlagSpec` literales de F0.2 siguen siendo válidos campo por campo, y `_CURATED_DEFAULTS_ON`
+> (`:467`) y `_REQUIRES_MAP_FROZEN` (`:120`) siguen siendo un `set` y un `dict` respectivamente.
+
+- **G1 (IMP.)** — **F0.0 barre 5 archivos y se queda corto: le faltan los DOS que están cambiando ahora mismo.**
+  `run_harness_tests.sh` y `run_harness_tests.ps1` son, según la propia tabla de §4.bis, dos de los archivos
+  compartidos de este plan (F4, F4.5 y F7 escriben ahí: "registrar en ambas `HARNESS_TEST_FILES`"), y **medido
+  hoy** (`git status --short`) los dos tienen cambios **sin commitear en este mismo momento**: otra sesión les
+  está agregando `tests/test_mg_states.py`, `tests/test_mg_dates.py` y `tests/test_mg_filtro_estados.py` (Plan 217)
+  — en el `.ps1`, justo **al final del array**, reemplazando la línea `"tests/test_plan267_help.py"` que hoy es la
+  última, exactamente donde este plan necesita apoyar sus propias 3 entradas nuevas. F0.0 no incluye estos dos
+  archivos en su barrido, así que un implementador puede correr F0.0, verlo limpio, y aun así llegar a F4/F4.5/F7
+  con una "última línea del array" que ya no es la que vio al principio. **Fix:** F0.0 v5 agrega un sexto y
+  séptimo target que imprimen toda entrada `tests/....py` de cada archivo — lo que importa es la **última** que
+  imprime cada uno, contra la que hay que apoyar el bloque `# Plan 265`, no la que asume el documento.
+- **G2 (MENOR)** — **El DoD cuenta "12" pasos de smoke donde el propio DoD enumera 13.** La lista entre
+  paréntesis del criterio binario de F8 (`1, 2, 2-bis, 3, 4, 4-bis, 5, 6, 7, 7-bis, 8, 9, 10`) tiene **13**
+  elementos (10 pasos numerados + 3 variantes `-bis`), no 12; los otros 12 conteos de casos de test del documento
+  (F1: 11, F1.5: 9, F2: 11, F2.5: 8, F3: 12, F4: 13+6, F4.5: 8, F5 búsqueda: 9, F5 historial: 4, F6: 11, F7: 10,
+  F8: 20 comandos) **sí** coinciden exactamente con sus tablas — es un desvío aislado, no un patrón. **Fix:** "12"
+  pasa a "13" en el criterio binario de F8 y en el bullet correspondiente del DoD.
+- **[ADICIÓN ARQUITECTO] F8.0** — segunda pasada del barrido de anclajes de F0.0, ahora **al cierre**, diffeada
+  contra la foto del principio. Cierra el hueco entre "verifiqué antes de empezar" y "¿se movió algo mientras
+  trabajaba, en una implementación de 9 fases que puede tomar más de un día?" — exactamente el modo de falla que
+  le costó a este plan las rondas v3 y v4, ahora vigilado también DENTRO de una misma implementación, no sólo
+  entre rondas de crítica.
 
 ---
 
@@ -470,6 +529,19 @@ en otra línea — pero todos exigían reabrir el archivo, exactamente como pide
 una eventual v5: 48 horas ya alcanzan para que un anclaje pinneado quede viejo. Corré la F0.0 de este plan (más
 arriba) antes de confiar en cualquier número de línea de este documento.**
 
+**Anclajes RE-verificados en la ronda v5** (abiertos uno por uno, 2026-07-29, mismo día que v4). **Cero drift**:
+`harness_flags.py:477/497/498` (tupla `interfaz_ui` con sus 5 entradas, la última de Plan 270), `endpoints.ts`
+(`Agents` `:1117`, `Executions` `:1350`, `Agents.cancel` `:1154-1155`, `Executions.cancel` `:1417-1418`),
+`api/executions.py` (`:509`, `:527`, `:682-683`, `:695-696`, `:707-721`). Confirmado con `git diff --stat
+6f451db8..HEAD` (vacío sobre los 9 archivos más citados) y `git log 6f451db8..HEAD -- ':!docs'` (vacío): cero
+commits de código desde el v4. `FlagSpec` no cambió de forma. `pytest test_harness_flags_help.py` repite
+`4 failed, 4 passed` con los mismos 15 nombres. **Lo único que no verificaba era lo que F0.0 nunca miró:**
+`run_harness_tests.sh`/`.ps1` — dos archivos con cambios sin commitear EN EL MOMENTO de esta ronda (otra sesión
+agregándoles entradas de Plan 217). Fix en G1/F8.0. **Moraleja para una eventual v6 (si hiciera falta): el drift
+de anclaje ya se resolvió sin un solo caso nuevo en esta ronda — lo que siguió fallando no fue la lectura del
+código, fue la cobertura de la propia herramienta de verificación. Antes de agregar un target a mano, preguntate
+qué archivo compartido de §4.bis todavía no está en la lista de F0.0/F8.0.**
+
 ---
 
 ## 5. Fases
@@ -496,7 +568,9 @@ $targets = @(
   @{ File = "Stacky Agents\backend\tests\test_harness_flags.py";           Pattern = '_CURATED_DEFAULTS_ON = \{|def test_every_registry_flag_is_categorized|def test_default_known_only_for_curated' },
   @{ File = "Stacky Agents\backend\tests\test_harness_flags_requires.py"; Pattern = '_REQUIRES_MAP_FROZEN = \{|def test_requires_map_is_frozen' },
   @{ File = "Stacky Agents\frontend\src\api\endpoints.ts";                 Pattern = 'export const Agents = \{|export const Executions = \{' },
-  @{ File = "Stacky Agents\backend\api\executions.py";                     Pattern = '@bp\.get\("/history"\)|feature_disabled|def cancel_execution|status not in \(' }
+  @{ File = "Stacky Agents\backend\api\executions.py";                     Pattern = '@bp\.get\("/history"\)|feature_disabled|def cancel_execution|status not in \(' },
+  @{ File = "Stacky Agents\backend\scripts\run_harness_tests.sh";          Pattern = '^\s*tests/[\w./-]+\.py\s*$' },
+  @{ File = "Stacky Agents\backend\scripts\run_harness_tests.ps1";         Pattern = '"tests/[\w./-]+\.py"' }
 )
 foreach ($t in $targets) {
   Select-String -Path $t.File -Pattern $t.Pattern |
@@ -509,6 +583,13 @@ la fecha de esta ronda (2026-07-29) deberían coincidir exactamente. Si no coinc
 moverse después de esta ronda**: confiá en lo que imprime el comando, no en el número escrito en la prosa, releé
 el párrafo entero alrededor de ese símbolo antes de editar, y anotalo en el registro de implementación al cierre
 del documento (mismo mecanismo que §4.ter ya pide para un anclaje individual roto).
+
+> **Los últimos dos targets son distintos a los otros cinco (G1, v5).** No buscás una línea única: los archivos
+> `run_harness_tests.sh` y `.ps1` van a imprimir **decenas** de líneas (todo el `HARNESS_TEST_FILES` actual). Lo
+> único que importa es la **ÚLTIMA** que imprime cada uno — esa es la entrada real de HOY, después de la cual
+> F4/F4.5/F7 apoyan su bloque `# Plan 265`. No asumas que es `tests/test_plan267_help.py` porque este documento lo
+> dice: dos sesiones pueden estar tocando este archivo a la vez (medido 2026-07-29: otra sesión le agregaba
+> entradas de Plan 217 al vuelo, sin commitear, mientras se escribía esta ronda de crítica).
 
 **Criterio.** No es pasa/falla: es un paso de lectura obligatorio, cumplido cuando la salida del comando quedó
 pegada en el registro de implementación **antes** del primer commit de F0.
@@ -1766,6 +1847,36 @@ no en un sistema del operador; es registro, no acción).
 
 ---
 
+### F8.0 — **[ADICIÓN ARQUITECTO]** Segunda pasada del barrido de anclajes, AHORA al cierre (G1, G2)
+
+**Por qué existe esta fase.** F0.0 prueba que los anclajes son correctos **antes** de tocar código. No prueba
+nada sobre **durante**: este plan tiene 9 fases entre F0.0 y F8, y las rondas v3→v4→v5 de este mismo documento ya
+demostraron, con evidencia repetida, que unas pocas horas y unos pocos merges alcanzan para mover los tres
+archivos más citados. Una implementación real de este tamaño puede tomar más de un día. Sin un cierre que se
+pregunte "¿se movió algo mientras yo trabajaba?", el plan queda expuesto exactamente al mismo modo de falla que
+le costó las rondas v3 y v4 — sólo que esta vez sería DURANTE la propia implementación, no entre rondas de
+crítica.
+
+**Comando — el MISMO bloque de F0.0, ya extendido con los 2 targets de G1 (7 targets, no 5).** Correlo de nuevo
+tal cual, y guardá la salida aparte (por ejemplo `f8_0_cierre.txt`).
+
+**Cómo usarlo.** Comparalo (un `diff` de texto, o a ojo, línea por línea) contra la salida que F0.0 pegó en el
+registro de implementación al principio. Dos resultados posibles:
+
+- **Idéntico:** no se movió nada mientras implementabas. Anotá "F8.0: sin cambios respecto a F0.0" en el registro.
+- **Distinto:** algo se movió — puede ser tu propio código (tus 4 keys, tus 3 archivos de test nuevos entrando al
+  barrido de `run_harness_tests.*`). Lo que hay que confirmar, leyendo la diferencia línea por línea, es que
+  ningún símbolo que tu código ya escrito referencia quedó apuntando al lugar equivocado (este plan referencia
+  todo por símbolo/nombre en el código final; los números de línea son sólo ayuda para el implementador humano).
+  Si algo no cuadra, aplicá la regla de §4.ter: parás y lo anotás — no lo "arreglás" adivinando.
+
+**Criterio.** Igual que F0.0: no es pasa/falla, es un paso de lectura obligatorio, cumplido cuando la comparación
+quedó pegada en el registro de implementación **antes** del `git commit` final de F8.
+
+**Trabajo del operador: ninguno** (el operador nunca ve ni corre este comando — igual que F0.0).
+
+---
+
 ### F8 — Cierre y verificación consolidada
 
 ```powershell
@@ -1842,8 +1953,9 @@ registro de implementación al final de este documento:
 10. Apagar `STACKY_CONSOLE_FULLSCREEN_ENABLED` ⇒ el dock sigue funcionando **exactamente** como antes.
 
 **Criterio binario.** **20 comandos exit 0** + el snippet de F0.8 en `OK 4/4` + `test_harness_flags_help.py` con el
-**baseline idéntico** (`4 failed, 4 passed`, sin `CONSOLE`) + los **12** pasos del smoke (1, 2, 2-bis, 3, 4, 4-bis,
-5, 6, 7, 7-bis, 8, 9, 10) con resultado esperado anotado.
+**baseline idéntico** (`4 failed, 4 passed`, sin `CONSOLE`) + los **13** pasos del smoke (1, 2, 2-bis, 3, 4, 4-bis,
+5, 6, 7, 7-bis, 8, 9, 10) con resultado esperado anotado (v5, G2 — son 13, no 12: 10 numerados + 3 variantes
+`-bis`) + **F8.0 corrida y diffeada contra F0.0, pegada en el registro** (v5, ADICIÓN ARQUITECTO).
 **Trabajo del operador: ninguno.**
 
 ---
@@ -1912,17 +2024,21 @@ registro de implementación al final de este documento:
 8. **F5** — contexto, historial y búsqueda.
 9. **F6** — atajos (después de F5, porque el atajo de búsqueda necesita la búsqueda).
 10. **F7** — bitácora.
-11. **F8** — cierre.
+11. **F8** — cierre: **F8.0** primero (segunda pasada de F0.0, diffeada contra la foto inicial — v5, G1), después
+    los 20 comandos + el smoke de 13 pasos.
 
 **Definición de Hecho (DoD):**
 
 - [ ] **F0.0 corrida y su salida pegada en el registro de implementación**, antes del primer commit de F0 (E4).
+- [ ] **F8.0 corrida y su salida diffeada contra la de F0.0, pegada en el registro**, antes del `git commit` final
+      de F8 (v5, ADICIÓN ARQUITECTO). Si hay diferencias, cada una revisada contra el código ya escrito (§4.ter).
 - [ ] Los **20** comandos de F8 salen **exit 0**, cero rojos nuevos.
 - [ ] El **snippet de F0.8** (4 keys `STACKY_CONSOLE_*` contra las 10 reglas) imprime **`OK 4/4`** y sale exit 0.
 - [ ] `test_harness_flags_help.py` sigue en su **baseline medido**: **`4 failed, 4 passed`**, los mismos 4 nombres
       de la tabla de F0.8, y **ninguna línea de error menciona `CONSOLE`**. (No se exige exit 0: es deuda ajena.)
-- [ ] Los **12** pasos del smoke manual ejecutados y **anotados con su resultado real** (incluidos 2-bis, 4-bis
-      y 7-bis, que son los tres casos que el v2 no tenía).
+- [ ] Los **13** pasos del smoke manual ejecutados y **anotados con su resultado real** (incluidos 2-bis, 4-bis
+      y 7-bis, que son los tres casos que el v2 no tenía; v5/G2 corrige el conteo de "12" a "13" — la enumeración
+      ya los listaba a los 13, sólo el número resumen estaba mal).
 - [ ] **KPI-1**: `normalizePresentation` cubre los 3 estados; test verde.
 - [ ] **KPI-2 — ahora automático (D12)**: los **9 casos de F1.5** verdes, en particular el test 1 (las 9
       transiciones conservan el token de sesión) y el test 8 (el token **distingue** sesiones distintas — sin él,

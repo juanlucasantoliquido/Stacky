@@ -1,13 +1,133 @@
 # Plan 266 — Cero pantalla rota en el Comparador de BD: forma garantizada del `summary`
 
-**Estado:** CRITICADO v6
-**Fecha:** 2026-07-29 (v6) · 2026-07-29 (v5) · 2026-07-29 (v4) · 2026-07-28 (v3) · 2026-07-27 (v1, v2)
+**Estado:** MEJORADO **v6 -> v7** (2026-07-29) · **Juez v6→v7:** `criticar-y-mejorar-plan` en corrida
+INDEPENDIENTE (StackyArchitectaUltraEficientCode, sexta pasada del mismo día) — **v6
+APROBADO-CON-CAMBIOS (0 BLOQUEANTES, 1 IMPORTANTE)**, primera vez NO-RECHAZADO en 7 rondas. v7
+con el fix aplicado. **Este plan queda en condiciones de pasar a implementación.**
+**Fecha:** 2026-07-29 (v7) · 2026-07-29 (v6) · 2026-07-29 (v5) · 2026-07-29 (v4) · 2026-07-28 (v3) · 2026-07-27 (v1, v2)
 **Rama sugerida:** `feat/plan-266-summary-shape`
 **Serie:** independiente (cierra una incidencia REAL reportada por el operador)
 
 ---
 
-## 0. Changelog v5 → v6 (quinta pasada, juez INDEPENDIENTE — drift en un gate DISTINTO al de F6.1)
+## 0. Changelog v6 → v7 (sexta pasada, juez INDEPENDIENTE — primer veredicto NO-RECHAZADO)
+
+Veredicto del v6: **APROBADO-CON-CAMBIOS (0 BLOQUEANTES, 1 IMPORTANTE)**. Es la primera vez en
+7 rondas de crítica (v1→v2 … v5→v6) que este plan no vuelve RECHAZADO. Todo lo de abajo está
+aplicado.
+
+Esta pasada tampoco releyó el v6 de memoria: abrió el árbol real en `HEAD` (mismo commit que
+midió el v5→v6, más el working tree sucio de la sesión paralela sobre
+`run_harness_tests.sh`/`.ps1` y `backend/tools/migrar_mantis_gitlab/**`, confirmado ajeno con
+`git status`/`git branch --show-current` antes de tocar nada) y volvió a correr, de cero, los
+gates, greps, conteos y los 4 archivos de test que pide la ronda, más uno nuevo que ninguna
+pasada anterior había corrido: **los 9 ratchets de frontend, uno por uno**, para ver si alguno
+además de `uiDebtRatchet` intersecta los archivos que este plan edita.
+
+### Lo que la ejecución CONFIRMÓ como correcto (no se tocó)
+
+El bug sigue **VIVO e idéntico**: `radarLogic.ts:60` es hoy, textual, `const sev =
+r.summary!.by_severity;` y `:63` es `danger: sev.danger || 0,`. Reabiertos uno por uno (no se
+confió en la ronda anterior): `radarLogic.ts` (`:31`, `:56`, `:60`, `:63`), `RunsTimeline.tsx`
+(`:35`, `:37`, `:38` con emojis y `parity_score` tal cual C32 lo dejó), `EnvironmentRadar.tsx`
+(`:144`, `:146`, `:152`, `:215`), `SummaryHero.tsx` (`:145`, `:147` con el prefijo `comparados — `
+de C18), `svgMath.ts` (`:39`, `:40`, `:43`, `:47`), `PageErrorBoundary.tsx` (completo, línea por
+línea: `:12-21` Props/State, `:30-43` `componentDidCatch` con `console.error` en `:32` y
+`publishActivity` en `:35-42`, `:55-72` render con el `<h2>` de `:60` y el `<p>` de `:61-63`
+intactos), `App.tsx` (**2** call-sites reales, `:346`/`:495`, más el `import` de `:33` — C17 sigue
+vivo), `copyService.ts` (`copyText`/`CopyResult`/`COPY_TOAST_*` existen en `:19-29`),
+`activityCenter.ts` (`:35` `localStorage`, **cero** `fetch(` en todo el archivo),
+`dbcompare_runs.py` (`_write_run` `:68`, `_read_run` `:109`, `_is_stale` `:127`, `get_run` `:316`,
+`list_runs` `:326`, sin `import config` todavía), `api/db_compare.py` (`get_run(` → **8**
+call-sites exactos, `:439,455,488,680,713,796,925,1016`, C37 confirmado una vez más; el masking en
+`:447`, inmediatamente después del `get_run` de `:439`), `api/db_compare_watch.py` (`:125`
+`baseline_diff_route`, `:153`/`:161` con el `by_severity` sin normalizar), `dbcompare_masking.py`
+(`import config as _config` dentro de la función en `:206`, lectura en `:207-208`),
+`harness_flags.py` (`_CATEGORY_KEYS: dict[str, tuple[str, ...]] = {` **exacto** en `:120`,
+`comparador_bd` `:454`, `STACKY_DB_COMPARE_MASKING_ENABLED` `:464`, `STACKY_MODEL_PROBE_ENABLED`
+`:471`, `FlagSpec` de MASKING `:4255`, y **confirmado ejecutando el código** que
+`STACKY_DB_COMPARE_ENABLED` —`FlagSpec` en `:4147-4154`— **no** declara `requires=` mientras que
+la SIGUIENTE `FlagSpec`, `STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC` en `:4155-4169`, sí lo hace: son
+dos specs distintas, R4 profundidad-1 queda confirmado sin ambigüedad), `config.py` (`:201-202`
+cierra `STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES`), `test_harness_flags.py`
+(`_CURATED_DEFAULTS_ON` `:467`, `test_declared_default_true_set` `:990`,
+`test_default_known_only_for_curated` `:1001`) y `test_harness_ratchet_meta.py` (`_SCRIPT` apunta
+solo al `.sh` en `:13`, regex de `:21`, `test_ratchet_no_referencia_archivos_inexistentes` en
+`:79`). **Los cinco tests re-corridos dan lo mismo que el v6 dice:**
+`test_harness_flags_requires.py` → **9 passed**; `test_harness_flags.py` → **56 passed**;
+`test_harness_ratchet_meta.py` → **4 passed**; `test_harness_flags_help.py` → **4 failed,
+4 passed** (mismos 4 nombres); `test_error_fingerprints_catalog.py` → **3 failed, 5 passed**
+(mismos 3 nombres: `test_campos_obligatorios`, `test_status_enum`, `test_self_test_coherente`).
+`error_fingerprints.json` tiene **45** huellas, **16** sin `self_test`, **0** con
+`log_pattern: null`, **0** con el `id` de este plan — igual que el v6. Y **simulado el cross-import
+de F3.5** (`from tests.test_harness_flags import _CURATED_DEFAULTS_ON` +
+`from tests.test_harness_flags_requires import _REQUIRES_MAP_FROZEN`, ejecutado de verdad, no
+leído): importa sin error, `len(_CURATED_DEFAULTS_ON) == 275`, `len(_REQUIRES_MAP_FROZEN) == 146`
+— y **hay precedente real** de este mismo idiom en el repo (`tests/test_fitness_flags.py:10`,
+`tests/test_knowledge_flags.py:17`, `tests/test_optimizer_flags.py:12` ya importan
+`_REQUIRES_MAP_FROZEN` de `tests.test_harness_flags_requires`), así que F3.5 no introduce un
+patrón nuevo ni arriesgado.
+
+**El anclaje de F6.1 (A6) sobrevivió una TERCERA ola de edición concurrente.** La sesión paralela
+(working tree sucio, ajena, del plan del migrador Mantis→GitLab) volvió a agregarle líneas a
+`run_harness_tests.sh`/`.ps1` mientras esta crítica corría: hoy `grep -n '^)$'
+scripts/run_harness_tests.sh` da **`:922`** (era `:920` en el v6) con **716** entradas desnudas
+(era 712), y `Select-String -Pattern '^\)$' scripts/run_harness_tests.ps1` da **`:841`** (era
+`:840`) con **652** entradas entrecomilladas (era 648) — la última real hoy es
+`"tests/test_mg_historial.py"`, sin coma. La técnica de A6 (localizar por búsqueda, nunca por
+número ni por vecino) sigue dando **una sola** coincidencia en cada archivo y sigue funcionando
+exactamente como está diseñada, ahora confirmada contra tres rondas sucesivas de mergeo/edición
+concurrente, no solo una.
+
+### El importante
+
+- **C41 (IMPORTANTE)** — **`formDebtRatchet.test.ts` está ROJO hoy (1 failed, 2 passed) y una de
+  sus dos violaciones cae en `EnvironmentRadar.tsx`, un archivo que este plan SÍ edita — y F6.3/DoD
+  no traen ninguna fila para este ratchet.** Este plan corrió, por primera vez en 7 rondas, los
+  **9** ratchets de `frontend/src/__tests__/*Ratchet*.test.ts` (no 8: `adhocModalRatchet`,
+  `copyDebtRatchet`, `devopsActionCatalogRatchet`, `devopsPollingRatchet`, `formatDebtRatchet`,
+  `formDebtRatchet`, `motionDebtRatchet`, `uiDebtRatchet`, `undoConfirmRatchet` — mismo censo que
+  encontró el plan hermano 260) uno por uno. Seis están rojos hoy por deuda ajena
+  (`adhocModalRatchet` por `ShortcutsCheatsheet.tsx`; `devopsPollingRatchet` por
+  `BuildWorkshopSection.tsx:98`; `formatDebtRatchet` por 6 archivos, ninguno de `dbcompare/`;
+  `motionDebtRatchet` por `pages/TicketBoard.module.css` y `components/ui/Dialog.module.css`;
+  `uiDebtRatchet`, ya documentado en C38). El sexto, **`formDebtRatchet`**, tiene **10** archivos en
+  rojo (`grep -c '<select\b' src/components/dbcompare/EnvironmentRadar.tsx` confirma **1** en
+  `:263`, un `<select>` del picker de snapshot en el panel de detalle de celda) y **uno de esos 10
+  es `components/dbcompare/EnvironmentRadar.tsx: 1 > 0 permitido`** — exactamente el mismo patrón
+  de C38 (el archivo **no figura** en `formDebtBaseline.json`, verificado con
+  `grep -n "EnvironmentRadar" src/__tests__/formDebtBaseline.json` → 0 resultados ⇒ cupo implícito
+  0, hoy tiene 1). La línea real (`:263`) está lejos de las que F2 toca (`:144`, `:146`, `:215`),
+  así que la implementación no la agrava, pero el plan no lo declara en ningún lado: ni F6.3 ni el
+  DoD mencionan `formDebtRatchet` una sola vez, a diferencia del tratamiento exhaustivo que sí
+  recibieron `uiDebtRatchet` (C38/A7) y `copyDebtRatchet` (C25). Un implementador o un CI que corra
+  la suite completa de ratchets se encuentra un rojo que este documento no anticipó y no puede
+  distinguir "es mío" de "es ajeno" sin repetir el trabajo de esta crítica. **Fix:** agregar la fila
+  19 a la tabla de F6.3 (`npx vitest run src/__tests__/formDebtRatchet.test.ts` → HOY **1 failed,
+  2 passed** con `EnvironmentRadar.tsx: 1 > 0` entre sus violaciones ajenas; DESPUÉS **la misma
+  cifra**, con la violación de `EnvironmentRadar.tsx` sin cambiar de número y sin que ninguna nueva
+  mencione otro archivo de este plan) y el checkbox correspondiente al DoD → §F6.3, §7.3.
+- **[ADICIÓN ARQUITECTO] A8** — **F6.3 se completa con un BARRIDO MECÁNICO de TODOS los ratchets
+  de frontend, no una lista fija recordada de rondas anteriores.** La causa de fondo de C41 no es
+  que `formDebtRatchet` cambiara entre rondas (no cambió: ya estaba rojo por
+  `EnvironmentRadar.tsx` antes de que existiera este plan) sino que **ninguna de las 6 pasadas
+  anteriores lo había corrido** — la tabla de F6.3 se construyó enumerando de memoria "los
+  ratchets que ya sabíamos que importan" (`uiDebtRatchet`, `copyDebtRatchet`), no barriendo los que
+  existen. Es la misma familia de gotcha que C34/C38 (un gate compartido que este plan no controla
+  del todo) pero en su variante de **descubrimiento tardío**, no de **drift**: acá el gate no se
+  movió, simplemente nadie lo había mirado. El fix, mecánico y barato, generaliza A7: antes de dar
+  por cerrada la tabla de F6.3, correr **por glob**
+  (`Get-ChildItem frontend/src/__tests__/*Ratchet*.test.ts` o `ls frontend/src/__tests__/*Ratchet*.test.ts`
+  — nunca una lista escrita a mano, que puede quedar corta si aparece un 10.º ratchet) cada
+  archivo `*Ratchet*.test.ts`, y por cada uno que salga rojo, cotejar el archivo que nombra su
+  mensaje de fallo (mismo criterio de A7) contra la lista de Ediciones de F1-F5; toda intersección
+  nueva se agrega como fila con su baseline medido, exactamente como se hizo acá con la fila 19.
+  Aplicado retroactivamente: de los 9 ratchets de hoy, 6 están rojos y solo 1
+  (`formDebtRatchet`/`EnvironmentRadar.tsx`) intersecta un archivo de este plan → §F6.3.
+
+---
+
+## 0.1. Changelog v5 → v6 (quinta pasada, juez INDEPENDIENTE — drift en un gate DISTINTO al de F6.1)
 
 Veredicto del v5: **RECHAZADO (1 BLOQUEANTE)**. Todo lo de abajo está aplicado.
 
@@ -131,7 +251,7 @@ verificación**, un caso más duro que "7 commits después" que ya había probad
 
 ---
 
-## 0.1. Changelog v4 → v5 (cuarta pasada, juez INDEPENDIENTE — el mismo par de archivos volvió a fallar)
+## 0.2. Changelog v4 → v5 (cuarta pasada, juez INDEPENDIENTE — el mismo par de archivos volvió a fallar)
 
 Veredicto del v4: **RECHAZADO (1 BLOQUEANTE)**. Todo lo de abajo está aplicado.
 
@@ -224,7 +344,7 @@ hermanas DB Compare" y no hace falta tocarlo.
 
 ---
 
-## 0.2. Changelog v3 → v4 (tercera pasada, juez INDEPENDIENTE que EJECUTÓ los gates)
+## 0.3. Changelog v3 → v4 (tercera pasada, juez INDEPENDIENTE que EJECUTÓ los gates)
 
 Veredicto del v3: **RECHAZADO (5 BLOQUEANTES)**. Todo lo de abajo está aplicado.
 
@@ -398,7 +518,7 @@ Se re-midió con el criterio exacto del plan, no con el número del documento:
 
 ---
 
-## 0.3. Changelog v2 → v3 (segunda pasada, revisión INDEPENDIENTE)
+## 0.4. Changelog v2 → v3 (segunda pasada, revisión INDEPENDIENTE)
 
 La crítica que produjo el v2 se corrió en la **misma sesión** que la propuesta: eso no equivale a
 revisión independiente (gotcha conocido de la casa). Esta segunda pasada re-verificó los anclajes
@@ -490,7 +610,7 @@ que `STACKY_DB_COMPARE_ENABLED` existe (`requires=` válido); y los anclajes del
 
 ---
 
-## 0.4. Changelog v1 → v2
+## 0.5. Changelog v1 → v2
 
 Crítica adversarial verificada contra el repo (2026-07-27). Veredicto del v1: **RECHAZADO
 (3 BLOQUEANTES)**. Todo lo de abajo está aplicado en este documento.
@@ -2280,10 +2400,11 @@ npm run build     # desde Stacky Agents/frontend → tsc --noEmit && vite build
 
 #### F6.3 — [ADICIÓN ARQUITECTO A5] Suite de cierre con BASELINE MEDIDO y criterio DELTA
 
-**Por qué cambia.** El v3 listaba comandos y pedía "verde". Eso es insatisfacible en 3 de los
-archivos (tienen rojos ajenos: filas 7, 8 y **16**, C38) e inauditable en los otros: un "pasó" sin
-número no distingue "corrió y pasó" de "no corrió". Los números de la columna **HOY** se midieron
-ejecutando cada comando el **2026-07-29**, re-confirmados sobre `HEAD` en la pasada v5→v6. El
+**Por qué cambia.** El v3 listaba comandos y pedía "verde". Eso es insatisfacible en 4 de los
+archivos (tienen rojos ajenos: filas 7, 8, **16** [C38] y **19** [C41, agregada en v6→v7]) e
+inauditable en los otros: un "pasó" sin número no distingue "corrió y pasó" de "no corrió". Los
+números de la columna **HOY** se midieron ejecutando cada comando el **2026-07-29**,
+re-confirmados sobre `HEAD` en las pasadas v5→v6 y v6→v7. El
 criterio es la columna **DESPUÉS**: si un archivo empeora respecto de su baseline, el plan lo
 rompió; si un rojo ajeno "desaparece", alguien tocó algo que no era de este plan.
 
@@ -2322,6 +2443,21 @@ arreglarlo antes de seguir. Es el mismo criterio que ya resolvió C38 en esta mi
 | 16 | `npx vitest run src/__tests__/uiDebtRatchet.test.ts` | **1 failed, 2 passed** (ajeno — C38: `ExecutionDetailDrawer.module.css` 23>21, `RunReconciliationCard.module.css` 1>0, ninguno de los dos tocado por este plan) | **`1 failed, 2 passed`**, con las MISMAS 2 violaciones y ninguna que mencione `PageErrorBoundary`; el hex de `PageErrorBoundary.module.css` sigue en **2** (C29) |
 | 17 | `npx vitest run src/__tests__/copyDebtRatchet.test.ts` | **3 passed** | **`3 passed`** ← el gate que atrapa C25; `PageErrorBoundary.tsx` **no** puede aparecer en el baseline |
 | 18 | `npm run build` (`tsc --noEmit && vite build`) | verde | exit 0 |
+| 19 | `npx vitest run src/__tests__/formDebtRatchet.test.ts` | **1 failed, 2 passed** (ajeno — C41: **10** archivos en rojo, entre ellos `components/dbcompare/EnvironmentRadar.tsx: 1 > 0 permitido` — un `<select>` en `:263`, cupo implícito 0 por ausencia en `formDebtBaseline.json`, igual patrón que C38) | **`1 failed, 2 passed`**, con la MISMA violación de `EnvironmentRadar.tsx` (sigue en **1**) y ninguna violación nueva que mencione otro archivo de este plan; F2 no toca `:263` (toca `:144`, `:146`, `:215`) |
+
+**[ADICIÓN ARQUITECTO A8] Cómo se llegó a la fila 19 — barrido mecánico, no memoria.** Esta tabla
+se completó corriendo, por **glob** (no por una lista fija), los 9 archivos
+`frontend/src/__tests__/*Ratchet*.test.ts` que existen hoy (`adhocModalRatchet`, `copyDebtRatchet`,
+`devopsActionCatalogRatchet`, `devopsPollingRatchet`, `formatDebtRatchet`, `formDebtRatchet`,
+`motionDebtRatchet`, `uiDebtRatchet`, `undoConfirmRatchet`) y cotejando, de cada uno que salió
+rojo, el archivo que nombra su mensaje de fallo contra la lista de Ediciones de F1-F5. Cinco de
+los rojos son 100% ajenos (`adhocModalRatchet` por `ShortcutsCheatsheet.tsx`; `devopsPollingRatchet`
+por `BuildWorkshopSection.tsx`; `formatDebtRatchet` por 6 archivos fuera de `dbcompare/`;
+`motionDebtRatchet` por `TicketBoard.module.css`/`Dialog.module.css`; `uiDebtRatchet`, ya en la
+fila 16) y no entran a la tabla. Antes de dar esta fase por cerrada, repetir el mismo barrido
+contra el árbol del momento de implementar (los baselines de ratchets son, igual que
+`run_harness_tests.sh`/`.ps1`, archivos que cualquier plan de esta casa puede tocar entre esta
+crítica y la implementación).
 
 **PROHIBIDO como parte de este plan:** `npm install` / `npm ci`, tocar `frontend/package.json`, y
 **regenerar cualquier baseline de ratchet** (`COPY_DEBT_REGEN`, `UI_DEBT_REGEN` o equivalente). Los
@@ -2511,7 +2647,7 @@ sin `pwsh`, sin red. **Trabajo del operador:** ninguno.
 
 ---
 
-**Criterio de aceptación de F6 (binario):** las **18** filas de la tabla de F6.3 cumplen su columna
+**Criterio de aceptación de F6 (binario):** las **19** filas de la tabla de F6.3 cumplen su columna
 **DESPUÉS**, más los checks de F6.4 y F6.5. El criterio es **delta contra el baseline medido**, no
 "verde": pedir verde es insatisfacible en las filas 7 y 8 (rojos ajenos) y no auditable en el resto.
 Si un ratchet o un test que hoy está verde se pone rojo, es de este plan hasta que se demuestre lo
@@ -2702,6 +2838,11 @@ que ninguno mencione la key nueva; ver F3.)
       1>0, ninguno de los dos tocado por este plan), con las MISMAS 2 violaciones y **ninguna**
       violación nueva que mencione `PageErrorBoundary` (ver A7: atribuí por el mensaje del fallo
       antes de plantar un worktree).
+- [ ] `npx vitest run src/__tests__/formDebtRatchet.test.ts` → **`1 failed, 2 passed`** (baseline
+      medido hoy — C41: **10** archivos en rojo, entre ellos `components/dbcompare/
+      EnvironmentRadar.tsx: 1 > 0 permitido`, un `<select>` en `:263` sin relación con lo que F2
+      toca), con la MISMA violación de `EnvironmentRadar.tsx` (sigue en **1**) y ninguna violación
+      nueva que mencione otro archivo de este plan (mismo criterio de A7/A8).
 - [ ] `.venv\Scripts\python.exe -m pytest tests/test_plan266_summary_shape.py -q` → `0 failed`,
       incluidos `test_list_runs_no_lanza_con_infinity_en_disco` (**C1**, con el token `Infinity`
       escrito a mano en el `.json`, no vía `json.dumps`),

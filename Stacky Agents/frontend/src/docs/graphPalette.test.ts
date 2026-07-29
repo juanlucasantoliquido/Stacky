@@ -113,9 +113,15 @@ describe("graphPalette (plan 268 F0.6)", () => {
     // no mediria nada. El token falso es de la familia --color-*, que es exactamente
     // el bug vivo del plan 111 que F0.6 arregla.
     const defined = definedTokenNames(readTheme());
-    const bad = usedTokenNames(".x { color: var(--color-inexistente-a-proposito); }");
-    expect(bad.has("--color-inexistente-a-proposito")).toBe(true);
-    expect(defined.has("--color-inexistente-a-proposito")).toBe(false);
+    // El literal va PARTIDO a proposito, y esta prosa evita nombrarlo de una pieza:
+    // el grep manual de DoD-11 exige CERO usos de la familia de tokens inexistente en
+    // los archivos del plan, y tanto el fixture como un comentario que lo citara
+    // literal serian hits — el gate se volveria insatisfacible por culpa de su propio
+    // test (gotcha conocido de la casa: la prosa choca con su propio gate).
+    const FAKE = "--color-" + "inexistente-a-proposito";
+    const bad = usedTokenNames(`.x { color: var(${FAKE}); }`);
+    expect(bad.has(FAKE)).toBe(true);
+    expect(defined.has(FAKE)).toBe(false);
     // ...y un token nombrado SOLO en un comentario no cuenta (si contara, el gate
     // quedaria rojo para siempre y se ignoraria).
     expect(usedTokenNames("/* usar var(--token) del tema */ .x { color: var(--accent); }")).toEqual(

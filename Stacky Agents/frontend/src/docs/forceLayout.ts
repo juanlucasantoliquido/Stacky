@@ -7,6 +7,9 @@
  * degradado (>300 nodos o prefers-reduced-motion). Testeable con vitest sin DOM.
  */
 import type { DocGraphResponse } from "./docGraphModel";
+// Plan 268 F5.3 — la clave de grupo tiene UNA sola definición, en graphGrouping.
+// graphGrouping importa SOLO tipos de docGraphModel, así que no hay ciclo (R4).
+import { groupKeyOf } from "./graphGrouping";
 
 export const MAX_ANIMATED_NODES = 300;
 
@@ -58,11 +61,6 @@ function frac(v: number): number {
   return v - Math.floor(v);
 }
 
-/** Grupo de color/columna: notas por fuente, código y faltantes por su kind. */
-function groupOf(kind: string, sourceId: string): string {
-  return kind === "note" ? "note:" + (sourceId || "") : kind;
-}
-
 /**
  * Construye el estado inicial desde el grafo (109). radio = f(in_degree). Posiciones
  * sembradas deterministas (hash del id, sin Math.random) para reproducibilidad.
@@ -86,7 +84,7 @@ export function initLayout(
       vx: 0,
       vy: 0,
       r: nodeRadius(n.in_degree || 0),
-      group: groupOf(n.kind, n.source_id),
+      group: groupKeyOf(n.kind, n.source_id),
     };
   });
 

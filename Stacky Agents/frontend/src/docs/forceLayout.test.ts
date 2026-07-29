@@ -7,6 +7,7 @@ import {
   staticLayout,
 } from "./forceLayout";
 import type { DocGraphResponse } from "./docGraphModel";
+import { groupKeyOf } from "./graphGrouping";
 
 function baseGraph(overrides: Partial<DocGraphResponse> = {}): DocGraphResponse {
   return {
@@ -118,5 +119,23 @@ describe("forceLayout", () => {
     expect(byId["a"].x).toBe(byId["b"].x);
     expect(byId["a"].x).not.toBe(byId["c"].x);
     expect(byId["c"].x).not.toBe(byId["d"].x);
+  });
+});
+
+// ── Plan 268 F5.3 — guardia de la refactorizacion groupOf -> groupKeyOf ───────
+
+describe("plan 268 F5.3: la clave de grupo tiene UNA sola definicion", () => {
+  it("initLayout asigna el group con la misma clave que groupKeyOf", () => {
+    const g = baseGraph({
+      nodes: [note("a"), note("c", 0, "code"), note("m", 0, "missing")],
+    });
+    const st = initLayout(g, 800, 600, false);
+    for (let i = 0; i < g.nodes.length; i++) {
+      expect(st.nodes[i].group).toBe(groupKeyOf(g.nodes[i].kind, g.nodes[i].source_id));
+    }
+    // y la semantica no cambio: la nota lleva su fuente, code y missing no.
+    expect(st.nodes[0].group).toBe("note:s");
+    expect(st.nodes[1].group).toBe("code");
+    expect(st.nodes[2].group).toBe("missing");
   });
 });

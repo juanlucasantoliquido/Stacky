@@ -19,13 +19,25 @@ import { applyGraphFilters, availableFilterOptions } from "../../docs/graphFilte
 import { searchGraphNodes, matchAt, matchIdSet } from "../../docs/graphSearch";
 import { focusSubgraph, rankedNeighbors, resolveFocusId } from "../../docs/graphNeighborhood";
 import {
+  boundsOf,
+  minimapTransform,
+  viewportRectInMinimap,
+  viewportFromMinimapClick,
+  shouldDrawEdge,
+  LOD_SCALE_THRESHOLD,
+  type MinimapTransform,
+} from "../../docs/graphMinimap";
+import {
   collapseGroups,
   groupKeyFromNodeId,
+  groupKeysOf,
+  assignGroupColorSlots,
   isGroupNodeId,
   groupLabelOf,
 } from "../../docs/graphGrouping";
 import DocGraphFilterBar from "./DocGraphFilterBar";
 import DocGraphZoomControls from "./DocGraphZoomControls";
+import DocGraphPeek from "./DocGraphPeek";
 import {
   initLayout,
   stepLayout,
@@ -94,14 +106,28 @@ function readPalette(el: HTMLElement): Palette {
   };
 }
 
-function colorForGroup(group: string, pal: Palette): string {
+/** Plan 268 F5.2 — color por GRUPO. Con `slots` vacío (flag OFF) devuelve `pal.note`
+ *  para cualquier grupo `note:<source>`, que es exactamente el 111. */
+function colorForGroup(group: string, pal: Palette, slots: Map<string, number>): string {
   if (group === "code") return pal.code;
   if (group === "missing") return pal.missing;
-  return pal.note; // note:<source>
+  const slot = slots.get(group);
+  return slot === undefined ? pal.note : pal.groups[slot % pal.groups.length];
 }
 
 const LABEL_FONT_PX = 11;
 const LABEL_HEIGHT_PX = 15;
+
+// Plan 268 F7.3 — umbrales del nivel de detalle, con nombre en vez de repartidos
+// como números mágicos dentro de draw(). (LOD_SCALE_THRESHOLD y LOD_MIN_RADIUS
+// viven en docs/graphMinimap.ts, que es donde está su predicado con test.)
+const LABEL_ZOOM_IN_SCALE = 1.4;
+const DENSE_GRAPH_NODES = 800;
+const MAX_LABELS = 60;
+const MAX_LABELS_DENSE = 30;
+/** Tamaño CSS fijo del minimapa; coincide con .minimap del módulo CSS. */
+const MM_W = 160;
+const MM_H = 110;
 
 /** Plan 268 F1 (B4) — Map vacío como CONSTANTE de módulo: si se creara uno nuevo por
  *  render, el efecto de sincronización de I2 se dispararía en cada render. */
@@ -115,6 +141,8 @@ export default function DocGraphView({
   projectName,
 }: DocGraphViewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapRef = useRef<HTMLCanvasElement | null>(null); // Plan 268 F7
+  const minimapTransformRef = useRef<MinimapTransform | null>(null); // Plan 268 F7
   const boxRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<LayoutState | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -214,7 +242,17 @@ export default function DocGraphView({
   // Costura F1→F2 resuelta: el placeholder tipado pasa a ser el valor real, SIN
   // tocar el efecto de sincronización ni la lista de refs (contrato de F1.3-3).
   const activeMatchId: string | null = matchAt(matches, ui.matchIndex);
-  const groupSlots: Map<string, number> = EMPTY_GROUP_SLOTS; // F5 lo reemplaza
+
+  /** Plan 268 F5 — claves de grupo del grafo COMPLETO (no del filtrado): así el color
+   *  de un grupo no cambia cuando el operador filtra, y la leyenda y el canvas
+   *  comparten exactamente la misma asignación de slots (era el riesgo de C1: leyenda
+   *  y grafo mostrando colores distintos). */
+  const legendGroups = useMemo(() => groupKeysOf(graph), [graph]);
+  const legendSlots = useMemo(() => assignGroupColorSlots(legendGroups), [legendGroups]);
+
+  // Costura F1→F5 resuelta con el mismo tipo del placeholder: el efecto de
+  // sincronización y la lista de refs no se tocan.
+  const groupSlots: Map<string, number> = explorerEnabled ? legendSlots : EMPTY_GROUP_SLOTS;
 
   /** (C3) La búsqueda corre sobre lo VISIBLE. Si hay filtros o foco activos, el
    *  contador lo dice para que nadie interprete que una nota "no está" cuando en
@@ -223,6 +261,19 @@ export default function DocGraphView({
     ui.focusRootId !== null ||
     ui.collapsedGroups.length > 0 ||
     visibleGraph.nodes.length !== totalNodes;
+
+  /** Plan 268 F5.4 — items de la leyenda accionable. Mismo `legendSlots` que el
+   *  canvas ⇒ swatch y nodo comparten color por construcción. */
+  const legendItems = useMemo(
+    () =>
+      legendGroups.map((groupKey) => ({
+        groupKey,
+        label: groupLabelOf(groupKey),
+        slot: legendSlots.get(groupKey) ?? 0,
+        collapsed: ui.collapsedGroups.includes(groupKey),
+      })),
+    [legendGroups, legendSlots, ui.collapsedGroups]
+  );
 
   /** Nodo efectivamente enfocado, resuelto contra el grafo compuesto. `ui.focusRootId`
    *  es lo que el operador PIDIÓ; `effectiveFocusId` es lo que se puede mostrar. */
@@ -236,6 +287,29 @@ export default function DocGraphView({
   const focusNeighbors = useMemo(
     () => (effectiveFocusId ? rankedNeighbors(visibleGraph, effectiveFocusId) : []),
     [visibleGraph, effectiveFocusId]
+  );
+
+  /** Plan 268 F6.3 — el nodo del peek, resuelto CONTRA `visibleGraph`. Si el id ya no
+   *  está (lo ocultó un filtro o lo absorbió un colapso), queda null y el efecto de
+   *  abajo cierra el panel: nunca se muestra la ficha de algo que no está en pantalla. */
+  const peekNode = useMemo(
+    () => (ui.peekNodeId ? (visibleGraph.nodes.find((n) => n.id === ui.peekNodeId) ?? null) : null),
+    [visibleGraph, ui.peekNodeId]
+  );
+
+  useEffect(() => {
+    if (ui.peekNodeId && !peekNode) dispatch({ type: "SET_PEEK", nodeId: null });
+  }, [ui.peekNodeId, peekNode]);
+
+  /** Vecinos del nodo del peek (si no hay foco, los del propio nodo espiado). */
+  const peekNeighbors = useMemo(
+    () =>
+      peekNode
+        ? peekNode.id === effectiveFocusId
+          ? focusNeighbors
+          : rankedNeighbors(visibleGraph, peekNode.id)
+        : [],
+    [peekNode, effectiveFocusId, focusNeighbors, visibleGraph]
   );
 
   /** (C3) El operador pidió un foco que la vista actual no puede mostrar. NUNCA se
@@ -388,6 +462,8 @@ export default function DocGraphView({
     stateRef.current = initLayout(visibleGraph, w, h, Boolean(reducedMotion));
     initViewport();
 
+    const isSelectedId = (id: string) => Boolean(selectedNodeId && id === selectedNodeId);
+
     function neighborsOf(idx: number, state: LayoutState): Set<number> {
       const set = new Set<number>();
       for (const e of state.edges) {
@@ -424,9 +500,12 @@ export default function DocGraphView({
       ctx.scale(vp.scale, vp.scale);
 
       // aristas primero
+      const lodOn = explorerEnabledRef.current; // I2: el ref, no la variable del render
       for (const e of state.edges) {
         const a = state.nodes[e.source];
         const b = state.nodes[e.target];
+        // Plan 268 F7.3 — nivel de detalle: alejado se ven los troncos, no las hojas.
+        if (lodOn && !shouldDrawEdge(a.r, b.r, vp.scale)) continue;
         const hoverEdge =
           hover !== null && (e.source === hover || e.target === hover);
         const al = Math.min(nodeAlpha(e.source), nodeAlpha(e.target));
@@ -457,7 +536,9 @@ export default function DocGraphView({
         }
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-        ctx.fillStyle = colorForGroup(node.group, palette);
+        // (C2/I2) el Map viene del REF: assignGroupColorSlots produce uno nuevo cada
+        // vez que cambia visibleGraph, y este efecto no se re-ejecuta por eso solo.
+        ctx.fillStyle = colorForGroup(node.group, palette, groupSlotsRef.current);
         ctx.fill();
         // anillo del hovered (feedback de "clickeable")
         if (i === hover) {
@@ -482,11 +563,15 @@ export default function DocGraphView({
 
       // ── Labels en espacio de PANTALLA (tamaño constante, sin solaparse) ────
       const candidates: LabelCandidate[] = [];
-      const zoomedIn = vp.scale >= 1.4;
+      const zoomedIn = vp.scale >= LABEL_ZOOM_IN_SCALE;
+      // Plan 268 F7.3 — muy alejado, solo se etiqueta lo que el operador está mirando.
+      const labelsSuppressed = lodOn && vp.scale < LOD_SCALE_THRESHOLD;
       for (let i = 0; i < state.nodes.length; i++) {
         const node = state.nodes[i];
         const id = node.id;
         if (hasFilter && !filter.has(id)) continue;
+        if (labelsSuppressed && i !== hover && !isSelectedId(id) && activeMatchIdRef.current !== id)
+          continue;
         const isHover = i === hover;
         const isSelected = Boolean(selectedNodeId && id === selectedNodeId);
         const isNeighbor = hover !== null && hoverNeighbors!.has(i);
@@ -525,7 +610,10 @@ export default function DocGraphView({
                   : node.r,
         });
       }
-      const visible = pickVisibleLabels(candidates, 60);
+      const visible = pickVisibleLabels(
+        candidates,
+        state.nodes.length > DENSE_GRAPH_NODES ? MAX_LABELS_DENSE : MAX_LABELS
+      );
       ctx.font = `${LABEL_FONT_PX}px system-ui, sans-serif`;
       ctx.textBaseline = "middle";
       for (const c of candidates) {
@@ -549,7 +637,51 @@ export default function DocGraphView({
         ctx.fillText(text, c.x + 2, c.y);
       }
       ctx.globalAlpha = 1;
+
+      drawMinimap();
     }
+
+    /** Plan 268 F7.2 — mismo tratamiento de DPR que sizeCanvas, con tamaño FIJO (no
+     *  depende del layout, así que no hace falta observarlo con el ResizeObserver).
+     *  Si el canvas del minimapa no está montado (flag OFF), sale sin hacer nada. */
+    function sizeMinimap(): void {
+      const mm = minimapRef.current;
+      if (!mm) return;
+      const dpr = window.devicePixelRatio || 1;
+      mm.width = Math.floor(MM_W * dpr);
+      mm.height = Math.floor(MM_H * dpr);
+      const mctx = mm.getContext("2d");
+      if (mctx) mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    /** Se llama al FINAL de draw(), no en un rAF propio (eso duplicaría el costo por
+     *  frame). Sin aristas: a esa escala son ruido. */
+    function drawMinimap(): void {
+      if (!explorerEnabledRef.current) return; // I2: el ref, no la variable del render
+      const mm = minimapRef.current;
+      const state = stateRef.current;
+      if (!mm || !state || !state.nodes.length) return;
+      const mctx = mm.getContext("2d");
+      if (!mctx) return;
+      const palette = paletteRef.current!;
+      mctx.clearRect(0, 0, MM_W, MM_H);
+      const t = minimapTransform(boundsOf(state.nodes), MM_W, MM_H);
+      minimapTransformRef.current = t;
+      mctx.globalAlpha = 0.7;
+      for (const n of state.nodes) {
+        mctx.fillStyle = colorForGroup(n.group, palette, groupSlotsRef.current);
+        mctx.beginPath();
+        mctx.arc(n.x * t.scale + t.offsetX, n.y * t.scale + t.offsetY, 1.5, 0, Math.PI * 2);
+        mctx.fill();
+      }
+      mctx.globalAlpha = 1;
+      const r = viewportRectInMinimap(viewportRef.current, w, h, t);
+      mctx.strokeStyle = palette.halo;
+      mctx.lineWidth = 1;
+      mctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+
+    sizeMinimap();
     drawRef.current = draw;
 
     /**
@@ -774,12 +906,34 @@ export default function DocGraphView({
       if (!isGroupNodeId(id) && kindById.get(id) === "note") onOpenNoteById(id);
     }
 
+    /** Plan 268 F7.2-4 — click en el minimapa: se calcula con el rect DEL MINIMAPA
+     *  (no del canvas principal) y se escribe el viewport por el escritor único. */
+    function onMinimapDown(ev: PointerEvent) {
+      ev.stopPropagation(); // cinturón y tirantes: es un hermano, no un hijo del canvas
+      const mm = minimapRef.current;
+      const t = minimapTransformRef.current;
+      if (!mm || !t) return;
+      const rect = mm.getBoundingClientRect();
+      setViewport(
+        viewportFromMinimapClick(
+          viewportRef.current,
+          ev.clientX - rect.left,
+          ev.clientY - rect.top,
+          t,
+          w,
+          h
+        )
+      );
+    }
+
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("dblclick", onDblClick);
+    const minimapEl = minimapRef.current;
+    minimapEl?.addEventListener("pointerdown", onMinimapDown);
     syncCursor();
 
     // Resize → re-inicializar layout.
@@ -818,9 +972,17 @@ export default function DocGraphView({
       canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("dblclick", onDblClick);
+      minimapEl?.removeEventListener("pointerdown", onMinimapDown);
     };
+    // `explorerEnabled` está en las deps a propósito (desvío consciente del plan, que
+    // pedía solo [visibleGraph, selectedNodeId]): el canvas del MINIMAPA se monta/
+    // desmonta con la flag y su listener se registra acá. Con filtros vacíos
+    // `visibleGraph === graph`, así que si el operador apaga y prende la flag desde el
+    // panel sin recargar, el efecto NO se re-crearía y el minimapa quedaría sin
+    // listener y sin dimensionar. Costo: un re-init del layout por flip de flag, que
+    // solo pasa por una acción explícita del operador.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleGraph, selectedNodeId]);
+  }, [visibleGraph, selectedNodeId, explorerEnabled]);
 
   return (
     <div className={styles.wrap}>
@@ -828,6 +990,8 @@ export default function DocGraphView({
         <DocGraphFilterBar
           options={filterOptions}
           filters={ui.filters}
+          groups={legendItems}
+          onToggleGroup={(groupKey) => dispatch({ type: "TOGGLE_GROUP_COLLAPSED", groupKey })}
           onToggleSource={(id) => dispatch({ type: "TOGGLE_SOURCE", sourceId: id })}
           onToggleKind={(kind) => dispatch({ type: "TOGGLE_KIND", kind })}
           onToggleEdgeKind={(edgeKind) => dispatch({ type: "TOGGLE_EDGE_KIND", edgeKind })}
@@ -969,7 +1133,15 @@ export default function DocGraphView({
       ) : null}
       {/* Plan 268 — con la flag OFF este contenedor es `display: contents`, así que
           el canvas sigue siendo hijo directo del flex de .wrap (layout del 111). */}
-      <div className={explorerEnabled ? ex.body : ex.bodyPlain}>
+      <div
+        className={
+          explorerEnabled
+            ? peekNode
+              ? `${ex.body} ${ex.bodyWithPeek}`
+              : ex.body
+            : ex.bodyPlain
+        }
+      >
         <div
           className={styles.canvasBox}
           ref={boxRef}
@@ -985,6 +1157,7 @@ export default function DocGraphView({
           ) : (
             <>
               <canvas ref={canvasRef} className={styles.canvas} />
+              {explorerEnabled ? <canvas ref={minimapRef} className={ex.minimap} /> : null}
               {explorerEnabled ? (
                 <DocGraphZoomControls
                   scale={viewScale}
@@ -1004,6 +1177,16 @@ export default function DocGraphView({
             </>
           )}
         </div>
+        {explorerEnabled && peekNode ? (
+          <DocGraphPeek
+            node={peekNode}
+            projectName={projectName}
+            neighbors={peekNeighbors}
+            onOpenNote={onOpenNoteById}
+            onFocusNode={(nodeId) => dispatch({ type: "FOCUS_NODE", nodeId })}
+            onClose={() => dispatch({ type: "SET_PEEK", nodeId: null })}
+          />
+        ) : null}
       </div>
     </div>
   );

@@ -11,9 +11,33 @@ import type { FilterOptions } from "../../docs/graphFilters";
 import type { GraphFilterState, NodeKind, EdgeKind } from "../../docs/graphExplorerState";
 import styles from "./DocGraphExplorer.module.css";
 
+/** Plan 268 F5.4 — un ítem de la leyenda accionable por grupo. */
+export interface GroupLegendItem {
+  groupKey: string;
+  label: string;
+  /** slot 0..5 → clase .swatchSlotN, que usa EXACTAMENTE el mismo token que
+   *  GROUP_SLOT_TOKENS en el mismo orden. Si divergen, la leyenda le miente al
+   *  operador (era el riesgo concreto de C1). */
+  slot: number;
+  collapsed: boolean;
+}
+
+/** 6 clases fijas: el índice se toma módulo 6, igual que en el canvas. */
+const SLOT_CLASSES = [
+  styles.swatchSlot0,
+  styles.swatchSlot1,
+  styles.swatchSlot2,
+  styles.swatchSlot3,
+  styles.swatchSlot4,
+  styles.swatchSlot5,
+];
+
 interface DocGraphFilterBarProps {
   options: FilterOptions;
   filters: GraphFilterState;
+  /** Plan 268 F5.4 — vacío ⇒ no se renderiza la leyenda. */
+  groups: GroupLegendItem[];
+  onToggleGroup: (groupKey: string) => void;
   onToggleSource: (sourceId: string) => void;
   onToggleKind: (kind: NodeKind) => void;
   onToggleEdgeKind: (edgeKind: EdgeKind) => void;
@@ -39,6 +63,8 @@ function isPristine(f: GraphFilterState): boolean {
 export default function DocGraphFilterBar({
   options,
   filters,
+  groups,
+  onToggleGroup,
   onToggleSource,
   onToggleKind,
   onToggleEdgeKind,
@@ -147,6 +173,37 @@ export default function DocGraphFilterBar({
           ))}
         </div>
       </details>
+
+      {groups.length ? (
+        <fieldset className={`${styles.group} ${styles.legendRow}`}>
+          <legend className={styles.groupLabel}>Grupos</legend>
+          {groups.map((g) => (
+            <button
+              key={g.groupKey}
+              type="button"
+              className={styles.chip}
+              aria-pressed={g.collapsed}
+              onClick={() => onToggleGroup(g.groupKey)}
+              title={
+                g.collapsed
+                  ? `Expandir ${g.label}`
+                  : `Colapsar ${g.label} en un solo nodo`
+              }
+            >
+              <span
+                className={`${styles.swatch} ${
+                  g.groupKey === "code"
+                    ? styles.swatchCode
+                    : g.groupKey === "missing"
+                      ? styles.swatchMissing
+                      : SLOT_CLASSES[g.slot % SLOT_CLASSES.length]
+                }`}
+              />
+              {g.label}
+            </button>
+          ))}
+        </fieldset>
+      ) : null}
 
       <button
         type="button"

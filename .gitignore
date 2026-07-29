@@ -25,10 +25,19 @@ data/
 *.sqlite3
 NOTIFICATIONS.json
 
-# Proyectos / tickets scrapeados — contienen datos del cliente
+# Proyectos / tickets scrapeados — contienen datos del cliente.
+# La regla es DELIBERADAMENTE amplia: hay ~90 carpetas "projects" con datos reales
+# (backend/projects, Stacky Agents/projects, DeployStackyAgents/projects y sus backups,
+# deployment/.prepare-out). Acotarla a una sola ruta las destaparia.
 projects/
 
-# Credenciales y sesiones
+# EXCEPCION: esto es CODIGO FUENTE del frontend, no data de cliente. Sin esta linea
+# la regla de arriba lo tapa y los modulos solo entran con `git add -f` — o se pierden
+# EN SILENCIO cuando alguien se olvida (paso con el plan 259).
+!Stacky Agents/frontend/src/projects/
+
+# Credenciales y sesiones. Tambien amplia a proposito: cubre las carpetas auth/ que
+# viven dentro de cada projects/<CLIENTE>/.
 auth/
 
 # Logs

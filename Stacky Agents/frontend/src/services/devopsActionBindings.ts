@@ -144,18 +144,25 @@ export const DEVOPS_ACTION_BINDINGS: Record<string, DevOpsActionBinding> = {
     'Pipeline disparada',
     (p) => CIPipeline.trigger(val(p, 'project'), val(p, 'pipeline_id'), '', '', true)
   ),
-  // `deployment_id` es el app_id; `environment` son los targets (uno o varios,
+  // `deployment_id` es el app_id; `targets` son los destinos (uno o varios,
   // separados por coma, como los junta la seccion). `confirm_text` es un extra
   // operativo que la seccion ya tiene: NO lo declara el catalogo porque no se
   // le pide al operador desde el asistente, y NO se pierde la guarda
-  // type-to-confirm de los targets protegidos.
+  // type-to-confirm de los destinos protegidos.
+  //
+  // F7: antes leia `environment`, un enum ('dev'|'qa'|'uat'|'prod') que el
+  // catalogo declaraba required. Los destinos REALES son '__local__' o el alias
+  // de un servidor registrado (deploymentsModel.ts:90-96), asi que ningun valor
+  // valido del enum era un destino valido: la llamada no podia funcionar, y el
+  // required volvia el boton inejecutable. Ahora el param se llama como el dato
+  // que el endpoint consume.
   'devops.deployment.execute': callEndpoint(
     'devops.deployment.execute',
     'Despliegue ejecutado',
     (p) =>
       DevOpsDeployments.execute(
         val(p, 'deployment_id'),
-        val(p, 'environment').split(',').map((s) => s.trim()).filter(Boolean),
+        val(p, 'targets').split(',').map((s) => s.trim()).filter(Boolean),
         true,
         val(p, 'confirm_text') || undefined
       )
@@ -265,13 +272,12 @@ export const FALLBACK_META: Record<string, DevOpsActionMeta> = {
     nav_path: '/devops/remote-console',
     effect: 'write',
     impact: 'high',
-    targets_environment: true,
+    targets_environment: false,
     health_key: 'remote_console_enabled',
     flag_key: 'STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED',
     reach: ['button', 'palette-nav', 'assistant'],
     params: [
-      { name: 'project', type: 'string', label: 'Proyecto', required: true, enum_values: [], default: '' },
-      { name: 'environment', type: 'enum', label: 'Entorno', required: true, enum_values: ['dev', 'qa', 'uat', 'prod'], default: '' },
+      { name: 'project', type: 'string', label: 'Proyecto', required: false, enum_values: [], default: '' },
       { name: 'server_alias', type: 'string', label: 'Servidor', required: true, enum_values: [], default: '' },
       { name: 'command', type: 'string', label: 'Comando', required: true, enum_values: [], default: '' },
     ],
@@ -290,7 +296,7 @@ export const FALLBACK_META: Record<string, DevOpsActionMeta> = {
     flag_key: 'STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED',
     reach: ['button', 'palette-nav', 'assistant'],
     params: [
-      { name: 'project', type: 'string', label: 'Proyecto', required: true, enum_values: [], default: '' },
+      { name: 'project', type: 'string', label: 'Proyecto', required: false, enum_values: [], default: '' },
       { name: 'solution_path', type: 'string', label: 'Solucion', required: true, enum_values: [], default: '' },
     ],
     phrases: [],
@@ -315,56 +321,54 @@ export const FALLBACK_META: Record<string, DevOpsActionMeta> = {
   'devops.pipeline.trigger': {
     id: 'devops.pipeline.trigger',
     label: 'Disparar pipeline',
-    summary: 'Lanza una corrida de la pipeline elegida en el entorno elegido.',
+    summary: 'Lanza una corrida de la pipeline en la rama elegida.',
     section_id: 'pipelines',
     nav_path: '/devops/pipelines',
     effect: 'write',
     impact: 'high',
-    targets_environment: true,
+    targets_environment: false,
     health_key: 'trigger_enabled',
     flag_key: 'STACKY_PIPELINE_TRIGGER_ENABLED',
     reach: ['button', 'palette-nav', 'assistant'],
     params: [
       { name: 'project', type: 'string', label: 'Proyecto', required: true, enum_values: [], default: '' },
-      { name: 'environment', type: 'enum', label: 'Entorno', required: true, enum_values: ['dev', 'qa', 'uat', 'prod'], default: '' },
-      { name: 'pipeline_id', type: 'string', label: 'Pipeline', required: true, enum_values: [], default: '' },
+      { name: 'pipeline_id', type: 'string', label: 'Rama o pipeline', required: true, enum_values: [], default: '' },
     ],
     phrases: [],
   },
   'devops.deployment.execute': {
     id: 'devops.deployment.execute',
     label: 'Ejecutar despliegue',
-    summary: 'Corre el despliegue elegido en el entorno elegido.',
+    summary: 'Corre el despliegue elegido en los destinos elegidos.',
     section_id: 'despliegues',
     nav_path: '/devops/despliegues',
     effect: 'write',
     impact: 'high',
-    targets_environment: true,
+    targets_environment: false,
     health_key: 'deployments_execute_enabled',
     flag_key: 'STACKY_DEPLOYMENTS_EXECUTE_ENABLED',
     reach: ['button', 'palette-nav', 'assistant'],
     params: [
-      { name: 'project', type: 'string', label: 'Proyecto', required: true, enum_values: [], default: '' },
-      { name: 'environment', type: 'enum', label: 'Entorno', required: true, enum_values: ['dev', 'qa', 'uat', 'prod'], default: '' },
-      { name: 'deployment_id', type: 'string', label: 'Despliegue', required: true, enum_values: [], default: '' },
+      { name: 'project', type: 'string', label: 'Proyecto', required: false, enum_values: [], default: '' },
+      { name: 'deployment_id', type: 'string', label: 'Aplicacion', required: true, enum_values: [], default: '' },
+      { name: 'targets', type: 'string', label: 'Destinos', required: true, enum_values: [], default: '' },
     ],
     phrases: [],
   },
   'devops.publication.run': {
     id: 'devops.publication.run',
     label: 'Correr publicacion',
-    summary: 'Ejecuta la publicacion elegida en el entorno elegido.',
+    summary: 'Ejecuta la publicacion elegida del proyecto activo.',
     section_id: 'publicaciones',
     nav_path: '/devops/publicaciones',
     effect: 'write',
     impact: 'high',
-    targets_environment: true,
+    targets_environment: false,
     health_key: 'one_click_publish_enabled',
     flag_key: 'STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED',
     reach: ['button', 'palette-nav', 'assistant'],
     params: [
       { name: 'project', type: 'string', label: 'Proyecto', required: true, enum_values: [], default: '' },
-      { name: 'environment', type: 'enum', label: 'Entorno', required: true, enum_values: ['dev', 'qa', 'uat', 'prod'], default: '' },
       { name: 'publication_id', type: 'string', label: 'Publicacion', required: true, enum_values: [], default: '' },
     ],
     phrases: [],
@@ -372,18 +376,17 @@ export const FALLBACK_META: Record<string, DevOpsActionMeta> = {
   'devops.solution.publish': {
     id: 'devops.solution.publish',
     label: 'Publicar solucion',
-    summary: 'Compila y publica la solucion en el entorno elegido.',
+    summary: 'Compila y publica la solucion elegida.',
     section_id: 'publicador-soluciones',
     nav_path: '/devops/publicador-soluciones',
     effect: 'write',
     impact: 'high',
-    targets_environment: true,
+    targets_environment: false,
     health_key: 'solution_publisher_enabled',
     flag_key: 'STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED',
     reach: ['button', 'palette-nav', 'assistant'],
     params: [
-      { name: 'project', type: 'string', label: 'Proyecto', required: true, enum_values: [], default: '' },
-      { name: 'environment', type: 'enum', label: 'Entorno', required: true, enum_values: ['dev', 'qa', 'uat', 'prod'], default: '' },
+      { name: 'project', type: 'string', label: 'Proyecto', required: false, enum_values: [], default: '' },
       { name: 'solution_path', type: 'string', label: 'Solucion', required: true, enum_values: [], default: '' },
     ],
     phrases: [],

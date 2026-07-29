@@ -79,16 +79,53 @@ class DevOpsAction:
 
 
 # --------------------------------------------------------------------------
-# Params reusados por las 23 entradas. `PRJ` es el PRIMER param de todas.
+# Params reusados por las 23 entradas. `project` es el PRIMER param de todas
+# (test_todas_declaran_project), pero NO es required en todas: ver abajo.
+#
+# --- CORRECCION F7: los params se declaran POR ACCION, no por plantilla ------
+#
+# Hasta la v4 este bloque exportaba tambien `ENV`, un param `environment` de tipo
+# enum con `enum_values=("dev","qa","uat","prod")` y `required=True`, y se lo
+# pegaba como segundo param a 5 de las 7 escrituras copiando el contrato de la
+# accion mas exigente. MEDIDO al construir F7, y es la causa raiz de que la fase
+# quedara bloqueada:
+#
+#   1. Esa tupla de 4 valores NO EXISTE EN NINGUN OTRO LUGAR DEL SISTEMA. Un
+#      barrido de `backend/` + `frontend/src/` encuentra el literal
+#      "dev","qa","uat","prod" en exactamente 2 archivos: este, y la copia
+#      espejada en FALLBACK_META. Ningun endpoint lo recibe, ninguna pantalla lo
+#      ofrece, ninguna config lo define. Era vocabulario inventado.
+#   2. NINGUN endpoint real de las 5 acciones consume un `environment`. Se
+#      verifico binding por binding en frontend/src/services/devopsActionBindings.ts:
+#        - devops.solution.publish   -> DevOpsSolutionPublisher.run(solution_path)
+#        - devops.remote_console.run -> DevOpsRemoteConsole.exec(alias, command, conv?)
+#        - devops.pipeline.trigger   -> CIPipeline.trigger(project, ref, ...)
+#        - devops.publication.run    -> delega en la pantalla (no llama endpoint)
+#        - devops.deployment.execute -> DevOpsDeployments.execute(app_id, targets, ...)
+#          El unico que USABA el valor lo pasaba como la lista de DESTINOS, y los
+#          destinos reales son "__local__" o un alias de servidor
+#          (frontend/src/components/devops/deploymentsModel.ts:90-96), nunca uno
+#          de los 4 valores del enum. La llamada no podia funcionar.
+#   3. `runDevOpsAction` corta con ok:false ANTES de confirmar si falta un param
+#      required. Un enum required que nadie puede proveer = boton muerto con
+#      "Faltan datos obligatorios".
+#
+# La guarda de requeridos NO se toco: sigue bloqueando todo param que el endpoint
+# de verdad necesita. Lo que se corrigio es la DECLARACION, que pedia datos que la
+# llamada nunca recibe. `project` queda required solo donde el endpoint lo recibe.
+#
+# Si alguna vez nace una accion que SI actua sobre un entorno concreto, el shape
+# obligatorio de su param esta especificado por
+# tests/test_devops_action_ratchet.py::test_targets_environment_exige_param_environment
+# (name="environment", type="enum", required=True, enum_values no vacio) — y ese
+# enum tiene que salir de una fuente real, no de una tupla escrita aca.
 # --------------------------------------------------------------------------
 PRJ = ActionParam(name="project", type="string", label="Proyecto", required=True)
-ENV = ActionParam(
-    name="environment",
-    type="enum",
-    label="Entorno",
-    required=True,
-    enum_values=("dev", "qa", "uat", "prod"),
-)
+
+# `project` para las acciones cuyo endpoint real NO lo recibe. Se sigue
+# DECLARANDO (el asistente lo usa para el deep-link y para el encabezado de la
+# tarjeta) pero no bloquea la ejecucion, porque no hay nada que bloquear.
+PRJ_OPT = ActionParam(name="project", type="string", label="Proyecto", required=False)
 
 
 # --------------------------------------------------------------------------
@@ -375,19 +412,21 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
     DevOpsAction(
         id="devops.pipeline.trigger",
         label="Disparar pipeline",
-        summary="Lanza una corrida de la pipeline elegida en el entorno elegido.",
+        # F7: decia "en el entorno elegido". El endpoint identifica la corrida por
+        # su REF (rama): CIPipeline.trigger(project, ref, ...). No hay entorno.
+        summary="Lanza una corrida de la pipeline en la rama elegida.",
         section_id="pipelines",
         nav_path="/devops/pipelines",
         effect="write",
         impact="high",
-        targets_environment=True,
+        targets_environment=False,
         health_key="trigger_enabled",
         flag_key="STACKY_PIPELINE_TRIGGER_ENABLED",
         reach=canonical_reach("write"),
+        # `project` SI lo recibe el endpoint => queda required.
         params=(
             PRJ,
-            ENV,
-            ActionParam(name="pipeline_id", type="string", label="Pipeline",
+            ActionParam(name="pipeline_id", type="string", label="Rama o pipeline",
                         required=True),
         ),
         phrases=(
@@ -398,19 +437,25 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
     DevOpsAction(
         id="devops.deployment.execute",
         label="Ejecutar despliegue",
-        summary="Corre el despliegue elegido en el entorno elegido.",
+        # F7: decia "en el entorno elegido". Los destinos reales son claves de
+        # tarjeta: "__local__" o el alias de un servidor registrado.
+        summary="Corre el despliegue elegido en los destinos elegidos.",
         section_id="despliegues",
         nav_path="/devops/despliegues",
         effect="write",
         impact="high",
-        targets_environment=True,
+        targets_environment=False,
         health_key="deployments_execute_enabled",
         flag_key="STACKY_DEPLOYMENTS_EXECUTE_ENABLED",
         reach=canonical_reach("write"),
+        # `project`: DevOpsDeployments.execute(app_id, targets, ...) no lo recibe.
+        # `targets` reemplaza al `environment` inventado: es el dato que el
+        # endpoint SI consume, y su vocabulario es el real (claves de destino).
         params=(
-            PRJ,
-            ENV,
-            ActionParam(name="deployment_id", type="string", label="Despliegue",
+            PRJ_OPT,
+            ActionParam(name="deployment_id", type="string", label="Aplicacion",
+                        required=True),
+            ActionParam(name="targets", type="string", label="Destinos",
                         required=True),
         ),
         phrases=("ejecutar el despliegue", "hacer el despliegue", "desplegar ahora"),
@@ -418,18 +463,22 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
     DevOpsAction(
         id="devops.publication.run",
         label="Correr publicacion",
-        summary="Ejecuta la publicacion elegida en el entorno elegido.",
+        # F7: decia "en el entorno elegido". La publicacion es una cadena de pasos
+        # sobre un preset del perfil del proyecto; no hay entorno.
+        summary="Ejecuta la publicacion elegida del proyecto activo.",
         section_id="publicaciones",
         nav_path="/devops/publicaciones",
         effect="write",
         impact="high",
-        targets_environment=True,
+        targets_environment=False,
         health_key="one_click_publish_enabled",
         flag_key="STACKY_DEVOPS_ONE_CLICK_PUBLISH_ENABLED",
         reach=canonical_reach("write"),
+        # `project` SI se consume: la cadena arranca con
+        # DevOps.materializePublication(project, presetName). `publication_id` es
+        # el nombre del preset.
         params=(
             PRJ,
-            ENV,
             ActionParam(name="publication_id", type="string", label="Publicacion",
                         required=True),
         ),
@@ -438,18 +487,20 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
     DevOpsAction(
         id="devops.solution.publish",
         label="Publicar solucion",
-        summary="Compila y publica la solucion en el entorno elegido.",
+        # F7: decia "en el entorno elegido". DevOpsSolutionPublisher.run(slug) no
+        # recibe entorno; la salida va a una carpeta propia de Stacky.
+        summary="Compila y publica la solucion elegida.",
         section_id="publicador-soluciones",
         nav_path="/devops/publicador-soluciones",
         effect="write",
         impact="high",
-        targets_environment=True,
+        targets_environment=False,
         health_key="solution_publisher_enabled",
         flag_key="STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED",
         reach=canonical_reach("write"),
+        # `project`: el endpoint no lo recibe (identifica por slug de solucion).
         params=(
-            PRJ,
-            ENV,
+            PRJ_OPT,
             ActionParam(name="solution_path", type="string", label="Solucion",
                         required=True),
         ),
@@ -466,13 +517,15 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
         nav_path="/devops/remote-console",
         effect="write",
         impact="high",
-        targets_environment=True,
+        # F7: actua sobre un SERVIDOR, no sobre un entorno. El summary ya lo decia
+        # bien; era `targets_environment` + el param los que mentian.
+        targets_environment=False,
         health_key="remote_console_enabled",
         flag_key="STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",
         reach=canonical_reach("write"),
+        # `project`: DevOpsRemoteConsole.exec(alias, command, conv?) no lo recibe.
         params=(
-            PRJ,
-            ENV,
+            PRJ_OPT,
             ActionParam(name="server_alias", type="string", label="Servidor",
                         required=True),
             ActionParam(name="command", type="string", label="Comando",
@@ -519,8 +572,10 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
         health_key="build_workshop_enabled",
         flag_key="STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
         reach=canonical_reach("write"),
+        # `project`: DevOpsBuildWorkshop.compile(slugs, unified) no lo recibe, y
+        # el Taller no tiene un proyecto en alcance (su seccion recibe solo `ctx`).
         params=(
-            PRJ,
+            PRJ_OPT,
             ActionParam(name="solution_path", type="string", label="Solucion",
                         required=True),
         ),

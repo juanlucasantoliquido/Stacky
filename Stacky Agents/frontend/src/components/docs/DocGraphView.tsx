@@ -10,12 +10,22 @@
  * Colores leídos de CSS custom properties (theme-aware). Read-only, nunca escribe.
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { DocGraphResponse } from "../../docs/docGraphModel";
 import { filterNodeIds, nodeIndexById } from "../../docs/docGraphModel";
 import { GRAPH_PALETTE_TOKENS, GROUP_SLOT_TOKENS } from "../../docs/graphPalette";
 import { graphExplorerReducer, INITIAL_EXPLORER_STATE } from "../../docs/graphExplorerState";
 import { applyGraphFilters, availableFilterOptions } from "../../docs/graphFilters";
+import { searchGraphNodes, matchAt, matchIdSet } from "../../docs/graphSearch";
+import { focusSubgraph, rankedNeighbors, resolveFocusId } from "../../docs/graphNeighborhood";
+import {
+  collapseGroups,
+  groupKeyFromNodeId,
+  isGroupNodeId,
+  groupLabelOf,
+} from "../../docs/graphGrouping";
 import DocGraphFilterBar from "./DocGraphFilterBar";
+import DocGraphZoomControls from "./DocGraphZoomControls";
 import {
   initLayout,
   stepLayout,
@@ -30,6 +40,12 @@ import {
   toScreen,
   pickVisibleLabels,
   estimateLabelWidth,
+  centerOn,
+  zoomAtCenter,
+  fitViewport,
+  ZOOM_STEP,
+  MIN_SCALE,
+  MAX_SCALE,
   type Viewport,
   type LabelCandidate,
 } from "../../docs/graphViewport";
@@ -140,12 +156,34 @@ export default function DocGraphView({
    *  referencias legítimas a `graph` fuera del efecto. */
   const filterOptions = useMemo(() => availableFilterOptions(graph), [graph]);
 
-  /** El subgrafo que realmente se dibuja. Con la flag OFF es el MISMO objeto que
-   *  `graph` (identidad referencial ⇒ el layout no se re-inicializa, R2). */
-  const visibleGraph = useMemo(
-    () => (explorerEnabled ? applyGraphFilters(graph, ui.filters) : graph),
-    [explorerEnabled, graph, ui.filters]
-  );
+  /**
+   * El subgrafo que realmente se dibuja. Con la flag OFF es el MISMO objeto que
+   * `graph` (identidad referencial ⇒ el layout no se re-inicializa, R2).
+   *
+   * ORDEN FIJO Y OBLIGATORIO: filtros → agrupación → RESOLUCIÓN del foco → foco.
+   * Filtrar después de enfocar daría vecindarios rotos; agrupar después de enfocar
+   * generaría super-nodos parciales; y sin el paso de resolución, colapsar el grupo
+   * del nodo enfocado (o filtrarlo) dejaría la pantalla EN BLANCO (C3 / G13).
+   */
+  const { visibleGraph, effectiveFocusId } = useMemo(() => {
+    if (!explorerEnabled) {
+      return { visibleGraph: graph, effectiveFocusId: null as string | null };
+    }
+    const filtered = applyGraphFilters(graph, ui.filters);
+    const grouped = collapseGroups(filtered, ui.collapsedGroups);
+    const focusId = resolveFocusId(grouped, graph, ui.focusRootId);
+    return {
+      visibleGraph: focusId ? focusSubgraph(grouped, focusId, ui.focusDepth) : grouped,
+      effectiveFocusId: focusId,
+    };
+  }, [
+    explorerEnabled,
+    graph,
+    ui.filters,
+    ui.collapsedGroups,
+    ui.focusRootId,
+    ui.focusDepth,
+  ]);
 
   // índices auxiliares del grafo VISIBLE (C5: si apuntaran a `graph` mientras el
   // layout indexa `visibleGraph`, los labels saldrían del nodo equivocado — R1).
@@ -167,12 +205,99 @@ export default function DocGraphView({
    *  grep-gate de la invariante I1 siga dando exactamente un hit. */
   const totalNodes = graph.nodes.length;
 
-  // ── Plan 268 F1 (B4) — placeholders tipados de las costuras F1→F2 y F1→F5.
-  // F2 REEMPLAZA la primera línea por `matchAt(matches, ui.matchIndex)` y F5 la
-  // segunda por `assignGroupColorSlots(...)`. El TIPO no cambia en ninguna fase,
-  // así que el efecto de sincronización de abajo se escribe UNA sola vez.
-  const activeMatchId: string | null = null; // F2 lo reemplaza
+  // ── Plan 268 F2 — búsqueda navegable sobre el grafo VISIBLE.
+  const matches = useMemo(
+    () => (explorerEnabled ? searchGraphNodes(visibleGraph, ui.query) : []),
+    [explorerEnabled, visibleGraph, ui.query]
+  );
+
+  // Costura F1→F2 resuelta: el placeholder tipado pasa a ser el valor real, SIN
+  // tocar el efecto de sincronización ni la lista de refs (contrato de F1.3-3).
+  const activeMatchId: string | null = matchAt(matches, ui.matchIndex);
   const groupSlots: Map<string, number> = EMPTY_GROUP_SLOTS; // F5 lo reemplaza
+
+  /** (C3) La búsqueda corre sobre lo VISIBLE. Si hay filtros o foco activos, el
+   *  contador lo dice para que nadie interprete que una nota "no está" cuando en
+   *  realidad está filtrada. */
+  const searchScopeIsPartial =
+    ui.focusRootId !== null ||
+    ui.collapsedGroups.length > 0 ||
+    visibleGraph.nodes.length !== totalNodes;
+
+  /** Nodo efectivamente enfocado, resuelto contra el grafo compuesto. `ui.focusRootId`
+   *  es lo que el operador PIDIÓ; `effectiveFocusId` es lo que se puede mostrar. */
+  const focusNode = useMemo(
+    () =>
+      effectiveFocusId ? (visibleGraph.nodes.find((n) => n.id === effectiveFocusId) ?? null) : null,
+    [visibleGraph, effectiveFocusId]
+  );
+
+  /** Vecinos directos del foco, para la lista "Relaciones" del peek (F6). */
+  const focusNeighbors = useMemo(
+    () => (effectiveFocusId ? rankedNeighbors(visibleGraph, effectiveFocusId) : []),
+    [visibleGraph, effectiveFocusId]
+  );
+
+  /** (C3) El operador pidió un foco que la vista actual no puede mostrar. NUNCA se
+   *  limpia solo: se le avisa y él decide (G4). */
+  const focusUnavailable = ui.focusRootId !== null && effectiveFocusId === null;
+  const focusRemapped =
+    effectiveFocusId !== null && effectiveFocusId !== ui.focusRootId && isGroupNodeId(effectiveFocusId);
+
+  /** Plan 268 F3 — atajos de teclado del canvas. Se registran sobre el `.canvasBox`
+   *  (NO sobre `window`: no deben dispararse mientras el operador escribe en otra
+   *  parte de la app) y llaman a los refs de comando que llena el efecto de layout. */
+  function onCanvasKeyDown(evt: ReactKeyboardEvent<HTMLDivElement>) {
+    // Guardia obligatoria: un atajo sin modificador jamás se dispara con el foco
+    // dentro de un campo editable.
+    const t = evt.target as HTMLElement | null;
+    const tag = (t?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select" || t?.isContentEditable) return;
+    const PAN_PX = 40;
+    switch (evt.key) {
+      case "+":
+      case "=":
+        evt.preventDefault();
+        zoomInRef.current();
+        break;
+      case "-":
+        evt.preventDefault();
+        zoomOutRef.current();
+        break;
+      case "0":
+        evt.preventDefault();
+        resetViewRef.current();
+        break;
+      case "f":
+      case "F":
+        evt.preventDefault();
+        fitRef.current();
+        break;
+      case "Escape":
+        evt.preventDefault();
+        dispatch({ type: "CLEAR_FOCUS" });
+        dispatch({ type: "SET_PEEK", nodeId: null });
+        break;
+      case "ArrowLeft":
+        evt.preventDefault();
+        setViewportRef.current(panBy(viewportRef.current, PAN_PX, 0));
+        break;
+      case "ArrowRight":
+        evt.preventDefault();
+        setViewportRef.current(panBy(viewportRef.current, -PAN_PX, 0));
+        break;
+      case "ArrowUp":
+        evt.preventDefault();
+        setViewportRef.current(panBy(viewportRef.current, 0, PAN_PX));
+        break;
+      case "ArrowDown":
+        evt.preventDefault();
+        setViewportRef.current(panBy(viewportRef.current, 0, -PAN_PX));
+        break;
+      default:
+        break;
+    }
+  }
 
   // UN solo efecto de sincronización de refs (no cuatro), que además fuerza el
   // redibujo en modo estático. Regla de oro: dentro de draw() se lee xxxRef.current,
@@ -184,12 +309,38 @@ export default function DocGraphView({
     if (stateRef.current && !stateRef.current.animated) drawRef.current();
   }, [activeMatchId, groupSlots, explorerEnabled]);
 
-  // Recalcular el set de filtro cuando cambia la query (sin reiniciar el layout).
+  // Recalcular el set de resaltado cuando cambia la búsqueda (sin reiniciar el
+  // layout). Con la flag ON la fuente de verdad es ui.query (vía `matches`); con
+  // la flag OFF sigue siendo el useState `query`, exactamente como en el 111.
   useEffect(() => {
-    filterRef.current = filterNodeIds(graph, query);
+    filterRef.current = explorerEnabled ? matchIdSet(matches) : filterNodeIds(graph, query);
     // en modo estático hay que forzar un redibujo
     if (stateRef.current && !stateRef.current.animated) drawRef.current();
-  }, [query, graph]);
+  }, [explorerEnabled, matches, query, graph]);
+
+  // Plan 268 F2.2-4 — encuadrar el resultado ACTIVO de la búsqueda. El findIndex
+  // corre una vez por salto (no por frame). No puede llamar a `setViewport` a
+  // secas: esa función vive dentro de OTRO efecto (B5) ⇒ se usa el ref de comando,
+  // que F3 llena. Antes de F3 es el no-op inicial: la fase compila y no hace nada.
+  useEffect(() => {
+    if (!explorerEnabled || !activeMatchId) return;
+    const st = stateRef.current;
+    if (!st) return;
+    const idx = st.nodes.findIndex((n) => n.id === activeMatchId);
+    if (idx < 0) return;
+    const n = st.nodes[idx];
+    const { w: cw, h: ch } = canvasSizeRef.current;
+    setViewportRef.current(centerOn(viewportRef.current, n.x, n.y, cw, ch));
+  }, [explorerEnabled, activeMatchId]);
+
+  // Plan 268 F4.2-4 — encuadre automático al enfocar / cambiar de profundidad. No es
+  // autonomía (G4): es la consecuencia visual directa de un click del operador. El
+  // rAF espera a que el layout ya tenga posiciones.
+  useEffect(() => {
+    if (!explorerEnabled || !ui.focusRootId) return;
+    const raf = requestAnimationFrame(() => fitRef.current());
+    return () => cancelAnimationFrame(raf);
+  }, [explorerEnabled, ui.focusRootId, ui.focusDepth]);
 
   // Redibujar cuando cambia la selección (modo estático).
   useEffect(() => {
@@ -222,9 +373,20 @@ export default function DocGraphView({
       return { w, h };
     }
 
+    /** Plan 268 F3 (C7) — re-init del viewport SIN dibujar. Se usa solo en los dos
+     *  caminos que re-inicializan el layout y dibujan inmediatamente después (evita
+     *  el doble draw). Lo importante es que `viewScale` NUNCA queda desincronizado:
+     *  ese era el bug de C7 (el indicador decía 195% con el grafo al 100%). */
+    function initViewport() {
+      viewportRef.current = IDENTITY;
+      setViewScale(IDENTITY.scale);
+    }
+
+    let fitRaf: number | null = null;
+
     let { w, h } = sizeCanvas();
     stateRef.current = initLayout(visibleGraph, w, h, Boolean(reducedMotion));
-    viewportRef.current = IDENTITY;
+    initViewport();
 
     function neighborsOf(idx: number, state: LayoutState): Set<number> {
       const set = new Set<number>();
@@ -305,6 +467,16 @@ export default function DocGraphView({
           ctx.lineWidth = 1.5 / vp.scale;
           ctx.stroke();
         }
+        // Plan 268 F2.2-5 — anillo del resultado ACTIVO de la búsqueda. Se lee el
+        // REF (I2): con la variable del render, el anillo quedaría clavado en el
+        // primer resultado y apretar Enter movería el contador pero no el dibujo.
+        if (activeMatchIdRef.current && node.id === activeMatchIdRef.current) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.r + 3 / vp.scale, 0, Math.PI * 2);
+          ctx.strokeStyle = palette.halo;
+          ctx.lineWidth = 2 / vp.scale;
+          ctx.stroke();
+        }
       }
       ctx.restore();
 
@@ -318,10 +490,19 @@ export default function DocGraphView({
         const isHover = i === hover;
         const isSelected = Boolean(selectedNodeId && id === selectedNodeId);
         const isNeighbor = hover !== null && hoverNeighbors!.has(i);
+        const isActiveMatch = activeMatchIdRef.current === id; // I2: el ref, no el render
         const isHub = node.r >= 9;
-        if (!isHover && !isSelected && !isNeighbor && !isHub && !zoomedIn && !hasFilter)
+        if (
+          !isHover &&
+          !isSelected &&
+          !isNeighbor &&
+          !isActiveMatch &&
+          !isHub &&
+          !zoomedIn &&
+          !hasFilter
+        )
           continue;
-        if (hover !== null && !isHover && !isNeighbor && !isSelected) continue;
+        if (hover !== null && !isHover && !isNeighbor && !isSelected && !isActiveMatch) continue;
         const g = visibleGraph.nodes[i];
         const text = g ? g.label : id;
         const p = toScreen(vp, node.x, node.y);
@@ -333,7 +514,15 @@ export default function DocGraphView({
           y: p.y,
           width: estimateLabelWidth(text, LABEL_FONT_PX),
           height: LABEL_HEIGHT_PX,
-          priority: isHover ? 1000 : isSelected ? 900 : isNeighbor ? 500 : node.r,
+          priority: isHover
+            ? 1000
+            : isActiveMatch
+              ? 950 // Plan 268 F2.2-5 — entre hover (1000) y seleccionado (900)
+              : isSelected
+                ? 900
+                : isNeighbor
+                  ? 500
+                  : node.r,
         });
       }
       const visible = pickVisibleLabels(candidates, 60);
@@ -363,6 +552,32 @@ export default function DocGraphView({
     }
     drawRef.current = draw;
 
+    /**
+     * Plan 268 F3 (C7) — ÚNICO lugar del componente donde se escribe
+     * viewportRef.current en respuesta a un gesto. Mantiene el % de zoom
+     * sincronizado y redibuja. Vive DENTRO del efecto de layout; los llamadores
+     * externos (JSX y otros efectos) pasan por setViewportRef (B5).
+     */
+    function setViewport(next: Viewport) {
+      if (next === viewportRef.current) return; // zoomAt devuelve el MISMO objeto si clampeó
+      viewportRef.current = next;
+      setViewScale(next.scale);
+      draw();
+    }
+
+    // Los 4 refs de comando ya están DECLARADOS en el cuerpo del componente (F1);
+    // acá solo se LLENAN. Esta es la línea que cierra las costuras F2→F3 y F7→F3:
+    // sin ella el encuadre al resultado de búsqueda y el click del minimapa quedan
+    // como no-ops SILENCIOSOS (no fallan: simplemente no hacen nada).
+    setViewportRef.current = setViewport;
+    zoomInRef.current = () => setViewport(zoomAtCenter(viewportRef.current, ZOOM_STEP, w, h));
+    zoomOutRef.current = () => setViewport(zoomAtCenter(viewportRef.current, 1 / ZOOM_STEP, w, h));
+    fitRef.current = () => {
+      const st = stateRef.current;
+      if (!st || !st.nodes.length) return;
+      setViewport(fitViewport(st.nodes.map((n) => ({ x: n.x, y: n.y, r: n.r })), w, h, 40));
+    };
+
     function tick() {
       const state = stateRef.current;
       if (!state) return;
@@ -380,10 +595,19 @@ export default function DocGraphView({
       draw();
     }
 
-    resetViewRef.current = () => {
-      viewportRef.current = IDENTITY;
-      draw();
-    };
+    resetViewRef.current = () => setViewport(IDENTITY);
+
+    // Plan 268 F3 (C7) — re-encuadre tras cada re-init, SOLO en modo explorador.
+    // Cuando el operador toca un filtro el subgrafo aparece encuadrado en vez de
+    // aparecer a escala 1 con la mitad afuera. No es autonomía (G4): es la
+    // consecuencia visual directa de su click. El rAF espera a que staticLayout /
+    // el primer stepLayout ya hayan puesto posiciones.
+    if (explorerEnabledRef.current && visibleGraph.nodes.length > 0) {
+      fitRaf = requestAnimationFrame(() => {
+        fitRaf = null;
+        fitRef.current();
+      });
+    }
 
     // ── Interacción ──────────────────────────────────────────────────────────
     function toLocal(ev: PointerEvent | WheelEvent): { x: number; y: number } {
@@ -433,6 +657,10 @@ export default function DocGraphView({
     let panActive = false;
 
     function onPointerDown(ev: PointerEvent) {
+      // (C9) SIN ESTO LOS ATAJOS DE TECLADO ESTÁN MUERTOS: el click cae en el
+      // <canvas> hijo y `pointerdown` NO enfoca a un ancestro con tabIndex, así que
+      // el keydown se iría al <body>. Primera instrucción, a propósito.
+      boxRef.current?.focus({ preventScroll: true });
       const { x, y } = toLocal(ev);
       downPos = { x, y };
       movedFar = false;
@@ -457,9 +685,8 @@ export default function DocGraphView({
         if (dx * dx + dy * dy > 9) movedFar = true;
       }
       if (panActive && downPos) {
-        viewportRef.current = panBy(vp, x - downPos.x, y - downPos.y);
+        setViewport(panBy(vp, x - downPos.x, y - downPos.y)); // C7: escritor único
         downPos = { x, y };
-        draw();
         return;
       }
       const drag = dragRef.current;
@@ -497,7 +724,19 @@ export default function DocGraphView({
       const state = stateRef.current;
       if (!state) return;
       const id = state.nodes[idx].id;
-      if (kindById.get(id) === "note") onOpenNoteById(id);
+      // TABLA ÚNICA DE GESTOS (F4.2-1). Se lee explorerEnabledRef, NO la prop: con
+      // filtros vacíos `visibleGraph === graph`, así que este efecto NO se re-crea
+      // cuando la flag llega del backend y la prop del closure quedaría en false.
+      if (!explorerEnabledRef.current) {
+        if (kindById.get(id) === "note") onOpenNoteById(id); // comportamiento del 111
+        return;
+      }
+      if (isGroupNodeId(id)) {
+        const key = groupKeyFromNodeId(id);
+        if (key) dispatch({ type: "TOGGLE_GROUP_COLLAPSED", groupKey: key }); // des-colapsa
+        return;
+      }
+      dispatch({ type: "FOCUS_NODE", nodeId: id }); // enfoca y abre el peek
     }
 
     function onPointerLeave() {
@@ -513,16 +752,26 @@ export default function DocGraphView({
       ev.preventDefault();
       const { x, y } = toLocal(ev);
       const factor = Math.exp(-ev.deltaY * 0.0015);
-      const next = zoomAt(viewportRef.current, factor, x, y);
-      if (next === viewportRef.current) return;
-      viewportRef.current = next;
-      const state = stateRef.current;
-      if (state && !state.animated) draw();
-      else draw(); // feedback inmediato también en modo animado
+      setViewport(zoomAt(viewportRef.current, factor, x, y)); // C7: escritor único
     }
 
-    function onDblClick() {
-      resetViewRef.current();
+    function onDblClick(ev: MouseEvent) {
+      // TABLA ÚNICA DE GESTOS (F4.2-1). En modo 111 el doble click SIEMPRE resetea.
+      if (!explorerEnabledRef.current) {
+        resetViewRef.current();
+        return;
+      }
+      const rect = canvas!.getBoundingClientRect();
+      const idx = nearestNode(ev.clientX - rect.left, ev.clientY - rect.top);
+      if (idx === null) {
+        resetViewRef.current(); // doble click al vacío: el reset del 111 sigue vivo
+        return;
+      }
+      const state = stateRef.current;
+      if (!state) return;
+      const id = state.nodes[idx].id;
+      // note → abre en el Lector; code / missing / super-nodo → nada (no hay doc).
+      if (!isGroupNodeId(id) && kindById.get(id) === "note") onOpenNoteById(id);
     }
 
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -539,7 +788,7 @@ export default function DocGraphView({
       w = size.w;
       h = size.h;
       stateRef.current = initLayout(visibleGraph, w, h, Boolean(reducedMotion));
-      viewportRef.current = IDENTITY;
+      initViewport(); // C7: el % de zoom no puede quedar mintiendo tras un resize
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -557,6 +806,10 @@ export default function DocGraphView({
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+      if (fitRaf !== null) {
+        cancelAnimationFrame(fitRaf);
+        fitRaf = null;
       }
       ro.disconnect();
       canvas.removeEventListener("pointerdown", onPointerDown);
@@ -591,10 +844,55 @@ export default function DocGraphView({
           type="search"
           className={styles.search}
           placeholder="Buscar nodo..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          value={explorerEnabled ? ui.query : query}
+          onChange={(e) =>
+            explorerEnabled
+              ? dispatch({ type: "SET_QUERY", query: e.target.value })
+              : setQuery(e.target.value)
+          }
+          onKeyDown={(ev) => {
+            if (!explorerEnabled) return;
+            if (ev.key === "Enter") {
+              ev.preventDefault();
+              dispatch({
+                type: ev.shiftKey ? "PREV_MATCH" : "NEXT_MATCH",
+                total: matches.length,
+              });
+            } else if (ev.key === "Escape") {
+              ev.preventDefault();
+              dispatch({ type: "SET_QUERY", query: "" });
+            }
+          }}
           aria-label="Buscar nodo en el grafo"
         />
+        {explorerEnabled ? (
+          <span className={ex.searchRow}>
+            <span className={ex.matchCount}>
+              {matches.length ? ui.matchIndex + 1 : 0} de {matches.length}
+              {searchScopeIsPartial ? " (en lo visible)" : ""}
+            </span>
+            <button
+              type="button"
+              className={ex.navBtn}
+              title="Coincidencia anterior"
+              aria-label="Coincidencia anterior"
+              disabled={!matches.length}
+              onClick={() => dispatch({ type: "PREV_MATCH", total: matches.length })}
+            >
+              &#9650;
+            </button>
+            <button
+              type="button"
+              className={ex.navBtn}
+              title="Coincidencia siguiente"
+              aria-label="Coincidencia siguiente"
+              disabled={!matches.length}
+              onClick={() => dispatch({ type: "NEXT_MATCH", total: matches.length })}
+            >
+              &#9660;
+            </button>
+          </span>
+        ) : null}
         <div className={styles.legend} aria-hidden="false">
           <span className={styles.legendItem}>
             <span className={styles.swatch} style={{ background: "var(--accent, #388bfd)" }} />
@@ -618,10 +916,66 @@ export default function DocGraphView({
           Centrar
         </button>
       </div>
+      {explorerEnabled && ui.focusRootId ? (
+        <div className={ex.breadcrumbs}>
+          <button
+            type="button"
+            className={ex.navBtn}
+            onClick={() => dispatch({ type: "FOCUS_BACK" })}
+            disabled={ui.focusHistory.length === 0 && !ui.focusRootId}
+            title="Volver al nodo anterior"
+          >
+            &#8592; Volver
+          </button>
+          {focusUnavailable ? (
+            <span className={ex.focusWarn}>
+              El nodo enfocado no está en la vista actual (lo ocultó un filtro o un grupo
+              colapsado).
+            </span>
+          ) : (
+            <span className={ex.focusLabel}>
+              Foco: {focusNode?.label ?? effectiveFocusId}
+              {focusRemapped
+                ? ` (${groupLabelOf(groupKeyFromNodeId(effectiveFocusId!) ?? "")} colapsado)`
+                : ""}
+            </span>
+          )}
+          <span className={ex.depthGroup}>
+            {[1, 2, 3].map((d) => (
+              <button
+                key={d}
+                type="button"
+                className={ex.navBtn}
+                aria-pressed={ui.focusDepth === d}
+                onClick={() => dispatch({ type: "SET_FOCUS_DEPTH", depth: d })}
+                title={`Mostrar vecinos a ${d} salto${d > 1 ? "s" : ""}`}
+              >
+                {d}
+              </button>
+            ))}
+          </span>
+          <button
+            type="button"
+            className={ex.navBtn}
+            onClick={() => dispatch({ type: "CLEAR_FOCUS" })}
+            title="Volver a ver el grafo completo"
+          >
+            Ver todo
+          </button>
+          <span className={ex.counter}>
+            {nodeCount} de {totalNodes} nodos
+          </span>
+        </div>
+      ) : null}
       {/* Plan 268 — con la flag OFF este contenedor es `display: contents`, así que
           el canvas sigue siendo hijo directo del flex de .wrap (layout del 111). */}
       <div className={explorerEnabled ? ex.body : ex.bodyPlain}>
-        <div className={styles.canvasBox} ref={boxRef}>
+        <div
+          className={styles.canvasBox}
+          ref={boxRef}
+          tabIndex={explorerEnabled ? 0 : undefined}
+          onKeyDown={explorerEnabled ? onCanvasKeyDown : undefined}
+        >
           {nodeCount === 0 ? (
             <div className={styles.empty}>
               {explorerEnabled && totalNodes > 0
@@ -631,8 +985,21 @@ export default function DocGraphView({
           ) : (
             <>
               <canvas ref={canvasRef} className={styles.canvas} />
+              {explorerEnabled ? (
+                <DocGraphZoomControls
+                  scale={viewScale}
+                  onZoomIn={() => zoomInRef.current()}
+                  onZoomOut={() => zoomOutRef.current()}
+                  onFit={() => fitRef.current()}
+                  onReset={() => resetViewRef.current()}
+                  canZoomIn={viewScale < MAX_SCALE}
+                  canZoomOut={viewScale > MIN_SCALE}
+                />
+              ) : null}
               <div className={styles.hint} aria-hidden="true">
-                Rueda: zoom · Arrastrá el fondo: mover · Click en una nota: abrirla
+                {explorerEnabled
+                  ? "Rueda o + / −: zoom · F: ajustar · 0: restablecer · Arrastrá el fondo: mover · Click: enfocar · Doble click: abrir · Click en el grafo para usar el teclado"
+                  : "Rueda: zoom · Arrastrá el fondo: mover · Click en una nota: abrirla"}
               </div>
             </>
           )}

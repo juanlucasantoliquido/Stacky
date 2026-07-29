@@ -400,3 +400,18 @@ export function actionMetaFrom(
   const servido = (catalogo ?? []).find((a) => a.id === id);
   return servido ?? FALLBACK_META[id];
 }
+
+/** Metadatos de una de las 7 acciones que los botones manuales recablean (F7).
+ *  Sale del fallback EMBEBIDO a proposito: asi el boton sigue confirmando con la
+ *  misma severidad aunque el catalogo no se haya podido pedir (flag OFF => 404).
+ *  El test 5 de devopsActionBindings.test.ts compara ese fallback campo a campo
+ *  contra el .py del backend, asi que no puede aflojarse en silencio. */
+export function actionMeta(id: string): DevOpsActionMeta {
+  const meta = FALLBACK_META[id];
+  if (!meta) {
+    throw new Error(
+      `plan 267 F7: ${id} no esta en FALLBACK_META; agregalo antes de recablear su boton`
+    );
+  }
+  return meta;
+}

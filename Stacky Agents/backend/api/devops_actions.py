@@ -52,6 +52,33 @@ def _health_payload_for_catalog() -> dict:
         return {}
 
 
+def _log_si_quedo_bloqueada(action_id: str, blocked_reason: str) -> None:
+    """Deja UNA linea de log cuando una propuesta sale bloqueada.
+
+    Existe para que la huella `plan267-propuesta-permanentemente-bloqueada` de
+    docs/sistema/error_fingerprints.json tenga un `log_pattern` REAL: sin esta
+    linea el sintoma (blocked_reason distinto de "" de forma permanente) no deja
+    rastro en ningun log y la huella seria una regex que nunca matchea.
+
+    CERO PII: se registran SOLO el action_id y el blocked_reason, que son
+    constantes del catalogo. NO se registra el texto que escribio el operador, ni
+    el proyecto, ni el entorno, ni ninguna ruta suya. NUNCA lanza.
+    """
+    if not blocked_reason:
+        return
+    try:
+        from services.stacky_logger import logger as stacky_logger
+
+        stacky_logger.warning(
+            "devops_action_propose",
+            "proposal_blocked",
+            action_id=action_id,
+            blocked_reason=blocked_reason,
+        )
+    except Exception:  # pragma: no cover - el log nunca puede romper la request
+        pass
+
+
 @bp.get("/catalog")
 def get_catalog():
     if _catalog_off():
@@ -104,6 +131,7 @@ def propose_action():
     prop = dap.build_proposal(top, supplied, matches[0].score, alts, agent_write)
     if alts:
         prop = replace(prop, blocked_reason=dap.BLOCKED_AMBIGUOUS)
+    _log_si_quedo_bloqueada(prop.action_id, prop.blocked_reason)
     return jsonify({"ok": True, "proposal": dap.proposal_to_dict(prop)})
 
 

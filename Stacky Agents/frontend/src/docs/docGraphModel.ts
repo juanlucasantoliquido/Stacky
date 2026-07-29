@@ -164,3 +164,15 @@ export function summarizeGraph(graph: DocGraphResponse): DocCoverageSummary {
     staleNotes: graph?.stale_stats?.stale_notes,  // Plan 114 — undefined si flag OFF
   };
 }
+
+/** Índice id → posición en graph.nodes. O(n) una vez; reemplaza findIndex por label/frame.
+ *  Grafo vacío/ausente → Map vacío. Ids duplicados: gana la PRIMERA aparición.
+ *  Plan 268 F0.3 (KPI K8: mata un O(n·L) por frame en el dibujo de labels). */
+export function nodeIndexById(graph: DocGraphResponse | undefined): Map<string, number> {
+  const m = new Map<string, number>();
+  const nodes = graph?.nodes ?? [];
+  for (let i = 0; i < nodes.length; i++) {
+    if (!m.has(nodes[i].id)) m.set(nodes[i].id, i);
+  }
+  return m;
+}

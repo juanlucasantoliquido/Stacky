@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summarizeGraph, type DocGraphResponse } from "./docGraphModel";
+import { summarizeGraph, nodeIndexById, type DocGraphResponse } from "./docGraphModel";
 
 function baseGraph(overrides: Partial<DocGraphResponse> = {}): DocGraphResponse {
   return {
@@ -101,5 +101,32 @@ describe("summarizeGraph", () => {
     expect(s.notes).toBe(1);
     expect(s.codeRefs).toBe(1);
     expect(s.missing).toBe(1);
+  });
+});
+
+// ── Plan 268 F0.3 — indice id -> posicion (mata el findIndex por label/frame) ──
+
+describe("nodeIndexById (plan 268 F0.3)", () => {
+  it("nodeIndexById mapea cada id a su posicion", () => {
+    const g = baseGraph({ nodes: [note("a", "a.md"), note("b", "b.md"), note("c", "c.md")] });
+    const idx = nodeIndexById(g);
+    expect(idx.get("a")).toBe(0);
+    expect(idx.get("b")).toBe(1);
+    expect(idx.get("c")).toBe(2);
+    expect(idx.size).toBe(3);
+  });
+
+  it("nodeIndexById con grafo vacio devuelve Map vacio", () => {
+    expect(nodeIndexById(baseGraph()).size).toBe(0);
+  });
+
+  it("nodeIndexById con undefined no lanza", () => {
+    expect(() => nodeIndexById(undefined)).not.toThrow();
+    expect(nodeIndexById(undefined).size).toBe(0);
+  });
+
+  it("nodeIndexById con ids duplicados: gana la PRIMERA aparicion", () => {
+    const g = baseGraph({ nodes: [note("dup", "uno.md"), note("dup", "dos.md")] });
+    expect(nodeIndexById(g).get("dup")).toBe(0);
   });
 });

@@ -9,9 +9,13 @@
  * (pickVisibleLabels). La búsqueda resalta nodos por label (filterNodeIds).
  * Colores leídos de CSS custom properties (theme-aware). Read-only, nunca escribe.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { DocGraphResponse } from "../../docs/docGraphModel";
-import { filterNodeIds } from "../../docs/docGraphModel";
+import { filterNodeIds, nodeIndexById } from "../../docs/docGraphModel";
+import { GRAPH_PALETTE_TOKENS, GROUP_SLOT_TOKENS } from "../../docs/graphPalette";
+import { graphExplorerReducer, INITIAL_EXPLORER_STATE } from "../../docs/graphExplorerState";
+import { applyGraphFilters, availableFilterOptions } from "../../docs/graphFilters";
+import DocGraphFilterBar from "./DocGraphFilterBar";
 import {
   initLayout,
   stepLayout,
@@ -30,11 +34,16 @@ import {
   type LabelCandidate,
 } from "../../docs/graphViewport";
 import styles from "./DocGraphView.module.css";
+import ex from "./DocGraphExplorer.module.css";
 
 interface DocGraphViewProps {
   graph: DocGraphResponse;
   onOpenNoteById: (nodeId: string) => void;
   selectedNodeId?: string | null;
+  /** Plan 268 — si false/undefined, el componente se comporta EXACTAMENTE como en el 111. */
+  explorerEnabled?: boolean;
+  /** Plan 268 F6 — necesario para el peek. */
+  projectName?: string;
 }
 
 interface Palette {
@@ -47,24 +56,25 @@ interface Palette {
   labelBg: string;
   halo: string;
   ring: string;
+  /** Plan 268 F0.6 — un color por SLOT de grupo (F5). Orden = GROUP_SLOT_TOKENS. */
+  groups: string[];
 }
 
 function readPalette(el: HTMLElement): Palette {
   const cs = getComputedStyle(el);
-  const v = (name: string, fallback: string) => {
-    const raw = cs.getPropertyValue(name).trim();
-    return raw || fallback;
-  };
+  const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+  const t = GRAPH_PALETTE_TOKENS;
   return {
-    note: v("--color-accent", "#4a9eff"),
-    code: v("--color-success", "#3fb950"),
-    missing: v("--color-danger", "#f85149"),
-    edge: v("--color-border", "#3a3a3a"),
-    stale: v("--color-danger", "#f85149"),
-    label: v("--color-text", "#d0d4da"),
-    labelBg: v("--color-surface", "#141414"),
-    halo: v("--color-accent", "#4a9eff"),
-    ring: v("--color-text", "#e6e6e6"),
+    note: v(t.note.token, t.note.fallback),
+    code: v(t.code.token, t.code.fallback),
+    missing: v(t.missing.token, t.missing.fallback),
+    edge: v(t.edge.token, t.edge.fallback),
+    stale: v(t.stale.token, t.stale.fallback),
+    label: v(t.label.token, t.label.fallback),
+    labelBg: v(t.labelBg.token, t.labelBg.fallback),
+    halo: v(t.halo.token, t.halo.fallback),
+    ring: v(t.ring.token, t.ring.fallback),
+    groups: GROUP_SLOT_TOKENS.map((g) => v(g.token, g.fallback)), // Plan 268 F5
   };
 }
 
@@ -77,10 +87,16 @@ function colorForGroup(group: string, pal: Palette): string {
 const LABEL_FONT_PX = 11;
 const LABEL_HEIGHT_PX = 15;
 
+/** Plan 268 F1 (B4) — Map vacío como CONSTANTE de módulo: si se creara uno nuevo por
+ *  render, el efecto de sincronización de I2 se dispararía en cada render. */
+const EMPTY_GROUP_SLOTS: Map<string, number> = new Map();
+
 export default function DocGraphView({
   graph,
   onOpenNoteById,
   selectedNodeId,
+  explorerEnabled,
+  projectName,
 }: DocGraphViewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -94,18 +110,79 @@ export default function DocGraphView({
   const viewportRef = useRef<Viewport>(IDENTITY);
   const resetViewRef = useRef<() => void>(() => {});
 
-  const [query, setQuery] = useState("");
+  // ── Plan 268 F1 — refs que lee draw() (invariante I2 / guardarraíl G12) ─────
+  // draw() vive DENTRO del efecto de layout (deps [visibleGraph, selectedNodeId]):
+  // cualquier valor de React que lea directamente queda congelado en el closure.
+  // Se declaran TODOS acá aunque los llenen fases posteriores, para no volver a
+  // tocar la firma del efecto ni este bloque nunca más.
+  const activeMatchIdRef = useRef<string | null>(null); // F2 — resultado de búsqueda activo
+  const groupSlotsRef = useRef<Map<string, number>>(EMPTY_GROUP_SLOTS); // F5 — slot de color por grupo
+  const explorerEnabledRef = useRef<boolean>(false); // F7 — gatea el LOD y el minimapa
+  const canvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 }); // F2/F3 — encuadre
 
-  // índices auxiliares del grafo
+  // ── refs de COMANDO (B5): funciones definidas DENTRO del efecto de layout y
+  //    llamadas desde AFUERA (JSX u otros efectos). Un efecto no puede ver el
+  //    closure de otro, así que este es el único puente legítimo. Mismo patrón
+  //    que resetViewRef / drawRef.
+  const setViewportRef = useRef<(next: Viewport) => void>(() => {});
+  const zoomInRef = useRef<() => void>(() => {});
+  const zoomOutRef = useRef<() => void>(() => {});
+  const fitRef = useRef<() => void>(() => {});
+
+  const [query, setQuery] = useState("");
+  const [viewScale, setViewScale] = useState(1);
+
+  // ── Plan 268 F1 — estado del explorador (puro, en docs/graphExplorerState.ts)
+  const [ui, dispatch] = useReducer(graphExplorerReducer, INITIAL_EXPLORER_STATE);
+
+  /** Opciones de la barra: derivadas del grafo COMPLETO a propósito (la barra no
+   *  debe cambiar de forma cuando el operador filtra). Es una de las DOS únicas
+   *  referencias legítimas a `graph` fuera del efecto. */
+  const filterOptions = useMemo(() => availableFilterOptions(graph), [graph]);
+
+  /** El subgrafo que realmente se dibuja. Con la flag OFF es el MISMO objeto que
+   *  `graph` (identidad referencial ⇒ el layout no se re-inicializa, R2). */
+  const visibleGraph = useMemo(
+    () => (explorerEnabled ? applyGraphFilters(graph, ui.filters) : graph),
+    [explorerEnabled, graph, ui.filters]
+  );
+
+  // índices auxiliares del grafo VISIBLE (C5: si apuntaran a `graph` mientras el
+  // layout indexa `visibleGraph`, los labels saldrían del nodo equivocado — R1).
   const kindById = useMemo(() => {
     const m = new Map<string, "note" | "code" | "missing">();
-    for (const n of graph.nodes) m.set(n.id, n.kind);
+    for (const n of visibleGraph.nodes) m.set(n.id, n.kind);
     return m;
-  }, [graph]);
+  }, [visibleGraph]);
 
-  const orphanSet = useMemo(() => new Set(graph.orphans ?? []), [graph]);
+  const orphanSet = useMemo(() => new Set(visibleGraph.orphans ?? []), [visibleGraph]);
 
-  const nodeCount = graph.nodes.length;
+  /** Plan 268 F0.3 — id → posición. Reemplaza el findIndex O(n) por label/frame (K8). */
+  const indexById = useMemo(() => nodeIndexById(visibleGraph), [visibleGraph]);
+
+  const nodeCount = visibleGraph.nodes.length;
+
+  /** Denominador del contador "N de TOTAL". Es la SEGUNDA (y última) referencia
+   *  legítima a `graph` fuera del efecto; se extrae a una constante para que el
+   *  grep-gate de la invariante I1 siga dando exactamente un hit. */
+  const totalNodes = graph.nodes.length;
+
+  // ── Plan 268 F1 (B4) — placeholders tipados de las costuras F1→F2 y F1→F5.
+  // F2 REEMPLAZA la primera línea por `matchAt(matches, ui.matchIndex)` y F5 la
+  // segunda por `assignGroupColorSlots(...)`. El TIPO no cambia en ninguna fase,
+  // así que el efecto de sincronización de abajo se escribe UNA sola vez.
+  const activeMatchId: string | null = null; // F2 lo reemplaza
+  const groupSlots: Map<string, number> = EMPTY_GROUP_SLOTS; // F5 lo reemplaza
+
+  // UN solo efecto de sincronización de refs (no cuatro), que además fuerza el
+  // redibujo en modo estático. Regla de oro: dentro de draw() se lee xxxRef.current,
+  // NUNCA la variable del render.
+  useEffect(() => {
+    activeMatchIdRef.current = activeMatchId;
+    groupSlotsRef.current = groupSlots;
+    explorerEnabledRef.current = Boolean(explorerEnabled);
+    if (stateRef.current && !stateRef.current.animated) drawRef.current();
+  }, [activeMatchId, groupSlots, explorerEnabled]);
 
   // Recalcular el set de filtro cuando cambia la query (sin reiniciar el layout).
   useEffect(() => {
@@ -141,11 +218,12 @@ export default function DocGraphView({
       canvas!.height = Math.floor(h * dpr);
       const ctx = canvas!.getContext("2d");
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvasSizeRef.current = { w, h }; // Plan 268 I2 — sin esto el encuadre usa 0×0
       return { w, h };
     }
 
     let { w, h } = sizeCanvas();
-    stateRef.current = initLayout(graph, w, h, Boolean(reducedMotion));
+    stateRef.current = initLayout(visibleGraph, w, h, Boolean(reducedMotion));
     viewportRef.current = IDENTITY;
 
     function neighborsOf(idx: number, state: LayoutState): Set<number> {
@@ -244,7 +322,7 @@ export default function DocGraphView({
         if (!isHover && !isSelected && !isNeighbor && !isHub && !zoomedIn && !hasFilter)
           continue;
         if (hover !== null && !isHover && !isNeighbor && !isSelected) continue;
-        const g = graph.nodes[i];
+        const g = visibleGraph.nodes[i];
         const text = g ? g.label : id;
         const p = toScreen(vp, node.x, node.y);
         // fuera de pantalla: no compite por espacio
@@ -263,8 +341,8 @@ export default function DocGraphView({
       ctx.textBaseline = "middle";
       for (const c of candidates) {
         if (!visible.has(c.id)) continue;
-        const idx = graph.nodes.findIndex((n) => n.id === c.id);
-        const text = idx >= 0 ? graph.nodes[idx].label : c.id;
+        const idx = indexById.get(c.id);
+        const text = idx !== undefined ? visibleGraph.nodes[idx].label : c.id;
         // pill de fondo para legibilidad sobre aristas
         ctx.globalAlpha = 0.82;
         ctx.fillStyle = pal.labelBg;
@@ -460,7 +538,7 @@ export default function DocGraphView({
       const size = sizeCanvas();
       w = size.w;
       h = size.h;
-      stateRef.current = initLayout(graph, w, h, Boolean(reducedMotion));
+      stateRef.current = initLayout(visibleGraph, w, h, Boolean(reducedMotion));
       viewportRef.current = IDENTITY;
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
@@ -489,10 +567,25 @@ export default function DocGraphView({
       canvas.removeEventListener("dblclick", onDblClick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, selectedNodeId]);
+  }, [visibleGraph, selectedNodeId]);
 
   return (
     <div className={styles.wrap}>
+      {explorerEnabled ? (
+        <DocGraphFilterBar
+          options={filterOptions}
+          filters={ui.filters}
+          onToggleSource={(id) => dispatch({ type: "TOGGLE_SOURCE", sourceId: id })}
+          onToggleKind={(kind) => dispatch({ type: "TOGGLE_KIND", kind })}
+          onToggleEdgeKind={(edgeKind) => dispatch({ type: "TOGGLE_EDGE_KIND", edgeKind })}
+          onSetMinDegree={(n) => dispatch({ type: "SET_MIN_DEGREE", minDegree: n })}
+          onToggleHideOrphans={() => dispatch({ type: "TOGGLE_HIDE_ORPHANS" })}
+          onToggleOnlyStale={() => dispatch({ type: "TOGGLE_ONLY_STALE" })}
+          onReset={() => dispatch({ type: "RESET_FILTERS" })}
+          visibleNodes={visibleGraph.nodes.length}
+          totalNodes={totalNodes}
+        />
+      ) : null}
       <div className={styles.toolbar}>
         <input
           type="search"
@@ -504,15 +597,15 @@ export default function DocGraphView({
         />
         <div className={styles.legend} aria-hidden="false">
           <span className={styles.legendItem}>
-            <span className={styles.swatch} style={{ background: "var(--color-accent, #4a9eff)" }} />
+            <span className={styles.swatch} style={{ background: "var(--accent, #388bfd)" }} />
             Nota
           </span>
           <span className={styles.legendItem}>
-            <span className={styles.swatch} style={{ background: "var(--color-success, #3fb950)" }} />
+            <span className={styles.swatch} style={{ background: "var(--success, #3fb950)" }} />
             Código
           </span>
           <span className={styles.legendItem}>
-            <span className={styles.swatch} style={{ background: "var(--color-danger, #f85149)" }} />
+            <span className={styles.swatch} style={{ background: "var(--danger, #f85149)" }} />
             Faltante
           </span>
         </div>
@@ -525,20 +618,25 @@ export default function DocGraphView({
           Centrar
         </button>
       </div>
-      <div className={styles.canvasBox} ref={boxRef}>
-        {nodeCount === 0 ? (
-          <div className={styles.empty}>
-            El grafo no tiene nodos todavía. Verificá que haya documentación en la
-            fuente seleccionada.
-          </div>
-        ) : (
-          <>
-            <canvas ref={canvasRef} className={styles.canvas} />
-            <div className={styles.hint} aria-hidden="true">
-              Rueda: zoom · Arrastrá el fondo: mover · Click en una nota: abrirla
+      {/* Plan 268 — con la flag OFF este contenedor es `display: contents`, así que
+          el canvas sigue siendo hijo directo del flex de .wrap (layout del 111). */}
+      <div className={explorerEnabled ? ex.body : ex.bodyPlain}>
+        <div className={styles.canvasBox} ref={boxRef}>
+          {nodeCount === 0 ? (
+            <div className={styles.empty}>
+              {explorerEnabled && totalNodes > 0
+                ? "Ningún nodo pasa los filtros actuales. Usá «Limpiar filtros» para volver a ver el grafo completo."
+                : "El grafo no tiene nodos todavía. Verificá que haya documentación en la fuente seleccionada."}
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              <canvas ref={canvasRef} className={styles.canvas} />
+              <div className={styles.hint} aria-hidden="true">
+                Rueda: zoom · Arrastrá el fondo: mover · Click en una nota: abrirla
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

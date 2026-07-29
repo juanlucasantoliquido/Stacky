@@ -58,6 +58,7 @@ def get_doc_sources():
     payload["graph_enabled"] = bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False))  # Plan 109
     payload["documenter_enabled"] = bool(getattr(config, "STACKY_DOCS_DOCUMENTER_ENABLED", False))  # Plan 113
     payload["staleness_enabled"] = bool(getattr(config, "STACKY_DOCS_STALENESS_ENABLED", False))  # Plan 114
+    payload["graph_explorer_enabled"] = bool(getattr(config, "STACKY_DOCS_GRAPH_EXPLORER_ENABLED", False))  # Plan 268
     return jsonify(payload)
 
 

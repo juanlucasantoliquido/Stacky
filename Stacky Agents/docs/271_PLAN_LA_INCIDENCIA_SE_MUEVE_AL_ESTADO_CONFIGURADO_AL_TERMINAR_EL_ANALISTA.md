@@ -1,10 +1,22 @@
 # Plan 271 — La incidencia se mueve al estado configurado al terminar el analista
 
-**Estado:** CRITICADO v4 (veredicto v3: **RECHAZADO**, 6 bloqueantes · v2: **RECHAZADO**, 6 · v1: **RECHAZADO**, 8)
+**Estado:** CRITICADO v5 (veredicto v4: **RECHAZADO**, 3 bloqueantes · v3: **RECHAZADO**, 6 · v2: **RECHAZADO**, 6 · v1: **RECHAZADO**, 8)
 **Fecha:** 2026-07-29
-**Juez v4: subagente independiente y NUEVO, corrida distinta, contexto limpio, worktree dedicado (`wt-c271`, rama `docs/critica-271`, base `760ac455`)**
+**Juez v5: subagente independiente y NUEVO, corrida distinta, contexto limpio, sobre el árbol compartido (rama `docs/plan-263-critica-v3-v4`, HEAD `6f451db8`, 32 commits por delante del `760ac455` que el v4 usó como base — incluye el merge de los planes 267/269/270).**
 **Reserva de números:** este plan usa **271**. Los huecos **261** y **262** siguen libres. El **272** queda reservado para "un solo escritor de estado" (§6.1).
-**Depende de:** nada. **Coordina con:** 79 (`_apply_task_state` + `_safe_transition`), 208 (matriz), 210 (gate de build), 216 (UI de estados), 254 (`_with_outcome`), **269 (`api/executions.py`, EN VUELO — §5 R15)**, 270 (cierre real ADO+GitLab).
+**Depende de:** nada. **Coordina con:** 79 (`_apply_task_state` + `_safe_transition`), 208 (matriz), 210 (gate de build), 216 (UI de estados), 254 (`_with_outcome`), **269 (`api/executions.py`, ya mergeado — §5 R15)**, **270 (cierre real ADO+GitLab, ya mergeado en `77627239` — §5 R10, y ver CHANGELOG v4→v5 E19/E20: el 270 le dejó a este plan un censo desactualizado y un centinela que su F3 va a hacer sonar a propósito)**.
+
+---
+
+## CHANGELOG v4 → v5
+
+El v4 acertó el diagnóstico de fondo (RC-1/RC-2/RC-3, los SEIS motores, el árbitro simétrico) y construyó, con razón, una defensa anti-drift (§3.4) después de tres rondas seguidas quemadas por números de línea. Pero esa defensa se escribió mirando solo hacia atrás (el commit base `760ac455`) y no hacia los planes que **ya estaban mergeándose al lado**: 267, 269 y **270** aterrizaron en `main` entre el 27 y el 29/07, y el 270 en particular tocó exactamente el terreno de este plan — el escritor de estado del motor B — con un ratchet propio que **anticipó textualmente** este momento. Todo lo que sigue salió de **correr el censo del propio F8 contra el HEAD real** y de **correr el ratchet del 270 antes y después de leer el diff de F3**, no de releer.
+
+- **E19 (BLOQ)** — **F8 nace rojo el día 1, otra vez — la MISMA causa (D1) que ya tumbó tres versiones, ahora mordiendo a la propia mitigación.** Se copió el script del Paso 0 tal cual está en el documento y se corrió contra el HEAD actual (`6f451db8`, 32 commits por delante de `760ac455`). Salida real: **13 entradas**, no 12. La nueva es `services/tracker_write_router.py::write_state_for_ticket [(155, 'update_work_item_state'), (157, 'update_item_state')]`. Ese archivo **no existía** en `760ac455` (`git show 760ac455:.../tracker_write_router.py` ⇒ *"exists on disk, but not in 760ac455"`) y lo creó el **plan 270**, commit `77627239` ("el tablero de incidencias dice la verdad — F0..F7"), ya mergeado. El allow-list `ESCRITORES_CENSADOS` del v4 congela exactamente 12; con el repo de hoy, `hallados - ESCRITORES_CENSADOS` da un conjunto de un elemento, no el vacío que el test exige. **F8, implementado literalmente como dice el v4, falla en el primer `pytest`.** Corregido: la entrada 13 se agrega al allow-list (§F8) con su etiqueta, y "12" pasa a "13" en cada lugar del documento que lo citaba (KPI de §1, los dos bloques de "Salida REAL", el criterio de aceptación, la DoD).
+- **E20 (BLOQ)** — **F3, tal como está escrito, va a hacer sonar — con certeza medida, no hipotética — un centinela que el plan 270 plantó a propósito esperando esta fase.** `backend/tests/test_plan270_state_write_ratchet.py::test_5_centinela_del_residuo_s5` existe hoy, está **verde (6 passed, corrido)**, y hace `ast.walk` sobre el cuerpo de `agent_completion_internal.py::_attempt_state_change` prohibiendo toda referencia a `get_tracker_provider` / `tracker_type` / `_provider_for_ticket`. El diff "DESPUÉS" de F3 agrega, dentro de esa misma función, `from services.tracker_provider import get_tracker_provider` seguido de la llamada `get_tracker_provider(project_name)` — un `ast.Name(id="get_tracker_provider")` que el centinela atrapa por diseño. Su propio mensaje de fallo, escrito por el 270 anticipando exactamente esto, dice: *"S5 cambió: alguien (probablemente el plan 271) enrutó `_attempt_state_change` por provider... actualizá §1 y re-medí la divergencia. NO subas el número ni borres este test."* El v4 no lo vio: `grep -c "tracker_write_router\|state_write_ratchet\|resolve_state_writer"` sobre el documento entero da **0**. Y hay algo peor que un test que se pone rojo a propósito: el plan 270 **ya construyó**, en `services/tracker_write_router.py::resolve_state_writer()` (usado hoy por `set_stacky_status_by_ado` y por `services/ticket_state_writeback.py`), el mecanismo de ruteo ADO↔GitLab que F3 quiere reconstruir a mano — con manejo de `CapabilityUnavailable`, mensaje de workaround para el operador, y ya probado. F3 no lo menciona ni una vez. Corregido: F3 suma un paso explícito de coordinación con el ratchet del 270 (editar `test_5` según su propio mensaje, no bypasearlo) y una nota de diseño sobre reusar `resolve_state_writer` en vez de duplicar la resolución de provider.
+- **E21 (BLOQ)** — **La tabla "anclajes VOLÁTILES" de §3.4 — la defensa que el propio v4 construyó contra el drift — no cubre los DOS archivos que más se movieron.** Medido con `git diff 760ac455..HEAD --stat`: `api/tickets.py` **+109 líneas** (el corrimiento CRECE a lo largo del archivo — Motor D pasa de `:1489-1492` a `:1505/1507`, Motor E de `:1751`/`:2078,2080` a `:1780`/`:2135,2137`, Motor F de `:4080`/`:4779,4781` a `:4157`/`:4856,4858`) y `services/gitlab_provider.py` **+36 líneas** (`update_item_state` de `:228` a `:243`, medido con `grep -n`). Ambos archivos se citan por número en §2.1, §2.1bis, la "Salida REAL" de F8, §6 punto 6 y §7.1 — de los 9 archivos que §3.4 sabe re-localizar, ninguno es uno de estos dos. No son coordenadas de edición (el plan declara explícitamente que no toca ninguno de los dos), pero si alguien copia el bloque "Salida REAL" de F8 al PR sin re-correr el script — la trampa D1/E6 que este mismo plan ya sufrió tres veces — pega evidencia numérica falsa creyendo que es la medida. Corregido: dos filas nuevas en §3.4 con el grep de estos símbolos.
+- **E22 (IMPORTANTE)** — **R10 (§5) da por buenos unos "0 hits" viejos y una colisión con el plan 270 que ya dejó de ser hipotética.** Decía *"el 270 no menciona `agent_completion_internal.py` ni `completion_state.py` (verificado: 0 hits)"* y recomendaba *"hacer el del 270 primero si ambos están listos"*. Las dos cosas cambiaron: el 270 está **mergeado** (`77627239`, ya en la ascendencia de este HEAD) y sí referencia `agent_completion_internal.py` — lo lee por AST en su ratchet y lo nombra por nombre y línea (`S5`, `:536`) más de diez veces en su propio documento. La disyuntiva de orden ya no aplica: el 270 llegó primero, y la colisión real es exactamente **E20**. Corregido: R10 apunta a E20 en vez de a una medición vieja.
+- **`[ADICIÓN ARQUITECTO]` — §3.5: grep de colisión con ratchets de planes hermanos YA MERGEADOS, antes de tocar una función compartida.** Es el antídoto estructural a E20: la causa no fue un error de lectura, fue no preguntarle a la suite de tests si algún plan hermano *ya* vigila la función que este plan está por editar. Ver §3.5, nueva.
 
 ---
 
@@ -81,7 +93,7 @@ No es una feature nueva. Es **reparar un comportamiento que el operador ya confi
 | Escrituras de estado que fallan y **no dicen por qué** (`_safe_transition` rama de error, `task_states.py:180-184`, devuelve dict **sin `reason`**) | **100 %** (el v2 las traducía a `"unknown"`, razón fuera de todo catálogo — **D3**) | **0 %** (`transition_failed`, cableado en el origen y verificado por **F9**) |
 | Trackers soportados por el escritor de estado del chokepoint, **para tickets con `stacky_project_name`** | **1** (ADO; `agent_completion_internal.py:527,536`) | **2** (ADO + GitLab, vía `tracker_provider`) |
 | Tickets **sin** `stacky_project_name` en un proyecto GitLab: escritura silenciosa a ADO | **100 % mudo** | **100 % legacy pero con razón visible** (`no_project_context`) — la reparación de fondo es del **272** (**D6**) |
-| Motores de estado conocidos y verificados por un test | **0** (el v1 contó 2 y el v2 contó 4 donde hay **6**) | **6/6 motores + 2 helpers del 79 + 4 adaptadores/cliente/puerto censados**, allow-list de **12 entradas** (9 por llamada + 3 por definición, **E6**); un **séptimo motor o un adaptador de tracker nuevo** rompe CI |
+| Motores de estado conocidos y verificados por un test | **0** (el v1 contó 2 y el v2 contó 4 donde hay **6**) | **6/6 motores + 2 helpers del 79 + 4 adaptadores/cliente/puerto + 1 router del plan 270 censados**, allow-list de **13 entradas** (**[v5, E19] no 12: re-corrido contra el HEAD de hoy apareció `tracker_write_router.py::write_state_for_ticket`, del plan 270, ya mergeado**); un **octavo escritor o un adaptador de tracker nuevo** rompe CI |
 | Clics del operador para arreglarlo | N/A (hoy no puede: no sabe que pasó) | **0** |
 
 > **KPI corregido (C1).** El v1 afirmaba "100 % con `next_state_ok` a nivel rol" a secas. Es falso en general: por el camino `set_stacky_status_by_ado` (`api/tickets.py:1205`), con `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` **ON** (default de `config.py:1245-1246`), `_apply_task_state` **sí** aplica el nivel rol. El 100 % vale para el camino del post-hook, y para el camino del 79 **solo cuando la flag está apagada**, que es exactamente lo que hace el deploy (`harness_defaults.env:33` fuerza `=false`).
@@ -402,8 +414,21 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 | encolado del motor A | `grep -n "ticket_status.on_execution_end" backend/services/agent_completion_internal.py` | `:183` |
 | `return` de `publish_execution_from_review` | `grep -n "def publish_execution_from_review" backend/services/agent_completion_internal.py` y leé hasta su `return` | `def :434`, `return :493` |
 | bloque a reemplazar en el motor A | `grep -n "no_matrix_cell\|no_final_state\|state_not_applicable" backend/services/completion_state.py` | `:92` / `:96` / `:99` |
+| **[v5, E21] Motores D/E/F en `tickets.py`** | `grep -n "def set_stacky_status_by_ado\|def finish_work\|def create_child_task" backend/api/tickets.py` | `:1205` / `:1751` / `:4080` — **YA desfasados dos de tres: `finish_work` real hoy `:1780`, `create_child_task` real hoy `:4157` (medido, `git diff 760ac455..HEAD` +109 líneas en este archivo)** |
+| **[v5, E21] escritor GitLab** | `grep -n "def update_item_state" backend/services/gitlab_provider.py` | `:228` — **real hoy `:243`** (medido, +36 líneas en este archivo desde `760ac455`) |
 
 > **Regla dura:** si el grep devuelve un número distinto al de la columna de referencia, **el grep gana** y no hay nada que reportar (es lo esperado). Si el grep devuelve **0 hits**, ahí sí: **se detiene la fase y se reporta** — significa que alguien renombró el símbolo y el plan hay que re-anclar.
+>
+> **[v5] Por qué estas dos filas faltaban y por qué importa igual sin que este plan edite esos archivos.** `api/tickets.py` y `services/gitlab_provider.py` son, medido, los DOS archivos que más se movieron desde `760ac455` (E21) — más que `api/executions.py`, que sí tenía su fila. Ninguna fase de este plan los edita (§6 punto 6), así que el número no es una coordenada de edición, pero SÍ es la evidencia que F8 pega en el PR (§F8, "Salida REAL") y la que sostiene §2.1/§2.1bis: si se cita de memoria en vez de re-grepear, el PR queda con una foto vieja disfrazada de medición fresca — la misma trampa D1/E6 en otra puerta.
+
+### 3.5 `[ADICIÓN ARQUITECTO v5]` Antes de editar una función compartida: grep de ratchets de OTROS planes ya mergeados (E20)
+
+**Por qué existe.** F3 edita `agent_completion_internal.py::_attempt_state_change`. Esa función tiene, hoy, un **dueño declarado por otro plan**: `test_plan270_state_write_ratchet.py::test_5_centinela_del_residuo_s5` (plan 270, ya mergeado) la vigila por AST y **espera** que este plan la toque de una forma específica. Nadie en el v1..v4 lo encontró porque los cuatro buscaron colisiones **leyendo el propio documento del plan vecino** (R10 lo hizo con el 270 y midió "0 hits" — cierto en su momento, falso hoy). El chequeo que sí lo encuentra es preguntarle a la **suite de tests**, no al documento.
+
+**Regla, para esta fase y para cualquier plan futuro que edite una función que ya existía antes del plan:**
+1. Antes de escribir el diff de una función compartida (cualquier `def` que no crea este plan), correr: `grep -rln "<nombre_de_la_función>" backend/tests/` y abrir cada archivo de test que no sea de este plan.
+2. Si alguno hace `ast.parse` / `inspect.getsource` / import directo de esa función y **afirma algo sobre su contenido** (una ausencia, un conteo, una firma), tratarlo como una **API implícita entre planes**: declararlo en el CHANGELOG, decidir si el test debe actualizarse o si el plan debe cambiar de forma, y nunca dejar que se rompa "de sorpresa" en CI.
+3. **Aplicado acá:** `grep -rln "_attempt_state_change" backend/tests/` incluye `test_plan270_state_write_ratchet.py` — F3 debe, en el mismo commit que cablea el provider, editar el `test_5` de ese archivo seguiendo **su propio mensaje de fallo** (relajar el conjunto `prohibidos` para esta función, dejar un comentario fechado explicando que el residuo S5 quedó resuelto por el 271) y anotar en el PR el diff de ese test como parte del entregable de F3, no como un descubrimiento posterior.
 
 ### 3.1bis Los CUATRO textos de ayuda llana, escritos y medidos (D5)
 
@@ -1249,7 +1274,17 @@ def _legacy_ado_client():
 
 **Por qué `_safe_transition` y no una función nueva:** el plan 79 lo declara *"ÚNICA función que escribe estado"* (`harness/task_states.py:155`, docstring; el `def` está en `:146`). Ya trae idempotencia (`:164-168`) y ya es provider-agnóstica (`:171-177`). Escribir otra sería crear un **quinto** escritor.
 
-> **Gotcha real de GitLab:** los write viven en `services/gitlab_provider.py`, **no** en el client. `update_item_state` está en `gitlab_provider.py:228`. `get_tracker_provider` (`tracker_provider.py:125-157`) exige `STACKY_GITLAB_ENABLED` y lanza `TrackerConfigError` si está OFF (`:133-136`) — por eso el `except` devuelve `provider_unavailable` en vez de romper el cierre.
+> **Gotcha real de GitLab:** los write viven en `services/gitlab_provider.py`, **no** en el client. `update_item_state` está en `gitlab_provider.py:228` en el commit base (**hoy `:243`, medido — E21; re-localizalo con el grep de §3.4 antes de citarlo**). `get_tracker_provider` (`tracker_provider.py:125-157`) exige `STACKY_GITLAB_ENABLED` y lanza `TrackerConfigError` si está OFF (`:133-136`) — por eso el `except` devuelve `provider_unavailable` en vez de romper el cierre.
+
+#### F3-bis-0 — `[ADICIÓN ARQUITECTO v5]` Coordinación OBLIGATORIA con el ratchet del plan 270 (E20)
+
+**Este paso va en el MISMO commit que el diff de arriba, no después.** El plan 270 (ya mergeado, commit `77627239`) construyó `services/tracker_write_router.py::resolve_state_writer()` — el mismo problema que resuelve el diff de F3 (decidir si el escritor es ADO o GitLab según el ticket) — y dejó un centinela esperando que este plan tocara `_attempt_state_change`: `backend/tests/test_plan270_state_write_ratchet.py::test_5_centinela_del_residuo_s5`, **verde hoy (6 passed, corrido)**, que prohíbe por AST que esa función referencie `get_tracker_provider` / `tracker_type` / `_provider_for_ticket`.
+
+1. **Antes de escribir el diff:** correr `& $PY -m pytest "$RAIZ\Stacky Agents\backend\tests\test_plan270_state_write_ratchet.py" -v` y confirmar que sigue en `6 passed` (baseline).
+2. **Después de escribir el diff:** volver a correrlo. `test_5_centinela_del_residuo_s5` **va a fallar** — es el resultado esperado, no una regresión: el mensaje del propio test lo dice (*"S5 cambió: alguien (probablemente el plan 271) enrutó `_attempt_state_change` por provider... actualizá §1 y re-medí la divergencia. NO subas el número ni borres este test"*).
+3. **Editar ese test, en el mismo commit**, siguiendo su propio mensaje: sacar `_attempt_state_change` del alcance de la aserción `prohibidos` (o mover ese `assert` a un `pytest.mark.xfail` fechado con el número de este plan), dejando un comentario que diga *"Residuo S5 resuelto por el plan 271 F3 — ver docs/271_..."*. **No se borra el test entero**: sus otros cuatro casos (conteos congelados de `api/tickets.py`, anti-gaming del router, paridad de arneses) siguen siendo válidos y este plan no los toca.
+4. **Evaluar, antes de comprometerse al diff literal de F3, si conviene construirlo sobre `services.tracker_write_router.resolve_state_writer(ticket)` en vez de `get_tracker_provider(project_name)` directo.** El router ya resuelve ADO-vs-GitLab, ya maneja `CapabilityUnavailable` con un mensaje accionable para el operador, y ya lo usan `set_stacky_status_by_ado` y `ticket_state_writeback.py`. Construir un segundo mecanismo de resolución en `agent_completion_internal.py` dejaría DOS caminos de ruteo ADO↔GitLab que pueden divergir con el tiempo (p. ej. si el 272 cambia la lógica de `CapabilityUnavailable`, este plan no se entera). Si se decide **no** reusarlo (porque `resolve_state_writer` no expone hoy la idempotencia de `_safe_transition` y fusionar los dos requeriría tocar `tracker_write_router.py`, fuera del alcance de este plan), esa decisión y su motivo van en el PR, no se omiten.
+5. **Test que lo verifica:** agregar un 12º caso a `test_plan271_writer_routed.py` que corra `test_plan270_state_write_ratchet.py` como parte del mismo `pytest` de F3 (o documentar el comando separado en la DoD) y afirme que la ÚNICA falla nueva contra el baseline del punto 1 es `test_5_centinela_del_residuo_s5`, con su motivo anotado.
 
 #### F3-bis-1 — `test_output_watcher.py` NO se rompe: la "confirmación" del v2 era falsa (D6)
 
@@ -1862,7 +1897,7 @@ TOTAL ENTRADAS: 9
 4. Atribuye cada hallazgo a la **función que lo contiene** — con un visitor que mantiene una pila de `FunctionDef`/`AsyncFunctionDef`, así que un método anidado se atribuye al método, no a la clase. Una `def` vigilada se atribuye **a sí misma**.
 5. Compara el conjunto contra el allow-list **congelado en el propio test**, con el plan dueño de cada entrada:
 
-**Salida REAL con la regla del v4 (12 entradas — CORRIDA, no estimada):**
+**Salida REAL con la regla del v4, tal como la corrió el v4 contra `760ac455` (12 entradas):**
 
 ```
 api/tickets.py::_apply_task_state                              [(577, '_safe_transition')]
@@ -1880,14 +1915,39 @@ services/tracker_provider.py::update_item_state                [(85, 'def update
 TOTAL ENTRADAS: 12
 ```
 
-> **Y esto es la prueba de por qué el Paso 0 no es opcional.** Esta crítica **también** se equivocó primero: estimó **11** entradas de cabeza y, al correr el censo, salieron **12** — faltaba `services/ado_client.py::update_work_item_state` (`:926`), que es el **escritor terminal de ADO**, el que hace el PATCH de verdad. Cuatro versiones seguidas de este plan contaron mal los escritores, y la única vez que el número salió bien fue **corriendo el censo**. Escribí el `dict` copiando el bloque de arriba, no de memoria.
+> **[v5, E19] Y esto es la prueba de que ni el v4 se salvó — re-corrida HOY contra el HEAD real (`6f451db8`), no contra `760ac455`, da 13, no 12.** El v4 ya había mostrado que estimar de cabeza (11) fallaba contra correr el script (12); esta crítica re-corrió el MISMO script del v4, sin cambiarle una línea, y el número volvió a subir:
+
+```
+api/tickets.py::_apply_task_state                              [(577, '_safe_transition')]
+api/tickets.py::create_child_task                              [(4856, 'update_item_state'), (4858, 'update_work_item_state')]
+api/tickets.py::finish_work                                    [(2135, 'update_item_state'), (2137, 'update_work_item_state')]
+api/tickets.py::set_stacky_status_by_ado                       [(1505, 'update_item_state'), (1507, 'update_work_item_state')]
+harness/task_states.py::_safe_transition                       [(173, 'update_item_state'), (175, 'update_work_item_state')]
+harness/task_states.py::apply_task_start_state                 [(206, '_safe_transition')]
+services/ado_client.py::update_work_item_state                 [(926, 'def update_work_item_state')]
+services/ado_provider.py::update_item_state                    [(81, 'def update_item_state'), (82, 'update_work_item_state')]
+services/agent_completion_internal.py::_attempt_state_change   [(536, 'update_work_item_state')]
+services/completion_state.py::maybe_apply_state_transition     [(113, '_safe_transition')]
+services/gitlab_provider.py::update_item_state                 [(243, 'def update_item_state')]
+services/tracker_provider.py::update_item_state                [(85, 'def update_item_state')]
+services/tracker_write_router.py::write_state_for_ticket        [(155, 'update_work_item_state'), (157, 'update_item_state')]
+TOTAL ENTRADAS: 13
+```
+
+La 13ª entrada, `services/tracker_write_router.py::write_state_for_ticket`, no existía en `760ac455` — la creó el **plan 270** (commit `77627239`, ya mergeado) como el punto único de resolución ADO/GitLab que hoy usan `set_stacky_status_by_ado` y `services/ticket_state_writeback.py`. Nótese además que los números de línea de `api/tickets.py` y de `gitlab_provider.py` **también** cambiaron (Motor D/E/F y el adaptador GitLab) — es la misma foto fechada de §3.4/E21, y aquí queda medida dos veces: al principio de esta crítica y al final, con el mismo script, sin tocarle una línea.
+
+> **Y esto es la prueba de por qué el Paso 0 no es opcional, ahora en su cuarta recurrencia.** El v3 estimó de cabeza y contó 9 donde había que ampliar la regla; el v4 estimó 11 y el censo dio 12; esta crítica re-corrió el censo del v4 sin cambiarlo y dio 13. **Cuatro pasadas seguidas, corriendo el mismo tipo de comando, y las cuatro el número subió.** La lección no es "correlo una vez antes de escribir el allow-list": es que el allow-list **caduca con cada merge ajeno**, y el número que hay que confiar es el de la corrida más reciente, nunca el impreso en un documento. Escribí el `dict` copiando el bloque de arriba (13 entradas), no de memoria, y volvé a correr el script el día que se implemente esta fase — puede haber subido otra vez.
 
 ```python
-# 12 entradas = los SEIS motores de §2.1 (A..F) + los dos helpers del plan 79 +
-# los DOS adaptadores + el Protocol del puerto + el cliente terminal de ADO.
-# La letra del motor va escrita a propósito: el v1 contó DOS motores, el v2 contó
-# CUATRO donde hay SEIS, el v3 censó UN adaptador donde hay CUATRO, y el v4 estimó
-# 11 donde hay 12. Ahora el repo lo sabe y nadie tiene que acordarse.
+# 13 entradas [v5, E19] = los SEIS motores de §2.1 (A..F) + los dos helpers del
+# plan 79 + los DOS adaptadores + el Protocol del puerto + el cliente terminal
+# de ADO + el router del plan 270. La letra/origen va escrito a propósito: el
+# v1 contó DOS motores, el v2 CUATRO donde hay SEIS, el v3 censó UN adaptador
+# donde hay CUATRO, el v4 estimó 11 donde había 12, y esta crítica re-corrió el
+# script SIN CAMBIARLE UNA LINEA y dio 13 — el plan 270 (ya mergeado) agregó un
+# escritor nuevo entre que el v4 midió y hoy. Ahora el repo lo sabe; igual
+# VOLVÉ A CORRER el script antes de congelar el número: puede haber subido de
+# nuevo si otro plan mergeó en el medio.
 ESCRITORES_CENSADOS: dict[str, str] = {
     # ── escritor canónico y helper de arranque (plan 79) ────────────────────
     "harness/task_states.py::_safe_transition":            "plan 79 — el escritor canónico (lo usan A, B y C)",
@@ -1896,14 +1956,16 @@ ESCRITORES_CENSADOS: dict[str, str] = {
     "services/completion_state.py::maybe_apply_state_transition": "MOTOR A — plan 208 + 271 F2/F2-bis",
     "services/agent_completion_internal.py::_attempt_state_change": "MOTOR B — plan 271 F3/F3-bis-2",
     "api/tickets.py::_apply_task_state":                   "MOTOR C — plan 79 + gate del 210 (el 271 NO lo modifica, §6.6)",
-    "api/tickets.py::set_stacky_status_by_ado":            "MOTOR D — inline sin plan dueño (el 271 NO lo modifica; unificación en el 272)",
-    "api/tickets.py::finish_work":                         "MOTOR E — inline sin plan dueño (el v2 lo citó en §6.6 y NO lo censó; 272)",
+    "api/tickets.py::set_stacky_status_by_ado":            "MOTOR D — inline, ya parcialmente ruteado por el plan 270 vía tracker_write_router (el 271 NO lo modifica; unificación en el 272)",
+    "api/tickets.py::finish_work":                         "MOTOR E — inline, ídem D (el v2 lo citó en §6.6 y NO lo censó; 272)",
     "api/tickets.py::create_child_task":                   "MOTOR F — estado de la TAREA HIJA recién creada, sin plan dueño (272)",
     # ── puerto, adaptadores y cliente terminal (E6): NO deciden, pero SÍ escriben ──
     "services/tracker_provider.py::update_item_state":     "PUERTO — Protocol (cuerpo `...`); acá para que un tracker nuevo no entre invisible",
     "services/ado_provider.py::update_item_state":         "ADAPTADOR ADO → AdoClient.update_work_item_state",
     "services/gitlab_provider.py::update_item_state":      "ADAPTADOR GitLab → label de estado + cierre del issue (el v3 NO lo veía)",
     "services/ado_client.py::update_work_item_state":      "CLIENTE TERMINAL ADO — el PATCH real de System.State (nadie lo había censado nunca)",
+    # ── [v5, E19] agregado por el plan 270, mergeado DESPUÉS del commit base de este plan ──
+    "services/tracker_write_router.py::write_state_for_ticket": "ROUTER — plan 270, resuelve ADO/GitLab para set_stacky_status_by_ado y ticket_state_writeback.py (ver §3.5 sobre F3 y este mismo router)",
 }
 ```
 6. Asserts:
@@ -1911,7 +1973,9 @@ ESCRITORES_CENSADOS: dict[str, str] = {
    - `ESCRITORES_CENSADOS - hallados == set()`: *"Escritor censado que ya no existe: `<x>`. Sacalo del censo."*
 7. Un tercer test afirma que **`services/completion_state.py` importa `dev_build_verify`** — el invariante concreto de C2: si alguien vuelve a sacar el gate de build del motor A, el test se pone rojo con el nombre del plan que se rompe (210). **Hoy ese import NO existe** (verificado: `grep -c dev_build_verify backend/services/completion_state.py` ⇒ **0**), así que este test **nace rojo y se pone verde con F2-bis guardia 1**.
 
-> **Verificación de que el censo es discriminante (obligatoria, E6).** Antes de dar F8 por hecho: comprobá que con la regla **sólo-llamadas** del v3 el censo devuelve **9** y `services/gitlab_provider.py::update_item_state` **no** está; con la regla del v4 devuelve **12** y sí está (y aparecen tambien el Protocol y ado_client). Pegá los dos conteos en el PR. Es la prueba de que la ampliación atrapa un escritor real que antes se colaba — no una preferencia de estilo.
+> **Verificación de que el censo es discriminante (obligatoria, E6).** Antes de dar F8 por hecho: comprobá que con la regla **sólo-llamadas** del v3 el censo devuelve **9** y `services/gitlab_provider.py::update_item_state` **no** está; con la regla del v4 devuelve **13** (no 12 — E19) y sí está (y aparecen también el Protocol, `ado_client` y el router del 270). Pegá los dos conteos en el PR. Es la prueba de que la ampliación atrapa un escritor real que antes se colaba — no una preferencia de estilo.
+>
+> **[v5, E19] Verificación adicional, obligatoria por ser la cuarta recurrencia:** correr el censo **el mismo día** en que se implementa esta fase, no confiar en el número de este documento. Si volvió a subir (otro plan mergeó de por medio), es exactamente el resultado que F8 existe para atrapar: se agrega la entrada nueva al `dict` de arriba con su etiqueta, en el mismo commit, y se sube el número en el criterio de aceptación de abajo y en la DoD (§7.3).
 
 **Alcance del barrido, declarado (para que no se lo interprete):** el censo recorre **solo `backend/`**. `Stacky pipeline/`, `Stacky tools/`, `deployment/` y los `.ps1` **no** se barren, y hoy **no contienen escritores de `System.State`** (verificado en esta pasada). Extender el barrido fuera de `backend/` es alcance del 272; anotarlo acá evita que alguien "amplíe el censo de paso" y rompa CI con hallazgos de otro dominio.
 
@@ -1920,7 +1984,7 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_censo_escritores.py -v
 ```
 
-**Criterio de aceptación (BINARIO):** `3 passed` con el allow-list en **exactamente 12 entradas** (E6), y esas 11 iguales a la salida del Paso 0 pegada en el PR **con la regla ampliada**. Si el censo encuentra una **decimotercera entrada** que esta pasada no vio, **eso es el resultado**: se la agrega al allow-list con su plan dueño **en el mismo commit**, se dice si es un **séptimo motor**, un helper o un **adaptador de tracker**, y se anota en §6 si merece su propio plan. **No se relaja el assert.**
+**Criterio de aceptación (BINARIO) — [v5, E19] corregido de 12 a 13:** `3 passed` con el allow-list en **exactamente 13 entradas** (12 del v4 + `services/tracker_write_router.py::write_state_for_ticket`, del plan 270 ya mergeado), y esas 13 iguales a la salida del Paso 0 pegada en el PR **con la regla ampliada, corrida el mismo día de la implementación**. Si el censo encuentra una **decimocuarta entrada** que esta pasada no vio, **eso es el resultado, otra vez**: se la agrega al allow-list con su plan dueño **en el mismo commit**, se dice si es un **séptimo motor**, un helper o un **adaptador de tracker**, y se anota en §6 si merece su propio plan. **No se relaja el assert. El número de este documento es de referencia, no de confianza: la corrida del día de la implementación manda.**
 
 > **AST, nunca regex.** Precedente del repo: un centinela textual sobre flags rompió el motor entero. El AST no confunde un string en un comentario con una llamada real.
 
@@ -1978,7 +2042,7 @@ cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_razon_del_c
 | R7 | `SQLITE_LOCKED` hace flaky a F5 y F2-bis. | Alta | §3-9 y repetido en cada fase: correr **por archivo**, reintentar hasta 3 veces el mismo archivo, nunca la suite completa. |
 | R8 | El implementador toca `run_harness_tests.ps1` con la sintaxis del `.sh`. | Media | §3-10 y F7 dan la diferencia literal. El criterio de F7 exige **24 hits**, 12 por script. |
 | R9 | El texto del `PlainHelp` rompe uno de los meta-tests. | Media | §3.1 pata 4 enumera las restricciones **reales** (verificadas en `test_harness_flags_help.py:44-52,63-70`), y F1 trae un texto ya medido campo por campo. |
-| R10 | **Colisión con el plan 270.** El 270 no menciona `agent_completion_internal.py` ni `completion_state.py` (verificado: 0 hits) **pero su C3 declara que su F4 se cablea en `set_stacky_status_by_ado`**, que es la misma función que contiene el caller `api/tickets.py:1386` que este plan afecta vía F4. | **Media** (el v1 la declaraba Baja) | Frontera explícita: **este plan no edita ni una línea de `api/tickets.py`** (§6.6). Lo único que cambia de esa función es el **contenido** del `publish`/`ado_state_change` que devuelve `close_execution_with_publish`, y esa función serializa la variable local `state_change_result` (`:1466-1503`), no el `CloseResult`. Los nombres nuevos (`final_state_resolver.py`, `final_state_outcome`, `finalStateOutcome.ts`, las 4 flags `STACKY_FINAL_STATE_*`) **no existen hoy en el repo** (verificado: 0 hits) y no colisionan. **Merge: hacer el del 270 primero si ambos están listos.** |
+| R10 | **[v5, E22] Colisión con el plan 270 — YA NO es hipotética.** El 270 está **mergeado** (`77627239`) y SÍ referencia `agent_completion_internal.py`: lo lee por AST en `test_plan270_state_write_ratchet.py::test_5_centinela_del_residuo_s5` y lo nombra por nombre y línea (`S5`, `:536`) más de diez veces en su propio documento, anticipando textualmente que **este** plan enrutaría `_attempt_state_change` por provider. | **Alta, medida (no ya "Media" ni hipotética)** | Frontera explícita conservada: **este plan no edita ni una línea de `api/tickets.py`** (§6.6). Pero SÍ edita `agent_completion_internal.py::_attempt_state_change`, y ESO es exactamente lo que el centinela S5 del 270 vigila. La colisión real, medida y con fix, es **E20/F3-bis-0** (nuevo, v5): el `test_5` se edita en el mismo commit que F3, siguiendo su propio mensaje de fallo. Los nombres `final_state_resolver.py` / `final_state_outcome` / `finalStateOutcome.ts` / las 4 flags `STACKY_FINAL_STATE_*` siguen sin existir hoy (re-verificado) y no colisionan por sí mismos — el punto de fricción es únicamente `_attempt_state_change`. **Orden de merge:** ya resuelto, el 270 llegó primero; no queda decisión pendiente. |
 | R11 | El diagnóstico está errado y el problema real era `harness_defaults.env:33`. | Media | **F0-D** lo mide antes de escribir una línea de producción, y su salida va al PR. Aun si se confirma, el motor A sigue roto y F1/F2/F2-bis se justifican. |
 | R12 | **El allow-list del censo vuelve a nacer mal** y F8 rompe CI el día 1 (le pasó al v2 con 6 entradas donde hay 9). | **Alta si se escribe de memoria** | **F8 Paso 0**: correr el censo **antes** de escribir el `dict` y **pegar su salida en el PR**. El allow-list es esa salida más una etiqueta por línea. Nunca al revés. |
 | R13 | **El implementador escribe las 3 ayudas llanas que faltan y usa una palabra de la denylist** (`gate` es la trampa obvia, con una flag llamada `..._PUBLISH_GATE_PRECISE_ENABLED`), dejando `test_harness_flags_help.py` con **más** de sus 4 fallos ajenos. | **Alta sin los textos escritos** | **§3.1bis** trae los **4** textos literales, ya medidos campo por campo, y §3.3 fija el baseline exacto contra el cual comparar (`4 failed, 4 passed`, y ninguna key `STACKY_FINAL_STATE_*` entre las violaciones). |
@@ -1995,7 +2059,7 @@ cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_razon_del_c
 3. **Construir la UI de la matriz `by_work_item_type` dentro de `StatesConfigPage`.** Es alcance del 208. Este plan hace que **no haga falta**.
 4. **Cambiar la semántica de `review_mode_hold`.** HITL deliberado. Solo se hace visible.
 5. **Transicionar en `needs_review`.** Exige revisión humana.
-6. **`api/tickets.py` en cualquiera de sus formas** — `set_stacky_status_by_ado` (**empieza en `:1205`**, no en `:1487` como decía el v1), `_apply_task_state:531` (**motor C**), el escritor inline `:1489-1492` (**motor D**), `finish_work:1751` con sus escrituras en `:2078,:2080` (**motor E**) y `create_child_task:4080` con las suyas en `:4779,:4781` (**motor F**). Territorio del 270 y del 272. **Este plan no edita ni una línea de ese archivo**, solo lo cita — pero ahora los **censa a los cuatro** (F8), que es la diferencia entre "fuera de scope" y "no lo vimos". **Los motores E y F son exactamente lo segundo hasta esta versión.**
+6. **`api/tickets.py` en cualquiera de sus formas** — `set_stacky_status_by_ado` (**empieza en `:1205`**, no en `:1487` como decía el v1; este número **no** se movió, verificado), `_apply_task_state:531` (**motor C**, tampoco se movió), el escritor inline (**motor D**, medido en `760ac455` en `:1489-1492`, **hoy `:1505/:1507` — E21**), `finish_work` (**motor E**, medido en `760ac455` en `:1751` con escrituras en `:2078,:2080`, **hoy `:1780` con escrituras en `:2135,:2137` — E21**) y `create_child_task` (**motor F**, medido en `760ac455` en `:4080` con las suyas en `:4779,:4781`, **hoy `:4157` con `:4856,:4858` — E21**). Territorio del 270 y del 272. **Este plan no edita ni una línea de ese archivo**, solo lo cita — pero ahora los **censa a los cuatro** (F8, hoy 13 entradas — E19), que es la diferencia entre "fuera de scope" y "no lo vimos". **Los motores E y F son exactamente lo segundo hasta esta versión. Re-localizá estos símbolos con el grep de §3.4 antes de citarlos: es el archivo que más se movió de todo el plan.**
 7. **`deployment/harness_defaults.env`.** Snapshot derivado, ya divergente.
 8. **Migrar `agent_workflow_configs.transition_state` al perfil del cliente.** El 216 lo declaró fuera de scope.
 9. **Cambiar `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` en `harness_defaults.env:33`.** F0-D lo **mide** y lo reporta; cambiarlo es una decisión del operador, no de este plan.
@@ -2015,9 +2079,9 @@ cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_razon_del_c
 | **Motor A / "matriz"** | `completion_state.maybe_apply_state_transition`, disparado por post-hook del `completion_dispatcher`, **asíncrono** (daemon). Lee `tracker_state_machine`. |
 | **Motor B / "employee_config"** | `agent_completion_internal.close_execution_with_publish`, Pasos 3.5 y 4, **síncrono**. Lee `agent_workflow_configs[<filename>].transition_state`. |
 | **Motor C / "determinista"** | `api/tickets.py:531 _apply_task_state` (plan 79 + gate del 210), **síncrono**, solo desde `set_stacky_status_by_ado:1473`. **Ya honra el nivel rol.** |
-| **Motor D / "inline"** | `api/tickets.py:1489-1492`, sin plan dueño. Este plan lo **censa** (F8) pero **no** lo modifica ni lo arbitra (§2.1bis); su unificación es del **272**. |
-| **Motor E / "finish_work"** | `api/tickets.py:1751 finish_work`, escrituras en `:2078,:2080`, sin plan dueño. **Censado, no modificado, no arbitrado** (§2.1bis). El v2 lo citó en §6.6 y aun así lo dejó fuera del censo (**D1**). |
-| **Motor F / "tarea hija"** | `api/tickets.py:4080 create_child_task`, escrituras en `:4779,:4781`. **Censado, no modificado, no arbitrado.** |
+| **Motor D / "inline"** | `api/tickets.py::set_stacky_status_by_ado`, medido `:1489-1492` en `760ac455`, **hoy `:1505/:1507` (E21, re-localizar con §3.4)**, sin plan dueño. Este plan lo **censa** (F8) pero **no** lo modifica ni lo arbitra (§2.1bis); su unificación es del **272**. |
+| **Motor E / "finish_work"** | `api/tickets.py::finish_work`, medido `:1751` con escrituras en `:2078,:2080` en `760ac455`, **hoy `:1780` con `:2135,:2137` (E21)**, sin plan dueño. **Censado, no modificado, no arbitrado** (§2.1bis). El v2 lo citó en §6.6 y aun así lo dejó fuera del censo (**D1**). |
+| **Motor F / "tarea hija"** | `api/tickets.py::create_child_task`, medido `:4080` con escrituras en `:4779,:4781` en `760ac455`, **hoy `:4157` con `:4856,:4858` (E21)**. **Censado, no modificado, no arbitrado.** |
 | **Árbitro simétrico** | El par de guardias `final_state_already_written(execution_id)` — una en el motor A (F2-bis) y **su gemela en el motor B** (F3-bis-2) — que usan **el mismo helper** de `final_state_resolver.py`. Un árbitro en un solo motor cubre un solo orden de carrera, y no es el probable (**D2**). |
 | **Razón fuera del catálogo** | Cualquier `reason` que no esté en `ALL_FINAL_STATE_REASONS`. `"unknown"` es el caso patológico: no es una razón, es un catálogo incompleto. **F9** lo prohíbe corriendo (**D3**). |
 | **Nivel rol** | `tracker_state_machine.<agent_type>.next_state_ok`. Lo que `StatesConfigPage.tsx` sabe escribir. |
@@ -2031,12 +2095,14 @@ cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_razon_del_c
 ### 7.2 Orden de implementación (estricto, por dependencia)
 
 ```
-F-1 (30 s, sin código) — correr los 9 greps de §3.4 y anotar los números de HOY
+F-1 (30 s, sin código) — correr los 11 greps de §3.4 [v5: +2, tickets.py y gitlab_provider.py] y anotar los números de HOY
  └─> F0 (rojo 0/4 + medición F0-D, sin prod)
  └─> F1 (resolver puro de 12 filas + catálogo de 27 + final_state_already_written + flag 1)
       └─> F2 (cablear motor A)              ← cierra RC-1  [F0 pasa a 2/4]
            └─> F2-bis GUARDIA 1 (gate 210, con cortocircuito developer)  [va JUNTO con F2]
- └─> F3 (writer ruteado + flag 2)           ← cierra E-3    [F0 pasa a 3/4]
+ └─> F3-bis-0 [v5, E20] (baseline `test_plan270_state_write_ratchet.py` en 6 passed, ANTES de tocar `_attempt_state_change`)
+      └─> F3 (writer ruteado + flag 2)      ← cierra E-3    [F0 pasa a 3/4]
+      ├─> F3-bis-0 cont. (editar `test_5` del ratchet del 270 en el MISMO commit que F3 — E20)
       ├─> F3-bis-1 (VERIFICAR que output_watcher NO se rompe — no se toca nada)
       ├─> F3-bis-3 (los DOS escritores dejan de fallar mudos: task_states:183 Y aci:547)
       └─> F4 (gate preciso + flag 3)        ← cierra RC-2   [F0 pasa a 4/4]
@@ -2077,10 +2143,11 @@ F-1 (30 s, sin código) — correr los 9 greps de §3.4 y anotar los números de
 - [ ] `test_plan271_role_fallback.py`: **10 passed** (incluye el caso 6-bis: flag OFF + matriz con estado final ⇒ **transiciona**, para que apagar esta flag no regresione el 208 — E7).
 - [ ] `test_plan271_arbitro.py`: **8 passed** (4/8 tras la guardia 1; los 8 tras F3-bis-2).
 - [ ] `test_plan271_writer_routed.py`: **11 passed** (incluye el 9-bis: `AdoClient` legacy que lanza ⇒ `reason="transition_failed"` — E4).
+- [ ] **[v5, E20] `test_plan270_state_write_ratchet.py` (F3-bis-0):** corrido ANTES de F3 en `6 passed` (baseline); corrido DESPUÉS de F3 y de la edición de `test_5_centinela_del_residuo_s5` prescripta en F3-bis-0, vuelve a **`6 passed`** — con el `test_5` editado (no borrado) y un comentario fechado que documenta que el residuo S5 quedó resuelto por este plan. El diff de ese test va en el mismo PR que F3.
 - [ ] `test_plan271_publish_gate.py`: 8 passed.
 - [ ] `test_plan271_reason_persisted.py`: 8 passed.
 - [ ] `test_plan271_reason_catalog.py`: 2 passed, sobre **27** razones.
-- [ ] `test_plan271_censo_escritores.py`: 3 passed, con el allow-list de **12 entradas** (E6: los 6 motores + 2 helpers del 79 + puerto + 2 adaptadores + el cliente terminal de ADO) — **y los DOS conteos del Paso 0 pegados en el PR** (regla sólo-llamadas ⇒ 9 y sin GitLab; regla ampliada ⇒ 12 y con GitLab + ado_client). Si el censo encuentra una 12ª entrada, se agrega con su etiqueta en el mismo commit.
+- [ ] `test_plan271_censo_escritores.py`: 3 passed, con el allow-list de **13 entradas** (**[v5, E19] corregido de 12 a 13**: los 6 motores + 2 helpers del 79 + puerto + 2 adaptadores + el cliente terminal de ADO + el router del plan 270 `tracker_write_router.py::write_state_for_ticket`) — **y los DOS conteos del Paso 0 pegados en el PR, corridos el día de la implementación** (regla sólo-llamadas ⇒ 9 y sin GitLab; regla ampliada ⇒ 13 y con GitLab + ado_client + el router). Si el censo encuentra una 14ª entrada, se agrega con su etiqueta en el mismo commit — a esta altura es la cuarta vez que el número sube entre versiones, así que no re-correrlo el día de la implementación es la causa más probable de que F8 nazca rojo.
 - [ ] `test_plan271_razon_del_catalogo.py` (**F9**): 3 passed, con la lista de violaciones del test 3 **de 4 a 0**, pegada antes y después. **Ningún `reason` fuera de `ALL_FINAL_STATE_REASONS`; cero apariciones de `"unknown"`.**
 - [ ] `test_plan271_flags.py`: las 4 keys con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, con línea `=true` en `harness_defaults.env`, **en `PLAIN_HELP` y pasando los 5 chequeos aplicados localmente** (§3.3bis), **sin `requires=`** (§3.1 pata 8). **Y la verificación de discriminación hecha**: borrar una entrada de `PLAIN_HELP` ⇒ **rojo**; reponerla ⇒ verde; las dos salidas en el PR.
 - [ ] `plan271FinalStateOutcome.test.ts`: 6 passed. `npx tsc --noEmit`: 0 errores. Los **8** ratchets de UI de F6 corridos uno por uno **a través del junction, sin instalar nada**. `.toneEspera` usa **`var(--text-muted)`** (existe; `--text-secondary` **NO** existe — E9).

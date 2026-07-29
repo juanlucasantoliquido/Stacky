@@ -25,6 +25,21 @@ from services.gitlab_client import GitLabClient  # importado a nivel módulo par
 import config  # importado a nivel módulo para poder parchear en tests
 
 
+def _unknown_state_guard_enabled() -> bool:
+    """Plan 270 F2 — STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED (default True).
+
+    Comparte flag con F1: son la misma promesa ("no escribas cualquier cosa en
+    el sistema equivocado"), y separarlas permitiría una combinación incoherente
+    (enrutar bien pero seguir reabriendo).
+
+    C9: `config` acá es el MÓDULO (gitlab_provider.py:25 hace `import config`
+    "para poder parchear en tests"). La instancia de flags es `config.config`,
+    igual que en las otras 8 lecturas del archivo (:46, :47, :50, :51, :186,
+    :196, :206, :217). NO usar un import local.
+    """
+    return bool(getattr(config.config, "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED", True))
+
+
 class GitLabTrackerProvider:
     """Adapter de la API GitLab v4 al puerto TrackerProvider."""
 
@@ -229,7 +244,26 @@ class GitLabTrackerProvider:
         """Mapea logical_state → label GitLab + close si corresponde."""
         state_map = self._state_map_for_gitlab()
         proj_path = self._client._project_path()
-        mapping = state_map.get(logical_state, {})
+        mapping = state_map.get(logical_state)
+        # Plan 270 F2 — un estado no mapeable NO puede caer en el else de abajo:
+        # con mapping={} se emitía state_event="reopen", es decir, cerrar
+        # REABRÍA la issue. Ahora se declara la incapacidad (Plan 218).
+        if mapping is None:
+            if _unknown_state_guard_enabled():
+                from services.tracker_provider import CapabilityUnavailable
+                raise CapabilityUnavailable(
+                    "tracker.items.update_state",
+                    "gitlab",
+                    reason=(
+                        f"el estado '{logical_state}' no existe en el mapa de "
+                        f"estados de GitLab ({', '.join(sorted(state_map))})"
+                    ),
+                    workaround=(
+                        "usá uno de los estados lógicos soportados, o definí el "
+                        "mapeo en el perfil del cliente"
+                    ),
+                )
+            mapping = {}   # comportamiento histórico, sólo con la flag apagada
 
         update_body: dict = {}
         if mapping.get("label"):

@@ -154,6 +154,19 @@
   padding: 0 var(--space-1);
 }
 
+/* Plan 270 F5 — "Sin sincronizar": Stacky la dio por cerrada y el tracker no.
+   Solo tokens que el tema define de verdad (--danger, --border, --radius-sm):
+   la familia --color-* NO existe en este repo y dejaria el badge invisible.
+   Cero HEX y cero estilos en linea (los exigen los ratchets de deuda visual). */
+.divergedBadge {
+  font-size: var(--text-xs);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  white-space: nowrap;
+}
+
 .runningDot {
   font-size: var(--text-xs);
   color: var(--accent);

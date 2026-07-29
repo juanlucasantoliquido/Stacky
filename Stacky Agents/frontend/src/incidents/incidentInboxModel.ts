@@ -32,6 +32,9 @@ export interface IncidentInboxResponse {
   truncated: boolean;
   /** Plan 238 4.1.4 — tickets del proyecto SIN work_item_type sincronizado. */
   untyped_count: number;
+  /** Plan 270 F5 — incidencias completed en Stacky pero abiertas en el tracker.
+   *  Conteo EXACTO por agregacion: no depende del LIMIT de la lista. */
+  diverged_count: number;
   /** Tracker del proyecto activo ("ado" | "gitlab" | null). Solo informativo. */
   provider: string | null;
   incident_types: string[];
@@ -46,6 +49,9 @@ export interface IncidentInboxStatus {
    *  lote). OPCIONAL: un backend viejo no la manda y la bandeja queda solo
    *  lectura. Se lee con resolveInboxActionsEnabled (incidentInboxActionsModel). */
   actions_enabled?: boolean;
+  /** Plan 270 F5 — gate del badge "Sin sincronizar". OPCIONAL: un backend
+   *  viejo no la manda y el badge queda oculto. */
+  divergence_badge_enabled?: boolean;
   incident_types: string[];
   incident_types_source: string;
   closed_states: string[];

@@ -32,6 +32,15 @@ import {
   type IncidentInboxItem,
 } from "../incidents/incidentInboxModel";
 import {
+  DIVERGENCE_BADGE_LABEL,
+  DIVERGENCE_BADGE_TITLE,
+  filterDiverged,
+  formatDivergenceCount,
+  isDiverged,
+  resolveDivergenceBadgeEnabled,
+  resolveDivergenceCount,
+} from "../incidents/incidentDivergence";
+import {
   BULK_FINISH_REASON,
   DEFAULT_FINISH_STATE,
   FINISH_STATE_SUGGESTIONS,
@@ -118,6 +127,8 @@ export default function IncidentInboxPage() {
   const [finishState, setFinishState] = useState(DEFAULT_FINISH_STATE);
   const [openPr, setOpenPr] = useState(DEFAULT_OPEN_PR);
   const [busyRowId, setBusyRowId] = useState<number | null>(null);
+  // Plan 270 F5 — filtro del chip "Sin sincronizar". Solo lectura: no escribe nada.
+  const [soloDivergentes, setSoloDivergentes] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const runnerRef = useRef(createBulkRunner());
   const headerWrapRef = useRef<HTMLSpanElement>(null);
@@ -179,7 +190,25 @@ export default function IncidentInboxPage() {
     [dto, statusQ.data],
   );
 
-  const visibleIds = useMemo(() => visible.map((i) => i.id), [visible]);
+  // Plan 270 F5 — el gate del badge/chip y la lista realmente MOSTRADA.
+  const divergenciaVisible = resolveDivergenceBadgeEnabled(statusQ.data?.data);
+  // C7 — el filtro se aplica ACA, no dentro del .map: `visible` alimenta tambien
+  // a visibleIds -> useRowSelection -> "Seleccionar todo" -> cierre en LOTE, que
+  // ESCRIBE en el tracker. Si el filtro viviera solo en el .map, "Seleccionar
+  // todo" marcaria filas ocultas y el lote escribiria sobre incidencias que el
+  // operador nunca vio.
+  const mostrados = useMemo(
+    () => filterDiverged(visible, soloDivergentes),
+    [visible, soloDivergentes],
+  );
+  // El conteo del SERVIDOR manda; la lista local es el fallback. Se calcula una
+  // sola vez y se usa para el gate Y para el texto: si el gate mirara una fuente
+  // y el texto otra, el chip podria aparecer vacio. NUNCA sobre `mostrados`: si
+  // no, al activar el filtro el numero se congelaria en si mismo.
+  const divergentes = resolveDivergenceCount(dto?.diverged_count, visible);
+  const textoChip = formatDivergenceCount(divergentes);
+
+  const visibleIds = useMemo(() => mostrados.map((i) => i.id), [mostrados]);
   const sel = useRowSelection({
     visibleIds,
     enabled: selectionEnabled,
@@ -473,9 +502,20 @@ export default function IncidentInboxPage() {
             {s.state} {s.count}
           </span>
         ))}
+        {divergenciaVisible && textoChip !== "" && (
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-pressed={soloDivergentes}
+            title={DIVERGENCE_BADGE_TITLE}
+            onClick={() => setSoloDivergentes((v) => !v)}
+          >
+            {textoChip}
+          </Button>
+        )}
       </div>
       <div className={styles.list}>
-        {visible.map((item: IncidentInboxItem) => {
+        {mostrados.map((item: IncidentInboxItem) => {
           const puedeCerrar = canFinishIncident({ item, actionsEnabled });
           const puedeResolver = canResolveIncident({
             item,
@@ -504,6 +544,11 @@ export default function IncidentInboxPage() {
               <span className={item.is_open ? styles.openBadge : styles.closedBadge}>
                 {item.is_open ? "Abierta" : "Cerrada"}
               </span>
+              {divergenciaVisible && isDiverged(item) && (
+                <span className={styles.divergedBadge} title={DIVERGENCE_BADGE_TITLE}>
+                  {DIVERGENCE_BADGE_LABEL}
+                </span>
+              )}
               {corriendo && <span className={styles.runningDot}>agente corriendo</span>}
               <span className={styles.assignee}>{item.assigned_to_ado ?? "sin asignar"}</span>
               <span className={styles.rowActions}>

@@ -881,6 +881,13 @@ HARNESS_TEST_FILES=(
   tests/test_plan242_no_new_deps.py
   tests/test_plan242_flags_off.py
   tests/test_plan242_runtime_parity.py
+  # -- Plan 270 - El tablero de incidencias dice la verdad: cierre real en ADO y GitLab --
+  tests/test_plan270_close_intent.py
+  tests/test_plan270_write_router.py
+  tests/test_plan270_gitlab_close.py
+  tests/test_plan270_finish_work_state.py
+  tests/test_plan270_state_writeback.py
+  tests/test_plan270_state_write_ratchet.py
 )
 
 pass=0

@@ -29,6 +29,18 @@ def _actions_enabled() -> bool:
     return bool(getattr(_cfg, "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED", True))
 
 
+def _divergence_badge_enabled() -> bool:
+    """Plan 270 F5 — marca "Sin sincronizar" en la bandeja (solo lectura).
+
+    Depende de la flag padre igual que las acciones: con la bandeja apagada no
+    hay nada que marcar.
+    """
+    if not _enabled():
+        return False
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED", True))
+
+
 def _feature_disabled_response():
     return jsonify({"ok": False, "error": "feature_disabled"}), 404
 
@@ -74,6 +86,10 @@ def incident_inbox_status():
         # / lote). ADITIVO: un frontend viejo que no lo lea sigue funcionando en
         # modo solo lectura. False si la bandeja entera esta apagada.
         "actions_enabled": _actions_enabled(),
+        # Plan 270 F5 — gate del badge "Sin sincronizar". ADITIVO y estricto a
+        # true del lado del frontend: un backend viejo que no lo manda deja el
+        # badge oculto y la pagina sigue funcionando.
+        "divergence_badge_enabled": _divergence_badge_enabled(),
         "incident_types": list(types),
         "incident_types_source": types_source,
         "closed_states": list(closed),
@@ -135,6 +151,13 @@ def incident_inbox_items():
         closed_count = incident_q.filter(state_expr.in_(closed_norm)).count()
         counts = build_counts(total, closed_count)
 
+        # Plan 270 F5 — divergencia EXACTA por agregación (no depende del LIMIT).
+        # Misma regla de dos condiciones que isDiverged() en el .ts: Stacky la da
+        # por cerrada pero el tablero la sigue pintando abierta.
+        diverged_count = incident_q.filter(
+            Ticket.stacky_status == "completed"
+        ).filter(~state_expr.in_(closed_norm)).count()
+
         # (2) DEGRADACION POR PROVEEDOR (Plan 238 4.1.4): tickets del proyecto
         # SIN tipo sincronizado. En GitLab el tipo viaja como label, no como
         # columna, asi que work_item_type queda NULL y el filtro de (1) los
@@ -172,6 +195,9 @@ def incident_inbox_items():
         "counts": counts,
         "truncated": truncated,
         "untyped_count": untyped_count,
+        # Plan 270 F5 — incidencias completed en Stacky pero abiertas en el
+        # tracker. ADITIVA: un frontend viejo que no la lea sigue funcionando.
+        "diverged_count": diverged_count,
         "provider": provider,
         "incident_types": list(types),
         "closed_states": list(closed),

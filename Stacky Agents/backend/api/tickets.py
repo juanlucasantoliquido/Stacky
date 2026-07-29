@@ -1485,12 +1485,27 @@ def set_stacky_status_by_ado(ado_id: int):
             }
         else:
             try:
-                _provider = _provider_for_ticket(ticket=t)
-                if _provider is not None:
-                    _provider.update_item_state(str(ado_id), target_ado_state)
+                from services import tracker_write_router as _twr
+                if _twr.routing_enabled():
+                    # Plan 270 F3 (S2) — mismo enrutado que finish_work: el
+                    # cierre AUTOMATICO al terminar un agente es el que mas
+                    # divergencia produce (ver KPI, seccion 1).
+                    _applied = _twr.write_state_for_ticket(
+                        ticket=t, ado_id=ado_id, requested_state=target_ado_state,
+                    )
+                    state_change_result = {
+                        "ok": True,
+                        "to": _applied["native_state"],
+                        "requested": target_ado_state,
+                        "tracker_type": _applied["tracker_type"],
+                    }
                 else:
-                    _ado_client_for_ticket(ticket=t).update_work_item_state(int(ado_id), target_ado_state)
-                state_change_result = {"ok": True, "to": target_ado_state}
+                    _provider = _provider_for_ticket(ticket=t)
+                    if _provider is not None:
+                        _provider.update_item_state(str(ado_id), target_ado_state)
+                    else:
+                        _ado_client_for_ticket(ticket=t).update_work_item_state(int(ado_id), target_ado_state)
+                    state_change_result = {"ok": True, "to": target_ado_state}
                 logger.info(
                     "set_stacky_status_by_ado: ado state changed → %s (ADO-%s corr=%s)",
                     target_ado_state, ado_id, correlation_id,
@@ -1506,6 +1521,20 @@ def set_stacky_status_by_ado(ado_id: int):
                     "error": str(exc),
                     "type": type(exc).__name__,
                 }
+
+    # ── Plan 270 F4 (S2) — reflejar el estado real en la base local ───────────
+    # Este es el camino AUTOMATICO: lo dispara el fin de un agente. Sin esto,
+    # cada agente que termina deja una fila divergente (stacky_status
+    # "completed" + ado_state viejo) y el KPI del plan nunca llega a 0.
+    # Corre SOLO si la escritura salio bien: agregar una lectura de red por cada
+    # fallo seria costo sin senal (el fallo ya queda en state_change_result).
+    # refresh_local_state toma el id LOCAL, no el del tracker: `ticket_id` ya es
+    # `t.id` (asignado en :1285 dentro del session_scope) y es un int plano, asi
+    # que no arriesga un DetachedInstanceError fuera de la sesion.
+    if target_ado_state and ado_id is not None and state_change_result.get("ok"):
+        from services import ticket_state_writeback as _wb
+        if _wb.writeback_enabled():
+            state_change_result["local_refresh"] = _wb.refresh_local_state(ticket_id)
 
     return jsonify({
         "ok": True,
@@ -1932,6 +1961,16 @@ def finish_work(ticket_id: int):
     }
 
     if dry_run:
+        # ── Plan 270 F7 — destino resuelto, SIN escribir ──────────────────────
+        # Reusa F0 (vocabulario) y F1 (destino) en modo consulta. Nunca escribe:
+        # write_state_for_ticket NO se llama acá. El operador lee a qué sistema
+        # va y en qué estado va a quedar ANTES de confirmar.
+        _destino = {"resolved": False, "reason": "no_target_state"}
+        if target_ado_state and ado_id is not None:
+            from services import tracker_write_router as _twr
+            _destino = _twr.preview_state_write(
+                ticket=ticket, requested_state=target_ado_state,
+            )
         return jsonify({
             "ok": True,
             "dry_run": True,
@@ -1942,6 +1981,8 @@ def finish_work(ticket_id: int):
             "actions": [],
             "current_status": current_stacky,
             "operator": operator,
+            # Key ADITIVA: un frontend viejo que no la lea sigue igual.
+            "destination": _destino,
         })
 
     if has_unconsumed_task_artifacts and not force_finish:
@@ -2073,24 +2114,60 @@ def finish_work(ticket_id: int):
     # ── 4. Cambiar estado en ADO ──────────────────────────────────────────────
     if target_ado_state and ado_id is not None:
         try:
-            _provider = _provider_for_ticket(ticket=ticket)
-            if _provider is not None:
-                _provider.update_item_state(str(ado_id), target_ado_state)
+            from services import tracker_write_router as _twr
+            if _twr.routing_enabled():
+                # Plan 270 F3 — destino y vocabulario correctos, o error honesto.
+                _applied = _twr.write_state_for_ticket(
+                    ticket=ticket, ado_id=ado_id, requested_state=target_ado_state,
+                )
+                actions.append({
+                    "action": "update_ado_state",
+                    "ok": True,
+                    "to": _applied["native_state"],
+                    "requested": target_ado_state,
+                    "tracker_type": _applied["tracker_type"],
+                    "reason": None,
+                })
             else:
-                _ado_client_for_ticket(ticket=ticket).update_work_item_state(int(ado_id), target_ado_state)
-            actions.append({
-                "action": "update_ado_state",
-                "ok": True,
-                "to": target_ado_state,
-                "reason": None,
-            })
+                # Camino histórico byte-idéntico (rollback por flag).
+                _provider = _provider_for_ticket(ticket=ticket)
+                if _provider is not None:
+                    _provider.update_item_state(str(ado_id), target_ado_state)
+                else:
+                    _ado_client_for_ticket(ticket=ticket).update_work_item_state(int(ado_id), target_ado_state)
+                actions.append({
+                    "action": "update_ado_state",
+                    "ok": True,
+                    "to": target_ado_state,
+                    "reason": None,
+                })
         except Exception as exc:  # noqa: BLE001
             logger.exception("finish_work: update_ado_state falló")
+            # Plan 270 F3 — el `workaround` de CapabilityUnavailable NO viaja en
+            # str(exc): su __str__ (tracker_provider.py:63) sólo arma
+            # "'<cap>' no disponible en <prov>: <reason>". Sin esto, el operador ve
+            # el problema pero nunca la solución.
+            _wa = getattr(exc, "workaround", "") or ""
             actions.append({
                 "action": "update_ado_state",
                 "ok": False,
                 "to": target_ado_state,
-                "reason": f"{type(exc).__name__}: {exc}",
+                "reason": f"{type(exc).__name__}: {exc}" + (f" — {_wa}" if _wa else ""),
+            })
+
+    # ── 4.bis Plan 270 F4 — reflejar el estado real en la base local ──────────
+    # Sin esto, la bandeja sigue pintando "Abierta" una fila recién cerrada,
+    # porque deriva is_open de Ticket.ado_state (api/incident_inbox.py:163) y
+    # set_status NO toca esa columna (services/ticket_status.py no la menciona).
+    if target_ado_state and ado_id is not None:
+        from services import ticket_state_writeback as _wb
+        if _wb.writeback_enabled():
+            _wb_result = _wb.refresh_local_state(ticket_id)
+            actions.append({
+                "action": "refresh_local_state",
+                "ok": bool(_wb_result.get("refreshed")),
+                "to": _wb_result.get("ado_state"),
+                "reason": _wb_result.get("reason"),
             })
 
     # ── 5. Cerrar en Stacky BD ────────────────────────────────────────────────

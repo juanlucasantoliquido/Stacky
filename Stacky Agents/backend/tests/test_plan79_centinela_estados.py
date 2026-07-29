@@ -267,9 +267,18 @@ def test_final_noop_when_flag_off_and_uses_config_when_flag_on(client, tmp_repo,
     _mk_ticket_and_exec(ado_id_off)
     _inject_publisher_stub_ok(ado_id_off)
 
+    # Plan 270 F3 — el SEAM de construccion del cliente ADO se movio: la rama
+    # legacy de set_stacky_status_by_ado ahora enruta por
+    # services.tracker_write_router, que construye el cliente con
+    # services.project_context.build_ado_client (no puede importar la capa web).
+    # El ARGUMENTO que recibe update_work_item_state es el mismo de siempre
+    # (passthrough exacto para azure_devops), asi que este centinela sigue
+    # midiendo lo mismo; solo hay que doblar el seam nuevo con el MISMO mock.
+    mock_legacy_client = MagicMock()
     with patch("api.tickets._apply_task_state") as mock_apply, \
          patch("api.tickets._provider_for_ticket", return_value=None), \
-         patch("api.tickets._ado_client_for_ticket") as mock_legacy_client:
+         patch("api.tickets._ado_client_for_ticket", new=mock_legacy_client), \
+         patch("services.project_context.build_ado_client", new=mock_legacy_client):
         resp_off = client.patch(
             f"/api/tickets/by-ado/{ado_id_off}/stacky-status",
             json={

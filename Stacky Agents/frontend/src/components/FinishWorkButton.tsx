@@ -18,6 +18,7 @@ import { Tickets, type FinishWorkResponse } from "../api/endpoints";
 import type { Ticket } from "../types";
 import { useWorkbench } from "../store/workbench";
 import { shouldCloseOnBackdrop } from "../services/uiGuards";
+import { describeCloseDestination } from "../incidents/incidentDivergence";
 import styles from "./FinishWorkButton.module.css";
 
 interface Props {
@@ -173,6 +174,21 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
                       ? <code>#{lastResult.preconditions.execution_id}</code>
                       : <span className={styles.warn}>ninguna</span>}
                   </li>
+                  {/* Plan 270 F7 — a QUE sistema se va a escribir y en que estado
+                      va a quedar, ANTES de confirmar. La redaccion vive en una
+                      funcion pura testeada (describeCloseDestination). */}
+                  {describeCloseDestination(lastResult.destination) !== "" && (
+                    <li>
+                      <span className={styles.checkLabel}>Destino del cierre:</span>{" "}
+                      <span
+                        className={
+                          lastResult.destination?.resolved === true ? styles.ok : styles.warn
+                        }
+                      >
+                        {describeCloseDestination(lastResult.destination)}
+                      </span>
+                    </li>
+                  )}
                 </ul>
               )}
               {/* CA-5.1: advertencia de ejecución activa detectada en dry-run */}

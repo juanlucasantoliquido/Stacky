@@ -136,9 +136,23 @@ export interface FinishWorkResponse {
     status?: string | null;
     html_sha256?: string | null;
     record_id?: number | null;
+    /** Plan 270 F3 — estado tal como lo pidio el operador (antes de traducir). */
+    requested?: string | null;
+    /** Plan 270 F3 — tracker al que realmente se escribio. */
+    tracker_type?: string | null;
   }[];
   current_status: string;
   operator: string;
+  /** Plan 270 F7 — destino resuelto del dry-run (a que sistema y en que estado
+   *  va a quedar), SIN escribir nada. OPCIONAL: un backend viejo no la manda. */
+  destination?: {
+    resolved?: boolean;
+    tracker_type?: string | null;
+    native_state?: string;
+    closes?: boolean;
+    reason?: string;
+    workaround?: string;
+  } | null;
   /** Resultado de la cancelación de la ejecución activa (Fase 5.B). null si no había ejecución activa. */
   cancel_result: {
     execution_id: number;

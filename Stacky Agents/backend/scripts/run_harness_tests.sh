@@ -904,6 +904,12 @@ HARNESS_TEST_FILES=(
   tests/test_plan259_enable_engine.py
   tests/test_plan259_tracker_parity_guard.py
   tests/test_plan259_ratchet_script_parity.py
+
+  # Plan 267 - Catalogo unico de acciones DevOps (3 superficies, 1 confirmacion)
+  tests/test_devops_action_catalog.py
+  tests/test_devops_actions_api.py
+  tests/test_devops_action_matcher.py
+  tests/test_devops_action_ratchet.py
 )
 
 pass=0

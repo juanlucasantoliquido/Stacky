@@ -828,6 +828,30 @@
       },
       "evidence": "backend/api/projects.py (rama gitlab de init_project y update_project); antes de este plan el mismo caso caia al else de azure_devops SIN loguear nada",
       "note": "Antes del plan 259, tracker_type=gitlab en init_project/update_project caia al else de Azure DevOps y CONVERTIA el proyecto en silencio (cero lineas de log: por eso no hay huella del bug viejo, solo del rechazo explicito que lo reemplaza)."
+    },
+    {
+      "id": "plan267-propuesta-permanentemente-bloqueada",
+      "title": "El asistente propone una accion DevOps que nunca se puede ejecutar",
+      "class": "ux-dead-end",
+      "status": "by_design",
+      "log_pattern": "devops_action_propose.*proposal_blocked.*blocked_reason.{0,4}(agent_write_disabled|missing_params|ambiguous|flag_off|no_match)",
+      "log_guarded": true,
+      "killed_by": "plan 267 F8",
+      "killed_commit": null,
+      "date_resolved": "2026-07-29",
+      "guard_test": "tests/test_devops_action_ratchet.py",
+      "self_test": {
+        "matches": [
+          "2026-07-29 10:00:00 WARNING devops_action_propose proposal_blocked action_id=devops.pipeline.trigger blocked_reason=agent_write_disabled",
+          "WARNING devops_action_propose proposal_blocked {\"action_id\": \"devops.deployment.execute\", \"blocked_reason\": \"missing_params\"}"
+        ],
+        "clean": [
+          "2026-07-29 10:00:00 INFO devops_action_propose proposal_ok action_id=devops.logs.tail blocked_reason=",
+          "2026-07-29 10:00:01 INFO devops_action_catalog served count=23"
+        ]
+      },
+      "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
+      "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
     }
   ]
 }

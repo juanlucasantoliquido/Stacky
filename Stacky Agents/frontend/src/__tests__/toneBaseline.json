@@ -1,0 +1,30 @@
+{
+  "BuildWorkshopSection.tsx": {
+    "askConfirm": 2,
+    "danger": 1
+  },
+  "PipelineBuilderSection.tsx": {
+    "askConfirm": 4,
+    "danger": 1
+  },
+  "ProductionFlow.tsx": {
+    "askConfirm": 2,
+    "danger": 0
+  },
+  "RemoteConsoleSection.tsx": {
+    "askConfirm": 1,
+    "danger": 1
+  },
+  "ServersSection.tsx": {
+    "askConfirm": 2,
+    "danger": 2
+  },
+  "SolutionPublisherSection.tsx": {
+    "askConfirm": 5,
+    "danger": 1
+  },
+  "VariablesSection.tsx": {
+    "askConfirm": 2,
+    "danger": 1
+  }
+}

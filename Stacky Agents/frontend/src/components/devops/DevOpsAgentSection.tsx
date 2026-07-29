@@ -18,6 +18,7 @@ import { Projects } from '../../api/endpoints';
 import { DevOpsAgentApi } from '../../api/endpoints';
 import { DevOpsSectionContext } from '../../pages/DevOpsPage';
 import { resolveAgentServerBinding } from './agentServerBinding';
+import { DevOpsActionConsole } from './DevOpsActionConsole'; // Plan 267 F6
 import styles from './devops.module.css';
 
 export interface DevOpsAgentSectionProps {
@@ -120,6 +121,18 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
       {binding.hint && (
         <div className={styles.alertWarning}>{binding.hint}</div>
       )}
+
+      {/* Plan 267 F6 — Consola de ACCIONES, montada ENCIMA del chat existente y
+          sin borrarlo. El chat de texto libre sigue igual (§7.3). Con
+          action_nl_enabled en OFF la consola no se monta y esta sección queda
+          exactamente como antes del plan 267. */}
+      <DevOpsActionConsole
+        enabled={ctx.health.action_nl_enabled === true}
+        project={project}
+        onNavigate={(path) => {
+          window.location.hash = path;
+        }}
+      />
 
       {/* Nueva conversación */}
       <div className={styles.panel}>

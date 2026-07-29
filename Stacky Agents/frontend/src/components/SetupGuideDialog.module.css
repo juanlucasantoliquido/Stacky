@@ -1,0 +1,166 @@
+/* Plan 259 F6.c — Panel de la guía de configuración.
+   CERO colores literales: `uiDebtRatchet` da presupuesto 0 a todo archivo que no
+   esté en el baseline (allowedBase = baseline[kind][file] ?? 0), así que un solo
+   hex acá pone el ratchet en rojo. Todo sale de los tokens de theme.css. */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.warnStrip {
+  padding: 8px 10px;
+  border: 1px solid var(--status-warning-border);
+  border-radius: 6px;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  font-size: var(--text-xs);
+}
+
+.summary {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* ── Pasos ── */
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step,
+.stepHighlight {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+}
+
+.stepHighlight {
+  border-color: var(--danger);
+}
+
+.stepHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stepTitle {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stepDetail {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.trap {
+  margin: 6px 0 0;
+  color: var(--status-warning-soft-text);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* ── Verificación ── */
+
+.verifyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.verifyHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btnVerify {
+  padding: 7px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.btnVerify:disabled {
+  border-color: var(--border);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.verdict {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+}
+
+.verifyError {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.checkIcon {
+  flex: 0 0 auto;
+  line-height: 1.5;
+}
+
+.checkText {
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}

@@ -181,6 +181,30 @@
   border-color: #22c55e !important;
 }
 
+/* Plan 259 F6.d — botón ℹ️ INFO junto al selector de tracker.
+   SIN un solo color literal nuevo: uiDebtBaseline congela este archivo en 24
+   hex y el ratchet no admite 25. Mismas medidas que .trackerBtn, con los tokens
+   que theme.css ya expone. */
+.btnInfo {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  /* Token, NO un tiempo literal: motionDebtRatchet congela este archivo en 2
+     literales de motion y un tercero lo pondria en rojo. Ojo: el propio
+     COMENTARIO cuenta, asi que aca no se puede escribir el valor de ejemplo. */
+  transition: var(--transition-colors);
+}
+
+.btnInfo:hover {
+  border-color: var(--accent);
+}
+
 .trackerFields {
   display: flex;
   flex-direction: column;

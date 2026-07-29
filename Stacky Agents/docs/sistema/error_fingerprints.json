@@ -786,6 +786,28 @@
           "otro-archivo.txt"
         ]
       }
+    },
+    {
+      "id": "plan259_gitlab_onboarding_off",
+      "title": "Alta/edicion GitLab rechazada por flag de onboarding apagada",
+      "class": "config-flag-off",
+      "status": "resolved",
+      "log_pattern": "(alta|edición) de proyectos GitLab está apagada",
+      "log_guarded": false,
+      "killed_by": "plan 259 (alta de proyecto GitLab de primera clase)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-29",
+      "guard_test": "tests/test_plan259_api_projects_gitlab.py",
+      "self_test": {
+        "matches": [
+          "El alta de proyectos GitLab está apagada (STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false)."
+        ],
+        "clean": [
+          "issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"
+        ]
+      },
+      "evidence": "backend/api/projects.py (rama gitlab de init_project y update_project); antes de este plan el mismo caso caia al else de azure_devops SIN loguear nada",
+      "note": "Antes del plan 259, tracker_type=gitlab en init_project/update_project caia al else de Azure DevOps y CONVERTIA el proyecto en silencio (cero lineas de log: por eso no hay huella del bug viejo, solo del rechazo explicito que lo reemplaza)."
     }
   ]
 }

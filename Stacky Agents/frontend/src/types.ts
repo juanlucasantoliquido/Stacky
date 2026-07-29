@@ -326,6 +326,19 @@ export interface InitProjectPayload {
   gitlab_project?: string;
   gitlab_group?: string;
   gitlab_auth_file?: string;
+  // Plan 259 F5.a — sin `gitlab_token` en el tipo base, `patch("gitlab_token", …)`
+  // de EditProjectModal (tipado `keyof InitProjectPayload`) NO compila.
+  gitlab_token?: string;
+  gitlab_enable_engine?: boolean;
+}
+
+/** Plan 259 F7 — lo que devuelve `init_project` en `gitlab_engine` cuando se crea
+ *  un proyecto GitLab. Ausente para los otros 3 trackers. */
+export interface GitlabEngineResult {
+  changed?: boolean;
+  already_on?: boolean;
+  skipped?: boolean;
+  error?: string;
 }
 
 export interface AgentWorkflowConfig {

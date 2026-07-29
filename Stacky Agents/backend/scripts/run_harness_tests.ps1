@@ -793,7 +793,20 @@ $HarnessTestFiles = @(
   "tests/test_plan242_cost_api.py",
   "tests/test_plan242_no_new_deps.py",
   "tests/test_plan242_flags_off.py",
-  "tests/test_plan242_runtime_parity.py"
+  "tests/test_plan242_runtime_parity.py",
+  # -- Plan 259 - Alta de proyecto GitLab + guia de configuracion verificable --
+  # SINTAXIS DISTINTA del .sh: rutas ENTRECOMILLADAS y separadas por coma. Pegarlas
+  # peladas parsea con 0 errores y el array las pierde MUDAS (PowerShell las lee
+  # como nombres de comando). La ultima NO lleva coma: una coma colgante antes del
+  # parentesis rompio el .ps1 del plan 266.
+  "tests/test_plan259_setup_guide_data.py",
+  "tests/test_plan259_project_manager_gitlab.py",
+  "tests/test_plan259_api_projects_gitlab.py",
+  "tests/test_plan259_gitlab_token_dpapi.py",
+  "tests/test_plan259_setup_guide_api.py",
+  "tests/test_plan259_enable_engine.py",
+  "tests/test_plan259_tracker_parity_guard.py",
+  "tests/test_plan259_ratchet_script_parity.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

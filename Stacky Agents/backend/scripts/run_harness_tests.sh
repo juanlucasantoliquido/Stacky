@@ -881,6 +881,15 @@ HARNESS_TEST_FILES=(
   tests/test_plan242_no_new_deps.py
   tests/test_plan242_flags_off.py
   tests/test_plan242_runtime_parity.py
+  # -- Plan 259 - Alta de proyecto GitLab + guia de configuracion verificable --
+  tests/test_plan259_setup_guide_data.py
+  tests/test_plan259_project_manager_gitlab.py
+  tests/test_plan259_api_projects_gitlab.py
+  tests/test_plan259_gitlab_token_dpapi.py
+  tests/test_plan259_setup_guide_api.py
+  tests/test_plan259_enable_engine.py
+  tests/test_plan259_tracker_parity_guard.py
+  tests/test_plan259_ratchet_script_parity.py
 )
 
 pass=0

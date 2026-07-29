@@ -1,10 +1,76 @@
 # Plan 263 — Tablero de planes denso y ningún plan sin estado: fallback único, migración con evidencia y guardia anti-regresión
 
-**Estado:** CRITICADO v5 (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3; **v3 RECHAZADO** (1 BLOQUEANTE, verificado abriendo el árbol real del 2026-07-29) → v4; **v4 RECHAZADO** (2 BLOQUEANTES, juez independiente, corrida distinta, verificado abriendo el árbol real horas más tarde el mismo 2026-07-29) → v5 in place
+**Estado:** CRITICADO v6 (2026-07-29) · **Autor:** pipeline `proponer-plan-stacky` · **Juez:** `criticar-y-mejorar-plan` — **v1 RECHAZADO** (6 BLOQUEANTES) → v2; **v2 RECHAZADO** (5 BLOQUEANTES) → v3; **v3 RECHAZADO** (1 BLOQUEANTE, verificado abriendo el árbol real del 2026-07-29) → v4; **v4 RECHAZADO** (2 BLOQUEANTES, juez independiente, corrida distinta, verificado abriendo el árbol real horas más tarde el mismo 2026-07-29) → v5; **v5 APROBADO-CON-CAMBIOS** (0 BLOQUEANTES, 1 IMPORTANTE + 1 MENOR, tercera ronda del mismo día, cada anclaje re-medido con comandos reales — no sólo releído) → v6 in place, **LISTO PARA IMPLEMENTAR**
 
 ---
 
-## 0. CHANGELOG v4 → v5
+## 0. CHANGELOG v5 → v6
+
+**Tercera ronda del mismo día, juez independiente, corrida nueva.** El v5 corrigió los dos símbolos que
+el v4 nunca re-verificó (`Health.get()`/`Record<string, boolean>` y la posición de `PlansBoard` en
+`endpoints.ts`). Esta ronda parte de una premisa distinta a las dos anteriores: **no confiar en que "nadie
+tocó código" implica "nada cambió"** — el mandato explícito fue reabrir cada archivo con comandos reales
+(no releer prosa) y correr el propio comando de censo de §1.1, no citar el número de la ronda anterior.
+Resultado, medido hoy con `git log` + lectura directa de cada archivo + ejecución real de los comandos
+del propio documento:
+
+- **Cero drift nuevo en absolutamente nada de lo ya fijado.** Los cinco archivos que F0 edita
+  (`config.py`, `harness_flags.py`, `test_harness_flags.py`, `harness_flags_help.py`,
+  `test_harness_flags_requires.py`) **más** el archivo de test cuya línea base de deuda ajena depende de
+  que nadie lo toque (`test_harness_flags_help.py`) siguen en el mismo commit tope (`05398601`, costura
+  P0, salvo `test_harness_flags_help.py`: sin tocar desde el Plan 86, 2026-07-03) que midió el v5;
+  ninguno tiene cambios sin commitear (`git status --short` del árbol no los incluye). Los símbolos
+  `Health.get()` (`endpoints.ts:3379-3380`),
+  `HealthResponse.flags: Record<string, boolean>` (`:3371-3375`) y `PlansBoard` (`:5066`) re-miden
+  **exactos, byte a byte**, contra lo que el v5 ya corrigió. El censo de §1.1, corrido de nuevo ahora
+  mismo, da **`total 223 | sin estado 80`** — el mismo número que el propio v5/C7 ya había registrado
+  horas antes, pese a que hoy se criticaron 260 (v4→v5→v6), 264 (v4→v5), 265 (v4→v5) y 266/271
+  (v4→v5→v6): son ediciones **in place** de documentos que ya declaran su `**Estado:**`, así que no mueven
+  el "sin estado". Los dos rojos ajenos se re-corrieron literalmente (no se citaron de memoria):
+  `test_harness_flags_help.py` → **4 failed / 4 passed**; `test_error_fingerprints_catalog.py` →
+  **3 failed / 5 passed**. Y los ~20 anclajes internos de `services/plans_board.py` que F1/F2/F3 dan por
+  sentado (`_PLAN_FILE_RE`/`_ESTADO_RE`/`_HEADER_READ_CHARS`/`_LEDGER_OK_VEREDICTOS` en `:23/25/30/34`,
+  `parse_plan_header` en `:89`, `claim_plan_path` en `:382-394`, `load_ledger` en `:425-446`, la línea en
+  blanco entre `estado_efectivo=` y `action=` de F1(d), `_BOARD_TTL_SEC=15` en `:698`, el patrón
+  `getattr(config, …)` de `api/plans_board.py:15-16/78-81`) re-miden **exactos** — ese archivo no lo tocó
+  nadie desde el 2026-07-25, dos días antes de que este plan existiera.
+- **C9 (MENOR)** — F5 afirma "Los ratchets del frontend son **OCHO**, no uno". Medido hoy:
+  `Get-ChildItem "frontend/src/__tests__" -Filter "*Ratchet.test.ts"` da **NUEVE**
+  (`devopsActionCatalogRatchet.test.ts` nació hoy 2026-07-29 00:52 con el cierre de F8 del Plan 267 —
+  antes de esta ronda, pero después de que el v3 escribiera "ocho" el 2026-07-27). No gatea ningún
+  criterio del DoD ni de F7 (F7 sólo corre `uiDebtRatchet.test.ts` por nombre): es una nota advisory para
+  que el implementador no se sorprenda si otro ratchet además del de UI se pone rojo. Pero es exactamente
+  el mismo patrón de fragilidad que el propio §1.1 ya combate para el censo de planes — un número
+  hardcodeado en un repo donde ese número cambia cada pocos días. Corregido: la nota deja de fijar un
+  número y pasa a decir "correlo, no lo cuentes de memoria", con el comando exacto.
+- **C10 (IMPORTANTE)** — la **[ADICIÓN ARQUITECTO 7]** (§9.1, nueva en el v5) declara que adopta el R10
+  del plan hermano 264, que nombra **cinco** estructuras a verificar por duplicados post-merge:
+  `FLAG_REGISTRY` / `_CURATED_DEFAULTS_ON` / `_REQUIRES_MAP_FROZEN` / `PLAIN_HELP` /
+  **`HARNESS_TEST_FILES`** (confirmado hoy: el R10 vigente de 264, tras su propia ronda v4→v5 de HOY,
+  sigue listando las cinco — `264_PLAN_...:1947`). El comando que el propio 263 escribió en §9.1 sólo
+  implementa **cuatro**: cuenta duplicados en `FLAG_REGISTRY` (única lista) y sólo *importa* (sin contar
+  duplicados) `_CURATED_DEFAULTS_ON`/`_REQUIRES_MAP_FROZEN`/`PLAIN_HELP` — `HARNESS_TEST_FILES` **no
+  aparece en el comando**, pese a ser justo la estructura que el propio F2 de este plan edita (registra
+  sus 3 archivos de test ahí) y una de "los mismos 5 archivos compartidos" que §9 ya califica de colisión
+  **Alta** entre 260/263/264/265. Peor: la "Nota honesta" del propio §9.1 dice que "la defensa real ya la
+  dan `test_harness_flags.py` / `test_harness_flags_requires.py` / `test_harness_ratchet_meta.py`" para
+  las cuatro estructuras dict/set — pero **medido hoy, leyendo el código real de
+  `test_harness_ratchet_meta.py:18-21`**: `_ratchet_files()` parsea `HARNESS_TEST_FILES` con
+  `set(re.findall(...))` — pasa por un **`set` ANTES** de cualquier aserción, así que una línea
+  duplicada colapsa en silencio y **ninguno de los 4 tests de ese archivo la detecta** (los cuatro operan
+  sobre el `set` ya deduplicado, nunca sobre el conteo de líneas crudo). La afirmación de que "ya está
+  defendido" es, para esta estructura puntual, **falsa** — verificado corriendo el archivo, no
+  asumido. Corregido: `HARNESS_TEST_FILES` se agrega como quinto chequeo explícito en §9.1, contando
+  líneas crudas (no un `set`) sobre **los dos archivos** (`.sh` y `.ps1` — el meta-test existente sólo
+  cubre el `.sh`, así que el `.ps1` no tiene ninguna otra red), y se corrige la "Nota honesta" para no
+  sobrestimar la cobertura existente. Ver **[ADICIÓN ARQUITECTO 8]**.
+
+*(Nota de numeración: esta ronda continúa desde C8, el último hallazgo del v4→v5, para que las tres
+críticas del mismo día — v3→v4, v4→v5 y v5→v6 — se puedan citar sin ambigüedad en la misma conversación.)*
+
+---
+
+## 0.1 CHANGELOG v4 → v5
 
 **Segunda ronda del mismo día.** El v4 fue rechazado por drift de anclajes en `config.py`/`harness_flags.py`
 y corrigió eso con marcadores semánticos + `Select-String`. Esta ronda (juez independiente, corrida nueva,
@@ -78,7 +144,7 @@ conversación.)*
 
 ---
 
-## 0.1 CHANGELOG v3 → v4
+## 0.2 CHANGELOG v3 → v4
 
 El v3 fue **RECHAZADO** por un juez independiente (`criticar-y-mejorar-plan`, corrida 2026-07-29) que
 abrió el árbol real en vez de confiar en la prosa. **El diseño de v3 no cambia ni una decisión**: los
@@ -140,7 +206,7 @@ el v3 daba por verdes lo siguen estando: `test_harness_flags.py` + `test_harness
 
 ---
 
-## 0.2 CHANGELOG v2 → v3
+## 0.3 CHANGELOG v2 → v3
 
 El v2 fue **RECHAZADO**. La v2 no había tenido revisión independiente (la escribió el mismo agente en
 la misma corrida), y al abrir los archivos que anclaba aparecieron **cinco bloqueantes**. Los anclajes
@@ -219,7 +285,7 @@ relación entre los dos campos nuevos, el criterio binario de F0 y el contrato d
 
 ---
 
-## 0.3 CHANGELOG v1 → v2
+## 0.4 CHANGELOG v1 → v2
 
 El v1 fue **RECHAZADO**: su F0 tenía **cinco rojos garantizados** (el arnés se ponía rojo antes de
 escribir una sola línea de producto) y su F3 **des-aprobaba** planes que el supervisor ya había
@@ -1566,8 +1632,15 @@ cd "Stacky Agents\frontend"; npx vitest run src/__tests__/uiDebtRatchet.test.ts
 
 > Si el nombre del archivo del ratchet difiere, ubicalo con
 > `Get-ChildItem "Stacky Agents\frontend\src\__tests__\" | Select-String -Pattern ratchet` y corré ese.
-> **Los ratchets del frontend son OCHO**, no uno: si alguno más se pone rojo, comprobá primero con un
-> worktree del commit base si ya estaba rojo antes de tu cambio.
+> **El de UI no es el único ratchet del frontend — y cuántos hay exactamente es una variable, no una
+> constante de este documento (v6/C9: el v3 escribió "ocho" el 2026-07-27; el Plan 267 agregó un noveno,
+> `devopsActionCatalogRatchet.test.ts`, el 2026-07-29; para cuando implementes esto puede haber uno
+> más).** Contá el número real antes de asumirlo:
+> ```powershell
+> (Get-ChildItem "Stacky Agents\frontend\src\__tests__\" -Filter "*Ratchet.test.ts").Count
+> ```
+> Si **cualquiera** de ellos se pone rojo (no sólo `uiDebtRatchet`), comprobá primero con un worktree del
+> commit base si ya estaba rojo antes de tu cambio — la regla no depende de cuántos sean.
 
 **Criterio binario.** Primer grep = **0** (KPI-2), segundo grep **≥ 46** (31 convertidas + 15 que ya
 usaban token), ratchet de UI verde, `npx tsc --noEmit` exit 0.
@@ -1965,15 +2038,18 @@ debe copiar las dos claves nuevas (forma uniforme).
 **Sin dependencia de orden:** el 263 **no** necesita que 260/264/265 estén implementados, ni al revés.
 Los 4 pueden implementarse en cualquier orden respetando las reglas de arriba.
 
-### 9.1 Verificación post-merge de duplicados **[ADICIÓN ARQUITECTO 7, v5]**
+### 9.1 Verificación post-merge de duplicados **[ADICIÓN ARQUITECTO 7 + 8, v5/v6]**
 
 **Por qué.** El riesgo ya documentado arriba (git 3-way merge sin marcar conflicto cuando dos ramas
 agregan la misma línea de cierre a una estructura existente) es silencioso por diseño: ni los marcadores
 `<<<<<<<` ni siempre el compilador lo atrapan, porque una entrada de dict duplicada o una `FlagSpec`
 repetida puede seguir siendo Python/TypeScript sintácticamente válido. El plan hermano **264** (crítica
-v3→v4 del propio 2026-07-29, R10) ya declara el mismo chequeo para las mismas 5 estructuras que el 263
-edita en F0 — el 263 no lo tenía con esa precisión. Se adopta acá, sin esperar a que 264 se implemente
-primero (§9 ya establece que no hay dependencia de orden entre hermanos).
+v3→v4 del propio 2026-07-29, R10; re-verificado hoy que su ronda v4→v5 no cambió esto —
+`264_PLAN_...:1947`) declara el mismo chequeo para **cinco** estructuras: `FLAG_REGISTRY` /
+`_CURATED_DEFAULTS_ON` / `_REQUIRES_MAP_FROZEN` / `PLAIN_HELP` / `HARNESS_TEST_FILES`. El v5 adoptó el
+chequeo pero sólo implementó **cuatro** de las cinco — se saltó `HARNESS_TEST_FILES`, que es justo la
+estructura que el propio **F2** de este plan edita (registra ahí sus 3 archivos de test) y que §9 ya
+califica de colisión **Alta** entre 260/263/264/265. **v6/C10** cierra ese quinto chequeo.
 
 **Comando (correr después de mergear con CUALQUIERA de 260/264/265/266/271, no sólo al final):**
 
@@ -1983,22 +2059,32 @@ $py = "Stacky Agents\backend\.venv\Scripts\python.exe"
 & $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend/tests'); from test_harness_flags import _CURATED_DEFAULTS_ON; print('_CURATED_DEFAULTS_ON OK (set, no duplica por definicion)')"
 & $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend/tests'); from test_harness_flags_requires import _REQUIRES_MAP_FROZEN; print('_REQUIRES_MAP_FROZEN OK (dict, no duplica por definicion)')"
 & $py -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.harness_flags_help import PLAIN_HELP; print('PLAIN_HELP OK (dict, no duplica por definicion)')"
+& $py -c "import re, collections, pathlib; t=pathlib.Path('Stacky Agents/backend/scripts/run_harness_tests.sh').read_text(encoding='utf-8'); lines=re.findall(r'^\s*(tests/[\w/]+\.py)\s*$', t, re.MULTILINE); dups=[k for k,c in collections.Counter(lines).items() if c>1]; print('HARNESS_TEST_FILES .sh dup:', dups or 'OK')"
+& $py -c "import re, collections, pathlib; t=pathlib.Path('Stacky Agents/backend/scripts/run_harness_tests.ps1').read_text(encoding='utf-8'); lines=re.findall(r'tests/[\w/]+\.py', t); dups=[k for k,c in collections.Counter(lines).items() if c>1]; print('HARNESS_TEST_FILES .ps1 dup:', dups or 'OK')"
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_ratchet_meta.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags.py" -q
 & $py -m pytest "Stacky Agents\backend\tests\test_harness_flags_requires.py" -q
 npx tsc --noEmit
 ```
 
-> **Nota honesta:** en Python, un `dict`/`set` literal con una key repetida no "duplica en silencio" — la
-> segunda definición pisa a la primera y el propio intérprete no avisa, pero tampoco hay DOS entradas.
-> El daño real de un merge silencioso en estas estructuras no es "quedan dos", es **"una de las dos
-> pisa a la otra sin que nadie lo note"** (p. ej. dos `FlagSpec` con la misma `key=` en `FLAG_REGISTRY`,
-> que es una `list`, sí puede tener dos entradas con la misma key — por eso el primer comando cuenta
-> ocurrencias sobre `FLAG_REGISTRY`, que es la única de las cinco que es lista y no dict/set). Para las
-> otras cuatro (dict/set), la defensa real ya la dan `test_harness_flags.py` /
-> `test_harness_flags_requires.py` / `test_harness_ratchet_meta.py`, que fallan si el conjunto resultante
-> no es el esperado — por eso el comando de arriba los corre a todos juntos, no reemplaza los tests: los
-> agrupa en un solo paso post-merge para no olvidarse ninguno.
+> **Nota honesta (v6/C10 — corregida: la v5 sobrestimaba la cobertura existente).** En Python, un
+> `dict`/`set` literal con una key repetida no "duplica en silencio" — la segunda definición pisa a la
+> primera y el propio intérprete no avisa, pero tampoco hay DOS entradas. El daño real de un merge
+> silencioso en estas estructuras no es "quedan dos", es **"una de las dos pisa a la otra sin que nadie
+> lo note"** (p. ej. dos `FlagSpec` con la misma `key=` en `FLAG_REGISTRY`, que es una `list`, sí puede
+> tener dos entradas con la misma key — por eso el primer comando cuenta ocurrencias sobre
+> `FLAG_REGISTRY`). Para `_CURATED_DEFAULTS_ON`/`_REQUIRES_MAP_FROZEN`/`PLAIN_HELP` (dict/set), la
+> defensa real ya la dan `test_harness_flags.py` / `test_harness_flags_requires.py`, que fallan si el
+> conjunto resultante no es el esperado. **Pero `HARNESS_TEST_FILES` es distinto, y el v5 lo daba por
+> cubierto sin verificarlo: `test_harness_ratchet_meta.py::_ratchet_files()`
+> (`tests/test_harness_ratchet_meta.py:18-21`) parsea la lista con `set(re.findall(...))` — pasa por un
+> `set` ANTES de cualquier aserción, así que una línea física duplicada colapsa en silencio y NINGUNO de
+> los 4 tests de ese archivo la detecta** (los cuatro operan sobre el conjunto ya deduplicado, nunca
+> sobre el conteo de líneas crudo — verificado leyendo el código, no asumido). Por eso el quinto comando
+> de arriba cuenta líneas crudas, no un `set`, y corre sobre **los dos archivos** (`.sh` y `.ps1`): el
+> meta-test existente sólo lee el `.sh` (gotcha ya conocido del repo), así que el `.ps1` no tiene
+> ninguna otra red. El comando de arriba no reemplaza los tests: los agrupa en un solo paso post-merge
+> para no olvidarse ninguno, y cierra el hueco que la propia nota del v5 no había medido.
 
 **Costo:** cero líneas de producto nuevas, cero flags nuevas — son comandos de verificación que reusan
 símbolos ya importados en otras fases de este mismo plan. **Trabajo del operador: ninguno** (lo corre

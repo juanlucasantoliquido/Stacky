@@ -1,10 +1,29 @@
 # Plan 271 — La incidencia se mueve al estado configurado al terminar el analista
 
-**Estado:** CRITICADO v3 (veredicto v2: **RECHAZADO**, 6 bloqueantes · veredicto v1: **RECHAZADO**, 8 bloqueantes)
-**Fecha:** 2026-07-28
-**Juez v3: subagente independiente y NUEVO (no es el que escribió el v2), misma corrida, contexto limpio**
+**Estado:** CRITICADO v4 (veredicto v3: **RECHAZADO**, 6 bloqueantes · v2: **RECHAZADO**, 6 · v1: **RECHAZADO**, 8)
+**Fecha:** 2026-07-29
+**Juez v4: subagente independiente y NUEVO, corrida distinta, contexto limpio, worktree dedicado (`wt-c271`, rama `docs/critica-271`, base `760ac455`)**
 **Reserva de números:** este plan usa **271**. Los huecos **261** y **262** siguen libres. El **272** queda reservado para "un solo escritor de estado" (§6.1).
-**Depende de:** nada. **Coordina con:** 79 (`_apply_task_state` + `_safe_transition`), 208 (matriz), 210 (gate de build), 216 (UI de estados), 254 (`_with_outcome`), 270 (cierre real ADO+GitLab).
+**Depende de:** nada. **Coordina con:** 79 (`_apply_task_state` + `_safe_transition`), 208 (matriz), 210 (gate de build), 216 (UI de estados), 254 (`_with_outcome`), **269 (`api/executions.py`, EN VUELO — §5 R15)**, 270 (cierre real ADO+GitLab).
+
+---
+
+## CHANGELOG v3 → v4
+
+El v3 acertó en lo grande y falló en lo que decía ser su fortaleza. Lo que **se verificó corriendo y resultó EXACTO**: el censo de F8 devuelve **las 9 entradas con los mismos números de línea** (reproducido); los **8 baselines de §3.3** dan **exactamente** los conteos declarados (56 / 4f+4p / 16 / 3 / 6 / 5 / 10 / 30); `test_b2_transition_from_config.py` está **ROJO con `5 failed`** y el `TypeError` literal; `api/tickets.py:574` **sí** emite `dev_build_gate_no_state`; `.toneAtencion, .toneEspera` **comparten `color: var(--warn)`** en `:150-151`; los **8 ratchets** de UI existen con esos nombres exactos; los **4 textos de ayuda llana pasan los 5 chequeos reales**; `_extract_current_state` lee `item["state"]`, así que el `FakeProvider` del plan es correcto; el test puente de F6 no tiene falsos positivos por subcadena. Nada de eso se toca.
+
+Lo que falló salió de **correr los greps y los números**, no de releer:
+
+- **E1 (BLOQ)** — **§2.0, la tabla rotulada "Línea REAL", es FALSA en 5 de sus 9 filas, y 4 de esas 5 "corrigieron" un anclaje del v2 que ya era correcto.** Medido en el árbol base: `_with_outcome` está en **`:65`** (no `:74-107`), el corte de flag en **`:75-76`** (no `:83-84`; `:83` es un `from services.run_outcome import ...` dentro de un `try`), `_outcome_badge_enabled` en **`:28-32`** (no `:63-68`; `:63-68` es la `def`+docstring de `_with_outcome`), el encolado del motor A en **`:183`** (`ticket_status.on_execution_end(`) y el `except` en **`:177`** — o sea que "`:183` es un `except`" es falso dos veces —, y el `return` de `publish_execution_from_review` en **`:493`** (no `:491`). La llamada `maybe_apply_state_transition(ev)` está en **`:119`**: el v2 dijo `:117` y el v3 `:118`, **los dos mal**. Peor: F5 conservó los números viejos (los correctos), así que el plan cargaba dos juegos contradictorios y rotulaba "REAL" el equivocado. §2.0 se reemplaza por la medición y **toda instrucción quirúrgica pasa a anclar por SÍMBOLO** (§3.4).
+- **E2 (BLOQ)** — **los anclajes de la receta de 7 patas están desfasados y la costura P0 es la causa.** `_REQUIRES_MAP_FROZEN` pasó de 143 a **146** entradas (medido), o sea que el paquete P0 declaró 15 flags de otros planes y corrió `config.py` y `harness_flags.py` hacia abajo. Reales: `STACKY_ADO_STATE_MATRIX_ENABLED` en **`config.py:1419-1420`** (el plan decía `:1401-1406` y mandaba *"copiar el patrón exacto de `config.py:1404-1406`"*, que es otra flag), `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` en **`:1260-1261`** (decía `:1245-1246`), `STACKY_UI_OUTCOME_REASON_BADGE_ENABLED` en **`:2085-2086`** (decía `:2070-2071`), y el `FlagSpec` de la matriz en **`harness_flags.py:2853-2866`** (decía `:2795-2807`, ~58 líneas de desfase). Corregidos y con su grep de re-localización en **§3.4**.
+- **E3 (BLOQ)** — **el criterio `4 failed, 4 passed` NO distingue escribir los 4 textos de ayuda de no escribir ninguno. Es el falso verde del plan 270 otra vez.** Medido: `FLAG_REGISTRY` tiene **403** keys, `PLAIN_HELP` **324**, y hay **79 flags sin ayuda llana** hoy. `test_plain_help_covers_all_registry_keys` es **UN** test que ya falla por esos 79; sumarle 4 lo deja con 83 y **sigue siendo 1 test rojo** ⇒ el conteo global no se mueve. La salvaguarda añadida ("ninguna key `STACKY_FINAL_STATE_*` en la lista de **violaciones**") mira `violations`, el mensaje del test de jerga (`:76`); la ausencia de `PlainHelp` sale en `missing` (`:35`), otro test, otra lista: la guardia era ciega justo donde D5 apuntaba. Además §3.3 caracterizaba mal los 4 fallos (describía sólo el de jerga). El criterio pasa a ser **aserción de pertenencia + los 5 chequeos aplicados localmente** dentro de `test_plan271_flags.py` (§3.3, F1, F7).
+- **E4 (BLOQ)** — **F9 nace con CUATRO violaciones y el plan arregla UNA; su criterio `3 passed` es insatisfacible.** Se corrió la regla del test 3 tal como está escrita: **28 returns analizados, 4 violaciones**. Además de `task_states.py:183` (la conocida, que F3-bis-3 tapa), aparece **`agent_completion_internal.py:547`** — el `except` del camino **legacy** de `_attempt_state_change` devuelve `{"ok": False, "to", "ado_id", "error", "type"}` **sin `reason`**: es el mismo defecto de D3 en la rama hermana, **el plan no lo nombra nunca**, y es justo la rama que corre en el caso común de R6-bis. Y `:493` y `:54` son **falsos positivos** (los sobres `CloseResult`, con `"ok": bool(...)` y `"ok": self.ok`) que la regla no puede distinguir porque exige `ok` literal `True`. El plan prohíbe "agregar una excepción al centinela" y su escape ("agregá la razón al catálogo") no aplica a ninguno de los tres. F9 se **acota a los `return` dentro de las funciones escritoras**, F3 agrega `reason` en `:547`, y el baseline de 4 queda declarado.
+- **E5 (BLOQ)** — **las dos huellas de regresión del DoD, escritas como el plan las prescribe, rompen un test compartido — y ese test YA está rojo sin que el plan lo declare.** `docs/sistema/error_fingerprints.json` es un **dict** (`schema_version`/`description`/`fingerprints`, 42 entradas) y `tests/test_error_fingerprints_catalog.py:18` congela **9 campos obligatorios**: `id, title, class, status, log_pattern, log_guarded, killed_by, guard_test, self_test`, con `status ∈ {by_design, open, resolved}`, `log_pattern` que compile y `self_test.matches`/`.clean` que matcheen y no matcheen de verdad. El plan prescribía `{"id","patron","plan","fecha","guard_test"}`: **faltan 6 de 9** e **inventa 3** — inmediatamente después de escribir *"no inventes el esquema"*. Baseline medido y no declarado: `test_error_fingerprints_catalog.py` **3 failed, 5 passed**; `test_error_fingerprints_scan.py` **2 failed, 7 passed**.
+- **E6 (BLOQ)** — **el censo de F8 es ciego al escritor de estado de GitLab, así que el KPI "un séptimo escritor rompe CI" es falso para la clase de escritor más probable.** `services/gitlab_provider.py:228 def update_item_state` escribe el estado en GitLab (labels + cierre vía `self._client._request`) y **no aparece** en las 9 entradas, porque la regla sólo ve **llamadas** `ast.Attribute` con esos dos nombres y el cuerpo de esa función no llama a ninguno. `services/ado_provider.py:82` sí aparece — sólo porque su cuerpo llama a `update_work_item_state`. Asimetría medida: el censo censa el adaptador ADO y no ve el de GitLab, en un plan cuyo titular de F3 es **paridad ADO↔GitLab**; un adaptador nuevo (Mantis, plan 217) entraría igual de invisible. F8 pasa a censar también **definiciones** y el allow-list a **12** — y al correrlo apareció además `services/ado_client.py:926 update_work_item_state`, el **escritor terminal de ADO** (el que hace el PATCH real), que **no había censado ninguna versión** de este plan… **ni la primera estimación de esta misma crítica, que dijo 11 y al correr el censo dio 12**. Es la mejor prueba de que el Paso 0 no se puede reemplazar por contar de cabeza.
+- **E7..E12 (IMPORTANTES)** — la tabla de verdad del resolver **no cubre (matriz + flag OFF)** ni (employee + flag OFF), y de eso depende la promesa "byte-idéntico con las flags apagadas" (§3-7): si la flag gatea la matriz, apagarla **regresiona el 208**; el plan **no menciona el 269 ni una vez** (0 hits) y el 269 es el que comparte `api/executions.py` con F5; **`var(--text-secondary)` NO EXISTE** (0 hits en `theme.css`; los reales son `--text-primary`/`--text-muted`/`--text-faint`) y el plan lo declara real; los ~20 comandos apuntan por ruta absoluta al **árbol principal** y `backend\.venv` **no existe en un worktree**; el bloque "ANTES" de F2 omite el comentario real de `:97` y muestra indentación 0 donde el código está a 8 espacios; el criterio `0 passed, 4 failed` de F0 no admite el `SQLITE_LOCKED` que el propio plan declara probable.
+- **E13..E18 (MENORES)** — **E13:** los 4 conteos de caracteres de la ayuda llana están mal (dice 113/116/104/121; reales **110/108/92/115** — pasan igual, pero el plan usa "medido" como argumento de autoridad). **E14:** el one-liner del "Paso 0 OBLIGATORIO" de F8 **no corre**: llama a `_walk()` y `_is_writer()`, dos funciones que nunca define ⇒ `NameError`, o sea que la mitigación entera de R12 era inejecutable (reemplazado por un script que sí corre). **E15:** `_CATEGORY_KEYS["flujo_funcional"]` abre en **`:272`**, no `:268-273` (`:268-270` son keys del 267). **E16:** la 7ª pata no dice que `requires` **no** hace falta (verificado: `test_requires_map_is_frozen` sólo mira flags **con** `requires`, y el archivo está en **9 passed**) ⇒ agregada como pata 8 con la prohibición explícita. **E17:** F9 tiene el bloque "Flag: ninguna (es un test)" **duplicado** palabra por palabra. **E18:** el test de jerga se cita como `:63-70` en §3.1 y `:63-76` en §3.1bis (el real es `:63-76`, con el assert en `:76`).
+- **`[ADICIÓN ARQUITECTO]`** — **§3.4: tabla de anclajes VOLÁTILES con su grep de re-localización.** Es el antídoto estructural a E1+E2+E8: los anclajes de wiring se movieron una vez (costura P0) y se van a mover otra (el 269 está en vuelo sobre el mismo archivo). En vez de números, cada fila trae el `grep -n` que los encuentra.
+- **`[ADICIÓN ARQUITECTO]`** — **§8: datos personales y prohibición de escribir en el tracker real.** El plan cambia lo que se escribe en el tablero de terceros del operador y persiste 27 razones que se muestran; faltaba decir qué NO se persiste, y faltaba una regla dura de que ningún test toque un tracker real.
 
 ---
 
@@ -62,7 +81,7 @@ No es una feature nueva. Es **reparar un comportamiento que el operador ya confi
 | Escrituras de estado que fallan y **no dicen por qué** (`_safe_transition` rama de error, `task_states.py:180-184`, devuelve dict **sin `reason`**) | **100 %** (el v2 las traducía a `"unknown"`, razón fuera de todo catálogo — **D3**) | **0 %** (`transition_failed`, cableado en el origen y verificado por **F9**) |
 | Trackers soportados por el escritor de estado del chokepoint, **para tickets con `stacky_project_name`** | **1** (ADO; `agent_completion_internal.py:527,536`) | **2** (ADO + GitLab, vía `tracker_provider`) |
 | Tickets **sin** `stacky_project_name` en un proyecto GitLab: escritura silenciosa a ADO | **100 % mudo** | **100 % legacy pero con razón visible** (`no_project_context`) — la reparación de fondo es del **272** (**D6**) |
-| Motores de estado conocidos y verificados por un test | **0** (el v1 contó 2 y el v2 contó 4 donde hay **6**) | **6/6 motores censados** (A..F), en un allow-list **de 9 entradas, verificado corriendo el censo**; un **séptimo escritor** rompe CI |
+| Motores de estado conocidos y verificados por un test | **0** (el v1 contó 2 y el v2 contó 4 donde hay **6**) | **6/6 motores + 2 helpers del 79 + 4 adaptadores/cliente/puerto censados**, allow-list de **12 entradas** (9 por llamada + 3 por definición, **E6**); un **séptimo motor o un adaptador de tracker nuevo** rompe CI |
 | Clics del operador para arreglarlo | N/A (hoy no puede: no sabe que pasó) | **0** |
 
 > **KPI corregido (C1).** El v1 afirmaba "100 % con `next_state_ok` a nivel rol" a secas. Es falso en general: por el camino `set_stacky_status_by_ado` (`api/tickets.py:1205`), con `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` **ON** (default de `config.py:1245-1246`), `_apply_task_state` **sí** aplica el nivel rol. El 100 % vale para el camino del post-hook, y para el camino del 79 **solo cuando la flag está apagada**, que es exactamente lo que hace el deploy (`harness_defaults.env:33` fuerza `=false`).
@@ -75,21 +94,30 @@ El operador deja de tener que mover incidencias a mano después de cada corrida 
 
 ## 2. Por qué ahora, y la causa raíz diagnosticada
 
-### 2.0 Estado de los anclajes tras la segunda pasada (D7..D18)
+### 2.0 Estado de los anclajes — TERCERA medición, contra el commit base `760ac455` (E1)
 
-El v3 no rehace la verificación del v2: la **repitió** sobre los anclajes que el v2 **agregó** (§2.1bis, F2-bis, F8, R3-bis, allow-list) y sobre todas sus **afirmaciones negativas**. Resultado: las negativas dieron **todas verdaderas** (`STACKY_FINAL_STATE*` = 0 hits en `backend/` y `frontend/src`; `ado_state_change` = 0 hits en `frontend/src`; `final_state_outcome` = 0 hits; `dev_build_verify` = 0 hits en `completion_state.py`; `_apply_task_state` llamado **solo** desde `:1473`; el 270 no menciona `agent_completion_internal` ni `completion_state` = 0 hits; `test_b2_transition_from_config` = 0 hits en ambos scripts del arnés). Los desfases que **sí** importan porque sostienen una edición quirúrgica están corregidos en el cuerpo:
+Las **afirmaciones negativas** del v2/v3 se re-verificaron y dieron **todas verdaderas**: `STACKY_FINAL_STATE*` = 0 hits en `backend/` y `frontend/src`; `final_state_resolver` / `finalStateOutcome` / `final_state_outcome` = 0 hits; `dev_build_verify` = 0 hits en `completion_state.py`; `_apply_task_state` llamado **solo** desde `:1473`; `test_b2_transition_from_config` = 0 hits en ambos scripts del arnés. Eso se conserva.
 
-| Anclaje del v2 | Línea REAL |
-|---|---|
-| `api/executions.py` `_with_outcome` `:65-92` | **`:74-107`** |
-| `api/executions.py` corte de flag `:75-76` | **`:83-84`** |
-| `api/executions.py` `_outcome_badge_enabled` `:28-32` | **`:63-68`** |
-| `agent_completion_internal.py:183` "encola el motor A" | **`:172-181`** (`:183` es un `except`) |
-| `completion_dispatcher.py` `_post_hook` `:51-57` / `enqueue_completion` `:28-48` | **`:53-59`** / **`:30-50`** |
-| `completion_dispatcher.py` `_drain_loop` `:98-120`, llamada en `:117` | **`:100-121`**, llamada en **`:118`** |
-| `publish_execution_from_review` "return de `:493`" | **`:491`** |
-| `ExecutionDetailDrawer.tsx` `outcomeToneClass` `:90-95` | **`:89-94`** |
-| CHANGELOG C7: "el `setdefault("source", ...)` de `:280`" | es **`agent_completion_internal.py:280`**, no `task_states.py:280` (ese archivo tiene **262** líneas) |
+Lo que **no** se sostuvo es la tabla de "correcciones" del v3. Se midió fila por fila abriendo los archivos en el commit base:
+
+| Anclaje | v2 decía | v3 "corrigió" a | **REAL (medido en `760ac455`)** | Veredicto |
+|---|---|---|---|---|
+| `api/executions.py` `_with_outcome` | `:65-92` | `:74-107` | **`def` en `:65`, cuerpo `:75-92`** | **el v2 tenía razón; el v3 lo rompió** |
+| `api/executions.py` corte de flag | `:75-76` | `:83-84` | **`:75-76`** (`:83` es `from services.run_outcome import ...` dentro de un `try`) | **el v2 tenía razón** |
+| `api/executions.py` `_outcome_badge_enabled` | `:28-32` | `:63-68` | **`:28-32`** (`:63-68` es la `def`+docstring de `_with_outcome`) | **el v2 tenía razón** |
+| `agent_completion_internal.py` encolado del motor A | `:183` | `:172-181`, *"`:183` es un `except`"* | **`ticket_status.on_execution_end(` en `:183`**; el `except` está en **`:177`**; el Paso 2 abre en `:180-181` | **el v2 tenía razón; la justificación del v3 es falsa** |
+| `publish_execution_from_review` `return` | `:493` | `:491` | **`:493`** (`ast.Return.lineno`) | **el v2 tenía razón** |
+| `completion_dispatcher.py` `_post_hook` | `:51-57` | `:53-59` | **`def` en `:53`** | v3 correcto |
+| `completion_dispatcher.py` `enqueue_completion` | `:28-48` | `:30-50` | **`def` en `:30`** | v3 correcto |
+| `completion_dispatcher.py` `_drain_loop` | `:98-120` | `:100-121` | **`def` en `:100`** | v3 correcto |
+| `completion_dispatcher.py` llamada `maybe_apply_state_transition(ev)` | `:117` | `:118` | **`:119`** | **los dos mal** |
+| `ExecutionDetailDrawer.tsx` `outcomeToneClass` | `:90-95` | `:89-94` | **`:89`** | v3 correcto |
+| `harness/task_states.py` total de líneas | — | 262 | **262** | v3 correcto |
+| CHANGELOG C7 `setdefault("source", ...)` | `:280` ambiguo | `agent_completion_internal.py:280` | **`agent_completion_internal.py`** (task_states tiene 262 líneas) | v3 correcto |
+
+> **Corolario 3 (E1) — la lección estructural.** Tres versiones seguidas se equivocaron con anclajes numéricos, y la tercera se equivocó **corrigiendo cuatro que estaban bien**. La causa no es descuido: es que estos archivos se mueven entre pasadas (la costura P0 los movió; el 269 los va a mover otra vez). Por eso el v4 **deja de anclar por número** en toda instrucción que edite código: §3.4 da el símbolo y el `grep` que lo encuentra. Los números que quedan en el documento son **evidencia de una medición fechada**, no coordenadas de edición.
+
+**Anclajes re-verificados y EXACTOS** (no hace falta re-medirlos): `completion_state.py` `:88-99` como rango del bloque a reemplazar, con `no_matrix_cell` en `:92`, `no_final_state` en `:96`, `state_not_applicable` en `:99`, `_OK_STATUSES` `:24-25`, `matrix_enabled` `:28`, `_origin_guard` `:121`, `_logged` `:164`, `return result` `:191`, import local de `get_tracker_provider` en `:101`, `_safe_transition(...)` en `:113`; `task_states.py` `:104-113` (bloque de `resolve_task_state_plan`), `def _safe_transition` `:146`, docstring *"ÚNICA función que escribe estado"* `:155`, `_extract_current_state` `:128`, rama de error `:183`; `agent_completion_internal.py` `close_execution_with_publish` `:66`, `stacky_project_name` `:135`, `_resolve_transition_state_from_config` `:321`, `_set_publish_hold` `:419`, `publish_execution_from_review` `:434`, `_attempt_state_change` `:502`; `api/tickets.py:574` (`dev_build_gate_no_state`); `dev_build_verify.py` `workspace_root_for_ado` `:343`, `gate_final_state` `:413` con el `not_applicable` en `:422`; `tracker_provider.py` `get_tracker_provider` `:125`, chequeo de GitLab `:133-135`; `StatesConfigPage.tsx` `:76-78`, `:102`, `:196-202` con el `onChange` en `:201`; `harness_defaults.env:33`; `harness_flags_help.py:893-898`; `models.py:331`; `ExecutionDetailDrawer.module.css:150-151`.
 
 ### 2.1 Los SEIS motores que hoy pueden mover el `System.State` (censados corriendo el AST, no supuestos) — D1
 
@@ -125,8 +153,15 @@ y antes de escribir aplica el **gate de build del plan 210** (`api/tickets.py:57
 **Motor F — `create_child_task`. ⟵ TAMPOCO ESTABA.**
 `api/tickets.py:4080 create_child_task`: `_provider.update_item_state(str(task_ado_id), target_state)` (`:4779`) o `ado.update_work_item_state(task_ado_id, target_state)` (`:4781`). Escribe el estado de la **tarea hija** recién creada. Es el más lejano al síntoma reportado, pero es un escritor de `System.State` y el censo lo encuentra, así que o está en el allow-list o F8 nace rojo.
 
-**Adaptador (no es motor, pero el censo lo captura).**
-`services/ado_provider.py:82 AdoTrackerProvider.update_item_state` hace `self._client.update_work_item_state(int(item_id), logical_state)`. Es la traducción puerto→cliente, no una decisión de negocio, pero la regla AST de F8 (`ast.Attribute` con `attr == "update_work_item_state"`) **lo marca sin remedio**. Va al allow-list etiquetado como adaptador.
+**Adaptadores (no son motores; el censo captura uno solo por accidente) — E6.**
+- `services/ado_provider.py:82 AdoTrackerProvider.update_item_state` hace `self._client.update_work_item_state(int(item_id), logical_state)`. La regla AST de F8 (`ast.Attribute` con `attr == "update_work_item_state"`) **lo marca** — pero lo marca por el **nombre de lo que llama**, no por ser un escritor.
+- `services/gitlab_provider.py:228 GitLabTrackerProvider.update_item_state` **escribe el estado en GitLab** (agrega el label de estado y cierra el issue vía `self._client._request`). **La regla del v3 NO lo ve**, porque es una `def` y su cuerpo no llama a ninguno de los dos nombres vigilados. Medido: no aparece en las 9 entradas.
+- `services/tracker_provider.py:85 update_item_state` es el **Protocol** del puerto (cuerpo `...`). Tampoco aparece.
+- `services/ado_client.py:926 update_work_item_state` es el **cliente terminal de ADO**: el que hace el PATCH real de `System.State`. **Nunca lo censó nadie**, en ninguna versión de este plan — ni el v4 en su primera estimación (§F8, ver la nota del Paso 0).
+
+**Son CUATRO escritores de puerto/adaptador/cliente, y el v3 censaba UNO.**
+
+> **Por qué esto invalidaba el KPI.** El censo del v3 censaba el adaptador **ADO** y era estructuralmente ciego al de **GitLab**, en un plan cuyo titular de F3 es *paridad ADO ↔ GitLab*. Un adaptador nuevo (Mantis, plan 217) entraría igual de invisible, y el KPI *"un séptimo escritor rompe CI"* sería falso justo para la clase de escritor que más probablemente aparezca. **F8 pasa a censar también las `FunctionDef` llamadas `update_item_state`/`update_work_item_state`**, y el allow-list sube a **11**.
 
 > **Corolario 1 (C1, conservado).** La frase del v1 "el plan 208 eligió no honrar el nivel de rol" es cierta **solo para el motor A**. El motor C sí lo honra. Por eso el síntoma reportado no puede explicarse sin decir **por qué camino se cerró la ejecución**.
 >
@@ -324,21 +359,51 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 9. **Tests por archivo.** Los tests que tocan la DB son flaky bajo pytest con shared-cache (`SQLITE_LOCKED`). **Nunca** correr la suite completa: siempre `pytest <archivo>`, hasta 3 reintentos del mismo archivo.
 10. **Todo `test_*.py` nuevo se registra en los DOS scripts** — `backend/scripts/run_harness_tests.sh` (`HARNESS_TEST_FILES`, líneas con dos espacios de indentación y **sin** comillas) **y** `backend/scripts/run_harness_tests.ps1` (`$HarnessTestFiles`, elementos **entre comillas dobles**). Omitir uno deja el meta-test rojo.
 11. **Nunca borrar un assert para poner algo en verde.** Si un criterio binario de este plan choca con la realidad, se **detiene la fase y se reporta**; no se relaja el test. (El v1 tenía dos criterios que solo podían "cumplirse" borrando asserts: C3 y C4.)
-12. **El intérprete es `backend\.venv\Scripts\python.exe`.** OJO: en este repo existen **`backend/.venv` y `backend/venv`**, ambos reales. Usá siempre el primero, con la ruta completa entre comillas.
+12. **Intérprete y rutas — CORREGIDO (E10).** El v3 mandaba `backend\.venv\Scripts\python.exe` y hardcodeaba `N:\GIT\RS\STACKY\Stacky\...` en los ~20 comandos. Las dos cosas están mal si se implementa en un worktree, que es como se trabaja hoy (**6 worktrees vivos**, medido con `git worktree list`):
+    - En el **árbol principal** existen `backend/.venv` **y** `backend/venv`, los dos reales. En un **worktree NO existe ninguno** (medido: los dos `ls` fallan) ⇒ el comando literal del v3 **no corre** donde se implementa.
+    - Regla: **el intérprete del árbol principal por ruta absoluta, el `cwd` en TU árbol.** Declaralo una vez al principio de la sesión y reusalo:
+      ```powershell
+      $PY = "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe"
+      $RAIZ = "<la raíz de TU árbol>"      # p.ej. N:\GIT\RS\STACKY\wt-XXXX
+      cd "$RAIZ\Stacky Agents\backend"
+      & $PY -m pytest tests/<archivo>.py -q
+      ```
+      Los comandos de las fases usan `$PY` y rutas **relativas a `$RAIZ`**. Si copiás una ruta absoluta a `...\STACKY\Stacky\...` estás testeando **otro árbol**.
+    - **`frontend/node_modules` es un junction al `node_modules` COMPARTIDO del árbol principal, y es de SÓLO LECTURA.** `npx vitest run <archivo>` y `npx tsc --noEmit` funcionan a través del junction sin escribir nada. **PROHIBIDO** `npm install`, `npm ci`, tocar `package.json`, y **prohibido borrar, mover, recrear o "arreglar"** el junction, su destino, o cualquier venv. Si algo ahí parece roto: **no lo toques, detenete y reportalo** (`N:` es un drive mapeado a `C:\desarrollo\...`, así que el mismo directorio se ve por dos rutas y eso **está bien así**).
+    - Ninguna fase de este plan puede pedir reinstalar dependencias ni regenerar un baseline de ratchet.
 
 ### 3.1 Receta completa de una flag nueva (7 patas — el "patrón triple" es un mito)
 
 | # | Archivo | Qué se agrega |
 |---|---|---|
-| 1 | `backend/config.py` | `KEY: bool = os.getenv("KEY", "true").lower() in ("1","true","yes")` — copiar el patrón exacto de `config.py:1404-1406`. |
-| 2 | `backend/services/harness_flags.py` | Un `FlagSpec(key=..., type="bool", default=True, label=..., description=..., group="global", env_only=False)` en `FLAG_REGISTRY` (empieza en `:490`). |
-| 3 | `backend/services/harness_flags.py` | La key en `_CATEGORY_KEYS["flujo_funcional"]` (`:268-273`). Sin esto, `tests/test_harness_flags.py` queda **rojo** (nota explícita en `harness_flags.py:488`). |
-| 4 | `backend/services/harness_flags_help.py` | Un `PlainHelp(what=..., on_effect=..., off_effect=..., example=...)`. **Restricciones duras REALES** (`tests/test_harness_flags_help.py:44-52,63-70`): `what` entre **10 y 200** chars; `on_effect`/`off_effect` ≤ **240** y deben empezar con `"Si "`; `example` ≤ **300**; ningún campo vacío; **sin** las palabras de `JARGON_DENYLIST` (`:17-20`: MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime); **sin** identificadores `SCREAMING_SNAKE` (`_KEY_RE`, `:22`) y **sin** referencias a fases tipo `F1` (`_PHASE_RE`, `:23`). |
-| 5 | `backend/harness_defaults.env` | Línea `KEY=true`, en **orden alfabético**. Obligatorio: este archivo es el snapshot que `deployment/build_release.ps1` hornea en cada deploy. Precedente vivo: `harness_defaults.env:33` fuerza `STACKY_DETERMINISTIC_TASK_STATES_ENABLED=false` mientras `config.py:1245-1246` dice `true`. |
-| 6 | `backend/tests/test_plan271_flags.py` | Test que afirma que las 4 keys están en `FLAG_REGISTRY` con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, y con línea `=true` en `harness_defaults.env`. |
+| 1 | `backend/config.py` | `KEY: bool = os.getenv("KEY", "true").lower() in ("1","true","yes")` — copiar el patrón del bloque de `STACKY_ADO_STATE_MATRIX_ENABLED`, que en el commit base está en **`:1419-1420`** (**localizalo con el grep de §3.4, no con este número**). |
+| 2 | `backend/services/harness_flags.py` | Un `FlagSpec(key=..., type="bool", default=True, label=..., description=..., group="global", env_only=False)` en `FLAG_REGISTRY`, inmediatamente después del `FlagSpec` de `STACKY_ADO_STATE_MATRIX_ENABLED` (commit base: **`:2853-2866`**; localizalo con §3.4). **NO declares `requires=`** — ver la nota de la pata 8. |
+| 3 | `backend/services/harness_flags.py` | La key en `_CATEGORY_KEYS["flujo_funcional"]`, que **abre en `:272`** (`:268-270` son keys del plan 267). Sin esto, `tests/test_harness_flags.py` queda **rojo**. |
+| 4 | `backend/services/harness_flags_help.py` | Un `PlainHelp(what=..., on_effect=..., off_effect=..., example=...)`. **Restricciones duras REALES** (`tests/test_harness_flags_help.py:44-52` y `:63-76`): `what` entre **10 y 200** chars; `on_effect`/`off_effect` ≤ **240** y deben empezar con `"Si "` (`:59-60`); `example` ≤ **300**; ningún campo vacío; **sin** las palabras de `JARGON_DENYLIST` (`:17-20`: MCP, TF-IDF, LLM, stdin, stdout, endpoint, frontmatter, prompt, token, regex, backend, frontend, gate, hook, runtime) — el match es **case-insensitive, por palabra completa y con plural opcional** (`\b<term>s?\b`); **sin** identificadores `SCREAMING_SNAKE` (`_KEY_RE`, `:22`) y **sin** referencias a fases tipo `F1` (`_PHASE_RE`, `:23`). Los 4 textos ya escritos y medidos están en §3.1bis. |
+| 5 | `backend/harness_defaults.env` | Línea `KEY=true`, en **orden alfabético**. Obligatorio: este archivo es el snapshot que `deployment/build_release.ps1` hornea en cada deploy. Precedente vivo: `harness_defaults.env:33` fuerza `STACKY_DETERMINISTIC_TASK_STATES_ENABLED=false` mientras `config.py:1260-1261` dice `true`. |
+| 6 | `backend/tests/test_plan271_flags.py` | Test que afirma que las 4 keys están en `FLAG_REGISTRY` con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, con línea `=true` en `harness_defaults.env`, **y en `PLAIN_HELP` pasando los 5 chequeos aplicados localmente** (E3 — ver §3.3). |
 | 7 | `backend/scripts/run_harness_tests.sh` **y** `.ps1` | Registrar todo archivo de test nuevo. |
+| 8 | — | **`requires` NO es una pata para este plan, y está verificado.** `test_requires_map_is_frozen` computa `{s.key: s.requires for s in FLAG_REGISTRY if s.requires}`: una flag **sin** `requires` no toca `_REQUIRES_MAP_FROZEN` (hoy **146** entradas) y el archivo sigue en **9 passed** (medido). Las 4 flags del 271 son **independientes entre sí** ⇒ **prohibido agregar una arista `requires` "de paso"**: declararla sin sumarla al mapa congelado deja ese test rojo (le pasó al plan 237, comentado en el propio mapa). |
 
 > **NO tocar `deployment/harness_defaults.env`.** Es un snapshot derivado de un deploy vivo (docstring de `deployment/export_harness_defaults.py:1-21`) y **ya diverge** del versionado. Fuera de scope.
+
+### 3.4 `[ADICIÓN ARQUITECTO]` Anclajes VOLÁTILES: localizalos con el grep, nunca con el número (E1, E2, E8)
+
+**Por qué existe esta tabla.** Tres versiones de este plan se equivocaron con números de línea, y la tercera **corrigió cuatro que estaban bien** (§2.0). La causa está medida: la **costura P0** movió `config.py` ~15 líneas y `harness_flags.py` ~58 (`_REQUIRES_MAP_FROZEN` pasó de 143 a **146**), y el **plan 269 está en vuelo sobre `api/executions.py`** (§5 R15). Cualquier número que este documento dé para esos archivos es una foto fechada. **Antes de cada edición, corré el grep de la fila y usá lo que devuelve.**
+
+| Qué vas a editar | Grep que lo localiza (corrélo desde `<raíz del árbol>/Stacky Agents`) | Valor en `760ac455` (referencia, NO coordenada) |
+|---|---|---|
+| bloque de flags de estado en `config.py` | `grep -n "STACKY_ADO_STATE_MATRIX_ENABLED" backend/config.py` | `:1419-1420` |
+| `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` en `config.py` | `grep -n "STACKY_DETERMINISTIC_TASK_STATES_ENABLED" backend/config.py` | `:1260-1261` |
+| flag ajena del 254 en `config.py` | `grep -n "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED" backend/config.py` | `:2085-2086` |
+| `FlagSpec` vecino en `harness_flags.py` | `grep -n "STACKY_ADO_STATE_MATRIX_ENABLED" backend/services/harness_flags.py` | `:2853-2866` |
+| categoría `flujo_funcional` | `grep -n '"flujo_funcional"' backend/services/harness_flags.py` | abre en `:272` |
+| `_with_outcome` y su corte de flag | `grep -n "def _with_outcome\|def _outcome_badge_enabled\|if not _outcome_badge_enabled" backend/api/executions.py` | `:65` / `:28` / `:75` |
+| encolado del motor A | `grep -n "ticket_status.on_execution_end" backend/services/agent_completion_internal.py` | `:183` |
+| `return` de `publish_execution_from_review` | `grep -n "def publish_execution_from_review" backend/services/agent_completion_internal.py` y leé hasta su `return` | `def :434`, `return :493` |
+| bloque a reemplazar en el motor A | `grep -n "no_matrix_cell\|no_final_state\|state_not_applicable" backend/services/completion_state.py` | `:92` / `:96` / `:99` |
+
+> **Regla dura:** si el grep devuelve un número distinto al de la columna de referencia, **el grep gana** y no hay nada que reportar (es lo esperado). Si el grep devuelve **0 hits**, ahí sí: **se detiene la fase y se reporta** — significa que alguien renombró el símbolo y el plan hay que re-anclar.
 
 ### 3.1bis Los CUATRO textos de ayuda llana, escritos y medidos (D5)
 
@@ -371,27 +436,95 @@ Consecuencia: **en el deploy del operador, el motor C está APAGADO**. Si el ope
 ),
 ```
 
-**Medición campo por campo (hecha, no estimada):** los cuatro `what` caen entre 10 y 200; los ocho `on_effect`/`off_effect` están bajo 240 y **empiezan con `"Si "`** (`test_harness_flags_help.py:59-60`); los cuatro `example` están bajo 300; ningún campo está vacío; **ninguno contiene** una palabra de `JARGON_DENYLIST` (`:17-20`) — nótese que se dice *"pantalla de Estados"*, *"tablero"* y *"frenar el cambio de estado"* precisamente para no escribir `gate`, `endpoint` ni `runtime`; ninguno matchea `_KEY_RE` (`:22`) ni `_PHASE_RE` (`:23`).
+**Medición campo por campo — CORRIDA de verdad esta vez (E13).** El v3 decía "hecha, no estimada" y daba cuatro números que **no coinciden** con sus propios textos (decía `what`=113, `on_effect`=116, `off_effect`=104, `example`=121 para la primera flag; los reales son **110 / 108 / 92 / 115**). Los cuatro textos **pasan igual** los cinco chequeos, así que el veredicto era correcto y los números no. Estos son los reales, ejecutando los mismos asserts del test:
 
-> **Prohibido parafrasear estos textos.** Si hay que cambiarlos, se vuelven a medir contra `test_harness_flags_help.py:44-52,59-60,63-76` **antes** de commitear.
+| Flag | `what` | `on_effect` | `off_effect` | `example` | `"Si "` | jerga / `_KEY_RE` / `_PHASE_RE` |
+|---|---|---|---|---|---|---|
+| `..._ROLE_FALLBACK_ENABLED` | 110 | 108 | 92 | 115 | ✔ ✔ | limpio |
+| `..._WRITER_ROUTED_ENABLED` | 105 | 72 | 111 | 78 | ✔ ✔ | limpio |
+| `..._PUBLISH_GATE_PRECISE_ENABLED` | 83 | 97 | 118 | 92 | ✔ ✔ | limpio |
+| `..._REASON_VISIBLE_ENABLED` | 90 | 87 | 76 | 105 | ✔ ✔ | limpio |
+
+Límites: `what` 10..200, `on_effect`/`off_effect` ≤240 y empezando con `"Si "` (`test_harness_flags_help.py:59-60`), `example` ≤300. Ningún campo vacío. Ninguno contiene una palabra de `JARGON_DENYLIST` (`:17-20`, match con **plural opcional**) — nótese que se dice *"pantalla de Estados"*, *"tablero"* y *"frenar el cambio de estado"* precisamente para no escribir `gate`, `endpoint` ni `runtime`. Ninguno matchea `_KEY_RE` (`:22`) ni `_PHASE_RE` (`:23`).
+
+> **Prohibido parafrasear estos textos.** Si hay que cambiarlos, se vuelven a medir contra `test_harness_flags_help.py:44-52,59-60,63-76` **antes** de commitear. Y ojo: el gate que los verifica **no es el conteo global del archivo** — es la aserción local de `test_plan271_flags.py` (§3.3, E3).
 
 ### 3.3 `[ADICIÓN ARQUITECTO]` Baseline MEDIDO de rojos ajenos (D4, D13)
 
-El v2 repetía en cada fase *"si ya venía rojo, probalo con un worktree y declaralo"*. Eso es correcto pero **inservible sin números**: un modelo menor no sabe qué es "ya venía rojo". Estos son los conteos **corridos hoy** con `backend\.venv\Scripts\python.exe -m pytest <archivo> -q`, por archivo:
+El v2 repetía en cada fase *"si ya venía rojo, probalo con un worktree y declaralo"*. Eso es correcto pero **inservible sin números**: un modelo menor no sabe qué es "ya venía rojo". Estos son los conteos **corridos hoy** con `& $PY -m pytest tests/<archivo> -q` desde `$RAIZ\Stacky Agents\backend` (§3-12), por archivo:
 
 | Archivo | Baseline REAL hoy | Qué significa para este plan |
 |---|---|---|
 | `test_harness_flags.py` | **56 passed** | Verde. Cualquier rojo tras tus cambios **es tuyo**. |
-| `test_harness_flags_help.py` | **4 failed, 4 passed** | **Rojo ajeno.** Los 4 fallos son de `STACKY_PLANS_BOARD_ENABLED`, `STACKY_CODE_INTEGRITY_ENABLED`, `STACKY_EVOLUTION_*`, `STACKY_EVAL_*` — ninguna de este plan. **Criterio de este plan: los mismos 4, ni uno más, y ninguna key `STACKY_FINAL_STATE_*` en la lista de violaciones.** |
+| `test_harness_flags_help.py` | **4 failed, 4 passed** | **Rojo ajeno — pero el conteo NO sirve como criterio. Ver §3.3bis (E3).** |
 | `test_plan210_state_gate.py` | **16 passed** | Verde. F2-bis no puede romperlo. |
 | `test_u2_publish_review_mode.py` | **3 passed** | Verde. |
 | `test_plan79_apply_final.py` | **6 passed** | Verde. |
 | `test_plan79_centinela_estados.py` | **5 passed** | Verde. |
 | `test_output_watcher.py` | **30 passed** | Verde. D6: F3 **no** lo toca; tiene que seguir en 30. |
 | `test_plan79_safe_transition.py` | **10 passed** | Verde. Es el dueño de la función que toca F3-bis-3. |
+| `test_harness_flags_requires.py` | **9 passed** | Verde. Sigue verde **si y sólo si** no declarás `requires=` (§3.1 pata 8). |
+| `test_error_fingerprints_catalog.py` | **3 failed, 5 passed** | **Rojo ajeno NO declarado por el v3, y el DoD escribe en ese archivo.** Fallan `test_campos_obligatorios` (la huella `PLAN239-OUTLET-EN-BLANCO` no tiene `self_test`), `test_status_enum` (`'guarded'` no está en `{by_design, open, resolved}`) y `test_self_test_coherente` (KeyError). **Arreglar la huella del 239 es fuera de scope (§6.12);** tus 2 huellas tienen que estar **bien formadas** (F7, E5). |
+| `test_error_fingerprints_scan.py` | **2 failed, 7 passed** | **Rojo ajeno**, misma causa (`test_scan_log_limpio`, `test_scan_multiple`, KeyError por la huella del 239). |
 | `test_b2_transition_from_config.py` | **5 failed** — `TypeError: _resolve_transition_state_from_config() missing 1 required keyword-only argument: 'final_status'` | **Rojo ajeno que ESTE plan arregla** (F4-bis), porque F7 lo adopta al arnés y un rojo registrado deja el arnés rojo. |
 
 > **Regla:** "ya estaba rojo" deja de ser una excusa y pasa a ser una **comparación contra esta tabla**. Si tu conteo difiere del de acá, es tuyo hasta que pruebes lo contrario con un worktree en el commit base.
+
+### 3.3bis `[ADICIÓN ARQUITECTO]` El gate corrido CONTRA el defecto: por qué "4 failed, 4 passed" era un falso verde (E3)
+
+**El v3 construyó todo D5 sobre un criterio que no distingue nada.** Medido:
+
+- `FLAG_REGISTRY` tiene **403** keys. `PLAIN_HELP` tiene **324**. Hay **79 flags sin ayuda llana HOY** (entre ellas `STACKY_ADO_STATE_MATRIX_ENABLED`, la del motor A).
+- `test_plain_help_covers_all_registry_keys` (`:32-35`) es **UN** test cuyo assert es `missing == []`. Con 79 faltantes ya está rojo. Agregarle las 4 keys del 271 **sin** `PlainHelp` lo deja con 83 faltantes: **sigue siendo 1 test rojo**. El conteo del archivo **no se mueve**: `4 failed, 4 passed` en los dos escenarios.
+- **Conclusión:** el criterio del v3 se cumple **exactamente igual** si escribís los 4 textos o si no escribís ninguno. Es el mismo falso verde que el plan 270 (15 casos que daban 15 passed también con la implementación prohibida).
+- La salvaguarda que el v3 agregó ("ninguna key `STACKY_FINAL_STATE_*` en la lista de **violaciones**") tampoco alcanza: `violations` es el mensaje del test de **jerga** (`:76`). La ausencia de `PlainHelp` sale en `missing` (`:35`) — **otro test, otra lista**. La guardia era ciega justo en el eje que D5 quería cubrir.
+- Y los 4 fallos estaban **mal caracterizados**: el v3 describía sólo el de jerga. Los cuatro reales, medidos, son: **(1)** `test_plain_help_covers_all_registry_keys` → 79 keys sin ayuda; **(2)** `test_plain_help_fields_non_empty_and_bounded` → `STACKY_DEVOPS_COCKPIT_ENABLED: on_effect 316 > 240`; **(3)** `test_plain_help_on_off_start_with_si` → `STACKY_EGRESS_SENTINEL_MAX_CHARS: off_effect no empieza con "Si "`; **(4)** `test_plain_help_avoids_jargon_denylist` → `STACKY_PLANS_BOARD_ENABLED` (cita una key), `STACKY_CODE_INTEGRITY_ENABLED` (`backend`, `endpoint`, `gate`), `STACKY_EVOLUTION_*` y `STACKY_EVAL_*` (`prompt`, `token`).
+
+**El criterio que SÍ discrimina — va en `test_plan271_flags.py`, autocontenido, sin depender de un archivo globalmente rojo:**
+
+```python
+# backend/tests/test_plan271_flags.py — el gate de la ayuda llana de ESTE plan.
+# E3: NO se mide el conteo de test_harness_flags_help.py (que ya está rojo por 79
+# faltantes ajenos y no cambia de color si omitís las tuyas). Se afirma pertenencia
+# y se aplican los MISMOS cinco chequeos, acotados a las 4 keys del 271.
+import re
+
+_PLAN271_KEYS = (
+    "STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED",
+    "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED",
+    "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED",
+    "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED",
+)
+
+
+def test_las_4_keys_tienen_ayuda_llana_y_pasan_los_cinco_chequeos():
+    from services.harness_flags_help import PLAIN_HELP
+    from tests.test_harness_flags_help import JARGON_DENYLIST, _KEY_RE, _PHASE_RE
+
+    faltan = [k for k in _PLAN271_KEYS if k not in PLAIN_HELP]
+    assert faltan == [], f"flags del 271 sin ayuda llana: {faltan}"
+
+    for key in _PLAN271_KEYS:
+        e = PLAIN_HELP[key]
+        assert 10 <= len(e.what.strip()) and len(e.what) <= 200, f"{key}: what fuera de 10..200"
+        for campo in ("on_effect", "off_effect"):
+            v = getattr(e, campo)
+            assert len(v) <= 240, f"{key}: {campo} > 240"
+            assert v.startswith("Si "), f"{key}: {campo} no empieza con 'Si '"
+        assert len(e.example) <= 300, f"{key}: example > 300"
+        for campo in ("what", "on_effect", "off_effect", "example"):
+            v = getattr(e, campo)
+            assert v.strip(), f"{key}: {campo} vacío"
+            for term in JARGON_DENYLIST:
+                assert not re.search(rf"\b{re.escape(term)}s?\b", v, re.IGNORECASE), \
+                    f"{key}.{campo}: jerga prohibida '{term}'"
+            assert not _KEY_RE.search(v), f"{key}.{campo}: cita una key SCREAMING_SNAKE"
+            assert not _PHASE_RE.search(v), f"{key}.{campo}: referencia a fase F<n>"
+```
+
+> **Verificación de que el gate es discriminante (obligatoria, una vez):** borrá **una** de las 4 entradas de `PLAIN_HELP` y corré `test_plan271_flags.py`: **tiene que ponerse ROJO**. Volvela a poner. Pegá las dos salidas en el PR. Un gate que no viste rojo ante el defecto que dice atrapar **no cuenta como gate**.
+>
+> **Y el criterio sobre el archivo compartido pasa a ser una aserción sobre los DOS mensajes, no sobre el conteo:** ninguna key `STACKY_FINAL_STATE_*` puede aparecer **ni en `missing`** (`:35`) **ni en `violations`** (`:76`). El conteo `4 failed, 4 passed` sigue siendo un dato de contexto, no el criterio.
 
 ### 3.2 Las 4 flags de este plan y su default
 
@@ -633,26 +766,33 @@ Corré estos 4 comandos y **pegá la salida en el PR**. No es opcional: decide s
 
 ```powershell
 # 1. ¿El motor C está apagado en el snapshot de deploy?
-Select-String -Path "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\harness_defaults.env" -Pattern "STACKY_DETERMINISTIC_TASK_STATES_ENABLED"
+Select-String -Path "$RAIZ\Stacky Agents\backend\harness_defaults.env" -Pattern "STACKY_DETERMINISTIC_TASK_STATES_ENABLED"
 # 2. ¿Y el motor A?
-Select-String -Path "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\harness_defaults.env" -Pattern "STACKY_ADO_STATE_MATRIX_ENABLED"
+Select-String -Path "$RAIZ\Stacky Agents\backend\harness_defaults.env" -Pattern "STACKY_ADO_STATE_MATRIX_ENABLED"
 # 3. ¿Hay .env del operador que pise cualquiera de las dos?
-Select-String -Path "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.env" -Pattern "STACKY_(DETERMINISTIC_TASK_STATES|ADO_STATE_MATRIX)_ENABLED" -ErrorAction SilentlyContinue
-# 4. ¿Qué dicen los SystemLog del motor A en la base viva?
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -c "import sqlite3,sys,json,glob; p=glob.glob(r'N:\GIT\RS\STACKY\DeployStackyAgents\data\*.db'); print(p); c=sqlite3.connect(p[0]) if p else sys.exit('sin db'); print(list(c.execute(\"select json_extract(context,'$.reason'), count(*) from system_logs where action='completion.matrix_transition' group by 1\")))"
+Select-String -Path "$RAIZ\Stacky Agents\backend\.env" -Pattern "STACKY_(DETERMINISTIC_TASK_STATES|ADO_STATE_MATRIX)_ENABLED" -ErrorAction SilentlyContinue
+# 4. ¿Qué dicen los SystemLog del motor A en la base viva? SOLO LECTURA, solo reason+conteo (§8-2 punto 4).
+#    La ruta de la base VIVA es del deploy del operador y NO depende de tu árbol.
+& $PY -c "import sqlite3,sys,glob; p=glob.glob(r'N:\GIT\RS\STACKY\DeployStackyAgents\data\*.db'); print(p); c=sqlite3.connect(p[0]) if p else sys.exit('sin db'); print(list(c.execute(\"select json_extract(context,'$.reason'), count(*) from system_logs where action='completion.matrix_transition' group by 1\")))"
 ```
+> **El comando 4 lee la base VIVA del operador.** Es de sólo lectura y devuelve **únicamente** `reason` y `count(*)`. **Prohibido agregarle columnas** (`title`, `description`, `ado_id`, cualquier campo del ticket): eso sería sacar datos del operador a un PR. Ver §8-2 punto 4.
+>
+> **Nota de medición ya hecha (v4):** los comandos 1 y 2 ya se corrieron contra el commit base. **(1) devuelve `STACKY_DETERMINISTIC_TASK_STATES_ENABLED=false`** (`harness_defaults.env:33`, verificado) ⇒ **el motor C está apagado en el snapshot de deploy**, tal como §2.6 supone. **(2) no devuelve nada** ⇒ `STACKY_ADO_STATE_MATRIX_ENABLED` está **ausente** de ese archivo y manda el default del código (`true`) ⇒ **el motor A está encendido**. **(3)** en el `.env` del árbol de trabajo: **0 hits**, ninguna de las dos está pisada. Falta sólo **(4)**, la base viva del operador, que depende de su máquina. **Consecuencia ya establecida sin escribir código: el diagnóstico de §2.6 se confirma — el motor C está apagado en deploy y el motor A está encendido y roto ⇒ F1/F2/F2-bis se justifican, y la "reparación de una línea de env" NO alcanza.**
 
 **Interpretación (escribila en el PR, una línea):**
 - Si (1) da `=false` **y** el operador cerró por `PATCH /by-ado/<id>/stacky-status` ⇒ el motor C estaba apagado; la reparación mínima sería esa línea, **pero el motor A sigue roto** y las fases F1/F2/F2-bis se justifican igual.
 - Si (4) devuelve mayoría `no_matrix_cell` ⇒ **RC-1 confirmado con datos de producción**.
 - Si (4) no devuelve nada ⇒ el motor A ni siquiera se disparó; revisar `app.py:997-1000` **antes** de seguir.
 
-**Comando exacto de los tests:**
+**Comando exacto de los tests** (con `$PY`/`$RAIZ` de §3-12):
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_caracterizacion.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_caracterizacion.py -v
 ```
 
-**Criterio de aceptación (BINARIO):** `0 passed, 4 failed`. **Y** la salida de los 4 comandos de F0-D pegada en el PR con su interpretación en una línea. Cualquier otro conteo = el diagnóstico está mal, se detiene el plan y se reabre §2. **Prohibido relajar un test para llegar al conteo** (§3-11).
+**Criterio de aceptación (BINARIO) — reformulado (E12):** los **4** tests fallan, y fallan **por su propio `assert`**, no por error de colección ni de DB. Conteo esperado `0 passed, 4 failed`.
+- `test_rc2_...` siembra en la DB (vía `close_sin_html` → `_seed_execution_y_ticket`). §3-9/R7 declaran `SQLITE_LOCKED` como probable, y un `SQLITE_LOCKED` da **`1 error`**, no `1 failed` ⇒ el conteo crudo del v3 era insatisfacible en ese escenario. **Si aparece `SQLITE_LOCKED`, reintentá el mismo archivo hasta 3 veces antes de leer el conteo.** Si a la tercera sigue en `error`, se reporta como flakiness de entorno, no como diagnóstico refutado.
+- Cualquier test que pase **en verde** acá = el diagnóstico está mal: se detiene el plan y se reabre §2. **Prohibido relajar un test para llegar al conteo** (§3-11).
+- **Y** la salida de los 4 comandos de F0-D pegada en el PR con su interpretación en una línea.
 
 **Flag:** ninguna. **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
@@ -755,8 +895,12 @@ def resolve_final_state(
 | `"error"` | `"technical"` | `None` | `"A"` | `"B"` | `"C"` | ON | `None` | `none` | `not_ok_status` |
 | `"needs_review"` | `"technical"` | `None` | `"A"` | `"B"` | `"C"` | ON | `None` | `none` | `not_ok_status` |
 | `"completed"` | `"technical"` | `"X"` | `None` | `None` | `None` | **OFF** | `"X"` | `caller` | `ok` |
+| `"completed"` | `"technical"` | `None` | `"A"` | `"B"` | `"C"` | **OFF** | `"A"` | `matrix` | `ok` |
+| `"completed"` | `"technical"` | `None` | `None` | `None` | `"C"` | **OFF** | `"C"` | `employee_config` | `ok` |
 
-**Casos borde obligatorios:** strings `""` y `"   "` se tratan como `None` (`.strip()` antes de evaluar). El `caller_state` **ignora la flag** (última fila: es una decisión explícita de quien llama, no del fallback). `final_status` se compara en minúsculas y `strip()`.
+> **Las dos últimas filas son NUEVAS y cierran un agujero que hacía insatisfacible una promesa del propio plan (E7).** El v3 tenía 10 filas y **ninguna** con `matrix != None` y la flag OFF. Eso deja al implementador decidiendo algo que no puede decidir: si la flag gatea **también** la matriz, apagarla **regresiona el plan 208** (la matriz deja de aplicar); si no la gatea, faltaba la fila y faltaba el test. §3-7 promete *"con las 4 flags apagadas, el comportamiento es byte-idéntico al de hoy"*, y eso **exige** que `caller`, `matrix` y `employee_config` ignoren la flag. Queda escrito: **`STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED` gatea EXCLUSIVAMENTE la rama `role`.** Es lo único que este plan agrega; las otras tres ramas no son suyas.
+
+**Casos borde obligatorios:** strings `""` y `"   "` se tratan como `None` (`.strip()` antes de evaluar). **Sólo la rama `role` consulta la flag**; `caller`, `matrix` y `employee_config` la ignoran (filas 10, 11 y 12). `final_status` se compara en minúsculas y `strip()`.
 
 > **Por qué `needs_review` NO transiciona:** exige revisión humana; auto-transicionar violaría HITL. Mismo criterio que `completion_state.py:16-25`.
 
@@ -765,13 +909,13 @@ def resolve_final_state(
 > **`on_failure_state` (C16):** `_resolve_transition_state_from_config` también resuelve `on_failure_state` para `final_status in {"error","needs_review"}` (`agent_completion_internal.py:249,352`). El resolver de F1 **no lo modela** y devuelve `not_ok_status` para todo lo que no sea `completed`. Mientras el motor B no use el resolver (o sea, en todo este plan), no hay pérdida. **Cablear el resolver en el motor B sin modelar `on_failure_state` sería una regresión**: queda escrito acá para el 272.
 
 **Archivo de test a crear:** `backend/tests/test_plan271_final_state_resolver.py`
-**Casos:** las **10** filas de la tabla, una por test, + 2 de casos borde (`""` y `"  "`), + 1 que afirma `PRECEDENCE == ("caller","matrix","role","employee_config")`, + 1 que afirma `REASONS ⊆ ALL_FINAL_STATE_REASONS`, + 1 que afirma `len(ALL_FINAL_STATE_REASONS) == 27` y que **`"unknown" not in ALL_FINAL_STATE_REASONS`** (D3), + 2 sobre `final_state_already_written` (sin `execution_id` ⇒ `False`; con `applied=True` sembrado ⇒ `True`). Total: **17 tests**.
+**Casos:** las **12** filas de la tabla, una por test (las 10 del v3 + las 2 de E7: matriz con flag OFF y employee con flag OFF), + 2 de casos borde (`""` y `"  "`), + 1 que afirma `PRECEDENCE == ("caller","matrix","role","employee_config")`, + 1 que afirma `REASONS ⊆ ALL_FINAL_STATE_REASONS`, + 1 que afirma `len(ALL_FINAL_STATE_REASONS) == 27` y que **`"unknown" not in ALL_FINAL_STATE_REASONS`** (D3), + 2 sobre `final_state_already_written` (sin `execution_id` ⇒ `False`; con `applied=True` sembrado ⇒ `True`). Total: **19 tests**.
 
-**Flag que la protege:** `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED` — **default ON**. Las 7 patas de §3.1 se cablean **en esta fase**:
-1. `backend/config.py` — junto al bloque `STACKY_ADO_STATE_MATRIX_ENABLED` (`:1401-1406`).
-2. `backend/services/harness_flags.py` — `FlagSpec` inmediatamente después del de `STACKY_ADO_STATE_MATRIX_ENABLED` (`:2795-2807`).
-3. `backend/services/harness_flags.py` — key en `_CATEGORY_KEYS["flujo_funcional"]` (`:268-273`).
-4. `backend/services/harness_flags_help.py` — `PlainHelp` junto al de `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` (`:893-898`).
+**Flag que la protege:** `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED` — **default ON**. Las 7 patas de §3.1 se cablean **en esta fase**. **Localizá los 3 primeros anclajes con los greps de §3.4 — los números del v3 estaban desfasados (E2):**
+1. `backend/config.py` — junto al bloque `STACKY_ADO_STATE_MATRIX_ENABLED` (commit base **`:1419-1420`**; el v3 decía `:1401-1406`, que es otra flag).
+2. `backend/services/harness_flags.py` — `FlagSpec` inmediatamente después del de `STACKY_ADO_STATE_MATRIX_ENABLED` (commit base **`:2853-2866`**; el v3 decía `:2795-2807`, ~58 líneas antes). **Sin `requires=`** (§3.1 pata 8).
+3. `backend/services/harness_flags.py` — key en `_CATEGORY_KEYS["flujo_funcional"]`, que **abre en `:272`**.
+4. `backend/services/harness_flags_help.py` — `PlainHelp` junto al de `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` (`:893-898` — **este anclaje sí es exacto**, verificado).
 5. `backend/harness_defaults.env` — `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED=true` (orden alfabético).
 6. `backend/tests/test_plan271_flags.py` (crear acá; se completa con las otras 3 keys en F3/F4/F5).
 7. Registrar `test_plan271_final_state_resolver.py` y `test_plan271_flags.py` en `run_harness_tests.sh` **y** `.ps1`.
@@ -785,14 +929,18 @@ def resolve_final_state(
     example="Como que el trámite avance solo de ventanilla cuando el funcionario lo termina, en vez de quedarse en el mostrador.",
 ),
 ```
-> Chequeado: `what`=113 chars (10..200 ✔), `on_effect`=116 (≤240 ✔, empieza con `"Si "` ✔), `off_effect`=104 ✔, `example`=121 (≤300 ✔). Sin palabras de la denylist, sin `SCREAMING_SNAKE`, sin `F\d`.
+> Medido de verdad (E13): `what`=**110** (10..200 ✔), `on_effect`=**108** (≤240 ✔, empieza con `"Si "` ✔), `off_effect`=**92** ✔, `example`=**115** (≤300 ✔). Sin palabras de la denylist, sin `SCREAMING_SNAKE`, sin `F\d`. (El v3 daba 113/116/104/121 — mal los cuatro, aunque el veredicto era el correcto.)
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_final_state_resolver.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_final_state_resolver.py -v
 ```
 
-**Criterio de aceptación (BINARIO):** `17 passed`. **Y** `test_harness_flags.py` en **`56 passed`** y `test_harness_flags_help.py` en **exactamente `4 failed, 4 passed`** (dos comandos, **por archivo**) — **D13: ese archivo está rojo de fábrica, así que el criterio NO es "verde" sino "los mismos 4 fallos de §3.3, sin ninguna key `STACKY_FINAL_STATE_*` entre las violaciones"**. Cualquier otro conteo se compara contra §3.3 y, si no está ahí, es tuyo.
+**Criterio de aceptación (BINARIO):**
+- **`19 passed`** (12 filas de la tabla + 2 borde + 5 estructurales — E7).
+- **Y** `test_harness_flags.py` en **`56 passed`**.
+- **Y** `test_plan271_flags.py` en **verde**, incluido `test_las_4_keys_tienen_ayuda_llana_y_pasan_los_cinco_chequeos` — **este es el gate real de la ayuda llana**, y en F1 cubre por lo menos la key de esta fase. **Con la verificación de discriminación de §3.3bis hecha y pegada en el PR** (borrar una entrada ⇒ rojo; reponerla ⇒ verde).
+- **Y** en `test_harness_flags_help.py`: **ninguna key `STACKY_FINAL_STATE_*` ni en `missing` (`:35`) ni en `violations` (`:76`)**. El conteo `4 failed, 4 passed` se anota como contexto pero **no es el criterio** (E3: no discrimina).
 
 **Impacto por runtime:** ninguno — módulo puro sin consumidores todavía. **Trabajo del operador: ninguno.**
 
@@ -805,22 +953,26 @@ def resolve_final_state(
 
 **Archivo a editar:** `backend/services/completion_state.py`
 
-**Diff — reemplazar `:88-99`:**
+**Diff — reemplazar `:88-99`** (el rango es exacto, verificado; localizá los bordes con `grep -n "no_matrix_cell\|state_not_applicable" backend/services/completion_state.py`).
+
+> **E11 — el bloque "ANTES" del v3 NO era byte-idéntico al código real.** Le faltaba el comentario de `:97` (`# CENTINELA EN RUNTIME: jamás aplicar un estado fuera del conjunto cerrado.`) y mostraba indentación **0** donde el código real está a **8 espacios** (vive dentro de un `with session_scope()` anidado en un `try`). Para un reemplazo literal eso importa. Este es el bloque **real**, copiado del archivo:
 
 ```python
-# ANTES (completion_state.py:88-99)
-plan = resolve_task_state_plan(profile, agent_type, work_item_type)
-ctx["source"] = plan.source
-if plan.source != "matrix":
-    return _logged(ctx, ev, {"skipped": True, "reason": "no_matrix_cell", "source": plan.source})
-target = plan.final_ok
-ctx["target"] = target
-if not target:
-    return _logged(ctx, ev, {"skipped": True, "reason": "no_final_state"})
-if target not in applicable_states(plan):
-    return _logged(ctx, ev, {"skipped": True, "reason": "state_not_applicable"})
+# ANTES (completion_state.py:88-99) — LITERAL, 8 espacios de indentación
+        plan = resolve_task_state_plan(profile, agent_type, work_item_type)
+        ctx["source"] = plan.source
+        if plan.source != "matrix":
+            # Backward-compat DURA: sin cell configurado, los paths de runner NO transicionan.
+            return _logged(ctx, ev, {"skipped": True, "reason": "no_matrix_cell", "source": plan.source})
+        target = plan.final_ok
+        ctx["target"] = target
+        if not target:
+            return _logged(ctx, ev, {"skipped": True, "reason": "no_final_state"})
+        # CENTINELA EN RUNTIME: jamás aplicar un estado fuera del conjunto cerrado.
+        if target not in applicable_states(plan):
+            return _logged(ctx, ev, {"skipped": True, "reason": "state_not_applicable"})
 
-# DESPUÉS
+# DESPUÉS — mantené los 8 espacios de indentación en todo el bloque
 plan = resolve_task_state_plan(profile, agent_type, work_item_type)
 from services.final_state_resolver import resolve_final_state
 
@@ -862,7 +1014,9 @@ if target not in permitidos:
 - `_OK_STATUSES` (`:24-25`) queda en `{"completed"}`. `needs_review` sigue sin transicionar.
 - `matrix_enabled()` (`:28-37`) sigue siendo el gate maestro del motor A.
 
-**Cambio de contrato de log — declarado (C22).** Tras F2, el motor A deja de emitir `no_matrix_cell` y `no_final_state` y pasa a emitir `no_config`/`no_agent_type`/`flag_off`. Las dos legacy **se conservan en `ALL_FINAL_STATE_REASONS`** para que las filas históricas de `SystemLog action="completion.matrix_transition"` sigan teniendo etiqueta en la UI. Escribilo en el docstring del módulo.
+**Cambio de contrato de log — declarado (C22, precisado en E7).** Tras F2, el motor A deja de emitir `no_matrix_cell` y `no_final_state` y pasa a emitir `no_config`/`no_agent_type`/`flag_off`. **Esto pasa también con la flag OFF**: el camino "sin matriz" que hoy dice `no_matrix_cell` va a decir `flag_off`. Las dos legacy **se conservan en `ALL_FINAL_STATE_REASONS`** para que las filas históricas de `SystemLog action="completion.matrix_transition"` sigan teniendo etiqueta en la UI. Escribilo en el docstring del módulo.
+
+**Criterio de aceptación (BINARIO) — actualizado:** `10 passed` (los 9 del v3 + el 6-bis de E7).
 
 **Archivo de test a crear:** `backend/tests/test_plan271_role_fallback.py`
 **Casos (9):**
@@ -871,18 +1025,19 @@ if target not in permitidos:
 3. Matriz configurada pero `ticket.work_item_type` NULL ⇒ cae a rol, `source="role"`, transiciona.
 4. **Celda PARCIAL** (`by_work_item_type["Bug"] = {"in_progress": "Doing"}`) + rol con `next_state_ok` ⇒ transiciona al de rol, `source="role"`. **(C13.)**
 5. Ni matriz ni rol ⇒ `skipped`, `reason="no_config"`, `reason` no vacío.
-6. Flag `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED=False` + solo rol ⇒ `skipped`, `reason="flag_off"` (byte-idéntico a hoy).
+6. Flag `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED=False` + solo rol ⇒ `skipped`, `reason="flag_off"`, **`prov.writes == []`**. **Ojo (E7): la CONDUCTA es idéntica a hoy (no se escribe), pero el `reason` NO lo es** — hoy ese camino emite `no_matrix_cell` (`completion_state.py:92`, verificado). El "byte-idéntico" de §3-7 se refiere a la **escritura de estado**, no a la etiqueta del `SystemLog`; el cambio de contrato de log está declarado abajo y vale también con la flag OFF.
+6-bis. **Flag OFF pero matriz CON estado final ⇒ transiciona igual, `source="matrix"`** (E7, fila 11 de la tabla de verdad). Sin este caso, apagar la flag de este plan regresionaría el plan 208 y nadie lo notaría.
 7. `_origin_guard` sigue bloqueando: `FakeProvider(current_state="Cerrado a mano")` fuera del flujo ⇒ `reason="human_moved_out_of_flow"`, **`prov.writes == []`**.
 8. `final_status="needs_review"` ⇒ `skipped`, `reason="not_ok_status"`, sin escritura.
 9. `role_state` no vacío pero distinto de todo lo aplicable **y sin rol en el perfil** (perfil manipulado) ⇒ `state_not_applicable`, sin escritura.
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_role_fallback.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_role_fallback.py -v
 ```
 
 **Criterio de aceptación (BINARIO):**
-- `9 passed`.
+- **`10 passed`** (E7).
 - **Y** de `test_plan271_caracterizacion.py`: `test_rc1_rol_sin_matriz_deberia_transicionar` y `test_rc1_celda_parcial_no_debe_enterrar_el_nivel_rol` pasan a **VERDE**; los otros 2 siguen rojos. Conteo esperado: `2 passed, 2 failed`.
 - **Y** `pytest backend/tests/test_plan79_apply_final.py` y `pytest backend/tests/test_plan79_centinela_estados.py` siguen verdes (**por archivo**): usan `resolve_task_state_plan`/`applicable_states`, que esta fase **no** modifica.
 
@@ -981,14 +1136,14 @@ if final_state_already_written(ev.get("execution_id")):
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_arbitro.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_arbitro.py -v
 ```
 
 **Criterio de aceptación (BINARIO):**
 - Al terminar la **guardia 1** (junto con F2): `4 passed, 4 failed` (los casos 5..8 necesitan F5/F3-bis-2).
 - Al terminar **F3-bis-2** (después de F5): **`8 passed`**.
 - **Y** `pytest backend/tests/test_plan210_state_gate.py` sigue en **`16 passed`** (§3.3 — hoy está verde, así que cualquier rojo es tuyo).
-- **Y** `test_plan271_role_fallback.py` sigue en `9 passed` (la guardia no debe cambiar ningún caso feliz).
+- **Y** `test_plan271_role_fallback.py` sigue en **`10 passed`** (E7; la guardia no debe cambiar ningún caso feliz).
 
 **Flag:** ninguna propia (vive dentro del camino de `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED`; su gemela de F3-bis-2 vive dentro del de `STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED`). Una guardia que solo **reduce** escrituras no necesita interruptor: apagarla sería pedir el bug.
 **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
@@ -1063,10 +1218,18 @@ if _writer_routed_enabled() and project_name:
     if result.pop("source", None) is not None:
         result["writer"] = "safe_transition"
     return result
-# Camino legacy (flag OFF, o sin project_name): idéntico al bloque ANTES, con una
-# sola diferencia — D6: si fue por FALTA de contexto de proyecto, el dict de ÉXITO
-# lleva `"note": "no_project_context"` para que F5/F6 lo puedan mostrar. El
-# comportamiento de escritura no cambia; lo que cambia es que deja de ser mudo.
+# Camino legacy (flag OFF, o sin project_name): idéntico al bloque ANTES, con DOS
+# diferencias, ninguna de comportamiento de escritura:
+#  (1) D6: si fue por FALTA de contexto de proyecto, el dict de ÉXITO lleva
+#      `"note": "no_project_context"` para que F5/F6 lo puedan mostrar.
+#  (2) E4 — OBLIGATORIO: el `except` de ese camino (hoy en :547) devuelve
+#      {"ok": False, "to", "ado_id", "error", "type"} SIN `reason`. Es el MISMO
+#      defecto que D3 denuncia en task_states.py:183, en la rama hermana, y el v3
+#      no lo vio. Se le agrega `"reason": "transition_failed"`:
+#          return {"ok": False, "reason": "transition_failed", "to": target_state,
+#                  "ado_id": ado_id, "error": str(exc), "type": type(exc).__name__}
+#      Sin esto, F9 test 3 NACE ROJO por un retorno que el plan no nombra, y el
+#      caso común de R6-bis (ticket sin stacky_project_name) falla en silencio.
 ```
 
 **Helpers nuevos (al final del bloque de helpers):**
@@ -1108,9 +1271,16 @@ La cadena que el v2 describió es correcta en abstracto: `_attempt_state_change`
 
 Agregar al principio de `_attempt_state_change` la guardia ya mostrada en el diff de F3 (`final_state_already_written(execution_id)` ⇒ `already_written_by_other_engine`). Es la mitad que faltaba: sin ella, en el orden más probable (A drena primero, B escribe después) el motor B pisa igual. **Verificado por los casos 7 y 8 de `test_plan271_arbitro.py`.**
 
-#### F3-bis-3 — `_safe_transition` deja de fallar en silencio (D3)
+#### F3-bis-3 — los DOS escritores dejan de fallar en silencio (D3 + E4)
 
-**Archivo a editar:** `backend/harness/task_states.py`, rama de error de `_safe_transition` (`:180-184`).
+**Son dos ramas, no una.** El v3 sólo vio la de `task_states.py`. Medido con la regla de F9 corrida contra el árbol base: hay **dos** `return` de escritor sin `reason`.
+
+| # | Archivo · función | `return` real | Estado en el v3 |
+|---|---|---|---|
+| 1 | `harness/task_states.py::_safe_transition`, `except` | `:183` | lo arreglaba ✔ |
+| 2 | `services/agent_completion_internal.py::_attempt_state_change`, `except` del camino **legacy** | `:547` | **no lo nombraba nunca (E4)** |
+
+**Archivo a editar (1):** `backend/harness/task_states.py`, rama de error de `_safe_transition` (el `return` está en `:183`; el `except` abre en `:179`).
 
 ```python
 # ANTES (:184)
@@ -1121,9 +1291,11 @@ return {"ok": False, "to": target, "reason": "transition_failed",
         "error": str(exc), "type": type(exc).__name__, "phase": phase}
 ```
 
-**Por qué es backward-compatible:** hoy **nadie lee `reason` en la rama de error** — `_logged` (`completion_state.py:183`) hace `result.get("reason")` y persiste `None`, y el Paso 4 del motor B solo hace `setdefault("source", ...)`. Agregar la key no cambia ningún branch existente; solo deja de perder la información.
+**Archivo a editar (2):** `backend/services/agent_completion_internal.py`, `except` del camino legacy de `_attempt_state_change` (`return` en `:547`) — el diff está en el bloque de F3, punto (2).
 
-**Test que lo cubre:** caso 9 de `test_plan271_writer_routed.py` — provider que lanza al escribir ⇒ `{"ok": False, "reason": "transition_failed", ...}`.
+**Por qué es backward-compatible (las dos):** hoy **nadie lee `reason` en la rama de error** — `_logged` (`completion_state.py`) hace `result.get("reason")` y persiste `None`, y el Paso 4 del motor B solo hace `setdefault("source", ...)`. Agregar la key no cambia ningún branch existente; solo deja de perder la información.
+
+**Test que lo cubre:** casos 9 **y 9-bis** de `test_plan271_writer_routed.py` — provider ruteado que lanza ⇒ `{"ok": False, "reason": "transition_failed", ...}`; **y `AdoClient` del camino legacy que lanza (flag OFF o `project_name=None`) ⇒ también `reason="transition_failed"`** (E4).
 **Y** `pytest backend/tests/test_plan79_safe_transition.py` **por archivo**: es el archivo dueño de esa función. Si tenía un assert de igualdad estricta sobre el dict de error, **se detiene la fase y se reporta** (§3-11) — la key nueva es correcta, pero el cambio de expectativa se documenta, no se silencia.
 
 **Archivo de test a crear:** `backend/tests/test_plan271_writer_routed.py`
@@ -1132,7 +1304,8 @@ return {"ok": False, "to": target, "reason": "transition_failed",
 2. Proyecto GitLab ⇒ se llama `update_item_state` del `GitLabTrackerProvider`, **y no** `AdoClient`.
 3. `get_tracker_provider` lanza ⇒ `{"skipped": True, "reason": "provider_unavailable"}` y `close_execution_with_publish` **no** lanza.
 4. Idempotencia: `provider.get_item` devuelve el estado ya igual al target ⇒ `{"skipped": True, "reason": "already_in_state"}` sin escribir.
-5. Flag OFF ⇒ camino legacy: `AdoClient().update_work_item_state(4242, "To Do")` (byte-idéntico a hoy).
+5. Flag OFF ⇒ camino legacy: `AdoClient().update_work_item_state(4242, "To Do")` (byte-idéntico a hoy). **`AdoClient` va monkeypatcheado con un doble — ver §8-2: ningún test de este plan construye un cliente real.**
+9-bis. **Camino legacy cuyo `AdoClient` (doble) lanza ⇒ `{"ok": False, "reason": "transition_failed", ...}`**, nunca `reason` ausente. **(E4, `:547`.)**
 6. `ado_id` es `None` ⇒ `{"skipped": True, "reason": "no_ado_id"}` (`:523-524`, preservado).
 7. **`project_name=None` con la flag ON ⇒ camino legacy `AdoClient`, NUNCA `get_tracker_provider`** — **y el dict de éxito lleva `note="no_project_context"`** (C6 + D6: el camino legacy deja de ser mudo).
 8. Éxito ruteado ⇒ el dict devuelto **no** trae `source` (para que la asignación de `target_source` del Paso 4 siga funcionando) y sí trae `writer="safe_transition"`. (C7.)
@@ -1141,11 +1314,11 @@ return {"ok": False, "to": target, "reason": "transition_failed",
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_writer_routed.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_writer_routed.py -v
 ```
 
 **Criterio de aceptación (BINARIO):**
-- `10 passed`.
+- **`11 passed`** (los 10 del v3 + el 9-bis de E4).
 - **Y** `test_e3_el_escritor_rutea_por_provider` de F0 pasa a **VERDE** (conteo de F0: `3 passed, 1 failed`).
 - **Y** `pytest backend/tests/test_output_watcher.py` **sigue en `30 passed`** (§3.3) — **por archivo, hasta 3 reintentos si aparece `SQLITE_LOCKED`**. **Sin tocar ni un doble** (D6). Si baja de 30, es tuyo: se detiene la fase y se reporta; no se borra el assert.
 - **Y** `pytest backend/tests/test_plan79_safe_transition.py` **sigue en `10 passed`** tras F3-bis-3.
@@ -1223,7 +1396,7 @@ else:
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_publish_gate.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_publish_gate.py -v
 ```
 
 #### F4-bis — `test_b2_transition_from_config.py` está ROJO HOY y este plan lo arregla (D4)
@@ -1262,8 +1435,8 @@ El test quedó desfasado cuando un plan posterior agregó el kwarg `final_status
 
 **Archivos a editar:**
 1. `backend/services/agent_completion_internal.py` — persistir antes del `return CloseResult(...)` (`:290-298`).
-2. `backend/services/completion_state.py` — persistir dentro de `_logged` (`:164-191`).
-3. `backend/api/executions.py` — promover la key en `_with_outcome` (`:65-92`).
+2. `backend/services/completion_state.py` — persistir dentro de `_logged` (`:164`, antes del `return result` de `:191`).
+3. `backend/api/executions.py` — promover la key en `_with_outcome` (**`def` en `:65`, cuerpo `:75-92`** — los números del v3 en §2.0 estaban mal, E1; **localizalo con el grep de §3.4**, porque el plan 269 está en vuelo sobre este archivo, R15).
 
 **Nombres exactos:**
 - Key en `metadata_json`: **`final_state_outcome`**.
@@ -1316,7 +1489,7 @@ def _persist_final_state_outcome(*, execution_id: int, result: dict,
 | 4 | `completion_state.py`, en `_logged` antes del `return result` de `:191` | `result` | `ctx.get("source")` |
 
 **Edición en `api/executions.py` — C14, LEER ANTES DE ESCRIBIR.**
-`_with_outcome` corta arriba de todo con `if not _outcome_badge_enabled(): return d` (`:75-76`), y esa flag es **ajena** (`STACKY_UI_OUTCOME_REASON_BADGE_ENABLED`, plan 254, default `True` en `config.py:2070-2071`). Si insertás la promoción después de ese corte, tu feature queda gateada por una flag que este plan no controla. **Insertá antes del corte:**
+`_with_outcome` corta arriba de todo con `if not _outcome_badge_enabled(): return d` (**`:75-76`** — verificado; el "`:83-84`" de §2.0 del v3 era falso y apunta a un `import` dentro de un `try`), y esa flag es **ajena** (`STACKY_UI_OUTCOME_REASON_BADGE_ENABLED`, plan 254, default `True` en **`config.py:2085-2086`** — el v3 decía `:2070-2071`). Si insertás la promoción después de ese corte, tu feature queda gateada por una flag que este plan no controla. **Insertá antes del corte:**
 
 ```python
 def _with_outcome(d: dict, dirty_ids: set[int] | None = None) -> dict:
@@ -1330,9 +1503,11 @@ def _with_outcome(d: dict, dirty_ids: set[int] | None = None) -> dict:
         return d
     ...  # resto sin cambios
 ```
-Agregá `_reason_visible_enabled()` en `api/executions.py` con el mismo patrón de instancia que `_outcome_badge_enabled` (`:28-32`).
+Agregá `_reason_visible_enabled()` en `api/executions.py` con el mismo patrón de instancia que `_outcome_badge_enabled` (**`:28-32`** — verificado; el "`:63-68`" del v3 era falso y apunta a la `def` de `_with_outcome`).
 
-> `AgentExecution.to_dict` incluye `"metadata": self.metadata_dict` (`models.py:331`), así que `d.get("metadata")` funciona tanto en el listado como en el detalle (`get_execution`, `:232-242`).
+> `AgentExecution.to_dict` incluye `"metadata": self.metadata_dict` (`models.py:331` ✔ verificado), y `get_execution` (`:233`) devuelve `jsonify(_with_outcome(row.to_dict(...), dirty))` en `:243` ✔ ⇒ `d.get("metadata")` funciona en el listado **y** en el detalle.
+
+> **Alcance de la promoción, declarado para que nadie lo "arregle de paso" (R15).** `GET /api/executions/history` (`executions_history`, `:442`) **no pasa por `_with_outcome`**: arma cada item **a mano** (`:538-559`) y **no incluye `metadata`** (verificado). Por lo tanto `final_state_outcome` **no llega** a ese endpoint, **y está bien así**: el único consumidor de este plan es el drawer, que se alimenta de `Executions.byId()` → `get_execution` → `_with_outcome` (verificado en `ExecutionDetailDrawer.tsx:55-57`), así que **F6 no queda inerte**. Cablearlo también en `executions_history` es alcance del **plan 269**, que ya está haciendo exactamente esa costura para su propio `run_verdict` (su C2). **No lo dupliques.**
 
 > **Por qué acá y no un endpoint nuevo:** `_with_outcome` ya es el promotor canónico del plan 254, se aplica al listado y al detalle, y `ExecutionDetailDrawer.tsx:79-88` ya consume ese payload. Endpoint nuevo = superficie nueva sin necesidad.
 
@@ -1349,7 +1524,7 @@ Agregá `_reason_visible_enabled()` en `api/executions.py` con el mismo patrón 
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_reason_persisted.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_reason_persisted.py -v
 ```
 > Este archivo toca la DB. Si aparece `SQLITE_LOCKED`, **volvé a correr el mismo archivo** (hasta 3 intentos). No corras la suite completa.
 
@@ -1466,10 +1641,12 @@ O sea que la "cuarta rama" que el v2 manda agregar a `outcomeToneClass` (que est
 ```css
 /* DESPUÉS — .toneEspera deja de ser un alias de .toneAtencion */
 .toneAtencion { color: var(--warn); }
-.toneEspera   { color: var(--text-secondary); }
+.toneEspera   { color: var(--text-muted); }
 ```
 
-> **Usá tokens que existan.** El tema de este repo NO define la familia `--color-*`. Los tokens reales son `--accent`, `--success`, `--warn`, `--danger`, `--border`, `--text-primary`, `--text-secondary`, `--bg-panel`. **Antes de escribir el CSS, confirmá con `grep -n "^  --" frontend/src/theme.css` que el token elegido existe**; si `--text-secondary` no estuviera, usá `--text-primary` con `opacity: .75`, nunca un hex crudo (lo caza `uiDebtRatchet`).
+> **E9 — `var(--text-secondary)` NO EXISTE, y el v3 lo declaraba real.** Medido: `grep -c -- "--text-secondary" frontend/src/theme.css` ⇒ **0**. Los tokens de texto reales son **`--text-primary`** (`theme.css:12`), **`--text-muted`** (`:13`) y **`--text-faint`** (`:14`), los tres re-declarados en el tema claro (`:182-184`). El token correcto y existente para "secundario" es **`--text-muted`** — usalo tal cual; el hedge del v3 (`--text-primary` + `opacity:.75`) era una solución peor a un problema inventado.
+>
+> **Tokens que sí existen y podés usar:** `--accent` (`:17`), `--success` (`:19`), `--warn` (`:20`), `--danger` (`:21`), `--text-primary`, `--text-muted`, `--text-faint`. La familia `--color-*` **no existe** en este tema. **Nunca un hex crudo** (lo caza `uiDebtRatchet`). `theme.css` está en `frontend/src/`, no en un subdirectorio.
 
 > **Ratchet de deuda UI (obligatorio):** en esta fase no se crea ningún `.tsx` nuevo, así que alcanza con **no introducir `style={{}}` inline** en el drawer ni **HEX crudos** en el `.module.css`. Usá clases y tokens.
 
@@ -1496,9 +1673,9 @@ más un test simétrico que afirma que el `.ts` no tiene keys huérfanas fuera d
 
 **Comandos exactos:**
 ```powershell
-cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx vitest run src/utils/__tests__/plan271FinalStateOutcome.test.ts
-cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_reason_catalog.py" -v
+cd "$RAIZ\Stacky Agents\frontend"; npx vitest run src/utils/__tests__/plan271FinalStateOutcome.test.ts
+cd "$RAIZ\Stacky Agents\frontend"; npx tsc --noEmit
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_reason_catalog.py -v
 ```
 > **Correr vitest por archivo.** La corrida completa tiene contaminación cross-file conocida en este repo.
 
@@ -1536,24 +1713,72 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit
 > `backend/tests/plan271_helpers.py` **NO** se registra: no es un `test_*.py`.
 > Formato: `.sh` ⇒ línea con dos espacios y **sin** comillas; `.ps1` ⇒ `"tests/..."` **con** comillas dobles dentro de `$HarnessTestFiles`.
 
-**Huella de regresión (C20 + D17). `docs/sistema/error_fingerprints.json` EXISTE** (verificado, 49 KB) ⇒ **el hedge "si no existe no lo crees" del v2 sobra y la huella es obligatoria**. Antes de escribir, abrí el archivo y **copiá el shape de las entradas vecinas** (no inventes el esquema). Dos entradas, una por causa raíz cerrada:
+**Huella de regresión (C20 + D17, ESQUEMA CORREGIDO — E5).** `docs/sistema/error_fingerprints.json` EXISTE (verificado, 49 KB) ⇒ la huella es obligatoria. **Pero el v3 mandaba "copiá el shape de las entradas vecinas, no inventes el esquema" y acto seguido inventaba el esquema.** Medido: el archivo es un **dict** con `schema_version` (=1), `description` y `fingerprints` (**42** entradas), y `tests/test_error_fingerprints_catalog.py:18` congela **NUEVE campos obligatorios**:
 
-1. `{"id": "FS-271-NO-MATRIX-CELL", "patron": "completion.matrix_transition reason=no_matrix_cell con next_state_ok de rol configurado", "plan": 271, "fecha": "2026-07-28", "guard_test": "backend/tests/test_plan271_role_fallback.py::test_rol_sin_matriz_transiciona"}`
-2. `{"id": "FS-271-RAZON-UNKNOWN", "patron": "final_state_outcome.reason fuera de ALL_FINAL_STATE_REASONS (tipicamente 'unknown' por la rama de error de _safe_transition)", "plan": 271, "fecha": "2026-07-28", "guard_test": "backend/tests/test_plan271_razon_del_catalogo.py"}`
+```python
+_REQUIRED = ("id", "title", "class", "status", "log_pattern", "log_guarded",
+             "killed_by", "guard_test", "self_test")
+```
+
+más: `status ∈ {"by_design", "open", "resolved"}`; `log_pattern` tiene que **compilar** con `re.compile`; y `self_test["matches"]` / `self_test["clean"]` tienen que **matchear y no matchear de verdad** contra ese patrón (`test_self_test_coherente`); y no puede haber caracteres de control crudos. Las entradas del v3 traían `{"id","patron","plan","fecha","guard_test"}`: **faltaban 6 de los 9** e **inventaban 3** (`patron`, `plan`, `fecha`). Escritas así, el DoD **rompe** ese test.
+
+**Baseline OBLIGATORIO antes de tocar el archivo (§3.3):** `test_error_fingerprints_catalog.py` está en **`3 failed, 5 passed`** y `test_error_fingerprints_scan.py` en **`2 failed, 7 passed`**, por una huella ajena (`PLAN239-OUTLET-EN-BLANCO`, sin `self_test` y con `status: "guarded"`). **Arreglar esa huella es fuera de scope (§6.12).** El criterio de este plan es: **los mismos 3+2 fallos, ni uno más, y ninguna huella `FS-271-*` en los mensajes de error.**
+
+**Las dos entradas, con los 9 campos reales:**
+
+```json
+{
+  "id": "FS-271-NO-MATRIX-CELL",
+  "title": "La incidencia no se mueve al estado configurado a nivel rol",
+  "class": "state-transition-skipped",
+  "status": "resolved",
+  "log_pattern": "completion\\.matrix_transition.*no_matrix_cell",
+  "log_guarded": true,
+  "killed_by": "plan 271 (F1+F2: el motor A honra tracker_state_machine.<rol>.next_state_ok)",
+  "guard_test": "backend/tests/test_plan271_role_fallback.py",
+  "self_test": {
+    "matches": ["action=completion.matrix_transition reason=no_matrix_cell source=config"],
+    "clean": ["action=completion.matrix_transition reason=ok source=role"]
+  }
+}
+```
+
+```json
+{
+  "id": "FS-271-RAZON-FUERA-DEL-CATALOGO",
+  "title": "El escritor de estado falla y no dice por que",
+  "class": "state-transition-mute",
+  "status": "resolved",
+  "log_pattern": "final_state_outcome.*\"reason\": ?\"(unknown|error|failed)\"",
+  "log_guarded": true,
+  "killed_by": "plan 271 (F3-bis-3 + F9: transition_failed cableado en los dos escritores)",
+  "guard_test": "backend/tests/test_plan271_razon_del_catalogo.py",
+  "self_test": {
+    "matches": ["final_state_outcome {\"applied\": false, \"reason\": \"unknown\"}"],
+    "clean": ["final_state_outcome {\"applied\": false, \"reason\": \"transition_failed\"}"]
+  }
+}
+```
+
+> **Dos trampas de este archivo, las dos verificadas:** (1) el `log_pattern` es una **regex dentro de un JSON**, así que un `\.` va escrito `\\.` — un `\.` crudo hace fallar `json.loads` y rompe el catálogo **entero**; (2) el `self_test` no es decorativo: `test_self_test_coherente` corre `re.search(pattern, sample)` sobre cada `matches` y cada `clean`. **Corré `test_error_fingerprints_catalog.py` inmediatamente después de agregar las dos entradas**, antes de seguir.
+>
+> **Estas dos entradas están VALIDADAS, no propuestas.** Se corrieron los cinco chequeos del test contra ellas antes de escribirlas acá: los 9 campos presentes, `status` en el enum, `log_pattern` compila, cada `matches` **matchea** y cada `clean` **no matchea**. Copialas literales; si las tocás, volvé a correr esa validación.
 
 **Comandos de verificación (corré los 5, uno por uno):**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_harness_flags.py" -v
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_harness_flags_help.py" -v
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_flags.py" -v
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_caracterizacion.py" -v
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m compileall -q "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\services" "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\api" "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\harness"
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_harness_flags.py -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_harness_flags_help.py -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_flags.py -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_caracterizacion.py -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m compileall -q services api harness
 ```
 
 **Criterio de aceptación (BINARIO):**
-- `test_harness_flags.py` en **`56 passed`** (§3.3: hoy verde ⇒ cualquier rojo es tuyo).
-- **Y** `test_harness_flags_help.py` en **exactamente `4 failed, 4 passed`** — **los mismos 4 fallos ajenos de §3.3**, y **ninguna key `STACKY_FINAL_STATE_*` en la lista de violaciones**. **D13: este criterio NO es "verde", porque el archivo está rojo de fábrica; pedir "verde" era insatisfacible.** Pegá el mensaje de assert en el PR y comparalo con §3.3.
-- **Y** `test_plan271_flags.py` y `test_plan271_caracterizacion.py` en verde, y `compileall` sin salida.
+- `test_harness_flags.py` en **`56 passed`** y `test_harness_flags_requires.py` en **`9 passed`** (§3.3: hoy verdes ⇒ cualquier rojo es tuyo).
+- **Y** en `test_harness_flags_help.py`: **ninguna key `STACKY_FINAL_STATE_*` ni en la lista `missing` del assert de `:35` ni en la lista `violations` del de `:76`**. **E3: el criterio NO es el conteo.** Ese archivo está rojo de fábrica por **79** faltantes ajenos, y `4 failed, 4 passed` sale igual escribas los 4 textos o ninguno — o sea que como gate no distingue nada. Pegá **los dos mensajes de assert** en el PR y comprobá que ninguna key del 271 aparece en ellos.
+- **Y** `test_plan271_flags.py` en verde, **incluido `test_las_4_keys_tienen_ayuda_llana_y_pasan_los_cinco_chequeos` (el gate real de la ayuda llana), con su verificación de discriminación hecha y pegada** (borrar una entrada ⇒ rojo; reponerla ⇒ verde — §3.3bis).
+- **Y** `test_plan271_caracterizacion.py` en verde y `compileall` sin salida.
+- **Y** `test_error_fingerprints_catalog.py` en **`3 failed, 5 passed`** y `test_error_fingerprints_scan.py` en **`2 failed, 7 passed`** — los mismos rojos ajenos de §3.3, **sin ninguna huella `FS-271-*` en los mensajes** (E5).
 - **Y** un `grep` de cada uno de los **12** nombres del checklist devuelve **≥1 hit en `.sh` y ≥1 hit en `.ps1`** (12 × 2 = **24 hits**, ni uno menos).
 - **Y** los **4** tests de `test_plan271_caracterizacion.py` en **verde** (de `0 passed, 4 failed` en F0 a `4 passed` acá).
 - **Y** `test_b2_transition_from_config.py` en **`5 passed`** (F4-bis) **antes** de aparecer en los scripts.
@@ -1576,12 +1801,46 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx tsc --noEmit
 
 **Nadie escribe el `dict` de memoria.** Primero se corre el censo y **se pega su salida en el PR**; el allow-list es esa salida más una etiqueta por línea. El v2 hizo lo contrario y por eso nació rojo.
 
-```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -c "import ast,pathlib;A={'update_item_state','update_work_item_state'};h={};r=pathlib.Path('backend');[ (lambda p,s: None if any(x in s for x in ('/tests/','/.venv/','/venv/','__pycache__')) else [ h.setdefault(s[len('backend/'):]+'::'+(f[-1] if f else '<module>'),[]).append(n.lineno) for f,n in _walk(ast.parse(p.read_text(encoding='utf-8'))) if _is_writer(n,A) ] )(p,p.as_posix()) for p in r.rglob('*.py')]"
-```
-> Si el one-liner te resulta ilegible, escribí el mismo censo como script temporal: la única regla es que **la regla del test y la del comando sean la MISMA** (mismos `attr`, misma exclusión, misma atribución a función contenedora).
+> **E14 — el one-liner del v3 NO CORRÍA.** Llamaba a `_walk(...)` y `_is_writer(...)`, dos funciones que **nunca definía**: cualquier intento daba `NameError`. O sea que el "Paso 0 OBLIGATORIO", que es la mitigación entera de R12 y la lección central de D1, era **inejecutable como estaba escrito** — y por eso nadie lo corrió. Este script sí corre. Guardalo fuera del repo (en tu carpeta temporal, **no** en `backend/`) y corrélo con `& $PY <ruta>`:
 
-**Salida REAL de hoy, verificada en esta pasada (9 entradas):**
+```python
+# censo271.py — MISMA regla que el test de F8 (v4: llamadas + DEFINICIONES).
+import ast, pathlib, sys
+ATTRS = {"update_item_state", "update_work_item_state"}
+BACKEND = pathlib.Path(sys.argv[1]) / "backend"   # sys.argv[1] = "<$RAIZ>/Stacky Agents"
+
+class V(ast.NodeVisitor):
+    def __init__(self, rel): self.rel, self.stack, self.hits = rel, [], []
+    def visit_FunctionDef(self, node):
+        self.stack.append(node.name)
+        if node.name in ATTRS:                      # ← E6: la DEFINICION tambien cuenta
+            self.hits.append((f"{self.rel}::{node.name}", node.lineno, "def " + node.name))
+        self.generic_visit(node); self.stack.pop()
+    visit_AsyncFunctionDef = visit_FunctionDef
+    def visit_Call(self, node):
+        f, name = node.func, None
+        if isinstance(f, ast.Attribute) and f.attr in ATTRS: name = f.attr
+        elif isinstance(f, ast.Attribute) and f.attr == "_safe_transition": name = "_safe_transition"
+        elif isinstance(f, ast.Name) and f.id == "_safe_transition": name = "_safe_transition"
+        if name:
+            cont = self.stack[-1] if self.stack else "<module>"
+            self.hits.append((f"{self.rel}::{cont}", node.lineno, name))
+        self.generic_visit(node)
+
+agg = {}
+for p in BACKEND.rglob("*.py"):
+    s = p.as_posix()
+    if any(x in s for x in ("/tests/", "/.venv/", "/venv/", "__pycache__")): continue
+    v = V(p.relative_to(BACKEND).as_posix())
+    v.visit(ast.parse(p.read_text(encoding="utf-8")))
+    for key, lineno, name in v.hits: agg.setdefault(key, []).append((lineno, name))
+
+for key in sorted(agg): print(f"{key:<62} {sorted(agg[key])}")
+print("TOTAL ENTRADAS:", len(agg))
+```
+> **La regla del test y la del script tienen que ser la MISMA** (mismos `attr`, mismos nombres de `def`, misma exclusión, misma atribución a función contenedora). Si divergen, el Paso 0 deja de probar nada.
+
+**Salida REAL, RE-VERIFICADA en la pasada del v4 corriendo el censo del v3 tal cual (9 entradas, mismos números de línea — el v3 acertó esto):**
 
 ```
 api/tickets.py::_apply_task_state                              [(577, '_safe_transition')]
@@ -1596,42 +1855,72 @@ services/completion_state.py::maybe_apply_state_transition     [(113, '_safe_tra
 TOTAL ENTRADAS: 9
 ```
 
-**Qué hace el test, exactamente:**
+**Qué hace el test, exactamente (regla AMPLIADA en el v4 — E6):**
 1. Recorre con `ast` todos los `.py` bajo `backend/` **excluyendo** `backend/tests/`, `backend/.venv/`, `backend/venv/` y `__pycache__`.
 2. Marca todo `ast.Call` cuyo `func` sea un `ast.Attribute` con `attr in {"update_item_state", "update_work_item_state"}`, más toda llamada a `_safe_transition` (como `ast.Name` **o** como `ast.Attribute`).
-3. Atribuye cada hallazgo a la **función que lo contiene** — con un visitor que mantiene una pila de `FunctionDef`/`AsyncFunctionDef`, así que un método anidado se atribuye al método, no a la clase.
-4. Compara el conjunto contra el allow-list **congelado en el propio test**, con el plan dueño de cada entrada:
+3. **NUEVO (E6): marca también toda `ast.FunctionDef`/`AsyncFunctionDef` cuyo `name` esté en `{"update_item_state", "update_work_item_state"}`.** Sin esta regla el censo es **estructuralmente ciego al escritor de GitLab**: `services/gitlab_provider.py:228 update_item_state` escribe el estado en GitLab (label + cierre vía `self._client._request`) y **no aparecía** en las 9 entradas, porque es una `def` y su cuerpo no llama a ninguno de los dos nombres vigilados. El adaptador de ADO aparecía **sólo de casualidad**, porque su cuerpo sí llama a `update_work_item_state`. Un adaptador nuevo (Mantis, plan 217) entraría igual de invisible, y el KPI *"un séptimo escritor rompe CI"* sería falso justo para la clase de escritor más probable.
+4. Atribuye cada hallazgo a la **función que lo contiene** — con un visitor que mantiene una pila de `FunctionDef`/`AsyncFunctionDef`, así que un método anidado se atribuye al método, no a la clase. Una `def` vigilada se atribuye **a sí misma**.
+5. Compara el conjunto contra el allow-list **congelado en el propio test**, con el plan dueño de cada entrada:
+
+**Salida REAL con la regla del v4 (12 entradas — CORRIDA, no estimada):**
+
+```
+api/tickets.py::_apply_task_state                              [(577, '_safe_transition')]
+api/tickets.py::create_child_task                              [(4779, 'update_item_state'), (4781, 'update_work_item_state')]
+api/tickets.py::finish_work                                    [(2078, 'update_item_state'), (2080, 'update_work_item_state')]
+api/tickets.py::set_stacky_status_by_ado                       [(1490, 'update_item_state'), (1492, 'update_work_item_state')]
+harness/task_states.py::_safe_transition                       [(173, 'update_item_state'), (175, 'update_work_item_state')]
+harness/task_states.py::apply_task_start_state                 [(206, '_safe_transition')]
+services/ado_client.py::update_work_item_state                 [(926, 'def update_work_item_state')]
+services/ado_provider.py::update_item_state                    [(81, 'def update_item_state'), (82, 'update_work_item_state')]
+services/agent_completion_internal.py::_attempt_state_change   [(536, 'update_work_item_state')]
+services/completion_state.py::maybe_apply_state_transition     [(113, '_safe_transition')]
+services/gitlab_provider.py::update_item_state                 [(228, 'def update_item_state')]
+services/tracker_provider.py::update_item_state                [(85, 'def update_item_state')]
+TOTAL ENTRADAS: 12
+```
+
+> **Y esto es la prueba de por qué el Paso 0 no es opcional.** Esta crítica **también** se equivocó primero: estimó **11** entradas de cabeza y, al correr el censo, salieron **12** — faltaba `services/ado_client.py::update_work_item_state` (`:926`), que es el **escritor terminal de ADO**, el que hace el PATCH de verdad. Cuatro versiones seguidas de este plan contaron mal los escritores, y la única vez que el número salió bien fue **corriendo el censo**. Escribí el `dict` copiando el bloque de arriba, no de memoria.
 
 ```python
-# 9 entradas = los SEIS motores de §2.1 (A..F) + los dos helpers de plan 79 + el
-# adaptador del puerto. La letra del motor va escrita a propósito: el v1 de este
-# plan contó DOS motores y el v2 contó CUATRO donde hay SEIS, y nada en el repo
-# lo desmentía. Ahora sí.
+# 12 entradas = los SEIS motores de §2.1 (A..F) + los dos helpers del plan 79 +
+# los DOS adaptadores + el Protocol del puerto + el cliente terminal de ADO.
+# La letra del motor va escrita a propósito: el v1 contó DOS motores, el v2 contó
+# CUATRO donde hay SEIS, el v3 censó UN adaptador donde hay CUATRO, y el v4 estimó
+# 11 donde hay 12. Ahora el repo lo sabe y nadie tiene que acordarse.
 ESCRITORES_CENSADOS: dict[str, str] = {
+    # ── escritor canónico y helper de arranque (plan 79) ────────────────────
     "harness/task_states.py::_safe_transition":            "plan 79 — el escritor canónico (lo usan A, B y C)",
     "harness/task_states.py::apply_task_start_state":      "plan 79 — estado al INICIAR (fuera del alcance del 271)",
-    "services/ado_provider.py::update_item_state":         "ADAPTADOR puerto→AdoClient (no decide nada; el censo lo ve por la regla AST)",
+    # ── los SEIS motores ───────────────────────────────────────────────────
     "services/completion_state.py::maybe_apply_state_transition": "MOTOR A — plan 208 + 271 F2/F2-bis",
     "services/agent_completion_internal.py::_attempt_state_change": "MOTOR B — plan 271 F3/F3-bis-2",
     "api/tickets.py::_apply_task_state":                   "MOTOR C — plan 79 + gate del 210 (el 271 NO lo modifica, §6.6)",
     "api/tickets.py::set_stacky_status_by_ado":            "MOTOR D — inline sin plan dueño (el 271 NO lo modifica; unificación en el 272)",
     "api/tickets.py::finish_work":                         "MOTOR E — inline sin plan dueño (el v2 lo citó en §6.6 y NO lo censó; 272)",
     "api/tickets.py::create_child_task":                   "MOTOR F — estado de la TAREA HIJA recién creada, sin plan dueño (272)",
+    # ── puerto, adaptadores y cliente terminal (E6): NO deciden, pero SÍ escriben ──
+    "services/tracker_provider.py::update_item_state":     "PUERTO — Protocol (cuerpo `...`); acá para que un tracker nuevo no entre invisible",
+    "services/ado_provider.py::update_item_state":         "ADAPTADOR ADO → AdoClient.update_work_item_state",
+    "services/gitlab_provider.py::update_item_state":      "ADAPTADOR GitLab → label de estado + cierre del issue (el v3 NO lo veía)",
+    "services/ado_client.py::update_work_item_state":      "CLIENTE TERMINAL ADO — el PATCH real de System.State (nadie lo había censado nunca)",
 }
 ```
-5. Asserts:
+6. Asserts:
    - `hallados - ESCRITORES_CENSADOS == set()`: *"Escritor de estado NUEVO sin censar: `<x>`. Agregalo al censo con su plan dueño, o rutealo por `_safe_transition`."*
    - `ESCRITORES_CENSADOS - hallados == set()`: *"Escritor censado que ya no existe: `<x>`. Sacalo del censo."*
-6. Un tercer test afirma que **`services/completion_state.py` importa `dev_build_verify`** — el invariante concreto de C2: si alguien vuelve a sacar el gate de build del motor A, el test se pone rojo con el nombre del plan que se rompe (210). **Hoy ese import NO existe** (verificado: `grep -c dev_build_verify backend/services/completion_state.py` ⇒ **0**), así que este test **nace rojo y se pone verde con F2-bis guardia 1**.
+7. Un tercer test afirma que **`services/completion_state.py` importa `dev_build_verify`** — el invariante concreto de C2: si alguien vuelve a sacar el gate de build del motor A, el test se pone rojo con el nombre del plan que se rompe (210). **Hoy ese import NO existe** (verificado: `grep -c dev_build_verify backend/services/completion_state.py` ⇒ **0**), así que este test **nace rojo y se pone verde con F2-bis guardia 1**.
+
+> **Verificación de que el censo es discriminante (obligatoria, E6).** Antes de dar F8 por hecho: comprobá que con la regla **sólo-llamadas** del v3 el censo devuelve **9** y `services/gitlab_provider.py::update_item_state` **no** está; con la regla del v4 devuelve **12** y sí está (y aparecen tambien el Protocol y ado_client). Pegá los dos conteos en el PR. Es la prueba de que la ampliación atrapa un escritor real que antes se colaba — no una preferencia de estilo.
 
 **Alcance del barrido, declarado (para que no se lo interprete):** el censo recorre **solo `backend/`**. `Stacky pipeline/`, `Stacky tools/`, `deployment/` y los `.ps1` **no** se barren, y hoy **no contienen escritores de `System.State`** (verificado en esta pasada). Extender el barrido fuera de `backend/` es alcance del 272; anotarlo acá evita que alguien "amplíe el censo de paso" y rompa CI con hallazgos de otro dominio.
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_censo_escritores.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_censo_escritores.py -v
 ```
 
-**Criterio de aceptación (BINARIO):** `3 passed` con el allow-list en **exactamente 9 entradas**, y esas 9 iguales a la salida del Paso 0 pegada en el PR. Si el censo encuentra una **décima entrada** que esta pasada no vio, **eso es el resultado**: se la agrega al allow-list con su plan dueño **en el mismo commit**, se dice si es un **séptimo motor** o solo un helper/adaptador, y se anota en §6 si merece su propio plan. **No se relaja el assert.**
+**Criterio de aceptación (BINARIO):** `3 passed` con el allow-list en **exactamente 12 entradas** (E6), y esas 11 iguales a la salida del Paso 0 pegada en el PR **con la regla ampliada**. Si el censo encuentra una **decimotercera entrada** que esta pasada no vio, **eso es el resultado**: se la agrega al allow-list con su plan dueño **en el mismo commit**, se dice si es un **séptimo motor**, un helper o un **adaptador de tracker**, y se anota en §6 si merece su propio plan. **No se relaja el assert.**
 
 > **AST, nunca regex.** Precedente del repo: un centinela textual sobre flags rompió el motor entero. El AST no confunde un string en un comentario con una llamada real.
 
@@ -1648,18 +1937,27 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 **Qué hace (3 tests, sin infraestructura nueva):**
 1. **Runtime, motor A:** invoca `completion_state.maybe_apply_state_transition` con `patch_motor_a` en **todas** las combinaciones de F2 que producen skip o error (perfil vacío, `agent_type=None`, flag OFF, `final_status="error"`, provider que lanza, ticket sin `ado_id`) y afirma para cada retorno: `"reason" in out` **y** `out["reason"] in ALL_FINAL_STATE_REASONS`.
 2. **Runtime, motor B:** ídem sobre `_attempt_state_change` con los 10 escenarios de `test_plan271_writer_routed.py` (`ticket_id=None`, lookup que lanza, `ado_id=None`, provider que lanza, flag OFF, `project_name=None`, ya escrito por el otro motor, …).
-3. **Estático:** `ast` sobre `services/completion_state.py`, `services/agent_completion_internal.py` y `harness/task_states.py`; para todo `return` de un `ast.Dict` cuyas claves incluyan `"skipped"` u `"ok"`, exige que **también** incluya `"reason"` **o** que el valor de `"ok"` sea `True`. Mensaje: *"Retorno mudo en `<archivo>:<línea>`: un no-cambio de estado sin `reason` es un defecto del plan 271 (§3-4)."*
+3. **Estático — ALCANCE CORREGIDO (E4).** `ast` sobre `services/completion_state.py`, `services/agent_completion_internal.py` y `harness/task_states.py`, **pero SÓLO sobre los `return` que están DENTRO de las funciones escritoras**: `maybe_apply_state_transition`, `_logged`, `_attempt_state_change`, `_safe_transition`, `apply_task_start_state`. Para todo `return` de un `ast.Dict` cuyas claves incluyan `"skipped"` u `"ok"`, exige que **también** incluya `"reason"` **o** que el valor de `"ok"` sea `True`. Mensaje: *"Retorno mudo en `<archivo>:<línea>`: un no-cambio de estado sin `reason` es un defecto del plan 271 (§3-4)."*
+
+> **BASELINE MEDIDO, y por qué el alcance del v3 hacía el criterio insatisfacible.** Se corrió la regla del v3 (**archivos enteros**) contra el commit base: **28 `return` analizados, 4 violaciones**.
+>
+> | Violación | Qué es | Qué hacía el v3 |
+> |---|---|---|
+> | `harness/task_states.py:183` | `except` de `_safe_transition` — escritor real, sin `reason` | **la arreglaba** (F3-bis-3) ✔ |
+> | `services/agent_completion_internal.py:547` | `except` del camino **legacy** de `_attempt_state_change` — escritor real, sin `reason` | **no la nombraba nunca** ⇒ F9 nacía rojo (E4) |
+> | `services/agent_completion_internal.py:493` | `return` de `publish_execution_from_review`: el **sobre** del cierre, `"ok": bool(publish_result.get("ok"))` | **falso positivo** que la regla no puede distinguir (exige `ok` literal `True`) |
+> | `services/agent_completion_internal.py:54` | `CloseResult.to_dict()`: el **sobre** del resultado, `"ok": self.ok` | **falso positivo**, ídem |
+>
+> O sea: el criterio `3 passed` del v3 era **inalcanzable** siguiendo el plan (arreglaba 1 de 4), y su escape ("agregá la razón al catálogo") no aplica a ninguna de las 3 restantes — `transition_failed` ya está en el catálogo, y los dos sobres no son decisiones de estado. Además el plan prohíbe explícitamente "agregar una excepción al centinela". **Acotar el barrido a las funciones escritoras elimina los dos sobres por construcción** (no por excepción), y F3/F3-bis-3 tapan las dos reales. Resultado esperado tras F3-bis-3: **0 violaciones**.
 
 > **Por qué el test estático además del de runtime:** el de runtime prueba los caminos que hoy sabemos enumerar; el estático atrapa el `return` **nuevo** que alguien agregue el mes que viene. Los dos juntos son lo que convierte "cero skip mudo" de promesa en invariante.
 
 **Comando exacto:**
 ```powershell
-& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" -m pytest "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan271_razon_del_catalogo.py" -v
+cd "$RAIZ\Stacky Agents\backend"; & $PY -m pytest tests/test_plan271_razon_del_catalogo.py -v
 ```
 
-**Criterio de aceptación (BINARIO):** `3 passed`. Si el test 3 encuentra un retorno mudo que este plan no previó, **se agrega la razón al catálogo (§2.4, `ALL_FINAL_STATE_REASONS` y el `.ts`) en el mismo commit**; no se agrega una excepción al centinela. **Prohibido usar `"unknown"`, `"error"`, `"failed"` o cualquier etiqueta genérica: si no sabés por qué no se movió, el plan no está terminado.**
-
-**Flag:** ninguna (es un test). **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
+**Criterio de aceptación (BINARIO):** `3 passed`, con **0 violaciones** del test 3 y la lista de violaciones **pegada en el PR antes y después** de F3-bis-3 (de **4 a 0**: las 2 reales arregladas, las 2 falsas eliminadas por el acotamiento del alcance). Si el test 3 encuentra un retorno mudo **dentro de una función escritora** que este plan no previó, **se le agrega `reason` a ese `return` con una razón del catálogo, en el mismo commit**; si la razón que corresponde no existe, se la agrega a `ALL_FINAL_STATE_REASONS` **y al `.ts`**. **No se agrega una excepción al centinela ni se amplía la lista de funciones exentas.** **Prohibido usar `"unknown"`, `"error"`, `"failed"` o cualquier etiqueta genérica: si no sabés por qué no se movió, el plan no está terminado.**
 
 **Flag:** ninguna (es un test). **Impacto por runtime:** ninguno. **Trabajo del operador: ninguno.**
 
@@ -1684,7 +1982,9 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 | R11 | El diagnóstico está errado y el problema real era `harness_defaults.env:33`. | Media | **F0-D** lo mide antes de escribir una línea de producción, y su salida va al PR. Aun si se confirma, el motor A sigue roto y F1/F2/F2-bis se justifican. |
 | R12 | **El allow-list del censo vuelve a nacer mal** y F8 rompe CI el día 1 (le pasó al v2 con 6 entradas donde hay 9). | **Alta si se escribe de memoria** | **F8 Paso 0**: correr el censo **antes** de escribir el `dict` y **pegar su salida en el PR**. El allow-list es esa salida más una etiqueta por línea. Nunca al revés. |
 | R13 | **El implementador escribe las 3 ayudas llanas que faltan y usa una palabra de la denylist** (`gate` es la trampa obvia, con una flag llamada `..._PUBLISH_GATE_PRECISE_ENABLED`), dejando `test_harness_flags_help.py` con **más** de sus 4 fallos ajenos. | **Alta sin los textos escritos** | **§3.1bis** trae los **4** textos literales, ya medidos campo por campo, y §3.3 fija el baseline exacto contra el cual comparar (`4 failed, 4 passed`, y ninguna key `STACKY_FINAL_STATE_*` entre las violaciones). |
-| R14 | **Un `return` nuevo sin `reason`** reabre el skip mudo dentro de seis meses, sin que ningún test lo note (el puente de F6 no lo ve: `"unknown"` no está en ninguno de los dos catálogos). | Media | **F9** test 3: centinela AST sobre los tres archivos de escritura; todo `return` de dict con `"skipped"`/`"ok"` debe traer `"reason"` salvo que `ok is True`. |
+| R14 | **Un `return` nuevo sin `reason`** reabre el skip mudo dentro de seis meses, sin que ningún test lo note (el puente de F6 no lo ve: `"unknown"` no está en ninguno de los dos catálogos). | Media | **F9** test 3, con el alcance acotado a las **funciones escritoras** (E4): todo `return` de dict con `"skipped"`/`"ok"` dentro de ellas debe traer `"reason"` salvo que `ok is True`. Baseline medido: **4 violaciones hoy → 0 tras F3/F3-bis-3**. |
+| **R15** | **Colisión con el plan 269 sobre `api/executions.py` — el v3 no lo mencionaba ni una vez** (medido: `grep -n "269"` en este doc ⇒ **0 hits**; R10 sólo cubría el 270). El 269 **se está implementando AHORA** en un worktree paralelo y edita `list_executions()` (`:96`) y `executions_history()` (`:442`, items a mano `:538-559`); F5 de este plan edita `_with_outcome` (`:65`). | **Alta** (concurrente, mismo archivo) | **Frontera por símbolo, no por línea.** (a) F5 ancla `_with_outcome` / `_outcome_badge_enabled` con el grep de §3.4, porque los números **se van a mover** cuando el 269 aterrice. (b) Son **funciones distintas** (`_with_outcome` vs los dos handlers) ⇒ el merge no colisiona textualmente, pero **los anclajes numéricos sí quedan obsoletos**. (c) `final_state_outcome` **no** se cablea en `executions_history` (declarado arriba): esa costura es del 269. (d) Las keys son disjuntas: el 269 promueve `run_verdict`, este plan `final_state_outcome` (0 hits cruzados, verificado). **Merge: el que llegue segundo re-corre el grep de §3.4 antes de editar.** |
+| **R16** | **Un test de este plan escribe en el tracker REAL del operador.** F3 caso 5 dice *"camino legacy: `AdoClient().update_work_item_state(4242, "To Do")`"* sin decir que `AdoClient` va monkeypatcheado, y `_legacy_ado_client()` hace `from services.ado_client import AdoClient; return AdoClient()` de verdad. | Media | **§8-2 lo prohíbe por escrito y con un guard ejecutable**: ningún test de este plan construye un cliente real; `services.ado_client.AdoClient` y `services.tracker_provider.get_tracker_provider` van parcheados en **todos** los casos, y un test del propio plan lo verifica. |
 
 ---
 
@@ -1700,7 +2000,9 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 8. **Migrar `agent_workflow_configs.transition_state` al perfil del cliente.** El 216 lo declaró fuera de scope.
 9. **Cambiar `STACKY_DETERMINISTIC_TASK_STATES_ENABLED` en `harness_defaults.env:33`.** F0-D lo **mide** y lo reporta; cambiarlo es una decisión del operador, no de este plan.
 10. **Poblar `stacky_project_name` en los tickets que no lo tienen** (R6-bis, D6). Es la reparación de fondo del hueco de paridad, toca `_startup_sync` (`app.py:196,203`) y el alta de tickets, y tiene riesgo de migración propio: **plan 272**. Este plan solo lo hace **visible** (`no_project_context`).
-11. **Arreglar los 4 fallos ajenos de `test_harness_flags_help.py`** (`STACKY_PLANS_BOARD_ENABLED`, `STACKY_CODE_INTEGRITY_ENABLED`, `STACKY_EVOLUTION_*`, `STACKY_EVAL_*`). Están declarados en §3.3 como baseline. **Excepción única y justificada:** `test_b2_transition_from_config.py` **sí** se arregla (F4-bis), porque F7 lo **adopta** al arnés y adoptar un rojo rompe CI para todos.
+11. **Arreglar los 4 fallos ajenos de `test_harness_flags_help.py`.** Los cuatro, medidos: las **79 flags sin ayuda llana** (`:35`), `STACKY_DEVOPS_COCKPIT_ENABLED` con `on_effect` de 316 chars (`:49`), `STACKY_EGRESS_SENTINEL_MAX_CHARS` con `off_effect` que no empieza con `"Si "` (`:60`), y la jerga de `STACKY_PLANS_BOARD_ENABLED` / `STACKY_CODE_INTEGRITY_ENABLED` / `STACKY_EVOLUTION_*` / `STACKY_EVAL_*` (`:76`). Están declarados en §3.3 como baseline. **Excepción única y justificada:** `test_b2_transition_from_config.py` **sí** se arregla (F4-bis), porque F7 lo **adopta** al arnés y adoptar un rojo rompe CI para todos.
+12. **Arreglar la huella ajena `PLAN239-OUTLET-EN-BLANCO`** de `docs/sistema/error_fingerprints.json` (le falta `self_test` y su `status` es `"guarded"`, fuera del enum), que es la causa de los **3 failed** de `test_error_fingerprints_catalog.py` y los **2 failed** de `test_error_fingerprints_scan.py` (§3.3). Este plan **agrega dos huellas bien formadas** y **no toca** la del 239. Corresponde al dueño del 239 o a un plan de higiene.
+13. **Cablear `final_state_outcome` en `GET /api/executions/history`.** Ese handler arma los items a mano y no incluye `metadata` (`api/executions.py:538-559`). El drawer no lo usa, así que este plan no lo necesita; la costura de ese endpoint es del **plan 269** (su C2). Ver R15.
 
 ---
 
@@ -1729,13 +2031,14 @@ ESCRITORES_CENSADOS: dict[str, str] = {
 ### 7.2 Orden de implementación (estricto, por dependencia)
 
 ```
-F0 (rojo 0/4 + medición F0-D, sin prod)
- └─> F1 (resolver puro + catálogo de 27 + final_state_already_written + flag 1)
+F-1 (30 s, sin código) — correr los 9 greps de §3.4 y anotar los números de HOY
+ └─> F0 (rojo 0/4 + medición F0-D, sin prod)
+ └─> F1 (resolver puro de 12 filas + catálogo de 27 + final_state_already_written + flag 1)
       └─> F2 (cablear motor A)              ← cierra RC-1  [F0 pasa a 2/4]
            └─> F2-bis GUARDIA 1 (gate 210, con cortocircuito developer)  [va JUNTO con F2]
  └─> F3 (writer ruteado + flag 2)           ← cierra E-3    [F0 pasa a 3/4]
       ├─> F3-bis-1 (VERIFICAR que output_watcher NO se rompe — no se toca nada)
-      ├─> F3-bis-3 (_safe_transition deja de fallar mudo)  ← cierra D3 en el origen
+      ├─> F3-bis-3 (los DOS escritores dejan de fallar mudos: task_states:183 Y aci:547)
       └─> F4 (gate preciso + flag 3)        ← cierra RC-2   [F0 pasa a 4/4]
            ├─> F4-bis (arreglar test_b2_transition_from_config, hoy 5 failed)
            └─> F5 (persistir razón + flag 4)
@@ -1749,6 +2052,7 @@ F0 (rojo 0/4 + medición F0-D, sin prod)
 ```
 
 **Verificación ítem por ítem de que ninguna fase depende de algo posterior:**
+- **F-1 no construye nada**: corre los greps de §3.4 y deja los números de hoy en el PR. Cuesta 30 segundos y es lo único que impide repetir E1/E2 por cuarta vez. ✔
 - F2 usa solo `final_state_resolver` (F1). ✔
 - **F2-bis guardia 1** usa `dev_build_verify`, **preexistente** (`api/tickets.py:573-577` ya lo llama). ✔
 - F3 usa `tracker_provider` y `_safe_transition`, ambos **preexistentes**. ✔
@@ -1768,23 +2072,64 @@ F0 (rojo 0/4 + medición F0-D, sin prod)
 ### 7.3 Definition of Done
 
 - [ ] **F0-D**: salida de los 4 comandos de medición pegada en el PR, con una línea de interpretación.
-- [ ] `test_plan271_caracterizacion.py`: `0 passed, 4 failed` al terminar F0 → **`4 passed`** al terminar F7.
-- [ ] `test_plan271_final_state_resolver.py`: **17 passed** (incluye `len(ALL_FINAL_STATE_REASONS) == 27`, `"unknown" not in ...` y los 2 de `final_state_already_written`).
-- [ ] `test_plan271_role_fallback.py`: 9 passed.
+- [ ] `test_plan271_caracterizacion.py`: `0 passed, 4 failed` al terminar F0 (fallando **por su assert**, no por `SQLITE_LOCKED` — E12) → **`4 passed`** al terminar F7.
+- [ ] `test_plan271_final_state_resolver.py`: **19 passed** (12 filas de la tabla incluidas las 2 de E7 + 2 borde + `len(ALL_FINAL_STATE_REASONS) == 27` + `"unknown" not in ...` + `PRECEDENCE` + `REASONS ⊆ ALL` + los 2 de `final_state_already_written`).
+- [ ] `test_plan271_role_fallback.py`: **10 passed** (incluye el caso 6-bis: flag OFF + matriz con estado final ⇒ **transiciona**, para que apagar esta flag no regresione el 208 — E7).
 - [ ] `test_plan271_arbitro.py`: **8 passed** (4/8 tras la guardia 1; los 8 tras F3-bis-2).
-- [ ] `test_plan271_writer_routed.py`: **10 passed**.
+- [ ] `test_plan271_writer_routed.py`: **11 passed** (incluye el 9-bis: `AdoClient` legacy que lanza ⇒ `reason="transition_failed"` — E4).
 - [ ] `test_plan271_publish_gate.py`: 8 passed.
 - [ ] `test_plan271_reason_persisted.py`: 8 passed.
 - [ ] `test_plan271_reason_catalog.py`: 2 passed, sobre **27** razones.
-- [ ] `test_plan271_censo_escritores.py`: 3 passed, con el allow-list de **9 entradas** — **y la salida del Paso 0 pegada en el PR** (o el conjunto que el censo encuentre hoy, actualizado en el mismo commit con su etiqueta de motor/adaptador).
-- [ ] `test_plan271_razon_del_catalogo.py` (**F9**): 3 passed. **Ningún `reason` fuera de `ALL_FINAL_STATE_REASONS`; cero apariciones de `"unknown"`.**
-- [ ] `test_plan271_flags.py`: las 4 keys con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, con línea `=true` en `harness_defaults.env` **y con `PlainHelp` (las 4, textos de §3.1bis)**.
-- [ ] `plan271FinalStateOutcome.test.ts`: 6 passed. `npx tsc --noEmit`: 0 errores. Los **8** ratchets de UI de F6 corridos uno por uno.
-- [ ] `test_harness_flags.py`: **56 passed**. `test_harness_flags_help.py`: **exactamente `4 failed, 4 passed`**, los mismos 4 ajenos de §3.3, **sin ninguna key `STACKY_FINAL_STATE_*` entre las violaciones**. (No es "verde": ese archivo está rojo de fábrica — D13.)
+- [ ] `test_plan271_censo_escritores.py`: 3 passed, con el allow-list de **12 entradas** (E6: los 6 motores + 2 helpers del 79 + puerto + 2 adaptadores + el cliente terminal de ADO) — **y los DOS conteos del Paso 0 pegados en el PR** (regla sólo-llamadas ⇒ 9 y sin GitLab; regla ampliada ⇒ 12 y con GitLab + ado_client). Si el censo encuentra una 12ª entrada, se agrega con su etiqueta en el mismo commit.
+- [ ] `test_plan271_razon_del_catalogo.py` (**F9**): 3 passed, con la lista de violaciones del test 3 **de 4 a 0**, pegada antes y después. **Ningún `reason` fuera de `ALL_FINAL_STATE_REASONS`; cero apariciones de `"unknown"`.**
+- [ ] `test_plan271_flags.py`: las 4 keys con `default is True`, en `_CATEGORY_KEYS["flujo_funcional"]`, con línea `=true` en `harness_defaults.env`, **en `PLAIN_HELP` y pasando los 5 chequeos aplicados localmente** (§3.3bis), **sin `requires=`** (§3.1 pata 8). **Y la verificación de discriminación hecha**: borrar una entrada de `PLAIN_HELP` ⇒ **rojo**; reponerla ⇒ verde; las dos salidas en el PR.
+- [ ] `plan271FinalStateOutcome.test.ts`: 6 passed. `npx tsc --noEmit`: 0 errores. Los **8** ratchets de UI de F6 corridos uno por uno **a través del junction, sin instalar nada**. `.toneEspera` usa **`var(--text-muted)`** (existe; `--text-secondary` **NO** existe — E9).
+- [ ] `test_harness_flags.py`: **56 passed**. `test_harness_flags_requires.py`: **9 passed**. En `test_harness_flags_help.py`: **ninguna key `STACKY_FINAL_STATE_*` ni en `missing` (`:35`) ni en `violations` (`:76`)** — el conteo `4 failed, 4 passed` se anota como contexto, **no es el criterio** (E3: no discrimina).
+- [ ] `test_error_fingerprints_catalog.py`: **los mismos `3 failed, 5 passed`** de §3.3 y `test_error_fingerprints_scan.py` **`2 failed, 7 passed`** — **ninguna huella `FS-271-*` en los mensajes de error** (E5). Arreglar la del 239 es fuera de scope (§6.12).
 - [ ] `test_b2_transition_from_config.py`: de **`5 failed` (hoy)** a **`5 passed`** (F4-bis), **antes** de registrarlo.
 - [ ] `test_u2_publish_review_mode.py` **3 passed**, `test_output_watcher.py` **30 passed** (sin tocar ni un doble — D6), `test_plan79_apply_final.py` **6 passed**, `test_plan79_safe_transition.py` **10 passed**, `test_plan79_centinela_estados.py` **5 passed**, `test_plan210_state_gate.py` **16 passed`** — todos **por archivo**, comparados contra **§3.3**. Cualquier desvío se prueba preexistente con un worktree en el commit base **o se arregla**; no se borra el assert.
 - [ ] Los **12** archivos del checklist de F7 registrados en **ambos** scripts (**24 hits**).
 - [ ] `compileall` de `services/`, `api/` y `harness/` sin salida.
 - [ ] Las 4 flags con línea `=true` en `backend/harness_defaults.env`. (Verificable: `grep "STACKY_FINAL_STATE_" backend/harness_defaults.env` ⇒ **4 líneas, todas `=true`**.)
 - [ ] **Las DOS huellas de regresión registradas** en `docs/sistema/error_fingerprints.json` (**el archivo existe** — D17 —, así que no hay salida por "inexistente"), con el shape copiado de las entradas vecinas.
-- [ ] **Smoke manual (una vez, el operador o el implementador):** con un proyecto que tenga `tracker_state_machine.technical.next_state_ok = "To Do"` y **sin** `by_work_item_type`, correr el Analista Técnico sobre una incidencia y verificar (a) en el tracker que quedó en `To Do`, (b) en el drawer que dice **“Movida a "To Do"”**, y (c) que el `System.State` **no** cambió dos veces (una sola escritura, comprobable en el historial del work item). **(c) es la prueba de campo del árbitro simétrico: con el árbitro en un solo motor, este paso fallaba (D2).**
+- [ ] **Smoke manual (una vez, el operador o el implementador):** con un proyecto que tenga `tracker_state_machine.technical.next_state_ok = "To Do"` y **sin** `by_work_item_type`, correr el Analista Técnico sobre una incidencia y verificar (a) en el tracker que quedó en `To Do`, (b) en el drawer que dice **“Movida a "To Do"”**, y (c) que el `System.State` **no** cambió dos veces (una sola escritura, comprobable en el historial del work item). **(c) es la prueba de campo del árbitro simétrico: con el árbitro en un solo motor, este paso fallaba (D2).** **Este es el ÚNICO paso del plan que toca un tracker real, y lo decide el operador (§8-2).**
+- [ ] **§8 cumplido:** ningún test construyó un cliente de tracker real (guard de §8-2 en verde); `final_state_outcome` no persiste `error` ni texto libre (§8-1); el `%s` del `logger.warning` de F3 pasa por el enmascarado (§8-3).
+
+---
+
+## 8. `[ADICIÓN ARQUITECTO]` Datos personales, retención y prohibición de escribir en un tracker real
+
+**Por qué esta sección existe.** Este plan hace dos cosas sensibles que ninguna versión anterior evaluó: **cambia lo que Stacky escribe en el tablero de terceros del operador** (ADO/GitLab) y **persiste 27 razones que después se muestran en la UI**. Riesgo evaluado: **MEDIO**, mitigable con tres reglas que ya son casi ciertas por diseño y sólo faltaba escribir.
+
+### 8-1. Qué se persiste, y qué NO — el diseño ya es correcto, queda congelado
+
+La forma de `final_state_outcome` está **cerrada**: `{"applied": bool, "to": str|None, "source": str, "reason": str, "at": iso8601}`.
+
+| Campo | Contenido | ¿Puede arrastrar datos personales? |
+|---|---|---|
+| `applied` | bool | No |
+| `to` | nombre de un estado del tablero, salido de la config del operador (`"To Do"`) | No |
+| `source` | uno de `caller`/`matrix`/`role`/`employee_config`/`none` | No |
+| `reason` | **uno de los 27 identificadores** de `ALL_FINAL_STATE_REASONS` | No — es un enum cerrado, y **F9 lo verifica corriendo** |
+| `at` | timestamp | No |
+
+**Lo que queda EXPLÍCITAMENTE fuera, y es una decisión, no un olvido:** `_persist_final_state_outcome` **no** copia `result["error"]` (el `str(exc)` del tracker), **ni** `result["type"]`, **ni** el título o la descripción del ticket, **ni** `ado_id`. Un `str(exc)` de ADO/GitLab puede traer una URL con query string, el nombre del usuario del tablero o un fragmento del cuerpo de la respuesta — nada de eso entra al `metadata_json` ni al payload HTTP. **Prohibido agregar un campo de texto libre a esta forma**: si hace falta más detalle para depurar, va al log (§8-3), no al registro que la UI muestra.
+
+**Retención, declarada:** `final_state_outcome` vive **exactamente lo que vive la fila `AgentExecution`** que lo contiene — no crea un almacén nuevo, no crea un archivo, no crea una tabla, y se borra cuando se borra la ejecución. Al ser un enum cerrado más un nombre de estado y un timestamp, **no requiere política de retención propia**. Este párrafo es la declaración: si una versión futura mete texto libre acá, deja de ser cierto y hay que revisarlo.
+
+**Superficie de UI:** `describeFinalState` tiene un fallback que renderiza el `reason` **crudo** si no lo conoce (`{ label: o.reason, ... }`). Con el catálogo cerrado y F9 vigilándolo eso nunca debería tener contenido arbitrario, pero es defensa en profundidad barata: **sanitizá antes de renderizar** — recortá a 64 chars y quedate sólo con `[a-z0-9_]`, cualquier otra cosa se muestra como `"Motivo no reconocido"`. Es una línea y cierra la única vía por la que un string del backend llegaría literal a la pantalla.
+
+### 8-2. REGLA DURA: ningún test de este plan escribe en un tracker real
+
+El v3 no lo decía en ninguna parte, y **F3 caso 5 lo invitaba**: *"camino legacy: `AdoClient().update_work_item_state(4242, "To Do")`"*, sin aclarar que `AdoClient` va doblado. `_legacy_ado_client()` hace `from services.ado_client import AdoClient; return AdoClient()` de verdad; sin parche, un test intenta una llamada saliente al ADO del operador.
+
+**Regla, vinculante para todas las fases:**
+1. **Todo** test de este plan parchea `services.ado_client.AdoClient` **y** `services.tracker_provider.get_tracker_provider` antes de ejercitar cualquier camino de escritura. El `FakeProvider` de `plan271_helpers.py` cubre el camino ruteado; el camino **legacy** necesita su propio doble y hasta ahora nadie lo había dicho.
+2. **Guard ejecutable** en `test_plan271_writer_routed.py`: un test que afirma que, tras correr los 11 casos, **`services.ado_client.AdoClient` nunca se instanció sin parche** (contador en el doble; si el contador del doble no cuadra con la cantidad de casos legacy, es que alguno pasó por el cliente real).
+3. `plan271_helpers.py` ya declara en su docstring *"Sin red, sin ADO real, sin GitLab real"*: eso pasa de comentario a **requisito verificado**.
+4. **F0-D es de sólo lectura** y está bien así: los 4 comandos leen `harness_defaults.env`, `.env` y la DB viva, y el cuarto sólo agrega `reason` y `count(*)` — **no imprime títulos, descripciones ni identificadores de ticket**. No lo "mejores" agregando columnas: un `select` que traiga `title` o `description` de la base viva al PR sí sería una fuga.
+5. El **único** contacto con un tracker real en todo el plan es el **smoke manual** del DoD, que lo corre el operador sobre una incidencia que él elige. Human-in-the-loop intacto.
+
+### 8-3. El `str(exc)` del provider no se loguea crudo
+
+F3 introduce `logger.warning("[exec=%s] provider no disponible: %s", execution_id, exc)`. `TrackerConfigError` trae texto de configuración, pero un fallo HTTP de ADO/GitLab puede traer URL con query string, usuario del tablero o cuerpo de respuesta. **Pasá ese `%s` por el enmascarado que el repo ya tiene** (el mismo que usan los flujos de secretos) en vez de interpolar `exc` directo, y **nunca** loguees el token ni la URL completa. Reusar, no reinventar: si el helper de enmascarado no aplica a este caso, se recorta a los primeros 200 chars y se anota el `type(exc).__name__`, que es lo que sirve para depurar.

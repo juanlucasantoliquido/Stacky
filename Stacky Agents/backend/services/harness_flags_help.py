@@ -1921,6 +1921,113 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: nadie comprueba nada y una prueba puede ensuciar tus datos durante meses sin que te enteres.",
         example="Un archivo de diez anotaciones tenía las diez escritas por una prueba. Con esta comprobación se habría visto el primer día.",
     ),
+    # =====================================================================
+    # COSTURA DE FLAGS DE LA OLA 1 (paquete P0, 2026-07-28)
+    # Las 15 entradas de los planes 259, 267, 268, 269 y 270. Los textos son
+    # copia LITERAL del doc de cada plan (prohibido parafrasear) y se
+    # validaron una por una contra las 6 reglas de
+    # tests/test_harness_flags_help.py: 15/15 sin violaciones.
+    # REGLA DURA: quien implemente 259/267/268/269/270 NO reescribe estas
+    # entradas. Si cree que falta una, PARA y avisa.
+    # =====================================================================
+    # ── Plan 259 — Alta de proyecto GitLab + guia de configuracion ────────
+    "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED": PlainHelp(
+        what="Permite elegir GitLab como sistema de tickets al crear un proyecto nuevo.",
+        on_effect="Si está encendida, la pantalla de alta ofrece GitLab y el servidor guarda el proyecto como GitLab.",
+        off_effect="Si está apagada, GitLab no aparece al crear y el servidor rechaza el pedido con un aviso claro.",
+        example="Crear un proyecto contra tu GitLab de empresa sin pasar por la pantalla de edición.",
+    ),
+    "STACKY_SETUP_GUIDE_ENABLED": PlainHelp(
+        what="Muestra un botón de información con la guía de configuración paso a paso.",
+        on_effect="Si está encendida, aparece el botón que abre la guía con los pasos exactos para dejar la conexión andando.",
+        off_effect="Si está apagada, el botón no aparece y hay que configurar la conexión sin la ayuda en pantalla.",
+        example="Abrir la guía y seguir los doce pasos sin salir de la pantalla de alta.",
+    ),
+    "STACKY_SETUP_GUIDE_VERIFY_ENABLED": PlainHelp(
+        what="Agrega un boton que prueba la conexion en vivo desde adentro de la guia.",
+        on_effect="Si está encendida, podés probar los datos que escribiste y ver cuál de los cinco controles falla.",
+        off_effect="Si está apagada, la guía se ve igual pero sin el botón que prueba la conexión.",
+        example="Apretar el botón de probar y descubrir que al permiso del acceso le falta el nivel de escritura.",
+    ),
+    # ── Plan 267 — Catalogo unico de acciones DevOps ──────────────────────
+    "STACKY_DEVOPS_ACTION_CATALOG_ENABLED": PlainHelp(
+        what="Arma una lista unica de todo lo que se puede hacer en el panel de DevOps, para que los botones, el buscador de comandos y el asistente ofrezcan siempre lo mismo.",
+        on_effect="Si la activas: la misma accion aparece con el mismo nombre y la misma advertencia en todos lados.",
+        off_effect="Si la apagas: cada pantalla vuelve a ofrecer su propia lista, y el buscador de comandos deja de ofrecer acciones.",
+        example="Es como el menu unico de un restaurante: la carta de la mesa, la del mostrador y la del delivery dicen exactamente lo mismo.",
+    ),
+    "STACKY_DEVOPS_ACTION_NL_ENABLED": PlainHelp(
+        what="Permite pedir una tarea de despliegue escribiendola en castellano, y que el asistente te muestre cual seria la accion antes de hacer nada.",
+        on_effect="Si la activas: escribis lo que queres hacer y aparece una tarjeta con la accion, el ambiente, el riesgo y que va a pasar.",
+        off_effect="Si la apagas: el asistente vuelve a responder solo con texto y tenes que buscar el boton vos mismo.",
+        example="Escribis «quiero ver los logs» y te muestra la tarjeta de esa tarea, sin ejecutar nada hasta que confirmes.",
+    ),
+    "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": PlainHelp(
+        what="Decide si el asistente puede llevar a cabo por si mismo las tareas que modifican tus servidores y repositorios, o si solo puede mostrartelas.",
+        on_effect="Si la activas: despues de que confirmes, el asistente hace la tarea (desplegar, publicar, correr una orden en un servidor).",
+        off_effect="Si la apagas: el asistente igual te muestra la tarjeta completa con todo lo que haria, y un boton que te lleva a la pantalla para hacerlo vos.",
+        example="Le pedis «hace el despliegue en produccion»: apagada, te muestra que haria y te lleva a la pantalla; activada, lo hace despues de tu confirmacion.",
+    ),
+    # ── Plan 268 — Explorador del grafo documental ────────────────────────
+    "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": PlainHelp(
+        what="Agrega herramientas para explorar el mapa de documentos: filtros, buscador que salta al resultado, foco en los vecinos de una nota y vista previa.",
+        on_effect="Si la activás: la pestaña 'Grafo' de Docs suma barra de filtros, buscador con contador, botones de zoom, minimapa y un panel que muestra el principio del documento del nodo elegido.",
+        off_effect="Si la apagás: la pestaña 'Grafo' se ve como antes, con el buscador simple y el botón Centrar.",
+        example="Como pasar de una foto del mapa a un mapa con lupa, filtros y buscador.",
+    ),
+    # ── Plan 269 — Veredicto por evidencia (3 niveles) ────────────────────
+    "STACKY_RUN_VERDICT_ENABLED": PlainHelp(
+        what="Decide si una corrida terminó bien, terminó con advertencias o falló de verdad, mirando además si dejó resultados.",
+        on_effect="Si la activás: cada corrida muestra un veredicto de tres niveles con la causa. No cambia ningún estado por su cuenta.",
+        off_effect="Si la apagás: se sigue viendo solo el estado crudo, como antes, sin el veredicto ni la explicación.",
+        example="Como el mecánico que además de decir 'no arranca' te dice si el auto igual llegó a destino.",
+    ),
+    "STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED": PlainHelp(
+        what="Busca las pruebas de que una corrida dejó resultados: archivos, comentario publicado, cambios en el repositorio y controles pasados.",
+        on_effect="Si la activás: el veredicto se apoya en pruebas concretas y te dice cuáles encontró y cuáles no.",
+        off_effect="Si la apagás: el veredicto no puede comprobar nada y queda siempre en advertencia por falta de pruebas.",
+        example="Como pedir el remito antes de dar por entregado un pedido.",
+    ),
+    "STACKY_UI_RUN_VERDICT_BADGE_ENABLED": PlainHelp(
+        what="Muestra el veredicto de tres niveles en la lista de corridas, no solo adentro del detalle.",
+        on_effect="Si la activás: cada fila muestra si terminó bien, con advertencias o con un error real, y podés filtrar por eso.",
+        off_effect="Si la apagás: la lista queda como antes, con el estado crudo y sin la columna de veredicto.",
+        example="Como el semáforo de tres luces en vez de una lamparita que solo se prende o se apaga.",
+    ),
+    "STACKY_INCIDENT_INBOX_VERDICT_ENABLED": PlainHelp(
+        what="Muestra en la bandeja de incidencias el veredicto de la última corrida de cada una.",
+        on_effect="Si la activás: ves de un vistazo qué incidencias necesitan atención de verdad y cuáles solo figuran mal.",
+        off_effect="Si la apagás: la bandeja se ve igual que antes y hay que abrir cada incidencia para saberlo.",
+        example="Como marcar en la lista del consultorio quién está grave y quién solo espera el alta.",
+    ),
+    "STACKY_RUN_RECONCILIATION_HITL_ENABLED": PlainHelp(
+        what="Te deja corregir a mano, desde la pantalla, el estado de una corrida que quedó mal marcada.",
+        on_effect="Si la activás: aparece un botón para arreglar cada caso. Nada se corrige solo: siempre decidís vos y queda registrado.",
+        off_effect="Si la apagás: seguís viendo cuántos casos hay mal marcados, pero no hay botón para corregirlos desde ahí.",
+        example="Como el arqueo de caja que además te deja anotar el ajuste, pero solo si vos lo firmás.",
+    ),
+    # ── Plan 270 — El tablero de incidencias dice la verdad ───────────────
+    # Ortografia DELIBERADA del plan (medida contra los topes): "Despues",
+    # "sincronizacion", "proxima", "boton", "despues" van SIN tilde a proposito.
+    # Agregarlas cambia longitudes ya medidas. NO las "corrijas".
+    "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED": PlainHelp(
+        what="Manda el cambio de estado al sistema de tickets que el proyecto usa de verdad, en vez de intentarlo siempre contra Azure DevOps.",
+        on_effect="Si la activás (viene así de fábrica): al cerrar una incidencia, Stacky escribe en el sistema que corresponde y traduce el estado al vocabulario de ese sistema. Si no puede, te lo dice y no escribe nada.",
+        off_effect="Si la apagás: vuelve el comportamiento viejo, que intenta el cambio contra Azure DevOps aunque el proyecto viva en otro lado.",
+        example="Cerrás una incidencia de un proyecto de GitLab: antes se intentaba contra Azure DevOps y quedaba mal; ahora se cierra en GitLab.",
+    ),
+    "STACKY_TICKET_STATE_WRITEBACK_ENABLED": PlainHelp(
+        what="Despues de cambiar el estado en el sistema de tickets, vuelve a leerlo y actualiza la copia local para que la lista no muestre datos viejos.",
+        on_effect="Si la activás (viene así de fábrica): al terminar el cierre, la fila del tablero pasa sola a su estado real, sin recargar la pantalla ni esperar la sincronizacion grande.",
+        off_effect="Si la apagás: el cierre igual se hace, pero la fila sigue mostrando el estado anterior hasta la proxima sincronizacion.",
+        example="Cerrás un reclamo y la fila pasa de Abierta a Cerrada en el momento, en vez de quedarse en Abierta y hacerte dudar.",
+    ),
+    "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED": PlainHelp(
+        what="Marca en la lista las incidencias que Stacky ya dio por terminadas pero el sistema de tickets sigue mostrando abiertas.",
+        on_effect="Si la activás (viene así de fábrica): esas filas suman una marca que dice Sin sincronizar, y arriba aparece un boton para ver solo esas. No cambia nada, solo te lo muestra.",
+        off_effect="Si la apagás: la lista se ve igual que antes y las filas desalineadas no se distinguen del resto.",
+        example="Cerraste ocho reclamos y dos quedaron a medias: los ves marcados en vez de descubrirlo semanas despues.",
+    ),
 }
 
 

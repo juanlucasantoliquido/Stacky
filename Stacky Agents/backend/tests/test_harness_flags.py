@@ -902,6 +902,27 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",    # Plan 240 — prohibido el PASS vacío
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", # Plan 241 — aserciones que saben fallar
     "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",           # Plan 241 — épicas por agregación
+    # ── Costura de flags de la OLA 1 (paquete P0, 2026-07-28) ───────────────
+    # Las 14 flags default ON de los planes 259, 267, 268, 269 y 270.
+    # La 15ª del bloque, STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED (Plan 267), NO
+    # está acá A PROPÓSITO: nace OFF (es la única que EJECUTA sobre los
+    # servidores y repositorios reales del operador) y por eso su FlagSpec no
+    # declara `default=`. Este assert es de igualdad de conjuntos: agregarla
+    # acá dejaría el test en rojo con un "Faltantes".
+    "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED",    # Plan 259 — alta de proyecto GitLab
+    "STACKY_SETUP_GUIDE_ENABLED",                  # Plan 259 — botón INFO + guía (solo lectura)
+    "STACKY_SETUP_GUIDE_VERIFY_ENABLED",           # Plan 259 — "Verificar ahora" (5 GET read-only)
+    "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",        # Plan 267 — solo LISTA lo que ya existe
+    "STACKY_DEVOPS_ACTION_NL_ENABLED",             # Plan 267 — reconocimiento determinista, no escribe
+    "STACKY_DOCS_GRAPH_EXPLORER_ENABLED",          # Plan 268 — explorador read-only del grafo
+    "STACKY_RUN_VERDICT_ENABLED",                  # Plan 269 — veredicto; no cambia estados
+    "STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED",      # Plan 269 — solo lee evidencia ya producida
+    "STACKY_UI_RUN_VERDICT_BADGE_ENABLED",         # Plan 269 — presentación
+    "STACKY_INCIDENT_INBOX_VERDICT_ENABLED",       # Plan 269 — presentación
+    "STACKY_RUN_RECONCILIATION_HITL_ENABLED",      # Plan 269 — corrige SOLO si el operador firma
+    "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED",  # Plan 270 — enruta un cierre YA pedido
+    "STACKY_TICKET_STATE_WRITEBACK_ENABLED",       # Plan 270 — re-lee y refresca la copia local
+    "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED",    # Plan 270 — aviso visual, no cambia nada
 }
 
 

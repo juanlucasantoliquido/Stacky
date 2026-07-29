@@ -306,6 +306,20 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED": "STACKY_PIPELINE_NL_EDIT_ENABLED",
     # Plan 251: la matriz de entornos cuelga del master del panel DevOps (profundidad 1).
     "STACKY_PIPELINE_ENV_MATRIX_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",
+    # ── Costura de flags de la OLA 1 (paquete P0, 2026-07-28) ───────────────
+    # Las 3 UNICAS aristas `requires` de los 15 flags pre-declarados. Los planes
+    # 259, 269 y 270 no declaran ninguna (el 269 de forma deliberada: resuelve la
+    # dependencia EN CODIGO, no en el registro), asi que este mapa solo crece 3.
+    # Profundidad 1 verificada (R4) en las dos madres: ni
+    # STACKY_DEVOPS_ACTION_CATALOG_ENABLED ni STACKY_DOCS_GRAPH_ENABLED declaran
+    # `requires`, asi que no se forma cadena.
+    #
+    # Plan 267: interpretar la frase y ejecutar la accion cuelgan del catalogo
+    # (es una ESTRELLA, no una cadena: las dos apuntan a la misma madre).
+    "STACKY_DEVOPS_ACTION_NL_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    # Plan 268: el explorador solo tiene sentido si el grafo documental existe.
+    "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",
 }
 
 

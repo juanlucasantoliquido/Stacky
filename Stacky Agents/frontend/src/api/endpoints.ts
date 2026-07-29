@@ -3181,6 +3181,10 @@ export interface RunReconciliationResponse {
   total: number;
   by_kind: Record<string, number>;
   items: { execution_id: number; ticket_id: number; kind: string; detail: string }[];
+  /** Plan 269 F6 — true si STACKY_RUN_RECONCILIATION_HITL_ENABLED está ON (gatea el
+   *  botón de corrección manual). OPCIONAL: un backend viejo no la manda.
+   *  Pre-declarado por la costura P0 (2026-07-28). */
+  hitl_enabled?: boolean;
 }
 
 export const RunReconciliation = {
@@ -3318,6 +3322,11 @@ export interface HealthResponse {
   warnings?: string[];
   /** Plan 253 F7 — opcional: un servidor viejo no lo manda. */
   db_runtime?: DbRuntimeInfo;
+  /** Plan 259 F4.c — flags de UI expuestas por el backend.
+   *  Pre-declarado por la costura P0 (2026-07-28): el paquete P2 NO edita este
+   *  archivo. `Record<string, boolean>` y no una interfaz cerrada, así la próxima
+   *  flag de UI no obliga a tocar el tipo. */
+  flags?: Record<string, boolean>;
 }
 
 // ── Plan 38 A2 — Health endpoint ─────────────────────────────────────────────
@@ -3386,6 +3395,9 @@ export interface DocsSourcesResponse {
   documenter_enabled?: boolean;
   /** Plan 114 — true si STACKY_DOCS_STALENESS_ENABLED está ON (gatea chip + acción de staleness). */
   staleness_enabled?: boolean;
+  /** Plan 268 — true si STACKY_DOCS_GRAPH_EXPLORER_ENABLED está ON (gatea el explorador del grafo).
+   *  Pre-declarado por la costura P0 (2026-07-28): el paquete P4 NO edita este archivo. */
+  graph_explorer_enabled?: boolean;
 }
 
 /** Plan 113 — salud documental recomputada (subset de doc_health). */

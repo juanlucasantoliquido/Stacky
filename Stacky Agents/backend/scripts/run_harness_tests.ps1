@@ -793,7 +793,50 @@ $HarnessTestFiles = @(
   "tests/test_plan242_cost_api.py",
   "tests/test_plan242_no_new_deps.py",
   "tests/test_plan242_flags_off.py",
-  "tests/test_plan242_runtime_parity.py"
+  "tests/test_plan242_runtime_parity.py",
+
+  # ===================================================================
+  # COSTURA DE LA OLA 1 (paquete P0, 2026-07-28) - 24 rutas PRE-DECLARADAS
+  # Los 4 paquetes que implementan los planes 259, 267, 269 y 270 tienen
+  # PROHIBIDO editar este archivo: sus rutas ya estan registradas aca.
+  # El plan 268 no aparece porque crea 0 tests .py (solo vitest).
+  # OJO: la coma de la linea anterior se agrego en esta costura. Sin ella
+  # PowerShell parsea igual pero el array se corta y $HarnessTestFiles.Count
+  # no sube.
+  # ===================================================================
+
+  # Plan 259 (paquete P2) - alta de proyecto GitLab + guia verificable
+  "tests/test_plan259_setup_guide_data.py",
+  "tests/test_plan259_project_manager_gitlab.py",
+  "tests/test_plan259_api_projects_gitlab.py",
+  "tests/test_plan259_gitlab_token_dpapi.py",
+  "tests/test_plan259_setup_guide_api.py",
+  "tests/test_plan259_enable_engine.py",
+  "tests/test_plan259_tracker_parity_guard.py",
+  "tests/test_plan259_ratchet_script_parity.py",
+
+  # Plan 267 (paquete P3) - catalogo unico de acciones DevOps
+  # OJO: NO se llaman test_plan267_*: el plan los nombra asi.
+  "tests/test_devops_action_catalog.py",
+  "tests/test_devops_actions_api.py",
+  "tests/test_devops_action_matcher.py",
+  "tests/test_devops_action_ratchet.py",
+
+  # Plan 269 (paquete P1) - veredicto por evidencia en tres niveles
+  "tests/test_plan269_run_verdict.py",
+  "tests/test_plan269_run_evidence.py",
+  "tests/test_plan269_executions_payload.py",
+  "tests/test_plan269_inbox_verdict.py",
+  "tests/test_plan269_hitl_correccion.py",
+  "tests/test_plan269_flags.py",
+
+  # Plan 270 (paquete P1) - cierre real del tracker en ADO y GitLab
+  "tests/test_plan270_close_intent.py",
+  "tests/test_plan270_write_router.py",
+  "tests/test_plan270_gitlab_close.py",
+  "tests/test_plan270_finish_work_state.py",
+  "tests/test_plan270_state_writeback.py",
+  "tests/test_plan270_state_write_ratchet.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

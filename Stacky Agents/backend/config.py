@@ -2149,4 +2149,87 @@ class Config:
         "STACKY_LEDGER_PURGE_ENABLED", "false"
     ).lower() in ("1", "true", "yes")
 
+    # =========================================================================
+    # COSTURA DE FLAGS DE LA OLA 1 (paquete P0, 2026-07-28)
+    # Las 15 flags de los planes 259, 267, 268, 269 y 270 se pre-declaran ACA,
+    # de una sola vez, para que los 4 paquetes que implementan esos planes NO
+    # tengan que tocar este archivo (ni harness_flags*.py ni los arneses) y
+    # puedan correr en paralelo sin pisarse.
+    #
+    # REGLA DURA para quien implemente 259/267/268/269/270: estas 15 ya estan
+    # declaradas. NO las vuelvas a declarar. Si crees que falta una, PARA y avisa.
+    # =========================================================================
+
+    # ── Plan 259 — Alta de proyecto GitLab + guia de configuracion ────────────
+    # Las 3 nacen ON: el alta guarda el token CIFRADO (hoy no se guarda de
+    # ninguna forma), la guia es texto de solo lectura y la verificacion son 5
+    # GET sin redirecciones contra la instancia que el propio operador tipeo.
+    # El kill-switch del eje GitLab sigue siendo STACKY_GITLAB_ENABLED, que NO
+    # cambia su default (OFF).
+    STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED: bool = os.getenv(
+        "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_SETUP_GUIDE_ENABLED: bool = os.getenv(
+        "STACKY_SETUP_GUIDE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_SETUP_GUIDE_VERIFY_ENABLED: bool = os.getenv(
+        "STACKY_SETUP_GUIDE_VERIFY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 267 — Catalogo unico de acciones DevOps ──────────────────────────
+    # Catalogo y lenguaje natural nacen ON: solo LISTAN o INTERPRETAN, no
+    # escriben en ningun lado, no llaman a ningun modelo y no corren en reposo.
+    # La tercera nace OFF: es la unica que EJECUTA sobre servidores y
+    # repositorios reales del operador. El default OFF vive SOLO aca; su
+    # FlagSpec NO declara default= (ver services/harness_flags.py).
+    STACKY_DEVOPS_ACTION_CATALOG_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ACTION_CATALOG_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DEVOPS_ACTION_NL_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_ACTION_NL_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED: bool = os.getenv(
+        "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED", "false"
+    ).strip().lower() == "true"
+
+    # ── Plan 268 — Explorador del grafo documental (default ON, editable UI) ───
+    STACKY_DOCS_GRAPH_EXPLORER_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_GRAPH_EXPLORER_ENABLED", "true"
+    ).strip().lower() == "true"
+
+    # ── Plan 269 — Veredicto por evidencia (3 niveles) ────────────────────────
+    # Las 5 nacen ON: ninguna escribe en un sistema real del operador por su
+    # cuenta ni corre en reposo. La de correccion manual exige SIEMPRE la
+    # decision del operador (no autocorrige nada).
+    STACKY_RUN_VERDICT_ENABLED: bool = os.getenv(
+        "STACKY_RUN_VERDICT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED: bool = os.getenv(
+        "STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_UI_RUN_VERDICT_BADGE_ENABLED: bool = os.getenv(
+        "STACKY_UI_RUN_VERDICT_BADGE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_INCIDENT_INBOX_VERDICT_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_INBOX_VERDICT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_RUN_RECONCILIATION_HITL_ENABLED: bool = os.getenv(
+        "STACKY_RUN_RECONCILIATION_HITL_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # ── Plan 270 — El tablero de incidencias dice la verdad ───────────────────
+    # Las 3 nacen ON. Las dos primeras SI escriben en el tablero real del
+    # operador, pero solo por un cierre que el operador ya pidio: enrutan y
+    # traducen ese mismo cambio en vez de mandarlo al sistema equivocado (hoy
+    # en GitLab "cerrar" manda reopen). La tercera es solo un aviso visual.
+    STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_TICKET_STATE_WRITEBACK_ENABLED: bool = os.getenv(
+        "STACKY_TICKET_STATE_WRITEBACK_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED: bool = os.getenv(
+        "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
 config = Config()

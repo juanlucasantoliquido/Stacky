@@ -264,6 +264,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DEVOPS_ENV_APPLY_LEDGER_ENABLED",  # Plan 198 — bitácora de applies de ambientes
         "STACKY_DEVOPS_COCKPIT_ENABLED",  # Plan 239 — cockpit DevOps (Resumen + nav agrupada)
         "STACKY_PIPELINE_INVENTORY_ENABLED",  # Plan 246 — inventario vivo de pipelines
+        # Costura OLA 1 (P0, 2026-07-28)
+        "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",  # Plan 267 — catálogo único de acciones DevOps
+        "STACKY_DEVOPS_ACTION_NL_ENABLED",  # Plan 267 — pedir la acción en castellano
+        "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED",  # Plan 267 — el asistente EJECUTA (nace OFF)
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -371,6 +375,12 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_KNOWLEDGE_INJECT_TOP_N",        # Plan 170 — top-N por corrida
         "STACKY_KNOWLEDGE_INJECT_MAX_CHARS",    # Plan 170 — tope de caracteres
         "STACKY_KNOWLEDGE_MAX_LESSONS",         # Plan 170 — cap sugerente del corpus
+        # Costura OLA 1 (P0, 2026-07-28)
+        "STACKY_RUN_VERDICT_ENABLED",              # Plan 269 F0 — veredicto de 3 niveles
+        "STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED",  # Plan 269 F1 — recolectores de evidencia
+        "STACKY_UI_RUN_VERDICT_BADGE_ENABLED",     # Plan 269 F2/F3/F4 — veredicto en la lista
+        "STACKY_INCIDENT_INBOX_VERDICT_ENABLED",   # Plan 269 F5 — veredicto en la bandeja
+        "STACKY_RUN_RECONCILIATION_HITL_ENABLED",  # Plan 269 F6 — correccion manual (HITL)
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -438,6 +448,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # tiene sentido sin el master (y lo declara con `requires`).
         "STACKY_NIGHT_FOUNDRY_ENABLED",
         "STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET",
+        # Costura OLA 1 (P0, 2026-07-28)
+        "STACKY_DOCS_GRAPH_EXPLORER_ENABLED",   # Plan 268 — explorador read-only del grafo de docs
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -479,6 +491,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INCIDENT_INBOX_ENABLED",  # Plan 238 — bandeja de incidencias abiertas
         "STACKY_INCIDENT_INBOX_ACTIONS_ENABLED",  # Acciones (cerrar / resolver+PR) desde la bandeja
         "STACKY_UI_LOG_NOISE_CARD_ENABLED",  # Plan 257 — tarjeta de firmas de log mas repetidas
+        # Costura OLA 1 (P0, 2026-07-28) — el plan 270 la ubica en la categoría de
+        # STACKY_INCIDENT_INBOX_ACTIONS_ENABLED (su vecino), NO en paridad_proveedores.
+        "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED",  # Plan 270 F5 — marca "Sin sincronizar" en la bandeja
     ),
     "paridad_proveedores": (
         "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
@@ -486,6 +501,12 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CANONICAL_VOCABULARY_ENABLED",        # Plan 218 F5 — alias canónicos aditivos
         "STACKY_CAPABILITY_DEGRADATION_ENABLED",      # Plan 218 F6 — 200 available:false en vez de 500 mudo
         "STACKY_GITLAB_SEMANTIC_RULES_ENABLED",       # Plan 249 — reglas GL000..GL011 de GitLab CI
+        # Costura OLA 1 (P0, 2026-07-28)
+        "STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED",  # Plan 259 F1/F2/F5 — alta de proyecto GitLab
+        "STACKY_SETUP_GUIDE_ENABLED",                # Plan 259 F4/F6 — botón INFO + guía
+        "STACKY_SETUP_GUIDE_VERIFY_ENABLED",         # Plan 259 F4/F6 — "Verificar ahora"
+        "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED",  # Plan 270 F1/F2 — enrutar el estado al tracker real
+        "STACKY_TICKET_STATE_WRITEBACK_ENABLED",       # Plan 270 F4 — re-leer y refrescar la copia local
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5506,6 +5527,259 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         default=True,
+    ),
+    # =====================================================================
+    # COSTURA DE FLAGS DE LA OLA 1 (paquete P0, 2026-07-28)
+    # Las 15 flags de los planes 259, 267, 268, 269 y 270, pre-declaradas de
+    # una sola vez para que los 4 paquetes que implementan esos planes NO
+    # toquen este archivo y puedan correr en paralelo sin pisarse.
+    # REGLA DURA: quien implemente 259/267/268/269/270 NO vuelve a declarar
+    # ninguna de estas. Si cree que falta una, PARA y avisa.
+    # =====================================================================
+    # ── Plan 259 — Alta de proyecto GitLab + guia de configuracion ────────
+    FlagSpec(
+        key="STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        label="Crear proyectos GitLab desde la pantalla de alta",
+        description=(
+            "Plan 259 - Agrega GitLab a los sistemas de tickets elegibles al crear un "
+            "proyecto y habilita la rama GitLab del alta en el backend. Si la apagas, el "
+            "boton no aparece y el backend rechaza tracker_type=gitlab con un mensaje "
+            "explicito en vez de convertir el proyecto a Azure DevOps."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_SETUP_GUIDE_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        label="Boton INFO con la guia de configuracion paso a paso",
+        description=(
+            "Plan 259 - Muestra un boton INFO junto al sistema de tickets elegido que abre "
+            "la guia exacta de configuracion (12 pasos para GitLab). Texto de solo lectura, "
+            "sin red."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_SETUP_GUIDE_VERIFY_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        label='Boton "Verificar ahora" dentro de la guia',
+        description=(
+            "Plan 259 - Corre 5 controles de solo lectura contra la instancia que "
+            "escribiste en el formulario y marca cual falla. No escribe nada, ni en GitLab "
+            "ni en disco."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 267 — Catalogo unico de acciones DevOps ──────────────────────
+    FlagSpec(
+        key="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA excepcion aplica. Solo LISTA lo que ya
+                        # existe; no escribe en ningun lado, no llama a ningun modelo,
+                        # no corre en reposo (se sirve a pedido de la pantalla) y no le
+                        # saca ninguna decision al operador.
+                        # Curada en _CURATED_DEFAULTS_ON (tests/test_harness_flags.py).
+        label="Catalogo de acciones DevOps",
+        description=(
+            "Plan 267 - declara en un solo lugar que se puede hacer en el panel DevOps "
+            "(que accion, en que seccion, si lee o escribe, que impacto, sobre que "
+            "entorno). Lo consumen los botones, la paleta de comandos y el asistente. "
+            "OFF: /api/devops/actions/catalog devuelve 404 y las tres superficies "
+            "quedan como hoy."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_DEVOPS_ACTION_NL_ENABLED",
+        type="bool",
+        default=True,   # default ON - ninguna excepcion aplica: solo INTERPRETA una frase
+                        # que el operador acaba de escribir y devuelve una propuesta; no
+                        # corre en reposo (no hay loop ni daemon: se dispara por request),
+                        # no llama a ningun modelo (el matcher es determinista) y no
+                        # escribe absolutamente nada. Curada en _CURATED_DEFAULTS_ON.
+        label="Pedir una tarea de despliegue escribiendola en castellano",
+        description=(
+            "Plan 267 - Permite pedir una tarea de despliegue escribiendola en castellano, "
+            "y que el asistente muestre cual seria la accion antes de hacer nada. El "
+            "reconocimiento es determinista: no interviene ningun modelo. OFF: el "
+            "asistente vuelve a responder solo con texto."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED",
+        # SIN default= A PROPOSITO (regla dura): una flag default OFF NO declara
+        # default=False, porque eso la volveria default_is_known y
+        # test_default_known_only_for_curated exige que ese conjunto sea EXACTAMENTE
+        # _CURATED_DEFAULTS_ON, donde una flag OFF no puede entrar.
+        # El OFF vive SOLO en config.py. NO va en _CURATED_DEFAULTS_ON.
+        # Nace OFF porque es la unica del plan que EJECUTA sobre los servidores y
+        # repositorios REALES del operador.
+        type="bool",
+        label="El asistente puede ejecutar las tareas que confirmes",
+        description=(
+            "Plan 267 - Decide si el asistente puede llevar a cabo por si mismo las tareas "
+            "que modifican tus servidores y repositorios, o si solo puede mostrartelas. "
+            "Nace APAGADA: aun encendida exige tu confirmacion antes de cada tarea. OFF: "
+            "el asistente muestra la tarjeta completa y un boton que te lleva a la "
+            "pantalla para hacerlo vos."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    ),
+    # ── Plan 268 — Explorador del grafo documental ────────────────────────
+    FlagSpec(
+        key="STACKY_DOCS_GRAPH_EXPLORER_ENABLED",
+        default=True,  # Plan 268 — read-only puro: nace ON (regla de defaults 2026-07-27)
+        type="bool",
+        label="Explorador del grafo documental (Plan 268)",
+        description=(
+            "Plan 268 — Convierte la pestaña 'Grafo' de la página Docs en un "
+            "explorador: barra de filtros (fuente, tipo de nodo, tipo de arista, "
+            "grado, huérfanas, desactualizadas), búsqueda navegable con conteo y "
+            "encuadre, foco por vecindario a profundidad 1-3 con historial, "
+            "agrupación por fuente con color y colapso, controles de zoom y "
+            "atajos de teclado, minimapa y vista previa del contenido del nodo "
+            "seleccionado. 100% read-only: no escribe ningún documento. Si la "
+            "apagás, la pestaña 'Grafo' vuelve a comportarse como en el Plan 111. "
+            "Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_GRAPH_ENABLED",
+    ),
+    # ── Plan 269 — Veredicto por evidencia (3 niveles) ────────────────────
+    # NINGUNA declara requires= (decision deliberada del plan, §3.7): la
+    # dependencia entre la flag de UI y la del nucleo se resuelve EN CODIGO
+    # (una funcion lee las dos), no en el registro.
+    FlagSpec(
+        key="STACKY_RUN_VERDICT_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. No cambia ningun estado por su cuenta.
+        label="Veredicto de la corrida en tres niveles",
+        description=(
+            "Plan 269 - Decide si una corrida termino bien, termino con advertencias o "
+            "fallo de verdad, mirando ademas si dejo resultados. No cambia ningun estado "
+            "por su cuenta. OFF: se sigue viendo solo el estado crudo, sin el veredicto "
+            "ni la explicacion de la causa."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. Solo LEE evidencia ya producida.
+        label="Buscar las pruebas de que la corrida dejo resultados",
+        description=(
+            "Plan 269 - Busca las pruebas de que una corrida dejo resultados: archivos, "
+            "comentario publicado, cambios en el repositorio y controles pasados. Solo "
+            "lee lo que la corrida ya produjo. OFF: el veredicto no puede comprobar nada "
+            "y queda siempre en advertencia por falta de pruebas."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_UI_RUN_VERDICT_BADGE_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. Solo presentacion.
+        label="Veredicto visible en la lista de corridas",
+        description=(
+            "Plan 269 - Muestra el veredicto de tres niveles en la lista de corridas, no "
+            "solo adentro del detalle, y permite filtrar por el. OFF: la lista queda como "
+            "antes, con el estado crudo y sin la columna de veredicto."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_INBOX_VERDICT_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. Solo presentacion.
+        label="Veredicto de la ultima corrida en la bandeja de incidencias",
+        description=(
+            "Plan 269 - Muestra en la bandeja de incidencias el veredicto de la ultima "
+            "corrida de cada una, para ver de un vistazo cuales necesitan atencion de "
+            "verdad y cuales solo figuran mal. OFF: la bandeja se ve igual que antes y "
+            "hay que abrir cada incidencia para saberlo."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_RUN_RECONCILIATION_HITL_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. NO autocorrige: la correccion la
+                        # decide y la firma SIEMPRE el operador, y queda registrada.
+        label="Corregir a mano una corrida mal marcada",
+        description=(
+            "Plan 269 - Deja corregir a mano, desde la pantalla, el estado de una corrida "
+            "que quedo mal marcada. Nada se corrige solo: cada correccion la decide el "
+            "operador y queda registrada con su autor. OFF: se sigue viendo cuantos casos "
+            "hay mal marcados, pero sin boton para corregirlos desde ahi."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 270 — El tablero de incidencias dice la verdad ───────────────
+    FlagSpec(
+        key="STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. Escribe en el tablero real, pero
+                        # SOLO por un cierre que el operador ya pidio: enruta y traduce ese
+                        # mismo cambio en vez de mandarlo al sistema equivocado.
+        label="Enrutar el cambio de estado al sistema de tickets correcto",
+        description=(
+            "Plan 270 - Manda el cambio de estado al sistema de tickets que el proyecto usa "
+            "de verdad, en vez de intentarlo siempre contra Azure DevOps, y traduce el "
+            "estado al vocabulario de ese sistema. Si no puede traducirlo, avisa y no "
+            "escribe nada. OFF: vuelve el comportamiento viejo, que intenta el cambio "
+            "contra Azure DevOps aunque el proyecto viva en otro lado."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_TICKET_STATE_WRITEBACK_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. Re-lee el estado que acaba de
+                        # cambiar y refresca la copia LOCAL; no origina cambios nuevos.
+        label="Refrescar el estado local despues de cerrar en el tracker",
+        description=(
+            "Plan 270 - Despues de cambiar el estado en el sistema de tickets, vuelve a "
+            "leerlo y actualiza la copia local para que la lista no muestre datos viejos. "
+            "OFF: el cierre igual se hace, pero la fila sigue mostrando el estado anterior "
+            "hasta la proxima sincronizacion."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON. Puramente informativa: no cambia
+                        # nada, solo marca la fila desalineada.
+        label="Marca \"Sin sincronizar\" en la bandeja de incidencias",
+        description=(
+            "Plan 270 - Marca en la lista las incidencias que Stacky ya dio por terminadas "
+            "pero el sistema de tickets sigue mostrando abiertas, y agrega un filtro para "
+            "ver solo esas. No cambia nada: solo lo muestra. OFF: la lista se ve igual que "
+            "antes y las filas desalineadas no se distinguen del resto."
+        ),
+        group="global",
+        env_only=False,
     ),
 )
 

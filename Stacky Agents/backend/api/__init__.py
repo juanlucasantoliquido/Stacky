@@ -80,6 +80,13 @@ from .evolution_fitness import bp as evolution_fitness_bp  # Plan 168 — arnés
 from .evolution_optimizer import bp as evolution_optimizer_bp  # Plan 169 — optimizador evolutivo
 from .evolution_knowledge import bp as evolution_knowledge_bp  # Plan 170 — flywheel de conocimiento
 from .parity import parity_bp  # Plan 218 F8 — matriz de paridad ADO ↔ GitLab
+# ── Costura de la OLA 1 (paquete P0, 2026-07-28) ─────────────────────────────
+# Los dos modulos son STUBS con su Blueprint declarado y CERO rutas. Se importan
+# y se registran acá de una sola vez para que los paquetes P2 (plan 259) y P3
+# (plan 267) NO tengan que editar este archivo, que comparten. Cada uno llena SU
+# stub, del que es dueño exclusivo.
+from .setup_guide import bp as setup_guide_bp  # Plan 259 — guía de configuración verificable
+from .devops_actions import bp as devops_actions_bp  # Plan 267 — catálogo de acciones DevOps
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -109,6 +116,10 @@ api_bp.register_blueprint(qa_browser_bp)
 api_bp.register_blueprint(qa_uat_bp)
 api_bp.register_blueprint(pipelines_bp)
 api_bp.register_blueprint(harness_flags_bp)
+# Costura OLA 1 (P0): stubs sin rutas. Registrarlos ahora es inerte (0 endpoints
+# nuevos) y le saca este archivo compartido del camino a P2 y P3.
+api_bp.register_blueprint(setup_guide_bp)  # Plan 259 (paquete P2)
+api_bp.register_blueprint(devops_actions_bp)  # Plan 267 (paquete P3)
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(reports_bp)
 api_bp.register_blueprint(diag_bp)

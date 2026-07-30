@@ -161,6 +161,12 @@
   /* Bordes / theme-ready */
   --border-width: 1px;
   --color-scheme: dark;
+
+  /* Plan 273 F3 (B-07) — contador de la nav v1. Rojo con contraste garantizado
+     (6.47:1 con --text-on-solid) en AMBOS temas, por eso el valor NO cambia entre
+     bloques. Deliberadamente distinto de --status-danger-solid, cuyo valor en
+     oscuro da 3.76:1 (falla AA ya congelada en themeContrast.test.ts). */
+  --nav-badge-bg: #b91c1c;
 }
 
 /* ═══ Plan 141 — Tema claro (re-apunta SOLO tokens de color) ═══════════
@@ -241,6 +247,9 @@
 
   /* color-scheme nativo (grupo H) */
   --color-scheme: light;
+
+  /* Plan 273 F3 — mismo valor a proposito (ver :root) */
+  --nav-badge-bg: #b91c1c;
 }
 
 /* ─── Plan 150 — Densidad compacta ────────────────────────────────

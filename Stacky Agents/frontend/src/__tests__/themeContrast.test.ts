@@ -61,6 +61,9 @@ const PAIRS: Array<[string, string]> = [
   ["--status-neutral-text", "--status-neutral-bg"],
   ["--text-on-solid", "--status-success-solid"], ["--text-on-warn", "--status-warning-solid"],
   ["--text-on-solid", "--status-danger-solid"], ["--text-on-solid", "--status-info-solid"],
+  // Plan 273 F3 (B-07) — el contador de la nav v1. 6.47:1 en ambos temas, asi que
+  // pasa el gate estricto de claro y el de oscuro SIN entrada en DARK_SHORTFALLS.
+  ["--text-on-solid", "--nav-badge-bg"],
 ];
 const AA = 4.5;
 
@@ -73,7 +76,7 @@ const DARK_SHORTFALLS: Record<string, number> = {
 };
 
 describe("Plan 141 F3 — gate WCAG AA modo CLARO (estricto)", () => {
-  it("los 24 pares cumplen AA (>= 4.5) en el tema claro", () => {
+  it("los 25 pares cumplen AA (>= 4.5) en el tema claro", () => {
     const fails = PAIRS
       .map(([f, b]) => [f, b, ratio(f, b, LIGHT)] as const)
       .filter(([, , r]) => r < AA);

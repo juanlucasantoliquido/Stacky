@@ -16,9 +16,19 @@ def _require_radar_enabled():
     # Idioma de api/db_compare.py — la instancia de flags es config.config,
     # NO el módulo (gotcha conocido: getattr(config, FLAG) da default y mata el OFF).
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
-        return jsonify({"ok": False, "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "El Comparador de BD está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_ENABLED"},
+        }), 403
     if not getattr(_config.config, "STACKY_DB_COMPARE_RADAR_ENABLED", False):
-        return jsonify({"ok": False, "error": "Radar de ambientes deshabilitado (STACKY_DB_COMPARE_RADAR_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "El monitoreo de ambientes está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_RADAR_ENABLED"},
+        }), 403
     return None
 
 

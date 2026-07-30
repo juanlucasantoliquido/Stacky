@@ -20,7 +20,8 @@ def _fitness_enabled() -> bool:
 def _disabled_resp():
     return jsonify({
         "ok": False, "error": "fitness_disabled",
-        "message": "El arnés de fitness está deshabilitado (STACKY_EVAL_HARNESS_ENABLED).",
+        "message": "La evaluación de calidad de los agentes está desactivada.",
+        "detail": {"flag": "STACKY_EVAL_HARNESS_ENABLED"},
     }), 404
 
 

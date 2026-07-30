@@ -62,8 +62,16 @@ def test_plans_404_con_su_flag_off(client):
         # buscar la flag equivocada.
         body = r.get_json()
         assert body["error"] == "plans_triage_disabled"
-        assert "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED" in body["message"]
-        assert "STACKY_EVOLUTION_CENTER_ENABLED" not in body["message"]
+        # Plan 273 F5 (B-06): el nombre de la variable de entorno YA NO va en
+        # `message` — ese texto lo lee el operador, y decirle el nombre de una env
+        # var es a la vez intimidante e inutil, porque el riel del producto es que
+        # las flags se configuran por UI. El nombre se movio a `detail.flag`, donde
+        # habilita el deep-link a Configuracion -> Flags. La intencion original de
+        # este caso (culpar a la flag CORRECTA y no a la maestra) se conserva
+        # intacta, solo cambia donde vive el dato.
+        assert body["detail"]["flag"] == "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED"
+        assert "STACKY_" not in body["message"]
+        assert "STACKY_EVOLUTION_CENTER_ENABLED" not in str(body)
         assert client.get("/api/evolution/plans/health").get_json()["flag_enabled"] is False
     finally:
         cfg.STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED = True
@@ -78,7 +86,9 @@ def test_plans_404_con_la_flag_maestra_off(client):
         # Con la maestra abajo, el diagnóstico correcto SÍ es el del Centro entero.
         body = r.get_json()
         assert body["error"] == "evolution_disabled"
-        assert "STACKY_EVOLUTION_CENTER_ENABLED" in body["message"]
+        # Plan 273 F5 (B-06): idem — el nombre de la flag vive en `detail.flag`.
+        assert body["detail"]["flag"] == "STACKY_EVOLUTION_CENTER_ENABLED"
+        assert "STACKY_" not in body["message"]
     finally:
         cfg.STACKY_EVOLUTION_CENTER_ENABLED = True
 

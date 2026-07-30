@@ -848,7 +848,8 @@ $HarnessTestFiles = @(
   # El nombre del tool no se transcribe: un test de este plan exige 0
   # menciones en estos scripts, comentarios incluidos.
   "tests/test_plan274_tool_tests_outside_ratchet.py",
-  "tests/test_plan274_efficacy_gates.py"
+  "tests/test_plan274_efficacy_gates.py",
+  "tests/test_plan273_error_message_sin_flags.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -1015,7 +1015,8 @@ def run_reconciliation_route():
         return jsonify({
             "ok": False,
             "error": "run_reconciliation_disabled",
-            "message": "La reconciliación de corridas está deshabilitada (STACKY_RUN_RECONCILIATION_ENABLED).",
+            "message": "La reconciliación de corridas está desactivada.",
+            "detail": {"flag": "STACKY_RUN_RECONCILIATION_ENABLED"},
         }), 404
     from services import run_reconciliation as rr  # import lazy (patrón Plan 109)
 
@@ -1055,7 +1056,8 @@ def code_integrity_route():
     """Plan 130 — gate determinista de sintaxis + imports (read-only, sin IA)."""
     if not bool(getattr(_config.config, "STACKY_CODE_INTEGRITY_ENABLED", False)):
         return jsonify({"ok": False, "error": "code_integrity_disabled",
-                        "message": "El verificador de integridad está deshabilitado (STACKY_CODE_INTEGRITY_ENABLED)."}), 404
+                        "message": "El verificador de integridad del código está desactivado.",
+                        "detail": {"flag": "STACKY_CODE_INTEGRITY_ENABLED"}}), 404
     from services import code_integrity as ci  # import lazy (patrón Plan 109)
     try:
         return jsonify(ci.run_checks())

@@ -22,7 +22,8 @@ def _disabled_resp():
             {
                 "ok": False,
                 "error": "plans_board_disabled",
-                "message": "El tablero de planes está deshabilitado (STACKY_PLANS_BOARD_ENABLED).",
+                "message": "El tablero de planes está desactivado.",
+                "detail": {"flag": "STACKY_PLANS_BOARD_ENABLED"},
             }
         ),
         404,

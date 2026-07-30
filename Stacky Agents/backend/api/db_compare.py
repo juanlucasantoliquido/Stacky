@@ -35,7 +35,12 @@ bp = Blueprint("db_compare", __name__, url_prefix="/db-compare")
 
 def _require_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
-        return jsonify({"ok": False, "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "El Comparador de BD está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_ENABLED"},
+        }), 403
     return None
 
 
@@ -44,7 +49,9 @@ def _require_webconfig_import_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED", False):
         return jsonify({
             "ok": False,
-            "error": "Import de web.config deshabilitado (STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED).",
+            "error": "feature_disabled",
+            "message": "La importación de web.config está desactivada.",
+            "detail": {"flag": "STACKY_DB_COMPARE_WEBCONFIG_IMPORT_ENABLED"},
         }), 403
     return None
 
@@ -54,7 +61,9 @@ def _require_data_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_DATA_DIFF_ENABLED", False):
         return jsonify({
             "ok": False,
-            "error": "Paridad de datos deshabilitada (STACKY_DB_COMPARE_DATA_DIFF_ENABLED).",
+            "error": "feature_disabled",
+            "message": "La comparación de datos entre ambientes está desactivada.",
+            "detail": {"flag": "STACKY_DB_COMPARE_DATA_DIFF_ENABLED"},
         }), 403
     return None
 
@@ -475,7 +484,9 @@ def _require_triage_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_TRIAGE_ENABLED", False):
         return jsonify({
             "ok": False,
-            "error": "Triage del diff deshabilitado (STACKY_DB_COMPARE_TRIAGE_ENABLED).",
+            "error": "feature_disabled",
+            "message": "La clasificación de diferencias está desactivada.",
+            "detail": {"flag": "STACKY_DB_COMPARE_TRIAGE_ENABLED"},
         }), 403
     return None
 
@@ -700,7 +711,9 @@ def _require_gates_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_GATES_ENABLED", False):
         return jsonify({
             "ok": False,
-            "error": "Gates de precondición deshabilitadas (STACKY_DB_COMPARE_GATES_ENABLED).",
+            "error": "feature_disabled",
+            "message": "Las verificaciones previas a la comparación están desactivadas.",
+            "detail": {"flag": "STACKY_DB_COMPARE_GATES_ENABLED"},
         }), 403
     return None
 

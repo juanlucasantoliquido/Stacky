@@ -219,7 +219,8 @@ def get_docs_graph():
     """
     if not bool(getattr(config, "STACKY_DOCS_GRAPH_ENABLED", False)):
         return jsonify({"ok": False, "error": "docs_graph_disabled",
-                        "message": "El grafo documental está deshabilitado (STACKY_DOCS_GRAPH_ENABLED)."}), 404
+                        "message": "El grafo de documentación está desactivado.",
+                        "detail": {"flag": "STACKY_DOCS_GRAPH_ENABLED"}}), 404
 
     t0 = time.monotonic()
     from services import doc_graph  # import lazy: no cargar el módulo si la flag está OFF

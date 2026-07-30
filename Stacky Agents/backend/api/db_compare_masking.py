@@ -20,9 +20,19 @@ bp = Blueprint("db_compare_masking", __name__, url_prefix="/db-compare")
 def _require_masking_enabled():
     # Idioma api/db_compare.py:27-29 — instancia de flags = config.config.
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
-        return jsonify({"ok": False, "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "El Comparador de BD está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_ENABLED"},
+        }), 403
     if not getattr(_config.config, "STACKY_DB_COMPARE_MASKING_ENABLED", False):
-        return jsonify({"ok": False, "error": "Masking deshabilitado (STACKY_DB_COMPARE_MASKING_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "El enmascarado de datos sensibles está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_MASKING_ENABLED"},
+        }), 403
     return None
 
 

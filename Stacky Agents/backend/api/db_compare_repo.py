@@ -22,9 +22,19 @@ def _require_bridge_enabled():
     # Idioma de api/db_compare.py — la instancia de flags es config.config,
     # NO el modulo (gotcha: getattr(config, FLAG) da el default y mata el OFF).
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
-        return jsonify({"ok": False, "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "El Comparador de BD está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_ENABLED"},
+        }), 403
     if not getattr(_config.config, "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED", False):
-        return jsonify({"ok": False, "error": "Puente al repo deshabilitado (STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED)."}), 403
+        return jsonify({
+            "ok": False,
+            "error": "feature_disabled",
+            "message": "La escritura de scripts en el repositorio está desactivada.",
+            "detail": {"flag": "STACKY_DB_COMPARE_REPO_BRIDGE_ENABLED"},
+        }), 403
     return None
 
 

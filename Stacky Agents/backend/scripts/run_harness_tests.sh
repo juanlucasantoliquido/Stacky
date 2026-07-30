@@ -670,6 +670,7 @@ HARNESS_TEST_FILES=(
   #   menciones en estos scripts, comentarios incluidos.
   tests/test_plan274_tool_tests_outside_ratchet.py
   tests/test_plan274_efficacy_gates.py
+  tests/test_plan273_error_message_sin_flags.py
   # — Plan 217 · Migrador Mantis→GitLab (F7: verify + reporte + anti-PII; F8: retry/circuit breaker) —
   tests/test_mg_verify.py
   tests/test_mg_report.py

@@ -26,7 +26,8 @@ def _knowledge_enabled() -> bool:
 def _disabled_resp():
     return jsonify({
         "ok": False, "error": "knowledge_disabled",
-        "message": "El flywheel de conocimiento está deshabilitado (STACKY_KNOWLEDGE_FLYWHEEL_ENABLED).",
+        "message": "La base de conocimiento acumulado está desactivada.",
+        "detail": {"flag": "STACKY_KNOWLEDGE_FLYWHEEL_ENABLED"},
     }), 404
 
 

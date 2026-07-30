@@ -159,6 +159,14 @@ export interface AgentExecution {
   outcome_actionable?: boolean;
   /** Plan 254 F1-bis — se preservó un terminal de éxito sobre un cierre sucio. */
   dirty_close_pending_review?: boolean;
+  /** Plan 271 F5 — por qué la incidencia se movió (o no) al terminar el rol. */
+  final_state_outcome?: {
+    applied?: boolean;
+    to?: string | null;
+    source?: string;
+    reason?: string;
+    at?: string;
+  } | null;
 }
 
 /** Plan 156 F1 — respuesta del latido unico GET /api/executions/summary. */

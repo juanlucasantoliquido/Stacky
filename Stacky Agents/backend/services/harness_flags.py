@@ -277,6 +277,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DETERMINISTIC_TASK_STATES_ENABLED",
         "STACKY_ADO_STATE_MATRIX_ENABLED",  # Plan 208 — matriz (tipo de ticket x agente)
         "STACKY_STATE_CONFIG_CENTRALIZED_ENABLED",  # Plan 216 — estados en el perfil
+        "STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED",  # Plan 271 — fallback a nivel rol
+        "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED",  # Plan 271 — escritor ruteado
+        "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED",  # Plan 271 — gate preciso
+        "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED",  # Plan 271 — razón visible
     ),
     "routing_costo": (
         "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "STACKY_DIFFICULTY_ROUTING_ENABLED",
@@ -2874,6 +2878,61 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 208 — Aplica el estado ADO configurado por (tipo de work item x "
             "tipo de agente) cuando el agente termina OK. NO-OP hasta que el "
             "operador configure la matriz en el perfil del proyecto. Default ON."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 271 — La incidencia se mueve al estado configurado al terminar ──
+    FlagSpec(
+        key="STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED",
+        type="bool",
+        default=True,
+        label="Estado final de nivel rol (fallback)",
+        description=(
+            "Plan 271 — Cuando la matriz no define un estado final para ese "
+            "tipo de ticket, aplica el estado configurado a nivel ROL en la "
+            "pantalla de Estados. Repara una promesa ya hecha al operador. "
+            "Default ON."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED",
+        type="bool",
+        default=True,
+        label="Escritor de estado ruteado por proveedor",
+        description=(
+            "Plan 271 — El escritor de estado del cierre por empleado rutea "
+            "por el proveedor del proyecto (ADO o GitLab) en vez de asumir "
+            "siempre ADO. Corrige el destino, no agrega escrituras. Default ON."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED",
+        type="bool",
+        default=True,
+        label="Gate de publicación preciso",
+        description=(
+            "Plan 271 — Deja de bloquear el cambio de estado cuando no había "
+            "nada que publicar (sin HTML, auto-publish apagado, publisher no "
+            "disponible). Sigue bloqueando si la publicación se intentó y "
+            "falló. Default ON."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED",
+        type="bool",
+        default=True,
+        label="Razón del cambio de estado visible",
+        description=(
+            "Plan 271 — Persiste y muestra en el detalle de la ejecución por "
+            "qué la incidencia se movió o por qué no. Solo lectura, no escribe "
+            "en el tracker. Default ON."
         ),
         group="global",
         env_only=False,

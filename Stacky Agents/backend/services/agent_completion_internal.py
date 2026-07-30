@@ -213,6 +213,13 @@ def close_execution_with_publish(
             html_output_path=html_output_path,
             triggered_by=triggered_by,
         )
+        # Plan 271 F5 — HITL deliberado (review_mode_hold): no hay ambigüedad de
+        # "source", así que se persiste explícito "none".
+        _persist_final_state_outcome(
+            execution_id=execution_id,
+            result={"skipped": True, "reason": "review_mode_hold"},
+            source="none",
+        )
         return CloseResult(
             ok=True,
             execution_id=execution_id,
@@ -258,13 +265,16 @@ def close_execution_with_publish(
             target_source = "employee_config"
 
     # ── Paso 4: transición de System.State en ADO ────────────────────────────
-    # Solo si hay target (explícito o resuelto de config) + publish.ok + ado_id.
-    # Si publish falló/skipeó, NO cambiamos estado (evita ticket "Done" sin
-    # comentario publicado).
+    # Solo si hay target (explícito o resuelto de config) + ado_id, y el gate de
+    # publish no lo bloquea. Plan 271 F4 — el gate deja de ser espurio: cuando NO
+    # había nada que publicar (sin HTML, auto-publish OFF, publisher no
+    # disponible, ya terminal sin html) el cambio de estado ya NO se bloquea.
+    # Si la publicación SE INTENTÓ y falló, sigue bloqueando (RC-2 cierra sin
+    # abrir la puerta a un ticket "Done" sin evidencia real de publicación).
     state_result: dict
     if not effective_target:
         state_result = {"skipped": True, "reason": "not_requested"}
-    elif final_status == "completed" and not publish_result.get("ok"):
+    elif final_status == "completed" and _publish_gate_blocks(publish_result):
         state_result = {
             "skipped": True,
             "reason": "publish_not_ok",
@@ -275,9 +285,13 @@ def close_execution_with_publish(
             ticket_id=ticket_id,
             target_state=effective_target,
             execution_id=execution_id,
+            project_name=stacky_project_name,  # Plan 271 F3 — paridad ADO↔GitLab
         )
-        if isinstance(state_result, dict):
-            state_result.setdefault("source", target_source)
+        # C7 — asignación EXPLÍCITA, no setdefault: `target_source` es el origen
+        # de la DECISIÓN y debe ganar. `_attempt_state_change` ya no devuelve
+        # `source` en el camino ruteado (F3).
+        if isinstance(state_result, dict) and target_source:
+            state_result["source"] = target_source
 
     if final_status in {"error", "needs_review"}:
         try:
@@ -286,6 +300,10 @@ def close_execution_with_publish(
             ado_feedback.comment_run_outcome(execution_id)
         except Exception:
             logger.exception("[exec=%s] ado_feedback falló en close_execution_with_publish", execution_id)
+
+    # Plan 271 F5 — persiste la razón del cambio (o no-cambio) de estado.
+    _persist_final_state_outcome(execution_id=execution_id, result=state_result,
+                                  source=target_source)
 
     return CloseResult(
         ok=True,
@@ -386,6 +404,35 @@ def _resolve_transition_state_from_config(
     return None
 
 
+def _publish_gate_precise_enabled() -> bool:
+    try:
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Plan 271 F4 — razones de publish que significan "no había nada que publicar"
+# ⇒ el gate de estado es espurio para ellas. `publish.failed` y
+# `publish.idempotent_replay` NO están acá a propósito: ahí sí hubo un intento
+# real de publicación que no llegó, y el gate tiene que seguir bloqueando.
+_PUBLISH_REASONS_SIN_NADA_QUE_PUBLICAR: frozenset[str] = frozenset({
+    "html_output_path_missing",     # :228-234
+    "already_terminal_no_html",     # :228-234 (rama already_terminal)
+    "auto_publish_disabled",        # :236-238
+    "ado_publisher_unavailable",    # :617-626
+})
+
+
+def _publish_gate_blocks(publish_result: dict) -> bool:
+    """True si el gate de publish debe seguir bloqueando el cambio de estado."""
+    if publish_result.get("ok"):
+        return False                      # publicó bien: nunca bloquea
+    if not _publish_gate_precise_enabled():
+        return True                       # legacy: cualquier no-ok bloquea
+    return publish_result.get("reason") not in _PUBLISH_REASONS_SIN_NADA_QUE_PUBLICAR
+
+
 def _should_auto_publish(override: bool | None) -> bool:
     """Decide si auto-publish está habilitado.
 
@@ -414,6 +461,47 @@ def _resolve_publish_mode(*, project_name: str | None) -> str:
     except Exception:
         logger.debug("publish_mode lookup falló project=%s", project_name, exc_info=True)
     return "auto"
+
+
+def _reason_visible_enabled() -> bool:
+    try:
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _persist_final_state_outcome(*, execution_id: int, result: dict,
+                                  source: str | None = None) -> None:
+    """Plan 271 F5 — deja la razón del cambio (o del no-cambio) donde la UI ya
+    mira. Best-effort: nunca lanza, nunca bloquea el cierre."""
+    if not _reason_visible_enabled() or not execution_id:
+        return
+    try:
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row is None:
+                return
+            md = dict(row.metadata_dict or {})
+            md["final_state_outcome"] = {
+                "applied": bool(result.get("ok")),
+                "to": result.get("to"),
+                # C7 — el `source` EXPLÍCITO gana. `_safe_transition` hardcodea
+                # {"source": "config"} en el éxito (task_states.py:178) y ese
+                # valor NO es el origen de la decisión.
+                "source": source or result.get("source") or "none",
+                # D3 — PROHIBIDO "unknown": no es una razón, es un catálogo
+                # incompleto. Tras F3-bis-3 la rama de error ya trae
+                # `transition_failed`, así que este fallback solo cubre dicts
+                # legacy; si alguna vez se dispara, F9 lo deja rojo.
+                "reason": result.get("reason") or (
+                    "ok" if result.get("ok") else "transition_failed"),
+                "at": _utc_now_iso(),
+            }
+            row.metadata_dict = md
+    except Exception:  # noqa: BLE001
+        logger.debug("[exec=%s] persistir final_state_outcome falló (no crítico)",
+                     execution_id, exc_info=True)
 
 
 def _set_publish_hold(*, execution_id: int, html_output_path: str | None, triggered_by: str) -> None:
@@ -477,6 +565,7 @@ def publish_execution_from_review(*, execution_id: int, triggered_by: str = "ope
                 ticket_id=ticket_id,
                 target_state=target_state,
                 execution_id=execution_id,
+                project_name=project_name,  # Plan 271 F3 — paridad ADO↔GitLab
             )
 
     if publish_result.get("ok"):
@@ -490,6 +579,10 @@ def publish_execution_from_review(*, execution_id: int, triggered_by: str = "ope
                 md["publish_hold"] = hold
                 row.metadata_dict = md
 
+    # Plan 271 F5 — persiste la razón del cambio (o no-cambio) de estado.
+    _persist_final_state_outcome(execution_id=execution_id, result=state_result,
+                                  source="employee_config")
+
     return {
         "ok": bool(publish_result.get("ok")),
         "execution_id": execution_id,
@@ -501,16 +594,21 @@ def publish_execution_from_review(*, execution_id: int, triggered_by: str = "ope
 
 def _attempt_state_change(
     *, ticket_id: int | None, target_state: str, execution_id: int,
+    project_name: str | None = None,
 ) -> dict:
-    """Aplica `target_state` al System.State del work item ADO del ticket.
+    """Aplica `target_state` al System.State del work item del ticket.
 
-    Cualquier excepción se convierte en `state_change.failed`.
+    Plan 271 F3 — rutea por `services.tracker_write_router.resolve_state_writer`
+    cuando hay `project_name` y la flag está ON, para paridad ADO↔GitLab. Sin
+    `project_name` (o con la flag OFF) conserva el camino legacy ADO-only.
+    Cualquier excepción se convierte en `reason="transition_failed"`.
     """
     if ticket_id is None:
         return {"skipped": True, "reason": "no_ticket_id"}
 
-    # Necesitamos ado_id para llamar a AdoClient
+    # Necesitamos ado_id (y el propio `ticket`, para el ruteo) para escribir.
     ado_id: int | None = None
+    ticket = None
     try:
         with session_scope() as session:
             ticket = session.get(Ticket, ticket_id)
@@ -523,6 +621,87 @@ def _attempt_state_change(
     if ado_id is None:
         return {"skipped": True, "reason": "no_ado_id"}
 
+    # Plan 271 D2 — mitad B del árbitro simétrico (F3-bis-2). Mismo helper que
+    # usa el motor A (F2-bis guardia 2): si el otro motor ya aplicó el estado
+    # final de esta ejecución, no se vuelve a escribir.
+    from services.final_state_resolver import final_state_already_written
+    if final_state_already_written(execution_id):
+        return {"skipped": True, "reason": "already_written_by_other_engine"}
+
+    # C6 — REGLA DURA: sin project_name NO se rutea. resolve_state_writer(ticket)
+    # resuelve por el tracker_type DEL TICKET, nunca por el proyecto activo: eso
+    # evita exactamente el bug que esta fase cierra (escribir en el tracker
+    # equivocado). E23/v6 — se rutea por el RESOLVER DEL PLAN 270
+    # (services.tracker_write_router.resolve_state_writer), NO por
+    # get_tracker_provider directo: es el mismo mecanismo que ya usan
+    # set_stacky_status_by_ado y ticket_state_writeback.py, evita un SEGUNDO
+    # camino de resolución ADO/GitLab que puede divergir del primero, y — a
+    # diferencia de la v5 — NO referencia get_tracker_provider/tracker_type/
+    # _provider_for_ticket dentro de esta función, así que no toca el centinela
+    # del 270 (test_plan270_state_write_ratchet.py::test_5, ver F3-bis-0).
+    # D6 — pero el caso NO puede ser mudo: hoy un ticket sin stacky_project_name en un
+    # proyecto GitLab escribe en ADO con el iid de GitLab y nadie se entera. Se marca.
+    _sin_contexto = False
+    if _writer_routed_enabled() and not project_name:
+        logger.warning(
+            "[exec=%s] sin stacky_project_name: escritura de estado por el "
+            "camino legacy (ADO) — ver plan 271 D6", execution_id,
+        )
+        _sin_contexto = True
+    if _writer_routed_enabled() and project_name:
+        from services.tracker_provider import CapabilityUnavailable
+        from services.tracker_write_router import resolve_state_writer
+        try:
+            writer = resolve_state_writer(ticket)  # `ticket` ya resuelto arriba
+        except CapabilityUnavailable as exc:
+            # §8-3 — un `reason` de configuración puede arrastrar un fragmento
+            # del error original (URL, usuario del tablero): se enmascara con
+            # el mismo helper que ya usan los flujos de secretos, en vez de
+            # interpolar crudo.
+            from services.secret_masking import mask_token_values
+            _reason_masked = mask_token_values(str(exc.reason))
+            logger.warning("[exec=%s] escritor no disponible: %s", execution_id, _reason_masked)
+            return {"skipped": True, "reason": "provider_unavailable", "error": _reason_masked}
+        except Exception as exc:  # noqa: BLE001 — tracker mal configurado, GitLab off, etc.
+            from services.secret_masking import mask_token_values
+            _exc_masked = mask_token_values(str(exc))
+            logger.warning("[exec=%s] provider no disponible: %s", execution_id, _exc_masked)
+            return {"skipped": True, "reason": "provider_unavailable", "error": _exc_masked}
+        from harness.task_states import _extract_current_state, _safe_transition
+        # R18 [v7, ADICIÓN ARQUITECTO menor] — motor B no tiene un `_origin_guard`
+        # equivalente al del motor A (deferido al plan 272): visibilidad barata,
+        # una línea, sin bloquear ni cambiar `ok=True` — mismo patrón que la
+        # advertencia de `no_project_context` arriba (C6/D6).
+        if writer.kind == "provider" and hasattr(writer.handle, "get_item"):
+            try:
+                _current = _extract_current_state(writer.handle.get_item(str(ado_id)) or {})
+                if _current and _current.strip().lower() != (target_state or "").strip().lower():
+                    logger.warning(
+                        "[exec=%s] escribiendo estado %s sobre %s, que no es el "
+                        "esperado por el rol — sin origin-guard, ver R18",
+                        execution_id, target_state, _current,
+                    )
+            except Exception:  # noqa: BLE001 — visibilidad best-effort, nunca bloquea
+                pass
+        # writer.kind: "provider" (GitLab, vía _safe_transition con provider=) o
+        # "ado_client" (ADO, vía legacy_client_fn= — el propio handle YA es el cliente).
+        result = _safe_transition(
+            writer.handle if writer.kind == "provider" else None, ado_id, target_state,
+            phase="final_config",
+            legacy_client_fn=(lambda: writer.handle) if writer.kind == "ado_client" else None,
+        )
+        result.setdefault("ado_id", ado_id)
+        # C7 — `_safe_transition` hardcodea {"source": "config"} en el éxito
+        # (task_states.py:178). Ese valor NO es el origen de la decisión y rompería
+        # el `setdefault("source", target_source)` del Paso 4. Se saca acá.
+        if result.pop("source", None) is not None:
+            result["writer"] = "safe_transition"
+        return result
+
+    # Camino legacy (flag OFF, o sin project_name): idéntico al de antes, con DOS
+    # diferencias, ninguna de comportamiento de escritura: (1) D6 — si fue por
+    # FALTA de contexto de proyecto, el éxito lleva `note="no_project_context"`;
+    # (2) E4 — el `except` de este camino deja de fallar mudo (D3, F3-bis-3).
     try:
         from services.ado_client import AdoClient
     except ImportError as exc:
@@ -533,12 +712,15 @@ def _attempt_state_change(
         return {"skipped": True, "reason": "ado_client_unavailable"}
 
     try:
-        AdoClient().update_work_item_state(int(ado_id), target_state)
+        _legacy_ado_client().update_work_item_state(int(ado_id), target_state)
         logger.info(
             "[exec=%s] ado state changed → %s (ADO-%s)",
             execution_id, target_state, ado_id,
         )
-        return {"ok": True, "to": target_state, "ado_id": ado_id}
+        result = {"ok": True, "to": target_state, "ado_id": ado_id}
+        if _sin_contexto:
+            result["note"] = "no_project_context"
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "[exec=%s] update_work_item_state falló — ADO-%s target=%s",
@@ -546,11 +728,25 @@ def _attempt_state_change(
         )
         return {
             "ok": False,
+            "reason": "transition_failed",
             "to": target_state,
             "ado_id": ado_id,
             "error": str(exc),
             "type": type(exc).__name__,
         }
+
+
+def _writer_routed_enabled() -> bool:
+    try:
+        from config import config as _cfg
+        return bool(getattr(_cfg, "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _legacy_ado_client():
+    from services.ado_client import AdoClient
+    return AdoClient()
 
 
 def _r13_check_publish_guard(execution_id: int) -> bool | None:

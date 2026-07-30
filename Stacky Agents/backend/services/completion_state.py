@@ -6,6 +6,15 @@ Solo actúa si `resolve_task_state_plan(...).source == "matrix"`: sin cell
 configurado el comportamiento es byte-idéntico al de hoy (backward-compat dura, P5).
 
 Corre en el hilo del daemon del dispatcher: nunca bloquea ni demora la completación.
+
+Plan 271 F2 — cambio de contrato de log (C22/E7): cuando la matriz NO define un
+estado final, este módulo ya NO emite `no_matrix_cell`/`no_final_state`: cae al
+`next_state_ok` de NIVEL ROL vía `services.final_state_resolver.resolve_final_state`
+y emite `ok`/`no_config`/`no_agent_type`/`flag_off` según corresponda. Esto pasa
+TAMBIÉN con `STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED` apagada: el camino "sin
+matriz" que antes decía `no_matrix_cell` pasa a decir `flag_off`. Las dos razones
+legacy se conservan en `ALL_FINAL_STATE_REASONS` para que las filas históricas de
+`SystemLog action="completion.matrix_transition"` sigan teniendo etiqueta en la UI.
 """
 from __future__ import annotations
 
@@ -86,17 +95,70 @@ def maybe_apply_state_transition(ev: dict) -> dict:
 
         profile = load_effective_client_profile(stacky_project) or {}
         plan = resolve_task_state_plan(profile, agent_type, work_item_type)
-        ctx["source"] = plan.source
-        if plan.source != "matrix":
-            # Backward-compat DURA: sin cell configurado, los paths de runner NO transicionan.
-            return _logged(ctx, ev, {"skipped": True, "reason": "no_matrix_cell", "source": plan.source})
-        target = plan.final_ok
-        ctx["target"] = target
-        if not target:
-            return _logged(ctx, ev, {"skipped": True, "reason": "no_final_state"})
-        # CENTINELA EN RUNTIME: jamás aplicar un estado fuera del conjunto cerrado.
-        if target not in applicable_states(plan):
-            return _logged(ctx, ev, {"skipped": True, "reason": "state_not_applicable"})
+        from services.final_state_resolver import resolve_final_state
+
+        # Plan 271 F2 — cierra RC-1: la matriz sigue mandando cuando DEFINE ESTADO
+        # FINAL (comportamiento 208 intacto); si no, cae al next_state_ok de
+        # NIVEL ROL que el operador ya configuró en StatesConfigPage.
+        matrix_state = plan.final_ok if plan.source == "matrix" else None
+        # C13 — celda PARCIAL: source=="matrix" con final_ok=None (task_states.py
+        # :107-108). El nivel de rol NO puede quedar enterrado por una celda que
+        # solo trae in_progress.
+        role_machine = (profile.get("tracker_state_machine") or {}).get(agent_type) or {}
+        role_state = (role_machine.get("next_state_ok") or "").strip() or None
+        decision = resolve_final_state(
+            matrix_state=matrix_state,
+            role_state=role_state,
+            agent_type=agent_type,
+            final_status=final_status,
+        )
+        ctx["source"] = decision.source
+        ctx["target"] = decision.state
+        ctx["plan_source"] = plan.source
+        if decision.state is None:
+            # Nunca mudo: `reason` viene del conjunto cerrado REASONS.
+            return _logged(ctx, ev, {"skipped": True, "reason": decision.reason,
+                                     "source": decision.source, "plan_source": plan.source})
+        target = decision.state
+        # CENTINELA EN RUNTIME: conjunto cerrado = lo aplicable del plan MÁS el
+        # nivel rol, porque `role_state` puede no estar en applicable_states(plan)
+        # cuando el plan vino de una celda parcial (plan.final_ok is None ⇒
+        # applicable_states no lo contiene).
+        permitidos = set(applicable_states(plan))
+        if role_state:
+            permitidos.add(role_state)
+        if target not in permitidos:
+            return _logged(ctx, ev, {"skipped": True, "reason": "state_not_applicable",
+                                     "target": target})
+
+        # Plan 271 F2-bis GUARDIA 1 (C2) — respetar el gate de build del plan 210,
+        # igual que api/tickets.py:573-577. D11 — CORTOCIRCUITO OBLIGATORIO:
+        # gate_final_state (dev_build_verify.py) devuelve `not_applicable` para
+        # todo agent_type != "developer", pero workspace_root_for_ado hace una
+        # consulta a DB MÁS get_project_config. Sin este `if`, cada completación
+        # de CUALQUIER rol paga dos lookups para nada.
+        if agent_type == "developer":
+            try:
+                from services import dev_build_verify as _dbv
+                _ws = _dbv.workspace_root_for_ado(int(ado_id))
+                _exec_id = ev.get("execution_id") or _dbv.latest_execution_id_for_ado(int(ado_id))
+                target, _gate = _dbv.gate_final_state(
+                    project_name=stacky_project, agent_type=agent_type, ado_id=int(ado_id),
+                    workspace_root=_ws, proposed_state=target, execution_id=_exec_id,
+                )
+                if target is None:
+                    return _logged(ctx, ev, {"skipped": True, "reason": "dev_build_gate_no_state",
+                                             "gate_reason": _gate.get("reason")})
+                ctx["target"] = target
+            except Exception:  # noqa: BLE001 — el gate jamás rompe el cierre
+                logger.debug("gate_final_state falló en motor A (no crítico)", exc_info=True)
+
+        # Plan 271 F2-bis GUARDIA 2 (C11/D2) — mitad A del árbitro simétrico.
+        # ALCANCE (§2.1bis): cubre A vs B. NO cubre C, D, E ni F (viven en
+        # api/tickets.py, intocable acá) — eso es del plan 272.
+        from services.final_state_resolver import final_state_already_written
+        if final_state_already_written(ev.get("execution_id")):
+            return _logged(ctx, ev, {"skipped": True, "reason": "already_written_by_other_engine"})
 
         from services.tracker_provider import get_tracker_provider
 
@@ -188,4 +250,13 @@ def _logged(ctx: dict, ev: dict, result: dict) -> dict:
         )
     except Exception:  # noqa: BLE001
         logger.debug("traza de matrix_transition falló (no crítico)", exc_info=True)
+    # Plan 271 F5 — persiste la razón donde la UI ya mira (import local para no
+    # acoplar el daemon del dispatcher a agent_completion_internal).
+    try:
+        from services.agent_completion_internal import _persist_final_state_outcome
+        _persist_final_state_outcome(
+            execution_id=ev.get("execution_id"), result=result, source=ctx.get("source"),
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("persistir final_state_outcome falló en motor A (no crítico)", exc_info=True)
     return result

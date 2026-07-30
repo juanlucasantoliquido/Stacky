@@ -24,7 +24,6 @@ tests/test_artifact_validator.py  # pendiente-de-triage
 tests/test_auto_assign_on_run.py  # pendiente-de-triage
 tests/test_auto_publish_legacy.py  # pendiente-de-triage
 tests/test_autopublish_rescue.py  # pendiente-de-triage
-tests/test_b2_transition_from_config.py  # pendiente-de-triage
 tests/test_b6_cancel_sync.py  # pendiente-de-triage
 tests/test_b7_technical_no_autoblock.py  # pendiente-de-triage
 tests/test_base_rejection_lessons.py  # pendiente-de-triage

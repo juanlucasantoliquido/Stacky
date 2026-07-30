@@ -603,6 +603,11 @@ _CURATED_DEFAULTS_ON = {
     # ── Plan 208 — auto-sync al completar + matriz de estados por tipo ──
     "STACKY_ADO_SYNC_ON_COMPLETION_ENABLED",  # pull read-only; no muta el tracker
     "STACKY_ADO_STATE_MATRIX_ENABLED",  # no-op hasta que el operador configure la matriz
+    # ── Plan 271 — La incidencia se mueve al estado configurado al terminar ──
+    "STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED",  # fallback a next_state_ok de nivel rol
+    "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED",  # escritor ruteado ADO/GitLab
+    "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED",  # gate de publish preciso
+    "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED",  # razón visible, solo lectura
     # ── Plan 63 — 12 originales ──
     "STACKY_EPIC_SANITIZE_ENABLED",
     "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",

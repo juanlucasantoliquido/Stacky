@@ -952,6 +952,34 @@
         "matches": [],
         "clean": []
       }
+    },
+    {
+      "id": "FS-271-NO-MATRIX-CELL",
+      "title": "La incidencia no se mueve al estado configurado a nivel rol",
+      "class": "state-transition-skipped",
+      "status": "resolved",
+      "log_pattern": "completion\\.matrix_transition.*no_matrix_cell",
+      "log_guarded": true,
+      "killed_by": "plan 271 (F1+F2: el motor A honra tracker_state_machine.<rol>.next_state_ok)",
+      "guard_test": "backend/tests/test_plan271_role_fallback.py",
+      "self_test": {
+        "matches": ["action=completion.matrix_transition reason=no_matrix_cell source=config"],
+        "clean": ["action=completion.matrix_transition reason=ok source=role"]
+      }
+    },
+    {
+      "id": "FS-271-RAZON-FUERA-DEL-CATALOGO",
+      "title": "El escritor de estado falla y no dice por que",
+      "class": "state-transition-mute",
+      "status": "resolved",
+      "log_pattern": "final_state_outcome.*\"reason\": ?\"(unknown|error|failed)\"",
+      "log_guarded": true,
+      "killed_by": "plan 271 (F3-bis-3 + F9: transition_failed cableado en los dos escritores)",
+      "guard_test": "backend/tests/test_plan271_razon_del_catalogo.py",
+      "self_test": {
+        "matches": ["final_state_outcome {\"applied\": false, \"reason\": \"unknown\"}"],
+        "clean": ["final_state_outcome {\"applied\": false, \"reason\": \"transition_failed\"}"]
+      }
     }
   ]
 }

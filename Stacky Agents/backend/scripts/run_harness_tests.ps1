@@ -806,6 +806,20 @@ $HarnessTestFiles = @(
   "tests/test_plan270_finish_work_state.py",
   "tests/test_plan270_state_writeback.py",
   "tests/test_plan270_state_write_ratchet.py",
+  # Plan 271 - La incidencia se mueve al estado configurado al terminar el analista
+  "tests/test_plan271_caracterizacion.py",
+  "tests/test_plan271_final_state_resolver.py",
+  "tests/test_plan271_flags.py",
+  "tests/test_plan271_role_fallback.py",
+  "tests/test_plan271_arbitro.py",
+  "tests/test_plan271_writer_routed.py",
+  "tests/test_plan271_publish_gate.py",
+  "tests/test_plan271_reason_persisted.py",
+  "tests/test_plan271_reason_catalog.py",
+  "tests/test_plan271_censo_escritores.py",
+  "tests/test_plan271_razon_del_catalogo.py",
+  # Preexistente, adoptado por el plan 271 F4-bis (arreglado: 5 failed -> 5 passed)
+  "tests/test_b2_transition_from_config.py",
   # Plan 269 - Veredicto por evidencia: tres niveles y fin del falso error visible
   "tests/test_plan269_run_verdict.py",
   "tests/test_plan269_run_evidence.py",

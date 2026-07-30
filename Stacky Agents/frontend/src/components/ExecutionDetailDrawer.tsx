@@ -16,6 +16,7 @@ import {
   dirtyCloseNotice,
   type BlockedDowngrade,
 } from "../utils/outcomeReason";
+import { describeFinalState, type FinalStateOutcome } from "../utils/finalStateOutcome";
 import { formatDuration, formatCostUsd, formatInt } from "../services/format";
 import CopyAsButton, { type CopyAsOption } from "./CopyAsButton";
 import { executionToMarkdown, executionToPlainText } from "../services/copyFormats";
@@ -91,6 +92,19 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
     dirty_close_pending_review: content?.dirty_close_pending_review,
     blocked_downgrade: metadata.blocked_downgrade as BlockedDowngrade | null | undefined,
   });
+  // Plan 271 F6 — POR QUÉ la incidencia se movió (o no) al terminar.
+  const finalState = describeFinalState(
+    (content?.final_state_outcome as FinalStateOutcome | undefined) ??
+      (metadata.final_state_outcome as FinalStateOutcome | undefined),
+  );
+  const finalStateToneClass =
+    finalState?.tone === "exito"
+      ? styles.toneExito
+      : finalState?.tone === "error"
+        ? styles.toneError
+        : finalState?.tone === "espera"
+          ? styles.toneEspera
+          : styles.toneAtencion;
   const outcomeToneClass =
     outcome?.tone === "exito"
       ? styles.toneExito
@@ -143,6 +157,19 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                   </>
                 )}
                 {dirtyClose && <p className={styles.dirtyClose}>{dirtyClose}</p>}
+              </section>
+            )}
+
+            {/* Plan 271 F6 — por qué la incidencia se movió (o no) al terminar. */}
+            {finalState && (
+              <section className={styles.section}>
+                <h4>Estado de la incidencia</h4>
+                <span className={`${styles.outcomeBadge} ${finalStateToneClass}`}>
+                  {finalState.label}
+                </span>
+                {finalState.action && (
+                  <p className={styles.outcomeAction}>{finalState.action}</p>
+                )}
               </section>
             )}
 

@@ -6,7 +6,7 @@
 
 import type { DevOpsSection } from './DevOpsPage';
 
-export type DevOpsGroupId = 'resumen' | 'operar' | 'construir' | 'diagnosticar';
+export type DevOpsGroupId = 'resumen' | 'operar' | 'construir' | 'gobernar' | 'diagnosticar';
 
 /** Sección sin `group` ⇒ cae acá. Preserva el contrato §3.12 C20 (KPI-10). */
 export const DEFAULT_GROUP: DevOpsGroupId = 'operar';
@@ -21,6 +21,7 @@ export const DEVOPS_SECTION_GROUPS: GroupDef[] = [
   { id: 'resumen', label: 'Resumen', hint: 'Estado general y avisos' },
   { id: 'operar', label: 'Operar', hint: 'Desplegar, ambientes, publicaciones y servidores' },
   { id: 'construir', label: 'Construir', hint: 'Pipelines y variables' },
+  { id: 'gobernar', label: 'Gobernar', hint: 'Inventario, auditoría, matriz de entornos y paquete de entrega' },
   { id: 'diagnosticar', label: 'Diagnosticar', hint: 'PRs, consola remota y agente DevOps' },
 ];
 
@@ -55,6 +56,7 @@ export function partitionForBar(
     resumen: [] as DevOpsSection[],
     operar: [] as DevOpsSection[],
     construir: [] as DevOpsSection[],
+    gobernar: [] as DevOpsSection[],
     diagnosticar: [] as DevOpsSection[],
   } as Record<DevOpsGroupId, DevOpsSection[]>;
   const gated: DevOpsSection[] = [];

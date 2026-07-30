@@ -572,24 +572,21 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             </p>
             <button
               onClick={() => setSpec(starterSpec())}
-              className={styles.btnSuccess}
-              style={{ padding: '10px 20px' }}
+              className={`${styles.btnSuccess} ${styles.btnLg}`}
             >
               Empezar con ejemplo
             </button>
             {' '}
             <button
               onClick={() => setSpec(addStage(spec))}
-              className={styles.btnPrimary}
-              style={{ padding: '10px 20px' }}
+              className={`${styles.btnPrimary} ${styles.btnLg}`}
             >
               + stage
             </button>
             {' '}
             <button
               onClick={handleStartEmptyJob}
-              className={styles.btnPrimary}
-              style={{ padding: '10px 20px' }}
+              className={`${styles.btnPrimary} ${styles.btnLg}`}
               title="Crea un stage y un job vacíos y los selecciona, para insertar acciones prehechas sueltas"
             >
               Insertá acciones sueltas (job vacío)
@@ -725,8 +722,7 @@ export const PipelineBuilderSection: React.FC<PipelineBuilderSectionProps> = ({ 
             onClick={() => setShowCommitModal(true)}
             disabled={localErrors.length > 0}
             title={localErrors.length > 0 ? 'Resolvé los avisos primero' : undefined}
-            className={styles.btnSuccess}
-            style={{ padding: '10px 20px' }}
+            className={`${styles.btnSuccess} ${styles.btnLg}`}
           >
             Commit al repo…
           </button>

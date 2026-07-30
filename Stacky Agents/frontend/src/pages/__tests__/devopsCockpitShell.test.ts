@@ -42,8 +42,8 @@ describe('F4 — agrupación', () => {
     expect(DEFAULT_GROUP).toBe('operar');
   });
 
-  it('DEVOPS_SECTION_GROUPS tiene exactamente 4 grupos (KPI-2)', () => {
-    expect(DEVOPS_SECTION_GROUPS).toHaveLength(4);
+  it('DEVOPS_SECTION_GROUPS tiene exactamente 5 grupos (KPI-2 ampliado por plan 275: separa autoría de gobierno)', () => {
+    expect(DEVOPS_SECTION_GROUPS).toHaveLength(5);
   });
 
   it('sectionsOfGroup respeta el orden de DEVOPS_SECTIONS', () => {
@@ -66,15 +66,15 @@ describe('F4 — agrupación', () => {
   it('grupo con TODAS gateadas ⇒ el grupo sigue existiendo (no se oculta)', () => {
     const { visibleByGroup } = partitionForBar(SECTIONS, {});
     expect(Object.keys(visibleByGroup).sort()).toEqual(
-      ['construir', 'diagnosticar', 'operar', 'resumen'],
+      ['construir', 'diagnosticar', 'gobernar', 'operar', 'resumen'],
     );
     expect(visibleByGroup.diagnosticar).toEqual([]);
-    expect(buildGroupTabs(DEVOPS_SECTION_GROUPS)).toHaveLength(4);
+    expect(buildGroupTabs(DEVOPS_SECTION_GROUPS)).toHaveLength(5);
   });
 
-  it('buildGroupTabs devuelve 4 items con id/label', () => {
+  it('buildGroupTabs devuelve 5 items con id/label', () => {
     const tabs = buildGroupTabs(DEVOPS_SECTION_GROUPS);
-    expect(tabs).toHaveLength(4);
+    expect(tabs).toHaveLength(5);
     tabs.forEach((t) => {
       expect(typeof t.id).toBe('string');
       expect(typeof t.label).toBe('string');

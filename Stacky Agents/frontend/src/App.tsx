@@ -53,6 +53,7 @@ import { reviewBadgeLabel } from "./services/reviewInbox";
 import AppSidebar from "./components/shell/AppSidebar";
 import {
   computeVisibleTabs, parseCollapsed, SIDEBAR_COLLAPSED_KEY,
+  SHELL_V2_DEFAULT, // Plan 273 F1 (B-03) — espejo del default del backend
 } from "./components/shell/shellNav";
 // Plan 165 F3 — fuente única del contrato de rutas (type Tab/TAB_PATHS/parseo).
 import { parseRoute, serializeRoute, TAB_PATHS, type Tab, type RouteState } from "./services/routes";
@@ -82,7 +83,11 @@ export default function App() {
   // (default ON, C1 — pero se prueba en vivo igual que migrador/devops/dbcompare).
   const [costCenterEnabled, setCostCenterEnabled] = useState(false);
   // Plan 139: App Shell v2 (sidebar agrupada) — flag leída una sola vez al montar.
-  const [shellV2Enabled, setShellV2Enabled] = useState(false);
+  // Plan 273 F1 (B-03): el default del frontend ESPEJA el del backend
+  // (STACKY_UI_SHELL_V2_ENABLED = "true", backend/config.py). Arrancar en false
+  // pintaba la nav v1 en el primer paint de TODA carga y saltaba a v2 al resolver
+  // el health: cambio de arquitectura de informacion visible, 100% de las cargas.
+  const [shellV2Enabled, setShellV2Enabled] = useState(SHELL_V2_DEFAULT);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
     () => parseCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY)),
   );
@@ -170,13 +175,21 @@ export default function App() {
     fetch("/api/diag/health")
       .then((r) => r.json())
       .then((d: { shell_v2_enabled?: boolean; ui_shortcuts_enabled?: boolean }) => {
-        if (alive) setShellV2Enabled(d.shell_v2_enabled === true);
+        // Plan 273 F1 (B-03, C8): `=== true` trataba "clave ausente" como
+        // "apagado" y reintroducia el cambio de nav despues del primer paint con
+        // un health 200 incompleto. `!== false` es el patron que el plan 172 F2 ya
+        // uso para ui_shortcuts_enabled UNA LINEA ABAJO, por la misma razon.
+        if (alive) setShellV2Enabled(d.shell_v2_enabled !== false);
         // Plan 172 F2 — default ON: una falla de red NO puede degradar el
         // teclado, así que la flag solo se toca cuando el health respondió.
         if (alive) setUiShortcutsEnabled(d.ui_shortcuts_enabled !== false);
       })
       .catch(() => {
-        if (alive) setShellV2Enabled(false);
+        // Plan 273 F1 (B-03): un fallo de red NO cambia la arquitectura de
+        // navegacion. Antes, un solo health fallido dejaba la nav v1 para toda la
+        // sesion, sin ninguna senal al operador. Ahora se CONSERVA el optimista.
+        // El .catch se deja VACIO a proposito: sin el, la promesa rechazada se
+        // vuelve un unhandled rejection en consola.
       });
     return () => {
       alive = false;

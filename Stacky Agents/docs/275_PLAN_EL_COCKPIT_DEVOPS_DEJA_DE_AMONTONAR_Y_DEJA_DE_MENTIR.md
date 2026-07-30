@@ -1,6 +1,15 @@
-**Estado:** PROPUESTO v1 (2026-07-30) · **Autor:** pipeline proponer-plan-stacky (StackyArchitectaUltraEficientCode) · **Fuente:** auditoría UX/UI 2026-07-29 (`fd4e45d3`) + código verificado 2026-07-30
+**Estado:** PROPUESTO v1 -> v2 (2026-07-30) · **Autor:** pipeline proponer-plan-stacky (StackyArchitectaUltraEficientCode) + crítica StackyArchitectaUltraEficientCode (juez) · **Fuente:** auditoría UX/UI 2026-07-29 (`fd4e45d3`) + código verificado 2026-07-30
 
 # Plan 275 — El cockpit DevOps deja de amontonar y deja de mentir
+
+## 0. Changelog v1 → v2 (crítica adversarial 2026-07-30)
+
+Veredicto: **APROBADO-CON-CAMBIOS**. Los tres cambios (F1/F2/F3) y sus ~15 anclajes `archivo:línea` se verificaron abriendo el código real hoy y coinciden byte a byte — no hubo que tocar ningún diff. Se corrigió el mecanismo de verificación de F0 y dos imprecisiones de texto:
+
+- **C1 (bloqueante de mecanismo, no de sustancia).** F0 paso 1 exigía que `git log --all --grep="plan-273"` devolviera **una sola línea** (`8a6a7123`). Verificado en esta crítica: devuelve **dos** — apareció `df0a1f98` ("crítica v1→v2, RECHAZADO v1"), un commit **documental** creado *después* de que este plan se escribiera. El texto original solo contemplaba el caso "aparece un commit de **implementación**" y no decía qué hacer ante un commit de **crítica en papel** — ambigüedad real para un modelo menor, que podría no disparar la verificación por tecnicismo literal. Se confirmó con `git show <hash> --stat` que ambos commits de plan-273 solo tocan su propio `.md` (cero líneas en `components/devops/` o `DevOpsPage.tsx`), así que la frontera real sigue intacta — pero el **criterio escrito** ya estaba desactualizado el día de su propia ejecución. Fix: F0 paso 1 ahora verifica el **diff acumulado** de todos los commits de `plan-273` contra las dos rutas de la frontera, sin importar cuántos commits aparezcan ni de qué tipo sean.
+- **C2 (importante, precisión de DoD).** §9 decía "los 4 archivos de test **nuevos**" incluyendo `devopsCockpitShell.test.ts`, que **no es nuevo** (existe desde el plan 239) — la propia F1 ya lo trata correctamente como "existente, se actualiza". Corregido para no invitar a un modelo menor a sobreescribirlo con `Write`.
+- **[ADICIÓN ARQUITECTO].** El riesgo #1 de la tabla §5 ("olvidar agregar `gobernar` al objeto hardcodeado de `partitionForBar`") dependía de cobertura **indirecta**: solo lo detectaba correr el test *hermano* `devopsCockpitShell.test.ts` completo, no el test nuevo de este plan. Se agregó un 5º `it()` a `plan275DevOpsGroupBalance.test.ts` que llama a `partitionForBar` directamente con una sección `group: 'gobernar'` construida en el propio test (sin depender de que `DEVOPS_SECTIONS` ya esté editado) y espera que NO lance `TypeError` y que la bucketee correctamente. Es una guarda explícita, autocontenida y propia del plan para su propio riesgo documentado — no un favor de un test ajeno que podría cambiar de forma en el futuro. Costo: cero archivos nuevos, cero flags, reusa `partitionForBar` ya importable.
+- Corrección menor de redacción: la descripción del ROJO esperado de F1 tenía una contradicción interna ("falla en 3 de los 4... el segundo también falla" — o sea, los 4). Ajustada a "fallan los 5" (los 4 originales + el nuevo).
 
 ## 1. Objetivo
 
@@ -33,7 +42,7 @@ El panel DevOps es, por conteo propio verificado hoy, el área con más superfic
 
 **Por qué un plan chico y no una reescritura:** los tres ejes son correcciones locales sobre construcción ya existente (cockpit v3 del plan 239, catálogo de acciones del plan 267) — ninguno pide diseño nuevo. Es exactamente el patrón "no falta construir, falta terminar de conectar/corregir lo construido" que la propia auditoría usa como diagnóstico general (§1).
 
-**Frontera con el plan 273** (`PROPUESTO v1 SIN CRITICAR`, commit `8a6a7123`, sin commit de crítica verificado hoy con `git log --all --grep="plan-273"`): su §4 declara **"Prohibido tocar `pages/DevOpsPage.tsx` o `components/devops/` salvo la lectura de F4.5"** (`docs/273_PLAN_...:154`). Su F4 (B-02, contrato de error) **lee** tres archivos de `components/devops/` (`ProductionFlow.tsx:32`, `SectionDoctorButton.tsx:29`, `VariablesSection.tsx:34,43`) solo para verificar que su cambio en `api/client.ts` no les rompe el parseo — **no los edita**. Ninguno de esos tres archivos aparece en este plan. Los dos planes son disjuntos en archivos de escritura y pueden implementarse en paralelo sin coordinación.
+**Frontera con el plan 273** (ya en v2 tras su propia crítica, commit `df0a1f98`, "RECHAZADO v1"; propuesta original `8a6a7123`): su §4 (línea ~194 del doc v2) sigue declarando **"Prohibido tocar `pages/DevOpsPage.tsx` o `components/devops/` salvo la lectura de F4.5"** — confirmado que el commit de crítica solo tocó el propio `.md` de 273, cero líneas en la frontera. Su F4 (B-02, contrato de error) **lee** tres archivos de `components/devops/` (`ProductionFlow.tsx:32`, `SectionDoctorButton.tsx:29`, `VariablesSection.tsx:34,43`) solo para verificar que su cambio en `api/client.ts` no les rompe el parseo — **no los edita**. Ninguno de esos tres archivos aparece en este plan. Los dos planes son disjuntos en archivos de escritura y pueden implementarse en paralelo sin coordinación.
 
 ---
 
@@ -74,11 +83,12 @@ Confirmado en 3.2: no se introduce ninguna `FlagSpec`, ninguna variable de entor
 
 **No se crean ni editan archivos en esta fase** — solo comandos de verificación, ejecutados desde `Stacky Agents/frontend` salvo que se indique lo contrario.
 
-1. Confirmar que el plan 273 no ha sido implementado ni ha tocado `components/devops/` desde que se escribió este plan:
+1. Confirmar que el plan 273 (en cualquier cantidad de commits — de propuesta, de crítica en papel, o de implementación) no ha tocado la frontera declarada con este plan. **No contar líneas de `git log`** (ese conteo caduca con cada commit de crítica nuevo del propio plan 273; ya pasó una vez entre la redacción y la crítica de este plan). Verificar el DIFF ACUMULADO real:
    ```
    git log --all --oneline --grep="plan-273"
+   git diff --stat $(git log --all --grep="plan-273" --format=%H | tail -1)^..HEAD -- "Stacky Agents/frontend/src/pages/DevOpsPage.tsx" "Stacky Agents/frontend/src/components/devops/"
    ```
-   Resultado esperado hoy: una sola línea, `8a6a7123 docs(plan-273): cierre de los 7 bloqueantes UX/UI para produccion` (solo el commit del documento, ningún commit de implementación). Si aparece un commit de implementación adicional, releer su diff antes de continuar (podría haber tocado por error un archivo de este plan pese a su frontera declarada).
+   El primer comando es solo informativo (para saber cuántos commits hay hoy — el número puede ser 1, 2 o más y NO es en sí mismo un criterio de aceptación). El segundo comando es el criterio real: **debe imprimir vacío** (ningún archivo de esa frontera aparece). Si imprime algo, releer ese diff completo antes de continuar — no importa si el commit que lo trajo se llama "crítica", "implementación" o cualquier otra cosa, lo único que importa es si tocó esos dos paths.
 
 2. Confirmar el conteo actual de secciones por grupo (debe imprimir `construir: 7`):
    ```
@@ -143,8 +153,9 @@ Quedan en `construir` (sin tocar): `pipelines` (línea 161), `variables` (línea
  * defecto: HOY 'construir' tiene 7 y este test da ROJO.
  */
 import { describe, it, expect } from 'vitest';
+import type { DevOpsSection } from '../DevOpsPage';
 import { DEVOPS_SECTIONS } from '../DevOpsPage';
-import { DEVOPS_SECTION_GROUPS, sectionsOfGroup, groupOf } from '../devopsCockpitShell';
+import { DEVOPS_SECTION_GROUPS, sectionsOfGroup, groupOf, partitionForBar } from '../devopsCockpitShell';
 
 const MAX_SECCIONES_POR_GRUPO = 5;
 
@@ -172,6 +183,22 @@ describe('plan 275 F1 — balance de grupos del cockpit DevOps', () => {
     const ids = sectionsOfGroup(DEVOPS_SECTIONS, 'construir').map((s) => s.id).sort();
     expect(ids).toEqual(['editar-pipeline', 'pipelines', 'variables']);
   });
+
+  // [ADICIÓN ARQUITECTO — crítica v1→v2] Guarda DIRECTA y autocontenida del riesgo #1
+  // de §5: si se olvida agregar la clave `gobernar: []` al objeto hardcodeado de
+  // `partitionForBar` (devopsCockpitShell.ts, dentro de la función), cualquier sección
+  // con `group: 'gobernar'` revienta el render con TypeError en runtime. Esta guarda NO
+  // depende de que DEVOPS_SECTIONS ya esté editado (construye su propia sección de
+  // prueba), así que sigue protegiendo aunque cambie el orden de edición o el test
+  // hermano `devopsCockpitShell.test.ts` (de otro plan) se modifique en el futuro.
+  it('partitionForBar no revienta con una sección group:"gobernar" y la bucketea bien', () => {
+    const conGobernar: DevOpsSection[] = [
+      { id: 'x-gobernar-probe', label: 'x', group: 'gobernar', render: () => null } as DevOpsSection,
+    ];
+    expect(() => partitionForBar(conGobernar, {})).not.toThrow();
+    const { visibleByGroup } = partitionForBar(conGobernar, {});
+    expect(visibleByGroup.gobernar?.map((s) => s.id)).toEqual(['x-gobernar-probe']);
+  });
 });
 ```
 
@@ -179,7 +206,7 @@ describe('plan 275 F1 — balance de grupos del cockpit DevOps', () => {
 ```
 cd "Stacky Agents\frontend"; npx vitest run src/pages/__tests__/plan275DevOpsGroupBalance.test.ts
 ```
-Falla en 3 de los 4 `it`: el primero (`construir` tiene 7 > 5), el tercero (`sectionsOfGroup(..., 'gobernar')` da `[]` porque ninguna sección usa ese id todavía) y el cuarto (`construir` tiene 7 ids, no 3). El segundo (`DEVOPS_SECTION_GROUPS` no contiene `'gobernar'`) también falla.
+Fallan los 5 `it`: el primero (`construir` tiene 7 > 5), el segundo (`DEVOPS_SECTION_GROUPS` no contiene `'gobernar'`), el tercero (`sectionsOfGroup(..., 'gobernar')` da `[]` porque ninguna sección usa ese id todavía), el cuarto (`construir` tiene 7 ids, no 3) y el quinto (`partitionForBar` lanza `TypeError: Cannot read properties of undefined` porque el objeto hardcodeado todavía no tiene la clave `gobernar`).
 
 **3. Diff de `frontend/src/pages/devopsCockpitShell.ts`:**
 
@@ -439,7 +466,7 @@ Falla: `count('PipelineBuilderSection.tsx')` da `4` (no `0`), `count('Publicatio
 
 **2. Diff de `frontend/src/components/devops/PipelineBuilderSection.tsx`** (4 sitios). El patrón es siempre `className={styles.btnXxx}` seguido de `style={{ padding: '10px 20px' }}` en la línea siguiente — se combina en una sola línea `className` y se borra la línea `style`:
 
-- Líneas 574-577 (`Empezar con ejemplo`):
+- Líneas 573-577 (`Empezar con ejemplo`):
 ```diff
              <button
                onClick={() => setSpec(starterSpec())}
@@ -572,8 +599,8 @@ Más los 3 archivos de test nuevos (`git status` debe listarlos como `??` o `A`)
 
 | Riesgo | Mitigación |
 |---|---|
-| Olvidar el paso 3.c de F1 (agregar `gobernar` al objeto hardcodeado de `partitionForBar`) y que `TypeError` rompa el render del cockpit en runtime. | El test `plan275DevOpsGroupBalance.test.ts` no lo detecta directamente (usa `sectionsOfGroup`, no `partitionForBar`), por eso F1 exige correr también `devopsCockpitShell.test.ts` completo, que sí ejercita `partitionForBar` con datos reales y hubiera lanzado la excepción en el test `'grupo con TODAS gateadas...'`. |
-| Un tercer plan en vuelo toca `DevOpsPage.tsx` en paralelo (los únicos verificados en F0 son 273, que declara frontera explícita, y 267/268/239, ya IMPLEMENTADOS). | F0 exige re-correr `git log --all --grep="plan-273"` antes de empezar; si aparece cualquier otra rama activa tocando `pages/DevOpsPage.tsx`, coordinar antes de F1 (no hay forma automática de detectarlo, es responsabilidad de quien ejecuta el plan). |
+| Olvidar el paso 3.c de F1 (agregar `gobernar` al objeto hardcodeado de `partitionForBar`) y que `TypeError` rompa el render del cockpit en runtime. | **[ADICIÓN ARQUITECTO v2]** `plan275DevOpsGroupBalance.test.ts` ahora incluye un 5º `it()` que llama a `partitionForBar` directamente con una sección `group: 'gobernar'` construida en el propio test y espera que no lance excepción — guarda explícita y propia del plan, ya no depende de que `devopsCockpitShell.test.ts` (test de otro plan) siga ejercitando ese camino en el futuro. |
+| Un tercer plan en vuelo toca `DevOpsPage.tsx` en paralelo (los únicos verificados en F0 son 273, que declara frontera explícita, y 267/268/239, ya IMPLEMENTADOS). | F0 exige re-correr el diff acumulado de `plan-273` contra la frontera (paso 1, corregido en v2 — ya no cuenta líneas de `git log`, que caducan con cada commit de crítica nuevo) antes de empezar; si aparece cualquier otra rama activa tocando `pages/DevOpsPage.tsx`, coordinar antes de F1 (no hay forma automática de detectarlo, es responsabilidad de quien ejecuta el plan). |
 | Regenerar `uiDebtBaseline.json` con `UI_DEBT_REGEN=1` arrastra deuda ajena si el working tree tiene otros cambios sin commitear al momento de F3. | F3 exige revisar el diff del JSON línea por línea antes de commitear; el propio `assertNoIncrease` del ratchet ya rechaza el regen si algún archivo subió, pero no evita que el regen "adopte" una baja ajena como si fuera de este plan — de ahí la instrucción explícita de revisar el diff. |
 | El nombre de clase `.btnLg` colisiona con una clase ya existente en otro `.module.css` importado en el mismo archivo. | No aplica: CSS Modules hashea la clase POR ARCHIVO (gotcha conocido), así que `styles.btnLg` de `devops.module.css` nunca colisiona con una clase de otro módulo — cada `import styles from './archivo.module.css'` es un namespace propio. |
 
@@ -606,7 +633,7 @@ Más los 3 archivos de test nuevos (`git status` debe listarlos como `??` o `A`)
 
 ## 9. Definición de Hecho (DoD)
 
-- Los 4 archivos de test nuevos existen y están en verde: `plan275DevOpsGroupBalance.test.ts`, `plan275PipelineYamlPreviewCtx.test.ts`, `plan275ButtonPaddingRatchet.test.ts`, y `devopsCockpitShell.test.ts` actualizado.
+- Los 3 archivos de test **nuevos** existen y están en verde (`plan275DevOpsGroupBalance.test.ts`, `plan275PipelineYamlPreviewCtx.test.ts`, `plan275ButtonPaddingRatchet.test.ts`), más `devopsCockpitShell.test.ts` — que **ya existía** desde el plan 239, no se crea — **actualizado** y en verde.
 - `DEVOPS_SECTION_GROUPS` tiene 5 grupos; ningún grupo tiene más de 5 secciones.
 - `PublicationsSection.tsx` no contiene ningún `ctx={{ health: {` literal.
 - `PipelineBuilderSection.tsx` y `PublicationsSection.tsx` no contienen `style={{ padding: '10px 20px' }}`; `devops.module.css` declara `.btnLg`.

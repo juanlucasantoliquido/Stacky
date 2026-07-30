@@ -52,8 +52,10 @@ _LOGGED_IN_HOME_HTML = (
 
 
 class _FakeResponse:
-    def __init__(self, text: str, *, headers: dict | None = None, content: bytes | None = None) -> None:
+    def __init__(self, text: str, *, headers: dict | None = None, content: bytes | None = None,
+                 status_code: int = 200) -> None:
         self.text = text
+        self.status_code = status_code
         # Por defecto se comporta como una respuesta HTML (mismo criterio
         # que los tests preexistentes, que solo miran `.text`); los tests
         # de `download_attachment_binary` (Batch 4) pasan `headers`/
@@ -332,7 +334,7 @@ _PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-binary-content"
 
 def test_download_attachment_binary_descarga_bytes_crudos():
     get_map, post_map = _happy_path_login_maps()
-    download_url = f"{_BASE_URL}/file_download.php?file_id=501"
+    download_url = f"{_BASE_URL}/file_download.php?file_id=501&type=bug"
     session = _make_session(get_map, post_map)
 
     def fake_get(url, timeout=None):
@@ -353,7 +355,7 @@ def test_download_attachment_binary_descarga_bytes_crudos():
 
 
 def test_download_attachment_binary_relogin_automatico_ante_sesion_expirada():
-    download_url = f"{_BASE_URL}/file_download.php?file_id=501"
+    download_url = f"{_BASE_URL}/file_download.php?file_id=501&type=bug"
     login_page_calls = {"n": 0}
     download_calls = {"n": 0}
 
@@ -394,7 +396,7 @@ def test_download_attachment_binary_relogin_automatico_ante_sesion_expirada():
 
 
 def test_download_attachment_binary_lanza_si_relogin_tambien_falla():
-    download_url = f"{_BASE_URL}/file_download.php?file_id=501"
+    download_url = f"{_BASE_URL}/file_download.php?file_id=501&type=bug"
     get_map, post_map = _happy_path_login_maps()
     # Cualquier intento de descarga sigue devolviendo la página de login,
     # incluso después del re-login.
@@ -503,3 +505,62 @@ def test_categoria_no_arrastra_el_prefijo_del_proyecto():
     assert categoria == "Procesos de Carga"
     assert "[" not in categoria and "602253" not in categoria
     assert "\xa0" not in categoria, "el espacio duro rompe los labels de GitLab"
+
+
+# ── Regresión: `type=bug`, HTTP != 200 y descarga vacía ──────────────────
+#
+# Contra el Mantis real (soporte.ais-int.net, verificado el 2026-07-30):
+#   file_download.php?file_id=N            -> HTTP 400, 0 bytes
+#   file_download.php?file_id=N&type=bug   -> HTTP 200, bytes reales
+# El adapter armaba la URL SIN `type`, no miraba el status y devolvía el
+# cuerpo vacío como si fuera el archivo. Aguas abajo eso se subía a GitLab
+# como un adjunto de 0 bytes y se reportaba migrado con éxito. Los tests
+# viejos mockeaban la URL sin `type`, así que daban verde contra una URL
+# que en producción nunca devolvió un archivo.
+
+
+def _adapter_con_get(fake_get):
+    session = MagicMock()
+    session.get.side_effect = fake_get
+    session.post.side_effect = lambda url, data=None, timeout=None: _FakeResponse(
+        _LOGGED_IN_HOME_HTML
+    )
+    adapter = MantisWebScrapingReadAdapter(
+        _BASE_URL, [310], "testuser", "correcthorsebattery", session=session
+    )
+    adapter._authenticated = True
+    return adapter
+
+
+def test_download_attachment_binary_usa_type_bug_en_la_url():
+    urls: list[str] = []
+
+    def fake_get(url, timeout=None):
+        urls.append(url)
+        return _FakeResponse("", headers={"Content-Type": "image/png"}, content=_PNG_BYTES)
+
+    adapter = _adapter_con_get(fake_get)
+    assert adapter.download_attachment_binary("501") == _PNG_BYTES
+    assert urls == [f"{_BASE_URL}/file_download.php?file_id=501&type=bug"], (
+        "sin `type=bug` Mantis responde 400 con cuerpo vacío"
+    )
+
+
+def test_download_attachment_binary_falla_si_el_status_no_es_200():
+    def fake_get(url, timeout=None):
+        return _FakeResponse("", headers={"Content-Type": "text/html"},
+                             content=b"", status_code=400)
+
+    adapter = _adapter_con_get(fake_get)
+    with pytest.raises(RuntimeError, match="HTTP 400"):
+        adapter.download_attachment_binary("501")
+
+
+def test_download_attachment_binary_falla_si_el_cuerpo_viene_vacio():
+    def fake_get(url, timeout=None):
+        return _FakeResponse("", headers={"Content-Type": "image/png"},
+                             content=b"", status_code=200)
+
+    adapter = _adapter_con_get(fake_get)
+    with pytest.raises(RuntimeError, match="0 bytes"):
+        adapter.download_attachment_binary("501")

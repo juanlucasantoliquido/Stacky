@@ -354,3 +354,91 @@ def test_hydrate_map_from_destination_mg_reconstruye_por_marker(conn):
     assert mg_map.get_gitlab_iid(
         conn, project_path=_PROJECT_PATH, mantis_project_id=_MANTIS_PROJECT_ID, mantis_issue_id="43"
     ) == "502"
+
+
+# ── (f) un adjunto que FALLA no puede contarse como aplicado ────────────
+#
+# Regresión de la migración de Ripley del 2026-07-29: `migrate_attachment_mg`
+# NUNCA propaga una excepción — atrapa todo y devuelve
+# `{"skipped": False, "verified": False, "error": ...}`. El executor sólo
+# miraba `skipped`, así que un adjunto que NO se subió sumaba a `applied`.
+# Resultado real: el TLS contra Mantis estaba roto, fallaron los 1419
+# adjuntos del proyecto, y el reporte los declaró aplicados. Cero adjuntos
+# migrados, reporte en verde.
+
+
+class _WriterAdjuntoRoto(_FakeWriter):
+    def upload_attachment(self, file_path: str, filename: str) -> dict:
+        raise RuntimeError("SSLError simulado bajando/subiendo el adjunto")
+
+
+def _plan_con_adjunto() -> MgMigrationPlan:
+    create = _make_op("42")
+    attach = MgMigrationOp(
+        op_kind="upload_attachment",
+        mantis_issue_id="42",
+        dest_parent_mantis_id=None,
+        payload={"attachment_meta": {"id": "777", "name": "captura.png", "size": 10}},
+        marker="<!-- stacky-migrated:mantis-file:310:42:777 -->",
+    )
+    return MgMigrationPlan(
+        ops=[create, attach],
+        counts_by_type={"create_item": 1, "upload_attachment": 1},
+        warnings=[],
+        skipped_at_plan=0,
+    )
+
+
+class _AdapterFake:
+    def download_attachment_binary(self, file_id):
+        return b"bytes"
+
+
+def test_adjunto_fallido_cuenta_como_failed_no_como_applied(conn, tmp_path):
+    writer = _WriterAdjuntoRoto()
+    result = execute_migration(
+        _plan_con_adjunto(), writer, conn,
+        project_path=_PROJECT_PATH,
+        mantis_project_id=_MANTIS_PROJECT_ID,
+        checkpoint_path=str(tmp_path / "cp.json"),
+        origin_adapter=_AdapterFake(),
+        attachment_options={"max_size_mb": 50, "skip_if_over_limit": True},
+    )
+
+    # Se creó el issue (1 applied) pero el adjunto NO: no puede haber 2.
+    assert result.applied == 1, (
+        f"el adjunto falló y se contó como aplicado (applied={result.applied})"
+    )
+    assert len(result.failed) == 1
+    assert result.failed[0]["op_kind"] == "upload_attachment"
+    assert "captura.png" in result.failed[0]["error"]
+    # El ticket queda 'partial' para que la corrida siguiente lo reintente.
+    assert mg_map.get_full_mapping(conn, _PROJECT_PATH)[0]["status"] == "partial"
+
+
+def test_adjunto_ya_presente_se_saltea_y_no_se_vuelve_a_subir(conn, tmp_path):
+    """Idempotencia: si `attachment_exists` dice que ya está, no se re-sube
+    (antes no había chequeo alguno y la descripción acumulaba duplicados)."""
+    subidas: list = []
+
+    class _WriterConAdjuntoYaPresente(_FakeWriter):
+        def attachment_exists(self, item_iid, marker, filename=""):
+            return True
+
+        def upload_attachment(self, file_path: str, filename: str) -> dict:
+            subidas.append(filename)
+            return {"url": f"/uploads/{filename}"}
+
+    writer = _WriterConAdjuntoYaPresente()
+    result = execute_migration(
+        _plan_con_adjunto(), writer, conn,
+        project_path=_PROJECT_PATH,
+        mantis_project_id=_MANTIS_PROJECT_ID,
+        checkpoint_path=str(tmp_path / "cp.json"),
+        origin_adapter=_AdapterFake(),
+        attachment_options={"max_size_mb": 50, "skip_if_over_limit": True},
+    )
+
+    assert subidas == [], "no debe re-subirse un adjunto que ya está en el destino"
+    assert result.skipped == 1
+    assert result.failed == []

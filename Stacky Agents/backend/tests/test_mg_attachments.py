@@ -61,7 +61,11 @@ class _FakeWriter:
 def test_migrate_attachment_mg_ok_descarga_sube_y_linkea(monkeypatch):
     adapter = _FakeOriginAdapter()
     writer = _FakeWriter()
-    attachment_meta = {"id": "501", "name": "captura.png", "size": 1024, "url": "https://mantis/x"}
+    # El `size` declarado tiene que coincidir con el contenido real: desde
+    # que existe el gate anti-descarga-truncada, un meta inconsistente es
+    # justamente lo que se quiere rechazar.
+    attachment_meta = {"id": "501", "name": "captura.png",
+                       "size": len(_CONTENT), "url": "https://mantis/x"}
 
     import tools.migrar_mantis_gitlab.migrator_mg_attachments as mg_attachments_module
 
@@ -164,3 +168,63 @@ def test_download_mg_attachment_to_temp_devuelve_ruta_con_contenido_correcto():
         assert adapter.calls == ["777"]
     finally:
         os.unlink(path)
+
+
+# ── Gates anti-adjunto-fantasma (regresión Ripley 2026-07-29) ───────────
+#
+# La descarga de Mantis devolvía 0 bytes (URL sin `type=bug` -> HTTP 400 con
+# cuerpo vacío) y el flujo subía ESE vacío a GitLab reportando `verified:
+# True`. Resultado real: 167 uploads de 0 bytes en el proyecto destino, todos
+# dados por migrados. Estos dos gates lo hacen imposible.
+
+
+class _AdapterQueDevuelveVacio:
+    def download_attachment_binary(self, file_id):
+        return b""
+
+
+def test_migrate_attachment_mg_rechaza_descarga_vacia():
+    writer = _FakeWriter()
+    meta = {"id": "501", "name": "captura.png", "size": 0, "url": "https://mantis/x"}
+
+    result = migrate_attachment_mg(
+        meta, writer, _AdapterQueDevuelveVacio(),
+        dest_iid="99", max_size_mb=50, skip_if_over_limit=True,
+    )
+
+    assert result["verified"] is False
+    assert "VACÍO" in result["error"] or "0 bytes" in result["error"]
+    assert writer.uploaded == [], "nunca debe subirse un adjunto vacío"
+    assert writer.linked == []
+
+
+def test_migrate_attachment_mg_rechaza_descarga_truncada():
+    """Mantis declara N bytes y se bajan menos: descarga cortada."""
+    writer = _FakeWriter()
+    meta = {"id": "501", "name": "informe.pdf",
+            "size": len(_CONTENT) + 5000, "url": "https://mantis/x"}
+
+    result = migrate_attachment_mg(
+        meta, writer, _FakeOriginAdapter(),
+        dest_iid="99", max_size_mb=50, skip_if_over_limit=True,
+    )
+
+    assert result["verified"] is False
+    assert "incompleto" in result["error"]
+    assert writer.uploaded == []
+
+
+def test_migrate_attachment_mg_propaga_el_marker_al_link():
+    """El marker tiene que llegar al `link_attachment`: es lo que hace
+    idempotente la corrida siguiente."""
+    writer = _FakeWriter()
+    meta = {"id": "501", "name": "captura.png", "size": len(_CONTENT)}
+    marker = "<!-- stacky-migrated:mantis-file:310:26020:501 -->"
+
+    result = migrate_attachment_mg(
+        meta, writer, _FakeOriginAdapter(),
+        dest_iid="99", max_size_mb=50, skip_if_over_limit=True, marker=marker,
+    )
+
+    assert result["verified"] is True
+    assert writer.linked[0][1]["marker"] == marker

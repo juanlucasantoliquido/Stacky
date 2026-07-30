@@ -272,18 +272,50 @@ def _apply_upload_attachment(
             "upload_attachment: falta el origin_adapter para descargar el "
             "binario desde Mantis (se inyecta en execute_migration)."
         )
+    attachment_meta = payload.get("attachment_meta", {}) or {}
+
+    # Idempotencia (§11): `link_attachment` escribe en la DESCRIPCIÓN, así que
+    # el `comment_exists` que protege a los comentarios no aplica acá. Sin
+    # este chequeo, re-correr la migración vuelve a subir cada binario y
+    # concatena otra vez el markdown, duplicando adjuntos en silencio.
+    if writer.attachment_exists(dest_iid, op.marker, attachment_meta.get("name", "")):
+        result.skipped += 1
+        return
+
     outcome = migrator_mg_attachments.migrate_attachment_mg(
-        payload.get("attachment_meta", {}),
+        attachment_meta,
         writer,
         adapter,
         dest_iid=dest_iid,
         max_size_mb=options.get("max_size_mb", 50),
         skip_if_over_limit=options.get("skip_if_over_limit", True),
+        marker=op.marker,
     )
     if isinstance(outcome, dict) and outcome.get("skipped"):
         # Saltado por tamaño: NO cuenta como aplicado; queda declarado.
         result.skipped += 1
         return
+
+    # `migrate_attachment_mg` NUNCA propaga: atrapa toda excepción y devuelve
+    # `{"skipped": False, "verified": False, "error": ...}`. Contar eso como
+    # aplicado convierte un fallo real en un éxito reportado — y eso fue
+    # exactamente lo que pasó en la migración de Ripley del 2026-07-29: el
+    # `REQUESTS_CA_BUNDLE` global (destination_writer.py:189) rompió el TLS
+    # contra Mantis, TODA descarga de adjunto falló, y la corrida las contó
+    # como "aplicadas". El reporte dio verde y no se migró ni un adjunto.
+    # Se re-lanza para que el `except` del loop de `execute_migration` lo
+    # registre en `result.failed` y deje el ticket en `status="partial"`,
+    # que es lo que hace reintentable la corrida siguiente.
+    if isinstance(outcome, dict) and outcome.get("error"):
+        raise RuntimeError(
+            f"upload_attachment: el adjunto {outcome.get('name')!r} del issue "
+            f"Mantis {issue_id} NO se migró: {outcome['error']}"
+        )
+    if isinstance(outcome, dict) and not outcome.get("verified"):
+        raise RuntimeError(
+            f"upload_attachment: el adjunto {outcome.get('name')!r} del issue "
+            f"Mantis {issue_id} no quedó verificado (outcome={outcome!r})."
+        )
     result.applied += 1
 
 

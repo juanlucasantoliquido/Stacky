@@ -63,6 +63,7 @@ def migrate_attachment_mg(
     dest_iid: str,
     max_size_mb: int,
     skip_if_over_limit: bool,
+    marker: str = "",
 ) -> dict:
     """Flujo completo de un adjunto Mantis -> GitLab (mismo patrón que
     `services.migrator_attachments.migrate_attachment`, Plan 74 F5,
@@ -97,10 +98,35 @@ def migrate_attachment_mg(
         if real_size > max_size_bytes and skip_if_over_limit:
             return _over_size_limit_result(attachment_meta, size=real_size, max_size_mb=max_size_mb)
 
+        # Un adjunto de 0 bytes casi nunca es real: es la firma de una
+        # descarga fallida que devolvió cuerpo vacío. Subirlo y darlo por
+        # migrado es peor que fallar, porque el issue queda con un archivo
+        # que parece estar y no está.
+        if real_size == 0:
+            raise RuntimeError(
+                f"el adjunto {name!r} se descargó VACÍO (0 bytes) desde Mantis; "
+                "no se sube."
+            )
+        # Si Mantis declaró un tamaño, tiene que coincidir: una descarga
+        # truncada (sesión caída a mitad, proxy que corta) no puede pasar
+        # como buena.
+        if declared_size and real_size != declared_size:
+            raise RuntimeError(
+                f"el adjunto {name!r} se descargó incompleto: Mantis declara "
+                f"{declared_size} bytes y se bajaron {real_size}."
+            )
+
         local_sha256 = compute_sha256(tmp_path)
 
         upload_result = writer.upload_attachment(tmp_path, name)
-        writer.link_attachment(dest_iid, upload_result or {})
+        # El marker viaja DENTRO del meta para no romper la firma
+        # `link_attachment(item_iid, attachment_meta)` que comparten las 3
+        # implementaciones de `DestinationWriter`. Es lo que hace detectable
+        # este adjunto en una corrida futura (idempotencia).
+        meta_link = dict(upload_result or {})
+        if marker:
+            meta_link["marker"] = marker
+        writer.link_attachment(dest_iid, meta_link)
 
         return {
             "name": name,

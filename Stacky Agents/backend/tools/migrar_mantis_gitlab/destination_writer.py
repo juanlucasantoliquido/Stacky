@@ -44,6 +44,63 @@ from services.tracker_provider import TrackerItem, TrackerQuery
 _LOGGER_NAME = "migrar_mantis_gitlab.destination_writer"
 
 
+def habilitar_pin_de_certificado_hoja() -> bool:
+    """Permite que un certificado NO auto-firmado presente en el bundle actúe
+    como ancla de confianza (`X509_V_FLAG_PARTIAL_CHAIN`).
+
+    POR QUÉ HACE FALTA: `srvcgit01.imsolutions.local` presenta SOLO su
+    certificado hoja (cadena de 1 elemento, verificado en vivo: `chain.Build`
+    de .NET devuelve `PartialChain`), y su emisora (`CN=imsolutions.local`,
+    `O=PFSTechSL`) no está ni en el bundle ni en el almacén de Windows. Con
+    la verificación por defecto, OpenSSL busca la emisora, no la encuentra y
+    falla con `unable to get local issuer certificate` — que es exactamente
+    lo que pasaba: `ca-bundle-migrador.pem` contiene la HOJA, no la CA, así
+    que el bundle NO servía para verificar el destino.
+
+    Esto NO debilita la verificación: la hoja pineada tiene que coincidir
+    EXACTAMENTE con la que presenta el servidor (es pinning, más estricto
+    que confiar en una CA que puede emitir para cualquier host), el
+    `check_hostname` sigue activo, y un host cuyo certificado no esté en el
+    bundle sigue siendo rechazado (verificado con un control negativo).
+
+    Se parchea el punto de creación del contexto de urllib3 porque
+    `services/gitlab_client.py` usa `requests.request(...)` a nivel módulo
+    (no una `Session`), así que no hay dónde montar un `HTTPAdapter` propio
+    sin tocar el cliente compartido. Se parchean AMBOS módulos: `urllib3.
+    connection` importa el nombre por valor (`from .util.ssl_ import
+    create_urllib3_context`), así que parchear solo `urllib3.util.ssl_` no
+    tendría efecto sobre las conexiones reales.
+    """
+    import ssl as _ssl
+
+    import urllib3.connection as _u3conn
+    import urllib3.util.ssl_ as _u3ssl
+
+    if getattr(_u3ssl, "_mg_partial_chain_patched", False):
+        return False
+
+    _original = _u3ssl.create_urllib3_context
+
+    def _con_partial_chain(*args, **kwargs):
+        ctx = _original(*args, **kwargs)
+        try:
+            ctx.verify_flags |= _ssl.VERIFY_X509_PARTIAL_CHAIN
+        except (AttributeError, ValueError):
+            # Python sin el flag: se deja el contexto tal cual (falla ruidosa
+            # en el handshake, nunca una verificación silenciosamente laxa).
+            pass
+        return ctx
+
+    _u3ssl.create_urllib3_context = _con_partial_chain
+    _u3conn.create_urllib3_context = _con_partial_chain
+    _u3ssl._mg_partial_chain_patched = True
+    logging.getLogger(_LOGGER_NAME).info(
+        "Verificación TLS con pin de certificado hoja habilitada "
+        "(VERIFY_X509_PARTIAL_CHAIN); la verificación sigue activa."
+    )
+    return True
+
+
 class DestinationMismatchError(RuntimeError):
     """El destino que el writer resolvió realmente (`effective_target()`)
     NO coincide con `destination.base_url`/`destination.project_path` del
@@ -143,6 +200,14 @@ class DestinationWriter(ABC):
         comentario, F5 verifica si ya existe uno con este `marker`."""
         raise NotImplementedError
 
+    def attachment_exists(self, item_iid: str, marker: str, filename: str = "") -> bool:
+        """Idempotencia de ADJUNTOS. Deliberadamente NO abstracto: el default
+        conservador es "no existe", que a lo sumo reintenta una subida; el
+        default contrario (True) SALTEARÍA adjuntos que faltan de verdad, que
+        es el fallo que se está corrigiendo. Las implementaciones que sí
+        pueden mirar el destino lo sobreescriben."""
+        return False
+
     @abstractmethod
     def effective_target(self) -> tuple[str, str]:
         """Devuelve `(base_url, project_path)` REALMENTE resueltos —
@@ -190,6 +255,12 @@ class GitLabDestinationWriter(DestinationWriter):
             logging.getLogger(_LOGGER_NAME).info(
                 "REQUESTS_CA_BUNDLE apuntado a %s", ruta
             )
+            # El bundle pinea la HOJA de srvcgit01 (su CA emisora no existe en
+            # ningún almacén de esta máquina), y una hoja no auto-firmada no
+            # sirve como ancla salvo con PARTIAL_CHAIN. Sin esto, TODA lectura
+            # y escritura contra el GitLab destino muere con
+            # `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`.
+            habilitar_pin_de_certificado_hoja()
 
         # 2. Destino EXPLÍCITO por parámetro. El Plan 218 F0/F4 amplió la
         #    firma del provider con `base_url=`/`group=` y corrigió sus
@@ -384,7 +455,23 @@ class GitLabDestinationWriter(DestinationWriter):
         return self._provider.upload_attachment(file_path, filename)
 
     def link_attachment(self, item_iid: str, attachment_meta: dict) -> dict:
-        return self._provider.link_attachment(item_iid, attachment_meta)
+        """Enlaza el adjunto en la descripción, dejando el MARKER al lado.
+
+        `GitLabTrackerProvider.link_attachment` (`gitlab_provider.py:369`)
+        concatena solo el markdown, sin ninguna huella de qué adjunto de
+        origen es. Sin marker no hay forma de saber, en una corrida futura,
+        si este adjunto ya se migró: la única defensa contra el duplicado
+        pasaba a ser el nombre de archivo. Se inyecta el marker en el propio
+        markdown (el caller lo pasa dentro de `attachment_meta["marker"]`,
+        sin cambiar la firma que comparten las 3 implementaciones)."""
+        marker = (attachment_meta or {}).get("marker") or ""
+        if not marker:
+            return self._provider.link_attachment(item_iid, attachment_meta)
+
+        meta = dict(attachment_meta)
+        markdown = meta.get("markdown") or meta.get("url") or ""
+        meta["markdown"] = f"{markdown}\n{marker}" if markdown else marker
+        return self._provider.link_attachment(item_iid, meta)
 
     def create_issue_link(self, source_iid: str, target_iid: str, link_type: str) -> dict:
         """No existe un método público genérico de issue-links no-parent en
@@ -500,6 +587,44 @@ class GitLabDestinationWriter(DestinationWriter):
 
     def comment_exists(self, item_iid: str, marker: str) -> bool:
         return self._provider.comment_exists(item_iid, marker)
+
+    def attachment_exists(self, item_iid: str, marker: str, filename: str = "") -> bool:
+        """Idempotencia de adjuntos: ¿ya está este adjunto en la descripción?
+
+        `link_attachment` escribe el adjunto EN LA DESCRIPCIÓN del issue, no
+        como comentario, así que `comment_exists` no lo ve. Sin este chequeo,
+        una segunda corrida vuelve a subir el binario y CONCATENA otra vez el
+        markdown a la descripción (`gitlab_provider.py:379` hace
+        `description + markdown`), duplicando el adjunto en silencio.
+
+        Dos criterios, en orden:
+          1. El `marker` (`<!-- stacky-migrated:mantis-file:P:I:F -->`), que es
+             el identificador exacto y estable del adjunto de origen.
+          2. Fallback por nombre de archivo dentro de un link `/uploads/`:
+             los adjuntos migrados ANTES de que se empezara a escribir el
+             marker no lo tienen, y sin este fallback se duplicarían.
+        """
+        proj_path = self._provider._client._project_path()
+        try:
+            current, _ = self._provider._client._request(
+                "GET", f"/projects/{proj_path}/issues/{item_iid}"
+            )
+            description = (current or {}).get("description") or ""
+        except Exception:
+            # Ante la duda NO se declara "ya existe": devolver True acá
+            # saltearía un adjunto que sí falta. Se devuelve False y el
+            # chequeo real queda en el marker de la próxima corrida.
+            return False
+
+        if marker and marker in description:
+            return True
+        if filename:
+            import re as _re
+
+            for match in _re.finditer(r"\((/uploads/[^)]+)\)", description):
+                if match.group(1).rstrip("/").endswith("/" + filename):
+                    return True
+        return False
 
     def effective_target(self) -> tuple[str, str]:
         return (self._provider._client._base_url, self._provider._project)

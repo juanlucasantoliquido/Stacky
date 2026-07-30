@@ -1079,7 +1079,16 @@ class MantisWebScrapingReadAdapter(MantisReadAdapter):
         `Content-Type` indique HTML — eso evita un `UnicodeDecodeError`
         espurio sobre un PNG/ZIP real)."""
         self._ensure_authenticated()
-        url = f"{self._base_url}/file_download.php?file_id={file_id}"
+        # `&type=bug` NO es opcional: sin él, Mantis responde 400 con CUERPO
+        # VACÍO (verificado en vivo el 2026-07-30 contra soporte.ais-int.net:
+        # `file_download.php?file_id=32057` -> 400 / 0 bytes;
+        # `...&file_id=32057&type=bug` -> 200 / 70.015 bytes). Es exactamente
+        # la URL que Mantis publica en el HTML del issue y que
+        # `_parse_attachments_html` ya captura en `attachment_meta["url"]`.
+        # Faltando el parámetro, TODA descarga devolvía 0 bytes, se subía un
+        # archivo VACÍO a GitLab y se reportaba como migrado con éxito: así
+        # se perdieron los 1.419 adjuntos de la migración de Ripley.
+        url = f"{self._base_url}/file_download.php?file_id={file_id}&type=bug"
 
         resp = self._session.get(url, timeout=self._timeout)
         if self._response_is_login_page(resp):
@@ -1090,6 +1099,22 @@ class MantisWebScrapingReadAdapter(MantisReadAdapter):
                     "La sesión Mantis expiró al descargar el adjunto "
                     f"(file_id={file_id}) y el re-login automático también falló."
                 )
+
+        # Gates duros: un adjunto vacío o un error HTTP NUNCA pueden pasar por
+        # una descarga buena. Antes se devolvía `resp.content` sin mirar el
+        # status, y un 400 con cuerpo vacío viajaba como "el archivo".
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"file_download.php devolvió HTTP {resp.status_code} para "
+                f"file_id={file_id} ({len(resp.content)} bytes). No se sube un "
+                "adjunto que no se pudo descargar."
+            )
+        if not resp.content:
+            raise RuntimeError(
+                f"file_download.php devolvió 0 bytes para file_id={file_id} "
+                f"(HTTP {resp.status_code}). Subir esto crearía un adjunto "
+                "vacío en el destino y lo daría por migrado."
+            )
         return resp.content
 
     @staticmethod

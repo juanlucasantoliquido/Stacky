@@ -48,34 +48,35 @@
     }
   },
   "field_mapping": {
+    "_status_nota": "La CLAVE de cada entrada es el nombre CANONICO EN INGLES del estado de Mantis y NO se traduce: el scraping no lee el texto visible (que viene en el idioma de la instancia), lo deriva del ID numerico de la clase CSS 'status-NN-fg' y lo resuelve contra services/mantis_client.py:51 _STANDARD_STATUS_IDS (new=10, feedback=20, acknowledged=30, confirmed=40, assigned=50, resolved=80, closed=90). Ver adapters/scraping_adapter.py:207 _status_name_from_row. Ademas mapping/status_map.py:23 normaliza la clave con .strip().lower(), asi que la clave debe ser minuscula y sin acentos. Lo que se muestra al usuario es el LABEL, y ese SI va en espanol. OJO: el texto que Mantis muestra realmente es SINGULAR ('nueva', 'aceptada', 'confirmada', 'asignada', 'resuelta', 'cerrada') -- verificado el 2026-07-30 contra el listado real; los labels de abajo usan el PLURAL porque es la forma que pidio explicitamente el operador. 'closed' no estaba en esa lista y se homologa como 'status::cerradas' por consistencia.",
     "status": {
       "new": {
         "gitlab_state": "opened",
-        "label": "status::new"
+        "label": "status::nuevas"
       },
       "feedback": {
         "gitlab_state": "opened",
-        "label": "status::feedback"
+        "label": "status::se necesitan más datos"
       },
       "acknowledged": {
         "gitlab_state": "opened",
-        "label": "status::acknowledged"
+        "label": "status::aceptadas"
       },
       "confirmed": {
         "gitlab_state": "opened",
-        "label": "status::confirmed"
+        "label": "status::confirmadas"
       },
       "assigned": {
         "gitlab_state": "opened",
-        "label": "status::assigned"
+        "label": "status::asignadas"
       },
       "resolved": {
         "gitlab_state": "closed",
-        "label": "status::resolved"
+        "label": "status::resueltas"
       },
       "closed": {
         "gitlab_state": "closed",
-        "label": "status::closed"
+        "label": "status::cerradas"
       },
       "_unmapped_fallback": {
         "gitlab_state": "opened",

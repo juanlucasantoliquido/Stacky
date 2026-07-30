@@ -34,7 +34,7 @@ def test_resolves_by_filename(monkeypatch):
     )
     result = _resolver()(
         project_name="X", agent_type="developer",
-        agent_filename="DevX.agent.md", execution_id=1,
+        agent_filename="DevX.agent.md", execution_id=1, final_status="completed",
     )
     assert result == "To Do"
 
@@ -55,7 +55,7 @@ def test_fallback_by_agent_type(monkeypatch):
     )
     result = _resolver()(
         project_name="X", agent_type="developer",
-        agent_filename=None, execution_id=2,
+        agent_filename=None, execution_id=2, final_status="completed",
     )
     assert result == "Code Review"  # filename "Dev..." → developer
 
@@ -67,6 +67,7 @@ def test_none_when_no_config(monkeypatch):
     monkeypatch.setattr(pm, "get_project_config", lambda project: {"agent_workflow_configs": {}})
     assert _resolver()(
         project_name="X", agent_type="developer", agent_filename="DevX.agent.md", execution_id=3,
+        final_status="completed",
     ) is None
 
 
@@ -77,10 +78,12 @@ def test_flag_off_disables(monkeypatch):
     monkeypatch.setattr(pm, "get_agent_workflow_config", lambda *a, **k: {"transition_state": "To Do"})
     assert _resolver()(
         project_name="X", agent_type="developer", agent_filename="DevX.agent.md", execution_id=4,
+        final_status="completed",
     ) is None
 
 
 def test_none_without_project(monkeypatch):
     assert _resolver()(
         project_name=None, agent_type="developer", agent_filename="DevX.agent.md", execution_id=5,
+        final_status="completed",
     ) is None

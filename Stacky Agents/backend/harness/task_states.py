@@ -180,7 +180,12 @@ def _safe_transition(
         logger.exception(
             "_safe_transition(%s) falló ADO-%s corr=%s", phase, ado_id, correlation_id
         )
-        return {"ok": False, "to": target, "error": str(exc), "type": type(exc).__name__, "phase": phase}
+        # Plan 271 D3/F3-bis-3 — la ÚNICA rama de todo el sistema que decidía no
+        # cambiar el estado y no decía por qué. Sin `reason`, F5 la traducía a
+        # "unknown", string fuera de ALL_FINAL_STATE_REASONS (services/
+        # final_state_resolver.py). "transition_failed" SÍ está en ese catálogo.
+        return {"ok": False, "to": target, "reason": "transition_failed",
+                "error": str(exc), "type": type(exc).__name__, "phase": phase}
 
 
 # ---------------------------------------------------------------------------

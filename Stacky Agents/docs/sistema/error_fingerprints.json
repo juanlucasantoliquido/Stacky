@@ -852,6 +852,34 @@
       },
       "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
       "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
+    },
+    {
+      "id": "FS-271-NO-MATRIX-CELL",
+      "title": "La incidencia no se mueve al estado configurado a nivel rol",
+      "class": "state-transition-skipped",
+      "status": "resolved",
+      "log_pattern": "completion\\.matrix_transition.*no_matrix_cell",
+      "log_guarded": true,
+      "killed_by": "plan 271 (F1+F2: el motor A honra tracker_state_machine.<rol>.next_state_ok)",
+      "guard_test": "backend/tests/test_plan271_role_fallback.py",
+      "self_test": {
+        "matches": ["action=completion.matrix_transition reason=no_matrix_cell source=config"],
+        "clean": ["action=completion.matrix_transition reason=ok source=role"]
+      }
+    },
+    {
+      "id": "FS-271-RAZON-FUERA-DEL-CATALOGO",
+      "title": "El escritor de estado falla y no dice por que",
+      "class": "state-transition-mute",
+      "status": "resolved",
+      "log_pattern": "final_state_outcome.*\"reason\": ?\"(unknown|error|failed)\"",
+      "log_guarded": true,
+      "killed_by": "plan 271 (F3-bis-3 + F9: transition_failed cableado en los dos escritores)",
+      "guard_test": "backend/tests/test_plan271_razon_del_catalogo.py",
+      "self_test": {
+        "matches": ["final_state_outcome {\"applied\": false, \"reason\": \"unknown\"}"],
+        "clean": ["final_state_outcome {\"applied\": false, \"reason\": \"transition_failed\"}"]
+      }
     }
   ]
 }

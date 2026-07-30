@@ -32,6 +32,15 @@ def _outcome_badge_enabled() -> bool:
     return bool(getattr(_config.config, "STACKY_UI_OUTCOME_REASON_BADGE_ENABLED", True))
 
 
+def _reason_visible_enabled() -> bool:
+    """Plan 271 F5 — kill-switch de la razón del cambio de estado. INDEPENDIENTE
+    de `_outcome_badge_enabled` (plan 254): C14, no puede quedar gateada por una
+    flag que este plan no controla."""
+    import config as _config  # noqa: PLC0415
+
+    return bool(getattr(_config.config, "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED", True))
+
+
 def _verdict_badge_enabled() -> bool:
     """Plan 269 F2 — kill-switch del veredicto en el payload. Se lee la INSTANCIA.
 
@@ -136,6 +145,13 @@ def _with_outcome(d: dict, dirty_ids: set[int] | None = None) -> dict:
     Con `STACKY_UI_OUTCOME_REASON_BADGE_ENABLED` apagada NO se agrega ninguna
     clave: la UI simplemente no dibuja el badge (sin hueco ni error).
     """
+    # Plan 271 F5 (C14) — la razón del cambio de estado NO depende de la flag
+    # del 254: se promueve ANTES del corte de `_outcome_badge_enabled`.
+    meta_271 = d.get("metadata") or {}
+    if _reason_visible_enabled() and isinstance(meta_271, dict):
+        fso = meta_271.get("final_state_outcome")
+        if isinstance(fso, dict):
+            d["final_state_outcome"] = fso
     if not _outcome_badge_enabled():
         return d
     meta = d.get("metadata") or {}

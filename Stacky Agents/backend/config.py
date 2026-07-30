@@ -1419,6 +1419,34 @@ class Config:
     STACKY_ADO_STATE_MATRIX_ENABLED: bool = os.getenv(
         "STACKY_ADO_STATE_MATRIX_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 271 — La incidencia se mueve al estado configurado al terminar ──
+    # F1/F2: cuando la matriz (STACKY_ADO_STATE_MATRIX_ENABLED) no define un
+    # estado final para (work_item_type x agent_type), el motor A cae al
+    # next_state_ok de NIVEL ROL que el operador ya configuró en la pantalla
+    # de Estados (StatesConfigPage). Repara comportamiento ya prometido, no
+    # agrega escritura nueva: default ON.
+    STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED: bool = os.getenv(
+        "STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # F3: el escritor de estado del motor B (agent_completion_internal) rutea
+    # por services.tracker_write_router.resolve_state_writer en vez de asumir
+    # siempre ADO. Corrige el DESTINO de una escritura que ya ocurre: default ON.
+    STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED: bool = os.getenv(
+        "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # F4: el gate de publish deja de bloquear el cambio de estado cuando no
+    # había nada que publicar (html_output_path ausente, auto-publish OFF,
+    # publisher no disponible, ya terminal sin html). Sigue bloqueando cuando
+    # la publicación SE INTENTÓ y falló. Default ON.
+    STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED: bool = os.getenv(
+        "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # F5/F6: persiste y muestra la razón del cambio (o no-cambio) de estado en
+    # el detalle de la ejecución. Solo lectura: nunca escribe en el tracker.
+    # Default ON.
+    STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED: bool = os.getenv(
+        "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # Si true (default), infiere pipelines CI de GitLab cuando el tracker es gitlab.
     STACKY_GITLAB_CI_INFERENCE: bool = os.getenv(
         "STACKY_GITLAB_CI_INFERENCE", "true"

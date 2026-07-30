@@ -147,9 +147,17 @@
   color: var(--ok, #86efac);
 }
 
-.toneAtencion,
-.toneEspera {
+.toneAtencion {
   color: var(--warn);
+}
+
+/* Plan 271 F6 — .toneEspera deja de ser alias de .toneAtencion: antes el
+   operador veía el MISMO color para "falta configurar" (acción suya) y para
+   "en espera de tu revisión" (nada que arreglar), justo la distinción que
+   este plan existe para hacer. --text-secondary NO EXISTE en este tema
+   (0 hits en theme.css); el token real para "secundario" es --text-muted. */
+.toneEspera {
+  color: var(--text-muted);
 }
 
 .toneError {

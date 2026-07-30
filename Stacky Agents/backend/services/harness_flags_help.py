@@ -896,6 +896,30 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el estado de la tarea puede quedar como lo proponga el agente, que podría no coincidir con la configuración del proyecto.",
         example="Como que el semáforo lo maneje siempre el sistema de tránsito, no lo que crea conveniente cada auto.",
     ),
+    "STACKY_FINAL_STATE_ROLE_FALLBACK_ENABLED": PlainHelp(
+        what="Hace que el estado al que configuraste que pase la incidencia cuando el empleado termina se aplique de verdad.",
+        on_effect="Si la activás: al terminar el empleado, la incidencia pasa al estado que elegiste en la pantalla de Estados.",
+        off_effect="Si la apagás: la incidencia se queda en el estado en que estaba y la tenés que mover a mano.",
+        example="Como que el trámite avance solo de ventanilla cuando el funcionario lo termina, en vez de quedarse en el mostrador.",
+    ),
+    "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED": PlainHelp(
+        what="Escribe el nuevo estado en el tablero que ese proyecto declara, en vez de escribirlo siempre en el mismo.",
+        on_effect="Si la activás: cada proyecto mueve sus incidencias en su propio tablero.",
+        off_effect="Si la apagás: todos los proyectos intentan mover la incidencia en el tablero de siempre, aunque no sea el suyo.",
+        example="Como mandar la carta a la sucursal del cliente y no siempre a la casa central.",
+    ),
+    "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED": PlainHelp(
+        what="Deja de frenar el cambio de estado cuando no había ningún comentario para publicar.",
+        on_effect="Si la activás: si no hubo nada que publicar, la incidencia igual pasa al estado que configuraste.",
+        off_effect="Si la apagás: cualquier publicación que no salga bien frena el cambio de estado, aunque no hubiera nada para publicar.",
+        example="Como no retener un expediente por falta de adjunto cuando ese trámite nunca llevaba adjunto.",
+    ),
+    "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED": PlainHelp(
+        what="Muestra en el detalle de la corrida por qué la incidencia se movió, o por qué no se movió.",
+        on_effect="Si la activás: al abrir la corrida ves en castellano el motivo y qué hacer al respecto.",
+        off_effect="Si la apagás: no ves ningún motivo y tenés que revisar los registros a mano.",
+        example="Como el cartel de la ventanilla que dice por qué te rechazaron el trámite en vez de mandarte a preguntar.",
+    ),
     # ── routing_costo ─────────────────────────────────────────────────────
     "STACKY_COMPLEXITY_ESTIMATION_ENABLED": PlainHelp(
         what="Estima automáticamente qué tan complejo es un pedido, con una fórmula fija, sin usar inteligencia artificial para decidirlo.",

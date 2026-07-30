@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ubimia® · IA: de qué estamos hablando realmente · 05/08/2026</title>
+<!-- v2 · 26 slides · registro único: la oficina. Eje conceptual: CHAT vs AGENTE -->
+<!-- Fuentes: GUION_SESION_IA_2026-08-05.md (v3) · CHULETA_1_PAGINA.md · README.md -->
+<!-- Bloque 2: Stacky Agents/backend/Stacky/agents/*.agent.md + manifest.json · RSPACIFICO/trunk/docs/agentic_manual/ · RSSICREA/Agentes/outputs/ + memory-bank/ -->
+<!-- Sin dependencias externas: abrir con doble clic. ← → · clic · N notas · F pantalla · B negro · T reloj -->
+<style>
+:root{
+  /* Colores de marca ubimia */
+  --u-bg-dark:    #16323C;
+  --u-bg-dark-2:  #0F2530;
+  --u-bg-light:   #FFFFFF;
+  --u-green:      #1FE3A4;
+  --u-green-2:    #12C98C;
+  --u-green-soft: #8FF1CE;
+  --u-navy:       #16323C;
+  --u-ink:        #0F2530;
+  --u-on-dark:    #FFFFFF;
+  --u-on-dark-2:  #C9D8DC;
+  --u-card:       rgba(255,255,255,0.04);
+  --u-card-bd:    rgba(255,255,255,0.16);
+  --u-grad: linear-gradient(135deg, var(--u-green) 0%, var(--u-green-2) 45%, rgba(143,241,206,0) 100%);
+  /* Extensiones para el contenido del guion (rojo de alucinación, ámbar de pendientes, gris claro de cards) */
+  --u-red:        #FF5B5B;
+  --u-red-ink:    #C62828;
+  --u-amber:      #FFC24B;
+  --u-light-card: #F1F6F7;
+  --u-light-bd:   #D6E3E6;
+  /* Tipografía — solo fuentes del sistema, sin CDN */
+  --u-font-head: "Poppins","Montserrat","Segoe UI",system-ui,sans-serif;
+  --u-font-body: "Inter","Segoe UI",system-ui,Arial,sans-serif;
+  --u-mono: ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  /* Medidas de slide 16:9 */
+  --u-slide-w: 1280px;
+  --u-slide-h: 720px;
+  --notes-h: 0px;
+  --s: 1;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#07131a;font-family:var(--u-font-body);color:var(--u-on-dark);overflow:hidden}
+
+/* ============ ESCENARIO / NAVEGACIÓN ============ */
+#stage{position:fixed;left:0;right:0;top:0;bottom:var(--notes-h);display:grid;place-items:center;overflow:hidden}
+#deck{position:relative;width:var(--u-slide-w);height:var(--u-slide-h);transform:scale(var(--s));transform-origin:center center;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.slide{position:absolute;inset:0;overflow:hidden;display:none;background:var(--u-bg-light);color:var(--u-navy)}
+.slide.is-active{display:block}
+.s-dark{background:radial-gradient(120% 120% at 100% 0%,var(--u-bg-dark) 0%,var(--u-bg-dark-2) 100%);color:var(--u-on-dark)}
+.s-light{background:var(--u-bg-light);color:var(--u-navy)}
+.notes{display:none}
+
+#hud{position:fixed;right:16px;bottom:calc(var(--notes-h) + 14px);z-index:40;display:flex;align-items:center;gap:10px;
+  font-family:var(--u-font-body);font-size:13px;color:#7f98a1;background:rgba(7,19,26,.72);
+  border:1px solid rgba(255,255,255,.10);border-radius:999px;padding:6px 12px;backdrop-filter:blur(4px)}
+#hud button{all:unset;cursor:pointer;color:var(--u-green);font-size:16px;line-height:1;padding:2px 6px;border-radius:6px}
+#hud button:hover{background:rgba(31,227,164,.14)}
+#hud .sec{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hud .cnt{color:#cfe0e4;font-variant-numeric:tabular-nums}
+#hud .clock{color:var(--u-green-soft);font-variant-numeric:tabular-nums}
+#hud .keys{color:#5d757e}
+#notes{position:fixed;left:0;right:0;bottom:0;height:var(--notes-h);z-index:45;overflow:auto;
+  background:#08161d;border-top:3px solid var(--u-green);padding:18px 26px 26px;font-size:15px;line-height:1.5;color:var(--u-on-dark-2)}
+#notes.hidden{display:none}
+#notes h4{font-family:var(--u-font-head);font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--u-green);margin-bottom:10px}
+#notes p{margin:0 0 9px}
+#notes .n-time{font-family:var(--u-font-head);font-weight:600;color:#fff;background:rgba(31,227,164,.10);border-left:3px solid var(--u-green);padding:6px 10px;margin-bottom:12px}
+#notes .n-nota{background:rgba(255,194,75,.09);border-left:3px solid var(--u-amber);padding:8px 10px;color:#ffe6b3}
+#notes .n-use{background:rgba(31,227,164,.09);border-left:3px solid var(--u-green);padding:8px 10px;color:#bdf5e0;font-weight:600}
+#notes .n-h{font-family:var(--u-font-head);font-weight:600;color:#fff;margin-top:14px}
+#notes .n-src{font-family:var(--u-mono);font-size:13px;color:#7f98a1}
+#notes blockquote{border-left:3px solid var(--u-green-soft);padding:4px 0 4px 12px;margin:8px 0;color:#e6f4f2;font-style:italic}
+#blank{position:fixed;inset:0;background:#000;z-index:90;display:none}
+#blank.on{display:block}
+
+/* ============ PIEZAS DE MARCA ============ */
+.arc{position:absolute;border-radius:50%;background:var(--u-grad);filter:saturate(1.05);pointer-events:none}
+.logo{font-family:var(--u-font-head);font-weight:700;letter-spacing:-.03em;line-height:1}
+.logo sup{font-size:.36em;vertical-align:super;font-weight:600;letter-spacing:0}
+.mono{position:absolute;top:26px;right:44px;width:44px;height:44px}
+.mono svg{width:100%;height:100%;display:block}
+
+/* Cabeceras de contenido */
+.hd{position:absolute;top:0;left:0;right:0;height:104px;background:#fff;display:flex;align-items:center;padding:0 56px;z-index:3}
+.hd h2{font-family:var(--u-font-head);font-weight:700;font-size:36px;color:var(--u-ink);letter-spacing:-.01em;line-height:1.05}
+.hd .kick{font-family:var(--u-font-head);font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--u-green-2);margin-bottom:3px}
+.hd .mono{color:var(--u-ink);top:30px}
+.hd--mint{background:var(--u-green)}
+.hd--mint h2,.hd--mint .mono{color:var(--u-ink)}
+.hd--mint .kick{color:rgba(15,37,48,.62)}
+.body{position:absolute;top:104px;left:0;right:0;bottom:0;padding:34px 56px;z-index:2}
+.body--u{bottom:88px}
+.body--u2{bottom:104px}
+
+/* Utilidades tipográficas */
+.h-xxl{font-family:var(--u-font-head);font-weight:700;font-size:132px;line-height:.98;letter-spacing:-.035em}
+.h-xl{font-family:var(--u-font-head);font-weight:700;font-size:98px;line-height:1.02;letter-spacing:-.03em}
+.h-l{font-family:var(--u-font-head);font-weight:700;font-size:64px;line-height:1.06;letter-spacing:-.02em}
+.h-m{font-family:var(--u-font-head);font-weight:700;font-size:42px;line-height:1.12;letter-spacing:-.01em}
+.h-s{font-family:var(--u-font-head);font-weight:600;font-size:27px;line-height:1.22}
+.mint{color:var(--u-green)}
+.mint-2{color:var(--u-green-2)}
+.dim{color:var(--u-on-dark-2)}
+.dim-l{color:#55707c}
+.red{color:var(--u-red)}
+.red-l{color:var(--u-red-ink)}
+.center{text-align:center}
+.mid{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0 90px}
+.chip{display:inline-block;font-family:var(--u-font-head);font-size:13px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;padding:6px 14px;border-radius:999px;border:1.5px solid var(--u-green);color:var(--u-green)}
+.chip--ink{border-color:var(--u-green-2);color:var(--u-green-2)}
+.chip--warn{border-color:var(--u-amber);color:#8a6300;background:rgba(255,194,75,.16)}
+.pend{display:inline-block;font-family:var(--u-font-body);font-size:14px;color:#8a6300;background:rgba(255,194,75,.20);
+  border:1px dashed var(--u-amber);border-radius:8px;padding:5px 10px;line-height:1.3}
+.s-dark .pend{color:#ffd98a;background:rgba(255,194,75,.10)}
+.pull{border-left:5px solid var(--u-green);padding:8px 0 8px 20px;font-family:var(--u-font-head);font-weight:600;font-size:27px;line-height:1.24}
+.pull--s{font-size:22px;border-left-width:4px;padding-left:16px}
+
+/* Banda «→ Para qué te sirve» — SIEMPRE proyectada */
+.useband{position:absolute;left:0;right:0;bottom:0;min-height:88px;display:flex;align-items:center;gap:18px;padding:14px 56px;
+  background:rgba(31,227,164,.16);border-top:2px solid var(--u-green-2);font-size:20px;line-height:1.3;z-index:3}
+.s-dark .useband{background:rgba(31,227,164,.10);border-top-color:var(--u-green)}
+.useband--tall{min-height:104px}
+.useband .lbl{font-family:var(--u-font-head);font-weight:700;font-size:15px;letter-spacing:.10em;text-transform:uppercase;
+  color:var(--u-green-2);white-space:nowrap;border-right:2px solid rgba(18,201,140,.45);padding-right:18px;line-height:1.2}
+.s-dark .useband .lbl{color:var(--u-green);border-right-color:rgba(31,227,164,.4)}
+
+/* Tarjetas */
+.cards{display:grid;gap:18px}
+.card{background:var(--u-card);border:1px solid var(--u-card-bd);border-radius:14px;padding:20px 22px}
+.s-light .card{background:var(--u-light-card);border:1px solid var(--u-light-bd)}
+.card h3{font-family:var(--u-font-head);font-weight:600;font-size:24px;margin-bottom:7px}
+.card p{font-size:18px;line-height:1.34;color:var(--u-on-dark-2)}
+.s-light .card p{color:#41606b}
+.num{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;
+  background:var(--u-green);color:var(--u-ink);font-family:var(--u-font-head);font-weight:700;font-size:19px;flex:none}
+
+/* Pares término → traducción de oficina */
+.pairs{display:flex;flex-direction:column;gap:16px}
+.pairs .p{display:grid;grid-template-columns:270px 1fr;gap:22px;align-items:baseline}
+.pairs .k{font-family:var(--u-font-head);font-weight:700;font-size:23px;line-height:1.1}
+.pairs .v{font-size:19px;line-height:1.32;color:var(--u-on-dark-2)}
+.s-light .pairs .v{color:#41606b}
+.off{color:var(--u-green-2);font-weight:600}
+.s-dark .off{color:var(--u-green)}
+
+/* Roles (los 8 agentes) */
+.roles{display:grid;grid-template-columns:1fr 1fr;gap:15px 40px}
+.role{padding-bottom:11px;border-bottom:1px solid rgba(255,255,255,.12)}
+.s-light .role{border-bottom-color:var(--u-light-bd)}
+.role .n{font-family:var(--u-mono);font-size:19px;font-weight:600;color:var(--u-green)}
+.s-light .role .n{color:var(--u-green-2)}
+.role .d{font-size:18px;line-height:1.28;color:var(--u-on-dark-2);margin-top:2px}
+.s-light .role .d{color:#41606b}
+
+/* Cita textual de un artefacto real */
+.vb{font-family:var(--u-mono);font-size:17px;line-height:1.42;background:rgba(255,255,255,.05);
+  border-left:3px solid var(--u-green);padding:12px 16px;border-radius:0 8px 8px 0;color:#e7f6f2}
+.s-light .vb{background:var(--u-light-card);border-left-color:var(--u-green-2);color:#20404b}
+.vb .who{display:block;font-family:var(--u-font-head);font-size:14px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--u-green);margin-bottom:5px}
+.s-light .vb .who{color:var(--u-green-2)}
+
+/* Línea de tiempo del proceso de noche */
+.tl{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.tl .big{font-family:var(--u-font-head);font-weight:700;font-size:52px;line-height:1;letter-spacing:-.02em}
+.tl .err{font-family:var(--u-font-head);font-weight:700;font-size:52px;line-height:1;color:var(--u-red);letter-spacing:.02em}
+.tl .ar{font-size:38px;color:var(--u-green)}
+.tl .note{font-size:18px;line-height:1.3;color:var(--u-on-dark-2);max-width:520px}
+
+/* Tabla matriz (versión reducida — la completa vive en la chuleta) */
+table.mx{width:100%;border-collapse:collapse;font-size:19px}
+table.mx th{font-family:var(--u-font-head);font-size:14px;letter-spacing:.12em;text-transform:uppercase;
+  text-align:left;padding:0 16px 10px;color:var(--u-green-2);border-bottom:2px solid var(--u-green)}
+table.mx td{padding:11px 16px;border-bottom:1px solid var(--u-light-bd);vertical-align:top;line-height:1.26}
+table.mx td:first-child{font-weight:600;color:var(--u-ink);width:36%}
+table.mx td.use{color:#12776f;width:32%}
+table.mx td.no{color:var(--u-red-ink);width:32%}
+
+/* Revelado progresivo */
+.step{opacity:0;transform:translateY(10px);transition:opacity .28s ease,transform .28s ease}
+.step.on{opacity:1;transform:none}
+
+@page{size:1280px 720px;margin:0}
+@media print{
+  html,body{background:#fff;overflow:visible;height:auto}
+  #stage{position:static;inset:auto;display:block;overflow:visible;bottom:auto}
+  #deck{width:auto;height:auto;transform:none;box-shadow:none}
+  .slide{display:block !important;position:relative;inset:auto;width:1280px;height:720px;page-break-after:always;break-after:page}
+  #hud,#notes,#blank{display:none !important}
+  .step{opacity:1 !important;transform:none !important}
+}
+</style>
+</head>
+<body>
+<div id="stage"><div id="deck">
+
+<!-- ============ 01 · PORTADA · guion L32 ============ -->
+<section class="slide s-dark" data-sec="Apertura · 3 min">
+  <div class="arc" style="width:820px;height:820px;top:-300px;right:-240px;opacity:.9"></div>
+  <div class="arc" style="width:220px;height:220px;bottom:-90px;left:-70px;opacity:.55"></div>
+  <div style="position:absolute;left:88px;top:146px;right:430px">
+    <div class="logo mint" style="font-size:42px;margin-bottom:60px">ubimia<sup>&reg;</sup></div>
+    <h1 class="h-xl">IA: de qué<br>estamos hablando<br><span class="mint">realmente</span></h1>
+  </div>
+  <div style="position:absolute;left:88px;bottom:92px;font-size:21px" class="dim">
+    45 minutos de conceptos · 20 minutos de caso real
+  </div>
+  <div style="position:absolute;left:88px;bottom:56px;font-size:19px;color:#8fa8b1">
+    Sesión de nivelación · miércoles 05/08/2026 · Juan Luca Santoliquido
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:00 → 0:03 · Bloque 1 · Apertura (3 min)</p>
+    <p class="n-nota">[NOTA] La chuleta se reparte <b>boca abajo</b> mientras entra la gente. Se anuncia en el minuto 1 y no se toca hasta el final.</p>
+    <p>Antes de empezar, dos cosas.</p>
+    <p><b>La primera:</b> tienen un papel boca abajo delante. No lo den vuelta todavía. Es un resumen de todo lo que voy a contar. <b>No hace falta que tomen notas.</b> Todo lo que diga hoy está en ese papel.</p>
+    <p><b>La segunda:</b> una pregunta a mano alzada. ¿A quién le pasó alguna vez que le preguntó algo a ChatGPT, la respuesta sonaba <b>perfecta</b>, y después resultó que estaba mal? <i>(esperar — normalmente levantan la mano casi todos, y con una sonrisa)</i>. Bien. Esa cara que están poniendo es de lo que vamos a hablar hoy.</p>
+    <p>Les hago un contrato para estos 45 minutos. <b>No los voy a convertir en expertos.</b> No se puede y no hace falta. Quiero que salgan de acá con tres cosas:</p>
+    <p><b>Una.</b> Que entiendan todas las palabras cuando alguien hable de IA. <b>Dos.</b> Que sepan elegir la herramienta correcta: hoy hay veinte, y usar la equivocada es la forma más rápida de concluir que esto no sirve. <b>Tres.</b> Que sepan cuándo desconfiar — esta es la importante.</p>
+    <p>Voy a explicar todo desde cero. Si a alguien le parece básico, que aguante diez minutos. Después subimos.</p>
+    <p class="n-nota">[NOTA] Si la sala está fría y nadie levanta la mano, no insistas: “por las caras, veo que a varios sí”, y seguí. No pierdas 40 segundos.</p>
+    <p class="n-src">fuente: GUION_SESION_IA_2026-08-05.md §0 (L28-56)</p>
+  </aside>
+</section>
+
+<!-- ============ 02 · DIVISOR BLOQUE 1 · eje conceptual chat/agente ============ -->
+<section class="slide s-light" data-sec="Bloque 1 · Conceptos básicos de IA · 45 min">
+  <div class="arc" style="width:300px;height:300px;top:-150px;left:-150px"></div>
+  <div class="arc" style="width:300px;height:300px;top:-150px;right:-150px"></div>
+  <div class="arc" style="width:300px;height:300px;bottom:-150px;left:-150px"></div>
+  <div class="arc" style="width:300px;height:300px;bottom:-150px;right:-150px"></div>
+  <div class="mid">
+    <div class="chip chip--ink" style="margin-bottom:28px">Bloque 1 · 45 minutos</div>
+    <h1 class="h-xl mint-2">CHAT o AGENTE</h1>
+    <p class="h-s" style="margin-top:30px;color:var(--u-navy);max-width:880px">
+      Todo lo de hoy cuelga de dos palabras.<br>
+      <b>Un chat opina. Un agente además hace — y repite hasta terminar.</b>
+    </p>
+    <p style="margin-top:22px;font-size:20px;color:#55707c;max-width:760px">
+      Si al final de esta parte distinguís esas dos cosas, y sabés cuándo desconfiar, ya está.
+    </p>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ Bloque 1 · 45 min de reloj, 40 de contenido (el colchón es parte del guion)</p>
+    <p class="n-nota">[NOTA] Regla del día: la palabra que no se entiende arruina todo lo que viene después. <b>Mejor cinco conceptos entendidos que veinte oídos.</b></p>
+    <p>Divisor. Se dice en diez segundos: “de todo el vocabulario de IA, hoy nos alcanza con dos palabras: chat y agente. Todo lo demás cuelga de esas dos.”</p>
+    <p class="n-nota">[NOTA] Esta slide fija el eje. Si en algún momento alguien se pierde, volvés acá: ¿estamos hablando de algo que <b>opina</b> o de algo que <b>hace</b>?</p>
+    <p class="n-src">fuente: README.md (decisiones de diseño) + encuadre pedido para la v2</p>
+  </aside>
+</section>
+
+<!-- ============ 03 · No busca. Predice. + ALUCINACIÓN · guion L85, L139, L167 ============ -->
+<section class="slide s-dark" data-sec="B1 · No busca, predice · alucinación · 9 min">
+  <div class="arc" style="width:700px;height:700px;top:-340px;right:-280px;opacity:.8"></div>
+  <div class="mid" style="bottom:88px">
+    <h1 class="h-xxl">No busca.<br><span class="mint">Predice.</span></h1>
+    <p style="margin-top:26px;font-size:22px;line-height:1.34;color:var(--u-on-dark-2);max-width:900px">
+      Es un autocompletar enorme: elige la palabra más probable. <b>No va a buscar el dato a ningún archivo — lo escribe.</b>
+    </p>
+    <p style="margin-top:26px;font-family:var(--u-font-head);font-weight:700;font-size:34px;letter-spacing:.02em" class="red">
+      ALUCINACIÓN
+    </p>
+    <p style="margin-top:8px;font-size:21px;line-height:1.32;max-width:920px;color:#ffd3d3">
+      Cuando no sabe, no se calla: <b>completa</b>. Y suena exactamente igual de seguro que cuando acierta.
+    </p>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Cada vez que te dé un dato concreto —un número, un nombre, una norma— <b>preguntale de dónde lo sacó</b>. Esa sola costumbre te evita el 90% de los sustos.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:03 → 0:13 · absorbe §1 (¿qué es la IA?), §2 (cómo funciona) y §3 (parada de comprensión)</p>
+    <p class="n-nota">[NOTA] ⚠ Esta slide se queda en pantalla ~9 minutos. <b>Antes de pasar al fichaje nuevo, hacé la parada de comprensión</b> (abajo). No se negocia y no se recorta.</p>
+    <p class="n-h">Lo que va hablado (nada de esto está en pantalla, y está bien así)</p>
+    <p><b>De afuera hacia adentro:</b> <b>Inteligencia Artificial</b> es el círculo grande — un campo académico de los años cincuenta: que una máquina haga algo que, si lo hiciera una persona, diríamos que requiere inteligencia. El corrector del Word es IA. El GPS es IA. El filtro de spam es IA. Adentro está el <b>Machine Learning</b>: programar de toda la vida es “yo escribo las reglas”; el ML lo da vuelta — le muestro diez mil correos que son spam y diez mil que no, y <b>deduce solo</b> las reglas. Más adentro, la <b>IA Generativa</b>: la anterior clasificaba, esta <b>crea</b> texto, imágenes, código, voz. Y en el centro el <b>LLM</b>, “modelo grande de lenguaje”: el motor de ChatGPT, Claude, Gemini, Copilot.</p>
+    <p><b>Un LLM es un autocompletar</b> — el del teclado del móvil. Solo que leyó casi todo el texto público de internet, y es tan grande que para acertar la palabra siguiente tuvo que aprender gramática, lógica, cómo se arma un argumento, algo parecido a razonar. Pero sigue siendo eso: <b>una máquina de predecir qué viene después</b>. No es Google. No tiene una base de datos adentro: <b>genera</b> la respuesta que le parece más probable. Esa frase explica el 90% de las cosas raras que hace.</p>
+    <p class="n-h">Cinco datos de cómo funciona (dichos, no proyectados)</p>
+    <p><b>1. Token:</b> ve pedacitos de palabra, unos cuatro caracteres. Todo se cobra y se mide en tokens. <b>2. Entrenar no es usar:</b> entrenar cuesta cientos de millones y lo hacen cinco empresas en el mundo; usar cuesta céntimos. <b>Nosotros nunca vamos a entrenar nada.</b> <b>3. No tiene memoria:</b> cada conversación arranca de cero — cuando parece acordarse de tu nombre es porque un programa alrededor lo anotó y se lo vuelve a pegar. <b>4. Tiene fecha de corte:</b> de ahí en adelante, o dice que no sabe, o te lo inventa. <b>5. No es determinista:</b> dos veces la misma pregunta, dos respuestas distintas; es de diseño, y se regula con la <b>temperatura</b> (baja para cerrar el mes, alta para una lluvia de ideas). Token, temperatura y fecha de corte están en la chuleta: <b>no hace falta proyectarlos</b>.</p>
+    <p class="n-h">Alucinación</p>
+    <p>Alucina cuando dice algo falso con seguridad absoluta: te inventa una función que no existe, una tabla que no está en la base, un artículo de una ley, una cita con autor y año. ¿Por qué? <b>Su trabajo es que suene bien, no que sea cierto.</b> Y lo peligroso: <b>la IA nunca suena insegura</b>. Un compañero que no sabe duda, se le nota, dice “creo que…”. La IA te dice la barbaridad más grande con la misma calma con la que te dice cuánto es dos más dos. <b>Toda la duda la tenés que poner vos.</b></p>
+    <p class="n-h">Parada de comprensión (1 min) — antes de avanzar</p>
+    <p>Pregunto a la sala, sin señalar a nadie: <b>¿qué significa que la IA “no busca, predice”?</b> <i>(esperar de verdad. Contar hasta cinco. Incomodarse un poco es parte del trabajo.)</i></p>
+    <p><i>(Si contestan bien:)</i> Exacto — y por eso, cuando no sabe algo, no se calla: <b>completa</b>. <i>(Si nadie contesta:)</i> Lo digo yo, porque es la clave de todo: no va a un archivo a buscar la respuesta, <b>la escribe</b>, palabra por palabra, eligiendo la más probable. Por eso a veces escribe algo perfecto y por eso a veces escribe algo perfectamente falso. Es el mismo mecanismo haciendo las dos cosas.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): preguntale siempre de dónde lo sacó.</p>
+    <p class="n-src">fuente: guion §1 (L60-105), §2 (L109-159), §3 (L163-181) · CHULETA “Las 3 frases”</p>
+  </aside>
+</section>
+
+<!-- ============ 04 · Lunes 9:00 · el modelo · guion L190-217 ============ -->
+<section class="slide s-light" data-sec="B1 · 9:00 Entra el fichaje nuevo = el modelo">
+  <div class="arc" style="width:420px;height:420px;bottom:-250px;right:-170px;opacity:.9"></div>
+  <div style="position:absolute;left:80px;top:82px;right:600px">
+    <div class="chip chip--ink" style="margin-bottom:22px">El hilo de toda la charla</div>
+    <h1 class="h-l">Lunes, 9:00.<br>Entra el<br><span class="mint-2">fichaje nuevo.</span></h1>
+    <div class="card" style="margin-top:28px;max-width:520px">
+      <h3 style="color:var(--u-ink)">Lo que trae puesto <span class="off">= el modelo</span></h3>
+      <p>Sabe contabilidad, redactar, inglés, programar. Y <b>no sabe absolutamente nada de nosotros</b>: ni cómo se llama nuestro cliente principal, ni dónde están los archivos, ni que los viernes se cierra a las tres.</p>
+    </div>
+  </div>
+  <svg viewBox="0 0 420 340" style="position:absolute;right:96px;top:158px;width:400px;height:324px" aria-hidden="true">
+    <g fill="none" stroke="#16323C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="14" y="20" width="150" height="290" rx="6"/>
+      <rect x="34" y="44" width="110" height="200" rx="4" stroke="#12C98C"/>
+      <circle cx="132" cy="180" r="6" fill="#12C98C" stroke="none"/>
+      <path d="M196 310h210"/>
+      <rect x="236" y="214" width="150" height="14" rx="5" fill="#8FF1CE" stroke="#16323C"/>
+      <path d="M252 228v82M370 228v82"/>
+      <circle cx="196" cy="132" r="26" fill="#fff"/>
+      <path d="M196 158c-30 0-48 22-48 52v44"/>
+      <path d="M244 254v-44c0-30-18-52-48-52"/>
+      <path d="M170 254v56M222 254v56"/>
+      <path d="M244 214h34" stroke="#12C98C"/>
+      <rect x="276" y="196" width="42" height="34" rx="4" fill="#1FE3A4" stroke="#16323C"/>
+    </g>
+  </svg>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Dejá de buscar “el mejor modelo”. Es como buscar “el mejor licenciado”. <b>La diferencia está en lo que le das después de contratarlo.</b></span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 El corazón de la charla (12 min, momentos 1 a 6)</p>
+    <p class="n-nota">[NOTA] 🎯 <b>El bloque más importante y el que cumple el encargo. No lo recortes.</b> Si vas mal de tiempo, recortá la matriz de modelos, no esto. Y <b>no leas ninguna tabla en voz alta</b>: va contado como historia, hora por hora. La tabla completa está en la chuleta que tienen en la mano.</p>
+    <p>Ahora les cuento todos los conceptos de IA de una sola manera, y no hace falta saber nada de tecnología. <b>Todos ustedes ya incorporaron a alguien alguna vez.</b> Resulta que todo lo que hay que hacer para que una IA sea útil es exactamente lo mismo que hay que hacer para que un fichaje nuevo sea útil. Punto por punto.</p>
+    <p><b>Momento 1 — 9:00.</b> Llega y trae lo que sabe: su carrera, sus años de oficio, su cultura general. Y no sabe nada de nosotros. <b>Eso que trae puesto es el modelo.</b> Es un producto de mercado: muy bueno, muy caro de fabricar, y <b>exactamente igual al que puede contratar la competencia</b>. Todo lo demás que vamos a ver hoy es lo que vos le agregás encima — y ahí sí está tu ventaja.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): dejá de buscar “el mejor modelo”.</p>
+    <p class="n-src">fuente: guion §4 momento 1 (L190-217) · CHULETA fila “Modelo / LLM”</p>
+  </aside>
+</section>
+
+<!-- ============ 05 · 9:15 los papeles en la mesa · guion L219-244 ============ -->
+<section class="slide s-light" data-sec="B1 · 9:15 Los papeles en la mesa">
+  <div class="hd hd--mint">
+    <div><div class="kick">9:15 · el momento más rentable de la charla</div><h2>Le pedís algo y le dejás papeles en la mesa</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:grid;grid-template-columns:330px 1fr;gap:40px;align-items:center">
+    <svg viewBox="0 0 360 300" style="width:100%;height:auto" aria-hidden="true">
+      <g fill="none" stroke="#16323C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="14" y="150" width="332" height="20" rx="6" fill="#8FF1CE"/>
+        <path d="M44 170v110M316 170v110"/>
+        <rect x="96" y="96" width="170" height="54" rx="6" fill="#fff"/>
+        <path d="M96 110h58l14-14h44" fill="#1FE3A4" stroke="#16323C"/>
+        <rect x="120" y="70" width="120" height="30" rx="4" fill="#F1F6F7"/>
+        <path d="M140 82h80M140 92h56" stroke="#8aa2ab" stroke-width="4"/>
+        <rect x="252" y="118" width="76" height="32" rx="4" fill="#F1F6F7"/>
+      </g>
+    </svg>
+    <div>
+      <div class="pairs">
+        <div class="p"><div class="k">Prompt</div><div class="v"><span class="off">Lo que le pedís.</span> <i>“Prepárame el informe de morosidad de julio.”</i></div></div>
+        <div class="p"><div class="k">Contexto</div><div class="v"><span class="off">Los papeles que le dejás en la mesa.</span> El fichero de julio, el informe del mes pasado, el correo del cliente.</div></div>
+        <div class="p"><div class="k">Ventana<br>de contexto</div><div class="v"><span class="off">El tamaño de la mesa.</span> Si le apilás 400 carpetas, las de abajo no las mira. Cuando “se olvida” de algo del principio, no se distrajo: <b>se le cayó de la mesa</b>.</div></div>
+      </div>
+      <div class="pull pull--s" style="margin-top:22px;color:var(--u-ink)">El contexto vale más que la pregunta.<br>La frase mágica no existe.</div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Cuando la respuesta sea floja, <b>no reescribas la pregunta: pegale el documento</b>. Y si la conversación se hizo larga y empezó a decir cosas raras, <b>abrí una nueva</b> y pegale lo importante.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 2 (9:15)</p>
+    <p>Le pedís lo primero: “Prepárame el informe de morosidad de julio.” Esa petición, tal cual la dijiste, es el <b>prompt</b>. Nada más que eso: “prompt” es la palabra de moda para decir <i>lo que le pediste</i>.</p>
+    <p>Si le decís solo eso y te vas, ¿qué te trae? Algo genérico, un informe de morosidad de manual. Pero si le dejás encima de la mesa el fichero de julio, el informe del mes pasado y el correo del cliente, te trae otra cosa completamente distinta. <b>Esos papeles de la mesa son el contexto.</b></p>
+    <p>Y de acá sale la regla más rentable de toda la charla: <b>el contexto vale más que la pregunta</b>. No existe la frase mágica; existe darle el material.</p>
+    <p>Ahora, la mesa <b>tiene un tamaño</b>. Si le apilás cuatrocientas carpetas, las de abajo no las va a mirar. Eso es la <b>ventana de contexto</b>. Por eso en una conversación larguísima el modelo “se olvida” de algo del principio: no se distrajo, se le cayó de la mesa.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): pegale el documento; y si la conversación se desbordó, abrí una nueva.</p>
+    <p class="n-src">fuente: guion §4 momento 2 (L219-244) · CHULETA filas Prompt / Contexto / Ventana de contexto</p>
+  </aside>
+</section>
+
+<!-- ============ 06 · 9:30 las normas de la casa + guardrails · guion L246-262 ============ -->
+<section class="slide s-dark" data-sec="B1 · 9:30 Las normas de la casa">
+  <div class="hd">
+    <div><div class="kick">9:30 · lo que a una persona le decimos el primer día</div><h2>Las normas de la casa</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:flex;flex-direction:column;justify-content:center;gap:20px">
+    <div class="cards" style="grid-template-columns:1fr 1fr">
+      <div class="card">
+        <h3>Instrucciones de sistema <span class="off">= las normas</span></h3>
+        <p>Las reglas permanentes, que no cambian con cada tarea: <i>“Eres analista de riesgos. Escribes siempre en formato informe. No hablas con clientes. Y todo lo que salga de aquí lo firma tu responsable.”</i></p>
+      </div>
+      <div class="card" style="border-color:rgba(255,194,75,.45)">
+        <h3>Guardrails <span class="off">= lo que no puede hacer nunca</span></h3>
+        <p>No autoriza un pago. No le escribe al cliente. No toca el sistema en producción. <b>Barandillas</b>: no son una lista de deseos, son un límite.</p>
+      </div>
+    </div>
+    <p style="font-size:21px;line-height:1.34;color:var(--u-on-dark-2);max-width:1000px">
+      A una persona nueva le decimos esto el primer día y nos parece lo más normal del mundo.
+      <b style="color:#fff">Con la IA hay que hacer exactamente lo mismo — y mucha gente se lo saltea.</b>
+    </p>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Si vas a usar la IA para algo que repetís todas las semanas, <b>escribí una vez las reglas y pegalas siempre al principio</b>. Diez líneas te ahorran corregir lo mismo cuarenta veces.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 3 (9:30)</p>
+    <p>Le explicás cómo funciona esto acá: “Eres analista de riesgos, escribes en formato informe, no hablas con clientes, y todo lo que salga de aquí lo firma tu responsable.” Eso son las <b>instrucciones de sistema</b>: las reglas permanentes. El usuario escribe la petición del momento; <b>la empresa escribe las normas de la casa</b>.</p>
+    <p>Y hay una parte de esas normas que es especial: <b>lo que no puede hacer nunca</b>. No puede autorizar un pago, no puede escribirle al cliente, no puede tocar producción. Eso se llama <b>guardrails</b>, barandillas.</p>
+    <p class="n-nota">[NOTA] Sembrá acá el bloque 2: “en la segunda parte les voy a mostrar las barandillas reales de nuestros agentes, escritas en un archivo, y son casi literalmente esto”.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): escribí las reglas una vez y pegalas siempre.</p>
+    <p class="n-src">fuente: guion §4 momento 3 (L246-262) · CHULETA filas Instrucciones de sistema / Guardrails</p>
+  </aside>
+</section>
+
+<!-- ============ 07 · 10:00 SKILL · guion L264-331 ============ -->
+<section class="slide s-light" data-sec="B1 · 10:00 Skill: el procedimiento de la casa">
+  <div class="hd hd--mint">
+    <div><div class="kick">10:00 · el minuto más valioso para quien no es técnico</div><h2>SKILL — el procedimiento de la casa, escrito</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:flex;flex-direction:column;justify-content:center;gap:20px">
+    <div class="cards" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="card">
+        <h3 style="color:var(--u-ink)">La receta de tu casa</h3>
+        <p>Un cocinero sabe cocinar: <b>eso es el modelo</b>. Para que te haga la paella <i>como la hacía tu madre</i> necesita esas cantidades, ese orden, ese truco del final. <b>La receta de tu casa es la skill.</b></p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--u-ink)">El cierre de mes</h3>
+        <p>Todo contable sabe contabilidad. <b>Ninguno sabe TU cierre:</b> se hace el día 3, primero bancos, el asiento de provisiones lo valida Marta, y el fichero va a esa carpeta con ese nombre.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--u-ink)">La checklist del piloto</h3>
+        <p>El piloto sabe volar y aun así lee la lista en voz alta. La lista no está porque sea malo: <b>está porque es bueno y aun así se le puede pasar algo.</b></p>
+      </div>
+    </div>
+    <div class="pull" style="color:var(--u-ink)">Si no lo podés escribir, tampoco lo vas a poder automatizar.</div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Elegí una cosa que hacés siempre igual y que hoy está <b>solo en tu cabeza</b>, y escribí el procedimiento. Media hora. Sirve con IA, sirve sin IA, y sirve el día que estés de vacaciones.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 4 (10:00) — 🎯 la parte que pidieron expresamente</p>
+    <p>Tu fichaje sabe contabilidad: eso lo trae de fábrica. Pero <b>no tiene ni idea de cómo se cierra el mes acá</b>. Nada de eso está en ninguna carrera: está en la cabeza de la gente que lleva tiempo, o con suerte en un Word que nadie abre. <b>Cuando eso lo escribís y se lo entregás, eso es una skill.</b> No es conocimiento general: es <b>cómo se hace algo, aquí dentro</b>.</p>
+    <p class="n-h">Los otros dos ejemplos (los tengo de repuesto, no están proyectados)</p>
+    <p><b>El protocolo de urgencias del hospital:</b> todo médico sabe medicina — eso es el modelo. El protocolo de <i>este</i> hospital para una parada cardíaca (quién llama, en qué orden, con qué material, quién se queda con la familia) es la skill. Y salva vidas <b>justamente porque no depende de la genialidad de nadie</b>: se hace igual siempre.</p>
+    <p><b>El nuestro:</b> en nuestro flujo hay una skill que se llama “cómo se critica un plan aquí”. Dice: leé el plan, abrí cada archivo que cita y comprobá que existe de verdad, buscá contradicciones entre las fases, comprobá que los criterios se puedan medir en vez de opinar, y emití un veredicto: aprobado o rechazado. <b>Se escribió una vez y ahora lo ejecuta cualquiera de nuestros agentes, igual, todas las veces, sin cansarse.</b> En la segunda parte les muestro lo que encuentra.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): escribí un procedimiento que hoy está solo en tu cabeza. Media hora.</p>
+    <p class="n-src">fuente: guion §4 momento 4 (L264-331) · CHULETA fila Skill ⭐</p>
+  </aside>
+</section>
+
+<!-- ============ 08 · las cuatro que se confunden · guion L315-326 ============ -->
+<section class="slide s-dark" data-sec="B1 · Las cuatro que se confunden">
+  <div class="arc" style="width:520px;height:520px;top:-300px;right:-220px;opacity:.6"></div>
+  <div class="body" style="top:0;bottom:88px;display:flex;flex-direction:column;justify-content:center;padding-left:88px">
+    <div class="chip" style="align-self:flex-start;margin-bottom:32px">La diapositiva para fotografiar</div>
+    <div class="pairs" style="gap:22px">
+      <div class="p" style="grid-template-columns:320px 1fr"><div class="k" style="font-size:34px">Contexto</div><div class="v" style="font-size:25px">los papeles de la mesa · <b style="color:#fff">el QUÉ</b></div></div>
+      <div class="p" style="grid-template-columns:320px 1fr"><div class="k" style="font-size:34px">Skill</div><div class="v" style="font-size:25px">el procedimiento de la casa · <b style="color:#fff">el CÓMO</b></div></div>
+      <div class="p" style="grid-template-columns:320px 1fr"><div class="k" style="font-size:34px">Herramienta</div><div class="v" style="font-size:25px">las llaves y los accesos · <b style="color:#fff">el PODER</b></div></div>
+      <div class="p" style="grid-template-columns:320px 1fr"><div class="k mint" style="font-size:34px">Agente</div><div class="v" style="font-size:25px">quien usa las tres hasta terminar · <b style="color:#fff">el QUIÉN</b></div></div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Quedate<br>con esto</span>
+    <span>Contexto, skill y herramienta son <b>cosas</b>. Agente es <b>quien las usa</b>. Si retienen solo estas cuatro líneas de los 45 minutos, ya valió la pena venir.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 · el cierre del momento 4</p>
+    <p>Estas cuatro cosas se confunden todo el tiempo, así que las digo despacio y las dejo en pantalla unos segundos de más. <b>Contexto</b> = los papeles de la mesa, el QUÉ. <b>Skill</b> = el procedimiento de la casa, el CÓMO. <b>Herramienta</b> = las llaves y los accesos, el PODER — ahora lo vemos. <b>Agente</b> = quien usa las tres cosas hasta terminar, el QUIÉN.</p>
+    <p class="n-nota">[NOTA] Dejá que la fotografíen. Es la slide que más se fotografía y está igual en la chuleta, así que podés decir “esto ya lo tienen en el papel”.</p>
+    <p class="n-src">fuente: guion §4 (L315-326) · CHULETA “Las cuatro que más se confunden”</p>
+  </aside>
+</section>
+
+<!-- ============ 09 · 11:00 CHAT vs AGENTE + herramientas reales · guion L333-372 ============ -->
+<section class="slide s-dark" data-sec="B1 · 11:00 De opinar a hacer: chat vs agente">
+  <div class="hd">
+    <div><div class="kick">11:00 · le das las llaves</div><h2>De opinar a hacer</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:flex;flex-direction:column;gap:18px;padding-top:26px">
+    <div class="cards" style="grid-template-columns:1fr 1fr">
+      <div class="card">
+        <h3>CHAT <span class="dim" style="font-size:18px">· sin llaves</span></h3>
+        <p>Te <b>explica</b> cómo se arregla el problema. Vos copiás, pegás y probás. Todo el trabajo y toda la responsabilidad siguen siendo tuyos. <b>Es el 90% de lo que la gente usa hoy.</b></p>
+      </div>
+      <div class="card" style="border-color:var(--u-green);background:rgba(31,227,164,.08)">
+        <h3 class="mint">AGENTE <span class="dim" style="font-size:18px">· con llaves y con bucle</span></h3>
+        <p>Te lo <b>arregla</b>. Modelo + herramientas + <b>bucle</b>: mira cómo está la cosa, decide, actúa, <b>mira el resultado</b>, ve que salió mal, corrige y vuelve a empezar. Hasta terminar o hasta rendirse.</p>
+      </div>
+    </div>
+    <p style="font-size:19px;line-height:1.34;color:var(--u-on-dark-2)">
+      <b style="color:#fff">Un ejemplo de los nuestros:</b> <i>“el proceso de anoche terminó con error, averiguá por qué”</i> → abre los registros, los cruza con el código, se da cuenta de en qué punto murió, lanza una consulta a la base para confirmarlo y vuelve con el diagnóstico y la línea exacta. <b style="color:#fff">No te contestó una pregunta: te hizo la investigación.</b>
+    </p>
+    <div style="display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.05);border:1px solid var(--u-card-bd);border-radius:12px;padding:14px 18px">
+      <span style="font-family:var(--u-font-head);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--u-green);white-space:nowrap">Los que usa<br>el equipo</span>
+      <span style="font-family:var(--u-font-head);font-weight:700;font-size:23px;color:#fff">Claude Code · Codex · GitHub Copilot Pro</span>
+      <span style="font-size:17px;color:var(--u-on-dark-2)">Tres agentes de código. Cada uno con su forma de trabajar — no son idénticos, pero los tres <b>hacen</b>, no solo opinan.</span>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Antes de pedirle algo, preguntate <b>si tiene acceso a lo que hace falta para saberlo</b>. Porque si no lo tiene, te va a contestar igual — y esa respuesta va a ser inventada. Es la causa número uno de las respuestas malas.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 5 (11:00) + absorbe §6 (la escalera de 4 escalones)</p>
+    <p>Once de la mañana. El fichaje ya sabe qué queremos, cómo son las normas y cuál es el procedimiento. Y todavía <b>no puede hacer nada</b>, porque no tiene acceso a ningún sistema. Lo único que puede hacer es <b>darte consejos</b>. Muy buenos, quizás. Pero consejos.</p>
+    <p>Entonces le das los accesos: el usuario del ERP, la llave del archivo, permiso para lanzar la consulta. <b>Eso son las herramientas</b> — en IA, <i>tools</i>. Es la capacidad de decir “para contestarte esto necesito abrir este fichero”. Y abrirlo de verdad.</p>
+    <p>Y acá pasa el salto más grande de los últimos dos años: <b>un modelo sin herramientas te explica cómo se arregla el problema; un modelo con herramientas te lo arregla.</b> Lo segundo se llama <b>agente</b>. Y ya está: esa es toda la definición — la palabra que todo el mundo usa y casi nadie define. Tres cosas juntas: un modelo, herramientas para actuar, y <b>un bucle</b>.</p>
+    <p class="n-h">Las tres herramientas concretas (nombralas despacio: es lo que se llevan para el lunes)</p>
+    <p><b>Claude Code</b>, <b>Codex</b> y <b>GitHub Copilot Pro</b>. Son los tres agentes de código que usamos. No los pongo como equivalentes exactos: cada uno tiene su forma de trabajar y su sitio. Lo que importa hoy es que los tres son del lado “agente”: les das un objetivo y dan las vueltas necesarias, en vez de devolverte un párrafo para copiar y pegar.</p>
+    <p class="n-h">Dos palabras más, dichas al pasar</p>
+    <p><b>Subagente:</b> pedirle a un compañero que se encargue de una parte — “tú revisa las facturas de proveedores mientras yo sigo”. <b>Multiagente:</b> un equipo con roles — uno propone, otro revisa, otro ejecuta, otro audita. <b>Eso es literalmente lo que les voy a mostrar en la segunda parte.</b></p>
+    <p class="n-nota">[NOTA] Acá va lo que en el guion era “la escalera de cuatro escalones”. Ya no se proyecta porque se solapa con chat-vs-agente. Si querés decirlo: <b>el escalón que más rinde es pasar del chat pelado al asistente que está DENTRO de la herramienta donde ya trabajás</b> — es gratis y es el mayor salto de calidad que se nota.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): preguntate si tiene acceso a lo que hace falta para saberlo.</p>
+    <p class="n-src">fuente: guion §4 momento 5 (L333-372) + §6 (L449-477) · brief del operador (herramientas del equipo)</p>
+  </aside>
+</section>
+
+<!-- ============ 10 · 13:00 grounding + firma · guion L374-401 ============ -->
+<section class="slide s-light" data-sec="B1 · 13:00 “¿De dónde sacaste esto?” · “Yo firmo”">
+  <div class="hd hd--mint">
+    <div><div class="kick">13:00 · te trae el trabajo</div><h2>Le pedís que lo justifique</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:grid;grid-template-columns:1fr 1fr;gap:36px;align-content:center">
+    <div>
+      <div class="h-m" style="color:var(--u-ink)">“¿De dónde<br>sacaste esto?”</div>
+      <div class="pairs" style="margin-top:22px">
+        <div class="p" style="grid-template-columns:1fr"><div class="k mint-2">Grounding = anclaje</div>
+          <div class="v" style="margin-top:6px">Obligarlo a apoyarse en <b>algo verificable</b> en vez de responder de memoria. Dos formas: dejarle consultar el archivador antes de contestar, y <b>exigirle que cite</b> el documento, la página, la línea.</div></div>
+      </div>
+      <div class="chip chip--ink" style="margin-top:20px">La segunda parte de la charla es entera sobre esto</div>
+    </div>
+    <div>
+      <div class="h-m" style="color:var(--u-ink)">“Yo firmo.”</div>
+      <div class="pairs" style="margin-top:22px">
+        <div class="p" style="grid-template-columns:1fr"><div class="k mint-2">Human-in-the-loop = la firma del responsable</div>
+          <div class="v" style="margin-top:6px"><b>El agente prepara. La persona firma.</b> Es el principio de diseño más importante de todo lo que voy a mostrar. Y como la firma es tuya, <b>la responsabilidad también</b>: las dos caras van juntas.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Incorporá una sola pregunta a tu rutina: <b>“¿de dónde sacaste esto?”</b>. Si no te lo puede señalar, no lo sabe: lo está <i>sonando bien</i>.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 6 (13:00) + “y al día siguiente…”</p>
+    <p>Una de la tarde. Te trae el informe. Y hacés lo que harías con cualquiera: <b>le pedís que lo justifique</b>. “Este número de aquí, ¿de dónde salió? Enseñame el expediente.” <b>Eso se llama grounding</b>, anclaje.</p>
+    <p>Tiene dos formas prácticas. <b>Una:</b> dejarle consultar el archivador en vez de responder de cabeza — cuando eso se hace con documentos tiene un nombre técnico, <b>RAG</b>, y es lo que hay debajo de todos los “chatbots que responden sobre nuestra documentación”. La sigla está en la chuleta; <b>no la proyecto porque no aporta nada en pantalla</b>. <b>Dos:</b> exigirle que cite: documento, página, línea.</p>
+    <p>Retengan la palabra <b>grounding</b>, porque la segunda parte de la charla es entera sobre esto.</p>
+    <p>Y lo último del día: el informe lo firmás <b>vos</b>. Él lo prepara, la firma es de una persona. Eso es <b>human-in-the-loop</b>, humano en el bucle. Y como la firma es tuya, la responsabilidad también.</p>
+    <p class="n-h">Y al día siguiente…</p>
+    <p>Martes, nueve de la mañana. Llega otra vez. Y <b>no se acuerda de nada</b>: ni de vos, ni del informe, ni de lo que le corregiste. Si querés que se acuerde, <b>tenés que darle un cuaderno</b> — y el cuaderno no es él: se lo ponemos nosotros por fuera. Todas las herramientas serias de IA hoy son, en el fondo, un modelo más un cuaderno bien organizado. <b>Esto lo remato en la slide siguiente</b>, que es donde se rompe la comparación.</p>
+    <p class="n-use">→ Para qué te sirve (proyectado): “¿de dónde sacaste esto?”. Si no lo puede señalar, no lo sabe.</p>
+    <p class="n-src">fuente: guion §4 momento 6 (L374-401) y “al día siguiente” (L403-413) · CHULETA filas Grounding / RAG / Memoria / Human-in-the-loop</p>
+  </aside>
+</section>
+
+<!-- ============ 11 · dónde se rompe la comparación · guion L417-445 · INNEGOCIABLE ============ -->
+<section class="slide s-light" data-sec="B1 · Dónde se rompe la comparación ⚠">
+  <div class="hd">
+    <div><div class="kick">La analogía es útil — y es peligrosa</div><h2>Dónde se rompe la comparación</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u2" style="display:flex;flex-direction:column;justify-content:center;gap:16px">
+    <p style="font-size:21px;color:#41606b">Un compañero nuevo se parece a una IA en casi todo. <b style="color:var(--u-ink)">Menos en tres cosas — y son las que cuestan caro.</b></p>
+    <div class="cards" style="grid-template-columns:1fr 1fr 1fr;gap:20px">
+      <div class="card" style="border-color:#f0c9c9;background:#FDF3F3">
+        <h3 style="color:var(--u-red-ink)">1 · Dice “no lo sé”</h3>
+        <p>Tu compañero duda y se le nota. <b>La IA, cuando no sabe, completa</b> — con el mismo tono que cuando acierta. No te está mintiendo: <b>no tiene ni idea de que no sabe</b>. Es peor.</p>
+      </div>
+      <div class="card" style="border-color:#f0c9c9;background:#FDF3F3">
+        <h3 style="color:var(--u-red-ink)">2 · Aprende de tus correcciones</h3>
+        <p>A una persona le explicás algo el lunes y el martes ya lo sabe. <b>La IA arranca de cero cada vez.</b> Corregirla solo mejora <i>esa</i> conversación. Si querés que se acuerde, hay que darle un cuaderno <span class="off">(= memoria)</span> — y <b>el cuaderno se lo ponemos nosotros por fuera</b>.</p>
+      </div>
+      <div class="card" style="border-color:#f0c9c9;background:#FDF3F3">
+        <h3 style="color:var(--u-red-ink)">3 · Tiene sentido de la responsabilidad</h3>
+        <p>Una persona sabe que si se equivoca hay consecuencias, y va con cuidado en lo importante. <b>La IA pone el mismo cuidado en corregir una coma que en tocar producción.</b> Ninguna diferencia.</p>
+      </div>
+    </div>
+  </div>
+  <div class="useband useband--tall">
+    <span class="lbl">Por eso</span>
+    <span>Las barandillas y la firma humana no son burocracia: <b>son el único sentido de la responsabilidad que hay en el sistema, y se lo ponemos nosotros desde fuera.</b> Con estas tres roturas en la cabeza, la comparación del fichaje es utilísima. Sin ellas, es una trampa.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:25 → 0:28 · §5 Dónde se rompe la comparación (3 min)</p>
+    <p class="n-nota">[NOTA] ⚠ <b>No te saltees esta sección jamás</b> (y el README lo marca como innegociable). La analogía del fichaje es tan cómoda que si la dejás correr sin frenarla, la sala sale pensando “es como un compañero nuevo” — y ese modelo mental lleva a <b>confiar por defecto</b>, justo lo contrario del objetivo. Va acá, en el pico de simpatía de la comparación: ahí es donde pega.</p>
+    <p>Ahora tengo que frenar la comparación, porque me gusta demasiado y es peligrosa. El fichaje se parece a una IA en muchas cosas. Y hay <b>tres</b> donde no se parece en nada.</p>
+    <p><b>Una.</b> Tu compañero nuevo dice “no lo sé”; la IA no. Cuando no sabe, <b>completa</b>, con el mismo tono de seguridad. No te miente: no tiene ni idea de que no sabe.</p>
+    <p><b>Dos.</b> Tu compañero aprende de lo que le corregís; la IA no. Arranca de cero cada vez, salvo que alguien haya construido el cuaderno por fuera. <b>Acá cierro lo de la memoria del martes por la mañana.</b></p>
+    <p><b>Tres.</b> Tu compañero tiene sentido de la responsabilidad; la IA no tiene ninguno. El mismo cuidado en una coma que en producción.</p>
+    <p>Por eso las barandillas y la firma no son burocracia: <b>son el único sentido de la responsabilidad que hay en el sistema</b>, y se lo ponemos nosotros desde fuera.</p>
+    <p class="n-src">fuente: guion §5 (L417-445) · CHULETA “Dónde se rompe la comparación ⚠️” · README.md (no recortar)</p>
+  </aside>
+</section>
+
+<!-- ============ 12 · qué uso para qué (matriz reducida) · guion L481-551 ============ -->
+<section class="slide s-light" data-sec="B1 · Qué uso para qué · 5 min">
+  <div class="hd hd--mint">
+    <div><div class="kick">La otra que se fotografía</div><h2>Qué uso para qué</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:26px">
+    <table class="mx">
+      <thead><tr><th>Lo que necesito hacer</th><th>Lo que uso</th><th>Lo que NO uso</th></tr></thead>
+      <tbody>
+        <tr><td>Redactar, reformular, resumir</td><td class="use">Un chat normal</td><td class="no">Nada más caro</td></tr>
+        <tr><td>Preguntar sobre <b>nuestros</b> documentos</td><td class="use">Algo que lea los documentos y <b>cite</b></td><td class="no">El chat pelado: te lo inventa</td></tr>
+        <tr><td>Hacer lo mismo en 40 sitios</td><td class="use">Un agente</td><td class="no">El chat, 40 veces</td></tr>
+        <tr><td>Que cuadren las cifras</td><td class="use">Excel, una consulta, una calculadora</td><td class="no">Cualquier IA</td></tr>
+        <tr><td>Datos de clientes o personales</td><td class="use">Plan de empresa, o un modelo en casa</td><td class="no">La versión gratuita</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:16px;font-size:17px;color:#7c959e">La tabla completa está en la chuleta que tienen en la mano. Acá van solo las cinco filas que más se equivocan.</p>
+  </div>
+  <div class="useband useband--tall">
+    <span class="lbl">Los tres<br>tamaños</span>
+    <span><b>Pequeño = el becario</b> (masivo y simple) · <b>Mediano = el analista</b> (el 90% del trabajo) · <b>Grande = el socio</b> (lo difícil de verdad).<br>
+    <b>No mandes al socio a hacer fotocopias, y no le pidas al becario que diseñe la estrategia.</b> Empezá por el mediano; bajá si es masivo; subí solo si el mediano te falló.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:28 → 0:37 · absorbe §7 (modelos y tecnologías) y §8 (la matriz)</p>
+    <p class="n-nota">[NOTA] <b>No leas la tabla en voz alta.</b> Está proyectada y está en la chuleta. Comentá solo dos filas y hablá de los tamaños.</p>
+    <p><b>La fila que más sorprende: cuadrar cifras. La IA es mala en aritmética.</b> Está prediciendo texto, no calculando. Si necesitás que cuadre: que la IA escriba la fórmula o la consulta, y que el cálculo lo haga el Excel o la base. <b>Que sume ella, nunca.</b></p>
+    <p><b>Datos sensibles.</b> La regla mental más simple que conozco: <i>“¿esto lo pondría en un correo a un proveedor de fuera?”</i> Si la respuesta es no, no lo pegues en un chat gratuito.</p>
+    <p class="n-h">Del mercado, lo único que no caduca (dicho, no proyectado)</p>
+    <p>Hay cinco o seis familias grandes: <b>Claude</b> (Anthropic, fuerte en código y trabajo agéntico — la que usamos), <b>GPT</b> (OpenAI, la más generalista), <b>Gemini</b> (Google, muy integrada con documentos y correo), y las abiertas <b>Llama</b>, <b>Mistral</b>, <b>DeepSeek</b>, que te podés descargar. <b>Todas tienen los mismos tres tamaños</b>: cambia el nombre comercial, no la idea. El error del que empieza es usar siempre el más caro por las dudas; el error contrario es peor: usás el más barato, te da respuestas flojas y concluís que la IA no sirve.</p>
+    <p><b>Nube o local.</b> En la nube: mejor calidad, cero infraestructura, pagás por uso. Y la aclaración que resuelve la mitad de las discusiones sobre confidencialidad: <b>en los planes de empresa el contrato dice explícitamente que no entrenan con tus datos; en las versiones gratuitas, sí pueden. No son el mismo producto aunque se llamen igual.</b> En nuestra casa: el dato no sale nunca, a cambio de hardware, mantenimiento y un escalón menos de calidad. Para lo verdaderamente sensible, es el camino.</p>
+    <p class="n-nota">[NOTA] ⚠ Refrescá nombres y versiones el 04/08. Y si vas mal de tiempo, <b>esta es la slide que se recorta</b> a 2 minutos: decís los tres tamaños y la regla del becario/analista/socio, y seguís.</p>
+    <p class="n-src">fuente: guion §7 (L481-521) y §8 (L527-551) · CHULETA “Qué uso para qué” + “Los tres tamaños”</p>
+  </aside>
+</section>
+
+<!-- ============ 13 · las 6 reglas + cuándo NO · guion L552-581 ============ -->
+<section class="slide s-dark" data-sec="B1 · Las 6 reglas">
+  <div class="hd">
+    <div><div class="kick">Valen igual para técnicos y no técnicos</div><h2>Las 6 reglas</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:26px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 44px">
+      <div style="display:flex;gap:14px;align-items:baseline"><span class="num">1</span><div><div style="font-family:var(--u-font-head);font-weight:600;font-size:23px">Contexto antes que astucia</div><div style="font-size:18px;color:var(--u-on-dark-2);line-height:1.28">Pegale el documento, el correo entero, el error completo. <b>No tu resumen.</b></div></div></div>
+      <div style="display:flex;gap:14px;align-items:baseline"><span class="num">2</span><div><div style="font-family:var(--u-font-head);font-weight:600;font-size:23px">Pedí el formato</div><div style="font-size:18px;color:var(--u-on-dark-2);line-height:1.28"><i>“Como tabla, con estas cuatro columnas”</i> vale más que <i>“hacelo bien”</i>.</div></div></div>
+      <div style="display:flex;gap:14px;align-items:baseline"><span class="num">3</span><div><div style="font-family:var(--u-font-head);font-weight:600;font-size:23px">Dale un ejemplo</div><div style="font-size:18px;color:var(--u-on-dark-2);line-height:1.28">Uno o dos de cómo se ve una respuesta buena. Es lo que mejor funciona y casi nadie lo hace.</div></div></div>
+      <div style="display:flex;gap:14px;align-items:baseline"><span class="num">4</span><div><div style="font-family:var(--u-font-head);font-weight:600;font-size:23px">Por pasos, no de un salto</div><div style="font-size:18px;color:var(--u-on-dark-2);line-height:1.28">Que analice → mirás → que proponga → mirás → que ejecute. <b>Cada revisión intermedia es un error que no llegó a producción.</b></div></div></div>
+      <div style="display:flex;gap:14px;align-items:baseline"><span class="num">5</span><div><div style="font-family:var(--u-font-head);font-weight:600;font-size:23px">Verificá lo verificable</div><div style="font-size:18px;color:var(--u-on-dark-2);line-height:1.28"><i>“¿De dónde sacaste esto?”</i> Si no lo puede señalar, no lo sabe.</div></div></div>
+      <div style="display:flex;gap:14px;align-items:baseline"><span class="num">6</span><div><div style="font-family:var(--u-font-head);font-weight:600;font-size:23px">Nada irreversible sin firma humana</div><div style="font-size:18px;color:var(--u-on-dark-2);line-height:1.28">Borrar, enviar, tocar producción, contestarle a un cliente.</div></div></div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Cuándo<br>NO usarla</span>
+    <span>Cuando hay <b>responsabilidad legal</b> · cuando necesitás <b>exactitud numérica</b> · cuando <b>no vas a poder verificar</b> el resultado · cuando <b>explicarla cuesta más que hacerla</b>.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:37 → 0:42 · §8 · las seis reglas + cuándo no usarla</p>
+    <p>Seis reglas, y valen igual para técnicos y no técnicos. Las leo rápido porque están proyectadas y en la chuleta; me detengo solo en la cuatro y la cinco.</p>
+    <p><b>La cuatro, por pasos:</b> primero que analice, lo mirás; después que proponga, lo mirás; después que ejecute. Cada revisión intermedia es un error que no llegó a producción.</p>
+    <p><b>La cinco, verificá lo verificable:</b> suena obvio, y es lo que menos se hace — precisamente porque la respuesta <i>suena</i> muy bien.</p>
+    <p><b>Cuándo no usarla</b>, para equilibrar: una charla de IA donde todo es maravilloso no hay que creérsela. Responsabilidad legal (te ayuda a preparar, no decide) · exactitud numérica · cuando no vas a poder verificar el resultado (estás delegando a ciegas) · cuando explicarle la tarea cuesta más que hacerla, que pasa más de lo que parece.</p>
+    <p class="n-nota">[NOTA] Si vas corto de tiempo, de los cuatro “cuándo no” decí dos: <b>cálculo exacto</b> y <b>si no lo podés verificar</b>.</p>
+    <p class="n-src">fuente: guion §8 (L552-581) · CHULETA “Las 6 reglas” + “Cuándo NO usarla”</p>
+  </aside>
+</section>
+
+<!-- ============ 14 · cierre bloque 1: tres frases + el lunes · guion L584-610 ============ -->
+<section class="slide s-dark" data-sec="B1 · Cierre: tres frases y el lunes · 2 min">
+  <div class="arc" style="width:600px;height:600px;top:-300px;right:-240px;opacity:.7"></div>
+  <div class="body" style="top:0;bottom:104px;display:flex;flex-direction:column;justify-content:center;padding-left:88px">
+    <div class="chip" style="align-self:flex-start;margin-bottom:30px">Si se olvidan de todo, quédense con tres frases</div>
+    <div class="pairs" style="gap:26px">
+      <div class="p" style="grid-template-columns:64px 1fr"><div class="k mint" style="font-size:40px">1</div><div class="v" style="font-size:31px;color:#fff;font-family:var(--u-font-head);font-weight:600">No busca, predice. <span class="dim" style="font-size:20px;font-family:var(--u-font-body);font-weight:400">Por eso alucina, por eso suena seguro, por eso hay que anclarlo a hechos.</span></div></div>
+      <div class="p" style="grid-template-columns:64px 1fr"><div class="k mint" style="font-size:40px">2</div><div class="v" style="font-size:31px;color:#fff;font-family:var(--u-font-head);font-weight:600">El contexto vale más que el prompt. <span class="dim" style="font-size:20px;font-family:var(--u-font-body);font-weight:400">Dale material. No busques la frase mágica.</span></div></div>
+      <div class="p" style="grid-template-columns:64px 1fr"><div class="k mint" style="font-size:40px">3</div><div class="v" style="font-size:31px;color:#fff;font-family:var(--u-font-head);font-weight:600">La IA no duda. <span class="dim" style="font-size:20px;font-family:var(--u-font-body);font-weight:400">La duda la ponés vos — y mejor si la ponés en el proceso, no en tu fuerza de voluntad.</span></div></div>
+    </div>
+  </div>
+  <div class="useband useband--tall">
+    <span class="lbl">El lunes</span>
+    <span><b>Si escribís código:</b> el asistente <b>dentro</b> del editor — Claude Code, Codex o GitHub Copilot Pro. Es el salto de calidad más grande que vas a notar.<br>
+    <b>Si no escribís código:</b> tus documentos en algo que te deje preguntarles <b>con citas</b>, una semana de preguntas reales. <b>Los dos:</b> escribí un procedimiento que hoy está solo en tu cabeza.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:42 → 0:44 · §9 Cierre del bloque 1 (2 min)</p>
+    <p>Si se olvidan de todo, quédense con tres frases: <b>no busca, predice</b> · <b>el contexto vale más que el prompt</b> · <b>la IA no duda, la duda la ponés vos</b>.</p>
+    <p>Y una cosa para hacer esta semana, según lo que hagan. <b>Si escribís código:</b> usá el asistente dentro del editor, no en una pestaña aparte. <b>Si no escribís código:</b> agarrá los documentos con los que trabajás y metelos en una herramienta que te deje preguntarles con citas — para quien no programa es, de lejos, lo de mayor impacto. Y los dos: <b>elegí un procedimiento que hoy está solo en tu cabeza y escribilo</b>. Media hora.</p>
+    <p>Ahora les muestro cómo se ve todo esto en dos proyectos reales. Con producción real. Y con lo que salió mal, que es la parte que más se aprende.</p>
+    <p class="n-nota">✅ <b>Checkpoint:</b> si llegás acá pasados los 44 minutos, arrancá el bloque 2 igual. No recuperes tiempo hablando más rápido: recortá contenido (la slide de “qué uso para qué” es la primera candidata).</p>
+    <p class="n-src">fuente: guion §9 (L584-612) · CHULETA “Las 3 frases” + “Para hacer esta semana”</p>
+  </aside>
+</section>
+
+<!-- ============ 15 · DIVISOR BLOQUE 2 ============ -->
+<section class="slide s-light" data-sec="Bloque 2 · La operatoria de Stacky · 20 min">
+  <div class="arc" style="width:300px;height:300px;top:-150px;left:-150px"></div>
+  <div class="arc" style="width:300px;height:300px;top:-150px;right:-150px"></div>
+  <div class="arc" style="width:300px;height:300px;bottom:-150px;left:-150px"></div>
+  <div class="arc" style="width:300px;height:300px;bottom:-150px;right:-150px"></div>
+  <div class="mid">
+    <div class="chip chip--ink" style="margin-bottom:28px">Bloque 2 · 20 minutos</div>
+    <h1 class="h-xl mint-2">LA OPERATORIA</h1>
+    <p class="h-s" style="margin-top:28px;color:var(--u-navy);max-width:900px">
+      Agentes dentro del ciclo real de desarrollo, en dos clientes:<br><b>RSPACIFICO</b> y <b>RSSICREA</b>.
+    </p>
+    <p style="margin-top:20px;font-size:20px;color:#55707c;max-width:820px">
+      Mismo hilo que la primera parte: la oficina. Solo que ahora la plantilla es entera.
+    </p>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ Bloque 2 · 20 min de reloj, 18 de contenido</p>
+    <p class="n-nota">[NOTA] ⚠ Este es el bloque donde más fácil te pasás. Regla dura: <b>si a los 9 minutos no arrancaste con el proceso de noche de Pacífico, saltá lo que sea.</b> Y regla de vocabulario: <b>todo término técnico se traduce en el momento, en media frase</b> — la mitad de la sala no sabe qué es un rollback, y ese es justo el dato que tiene que impresionar.</p>
+    <p>Presentación del bloque en dos frases: “Esto es lo mismo que acabamos de ver, pero con la plantilla completa y en dos clientes de verdad. Se llama <b>Stacky</b>: es nuestro sistema para que agentes trabajen sobre el ciclo real de desarrollo del producto RS.”</p>
+    <p class="n-src">fuente: guion bloque 2 (L617-620) · Stacky Agents/backend/Stacky/agents/ (evidencia en disco)</p>
+  </aside>
+</section>
+
+<!-- ============ 16 · el punto de partida · guion L622-641 ============ -->
+<section class="slide s-light" data-sec="B2 · El punto de partida · 2 min">
+  <div class="hd hd--mint">
+    <div><div class="kick">El punto de partida</div><h2>El fichaje que tarda semanas</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:flex;flex-direction:column;justify-content:center;gap:20px">
+    <div class="cards" style="grid-template-columns:1fr 1fr">
+      <div class="card">
+        <h3 style="color:var(--u-ink)">El producto</h3>
+        <p><b>RS</b> tiene muchos años encima y funciona en varios clientes. Una parte web, y procesos que corren <b>de noche</b> <span class="off">(“batch”)</span> moviendo millones de registros. Y una base de datos con cientos de tablas cuyas convenciones <b>no están escritas en ningún lado</b>: están en la cabeza de la gente que lleva tiempo.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--u-ink)">La escena de siempre</h3>
+        <p>Entra alguien nuevo, le dan una tarea, y tarda <b>semanas</b> en poder tocar algo con confianza. Y el que lleva tiempo <b>es cuello de botella de todo el mundo</b>. Es exactamente el fichaje de la primera parte — pero con nómina.</p>
+      </div>
+    </div>
+    <div class="pull" style="color:var(--u-ink)">El encargo no fue “usemos ChatGPT”. Fue: ¿podemos meter agentes dentro del ciclo real de desarrollo —nuestras tareas, nuestro código— <span class="mint-2">sin romper nada y sin que nadie firme a ciegas?</span></div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Adelanto la<br>conclusión</span>
+    <span>Se puede. Pero <b>el trabajo no está donde uno cree: no está en el modelo, está en todo lo que hay que construir alrededor.</b> Que es, exactamente, lo que vimos en la primera parte.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:00 → 0:02 · El punto de partida (2 min)</p>
+    <p>Contexto para los que no están en el día a día. RS es un producto con muchos años, funcionando en varios clientes: una parte web, y procesos que corren de noche —lo que llamamos <i>batch</i>— moviendo millones de registros contra bases enormes. Y una base de datos con cientos de tablas, con convenciones propias que no están escritas en ningún lado.</p>
+    <p>El escenario típico: entra alguien nuevo, le dan una tarea, y tarda semanas en poder tocar algo con confianza. Y el que lleva tiempo es cuello de botella de todo el mundo.</p>
+    <p>El encargo fue incómodo: <b>¿podemos meter agentes dentro del ciclo real de desarrollo, sobre nuestras tareas y nuestro código, sin romper nada y sin que nadie firme a ciegas?</b> Adelanto la conclusión: se puede, pero el trabajo no está en el modelo — está alrededor.</p>
+    <p class="n-src">fuente: guion B2 §1 (L622-641)</p>
+  </aside>
+</section>
+
+<!-- ============ 17 · los 8 agentes de Stacky ============ -->
+<!-- fuente verificada: Stacky Agents/backend/Stacky/agents/manifest.json (8 agentes, descripciones textuales) -->
+<section class="slide s-dark" data-sec="B2 · La plantilla completa: 8 agentes con nombre">
+  <div class="hd">
+    <div><div class="kick">Stacky · un archivo por puesto</div><h2>La plantilla completa: ocho puestos con nombre</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:24px">
+    <div class="roles">
+      <div class="role"><div class="n">BusinessAgent</div><div class="d">El que escucha al cliente —un correo, una nota de reunión— y escribe <b>qué se pide</b>.</div></div>
+      <div class="role"><div class="n">IncidentAnalyst</div><div class="d">El que desarma una incidencia con <b>capturas y registros</b> y la deja lista para trabajar.</div></div>
+      <div class="role"><div class="n">FunctionalAnalyst</div><div class="d">El que define <b>qué tiene que pasar y cómo se comprueba</b>.</div></div>
+      <div class="role"><div class="n">QAUat1</div><div class="d">El que <b>lo prueba en la pantalla real</b>, como lo haría un usuario.</div></div>
+      <div class="role"><div class="n">TechnicalAnalyst.v2</div><div class="d">El que dice <b>qué archivos y qué tablas se tocan</b>, y con qué pruebas.</div></div>
+      <div class="role"><div class="n">DevOpsAgent</div><div class="d">El que prepara la puesta en marcha y <b>espera tu CONFIRMO</b>.</div></div>
+      <div class="role"><div class="n">Developer</div><div class="d">El que <b>escribe el cambio</b> en el código.</div></div>
+      <div class="role"><div class="n">Documentador</div><div class="d">El que escribe la documentación <b>sin inventar</b>.</div></div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Cada puesto es <b>un archivo de texto</b>: <span style="font-family:var(--u-mono);font-size:18px">Developer.agent.md</span>, <span style="font-family:var(--u-mono);font-size:18px">QAUat1.agent.md</span>… Es la <b>skill de la primera parte, una por puesto</b>: las normas de la casa, escritas una vez y ejecutadas siempre igual.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:02 → 0:04 · el bucle 1: el ciclo de vida de una tarea</p>
+    <p>El flujo tiene dos bucles, y me interesa que se distingan. <b>Bucle 1: el ciclo de vida de una tarea.</b> Una cadena de agentes especializados, cada uno con su rol, sus normas de la casa y su acceso a la documentación. Ocho puestos, y cada puesto es un archivo.</p>
+    <p>Nombrálos rápido, con la traducción de oficina que está en pantalla. Si alguien pregunta por los nombres en inglés: son los nombres reales de los archivos, no los traduzco para que quien los vea en pantalla los reconozca.</p>
+    <p class="n-h">Lo que dice el manifiesto de cada uno (por si preguntan)</p>
+    <p><b>BusinessAgent:</b> convierte texto libre del cliente (briefs, transcripciones, notas) en una épica de negocio con requisitos numerados; ante una ambigüedad asume la interpretación más razonable y sigue, dejándolo dicho. <b>FunctionalAnalyst:</b> analiza épicas y genera análisis funcional + plan de pruebas. <b>TechnicalAnalyst.v2:</b> traduce funcional → técnico, define alcance, plan de pruebas y pruebas unitarias. <b>Developer:</b> implementa lo que describió el técnico y deja rastro en el código. <b>QAUat1:</b> prueba tickets ya desarrollados sobre la pantalla real. <b>IncidentAnalyst:</b> funde negocio, funcional y técnico en una sola pasada sobre una incidencia con texto, capturas y registros. <b>DevOpsAgent:</b> diagnostica, propone y espera; es multi-turno. <b>Documentador:</b> documentación anti-alucinación.</p>
+    <p><b>Y el detalle que es la mitad de la adopción:</b> todo esto corre <b>sobre el gestor de tareas que el equipo ya usa</b> y el resultado vuelve ahí, como tarea o como comentario. No es un chat aparte del que después hay que copiar y pegar. <b>En cada salto entre agentes hay una persona que aprueba.</b></p>
+    <p class="n-src">fuente: Stacky Agents/backend/Stacky/agents/manifest.json + los 8 archivos *.agent.md · guion B2 §2 bucle 1 (L645-667)</p>
+  </aside>
+</section>
+
+<!-- ============ 18 · los guardrails REALES · verbatim de los .agent.md ============ -->
+<section class="slide s-dark" data-sec="B2 · Lo que el fichaje NO puede hacer nunca">
+  <div class="hd">
+    <div><div class="kick">Los guardrails de la primera parte, en un archivo</div><h2>Lo que NO puede hacer nunca</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:16px 24px;align-content:center">
+    <div class="vb"><span class="who">Developer</span>“NO crea archivos locales fuera de <b>Agentes/outputs</b>. NO ejecuta <b>DML</b>. NO se conecta al tracker directamente.”</div>
+    <div class="vb"><span class="who">Analista técnico</span>“✅ Solo <b>SELECT</b>. ❌ Nunca DML/DDL.” · “NO creás archivos locales. NO ejecutás DML. NO te conectás al tracker directamente.”</div>
+    <div class="vb"><span class="who">DevOpsAgent</span>“Multi-turno — propone y espera; <b>NUNCA ejecuta acciones mutantes sin la palabra CONFIRMO del operador</b>.”</div>
+    <div class="vb"><span class="who">BusinessAgent</span>“NO toca ADO — <b>Stacky publica la épica con la aprobación del operador</b>.”</div>
+    <div style="grid-column:1 / -1;font-size:18px;color:var(--u-on-dark-2);line-height:1.34">
+      <b style="color:#fff">Traducción, palabra por palabra:</b>
+      <b>DML</b> <span class="off">= las órdenes que cambian datos: insertar, actualizar, borrar</span> — solo puede <b>leer</b>.
+      <b>Tracker</b> <span class="off">= el gestor de tareas</span> — no publica nada por su cuenta.
+      <b>Acción mutante</b> <span class="off">= algo que cambia el mundo real</span> — necesita que una persona escriba <b>CONFIRMO</b>.
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Por eso<br>funciona</span>
+    <span>No borra, no escribe en la base, no publica y no despliega sin que una persona lo diga. <b>Es el primer día de cualquier fichaje — pero escrito, igual para todos, y sin depender de que ese día alguien se acuerde de decirlo.</b></span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:04 → 0:06 · las barandillas reales</p>
+    <p>Esto es la slide de los guardrails de la primera parte, pero de verdad. <b>Son citas textuales de los archivos de nuestros agentes</b>, no un resumen mío. Y fíjense que están escritas igual que las normas del primer día de una persona nueva.</p>
+    <p class="n-nota">[NOTA] ⚠ Traducí <b>DML</b> en el momento (“las órdenes que cambian datos: insertar, actualizar, borrar”) y <b>tracker</b> (“el gestor de tareas: Azure DevOps, Jira, Mantis”). Si no lo traducís, esta slide no le sirve a la mitad de la sala.</p>
+    <p>El técnico y el desarrollador <b>pueden mirar la base de datos, pero solo leer</b>. Si hace falta cambiar un dato, no lo cambian: <b>escriben la sentencia y la firma una persona</b>. El de DevOps propone un despliegue y se queda esperando la palabra CONFIRMO. El de negocio no publica en el gestor de tareas: prepara la épica y publica Stacky <i>después</i> de que el operador aprueba.</p>
+    <p>Y una cosa que a mí me parece la más elegante: el desarrollador <b>no puede crear archivos donde quiera</b>. Solo dentro de su carpeta de salidas. Es el equivalente a “podés dejar tus borradores en esta bandeja, no en el escritorio de los demás”.</p>
+    <p class="n-src">fuente verbatim: agents/manifest.json (descripciones de Developer, DevOpsAgent, BusinessAgent) · TechnicalAnalyst.v2.agent.md §ROL y §4 “Base de datos (SOLO SELECT)”</p>
+  </aside>
+</section>
+
+<!-- ============ 19 · el bucle 2 + 7 de 7 · guion L669-703 ============ -->
+<section class="slide s-light" data-sec="B2 · Proponer → Criticar → Implementar → Supervisar">
+  <div class="hd hd--mint">
+    <div><div class="kick">El bucle que da la calidad · cada paso, otro agente</div><h2>El que redacta · el que audita · el que ejecuta · el que firma la recepción</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:22px;display:flex;flex-direction:column;gap:18px">
+    <div class="cards" style="grid-template-columns:repeat(4,1fr);gap:14px">
+      <div class="card"><h3 style="color:var(--u-ink);font-size:21px">1 · Proponer</h3><p>Un plan por fases, y <b>cada afirmación anclada a un archivo y una línea reales</b>. No vale “hay que tocar la capa de datos”: vale “este archivo, línea 122”.</p></div>
+      <div class="card" style="border-color:var(--u-green-2);background:#EAF9F4"><h3 style="color:var(--u-ink);font-size:21px">2 · Criticar</h3><p><b>Otro</b> agente, que arranca de cero y <b>no vio nada de lo anterior</b>. Abre cada archivo citado y comprueba que exista y diga lo que el plan dice. Veredicto <b>binario</b>: aprobado o rechazado.</p></div>
+      <div class="card"><h3 style="color:var(--u-ink);font-size:21px">3 · Implementar</h3><p>Recién acá se toca código. <b>Fase por fase, con pruebas.</b></p></div>
+      <div class="card"><h3 style="color:var(--u-ink);font-size:21px">4 · Supervisar</h3><p>Un cuarto agente audita que lo hecho sea lo que decía el plan — y <b>ejecuta las pruebas él mismo</b>, en vez de leer que alguien escribió “todo correcto”.</p></div>
+    </div>
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:32px;align-items:center">
+      <div>
+        <div class="h-xl mint-2" style="font-size:86px">7 de 7</div>
+        <div style="font-size:19px;color:#41606b;line-height:1.28;margin-top:4px"><b>planes rechazados</b> en su primera versión, por el agente que hace de juez.</div>
+      </div>
+      <div class="pull pull--s" style="color:var(--u-ink)">El valor no está en que la IA escriba. Está en que <b>otra IA le encuentre los agujeros antes que vos</b>. Todas las veces. Sin cansarse y sin ego.</div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Es el “cuatro ojos” de siempre — <b>con la diferencia de que pasa todas las veces</b>, y el que revisa no está mentalmente casado con la solución porque no la escribió.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:02 → 0:06 · el bucle 2 (el que da la calidad)</p>
+    <p><b>Bucle 2.</b> Cuatro pasos, y cada paso lo hace <b>un agente distinto</b>. <b>Proponer:</b> un plan detallado por fases, con cada afirmación anclada a archivo y línea. <b>Criticar:</b> acá está el corazón — otro agente que arranca de cero, no vio nada de lo anterior, y tiene una única misión: ser el juez. Abre cada archivo citado, comprueba que exista y diga lo que el plan dice, busca contradicciones entre fases y comprueba que los criterios se puedan <i>medir</i> en vez de <i>opinar</i>. Veredicto binario. <b>Implementar:</b> recién ahí se toca código. <b>Supervisar:</b> el cuarto audita y ejecuta las pruebas él mismo.</p>
+    <p>Fíjense que esto es exactamente el momento de las 10:00 de la primera parte: <b>es una skill</b>. El procedimiento de criticar un plan, escrito una vez, ejecutado siempre igual.</p>
+    <p><b>El dato:</b> en una de las series de trabajo el juez rechazó <b>siete de siete planes en su primera versión</b>. Y en la serie en la que estoy ahora, un mismo plan lleva <b>dos rechazos seguidos</b>; el segundo, de un juez independiente que encontró varios puntos bloqueantes.</p>
+    <p>La primera vez que conté esto, alguien me dijo: “entonces el que los escribe es malo”. No: <b>el que los escribe es normal</b>. Un primer borrador de cualquiera de nosotros también tiene agujeros. La diferencia es que el borrador de una persona se revisa <b>a veces</b>, con prisa, y lo revisa alguien que ya está casado con la solución.</p>
+    <p class="n-nota">[NOTA] Los tres pilares, si hay tiempo (30 segundos, dichos): <b>grounding</b> = “enseñame dónde lo pone”; <b>evidencia obligatoria</b> = archivo y línea, no “hay que tocar la capa de datos”; <b>puertas binarias</b> = compila o no compila, nada de “quedó mejor”. Si el criterio es una opinión, el agente siempre te va a poder convencer de que lo cumplió. Los tres se ven en las slides que siguen.</p>
+    <p class="n-src">fuente: guion B2 §2 (L669-720)</p>
+  </aside>
+</section>
+
+<!-- ============ 20 · RSPACIFICO · grounding: el manual que no existía ============ -->
+<!-- fuente verificada en disco: RSPACIFICO/trunk/docs/agentic_manual/ (tecnica 41 archivos · funcional 29 · README: 853 chunks) -->
+<section class="slide s-light" data-sec="B2 · RSPACIFICO · El manual que no existía">
+  <div class="hd hd--mint">
+    <div><div class="kick">RSPACIFICO · el trabajo que no se ve en ninguna demo</div><h2>El manual que no existía</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:24px;display:flex;flex-direction:column;gap:18px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;text-align:center">
+      <div><div class="h-m mint-2">41</div><div style="font-size:18px;color:#41606b">documentos <b>técnicos</b><br><span style="font-size:15px">(28 escritos contra el código · 10 de los manuales oficiales · índice y bitácora)</span></div></div>
+      <div><div class="h-m mint-2">29</div><div style="font-size:18px;color:#41606b">documentos <b>funcionales</b><br><span style="font-size:15px">las pantallas y los procesos de noche, contados como los usa el negocio</span></div></div>
+      <div><div class="h-m mint-2">853</div><div style="font-size:18px;color:#41606b">fragmentos <b>indexados</b><br><span style="font-size:15px">para que el agente encuentre el párrafo exacto, no “algo parecido”</span></div></div>
+      <div><div class="h-m mint-2">1</div><div style="font-size:18px;color:#41606b">índice <b>maestro</b><br><span style="font-size:15px">lectura obligatoria <b>antes</b> de tocar nada</span></div></div>
+    </div>
+    <p style="font-size:20px;line-height:1.34;color:#2c4d59">
+      El proyecto <b>no tenía documentación técnica utilizable</b>: cosas sueltas, viejas y que se contradecían. Se reconstruyó desde el código — arquitectura, capas, procesos de noche, base de datos, tablas, pantallas.
+      <b>Sin esto, el agente adivina. Y adivina de forma muy convincente.</b>
+    </p>
+    <div class="vb">La documentación dice en voz alta de qué parte de sí misma desconfiar:<br>
+      “<b>confiá en el Set A — fue verificado contra el código fuente real</b>” · el Set B (transcripción de los manuales viejos) se indexa con <b>prioridad 2</b>.</div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Documentar dejó de ser un gasto de conciencia: <b>esa documentación es el combustible de todos los agentes</b> — y también del próximo compañero humano que entre. Es la primera vez que veo ese argumento funcionar de verdad.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:06 → 0:08 · Pacífico, frente A: la documentación</p>
+    <p>Tres cosas hacen que esto no sea humo, y las tres son <b>caras</b>. Esta es la parte que no sale en las demos. La primera es el <b>grounding</b>: la palabra de la primera parte.</p>
+    <p>Se reconstruyó un manual del proyecto. Y los números son estos, contados de la carpeta: <b>41 documentos técnicos</b> —de los cuales 28 se escribieron leyendo el código y 10 son la transcripción de los manuales oficiales—, <b>29 funcionales</b> entre pantallas y procesos de noche, un <b>índice maestro</b> que el agente está obligado a leer antes de tocar nada, y <b>853 fragmentos indexados</b> para poder buscar el párrafo exacto.</p>
+    <p><b>Y esto es lo que me robaría para cualquier proyecto, con IA o sin ella:</b> los documentos llevan marca de fiabilidad. Textual: “confiá en el Set A — fue verificado contra el código fuente real”. Y el Set B, el que viene de los manuales viejos, entra con menor prioridad. <b>Que la documentación diga en voz alta qué parte de sí misma no es fiable</b> es una idea buenísima.</p>
+    <p>El beneficio obvio es que ahora alguien nuevo se orienta. El beneficio real es que <b>esa documentación es el combustible de todos los agentes</b>. Y para los responsables que escuchen: documentar pasó de gasto a inversión con retorno medible.</p>
+    <p class="n-nota">[NOTA] Si vas mal de tiempo, esta slide se cuenta en 20 segundos: “no había documentación utilizable, se reconstruyó, y esa documentación es el combustible de todo”. Los nombres de los documentos, si alguien pregunta: <span class="n-src">01_ARQUITECTURA_SISTEMA.md · 05_CONVENCIONES_BD.md · 07_BATCH_ARQUITECTURA.md · 09_MOTOR_GMR.md · 25_REFERENCIA_TABLAS_BD.md</span></p>
+    <p class="n-src">fuente verificada: RSPACIFICO/trunk/docs/agentic_manual/ — tecnica/ (41 .md) · funcional/BATCH y ONLINE (29 .md) · README.md (“Corpus RAG RSPACIFICO — 853 chunks”) · tecnica/00_INDICE_MAESTRO.md L166 y L181 (Set A / Set B, precedence=2) · guion B2 §3 frente A (L726-739)</p>
+  </aside>
+</section>
+
+<!-- ============ 21 · RSPACIFICO · la frase ambigua · guion L741-769 ============ -->
+<!-- fuente verificada: RSPACIFICO/trunk/docs/agentic_manual/tecnica/CATALOGO_PROCESOS_BATCH.md L1-20 (cita textual) -->
+<section class="slide s-light" data-sec="B2 · RSPACIFICO · La frase ambigua">
+  <div class="hd">
+    <div><div class="kick">RSPACIFICO · lo que salió mal, y lo que enseñó</div><h2>Una frase ambigua nuestra, repetida con seguridad</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:26px;align-content:center">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card"><h3 style="color:var(--u-ink);font-size:22px">Qué escribió el agente</h3><p>Que la carga de datos <b>empezaba</b> en un módulo concreto. <b>Estaba mal:</b> empieza <b>antes</b>, en otro. Ese que citaba es el <b>segundo</b> paso.</p></div>
+      <div class="card"><h3 style="color:var(--u-ink);font-size:22px">¿Se lo inventó? No</h3><p>Fue a buscarlo <b>a nuestra propia documentación funcional</b>. Y ahí había una frase que decía, textual, que ese módulo era <i>“el punto de entrada principal”</i>. <b>El agente la tomó literal.</b></p></div>
+      <div class="pull pull--s" style="color:var(--u-ink)">No fue una alucinación aleatoria. Fue <b>nuestra ambigüedad</b>, repetida con una seguridad que nosotros nunca le habríamos puesto.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-family:var(--u-font-head);font-weight:600;font-size:21px;color:var(--u-ink)">El arreglo no fue tocar el modelo: fue escribir el catálogo.</div>
+      <div class="vb"><span class="who">tecnica/CATALOGO_PROCESOS_BATCH.md · hoy empieza así</span>
+        “<b>LECTURA OBLIGATORIA</b> para cualquier tarea que toque la cadena batch […] Este catálogo fija qué hace cada proceso y, sobre todo, el <b>ORDEN real</b> del flujo de carga (cuál es el verdadero punto de entrada). <b>No infieras el rol de un proceso por su nombre: confirmalo acá.</b>”<br><br>
+        “⚠️ El punto de entrada real de la carga es <b>Mul2Bane</b>, <b>NO IncHost</b>. Aunque la doc funcional llama a IncHost <i>«punto de entrada principal»</i>, <b>Mul2Bane lo precede</b>.”</div>
+      <div style="font-size:18px;color:#41606b;line-height:1.3">Y además se le <b>recortó el alcance a cada agente</b>: el de negocio ya no decide cuestiones técnicas, porque no es su trabajo. El técnico sí — pero <b>leyendo el catálogo</b>.</div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">La frase<br>del caso</span>
+    <span><b>La IA amplifica la calidad de tu documentación. Para bien y para mal.</b> Si tu documentación es ambigua, no vas a tener un agente confundido: vas a tener un agente <b>muy convincente</b> repitiendo tu ambigüedad, a escala.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:08 → 0:10 · Pacífico, frente B: el fallo que nos enseñó todo</p>
+    <p class="n-nota">[NOTA] ⚠ Del Plan B de recortes: <b>este fallo NUNCA se recorta</b>. Es el que hace creíble todo el resto.</p>
+    <p>El segundo frente es un <b>error</b>, y lo cuento porque enseña más que los aciertos. Un agente generó una especificación que decía que el proceso de carga <b>empezaba</b> en un módulo concreto, y usaba nombres de tabla con un formato que aquí no se usa. Las dos cosas estaban mal: el proceso empieza antes, en otro módulo, y ese que citaba es el segundo paso.</p>
+    <p>¿Se lo inventó de la nada? <b>No.</b> Y acá está lo interesante: fue a buscarlo a nuestra documentación funcional, y ahí había una frase que decía, textual, que ese módulo era “el punto de entrada principal”. <b>El agente la tomó literal.</b></p>
+    <p>La solución tampoco fue tocar el modelo. Fue exactamente lo de la primera parte: escribir el <b>catálogo</b> de los procesos —cuáles son, qué hace cada uno, cuál va primero—, escribir la <b>regla de nombres</b> de forma explícita, y <b>recortarle el alcance a cada agente</b>.</p>
+    <p><b>Y el remate:</b> ese catálogo existe, es un archivo, y hoy arranca con una advertencia en mayúsculas y un aviso de “no infieras el rol de un proceso por su nombre: confirmalo acá”. Es decir: <b>el arreglo quedó escrito donde el próximo agente —y el próximo humano— lo va a leer obligatoriamente</b>.</p>
+    <p class="n-src">fuente verificada: RSPACIFICO/trunk/docs/agentic_manual/tecnica/CATALOGO_PROCESOS_BATCH.md (L1-20, cita textual) · regla de nombres en tecnica/05_CONVENCIONES_BD.md · guion B2 §3 frente B (L741-769)</p>
+  </aside>
+</section>
+
+<!-- ============ 22 · RSPACIFICO · 95 min → ERROR + baseline incompleto · guion L771-831 ============ -->
+<section class="slide s-dark" data-sec="B2 · RSPACIFICO · El proceso de noche · 4 min">
+  <div class="hd">
+    <div><div class="kick">RSPACIFICO · el caso que no es “me escribió un formulario”</div><h2>El proceso de noche que no terminaba</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body" style="bottom:112px;padding-top:20px;display:flex;flex-direction:column;gap:14px">
+    <div class="tl">
+      <span class="big">95 min</span><span class="ar">→</span><span class="err">ERROR</span>
+      <span class="note" style="max-width:660px">Al fallar, la base <b>deshace todo lo ya hecho</b> <span class="off">(eso es un “rollback”)</span>: <b>27 millones de registros</b> · <b>40 minutos de espera muerta</b>. Y era la <b>tercera</b> vez.</span>
+    </div>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr);gap:14px">
+      <div class="card"><h3 style="font-size:20px">No murió trabajando</h3><p style="font-size:17px">La fase que fallaba murió a los <b>2.400.057 milisegundos</b>. El tope de espera configurado era <b>2.400.000</b>. <b>Murió esperando.</b> Cuando el número coincide al milisegundo con una configuración, no mirás un problema de rendimiento: mirás <b>un tope que alguien puso</b>.</p></div>
+      <div class="card"><h3 style="font-size:20px">¿Esperando qué?</h3><p style="font-size:17px">La base se esperaba <b>a sí misma</b>: más de <b>900 segundos</b> de espera interna <b>con el procesador al 0%</b>. No estaba bloqueada por nadie —los bloqueos sumaban <b>123 milisegundos</b>—. <b>Estaba quieta.</b></p></div>
+      <div class="card"><h3 style="font-size:20px">Y de paso, trabajo inútil</h3><p style="font-size:17px"><b>36 minutos</b> de borrados evitables. Una actualización de casi <b>28 minutos</b> sobre 36 millones de registros. Y una inserción de <b>6 minutos que insertaba cero registros</b>. Todas las noches. Para no hacer nada.</p></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:18px;background:rgba(255,255,255,.05);border:1px solid var(--u-card-bd);border-radius:12px;padding:12px 18px">
+      <span style="font-family:var(--u-font-head);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--u-green);white-space:nowrap">Y después<br>vino el juez</span>
+      <span style="font-size:18px;line-height:1.3;color:var(--u-on-dark-2)"><b style="color:#fff">13 hallazgos · 2 bloqueantes.</b> Uno: un script que <b>el propio plan proponía estaba roto</b>. Dos: una de las fases propuestas <b>volvía a provocar el mismo error que decía arreglar</b>. Las dos cosas se corrigieron <b>antes</b> de tocar producción.</span>
+    </div>
+  </div>
+  <div class="useband useband--tall" style="align-items:flex-start">
+    <span class="lbl">Lo que más<br>orgullo me da</span>
+    <span><b>“El baseline está incompleto.”</b> <span class="off">(= la medición de referencia)</span> Las tres corridas instrumentadas murieron antes del final: hay un tramo cuya duración real <b>nunca se midió</b>. Así que bajar de 95 a ~45 minutos es <b>una previsión, no un compromiso</b>. <b>Ese cartel no lo puse yo: lo puso el juez.</b><br>
+    <span class="pend" style="margin-top:8px">[PENDIENTE] ¿Hubo ya una corrida completa en verde? · ¿Cuál es el número real de hoy contra los 95 min? — Anexo C del guion, cerrar el 04/08</span></span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:10 → 0:14 · Pacífico, frente C: el proceso de noche (la historia principal)</p>
+    <p class="n-nota">[NOTA] ⚠ Llevá las cifras <b>apuntadas, no de memoria</b>: 95 min · 27 M registros · 2.400.057 ms · 900 s de espera interna · 123 ms de bloqueos · 13 hallazgos · 2 bloqueantes.</p>
+    <p><b>El problema.</b> Uno de los procesos que corre de noche en producción terminaba en error. Noventa y cinco minutos. Y al fallar, la base tenía que deshacer todo el trabajo ya hecho —un <i>rollback</i>—: veintisiete millones de registros deshaciéndose, cuarenta minutos de espera muerta. Y ya era la tercera vez que aparecía la misma familia de fallo, con dos intentos previos que no habían llegado al fondo.</p>
+    <p><b>Qué hizo el flujo. Primero, medir.</b> Antes de tocar nada, instrumentar el proceso para saber dónde se va el tiempo de verdad. Con una regla de oro: <b>la medición no puede convertirse en el atasco que está midiendo</b>.</p>
+    <p>Después, con los datos en la mano, el plan. Los tres hallazgos están proyectados; contalos como una historia de detectives, no como una lista.</p>
+    <p><b>Y después vino el juez.</b> El plan se criticó contra los registros y los datos reales: trece hallazgos, dos bloqueantes. Un script que el propio plan proponía estaba roto, y una de las fases volvía a provocar el mismo error que decía arreglar. Corregidos antes de tocar producción.</p>
+    <p><b>Y la parte que más orgullo me da, aunque suene raro:</b> el propio plan lleva escrita, en mayúsculas, una advertencia de que la medición de referencia está incompleta — porque las tres corridas instrumentadas murieron antes de llegar al final. Un consultor os habría enseñado una diapositiva con una flecha verde y “reducción del 50%”. Y esa es la diferencia entre un sistema con IA que sirve y uno que te mete en un problema dentro de seis meses: <b>el que sirve te dice qué parte de lo que te está contando todavía no está probada</b>.</p>
+    <p class="n-nota">[NOTA] <b>[COMPLETAR antes del 04/08]</b> — estado actual del plan, si ya hubo corrida completa en verde, y el número real de la ventana hoy contra los 95 minutos. Si tenés número real, <b>ese es tu mejor cierre del bloque</b>. Si no lo tenés, la honestidad del “baseline incompleto” cierra igual de bien — pero decilo <b>como decisión, no como excusa</b>.</p>
+    <p class="n-src">fuente: guion B2 §3 frente C (L771-831) · las cifras salen del guion v3, sin redondear</p>
+  </aside>
+</section>
+
+<!-- ============ 23 · RSSICREA · la operatoria en vivo ============ -->
+<!-- fuente verificada: RSSICREA/Agentes/outputs/{17,18,20,22,40}/comment.html · RSSICREA/memory-bank/ (7 archivos) -->
+<section class="slide s-dark" data-sec="B2 · RSSICREA · Cinco tareas reales, de ida y de vuelta">
+  <div class="hd">
+    <div><div class="kick">RSSICREA · la operatoria, no la promesa</div><h2>Cinco tareas reales, de ida y de vuelta</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:28px;align-content:center">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:baseline;gap:14px">
+        <span class="h-m mint">17 · 18 · 20 · 22 · 40</span>
+      </div>
+      <p style="font-size:19px;line-height:1.34;color:var(--u-on-dark-2)">Corridas reales, <b style="color:#fff">una carpeta por número de tarea</b>. Cada una dejó su archivo con el análisis, y ese análisis <b style="color:#fff">se publica de vuelta en el gestor de tareas que el equipo ya usa</b> — en este cliente, Azure DevOps.</p>
+      <div class="pull pull--s">Entra y sale por donde el equipo ya trabaja.</div>
+      <p style="font-size:18px;color:var(--u-on-dark-2);line-height:1.3">No es un chat aparte del que después hay que copiar y pegar. Suena a detalle y <b style="color:#fff">es la mitad de la adopción</b>.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="font-family:var(--u-font-head);font-weight:600;font-size:22px">Y el cuaderno de la primera parte, hecho carpeta</div>
+      <div class="vb"><span class="who">RSSICREA/memory-bank/ · 7 archivos</span>
+        activeContext.md · decisionLog.md · progress.md · systemPatterns.md · productContext.md · projectBrief.md · architect.md</div>
+      <p style="font-size:18px;line-height:1.32;color:var(--u-on-dark-2)"><b style="color:#fff">Y ahora la parte honesta:</b> en este cliente el cuaderno está <b>creado y todavía casi vacío</b> — dice literalmente “Goal 1” y “None yet”. <b style="color:#fff">La memoria no viene con el modelo.</b> Si nadie escribe el cuaderno, mañana no se acuerda de nada. Tener la carpeta no es tener memoria.</p>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Cuando evalúes cualquier herramienta de IA, mirá <b>por dónde entra el trabajo y por dónde sale</b>. Si obliga a copiar y pegar en una pestaña aparte, no se va a usar — por buena que sea.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:14 → 0:16 · RSSICREA: la operatoria en vivo</p>
+    <p>Pacífico fue el caso del <b>grounding</b>: la documentación. RSSICREA es el caso de la <b>operatoria</b>: los agentes trabajando sobre tickets reales.</p>
+    <p>Hay cinco corridas con número de tarea: 17, 18, 20, 22 y 40. Cada una produjo un archivo con el análisis, y ese archivo <b>es el comentario que se publica de vuelta en el gestor de tareas</b>. Eso es lo que quiero que se lleven de esta slide: el trabajo entra por donde el equipo ya trabaja y sale por el mismo sitio.</p>
+    <p>Un ejemplo de lo que hay dentro, para que se vea el nivel de concreción: en la tarea 22 el análisis dice <b>los tres archivos exactos que hay que modificar</b> y qué se toca en cada uno: la pantalla, el archivo de declaraciones y el código de detrás, con los dos métodos afectados. No “hay que ajustar la búsqueda”: <b>archivo por archivo</b>.</p>
+    <p><b>El cuaderno.</b> Hay una carpeta llamada memory-bank con siete archivos de nombre fijo: contexto activo, registro de decisiones, progreso, patrones del sistema… Es literalmente la memoria de la primera parte, hecha carpeta. <b>Y lo digo tal como está:</b> en este cliente está recién inicializada, casi vacía, con los textos de plantilla. Lo cuento porque refuerza el mensaje: <b>la memoria hay que escribirla; no aparece sola</b>.</p>
+    <p class="n-nota">[NOTA] ⚠ No cites la carpeta <span class="n-src">RSSICREA/docs/</span> como documentación del cliente: es un clon de documentación interna de Stacky. La evidencia real de este cliente es <span class="n-src">Agentes/outputs/</span> y <span class="n-src">memory-bank/</span>.</p>
+    <p class="n-src">fuente verificada: RSSICREA/Agentes/outputs/{17,18,20,22,40}/comment.html · outputs/22/comment.html §1 (los 3 archivos) · RSSICREA/memory-bank/ (7 archivos; activeContext.md y progress.md con texto de plantilla) · guion B2 §2 (L663-665)</p>
+  </aside>
+</section>
+
+<!-- ============ 24 · RSSICREA · ADO-40 · EL REMATE ============ -->
+<!-- fuente verificada verbatim: RSSICREA/Agentes/outputs/40/comment.html -->
+<section class="slide s-light" data-sec="B2 · RSSICREA · ADO-40: se detuvo y preguntó">
+  <div class="hd hd--mint">
+    <div><div class="kick">RSSICREA · tarea 40 · el remate de toda la charla</div><h2>Se detuvo y preguntó, en vez de inventar</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u2" style="padding-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:26px;align-content:start">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="vb"><span class="who">Lo que publicó, textual</span>
+        “ANÁLISIS TÉCNICO — ADO-40 · Generado por: Analista Técnico v2.0.0 · 2026-07-15<br>
+        <b>Estado del análisis: ⚠️ CONSULTA PRE-BLOQUEO — faltan definiciones funcionales para cerrar el mapeo final de campos</b>”</div>
+      <div style="font-size:19px;line-height:1.32;color:#2c4d59">Y en la tabla de campos, <b>cada fila se autoclasifica</b>:</div>
+      <div style="display:flex;flex-direction:column;gap:9px;font-size:18px">
+        <div><b style="color:#12776f">✅ Definido</b> — “FECHA ← RCONVP.COFECHA”. <span style="color:#41606b">Lo comprobó.</span></div>
+        <div><b style="color:#9a6a00">⚠️ Supuesto a confirmar</b> — “RCPAGO.CPFECNEG <i>(candidato)</i>”. <span style="color:#41606b">Lo deduce, y lo dice.</span></div>
+        <div><b style="color:var(--u-red-ink)">❓ Gap funcional abierto</b> — “CAPITAL, INTERES, IVA: pendiente definición funcional”. <span style="color:#41606b">No lo sabe, y no lo rellena.</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div style="font-family:var(--u-font-head);font-weight:600;font-size:21px;color:var(--u-ink)">Y en vez de construir, preguntó cinco cosas concretas</div>
+      <div style="font-size:18px;line-height:1.34;color:#2c4d59">
+        <b>Q1</b> de dónde salen CAPITAL, INTERES e IVA · <b>Q2</b> el layout completo del segundo archivo, que <b>no vino en el pedido</b> · <b>Q3</b> la regla de SUBTIPO y GRADO · <b>Q4</b> el criterio exacto de la ventana diaria · <b>Q5</b> la ruta final por ambiente.
+      </div>
+      <div class="vb"><b>“¿Por qué bloquea?</b> Sin estas definiciones el Developer puede construir archivos con estructura incorrecta para el consumidor.” · “<b>El ticket NO se bloquea:</b> queda esperando respuesta humana.”</div>
+      <div style="font-size:18px;color:#41606b;line-height:1.3">Y ofrece dos caminos: que el funcional cierre la tabla de campos <i>(recomendado)</i>, o que alguien <b>apruebe explícitamente</b> dejar huecos temporales.</div>
+    </div>
+  </div>
+  <div class="useband useband--tall">
+    <span class="lbl">El círculo<br>se cierra</span>
+    <span>La chuleta dice: <b>“tu compañero dice «no lo sé»; la IA no”</b>. Acá se ve <b>cómo se consigue por diseño que sí lo diga</b>: obligalo a marcar qué comprobó, qué supone y qué le falta — y a preguntar <b>antes</b> de construir. Eso no lo arregla un modelo mejor. Lo arregla el procedimiento.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:16 → 0:18 · el remate. <b>Si tenés que elegir una sola slide del bloque 2, es esta.</b></p>
+    <p>Y ahora la que para mí es la mejor prueba de todo lo que dije en la primera parte. Tarea 40, cliente RSSICREA, 15 de julio. El analista técnico tenía que definir tres archivos de salida para un sistema externo. Y esto es lo que publicó, textual: <b>“consulta pre-bloqueo: faltan definiciones funcionales para cerrar el mapeo final de campos”</b>.</p>
+    <p>Fíjense en el detalle: <b>en la tabla de campos, cada fila se clasifica sola</b>. Hay filas con un tilde verde —“esto lo comprobé”—, filas con un aviso —“esto es un supuesto, confirmámelo”— y filas con un signo de pregunta —“esto no lo sé y no lo voy a rellenar”—. Tres estados. Escritos por el propio agente, sobre su propio trabajo.</p>
+    <p>Y en vez de construir tres archivos con estructura inventada, <b>preguntó cinco cosas concretas</b>, y explicó por qué cada una bloquea: “sin estas definiciones el desarrollador puede construir archivos con estructura incorrecta para el consumidor”. Y ofreció dos caminos: que el funcional cierre la tabla, o que alguien apruebe explícitamente dejar huecos temporales.</p>
+    <p>Y el último detalle, que es de oficio: <b>el ticket no se bloquea</b>. Queda esperando respuesta humana. No frena la tarea: frena <b>la parte que no se puede decidir sin una persona</b>.</p>
+    <p><b>Esto es el cierre del círculo.</b> En la primera parte les dije que la diferencia más peligrosa entre la IA y un compañero nuevo es que el compañero dice “no lo sé” y la IA no. Bueno: acá se ve que <b>sí se puede conseguir que lo diga</b> — pero no sale gratis y no sale del modelo. Sale de obligarlo, por procedimiento, a separar lo que comprobó de lo que supone y de lo que le falta.</p>
+    <p><b>Y en la misma pieza hay otra honestidad:</b> la consulta a la base de datos quedó preparada pero <b>no se pudo ejecutar</b> contra la base real (el entorno no lo permitió), y el propio análisis lo deja dicho en vez de fingir que verificó. Es el mismo espíritu que el “baseline incompleto” de Pacífico.</p>
+    <p class="n-src">fuente verificada verbatim: RSSICREA/Agentes/outputs/40/comment.html — encabezado, §3 matriz de campos, §4 CA-01..CA-08 con TU-001..TU-009, §6 (query preparada, no ejecutada) y §7 (Q1-Q5 + “El ticket NO se bloquea”)</p>
+  </aside>
+</section>
+
+<!-- ============ 25 · lo que salió mal (adopción) · guion L835-880 ============ -->
+<section class="slide s-dark" data-sec="B2 · Lo que salió mal · 4 min">
+  <div class="hd">
+    <div><div class="kick">Una charla de caso de éxito sin fracasos no se cree</div><h2>Lo que salió mal</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body" style="bottom:112px;padding-top:20px;display:flex;flex-direction:column;gap:14px">
+    <div class="cards" style="grid-template-columns:1fr 1fr;gap:14px">
+      <div class="card" style="border-color:rgba(255,91,91,.5)">
+        <h3 style="font-size:21px"><span class="red">1 ·</span> El falso verde <span class="dim" style="font-size:16px">— el problema número uno</span></h3>
+        <p style="font-size:17px">“Hecho, y las pruebas pasan”… y la prueba <b>no probaba nada</b>. Caso real: una orden de ejecutar pruebas filtrando por un nombre que <b>no coincidía con ninguna</b>. Cero pruebas ejecutadas. ¿Y el resultado del comando? <b>Correcto.</b> Verde perfecto sobre la nada.<br>
+        <b style="color:var(--u-green)">→ El control se prueba contra el defecto: si no lo viste fallar, no sabés si funciona.</b></p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:21px"><span class="red">2 ·</span> “Corregido” no es evidencia</h3>
+        <p style="font-size:17px">De <b>catorce</b> correcciones declaradas en un listado de cambios, <b>tres cerraban el síntoma y dejaban vivo el defecto</b>. No leas el resumen de lo que hizo: <b>andá al cambio</b>.</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:21px"><span class="red">3 ·</span> La confianza es asimétrica</h3>
+        <p style="font-size:17px">Un error espectacular te cuesta veinte aciertos. Por eso el <b>orden</b> importa: empezá por lo <b>reversible</b> (documentación, análisis, planes) y sólo después por lo irreversible (código, base de datos, producción). <b>El que empieza al revés quema la confianza la primera semana.</b></p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:21px"><span class="red">4 ·</span> La fricción del primer día</h3>
+        <p style="font-size:17px">Alguien abre la herramienta, <b>no entiende qué hacer en los primeros tres minutos</b>, la cierra y vuelve a trabajar como siempre. Así mueren todas las herramientas internas. <b>Si no saca algo útil en su primera sesión, no hay segunda.</b></p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;font-size:17px;color:var(--u-on-dark-2);line-height:1.3">
+      <span style="font-family:var(--u-font-head);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--u-green);white-space:nowrap">5 · Los costes</span>
+      <span>Sin techo, alguien lanza cincuenta veces el modelo más caro y llega la factura. <b style="color:#fff">Modelo por defecto, tope por proyecto, aviso al 80%.</b></span>
+      <span class="pend">[PENDIENTE] coste real por tarea/mes · tiempo real de montaje del flujo — Anexo C</span>
+    </div>
+  </div>
+  <div class="useband useband--tall">
+    <span class="lbl">6 · La resistencia<br>(y es legítima)</span>
+    <span><i>“Esto me va a sustituir.” “Yo lo hago más rápido a mano.”</i> Lo que funcionó no fue un discurso: fue un hecho.<br>
+    <b style="font-size:23px">El agente no cierra la tarea. La prepara. La firma sigue siendo tuya.</b> Y como la firma es tuya, la responsabilidad también.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:18 → 0:22 · Lo que salió mal (4 min) — la parte útil del bloque</p>
+    <p>Me pidieron que hablara de las dificultades de la adopción, y me alegra, porque es la parte útil. Están proyectadas cinco y la sexta va en la banda; <b>contalas rápido, son de una frase cada una</b>.</p>
+    <p><b>El falso verde</b> es el problema número uno con diferencia. El segundo caso real, si querés dar dos: un control automático de calidad que contaba coincidencias de texto y que, por cómo estaba escrito, <b>premiaba exactamente el error que decía cazar</b> — cuanto peor estaba el código, más subía el marcador hacia el objetivo. La contramedida funciona igual sin IA: <b>el control se prueba contra el defecto</b>.</p>
+    <p class="n-h">La séptima, que no está en pantalla</p>
+    <p><b>El entorno miente.</b> Muy nuestro y nada glamuroso: la carpeta que editás no siempre es la que lee el agente — hay copias, hay rutas distintas. Cambiás algo, no llega, y parece un fallo de la IA. <b>No lo es: es fontanería.</b> Y te come días.</p>
+    <p class="n-nota">[NOTA] <b>[COMPLETAR]</b> coste real por tarea o por mes, y tiempo real de montaje del flujo. Si el número de montaje es grande, <b>no lo escondas</b>: refuerza el mensaje de “el trabajo no está en el modelo, está alrededor”. Un número honesto y grande es más creíble que uno pequeño y sospechoso. Si no lo tenés, decí que no lo tenés y <b>no improvises una cifra</b>.</p>
+    <p class="n-src">fuente: guion B2 §4 (L835-880) · las 7 dificultades; 5 proyectadas, 2 acá</p>
+  </aside>
+</section>
+
+<!-- ============ 26 · CIERRE · guion L884-924 ============ -->
+<section class="slide s-dark" data-sec="Cierre · Gracias">
+  <div class="arc" style="width:820px;height:820px;top:-320px;right:-260px;opacity:.85"></div>
+  <div class="arc" style="width:220px;height:220px;bottom:-90px;left:-70px;opacity:.5"></div>
+  <div style="position:absolute;left:88px;top:120px;right:430px">
+    <h1 class="h-l">Esto no<br>sustituyó<br>a nadie.</h1>
+    <p style="margin-top:28px;font-size:24px;line-height:1.34;color:var(--u-on-dark-2)">
+      Movió el trabajo del equipo: de <b style="color:#fff">escribir la primera versión</b> → a <b class="mint">juzgar la primera versión</b>.
+      Y resulta que <b style="color:#fff">juzgar es exactamente donde alguien con experiencia vale más</b>.
+    </p>
+    <p style="margin-top:22px;font-size:19px;line-height:1.34;color:#9db4bc;max-width:660px">
+      El primer borrador lo puede hacer un fichaje brillante con memoria de pez. Pero saber que la medición está incompleta, que esa prueba no prueba nada y que esa frase de la documentación es ambigua… <b style="color:#cfe0e4">eso todavía no lo hace ninguna máquina.</b>
+    </p>
+  </div>
+  <div style="position:absolute;right:88px;bottom:150px;text-align:right">
+    <div class="pull" style="border-left:none;border-right:5px solid var(--u-green);padding:10px 22px 10px 0;font-size:30px">El agente prepara.<br>La persona firma.</div>
+  </div>
+  <div style="position:absolute;left:88px;bottom:56px;display:flex;align-items:center;gap:26px">
+    <div class="logo mint" style="font-size:30px">ubimia<sup>&reg;</sup></div>
+    <div style="font-size:21px;color:var(--u-on-dark-2)"><b style="color:#fff">Gracias.</b> Ahora sí: den la vuelta al papel.</div>
+    <div class="chip">Preguntas</div>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:22 → 0:24 · Lecciones y cierre (2 min)</p>
+    <p class="n-h">Cinco lecciones, dichas antes del cierre</p>
+    <p><b>Una. El grounding es el ochenta por ciento del resultado.</b> El modelo lo compra cualquiera; <b>tu documentación no</b>. Ahí está la ventaja y ahí está el trabajo.</p>
+    <p><b>Dos.</b> Un agente que escribe sin otro que lo critique es <b>una máquina de generar problemas, muy rápido</b>. El crítico no es un lujo.</p>
+    <p><b>Tres. Exigí evidencia.</b> Si no puede señalarte de dónde lo sacó, no lo sabe: lo está sonando bien. Y esto vale para la IA y —dicho con cariño— para las personas también.</p>
+    <p><b>Cuatro. Automatizá el juicio, no la decisión.</b> Que el sistema junte la evidencia, la contraste y te la ponga delante. La decisión la firma alguien.</p>
+    <p><b>Cinco. Medí antes de optimizar, y desconfiá de tu propia medición.</b> El número más peligroso no es el que está mal: <b>es el que nunca se midió y todos damos por bueno</b>.</p>
+    <p class="n-h">El cierre, tal cual</p>
+    <p>Esto no sustituyó a nadie. Movió el trabajo del equipo desde <i>escribir la primera versión</i> hacia <i>juzgar la primera versión</i>. Y juzgar es exactamente donde alguien con experiencia vale más. Gracias. Ahora sí, den la vuelta al papel. Preguntas.</p>
+    <p class="n-h">Las preguntas que te van a hacer (Anexo A del guion — tenelas acá, no en una slide)</p>
+    <p><b>“¿Y yo, que no programo, esto para qué lo uso?”</b> — La más probable en una sala mixta; no la contestes con condescendencia. Tres cosas, hoy mismo: <b>preguntarle a tus propios documentos</b> (con citas) — de lejos lo de mayor impacto para quien no programa; <b>primeros borradores</b> de informes, actas y correos difíciles — nunca la versión final; y <b>transcribir y resumir reuniones</b>, que ya está resuelto y devuelve horas cada semana.</p>
+    <p><b>“¿Esto nos va a sustituir?”</b> — No a corto plazo, y te digo por qué: la IA es buenísima produciendo el primer borrador y malísima sabiendo si ese borrador está bien. En nuestro caso <b>el 100% de los primeros planes fue rechazado</b> por el revisor. Lo que cambia es en qué parte del trabajo pasás el día. <b>El que sabe juzgar, gana.</b></p>
+    <p><b>“¿Y si mete un error en producción?”</b> — Ninguna acción irreversible pasa sin firma humana; el agente prepara, propone y justifica. Y las puertas de calidad son binarias: compila o no compila. No hay “quedó mejor”.</p>
+    <p><b>“¿Cuánto cuesta?”</b> / <b>“¿Cuánto llevó montarlo?”</b> — <b>[PENDIENTE]</b> cifras reales. Si no las tenés, decilo y <b>no improvises un número</b>.</p>
+    <p><b>“¿Nuestros datos van a entrenar al modelo?”</b> — En los planes de empresa, no: el contrato lo prohíbe explícitamente. En las gratuitas, sí pueden. Y para lo verdaderamente sensible existe el modelo local, donde el dato no sale de casa.</p>
+    <p><b>“¿Qué modelo es el mejor?”</b> — Es la pregunta equivocada: cambia cada dos meses. La correcta es <b>de qué tamaño lo necesitás</b>. Empezá por el mediano.</p>
+    <p><b>“¿Por dónde empiezo mañana?”</b> — Por algo <b>reversible</b> y que ya estés haciendo. Si programás: el asistente dentro del editor esta semana — Claude Code, Codex o GitHub Copilot Pro. Si no: cargá tus documentos y hacé una semana de preguntas reales. Y aplicá dos de las seis reglas: la cuatro (por pasos) y la cinco (verificá lo verificable).</p>
+    <p class="n-nota">[NOTA] Checklist del 04/08: refrescar nombres de modelos · cerrar los cuatro <b>[COMPLETAR]</b> del Anexo C · <b>imprimir la chuleta</b> (una por asistente, repartir boca abajo) · ensayar el bloque 2 con cronómetro · <b>decidir si hay demo: la recomendación es no</b>, o un vídeo corto ya grabado. Una demo que falla delante de treinta personas te destruye los veinte minutos.</p>
+    <p class="n-src">fuente: guion B2 §5 (L884-924) + Anexo A (L931-959) + Anexo C (L979-989)</p>
+  </aside>
+</section>
+
+</div></div>
+
+<div id="hud">
+  <button id="prev" title="Anterior (←)">&#8249;</button>
+  <span class="cnt" id="cnt">1 / 1</span>
+  <button id="next" title="Siguiente (→)">&#8250;</button>
+  <span class="sec" id="sec"></span>
+  <span class="clock" id="clock">00:00</span>
+  <span class="keys">← → · N notas · F pantalla · B negro · T reloj</span>
+</div>
+<aside id="notes" class="hidden"><h4>Notas del expositor</h4><div id="notesBody"></div></aside>
+<div id="blank"></div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0, stepIdx = 0;
+  var notes = document.getElementById('notes'), notesBody = document.getElementById('notesBody');
+  var cnt = document.getElementById('cnt'), secEl = document.getElementById('sec');
+  var blank = document.getElementById('blank'), clockEl = document.getElementById('clock');
+
+  function fit(){
+    var nh = notes.classList.contains('hidden') ? 0 : Math.round(Math.min(300, window.innerHeight * 0.36));
+    document.documentElement.style.setProperty('--notes-h', nh + 'px');
+    var w = window.innerWidth, h = window.innerHeight - nh;
+    document.documentElement.style.setProperty('--s', Math.min(w / 1280, h / 720).toFixed(4));
+  }
+  function steps(s){ return Array.prototype.slice.call(s.querySelectorAll('.step')); }
+  function paint(allSteps){
+    slides.forEach(function(s, n){ s.classList.toggle('is-active', n === i); });
+    var s = slides[i], st = steps(s);
+    if (allSteps) stepIdx = st.length;
+    st.forEach(function(el, n){ el.classList.toggle('on', n < stepIdx); });
+    cnt.textContent = (i + 1) + ' / ' + slides.length;
+    secEl.textContent = s.getAttribute('data-sec') || '';
+    var nd = s.querySelector('.notes');
+    notesBody.innerHTML = nd ? nd.innerHTML : '<p class="dim">(sin notas)</p>';
+    if (location.hash !== '#' + (i + 1)) history.replaceState(null, '', '#' + (i + 1));
+  }
+  function go(n, allSteps){ i = Math.max(0, Math.min(slides.length - 1, n)); stepIdx = 0; paint(allSteps); }
+  function next(){
+    var st = steps(slides[i]);
+    if (stepIdx < st.length){ stepIdx++; paint(false); return; }
+    if (i < slides.length - 1) go(i + 1, false);
+  }
+  function prev(){
+    if (stepIdx > 0){ stepIdx--; paint(false); return; }
+    if (i > 0) go(i - 1, true);
+  }
+  document.getElementById('next').addEventListener('click', function(e){ e.stopPropagation(); next(); });
+  document.getElementById('prev').addEventListener('click', function(e){ e.stopPropagation(); prev(); });
+  document.getElementById('deck').addEventListener('click', next);
+  blank.addEventListener('click', function(){ blank.classList.remove('on'); });
+
+  document.addEventListener('keydown', function(e){
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Enter'){ next(); e.preventDefault(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace'){ prev(); e.preventDefault(); }
+    else if (k === 'Home'){ go(0, false); }
+    else if (k === 'End'){ go(slides.length - 1, true); }
+    else if (k === 'n' || k === 'N'){ notes.classList.toggle('hidden'); fit(); }
+    else if (k === 'f' || k === 'F'){ if (!document.fullscreenElement){ if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } else if (document.exitFullscreen) document.exitFullscreen(); }
+    else if (k === 'b' || k === 'B' || k === '.'){ blank.classList.toggle('on'); }
+    else if (k === 't'){ toggleClock(); }
+    else if (k === 'T'){ resetClock(); }
+  });
+
+  // Cronómetro del expositor (los ⏱ del guion son acumulados por bloque)
+  var t0 = null, acc = 0, tick = null;
+  function fmt(ms){ var s = Math.floor(ms / 1000); return ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + (s % 60)).slice(-2); }
+  function render(){ clockEl.textContent = fmt(acc + (t0 ? Date.now() - t0 : 0)); }
+  function toggleClock(){
+    if (t0){ acc += Date.now() - t0; t0 = null; clearInterval(tick); tick = null; clockEl.style.opacity = .5; }
+    else { t0 = Date.now(); tick = setInterval(render, 500); clockEl.style.opacity = 1; }
+    render();
+  }
+  function resetClock(){ t0 = null; acc = 0; if (tick) clearInterval(tick); tick = null; render(); }
+
+  window.addEventListener('resize', fit);
+  var h = parseInt((location.hash || '').replace('#', ''), 10);
+  fit(); go(isNaN(h) ? 0 : h - 1, false);
+})();
+</script>
+</body>
+</html>

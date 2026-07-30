@@ -2028,6 +2028,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la lista se ve igual que antes y las filas desalineadas no se distinguen del resto.",
         example="Cerraste ocho reclamos y dos quedaron a medias: los ves marcados en vez de descubrirlo semanas despues.",
     ),
+    "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED": PlainHelp(
+        what="Controla si el Comparador de BD completa los contadores faltantes del resumen de una comparación antes de mandárselos a la pantalla.",
+        on_effect="Si la activás: una comparación vieja o interrumpida se ve con contadores en cero en vez de romper la pestaña.",
+        off_effect="Si la apagás: el resumen viaja tal cual está guardado y una comparación incompleta puede romper la pestaña del Comparador.",
+        example="Abrís una comparación hecha con una versión anterior de Stacky: con esto activado ves 0 danger / 0 warn / 0 info; apagado, la pestaña muestra el cartel rojo de error.",
+    ),
 }
 
 

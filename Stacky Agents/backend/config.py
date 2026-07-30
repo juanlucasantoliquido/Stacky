@@ -201,6 +201,15 @@ class Config:
     STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES: int = int(
         os.getenv("STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES", "5000")
     )
+    # ── Plan 266 — Forma garantizada del summary de las corridas ─────────────
+    # Default ON: normalización SOLO-LECTURA y en memoria del summary que sale por
+    # list_runs/get_run. No escribe disco, no toca ningún sistema del operador, no
+    # llama a ningún modelo: no cae en (A) quema de tokens en reposo ni en (B)
+    # escritura en sistema real ⇒ ON. Curada en _CURATED_DEFAULTS_ON.
+    # OFF = payload byte-idéntico a antes del plan 266 (kill-switch auditable).
+    STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED: bool = os.getenv(
+        "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED", "true"
+    ).strip().lower() == "true"
     # Plan 176 — Triage curado, gates read-only y UX v2 del comparador. Las 4 son
     # read-only o curación local del operador: no publican, no ejecutan DML y no
     # tocan ningún sistema externo ⇒ default ON.

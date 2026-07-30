@@ -320,6 +320,9 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
     # Plan 268: el explorador solo tiene sentido si el grafo documental existe.
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",
+    # Plan 266: la forma garantizada del summary cuelga del master del Comparador
+    # (profundidad 1: STACKY_DB_COMPARE_ENABLED no declara `requires`, no hay cadena).
+    "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED": "STACKY_DB_COMPARE_ENABLED",
 }
 
 

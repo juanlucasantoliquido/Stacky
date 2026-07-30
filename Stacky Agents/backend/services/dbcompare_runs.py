@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import json
 import os
+import re as _re
 import threading
 import time
 from datetime import datetime, timezone
 
+import config as _config
 from runtime_paths import data_dir
 from services import dbcompare_diff, dbcompare_registry, dbcompare_snapshot
 
@@ -129,6 +131,73 @@ def _is_stale(run: dict) -> bool:
         return False
     started = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
     return (_now() - started).total_seconds() > _STALE_AFTER_SEC
+
+
+# --------------------------------------------------------------------------
+# Plan 266 — forma garantizada del summary (normalización SOLO EN MEMORIA)
+# --------------------------------------------------------------------------
+
+_CANON_BY_SEVERITY = ("info", "warn", "danger")
+_CANON_BY_ACTION = ("added", "removed", "changed")
+_CANON_BY_OBJECT_TYPE = ("table", "view", "sequence")
+
+# Plan 266 C16/C21 — gemela EXACTA de DECIMAL_RE en summaryShape.ts. Si cambia
+# una, cambia la otra: lo verifica la tabla de verdad compartida de F1.5.
+_DECIMAL_RE = _re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
+
+
+def _count(value) -> int:
+    """Entero >= 0. Cualquier cosa que no sea un número usable cuenta como 0.
+
+    Plan 266 C21 — el guard de decimales sobre strings es obligatorio y NO es
+    simétrico al del frontend por casualidad: `float("1_0")` en Python da 10.0
+    (admite guiones bajos) mientras que `Number("1_0")` en JS da NaN. Al revés,
+    `Number("0x10")` da 16 y `float("0x10")` lanza. Sin la MISMA regex de los
+    dos lados, los normalizadores divergen en ambas direcciones (medido).
+
+    Plan 266 C2 — el corte de `bool` va PRIMERO y es obligatorio: en Python
+    `bool` es subclase de `int`, así que `int(float(True))` daría 1, mientras
+    que el normalizador gemelo del frontend (`toCount`) da 0 para `true`. Sin
+    este corte los dos lados divergen y la UI mostraría 1 con la flag ON y 0
+    con la flag OFF. Lo verifica la tabla de verdad compartida de F1.5.
+
+    Plan 266 C1 — `OverflowError` va en el `except` y es obligatorio:
+    `json.loads` acepta `Infinity` / `-Infinity` / `NaN` por default, y
+    `int(float(float("inf")))` lanza OverflowError (NO TypeError ni
+    ValueError). Sin capturarlo, un solo run con `Infinity` en disco haría
+    que `list_runs()` LANCE y rompa la lista entera: el normalizador que
+    existe para evitar la pantalla rota sería el que la causa.
+    """
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, str) and not _DECIMAL_RE.match(value.strip()):
+        return 0
+    try:
+        n = int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return n if n > 0 else 0
+
+
+def _normalize_summary(summary):
+    """Plan 266 — forma canónica del summary, SOLO EN MEMORIA.
+
+    `None` se preserva como `None`: una corrida `running` no tiene resumen y
+    fabricar ceros haría que la UI muestre '0 danger' para algo que todavía no
+    comparó nada (mentira, no defensa).
+    """
+    if not isinstance(summary, dict):
+        return None if summary is None else summary
+    out = dict(summary)
+    for key, canon in (
+        ("by_severity", _CANON_BY_SEVERITY),
+        ("by_action", _CANON_BY_ACTION),
+        ("by_object_type", _CANON_BY_OBJECT_TYPE),
+    ):
+        src = out.get(key)
+        src = src if isinstance(src, dict) else {}
+        out[key] = {k: _count(src.get(k)) for k in canon}
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -320,6 +389,21 @@ def get_run(run_id: str) -> dict | None:
     if _is_stale(run):
         run = dict(run)
         run["stale"] = True
+    if getattr(_config.config, "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED", True):
+        run = dict(run)
+        run["summary"] = _normalize_summary(run.get("summary"))
+        # Plan 266 C4 — la copia ANIDADA. `get_run` devuelve el run COMPLETO,
+        # `diff` incluido (a diferencia de `list_runs`, que lo saca en :336).
+        # SummaryHero.tsx:49-50 lee `run.diff` y se lo pasa a
+        # svgMath.severityCounters/actionCounters (svgMath.ts:43 y :47), que son
+        # las violaciones #7 y #8 del censo: sin esto seguirían recibiendo el
+        # summary sin normalizar AUN CON LA FLAG ON. Copia superficial: no toca
+        # el disco (lo prueba test_get_run_no_reescribe_el_archivo_en_disco).
+        inner = run.get("diff")
+        if isinstance(inner, dict):
+            inner = dict(inner)
+            inner["summary"] = _normalize_summary(inner.get("summary"))
+            run["diff"] = inner
     return run
 
 
@@ -335,6 +419,8 @@ def list_runs(limit: int = 50) -> list[dict]:
             continue
         meta = {k: v for k, v in run.items() if k not in ("diff", "data_diff")}  # Plan 181: la lista JAMÁS arrastra filas (los secretos crudos viajaban por acá) ni el peso del data-diff
         meta["stale"] = _is_stale(run)
+        if getattr(_config.config, "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED", True):
+            meta["summary"] = _normalize_summary(meta.get("summary"))
         runs.append(meta)
     runs.sort(key=lambda r: r.get("started_at") or "", reverse=True)
     return runs[:limit]

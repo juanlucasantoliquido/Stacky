@@ -852,6 +852,39 @@
       },
       "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
       "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
+    },
+    {
+      "id": "dbcompare-summary-shape-render-crash",
+      "title": "Pantalla rota del Comparador de BD: lectura de by_severity sobre un summary a medio formar",
+      "class": "frontend-render-crash",
+      "status": "resolved",
+      "log_pattern": "Cannot read propert(?:y|ies) of undefined \\(?reading '(danger|warn|info|added|removed|changed|table|view|sequence)'",
+      "log_guarded": false,
+      "self_test": {
+        "matches": [
+          "Cannot read properties of undefined (reading 'danger')",
+          "Cannot read properties of undefined (reading 'added')"
+        ],
+        "clean": [
+          "Comparador de BD: corrida finalizada sin diferencias",
+          "Cannot read properties of undefined (reading 'foo')"
+        ]
+      },
+      "killed_by": "plan-266",
+      "killed_commit": "a38beb16",
+      "date_resolved": "2026-07-29",
+      "guard_test": "frontend/src/__tests__/dbcompareSummaryShapeRatchet.test.ts",
+      "evidence": [
+        "frontend/src/components/dbcompare/radarLogic.ts:60",
+        "frontend/src/components/dbcompare/RunsTimeline.tsx:37",
+        "frontend/src/components/dbcompare/EnvironmentRadar.tsx:144",
+        "frontend/src/components/dbcompare/EnvironmentRadar.tsx:215",
+        "frontend/src/components/dbcompare/SummaryHero.tsx:145",
+        "frontend/src/components/dbcompare/svgMath.ts:43",
+        "frontend/src/components/dbcompare/svgMath.ts:47",
+        "backend/services/dbcompare_runs.py:336"
+      ],
+      "note": "El operador veia 'Esta pestana fallo al renderizar / Cannot read properties of undefined'. El guard real es el ratchet, no un patron de log."
     }
   ]
 }

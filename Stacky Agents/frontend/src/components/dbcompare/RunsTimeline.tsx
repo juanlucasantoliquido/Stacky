@@ -1,5 +1,6 @@
 import type { CompareRun } from "./dbcompareTypes";
 import { relativeTimeEs } from "./relativeTime";
+import { safeSummary } from "./summaryShape";
 import styles from "./dbcompare.module.css";
 
 interface Props {
@@ -20,28 +21,32 @@ export function RunsTimeline({ runs, activeRunId, onSelectRun }: Props) {
 
   return (
     <div className={styles.runsTimeline}>
-      {sorted.map((run) => (
-        <div
-          key={run.run_id}
-          className={`${styles.runCard} ${run.run_id === activeRunId ? styles.runCardActive : ""}`}
-          onClick={() => onSelectRun(run)}
-        >
-          <div>
-            {run.source_alias} → {run.target_alias}
-          </div>
-          <div className={styles.recency}>
-            {run.status === "running" ? "en curso…" : relativeTimeEs(run.finished_at ?? run.started_at, nowIso)}
-          </div>
-          {run.summary && (
-            <div className={styles.recency}>
-              {run.summary.parity_score}% · 🔴{run.summary.by_severity.danger} 🟠
-              {run.summary.by_severity.warn} 🔵{run.summary.by_severity.info}
+      {sorted.map((run) => {
+        const sum = safeSummary(run.summary);
+        const sev = sum.by_severity;
+        return (
+          <div
+            key={run.run_id}
+            className={`${styles.runCard} ${run.run_id === activeRunId ? styles.runCardActive : ""}`}
+            onClick={() => onSelectRun(run)}
+          >
+            <div>
+              {run.source_alias} → {run.target_alias}
             </div>
-          )}
-          {run.stale && <span className={styles.staleCard}>stale</span>}
-          {run.status === "error" && <span className={styles.errorBanner}>error</span>}
-        </div>
-      ))}
+            <div className={styles.recency}>
+              {run.status === "running" ? "en curso…" : relativeTimeEs(run.finished_at ?? run.started_at, nowIso)}
+            </div>
+            {run.summary && (
+              <div className={styles.recency}>
+                {sum.parity_score}% · 🔴{sev.danger} 🟠
+                {sev.warn} 🔵{sev.info}
+              </div>
+            )}
+            {run.stale && <span className={styles.staleCard}>stale</span>}
+            {run.status === "error" && <span className={styles.errorBanner}>error</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }

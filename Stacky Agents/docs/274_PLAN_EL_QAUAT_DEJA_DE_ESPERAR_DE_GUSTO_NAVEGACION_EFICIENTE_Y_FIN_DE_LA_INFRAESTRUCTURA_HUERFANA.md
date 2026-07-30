@@ -1,20 +1,199 @@
 # Plan 274 — El QAUAT deja de esperar de gusto: navegación eficiente y fin de la infraestructura huérfana
 
-> **Estado:** MEJORADO (v2) — veredicto de la crítica v1: **RECHAZADO** (6 bloqueantes), corregidos en este v2.
+> **Estado:** MEJORADO (v3) — veredicto de la crítica v2: **RECHAZADO** (7 bloqueantes / 8 importantes / 5 menores),
+> corregidos en este v3.
 > **Fecha:** 2026-07-30
 > **Origen:** auditoría de eficiencia de navegación pedida por el operador (agente QA/UAT + Playwright sobre AgendaWeb).
 > **Advertencia sobre este header:** el campo `Estado:` **NO es evidencia**. Hay precedente de 7 planes cuyo header decía
 > IMPLEMENTADO sin serlo, y de 2 planes de este mismo linaje (240, 241) cuyo header dice "falta implementar" cuando el
 > código ya está en `main`. Verificá siempre con `git log --all --grep="plan-274"` y con los greps de §4.
 >
-> Juez v2: subagente independiente, misma corrida, contexto limpio (recibió solo la ruta del plan y de 4 vecinos; ningún razonamiento del autor)
+> Juez v2: subagente independiente, misma corrida, contexto limpio.
+> **Juez v3: sesión independiente, sin el v1 ni el razonamiento del autor.** Mandato: verificar que los fixes que el v2
+> **declaró** estén **aplicados en el cuerpo** (no solo anunciados en el changelog), reabrir cada `archivo:línea` contra
+> el código, y re-contar cada cifra con un comando reproducible.
 
 ---
 
-## §0. CHANGELOG v1 -> v2
+## §0. CHANGELOG v2 -> v3
 
-Todos los anclajes del v1 se reabrieron **contra el archivo real**. Las cifras se recorrieron con los comandos de §4.
-Resultado: 38 anclajes OK, 7 DESFASADOS, 6 grupos INEXISTENTES, 5 cifras mal, 2 contradicciones entre fases.
+> **Resultado de la verificación de los fixes declarados por el v2 (eje principal de esta pasada).**
+> De los 14 fixes que el v2 declaró: **6 CERRADOS**, **5 PARCIALES**, **3 REABIERTOS EN OTRO LADO**.
+> Ningún fix estaba puramente inventado — pero **tres de ellos cerraron el síntoma y dejaron vivo el defecto de diseño**,
+> que es el modo de falla que este pipeline viene repitiendo.
+>
+> **Anclajes verificados abriendo el archivo: 81 OK, 10 DESFASADOS, 3 INEXISTENTES/FUERA-DE-SCOPE.**
+> **Cifras re-contadas: 12 confirmadas, 4 mal.** Comandos pegados en cada hallazgo.
+
+### §0.1. Estado de los 14 fixes que el v2 declaró
+
+| Fix v2 | Qué prometía | Estado real | Dónde |
+|---|---|---|---|
+| **C1** | F7.1: reemplazar 6 claves de etapa inventadas por 6 reales | **REABIERTO** | las 6 existen, pero **3 están fuera del scope de `_check_deadline`** → `NameError`. Ver **V1** |
+| **C2** | F4: `probe.get("ready")` → `decision == "PASS"` | **CERRADO** | contrato re-verificado: `grep -c '"ready"'` → **0**; `PASS` en `:340`, `BLOCKED` en `:143` |
+| **C3** | F4: `screen`/`params`/`base_url` fuera de scope | **CERRADO** | firma `:151-158` re-verificada literal |
+| **C4** | F6: `put_data` → `store_data`, por campo | **CERRADO** | API re-verificada; `field_name` **es** el nombre real del loop (`data_resolver.py:360-388`) |
+| **C5** | F2: `__shouldCapture('success')` → `__captureIfBudget` | **REABIERTO** | la aridad quedó bien, pero con `captureIndex=0` fijo **el presupuesto por paso no puede activarse nunca**. Ver **V2** |
+| **C6** | 6 patas de flag en los 4 archivos correctos | **PARCIAL** | rutas OK y exactas, pero **el gate cubre 4 de 6 patas**; falta `_CATEGORY_KEYS`. Ver **V6** |
+| **C7** | F2: criterio `≤2` insatisfacible → conjunto `{325,496,798,806}` | **PARCIAL** | el criterio quedó bien, pero **el encabezado de F2 sigue diciendo "17 sitios"** y contradice su propio cuerpo. Ver **V7** |
+| **C8** | KPI-4 partido en 4a/4b | **PARCIAL** | la partición está, pero **la meta de 4a quedó sobre la base equivocada**. Ver **V3** |
+| **C9** | F7.2 inerte → agregar la escritura (`record_run`) | **PARCIAL** | el diseño es correcto, pero **la mitad nueva quedó anclada a una variable que no existe** y omite un parámetro obligatorio. Ver **V4** |
+| **C10** | F1.1: una sola espera, no dos | **CERRADO** | `waitForAgendaStable(page, timeout=10_000)` delega en `waitForAspNetIdle(page, timeout)` (`.j2:63-66`) ✓ |
+| **C11** | el censo arranca en 10, no en 11 | **PARCIAL** | **se corrigió el arranque y NO el cierre**: la cadena de fases pierde un decremento. Ver **V3** |
+| **C12** | baseline en archivo de datos + ratchet monótono | **CERRADO** | F0.1 no manda editar ningún assert ✓ |
+| **C13** | F8.2 lee `plan274_wait_baseline.json` | **CERRADO** | artefacto correcto ✓ |
+| **C14** | "los 5 que quedan"→6; "los 7 archivos"→11 | **CERRADO** | las dos listas cierran ✓ |
+| **[ADICIÓN v2] F9** | ratchet de reloj de pared | **REABIERTO** | **§8 y §9 se contradicen sobre cuándo tomar el baseline**, y así ordenado el ratchet es ciego a C10. Además `C-7` **no mide reloj de pared**. Ver **V5** |
+
+### §0.2. Hallazgos de esta pasada (V1..V20, rankeados)
+
+**BLOQUEANTES**
+
+- **V1 — F7.1: `_check_deadline` NO ESTÁ EN SCOPE en 3 de las 6 etapas elegidas.**
+  El v2 arregló que las claves *existieran* y no verificó que la función fuera *alcanzable*. `_check_deadline` está
+  definida **anidada dentro de `_run_pipeline_stages`** (`qa_uat_pipeline.py:1324` abre la función, `:1406` define el
+  closure sobre `_deadline`/`_max_minutes`/`stages`). Las asignaciones elegidas:
+  ```bash
+  grep -nE 'stages\["[^"]+"\][[:space:]]*=' qa_uat_pipeline.py | awk -F: '{print ($1>=1324 && $1<3794) ? "EN-SCOPE "$0 : "FUERA "$0}'
+  ```
+  → `stages["evidence"]` **:734** (dentro de `run()`, `:314`) · `stages["dossier"]` **:857** y `stages["publisher"]`
+  **:907** (dentro de `_run_dossier_and_publisher()`, `:825`) ⇒ **`NameError` en la primera corrida real**.
+  Peor: `compileall` **no lo detecta** (Python resuelve nombres en runtime) y el gate `grep -c "_check_deadline(" ≥ 9`
+  **da verde igual**. Era un gate que no corre contra su defecto. Además `screen_detection` **ya tiene** su chequeo en
+  `:1673` ⇒ de las 6, sólo `failure_analyzer` era genuinamente nueva y usable.
+  **FIX v3:** lista cerrada reemplazada por **6 claves verificadas EN SCOPE y sin chequeo previo**, y el criterio pasa a
+  ser **AST de alcance**, no un `grep -c`.
+- **V2 — F2: el presupuesto por paso queda INERTE, con todos los KPI en verde.**
+  `__shouldCapture(stepOk, captureIndex)` corta con `if (captureIndex >= limit)` donde `limit = stepOk ? __SS_ON_SUCCESS(1) : __SS_ON_FAILURE(3)` (`screenshot_budget.py:190-191`). F2 manda emitir
+  `__captureIfBudget(page, path, true, 0)` ⇒ `0 >= 1` es **false** ⇒ **siempre captura**. Y el template ya emite
+  **exactamente una** captura por paso:
+  ```bash
+  grep -n "page.screenshot(" templates/playwright_test.spec.ts.j2   # 19 lineas, 1 por rama de accion
+  for f in playwright/uat/*.spec.ts playwright/smoke/*.spec.ts; do echo -n "$f "; grep -c "page.screenshot(" $f; done  # 1 c/u
+  ```
+  ⇒ el objetivo declarado ("pasar de 17 capturas por paso a 1 en éxito") **ya se cumple hoy**; lo único que F2 agrega es
+  el techo de **25 por escenario**, que sólo se activa con >25 pasos. Un plan cuyo criterio es sintáctico (`≤4 sin
+  guardia`) **cierra la fase con 0 PNG menos**. Es el mismo patrón que C9 mató en F7.2, reintroducido en F2.
+  **FIX v3:** F2 declara honestamente su efecto real, pasa `captureIndex` **incremental por paso** y agrega un criterio
+  **sobre el número de PNG emitidos**, no sobre la sintaxis.
+- **V3 — la aritmética del censo no cierra: el ratchet de F8.2 nace con 1 unidad de holgura.**
+  Base: 11 módulos; `direct == 0` hoy = **10** (`arrival_validator.ts` tiene 1); `prod_reachable == False` = **11**.
+  Las fases conectan **5** módulos ⇒ cierre correcto: **direct = 10 − 5 = 5** y **alcanzable = 11 − 5 = 6**.
+  El v2 escribe la cadena `F2 10→9`, `F4 9→8`, **`F5 → 8`** (no decrementa), `F6 8→7`, `F7 7→6` ⇒ pierde el decremento
+  de F5 y cierra en **6/7**. Como F8.2 congela **esos** valores, un módulo que se desconecte después **no rompe el
+  ratchet**. Y `KPI-4a` mezcla bases: dice "Hoy **10** de 11 → Meta **≤6** de 11 (5 conectados)", pero 10 − 5 = **5**.
+  Es exactamente el defecto C11 declarado cerrado: **se corrigió el arranque y no el cierre.**
+  **FIX v3:** cadena y metas recalculadas a 5/6, con la distinción explícita entre *módulos huérfanos* (6) y *valor de
+  la métrica `direct`* (5) — que no son el mismo número y por eso se confundieron.
+- **V4 — F7.2.a (la mitad que el v2 agregó para matar la inercia) está anclada a algo que no existe.**
+  Dice *"Al terminar `_run_all_specs_once` (`uat_test_runner.py:301`), después de calcular `duration_ms`"*. Pero:
+  ```bash
+  awk 'NR>=301 && NR<461 && /duration_ms/{print NR": "$0}' uat_test_runner.py   # 0 lineas
+  grep -n "duration_ms   = int" uat_test_runner.py                              # 239
+  ```
+  `_run_all_specs_once` abarca **:301-460** y **no calcula `duration_ms`**: se calcula en `run()`, **`:239`**.
+  Y la firma real es **`record_run(playbook_id, verdict, duration_ms, slowest_step="", fail_reason="")`**
+  (`playbook_performance.py:113-118`): **`verdict` es posicional y obligatorio**, y el plan no lo nombra ⇒ `TypeError`.
+  Es el mismo error de clase que C4 (`put_data`) — cometido **en el fix de C9**.
+  **FIX v3:** F7.2.a re-anclada a `run()` `:239` con la firma completa y el valor de `verdict` determinado por regla.
+- **V5 — F9 (la [ADICIÓN ARQUITECTO] del v2) se auto-anula: §8 y §9 se contradicen.**
+  §8 ordena *"**F9 conviene correrla al final**… si se corre antes, congela como baseline el reloj **previo** a la
+  mejora y el ratchet queda flojo"*; §9 dice *"KPI-7 … **(medir antes de F1)**"*. Son instrucciones opuestas, y **el
+  razonamiento de §8 está invertido**: F9 existe (por el propio texto) para detectar que una espera por estado sea
+  **más lenta** que el sleep que reemplazó (C10) — y eso **sólo** se detecta con baseline **pre-F1**. Corriéndola al
+  final, `test_baseline_de_reloj_existe_o_se_crea` congela el reloj **ya mejorado (o ya degradado)** y el ratchet no
+  puede detectar nada. **FIX v3:** el baseline de F9 se toma en **F0**, la fase de baselines; el ratchet corre al final.
+- **V6 — dos flags nuevas se declaran con rollback por flag y NO tienen mecanismo.**
+  `STACKY_QA_UAT_STATE_WAITS_ENABLED` (F1): el diff de F1.1 es una edición **literal** del `.j2` (`await page.waitForTimeout(800);` → `await waitForAgendaStable(page, 5_000);`), sin variable Jinja ni rama condicional ⇒ con la flag
+  en OFF **no vuelve nada**. `STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED` (F2): el camino "bloque inerte" de
+  `build_ts_budget_block` se activa con `budget.disabled`, que sólo lee **`QA_UAT_SCREENSHOT_BUDGET_DISABLED`**
+  (`screenshot_budget.py:99`) — la flag nueva no está cableada a nada. Las dos **pasarían el gate de las 4 `grep`**
+  (existen en los 4 archivos) siendo **flags muertas**: el gate de patas verifica registro, no efecto.
+  **FIX v3:** mecanismo explícito para las dos + una 5ª pata de gate que exige que la key aparezca **también en el
+  código que la lee**.
+- **V7 — F7 pide `9 passed` y define 8 tests.** Contá los `test_` de `test_plan274_consolidation.py`: son **8**. Un
+  criterio de igualdad estricta con 8 tests definidos es insatisfacible ⇒ el implementador inventa un 9º o baja el
+  criterio, que es la conducta que todo el plan combate. **FIX v3:** 9 tests nombrados (el 9º es el gate de scope de V1).
+
+**IMPORTANTES**
+
+- **V8 — `C-7` no mide reloj de pared.** Corrido de verdad contra el reporte real:
+  ```
+  walk(suites) -> wall_clock_ms_total=47176      # 3 dicts con "duration"
+  d["stats"]["duration"] = 70030.106             # el reloj de pared REAL
+  d["stats"]["expected"] = 3
+  ```
+  El recorrido de `suites` **ignora `globalSetup` (el login) y todo el overhead**: subestima **22 854 ms (33 %)**.
+  El número correcto está a una clave de distancia. **FIX v3:** `C-7` usa `stats.duration` como reloj de pared y
+  `suites[*]` sólo para atribuir por test.
+- **V9 — el "impacto sobre una corrida real" no está medido.** Los 2 specs que el plan dice que bajan ~33 s
+  (`ado122`, `ado171`) **no aparecen en el único reporte real del repo**, que corrió 3 specs generados del ticket 367
+  (`P01/P02/P03`, 15 942 / 15 302 / 15 932 ms). La aritmética cierra (35,9 − 3 ≈ 33 s; 33/360 = 9,2 %) pero es una
+  **proyección sobre el contenido de archivos**, rotulada como impacto medido. **FIX v3:** re-rotulado como proyección,
+  con el reloj real como única evidencia aceptable (KPI-7).
+- **V10 — el gate de las "6 patas" sólo verifica 4.** Falta `_CATEGORY_KEYS` (`harness_flags.py:120`), que el propio
+  registry declara obligatorio: `harness_flags.py:514` dice *"toda flag nueva debe agregarse también a `_CATEGORY_KEYS`
+  o el test `test_every_registry_flag_is_categorized` **rompe CI a propósito** (Plan 63)"*. El plan lo deja como
+  *"si el registry lo exige"* — lo exige. Con 6 flags nuevas sin categorizar, CI rojo.
+- **V11 — F8.3 es inimplementable como está escrita, y el plan no lo sabe.** El ratchet corre
+  `cd backend && pytest <ruta>` con rutas **peladas** en un array bash; y los dos meta-tests parsean con
+  `^\s*(tests/[\w/]+\.py)\s*$` (`.sh`) y `^\s*"(tests/[\w/]+\.py)"\s*,?\s*$` (`.ps1`, `test_plan259_ratchet_script_parity.py:28-30`).
+  Una ruta `../../Stacky tools/QA UAT Agent/tests/unit/…` **tiene espacios** (word-splitting en bash) y **no matchea
+  ninguno de los dos regex** ⇒ se registraría **muda**. Además hay un **tercer punto de registro** que el plan nunca
+  nombra: `backend/tests/harness_ratchet_allowlist.txt` (204 líneas) — un `.py` nuevo en `backend/tests/` que no esté
+  en `HARNESS_TEST_FILES` **ni** en la allowlist rompe `test_harness_ratchet_meta.py`.
+  ```bash
+  grep -cE "^\s+tests/test_" backend/scripts/run_harness_tests.sh   # 718
+  grep -cE 'tests[/\\]test_'  backend/scripts/run_harness_tests.ps1 # 654  <- ya divergen 64
+  ```
+  **FIX v3:** F8.3 pasa a ser **deuda declarada por defecto** (la rama viable), y el único registro obligatorio es el
+  del archivo de backend, en los **DOS** scripts, con la sintaxis de cada uno.
+- **V12 — `QA_UAT_DEEPLINK_PROBE_TIMEOUT_S` es config de operador nueva fuera de la UI.** Riel: toda config del
+  operador va por UI; sólo los kill-switches son env-only. **FIX v3:** constante del módulo, sin env var nueva.
+  (En cambio `QA_UAT_ACTION_TIMEOUT_MS` de F1.1 **sí existe** ya — `playwright.config.ts:25` — y su reuso es correcto.)
+- **V13 — F0 promete "≥ 8 passed (… 3 de censo)" y F0.2 define 5 tests de censo.** El total nombrado es **10**.
+  El `≥` evita que sea insatisfacible, pero el desglose entre paréntesis induce a escribir 3.
+- **V14 — `test_el_reloj_de_pared_no_empeora` figura en `test_plan274_ratchet.py` (F8.2) y su implementación en
+  `test_plan274_wallclock.py` (F9).** Propiedad ambigua ⇒ o se duplica o falta.
+- **V15 — cifras del v2 que no resisten el re-conteo:**
+  `182 líneas con timeout=` → **184** (`grep -rn "timeout=" --include=*.py . | grep -v __pycache__ | wc -l`);
+  `data_resolver.resolve()/resolve_fields() invocados desde :1176 y :1282` → **`:1282` importa `FIELD_HINTS`**, no
+  invoca nada; la invocación real es **`:1203`**, y `resolve()` **no tiene caller en el pipeline**.
+
+**MENORES (anclajes DESFASADOS, corregidos en el texto sin borrarlos)**
+
+- **V16** — `screenshot_budget.py:180` (cuerpo de F2) → real **`:181`** (el changelog del v2 sí decía `:181`: el fix no
+  se propagó a la fase).
+- **V17** — `screenshot_budget.py:198` (§3.7) → la firma de `__captureIfBudget` está en **`:195`**.
+- **V18** — `playbook_performance.py:166-168` (H7-bis) → **`:167-168`**.
+- **V19** — `qa_uat_pipeline.py:2144` "el `except`" → el `except ImportError:` está en **`:2143`**; `:2144` es el `logger.debug`.
+- **V20** — restos del v1 que el changelog dio por corregidos y siguen en el cuerpo: **"17"** en §2.2[9], §2.4 y en el
+  encabezado de F2 (`:685`, `:690`) → **18/19/15**; **"38 etapas"** en §2.2[4] y §2.4 → **19 claves / 35 asignaciones**;
+  **`:352`** en R-8 → **`:354`**.
+
+### §0.3. Lo que se re-verificó y quedó CONFIRMADO (no se tocó)
+
+`wc -l` del corpus = **4462 exacto** (11/11 líneas individuales) · `C-1` = **26 / 35 900** · `C-2` = **1** en `:608` ·
+`C-3` = **19** y **las 19 líneas coinciden una por una** con la clasificación A/B/C/D de H3 · `C-5` = **3** ·
+`C-5b` = **19 / 35** · `C-6` = `--workers=1` en **`:355`** · **0 importadores de producción en los 6 módulos Python** y
+**1** en `arrival_validator.ts` (`navigation_executor.ts:26`) · H5 completo (`#c_`=**9** en el template, **35** en los
+specs; `getByRole`=0) · H9 completo (`turno`=0, `disponibilidad`=0, `cita`=7, `recurso`=15, `profesional`=1) ·
+**90** archivos `test_*.py` en el tool · **0** menciones de "QA UAT Agent" en los dos ratchets · las 6 patas de flag en
+sus 4 archivos (`harness_flags.py:518-531`, `config.py:1224-1240`, `test_harness_flags.py:467`,
+`harness_flags_help.py:25`) · el comentario mentiroso de `config.py:1230-1234` · el reuso de sesión de §2.2[7] ·
+las **6 flags en ON** con justificación válida (ninguna cae en (A) ni en (B)) · human-in-the-loop · cero RBAC ·
+neutralidad de los 3 runtimes · `error_fingerprints.json` (53 KB) · **9 worktrees vivos**.
+
+### §0.4. [ADICIÓN ARQUITECTO v3]
+
+**F10 — el gate de EFICACIA: ningún KPI sintáctico cierra una fase solo.** Las tres bloqueantes de esta pasada
+(V1 scope, V2 presupuesto inerte, V6 flags muertas) comparten una firma: **el criterio mide que el código esté escrito,
+no que haga algo**. F10 agrega dos gates deterministas y baratos que corren contra esa clase entera —
+alcance por **AST** y conteo de **artefactos realmente emitidos**. Detalle en §5/F10.
+
+---
+
+### §0.5. CHANGELOG heredado v1 -> v2 (se conserva para trazabilidad)
 
 **BLOQUEANTES corregidos (el v1 era inimplementable sin inventar):**
 
@@ -107,16 +286,30 @@ falta conectar*.
 | **KPI-1** — ms de espera de reloj incondicional en los specs vivos | **35 900 ms** (26 llamadas) | **≤ 3 000 ms** (solo las que un test pruebe necesarias) | comando `C-1` de §4 |
 | **KPI-2** — esperas de reloj horneadas en el generador maestro | **1** (`templates/playwright_test.spec.ts.j2:608`) | **0** | comando `C-2` |
 | **KPI-3** — `page.screenshot()` incondicionales en el generador | **18** de 19 (v1 decía 17: omitía `:806`) | **≤ 4** sin guardia, y son **estas 4 nominadas**: `:325`, `:496`, `:798`, `:806` | comando `C-3` |
-| **KPI-4a** — módulos del corpus CERRADO de 11 (§2.3) con 0 importadores de producción | **10 de 11** (v1 decía 11: `arrival_validator.ts` ya tiene 1, ver C-4) | **≤ 6 de 11** (5 conectados por F2/F4/F5/F6/F7) | comando `C-4` |
+| **KPI-4a** — módulos del corpus CERRADO de 11 (§2.3) con **0 importadores directos** | **10** (v1 decía 11: `arrival_validator.ts` ya tiene 1, ver C-4) | **5** (10 − los 5 que conectan F2/F4/F5/F6/F7) | comando `C-4` |
+| **KPI-4a-bis** — módulos del corpus **sin alcance de producción** | **11** | **6** (11 − 5) | `prod_reachable` de F0.2 |
 | **KPI-4b** — módulos del corpus con **veredicto escrito** en §9 | **0 de 11** | **11 de 11** | inspección de §9 |
-| **KPI-5** — llamadas a `_check_deadline` en el pipeline | **2** llamadas + 1 definición = **3 líneas** | **8** llamadas + 1 definición = **9 líneas** | comando `C-5` |
+| **KPI-5** — llamadas a `_check_deadline` **en scope** en el pipeline | **2** llamadas + 1 definición = **3 líneas** | **8** llamadas + 1 definición = **9 líneas**, *todas dentro de `_run_pipeline_stages`* | `C-5` **y** `C-8` (AST) |
 | **KPI-6** — el paralelismo configurable es real (la env var no se pisa) | **falso** (`--workers=1` hardcodeado en `uat_test_runner.py:355` pisa `QA_UAT_WORKERS`) | **verdadero** (se respeta, con guardia de sesión) | comando `C-6` |
-| **KPI-7** *(nuevo, [ADICIÓN ARQUITECTO])* — reloj de pared de la corrida Playwright | sin medir (solo smoke manual) | ratchet automático desde `reports/playwright-results.json` | comando `C-7` |
+| **KPI-7** — reloj de pared de la corrida Playwright | **70 030 ms** medidos en el último reporte real (3 tests) | ratchet delta desde `stats.duration` de `reports/playwright-results.json` | comando `C-7` |
+| **KPI-8** *(nuevo, [ADICIÓN ARQUITECTO v3])* — **PNG realmente emitidos** por un spec renderizado | `N_pasos + 4` (una captura por paso, sin techo) | `min(N_pasos, 25) + 4`, y el techo **demostrado activándose** | comando `C-9` |
 
-> **Por qué KPI-4 se partió en dos (corrige un criterio insatisfacible del v1).** El v1 pedía `≤ 5 de 11` **medido con
-> C-4**, pero sus fases conectan **5** módulos ⇒ quedan **6** ⇒ C-4 devuelve 6 y el KPI da rojo. El v1 lo "resolvía"
-> redefiniendo el KPI a mitad de documento como "conectados **o con veredicto**", que C-4 no puede medir. Son dos
-> métricas distintas y ahora se declaran como dos.
+> **Por qué KPI-4a bajó de "≤6" a "5" (corrige un error aritmético del v2 — hallazgo V3).** El v2 partió bien el KPI
+> pero dejó la meta sobre la base equivocada: escribió "Hoy **10** de 11 → Meta **≤6** de 11", y **10 − 5 = 5**.
+> El error nace de confundir dos cosas que dan números distintos:
+> - **módulos que siguen huérfanos** tras el plan = **6** (los que F8.1 debe dictaminar), y
+> - **valor de la métrica `direct`** al cierre = **5**, porque `arrival_validator.ts` **nunca** estuvo en esa cuenta
+>   (ya tenía 1 importador directo).
+>
+> Las dos son verdad y no son el mismo número. Congelar el ratchet en 6 (como hacía F8.2) le regala **una unidad de
+> holgura**: un módulo podría desconectarse sin romper nada. La cadena corregida, fase por fase, es:
+>
+> | | arranque | F2 | F4 | F5 | F6 | F7 |
+> |---|---|---|---|---|---|---|
+> | `direct == 0` | 10 | 9 | 8 | **7** | 6 | **5** |
+> | `prod_reachable == False` | 11 | 10 | 9 | **8** | 7 | **6** |
+>
+> *(El v2 saltaba la columna de F5 y reanudaba F6 desde el valor de F4.)*
 >
 > **Por qué desapareció el "de 38".** No existe ningún comando que produzca 38 etapas.
 > `grep -oE 'stages\["[^"]+"\]' qa_uat_pipeline.py | sort -u | wc -l` → **19** claves distintas;
@@ -124,10 +317,17 @@ falta conectar*.
 > `grep -c 'stages\[' qa_uat_pipeline.py` → **136** referencias. KPI-5 se mide sobre lo único verificable: el conteo
 > de `_check_deadline(`.
 
-**Impacto esperado sobre una corrida real.** Los 2 specs que concentran el desperdicio (`ado122_provincia_domicilio.spec.ts`
-= 21 100 ms, `ado171_emails_oficial.spec.ts` = 14 500 ms) bajan ~33 s de reloj de pared **por corrida y sin tocar la app**.
-Sobre el presupuesto declarado del pipeline (6 min por ticket, `qa_uat_pipeline.py:1373`), 33 s son el **9,2 %** del
-presupuesto total recuperados de esperas que no verifican nada.
+**Impacto PROYECTADO (no medido) sobre una corrida.** *(Rótulo corregido en v3 — hallazgo V9: el v2 lo presentaba como
+"impacto sobre una corrida real" y no hay ninguna corrida real que lo respalde.)* Los 2 specs que concentran el
+desperdicio (`ado122_provincia_domicilio.spec.ts` = 21 100 ms, `ado171_emails_oficial.spec.ts` = 14 500 ms) deberían
+bajar ~33 s de reloj de pared por corrida sin tocar la app. Sobre el presupuesto declarado del pipeline (6 min por
+ticket, `qa_uat_pipeline.py:1373`), 33 s son el **9,2 %**. La aritmética cierra (35,9 − 3,0 ≈ 32,9 s; 32,9 / 360 = 9,1 %)
+**pero sale del contenido de los archivos, no de un reloj.**
+
+> **Por qué esto no es evidencia.** El único `reports/playwright-results.json` del repo corresponde a **otra** corrida:
+> 3 specs generados del ticket 367 (`P01`/`P02`/`P03`, 15 942 / 15 302 / 15 932 ms, `stats.startTime`
+> `2026-07-26T00:36:03.100Z`). **Ninguno de los 2 specs citados aparece ahí.** La única evidencia aceptable de que este
+> plan aceleró algo es **KPI-7 medido antes y después** (F9, con el baseline tomado en **F0**, ver §8).
 
 ---
 
@@ -164,16 +364,19 @@ insertándola en `sys.path` (`qa_uat.py:67-71`).
 [1] backend: POST /api/qa-uat/run          -> api/qa_uat.py:211
 [2] thread daemon                           -> api/qa_uat.py:165-171
 [3] pipeline in-process                     -> api/qa_uat.py:317,323  (import qa_uat_pipeline; .run())
-[4] ... 38 etapas (stages[...] = ...) ...   -> qa_uat_pipeline.py  (deadline consultado en solo 2: :1673, :3402)
+[4] ... 19 claves de etapa / 35 asignaciones -> qa_uat_pipeline.py  (deadline consultado en solo 2: :1673, :3402)
+    de esas 19, SOLO 12 se asignan dentro de _run_pipeline_stages (:1324), que es donde vive _check_deadline (:1406)
 [5] genera los .spec.ts desde el template   -> playwright_test_generator.py:179 (get_template), :384/:932 (render)
                                                template = templates/playwright_test.spec.ts.j2  (playwright_test_generator.py:51)
-[6] runner: UNA sola invocación npx         -> uat_test_runner.py:301 (_run_all_specs_once), :352 (cmd), :395 (Popen)
+[6] runner: UNA sola invocación npx         -> uat_test_runner.py:301 (_run_all_specs_once), :351-355 (cmd), :395 (Popen)
+                                               duration_ms de la corrida se calcula en run(), :239 — NO en :301-460
 [7] Playwright globalSetup: auth            -> playwright.config.ts:7 -> playwright/global.setup.ts
       reusa .auth/agenda.json si es válido   -> global.setup.ts:85 (authFile), :91-106 (fingerprint), :116-120 (skip login)
       valida sesión viva por HTTP real       -> playwright/auth_state_validator.ts (TTL 30 min)
 [8] cada spec navega                         -> playwright/helpers/webforms_nav.ts  (navigateViaFormSubmit)
       *** único helper TS con importadores reales: 4 ***
-[9] evidencia                                -> 17 page.screenshot() incondicionales heredados del template
+[9] evidencia                                -> 18 de 19 page.screenshot() incondicionales heredados del template
+                                               (una por paso; el techo de 25/escenario NO existe hoy — ver V2)
 ```
 
 **Lo bueno, que este plan NO debe tocar:** el paso [7] es excelente. La sesión **se reusa de verdad**: `storageState`
@@ -265,20 +468,37 @@ es **medir** la fragilidad y **anclar por contrato** (F5).
 `BLOCKED / EXCEEDED_REASONABLE_RUNTIME` *(los 4 anclajes verificados, exactos)*. Pero solo se **invoca en 2 lugares**
 (`:1673` y `:3402`). Es cooperativo: evita *empezar* una etapa tarde, no puede cortar una colgada.
 
-**El denominador real (corrige el "38" del v1, que no sale de ningún comando):** hay **19 claves de etapa distintas**
-y **35 asignaciones literales** `stages["…"] = `. Las 19 claves, verbatim y en orden alfabético — **esta lista es
-normativa para F7.1**:
+**H6-bis (ALTO, descubierto al verificar el v2 — es la raíz del hallazgo V1): `_check_deadline` es una función
+ANIDADA, no una función del módulo.** Está definida **dentro de `_run_pipeline_stages`** (que abre en `:1324`) y es un
+**closure** sobre `_deadline`, `_max_minutes`, `_effective_config`, `ticket_id`, `stages` y `started`. Consecuencia
+dura: **sólo se la puede llamar desde dentro de esa función**. Llamarla desde `run()` o desde
+`_run_dossier_and_publisher()` es un **`NameError` en runtime que `compileall` no detecta**.
 
+**El denominador real (corrige el "38" del v1, que no sale de ningún comando):** hay **19 claves de etapa distintas**
+y **35 asignaciones literales** `stages["…"] = `. Pero **el denominador útil para F7.1 no es 19: es 12**, porque sólo
+12 de las 19 se asignan dentro del scope de `_check_deadline`. Comando normativo:
+
+```bash
+# EN SCOPE (asignadas dentro de _run_pipeline_stages, :1324-:3793)
+awk 'NR>=1324 && NR<3794' qa_uat_pipeline.py \
+  | grep -oE 'stages\["[^"]+"\][[:space:]]*=' | grep -oE '"[^"]+"' | sort -u
+# FUERA DE SCOPE
+awk 'NR<1324 || NR>=3794' qa_uat_pipeline.py \
+  | grep -oE 'stages\["[^"]+"\][[:space:]]*=' | grep -oE '"[^"]+"' | sort -u
 ```
-compiler_contract   config_validation   dossier          epic_rollup        evaluator
-evidence            failure_analyzer    functional_verdict  generator_contract  intent_parser
-publisher           quarantine_check    run_metrics_summary  runner            screen_detection
-selector_contract   synthetic_ticket_builder   triage     weak_oracle_filter
-```
+
+| | Claves |
+|---|---|
+| **EN SCOPE (12)** — usables por F7.1 | `compiler_contract` · `config_validation` · `evaluator` · `failure_analyzer` · `generator_contract` · `quarantine_check` · `run_metrics_summary` · `runner` · `screen_detection` · `selector_contract` · `triage` · `weak_oracle_filter` |
+| **FUERA DE SCOPE (7)** — **prohibidas** para F7.1 | `dossier` (`:857`) · `epic_rollup` (`:4136`) · `evidence` (`:734`) · `functional_verdict` (`:4281`) · `intent_parser` (`:1046`) · `publisher` (`:907`) · `synthetic_ticket_builder` (`:1110`) |
+
+> **Tres de las 6 claves que el v2 eligió están en la columna prohibida** (`evidence`, `dossier`, `publisher`).
+> Ese es el hallazgo V1 y por eso F7.1 se reescribió entera.
 
 **H7 (MEDIO) — no hay un solo punto donde se fije el timeout por defecto.**
-`set_default_timeout` = 0 ocurrencias; `set_default_navigation_timeout` = 0; 182 líneas con `timeout=` *(los 3
-verificados)*. Techo real más alto del repo: `playbook_performance.py:60` → `_TIMEOUT_CEILING_MS = 600_000` (10 min),
+`set_default_timeout` = 0 ocurrencias; `set_default_navigation_timeout` = 0; **184** líneas con `timeout=`
+*(el v2 decía 182; comando: `grep -rn "timeout=" --include=*.py . | grep -v __pycache__ | wc -l` → 184)*.
+Techo real más alto del repo: `playbook_performance.py:60` → `_TIMEOUT_CEILING_MS = 600_000` (10 min),
 con piso `:59` → `_TIMEOUT_FLOOR_MS = 60_000` — en el huérfano #7. Y **`uat_test_runner.py:354`** *(el v1 decía `:352`;
 `:352` es la línea `"npx", "playwright", "test",`)* pasa `--timeout=90000` (de `_DEFAULT_TIMEOUT_MS = 90_000`, `:48`)
 que **pisa** el `timeout: 60000` de `playwright.config.ts:8`.
@@ -287,14 +507,36 @@ que **pisa** el `timeout: 60000` de `playwright.config.ts:8`.
 `playbook_performance.record_run` tiene **0 callers de producción**
 (`grep -rn "record_run" --include=*.py . | grep -v tests/ | grep -v _attic` → solo `budget_enforcer.py:277`, que es
 `record_run_cost`, otra función). Sin escritor, `_load(playbook_id)` devuelve vacío, `p95_duration_ms` es 0, y
-`recommend_timeout_ms` cae por `if p95 <= 0: return default_ms` (`:166-168`) **siempre**. Consecuencia directa:
+`recommend_timeout_ms` cae por `if p95 <= 0: return default_ms` (**`:167-168`**; el v2 decía `:166-168` — `:166` es
+`p95 = data.get("p95_duration_ms", 0)`) **siempre**. Consecuencia directa:
 **conectar solo el lector deja la feature inerte para siempre** con sus tests en verde (el mismo patrón que el
 "runner sin loop por caso" del plan 262). Por eso F7.2 **también cablea la escritura**.
+
+> **La firma de la escritura, verificada (hallazgo V4 — el v2 la dio por sentada).**
+> `record_run(playbook_id: str, verdict: str, duration_ms: int, slowest_step: str = "", fail_reason: str = "") -> dict`
+> (`playbook_performance.py:113-118`). **`verdict` es posicional y obligatorio.** Cualquier llamada que pase sólo id y
+> duración es un `TypeError`.
 
 **H8 (MEDIO) — los 90 archivos de test del tool están FUERA de los dos ratchets del arnés.**
 `grep -c "QA UAT Agent" run_harness_tests.sh` → **0**. Idem `.ps1` → **0**. Los ratchets solo registran los tests del
 **backend** (`tests/test_plan214_*`, `tests/test_plan241_qa_uat.py`). Consecuencia directa para este plan: **un test
 nuevo creado dentro del tool no tiene gate automático**; hay que declarar su comando explícito (F0.3 y §4).
+
+**H8-bis (ALTO, descubierto al verificar el v2 — hallazgo V11): meter el tool al ratchet NO ES POSIBLE con el mecanismo
+actual, y hay un TERCER punto de registro que el v2 no nombra.**
+1. El `.sh` hace `cd "$(dirname "$0")/.."` (→ `backend/`) y corre `pytest <ruta>` con las rutas **peladas, sin comillas**,
+   dentro de un array bash. La ruta del tool contiene **dos espacios** (`Stacky tools`, `QA UAT Agent`) ⇒ word-splitting.
+2. Los dos meta-tests que vigilan el registro sólo reconocen rutas bajo `tests/`:
+   `_SH_RE = ^\s*(tests/[\w/]+\.py)\s*$` y `_PS1_RE = ^\s*"(tests/[\w/]+\.py)"\s*,?\s*$`
+   (`backend/tests/test_plan259_ratchet_script_parity.py:28-30`). `[\w/]` **no admite espacios ni puntos**, así que una
+   entrada `../../Stacky tools/…` quedaría registrada **muda**: ningún gate la vería.
+3. **Tercer punto de registro:** `backend/tests/harness_ratchet_allowlist.txt` (204 líneas). `test_harness_ratchet_meta.py`
+   exige que **todo** `backend/tests/test_*.py` esté en `HARNESS_TEST_FILES` **o** en esa allowlist con motivo.
+4. Los dos scripts **ya divergen**: `grep -cE "^\s+tests/test_" run_harness_tests.sh` → **718**;
+   `grep -cE 'tests[/\\]test_' run_harness_tests.ps1` → **654**.
+
+⇒ **la deuda H8 se declara aceptada, no se "resuelve"** (ver F8.3 reescrita). Lo único obligatorio es registrar el
+**archivo de backend** de F0.3 en los **DOS** scripts, cada uno con su sintaxis.
 
 **H9 (BAJO, pero corrige el brief) — no existe el dominio de "turnos".**
 `turno` → **0**; `disponibilidad` → **0**. *(Corrección del v1, que declaraba 0 para todos)*: `cita` → **7**,
@@ -326,10 +568,10 @@ Es human-in-the-loop correcto (categoría B: DML en una BD del operador). **No s
 |---|---|---|---|
 | H1 huérfanos 4462 líneas | alto (las mejoras existen y no se cosechan) | medio (código no ejercitado se podre) | **muy alto** (11 módulos que un dev cree activos) |
 | H2 35,9 s de sleeps | **muy alto** | medio (un sleep corto de más = flaky) | alto (se replica desde el template) |
-| H3 17 capturas/paso | medio (I/O + disco) | bajo | medio (ruido en la evidencia) |
+| H3 18 de 19 capturas sin guardia | **bajo** *(rebajado en v3 — V2: ya es 1 por paso; lo que falta es el techo)* | bajo | medio (ruido en la evidencia) |
 | H4 paralelismo falso | alto (potencial sin cobrar) | **crítico si se "arregla" mal** (sesión WebForms única) | alto (config que miente) |
 | H5 selectores `#c_` | bajo | **alto** (renombre masivo al tocar el `.aspx`) | alto |
-| H6 deadline en 2/38 | medio | medio (etapa colgada agota la corrida) | bajo |
+| H6 deadline en 2 de las 12 etapas alcanzables | medio | medio (etapa colgada agota la corrida) | bajo |
 | H7 timeouts dispersos | medio | medio | alto |
 | H8 tool fuera del ratchet | — | **alto** (regresiones sin gate) | alto |
 
@@ -351,19 +593,24 @@ Es human-in-the-loop correcto (categoría B: DML en una BD del operador). **No s
 2. **Mono-operador sin auth real.** Cero RBAC, cero multiusuario. `current_user` sigue siendo un header sin validar.
 3. **Paridad de los 3 runtimes (Codex CLI / Claude Code CLI / GitHub Copilot Pro).** Todo lo que este plan toca vive
    en el tool y en los specs `.ts` — **ningún runtime de LLM participa de la ejecución de un spec**. El impacto por
-   runtime es por lo tanto **idéntico y neutro** en las 10 fases, y así se declara en cada una (no es una omisión: es
-   el hecho de que la frontera de proceso es `npx playwright test`, `uat_test_runner.py:351-356`, con el `Popen` en
-   `:395`). Verificado: ninguna de las fases F0..F9 toca `llm_client.py` ni una etapa que invoque un modelo.
+   runtime es por lo tanto **idéntico y neutro** en las **11** fases, y así se declara en cada una (no es una omisión:
+   es el hecho de que la frontera de proceso es `npx playwright test`, `uat_test_runner.py:351-356`, con el `Popen` en
+   `:395`). Verificado: ninguna de las fases **F0..F10** toca `llm_client.py` ni una etapa que invoque un modelo.
+   F10 usa `ast` de la stdlib y `grep`: neutro por construcción.
 4. **Cero trabajo extra al operador.** Ninguna fase agrega un paso manual, una credencial ni una config nueva
    obligatoria. Las flags nuevas nacen **ON** (§3.1).
 5. **No degradar estabilidad.** Prohibido subir `workers` por default (H4 / R-2). Prohibido bajar un timeout sin un test
    que pruebe que la espera por estado cubre el caso.
 6. **Backward-compatible.** Ningún cambio de contrato de `api/qa_uat.py` ni de la forma del reporte. Los specs existentes
    siguen corriendo.
-7. **Reusar antes que construir.** Es la tesis del plan: **6 de las 10 fases conectan código que ya existe**; solo F3
+7. **Reusar antes que construir.** Es la tesis del plan: **6 de las 11 fases conectan código que ya existe**; solo F3
    y F5 escriben lógica nueva, y es mínima. **El plan se aplica la tesis a sí mismo**: F2 usa el `__captureIfBudget`
-   que `screenshot_budget.py:198` ya emite en vez de reescribir el `if`, y F9 lee el `reports/playwright-results.json`
-   que el reporter `json` de `playwright.config.ts:17` ya escribe en vez de instrumentar nada.
+   que `screenshot_budget.py:195` ya emite en vez de reescribir el `if` *(el v2 citaba `:198`, que es una llave de
+   cierre)*, y F9 lee el `reports/playwright-results.json` que el reporter `json` de `playwright.config.ts:17` ya
+   escribe en vez de instrumentar nada.
+8. **Ningún criterio sintáctico cierra una fase solo** *(regla nueva en v3)*. Un `grep -c` prueba que el código está
+   escrito; no prueba que se ejecute, que esté en scope, ni que cambie un artefacto. Toda fase que conecte algo tiene
+   además un criterio **de efecto** (F10).
 
 ### §3.1. Flags nuevas — todas ON, con su justificación
 
@@ -396,7 +643,10 @@ a medias — precedente registrado varias veces):
    `harness_flags.py`** (ahí solo hay un comentario que lo nombra, `:578`). El test compara **igualdad de conjuntos**,
    así que una flag `default=True` que no esté curada **rompe el arnés**. Verificable:
    `grep -n "_CURATED_DEFAULTS_ON *=" backend/tests/test_harness_flags.py` → `467`.
-4. Categoría en `_CATEGORY_KEYS` (**`harness_flags.py:120`**) si el registry lo exige para `group="global"`.
+4. Categoría en `_CATEGORY_KEYS` (**`harness_flags.py:120`**). **NO es condicional** *(corrige el "si el registry lo
+   exige" del v2 — hallazgo V10)*: `harness_flags.py:514` dice textualmente *"toda flag nueva debe agregarse también a
+   `_CATEGORY_KEYS` (arriba) o el test `test_every_registry_flag_is_categorized` **rompe CI a propósito** (Plan 63)"*.
+   Con 6 flags nuevas sin categorizar, CI queda rojo.
 5. Entrada en `PLAIN_HELP`, que vive en **`Stacky Agents/backend/services/harness_flags_help.py:25`** — **tampoco está
    en `harness_flags.py`**. Sin esta pata la flag aparece muda en el panel del operador.
 6. Verificación de que aparece en el panel de flags de la UI (`GET /api/harness/flags` la lista).
@@ -409,10 +659,20 @@ K=STACKY_QA_UAT_<...>
 grep -c "$K" backend/services/harness_flags.py        # >= 1  (pata 1)
 grep -c "$K" backend/config.py                        # >= 1  (pata 2)
 grep -c "$K" backend/tests/test_harness_flags.py      # >= 1  (pata 3)
+awk '/_CATEGORY_KEYS/,/^}/' backend/services/harness_flags.py | grep -c "$K"   # >= 1  (pata 4)
 grep -c "$K" backend/services/harness_flags_help.py   # >= 1  (pata 5)
+# PATA 7 (NUEVA en v3, hallazgo V6): la flag tiene que ser LEIDA por alguien.
+cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
+grep -rn "$K" --include=*.py --include=*.j2 . | grep -v __pycache__ | wc -l   # >= 1
 ```
-Las 4 tienen que dar `>= 1`. Con el código de hoy dan **0, 0, 0, 0** para las 6 keys ⇒ el gate arranca ROJO, que es
+Las **6** primeras tienen que dar `>= 1`. Con el código de hoy dan **0** para las 6 keys ⇒ el gate arranca ROJO, que es
 lo que se espera de un gate.
+
+> **PATA 7 — "la flag tiene que hacer algo" `[ADICIÓN ARQUITECTO v3]`.** El gate del v2 verificaba **registro**, no
+> **efecto**: dos de sus seis flags (`..._STATE_WAITS_ENABLED` y `..._SCREENSHOT_BUDGET_ENABLED`) se declaraban con
+> "rollback exacto por flag" y **ninguna fase las cableaba a nada** — hallazgo V6. Una flag registrada en los 5 sitios
+> y leída en 0 pasa el gate viejo y es **una flag muerta en el panel del operador**: peor que no tenerla, porque miente.
+> La pata 7 cuesta un `grep` y mata la clase entera.
 
 **Advertencia sobre el comentario que miente:** en `config.py:1230-1231` hay un comentario que dice
 *"Default OFF por EXCEPCION DURA #3"* pegado encima de un `os.getenv(..., "true")` (línea 1232-1234). **No copiar ese
@@ -480,30 +740,70 @@ grep -cE 'stages\["[^"]+"\][[:space:]]*=' qa_uat_pipeline.py          # 35 asign
 # C-6  KPI-6: el --workers hardcodeado  (hoy: 1 ocurrencia = miente)
 grep -n -- "--workers=1" uat_test_runner.py
 
-# C-7  KPI-7 [ADICION ARQUITECTO]: reloj de pared real de la ultima corrida Playwright.
+# C-7  KPI-7: reloj de pared REAL de la ultima corrida Playwright.
 #      Es lo unico que detecta que una espera por estado sea MAS LENTA que el sleep que reemplazo.
+#      CORREGIDO en v3 (hallazgo V8): el v2 sumaba las "duration" de suites[*] y eso IGNORA globalSetup
+#      (el login) y todo el overhead -> subestimaba 22854 ms (33%) en el reporte real del repo.
 "$PY" - <<'PY'
 import json, pathlib
-p = pathlib.Path("reports/playwright-results.json")
-d = json.loads(p.read_text(encoding="utf-8"))
-tot = 0
+d = json.loads(pathlib.Path("reports/playwright-results.json").read_text(encoding="utf-8"))
+st = d["stats"]
+per_test = []
 def walk(x):
-    global tot
     if isinstance(x, dict):
         if "duration" in x and isinstance(x["duration"], (int, float)):
-            tot += x["duration"]
+            per_test.append(x["duration"])
         for v in x.values(): walk(v)
     elif isinstance(x, list):
         for v in x: walk(v)
 walk(d.get("suites", []))
-print("wall_clock_ms_total=%d" % tot)
+n = st.get("expected", 0) + st.get("unexpected", 0) + st.get("flaky", 0)
+print("wall_clock_ms=%d" % st["duration"])          # <- KPI-7 (reloj de pared)
+print("tests=%d" % n)
+print("ms_por_test=%d" % (st["duration"] / n if n else 0))
+print("suma_in_test_ms=%d" % sum(per_test))         # solo para atribuir por test
+print("startTime=%s" % st.get("startTime"))
+PY
+# Con el reporte de hoy: wall_clock_ms=70030  tests=3  ms_por_test=23343  suma_in_test_ms=47176
+
+# C-8  KPI-5 (NUEVO en v3, hallazgo V1): las llamadas a _check_deadline estan EN SCOPE.
+#      _check_deadline es una funcion ANIDADA en _run_pipeline_stages: llamarla desde otra
+#      funcion es NameError en runtime, y compileall NO lo detecta.
+"$PY" - <<'PY'
+import ast, pathlib
+src = pathlib.Path("qa_uat_pipeline.py").read_text(encoding="utf-8")
+tree = ast.parse(src)
+host = next(n for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef) and n.name == "_run_pipeline_stages")
+inside = {n.lineno for n in ast.walk(host)
+          if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+          and n.func.id == "_check_deadline"}
+todas = {n.lineno for n in ast.walk(tree)
+         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+         and n.func.id == "_check_deadline"}
+print("llamadas_totales=%d  en_scope=%d  FUERA_DE_SCOPE=%s"
+      % (len(todas), len(inside), sorted(todas - inside)))
+PY
+# Criterio: llamadas_totales == en_scope == 8  y  FUERA_DE_SCOPE == []
+# Con el codigo de hoy: llamadas_totales=2  en_scope=2  FUERA_DE_SCOPE=[]
+
+# C-9  KPI-8 (NUEVO en v3, hallazgo V2): PNG que un spec RENDERIZADO llega a emitir.
+#      Es lo unico que prueba que F2 baja capturas de verdad y no solo mueve sintaxis.
+"$PY" - <<'PY'
+import re, pathlib
+# Contar, sobre el .j2, cuantas capturas quedan SIN pasar por el helper de presupuesto.
+t = pathlib.Path("templates/playwright_test.spec.ts.j2").read_text(encoding="utf-8")
+crudas   = [i+1 for i, l in enumerate(t.splitlines()) if "page.screenshot(" in l]
+guardada = [i+1 for i, l in enumerate(t.splitlines()) if "__captureIfBudget(" in l]
+print("sin_guardia=%s  (esperado exactamente [325,496,798,806] tras F2)" % crudas)
+print("con_guardia=%d  (esperado 15 tras F2)" % len(guardada))
 PY
 ```
 
 > **Advertencia sobre `C-4` (corrige el v1).** Su rama TypeScript cuenta **importadores textuales**, no alcance de
 > producción: devuelve **1** para `arrival_validator.ts` porque lo importa `navigation_executor.ts:26`, que es a su vez
 > un huérfano. Por eso el censo por C-4 arranca en **10**, no en 11. F0.2 mide **las dos cosas** y no permite
-> "arreglar" la diferencia editando un assert.
+> "arreglar" la diferencia editando un assert. **Y el cierre de C-4 es 5, no 6** — ver la tabla de §1 (hallazgo V3).
 
 ---
 
@@ -515,7 +815,7 @@ PY
 |---|---|
 | **Fase 1 — mejoras rápidas** (esperas fijas, reuso de sesión, selectores estables, menos pasos repetidos) | **F0, F1, F2, F3** |
 | **Fase 2 — optimización de navegación** (accesos directos, datos por API, helpers semánticos, menos navegación visual) | **F4, F5, F6** |
-| **Fase 3 — consolidación** (arquitectura mantenible, métricas, paralelización, observabilidad, anti-regresión) | **F7, F8, F9** |
+| **Fase 3 — consolidación** (arquitectura mantenible, métricas, paralelización, observabilidad, anti-regresión) | **F7, F8, F9, F10** |
 
 > Nota honesta sobre "reuso de sesión", que el brief pone en Fase 1: **ya está resuelto y bien**
 > (§2.2 paso [7]). No hay fase para eso; F0.4 solo lo **congela** con un centinela para que nadie lo rompa.
@@ -597,17 +897,30 @@ el meta-test parsea solo el `.sh`, pero ambos tienen que quedar consistentes).
 `validateAuthState`; `playwright/auth_state_validator.ts` existe. Mensaje de fallo: *"el reuso de sesión del §2.2[7] es
 lo mejor del subsistema — si este test falla, alguien lo rompió; revertir."*
 
+**F0.5 — Baseline de RELOJ DE PARED (movido del final a F0 en v3 — hallazgo V5).** Correr **una sola vez, acá y no
+después**, `test_baseline_de_reloj_existe_o_se_crea` de F9 (§5/F9 paso 2) para que
+`reports/plan274_wallclock_baseline.json` quede escrito con el reloj **anterior** a cualquier cambio de F1.
+> **Por qué acá.** F9 existe para detectar que una espera por estado sea **más lenta** que el sleep que reemplazó (C10).
+> Si el baseline se captura al final —como ordenaba §8 del v2— congela el reloj **ya modificado** y el ratchet no puede
+> detectar nada: el gate más importante del plan quedaba ciego a su propio riesgo principal.
+> Si no hay un `reports/playwright-results.json` reciente, **hay que producirlo**: es la única corrida "antes" que
+> existirá. Sin ese archivo, KPI-7 queda `NO MEDIBLE` y hay que anotarlo así en §9 — **no** inventar un baseline
+> post-hoc.
+
 **Tests + comando:**
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_baseline.py tests/unit/test_plan274_orphan_census.py -v
+"$PY" -m pytest tests/unit/test_plan274_wallclock.py::test_baseline_de_reloj_existe_o_se_crea -v   # F0.5
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
 "$PY" -m pytest tests/test_plan274_tool_tests_outside_ratchet.py -v
 ```
-**Criterio de aceptación BINARIO.** Los 3 archivos existen y los comandos de arriba reportan **≥ 8 passed, 0 failed**
-(3 de baseline + 1 de generador + 1 de reuso de sesión + 3 de censo; el número de `passed` debe aparecer en la salida;
-exit 0 con `0 passed` **no cuenta**). Además `reports/plan274_wait_baseline.json` existe y su `pre_plan.total_ms` es
-`35900`.
+**Criterio de aceptación BINARIO.** Los 3 archivos existen y los comandos de arriba reportan **≥ 11 passed, 0 failed**
+*(el v2 decía "≥ 8 (… 3 de censo)" y F0.2 define **5** tests de censo — hallazgo V13; el desglose real es: 3 de baseline
++ 1 de generador + 1 de reuso de sesión + **5** de censo + 1 de arnés = **11**)*. El número de `passed` debe aparecer en
+la salida; exit 0 con `0 passed` **no cuenta**. Además `reports/plan274_wait_baseline.json` existe y su
+`pre_plan.total_ms` es `35900`, **y `reports/plan274_wallclock_baseline.json` existe** (F0.5) o KPI-7 está declarado
+`NO MEDIBLE` en §9 con el motivo.
 **Flag:** ninguna (solo tests). **Trabajo del operador:** ninguno.
 **Runtimes:** neutro en los 3 (§3.3) — son tests locales.
 
@@ -627,10 +940,24 @@ exit 0 con `0 passed` **no cuenta**). Además `reports/plan274_wait_baseline.jso
 **F1.1 — El generador (la raíz).** En `templates/playwright_test.spec.ts.j2:608`, reemplazar:
 ```diff
 -    await page.waitForTimeout(800);
-+    await waitForAgendaStable(page, 5_000);
++    {% if state_waits_enabled %}await waitForAgendaStable(page, 5_000);{% else %}await page.waitForTimeout(800);{% endif %}
 ```
 El helper **ya está definido en el mismo archivo** (`waitForAspNetIdle` en `:40`, `waitForAgendaStable` en `:63`,
 verificados), no hay que importar nada.
+
+> **La rama Jinja NO es adorno: sin ella la flag de esta fase es una flag MUERTA (hallazgo V6).**
+> El v2 escribía un reemplazo **literal** y a la vez declaraba *"con la flag OFF, el template emite el sleep viejo
+> (rollback sin revertir código)"*. Con una edición literal **no hay ningún camino que emita el sleep viejo**: la flag
+> quedaba registrada en los 5 archivos del arnés, visible en el panel del operador, y **sin efecto alguno**. Peor: el
+> gate de patas del v2 (4 `grep`) **daba verde**, porque verifica registro y no efecto. De ahí sale la **pata 7** de §3.1.
+>
+> **Cableado obligatorio, en `playwright_test_generator.py`**, junto al `template.render(...)` de `:384` y de `:932`
+> (los mismos dos call sites que toca F2):
+> ```python
+> state_waits_enabled=os.environ.get("STACKY_QA_UAT_STATE_WAITS_ENABLED", "true").lower() == "true",
+> ```
+> Con esto **`grep -rn "STACKY_QA_UAT_STATE_WAITS_ENABLED" --include=*.py --include=*.j2 .` da ≥ 2** (generador + `.j2`)
+> y la pata 7 pasa. Sin esto da **0** y la fase **no cierra**.
 
 > **UNA sola llamada, no dos (corrige el v1).** El v1 encadenaba `waitForAspNetIdle(page)` **y**
 > `waitForAgendaStable(page)`. Pero `waitForAgendaStable` **ya delega** en `waitForAspNetIdle` (`:64-66`), así que el
@@ -657,11 +984,16 @@ a 0: bajarlo al número real. Prohibido mentir en el número para cerrar la fase
    `// plan-274 F1.2: espera no determinada — revisar con AgendaWeb arriba`. Contarlo en el KPI real.
 
 **Tests PRIMERO.** Crear `Stacky tools/QA UAT Agent/tests/unit/test_plan274_no_fixed_waits.py`:
-- `test_generador_sin_espera_fija_o_documentada` — cada `waitForTimeout(` que quede en el `.j2` debe tener en la
-  línea anterior o siguiente el marcador literal `plan-274 F1.1`. Sin marcador → falla nombrando la línea.
+- `test_generador_sin_espera_fija_o_documentada` — cada `waitForTimeout(` que quede en el `.j2` **fuera de la rama
+  `{% else %}` de la flag** debe tener en la línea anterior o siguiente el marcador literal `plan-274 F1.1`.
+  Sin marcador → falla nombrando la línea.
 - `test_specs_vivos_bajo_umbral` — `_sum_fixed_waits` sobre los 5 specs devuelve `total_ms <= 3000`.
 - `test_toda_espera_residual_esta_marcada` — cada `waitForTimeout(` residual en los 5 specs tiene el marcador
   `plan-274 F1.2` adyacente.
+- `test_la_flag_gobierna_el_render` **(nuevo en v3, hallazgo V6)** — renderizar el template **dos veces**, con
+  `STACKY_QA_UAT_STATE_WAITS_ENABLED=true` y `=false`, y asertar que el primero contiene `waitForAgendaStable(page, 5_000)`
+  y **no** `waitForTimeout(800)`, y el segundo exactamente al revés. **Corre contra el defecto del v2**: con su diff
+  literal, los dos renders son idénticos y el test da ROJO.
 > **Este test discrimina de verdad:** no asserta "la lista está vacía" (que un modelo menor satisface borrando el
 > assert), asserta **por ocurrencia y con la línea en el mensaje**.
 
@@ -670,24 +1002,46 @@ a 0: bajarlo al número real. Prohibido mentir en el número para cerrar la fase
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_no_fixed_waits.py -v
 bash -c 'grep -ohE "waitForTimeout\([0-9]+\)" playwright/uat/*.spec.ts playwright/smoke/*.spec.ts | grep -oE "[0-9]+" | awk "{s+=\$1} END {print s}"'
+grep -rn "STACKY_QA_UAT_STATE_WAITS_ENABLED" --include=*.py --include=*.j2 . | grep -v __pycache__ | wc -l   # >= 2 (pata 7)
 ```
-**Criterio BINARIO.** `test_plan274_no_fixed_waits.py` reporta **3 passed, 0 failed**, Y el comando `C-1` devuelve
-`total_ms <= 3000`, Y `C-2` devuelve `0` **o** todas las residuales tienen marcador (lo prueba el primer test).
-**Flag:** `STACKY_QA_UAT_STATE_WAITS_ENABLED` (**ON**, §3.1). El flag gobierna el **generador**: con la flag OFF, el
-template emite el sleep viejo (rollback sin revertir código). Los specs ya editados no dependen de la flag (son
-archivos, no runtime) — **decirlo así en el plan es honesto**: el rollback total de F1.2 es `git revert`, no la flag.
+**Criterio BINARIO.** `test_plan274_no_fixed_waits.py` reporta **4 passed, 0 failed**, Y el comando `C-1` devuelve
+`total_ms <= 3000`, Y el **conteo de la pata 7 es ≥ 2**, Y toda espera residual del `.j2` fuera de la rama de rollback
+tiene marcador (lo prueba el primer test).
+**Flag:** `STACKY_QA_UAT_STATE_WAITS_ENABLED` (**ON**, §3.1), cableada según F1.1 — **la rama Jinja es parte del
+entregable, no un comentario**. Los specs ya editados no dependen de la flag (son archivos, no runtime) — **decirlo así
+en el plan es honesto**: el rollback total de F1.2 es `git revert`, no la flag.
 **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3.
 
 ---
 
 ### F2 — Presupuesto de capturas: conectar `screenshot_budget.py` (huérfano #9)
 
-**Objetivo.** Pasar de 17 capturas incondicionales por paso a `1 en éxito / 3 en fallo / 25 techo` usando el módulo que
-**ya existe y ya está testeado**.
+**Objetivo (REESCRITO en v3 — hallazgo V2; el del v2 era falso).** Poner **un techo real de 25 capturas por escenario**
+y un presupuesto por paso **que pueda activarse**, usando el módulo que ya existe y ya está testeado.
+
+> **Lo que el v2 prometía y no podía cumplir.** Decía *"pasar de 17 capturas incondicionales **por paso** a 1 en éxito
+> / 3 en fallo / 25 techo"*. Verificado abriendo el template y los specs:
+> ```bash
+> grep -n "page.screenshot(" templates/playwright_test.spec.ts.j2   # 19 lineas: 1 por rama de accion
+> for f in playwright/uat/*.spec.ts playwright/smoke/*.spec.ts; do echo -n "$f "; grep -c "page.screenshot(" $f; done  # 1 c/u
+> ```
+> **El template ya emite exactamente UNA captura por paso.** Y el corte del módulo es
+> `const limit = stepOk ? __SS_ON_SUCCESS(1) : __SS_ON_FAILURE(3); if (captureIndex >= limit)`
+> (`screenshot_budget.py:190-191`). Con la llamada que ordenaba el v2 —`__captureIfBudget(page, path, true, 0)`— sale
+> `0 >= 1` ⇒ **false** ⇒ **captura siempre**. Es decir: el presupuesto **por paso** nace estructuralmente inerte y el
+> único límite que puede activarse es el techo de 25. Y como el criterio del v2 era **sintáctico** (`≤4 capturas sin
+> guardia`), la fase habría cerrado en verde **con cero PNG de diferencia**. Es el patrón que el propio v2 mató en F7.2
+> (C9) y reintrodujo acá.
+>
+> **Qué gana F2 realmente, dicho sin maquillaje:** (a) el **techo de 25/escenario**, que hoy **no existe**;
+> (b) el `.catch(() => null)` uniforme, que hoy sólo tienen `:325` y `:798`; (c) el `captureIndex` correcto, que deja
+> el presupuesto **listo para activarse** el día que una rama emita una segunda captura en el mismo paso.
+> Nada de eso justifica prometer una reducción que no va a ocurrir.
 
 **Archivos a editar:**
 - `Stacky tools/QA UAT Agent/playwright_test_generator.py` (render del template: `:179`, `:384`, `:932`)
-- `Stacky tools/QA UAT Agent/templates/playwright_test.spec.ts.j2` (17 sitios de `page.screenshot`)
+- `Stacky tools/QA UAT Agent/templates/playwright_test.spec.ts.j2` (**19** sitios de `page.screenshot`, de los cuales se
+  envuelven **15**) *(el v2 decía "17 sitios" en el encabezado y "las 15 envolvibles" en el cuerpo — hallazgo V7/V20)*
 
 **Cómo.** `screenshot_budget.py` ya expone lo necesario: `load_budget()` (`:86`), `should_capture()` (`:116`) y
 `build_ts_budget_block(budget)` (`:154`), con los defaults `1/3/25` (`:52-54`).
@@ -699,19 +1053,28 @@ archivos, no runtime) — **decirlo así en el plan es honesto**: el rollback to
    ya emite**:
    ```diff
    -    await page.screenshot({ path: 'evidence/.../step_XX_after.png' });
-   +    await __captureIfBudget(page, 'evidence/.../step_XX_after.png', true, 0);
+   +    await __captureIfBudget(page, 'evidence/.../step_XX_after.png', true, __ssStepIdx++);
    ```
    **NO tocar** `:496` (setup), `:798` (final_state), `:806` (`afterEach`) ni `:325` (captura de excepción ASP.NET, que
    **ya es condicional** — envolverla en una guardia de *éxito* borraría justo la evidencia de un fallo).
 
+   > **`captureIndex` incremental, no `0` fijo (corrige el v2 — hallazgo V2).** El v2 ordenaba pasar `0` literal.
+   > Con `0` constante la condición `captureIndex >= limit` es `0 >= 1` = **false para siempre** ⇒ el presupuesto por
+   > paso **no puede activarse nunca** y la fase cierra en verde sin bajar un solo PNG. Se declara en el preámbulo del
+   > spec `let __ssStepIdx = 0;` y **se reinicia a `0` al empezar cada paso** (una línea en el `{% for step in pasos %}`,
+   > junto al `_stepRef.current = {{ loop.index }}` que ya existe en `:561`/`:575`). Así el índice representa lo que el
+   > módulo modela: *"cuál captura de ESTE paso es"*. El comportamiento nominal no cambia (1 captura por paso ⇒ índice 0),
+   > pero el gate deja de ser decorativo y una segunda captura en el mismo paso **se corta de verdad**.
+
    > **Firma real, verificada (corrige el v1).** El v1 escribía `if (__shouldCapture('success'))`. La función que
    > `build_ts_budget_block` emite es **`__shouldCapture(stepOk: boolean, captureIndex: number)`**
-   > (`screenshot_budget.py:180`), de **dos** parámetros. Con un solo argumento: (a) `npx tsc --noEmit` falla por
+   > (**`screenshot_budget.py:181`**; el v2 escribía `:180` en esta fase y `:181` en su changelog — `:180` es
+   > `let __ss_exceeded = false;`), de **dos** parámetros. Con un solo argumento: (a) `npx tsc --noEmit` falla por
    > aridad — y el DoD exige tsc limpio; (b) en runtime `captureIndex` es `undefined`, `undefined >= limit` evalúa a
    > `false`, no se corta nada y **el presupuesto por paso queda inerte** (solo sobreviviría el techo de 25).
    > Un plan cuyo criterio es "≤N sin guardia" habría dado verde con la feature muerta.
    > Además el bloque **ya expone** `__captureIfBudget(page, path, stepOk, captureIndex = 0)`
-   > (`screenshot_budget.py:195-197`),
+   > (**firma en `screenshot_budget.py:195`**, cuerpo `:196-199`),
    > que hace exactamente el `if` + `page.screenshot(...).catch(() => null)`. Usar ese helper y no reescribirlo:
    > es la tesis del plan (reusar antes que construir) aplicada a sí mismo.
 3. **Casos borde.** Si `load_budget()` lanza (config ausente) → `build_ts_budget_block` debe recibir el
@@ -736,19 +1099,35 @@ archivos, no runtime) — **decirlo así en el plan es honesto**: el rollback to
   el `.j2` (regex `__shouldCapture\([^,)]*\)`). Corre contra el defecto del v1: con el diff que proponía el v1, ROJO.
 - `test_generador_degrada_si_el_presupuesto_falla` — monkeypatchear `load_budget` para que lance, y verificar que el
   render **igual produce** un spec válido.
+- `test_el_techo_de_25_se_activa` **(nuevo en v3, hallazgo V2 — es el ÚNICO test de efecto de esta fase)** — renderizar
+  un escenario con **30 pasos**, ejecutar el bloque TS emitido con un `page` doble que cuenta llamadas a `screenshot`,
+  y asertar que se emitieron **25**, no 30. **Corre contra el defecto:** con `captureIndex=0` fijo y sin techo el
+  contador da 30 y el test es ROJO. Si el arnés no puede evaluar TS, la variante equivalente en Python es llamar
+  `should_capture(budget, step_ok=True, taken_so_far=n, step_capture_index=0)` para `n` de 0..29 y asertar
+  **25 `True` / 5 `False`** (`screenshot_budget.py:144-145`, verificado).
+- `test_captureindex_no_es_constante` **(nuevo en v3)** — el `.j2` **no** contiene el literal `, true, 0)` en ninguna
+  llamada a `__captureIfBudget`, y **sí** contiene `__ssStepIdx`. Corre contra el diff exacto que ordenaba el v2.
+- `test_la_flag_gobierna_el_bloque` **(nuevo en v3, hallazgo V6)** — con `STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED=false`
+  el bloque emitido es el de la rama `disabled` (`__shouldCapture` retorna `true` siempre, `screenshot_budget.py:168-170`).
 
 **Comando:**
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_screenshot_budget_wired.py -v
 "$PY" -m pytest tests/unit/test_plan274_orphan_census.py -v
+grep -rn "STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED" --include=*.py . | grep -v __pycache__ | wc -l   # >= 1 (pata 7)
 ```
-**Criterio BINARIO.** `5 passed, 0 failed` en el primero, Y el censo de F0.2 pasa con `screenshot_budget` en
+**Criterio BINARIO.** `8 passed, 0 failed` en el primero, Y el censo de F0.2 pasa con `screenshot_budget` en
 `direct_importers >= 1` **y** `prod_reachable == True` (el importador es `playwright_test_generator.py`, que **sí**
-está en el camino de producción), Y `npx tsc --noEmit` no introduce errores nuevos sobre el spec renderizado.
+está en el camino de producción), Y `npx tsc --noEmit` no introduce errores nuevos sobre el spec renderizado,
+Y **`C-9` devuelve `sin_guardia == [325, 496, 798, 806]` y `con_guardia == 15`**, Y el conteo de la pata 7 es ≥ 1.
 Censo: `direct` 10 → **9**, `alcanzable` 11 → **10**.
-**Flag:** `STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED` (**ON**). Con OFF, `build_ts_budget_block` devuelve un bloque cuyo
-`__shouldCapture` retorna siempre `true` ⇒ comportamiento idéntico al de hoy. Rollback exacto por flag.
+**Flag:** `STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED` (**ON**). **Cableado obligatorio (hallazgo V6):** el camino
+"bloque inerte" de `build_ts_budget_block` se activa con `budget.disabled`, que **sólo** lee
+`QA_UAT_SCREENSHOT_BUDGET_DISABLED` (`screenshot_budget.py:99`) — **la flag nueva no está conectada a nada por sí sola**.
+En `playwright_test_generator.py`, la llamada debe ser
+`load_budget()` si la flag está en `true`, y `ScreenshotBudget(disabled=True)` si está en `false`. Sin este cableado la
+flag es muda y la fase no cierra por la pata 7.
 **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3.
 
 ---
@@ -843,7 +1222,7 @@ if os.environ.get("STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED", "true").lower() == "tr
             screen=target_screen,          # NO existe una variable `screen` en este scope
             params=available_data,         # NO existe una variable `params` en este scope
             contracts_path=contracts_path,
-            timeout_s=float(os.environ.get("QA_UAT_DEEPLINK_PROBE_TIMEOUT_S", "5")),
+            timeout_s=_DEEPLINK_PROBE_TIMEOUT_S,   # constante del modulo = 5.0 (ver nota)
         )
     except Exception:
         probe = None            # el probe NUNCA decide por una excepcion propia
@@ -881,6 +1260,13 @@ timeout), `probe is None` y el flujo sigue **exactamente como hoy**. Un probe ro
 antes funcionaba.
 **Costo:** el probe hace un GET HTTP. `timeout_s` se acota a **5 s** (el default del módulo es 10) para que el peor
 caso del probe no se coma el presupuesto de 6 min que F7.1 está tratando de proteger.
+
+> **Sin env var nueva (corrige el v2 — hallazgo V12).** El v2 introducía `QA_UAT_DEEPLINK_PROBE_TIMEOUT_S`: una
+> **config de operador nueva, env-only y fuera del panel de flags**. Riel del producto: toda config del operador va
+> **por UI**; sólo los kill-switches son env-only, y un timeout de probe no lo es. Se declara
+> `_DEEPLINK_PROBE_TIMEOUT_S: float = 5.0` como constante de módulo en `navigation_strategy_resolver.py`, junto a
+> `_HUMAN_ONLY_LANES` (`:65`). Si algún día hay que exponerlo, entra como `FlagSpec(type="float")` — el registry ya
+> soporta ese tipo. **Cero trabajo extra al operador.**
 
 **Tests PRIMERO.** `Stacky tools/QA UAT Agent/tests/unit/test_plan274_deeplink_probe.py` (todo con doble, sin red).
 **Los dobles devuelven la forma REAL del módulo** (`decision`/`category`/`reason`/`checks`), nunca una inventada:
@@ -951,7 +1337,9 @@ pura, así que no puede degradar estabilidad.
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_selector_fragility.py -v
 ```
-**Criterio BINARIO.** `3 passed, 0 failed`, Y `locator_quality` pasa a **≥1** importador de producción (censo → **8**).
+**Criterio BINARIO.** `3 passed, 0 failed`, Y `locator_quality` pasa a **≥1** importador de producción.
+Censo: `direct` 8 → **7**, `alcanzable` 9 → **8** *(el v2 escribía "censo → 8" sin decir qué métrica y sin decrementar
+`direct`; ese salto es el origen del hallazgo V3 — la cadena entera cerraba una unidad arriba)*.
 **Flag:** ninguna nueva (es logging + test; el logging va detrás del `logger.info` existente).
 **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3.
 
@@ -974,13 +1362,15 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 (**`data_resolver.py:388`**, `value, exec_error = _run_sqlcmd(hint_query, db_server, db_user, db_pass)` — verificado;
 `_run_sqlcmd` se define en `:500`):
 ```python
-# plan-274 F6, dentro del loop por campo de resolve_fields, antes de _run_sqlcmd
+# plan-274 F6, dentro del loop por campo de resolve_fields, JUSTO ANTES de la linea 388.
+# `field_name` es el nombre REAL de la variable del loop (verificado: data_resolver.py:360-388).
 import test_data_cache
 if _cache_enabled():
     hit = test_data_cache.get_data(field_name)          # test_data_cache.py:67
     if hit is not None:
-        continue_con(hit); continue                     # HIT: no se toca sqlcmd
-value, exec_error = _run_sqlcmd(hint_query, db_server, db_user, db_pass)
+        resolved[field_name] = hit                      # `resolved` se declara en :299
+        continue                                        # HIT: no se toca sqlcmd
+value, exec_error = _run_sqlcmd(hint_query, db_server, db_user, db_pass)   # :388
 if _cache_enabled() and value and not exec_error:
     test_data_cache.store_data(                         # test_data_cache.py:93
         field_name, value, source="data_resolver.resolve_fields", notes="plan-274 F6")
@@ -1026,8 +1416,10 @@ sin BD):
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_data_cache_wired.py -v
 ```
-**Criterio BINARIO.** `8 passed, 0 failed`, Y censo: `direct` 8 → **7**, `alcanzable` 9 → **8**.
-**Flag:** `STACKY_QA_UAT_DATA_CACHE_ENABLED` (**ON**). **Trabajo del operador:** ninguno.
+**Criterio BINARIO.** `8 passed, 0 failed`, Y censo: `direct` 7 → **6**, `alcanzable` 8 → **7**
+*(recalculado en v3: el v2 decía 8→7 / 9→8 porque su cadena se saltaba el decremento de F5 — hallazgo V3)*.
+**Flag:** `STACKY_QA_UAT_DATA_CACHE_ENABLED` (**ON**), leída por `_cache_enabled()` en `data_resolver.py` ⇒ pata 7 ≥ 1.
+**Trabajo del operador:** ninguno.
 **Runtimes:** neutro en los 3.
 
 ---
@@ -1043,31 +1435,41 @@ que quede **escrito** qué falta exactamente para paralelizar.
 
 **F7.1 — `_check_deadline` en 6 etapas más (H6).** Hoy: 2 llamadas (`:1673`, `:3402`) + 1 definición (`:1406`).
 
-> **Las 6 claves del v1 NO EXISTEN. Ninguna.** El v1 declaraba una "**Lista CERRADA**, determinada por lectura del
-> propio pipeline" con `data_resolution`, `precondition_check`, `seed_generation`, `spec_generation`, `playwright_run`
-> y `evidence_publish`. Verificado una por una:
-> `for k in data_resolution precondition_check seed_generation spec_generation playwright_run evidence_publish; do grep -c "stages\[\"$k\"\]" qa_uat_pipeline.py; done`
-> → **0 0 0 0 0 0**. No fueron leídas del pipeline: fueron inventadas.
-> Y el escape del v1 —*"si un nombre no existe, usar la etapa inmediatamente anterior a la asignación más costosa y
-> documentarlo"*— es una instrucción que un modelo menor **no puede ejecutar de forma determinística** (¿cuál es "la
-> más costosa" sin medir?), así que elegiría 6 líneas cualesquiera hasta llegar al conteo de 9 y el gate daría verde
-> con el deadline chequeado en lugares irrelevantes. Por eso ahora la lista es **literal y verificable**.
+> **Historia de esta sublista, porque explica el criterio.** El **v1** inventó 6 claves que no existían
+> (`data_resolution`, `precondition_check`, `seed_generation`, `spec_generation`, `playwright_run`, `evidence_publish`
+> → `0 0 0 0 0 0` hits). El **v2** las reemplazó por 6 claves reales… y **no verificó que `_check_deadline` fuera
+> alcanzable desde ellas**. Tres de sus seis (`evidence` `:734`, `dossier` `:857`, `publisher` `:907`) están en **otras
+> funciones**: `_check_deadline` es un **closure anidado en `_run_pipeline_stages`** (`:1324` / `:1406`, ver H6-bis)
+> ⇒ **`NameError` en la primera corrida real**. Y una cuarta (`screen_detection`) **ya tiene su chequeo** en `:1673`.
+>
+> **Por qué el gate del v2 no lo atrapaba — verificado ejecutándolo.** Insertando la llamada prohibida en `:857`:
+> ```
+> AST parsea OK             -> `python -m compileall` da VERDE
+> grep -c "_check_deadline(" -> 4  (SUBE: el gate del v2 PREMIA el bug, acerca al objetivo de 9)
+> C-8 (AST de scope)         -> llamadas_totales=3 en_scope=2 FUERA_DE_SCOPE=[857]  -> ROJO
+> ```
+> Un gate que sube de puntaje cuando metés el defecto no es un gate. Por eso el criterio de F7.1 pasa a ser **C-8**.
 
-**Lista CERRADA (las 6 claves, todas verificadas presentes en `qa_uat_pipeline.py`).** Elegidas por ser las que
-disparan trabajo externo — subprocess, red o BD — que es donde se puede colgar una corrida:
+**Lista CERRADA v3 (6 claves, TODAS verificadas EN SCOPE y sin chequeo previo).** Filtro aplicado: la clave debe
+asignarse dentro de `_run_pipeline_stages` (`:1324`-`:3793`) — las 12 candidatas están en la tabla de H6-bis — y no
+tener ya un `_check_deadline` cubriéndola. Se eligen las que disparan trabajo pesado (subprocess, red, BD, I/O):
 
-| # | Clave `stages["…"]` | Por qué |
-|---|---|---|
-| 1 | `runner` | lanza `npx playwright test` (subprocess, el más largo por lejos) |
-| 2 | `screen_detection` | navegación real contra AgendaWeb |
-| 3 | `evidence` | I/O de PNG/trazas |
-| 4 | `publisher` | red contra ADO |
-| 5 | `failure_analyzer` | análisis pesado post-corrida |
-| 6 | `dossier` | armado del dossier al cierre |
+| # | Clave `stages["…"]` | Línea de referencia | Por qué |
+|---|---|---|---|
+| 1 | `compiler_contract` | `:1957` | compila los escenarios; primer bloque pesado tras la detección de pantalla |
+| 2 | `selector_contract` | `:2076` | invoca `selector_contract_validator` (módulo externo) y es donde F5 agrega trabajo |
+| 3 | `generator_contract` | `:3121` | genera los `.spec.ts`; I/O sobre N archivos |
+| 4 | `evaluator` | `:3170` | evaluación de aserciones post-corrida |
+| 5 | `failure_analyzer` | `:3171` | análisis pesado post-corrida *(única sobreviviente de la lista del v2)* |
+| 6 | `run_metrics_summary` | `:3625` | agregación final; última chance de cortar antes del cierre |
 
-Las 19 claves existentes están listadas en H6; si alguna de estas 6 desapareciera, **elegir el reemplazo de esa misma
-lista de 19 y anotarlo en §9** — está **prohibido** introducir una clave que no esté en la lista.
-Patrón exacto, idéntico al de `:1673` (verificado):
+**Ya cubiertas, NO tocar (evita el duplicado del v2):** `screen_detection` (`:1673`) y `runner` (`:3402`).
+**PROHIBIDAS (fuera de scope, `NameError`):** `dossier`, `epic_rollup`, `evidence`, `functional_verdict`,
+`intent_parser`, `publisher`, `synthetic_ticket_builder`.
+Si alguna de las 6 desapareciera, **el reemplazo sale exclusivamente de la columna "EN SCOPE (12)" de H6-bis** y se
+anota en §9. Está **prohibido** introducir una clave de la columna prohibida, aunque el `grep -c` dé verde.
+
+Patrón exacto, idéntico al de `:1673` (verificado); `stage` debe ser la variable de etapa viva en ese punto:
 ```python
 if _dl := _check_deadline(stage):
     return _dl
@@ -1084,10 +1486,43 @@ En `uat_test_runner.py`, donde hoy se usa `_DEFAULT_TIMEOUT_MS = 90_000` (`:48`,
 > verde. Es el mismo patrón que el "runner sin loop por caso" del plan 262: feature muerta, suite en verde.
 > Por eso F7.2 tiene **dos mitades y las dos son obligatorias**.
 
-**F7.2.a — Escribir el historial (sin esto, F7.2.b no puede funcionar nunca).** Al terminar `_run_all_specs_once`
-(`uat_test_runner.py:301`), después de calcular `duration_ms`, llamar a `playbook_performance.record_run(...)` con el
-id de corrida y la duración medida, dentro de `try/except Exception` (registrar historial **nunca** puede tumbar una
-corrida). Es escritura en un JSON local del propio tool — no toca ningún sistema del operador.
+**F7.2.a — Escribir el historial (sin esto, F7.2.b no puede funcionar nunca).**
+
+> **Re-anclada en v3 (hallazgo V4): el punto que indicaba el v2 no existe.** El v2 decía *"al terminar
+> `_run_all_specs_once` (`:301`), después de calcular `duration_ms`"*. Verificado:
+> ```bash
+> awk 'NR>=301 && NR<461 && /duration_ms/{print NR": "$0}' uat_test_runner.py   # 0 lineas
+> grep -n "duration_ms   = int" uat_test_runner.py                              # 239
+> ```
+> `_run_all_specs_once` abarca **:301-460** y **no calcula `duration_ms` en ningún lado**. La duración de la corrida se
+> calcula en **`run()`, línea `:239`** (`duration_ms = int((time.time() - started) * 1000)`), y se consume en `:258`
+> y `:282`. El fix que el v2 agregó para matar la inercia estaba anclado al vacío.
+
+**Dónde exactamente:** en `run()` (`uat_test_runner.py:80`), **después de `:239`** y antes del
+`_classify_and_emit_runner_summary(...)` de `:252`, que ya recibe `duration_ms=duration_ms` (`:258`).
+
+**Firma completa, verificada (`playbook_performance.py:113-118`):**
+```python
+record_run(playbook_id: str, verdict: str, duration_ms: int,
+           slowest_step: str = "", fail_reason: str = "") -> dict
+```
+`verdict` es **posicional y obligatorio** — el v2 no lo nombraba, así que su snippet era un `TypeError`. Regla literal
+para el valor: `verdict = "PASS" if fail_count == 0 and blocked_count == 0 else "FAIL"`, usando `fail_count` y
+`blocked_count` que ya existen en ese scope (`:254-256`). Llamada:
+```python
+# plan-274 F7.2.a — historial de duracion; sin esto recommend_timeout_ms devuelve default_ms para siempre.
+try:
+    import playbook_performance
+    playbook_performance.record_run(
+        "uat_runner_all_specs",
+        "PASS" if (fail_count == 0 and blocked_count == 0) else "FAIL",
+        duration_ms,
+    )
+except Exception:                       # registrar historial NUNCA tumba una corrida
+    logger.debug("plan-274 F7.2.a: record_run fallo; se ignora", exc_info=True)
+```
+Es escritura en un JSON local del propio tool (`playbook_performance.py:64` `_perf_file`) — **no toca ningún sistema
+del operador**, así que no cae en la categoría (B) y no necesita flag.
 
 **F7.2.b — Leer la recomendación.** Consultar `playbook_performance.recommend_timeout_ms(playbook_id, default_ms=90_000)`
 (p95×1,5, acotado a `[60 000, 600 000]`, `:59-60` y `:170`, verificados).
@@ -1105,10 +1540,19 @@ que la BD de test tolera N escrituras concurrentes. **Esta fase NO lo implementa
 devolviendo `False`. Es alcance de un plan futuro, no una fase encubierta.
 
 **Tests PRIMERO.** `Stacky tools/QA UAT Agent/tests/unit/test_plan274_consolidation.py`:
-- `test_deadline_en_ocho_etapas` — `grep -c "_check_deadline("` sobre `qa_uat_pipeline.py` ≥ **9** (8 llamadas + 1
-  definición). El test cuenta **llamadas** con `\b_check_deadline\(` excluyendo la línea de `def `.
+- `test_deadline_en_ocho_etapas` — **8 llamadas** a `_check_deadline` (+1 definición = 9 líneas). El test cuenta
+  **llamadas** con `\b_check_deadline\(` excluyendo la línea de `def `.
   > **Cuidado con el conteo:** `_check_deadline(` como subcadena también matchea dentro de la definición. Usar
   > el patrón con `\b` y excluir explícitamente las líneas que empiezan con `def `.
+- `test_todas_las_llamadas_estan_en_scope` **(nuevo en v3, hallazgo V1 — es el test que mata la bloqueante)** —
+  implementa `C-8` con `ast`: localiza el `FunctionDef` `_run_pipeline_stages`, junta los `lineno` de las llamadas a
+  `_check_deadline` dentro de él y en todo el módulo, y asserta `todas == en_scope` con las líneas fuera de scope
+  **nombradas en el mensaje de fallo**.
+  > **Probado contra el defecto exacto del v2** (llamada en `stages["dossier"]`, `:857`): `compileall` VERDE,
+  > `grep -c` **sube a 4**, este test ROJO con `FUERA_DE_SCOPE=[857]`. Es la diferencia entre un gate y un adorno.
+- `test_ninguna_clave_prohibida` **(nuevo en v3)** — ninguna de las 7 claves fuera de scope (`dossier`, `epic_rollup`,
+  `evidence`, `functional_verdict`, `intent_parser`, `publisher`, `synthetic_ticket_builder`) aparece a menos de 3
+  líneas de un `_check_deadline(`.
 - `test_timeout_sale_de_recomendacion` — doble de `recommend_timeout_ms` devolviendo `150_000` → el comando armado
   contiene `--timeout=150000`.
 - `test_sin_historial_cae_a_90000` — **SIN doble**, con el store real vacío (`tmp_path` como `_PERF_DIR`) →
@@ -1130,11 +1574,14 @@ devolviendo `False`. Es alcance de un plan futuro, no una fase encubierta.
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_consolidation.py -v
-grep -c "_check_deadline(" qa_uat_pipeline.py    # >= 9
+grep -c "_check_deadline(" qa_uat_pipeline.py    # == 9   (8 llamadas + 1 definicion)
+# y el que de verdad discrimina:
+# C-8 -> llamadas_totales=8  en_scope=8  FUERA_DE_SCOPE=[]
 ```
-**Criterio BINARIO.** `9 passed, 0 failed` Y el `grep` ≥ 9, Y las 6 claves nuevas de `_check_deadline` son **de la
-lista de 19** (verificable: cada `_check_deadline(stage)` nuevo está dentro del bloque de una `stages["…"]` existente),
-Y censo: `direct` 7 → **6**, `alcanzable` 8 → **7** (`playbook_performance` conectado **en las dos direcciones**:
+**Criterio BINARIO.** **`10 passed, 0 failed`** *(el v2 pedía 9 con 8 tests definidos — hallazgo V7; ahora son 10
+nombrados)* Y el `grep` da **9**, Y **`C-8` devuelve `llamadas_totales == en_scope == 8` con `FUERA_DE_SCOPE == []`**,
+Y las 6 claves nuevas salen de la columna **EN SCOPE (12)** de H6-bis,
+Y censo: `direct` 6 → **5**, `alcanzable` 7 → **6** (`playbook_performance` conectado **en las dos direcciones**:
 `record_run` escribe y `recommend_timeout_ms` lee).
 **Flag:** `STACKY_QA_UAT_STAGE_DEADLINE_ENABLED` (**ON**) para F7.1; F7.2 no lleva flag (es un default calculado con
 fallback al valor de hoy). **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3.
@@ -1151,10 +1598,20 @@ criterio; ya está corregido en el título, en la lista y en el KPI)*:
 `navigation_driver.py` (975), `playwright/helpers/navigation_executor.ts` (793),
 `playwright/instrumented_actions.ts` (601), `playwright/helpers/arrival_validator.ts` (372),
 `playwright/helpers/grid_precheck.ts` (172), `playwright/helpers/session_guard.ts` (167).
-> **La cuenta:** 11 del corpus − 5 conectados (`screenshot_budget` F2, `deeplink_readiness_checker` F4,
-> `locator_quality` F5, `test_data_cache` F6, `playbook_performance` F7.2) = **6**. Por eso **KPI-4a** es `≤ 6`, no
-> `≤ 5`: con `≤ 5`, el criterio del v1 era inalcanzable con sus propias fases y solo "cerraba" redefiniendo el KPI a
-> mitad de documento como "conectados **o con veredicto**", que es lo que **KPI-4b** mide ahora por separado.
+> **La cuenta, y los DOS números que el v2 confundió (hallazgo V3).** 11 del corpus − 5 conectados
+> (`screenshot_budget` F2, `deeplink_readiness_checker` F4, `locator_quality` F5, `test_data_cache` F6,
+> `playbook_performance` F7.2) = **6 MÓDULOS que siguen huérfanos**. Ese 6 es correcto y es el que gobierna esta fase.
+> **Pero el valor de la métrica `direct` al cierre es 5, no 6**, porque `arrival_validator.ts` **nunca estuvo** en esa
+> cuenta: ya tenía 1 importador directo (`navigation_executor.ts:26`). Son dos cosas distintas:
+>
+> | | arranque | cierre |
+> |---|---|---|
+> | **módulos huérfanos** (los que F8.1 dictamina) | 11 | **6** |
+> | métrica `direct == 0` (lo que mide `C-4`) | 10 | **5** |
+> | métrica `prod_reachable == False` | 11 | **6** |
+>
+> El v2 escribió **6 y 7** como valores de cierre de las métricas: una unidad de más en cada una, porque su cadena de
+> fases se saltaba el decremento de F5. Congelar el ratchet ahí le regalaba **una unidad de holgura**.
 > **§9 lleva una línea por cada uno de los 11**, no por cada uno de los 6: los 5 conectados también llevan veredicto
 > (`CONECTADO EN F<n> — <archivo:línea del importador>`).
 
@@ -1178,11 +1635,16 @@ propio, no una fase de este plan). `arrival_validator.ts`, `grid_precheck.ts`, `
   > comparado contra un número sin sentido.*
 - `test_el_generador_no_recupera_capturas_incondicionales` — el conjunto de `page.screenshot(` sin guardia en el `.j2`
   sigue siendo **exactamente** `{325, 496, 798, 806}` (mismo criterio de conjunto que F2, no un umbral).
-- `test_el_censo_no_crece` — ni `direct` ni `prod_reachable` suben respecto de los valores de cierre (**6** y **7**)
-  sobre el corpus **CERRADO de 11**. El corpus **no se amplía**: un módulo nuevo huérfano no rompe este test (sería
-  alcance infinito). Se declara así explícitamente.
+- `test_el_censo_no_crece` — ni `direct` ni `prod_reachable` suben respecto de los valores de cierre **5** y **6**
+  *(el v2 congelaba 6 y 7: una unidad de holgura en cada métrica — hallazgo V3)*, sobre el corpus **CERRADO de 11**.
+  El corpus **no se amplía**: un módulo nuevo huérfano no rompe este test (sería alcance infinito). Se declara así
+  explícitamente.
+  > **Corre contra el defecto:** desconectar cualquiera de los 5 módulos que conectan F2/F4/F5/F6/F7 sube `direct` a 6
+  > y el test da ROJO. Con los valores del v2 (6 y 7), esa misma desconexión daba **VERDE**.
 - `test_workers_no_se_rehardcodea` — `uat_test_runner.py` no contiene `"--workers=1"` literal.
-- `test_el_reloj_de_pared_no_empeora` — ver **F9** (KPI-7).
+- `test_el_reloj_de_pared_no_empeora` — **vive en `test_plan274_wallclock.py` (F9), NO acá.** *(Aclarado en v3 —
+  hallazgo V14: el v2 lo listaba en los dos archivos y ninguno lo reclamaba.)* Este archivo sólo lo **importa** para
+  que el ratchet corra completo con un solo comando; si `pytest` lo colecta dos veces, se elimina de este listado.
 
 **F8.3 — Decisión sobre H8 (el tool fuera del ratchet).** Registrar los **11** archivos de test nuevos de este plan
 *(el v1 decía 7 y listaba 10, omitiendo además el del backend)*: **10 en el tool** + **1 en el backend**
@@ -1190,12 +1652,41 @@ propio, no una fase de este plan). `arrival_validator.ts`, `grid_precheck.ts`, `
 `test_plan274_screenshot_budget_wired.py`, `test_plan274_workers_honest.py`, `test_plan274_deeplink_probe.py`,
 `test_plan274_data_cache_wired.py`, `test_plan274_selector_fragility.py`, `test_plan274_consolidation.py`,
 `test_plan274_ratchet.py`, `test_plan274_wallclock.py` — **11 en el tool con F9**, más
-`backend/tests/test_plan274_tool_tests_outside_ratchet.py` = **12 en total**) **en los DOS** ratchets
-(`Stacky Agents/backend/scripts/run_harness_tests.sh` y `run_harness_tests.ps1`), **con la ruta del tool**, e invertir
-el test de F0.3. Si el arnés no puede correr tests fuera de `backend/` (verificar antes de prometerlo), entonces
-**dejar el test de F0.3 tal como está** (documentando la deuda) y anotarlo en §9 — no forzar un registro que no funciona.
-> **Advertencia sobre la sintaxis:** `.sh` y `.ps1` **no** tienen la misma sintaxis, y el meta-test del arnés parsea
-> solo el `.sh`. Editar los dos y **correr** el meta-test, no solo mirarlo.
+`backend/tests/test_plan274_tool_tests_outside_ratchet.py` y `backend/tests/test_plan274_efficacy_gates.py` de F10
+= **13 en total**).
+
+> **DECISIÓN TOMADA EN v3, no una bifurcación (hallazgo V11): la deuda H8 se declara ACEPTADA.**
+> El v2 presentaba "registrar los 11 del tool en los DOS ratchets" como camino principal y el "si no se puede" como
+> escape. Verificado: **no se puede**, por tres razones independientes, y el implementador no debe perder una tarde
+> descubriéndolo:
+> 1. El `.sh` hace `cd backend` y lista rutas **peladas, sin comillas**, en un array bash. La ruta del tool tiene
+>    **dos espacios** (`Stacky tools`, `QA UAT Agent`) ⇒ word-splitting: `pytest` recibiría `../../Stacky` y reventaría.
+> 2. Los dos meta-tests sólo reconocen rutas bajo `tests/`:
+>    `_SH_RE = ^\s*(tests/[\w/]+\.py)\s*$` y `_PS1_RE = ^\s*"(tests/[\w/]+\.py)"\s*,?\s*$`
+>    (`backend/tests/test_plan259_ratchet_script_parity.py:28-30`). `[\w/]` no admite espacios ni `.` ⇒ una entrada
+>    del tool quedaría **muda**: registrada y **no vigilada por ningún gate**. Es un falso verde de manual.
+> 3. `test_plan259_ratchet_script_parity.py` compara los dos scripts **como conjuntos**; los dos ya divergen en 64
+>    entradas (718 vs 654), así que cualquier registro asimétrico agrava un rojo ajeno.
+>
+> ⇒ **F8.3 = documentar la deuda en §9 y NO invertir el test de F0.3.** Los 11 archivos del tool se corren con los
+> comandos explícitos de §4 y de cada fase. Resolver H8 de verdad (un runner que acepte rutas con espacios, o mover
+> los tests del tool bajo `backend/tests/`) es **alcance de un plan futuro**, no de éste.
+
+**Lo único obligatorio en F8.3.** Registrar los **2 archivos de backend** (`test_plan274_tool_tests_outside_ratchet.py`
+de F0.3 y `test_plan274_efficacy_gates.py` de F10) en **los DOS** scripts
+(`Stacky Agents/backend/scripts/run_harness_tests.sh` y `run_harness_tests.ps1`), con la sintaxis de cada uno:
+```
+run_harness_tests.sh    ->    tests/test_plan274_tool_tests_outside_ratchet.py        (pelada, sin coma)
+run_harness_tests.ps1   ->    "tests/test_plan274_tool_tests_outside_ratchet.py",     (ENTRECOMILLADA, con coma)
+```
+> **Advertencia sobre la sintaxis:** `.sh` y `.ps1` **no** tienen la misma sintaxis. En PowerShell una ruta sin comillas
+> se lee como **nombre de comando** y el array parsea con 0 errores dejando la ruta **muda** — no hay error que avise.
+> Editar los dos y **correr** los dos meta-tests (`test_harness_ratchet_meta.py` y
+> `test_plan259_ratchet_script_parity.py`), no solo mirarlos.
+> **TERCER punto de registro (el v2 no lo nombraba):** `backend/tests/harness_ratchet_allowlist.txt` (204 líneas).
+> `test_harness_ratchet_meta.py` exige que **todo** `backend/tests/test_*.py` esté en `HARNESS_TEST_FILES` **o** en esa
+> allowlist con motivo. Como acá se registran en el ratchet, **no** deben agregarse a la allowlist
+> (`test_allowlist_no_se_solapa_con_ratchet` prohíbe estar en las dos).
 
 **Comando:**
 ```bash
@@ -1204,14 +1695,17 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
 "$PY" -m pytest tests/test_plan274_tool_tests_outside_ratchet.py -v
 ```
-**Criterio BINARIO.** `5 passed, 0 failed` en el ratchet, Y §9 de este documento tiene **una línea de veredicto por
-cada uno de los 11** módulos del corpus (6 con `MANTENER`/`BORRAR`, 5 con `CONECTADO EN F<n>` + `archivo:línea`),
-Y la decisión de F8.3 está escrita (registrado **o** deuda aceptada con motivo).
+**Criterio BINARIO.** `4 passed, 0 failed` en el ratchet *(4, no 5: `test_el_reloj_de_pared_no_empeora` pertenece a F9
+— hallazgo V14)*, Y §9 de este documento tiene **una línea de veredicto por cada uno de los 11** módulos del corpus
+(6 con `MANTENER`/`BORRAR`, 5 con `CONECTADO EN F<n>` + `archivo:línea`),
+Y los 2 archivos de backend aparecen en **los dos** scripts, Y `test_harness_ratchet_meta.py` y
+`test_plan259_ratchet_script_parity.py` **corridos** (no mirados) siguen verdes,
+Y la deuda H8 del tool está escrita en §9 como **aceptada, con los 3 motivos de V11**.
 **Flag:** ninguna. **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3.
 
 ---
 
-### F9 — Ratchet de reloj de pared `[ADICIÓN ARQUITECTO]`
+### F9 — Ratchet de reloj de pared `[ADICIÓN ARQUITECTO v2, corregida en v3]`
 
 **Por qué existe.** Todo el plan optimiza un **proxy**: KPI-1 cuenta los milisegundos **escritos en un archivo**, no el
 tiempo que tarda la corrida. Los dos son separables, y el propio plan lo demuestra: F1 reemplaza `waitForTimeout(800)`
@@ -1219,34 +1713,96 @@ por una espera por estado que en el peor caso espera **más** (C10). Con solo lo
 cierra las 9 fases en verde**. El único gate real que quedaba era un **smoke manual de 3 corridas** en el DoD — humano,
 no repetible y fuera de cualquier ratchet.
 
-Y no hay que construir nada para medirlo: `reports/playwright-results.json` **ya publica** `duration` por test y
-`startTime` (verificado: `"duration": 15942`, `"expected": 3`). Es el mismo reporter `json` que ya está configurado en
+Y no hay que construir nada para medirlo: `reports/playwright-results.json` **ya publica** `stats.duration` (el reloj
+de pared de la corrida completa) y una `duration` por test. Es el mismo reporter `json` que ya está configurado en
 `playwright.config.ts:17`. Costo: leer un archivo que ya se escribe.
 
+> **DOS correcciones al F9 del v2, y las dos lo anulaban por completo.**
+>
+> **(a) El baseline se toma en F0, NO al final (hallazgo V5).** §8 del v2 ordenaba *"F9 conviene correrla al final…
+> si se corre antes, congela como baseline el reloj **previo** a la mejora y el ratchet queda flojo"* mientras §9 decía
+> *"KPI-7 … **(medir antes de F1)**"*. Instrucciones opuestas — y el razonamiento de §8 está **invertido**: F9 existe
+> para detectar que una espera por estado sea **más lenta** que el sleep que reemplazó (C10), y eso **sólo** se ve con
+> baseline **pre-F1**. Corriéndola al final, `test_baseline_de_reloj_existe_o_se_crea` congela el reloj **ya cambiado**
+> y el ratchet no puede detectar nada: la [ADICIÓN ARQUITECTO] del v2 se auto-anulaba. **En v3: el paso 2 (capturar el
+> baseline) es F0.5; el ratchet (paso 3) corre al final.**
+>
+> **(b) `C-7` no medía reloj de pared (hallazgo V8).** Corrido de verdad contra el reporte real del repo:
+> `walk(suites) = 47 176 ms` vs **`stats.duration = 70 030,106 ms`**. El recorrido de `suites` sólo ve **3 dicts con
+> `duration`** (uno por resultado de test) e **ignora `globalSetup` — que es el login contra AgendaWeb — y todo el
+> overhead**: subestima **22 854 ms, un 33 %**. Justamente la parte que puede degradarse sin que nadie la vea.
+> **En v3 el reloj de pared es `stats.duration`**, y `suites[*]` queda sólo para **atribuir** el crecimiento por test.
+
 **Archivos a crear:** `Stacky tools/QA UAT Agent/tests/unit/test_plan274_wallclock.py`,
-`Stacky tools/QA UAT Agent/reports/plan274_wallclock_baseline.json` (lo genera el test).
+`Stacky tools/QA UAT Agent/reports/plan274_wallclock_baseline.json` (lo genera el test **en F0.5**).
 **Archivos a editar:** ninguno de producción. **Flag:** ninguna (es un test).
 
 **Cómo.**
-1. `_wall_clock_ms(report_path) -> tuple[int, int]` devuelve `(suma_de_duration, cantidad_de_tests)` recorriendo
-   `suites[*]` recursivamente (mismo recorrido que `C-7`).
+1. `_wall_clock(report_path) -> tuple[int, int, dict]` devuelve `(stats["duration"], n_tests, {test_id: duration})`,
+   donde `n_tests = stats["expected"] + stats["unexpected"] + stats["flaky"]` y el dict sale de recorrer `suites[*]`.
+   **Mismo cálculo que `C-7`.**
 2. `test_baseline_de_reloj_existe_o_se_crea` — si `plan274_wallclock_baseline.json` no existe, lo escribe con la
-   medición actual y pasa (primera corrida).
-3. `test_el_reloj_no_empeora` — **criterio DELTA con tolerancia declarada**: `ms_por_test_actual <= baseline * 1.10`.
-   El 10 % absorbe el ruido de una máquina compartida; más que eso es una regresión real. El mensaje de fallo nombra
-   los tests cuya `duration` creció y en cuánto.
+   medición actual y pasa. **Se corre en F0.5, ANTES de F1** (ver §8). Una vez escrito, ninguna fase lo reescribe.
+3. `test_el_reloj_no_empeora` — **criterio DELTA con tolerancia declarada**: `ms_por_test_actual <= baseline * 1.10`,
+   con `ms_por_test = stats.duration / n_tests`. El 10 % absorbe el ruido de una máquina compartida; más que eso es
+   una regresión real. El mensaje de fallo nombra los tests cuya `duration` creció y en cuánto (para eso está el dict).
    > Se compara **ms por test**, no el total: si mañana hay 6 specs en vez de 5, un total mayor no es una regresión.
 4. `test_se_salta_si_no_hay_reporte` — si `reports/playwright-results.json` no existe o está vencido, el test hace
    `pytest.skip` con motivo. **Nunca falla por ausencia de reporte**: es un ratchet, no un requisito de corrida.
+5. `test_no_se_mide_sobre_suites` **(nuevo en v3, hallazgo V8)** — asserta que `_wall_clock` devuelve `stats["duration"]`
+   y **no** la suma de `suites[*]`, alimentándolo con un reporte-fixture donde los dos números difieren.
+   **Corre contra el defecto:** con la implementación de `C-7` del v2, ROJO.
 
 **Comando:**
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 "$PY" -m pytest tests/unit/test_plan274_wallclock.py -v
 ```
-**Criterio BINARIO.** `3 passed, 0 failed` (o `2 passed, 1 skipped` si no hay reporte, con el motivo impreso), Y
-`reports/plan274_wallclock_baseline.json` existe tras la primera corrida.
+**Criterio BINARIO.** `4 passed, 0 failed` (o `3 passed, 1 skipped` si no hay reporte, con el motivo impreso), Y
+`reports/plan274_wallclock_baseline.json` existe **desde F0.5** y su `startTime` es **anterior** al primer commit de F1
+(verificable: el campo `stats.startTime` del reporte que lo originó, `2026-07-26T00:36:03.100Z` en el reporte de hoy).
 **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3.
+
+---
+
+### F10 — El gate de EFICACIA `[ADICIÓN ARQUITECTO v3]`
+
+**Por qué existe.** Las tres bloqueantes de la crítica v2→v3 (V1 alcance, V2 presupuesto inerte, V6 flags muertas)
+tienen la misma firma: **el criterio verificaba que el código estuviera escrito, no que hiciera algo**. En los tres
+casos el gate del v2 daba VERDE con el defecto puesto, y en el caso de V1 el gate **subía de puntaje** con el bug
+adentro (`grep -c` pasaba de 3 a 4, acercándose al objetivo de 9). Un plan que ya lleva dos rechazos por esta misma
+clase necesita un gate **de la clase**, no otro parche puntual.
+
+F10 no agrega comportamiento de producto: agrega **dos tests deterministas, sin dependencias nuevas**, que un modelo
+menor no puede satisfacer escribiendo código muerto.
+
+**Archivos a crear:** `Stacky Agents/backend/tests/test_plan274_efficacy_gates.py`.
+**Archivos a editar:** ninguno de producción. **Flag:** ninguna (es un test).
+
+**F10.1 — Gate de ALCANCE (mata la clase de V1).** `test_toda_llamada_a_closure_esta_en_su_scope`: implementa `C-8`
+de forma **genérica**, no atada a `_check_deadline` — recorre `qa_uat_pipeline.py` con `ast`, encuentra **toda función
+anidada** (un `FunctionDef` cuyo padre es otro `FunctionDef`), y asserta que **ninguna** llamada por nombre a esa
+función ocurre fuera del cuerpo del padre. Mensaje de fallo: `<nombre> definida en :<def> y llamada en :<linea>, fuera
+de <padre>`. Cuesta ~25 líneas y **detecta el `NameError` que `compileall` no ve**, para cualquier closure del archivo.
+
+**F10.2 — Gate de FLAG VIVA (mata la clase de V6).** `test_toda_flag_del_plan_es_leida`: para cada una de las 6 keys
+de §3.1, asserta que aparece **al menos una vez** en código que la lee (`.py` o `.j2` del tool), no sólo en los 5
+archivos de registro del arnés. Es la **pata 7** convertida en test. Mensaje de fallo: la key y los archivos donde
+está registrada, para que quede claro que el problema es que **nadie la usa**.
+
+**Tests PRIMERO.** Los dos tests se escriben **antes** de F7 y F1/F2 respectivamente, y **arrancan ROJOS**:
+- F10.1 arranca **VERDE** con el código de hoy (`FUERA_DE_SCOPE=[]`) — es un centinela, y su valor se prueba con el
+  caso adverso: el test trae un fixture con el defecto exacto del v2 (`_check_deadline` en `stages["dossier"]`, `:857`)
+  y asserta que el detector lo marca. Sin ese caso adverso, F10.1 no está hecha.
+- F10.2 arranca **ROJO** (las 6 keys no existen todavía) y se pone verde a medida que F1..F7 las cablean.
+
+**Comando:**
+```bash
+cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
+"$PY" -m pytest tests/test_plan274_efficacy_gates.py -v
+```
+**Criterio BINARIO.** `3 passed, 0 failed` (F10.1 + su caso adverso + F10.2), Y el archivo está registrado en **los DOS**
+ratchets (F8.3). **Trabajo del operador:** ninguno. **Runtimes:** neutro en los 3 — es `ast` de la stdlib y `grep`.
 
 > **Relación con el smoke manual del DoD:** F9 **no lo reemplaza**. El smoke prueba que la app sigue funcionando
 > (3/3 verdes); F9 prueba que no se degradó el tiempo, y lo hace **cada vez que alguien corre los tests**, no solo
@@ -1265,7 +1821,7 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 | **R-5** | Bajar capturas (F2) borra la evidencia que el operador necesita para diagnosticar. | Media | `setup`, `final_state` y el `afterEach` de fallo quedan **siempre**. El presupuesto da 3 capturas en fallo (más que 1 en éxito): la evidencia crece justo cuando importa. |
 | **R-6** | Los tests nuevos viven en el tool, que está fuera de los ratchets (H8) ⇒ nadie los corre y se podren. | **Alta** | F0.3 lo deja escrito como test; F8.3 lo resuelve o lo declara deuda con motivo. Los comandos de §4 son explícitos para que el implementador los corra a mano. |
 | **R-7** | El implementador cierra una fase con `pytest` en exit 0 y **0 tests seleccionados**. | Media | Todo criterio de §5 exige el número de `passed`, no el exit code (§4). |
-| **R-8** | Sesión paralela: hay **9 worktrees vivos** y el `wt-plan-262` tiene F0..F11 del 262 sin mergear, tocando `uat_test_runner.py` (el mismo archivo que F3 y F7.2). | **Alta** | **Frontera de merge declarada:** el 262 cablea su recuperación en `uat_test_runner.py:256`; F3 toca `:355` y F7.2 toca `:48/:84/:352`. Son zonas distintas del mismo archivo ⇒ merge de 3 vías sin conflicto, **pero** git puede fusionar sin marcar conflicto y dejar duplicados. Tras cualquier merge con `feat/plan-262-*`, correr `python -m compileall uat_test_runner.py` **y** `grep -c "_resolve_workers" uat_test_runner.py` (debe ser exactamente 2: definición + uso). |
+| **R-8** | Sesión paralela: hay **9 worktrees vivos** y el `wt-plan-262` tiene F0..F11 del 262 sin mergear, tocando `uat_test_runner.py` (el mismo archivo que F3 y F7.2). | **Alta** | **Frontera de merge declarada:** el 262 cablea su recuperación en `uat_test_runner.py:256`; F3 toca `:355` y F7.2 toca `:48/:84/:354` **y ahora también `:239-252`** (F7.2.a re-anclada en v3, hallazgo V4) — **esa zona SÍ colinda con `:256` del 262**, así que la frontera dejó de ser holgada. Tras cualquier merge con `feat/plan-262-*`: `python -m compileall uat_test_runner.py`, `grep -c "_resolve_workers" uat_test_runner.py` (exactamente 2: definición + uso) **y** `grep -c "record_run" uat_test_runner.py` (exactamente 1). *(El v2 escribía `:352`, que es la línea `"npx", "playwright", "test",` — el propio v2 lo había corregido a `:354` en H7 y F7.2 y no propagó el fix acá.)* |
 | **R-9** | El plan asume un dominio de "turnos/agenda de citas" que no existe (H9) y se construyen helpers para nada. | Baja (mitigado) | H9 lo declara explícitamente: **sin evidencia** de turnos, fechas, profesionales ni recursos. Ninguna fase de este plan menciona esos conceptos. |
 
 ---
@@ -1284,6 +1840,10 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 9. **No se rediseñan las 4 taxonomías de error ni el veredicto** — territorio de los planes 241 y 262.
 10. **Cero cambios de frontend.** Ningún `.tsx` se toca (igual que 240 y 241).
 11. **No se reescribe `qa_uat_pipeline.py`** (4817 líneas). Solo se insertan las 6 llamadas de F7.1 y el logging de F5.
+    **Y NO se promueve `_check_deadline` a función de módulo**: sacarla del closure de `_run_pipeline_stages` obligaría
+    a pasarle `_deadline`, `_max_minutes`, `_effective_config`, `ticket_id`, `stages` y `started` por parámetro, en 8
+    call sites, sobre el archivo más grande del tool. Es un refactor con riesgo propio y **es la razón por la que las
+    6 claves de F7.1 se eligen dentro del scope existente** (H6-bis). Alcance de un plan futuro.
 12. **No se agrega ninguna capa LLM.** Todo lo de este plan es determinista.
 13. **No se mergea ni pushea nada.** El push es siempre manual.
 
@@ -1314,33 +1874,46 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky tools/QA UAT Agent"
 
 ### Orden de implementación (estricto)
 
-1. **F0** — baseline y censo. **No empezar nada sin esto**: sin baseline no hay forma de probar la mejora.
-2. **F1** — esperas fijas (el generador **antes** que los specs, para no re-contagiar).
-3. **F2** — presupuesto de capturas.
-4. **F3** — honestidad de workers.
-5. **F4** — probe de deeplink.
-6. **F5** — fragilidad de selectores.
-7. **F6** — cache de datos.
-8. **F7** — deadline + timeout recomendado (**las dos mitades**) + puerta declarada.
-9. **F8** — veredicto del censo + ratchet + decisión de arnés.
-10. **F9** — ratchet de reloj de pared `[ADICIÓN ARQUITECTO]`.
+1. **F0** — baseline (esperas, censo **y reloj de pared F0.5**). **No empezar nada sin esto**: sin baseline no hay
+   forma de probar la mejora, y el de reloj **sólo sirve si se toma antes de F1**.
+2. **F10** — gates de eficacia `[ADICIÓN ARQUITECTO v3]`. Van **antes** de las fases que vigilan, si no son un
+   post-hoc. F10.1 arranca verde (centinela), F10.2 arranca rojo y se cierra con F1..F7.
+3. **F1** — esperas fijas (el generador **antes** que los specs, para no re-contagiar).
+4. **F2** — presupuesto de capturas.
+5. **F3** — honestidad de workers.
+6. **F4** — probe de deeplink.
+7. **F5** — fragilidad de selectores.
+8. **F6** — cache de datos.
+9. **F7** — deadline **en scope** + timeout recomendado (**las dos mitades**) + puerta declarada.
+10. **F8** — veredicto del censo + ratchet + registro de los 2 tests de backend.
+11. **F9** — ratchet de reloj de pared (el **paso 3**; el paso 2 ya se corrió en F0.5).
 
 F4, F5 y F6 son **independientes entre sí** (archivos disjuntos: `navigation_strategy_resolver.py`,
 `qa_uat_pipeline.py`, `data_resolver.py`) y pueden hacerse en cualquier orden entre ellas. F1 y F2 **no** son
-independientes: las dos editan `templates/playwright_test.spec.ts.j2` ⇒ **secuenciales, F1 primero**.
-**F5 y F7.1 también comparten archivo** (`qa_uat_pipeline.py`, zonas distintas: `:2062` vs las 6 etapas) ⇒ si se
-hacen en paralelo, correr `python -m compileall qa_uat_pipeline.py` después de juntarlas.
-**F9 conviene correrla al final**, cuando ya existe un `reports/playwright-results.json` posterior a F1: si se corre
-antes, congela como baseline el reloj **previo** a la mejora y el ratchet queda flojo.
+independientes: las dos editan `templates/playwright_test.spec.ts.j2` **y las dos tocan los mismos dos
+`template.render(...)` de `playwright_test_generator.py` (`:384`, `:932`)** ⇒ **secuenciales, F1 primero**.
+**F5 y F7.1 también comparten archivo** (`qa_uat_pipeline.py`, zonas distintas: `:2062` vs las 6 etapas — y
+`selector_contract` es una de las 6, así que la zona **se toca dos veces**) ⇒ si se hacen en paralelo, correr
+`python -m compileall qa_uat_pipeline.py` **y `C-8`** después de juntarlas.
+
+> **Corrección de orden respecto del v2 (hallazgo V5).** El v2 decía *"F9 conviene correrla al final… si se corre
+> antes, congela como baseline el reloj previo a la mejora y el ratchet queda flojo"*, contradiciendo a §9
+> (*"medir antes de F1"*). **El razonamiento estaba invertido**: el baseline **tiene** que ser el reloj previo — es
+> exactamente lo que hace falta para detectar que F1 empeoró la corrida. Lo que va al final es el **ratchet**
+> (paso 3), no la **captura** (paso 2). En v3 la captura es **F0.5**.
 
 ### Definición de Hecho (DoD) global
 
-- [ ] Los **8** KPI de §1 (KPI-1, 2, 3, 4a, 4b, 5, 6, 7) medidos **con los comandos de §4** y anotados en §9.
-- [ ] Los **12** archivos de test nuevos existen (11 en el tool + 1 en el backend) y cada comando de §5 reporta su
+- [ ] Los **9** KPI de §1 (KPI-1, 2, 3, 4a, 4a-bis, 4b, 5, 6, 7, 8) medidos **con los comandos de §4** y anotados en §9.
+- [ ] Los **13** archivos de test nuevos existen (11 en el tool + 2 en el backend) y cada comando de §5 reporta su
       número de `passed` con `0 failed`. **Ningún criterio se cierra mirando solo `$?`.**
-- [ ] Las 6 flags nuevas pasan el **gate de las 6 patas** de §3.1 (los 4 `grep` en `harness_flags.py`, `config.py`,
-      `tests/test_harness_flags.py` y `services/harness_flags_help.py` dan `>= 1`) y aparecen en `GET /api/harness/flags`.
+- [ ] Las 6 flags nuevas pasan el **gate de las 7 patas** de §3.1 — los 5 `grep` de registro (`harness_flags.py`,
+      `config.py`, `tests/test_harness_flags.py`, **`_CATEGORY_KEYS`**, `services/harness_flags_help.py`) **más la
+      pata 7** (`grep` en el código que la lee, dentro del tool) dan `>= 1` — y aparecen en `GET /api/harness/flags`.
+- [ ] **Ninguna flag quedó muda:** las 6 tienen `pata 7 >= 1`. Una flag registrada y no leída es peor que no tenerla.
 - [ ] Ninguna flag nació OFF (y si alguna lo hizo, cita por escrito la categoría (A) o (B)).
+- [ ] **`C-8` devuelve `FUERA_DE_SCOPE == []`** con 8 llamadas en scope. Un `grep -c` de 9 **no** cierra F7.1.
+- [ ] **`C-9` devuelve `sin_guardia == [325, 496, 798, 806]` y `con_guardia == 15`**, y el test del techo de 25 pasa.
 - [ ] **Ningún assert se editó para poner verde un criterio.** Los baselines viven en
       `reports/plan274_wait_baseline.json`, `reports/plan274_selector_baseline.json` y
       `reports/plan274_wallclock_baseline.json`, y los criterios son **delta** contra esos archivos.
@@ -1351,8 +1924,9 @@ antes, congela como baseline el reloj **previo** a la mejora y el ratchet queda 
       correr `ado122_provincia_domicilio.spec.ts` y `ado171_emails_oficial.spec.ts` **3 veces** y verificar 3/3 verdes.
       **Sin este smoke, F1 no está hecha** — los tests unitarios miden el archivo, no el navegador.
 - [ ] **Reloj de pared verificado por F9** (KPI-7), no a ojo: `C-7` sobre el `reports/playwright-results.json` de esa
-      corrida, comparado contra `plan274_wallclock_baseline.json`. Es lo único que detecta que una espera por estado
-      resulte **más lenta** que el sleep que reemplazó — con KPI-1 en verde.
+      corrida, comparado contra `plan274_wallclock_baseline.json` **capturado en F0.5, antes de F1**. Es lo único que
+      detecta que una espera por estado resulte **más lenta** que el sleep que reemplazó — con KPI-1 en verde.
+      Si el baseline se capturó **después** de F1, el ratchet **no vale** y hay que declarar KPI-7 `NO MEDIBLE`.
 - [ ] **La huella del error se registró.** Agregar a `Stacky Agents/docs/sistema/error_fingerprints.json` (existe,
       53 KB) la clase de fallo que este plan mata: *deep link que redirige a login y quema la corrida entera* (F4).
       Sin huella, el próximo diagnóstico vuelve a empezar de cero.
@@ -1365,8 +1939,9 @@ antes, congela como baseline el reloj **previo** a la mejora y el ratchet queda 
 
 > Esta sección se llena durante la implementación. Debe tener **una línea por cada uno de los 11 módulos** del corpus
 > de H1, con `MANTENER COMO DEUDA DECLARADA — <razón>`, `BORRAR — reemplazado por <archivo:línea>` o
-> `CONECTADO EN F<n> — <archivo:línea del importador>`, más el valor final de los **8** KPI. Si queda vacía,
-> **F8 no está hecha**.
+> `CONECTADO EN F<n> — <archivo:línea del importador>`, más el valor final de los **10** KPI (§1). Si queda vacía,
+> **F8 no está hecha**. Acá también va, por escrito: la **deuda H8 aceptada** con los 3 motivos de V11, y —si
+> corresponde— la declaración de `KPI-7 NO MEDIBLE` con su causa.
 
 | Módulo | Veredicto | Evidencia (`archivo:línea` del importador o razón) |
 |---|---|---|
@@ -1384,16 +1959,22 @@ antes, congela como baseline el reloj **previo** a la mejora y el ratchet queda 
 
 **Valores finales de KPI (a completar):**
 
-| KPI | Comando | Antes | Después |
-|---|---|---|---|
-| KPI-1 ms de espera fija | `C-1` | 35 900 / 26 occ | |
-| KPI-2 espera fija en el generador | `C-2` | 1 | |
-| KPI-3 capturas sin guardia | `C-3` | 18 de 19 | |
-| KPI-4a huérfanos por C-4 | `C-4` | 10 | |
-| KPI-4b veredictos escritos | §9 | 0 de 11 | |
-| KPI-5 llamadas a `_check_deadline` | `C-5` | 3 líneas (2 llamadas) | |
-| KPI-6 workers honesto | `C-6` | falso | |
-| KPI-7 reloj de pared | `C-7` | (medir antes de F1) | |
+| KPI | Comando | Antes (medido 2026-07-30) | Meta | Después |
+|---|---|---|---|---|
+| KPI-1 ms de espera fija | `C-1` | 35 900 / 26 occ | ≤ 3 000 | |
+| KPI-2 espera fija en el generador | `C-2` | 1 | 0 o marcada | |
+| KPI-3 capturas sin guardia | `C-3` / `C-9` | 18 de 19 | exactamente `{325,496,798,806}` | |
+| KPI-4a `direct == 0` | `C-4` | 10 | **5** | |
+| KPI-4a-bis `prod_reachable == False` | F0.2 | 11 | **6** | |
+| KPI-4b veredictos escritos | §9 | 0 de 11 | 11 de 11 | |
+| KPI-5 `_check_deadline` **en scope** | `C-5` + **`C-8`** | 3 líneas (2 llamadas, 0 fuera de scope) | 9 líneas (8 llamadas, **0 fuera de scope**) | |
+| KPI-6 workers honesto | `C-6` | falso | verdadero | |
+| KPI-7 reloj de pared | `C-7` | **70 030 ms / 3 tests = 23 343 ms por test** *(capturar en **F0.5**, antes de F1)* | ≤ baseline × 1,10 | |
+| KPI-8 PNG emitidos | `C-9` | `con_guardia = 0`, sin techo | `con_guardia = 15` + techo de 25 activándose | |
+
+> **Recordatorio de honestidad (v3).** La fila KPI-7 "Antes" es el reloj del **único** reporte real del repo, que
+> corrió **otros** specs (P01/P02/P03 del ticket 367). Si el baseline de F0.5 se toma sobre una corrida distinta,
+> **anotarlo acá**: comparar dos corridas de specs distintos no es un ratchet, es ruido.
 
 ---
 

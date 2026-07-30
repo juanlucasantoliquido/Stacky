@@ -237,6 +237,43 @@ def run(
                 pass
         return _blocked
 
+    # ── Plan 262 F7.2 — RECUPERACION EN CALIENTE POR CASO ─────────────────────
+    # UNICO call site de hot_recovery.recover(). Va DESPUES de _run_all_specs_once
+    # y ANTES de los contadores a proposito: los contadores y el classifier derivan
+    # de `runs`, asi que reemplazar una entrada de `runs` aca hace que el reintento
+    # fluya al veredicto sin tocar el classifier.
+    # Con la flag OFF este bloque es un no-op de una comparacion (INV-8).
+    try:
+        import recovery_config as _rc
+        if _rc.hot_recovery_enabled():
+            import hot_recovery as _hr
+            _budget = _hr.build_budget_for_run()          # UNA sola vez por run:
+            # construirlo dentro del for reiniciaria los contadores por caso y
+            # convertiria el presupuesto en un bucle con pasos extra.
+            for _i, _r in enumerate(runs):
+                if _r.get("status") not in ("fail", "blocked"):
+                    continue                              # un pass no se toca JAMAS
+                _out = _hr.recover(
+                    case_id=str(_r.get("scenario_id") or _r.get("spec_file") or _i),
+                    exc=None,
+                    exc_text=f"{_r.get('reason', '')} {_r.get('raw_stderr', '')}".strip(),
+                    route_used=_hr.route_of_case(_r, evidence_out),
+                    nav_code=_hr.nav_code_of_case(_r, evidence_out),
+                    budget=_budget,
+                    exec_log=_exec_log,
+                    run_dict=_r,
+                    evidence_out=evidence_out,
+                )
+                if _out.attempted and _out.succeeded and _out.retried_result is not None:
+                    runs[_i] = _out.retried_result        # el reintento REEMPLAZA al caso
+                # F10.2 — el reporte va SIEMPRE que se haya clasificado, con o sin
+                # intento. Este call site es el UNICO dueno del dict del caso:
+                # _blocked_result no tiene parametro para esto y no hay que agregarselo.
+                runs[_i]["recovery_report"] = _out.as_report()
+    except Exception:                                      # noqa: BLE001
+        # INV-8: un fallo de la capa nueva devuelve el comportamiento de hoy.
+        logger.warning("recuperacion en caliente no disponible", exc_info=True)
+
     pass_count    = sum(1 for r in runs if r.get("status") == "pass")
     fail_count    = sum(1 for r in runs if r.get("status") == "fail")
     blocked_count = sum(1 for r in runs if r.get("status") == "blocked")
@@ -1577,6 +1614,14 @@ def _parse_args() -> argparse.Namespace:
                         dest="timeout_ms", help="Per-test timeout in ms")
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
+
+
+# ── Plan 262 F7.2 — alias PUBLICO del reintento por caso ──────────────────────
+# _run_single_spec existia completa y con CERO llamadores (1 solo hit en todo el
+# arbol: su propia definicion). El reintento acotado al caso no habia que
+# inventarlo: habia que cablearlo. Se expone con nombre publico y se CONSERVA el
+# privado para no romper nada que lo referencie por texto.
+run_single_spec = _run_single_spec
 
 
 if __name__ == "__main__":

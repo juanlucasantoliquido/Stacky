@@ -2087,3 +2087,75 @@ registro de implementación al final de este documento:
 - [ ] `git commit` con **pathspec explícito** (`git commit -- "<ruta>" ...`). Prohibido `git add -A`,
       `reset`, `amend`, `stash`, `rebase`, `checkout` y `--no-verify` — hay sesiones paralelas vivas sobre este
       árbol. El `push` es manual.
+
+---
+
+## Registro de implementación (2026-07-29, worktree `wt-plan-265`, rama `feat/plan-265-consola-devops-fullscreen`)
+
+**F0.0 — salida pegada (targets 1-5, antes de tocar código).** Coincide exacto con lo citado por la v5,
+con UN drift propio no anticipado por la ronda de crítica: `test_default_known_only_for_curated` mide
+`:1001` (la v5 en su prosa de F0.4 citaba `:974`; el símbolo es inequívoco, se usó el símbolo por §4.ter).
+Los targets 6-7 (G1, `.sh`/`.ps1`) confirmaron que **ambos arrays terminan hoy en
+`tests/test_plan267_help.py`** (`.sh:913`, `.ps1:830`) — sin la divergencia entre sesiones que advertía G1;
+ahí se apoyaron las 3 entradas nuevas de F4/F4.5/F7.
+
+**F8.0 — salida diffeada contra F0.0 (al cierre, antes del commit final).** Todo el drift observado
+queda **100% explicado por el propio código de este plan**, sin un solo cambio de terceros:
+- `harness_flags.py`: `"paridad_proveedores"` `:498→:502` (+4, mis 4 keys en `_CATEGORY_KEYS`);
+  `STACKY_EXECUTION_HISTORY_ENABLED` `:1922→:1926` (+4, arrastre del mismo cambio, vive después en el archivo).
+- `test_harness_flags.py`: `test_every_registry_flag_is_categorized` `:929→:933` (+4, mis 4 keys en
+  `_CURATED_DEFAULTS_ON`); `test_default_known_only_for_curated` `:1001→:1005` (+4, arrastre).
+- `test_harness_flags_requires.py`: `test_requires_map_is_frozen` `:326→:331` (+5, mi bloque de 2 comentarios
+  + 3 aristas en `_REQUIRES_MAP_FROZEN`).
+- `api/executions.py`: los 4 anclajes (`:509/:527/:683/:695→:510/:528/:684/:696`, todos +1, por el
+  `from services import console_audit` agregado antes de todos ellos).
+- `endpoints.ts`: **cero drift** en `Agents`/`Executions` (`:1117`/`:1350` sin cambio) — `GitReadonly`/`Console`
+  se agregaron al final del archivo, como exige §4.bis.
+- `run_harness_tests.sh`/`.ps1`: +3 líneas cada uno (mis 3 archivos de test), mismo orden
+  `git_readonly, secret_mask, console_audit` después de `test_plan267_help.py` en ambos.
+Conclusión: **nada se movió mientras se implementaba, salvo el propio código de este plan.**
+
+**Fases — archivo:línea real (rama `feat/plan-265-consola-devops-fullscreen`):**
+
+| Fase | Estado | Archivos reales | Tests (comando → resultado) |
+|---|---|---|---|
+| F0 | IMPLEMENTADA | `backend/config.py` (+13), `backend/services/harness_flags.py` (FLAG_REGISTRY +55, `_CATEGORY_KEYS` +4), `backend/tests/test_harness_flags.py` (+4), `backend/tests/test_harness_flags_requires.py` (+5), `backend/services/harness_flags_help.py` (+24) | `test_harness_flags.py` 56 passed · `test_harness_flags_requires.py` 9 passed · gate F0.8 propio `OK 4/4` · `test_harness_flags_help.py` **4 failed, 4 passed** (baseline idéntico, sin `CONSOLE`) |
+| F1 | IMPLEMENTADA | `frontend/src/services/consolePresentation.ts` (nuevo), `store/workbenchPure.ts` (`WorkbenchPersistV4`), `store/workbench.ts` (`codexConsolePresentation` + setter + `partialize`) | `consolePresentation.test.ts` 12 passed · `workbenchPure.test.ts` 12 passed (9 previos + 3 nuevos) |
+| F1.5 | IMPLEMENTADA | `frontend/src/services/consoleSession.ts` (nuevo); `workbench.ts` setter delega en `applyPresentation` | `consoleSession.test.ts` 9 passed |
+| F2 | IMPLEMENTADA | `frontend/src/services/consoleRender.ts` (nuevo); render rico cableado en `components/CodexConsoleFull.tsx` | `consoleRender.test.ts` 11 passed · gate clipboard `grep -c navigator.clipboard CodexConsoleDock.tsx` = 0 |
+| F2.5 | IMPLEMENTADA | `frontend/src/services/consoleCapabilities.ts` (nuevo) | `consoleCapabilities.test.ts` 8 passed (test 3 = gate de paridad de los 3 runtimes) |
+| F3 | IMPLEMENTADA | `frontend/src/services/consoleActions.ts` (nuevo, usa `Executions.cancel` `:1417-1418`, jamás `Agents.cancel` `:1154-1155`); cableado en `CodexConsoleFull.tsx` con `useConfirm` | `consoleActions.test.ts` 12 passed (test 11 = gate D1 leyendo el texto fuente) |
+| F4 | IMPLEMENTADA | `backend/services/console_repo.py` (nuevo), `backend/api/git.py` (+30, rutas `/status` `/diff`), `frontend/src/services/consoleRepoPanel.ts` (nuevo), panel en `CodexConsoleFull.tsx` | `test_plan265_git_readonly.py` 13 passed (test 11 = gate de escritura) · `consoleRepoPanel.test.ts` 6 passed |
+| F4.5 | IMPLEMENTADA | `backend/services/console_secret_mask.py` (nuevo); cableado en `console_repo.py::repo_diff` (orden diff→mask→truncado) y en `console_audit.py` | `test_plan265_secret_mask.py` 8 passed (test 7 = orden verificado con `repo_diff` real) |
+| F5 | IMPLEMENTADA | `frontend/src/services/consoleHistoryPanel.ts` (nuevo, D6), `consoleSearch.ts` (nuevo); `endpoints.ts` `Console.historyRaw` (rawGet, nunca `api.get`); paneles Contexto/Historial + búsqueda en `CodexConsoleFull.tsx` | `consoleHistoryPanel.test.ts` 4 passed · `consoleSearch.test.ts` 10 passed |
+| F6 | IMPLEMENTADA | `frontend/src/services/consoleShortcuts.ts` (nuevo, 3 combos con Ctrl); registrados vía `useShortcut` en `CodexConsoleDock.tsx` | `consoleShortcuts.test.ts` 12 passed (test 9 = ratchet de atajos muertos) · `shortcuts.test.ts` 31 passed (regresión Plan 172) |
+| F7 | IMPLEMENTADA | `backend/services/console_audit.py` (nuevo), endpoint `GET /api/executions/console-audit` en `api/executions.py` (+9); **cableado real**: `cancel_execution` llama `record_console_action(action="cancel")` (único handler inequívoco; "relaunch"/"copy_all"/"open_full"/"close" quedan con la allowlist lista pero SIN un segundo call-site de escritura, para no violar KPI-5 = 0 endpoints de escritura — ver "Pendiente" abajo) | `test_plan265_console_audit.py` 10 passed (test 9 = AST, gate de "nunca restringe") |
+| F8.0 | IMPLEMENTADA | ver arriba | comparación pegada arriba |
+| F8 | IMPLEMENTADA | — | **19/20** comandos exit 0 (ver "Hallazgo" abajo) |
+
+**Hallazgo — 1 de los 20 comandos de F8 sale rojo, y es deuda ajena confirmada, no de este plan.**
+`npx vitest run src/__tests__/uiDebtRatchet.test.ts` falla por
+`components/ExecutionDetailDrawer.module.css` (23 hex medidos vs 21 del baseline, **Plan 254**,
+commit `92e593f2`) y `components/RunReconciliationCard.module.css` (1 hex vs 0, **Plan 269**, commit
+`64088830`). Verificado con `git diff --stat -- <ambos archivos>` y `git status --porcelain` sobre
+`uiDebtBaseline.json`: **las 3 salidas están vacías** — ninguno de los 3 archivos fue tocado por este
+plan. Es la misma categoría que `test_harness_flags_help.py` (F0.8): una deuda ajena preexistente que
+este plan **no usa como gate propio y no intenta arreglar** (fuera de su scope declarado). Los archivos
+nuevos de este plan (`CodexConsoleFull.tsx`, `CodexConsoleFull.module.css`) miden **0** hex y **0**
+`style={{` — confirmado con grep directo.
+
+**Pendiente / gap declarado (F7).** El plan asume que "relaunch"/"copy_all"/"open_full"/"close" también
+quedan auditados, pero KPI-5 (0 endpoints de escritura) y la ausencia de un handler de backend único para
+esas 4 acciones (relanzar depende del origen; copiar/abrir/cerrar son puramente de cliente) significan que,
+tal como está el árbol HOY, solo **"cancel"** tiene un call-site de escritura real (`cancel_execution`).
+La allowlist y el resto del mecanismo (rotación, enmascarado, aislamiento, "nunca restringe") están
+completos y probados; conectar los otros 4 verbos requiere una decisión de diseño (¿qué endpoint dispara
+"relaunch"? ¿se best-effort desde el cliente sin exponer escritura?) que este documento no explicita y que
+no se resolvió por cuenta propia para no adivinar contra la regla de §4.ter.
+
+**Smoke manual (13 pasos) — PENDIENTE, es trabajo del operador.** El repo no tiene RTL ni jsdom: la
+verificación visual de la consola en pantalla completa (KPI-2 visual, KPI-6 aviso de secretos, paridad de
+los 3 runtimes con una corrida real de cada uno, etc.) no se puede automatizar y queda para que el
+operador la corra siguiendo los 13 pasos de la sección F8 de este documento.
+
+**Commits:** `7e105cb5` (F0.0..F8, 41 archivos) — ver también el commit siguiente con este registro.

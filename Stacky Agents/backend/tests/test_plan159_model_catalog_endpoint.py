@@ -42,7 +42,10 @@ def test_endpoint_includes_codex_note(client):
     resp = client.get("/api/agents/model-catalog")
     data = resp.get_json()
     codex = data["runtimes"]["codex_cli"]
-    assert codex["efforts"] == []
+    # Plan 264 (matriz única de capacidades runtime/modelo/effort) le dio a Codex
+    # paridad de effort vía presupuesto de turnos: ya no es `[]`.
+    from services.runtime_capabilities import EFFORTS
+    assert [e["id"] for e in codex["efforts"]] == list(EFFORTS)
     assert codex.get("note", "").strip()
 
 

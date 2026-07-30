@@ -111,6 +111,19 @@ def test_transicion_aplicada_emite_system_log(ticket_id, monkeypatch):
                         lambda project: profile, raising=True)
     monkeypatch.setattr("services.tracker_provider.get_tracker_provider",
                         lambda project=None: FakeProvider(), raising=True)
+    # Plan 271 F2-bis GUARDIA 1 cableó el gate de build del plan 210 en motor A
+    # para agent_type=="developer". Este test prueba la observabilidad de la
+    # transición en sí, no el gate (que tiene su propia suite) — se simula un
+    # veredicto fresco y verde con el mismo execution_id para que pase de largo.
+    from services.dev_build_verify import BuildVerdict
+
+    monkeypatch.setattr(
+        "services.dev_build_verify.read_verdict",
+        lambda ado_id, workspace_root: BuildVerdict(
+            ok=True, gate_ok=True, reason="verified", execution_id=77,
+        ),
+        raising=True,
+    )
 
     from services.completion_state import maybe_apply_state_transition
 

@@ -179,12 +179,17 @@ def _variables_provider_con_doble(monkeypatch) -> tuple[object, _SignatureChecke
 
 
 def test_gitlab_variables_list_usa_firma_real(monkeypatch):
-    """D4: _request_paginated NO acepta `method` posicional (es GET por definición)."""
+    """D4: _request_paginated NO acepta `method` posicional (es GET por definición).
+
+    `has_value` es None (no True): el plan 260 F1 cerró el hardcodeo a True —
+    GitLab enmascara el valor de una variable secreta en el listado, así que
+    sin una lectura aparte no hay forma honesta de saber si tiene valor.
+    """
     provider, doble = _variables_provider_con_doble(monkeypatch)
 
     result = provider.list_variables()
 
-    assert result == [{"key": "K1", "is_secret": True, "has_value": True, "masked": True}]
+    assert result == [{"key": "K1", "is_secret": True, "has_value": None, "masked": True}]
     assert doble.calls[0]["path"].endswith("/variables")
     assert not doble.calls[0]["path"].startswith("GET")
 

@@ -87,7 +87,15 @@ def ticket_id():
 
 @pytest.fixture
 def wired(monkeypatch):
-    """Devuelve un helper que cablea profile+provider y corre la transición."""
+    """Devuelve un helper que cablea profile+provider y corre la transición.
+
+    Plan 271 F2-bis GUARDIA 1 cableó el gate de build del plan 210
+    (dev_build_verify.gate_final_state) en motor A para agent_type=="developer".
+    Este archivo prueba la lógica de motor A en sí (matriz/rol/resolve_final_state),
+    no el gate de build (que tiene su propia suite) — se simula un veredicto
+    fresco y verde (execution_id=1, igual al de `maybe_apply_state_transition`
+    más abajo) para que el gate pase de largo sin degradar el target.
+    """
 
     def _run(*, cell, provider, final_status="completed", agent_type="developer",
              tid=None, profile=None):
@@ -100,6 +108,15 @@ def wired(monkeypatch):
         monkeypatch.setattr(
             "services.tracker_provider.get_tracker_provider",
             lambda project=None: provider,
+            raising=True,
+        )
+        from services.dev_build_verify import BuildVerdict
+
+        monkeypatch.setattr(
+            "services.dev_build_verify.read_verdict",
+            lambda ado_id, workspace_root: BuildVerdict(
+                ok=True, gate_ok=True, reason="verified", execution_id=1,
+            ),
             raising=True,
         )
         from services.completion_state import maybe_apply_state_transition
@@ -124,13 +141,18 @@ def test_transiciona_con_cell_configurado(ticket_id, wired):
 
 
 def test_no_op_sin_cell(ticket_id, wired):
+    """Plan 271 F1/F2 (RC-1) cambió este comportamiento a propósito: sin celda de
+    matriz para el work item type, motor A ya NO se queda mudo — cae al
+    `next_state_ok` de NIVEL ROL que el operador configuró (STACKY_FINAL_STATE_
+    ROLE_FALLBACK_ENABLED, default ON). El profile de este archivo siempre
+    declara ese nivel rol ("Code Review"), así que el resultado correcto hoy es
+    una transición real, no un skip."""
     prov = FakeProvider(current="In Progress")
     res = wired(cell=None, provider=prov, tid=ticket_id)
 
-    assert res.get("skipped") is True
-    assert res.get("reason") == "no_matrix_cell"
-    assert res.get("source") == "config"
-    assert prov.updates == [], "sin cell configurado NO se transiciona (backward-compat dura)"
+    assert res.get("ok") is True, res
+    assert res.get("to") == "Code Review"
+    assert prov.updates == [(str(_ADO_ID), "Code Review")]
 
 
 def test_idempotente_segundo_llamado(ticket_id, wired):

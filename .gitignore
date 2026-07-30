@@ -18,6 +18,10 @@ __pycache__/
 pipeline/state.json
 state/
 active_project.json
+# Estado y salidas del migrador Mantis→GitLab: checkpoints de reanudacion y reportes
+# de corridas reales (llevan nombre de operador y data del cliente en el nombre).
+Stacky Agents/backend/run_state/
+Stacky Agents/backend/reports/
 # DB viva del runtime — binario, no versionar
 data/
 *.db
@@ -78,4 +82,10 @@ node_modules.stale-*/
 # Entornos virtuales de Python (machine-specific, nunca versionar)
 venv/
 .venv/
+
+# Worktrees de git creados DENTRO de la raiz del repo (wt-plan-260, wt-main-consolidation,
+# etc.). Al vivir adentro aparecen como carpetas untracked en `git status` y ensucian el
+# inventario: se llegaron a acumular 7 worktrees de planes ya consolidados. Anclado a la
+# raiz con `/` para no tapar nada anidado.
+/wt-*/
 

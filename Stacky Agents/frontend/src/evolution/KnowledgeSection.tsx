@@ -21,6 +21,7 @@ import {
   sortCandidates,
 } from "./knowledgeModel";
 import styles from "./KnowledgeSection.module.css";
+import { userFacingMessage } from "../api/gatewayError"; // Plan 273 F4.6
 
 type Tab = "lessons" | "harvest" | "new";
 const RETIRE_NOTE = "retiro de lección desde el panel de conocimiento";
@@ -74,7 +75,7 @@ export default function KnowledgeSection() {
       await Promise.all([refreshOverview(), refreshLessons(), refreshCandidates()]);
       setStatus("ready");
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(userFacingMessage(e).title);
       setStatus("error");
     }
   }, [refreshOverview, refreshLessons, refreshCandidates]);

@@ -250,8 +250,16 @@ def test_dry_run_writer_fetch_open_items_refleja_create_item_simulados():
     writer = dw.DryRunGitLabWriter(dest)
 
     created = writer.create_item({"title": "x", "description": "desc <!-- marker -->"})
+    # `state` se agregó al item simulado porque la pasada de estados
+    # (`migrator_mg_states.fetch_destination_states`) lo necesita para poder
+    # comparar el estado actual con el deseado. Un issue recién creado por la
+    # API de GitLab nace abierto, así que "opened" es el valor fiel.
     assert writer.fetch_open_items() == [
-        {"iid": created["iid"], "description": "desc <!-- marker -->"}
+        {
+            "iid": created["iid"],
+            "description": "desc <!-- marker -->",
+            "state": "opened",
+        }
     ]
 
 

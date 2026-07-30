@@ -26,6 +26,7 @@ import Input from "../ui/Input";
 import { isTerminal, nextPollDelayMs } from "./useCompareRun";
 import { DataMaskingBar } from "./DataMaskingBar";
 import styles from "./dbcompare.module.css";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.6
 
 const MAX_TABLES = 20;
 
@@ -57,7 +58,7 @@ export function DataParitySection({ run, onRunUpdate, tablePrefs }: Props) {
         // diff de datos se deja de usar.
         if (tablePrefs) setSelected(new Set(preselect(r.candidates, MAX_TABLES)));
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(userFacingMessage(err).title));
   }, [open, run.run_id, candidates, dataDiff]);
 
   // Polling del sub-estado data_diff mientras esté "running" (mismo backoff que
@@ -100,7 +101,7 @@ export function DataParitySection({ run, onRunUpdate, tablePrefs }: Props) {
       const fresh = await DbCompare.getRun(run.run_id);
       onRunUpdate(fresh);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(userFacingMessage(err).title);
     } finally {
       setLaunching(false);
     }

@@ -358,8 +358,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
             <p className={styles.textMuted} style={{ marginBottom: '16px' }}>Todavía no hay presets de publicación</p>
             <button
               onClick={() => void handleCreateTodoPreset()}
-              className={styles.btnSuccess}
-              style={{ padding: '10px 20px' }}
+              className={`${styles.btnSuccess} ${styles.btnLg}`}
             >
               Crear preset TODO
             </button>
@@ -538,7 +537,7 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
             )}
             <PipelineYamlPreview
               spec={materializedDraft}
-              ctx={{ health: { flag_enabled: true, generator_enabled: true, trigger_enabled: false, publications_enabled: true }, refetchHealth: () => {} }}
+              ctx={ctx}
               localErrors={[]}
             />
 
@@ -552,12 +551,11 @@ export const PublicationsSection: React.FC<PublicationsSectionProps> = ({ ctx })
             <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => setShowCommitModal(true)}
-                className={styles.btnSuccess}
-                style={{ padding: '10px 20px' }}
+                className={`${styles.btnSuccess} ${styles.btnLg}`}
               >
                 Commit al repo…
               </button>
-              <button onClick={() => void handleSaveAsDraft()} style={{ padding: '10px 20px' }}>
+              <button onClick={() => void handleSaveAsDraft()} className={styles.btnLg}>
                 Guardar como borrador
               </button>
             </div>

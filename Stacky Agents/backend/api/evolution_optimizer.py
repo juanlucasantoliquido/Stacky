@@ -32,7 +32,8 @@ def _harness_enabled() -> bool:
 def _disabled_resp():
     return jsonify({
         "ok": False, "error": "optimizer_disabled",
-        "message": "El optimizador evolutivo está deshabilitado (STACKY_EVOLUTION_OPTIMIZER_ENABLED).",
+        "message": "El optimizador de configuración está desactivado.",
+        "detail": {"flag": "STACKY_EVOLUTION_OPTIMIZER_ENABLED"},
     }), 404
 
 

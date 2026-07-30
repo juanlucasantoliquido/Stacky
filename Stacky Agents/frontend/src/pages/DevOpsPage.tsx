@@ -271,7 +271,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'inventario-pipelines',
     label: 'Inventario',
-    group: 'construir',
+    group: 'gobernar',
     icon: '📋',
     summary: 'Todas las pipelines del proyecto: registradas, huerfanas y sin archivo.',
     healthKey: 'pipeline_inventory_enabled',
@@ -283,7 +283,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'pipeline-audit',
     label: 'Auditoría',
-    group: 'construir',
+    group: 'gobernar',
     icon: '🛡️',
     summary: 'Riesgos de seguridad y malas prácticas de una pipeline que ya existe.',
     healthKey: 'pipeline_audit_enabled',
@@ -307,7 +307,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'matriz-entornos',
     label: 'Matriz de entornos',
-    group: 'construir',
+    group: 'gobernar',
     icon: '🧭',
     summary: 'Que valores exige esta pipeline en cada entorno y cuales todavia faltan.',
     healthKey: 'env_matrix_enabled',
@@ -319,7 +319,7 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
   {
     id: 'paquete-entrega',
     label: 'Paquete de entrega',
-    group: 'construir',
+    group: 'gobernar',
     icon: '📦',
     summary: 'Que hace Stacky, que te toca a vos, y un zip con los archivos y la guia.',
     healthKey: 'handoff_bundle_enabled',

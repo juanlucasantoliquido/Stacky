@@ -93,3 +93,12 @@ export const SIDEBAR_COLLAPSED_KEY = "stacky.ui.shell.collapsed";
 export function parseCollapsed(raw: string | null): boolean {
   return raw === "true";
 }
+
+/**
+ * Plan 273 F1 (B-03) — ESPEJO del default del backend:
+ * backend/config.py -> STACKY_UI_SHELL_V2_ENABLED = os.getenv(..., "true")
+ * expuesto en backend/api/diag.py -> "shell_v2_enabled".
+ * Si el default del backend cambia, este literal cambia en el MISMO commit;
+ * plan273ShellV2Default.test.ts lo verifica leyendo config.py.
+ */
+export const SHELL_V2_DEFAULT = true;

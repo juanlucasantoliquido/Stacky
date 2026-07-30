@@ -917,6 +917,14 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",    # Plan 240 — prohibido el PASS vacío
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", # Plan 241 — aserciones que saben fallar
     "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",           # Plan 241 — épicas por agregación
+    # Plan 274 — eficiencia de navegación del QA UAT. Ninguna quema tokens en
+    # reposo (cero LLM en el plan) ni escribe en un sistema real del operador.
+    "STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED",     # Plan 274 F2 — techo de 25 PNG por escenario
+    "STACKY_QA_UAT_STATE_WAITS_ENABLED",           # Plan 274 F1 — espera por estado, no por reloj
+    "STACKY_QA_UAT_RESPECT_WORKERS_ENABLED",       # Plan 274 F3 — deja de pisar QA_UAT_WORKERS
+    "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED",        # Plan 274 F4 — GET de solo lectura, falla abierto
+    "STACKY_QA_UAT_DATA_CACHE_ENABLED",            # Plan 274 F6 — cache local; baja carga sobre la BD
+    "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED",        # Plan 274 F7 — extiende un corte que ya existe
     # ── Costura de flags de la OLA 1 (paquete P0, 2026-07-28) ───────────────
     # Las 14 flags default ON de los planes 259, 267, 268, 269 y 270.
     # La 15ª del bloque, STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED (Plan 267), NO

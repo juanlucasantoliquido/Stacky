@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DbCompare } from "../../api/endpoints";
 import type { ScriptPairRow } from "./scriptsLogic";
 import styles from "./dbcompare.module.css";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.6
 
 interface Props {
   runId: string;
@@ -30,7 +31,7 @@ export function SqlViewer({ runId, row, onClose }: Props) {
         if (!cancelled) setMainText(text);
       })
       .catch((err) => {
-        if (!cancelled) setMainText(`No se pudo cargar: ${err instanceof Error ? err.message : String(err)}`);
+        if (!cancelled) setMainText(`No se pudo cargar: ${userFacingMessage(err).title}`);
       });
     if (pairFile) {
       DbCompare.getScriptFileText(runId, pairFile)
@@ -38,7 +39,7 @@ export function SqlViewer({ runId, row, onClose }: Props) {
           if (!cancelled) setPairText(text);
         })
         .catch((err) => {
-          if (!cancelled) setPairText(`No se pudo cargar: ${err instanceof Error ? err.message : String(err)}`);
+          if (!cancelled) setPairText(`No se pudo cargar: ${userFacingMessage(err).title}`);
         });
     }
     return () => {

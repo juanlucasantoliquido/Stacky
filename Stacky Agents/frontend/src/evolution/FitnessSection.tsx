@@ -24,6 +24,7 @@ import {
   judgeCheckLabel,
 } from "./fitnessModel";
 import styles from "./FitnessSection.module.css";
+import { userFacingMessage } from "../api/gatewayError"; // Plan 273 F4.6
 
 interface SelfcheckDto {
   status: JudgeCheckStatus;
@@ -117,7 +118,7 @@ export default function FitnessSection() {
       setSelfcheck(last.selfcheck ?? null);
       setStatus("ready");
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(userFacingMessage(e).title);
       setStatus("error");
     }
   }, []);

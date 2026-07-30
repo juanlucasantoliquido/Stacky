@@ -4,6 +4,7 @@ import Select from "../ui/Select";
 import type { CompareRun, DbEnvironment, SnapshotMeta } from "./dbcompareTypes";
 import { selectableTargets, canLaunch } from "./wizardLogic";
 import styles from "./dbcompare.module.css";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.6
 
 /** Plan 176 F8 — el histórico se suma acá; los dos primeros no cambian. */
 const MODES: { value: "fresh" | "cached" | "snapshot"; label: string }[] = [
@@ -94,9 +95,7 @@ export function CompareWizard({ environments, onLaunched, diffUxV2 }: Props) {
       setError(
         isBusyError(err)
           ? "Ya hay una comparación corriendo para este par de ambientes."
-          : err instanceof Error
-            ? err.message
-            : String(err),
+          : userFacingMessage(err).title,
       );
     } finally {
       setLaunching(false);

@@ -98,7 +98,11 @@ def migrator_plan():
     Requiere STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED=true (sino 503).
     """
     if not _flag_enabled():
-        return jsonify({"error": "Migrador no habilitado (STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED=false)"}), 503
+        return jsonify({
+            "error": "feature_disabled",
+            "message": "El migrador de incidencias está desactivado.",
+            "detail": {"flag": "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED"},
+        }), 503
 
     data = request.get_json(force=True) or {}
     stacky_project = data.get("stacky_project") or ""

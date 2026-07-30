@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DbCompare } from "../../api/endpoints";
 import type { CompareRun } from "./dbcompareTypes";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.6
 
 /** Un status de run es terminal cuando ya no tiene sentido seguir haciendo polling. */
 export function isTerminal(status: string): boolean {
@@ -57,7 +58,7 @@ export function useCompareRun(runId: string | null): UseCompareRunResult {
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(userFacingMessage(err).title);
       }
     };
 

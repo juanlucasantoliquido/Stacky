@@ -1247,6 +1247,40 @@ class Config:
     STACKY_QA_UAT_EPIC_ROLLUP_ENABLED: bool = os.getenv(
         "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # -- Plan 274 - eficiencia de navegacion del agente QA UAT ---------------
+    # Las 6 nacen ON: ninguna quema tokens en reposo (no hay LLM en ninguna) ni
+    # escribe en un sistema real del operador. Los defaults de abajo dicen la
+    # verdad sobre la linea que tienen encima (ver la advertencia de :1230).
+    # Presupuesto de capturas: decide si se saca o no un PNG en el directorio de
+    # evidencia del propio tool.
+    STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Espera por estado en vez de sleeps de reloj. Sin LLM, sin escritura externa.
+    STACKY_QA_UAT_STATE_WAITS_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_STATE_WAITS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Deja de pisar QA_UAT_WORKERS. Encenderla NO cambia el comportamiento: el
+    # default de la env var sigue siendo 1. Solo elimina la mentira.
+    STACKY_QA_UAT_RESPECT_WORKERS_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_RESPECT_WORKERS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Probe de deep link: un GET HTTP de SOLO LECTURA contra la propia AgendaWeb
+    # local antes de usarlo. No corre en reposo: solo cuando ya se decidio usar
+    # un deeplink. Falla ABIERTO.
+    STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Cachea en disco local el resultado de un SELECT ya hecho. Reduce carga
+    # sobre la BD del operador; no escribe en ella.
+    STACKY_QA_UAT_DATA_CACHE_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_DATA_CACHE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # Extiende a 6 etapas mas un chequeo de reloj que YA es el comportamiento
+    # actual en 2 etapas.
+    STACKY_QA_UAT_STAGE_DEADLINE_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 70 — Desacople consumers TrackerProvider ─────────────────────────
     # ON: api/tickets.py enruta los ~18 call sites por el puerto TrackerProvider
     # (get_tracker_provider) en vez de por _ado_client_for_ticket; cae al fallback

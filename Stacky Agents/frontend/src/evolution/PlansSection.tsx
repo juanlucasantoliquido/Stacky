@@ -16,6 +16,7 @@ import {
   type PlansTriageDto, type PlanTriageCard, type TriageBucket,
 } from "./plansTriageModel";
 import styles from "./PlansSection.module.css";
+import { userFacingMessage } from "../api/gatewayError"; // Plan 273 F4.6
 
 export default function PlansSection() {
   const [status, setStatus] = useState<"loading" | "hidden" | "error" | "ready">("loading");
@@ -41,7 +42,7 @@ export default function PlansSection() {
       setData(r.data as PlansTriageDto);
       setStatus("ready");
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(userFacingMessage(e).title);
       setStatus("error");
     }
   }, []);

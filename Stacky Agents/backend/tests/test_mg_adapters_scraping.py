@@ -154,9 +154,16 @@ def test_login_fallido_usuario_invalido_lanza_auth_error_en_paso1():
 
 
 _SET_PROJECT_URL = f"{_BASE_URL}/set_project.php?project_id=310"
+# RESET del filtro guardado antes del "set". Imprescindible: `view_all_set.php?
+# type=1` es un set PARCIAL y los campos no enviados heredan el filtro guardado
+# de la cuenta — así es como la migración de Ripley terminó sin ningún ticket
+# `closed`. Solo se emite cuando `include_resolved_closed=True`.
+_RESET_FILTRO_URL = f"{_BASE_URL}/view_all_set.php?type=3"
 _FILTRO_TODOS_URL = (
     f"{_BASE_URL}/view_all_set.php?type=1&project_id[]=310&per_page=500"
-    "&hide_status_id=-2&status_id=0"
+    "&hide_status_id=-2&hide_status=-2"
+    "&status_id=0&status_id[]=0"
+    "&sort=id&dir=ASC"
 )
 _PAGINA_VACIA_HTML = (
     '<html><body><a href="logout_page.php">Salir</a>'
@@ -169,6 +176,7 @@ def test_fetch_all_issues_parsea_listado_con_conteo_e_ids():
     get_map, post_map = _happy_path_login_maps()
     # Fija el filtro "todos los estados" y luego pagina hasta agotar.
     get_map[_SET_PROJECT_URL] = list_html
+    get_map[_RESET_FILTRO_URL] = list_html
     get_map[_FILTRO_TODOS_URL] = list_html
     get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = list_html
     get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = _PAGINA_VACIA_HTML
@@ -203,6 +211,7 @@ def test_fetch_all_issues_pagina_hasta_agotar_sin_perder_issues():
     pagina2 = pagina1.replace("1001", "2001").replace("1002", "2002").replace("1003", "2003")
     get_map, post_map = _happy_path_login_maps()
     get_map[_SET_PROJECT_URL] = pagina1
+    get_map[_RESET_FILTRO_URL] = pagina1
     get_map[_FILTRO_TODOS_URL] = pagina1
     get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = pagina1
     get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = pagina2
@@ -469,12 +478,18 @@ def test_categoria_no_arrastra_el_prefijo_del_proyecto():
         '<td class="column-category"><div class="align-left">'
         '<span class="small project">[<a href="#">602253 REC Proyecto Ejemplo</a>]</span>'
         "&#160;&#160;Procesos de Carga</div></td>"
-        '<td class="column-status"><i class="status-10-fg"></i></td>'
+        # `status-80-fg` (resolved) y no `status-10-fg` (new) sólo para satisfacer
+        # el gate `_verificar_cobertura_de_estados`, que con
+        # `include_resolved_closed=True` aborta si NINGÚN issue del lote está
+        # resuelto/cerrado. Este test es sobre la CATEGORÍA; el estado es
+        # decorado.
+        '<td class="column-status"><i class="status-80-fg"></i></td>'
         '<td class="column-summary"><a href="view.php?id=1001">Titulo</a></td>'
         "</tr></table></body></html>"
     )
     get_map, post_map = _happy_path_login_maps()
     get_map[_SET_PROJECT_URL] = fila
+    get_map[_RESET_FILTRO_URL] = fila
     get_map[_FILTRO_TODOS_URL] = fila
     get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=1"] = fila
     get_map[f"{_BASE_URL}/view_all_bug_page.php?page_number=2"] = _PAGINA_VACIA_HTML

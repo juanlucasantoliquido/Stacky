@@ -5,22 +5,23 @@
     "origin": "extraction_mode='scraping' porque contra soporte.ais-int.net ya se verificó en vivo (§0 del plan) que el plugin MantisConnect (SOAP) no está habilitado y la sección de Tokens de API no está disponible -- el login web en 2 pasos es el único camino viable hoy.",
     "cuantos_migrar": "Decidido junto con la confirmación de F0: SOLO el proyecto 310. El 311 fue descartado explícitamente por el operador -- no aplica unificación de sub-proyectos."
   },
-
   "$schema_version": "1.0",
-
   "origin": {
     "type": "mantis",
     "base_url": "https://soporte.ais-int.net/mantis",
-    "project_ids": [310],
+    "project_ids": [
+      310
+    ],
     "extraction_mode": "scraping",
     "auth": {
       "auth_file": "auth/mantis_auth_ripley.json",
       "protocol": "rest"
     },
     "include_resolved_closed": true,
-    "csv_export_fallback": true
+    "csv_export_fallback": true,
+    "_timezone_offset_confirmation": "CONFIRMADO por el operador humano (Juan Luca Santoliquido) el 2026-07-29: la instancia Mantis (soporte.ais-int.net) corre en horario de ARGENTINA, UTC-03:00. Argentina NO aplica horario de verano desde 2009, por lo que un offset FIJO es correcto para todo el rango historico de tickets del proyecto 310 (IDs 22511..29245, actividad desde 2025) y no hace falta modelar transiciones de DST. Por que importa: Mantis muestra sus fechas en su TZ local y no lo declara en el HTML; si se envia a GitLab un ISO sin offset, GitLab lo interpreta como UTC e introduce un corrimiento de 3 horas en TODAS las fechas migradas. Ver 30_HOMOLOGACION_MANTIS_GITLAB.md seccion 9.2.",
+    "timezone_offset": "-03:00"
   },
-
   "destination": {
     "type": "gitlab",
     "base_url": "https://srvcgit01.imsolutions.local",
@@ -30,35 +31,81 @@
       "secret_backend": "auto"
     },
     "preserve_authorship_mode": "metadata_only",
-    "epics_strategy": "auto"
+    "epics_strategy": "auto",
+    "_ca_bundle_nota": "Bundle COMBINADO (certifi + certificado interno de srvcgit01). Necesario porque services/gitlab_client.py usa requests sin pasar verify, y el certificado del GitLab destino es interno. CRITICO: REQUESTS_CA_BUNDLE es GLOBAL AL PROCESO -- apuntarlo solo al cert interno rompe la verificacion de soporte.ais-int.net (Mantis) y la corrida muere contra el ORIGEN (paso el 2026-07-29 tras crear 1009 issues y 2887 notas). Por eso el bundle incluye certifi ademas del cert interno: se verifican AMBOS extremos de verdad, sin desactivar la verificacion en ninguno. Regenerar cuando el cert interno expire (2028-06-14). Ruta relativa al CWD, que debe ser backend/.",
+    "ca_bundle": "../deployment/ca-bundle-migrador.pem"
   },
-
   "user_mapping": {
     "default_fallback": "unassigned",
     "map": {
-      "_comment": "clave = username Mantis, valor = username GitLab. Completar tras revisar los usuarios reales del proyecto 310/311 en soporte.ais-int.net. No mapeados -> default_fallback"
+      "_comment": "clave = NOMBRE COMPLETO tal como lo muestra Mantis (el scraping expone el display name, no el username), valor = username GitLab. Inferido 2026-07-29 con EVIDENCIA ESTRICTA contra los 101 usuarios de la instancia y los 6 miembros del proyecto 127. Solo se mapea con coincidencia EXACTA de nombre completo o de username (normalizando acentos/espacios/puntuacion). Todo lo ambiguo u homonimo queda SIN mapear a proposito: asignar 1008 issues a la persona equivocada atribuye trabajo ajeno y es dificil de detectar despues. Los no mapeados caen en default_fallback=unassigned y su nombre real igual queda en el bloque de autoria de la descripcion, asi que la informacion no se pierde. NO se agregaron miembros al proyecto: eso es decision de accesos del operador.",
+      "_no_mapeados_a_proposito": "Xavier Torres (freq 816): sin coincidencia exacta en los 101 usuarios de GitLab; Pepe Company (freq 262): sin coincidencia exacta en los 101 usuarios de GitLab; Kevin Garcia (freq 225): sin coincidencia exacta en los 101 usuarios de GitLab; Víctor García (freq 73): sin coincidencia exacta en los 101 usuarios de GitLab; Marcelo Yanez (freq 62): sin coincidencia exacta en los 101 usuarios de GitLab; Xavier Torres Admin (freq 18): sin coincidencia exacta en los 101 usuarios de GitLab; David Domínguez (freq 9): sin coincidencia exacta en los 101 usuarios de GitLab; Daniel Ferre (freq 3): sin coincidencia exacta en los 101 usuarios de GitLab; Jesús Martínez (freq 3): sin coincidencia exacta en los 101 usuarios de GitLab; Caijie Zou (freq 2): sin coincidencia exacta en los 101 usuarios de GitLab; Admini. Original mantis (freq 1): placeholder administrativo de Mantis, no es una persona",
+      "_match_valido_pero_NO_miembro": "Jonathan Liberona -> jonathan.liberona (freq 51) NO es miembro del proyecto 127, GitLab no permite asignarlo; Sergio Vilar -> sergio.vilar (freq 14) NO es miembro del proyecto 127, GitLab no permite asignarlo",
+      "Juan Luca Santolíquido": "juanluca.santoliquido",
+      "Patricia Bersani": "patricia.bersani",
+      "Ezequiel Fano": "ezequiel.fano",
+      "Esteban Prieto": "esteban.prieto"
     }
   },
-
   "field_mapping": {
     "status": {
-      "new": { "gitlab_state": "opened", "label": "status::new" },
-      "feedback": { "gitlab_state": "opened", "label": "status::feedback" },
-      "acknowledged": { "gitlab_state": "opened", "label": "status::acknowledged" },
-      "confirmed": { "gitlab_state": "opened", "label": "status::confirmed" },
-      "assigned": { "gitlab_state": "opened", "label": "status::assigned" },
-      "resolved": { "gitlab_state": "closed", "label": "status::resolved" },
-      "closed": { "gitlab_state": "closed", "label": "status::closed" },
-      "_unmapped_fallback": { "gitlab_state": "opened", "label": "status::sin_mapear" }
+      "new": {
+        "gitlab_state": "opened",
+        "label": "status::new"
+      },
+      "feedback": {
+        "gitlab_state": "opened",
+        "label": "status::feedback"
+      },
+      "acknowledged": {
+        "gitlab_state": "opened",
+        "label": "status::acknowledged"
+      },
+      "confirmed": {
+        "gitlab_state": "opened",
+        "label": "status::confirmed"
+      },
+      "assigned": {
+        "gitlab_state": "opened",
+        "label": "status::assigned"
+      },
+      "resolved": {
+        "gitlab_state": "closed",
+        "label": "status::resolved"
+      },
+      "closed": {
+        "gitlab_state": "closed",
+        "label": "status::closed"
+      },
+      "_unmapped_fallback": {
+        "gitlab_state": "opened",
+        "label": "status::sin_mapear"
+      }
     },
     "priority": {
       "_reuse": "mantis_client._PRIORITY_MAP",
       "label_prefix": "priority::",
-      "scale": { "1": "P1-critica", "2": "P2-alta", "3": "P3-normal", "4": "P4-baja", "5": "P5-trivial" }
+      "scale": {
+        "1": "P1-critica",
+        "2": "P2-alta",
+        "3": "P3-normal",
+        "4": "P4-baja",
+        "5": "P5-trivial"
+      }
     },
-    "severity": { "label_prefix": "severity::" },
-    "category": { "label_prefix": "category::" },
-    "tags": { "label_prefix": "tag::" },
+    "severity": {
+      "label_prefix": "severity::"
+    },
+    "category": {
+      "label_prefix": "category::"
+    },
+    "_resolution_nota": "La resolucion de Mantis (corregida / duplicada / no se corregira / no se requieren cambios / ...) se extrae del HISTORIAL de la incidencia y se refleja como label. Es lo que distingue un ticket CORREGIDO de uno RECHAZADO -- matiz que antes se perdia por completo. NO afecta el estado del issue: eso lo decide field_mapping.status. El valor 'open' (default de Mantis para todo ticket sin resolver) NO genera label.",
+    "resolution": {
+      "label_prefix": "mantis-resolution::"
+    },
+    "tags": {
+      "label_prefix": "tag::"
+    },
     "version": {
       "target_version_as": "milestone",
       "fixed_in_version_as": "label:fixed_in::",
@@ -72,22 +119,39 @@
       "depends_on": "blocks",
       "blocks": "blocks"
     },
-    "custom_fields": { "mode": "metadata_block" }
+    "custom_fields": {
+      "mode": "metadata_block"
+    }
   },
-
   "options": {
     "dry_run": true,
     "batch_size": 25,
     "max_retries": 5,
-    "retry_backoff_seconds": [2, 5, 15, 30, 60],
+    "retry_backoff_seconds": [
+      2,
+      5,
+      15,
+      30,
+      60
+    ],
     "rate_limit_pause_on_429_seconds": 60,
-    "attachments": { "max_size_mb": 50, "skip_if_over_limit": true, "download_temp_dir": null },
-    "incremental": { "enabled": true, "since_field": "last_updated", "checkpoint_file": "run_state/ripley_checkpoint.json" },
+    "attachments": {
+      "max_size_mb": 50,
+      "skip_if_over_limit": true,
+      "download_temp_dir": null
+    },
+    "incremental": {
+      "enabled": true,
+      "since_field": "last_updated",
+      "checkpoint_file": "run_state/ripley_checkpoint.json"
+    },
     "verify_after_execute": true,
-    "report_formats": ["markdown", "json"],
+    "report_formats": [
+      "markdown",
+      "json"
+    ],
     "report_output_dir": "reports/"
   },
-
   "logging": {
     "level": "INFO",
     "file": "logs/migrar_mantis_gitlab_{run_id}.log",

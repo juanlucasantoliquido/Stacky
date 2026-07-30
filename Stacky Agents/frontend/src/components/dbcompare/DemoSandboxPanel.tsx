@@ -4,6 +4,7 @@ import type { DbEnvironment } from "./dbcompareTypes";
 import { demoPanelState, type DemoStatus } from "./demoLogic";
 import { useConfirm } from "../ui";
 import styles from "./dbcompare.module.css";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.6
 
 interface Props {
   environments: DbEnvironment[];
@@ -47,7 +48,7 @@ export function DemoSandboxPanel({ environments, onChanged }: Props) {
       onChanged();
     } catch (err) {
       // 409 (archivos lockeados, fix C3) / 503 (keyring) / 500: mostrar sin crash.
-      setError(err instanceof Error ? err.message : String(err));
+      setError(userFacingMessage(err).title);
     } finally {
       setBusy(false);
     }

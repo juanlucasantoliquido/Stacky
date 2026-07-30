@@ -29,7 +29,8 @@ def _disabled_resp():
     return (
         jsonify({
             "ok": False, "error": "evolution_disabled",
-            "message": "El Centro de Evolución está deshabilitado (STACKY_EVOLUTION_CENTER_ENABLED).",
+            "message": "El Centro de Evolución está desactivado.",
+            "detail": {"flag": "STACKY_EVOLUTION_CENTER_ENABLED"},
         }),
         404,
     )
@@ -176,7 +177,8 @@ def cycle_run():
         return (
             jsonify({
                 "ok": False, "error": "evolution_cycle_disabled",
-                "message": "El ciclo MAPE está deshabilitado (STACKY_EVOLUTION_CYCLE_ENABLED).",
+                "message": "El ciclo de mejora automática está desactivado.",
+                "detail": {"flag": "STACKY_EVOLUTION_CYCLE_ENABLED"},
             }),
             404,
         )
@@ -239,7 +241,8 @@ def _plans_disabled_resp():
     return (
         jsonify({
             "ok": False, "error": "plans_triage_disabled",
-            "message": "El triage de planes está deshabilitado (STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED).",
+            "message": "La clasificación de planes está desactivada.",
+            "detail": {"flag": "STACKY_EVOLUTION_PLANS_TRIAGE_ENABLED"},
         }),
         404,
     )

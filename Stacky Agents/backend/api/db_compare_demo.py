@@ -21,12 +21,16 @@ def _require_demo_enabled():
     if not getattr(_config.config, "STACKY_DB_COMPARE_ENABLED", False):
         return jsonify({
             "ok": False,
-            "error": "Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED).",
+            "error": "feature_disabled",
+            "message": "El Comparador de BD está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_ENABLED"},
         }), 403
     if not getattr(_config.config, "STACKY_DB_COMPARE_DEMO_ENABLED", False):
         return jsonify({
             "ok": False,
-            "error": "Sandbox de demostración deshabilitado (STACKY_DB_COMPARE_DEMO_ENABLED).",
+            "error": "feature_disabled",
+            "message": "El entorno de demostración está desactivado.",
+            "detail": {"flag": "STACKY_DB_COMPARE_DEMO_ENABLED"},
         }), 403
     return None
 

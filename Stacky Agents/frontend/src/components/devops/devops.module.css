@@ -101,6 +101,13 @@
   cursor: not-allowed;
 }
 
+/* Plan 275 F3 — modificador de tamaño, se compone con .btnPrimary/.btnSuccess
+   o solo. Declarado DESPUÉS de .btnPrimary/.btnSuccess para ganar el cascade
+   en `padding` cuando se combinan (misma especificidad, orden de fuente). */
+.btnLg {
+  padding: 10px 20px;
+}
+
 /* ── Texto semántico ──────────────────────────────────────────────────── */
 .textSuccess { color: var(--success); }
 .textDanger { color: var(--danger); }

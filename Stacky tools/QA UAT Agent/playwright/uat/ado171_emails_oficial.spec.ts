@@ -6,6 +6,8 @@
 import { test, expect, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+// plan-274 F1.2 — espera por ESTADO en vez de espera de reloj.
+import { waitForAspNetIdle } from '../helpers/webforms_nav';
 
 const BASE_URL = (process.env.AGENDA_WEB_BASE_URL || 'http://localhost:35017/AgendaWeb/').replace(/\/$/, '');
 const EMCOD = '1000001118137685';
@@ -29,7 +31,7 @@ async function freshLogin(page: Page) {
 async function navigateToDetalleCliente(page: Page, emcod: string) {
   const busquedaUrl = `${BASE_URL}/FrmBusquedaClie.aspx`;
   await page.goto(busquedaUrl, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1000);
+  await waitForAspNetIdle(page);
 
   // Llenar búsqueda por código
   const inputSel = 'input[id$="abfCodCliente"], input[id$="txtCodCliente"], input[name*="CodClie"]';
@@ -37,19 +39,19 @@ async function navigateToDetalleCliente(page: Page, emcod: string) {
     await page.fill(inputSel, emcod, { timeout: 5000 });
     const btnBuscar = 'input[id$="btnBuscar"], button[id$="btnBuscar"], [id$="btnOk"], input[id$="btnOk"]';
     await page.click(btnBuscar, { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await waitForAspNetIdle(page);
     // Seleccionar primer resultado en grid
     const gridRow = 'table[id$="GridPersonas"] tr:nth-child(2), [id$="GridPersonas"] tr:nth-child(2)';
     const rowVisible = await page.locator(gridRow).isVisible({ timeout: 3000 }).catch(() => false);
     if (rowVisible) {
       await page.locator(gridRow).click();
-      await page.waitForTimeout(2000);
+      await waitForAspNetIdle(page);
     }
   } catch {
     // Navegar directamente al detalle
     await page.goto(`${BASE_URL}/FrmDetalleClie.aspx?CLCOD=${emcod}`, { waitUntil: 'networkidle' });
   }
-  await page.waitForTimeout(2000);
+  await waitForAspNetIdle(page);
 }
 
 test.beforeAll(() => {
@@ -75,7 +77,7 @@ test.describe('ADO-171 RF-018 — Marca Oficial en Emails (UI — trunk)', () =>
       const tabVisible = await tabEmails.first().isVisible({ timeout: 3000 }).catch(() => false);
       if (tabVisible) {
         await tabEmails.first().click({ noWaitAfter: true });
-        await page.waitForTimeout(2000);
+        await waitForAspNetIdle(page);
         await ss(page, 'p05_03_tab_clicked');
       }
     }
@@ -107,7 +109,7 @@ test.describe('ADO-171 RF-018 — Marca Oficial en Emails (UI — trunk)', () =>
     
     if (btnVisible) {
       await btnAgregar.first().click({ noWaitAfter: true });
-      await page.waitForTimeout(2000);
+      await waitForAspNetIdle(page);
       await ss(page, 'p06_03_form_alta');
     } else {
       await ss(page, 'p06_03_btn_not_found');
@@ -139,7 +141,7 @@ test.describe('ADO-171 RF-018 — Marca Oficial en Emails (UI — trunk)', () =>
     
     if (rowVisible) {
       await gridRow.first().click({ noWaitAfter: true });
-      await page.waitForTimeout(1500);
+      await waitForAspNetIdle(page);
       await ss(page, 'p04_02_row_selected');
 
       // Click Modificar
@@ -147,7 +149,7 @@ test.describe('ADO-171 RF-018 — Marca Oficial en Emails (UI — trunk)', () =>
       const btnModVisible = await btnMod.first().isVisible({ timeout: 3000 }).catch(() => false);
       if (btnModVisible) {
         await btnMod.first().click({ noWaitAfter: true });
-        await page.waitForTimeout(2000);
+        await waitForAspNetIdle(page);
         await ss(page, 'p04_03_form_modificacion');
       }
     } else {

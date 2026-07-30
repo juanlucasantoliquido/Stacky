@@ -47,6 +47,104 @@ _TOOL_VERSION = "1.2.0"
 # escenarios que de otro modo eran PASS (ej: P01/P05 ticket 70).
 _DEFAULT_TIMEOUT_MS = 90_000
 
+
+# ── plan-274 F3 — el paralelismo deja de mentir (sin habilitarlo) ────────────
+
+# ── plan-274 F7.2 — timeout por datos (playbook_performance, huerfano #7) ────
+# Id UNICO y ESTABLE de la invocacion agregada: _run_all_specs_once lanza UNA
+# invocacion npx para N specs, asi que no hay "el" playbook. Derivarlo de un spec
+# mezclaria p95 de escenarios distintos.
+_PERF_PLAYBOOK_ID = "uat_runner_all_specs"
+
+
+def _record_run_history(duration_ms: int, fail_count: int, blocked_count: int) -> None:
+    """F7.2.a — escribe el historial de duracion. SIN ESTO F7.2.b NO PUEDE ANDAR.
+
+    `record_run` tenia 0 callers de produccion, asi que `_load(playbook_id)`
+    devolvia {}, `p95_duration_ms` era 0 y `recommend_timeout_ms` salia por
+    `if p95 <= 0: return default_ms` en el 100 % de las corridas, para siempre.
+
+    Es escritura en un JSON local del propio tool (`playbook_performance.py:64`):
+    no toca ningun sistema del operador, asi que no cae en la categoria (B) y no
+    necesita flag.
+    """
+    try:
+        import playbook_performance
+        playbook_performance.record_run(
+            _PERF_PLAYBOOK_ID,
+            "PASS" if (fail_count == 0 and blocked_count == 0) else "FAIL",
+            duration_ms,
+        )
+    except Exception:  # noqa: BLE001 — registrar historial NUNCA tumba una corrida
+        logger.debug("plan-274 F7.2.a: record_run fallo; se ignora", exc_info=True)
+
+
+def _resolve_timeout_ms(default_ms: int = _DEFAULT_TIMEOUT_MS) -> int:
+    """F7.2.b — timeout recomendado por datos (p95 x 1,5, acotado a [60s, 600s]).
+
+    `default_ms` se pasa EXPLICITO a proposito: el default del modulo es
+    120_000 (`playbook_performance.py:160`), asi que omitirlo haria SUBIR SOLO el
+    timeout de 90 s a 120 s sin que nadie lo haya decidido.
+
+    Sin historial devuelve `default_ms`, que es el comportamiento de hoy.
+    """
+    try:
+        import playbook_performance
+        return int(playbook_performance.recommend_timeout_ms(
+            _PERF_PLAYBOOK_ID, default_ms=default_ms))
+    except Exception:  # noqa: BLE001
+        logger.debug("plan-274 F7.2.b: recommend_timeout_ms fallo; se usa %d",
+                     default_ms, exc_info=True)
+        return default_ms
+
+
+def _has_per_worker_session() -> bool:
+    """Devuelve False INCONDICIONALMENTE en este plan. Es un stub honesto.
+
+    Habilitar paralelismo real exige, y F7.3 es quien lo implementa:
+      (a) un `storageState` por worker (`.auth/agenda.w{index}.json`) en vez del
+          unico compartido de `playwright.config.ts:27`;
+      (b) un usuario de AgendaWeb por worker —o una sesion de servidor por
+          worker—, porque WebForms guarda el contexto en la sesion y dos workers
+          con la misma cookie ASP.NET_SessionId se pisan el ViewState;
+      (c) verificar que la BD de test tolera N escrituras concurrentes.
+
+    Mientras devuelva False, `_resolve_workers()` fuerza 1 y deja dicho por que.
+    """
+    return False
+
+
+def _resolve_workers() -> int:
+    """Numero de workers efectivo para el CLI de Playwright.
+
+    Antes de este plan el flag de workers del CLI era un literal fijo en 1 que
+    pisaba QA_UAT_WORKERS (`playwright.config.ts:13`), asi que la config del
+    operador era una mentira. Ahora se respeta la env var, con una guardia que
+    impide romper la sesion.
+
+    (El literal viejo NO se transcribe aca a proposito: el ratchet de F8.2 y el
+    test `test_el_comando_ya_no_hardcodea_uno` buscan esa cadena en TODO el
+    archivo, comentarios incluidos, y un comentario que la cite pondria el gate
+    en rojo — o peor, entrenaria a bajarle el criterio.)
+    """
+    if os.environ.get("STACKY_QA_UAT_RESPECT_WORKERS_ENABLED", "true").lower() != "true":
+        return 1                                    # flag OFF -> comportamiento historico exacto
+    try:
+        n = int(os.environ.get("QA_UAT_WORKERS", "1"))
+    except ValueError:
+        return 1                                    # basura -> 1, nunca crashea
+    if n <= 1:
+        return 1
+    # GUARDIA DE SESION (H4/R-2): con storageState compartido, N workers comparten
+    # UNA cookie ASP.NET_SessionId y se pisan el contexto de servidor.
+    if not _has_per_worker_session():
+        logger.warning(
+            "plan-274 F3: QA_UAT_WORKERS=%d ignorado -> 1. "
+            "AgendaWeb es WebForms con sesion unica en storageState (playwright.config.ts:27); "
+            "N workers se pisarian el ViewState. Sesion por worker = plan 274 F7.3.", n)
+        return 1
+    return n
+
 # Assertion failure patterns in Playwright output
 _ASSERTION_FAILURE_RE = re.compile(
     r'Error:\s*(.*?Expected.*?Received.*?)(?=\n\s{4}at |\Z)',
@@ -168,6 +266,16 @@ def run(
         except Exception as _bex:
             logger.warning("PlaywrightForensicBridge init failed (skipped): %s", _bex)
 
+    # plan-274 F7.2.b — el timeout por caso sale de datos (p95 x 1,5) en vez de
+    # un numero magico. Solo se recalcula cuando el caller dejo el default: un
+    # timeout explicito del operador o del pipeline manda.
+    if timeout_ms == _DEFAULT_TIMEOUT_MS:
+        _recomendado = _resolve_timeout_ms(_DEFAULT_TIMEOUT_MS)
+        if _recomendado != timeout_ms:
+            logger.info("plan-274 F7.2: timeout por datos %d ms (default %d)",
+                        _recomendado, _DEFAULT_TIMEOUT_MS)
+        timeout_ms = _recomendado
+
     # ── Run ALL specs in a SINGLE Playwright invocation ──────────────────────
     runs, browser_launches, login_count = _run_all_specs_once(
         spec_files=spec_files,
@@ -237,6 +345,11 @@ def run(
     fail_count    = sum(1 for r in runs if r.get("status") == "fail")
     blocked_count = sum(1 for r in runs if r.get("status") == "blocked")
     duration_ms   = int((time.time() - started) * 1000)
+
+    # plan-274 F7.2.a — historial de duracion. Sin este escritor,
+    # recommend_timeout_ms devuelve default_ms para siempre y F7.2.b es inerte.
+    _record_run_history(duration_ms=duration_ms, fail_count=fail_count,
+                        blocked_count=blocked_count)
 
     import hashlib as _hashlib
     _user = os.environ.get("AGENDA_WEB_USER", "")
@@ -352,7 +465,7 @@ def _run_all_specs_once(
         "npx", "playwright", "test",
         tests_arg,
         f"--timeout={timeout_ms}",
-        "--workers=1",
+        f"--workers={_resolve_workers()}",
     ]
     if headed:
         cmd.append("--headed")

@@ -1944,6 +1944,9 @@ def _run_pipeline_stages(
             _persist_json(evidence_dir / "scenarios.json", compiler_result)
             return _build_output(ticket_id, stages, no_scenarios_result, started)
 
+        # plan-274 F7.1 — compila los escenarios; primer bloque pesado tras la deteccion de pantalla.
+        if _stage_deadline_enabled() and (_dl := _check_deadline("compiler_contract")):
+            return _dl
         # Sprint 4 — Compiler contract validation: validate compiler output shape
         # before persisting scenarios.json or advancing to the next stage.
         try:
@@ -2057,6 +2060,9 @@ def _run_pipeline_stages(
     # in the legacy pantalla/pasos format are skipped — they are handled by
     # playwright_test_generator which does its own selector resolution.
     stage = "selector_contract"
+    # plan-274 F7.1 — invoca selector_contract_validator (modulo externo) y es donde F5 agrega trabajo.
+    if _stage_deadline_enabled() and (_dl := _check_deadline(stage)):
+        return _dl
     if stage not in skip_stages and "compiler" not in skip_stages:
         try:
             from selector_contract_validator import validate_all_scenarios as _validate_sc
@@ -2140,6 +2146,11 @@ def _run_pipeline_stages(
                         except Exception:  # noqa: BLE001
                             pass
                     return _build_output(ticket_id, stages, _sc_fail, started)
+            # ── plan-274 F5 — fragilidad de selectores MEDIDA (no reescrita) ──
+            # Observabilidad pura: no cambia ninguna decision de navegacion, asi
+            # que no puede degradar estabilidad. Conecta locator_quality.py, que
+            # eran 294 lineas sin un solo importador de produccion.
+            _score_locator_quality(screens, ui_maps_dir, evidence_dir)
         except ImportError:
             logger.debug("selector_contract_validator unavailable — skipping alias contract check")
             stages["selector_contract"] = {"ok": True, "skipped": True,
@@ -3109,6 +3120,9 @@ def _run_pipeline_stages(
         if not generator_result.get("ok"):
             return _build_output(ticket_id, stages, generator_result, started)
 
+        # plan-274 F7.1 — genera los .spec.ts; I/O sobre N archivos.
+        if _stage_deadline_enabled() and (_dl := _check_deadline("generator_contract")):
+            return _dl
         # Sprint 4 — Generator contract validation: validate shape before runner.
         try:
             from contract_validator import validate_generator_output as _validate_generator_contract
@@ -3604,6 +3618,9 @@ def _run_pipeline_stages(
                 for _line in _exec_log_path_for_metrics.read_text(encoding="utf-8").splitlines():
                     _line = _line.strip()
                     if _line:
+                        # plan-274 F7.1 — agregacion final; ultima chance de cortar antes del cierre.
+                        if _stage_deadline_enabled() and (_dl := _check_deadline("run_metrics_summary")):
+                            return _dl
                         try:
                             _exec_events_for_metrics.append(json.loads(_line))
                         except Exception:
@@ -3728,6 +3745,9 @@ def _run_pipeline_stages(
 
     # ── Stage 6: evaluator ───────────────────────────────────────────────────
     stage = "evaluator"
+    # plan-274 F7.1 — evaluacion de aserciones post-corrida.
+    if _stage_deadline_enabled() and (_dl := _check_deadline(stage)):
+        return _dl
     if stage in skip_stages:
         stages[stage] = {"ok": True, "skipped": True}
         eval_file = evidence_dir / "evaluations.json"
@@ -3761,6 +3781,9 @@ def _run_pipeline_stages(
 
     # ── Stage 7: failure_analyzer ────────────────────────────────────────────
     stage = "failure_analyzer"
+    # plan-274 F7.1 — analisis pesado post-corrida.
+    if _stage_deadline_enabled() and (_dl := _check_deadline(stage)):
+        return _dl
     has_failures = bool(
         evaluations_result
         and any(e.get("status") == "fail"
@@ -4055,6 +4078,73 @@ def _extract_screens(ticket_result: dict) -> list:
             found.add(screen)
 
     return sorted(found) if found else ["FrmAgenda.aspx"]
+
+
+def _stage_deadline_enabled() -> bool:
+    """plan-274 F7.1 — gobierna las 6 comprobaciones de deadline NUEVAS.
+
+    Las 2 preexistentes (screen_detection y runner) NO dependen de esta flag:
+    cortar por deadline ya era el comportamiento de hoy en esas dos etapas.
+    Apagarla devuelve exactamente el comportamiento previo al plan 274.
+
+    Se lee en cada llamada, no al importar: `api/qa_uat.py` exporta las flags a
+    os.environ DESPUES de importar el pipeline, asi que congelarla en tiempo de
+    import la dejaria pegada al default.
+    """
+    return os.environ.get("STACKY_QA_UAT_STAGE_DEADLINE_ENABLED", "true").lower() == "true"
+
+
+def _score_locator_quality(screens: list, ui_maps_dir: Path, evidence_dir: Path) -> Optional[dict]:
+    """plan-274 F5 — puntua la fragilidad de los selectores de las pantallas en juego.
+
+    MEDICION PURA: loguea y vuelca un reporte; NO cambia ninguna decision de
+    navegacion, asi que no puede degradar estabilidad. Es el unico consumidor de
+    produccion de `locator_quality.py` (huerfano #6, 294 lineas).
+
+    OJO CON EL CONTRATO: `score_ui_map` espera `{"aliases": [{"alias","selector"}]}`
+    pero los UI maps reales del repo traen `{"elements": [{"alias_semantic",
+    "asp_id", "selector_recommended", ...}]}`. Pasarle el JSON crudo puntuaria
+    CERO aliases y el reporte saldria vacio sin fallar — un falso verde. Por eso
+    se traduce `elements` -> `aliases` antes de llamar.
+
+    Nunca lanza: un problema de medicion no puede tumbar una corrida.
+    """
+    try:
+        from locator_quality import score_ui_map
+    except Exception:  # noqa: BLE001
+        logger.debug("plan-274 F5: locator_quality no disponible; se omite el score")
+        return None
+
+    resumen: dict = {}
+    for screen in (screens or []):
+        try:
+            ui_map_file = ui_maps_dir / f"{screen}.json"
+            if not ui_map_file.is_file():
+                continue
+            raw = json.loads(ui_map_file.read_text(encoding="utf-8"))
+            aliases = [
+                {
+                    "alias": el.get("alias_semantic") or el.get("asp_id") or "",
+                    "selector": (f"#{el['asp_id']}" if el.get("asp_id")
+                                 else (el.get("selector_recommended") or "")),
+                    "warnings": [el["warning"]] if el.get("warning") else [],
+                }
+                for el in (raw.get("elements") or [])
+                if isinstance(el, dict) and not el.get("is_decorative")
+            ]
+            report = score_ui_map({"screen": screen, "aliases": aliases},
+                                  evidence_dir=evidence_dir, write_report=True)
+            resumen[screen] = {
+                "total": report.total_aliases,
+                "low": report.low_count,
+                "avg_score": report.avg_score,
+            }
+            logger.info(
+                "plan-274 F5 locator_quality: screen=%s aliases=%d avg=%.3f low=%d",
+                screen, report.total_aliases, report.avg_score, report.low_count)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("plan-274 F5: score de %s fallo (no fatal): %s", screen, exc)
+    return resumen or None
 
 
 def _persist_json(path: Path, data: dict) -> None:

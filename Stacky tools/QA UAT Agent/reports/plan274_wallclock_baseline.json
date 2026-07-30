@@ -1,0 +1,9 @@
+{
+  "pre_plan": {
+    "wall_clock_ms": 70030,
+    "tests": 3,
+    "ms_por_test": 23343.333,
+    "startTime": "2026-07-26T00:36:03.100Z",
+    "nota": "capturado en F0.5, ANTES de F1. Corresponde a la unica corrida real del repo (3 specs P01/P02/P03 del ticket 367)."
+  }
+}

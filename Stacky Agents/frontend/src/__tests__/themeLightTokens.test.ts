@@ -65,6 +65,10 @@ const REQUIRED: Array<[string, string]> = [
   ["--shadow-3", "0 8px 24px rgba(31, 35, 40, 0.18)"],
   ["--shadow-overlay", "0 16px 48px rgba(31, 35, 40, 0.24)"],
   ["--color-scheme", "light"],
+  // Plan 273 F3 (B-07) — el rojo del contador de la nav v1 sale de App.module.css
+  // y pasa a token. MISMO valor en los dos temas a proposito: da 6.47:1 con
+  // --text-on-solid en ambos, y --status-danger-solid daria 3.76:1 en oscuro.
+  ["--nav-badge-bg", "#b91c1c"],
 ];
 
 // Tokens INVARIANTES al tema: PROHIBIDO que aparezcan en el bloque claro.
@@ -83,15 +87,16 @@ describe("Plan 141 F2 — bloque claro completo y correcto", () => {
   it("existe el bloque :root[data-theme=\"light\"]", () => {
     expect(LIGHT.length).toBeGreaterThan(0);
   });
-  it("re-apunta los 53 tokens de color con valor exacto", () => {
+  it("re-apunta los 54 tokens de color con valor exacto", () => {
     const missing = REQUIRED.filter(([n, v]) => !LIGHT.includes(`${n}: ${v};`));
     expect(missing.map(([n]) => n)).toEqual([]);
     // CONTEO ACOPLADO (C3): 52 tokens de color no-invariantes del :root base del 138
-    // (contrato §10.1) + `--color-scheme` = 53. La FUENTE DE VERDAD de completitud es el
-    // anti-drift de F3 (themeContrast.test.ts), que deriva el censo del base mecánicamente.
-    // Este `.toBe(53)` es un tripwire SECUNDARIO: si F3 obliga a agregar/quitar un token de
+    // (contrato §10.1) + `--color-scheme` = 53, + `--nav-badge-bg` del plan 273 F3 = 54.
+    // La FUENTE DE VERDAD de completitud es el anti-drift de F3 (themeContrast.test.ts),
+    // que deriva el censo del base mecánicamente.
+    // Este `.toBe(54)` es un tripwire SECUNDARIO: si F3 obliga a agregar/quitar un token de
     // color en el base, actualizá REQUIRED y BUMPEÁ este literal EN EL MISMO commit.
-    expect(REQUIRED.length).toBe(53);
+    expect(REQUIRED.length).toBe(54);
   });
   it("NO duplica tokens invariantes al tema (spacing/tipografía/radio/motion/border-width)", () => {
     const leaked = FORBIDDEN.filter((n) => LIGHT.includes(`${n}:`));

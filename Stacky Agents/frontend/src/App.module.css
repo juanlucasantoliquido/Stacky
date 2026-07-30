@@ -13,6 +13,13 @@
   position: sticky;
   top: 0;
   z-index: 30;
+  /* Plan 273 F2 (B-05): sin esto, con las 18 secciones habilitadas los ultimos
+     tabs quedan FUERA del viewport y no hay forma de llegar: los items son
+     white-space: nowrap y el contenedor no envuelve ni scrollea. Se elige
+     overflow-x y NO flex-wrap porque wrap cambia el ALTO de una barra sticky
+     con z-index 30, y ese alto lo asume el layout de las 18 pantallas. */
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .navTab {
@@ -21,7 +28,10 @@
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
-  color: rgba(255, 255, 255, 0.45);
+  /* Plan 273 F3 (B-07): era un rgba de blanco al 45% => 1.03:1 sobre --bg-panel
+     en tema claro (invisible) y 4.46:1 en oscuro (falla AA). Un literal no lo
+     puede re-apuntar el tema; el token si. Valores: ver el plan 273 F3. */
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -30,24 +40,30 @@
 }
 
 .navTab:hover {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
 }
 
 .navTab.active {
-  color: #a5b4fc;
-  border-bottom-color: #6366f1;
+  /* Plan 273 F3 (B-07): eran dos indigos ajenos al design system, que no existen
+     en theme.css. El acento del sistema es --accent. */
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 /* Plan 134 F5: contador de runs en needs_review/error sobre el tab Revisión.
-   Rojo fijo con texto blanco: contraste garantizado en tema claro y oscuro. */
+   Rojo fijo con texto blanco: contraste garantizado en tema claro y oscuro.
+   Plan 273 F3 (B-07): el rojo se mueve a theme.css como --nav-badge-bg con el
+   MISMO valor, que da 6.47:1 con el texto. NO se usa --status-danger-solid:
+   su valor en oscuro da 3.76:1, falla AA ya congelada en
+   themeContrast.test.ts. El texto usa el invariante --text-on-solid. */
 .navBadge {
   display: inline-block;
   margin-left: 6px;
   padding: 0 6px;
   min-width: 16px;
   border-radius: 8px;
-  background: #b91c1c;
-  color: #ffffff;
+  background: var(--nav-badge-bg);
+  color: var(--text-on-solid);
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;

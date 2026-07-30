@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { HarnessFlags, PipelineEnvironments, type DeclarePreviewResponseDto } from "../../api/endpoints";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.7
 import type { DevOpsSectionContext } from "../../pages/DevOpsPage";
 import { Button, SectionHeader, Select, Textarea } from "../ui";
 import {
@@ -99,7 +100,7 @@ export const PipelineEnvMatrixPanel: React.FC<{ ctx: DevOpsSectionContext }> = (
       guardarPrevio(r);
     } catch (e) {
       setMatriz(null);
-      setError(e instanceof Error ? e.message : "no se pudo analizar la pipeline");
+      setError(userFacingMessage(e).title);
     } finally {
       setBusy(false);
     }
@@ -132,7 +133,7 @@ export const PipelineEnvMatrixPanel: React.FC<{ ctx: DevOpsSectionContext }> = (
       }
       setDeclarePreview(res.data);
     } catch (e) {
-      setDeclareError(e instanceof Error ? e.message : "no se pudo previsualizar la declaración");
+      setDeclareError(userFacingMessage(e).title);
     } finally {
       setDeclaring(false);
     }
@@ -154,7 +155,7 @@ export const PipelineEnvMatrixPanel: React.FC<{ ctx: DevOpsSectionContext }> = (
       setNeedsMasking(res.data.needs_masking || []);
       await analizar(); // refresca la matriz: el pendiente visible NO debe bajar
     } catch (e) {
-      setDeclareError(e instanceof Error ? e.message : "no se pudo declarar");
+      setDeclareError(userFacingMessage(e).title);
     } finally {
       setDeclaring(false);
     }

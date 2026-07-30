@@ -2052,8 +2052,70 @@ def get_runtime_doctor():
         out["ado_bridge"] = {"ok": bool(bridge_available())}
     except Exception as exc:  # noqa: BLE001
         out["ado_bridge"] = {"ok": False, "detail": str(exc)}
+    # ── Plan 262 F10.3 — seccion de recuperacion en caliente ─────────────────
+    # ADITIVA: ninguna clave existente cambia de nombre, tipo ni posicion. Y
+    # SIEMPRE 200: un doctor que falla cuando la capacidad esta apagada es un
+    # doctor roto.
+    out["hot_recovery"] = _hot_recovery_doctor_section()
     out["ok"] = bool((out["browser"] or {}).get("ok"))
     return jsonify(out)
+
+
+def _hot_recovery_doctor_section() -> dict:
+    """Estado de la recuperacion en caliente para el doctor. NUNCA levanta."""
+    seccion: dict = {"enabled": False, "config": {}, "allowlist": {},
+                     "safe_route": "", "health": {}, "flags_exported": []}
+    try:
+        import recovery_config
+        seccion["enabled"] = bool(recovery_config.hot_recovery_enabled())
+        # snapshot() expone SOLO las 9 claves: nunca usuario ni contraseña.
+        seccion["config"] = recovery_config.snapshot()
+    except Exception as exc:  # noqa: BLE001
+        seccion["config"] = {"error": str(exc)}
+    try:
+        import route_allowlist
+        rutas, source = route_allowlist.effective_allowlist()
+        seccion["allowlist"] = {"source": source, "count": len(rutas),
+                                "routes": sorted(rutas)}
+        seccion["safe_route"] = route_allowlist.safe_route_url()
+    except Exception as exc:  # noqa: BLE001
+        seccion["allowlist"] = {"source": "unavailable", "count": 0,
+                                "routes": [], "error": str(exc)}
+    try:
+        # UNA sola muestra a proposito: el doctor INFORMA, no autoriza arrancar
+        # nada, asi que no paga la pausa de confirmacion (F1.5).
+        import agenda_health
+        p = agenda_health.probe_agenda()
+        seccion["health"] = {"alive": bool(p.alive), "status": p.status,
+                             "url": p.url, "elapsed_ms": p.elapsed_ms,
+                             "error": p.error, "source": p.source,
+                             "samples": p.samples}
+    except Exception as exc:  # noqa: BLE001
+        seccion["health"] = {"alive": False, "status": None, "error": str(exc),
+                             "source": "unavailable", "samples": 0}
+    try:
+        _cfg_specs = _spec_by_key()
+        seccion["flags_exported"] = [
+            {"key": k, "type": getattr(_cfg_specs.get(k), "type", "bool")}
+            for k in _QA_UAT_FLAG_KEYS if k in _PLAN_262_KEYS
+        ]
+    except Exception:  # noqa: BLE001
+        seccion["flags_exported"] = []
+    return seccion
+
+
+# Las 9 claves que introdujo el plan 262 (para reportarlas en el doctor).
+_PLAN_262_KEYS = (
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE",
+    "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S",
+    "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S",
+    "STACKY_QA_UAT_ROUTE_ALLOWLIST",
+    "STACKY_QA_UAT_SAFE_ROUTE",
+    "AGENDA_WEB_BASE_URL",
+    "QA_NAV_RETRIES",
+)
 
 
 @bp.get("/kb")

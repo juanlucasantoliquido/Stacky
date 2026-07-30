@@ -189,6 +189,17 @@ def _reintentar(run_dict, evidence_out, exec_log, acciones: list):
             timeout_ms=int(run_dict.get("timeout_ms") or 30_000),
             verbose=False, exec_log=exec_log,
         )
+        # F10.1 — un caso que pasa DESPUES de un reintento no es un exito limpio:
+        # es una senal honesta de inestabilidad. Se emite con el metodo que ya
+        # existe para esto, no con uno nuevo.
+        if (resultado or {}).get("status") == "pass" and exec_log is not None:
+            try:
+                exec_log.flake_suspected(
+                    test_id=scenario_id, reason="PASS_ON_RETRY", attempt=1,
+                    metadata={"origen": "plan_262_hot_recovery"},
+                )
+            except Exception:                      # noqa: BLE001
+                pass
         return resultado, bool(resultado)
     except Exception:                              # noqa: BLE001
         logger.warning("el reintento del caso fallo", exc_info=True)

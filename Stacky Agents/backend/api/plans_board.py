@@ -300,6 +300,80 @@ def plans_pipeline_runs():
     })
 
 
+# ── Plan 263 — normalización de estado con evidencia (rutas ADITIVAS) ────────
+# `config` YA ES LA INSTANCIA (from config import config, :10): getattr(config,
+# "<KEY>", <default>) es el patrón vigente en este módulo — NUNCA repetir el
+# nombre del módulo dos veces encadenado (ese patrón es de OTROS módulos que
+# hacen `import config` a secas, no de este archivo).
+
+
+def _normalize_preview_enabled() -> bool:
+    # Espejo EXACTO de _actions_enabled() (arriba). Default True: la flag es ON.
+    return _enabled() and bool(
+        getattr(config, "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED", True)
+    )
+
+
+def _normalize_apply_enabled() -> bool:
+    # Candado 0 (patrón Plan 250, api/pipeline_editor.py): las TRES flags acá, NO
+    # se confía en `requires` (metadata para la UI, no la evalúa ningún runner).
+    # Esto materializa "APPLY exige PREVIEW". Default False: la flag nace OFF.
+    return _normalize_preview_enabled() and bool(
+        getattr(config, "STACKY_PLANS_NORMALIZE_APPLY_ENABLED", False)
+    )
+
+
+def _normalize_disabled_resp():
+    return (
+        jsonify({
+            "ok": False,
+            "error": "plans_normalize_disabled",
+            "message": (
+                "La normalización de estados está deshabilitada "
+                "(STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED / "
+                "STACKY_PLANS_NORMALIZE_APPLY_ENABLED)."
+            ),
+        }),
+        404,
+    )
+
+
+@bp.get("/normalize/preview")          # ruta final: /api/plans-board/normalize/preview
+def plans_normalize_preview():
+    if not _normalize_preview_enabled():
+        return _normalize_disabled_resp()
+    from services import plans_board, plans_estado_migration      # import lazy (patrón :36)
+
+    return jsonify(
+        plans_estado_migration.preview_estado_migration(plans_board.docs_dir_default())
+    )
+
+
+@bp.post("/normalize/apply")           # ruta final: /api/plans-board/normalize/apply
+def plans_normalize_apply():
+    if not _normalize_apply_enabled():
+        return _normalize_disabled_resp()
+
+    from services import plans_board, plans_estado_migration
+
+    body = request.get_json(force=True, silent=True) or {}
+
+    if body.get("confirm") is not True:
+        return jsonify({"ok": False, "error": "confirm_required"}), 400
+
+    items = body.get("items")
+    if not isinstance(items, list) or not items:
+        return jsonify({"ok": False, "error": "items_required"}), 400
+    if any(not isinstance(it, dict) or not it.get("sha256_visto") for it in items):
+        return jsonify({"ok": False, "error": "sha256_visto_required"}), 400
+
+    dry_run = bool(body.get("dry_run", False))
+    result = plans_estado_migration.apply_estado_migration(
+        plans_board.docs_dir_default(), items, dry_run=dry_run
+    )
+    return jsonify(result)
+
+
 @bp.get("/commits/<int:number>")
 def plans_board_commits(number: int):
     """Plan 196 §4.6 — commits recientes del doc del plan (git log read-only)."""

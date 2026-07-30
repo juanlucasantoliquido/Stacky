@@ -33,6 +33,16 @@ _MAX_PLAN_FILES = 500          # Plan 237: cota de I/O. Más allá de esto se cu
 
 _LEDGER_OK_VEREDICTOS = ("APROBADO", "TERMINADO-POR-SUPERVISOR")
 
+# ── Plan 263 — el fallback de estado, en UN solo literal ────────────────────
+ESTADO_FALLBACK = "IMPLEMENTADO"
+ESTADOS_VALIDOS: tuple[str, ...] = (
+    "PROPUESTO", "CRITICADO", "IMPLEMENTADO", "IMPLEMENTADO_PARCIAL",
+)
+# Plan 263 — origen del estado que ve la UI. Ver ADICIÓN ARQUITECTO 2 del plan.
+ORIGEN_DECLARADO = "declarado"
+ORIGEN_INFERIDO = "inferido"
+ORIGEN_LEDGER = "ledger"
+
 # ── Plan 237 — Triage: el ORDEN de esta tupla ES el orden de presentación. ──
 # Responde, de arriba a abajo: qué NO está implementado, qué NO está criticado,
 # qué ni siquiera tiene documento, qué falta cerrar, y qué ya está completo.
@@ -115,6 +125,34 @@ def parse_plan_header(text: str) -> dict:
         "version": version,
         "fecha": fecha,
     }
+
+
+def _fallback_activo() -> bool:
+    """Lee la flag por la INSTANCIA config.config. Nunca lanza."""
+    try:
+        import config as _config
+        return bool(getattr(_config.config, "STACKY_PLANS_ESTADO_FALLBACK_ENABLED", True))
+    except Exception:      # noqa: BLE001 — sin config, el fallback queda activo
+        return True
+
+
+def resolve_estado(estado_normalizado: str | None) -> tuple[str, bool]:
+    """(estado_resuelto, fallback_aplicado).
+
+    v3/C3: el segundo elemento NO es `estado_inferido` del card. Es "¿tuve que
+    aplicar el fallback?". `estado_inferido` lo deriva build_board de
+    `estado_origen`, porque el ledger puede ganarle al fallback.
+
+    Un estado nulo, vacío, no reconocido o SIN_ESTADO resuelve a ESTADO_FALLBACK
+    con inferido=True. Con la flag OFF devuelve el valor tal cual, inferido=False
+    (comportamiento byte-idéntico al previo al Plan 263).
+    """
+    valor = (estado_normalizado or "").strip().upper()
+    if valor in ESTADOS_VALIDOS:
+        return valor, False
+    if not _fallback_activo():
+        return (valor or "SIN_ESTADO"), False
+    return ESTADO_FALLBACK, True
 
 
 # Plan 237 — memo de encabezados: clave = (str(path), mtime_ns, size) -> dict header.
@@ -407,6 +445,8 @@ def build_planned_cards(docs_dir: Path, numeros_con_doc: set[int]) -> list[dict]
             "filename": None, "path_rel": f"docs/_roadmap/{e['source']}",
             "title": e["title"], "estado": "SIN_DOCUMENTO", "estado_raw": None,
             "estado_efectivo": "SIN_DOCUMENTO", "triage_bucket": "SIN_DOCUMENTO",
+            # Plan 263 — forma uniforme con las demás cards (F1, "cuidado" de F1(d)).
+            "estado_inferido": False, "estado_origen": "declarado",
             "veredicto": None, "version": None, "fecha": None, "duplicate": False,
             "ledger": None, "unpushed": None,
             "priority": e["priority"], "milestone": e["milestone"],
@@ -469,9 +509,18 @@ def ledger_info_for(number: int, path: Path, ledger: dict) -> dict | None:
 
 
 def suggest_next_action(
-    estado: str, ledger_info: dict | None, unpushed: bool | None, number_str: str
+    estado: str,
+    ledger_info: dict | None,
+    unpushed: bool | None,
+    number_str: str,
+    *,
+    estado_inferido: bool = False,
 ) -> dict:
-    """Tabla §4.3 LITERAL. Devuelve {"kind","label","command","natural_language"}."""
+    """Tabla §4.3 LITERAL. Devuelve {"kind","label","command","natural_language"}.
+
+    Plan 263: `estado_inferido` es keyword-only con default -> los llamadores
+    posicionales existentes (4 args) siguen compilando y funcionando igual.
+    """
     ledger_ok = bool(ledger_info) and ledger_info.get("veredicto") in _LEDGER_OK_VEREDICTOS
     doc_drift = ledger_info.get("doc_drift") if ledger_info else None
 
@@ -523,6 +572,17 @@ def suggest_next_action(
             ),
         }
     if estado in ("IMPLEMENTADO", "IMPLEMENTADO_PARCIAL"):
+        if estado_inferido:
+            return {
+                "kind": "supervisar",
+                "label": "Supervisar (estado inferido)",
+                "command": f"/supervisar-implementaciones-planes {number_str}",
+                "natural_language": (
+                    f"El doc del plan {number_str} no declara **Estado:**, así que el tablero "
+                    f"lo asume implementado: pedile al agente supervisar el plan {number_str} "
+                    "para confirmarlo contra el código y escribir el estado real."
+                ),
+            }
         return {
             "kind": "supervisar",
             "label": "Supervisar",
@@ -565,9 +625,27 @@ def build_board(
         ledger_info = ledger_info_for(c["number"], c["path"], ledger)
         ledger_ok = bool(ledger_info) and ledger_info.get("veredicto") in _LEDGER_OK_VEREDICTOS
         doc_drift = ledger_info.get("doc_drift") if ledger_info else None
-        estado_efectivo = "APROBADO" if (ledger_ok and doc_drift is not True) else c["estado"]
 
-        action = suggest_next_action(c["estado"], ledger_info, unpushed, c["number_str"])
+        # Plan 263 F1 — el fallback único: ningún card sale con SIN_ESTADO.
+        estado_resuelto, fallback_aplicado = resolve_estado(c["estado"])
+        aprobado = bool(ledger_ok and doc_drift is not True)
+        estado_efectivo = "APROBADO" if aprobado else estado_resuelto
+        if aprobado:
+            estado_origen = ORIGEN_LEDGER
+        elif fallback_aplicado:
+            estado_origen = ORIGEN_INFERIDO
+        else:
+            estado_origen = ORIGEN_DECLARADO
+        # v3/C3 — UNA sola fuente de verdad: estado_inferido ES estado_origen.
+        # Nunca se asigna por separado. Un doc sin **Estado:** aprobado por el
+        # supervisor sale con origen "ledger" e inferido False: el ledger ya
+        # dijo la verdad y el chip NO debe decir "(inferido)".
+        estado_inferido = estado_origen == ORIGEN_INFERIDO
+
+        action = suggest_next_action(
+            estado_resuelto, ledger_info, unpushed, c["number_str"],
+            estado_inferido=estado_inferido,
+        )
 
         card = {
             "number": c["number"],
@@ -579,6 +657,8 @@ def build_board(
             "estado": c["estado"],
             "estado_raw": c["estado_raw"],
             "estado_efectivo": estado_efectivo,
+            "estado_inferido": estado_inferido,
+            "estado_origen": estado_origen,
             "triage_bucket": triage_bucket(estado_efectivo),
             "veredicto": c["veredicto"],
             "version": c["version"],
@@ -610,6 +690,15 @@ def build_board(
     totals["unpushed"] = unpushed_count
     totals["duplicados"] = sum(1 for cnt in number_counts.values() if cnt > 1)
     totals["total"] = len(plans)
+    totals["inferidos"] = sum(1 for c in plans if c.get("estado_inferido"))
+    # [ADICIÓN ARQUITECTO 6, v4] Desglose agregado de DÓNDE salió cada estado. Mismo
+    # loop, mismo dato ya calculado por card (estado_origen, F1(d)): costo marginal
+    # cero, sin I/O nuevo, sin flag nueva, aditivo.
+    totals["por_origen"] = {
+        ORIGEN_DECLARADO: sum(1 for c in plans if c.get("estado_origen") == ORIGEN_DECLARADO),
+        ORIGEN_INFERIDO: sum(1 for c in plans if c.get("estado_origen") == ORIGEN_INFERIDO),
+        ORIGEN_LEDGER: sum(1 for c in plans if c.get("estado_origen") == ORIGEN_LEDGER),
+    }
 
     triage_totals = {key: 0 for key, _ in TRIAGE_BUCKETS}
     for card in plans:

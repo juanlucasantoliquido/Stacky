@@ -384,6 +384,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_UI_RUN_VERDICT_BADGE_ENABLED",     # Plan 269 F2/F3/F4 — veredicto en la lista
         "STACKY_INCIDENT_INBOX_VERDICT_ENABLED",   # Plan 269 F5 — veredicto en la bandeja
         "STACKY_RUN_RECONCILIATION_HITL_ENABLED",  # Plan 269 F6 — correccion manual (HITL)
+        "STACKY_PLANS_ESTADO_FALLBACK_ENABLED",      # Plan 263 — ningun plan sin estado
+        "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED",    # Plan 263 — vista previa (solo lectura)
+        "STACKY_PLANS_NORMALIZE_APPLY_ENABLED",      # Plan 263 — escritura HITL en los .md
     ),
     "aprendizaje": (
         "STACKY_PUSH_REJECTIONS_ENABLED", "STACKY_OPERATOR_NOTE_TO_MEMORY_ENABLED",
@@ -4682,6 +4685,56 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Tablero de Planes: lanzan la corrida (Claude Code CLI + skills del "
             "repo) con modelo y effort a eleccion. Siempre con click y "
             "confirmacion; el push sigue siendo manual."
+        ),
+        group="global",
+        requires="STACKY_PLANS_BOARD_ENABLED",
+    ),
+    # ── Plan 263 — ningun plan sin estado + migracion con evidencia ──────────
+    FlagSpec(
+        key="STACKY_PLANS_ESTADO_FALLBACK_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON (tests/test_harness_flags.py).
+        label="Ningun plan sin estado en el tablero",
+        description=(
+            "Plan 263 — Un plan cuyo documento no declara **Estado:** se muestra como "
+            "IMPLEMENTADO (inferido) en vez de 'Sin estado', para que el tablero le "
+            "ofrezca la accion Supervisar. Calculo puro en memoria, no toca el disco."
+        ),
+        group="global",
+        requires="STACKY_PLANS_BOARD_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON (tests/test_harness_flags.py).
+        label="Vista previa de normalizacion de estados",
+        description=(
+            "Plan 263 — Calcula, SOLO EN MEMORIA, que linea **Estado:** habria que "
+            "escribir en cada plan sin estado, con la evidencia que la respalda "
+            "(ledger, contenido del doc, numero del plan). No escribe nada."
+        ),
+        group="global",
+        requires="STACKY_PLANS_BOARD_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_PLANS_NORMALIZE_APPLY_ENABLED",
+        type="bool",
+        # SIN default=: el default EFECTIVO es el de config.py ("false"). Declararlo
+        # aca —aunque fuera default=False— la volveria default_is_known
+        # (services/harness_flags.py: `spec.default is not None`; False NO es None) y
+        # pondria ROJO a test_default_known_only_for_curated, que exige igualdad EXACTA
+        # con el conjunto curado. Precedente identico y ya vivo en este archivo:
+        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED (Plan 250).
+        #
+        # OFF por CATEGORIA (B): escribe en un sistema REAL del operador — los .md de
+        # "Stacky Agents"/docs/ en su working tree, que ademas suele tener cambios sin
+        # commitear. La escritura vive en
+        # services/plans_estado_migration.py::apply_estado_migration.
+        label="Aplicar la normalizacion de estados a los .md",
+        description=(
+            "Plan 263 — Escribe la linea **Estado:** en los planes que no la tienen, "
+            "uno por uno, con confirmacion y diff a la vista. Nunca corre sola. "
+            "El commit y el push siguen siendo manuales."
         ),
         group="global",
         requires="STACKY_PLANS_BOARD_ENABLED",

@@ -1480,6 +1480,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el tablero queda solo-lectura, como antes, con la acción sugerida copiable a mano.",
         example="Como pasar de un semáforo que solo te dice 'avanzá' a un botón que arranca el auto por vos — pero siempre apretás vos el botón.",
     ),
+    # ── Plan 263 — ningun plan sin estado ────────────────────────────────────
+    "STACKY_PLANS_ESTADO_FALLBACK_ENABLED": PlainHelp(
+        what="Decide que muestra el tablero de planes cuando el documento de un plan no dice en que etapa esta.",
+        on_effect="Si la activas (viene asi de fabrica): esos planes aparecen como implementados y marcados 'inferido', con el boton de supervisar disponible para confirmarlo.",
+        off_effect="Si la apagas: esos planes vuelven a mostrarse como 'Sin estado' y quedan sin ninguna accion disponible, como antes.",
+        example="Como una carpeta sin etiqueta: en vez de dejarla en el limbo, la ponés en 'a revisar' para que alguien la clasifique.",
+    ),
+    "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED": PlainHelp(
+        what="Arma una vista previa de que etapa habria que anotar en cada plan que no la declara, con la evidencia que respalda cada propuesta.",
+        on_effect="Si la activas (viene asi de fabrica): el tablero lista los planes sin etapa declarada, la etapa propuesta para cada uno y por que. No modifica ningun archivo.",
+        off_effect="Si la apagas: ese panel desaparece y el tablero queda igual que antes, sin propuesta de normalizacion.",
+        example="Como el presupuesto que te pasa el mecanico antes de tocar el auto: te dice que haria y por que, pero todavia no hizo nada.",
+    ),
+    "STACKY_PLANS_NORMALIZE_APPLY_ENABLED": PlainHelp(
+        what="Permite que la app escriba en los documentos de los planes la linea que declara su etapa.",
+        on_effect="Si la activas: se habilita el boton que escribe esa linea en los documentos que elijas, de a uno, mostrandote antes el cambio exacto y pidiendote confirmacion.",
+        off_effect="Si la apagas (viene asi de fabrica): el boton queda deshabilitado y ningun documento se modifica; solo podes ver la propuesta.",
+        example="Como firmar vos mismo el formulario: la app te lo completa y te lo muestra, pero la lapicera la agarras vos.",
+    ),
     # ── Plan 215 — Publicador de Soluciones ──────────────────────────────────
     "STACKY_DEVOPS_SOLUTION_PUBLISHER_ENABLED": PlainHelp(
         what="Agrega al panel DevOps una sección que busca una sola vez todas las soluciones de tu proyecto, te deja elegir cómo se publica cada una y publicarla con un botón.",

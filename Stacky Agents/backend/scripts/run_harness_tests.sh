@@ -924,6 +924,11 @@ HARNESS_TEST_FILES=(
   tests/test_plan260_trigger_gate.py
   tests/test_plan260_secret_commit_gate.py
   tests/test_plan260_fingerprints.py
+
+  # Plan 263 - tablero de planes denso: ningun plan sin estado
+  tests/test_plan263_estado_fallback.py
+  tests/test_plan263_estado_guard.py
+  tests/test_plan263_migration.py
 )
 
 pass=0

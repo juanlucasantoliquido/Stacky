@@ -913,6 +913,27 @@
       "guard_test": "tests/test_plan260_secret_commit_gate.py",
       "evidence": "audit_yaml corre solo SEC*+OPT* (services/cicd_audit_core.py) y las PL de secreto son SEV_WARNING (services/pipeline_lint.py); filtrar por severity=='error' las descarta a las tres",
       "note": "test_f5_cada_codigo_bloqueante_dispara_de_verdad exige que cada codigo del conjunto bloqueante (SECRET_BLOCKING_AUDIT/SECRET_BLOCKING_LINT) dispare de verdad contra el repro que el propio catalogo declara (AUDIT_RULES[code].repro y pipeline_lint._RULES), nunca con un fixture escrito a mano."
+    },
+    {
+      "id": "PLAN263-ROLLBACK-NORMALIZACION-ESTADO",
+      "title": "La normalizacion de estados de un plan se revirtio sin completar",
+      "class": "data-integrity",
+      "status": "resolved",
+      "log_pattern": "\\[plan263\\] rollback de normalizacion: (\\S+)",
+      "log_guarded": true,
+      "killed_by": "plan 263 F2.5 (transaccion de 3 patas con rollback) + F3 (guardia TOCTOU por sha256)",
+      "killed_commit": null,
+      "date_resolved": "2026-07-29",
+      "guard_test": "tests/test_plan263_migration.py",
+      "self_test": {
+        "matches": [
+          "[plan263] rollback de normalizacion: 51_PLAN_X.md (ledger corrupto)"
+        ],
+        "clean": [
+          "[plan263] normalizacion aplicada: 51_PLAN_X.md"
+        ]
+      },
+      "evidence": "backend/services/plans_estado_migration.py (apply_estado_migration restaura el .md desde memoria si falla la pata 2 o la 3); backend/tests/test_plan263_migration.py casos 17, 19 y 20"
     }
   ]
 }

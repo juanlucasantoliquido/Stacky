@@ -12,6 +12,7 @@ import log_streamer
 from db import session_scope
 from models import AgentExecution, Ticket
 from ._helpers import current_user
+from services import console_audit
 from services import human_review as human_review_svc
 from services.project_context import resolve_project_context
 from project_manager import (
@@ -737,6 +738,9 @@ def cancel_execution(execution_id: int):
             logger.warning("on_execution_end (cancel) falló exec=%s", execution_id, exc_info=True)
 
     logger.info("execution cancelled manually exec=%s", execution_id)
+    # Plan 265 F7 — bitácora de acciones de consola: registro, nunca gate.
+    # record_console_action nunca lanza; no puede tumbar un cancel exitoso.
+    console_audit.record_console_action(execution_id=execution_id, action="cancel")
     return jsonify({"ok": True, "execution_id": execution_id})
 
 
@@ -1023,3 +1027,15 @@ def patch_assumptions(execution_id: int):
         resultado = dict(bloque)
 
     return jsonify({"ok": True, "assumptions": resultado})
+
+
+# ── Plan 265 F7 — Bitácora de acciones de consola (SOLO LECTURA) ───────────
+# La escritura se dispara desde los propios handlers de cancel / volver a
+# lanzar; acá solo se expone la LECTURA. Es registro, no control de acceso
+# (test 9 de F7 lo verifica): este endpoint reporta, nunca decide.
+
+@bp.get("/console-audit")
+def console_audit_route():
+    """GET /api/executions/console-audit?limit=N — bitácora local, SOLO LECTURA."""
+    limit = request.args.get("limit", default=200, type=int)
+    return jsonify(console_audit.read_console_audit(limit=limit))

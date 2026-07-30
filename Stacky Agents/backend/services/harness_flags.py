@@ -494,6 +494,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Costura OLA 1 (P0, 2026-07-28) — el plan 270 la ubica en la categoría de
         # STACKY_INCIDENT_INBOX_ACTIONS_ENABLED (su vecino), NO en paridad_proveedores.
         "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED",  # Plan 270 F5 — marca "Sin sincronizar" en la bandeja
+        "STACKY_CONSOLE_FULLSCREEN_ENABLED",    # Plan 265 — consola en pantalla completa
+        "STACKY_CONSOLE_RICH_RENDER_ENABLED",   # Plan 265
+        "STACKY_CONSOLE_REPO_PANEL_ENABLED",    # Plan 265
+        "STACKY_CONSOLE_AUDIT_LOG_ENABLED",     # Plan 265
     ),
     "paridad_proveedores": (
         "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
@@ -5780,6 +5784,58 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,
+    ),
+    # ── Plan 265 — la consola como experiencia principal ──
+    FlagSpec(
+        key="STACKY_CONSOLE_FULLSCREEN_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON de tests/test_harness_flags.py.
+        label="Consola en pantalla completa",
+        description=(
+            "Plan 265 — La consola de corridas puede ocupar toda la pantalla util, "
+            "con paneles laterales, busqueda y atajos, sobre la MISMA sesion que el "
+            "dock. Presentacion de UI: no cambia como corre nada."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_CONSOLE_RICH_RENDER_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON de tests/test_harness_flags.py.
+        label="Markdown y bloques de codigo en la consola",
+        description=(
+            "Plan 265 — En pantalla completa, la salida se renderiza con markdown y "
+            "resaltado de sintaxis, con boton de copia por bloque. El dock sigue "
+            "mostrando lineas crudas. Sin dependencias nuevas."
+        ),
+        group="global",
+        requires="STACKY_CONSOLE_FULLSCREEN_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_CONSOLE_REPO_PANEL_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON de tests/test_harness_flags.py.
+        label="Panel de repositorio en la consola",
+        description=(
+            "Plan 265 — Muestra archivos modificados y sus diferencias, de SOLO "
+            "LECTURA, sobre el workspace de la corrida. Sin repositorio, sin git "
+            "instalado o si expira el tiempo, el panel lo dice y no rompe nada."
+        ),
+        group="global",
+        requires="STACKY_CONSOLE_FULLSCREEN_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_CONSOLE_AUDIT_LOG_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON de tests/test_harness_flags.py.
+        label="Bitacora de acciones de la consola",
+        description=(
+            "Plan 265 — Registra que acciones disparo el operador desde la consola "
+            "(cancelar, volver a lanzar, copiar) en el directorio de datos de Stacky. "
+            "Es registro, no restriccion: mono-operador, sin RBAC."
+        ),
+        group="global",
+        requires="STACKY_CONSOLE_FULLSCREEN_ENABLED",
     ),
 )
 

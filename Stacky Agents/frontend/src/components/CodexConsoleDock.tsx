@@ -1,13 +1,18 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Maximize2, Minimize2, Send, Terminal, X } from "lucide-react";
+import { Expand, Maximize2, Minimize2, Send, Terminal, X } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Executions } from "../api/endpoints";
 import { useExecutionStream } from "../hooks/useExecutionStream";
 import { useWorkbench } from "../store/workbench";
 import type { LogLine } from "../types";
 import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
+import CodexConsoleFull from "./CodexConsoleFull";
 import { formatLoadErrorMessage } from "../utils/loadError";
 import { restoreConsoleDecision } from "../services/uiGuards";
+import { copyText } from "../services/copyService";
+import useShortcut from "../hooks/useShortcut";
+import { CONSOLE_SHORTCUT_DEFS } from "../services/consoleShortcuts";
+import { togglePresentation } from "../services/consolePresentation";
 import styles from "./CodexConsoleDock.module.css";
 
 /** Distancia (px) al fondo dentro de la cual seguimos auto-scrolleando. */
@@ -51,6 +56,11 @@ function workingPhase(
 export default function CodexConsoleDock() {
   const executionId = useWorkbench((state) => state.codexConsoleExecutionId);
   const minimized = useWorkbench((state) => state.codexConsoleMinimized);
+  // Plan 265 F1 — tercera presentación: "dock" | "full" | "minimized". Mismo
+  // estado, misma sesión (F1.5): cambiar de presentación NUNCA toca
+  // codexConsoleExecutionId, así que useExecutionStream (abajo) no se re-suscribe.
+  const presentation = useWorkbench((state) => state.codexConsolePresentation);
+  const setPresentation = useWorkbench((state) => state.setCodexConsolePresentation);
   const setExecution = useWorkbench((state) => state.setCodexConsoleExecution);
   const setMinimized = useWorkbench((state) => state.setCodexConsoleMinimized);
   const [input, setInput] = useState("");
@@ -59,9 +69,32 @@ export default function CodexConsoleDock() {
     closing: false,
     error: null,
   });
+  const [focusSearchRequestId, setFocusSearchRequestId] = useState(0);
   const stream = useExecutionStream(executionId);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Plan 265 F6 — los 3 atajos propios de la consola. Se registran SIEMPRE
+  // (regla de hooks: cantidad fija entre renders); el handler es un no-op sin
+  // sesión abierta. Los 3 llevan Ctrl (D3/D9): siguen vivos con foco en un
+  // input (ratchet F6 test 9).
+  const consoleShortcutHandlers: Record<string, () => void> = {
+    "console.toggle-fullscreen": () => {
+      if (executionId == null) return;
+      setPresentation(togglePresentation(presentation));
+    },
+    "console.focus-search": () => {
+      if (executionId == null) return;
+      if (presentation !== "full") setPresentation("full");
+      setFocusSearchRequestId((n) => n + 1);
+    },
+    "console.copy-all": () => {
+      if (executionId == null) return;
+      void copyText(stream.lines.map((l) => l.message ?? "").join("\n"));
+    },
+  };
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  CONSOLE_SHORTCUT_DEFS.forEach((spec) => useShortcut({ ...spec, handler: consoleShortcutHandlers[spec.id] }));
   // Mientras el usuario esté pegado al fondo, seguimos auto-scrolleando; si
   // scrollea hacia arriba para leer, dejamos de moverle la vista.
   const stickToBottom = useRef(true);
@@ -174,6 +207,31 @@ export default function CodexConsoleDock() {
     setExecution(null);
   };
 
+  // Plan 265 F1 — la pantalla completa es OTRA PRESENTACIÓN del mismo estado,
+  // no un componente paralelo: useExecutionStream (arriba) sigue siendo el
+  // único suscriptor del stream. CodexConsoleFull es puramente de presentación.
+  if (presentation === "full") {
+    return (
+      <>
+        <CodexConsoleFull
+          executionId={executionId}
+          lines={stream.lines}
+          dropped={stream.dropped ?? 0}
+          done={stream.done}
+          execution={executionQ.data}
+          runtimeLabel={runtimeLabel}
+          totalTokens={totalTokens}
+          onBackToDock={() => setPresentation("dock")}
+          onOpenExecution={(id) => setExecution(id)}
+          focusSearchRequestId={focusSearchRequestId}
+        />
+        {detailOpen && (
+          <ExecutionDetailDrawer executionId={executionId} onClose={() => setDetailOpen(false)} />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
     <section className={minimized ? styles.dockMinimized : styles.dock} aria-label={`Consola ${runtimeLabel}`}>
@@ -199,6 +257,14 @@ export default function CodexConsoleDock() {
           )}
         </div>
         <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={() => setPresentation("full")}
+            title="Pantalla completa (Ctrl+Shift+Enter)"
+          >
+            <Expand size={15} />
+          </button>
           {stream.done && (
             <button
               type="button"

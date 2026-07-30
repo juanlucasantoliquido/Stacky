@@ -911,6 +911,10 @@ HARNESS_TEST_FILES=(
   tests/test_devops_action_matcher.py
   tests/test_devops_action_ratchet.py
   tests/test_plan267_help.py
+  # Plan 265 - Consola DevOps pantalla completa (panel de repo, secretos, bitacora)
+  tests/test_plan265_git_readonly.py
+  tests/test_plan265_secret_mask.py
+  tests/test_plan265_console_audit.py
 )
 
 pass=0

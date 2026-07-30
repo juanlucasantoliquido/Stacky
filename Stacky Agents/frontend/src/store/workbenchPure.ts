@@ -3,8 +3,10 @@
  * migración del persist F6), extraída para tests vitest sin zustand/jsdom.
  */
 import type { AgentRuntime, ContextBlock } from "../types";
+import type { ConsolePresentation } from "../services/consolePresentation";
+import { normalizePresentation, presentationFromLegacy } from "../services/consolePresentation";
 
-export const WORKBENCH_PERSIST_VERSION = 3;
+export const WORKBENCH_PERSIST_VERSION = 4;
 
 export interface WorkbenchPersistV3 {
   agentRuntime: AgentRuntime;
@@ -12,20 +14,28 @@ export interface WorkbenchPersistV3 {
   codexConsoleMinimized: boolean;
 }
 
+/** Plan 265 — v4 agrega la presentación de la consola. `codexConsoleMinimized`
+ *  se CONSERVA y se sigue escribiendo: un deploy viejo rehidrata sin romper. */
+export interface WorkbenchPersistV4 extends WorkbenchPersistV3 {
+  codexConsolePresentation: ConsolePresentation;
+}
+
 const VALID_RUNTIMES: AgentRuntime[] = ["github_copilot", "codex_cli", "claude_code_cli"];
 
-/** Migración v1/v2 → v3. Preserva EXACTAMENTE el remapeo del Plan 37
+/** Migración v1/v2/v3 → v4. Preserva EXACTAMENTE el remapeo del Plan 37
  *  (copilot heredado → claude_code_cli cuando fromVersion < 2, ver
- *  workbench.ts:139-155 actual) y agrega los campos de consola con defaults
- *  inertes (null/false) para todo lo anterior a v3. */
+ *  workbench.ts:139-155 actual), agrega los campos de consola con defaults
+ *  inertes (null/false) para todo lo anterior a v3, y deriva/lee la
+ *  presentación de consola (Plan 265 F1) según la versión de origen. */
 export function migrateWorkbenchPersist(
   persisted: unknown,
   fromVersion: number,
-): WorkbenchPersistV3 {
+): WorkbenchPersistV4 {
   const prev = (persisted ?? {}) as {
     agentRuntime?: unknown;
     codexConsoleExecutionId?: unknown;
     codexConsoleMinimized?: unknown;
+    codexConsolePresentation?: unknown;
   };
   let rt: AgentRuntime =
     typeof prev.agentRuntime === "string" &&
@@ -38,7 +48,16 @@ export function migrateWorkbenchPersist(
       ? prev.codexConsoleExecutionId
       : null;
   const minimized = fromVersion >= 3 && prev.codexConsoleMinimized === true;
-  return { agentRuntime: rt, codexConsoleExecutionId: execId, codexConsoleMinimized: minimized };
+  const presentation =
+    fromVersion >= 4
+      ? normalizePresentation(prev.codexConsolePresentation)
+      : presentationFromLegacy(minimized); // estado v3 o anterior: se deriva del booleano
+  return {
+    agentRuntime: rt,
+    codexConsoleExecutionId: execId,
+    codexConsoleMinimized: minimized,
+    codexConsolePresentation: presentation,
+  };
 }
 
 export interface ProjectChangeReset {

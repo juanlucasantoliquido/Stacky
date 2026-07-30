@@ -2028,6 +2028,30 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: la lista se ve igual que antes y las filas desalineadas no se distinguen del resto.",
         example="Cerraste ocho reclamos y dos quedaron a medias: los ves marcados en vez de descubrirlo semanas despues.",
     ),
+    "STACKY_CONSOLE_FULLSCREEN_ENABLED": PlainHelp(
+        what="Permite que la consola de corridas ocupe toda la pantalla, con paneles laterales, busqueda y atajos, sobre la misma sesion que la barra de abajo.",
+        on_effect="Si la activás: aparece el botón para agrandar la consola, y la conversación se sigue viendo entera al ir y volver, sin perder ni una línea.",
+        off_effect="Si la apagás: la consola sigue siendo la barra de abajo de siempre, exactamente como antes. No se pierde nada de lo que ya hacía.",
+        example="Es como poner un video en pantalla completa: el video no se reinicia ni cambia, solo lo ves más grande.",
+    ),
+    "STACKY_CONSOLE_RICH_RENDER_ENABLED": PlainHelp(
+        what="Muestra la salida de la consola con titulos, listas y bloques de codigo resaltados, y un boton para copiar cada bloque.",
+        on_effect="Si la activás: en pantalla completa la salida se lee con formato y podés copiar un comando entero con un click, sin seleccionarlo a mano.",
+        off_effect="Si la apagás: la salida se ve como texto plano, línea por línea. Se lee peor, pero no falta nada.",
+        example="Un comando de cinco líneas se copia entero con un click, en vez de arrastrar el mouse y equivocarse en la última.",
+    ),
+    "STACKY_CONSOLE_REPO_PANEL_ENABLED": PlainHelp(
+        what="Muestra en la consola que archivos toco el agente y las diferencias de cada uno, sin salir de la pantalla.",
+        on_effect="Si la activás: aparece un panel con los archivos cambiados y, al hacer click, sus diferencias. Solo lee: nunca guarda, deshace ni borra nada.",
+        off_effect="Si la apagás: el panel no aparece y hay que mirar los cambios por afuera, con otra herramienta.",
+        example="Como mirar la lista de cambios antes de confirmarlos: se lee todo y no se escribe nada.",
+    ),
+    "STACKY_CONSOLE_AUDIT_LOG_ENABLED": PlainHelp(
+        what="Anota en un archivo propio de la aplicacion que acciones disparaste desde la consola y cuando.",
+        on_effect="Si la activás: queda anotado cada cancelar, volver a lanzar o copiar, con la fecha y la corrida. Sirve para reconstruir qué pasó y cuándo.",
+        off_effect="Si la apagás: no queda anotación y después no vas a poder reconstruir qué acción disparaste ni en qué momento.",
+        example="Es una bitácora, no un permiso: anota lo que hiciste, nunca te impide hacerlo ni le pregunta a nadie.",
+    ),
 }
 
 

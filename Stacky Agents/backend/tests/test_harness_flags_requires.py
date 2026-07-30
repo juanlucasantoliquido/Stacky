@@ -320,6 +320,11 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
     # Plan 268: el explorador solo tiene sentido si el grafo documental existe.
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",
+    # Plan 265: las 3 hijas de la consola cuelgan del master de pantalla completa
+    # (profundidad 1; el master NO declara requires).
+    "STACKY_CONSOLE_RICH_RENDER_ENABLED": "STACKY_CONSOLE_FULLSCREEN_ENABLED",
+    "STACKY_CONSOLE_REPO_PANEL_ENABLED": "STACKY_CONSOLE_FULLSCREEN_ENABLED",
+    "STACKY_CONSOLE_AUDIT_LOG_ENABLED": "STACKY_CONSOLE_FULLSCREEN_ENABLED",
 }
 
 

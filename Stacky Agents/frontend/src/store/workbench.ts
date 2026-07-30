@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { AgentRuntime, AgentType, AgentWorkflowConfig, ContextBlock, Project, VsCodeAgent } from "../types";
 import { migrateWorkbenchPersist, projectChangeReset, WORKBENCH_PERSIST_VERSION } from "./workbenchPure";
+import type { ConsolePresentation } from "../services/consolePresentation";
+import { DEFAULT_PRESENTATION } from "../services/consolePresentation";
+import { applyPresentation } from "../services/consoleSession";
 
 interface WorkbenchState {
   activeTicketId: number | null;
@@ -9,6 +12,9 @@ interface WorkbenchState {
   activeExecutionId: number | null;
   codexConsoleExecutionId: number | null;
   codexConsoleMinimized: boolean;
+  /** Plan 265 — presentación de la consola. `codexConsoleMinimized` se conserva
+      y se sigue escribiendo, para que un deploy viejo rehidrate sin romper. */
+  codexConsolePresentation: ConsolePresentation;
   blocks: ContextBlock[];
   runningExecutionId: number | null;
   // FA-04 — modelo override (null = router decide)
@@ -42,6 +48,7 @@ interface WorkbenchState {
   setActiveExecution: (id: number | null) => void;
   setCodexConsoleExecution: (id: number | null, minimized?: boolean) => void;
   setCodexConsoleMinimized: (value: boolean) => void;
+  setCodexConsolePresentation: (p: ConsolePresentation) => void;
   setBlocks: (b: ContextBlock[]) => void;
   patchBlock: (id: string, patch: Partial<ContextBlock>) => void;
   removeBlock: (id: string) => void;
@@ -65,6 +72,7 @@ export const useWorkbench = create<WorkbenchState>()(
   activeExecutionId: null,
   codexConsoleExecutionId: null,
   codexConsoleMinimized: false,
+  codexConsolePresentation: DEFAULT_PRESENTATION,
   blocks: [],
   runningExecutionId: null,
   modelOverride: null,
@@ -100,6 +108,8 @@ export const useWorkbench = create<WorkbenchState>()(
       codexConsoleMinimized: id == null ? false : minimized,
     }),
   setCodexConsoleMinimized: (value) => set({ codexConsoleMinimized: value }),
+  setCodexConsolePresentation: (p) =>
+    set((state) => applyPresentation(state, p)),
   setBlocks: (b) => set({ blocks: b }),
   patchBlock: (id, patch) =>
     set((s) => ({
@@ -149,6 +159,7 @@ export const useWorkbench = create<WorkbenchState>()(
         agentRuntime: state.agentRuntime,
         codexConsoleExecutionId: state.codexConsoleExecutionId,
         codexConsoleMinimized: state.codexConsoleMinimized,
+        codexConsolePresentation: state.codexConsolePresentation,
       }),
       version: WORKBENCH_PERSIST_VERSION,
       migrate: (persisted: unknown, fromVersion: number) =>

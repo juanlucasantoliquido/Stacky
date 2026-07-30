@@ -2232,4 +2232,18 @@ class Config:
         "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 265 — la consola como experiencia principal.
+    STACKY_CONSOLE_FULLSCREEN_ENABLED: bool = os.getenv(
+        "STACKY_CONSOLE_FULLSCREEN_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_CONSOLE_RICH_RENDER_ENABLED: bool = os.getenv(
+        "STACKY_CONSOLE_RICH_RENDER_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_CONSOLE_REPO_PANEL_ENABLED: bool = os.getenv(
+        "STACKY_CONSOLE_REPO_PANEL_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_CONSOLE_AUDIT_LOG_ENABLED: bool = os.getenv(
+        "STACKY_CONSOLE_AUDIT_LOG_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
 config = Config()

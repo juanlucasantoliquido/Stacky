@@ -875,7 +875,7 @@
       "log_pattern": "\"(error|message)\":\\s*\"[^\"]*STACKY_[A-Z_]+",
       "log_guarded": false,
       "killed_by": "plan 273 F5 (B-06) + F4.6 (superficie de render)",
-      "killed_commit": "PENDIENTE_F5",
+      "killed_commit": "c017a981",
       "date_resolved": "2026-07-30",
       "guard_test": "tests/test_plan273_error_message_sin_flags.py",
       "self_test": {

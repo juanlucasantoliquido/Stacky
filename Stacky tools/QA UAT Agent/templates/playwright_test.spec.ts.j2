@@ -65,6 +65,24 @@ async function waitForAgendaStable(page: any, timeout = 10_000): Promise<void> {
   await waitForAspNetIdle(page, timeout);
 }
 
+// ── plan-274 F2 — presupuesto de capturas (screenshot_budget.py) ──────────────
+// Lo genera build_ts_budget_block(); define __shouldCapture / __captureIfBudget
+// y el techo de {{ 25 }} capturas por escenario, que antes de este plan NO EXISTIA.
+{% if screenshot_budget_block %}
+{{ screenshot_budget_block }}
+{% else %}
+// plan-274 F2 — DEGRADADO: el modulo de presupuesto no estaba disponible.
+// Se captura sin guardia, que es exactamente el comportamiento previo al plan.
+async function __captureIfBudget(page: any, path: string, stepOk: boolean, captureIndex = 0): Promise<void> {
+  await page.screenshot({ path }).catch(() => null);
+}
+{% endif %}
+// Indice de captura DENTRO del paso en curso. Se reinicia en cada paso, asi el
+// modulo puede modelar "cual captura de ESTE paso es". Con `0` fijo la condicion
+// `captureIndex >= limit` seria `0 >= 1` = false PARA SIEMPRE y el presupuesto
+// por paso nunca podria activarse (hallazgo V2).
+let __ssStepIdx = 0;
+
 /**
  * assertArrival — Plan 214 F2. Fail EARLY when navigation went off-route.
  *
@@ -552,10 +570,11 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
       }
     }
     console.log('Advanced filters ready:', filtersReady);
-    await page.screenshot({ path: 'screenshots/{{ scenario_id }}_panel_expanded.png' });
+    await __captureIfBudget(page, 'screenshots/{{ scenario_id }}_panel_expanded.png', true, __ssStepIdx++);
 
     // ACTION
     {% for step in pasos %}
+    __ssStepIdx = 0;  // plan-274 F2: indice de captura DENTRO de este paso
     {% if step.accion == 'navigate' %}
     // [STEP {{ "%02d" | format(loop.index) }}] navigate to {{ step.target }}
 {% if detect_screen_errors %}
@@ -567,7 +586,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
 {% if detect_screen_errors %}
     await __checkAspNetExceptionAfterNav(page, {{ loop.index }});
 {% endif %}
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% elif step.accion == 'navigate_webforms' %}
     // [STEP {{ "%02d" | format(loop.index) }}] navigate_webforms → {{ step.target }}
     // Uses HTMLFormElement.prototype.submit() to bypass ScriptManager (headless-safe).
@@ -600,13 +619,13 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     }
     await waitForAgendaStable(page);
     await assertArrival(page, {{ step.target | tojson }}, {{ loop.index }});
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% elif step.accion == 'expand_collapsible' %}
     // [STEP {{ '%02d' | format(loop.index) }}] expand collapsible search panel
     console.log('[STEP {{ '%02d' | format(loop.index) }}] expand collapsible');
     await page.locator('.collapsible-header:has-text("Búsqueda Avanzada")').first().click();
-    await page.waitForTimeout(800);
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    {% if state_waits_enabled %}await waitForAgendaStable(page, 5_000);{% else %}await page.waitForTimeout(800);{% endif %}
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% elif step.accion == 'click' %}
     // [STEP {{ '%02d' | format(loop.index) }}] click {{ step.target }}
 {% if detect_screen_errors %}
@@ -619,7 +638,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await page.locator("{{ ui_map[step.target] }}").click({ noWaitAfter: true });
     await waitForAspNetIdle(page);
     await waitForAgendaStable(page);
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'fill' %}
@@ -630,7 +649,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     console.log('[STEP {{ '%02d' | format(loop.index) }}] fill {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").fill('{{ step.valor }}');
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'select' %}
@@ -641,7 +660,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     console.log('[STEP {{ '%02d' | format(loop.index) }}] select {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").selectOption('{{ step.valor }}');
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'select_by_index' %}
@@ -651,7 +670,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
       const el = document.querySelector(sel) as HTMLSelectElement;
       if (el) { el.selectedIndex = {{ step.valor }}; el.dispatchEvent(new Event('change', { bubbles: true })); }
     }, "{{ ui_map[step.target] }}");
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% elif step.accion == 'wait_networkidle' %}
     // [STEP {{ '%02d' | format(loop.index) }}] wait networkidle + UpdatePanel DOM settle
     await page.waitForLoadState('networkidle');
@@ -666,12 +685,12 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     // [STEP {{ '%02d' | format(loop.index) }}] press key {{ step.valor }} on {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] press_key {{ step.valor }}');
     await page.keyboard.press({{ step.valor | tojson }});
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% elif step.accion == 'hover' %}
     // [STEP {{ '%02d' | format(loop.index) }}] hover {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] hover {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").hover();
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% elif step.accion == 'double_click' %}
     // [STEP {{ '%02d' | format(loop.index) }}] double_click {{ step.target }}
@@ -679,7 +698,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").dblclick();
     await waitForAgendaStable(page);
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'check_checkbox' %}
@@ -691,7 +710,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     {% else %}
     await page.locator("{{ ui_map[step.target] }}").uncheck();
     {% endif %}
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}").boundingBox().catch(() => null) });
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'select_radio' %}
@@ -699,7 +718,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     console.log('[STEP {{ '%02d' | format(loop.index) }}] select_radio {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}[value={{ step.valor | tojson }}]").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}[value={{ step.valor | tojson }}]").check();
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     STEP_BBOXES.push({ step_index: {{ loop.index }}, screenshot_path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', target: {{ step.target | tojson }}, bbox: await page.locator("{{ ui_map[step.target] }}[value={{ step.valor | tojson }}]").boundingBox().catch(() => null) });
     {% if detect_screen_errors %}await __checkScreenAfterStep(page, {{ loop.index }}, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png');{% endif %}
     {% elif step.accion == 'clear' %}
@@ -707,7 +726,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     console.log('[STEP {{ '%02d' | format(loop.index) }}] clear {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded().catch(() => null);
     await page.locator("{{ ui_map[step.target] }}").clear();
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% elif step.accion == 'wait_for_text' %}
     // [STEP {{ '%02d' | format(loop.index) }}] wait for text "{{ step.valor }}" in {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] wait_for_text {{ step.target }}');
@@ -716,7 +735,7 @@ test.describe('ADO-{{ ticket_id }} | {{ scenario_id }} — {{ titulo }}', () => 
     // [STEP {{ '%02d' | format(loop.index) }}] scroll_into_view {{ step.target }}
     console.log('[STEP {{ '%02d' | format(loop.index) }}] scroll_into_view {{ step.target }}');
     await page.locator("{{ ui_map[step.target] }}").scrollIntoViewIfNeeded();
-    await page.screenshot({ path: 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png' });
+    await __captureIfBudget(page, 'evidence/{{ ticket_id }}/{{ scenario_id }}/step_{{ '%02d' | format(loop.index) }}_after.png', true, __ssStepIdx++);
     {% endif %}
     {% endfor %}
 

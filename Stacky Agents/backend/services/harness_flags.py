@@ -172,6 +172,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
         # Plan 241 F2/F7 — cero falso verde: discriminacion estricta y roll-up de epicas
         "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+        # Plan 274 — eficiencia de navegacion del agente QA UAT
+        "STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED", "STACKY_QA_UAT_STATE_WAITS_ENABLED",
+        "STACKY_QA_UAT_RESPECT_WORKERS_ENABLED", "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED",
+        "STACKY_QA_UAT_DATA_CACHE_ENABLED", "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED",
         # Plan 209 — guia "Como validar esto" para el usuario de RS
         "STACKY_VALIDATION_PLAYBOOK_ENABLED",
         # Plan 214 — validacion QAUAT E2E al completar el Developer
@@ -514,6 +518,96 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
 # NOTA: toda flag nueva debe agregarse también a _CATEGORY_KEYS (arriba) o el test
 # test_every_registry_flag_is_categorized rompe CI a propósito (Plan 63).
 FLAG_REGISTRY: tuple[FlagSpec, ...] = (
+    # -- Plan 274 - Eficiencia de navegacion del agente QA UAT ---------------
+    # Las 6 nacen ON. Ninguna cae en (A) quemar tokens en reposo — no hay un solo
+    # LLM en todo el plan — ni en (B) escribir en un sistema real del operador.
+    FlagSpec(
+        key="STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED",
+        type="bool",
+        label="Techo de capturas por escenario en el QA UAT",
+        description=(
+            "Plan 274 F2 — Pone un techo de 25 capturas por escenario y unifica el "
+            "manejo de errores al sacarlas, conectando screenshot_budget.py, que "
+            "estaba escrito y testeado pero sin usar. Solo decide si se saca o no "
+            "un PNG en el directorio de evidencia del propio tool. Apagarla emite "
+            "el bloque sin limites (comportamiento previo al plan)."
+        ),
+        group="global",
+        env_only=False,
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_STATE_WAITS_ENABLED",
+        type="bool",
+        label="Esperar por estado en vez de dormir un tiempo fijo",
+        description=(
+            "Plan 274 F1 — El generador de specs espera a que AgendaWeb se aquiete "
+            "(waitForAgendaStable) en vez de dormir 800 ms pase lo que pase. Sin LLM "
+            "y sin escritura externa. Apagarla hace que el template vuelva a emitir "
+            "el sleep historico, sin revertir codigo."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_RESPECT_WORKERS_ENABLED",
+        type="bool",
+        label="Respetar QA_UAT_WORKERS en vez de ignorarlo",
+        description=(
+            "Plan 274 F3 — El runner deja de inyectar un numero fijo de workers que "
+            "pisaba QA_UAT_WORKERS. ENCENDERLA NO CAMBIA EL COMPORTAMIENTO: el "
+            "default de la env var sigue siendo 1 y una guardia fuerza 1 mientras no "
+            "haya sesion por worker (AgendaWeb es WebForms con una sola sesion). "
+            "Solo elimina una config que mentia."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED",
+        type="bool",
+        label="Probar el deep link antes de gastar una corrida en el",
+        description=(
+            "Plan 274 F4 — Antes de usar un deep link, un GET HTTP de SOLO LECTURA "
+            "contra la propia AgendaWeb verifica que no redirija a login. No corre en "
+            "reposo: solo cuando el pipeline ya decidio usar un deeplink. Falla "
+            "ABIERTO: si el probe no puede correr, el flujo sigue como antes."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_DATA_CACHE_ENABLED",
+        type="bool",
+        label="Reusar el dato de test ya resuelto por SQL",
+        description=(
+            "Plan 274 F6 — Cachea en disco local, por campo y con TTL de 8 h, el "
+            "resultado de un SELECT ya ejecutado, para no repetirlo en cada corrida. "
+            "REDUCE la carga sobre la BD del operador y no escribe en ella. No se "
+            "cachean errores ni resultados vacios, y QA_UAT_FORCE_RUN lo saltea."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_STAGE_DEADLINE_ENABLED",
+        type="bool",
+        label="Chequear el presupuesto de 6 minutos en mas etapas",
+        description=(
+            "Plan 274 F7 — El presupuesto maximo de la corrida se consulta en 8 "
+            "etapas en vez de 2, para cortar antes de EMPEZAR una etapa pesada si ya "
+            "no hay tiempo. Cortar por deadline YA es el comportamiento actual: esto "
+            "solo lo extiende."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
     # -- Plan 240 F8 / Plan 241 F8 - Agente QA UAT E2E -----------------------
     FlagSpec(
         key="STACKY_QA_UAT_ADO_BRIDGE_ENABLED",

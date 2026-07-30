@@ -1,7 +1,10 @@
 # Plan 274 — El QAUAT deja de esperar de gusto: navegación eficiente y fin de la infraestructura huérfana
 
-> **Estado:** MEJORADO (v3) — veredicto de la crítica v2: **RECHAZADO** (7 bloqueantes / 8 importantes / 5 menores),
-> corregidos en este v3.
+> **Estado:** **IMPLEMENTADO F0..F10** el 2026-07-30 — **68 tests propios verdes** (63 en el tool sobre 11 archivos +
+> 5 en el backend sobre 2 archivos), 0 fallos. **Falta el smoke manual con AgendaWeb arriba** (DoD) y, por lo tanto, el "después" de KPI-7 queda
+> declarado `NO MEDIBLE` en §9.2 — el *baseline* sí se capturó en F0.5, antes de F1.
+> Pre-flight: los 7 bloqueantes del v3 se verificaron **uno por uno contra el código real** antes de escribir nada;
+> los 7 estaban CERRADOS en el cuerpo de las fases (no solo anunciados en el changelog).
 > **Fecha:** 2026-07-30
 > **Origen:** auditoría de eficiencia de navegación pedida por el operador (agente QA/UAT + Playwright sobre AgendaWeb).
 > **Advertencia sobre este header:** el campo `Estado:` **NO es evidencia**. Hay precedente de 7 planes cuyo header decía
@@ -1943,34 +1946,71 @@ independientes: las dos editan `templates/playwright_test.spec.ts.j2` **y las do
 > **F8 no está hecha**. Acá también va, por escrito: la **deuda H8 aceptada** con los 3 motivos de V11, y —si
 > corresponde— la declaración de `KPI-7 NO MEDIBLE` con su causa.
 
+**Estado: COMPLETADA en la implementación del 2026-07-30.** Los 11 módulos del corpus tienen veredicto escrito.
+
 | Módulo | Veredicto | Evidencia (`archivo:línea` del importador o razón) |
 |---|---|---|
-| `navigation_driver.py` | _(pendiente F8.1)_ | |
-| `playwright/helpers/navigation_executor.ts` | _(pendiente F8.1)_ | |
-| `playwright/instrumented_actions.ts` | _(pendiente F8.1)_ | |
-| `deeplink_readiness_checker.py` | _(esperado: CONECTADO en F4)_ | |
-| `playwright/helpers/arrival_validator.ts` | _(pendiente F8.1)_ | ojo: ya tiene 1 importador (`navigation_executor.ts:26`), que **también** es huérfano |
-| `locator_quality.py` | _(esperado: CONECTADO en F5)_ | |
-| `playbook_performance.py` | _(esperado: CONECTADO en F7.2, **lectura Y escritura**)_ | |
-| `test_data_cache.py` | _(esperado: CONECTADO en F6)_ | |
-| `screenshot_budget.py` | _(esperado: CONECTADO en F2)_ | |
-| `playwright/helpers/grid_precheck.ts` | _(pendiente F8.1)_ | |
-| `playwright/helpers/session_guard.ts` | _(pendiente F8.1)_ | |
+| `navigation_driver.py` | **MANTENER COMO DEUDA DECLARADA** | Duplica `webforms_nav.ts` (el único helper vivo). El backoff `[1,2,4,8]` está reimplementado en los dos lenguajes (`navigation_driver.py:105` y `playwright/helpers/webforms_nav.ts:76`). Borrar 975 líneas es un cambio de riesgo propio, no una fase de este plan. Plan futuro sin número. |
+| `playwright/helpers/navigation_executor.ts` | **MANTENER COMO DEUDA DECLARADA** | Misma duplicación que el anterior (793 líneas). Además es el único importador de `arrival_validator.ts`, así que borrarlo deja a ese otro en 0. Plan futuro sin número. |
+| `playwright/instrumented_actions.ts` | **MANTENER COMO DEUDA DECLARADA** | Telemetría por acción; candidato a conectarse en el plan que abra el paralelismo (F7.3), donde la atribución por worker sí hace falta. |
+| `deeplink_readiness_checker.py` | **CONECTADO EN F4** | `navigation_strategy_resolver.py:394-424` (import perezoso dentro de la rama deeplink). `prod_reachable == True`: el resolver lo importa `qa_uat_pipeline.py`. |
+| `playwright/helpers/arrival_validator.ts` | **MANTENER COMO DEUDA DECLARADA** | Sigue con 1 importador textual (`navigation_executor.ts:26`) que **también** es huérfano ⇒ alcance de producción 0. Se conecta cuando se conecte su importador. |
+| `locator_quality.py` | **CONECTADO EN F5** | `qa_uat_pipeline.py` → `_score_locator_quality()`, invocado dentro de la etapa `selector_contract`. Observabilidad pura: no cambia ninguna decisión de navegación. |
+| `playbook_performance.py` | **CONECTADO EN F7.2, EN LAS DOS DIRECCIONES** | Escritura: `uat_test_runner.py` → `_record_run_history()` desde `run()`, tras calcular `duration_ms`. Lectura: `_resolve_timeout_ms()`. Sin la mitad de escritura, `recommend_timeout_ms` devolvía `default_ms` para siempre. |
+| `test_data_cache.py` | **CONECTADO EN F6** | `data_resolver.py`, cache-aside **por campo** alrededor de `_run_sqlcmd` dentro de `resolve_fields`. |
+| `screenshot_budget.py` | **CONECTADO EN F2** | `playwright_test_generator.py` → `_screenshot_budget_block()`, inyectado en los **dos** `template.render(...)`. |
+| `playwright/helpers/grid_precheck.ts` | **MANTENER COMO DEUDA DECLARADA** | Pre-chequeo de grilla; candidato del plan que abra el paralelismo. No se borra: 172 líneas testeadas. |
+| `playwright/helpers/session_guard.ts` | **MANTENER COMO DEUDA DECLARADA** | Guardia de sesión; es justamente lo que hace falta para la sesión por worker de F7.3. Borrarlo sería tirar la pieza que el próximo plan necesita. |
 
-**Valores finales de KPI (a completar):**
+**Prohibido borrar código en esta fase, y no se borró: el entregable es el veredicto.**
 
-| KPI | Comando | Antes (medido 2026-07-30) | Meta | Después |
+**Valores finales de KPI (medidos el 2026-07-30, tras la implementación):**
+
+| KPI | Comando | Antes (medido 2026-07-30) | Meta | **Después (real)** |
 |---|---|---|---|---|
-| KPI-1 ms de espera fija | `C-1` | 35 900 / 26 occ | ≤ 3 000 | |
-| KPI-2 espera fija en el generador | `C-2` | 1 | 0 o marcada | |
-| KPI-3 capturas sin guardia | `C-3` / `C-9` | 18 de 19 | exactamente `{325,496,798,806}` | |
-| KPI-4a `direct == 0` | `C-4` | 10 | **5** | |
-| KPI-4a-bis `prod_reachable == False` | F0.2 | 11 | **6** | |
-| KPI-4b veredictos escritos | §9 | 0 de 11 | 11 de 11 | |
-| KPI-5 `_check_deadline` **en scope** | `C-5` + **`C-8`** | 3 líneas (2 llamadas, 0 fuera de scope) | 9 líneas (8 llamadas, **0 fuera de scope**) | |
-| KPI-6 workers honesto | `C-6` | falso | verdadero | |
-| KPI-7 reloj de pared | `C-7` | **70 030 ms / 3 tests = 23 343 ms por test** *(capturar en **F0.5**, antes de F1)* | ≤ baseline × 1,10 | |
-| KPI-8 PNG emitidos | `C-9` | `con_guardia = 0`, sin techo | `con_guardia = 15` + techo de 25 activándose | |
+| KPI-1 ms de espera fija | `C-1` | 35 900 / 26 occ | ≤ 3 000 | **500 ms / 1 occ** ✅ |
+| KPI-2 espera fija en el generador | `C-2` | 1 | 0 o marcada | **1, y es la rama `{% else %}` del rollback por flag** ✅ |
+| KPI-3 capturas sin guardia | `C-3` / `C-9` | 18 de 19 | exactamente `{325,496,798,806}` | **4, las mismas por artefacto: ahora `{343, 514, 817, 825}`** (el bloque de presupuesto corrió el `.j2`; se anclan por `path`, no por línea) ✅ |
+| KPI-4a `direct == 0` | `C-4` | 10 | **5** | **5** ✅ |
+| KPI-4a-bis `prod_reachable == False` | F0.2 | 11 | **6** | **6** ✅ |
+| KPI-4b veredictos escritos | §9 | 0 de 11 | 11 de 11 | **11 de 11** ✅ |
+| KPI-5 `_check_deadline` **en scope** | `C-5` + **`C-8`** | 3 líneas (2 llamadas, 0 fuera de scope) | 9 líneas (8 llamadas, **0 fuera de scope**) | **`C-5`=9; `C-8`: `llamadas_totales=8 en_scope=8 FUERA_DE_SCOPE=[]`** ✅ |
+| KPI-6 workers honesto | `C-6` | falso | verdadero | **verdadero** (0 líneas con el literal; `_resolve_workers()` con guardia de sesión) ✅ |
+| KPI-7 reloj de pared | `C-7` | **70 030 ms / 3 tests = 23 343 ms por test** | ≤ baseline × 1,10 | **baseline capturado en F0.5** (`reports/plan274_wallclock_baseline.json`, `startTime=2026-07-26T00:36:03.100Z`, anterior a todo cambio de F1). **El "después" queda NO MEDIBLE hasta el smoke manual** — ver abajo. |
+| KPI-8 PNG emitidos | `C-9` | `con_guardia = 0`, sin techo | `con_guardia = 15` + techo de 25 activándose | **`con_guardia = 15`; techo demostrado: 30 pasos ⇒ 25 `True` / 5 `False`** ✅ |
+
+### §9.1. Deuda H8 — ACEPTADA (los 3 motivos de V11)
+
+Los ~90 tests del tool (y los 11 nuevos de este plan) **no entran a los dos ratchets**, y no es una omisión:
+
+1. `run_harness_tests.sh` hace `cd backend` y lista rutas **peladas, sin comillas**, en un array bash. La ruta del tool
+   tiene **dos espacios** ⇒ word-splitting: `pytest` recibiría `../../Stacky` y reventaría.
+2. Los dos meta-tests solo reconocen rutas bajo `tests/`: `_SH_RE = ^\s*(tests/[\w/]+\.py)\s*$` y
+   `_PS1_RE = ^\s*"(tests/[\w/]+\.py)"\s*,?\s*$` (`backend/tests/test_plan259_ratchet_script_parity.py:27,29`).
+   `[\w/]` no admite espacios ni `.` ⇒ una entrada del tool quedaría **muda**: registrada y vigilada por ningún gate.
+3. `test_plan259_ratchet_script_parity.py` compara los dos scripts **como conjuntos** y ya divergen en 64 entradas
+   (718 vs 654): cualquier registro asimétrico agrava un rojo ajeno.
+
+⇒ Lo único obligatorio, y lo que se hizo: registrar los **2 archivos de backend**
+(`test_plan274_tool_tests_outside_ratchet.py` y `test_plan274_efficacy_gates.py`) en **los dos** scripts, con la
+sintaxis de cada uno, y **no** agregarlos a `harness_ratchet_allowlist.txt` (estar en las dos listas está prohibido).
+Los 11 del tool se corren con los comandos explícitos de §4.
+
+### §9.2. KPI-7 — `NO MEDIBLE` en el "después", con su causa
+
+El baseline **sí** quedó capturado antes de F1 (que es lo que el v2 hacía mal). Lo que falta es la corrida "después":
+medirla exige **AgendaWeb arriba**, que es el mismo prerequisito del smoke manual del DoD y no está disponible en este
+entorno. Queda **pendiente y declarado**, no inventado. Además, el único reporte real del repo corrió **otros** specs
+(`P01/P02/P03` del ticket 367), así que cuando se tome la medición "después" hay que anotar si se corrieron **los mismos
+specs**: comparar dos corridas de specs distintos no es un ratchet, es ruido.
+
+### §9.3. Hallazgo de implementación — una SEXTA pata de flag que el plan no nombra
+
+`_export_qa_uat_flags()` itera una **tupla explícita**, `_QA_UAT_FLAG_KEYS` (`backend/api/qa_uat.py:82`). Una flag
+registrada en los 5 archivos del arnés **y leída por el tool** (pata 7 en verde) pero **ausente de esa tupla** nunca se
+exporta al entorno: el tool hace `os.environ.get(KEY, "true")`, jamás ve el valor apagado, y **el interruptor del panel
+del operador no hace nada**. Es la clase de V6 por otro mecanismo. Las 6 flags se agregaron ahí y el gate
+`test_toda_flag_del_plan_llega_al_tool` (F10) lo vigila con `ast`.
 
 > **Recordatorio de honestidad (v3).** La fila KPI-7 "Antes" es el reloj del **único** reporte real del repo, que
 > corrió **otros** specs (P01/P02/P03 del ticket 367). Si el baseline de F0.5 se toma sobre una corrida distinta,

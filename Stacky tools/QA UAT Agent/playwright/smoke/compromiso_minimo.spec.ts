@@ -1,6 +1,8 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+// plan-274 F1.2 — espera por ESTADO en vez de espera de reloj.
+import { waitForAspNetIdle } from '../helpers/webforms_nav';
 
 const BASE_URL = normalizeBaseUrl(process.env.AGENDA_WEB_BASE_URL || 'http://localhost:35017/AgendaWeb/');
 const CLCOD = process.env.QA_UAT_COMPROMISO_CLCOD || process.env.QA_UAT_CLCOD || '7780380119179197';
@@ -112,7 +114,7 @@ async function fillProjection(page: Page): Promise<void> {
   await input.click({ force: true });
   await input.fill(MONTO);
   await input.press('Tab').catch(() => undefined);
-  await page.waitForTimeout(300);
+  await waitForAspNetIdle(page);
   const value = await input.inputValue().catch(() => '');
   if (!value || value === '0') {
     throw new Error(`APP_PROYECCION_NO_CARGADA expected monto=${MONTO}, got=${value}`);

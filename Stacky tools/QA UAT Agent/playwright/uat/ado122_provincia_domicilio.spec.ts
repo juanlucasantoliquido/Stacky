@@ -10,6 +10,8 @@
 import { test, expect, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+// plan-274 F1.2 — espera por ESTADO en vez de espera de reloj.
+import { waitForAspNetIdle } from '../helpers/webforms_nav';
 
 const BASE_URL = (process.env.AGENDA_WEB_BASE_URL || 'http://localhost:35017/AgendaWeb/').replace(/\/$/, '');
 const NAV_TIMEOUT = parseInt(process.env.QA_UAT_NAV_TIMEOUT_MS || '45000');
@@ -47,7 +49,7 @@ async function navigateToDetalleCliente(page: Page, clcod: string) {
     await page.goto(`${BASE_URL}/FrmAgenda.aspx`, { waitUntil: 'load', timeout: NAV_TIMEOUT });
   }
   await waitForLoader(page);
-  await page.waitForTimeout(2000);
+  await waitForAspNetIdle(page);
 
   // Try to find specific LOCOD in agenda grids
   const agendaRows = page.locator('[id$="GridAgendaUsu"] tbody tr, [id$="GridAgendaAut"] tbody tr');
@@ -75,7 +77,7 @@ async function navigateToDetalleCliente(page: Page, clcod: string) {
   if (clickedViaAgenda) {
     await page.waitForURL(/FrmDetalleClie/i, { timeout: NAV_TIMEOUT }).catch(() => {});
     await waitForLoader(page);
-    await page.waitForTimeout(1000);
+    await waitForAspNetIdle(page);
   } else {
     // ── Method 2: FrmBusqueda two-grid flow ─────────────────────────────────
     // GridPersonas click → loads GridObligaciones (no navigation)
@@ -99,7 +101,7 @@ async function navigateToDetalleCliente(page: Page, clcod: string) {
       ).catch(() => null);
       await page.click('[id$="btnOk"]', { timeout: NAV_TIMEOUT });
       await respPromise;
-      await page.waitForTimeout(1500);
+      await waitForAspNetIdle(page);
     } else {
       console.log('NAV WARN: abfCodCliente input not found');
     }
@@ -119,7 +121,7 @@ async function navigateToDetalleCliente(page: Page, clcod: string) {
       ).catch(() => null);
       await personRows.first().click();
       await resp2Promise;
-      await page.waitForTimeout(1500);
+      await waitForAspNetIdle(page);
 
       const obligRows = page.locator('[id$="GridObligaciones"] tbody tr');
       const obligCount = await obligRows.count().catch(() => 0);
@@ -134,7 +136,7 @@ async function navigateToDetalleCliente(page: Page, clcod: string) {
           console.log(`NAV WARN: URL did not change to FrmDetalleClie after clicking obligation`);
         });
         await waitForLoader(page);
-        await page.waitForTimeout(1000);
+        await waitForAspNetIdle(page);
       } else {
         console.log(`NAV WARN: No GridObligaciones results for CLCOD=${clcod}`);
         return;
@@ -170,7 +172,8 @@ async function navigateToDetalleCliente(page: Page, clcod: string) {
       await relTabEl.click();
       const tabResp = await tabRespPromise;
       console.log(`NAV: Tab postback response received=${tabResp !== null}`);
-      await page.waitForTimeout(2000); // Allow Materialize to re-initialize
+      // plan-274 F1.2: espera no determinada — Materialize re-inicializa por JS propio, sin estado observable; revisar con AgendaWeb arriba
+      await page.waitForTimeout(500);
     }
 
     // After the postback, tabRelaciones panel may be CSS-hidden if Materialize hasn't re-shown it.
@@ -235,7 +238,7 @@ async function expandDireccionesSection(page: Page): Promise<void> {
     console.log(`EXPAND: alt DIRECCION header visible=${altVisible}`);
     if (altVisible) {
       await altHeader.click();
-      await page.waitForTimeout(800); // Wait for Materialize animation
+      await page.locator('[id$="colDirecciones"] .collapsible-body').first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => null);
       await waitForLoader(page);
     }
     return;
@@ -246,7 +249,7 @@ async function expandDireccionesSection(page: Page): Promise<void> {
   console.log(`EXPAND: colDirecciones body alreadyExpanded=${alreadyExpanded}`);
   if (!alreadyExpanded) {
     await sectionHeader.click();
-    await page.waitForTimeout(800); // Wait for Materialize CSS animation to complete
+    await sectionContent.waitFor({ state: 'visible', timeout: 10000 }).catch(() => null);
     await waitForLoader(page);
   }
 }
@@ -278,7 +281,7 @@ async function openNuevaDireccionDialog(page: Page): Promise<boolean> {
   console.log(`DIALOG: UpdatePanel response received=${resp !== null}`);
 
   // Wait for _processControlActionsPageLoaded to fire and Materialize modal('open') to run
-  await page.waitForTimeout(2000);
+  // plan-274 F1.2: el waitFor({ state: 'visible' }) de abajo ya es la espera por estado
 
   // Use waitFor({ state: 'visible' }) which retries — isVisible() does NOT retry
   const dialogSel = '[id$="dlgFormAgregarModificarDireccion"]';
@@ -326,7 +329,7 @@ async function selectDomicilioInGrid(page: Page, coddom: string): Promise<boolea
       await firstRow.click();
       const resp = await clickRespPromise;
       console.log(`SELECT-DOM: First row click response received=${resp !== null}`);
-      await page.waitForTimeout(500);
+      await waitForAspNetIdle(page);
       return true;
     }
     return false;
@@ -334,7 +337,7 @@ async function selectDomicilioInGrid(page: Page, coddom: string): Promise<boolea
   await row.click();
   const resp = await clickRespPromise;
   console.log(`SELECT-DOM: Row click response received=${resp !== null}`);
-  await page.waitForTimeout(500);
+  await waitForAspNetIdle(page);
   return true;
 }
 
@@ -355,7 +358,7 @@ async function openModificarDireccionDialog(page: Page, coddom: string): Promise
   await page.locator(btnModSel).first().click({ timeout: NAV_TIMEOUT });
   const resp = await respPromise;
   console.log(`MODIFY-DLG: UpdatePanel response received=${resp !== null}`);
-  await page.waitForTimeout(2000);
+  // plan-274 F1.2: el waitFor({ state: 'visible' }) de abajo ya es la espera por estado
 
   const dialogSel = '[id$="dlgFormAgregarModificarDireccion"]';
   try {
@@ -600,7 +603,7 @@ test.describe('ADO-122 RF-008 — Provincia y Departamento Territorial en Domici
     console.log('P05: Clicked Guardar, waiting for save response...');
     const saveResp = await saveRespPromise;
     console.log(`P05: Save response received=${saveResp !== null}`);
-    await page.waitForTimeout(1000);
+    await waitForAspNetIdle(page);
     await ss(page, 'p05_05_after_save');
 
     // After successful save: AgregarDomicilio() hides btnAgregarDomicilioFinal (Visible=false → removed from DOM)
@@ -622,7 +625,7 @@ test.describe('ADO-122 RF-008 — Provincia y Departamento Territorial en Domici
       ).catch(() => null);
       await btnCancelDlg.click();
       await closeRespPromise;
-      await page.waitForTimeout(1000);
+      await waitForAspNetIdle(page);
     }
     await ss(page, 'p05_07_dialog_closed');
 
@@ -639,7 +642,7 @@ test.describe('ADO-122 RF-008 — Provincia y Departamento Territorial en Domici
       ).catch(() => null);
       await gridRow.click();
       await rowRespPromise;
-      await page.waitForTimeout(500);
+      await waitForAspNetIdle(page);
 
       const btnMod = page.locator('[id$="btnModificarDireccion"]').first();
       if (await btnMod.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -649,7 +652,7 @@ test.describe('ADO-122 RF-008 — Provincia y Departamento Territorial en Domici
         ).catch(() => null);
         await btnMod.click({ timeout: NAV_TIMEOUT });
         await modRespPromise;
-        await page.waitForTimeout(2000);
+        await page.locator('[id$="dlgFormAgregarModificarDireccion"]').first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => null);
         await ss(page, 'p05_08_reopen_dialog');
 
         // Read ddlProvincia value via evaluate (bypasses Materialize visibility)
@@ -730,7 +733,7 @@ test.describe('ADO-122 RF-008 — Provincia y Departamento Territorial en Domici
     console.log('P06: Clicked Guardar (sin Provincia), waiting for save response...');
     const saveResp = await saveRespPromise;
     console.log(`P06: Save response received=${saveResp !== null}`);
-    await page.waitForTimeout(1000);
+    await waitForAspNetIdle(page);
     await ss(page, 'p06_05_after_save');
 
     // After successful save: AgregarDomicilio() hides btnAgregarDomicilioFinal (removed from DOM)

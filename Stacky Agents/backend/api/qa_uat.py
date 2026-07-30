@@ -85,6 +85,16 @@ _QA_UAT_FLAG_KEYS = (
     "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED",
     "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+    # Plan 274 — eficiencia de navegacion. Sin figurar en ESTA tupla, una flag
+    # registrada en los 5 archivos del arnes queda MUDA para el tool: el modulo
+    # lee os.environ.get(KEY, "true") y nunca ve el valor apagado, asi que el
+    # toggle de la UI no hace nada. Es una 6a pata, no opcional.
+    "STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED",
+    "STACKY_QA_UAT_STATE_WAITS_ENABLED",
+    "STACKY_QA_UAT_RESPECT_WORKERS_ENABLED",
+    "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED",
+    "STACKY_QA_UAT_DATA_CACHE_ENABLED",
+    "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED",
 )
 
 

@@ -57,6 +57,44 @@ _NAV_CONTRACTS_PATH = Path(__file__).resolve().parent / "navigation_contracts.ym
 _NAV_CONTRACTS_CACHE: Optional[dict] = None
 
 
+# ── plan-274 F1/F2 — flags del arnes leidas por el generador ─────────────────
+# El pipeline QA UAT corre in-process y api/qa_uat.py exporta las flags al
+# entorno antes de lanzarlo, por eso se leen por os.environ (config.py:1222-1223).
+# OJO: el Environment de Jinja usa StrictUndefined, asi que TODA variable que el
+# template consulte tiene que ir en los DOS `template.render(...)` o el render
+# revienta con template_render_failed.
+
+def _state_waits_enabled() -> bool:
+    """plan-274 F1.1 — ON: espera por estado. OFF: el sleep historico de 800 ms."""
+    return os.environ.get("STACKY_QA_UAT_STATE_WAITS_ENABLED", "true").lower() == "true"
+
+
+def _screenshot_budget_block() -> str:
+    """plan-274 F2 — bloque TS del presupuesto de capturas.
+
+    Con la flag OFF se emite el bloque de la rama `disabled` de
+    `build_ts_budget_block` (`__shouldCapture` devuelve true siempre), que es el
+    rollback exacto al comportamiento historico. La flag nueva NO esta cableada
+    al modulo por si sola: `load_budget()` solo mira
+    QA_UAT_SCREENSHOT_BUDGET_DISABLED (screenshot_budget.py:99), asi que hay que
+    construir el ScreenshotBudget deshabilitado a mano.
+
+    Degrada, no rompe: si el modulo o su config fallan, devuelve "" y el
+    template emite las capturas sin guardia (comportamiento de hoy).
+    """
+    try:
+        from screenshot_budget import ScreenshotBudget, build_ts_budget_block, load_budget
+        if os.environ.get("STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED", "true").lower() == "true":
+            budget = load_budget()
+        else:
+            budget = ScreenshotBudget(disabled=True)
+        return build_ts_budget_block(budget)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("plan-274 F2: presupuesto de capturas no disponible (%s); "
+                       "el spec se genera sin guardia", exc)
+        return ""
+
+
 def _load_nav_contracts() -> dict:
     """Load navigation_contracts.yml once per process. Returns {} on failure."""
     global _NAV_CONTRACTS_CACHE
@@ -398,6 +436,10 @@ def run(
                 aspnet_exception_detector_js=aspnet_exception_detector_js,
                 # Fase 2: resolved values from precondition_parser pipeline
                 resolved_values=_resolved_values.get(sid, _resolved_values),
+                # plan-274 F1.1 — rama de rollback de STACKY_QA_UAT_STATE_WAITS_ENABLED
+                state_waits_enabled=_state_waits_enabled(),
+                # plan-274 F2 — presupuesto de capturas (techo de 25 por escenario)
+                screenshot_budget_block=_screenshot_budget_block(),
             )
         except Exception as exc:
             return _err("template_render_failed", f"Jinja2 render failed for {sid}: {exc}")
@@ -945,6 +987,10 @@ def _render_from_playbook(
             screen_error_detector_js="",
             aspnet_exception_detector_js="",
             resolved_values={},
+            # plan-274 F1.1 — rama de rollback de STACKY_QA_UAT_STATE_WAITS_ENABLED
+            state_waits_enabled=_state_waits_enabled(),
+            # plan-274 F2 — presupuesto de capturas (techo de 25 por escenario)
+            screenshot_budget_block=_screenshot_budget_block(),
         )
     except Exception as exc:
         return {

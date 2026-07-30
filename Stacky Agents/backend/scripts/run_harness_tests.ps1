@@ -827,7 +827,28 @@ $HarnessTestFiles = @(
   "tests/test_devops_actions_api.py",
   "tests/test_devops_action_matcher.py",
   "tests/test_devops_action_ratchet.py",
-  "tests/test_plan267_help.py"
+  "tests/test_plan267_help.py",
+
+  # Plan 217 - Migrador Mantis->GitLab: pasada de ESTADO (cerrar/reabrir).
+  # NOTA: los otros 25 archivos test_mg_* siguen SOLO en el .sh (deuda
+  # pre-existente de paridad, _PS1_LAG_MAX de test_plan259_ratchet_script_parity).
+  # Este se agrega aca para no AUMENTAR ese lag; saldar la deuda de los otros 25
+  # es alcance de quien la tome.
+  "tests/test_mg_states.py",
+  "tests/test_mg_dates.py",
+  "tests/test_mg_filtro_estados.py",
+  "tests/test_mg_historial.py",
+  "tests/test_mg_reanudacion.py",
+  "tests/test_mg_cache_view.py",
+  "tests/test_mg_cableado_config.py",
+
+  # Plan 274 - eficiencia de navegacion del agente de UAT.
+  # Sus 11 tests quedan FUERA a proposito (deuda H8 aceptada, F8.3): esa ruta
+  # tiene espacios y no matchea el regex del meta-test de paridad.
+  # El nombre del tool no se transcribe: un test de este plan exige 0
+  # menciones en estos scripts, comentarios incluidos.
+  "tests/test_plan274_tool_tests_outside_ratchet.py",
+  "tests/test_plan274_efficacy_gates.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

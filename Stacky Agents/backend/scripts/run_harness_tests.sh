@@ -648,6 +648,28 @@ HARNESS_TEST_FILES=(
   tests/test_mg_executor.py
   tests/test_mg_attachments.py
   tests/test_mg_links.py
+  # — Plan 217 · Migrador Mantis→GitLab (pasada de ESTADO: cerrar/reabrir) —
+  tests/test_mg_states.py
+  # — Plan 217 · Migrador Mantis→GitLab (fidelidad de FECHAS: backdating) —
+  tests/test_mg_dates.py
+  # — Plan 217 · Migrador Mantis→GitLab (gate anti-extracción-truncada) —
+  tests/test_mg_filtro_estados.py
+  # — Plan 217 · Migrador Mantis→GitLab (historial: fecha real de cierre + resolución) —
+  tests/test_mg_historial.py
+  # — Plan 217 · Migrador Mantis→GitLab (reanudar sin duplicar ni dejar huecos) —
+  tests/test_mg_reanudacion.py
+  # — Plan 217 · Migrador Mantis→GitLab (caché de view.php: 4 requests -> 1) —
+  tests/test_mg_cache_view.py
+  # — Plan 217 · Migrador Mantis→GitLab (el config LLEGA al payload) —
+  tests/test_mg_cableado_config.py
+  # — Plan 274 · eficiencia de navegación del agente de UAT —
+  #   Sus 11 tests viven en el tool externo y NO se registran acá: esa ruta
+  #   tiene espacios (word-splitting en el array bash) y no matchea el
+  #   regex `tests/[\w/]+\.py` del meta-test. Deuda H8 ACEPTADA (F8.3).
+  #   El nombre del tool no se transcribe: un test de este plan exige 0
+  #   menciones en estos scripts, comentarios incluidos.
+  tests/test_plan274_tool_tests_outside_ratchet.py
+  tests/test_plan274_efficacy_gates.py
   # — Plan 217 · Migrador Mantis→GitLab (F7: verify + reporte + anti-PII; F8: retry/circuit breaker) —
   tests/test_mg_verify.py
   tests/test_mg_report.py

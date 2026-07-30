@@ -61,6 +61,14 @@ logger = logging.getLogger("stacky.qa_uat.navigation_strategy_resolver")
 _TOOL_VERSION = "1.0.0"
 _DEFAULT_CONTRACTS_PATH = Path(__file__).resolve().parent / "navigation_contracts.yml"
 
+# plan-274 F4 — techo del probe de deeplink, en SEGUNDOS.
+# Es constante de modulo, NO env var: el riel del producto dice que toda config
+# del operador va por UI y solo los kill-switches son env-only; un timeout de
+# probe no lo es. El default del modulo es 10 s; se acota a 5 para que el peor
+# caso del probe no se coma el presupuesto de 6 min que F7.1 protege.
+# Si algun dia hay que exponerlo, entra como FlagSpec(type="float").
+_DEEPLINK_PROBE_TIMEOUT_S: float = 5.0
+
 # ── Lanes that require human path (may NOT use deeplink unless override) ──────
 _HUMAN_ONLY_LANES: frozenset[str] = frozenset({
     "uat_human",
@@ -391,6 +399,44 @@ def resolve_navigation_strategy(
                 url = url.replace(f"{{{param}}}", str(available_data[param]))
         except Exception:
             url = pattern
+        # ── plan-274 F4 — probar el deeplink ANTES de gastar una corrida en el ──
+        # Falla ABIERTO a proposito: si el probe no puede correr (modulo ausente,
+        # red caida, timeout), `probe is None` y el flujo sigue exactamente como
+        # hoy. Un probe roto no debe bloquear una corrida que antes funcionaba.
+        if os.environ.get("STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED", "true").lower() == "true":
+            probe = None
+            try:
+                # Import PEREZOSO a proposito: deeplink_readiness_checker importa
+                # este mismo modulo, asi que un import a nivel de modulo seria
+                # circular.
+                from deeplink_readiness_checker import check_deeplink_readiness
+                # Firma real (deeplink_readiness_checker.py:77-84):
+                #   check_deeplink_readiness(screen, params=None, base_url=None,
+                #                            contracts_path=None, timeout_s=10.0, ...)
+                # base_url se omite a proposito: el modulo cae a AGENDA_WEB_BASE_URL
+                # por si mismo.
+                probe = check_deeplink_readiness(
+                    screen=target_screen,
+                    params=available_data,
+                    contracts_path=contracts_path,
+                    timeout_s=_DEEPLINK_PROBE_TIMEOUT_S,
+                )
+            except Exception:  # noqa: BLE001
+                probe = None            # el probe NUNCA decide por una excepcion propia
+            # Contrato REAL del modulo: devuelve "decision" in {"PASS","BLOCKED"}
+            # (:340 y :143). NO devuelve ninguna clave "ready".
+            if probe is not None and probe.get("decision") != "PASS":
+                return _fallback_after_failed_deeplink(
+                    ticket_id=ticket_id,
+                    scenario_id=scenario_id,
+                    target_screen=target_screen,
+                    lane=lane,
+                    human_paths=human_paths,
+                    direct_entry_allowed=direct_entry_allowed,
+                    available_data=available_data,
+                    probe=probe,
+                )
+
         return _allow(
             strategy="deeplink",
             target_screen=target_screen,
@@ -439,6 +485,86 @@ def resolve_navigation_strategy(
 
 
 # ── Builder helpers ───────────────────────────────────────────────────────────
+
+def _fallback_after_failed_deeplink(
+    ticket_id: int,
+    scenario_id: str,
+    target_screen: str,
+    lane: str,
+    human_paths: dict,
+    direct_entry_allowed: bool,
+    available_data: dict,
+    probe: dict,
+) -> dict:
+    """plan-274 F4 — el deeplink no sirve: DEGRADAR, no bloquear la corrida.
+
+    Devuelve la estrategia que el resolver ya elegiria si el deeplink no
+    estuviera permitido: `human_path` si hay alguno, si no `direct_entry` cuando
+    esta permitido, y solo como ultimo recurso `_blocked` con el motivo del probe.
+
+    (`ticket_id` y `scenario_id` no figuraban en la firma que proponia el plan,
+    pero `_blocked` los exige como posicionales obligatorios.)
+    """
+    razon = probe.get("reason") or "deeplink_probe_failed"
+    categoria = probe.get("category") or "NAV"
+    comun = {
+        "deeplink_available": True,
+        "deeplink_rejected_reason": f"probe_{razon}",
+        "deeplink_probe": {
+            "decision": probe.get("decision"),
+            "reason": razon,
+            "category": categoria,
+            "url": probe.get("url"),
+        },
+        "direct_goto_allowed": False,
+    }
+
+    if human_paths:
+        path_id, path_cfg = next(iter(human_paths.items()))
+        logger.info(
+            "plan-274 F4: deeplink de '%s' descartado por el probe (%s); "
+            "se degrada a human_path '%s'", target_screen, razon, path_id)
+        return _allow(
+            strategy="human_path",
+            target_screen=target_screen,
+            lane=lane,
+            extra={
+                **comun,
+                "path_id": path_id,
+                "entrypoint": path_cfg.get("entrypoint", target_screen),
+                "requires_data": path_cfg.get("required_data", []),
+                "data_available": all(
+                    available_data.get(k) for k in path_cfg.get("required_data", [])),
+                "required_assertions": path_cfg.get("required_assertions", []),
+            },
+        )
+
+    if direct_entry_allowed:
+        logger.info(
+            "plan-274 F4: deeplink de '%s' descartado por el probe (%s); "
+            "se degrada a direct_entry", target_screen, razon)
+        return _allow(
+            strategy="direct_entry",
+            target_screen=target_screen,
+            lane=lane,
+            extra={**comun, "direct_goto_allowed": True},
+        )
+
+    return _blocked(
+        ticket_id=ticket_id,
+        scenario_id=scenario_id,
+        target_screen=target_screen,
+        lane=lane,
+        category=categoria,
+        reason=f"DEEPLINK_NOT_READY:{razon}",
+        human_action_required=(
+            f"El deeplink de '{target_screen}' no esta listo (probe: {razon}, "
+            f"categoria {categoria}) y no hay human_path ni entrada directa "
+            f"declarados en navigation_contracts.yml."
+        ),
+        extra=comun,
+    )
+
 
 def _allow(strategy: str, target_screen: str, lane: str, extra: dict) -> dict:
     """Build an ALLOW_GENERATION result."""

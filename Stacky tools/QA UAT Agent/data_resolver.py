@@ -385,7 +385,39 @@ def resolve_fields(
             })
             continue
 
+        # ── plan-274 F6 — cache-aside POR CAMPO alrededor del SELECT ──────────
+        # El modulo test_data_cache es por campo (un archivo por campo), asi que
+        # cachear el agregado bajo una clave impediria reusar los N-1 campos ya
+        # resueltos cuando uno cambia, y romperia invalidate(field).
+        if _cache_enabled():
+            try:
+                import test_data_cache
+                hit = test_data_cache.get_data(field_name)   # respeta QA_UAT_FORCE_RUN
+                if hit is not None:
+                    logger.debug("plan-274 F6: cache HIT para %r — no se toca la BD",
+                                 field_name)
+                    resolved[field_name] = hit
+                    continue
+            except Exception as exc:  # noqa: BLE001
+                # Un cache roto (JSON corrupto, disco lleno) NUNCA debe romper
+                # una resolucion que funcionaba: se sigue por el camino SQL.
+                logger.debug("plan-274 F6: lectura de cache fallo para %r (%s); "
+                             "se resuelve por SQL", field_name, exc)
+
         value, exec_error = _run_sqlcmd(hint_query, db_server, db_user, db_pass)
+
+        # No se cachean errores ni resultados vacios: cachear un "no encontre" o
+        # una BD caida durante 8 h esconderia el problema.
+        if _cache_enabled() and value and not exec_error:
+            try:
+                import test_data_cache
+                test_data_cache.store_data(
+                    field_name, value,
+                    source="data_resolver.resolve_fields", notes="plan-274 F6")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("plan-274 F6: escritura de cache fallo para %r (%s)",
+                             field_name, exc)
+
         if exec_error:
             logger.warning(
                 "data_resolver: field %r — query execution failed: %s", field_name, exec_error
@@ -488,6 +520,15 @@ def _try_dynamic_resolution(field_name: str, description: str) -> Optional[str]:
 
 
 # ── DB execution ─────────────────────────────────────────────────────────────
+
+def _cache_enabled() -> bool:
+    """plan-274 F6 — flag del arnes que gobierna el cache de datos resueltos.
+
+    ON por default: cachear en disco local el resultado de un SELECT ya hecho
+    reduce carga sobre la BD del operador y no escribe en ella.
+    """
+    return os.environ.get("STACKY_QA_UAT_DATA_CACHE_ENABLED", "true").lower() == "true"
+
 
 def _get_db_creds() -> tuple[str, str, str]:
     """Read DB credentials from environment variables."""

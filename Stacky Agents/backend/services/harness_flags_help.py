@@ -1681,6 +1681,43 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: un ticket que agrupa a otros queda siempre trabado, porque él solo no tiene pasos para probar.",
         example="Como la nota final de una materia: sale del promedio de los parciales, no de un examen que nunca se tomó.",
     ),
+    # ── Plan 274 — El QA UAT deja de esperar de gusto ─────────────────────
+    "STACKY_QA_UAT_STATE_WAITS_ENABLED": PlainHelp(
+        what="Hace que las pruebas automáticas esperen a que la pantalla termine de cargar, en vez de esperar un tiempo fijo pase lo que pase.",
+        on_effect="Si la activás: cada paso sigue apenas la pantalla está lista, así que la prueba tarda menos sin volverse menos confiable.",
+        off_effect="Si la apagás: las pruebas nuevas vuelven a dormir un tiempo fijo en cada paso, aunque la pantalla ya esté lista.",
+        example="Como esperar el ascensor: te subís cuando se abre la puerta, no cuando pasaron 30 segundos.",
+    ),
+    "STACKY_QA_UAT_SCREENSHOT_BUDGET_ENABLED": PlainHelp(
+        what="Le pone un tope a la cantidad de capturas de pantalla que guarda una prueba, para que la evidencia no se vuelva impossible de mirar.",
+        on_effect="Si la activás: una prueba guarda como mucho 25 capturas, y sigue guardando más cuando algo falla que cuando todo sale bien.",
+        off_effect="Si la apagás: la prueba guarda una captura por paso sin ningún tope, como antes.",
+        example="Como sacar fotos en un viaje: mejor 25 buenas que 300 iguales que nadie va a revisar.",
+    ),
+    "STACKY_QA_UAT_RESPECT_WORKERS_ENABLED": PlainHelp(
+        what="Hace que el número de pruebas en paralelo que configurás se respete de verdad, en vez de ser ignorado en silencio.",
+        on_effect="Si la activás: el valor que ponés se tiene en cuenta; igual se fuerza 1 mientras la app siga usando una sola sesión, y queda avisado en el log.",
+        off_effect="Si la apagás: el número queda fijo en 1 y tu configuración se ignora sin decírtelo.",
+        example="Como el control de temperatura de un horno: si lo movés y no cambia nada, mejor que te lo diga antes de que esperes otra cosa.",
+    ),
+    "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED": PlainHelp(
+        what="Antes de entrar directo a una pantalla por su dirección, revisa que esa dirección funcione y no te devuelva al login.",
+        on_effect="Si la activás: si el atajo no sirve, la prueba se va por el camino largo en vez de gastar toda la corrida en una pantalla equivocada.",
+        off_effect="Si la apagás: se usa el atajo sin verificarlo, y si estaba roto la corrida se pierde entera.",
+        example="Como probar la llave antes de cargar las bolsas del super: si no abre, mejor enterarte con las manos vacías.",
+    ),
+    "STACKY_QA_UAT_DATA_CACHE_ENABLED": PlainHelp(
+        what="Guarda por un rato los datos de prueba que ya se consultaron a la base, para no volver a preguntar lo mismo en cada corrida.",
+        on_effect="Si la activás: la segunda corrida reusa el dato guardado (hasta 8 horas) y le pega menos a la base de datos.",
+        off_effect="Si la apagás: cada corrida vuelve a consultar la base desde cero.",
+        example="Como anotarte el número de cliente en un papel: no se lo volvés a pedir cada vez que lo necesitás.",
+    ),
+    "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED": PlainHelp(
+        what="Revisa el reloj en más momentos de la corrida, para no arrancar una etapa pesada cuando ya no queda tiempo.",
+        on_effect="Si la activás: la corrida corta antes y te dice en qué etapa se quedó sin tiempo, en vez de morir sin explicación.",
+        off_effect="Si la apagás: el reloj se mira solo en dos momentos y una etapa larga puede arrancar igual.",
+        example="Como mirar la hora antes de empezar una película de 3 horas si el último tren sale en una.",
+    ),
     # ── Plan 171 — Telemetría operativa ───────────────────────────────────
     "STACKY_OPS_TELEMETRY_ENABLED": PlainHelp(
         what="Muestra, dentro del Centro de Costos, cómo viene funcionando cada agente: cuántas corridas fallaron, cuánto tardaron y cuánto costaron.",

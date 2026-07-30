@@ -296,6 +296,37 @@ export async function navigateViaDoPostBack(
     'All attempts exhausted.', screenshots, urlBefore, _safePageUrl(page));
 }
 
+// ── Espera por ESTADO (plan-274 F1.2) ─────────────────────────────────────────
+
+/**
+ * waitForAspNetIdle — plan-274 F1.2. Espera acotada hasta que ASP.NET queda quieto.
+ *
+ * Es el reemplazo de `page.waitForTimeout(N)` en los specs vivos: en vez de
+ * dormir N ms pase lo que pase, vuelve APENAS la pagina se aquieta
+ * (`readyState === 'complete'` y sin postback asincronico de UpdatePanel en
+ * vuelo). El timeout es un TECHO, no un piso.
+ *
+ * Misma implementacion que el helper canonico del generador maestro
+ * (`templates/playwright_test.spec.ts.j2:40`), exportada aca para que los specs
+ * escritos a mano la reusen en vez de duplicarla. Nunca lanza: devuelve `false`
+ * si se agoto el presupuesto, para que un sleep de mas no convierta un test en
+ * rojo por su cuenta.
+ */
+export async function waitForAspNetIdle(page: any, timeoutMs = 3_000): Promise<boolean> {
+  return await page.waitForFunction(
+    () => {
+      if (document.readyState !== 'complete') return false;
+      try {
+        const prm = (window as any).Sys?.WebForms?.PageRequestManager?.getInstance?.();
+        if (prm && prm.get_isInAsyncPostBack()) return false;
+      } catch (_) { /* sin ScriptManager => no hay postback asincronico */ }
+      return true;
+    },
+    null,
+    { timeout: timeoutMs },
+  ).then(() => true).catch(() => false);
+}
+
 // ── Type guard ────────────────────────────────────────────────────────────────
 
 export function isWebFormsNavResult(v: unknown): v is WebFormsNavResult {

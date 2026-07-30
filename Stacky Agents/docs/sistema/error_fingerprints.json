@@ -852,6 +852,20 @@
       },
       "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
       "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
+    },
+    {
+      "id": "qa_uat_deeplink_redirects_to_login",
+      "title": "Deep link de AgendaWeb que redirige a login y quema la corrida entera",
+      "class": "nav-deeplink-unready",
+      "status": "resolved",
+      "log_pattern": "deeplink_readiness_check.*\"decision\":\\s*\"BLOCKED\"",
+      "log_guarded": true,
+      "killed_by": "plan 274 F4 (probe de deep link antes de usarlo)",
+      "killed_commit": "",
+      "date_resolved": "2026-07-30",
+      "guard_test": "Stacky tools/QA UAT Agent/tests/unit/test_plan274_deeplink_probe.py",
+      "evidence": "navigation_strategy_resolver.py:394-424 (probe antes del _allow de deeplink); deeplink_readiness_checker.py:340 PASS / :143 BLOCKED; _fallback_after_failed_deeplink degrada a human_path o direct_entry",
+      "note": "El pipeline armaba la URL del deeplink con pattern.replace(...) y la usaba SIN validar. Si la sesion no estaba viva, AgendaWeb redirigia a login y los N pasos siguientes fallaban con causas enganosas (elemento no encontrado), consumiendo el presupuesto de 6 minutos. Ahora un GET de solo lectura decide antes de gastar la corrida. FALLA ABIERTO: si el probe no puede correr (probe is None), el flujo sigue exactamente como antes — un probe roto nunca bloquea lo que ya funcionaba. OJO: el modulo devuelve la clave 'decision' (PASS/BLOCKED); NO existe ninguna clave 'ready' — leerla da siempre falso y degrada el deeplink SIEMPRE."
     }
   ]
 }

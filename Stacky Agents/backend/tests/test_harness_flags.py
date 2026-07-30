@@ -925,6 +925,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED",        # Plan 274 F4 — GET de solo lectura, falla abierto
     "STACKY_QA_UAT_DATA_CACHE_ENABLED",            # Plan 274 F6 — cache local; baja carga sobre la BD
     "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED",        # Plan 274 F7 — extiende un corte que ya existe
+    # Plan 262 — recuperación en caliente. SOLO la bool: las 8 claves de valor no
+    # declaran default= (su default efectivo vive en config.py), así que
+    # default_is_known() es False para ellas y NO van en este set.
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED",          # Plan 262 — recuperación en caliente
     # ── Costura de flags de la OLA 1 (paquete P0, 2026-07-28) ───────────────
     # Las 14 flags default ON de los planes 259, 267, 268, 269 y 270.
     # La 15ª del bloque, STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED (Plan 267), NO

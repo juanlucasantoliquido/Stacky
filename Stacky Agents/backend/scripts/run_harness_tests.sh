@@ -976,6 +976,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan265_git_readonly.py
   tests/test_plan265_secret_mask.py
   tests/test_plan265_console_audit.py
+
+  # Plan 262 - recuperacion en caliente
+  tests/test_plan262_recovery_flags.py
+  tests/test_plan262_runtime_doctor_recovery.py
 )
 
 pass=0

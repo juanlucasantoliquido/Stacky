@@ -20,7 +20,7 @@ from services.harness_flags_help import plain_help_for  # Plan 86 — ayuda en l
 @dataclass(frozen=True)
 class FlagSpec:
     key: str             # nombre EXACTO de la env var / atributo de Config
-    type: str            # "bool" | "csv" | "int" | "float" | "json"
+    type: str            # "bool" | "csv" | "int" | "float" | "str" | "json"
     label: str           # texto corto para la UI (español)
     description: str     # 1-2 líneas para tooltip
     group: str           # "claude_code_cli" | "global"
@@ -183,6 +183,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Plan 213 — analistas declaran supuestos en vez de frenar el pipeline
         "STACKY_ASSUMPTION_MODE_ENABLED", "STACKY_ASSUMPTION_MODE_AGENT_TYPES",
         "STACKY_ASSUMPTION_MAX_PER_RUN",
+        # Plan 262 — recuperacion en caliente: una ruta invalida no es una caida
+        "STACKY_QA_UAT_HOT_RECOVERY_ENABLED", "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN",
+        "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE", "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S",
+        "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S", "STACKY_QA_UAT_ROUTE_ALLOWLIST",
+        "STACKY_QA_UAT_SAFE_ROUTE", "AGENDA_WEB_BASE_URL", "QA_NAV_RETRIES",
     ),
     "integridad_grounding": (
         "STACKY_RUN_PREFLIGHT_GATE_ENABLED", "STACKY_VERIFY_TASK_BEFORE_CONSUMED_ENABLED",
@@ -704,6 +709,131 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         # Curada en _CURATED_DEFAULTS_ON (aditivo y solo lectura).
         default=True,
+    ),
+    # -- Plan 262 F2 - Recuperacion en caliente del QA UAT --------------------
+    # Las 8 de VALOR van SIN default=: default_is_known(spec) es literalmente
+    # `spec.default is not None` (type-agnostico), asi que hasta un default=0
+    # las volveria "conocidas" y pondria rojo test_default_known_only_for_curated.
+    # Su default EFECTIVO vive en config.py.
+    FlagSpec(
+        key="STACKY_QA_UAT_HOT_RECOVERY_ENABLED",
+        type="bool",
+        label="Recuperar la prueba en caliente ante una ruta invalida",
+        description=(
+            "Plan 262 — Ante una excepcion durante la corrida, comprueba si la aplicacion "
+            "responde y distingue una caida real de una ruta mal construida. Reintenta solo "
+            "el caso afectado. Determinista, sin LLM."
+        ),
+        group="global",
+        env_only=False,
+        # Default ON: no quema tokens en reposo (cero LLM, INV-6), no escribe en ningun
+        # sistema real del operador y no le saca ninguna decision. Con OFF, el
+        # comportamiento es el de hoy (INV-8).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_RECOVERY_MAX_PER_RUN",
+        type="int",
+        label="Recuperaciones maximas por corrida",
+        description=(
+            "Plan 262 — Cota global anti-bucle. 0 = modo observacion: se clasifica y se "
+            "registra, pero no se recupera nada. El default efectivo (6) vive en config.py."
+        ),
+        group="global",
+        env_only=False,
+        min_value=0,
+        max_value=50,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_RECOVERY_MAX_PER_CASE",
+        type="int",
+        label="Recuperaciones maximas por caso",
+        description=(
+            "Plan 262 — Cuantas veces se puede reintentar UN mismo caso. Alineado con "
+            "_MAX_REAUTH_PER_STEP=1 del navegador. El default efectivo (1) vive en config.py."
+        ),
+        group="global",
+        env_only=False,
+        min_value=0,
+        max_value=10,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S",
+        type="float",
+        label="Espera maxima del chequeo de disponibilidad (segundos)",
+        description=(
+            "Plan 262 — Timeout de cada consulta HTTP contra la URL base. El default "
+            "efectivo (5.0) vive en config.py y es identico al del preflight."
+        ),
+        group="global",
+        env_only=False,
+        min_value=1,
+        max_value=30,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S",
+        type="float",
+        label="Pausa entre las dos muestras de disponibilidad (segundos)",
+        description=(
+            "Plan 262 F1.5 — Declarar la aplicacion caida exige DOS consultas fallidas "
+            "seguidas. 0 = confirmar sin pausa (sigue exigiendo 2 muestras). El default "
+            "efectivo (2.0) vive en config.py."
+        ),
+        group="global",
+        env_only=False,
+        min_value=0,
+        max_value=15,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_ROUTE_ALLOWLIST",
+        type="csv",
+        label="Rutas permitidas de la aplicacion",
+        description=(
+            "Plan 262 — Lista separada por comas de pantallas legales (ej "
+            "FrmLogin.aspx,FrmBusqueda.aspx). Vacia = lista derivada del codigo, en modo "
+            "permisivo. El default efectivo (vacio) vive en config.py."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_QA_UAT_SAFE_ROUTE",
+        type="str",
+        label="Ruta segura a la que volver tras una excepcion",
+        description=(
+            "Plan 262 — Pantalla a la que se regresa antes de reintentar. Vacia = la URL "
+            "base, que siempre existe y siempre es valida. El default efectivo (vacio) "
+            "vive en config.py."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="AGENDA_WEB_BASE_URL",
+        type="str",
+        label="Direccion base de AgendaWeb",
+        description=(
+            "Plan 262 — La direccion contra la que se valida que la aplicacion responde. "
+            "Es el nombre EXACTO que el pipeline ya lee. Su default en config.py es "
+            "env-first: si ya la tenias configurada en el entorno, se adopta TU valor."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="QA_NAV_RETRIES",
+        type="int",
+        label="Reintentos de navegacion por paso",
+        description=(
+            "Plan 262 F6 — Cota canonica de reintentos al navegar entre pantallas. El "
+            "default efectivo (3) vive en config.py y es el vigente hoy; bajarlo a 1 seria "
+            "una regresion silenciosa de comportamiento."
+        ),
+        group="global",
+        env_only=False,
+        min_value=0,
+        max_value=10,
     ),
     FlagSpec(
         key="CLAUDE_CODE_CLI_CONTRACT_GATE_ENABLED",

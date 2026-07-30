@@ -95,7 +95,34 @@ _QA_UAT_FLAG_KEYS = (
     "STACKY_QA_UAT_DEEPLINK_PROBE_ENABLED",
     "STACKY_QA_UAT_DATA_CACHE_ENABLED",
     "STACKY_QA_UAT_STAGE_DEADLINE_ENABLED",
+    # ── Plan 262 F2 — recuperación en caliente. Sin estas 9 la config nace
+    # invisible para el tool (trampa documentada del plan 240 C13).
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE",
+    "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S",
+    "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S",
+    "STACKY_QA_UAT_ROUTE_ALLOWLIST",
+    "STACKY_QA_UAT_SAFE_ROUTE",
+    "AGENDA_WEB_BASE_URL",
+    "QA_NAV_RETRIES",
 )
+
+
+def _spec_by_key() -> dict:
+    """Plan 262 F2 — mapa key -> FlagSpec para exportar según el TIPO declarado.
+
+    Import legal en un módulo de api/: services/ nunca importa api/, la dirección
+    inversa es la normal. Se resuelve perezosamente para no encarecer el import.
+    """
+    global _SPEC_BY_KEY_CACHE
+    if _SPEC_BY_KEY_CACHE is None:
+        from services.harness_flags import FLAG_REGISTRY
+        _SPEC_BY_KEY_CACHE = {s.key: s for s in FLAG_REGISTRY}
+    return _SPEC_BY_KEY_CACHE
+
+
+_SPEC_BY_KEY_CACHE: dict | None = None
 
 
 def _export_qa_uat_flags() -> dict:
@@ -113,9 +140,24 @@ def _export_qa_uat_flags() -> dict:
     from config import config as _cfg
 
     exported: dict = {}
+    _specs = _spec_by_key()
     with _FLAG_EXPORT_LOCK:
         for _k in _QA_UAT_FLAG_KEYS:
-            val = "true" if bool(getattr(_cfg, _k, False)) else "false"
+            _spec = _specs.get(_k)
+            _ftype = getattr(_spec, "type", "bool") if _spec is not None else "bool"
+            if _ftype == "bool":
+                val = "true" if bool(getattr(_cfg, _k, False)) else "false"
+            else:
+                # Plan 262 F2: int/float/csv/str se exportan TAL CUAL. Coaccionarlos a
+                # booleano destruye el valor (int("true") -> ValueError en el hilo
+                # del pipeline, que termina rotulado PIPELINE_CRASH).
+                raw = getattr(_cfg, _k, None)
+                if raw is None:
+                    continue                      # BORDE: sin atributo, no se exporta basura
+                if isinstance(raw, (list, tuple)):
+                    val = ",".join(str(x) for x in raw)
+                else:
+                    val = str(raw)
             os.environ[_k] = val
             exported[_k] = val
     return exported
@@ -2020,8 +2062,70 @@ def get_runtime_doctor():
         out["ado_bridge"] = {"ok": bool(bridge_available())}
     except Exception as exc:  # noqa: BLE001
         out["ado_bridge"] = {"ok": False, "detail": str(exc)}
+    # ── Plan 262 F10.3 — seccion de recuperacion en caliente ─────────────────
+    # ADITIVA: ninguna clave existente cambia de nombre, tipo ni posicion. Y
+    # SIEMPRE 200: un doctor que falla cuando la capacidad esta apagada es un
+    # doctor roto.
+    out["hot_recovery"] = _hot_recovery_doctor_section()
     out["ok"] = bool((out["browser"] or {}).get("ok"))
     return jsonify(out)
+
+
+def _hot_recovery_doctor_section() -> dict:
+    """Estado de la recuperacion en caliente para el doctor. NUNCA levanta."""
+    seccion: dict = {"enabled": False, "config": {}, "allowlist": {},
+                     "safe_route": "", "health": {}, "flags_exported": []}
+    try:
+        import recovery_config
+        seccion["enabled"] = bool(recovery_config.hot_recovery_enabled())
+        # snapshot() expone SOLO las 9 claves: nunca usuario ni contraseña.
+        seccion["config"] = recovery_config.snapshot()
+    except Exception as exc:  # noqa: BLE001
+        seccion["config"] = {"error": str(exc)}
+    try:
+        import route_allowlist
+        rutas, source = route_allowlist.effective_allowlist()
+        seccion["allowlist"] = {"source": source, "count": len(rutas),
+                                "routes": sorted(rutas)}
+        seccion["safe_route"] = route_allowlist.safe_route_url()
+    except Exception as exc:  # noqa: BLE001
+        seccion["allowlist"] = {"source": "unavailable", "count": 0,
+                                "routes": [], "error": str(exc)}
+    try:
+        # UNA sola muestra a proposito: el doctor INFORMA, no autoriza arrancar
+        # nada, asi que no paga la pausa de confirmacion (F1.5).
+        import agenda_health
+        p = agenda_health.probe_agenda()
+        seccion["health"] = {"alive": bool(p.alive), "status": p.status,
+                             "url": p.url, "elapsed_ms": p.elapsed_ms,
+                             "error": p.error, "source": p.source,
+                             "samples": p.samples}
+    except Exception as exc:  # noqa: BLE001
+        seccion["health"] = {"alive": False, "status": None, "error": str(exc),
+                             "source": "unavailable", "samples": 0}
+    try:
+        _cfg_specs = _spec_by_key()
+        seccion["flags_exported"] = [
+            {"key": k, "type": getattr(_cfg_specs.get(k), "type", "bool")}
+            for k in _QA_UAT_FLAG_KEYS if k in _PLAN_262_KEYS
+        ]
+    except Exception:  # noqa: BLE001
+        seccion["flags_exported"] = []
+    return seccion
+
+
+# Las 9 claves que introdujo el plan 262 (para reportarlas en el doctor).
+_PLAN_262_KEYS = (
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE",
+    "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S",
+    "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S",
+    "STACKY_QA_UAT_ROUTE_ALLOWLIST",
+    "STACKY_QA_UAT_SAFE_ROUTE",
+    "AGENDA_WEB_BASE_URL",
+    "QA_NAV_RETRIES",
+)
 
 
 @bp.get("/kb")

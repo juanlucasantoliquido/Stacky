@@ -2181,6 +2181,61 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: no queda anotación y después no vas a poder reconstruir qué acción disparaste ni en qué momento.",
         example="Es una bitácora, no un permiso: anota lo que hiciste, nunca te impide hacerlo ni le pregunta a nadie.",
     ),
+    # ── Plan 262 — recuperacion en caliente de las pruebas automaticas ──────
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED": PlainHelp(
+        what="Hace que las pruebas automáticas se recuperen solas cuando una pantalla falla, en vez de cortar toda la corrida.",
+        on_effect="Si la activás: ante una falla se verifica si la aplicación responde, se vuelve a una pantalla segura y se reintenta solo el caso afectado; el resto sigue corriendo.",
+        off_effect="Si la apagás: cualquier falla inesperada corta la corrida entera y se informa como si la aplicación estuviera caída, aunque no lo esté.",
+        example="Como un navegador de auto que recalcula el camino cuando te equivocás de calle, en vez de apagarse y decirte que la ciudad no existe.",
+    ),
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN": PlainHelp(
+        what="Cuántas veces como máximo se puede intentar recuperar una prueba dentro de una misma corrida.",
+        on_effect="Si subís el número: se toleran más tropiezos antes de darse por vencido, pero la corrida puede tardar más.",
+        off_effect="Si lo bajás a cero: se anota qué se habría recuperado pero no se recupera nada; sirve para observar antes de habilitarlo.",
+        example="Como darle a un repartidor hasta seis reintentos de entrega en el día antes de devolver el paquete.",
+    ),
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE": PlainHelp(
+        what="Cuántas veces como máximo se puede reintentar un mismo caso de prueba dentro de una corrida.",
+        on_effect="Si subís el número: un caso inestable tiene más oportunidades de completarse, a costa de tiempo.",
+        off_effect="Si lo bajás a cero: ningún caso se reintenta y el primer tropiezo lo deja marcado como fallado.",
+        example="Como permitir un solo segundo intento por pregunta en un examen, en vez de diez.",
+    ),
+    "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S": PlainHelp(
+        what="Cuántos segundos se espera una respuesta de la aplicación antes de considerar que no contestó.",
+        on_effect="Si subís el número: se le da más aire a una aplicación lenta antes de darla por caída, pero cada verificación tarda más.",
+        off_effect="Si lo bajás: la verificación es más rápida, pero una aplicación lenta puede parecer caída sin estarlo.",
+        example="Como cuántos tonos dejás sonar el teléfono antes de colgar y asumir que no hay nadie.",
+    ),
+    "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S": PlainHelp(
+        what="Cuántos segundos se espera antes de volver a preguntar si la aplicación responde, para confirmar una caída.",
+        on_effect="Si subís el número: se le da más margen a la aplicación para volver sola tras un reinicio breve, y se evita arrancarla sin necesidad.",
+        off_effect="Si lo dejás en cero: se pregunta dos veces seguidas sin pausa; siguen haciendo falta dos respuestas fallidas para declarar la caída.",
+        example="Como volver a golpear la puerta unos segundos después antes de concluir que no hay nadie en casa.",
+    ),
+    "STACKY_QA_UAT_ROUTE_ALLOWLIST": PlainHelp(
+        what="La lista de pantallas de la aplicación que se consideran válidas durante una prueba, separadas por comas.",
+        on_effect="Si la completás: cualquier pantalla fuera de esa lista se trata como camino equivocado y se corrige sola.",
+        off_effect="Si la dejás vacía: la lista se deduce sola y se aplica con criterio amplio, para no confundir una falla real con un camino mal armado.",
+        example="Como la lista de salones habilitados de un edificio: si alguien aparece en otro, algo salió mal.",
+    ),
+    "STACKY_QA_UAT_SAFE_ROUTE": PlainHelp(
+        what="La pantalla a la que se vuelve antes de reintentar un caso de prueba que falló.",
+        on_effect="Si la completás: tras un tropiezo se regresa a esa pantalla concreta antes de repetir el caso.",
+        off_effect="Si la dejás vacía: se vuelve a la dirección principal de la aplicación, que siempre existe y siempre es válida.",
+        example="Como volver al hall de entrada antes de intentar de nuevo llegar a la oficina correcta.",
+    ),
+    "AGENDA_WEB_BASE_URL": PlainHelp(
+        what="La dirección web donde corre la aplicación que las pruebas automáticas van a revisar.",
+        on_effect="Si la completás: todas las verificaciones y pruebas apuntan a esa dirección.",
+        off_effect="Si la dejás vacía: se usa la dirección local de fábrica; si tu aplicación corre en otro puerto, las pruebas van a fallar sin motivo real.",
+        example="Como la dirección de la sucursal a la que mandás al inspector: si está mal, va a informar que el local no existe.",
+    ),
+    "QA_NAV_RETRIES": PlainHelp(
+        what="Cuántas veces se reintenta pasar de una pantalla a otra cuando la aplicación no responde a tiempo.",
+        on_effect="Si subís el número: el paso entre pantallas aguanta mejor una aplicación lenta, pero cada paso puede demorar más.",
+        off_effect="Si lo bajás a cero: no se reintenta ningún paso y cualquier demora se convierte en una falla.",
+        example="Como cuántas veces volvés a apretar un botón que tarda antes de asumir que no anda.",
+    ),
 }
 
 

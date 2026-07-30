@@ -309,6 +309,130 @@ def main() -> None:
         sys.exit(0)
 
 
+# ── Plan 262 F8 — clasificar el crash ANTES de rotularlo ──────────────────────
+
+def _recovery_enabled() -> bool:
+    """Lee la config de recuperacion. Ante cualquier problema, apagado."""
+    try:
+        from recovery_config import hot_recovery_enabled
+        return hot_recovery_enabled()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _last_route_used(evidence_root=None) -> str:
+    """Ultima URL/ruta conocida del run, con precedencia determinista y SIN levantar:
+      1. la ultima entrada url_after / url_before del execution.jsonl del run;
+      2. si no hay, el target del ultimo paso de scenarios.json;
+      3. si no hay, "" (que el clasificador rotula "<desconocida>").
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        if evidence_root is None:
+            evidence_root = _Path(__file__).parent / "evidence"
+        raiz = _Path(evidence_root)
+        if not raiz.exists():
+            return ""
+        candidatos = sorted(raiz.rglob("execution.jsonl"),
+                            key=lambda p: p.stat().st_mtime, reverse=True)
+        for jsonl in candidatos:
+            try:
+                lineas = jsonl.read_text(encoding="utf-8").splitlines()
+            except Exception:  # noqa: BLE001
+                continue
+            for linea in reversed(lineas):
+                linea = linea.strip()
+                if not linea:
+                    continue
+                try:
+                    ev = _json.loads(linea)
+                except Exception:  # noqa: BLE001
+                    continue
+                data = ev.get("data") if isinstance(ev.get("data"), dict) else ev
+                for clave in ("url_after", "url_before"):
+                    valor = data.get(clave)
+                    if valor:
+                        return str(valor)
+        for scenarios in raiz.rglob("scenarios.json"):
+            try:
+                datos = _json.loads(scenarios.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                continue
+            pasos = datos if isinstance(datos, list) else datos.get("pasos") or []
+            for paso in reversed(pasos if isinstance(pasos, list) else []):
+                if isinstance(paso, dict) and paso.get("target"):
+                    return str(paso["target"])
+        return ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def classify_pipeline_crash(exc, route_used: str = "", probe=None,
+                            traceback_text: str = "") -> dict:
+    """Traduce un crash no previsto a categoria+motivo CON EVIDENCIA de salud.
+
+    ANTES: todo crash salia BLOCKED/OPS/PIPELINE_CRASH sin preguntar NUNCA si la
+    aplicacion respondia, asi que una ruta mal construida se leia como "AgendaWeb
+    no disponible" y moria el run entero.
+
+    `verdict` NO cambia: sigue BLOCKED. Un crash no previsto no es un FAIL
+    funcional ni un PASS; cambiar el veredicto aca seria el ablandamiento que
+    INV-1 prohibe. Lo que cambia es la CATEGORIA y el MOTIVO, que es lo que el
+    operador necesita para saber si tiene que levantar la aplicacion o arreglar
+    un escenario.
+
+    Un FUNCTIONAL_ERROR NO reetiqueta el crash: un crash del pipeline no es el
+    resultado de una asercion. Se conserva OPS/PIPELINE_CRASH: no se inventa una causa.
+    """
+    base = {
+        "verdict": "BLOCKED",
+        "category": "OPS",
+        "reason": "PIPELINE_CRASH",
+        "recovery_class": None,
+        "recovery_evidence": "",
+        "route_used": route_used or "",
+        "app_alive": None,
+        "traceback": (traceback_text or "")[-2000:],
+    }
+    if not _recovery_enabled():
+        return base
+    try:
+        import recovery_classifier
+        import route_allowlist
+        try:
+            route_allowed = route_allowlist.is_allowed(route_used).allowed
+        except Exception:  # noqa: BLE001
+            route_allowed = None
+        veredicto = recovery_classifier.classify_recovery(
+            exc=exc,
+            exc_text=f"{type(exc).__name__}: {exc}" if exc is not None else "",
+            route_used=route_used, nav_code=None, health=probe,
+            route_allowed=route_allowed,
+        )
+        clase = veredicto.recovery_class
+        etiquetas = {
+            recovery_classifier.SERVICE_DOWN:  ("ENV", "APP_NOT_RUNNING"),
+            recovery_classifier.ROUTE_ERROR:   ("NAV", "ROUTE_INVALID"),
+            recovery_classifier.SESSION_ERROR: ("NAV", "SESSION_LOST"),
+        }
+        categoria, motivo = etiquetas.get(clase, ("OPS", "PIPELINE_CRASH"))
+        base.update({
+            "category": categoria,
+            "reason": motivo,
+            "recovery_class": clase,
+            "recovery_evidence": veredicto.evidence,
+            "route_used": veredicto.route_used,
+            "app_alive": (None if probe is None
+                          else bool(getattr(probe, "alive", False))),
+        })
+    except Exception:  # noqa: BLE001
+        # Un clasificador que rompe NO puede empeorar el diagnostico: se cae al
+        # rotulo historico. Degradacion, no ruptura (INV-8).
+        logger.debug("clasificacion de recuperacion no disponible", exc_info=True)
+    return base
+
+
 # ── Core logic ────────────────────────────────────────────────────────────────
 
 def run(
@@ -694,16 +818,37 @@ def run(
         _crash_tb = _tb.format_exc()
         logger.error("Sprint 1: pipeline crashed unexpectedly: %s\n%s",
                      _pipeline_crash, _crash_tb)
+        # ── Plan 262 F8 — CLASIFICAR ANTES DE ROTULAR ────────────────────────
+        # ANTES: todo crash no previsto salia BLOCKED/OPS/PIPELINE_CRASH sin
+        # preguntar NUNCA si la app respondia. Una ruta mal construida se leia
+        # como "AgendaWeb no disponible". El traceback del 241 F6 se CONSERVA.
+        _probe = None
+        try:
+            if _recovery_enabled():
+                from agenda_health import probe_agenda_confirmed
+                _probe = probe_agenda_confirmed()   # 2 muestras (F1.5)
+        except Exception:  # noqa: BLE001
+            _probe = None
+        _crash_cls = classify_pipeline_crash(
+            _pipeline_crash, route_used=_last_route_used(), probe=_probe,
+            traceback_text=_crash_tb,
+        )
+
         pipeline_result = {
             "ok": False,
             "ticket_id": ticket_id,
-            "verdict": "BLOCKED",
-            "category": "OPS",
-            "reason": "PIPELINE_CRASH",
+            "verdict": "BLOCKED",                    # NO cambia: INV-1
+            "category": _crash_cls["category"],      # ENV | NAV | OPS segun evidencia
+            "reason": _crash_cls["reason"],
             "failed_stage": "pipeline",
             "error": "pipeline_crash",
             "message": str(_pipeline_crash),
             "traceback": _crash_tb[-2000:],   # Plan 241 F6: dónde pasó, no solo qué
+            # Plan 262 F8 — la evidencia de la clasificacion, no solo el rotulo
+            "recovery_class": _crash_cls["recovery_class"],
+            "recovery_evidence": _crash_cls["recovery_evidence"],
+            "route_used": _crash_cls["route_used"],
+            "app_alive": _crash_cls["app_alive"],
             "stages": stages,
             "elapsed_s": round(time.time() - started, 2),
         }

@@ -9,10 +9,9 @@ Guardarrailes NO negociables (todos verificados ANTES de ejecutar nada):
   5. Jamas en deploy/frozen: si STACKY_DEPLOY_MODE esta seteada o el ejecutable
      corre congelado (sys.frozen), rechaza.
 
-FLAG: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED, default OFF por EXCEPCION DURA #3
-(prerequisito no garantizado en instalacion default: IIS Express instalado +
-applicationhost.config del cliente + solucion compilada). Con OFF el comportamiento
-es byte-identico al de hoy (BLOCKED/APP_NOT_RUNNING).
+FLAG: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED, default ON desde el barrido 2026-07-27
+(config.py). Con OFF el comportamiento es byte-identico al previo al plan 240
+(BLOCKED/APP_NOT_RUNNING sin intentar arrancar nada).
 """
 from __future__ import annotations
 
@@ -71,16 +70,15 @@ def _out(ok, code, *, already_running=False, started_by_us=False, pid=None,
 
 
 def _responds(base_url: str, timeout_s: float = 3.0) -> bool:
-    """True si AgendaWeb responde con un status 'vivo'. NUNCA lanza."""
+    """True si AgendaWeb responde con un status 'vivo'. NUNCA lanza.
+
+    Plan 262 F9 — delega en agenda_health. Antes tenia una COPIA hardcodeada de los
+    alive codes como fallback por si el import fallaba: tres modulos opinando sobre
+    lo mismo con codigo distinto es exactamente como se deriva.
+    """
     try:
-        from environment_preflight import _ALIVE_STATUS_CODES
-    except Exception:  # noqa: BLE001
-        _ALIVE_STATUS_CODES = frozenset({200, 301, 302, 400, 401, 403})
-    try:
-        with urllib.request.urlopen(base_url, timeout=timeout_s) as resp:
-            return int(getattr(resp, "status", 200)) in _ALIVE_STATUS_CODES
-    except urllib.error.HTTPError as exc:
-        return int(getattr(exc, "code", 0)) in _ALIVE_STATUS_CODES
+        from agenda_health import probe_url
+        return probe_url(base_url, timeout_s=timeout_s).alive
     except Exception:  # noqa: BLE001
         return False
 

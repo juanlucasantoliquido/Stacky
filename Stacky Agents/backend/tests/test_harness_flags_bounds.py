@@ -217,6 +217,13 @@ _FROZEN_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "STACKY_LOG_MAX_BYTES": (65536, 1073741824),
     "STACKY_LOG_MAX_PARTS_PER_DAY": (1, 1000),
     "STACKY_LOG_RETENTION_DAYS": (1, 3650),
+    # Plan 262 — recuperación en caliente del QA UAT (5 numéricas con consumidor real:
+    # recovery_budget, agenda_health y uat_test_runner).
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN": (0, 50),
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE": (0, 10),
+    "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S": (1, 30),
+    "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S": (0, 15),
+    "QA_NAV_RETRIES": (0, 10),
 }
 
 

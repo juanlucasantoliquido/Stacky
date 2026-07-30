@@ -892,7 +892,11 @@ $HarnessTestFiles = @(
   # menciones en estos scripts, comentarios incluidos.
   "tests/test_plan274_tool_tests_outside_ratchet.py",
   "tests/test_plan274_efficacy_gates.py",
-  "tests/test_plan273_error_message_sin_flags.py"
+  "tests/test_plan273_error_message_sin_flags.py",
+
+  # Plan 262 - recuperacion en caliente
+  "tests/test_plan262_recovery_flags.py",
+  "tests/test_plan262_runtime_doctor_recovery.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

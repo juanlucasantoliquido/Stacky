@@ -37,7 +37,8 @@ _AUTH_FILE = _TOOL_ROOT / ".auth" / "agenda.json"
 _CHECK_TIMEOUT_S: float = 5.0
 # 400 is included because IIS may return it when using 127.0.0.1 as Host header
 # (host-binding mismatch) — still proves the server process is running.
-_ALIVE_STATUS_CODES = frozenset({200, 301, 302, 400, 401, 403})
+# Plan 262 F9 — alias: la definicion canonica vive en agenda_health.
+from agenda_health import ALIVE_STATUS_CODES as _ALIVE_STATUS_CODES  # noqa: E402,F401
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -62,8 +63,10 @@ def run_smoke_path(
         from environment_preflight import get_agenda_base_url
         canonical_url = base_url or get_agenda_base_url()
     except ImportError:
+        # Plan 262 F9 — sin literal: el default canonico vive en agenda_health.
+        from agenda_health import DEFAULT_BASE_URL as _DEF
         canonical_url = base_url or os.environ.get(
-            "AGENDA_WEB_BASE_URL", "http://localhost:35017/AgendaWeb/"
+            "AGENDA_WEB_BASE_URL", _DEF
         ).rstrip("/") + "/"
 
     checks = []
@@ -132,22 +135,13 @@ def _check_http(url: str, label: str = "url") -> dict:
     Windows configurations, causing spurious timeouts when IIS listens on IPv4).
     """
     def _attempt(attempt_url: str) -> dict:
-        try:
-            req = urllib.request.Request(attempt_url, method="GET")
-            with urllib.request.urlopen(req, timeout=_CHECK_TIMEOUT_S) as resp:
-                return {"ok": True, "label": label, "status": resp.getcode(), "error": ""}
-        except urllib.error.HTTPError as exc:
-            if exc.code in _ALIVE_STATUS_CODES:
-                return {"ok": True, "label": label, "status": exc.code, "error": ""}
-            return {"ok": False, "label": label, "status": exc.code,
-                    "error": f"HTTP {exc.code}: {exc.reason}"}
-        except urllib.error.URLError as exc:
-            return {"ok": False, "label": label, "status": None,
-                    "error": f"URLError: {exc.reason}"}
-        except OSError as exc:
-            return {"ok": False, "label": label, "status": None, "error": f"OSError: {exc}"}
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "label": label, "status": None, "error": str(exc)}
+        # Plan 262 F9 / C13 — ADAPTADOR EXPLICITO, no sustitucion: HealthProbe no
+        # tiene `ok` ni `label`, y este dict de 4 claves es el contrato que consume
+        # run_smoke_path. Ojo con el falso amigo _check_auth_file, que devuelve
+        # {"ok","label","message"}: NO se unifican, el caller le inyecta "note".
+        from agenda_health import probe_url
+        p = probe_url(attempt_url, timeout_s=_CHECK_TIMEOUT_S)
+        return {"ok": p.alive, "label": label, "status": p.status, "error": p.error}
 
     result = _attempt(url)
     if result["ok"]:

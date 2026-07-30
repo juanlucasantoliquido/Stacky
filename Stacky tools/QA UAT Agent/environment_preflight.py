@@ -40,7 +40,7 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("stacky.qa_uat.environment_preflight")
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,11 @@ _CHECK_TIMEOUT_S: float = 5.0
 # 400 is included because IIS/IIS-Express may return it when the HTTP request
 # uses 127.0.0.1 as the Host header instead of "localhost" (host-binding
 # mismatch), which still proves the server process is running.
-_ALIVE_STATUS_CODES = frozenset({200, 301, 302, 400, 401, 403})
+#
+# Plan 262 F9 — la definicion canonica vive en agenda_health. El nombre privado se
+# CONSERVA porque agenda_web_launcher lo importaba por este nombre exacto y otros
+# modulos lo leen igual. Cambiarlo romperia esos imports.
+from agenda_health import ALIVE_STATUS_CODES as _ALIVE_STATUS_CODES  # noqa: E402,F401
 
 
 # ── URL helper ─────────────────────────────────────────────────────────────────

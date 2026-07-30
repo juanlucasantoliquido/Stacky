@@ -8,11 +8,12 @@ import json
 from flask import Blueprint, jsonify, request
 
 import config as _config
+from services.runtime_capabilities import EFFORTS as _EFFORTS_TUPLE  # Plan 264 KPI-1
 
 bp = Blueprint("devops_agent", __name__, url_prefix="/devops/agent")
 
 _CLI_RUNTIMES = ("claude_code_cli", "codex_cli")
-_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+_EFFORTS = set(_EFFORTS_TUPLE)
 _CONVERSATION_ADO_ID = -2
 
 

@@ -465,6 +465,10 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    "STACKY_RUNTIME_CAPABILITIES_ENABLED",      # Plan 264
+    "STACKY_CODEX_EFFORT_PARITY_ENABLED",       # Plan 264
+    "STACKY_RUN_SELECTION_PREFS_ENABLED",       # Plan 264
+    "STACKY_MODEL_PICKER_EVERYWHERE_ENABLED",   # Plan 264
     # ── Barrido default-ON 2026-07-27 (directiva del operador) ──────────────
     # Regla aplicada: toda flag va default ON salvo que (a) queme tokens en
     # REPOSO (loop/daemon que llama a un modelo sin que el operador pida nada) o

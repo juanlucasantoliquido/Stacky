@@ -94,6 +94,7 @@ def start_codex_cli_run(
     ticket_message: str,
     workspace_root: str | None = None,
     model_override: str | None = None,
+    effort_override: str | None = None,
 ) -> int:
     """Create an execution row and launch Codex CLI in the background."""
     with session_scope() as session:
@@ -110,6 +111,7 @@ def start_codex_cli_run(
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": workspace_root,
             "model_override": model_override,
+            "effort_override": effort_override,   # Plan 264 — paridad con claude
         }
         session.add(exec_row)
         session.flush()
@@ -174,6 +176,7 @@ def start_codex_cli_run(
             "vscode_agent_filename": vscode_agent_filename,
             "workspace_root": workspace_root,
             "model_override": model_override,
+            "effort_override": effort_override,   # Plan 264 — paridad con claude
         },
         daemon=True,
         name=f"codex-cli-{execution_id}",
@@ -259,6 +262,7 @@ def _run_in_background(
     vscode_agent_filename: str,
     workspace_root: str | None,
     model_override: str | None,
+    effort_override: str | None = None,
 ) -> None:
     started = datetime.utcnow()
 
@@ -578,23 +582,68 @@ def _run_in_background(
 
         # Q0.2 — Esfuerzo adaptativo por dificultad estimada (solo codex, OFF default).
         # Codex no tiene --effort; se ajusta el presupuesto de turnos bajo el cap.
+        # Plan 264 — el cap es TECHO: el esfuerzo sólo puede mover el presupuesto
+        # hacia abajo. 0 = sin límite y se mantiene sin límite.
         _codex_adaptive_turns = config.STACKY_RUNAWAY_MAX_TURNS
+        _codex_effort_requested = effort_override
+        _codex_effort_effective: str | None = None
         if getattr(config, "STACKY_ADAPTIVE_EFFORT_ENABLED", False) and _codex_complexity:
             _floor = (getattr(config, "STACKY_EFFORT_FLOOR", "medium") or "medium").strip().lower()
             _ORDER_EFFORT = {"low": 0, "medium": 1, "high": 2}
-            _mapped_effort_codex = {"S": "low", "M": "medium", "L": "high", "XL": "high"}.get(
+            _adaptive_codex = {"S": "low", "M": "medium", "L": "high", "XL": "high"}.get(
                 _codex_complexity, "medium"
             )
-            if _ORDER_EFFORT.get(_mapped_effort_codex, 1) < _ORDER_EFFORT.get(_floor, 1):
-                _mapped_effort_codex = _floor
-            # S/low → 50% del cap; M/medium → 100%; L/XL/high → 100%
-            if _codex_adaptive_turns > 0 and _mapped_effort_codex == "low":
-                _codex_adaptive_turns = max(1, _codex_adaptive_turns // 2)
-            log(
-                "info",
-                f"adaptive effort (codex) → {_mapped_effort_codex} "
-                f"(complexity={_codex_complexity}, max_turns={_codex_adaptive_turns}, Q0.2)",
+            if _ORDER_EFFORT.get(_adaptive_codex, 1) < _ORDER_EFFORT.get(_floor, 1):
+                _adaptive_codex = _floor
+            _codex_effort_effective = _adaptive_codex
+            log("info", f"adaptive effort (codex) → {_adaptive_codex} "
+                        f"(complexity={_codex_complexity}, Q0.2)")
+
+        # Plan 264 [C2 de la ronda v1→v2] — FUERA del bloque adaptativo: el override
+        # explícito del operador se honra tenga o no estimación de complejidad, y le
+        # GANA al adaptativo (misma regla que claude_code_cli_runner.py:961).
+        # [C2 de la ronda v2→v3] `config` acá ES la instancia (`from config import
+        # config`, :22): NO escribir `config.config`.
+        from services.runtime_capabilities import (
+            is_valid_effort as _rc_valid,
+            codex_turn_budget as _rc_budget,
+        )
+        if getattr(config, "STACKY_CODEX_EFFORT_PARITY_ENABLED", False) \
+                and _rc_valid(_codex_effort_requested):
+            _codex_effort_effective = (_codex_effort_requested or "").strip().lower()
+            log("info", f"effort_override explícito (codex) → {_codex_effort_effective} "
+                        f"(prioridad sobre adaptativo, Plan 264)")
+        # El cap NUNCA sube: codex_turn_budget devuelve <= cap, y 0 sigue siendo 0.
+        # [C7] Con los factores de F1, el resultado para el adaptativo es IDÉNTICO
+        # al de hoy (sólo `low` divide por 2).
+        if _codex_effort_effective:
+            _codex_adaptive_turns = _rc_budget(_codex_effort_effective, _codex_adaptive_turns)
+            log("info", f"presupuesto de turnos (codex) → {_codex_adaptive_turns} "
+                        f"(cap={config.STACKY_RUNAWAY_MAX_TURNS}, "
+                        f"esfuerzo={_codex_effort_effective}, "
+                        f"efecto={'si' if config.STACKY_RUNAWAY_MAX_TURNS > 0 else 'no (sin cap)'})")
+
+        # Plan 264 F4(b) — persistir el trace también en Codex (paridad con
+        # Claude). build_model_effort_trace/_persist_model_effort_trace viven
+        # en runtime_capabilities.py (Plan 212 F7 + Plan 264 F4(b), mudadas de
+        # claude_code_cli_runner.py, que las conserva como delegadores).
+        try:
+            from services.runtime_capabilities import (
+                build_model_effort_trace as _build_me_trace,
+                _persist_model_effort_trace as _persist_me_trace,
             )
+            _me_trace = _build_me_trace(
+                requested_model=model_override,
+                effective_model=_resolved_model,
+                requested_effort=_codex_effort_requested,
+                effective_effort=_codex_effort_effective,
+                reason="codex: presupuesto de turnos" if _codex_effort_effective else "",
+                runtime=RUNTIME,
+                effort_effective_now=(config.STACKY_RUNAWAY_MAX_TURNS > 0),
+            )
+            _persist_me_trace(execution_id, _me_trace)
+        except Exception:  # noqa: BLE001 — el trace es informativo, nunca rompe el run
+            logger.debug("codex model_effort trace falló (no crítico)", exc_info=True)
 
         # H5 — Runaway guard: solo turnos (costo no disponible en codex stream hasta H2.2).
         from harness.runaway_guard import RunLimits, RunawayGuard as _RunawayGuard

@@ -934,6 +934,24 @@
         ]
       },
       "evidence": "backend/services/plans_estado_migration.py (apply_estado_migration restaura el .md desde memoria si falla la pata 2 o la 3); backend/tests/test_plan263_migration.py casos 17, 19 y 20"
+    },
+    {
+      "id": "seleccion-aceptada-nunca-materializada",
+      "title": "Seleccion de modelo/effort aceptada por el runner y nunca materializada",
+      "class": "silent-param-drop",
+      "status": "resolved",
+      "log_pattern": "$^",
+      "log_guarded": false,
+      "killed_by": "plan 264 (matriz unica de capacidades runtime/modelo/effort)",
+      "killed_commit": "752b842f",
+      "date_resolved": "2026-07-29",
+      "guard_test": "backend/tests/test_plan264_paridad_ejecutable.py",
+      "evidence": "backend/agent_runner.py:442-450 (rama viva); backend/agent_runner.py:256-265 (rama muerta, higiene)",
+      "note": "Sintoma: el operador elige un modelo o un esfuerzo y la corrida se comporta igual que si no hubiera elegido nada. Causa raiz: un parametro de seleccion aceptado por la firma del runner y (a) nunca consumido, (b) consumido dentro de una rama gateada por otra flag, (c) consumido en una rama MUERTA por un return anterior, o (d) consumido sin efecto observable con la config vigente. Antecedentes: Plan 196 (claude_code_cli, rama muerta agent_runner.py:350) y Plan 264 (codex_cli, rama viva agent_runner.py:442). log_guarded=false a proposito: este bug no tiene firma de log (es un no-evento silencioso); el unico detector real es el AST de guard_test (Test A: parametros decorativos y las 4 llamadas de agent_runner; Test D: efecto observable, no solo consumo simbolico).",
+      "self_test": {
+        "matches": [],
+        "clean": []
+      }
     }
   ]
 }

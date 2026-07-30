@@ -98,6 +98,8 @@ def _cmd_run(agent_type: str, ado_id: str, user: str) -> SlashResponse:
         description = t.description or ""
 
     try:
+        from services.runtime_capabilities import resolve_run_selection
+        _sel = resolve_run_selection(runtime="github_copilot", project_name=None)
         eid = agent_runner.run_agent(
             agent_type=agent_type,
             ticket_id=ticket_id,
@@ -106,6 +108,8 @@ def _cmd_run(agent_type: str, ado_id: str, user: str) -> SlashResponse:
                  "content": f"{title}\n\n{description}"}
             ],
             user=user,
+            model_override=_sel["model"],
+            effort_override=_sel["effort"],
         )
     except agent_runner.UnknownAgentError:
         return SlashResponse(text=f"Agente `{agent_type}` desconocido.")

@@ -73,7 +73,7 @@ def test_pipeline_start_and_advance(monkeypatch):
 
     launches: list[int] = []
 
-    def _fake_run_agent(*, agent_type, ticket_id, context_blocks, chain_from, user, runtime, project_name):
+    def _fake_run_agent(*, agent_type, ticket_id, context_blocks, chain_from, user, runtime, project_name, **_kw):
         with session_scope() as session:
             e = AgentExecution(
                 ticket_id=ticket_id,
@@ -112,7 +112,7 @@ def test_pipeline_pauses_on_error(monkeypatch):
     ticket_id = _seed_ticket()
     monkeypatch.setattr(pipeline_orchestrator.config, "STACKY_PIPELINES_ENABLED", True)
 
-    def _fake_run_agent(*, agent_type, ticket_id, context_blocks, chain_from, user, runtime, project_name):
+    def _fake_run_agent(*, agent_type, ticket_id, context_blocks, chain_from, user, runtime, project_name, **_kw):
         with session_scope() as session:
             e = AgentExecution(
                 ticket_id=ticket_id,

@@ -20,7 +20,8 @@ import { formatDuration, formatCostUsd, formatInt } from "../services/format";
 import CopyAsButton, { type CopyAsOption } from "./CopyAsButton";
 import { executionToMarkdown, executionToPlainText } from "../services/copyFormats";
 import { copyText } from "../services/copyService";
-import { describeDowngrade } from "../services/modelEffortModel";
+import { formatModelEffortTrace, type ModelEffortTraceV264 } from "../services/modelEffortTrace";
+import ModelDecisionChip from "./ModelDecisionChip";
 import type { AgentExecution } from "../types";
 import styles from "./ExecutionDetailDrawer.module.css";
 
@@ -74,8 +75,12 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
     : [];
   // Plan 144 F4 — razón humana del stall (watchdog de inactividad).
   const stallReason = formatStallReason(metadata.stall as StallMeta | null | undefined);
-  // Plan 212 F7 — si lo ejecutado no fue lo elegido, el operador tiene que verlo acá.
-  const downgradeNotice = describeDowngrade(metadata);
+  // Plan 264 F6 — historial "qué se usó de verdad" en los 3 runtimes (tool +
+  // effort_mode + degradación). No recalcula requested_*!==effective_*: lee
+  // trace.downgraded tal cual lo escribe el backend.
+  const meFormatted = formatModelEffortTrace(
+    metadata.model_effort as ModelEffortTraceV264 | undefined
+  );
   // Plan 254 F4 — POR QUÉ terminó así. Seis causas distintas no pueden verse iguales.
   const outcome = describeOutcomeReason(
     content?.outcome_reason ?? (metadata.outcome_reason as string | undefined),
@@ -210,10 +215,22 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
               )}
             </section>
 
-            {downgradeNotice && (
+            {meFormatted && (
               <section className={styles.section}>
-                <h4>Modelo y effort</h4>
-                <p className={styles.downgradeNotice}>{downgradeNotice}</p>
+                <h4>Modelo y effort — {meFormatted.tool}</h4>
+                <p className={meFormatted.degraded ? styles.downgradeNotice : undefined}>
+                  {meFormatted.text}
+                </p>
+                {meFormatted.degraded && (
+                  <ModelDecisionChip
+                    decision={{
+                      model: metadata.model_effort
+                        ? (metadata.model_effort as ModelEffortTraceV264).effective_model
+                        : undefined,
+                      reason: (metadata.model_effort as ModelEffortTraceV264 | undefined)?.reason,
+                    }}
+                  />
+                )}
               </section>
             )}
 

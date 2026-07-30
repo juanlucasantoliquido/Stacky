@@ -476,6 +476,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DB_COMPARE_REPO_BRIDGE_GLOBS",    # Plan 180 — globs de scripts del repo (CSV)
         "STACKY_DB_COMPARE_REPO_BRIDGE_MAX_FILES",  # Plan 180 — cap de archivos escaneados por refresh
         "STACKY_MODEL_PROBE_ENABLED",  # Plan 212 F6 — probe vivo del CLI
+        "STACKY_RUNTIME_CAPABILITIES_ENABLED",      # Plan 264
+        "STACKY_CODEX_EFFORT_PARITY_ENABLED",       # Plan 264
+        "STACKY_RUN_SELECTION_PREFS_ENABLED",       # Plan 264
+        "STACKY_MODEL_PICKER_EVERYWHERE_ENABLED",   # Plan 264
         "STACKY_DB_COMPARE_TRIAGE_ENABLED",  # Plan 176
         "STACKY_DB_COMPARE_GATES_ENABLED",  # Plan 176
         "STACKY_DB_COMPARE_TABLE_PREFS_ENABLED",  # Plan 176
@@ -4419,6 +4423,56 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "cualquier problema, deja el catálogo del archivo intacto."
         ),
         group="global",
+    ),
+    # ── Plan 264 — herramienta/modelo/effort elegibles en todo punto de uso ──
+    FlagSpec(
+        key="STACKY_RUNTIME_CAPABILITIES_ENABLED",
+        type="bool", default=True,   # Curada en tests/test_harness_flags.py:467.
+        label="Matriz unica de capacidades de runtime",
+        description=(
+            "Plan 264 — Una sola fuente para 'que modelos y efforts admite cada "
+            "herramienta y como degrada'. Reemplaza las 12 copias de la lista de "
+            "efforts. Calculo puro sobre el catalogo ya cacheado."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_CODEX_EFFORT_PARITY_ENABLED",
+        type="bool", default=True,   # Curada en tests/test_harness_flags.py:467.
+        label="El effort elegido llega tambien a Codex",
+        description=(
+            "Plan 264 — Codex no tiene --effort: el esfuerzo elegido se traduce a "
+            "una fraccion del cap de turnos, siempre POR DEBAJO del cap. Hoy se "
+            "descarta en silencio (agent_runner.py:442-450). Solo aplica a corridas "
+            "que el operador lanza; no enciende ningun proceso de fondo."
+        ),
+        group="global",
+        requires="STACKY_RUNTIME_CAPABILITIES_ENABLED",   # → _REQUIRES_MAP_FROZEN
+    ),
+    FlagSpec(
+        key="STACKY_RUN_SELECTION_PREFS_ENABLED",
+        type="bool", default=True,   # Curada en tests/test_harness_flags.py:467.
+        label="Recordar herramienta/modelo/effort por proyecto",
+        description=(
+            "Plan 264 — La ultima eleccion del operador se guarda en el archivo de "
+            "preferencias de Stacky (api/preferences.py) y se preselecciona la "
+            "proxima vez. Un override explicito siempre gana. Requiere que el store "
+            "de preferencias de UI este activo (STACKY_UI_SAVED_VIEWS_ENABLED)."
+        ),
+        group="global",
+        requires="STACKY_RUNTIME_CAPABILITIES_ENABLED",   # → _REQUIRES_MAP_FROZEN
+    ),
+    FlagSpec(
+        key="STACKY_MODEL_PICKER_EVERYWHERE_ENABLED",
+        type="bool", default=True,   # Curada en tests/test_harness_flags.py:467.
+        label="Selector de modelo/effort en todas las pantallas",
+        description=(
+            "Plan 264 — El mismo ModelEffortPicker (Plan 212 F4) en el tablero de "
+            "planes, la bandeja de incidencias y las secciones DevOps, en vez de un "
+            "selector distinto hecho a mano en cada pantalla."
+        ),
+        group="global",
+        requires="STACKY_RUNTIME_CAPABILITIES_ENABLED",   # → _REQUIRES_MAP_FROZEN
     ),
     # ── Plan 176 — Triage curado, gates read-only y UX v2 del comparador ──────
     FlagSpec(

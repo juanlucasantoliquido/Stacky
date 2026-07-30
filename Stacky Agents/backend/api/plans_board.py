@@ -169,11 +169,12 @@ def plans_pipeline_run():
     # modelo/effort: clamps EXISTENTES (espejo run_incident, api/agents.py)
     from api.agents import _clamp_effort_for_model
     from services import llm_router as _llm_router
+    from services.runtime_capabilities import EFFORTS  # Plan 264 KPI-1
 
     _model_raw = (payload.get("model") or "").strip()
     model_override = _llm_router.clamp_model(_model_raw, allow_opus=True) if _model_raw else None
     _effort_raw = (payload.get("effort") or "").strip().lower()
-    effort_override = _effort_raw if _effort_raw in {"low", "medium", "high", "xhigh", "max"} else "high"
+    effort_override = _effort_raw if _effort_raw in EFFORTS else "high"
     effort_override = _clamp_effort_for_model(effort_override, model_override)
 
     import agent_runner
@@ -253,6 +254,7 @@ def plans_pipeline_run():
                     "action": action, "plan_number": plan_number,
                     "model": model_override, "effort": effort_override,
                     "prompt_line": prompt_line,
+                    "tool": "claude_code_cli",  # Plan 264 F6 — misma constante que runtime= arriba
                 }
                 _ex.metadata_dict = _md
     except Exception:  # noqa: BLE001

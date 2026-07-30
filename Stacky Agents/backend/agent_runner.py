@@ -262,6 +262,10 @@ def run_agent(
                 ticket_message=_ticket_message,
                 workspace_root=workspace_root,
                 model_override=model_override,
+                # Plan 264 — este bloque es INALCANZABLE (el return de más arriba
+                # ya se ejecutó para codex_cli). Se completa igual para que el
+                # código muerto no contradiga al vivo si alguien lo resucita.
+                effort_override=effort_override,
             )
             # start_codex_cli_run crea su propia fila de ejecución; la fila
             # original creada aquí queda marcada como reemplazada para evitar
@@ -448,6 +452,10 @@ def _start_cli_runtime(
             ticket_message=ticket_message,
             workspace_root=workspace_root,
             model_override=model_override,
+            # Plan 264 — BUG VIVO: _start_cli_runtime RECIBE effort_override (más
+            # arriba) y no lo reenviaba, así que el selector de esfuerzo era
+            # decorativo en TODA corrida codex_cli. La rama de claude sí lo pasa.
+            effort_override=effort_override,
         )
 
     if runtime == "claude_code_cli":

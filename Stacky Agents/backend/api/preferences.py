@@ -71,6 +71,38 @@ def _saved_views_enabled() -> bool:
     return bool(getattr(_config.config, "STACKY_UI_SAVED_VIEWS_ENABLED", False))
 
 
+# Plan 264 F4(a) — helpers reusables desde services/ (la lógica del sub-objeto
+# `ui` estaba enterrada en el cuerpo de la ruta y no se podía reusar sin
+# duplicarla; runtime_capabilities.load/save_run_preference los consume).
+def read_ui_pref(key: str):
+    """Valor de una preferencia de UI, o None. Nunca lanza."""
+    try:
+        if not _saved_views_enabled() or not _UI_KEY_RE.match(key):
+            return None
+        return (_read().get(_UI_STATE_KEY) or {}).get(key)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def write_ui_pref(key: str, value) -> bool:
+    """Guarda la preferencia. False si la clave es inválida, el valor excede
+    el límite de tamaño, la flag está OFF, o falla. Nunca lanza."""
+    try:
+        if not _saved_views_enabled() or not _UI_KEY_RE.match(key):
+            return False
+        tamano = len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+        if tamano > _UI_VALUE_MAX_BYTES:
+            return False
+        existing = _read()
+        ui = dict(existing.get(_UI_STATE_KEY) or {})
+        ui[key] = value
+        existing[_UI_STATE_KEY] = ui
+        _write(existing)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 @bp.get("/ui/<key>")
 def get_ui_preference(key: str):
     if not _saved_views_enabled():
@@ -81,7 +113,7 @@ def get_ui_preference(key: str):
         return jsonify({"error": "invalid_key"}), 400
     # Ausente ⇒ null, NO 404: el frontend distingue "no hay preferencia" sin
     # tener que manejar un error para el caso más normal que existe.
-    value = (_read().get(_UI_STATE_KEY) or {}).get(key)
+    value = read_ui_pref(key)
     return jsonify({"key": key, "value": value})
 
 
@@ -103,9 +135,5 @@ def put_ui_preference(key: str):
     if tamano > _UI_VALUE_MAX_BYTES:
         return jsonify({"error": "value_too_large", "max_bytes": _UI_VALUE_MAX_BYTES}), 413
 
-    existing = _read()
-    ui = dict(existing.get(_UI_STATE_KEY) or {})
-    ui[key] = value
-    existing[_UI_STATE_KEY] = ui
-    _write(existing)
+    write_ui_pref(key, value)
     return jsonify({"ok": True, "key": key})

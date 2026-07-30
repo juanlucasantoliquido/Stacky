@@ -1282,6 +1282,19 @@ class Config:
     STACKY_MODEL_PROBE_ENABLED: bool = os.getenv(
         "STACKY_MODEL_PROBE_ENABLED", "true"
     ).strip().lower() == "true"
+    # ── Plan 264 — una sola matriz de capacidades de runtime/modelo/effort ────
+    STACKY_RUNTIME_CAPABILITIES_ENABLED: bool = os.getenv(
+        "STACKY_RUNTIME_CAPABILITIES_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_CODEX_EFFORT_PARITY_ENABLED: bool = os.getenv(
+        "STACKY_CODEX_EFFORT_PARITY_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_RUN_SELECTION_PREFS_ENABLED: bool = os.getenv(
+        "STACKY_RUN_SELECTION_PREFS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_MODEL_PICKER_EVERYWHERE_ENABLED: bool = os.getenv(
+        "STACKY_MODEL_PICKER_EVERYWHERE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
     # ── Plan 199 — Cosecha histórica de telemetría desde disco ────────────────
     STACKY_TELEMETRY_HARVEST_ENABLED: bool = os.getenv(
         "STACKY_TELEMETRY_HARVEST_ENABLED", "true"

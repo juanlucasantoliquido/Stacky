@@ -520,46 +520,37 @@ def build_model_effort_trace(
     requested_effort: str | None,
     effective_effort: str | None,
     reason: str = "",
+    **kwargs,
 ) -> dict:
     """Plan 212 F7 — qué pidió el operador vs qué se ejecutó realmente.
 
-    `downgraded` solo mira lo que el operador pidió EXPLÍCITAMENTE: si no eligió
-    modelo, que el router elija no es una degradación, es su trabajo.
+    Plan 264 F4(b) — DELEGADOR: la implementación real vive en
+    `services.runtime_capabilities.build_model_effort_trace` (símbolo
+    conservado acá por callers existentes por nombre, incluidos tests del
+    212). Default `runtime="claude_code_cli"` si el caller no lo pasa: todos
+    los call sites de ESTE módulo son Claude.
     """
-    degradado = bool(
-        (requested_model and effective_model != requested_model)
-        or (requested_effort and effective_effort != requested_effort)
+    from services.runtime_capabilities import build_model_effort_trace as _rc_build
+
+    kwargs.setdefault("runtime", "claude_code_cli")
+    return _rc_build(
+        requested_model=requested_model,
+        effective_model=effective_model,
+        requested_effort=requested_effort,
+        effective_effort=effective_effort,
+        reason=reason,
+        **kwargs,
     )
-    return {
-        "requested_model": requested_model or "",
-        "effective_model": effective_model or "",
-        "requested_effort": requested_effort or "",
-        "effective_effort": effective_effort or "",
-        "downgraded": degradado,
-        "reason": reason,
-    }
 
 
 def _persist_model_effort_trace(execution_id: int, trace: dict) -> None:
-    """Fusiona la traza en metadata_json. Nunca rompe el run (es informativo).
+    """Plan 264 F4(b) — DELEGADOR: la implementación real vive en
+    `services.runtime_capabilities._persist_model_effort_trace`. Fusiona la
+    traza en metadata_json; nunca rompe el run (es informativo)."""
+    from services.runtime_capabilities import _persist_model_effort_trace as _rc_persist
 
-    `metadata_json` es una columna Text: se lee con el accessor y se escribe con
-    json.dumps — asignarle un dict la dejaría como feature muerta silenciosa.
-    """
-    try:
-        from db import session_scope
-        from models import AgentExecution
+    return _rc_persist(execution_id, trace)
 
-        with session_scope() as session:
-            ex = session.query(AgentExecution).filter_by(id=execution_id).first()
-            if not ex:
-                return
-            meta = dict(ex.metadata_dict or {})
-            meta["model_effort"] = trace
-            ex.metadata_json = json.dumps(meta, ensure_ascii=False, default=str)
-    except Exception:  # noqa: BLE001
-        logger.warning("no se pudo persistir model_effort (no bloquea el run)",
-                       exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -982,6 +973,8 @@ def _run_in_background(
             requested_effort=effort_override,
             effective_effort=_effective_effort,
             reason=_route_reason,
+            runtime=RUNTIME,             # Plan 264 F4(b) — "claude_code_cli"
+            effort_effective_now=True,   # nativo: siempre efectivo (Plan 264)
         )
         if _me_trace["downgraded"]:
             log("warn",
@@ -2221,7 +2214,10 @@ def _map_effort(complexity: str | None) -> str | None:
 
 # Plan 43 F0 / Plan 212 F3 — efforts que el CLI acepta en `--effort`. Constante
 # nombrada para que el test de paridad la importe en vez de parsear el archivo.
-CLI_VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+# Plan 264 KPI-1 — alias de EFFORTS (misma tupla): el símbolo se conserva
+# porque tiene consumidores externos por nombre (claude_code_cli_runner.py más
+# abajo, tests/test_plan212_characterization.py, tests/test_plan212_effort_matrix_parity.py).
+from services.runtime_capabilities import EFFORTS as CLI_VALID_EFFORTS
 
 
 def _build_command(

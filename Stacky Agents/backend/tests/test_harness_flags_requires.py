@@ -118,6 +118,13 @@ def test_read_current_exposes_requires_fields():
 # ---------------------------------------------------------------------------
 
 _REQUIRES_MAP_FROZEN = {
+    # Plan 264: la paridad de effort en Codex, la preferencia por proyecto y el
+    # selector unico solo tienen sentido si la matriz unica de capacidades esta
+    # activa (es quien resuelve y clampea). Profundidad 1: la madre
+    # STACKY_RUNTIME_CAPABILITIES_ENABLED no declara requires (R4).
+    "STACKY_CODEX_EFFORT_PARITY_ENABLED": "STACKY_RUNTIME_CAPABILITIES_ENABLED",
+    "STACKY_RUN_SELECTION_PREFS_ENABLED": "STACKY_RUNTIME_CAPABILITIES_ENABLED",
+    "STACKY_MODEL_PICKER_EVERYWHERE_ENABLED": "STACKY_RUNTIME_CAPABILITIES_ENABLED",
     # Plan 258: la lista de nombres de prueba y la limpieza destructiva solo
     # tienen efecto por el camino que abre la inferencia de procedencia (sin
     # ella nada queda marcado como 'test', asi que no habria ni que filtrar ni

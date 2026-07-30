@@ -23,6 +23,31 @@ class PlainHelp:
 
 
 PLAIN_HELP: dict[str, PlainHelp] = {
+    # ── Plan 264 ──────────────────────────────────────────────────────────
+    "STACKY_RUNTIME_CAPABILITIES_ENABLED": PlainHelp(
+        what="Una sola tabla que dice qué modelos y qué niveles de esfuerzo acepta cada herramienta, y a qué degrada cada combinación.",
+        on_effect="Si la activás: todas las pantallas y todos los lanzadores usan la misma tabla, así que ofrecen exactamente lo que la herramienta puede hacer.",
+        off_effect="Si la apagás: cada pantalla vuelve a su propia lista, y algunas pueden ofrecer opciones que la herramienta no acepta.",
+        example="Como tener una única carta para todo el restaurante en vez de una distinta por mesa.",
+    ),
+    "STACKY_CODEX_EFFORT_PARITY_ENABLED": PlainHelp(
+        what="Hace que el nivel de esfuerzo que elegís también valga para Codex, traduciéndolo a cuántos turnos de trabajo se le permiten.",
+        on_effect="Si la activás: elegir 'bajo' hace que Codex trabaje menos turnos, siempre por debajo del límite que vos configuraste.",
+        off_effect="Si la apagás: Codex ignora el esfuerzo elegido y corre como hasta ahora.",
+        example="Como decirle a alguien 'dale una revisada rápida' en vez de 'revisalo a fondo'.",
+    ),
+    "STACKY_RUN_SELECTION_PREFS_ENABLED": PlainHelp(
+        what="Recuerda por proyecto la última herramienta, modelo y esfuerzo que elegiste, y te los deja preseleccionados.",
+        on_effect="Si la activás: cada proyecto abre con la elección que usaste la última vez; podés cambiarla siempre.",
+        off_effect="Si la apagás: cada pantalla arranca con el valor por defecto del catálogo.",
+        example="Como el auto que recuerda la posición de tu asiento.",
+    ),
+    "STACKY_MODEL_PICKER_EVERYWHERE_ENABLED": PlainHelp(
+        what="Usa el mismo selector de modelo y esfuerzo en todas las pantallas que lanzan trabajo.",
+        on_effect="Si la activás: el control se ve y se comporta igual en todos lados, y se adapta a lo que cada herramienta soporta.",
+        off_effect="Si la apagás: cada pantalla muestra su propio selector, con reglas distintas.",
+        example="Como que todos los ascensores del edificio tengan la botonera igual.",
+    ),
     # ── runtimes_cli ──────────────────────────────────────────────────────
     "STACKY_MODEL_CATALOG_ENABLED": PlainHelp(
         what="Controla si el selector de modelo/effort del Resolutor de Incidencias y de la Épica desde Brief usa la lista actualizada del servidor o una lista fija.",

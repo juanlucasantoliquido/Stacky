@@ -168,6 +168,8 @@ def section_doctor_route(section_id: str):
                         "message": str(exc)}), 502
 
     try:
+        from services.runtime_capabilities import resolve_run_selection
+        _sel = resolve_run_selection(runtime=runtime, project_name=project)
         execution_id = agent_runner.run_agent(
             agent_type="devops",
             ticket_id=doctor_ticket_id,    # int OBLIGATORIO — NO None
@@ -179,6 +181,8 @@ def section_doctor_route(section_id: str):
             use_few_shot=False,
             use_anti_patterns=False,
             work_item_type="Task",
+            model_override=_sel["model"],
+            effort_override=_sel["effort"],
         )
     except agent_runner.UnknownAgentError:
         return jsonify({"ok": False, "error": "devops_agent_not_registered"}), 500

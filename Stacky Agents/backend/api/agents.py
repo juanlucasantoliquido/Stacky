@@ -422,7 +422,7 @@ def run():
     # ausente/"" ⇒ None ⇒ el runner usa su default/adaptativo (comportamiento pre-212).
     # Se valida ACÁ, antes de cualquier efecto secundario (auto-asignar, refresh del
     # ticket, slot de concurrencia): un payload inválido no tiene por qué mover nada.
-    _VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+    from services.runtime_capabilities import EFFORTS as _VALID_EFFORTS  # Plan 264 KPI-1
     _effort_raw = (payload.get("effort") or "").strip().lower()
     if _effort_raw and _effort_raw not in _VALID_EFFORTS:
         return jsonify({
@@ -677,8 +677,9 @@ def run_brief():
     _requested_effort_raw = (payload.get("effort") or "").strip().lower()
 
     # Override explícito: solo si el operador envió algo no-vacío y válido.
+    from services.runtime_capabilities import EFFORTS  # Plan 264 KPI-1
     _operator_explicitly_set_model = _requested_model is not None
-    _operator_explicitly_set_effort = _requested_effort_raw in {"low", "medium", "high", "xhigh", "max"}
+    _operator_explicitly_set_effort = _requested_effort_raw in EFFORTS
 
     # Base inicial: override del operador si lo envió, si no, defaults.
     _base_model: str | None = _requested_model if _operator_explicitly_set_model else None
@@ -714,7 +715,7 @@ def run_brief():
     model_override: str | None = (
         _llm_router.clamp_model(_base_model, allow_opus=True) if _base_model else None
     )
-    effort_override: str = _base_effort if _base_effort in {"low", "medium", "high", "xhigh", "max"} else "high"
+    effort_override: str = _base_effort if _base_effort in EFFORTS else "high"
     effort_override = _clamp_effort_for_model(effort_override, model_override)
 
     # Completar la traza con los valores efectivos post-clamp.
@@ -930,8 +931,9 @@ def run_incident():
 
     _requested_effort_raw = (payload.get("effort") or "").strip().lower()
 
+    from services.runtime_capabilities import EFFORTS  # Plan 264 KPI-1
     _operator_explicitly_set_model = _requested_model is not None
-    _operator_explicitly_set_effort = _requested_effort_raw in {"low", "medium", "high", "xhigh", "max"}
+    _operator_explicitly_set_effort = _requested_effort_raw in EFFORTS
 
     _base_model: str | None = _requested_model if _operator_explicitly_set_model else None
     _base_effort: str = _requested_effort_raw if _operator_explicitly_set_effort else "high"
@@ -960,7 +962,7 @@ def run_incident():
     model_override: str | None = (
         _llm_router.clamp_model(_base_model, allow_opus=True) if _base_model else None
     )
-    effort_override: str = _base_effort if _base_effort in {"low", "medium", "high", "xhigh", "max"} else "high"
+    effort_override: str = _base_effort if _base_effort in EFFORTS else "high"
     effort_override = _clamp_effort_for_model(effort_override, model_override)
 
     if _adaptive_trace is not None:
@@ -1153,7 +1155,8 @@ def run_incident_dev():
     _requested_model_raw = (payload.get("model") or "").strip()
     _requested_model: str | None = _requested_model_raw or None
     _requested_effort_raw = (payload.get("effort") or "").strip().lower()
-    _base_effort: str = _requested_effort_raw if _requested_effort_raw in {"low", "medium", "high", "xhigh", "max"} else "high"
+    from services.runtime_capabilities import EFFORTS  # Plan 264 KPI-1
+    _base_effort: str = _requested_effort_raw if _requested_effort_raw in EFFORTS else "high"
 
     model_override: str | None = (
         _llm_router.clamp_model(_requested_model, allow_opus=True) if _requested_model else None
@@ -1383,6 +1386,26 @@ def model_catalog_route():
         "models": copilot["models"],
         "error": copilot["error"],
     }}
+    # Plan 264 [C4] — la capacidad declarada viaja CON el catálogo. Aditivo:
+    # no se quita ninguna clave existente. Sin esto el frontend nunca ve
+    # effort_mode y el selector no puede adaptarse (pickerCapabilities cae a
+    # "nativo" por default y el cambio de F5 queda inerte).
+    try:
+        from services.runtime_capabilities import capabilities_for
+        for _rt in list(runtimes.keys()):
+            _caps = capabilities_for(_rt)
+            runtimes[_rt] = {
+                **runtimes[_rt],
+                "effort_mode": _caps["effort_mode"],
+                "effort_effective_now": _caps["effort_effective_now"],
+                "effort_note": _caps["effort_note"],
+                "efforts": _caps["efforts"],           # normalizados (codex venía vacío)
+                "models": _caps["models"] or runtimes[_rt].get("models") or [],
+                "default_effort": _caps["default_effort"],
+                "default_model": _caps["default_model"],
+            }
+    except Exception:  # noqa: BLE001 — el catálogo nunca se cae por el enriquecido
+        pass
 
     return jsonify({
         "ok": True,

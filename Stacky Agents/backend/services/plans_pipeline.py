@@ -135,6 +135,7 @@ def serialize_run(row) -> dict:
         "model": pp.get("model"),
         "effort": pp.get("effort"),
         "prompt_line": pp.get("prompt_line"),
+        "tool": pp.get("tool"),  # Plan 264 F6 — historial: qué herramienta corrió
     }
 
 

@@ -54,7 +54,7 @@ ADAPTIVE_BANDS: tuple[tuple[float, str, str, str], ...] = (
 @dataclass(frozen=True)
 class Selection:
     model: str | None     # id de modelo Claude propuesto (None = usar default del runner)
-    effort: str           # uno de {"low","medium","high","xhigh","max"}
+    effort: str           # uno de services.runtime_capabilities.EFFORTS
     reason: str           # traza humana de por qué (banda de confidence aplicada)
 
 

@@ -380,6 +380,8 @@ def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
     # Fallback de persona built-in si el .agent.md no está (patrón plan 112 F5).
     system_override = _DEFAULT_DOCUMENTADOR_PROMPT
     try:
+        from services.runtime_capabilities import resolve_run_selection
+        _sel = resolve_run_selection(runtime=runtime, project_name=project_name)
         execution_id = agent_runner.run_agent(
             agent_type="Documentador",
             ticket_id=ticket_id,
@@ -392,6 +394,8 @@ def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
             use_few_shot=False,
             use_anti_patterns=False,
             work_item_type="Doc",
+            model_override=_sel["model"],
+            effort_override=_sel["effort"],
         )
     except Exception as exc:
         logger.warning("doc_documenter: run_agent falló en modo %s: %s", mode, exc)

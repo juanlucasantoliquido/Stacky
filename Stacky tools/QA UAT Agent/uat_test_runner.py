@@ -133,7 +133,11 @@ def run(
     # ── Guardrails ────────────────────────────────────────────────────────────
     max_browser_launches = int(os.environ.get("QA_UAT_MAX_BROWSER_LAUNCHES", "1"))
     max_login_attempts   = int(os.environ.get("QA_UAT_MAX_LOGIN_ATTEMPTS", "1"))
-    max_nav_retries      = int(os.environ.get("QA_UAT_MAX_NAVIGATION_RETRIES", "1"))
+    # Plan 262 F6 — aca vivia una tercera guardrail que leia el alias
+    # QA_UAT_MAX_NAVIGATION_RETRIES con default 1 y NUNCA se usaba (1 solo hit en todo
+    # el archivo). Se ELIMINA: su intencion la cumple _canonical_nav_retries(), que
+    # resuelve el valor y lo exporta por las DOS keys. Cablear aquella variable a la
+    # ligera habria bajado los reintentos efectivos de 3 a 1 en silencio.
     # Default 6 minutes (3× the expected 2-minute human flow).
     # Operators can raise/lower via QA_UAT_MAX_TOTAL_MINUTES.
     max_total_min        = int(os.environ.get("QA_UAT_MAX_TOTAL_MINUTES", "6"))
@@ -298,6 +302,47 @@ def run(
 
 # ── Single Playwright invocation (all specs at once) ─────────────────────────
 
+def _canonical_nav_retries() -> int:
+    """Plan 262 F6 — UN nombre canonico para la cota de reintentos de navegacion.
+
+    ANTES: una guardrail local (default 1) se asignaba en run() y NUNCA se usaba, y el
+    lado TS (navigation_executor.ts:377) prefiere QA_UAT_MAX_NAVIGATION_RETRIES sobre
+    QA_NAV_RETRIES — la que Python jamas exportaba. Dos nombres, dos defaults (1 y 3),
+    y el efectivo era 3 por accidente. El dia que alguien exportara el alias en 1
+    "para arreglar el warning", los reintentos bajaban de 3 a 1 EN SILENCIO.
+
+    AHORA: QA_NAV_RETRIES es el CANONICO y el alias se sigue leyendo por
+    compatibilidad. EL DEFAULT SE MANTIENE EN 3: bajarlo seria una regresion
+    silenciosa de comportamiento disfrazada de limpieza.
+
+    Vive a nivel de modulo (y no como local del bloque de guardrails, como sugeria el
+    plan) porque los dos puntos que lo necesitan estan en FUNCIONES DISTINTAS:
+    los guardrails en run() y el export del env en _run_all_specs_once().
+    """
+    raw = (
+        os.environ.get("QA_NAV_RETRIES")
+        or os.environ.get("QA_UAT_MAX_NAVIGATION_RETRIES")
+        or "3"
+    )
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 3
+
+
+def _apply_nav_retry_env(env: dict) -> dict:
+    """Escribe el MISMO valor en las dos keys. ASIGNACION, no setdefault.
+
+    Con setdefault, un QA_NAV_RETRIES="abc" heredado de os.environ sobreviviria sin
+    validar y el subproceso recibiria basura. Asignando, el TS no puede resolver un
+    numero distinto del que Python cree, que es el objetivo entero de esta fase.
+    """
+    canonical = str(_canonical_nav_retries())
+    env["QA_NAV_RETRIES"] = canonical
+    env["QA_UAT_MAX_NAVIGATION_RETRIES"] = canonical
+    return env
+
+
 def _run_all_specs_once(
     spec_files: list,
     evidence_out: Path,
@@ -340,7 +385,9 @@ def _run_all_specs_once(
     # Fase 1 — Forward navigation strategy to the Playwright subprocess.
     # navigate_webforms steps in generated specs read these vars.
     env.setdefault("QA_NAV_STRATEGY",        os.environ.get("QA_NAV_STRATEGY",        "form_submit"))
-    env.setdefault("QA_NAV_RETRIES",         os.environ.get("QA_NAV_RETRIES",         "3"))
+    # Plan 262 F6 — las DOS keys con el MISMO valor resuelto. El TS prefiere el alias
+    # (navigation_executor.ts:377); exportando ambas, el orden deja de importar.
+    _apply_nav_retry_env(env)
     env.setdefault("QA_NAV_TIMEOUT_MS",      os.environ.get("QA_NAV_TIMEOUT_MS",      "45000"))
     # Fase 3: configurable timeouts for grid visibility and per-action waits.
     env.setdefault("QA_UAT_GRID_TIMEOUT_MS",   os.environ.get("QA_UAT_GRID_TIMEOUT_MS",   "5000"))

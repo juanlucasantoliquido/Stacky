@@ -372,14 +372,118 @@ def limpiar_links_de_adjuntos(writer, cfg, *, dry_run: bool) -> dict:
     return res
 
 
+# ── Issue board por estado ──────────────────────────────────────────────
+
+# Orden de FLUJO de Mantis (no alfabetico): es como avanza un ticket.
+_ORDEN_ESTADOS = ["new", "feedback", "acknowledged", "confirmed",
+                  "assigned", "resolved", "closed"]
+
+
+def configurar_board(writer, cfg, *, dry_run: bool, nombre_board: "str | None" = None,
+                     board_id: "int | None" = None) -> dict:
+    """Deja UN issue board con una lista por estado, en orden de flujo.
+
+    LIMITACION DURA DE GITLAB (no es un bug de este script): una lista de
+    board por LABEL muestra unicamente issues ABIERTOS. Los issues cerrados
+    no aparecen en ninguna lista de label, sino en la lista "Closed"
+    incorporada del board (que se controla con `hide_closed_list`). Por eso
+    la lista `status::cerradas` se ve VACIA aunque el label este bien puesto
+    en 956 issues. Se deja `hide_closed_list=False` para que esos 956 sean
+    visibles en la lista Closed, y la verificacion reporta el conteo REAL de
+    cada lista para que la diferencia quede a la vista y no escondida.
+    """
+    from .__main__ import _field_mapping_to_dict
+
+    fm_status = _field_mapping_to_dict(cfg.field_mapping)["status"]
+    deseadas = [fm_status[k]["label"] for k in _ORDEN_ESTADOS if k in fm_status]
+
+    body, _ = _api(writer, "GET", f"/projects/{_proj(writer)}/labels",
+                   params={"per_page": 100})
+    label_id = {l["name"]: l["id"] for l in body} if isinstance(body, list) else {}
+    faltan = [l for l in deseadas if l not in label_id]
+    if faltan:
+        raise RuntimeError(f"faltan labels en el proyecto: {faltan}")
+
+    boards, _ = _api(writer, "GET", f"/projects/{_proj(writer)}/boards")
+    if board_id is None:
+        if not boards:
+            raise RuntimeError("el proyecto no tiene ningun board")
+        board_id = boards[0]["id"]
+    board = next(b for b in boards if b["id"] == board_id)
+
+    res = {"board_id": board_id, "board_nombre_previo": board["name"],
+           "listas_previas": [(l["id"], (l.get("label") or {}).get("name"))
+                              for l in board.get("lists", [])],
+           "borradas": [], "creadas": [], "renombrado": False}
+
+    if dry_run:
+        res["creadas"] = deseadas
+        res["borradas"] = [n for _, n in res["listas_previas"]]
+        return res
+
+    # `hide_closed_list=False` es lo unico que hace visibles los cerrados.
+    payload = {"hide_closed_list": False, "hide_backlog_list": False}
+    if nombre_board and nombre_board != board["name"]:
+        payload["name"] = nombre_board
+        res["renombrado"] = True
+    _api(writer, "PUT", f"/projects/{_proj(writer)}/boards/{board_id}",
+         json_body=payload)
+
+    # Se borran TODAS las listas y se recrean en orden: la API asigna la
+    # position por orden de creacion (append), asi que recrear de cero es la
+    # unica forma confiable de fijar el orden sin depender de reordenamientos.
+    for lst in board.get("lists", []):
+        _api(writer, "DELETE",
+             f"/projects/{_proj(writer)}/boards/{board_id}/lists/{lst['id']}")
+        res["borradas"].append((lst["id"], (lst.get("label") or {}).get("name")))
+
+    for nombre in deseadas:
+        nueva, _ = _api(writer, "POST",
+                        f"/projects/{_proj(writer)}/boards/{board_id}/lists",
+                        json_body={"label_id": label_id[nombre]})
+        res["creadas"].append((nueva.get("id"), nombre, nueva.get("position")))
+    return res
+
+
+def verificar_board(writer, cfg, *, board_id: "int | None" = None) -> dict:
+    """Relee el board por API y cuenta, por lista, los issues que REALMENTE
+    muestra (label + state=opened, que es el criterio de GitLab) contra el
+    total del label. La diferencia es lo que el board esconde."""
+    boards, _ = _api(writer, "GET", f"/projects/{_proj(writer)}/boards")
+    if board_id is None:
+        board_id = boards[0]["id"]
+    board = next(b for b in boards if b["id"] == board_id)
+
+    def total(**p):
+        q = {"per_page": 1}
+        q.update(p)
+        _, headers = _api(writer, "GET", f"/projects/{_proj(writer)}/issues", params=q)
+        return int(headers.get("X-Total") or headers.get("x-total") or 0)
+
+    filas = []
+    for lst in sorted(board.get("lists", []), key=lambda l: l["position"]):
+        nombre = (lst.get("label") or {}).get("name")
+        filas.append({
+            "position": lst["position"], "list_id": lst["id"], "label": nombre,
+            "muestra": total(labels=nombre, state="opened"),
+            "label_total": total(labels=nombre),
+        })
+    return {"board_id": board_id, "nombre": board["name"],
+            "hide_closed_list": board["hide_closed_list"],
+            "hide_backlog_list": board["hide_backlog_list"],
+            "listas": filas,
+            "cerrados_en_lista_Closed": total(state="closed")}
+
+
 # ── CLI ─────────────────────────────────────────────────────────────────
 
 
 def main(argv: "Optional[list[str]]" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", required=True)
-    ap.add_argument("--fase", choices=["labels", "adjuntos", "ambas", "limpiar-vacios"],
-                    required=True)
+    ap.add_argument("--fase", choices=["labels", "adjuntos", "ambas", "limpiar-vacios",
+                                       "board", "verificar-board"], required=True)
+    ap.add_argument("--nombre-board", default=None)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--confirmed", action="store_true")
     ap.add_argument("--limit", type=int, default=None)
@@ -402,6 +506,20 @@ def main(argv: "Optional[list[str]]" = None) -> int:
     writer = GitLabDestinationWriter(cfg.destination, token)
     assert_target_matches(writer, cfg.destination)
     print(f"destino verificado: {writer.effective_target()}")
+
+    if args.fase == "verificar-board":
+        v = verificar_board(writer, cfg)
+        print(json.dumps(v, ensure_ascii=False, indent=1))
+        return 0
+
+    if args.fase == "board":
+        r = configurar_board(writer, cfg, dry_run=args.dry_run,
+                             nombre_board=args.nombre_board)
+        print("[board] RESULTADO:", json.dumps(r, ensure_ascii=False)[:2000])
+        if not args.dry_run:
+            print("[board] VERIFICACION:",
+                  json.dumps(verificar_board(writer, cfg), ensure_ascii=False, indent=1))
+        return 0
 
     if args.fase == "limpiar-vacios":
         r = limpiar_links_de_adjuntos(writer, cfg, dry_run=args.dry_run)

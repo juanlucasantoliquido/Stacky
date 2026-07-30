@@ -1,8 +1,37 @@
-**Estado:** MEJORADO v2 (2026-07-30) · **Autor:** pipeline proponer-plan-stacky · **Crítica:** skill `criticar-y-mejorar-plan` (juez adversarial, subagente con contexto limpio) · **Fuente:** auditoría 2026-07-29 (fd4e45d3)
+**Estado:** MEJORADO v3 (2026-07-30) · **Autor:** pipeline proponer-plan-stacky · **Crítica:** skill `criticar-y-mejorar-plan`, **dos pasadas** (v1→v2 juez en subagente; v2→v3 juez independiente que **corrió los gates y midió cada cifra**) · **Fuente:** auditoría 2026-07-29 (fd4e45d3)
 
 # Plan 273 — El deep link aterriza y el error se entiende: los 7 bloqueantes de producción
 
-## 0. Versión v1 → v2 · Veredicto y changelog
+## 0. Versión v2 → v3 · Veredicto y changelog
+
+**Veredicto sobre el v2: RECHAZADO** — **5 BLOQUEANTES, 6 IMPORTANTES** (11 hallazgos nuevos). El v2 cerró bien los cinco bloqueantes del v1 y sus correcciones de anclaje son **exactas**: `theme.css` abre `:root` en **:3-164** y el bloque claro en **:172-244** (C18/C19 ✓), `config.py:1811-1813` es la sentencia de 3 líneas con `"true"` en `:1812` ✓, `migrator.py:101` **no tiene clave `ok`** y responde 503 ✓, el efecto de redirección tiene **12 ramas en :265-276** (1 `if` + 11 `else if`) ✓, el lag del ratchet es **719/655 ⇒ `solo_en_sh` = 64 con límite 64: holgura CERO medida corriendo el test** ✓, B-06 es **24 ocurrencias / 13 archivos** con el desglose por archivo exacto (5/2/2/2/2/2/1/3/1/1/1/1/1) ✓, `ProbeOptions.fetchImpl` es `(path) => Promise<{json()}>` y por eso no sirve copiada (C16 ✓), y la suma de §10.1 (4+6+16+3+4+4+11+10+6 = 64) **cierra** (C6 ✓).
+
+**Los cinco bloqueantes del v2 son de otra clase: cuatro son diffs y alcances que no coinciden con el archivo real, y uno es una fase insatisfacible.** Tres se descubren solo abriendo el código (no leyendo el plan) y dos solo **corriendo** el gate. Ninguna cifra de esta tabla se leyó del plan: todas se midieron en esta corrida.
+
+| # | Sev | Hallazgo | Dónde se corrige en v3 |
+|---|---|---|---|
+| **C21** | **BLOQ** | **El diff del esqueleto de F7 no matchea el código real y, en su lectura intencionada, monta páginas de features APAGADAS.** F7 dicta `- {tab === "devops" && <DevOpsPage ... />}`. El código real es `{tab === "devops" && devopsEnabled && <DevOpsPage subTab={...} />}` (verificado `App.tsx:313-319`, las **7** líneas tienen el término `&& <gate>`): el diff **omite el guard**. ⇒ (a) la línea "antes" no existe y el pathspec del diff no aplica; (b) el reemplazo `isGateResolving(g) ? <Skeleton/> : <DevOpsPage/>` deja el caso `"off"` renderizando **la página de una feature apagada**, que monta y dispara sus llamadas API (403) antes de que el efecto de redirección corra | **F7 reescrita**: ternario de **3 vías** en las 7 pantallas + caso de test `ninguna_pantalla_gateada_se_monta_en_off` |
+| **C22** | **BLOQ** | **F7 enumera 3 sitios de lectura de los 7 gates; hay 20, y los que omite dejan la nav v1 mostrando TODOS los tabs con `tsc` en VERDE.** Verificado en `App.tsx`: los 7 booleanos se leen en `:270-276` (efecto), **`:277`** (array de deps), `:279-288` (`computeVisibleTabs`, **propiedades shorthand**), `:313-319` (render de páginas), **`:367` y `:445-485`** (los **7 botones de la nav v1**) y **`:504`** (prop `incidentInboxEnabled={incidentInboxEnabled}`). La lista de "Archivos a editar" de F7 no nombra los 7 botones ni los dos arrays de deps. Y el modo de falla es **silencioso**: `{devopsGate && (<button/>)}` con `devopsGate === "off"` es **truthy** ⇒ los 7 tabs se muestran siempre, incluidos los de features apagadas; TypeScript no se queja (un string no vacío es truthy y renderizable) y ningún test del plan lo mira. El plan que arregla B-05 (tabs inalcanzables por desborde) **le agregaría 7 tabs permanentes al desborde** | **F7**: censo de los **20** sitios con su símbolo + caso `ninguna_lectura_de_gate_queda_en_posicion_booleana` |
+| **C23** | **BLOQ** | **El override de F6 sigue inalcanzable en el verbo que escribe en ADO.** Verificado `client.ts:224-234`: `postWithHeaders` y `postAbortable` **enrutan por `request()`**, así que heredan el deadline de 20 s — y F6 declara *"`postWithHeaders` y `postAbortable` NO se tocan (siguen sin override)"*. Sus call sites son `POST /api/tickets/{id}/finish-work` (`endpoints.ts:329`) y `POST /api/tickets/by-ado/{id}/create-child-task` (`:360`), y `finish-work` es un handler de ~490 líneas (`backend/api/tickets.py:1779-2269`) que **sincrónicamente** cancela la ejecución activa, publica el comentario HTML en ADO y transiciona el `System.State`: varios round-trips a la red del operador. A los 20 s la UI aborta y dice *"tardó más de lo esperado"* mientras ADO **sí** cerró; el operador reintenta ⇒ es **exactamente el R16 que el plan clasifica CRÍTICO**, por el único canal que el v2 no cerró | **F6**: el parámetro aditivo va también en `postWithHeaders` y `postAbortable`; la tabla pasa a **12 endpoints**; **[ADICIÓN ARQUITECTO] F6.5** (inventario de verbos) |
+| **C24** | **BLOQ** | **F9 es insatisfacible: la entrada que dicta pone ROJO un gate compartido.** Verificado `backend/tests/test_error_fingerprints_catalog.py:18`: `_REQUIRED = ("id","title","class","status","log_pattern","log_guarded","killed_by","guard_test","self_test")` — **`self_test` es obligatorio**, y `:53-59` exige que cada `self_test["matches"]` matchee el `log_pattern` y cada `self_test["clean"]` no. La plantilla de F9 **no tiene `self_test`** ⇒ agregarla rompe `test_campos_obligatorios`. Y el criterio de aceptación de F9 **no corre ese test** (solo *"el caso verde, `json.load` sin excepción, 45→46"*), así que el rojo aparece después de cerrar la fase. Es la enésima recurrencia de "la fase rompe un gate que su propio DoD no mira" | **F9**: `self_test` escrito con sus dos muestras + `test_error_fingerprints_catalog.py` en el criterio de aceptación y en §10.1 |
+| **C25** | **BLOQ** | **El número 42 del que penden el KPI, F0, F4.6 y el ratchet de F4.7 no lo produce ningún comando del plan, y las dos cifras que el plan manda "ver en rojo" son irreproducibles.** Medido hoy en `Stacky Agents/frontend`: el glob de F0 (`src\*.ts,src\**\*.ts`) da **65 en 36 archivos** — y da eso porque **`**` no es recursivo en `-Path` de PowerShell** (se comporta como `*`), así que **nunca ve `src/components/dbcompare/*.tsx`**, que es donde vive la mitad del alcance de F4.6; el barrido recursivo da **142 en 70**; el comando de censo de F4.6 (`Get-ChildItem -Recurse`, que **no** excluye tests) da **143**; y el `RAW_IDIOM` estricto de F4.7 — *el que el plan declara canónico* — da **40 en 26 archivos**, no 42. En las 10 superficies de F4.6 hay **12** ocurrencias, no 14 (`CompareWizard.tsx` tiene **1**, no 3: su segunda ocurrencia de `instanceof Error` es el `isBusyError` de `:30`, que F4.5 protege). El techo `28` sale bien **por casualidad** (42−14 = 40−12 = 28). Pero: (a) F4.7 exige como demostración obligatoria y como línea de bitácora ver *"**42 > 28** y enumerar las 42"* ⇒ saldrá `40 > 28` con 40; (b) F4.6 exige ver *"**las 14** ocurrencias"* y agrega *"si enumera menos de 14, el regex multilínea está mal y hay que arreglarlo antes de seguir"* ⇒ enumerará 12 y **el plan le ordena al implementador perseguir un bug que no existe** | **KPI, F0 fila 7, F4.6, F4.7 y §10.3**: un solo comando recursivo, y las cifras reales **40 / 26 / 12 / techo 28** |
+| **C26** | IMP | **El ratchet de F4.7 congela el 26% de la superficie que dice congelar.** Su regex exige el fallback `: String(`, y esa es la forma **minoritaria**: medido hoy, `X instanceof Error ? X.message : String(` son **40**, pero `X instanceof Error ? X.message : "<literal>"` — que aplana **igual**, pinta el mismo `403 FORBIDDEN: {...}` — son **87**; más `setError(String(e))` **11** y `setError(e.message)` **15**. Total real ≈ **153**. Un plan futuro que escriba la forma con literal (ya 87 veces en el árbol) deja el ratchet **verde**: la [ADICIÓN ARQUITECTO] pierde la propiedad que declara | **F4.7**: regex con alternancia + techo re-medido + caso `el_censo_cubre_las_dos_variantes` |
+| **C27** | IMP | **Los props de `Toast` que F7 cita no existen.** El plan dice *"`<Toast … />` (props `variant` y `body`, verificadas en `Toast.tsx:9-24`)"*. Verificado: `:9-22` es el **tipo `ToastState`**, no la firma del componente; los props reales son `{ toast: ToastState; onClose: () => void; inStack?: boolean }` (`:24-30`) y `Toast` es **export default**. Un modelo menor escribe `<Toast variant="warning" body="…" />` y **no compila**. Además el microcopy con **negrita** no es expresable en `body: string` | **F7**: firma real, import real y uso literal; la primera frase va en `title` (que existe, opcional) |
+| **C28** | IMP | **El "texto de reintento" del esqueleto no tiene mecanismo — y la primitiva correcta existe y el plan no la nombra.** F7 declara como caso borde *"la pantalla queda en esqueleto… El esqueleto debe traer un texto de reintento; usar el `Skeleton` que ya existe"*. Verificado `components/ui/Skeleton.tsx:33`: `Skeleton({width,height,radius,lines,className})` **pinta barras y no acepta texto ni acción**. Es el mismo defecto que C3 mató en el v1 (requisito sin artefacto). Y la primitiva de la casa para esto existe: **`components/LoadErrorState.tsx`**, citada por el propio comentario de `Toast.tsx:5` (*"Canal para resultados de ACCIONES (no de cargas: eso es LoadErrorState)"*) | **F7**: `<Skeleton lines={3} />` para el caso transitorio y el sub-caso "unknown persistente" acotado explícitamente, con su artefacto |
+| **C29** | IMP | **La regla de cierre de F6 barre solo `post|put`: los GET largos quedan con deadline de 20 s y sin enumerar.** El comando es `-Pattern 'api\.(post\|put)<'`. Verificados en `endpoints.ts`, GETs candidatos a pasar 20 s: `/api/devops/build/doctor` (`:4516`, sondea el toolchain), `/api/docs/graph` (`:3583`), `/api/diag/operational-health` (`:2931`), `/api/reports/digest` (`:1721`), los reportes de triage/closure del Comparador (`:4867`, `:4897`). El canal de override **sí** existe para `get` (ya toma `init`): es una omisión del barrido, no de diseño | **F6**: el barrido cubre los 5 verbos |
+| **C30** | IMP | **F0 no mide 4 de los 8 gates compartidos que el plan compara en delta.** F0 corre `uiDebtRatchet`, los 3 de tema, los 2 de ratchet backend, `tsc` y los censos. Pero F1 exige `shellNav.test.ts` *"en el mismo estado que en F0"*, F7 exige eso de `shellNav`, `routes`, `routesDeepLink` y `flagHealth`, y §10.1 lista **8** gates compartidos. Cuatro no tienen foto ⇒ su criterio delta no es verificable: es el mismo defecto que C15 corrigió para `tsc` | **F0**: 4 comandos y 4 filas más (la tabla pasa de 8 a **13** mediciones, con la del catálogo de huellas por C24) |
+| **C31** | IMP | **El `return` temprano de `sectionsReady` bloquea también las 7 ramas de flag.** Verificado `App.tsx:265-276`: las 12 ramas son **una sola cadena** `if / else if`, con las 5 de sección **primero** y las 7 de flag **después**. El diff de F7 pone `if (!sectionsReady) return;` **arriba de la cadena** ⇒ mientras `initUiSections()` no resuelva, **ninguna** redirección ocurre, incluidas las de un gate legítimamente `"off"`, y el aviso de F7 nunca se emite. Si el backend no responde, `sectionsReady` queda `false` para siempre y acopla dos mecanismos independientes | **F7**: la guarda envuelve **solo** las 5 ramas de sección; las 7 de flag se separan en su propia cadena |
+| **C32** | IMP | **Las reglas 3 y 4 de F4.6 se contradicen.** Regla 3: *"si el `correlationId` está presente, **se muestra** como pie discreto `ref. <id>`… prohibido concatenarlo al título"*. Regla 4: *"**no cambiar el tipo del estado** (`string \| null` sigue siendo `string \| null`)"*. Con un estado `string \| null` no hay dónde poner un segundo campo sin concatenar ⇒ la regla 3 siempre resuelve a "se omite", y el plan no lo dice. Un modelo menor concatena (violando la 3) o lo omite sin registrarlo | **F4.6**: se declara explícito que en esta fase el `correlationId` **no** se renderiza y por qué; el pie `ref.` es de F4 (`PageErrorBoundary`) y de B-21 |
+
+**Cifras que este v3 corrige en todo el documento:** `42 → 40`, `14 → 12`, `26 archivos` (sin cambio, sale del regex estricto), techo del ratchet `28` (sin cambio, aritmética distinta), endpoints con `timeoutMs: 0` `10 → 12`, mediciones de F0 `8 → 13`, casos de test `64 → 71`.
+
+**Flags nuevas en v3: sigue siendo CERO.** Ninguna corrección de este v3 introduce flag, ni archivo de test nuevo (todos los casos nuevos van a archivos que el plan ya crea) ⇒ **cero ediciones nuevas en los dos scripts del arnés**, que siguen en holgura cero.
+
+---
+
+## 0.b Historia: versión v1 → v2 · Veredicto y changelog
+
+> **Esta sección es HISTORIA, no instrucciones.** Documenta la crítica v1→v2 tal como se escribió. Cuatro de sus cifras quedaron **superadas** por la medición de v3 (C25, C26, C23, C24): donde dice *42 ocurrencias*, *14 sitios*, *42→28*, *los 4 verbos* o *los 10 endpoints*, mandan **40 / 12 / 127→115 / los 6 verbos / los 12 endpoints** de §0. Si hay conflicto entre esta sección y el cuerpo de una fase, **gana el cuerpo de la fase**.
 
 **Veredicto sobre el v1: RECHAZADO** — **5 BLOQUEANTES, 8 IMPORTANTES, 7 MENORES** (20 hallazgos). El v1 tiene una calidad de anclaje excepcional: se verificaron ~40 anclas contra el código real y coincidieron casi todas, incluidos conteos finos como `PAIRS`=24 con el texto literal del `it`, `.toBe(53)`, `.toBe(69)`, baseline `App.module.css`=4 con exactamente esos 4 hex, B-06=24/13 con los 13 nombres 1:1, el lag de ratchet 719/655/64 con holgura CERO, y la aritmética WCAG (6.47 / 3.76 / 4.88 recalculados de forma independiente). **Los cinco bloqueantes no son de anclaje.** Cuatro son de **alcance dimensionado por el tamaño del defecto en vez de por el tamaño de la superficie que lo muestra**, y uno es autoinfligido: el diff que F3 dicta rompe el gate que F3 crea. Este v2 los cierra.
 
@@ -49,7 +78,8 @@ Cerrar los **7 condicionantes P0** (B-01…B-07) que la auditoría UX/UI del 202
 | Ventana de rebote tras el montaje | ~1.2 s (`flagHealth.ts:40-41`, 2 reintentos 400→800 ms) | **0 ms** (no se redirige con gate sin resolver) |
 | Cambios de arquitectura de navegación por carga | 1 (v1 → v2), **y un 2º si el health responde 200 sin la clave** (C8) | **0** en los dos casos |
 | Cadenas de error del backend que nombran `STACKY_*` en texto para el operador | 24 (13 archivos: 14 con clave `error`, 10 con clave `message`) | **0** (el nombre se mueve a `detail.flag`) |
-| **Sitios del frontend que aplanan la excepción y la pintan cruda al operador** (C1: el modismo `X instanceof Error ? X.message : String(X)`) | **42 en 26 archivos** | **28** — los **14** de las 10 superficies gateadas van a `userFacingMessage()`; el resto queda **congelado por ratchet que solo baja** (F4.7) |
+| **Sitios del frontend que aplanan la excepción y la pintan cruda al operador** (C1: el modismo `X instanceof Error ? X.message : String(X)`) | **40 en 26 archivos** (C25: el v2 decía 42; medido con el `RAW_IDIOM` de F4.7, que es el canónico) | **28** — los **12** de las 10 superficies gateadas van a `userFacingMessage()`; el resto queda **congelado por ratchet que solo baja** (F4.7) |
+| **Superficie cruda TOTAL, contando la variante con fallback literal** (C26: `X instanceof Error ? X.message : "texto"` aplana igual y el regex del v2 no la veía) | **127** (40 con `: String(` + 87 con `: "literal"`) | **115** — mismo criterio de ratchet, ahora con las **dos** formas; el resto se paga por concentración (B-09/B-10) |
 | `STACKY_*` visible en pantalla ante una feature apagada | sí (dentro del string crudo) | **0** — y es F4.6, **no** F5, quien lo logra: F5 solo mueve el nombre de `error` a `detail.flag`, **dentro del mismo string crudo** |
 | Contraste del texto de tab en reposo, tema claro | **1.03:1** | **≥ 4.5:1** (6.00:1 con el token propuesto) |
 | Contraste del texto de tab en reposo, tema oscuro | **4.48:1** (falla AA por 0.02) | **≥ 4.5:1** (5.62:1) |
@@ -58,7 +88,17 @@ Cerrar los **7 condicionantes P0** (B-01…B-07) que la auditoría UX/UI del 202
 
 **Flags nuevas: CERO.** La justificación está en cada fase y consolidada en §3.6, incluido el caso tentador (el timeout de F6) y por qué convertirlo en flag sería un error de diseño, no una precaución.
 
-**Nota de honestidad sobre el KPI de errores (C1).** El v1 medía el defecto en el lado equivocado del cable: contaba las 24 cadenas del backend. El daño que ve el operador se mide en el frontend, y son **42 sitios en 26 archivos** los que aplanan la excepción. Reescribir el backend sin migrar consumidores no baja ese número de 42: lo deja igual y **reubica** el nombre de la flag dentro del mismo string. Por eso el v2 agrega F4.6 (migración de las 10 superficies gateadas) y F4.7 (ratchet).
+**Nota de honestidad sobre el KPI de errores (C1, recontada en v3 por C25 y C26).** El v1 medía el defecto en el lado equivocado del cable: contaba las 24 cadenas del backend. El daño que ve el operador se mide en el frontend. **Las cifras del v2 estaban mal en las dos direcciones** y este v3 las reemplaza por las medidas en esta corrida:
+
+| Barrido (sobre `frontend/src/**/*.{ts,tsx}`, excluyendo `__tests__` y `*.test.*`) | Ocurrencias | Archivos |
+|---|---|---|
+| `X instanceof Error ? X.message : String(X)` — el `RAW_IDIOM` que el v2 declaró canónico | **40** | 26 |
+| `X instanceof Error ? X.message : "<literal>"` — **aplana idéntico** y el regex del v2 **no lo veía** | **87** | — |
+| **Total de la superficie cruda del modismo (las dos formas)** | **127** | **61** |
+| De ese total, en las **10** superficies que F4.6 migra | **12** | 10 |
+| `instanceof Error` en cualquier construcción (incluye guardas que **no** aplanan, p. ej. `isBusyError`) | 142 | 70 |
+
+Reescribir el backend sin migrar consumidores no baja el 127: lo deja igual y **reubica** el nombre de la flag dentro del mismo string. Por eso F4.6 migra las 10 superficies gateadas (12 ocurrencias) y F4.7 congela el resto en **115** con las **dos** formas.
 
 ---
 
@@ -119,6 +159,7 @@ Hay gates rojos por deuda ajena a este plan. **Prohibido** escribir un DoD que e
 | Deuda visual por archivo | `frontend/src/__tests__/uiDebtRatchet.test.ts:97-131` | `count > allowed` ⇒ una **BAJA nunca falla**; solo cuenta hex en `*.module.css`; baseline de `App.module.css` = **4** | F3 lleva 4 → 0. `0 > 4` es falso ⇒ pasa **sin regenerar el baseline** |
 | Anti-drift color base↔claro | `frontend/src/__tests__/themeContrast.test.ts:100-116` | todo token de color nuevo en `:root` **debe** re-apuntarse en el bloque claro o el gate se pone rojo | F3 agrega **un** token ⇒ reconciliación de 3 pasos obligatoria, escrita en F3 |
 | Ratchet de tests del arnés | `backend/tests/test_harness_ratchet_meta.py:43-53` + `backend/tests/test_plan259_ratchet_script_parity.py:46` | todo `tests/test_*.py` nuevo va a `HARNESS_TEST_FILES` **o** a `tests/harness_ratchet_allowlist.txt`; el test compara **conjuntos** (`solo_en_sh`), no tamaños, y hoy vale **64 con límite 64: holgura CERO** (medido: `.sh`=719, `.ps1`=655, `solo_en_ps1`=0) | F5 agrega **1** test backend ⇒ **hay que registrarlo en los DOS scripts**. Registrarlo solo en el `.sh` sube `solo_en_sh` a 65 y pone rojo el gate de paridad. **v2:** F9 NO agrega un segundo archivo (su caso va en el de F5) precisamente para no repetir esta operación con holgura cero |
+| **[v3, C24] Schema del catálogo de huellas** | `backend/tests/test_error_fingerprints_catalog.py:18` + `:32-35` + `:48-59` | `_REQUIRED` son **9** campos obligatorios por entrada, **incluido `self_test`**; además el `log_pattern` tiene que compilar y cada muestra de `self_test.matches`/`.clean` tiene que matchear / no matchear. `test_error_fingerprints_scan.py` solo mira las entradas con `log_guarded is True` (`:49-54`) | F9 agrega **una** entrada ⇒ **con `self_test` o el gate se pone rojo**. Medido hoy: los dos gates VERDES, así que acá delta cero = **verdes** |
 | **[v2, C20] Presupuesto CERO ABSOLUTO por carpeta** | `frontend/src/__tests__/uiDebtRatchet.test.ts:109-112` | `forcedZero = kind === "nativeDialogByFile" \|\| file.startsWith("components/ui/") \|\| file.startsWith("components/shell/")` ⇒ para esas dos carpetas el techo es **0**, no un baseline, y **ni un `UI_DEBT_REGEN` futuro puede resubirlo** | F1 agrega `SHELL_V2_DEFAULT` en `components/shell/shellNav.ts`: es un `.ts` con un booleano, sin hex ni inline style ⇒ **sin efecto**. Pero cualquier `.tsx`/`.module.css` que este plan agregara bajo esas dos carpetas arrancaría con techo 0. Vale para el aviso de F7 (§F7, punto 3) |
 
 ### 3.5 Regla de anclaje de este plan (obligatoria para el implementador)
@@ -211,7 +252,7 @@ Verificado hoy que **no existen** y que ningún plan de la tabla los declara:
 
 **Archivos existentes que el v2 SÍ edita y el v1 no listaba** (por C1 y C2, con su justificación de frontera):
 - Los **10** de F4.6 (6 en `components/dbcompare/`, 3 en `evolution/`, `pages/EvolutionCenterPage.tsx`). **Ninguno** de los 4 planes de la tabla de §4 los toca: el 266 vive en `dbcompare/radarLogic.ts` (que F4.6 **no** toca) y el 263 en `plansBoard/`.
-- `frontend/src/api/client.ts` — **también** las firmas de los 4 verbos (C2). Sigue **sin** tocar `rawGet`/`rawPost`/`rawPut`, que es donde está la frontera con el 263.
+- `frontend/src/api/client.ts` — **también** las firmas de los **6** verbos que enrutan por `request()` (C2 + **C23**: `post`, `put`, `patch`, `delete`, `postWithHeaders`, `postAbortable`) y el tipo del `init` de `get`. Sigue **sin** tocar `rawGet`/`rawPost`/`rawPut`, que es donde está la frontera con el 263.
 - `Stacky Agents/docs/sistema/error_fingerprints.json` (F9).
 
 (Existe `frontend/src/services/flagGate.ts` — es la lectura de flags de la UI, **concepto distinto** de `gateState.ts`, que es la máquina de tres estados del gate de tab. No unificarlos en este plan.)
@@ -262,9 +303,34 @@ cd "Stacky Agents\backend"; (Select-String -Path api\*.py -Pattern '"(error|mess
 cd "Stacky Agents\frontend"; npx tsc --noEmit
 # anotar el CONTEO de errores (0 si sale limpio) y, si hay, los archivos.
 
-# (7) [v2, C1] Superficie de error cruda: sitios que aplanan la excepcion y la
-# pintan al operador. Es el numerador real del KPI de C3.
-cd "Stacky Agents\frontend"; (Select-String -Path src\*.ts,src\*.tsx,src\**\*.ts,src\**\*.tsx -Pattern 'instanceof Error' | Where-Object { $_.Path -notmatch '__tests__|\.test\.' }).Count
+# (7) [v2 C1, CORREGIDO en v3 por C25] Superficie de error cruda: sitios que
+# aplanan la excepcion y la pintan al operador. Es el numerador real del KPI de C3.
+#
+# OJO — el comando del v2 estaba ROTO y por eso el v2 anoto 42. `**` NO es
+# recursivo en el -Path de Select-String (PowerShell lo trata como `*`), asi que
+# `src\**\*.tsx` NUNCA ve src\components\dbcompare\*.tsx, que es donde vive la
+# mitad del alcance de F4.6. Medido: el comando roto da 65/36, el recursivo da
+# 142/70, y el modismo real (las dos formas) da 127/61. USAR ESTE:
+cd "Stacky Agents\frontend"; $arch = Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx | Where-Object { $_.FullName -notmatch '__tests__|\.test\.' }
+# 7a) forma con fallback String(  -> esperado 40
+($arch | Select-String -Pattern 'instanceof\s+Error\s*\?\s*\w+\.message\s*:\s*String\(').Count
+# 7b) forma con fallback literal  -> esperado 87  (C26: aplana IGUAL)
+($arch | Select-String -Pattern 'instanceof\s+Error\s*\?\s*\w+\.message\s*:\s*["'']').Count
+# 7c) archivos distintos con cualquiera de las dos -> esperado 61
+($arch | Select-String -Pattern 'instanceof\s+Error\s*\?\s*\w+\.message\s*:\s*(String\(|["''])' | Select-Object -ExpandProperty Path -Unique).Count
+
+# (8) [v3, C30] Los CUATRO gates compartidos que el plan compara en delta y que
+# el v2 nunca fotografiaba. Sin esta foto, "en el mismo estado que en F0" de F1
+# y F7 no es verificable.
+cd "Stacky Agents\frontend"; npx vitest run src/components/shell/__tests__/shellNav.test.ts
+cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/routes.test.ts
+cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/routesDeepLink.test.ts
+cd "Stacky Agents\frontend"; npx vitest run src/utils/__tests__/flagHealth.test.ts
+
+# (9) [v3, C24] El catalogo de huellas que F9 edita esta guardado por DOS tests
+# compartidos que el v2 no corria. Foto obligatoria: F9 los tiene que dejar igual.
+cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_catalog.py -q
+cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_scan.py -q
 ```
 
 **Valores medidos el 2026-07-30** (si difieren, gana la medición del implementador y se anota la diferencia):
@@ -278,13 +344,19 @@ cd "Stacky Agents\frontend"; (Select-String -Path src\*.ts,src\*.tsx,src\**\*.ts
 | `themeTokens.test.ts` → `FROZEN_TOKENS.length` | **69** |
 | B-06 ocurrencias / archivos | **24 / 13** (desglose: **14** con clave `error`, **10** con clave `message`; conjuntos de archivos **disjuntos** ⇒ 24 ocurrencias = 24 cuerpos distintos) |
 | **[v2, C15] `tsc --noEmit`** → errores | **a medir** (anotar el conteo; el criterio de F4/F6/§10.1 es delta contra este número) |
-| **[v2, C1] Modismo `X instanceof Error ? X.message : String(X)`** | **42 ocurrencias en 26 archivos** (0 en tests) |
+| **[v3, C25] Modismo con fallback `String(` (el `RAW_IDIOM` canónico)** | **40 ocurrencias en 26 archivos** (0 en tests) — el v2 decía 42 |
+| **[v3, C26] Modismo con fallback literal (aplana igual)** | **87 ocurrencias** |
+| **[v3, C25/C26] Total del modismo, las dos formas** | **127 ocurrencias en 61 archivos** ⇒ techo del ratchet tras F4.6 = **115** |
+| **[v3, C25] Ocurrencias (dos formas) en las 10 superficies de F4.6** | **12** — el v2 decía 14; `CompareWizard.tsx` tiene **1**, no 3 |
+| **[v3, C30] `shellNav` / `routes` / `routesDeepLink` / `flagHealth`** | **a medir, uno por uno** (verde o rojo; son 4 de los **10** gates compartidos de §10.1) |
+| **[v3, C24] `test_error_fingerprints_catalog` / `test_error_fingerprints_scan`** | **a medir** (hoy: los dos VERDES, medido en esta corrida; F9 los tiene que dejar verdes) |
+| **[v3] Entradas en `error_fingerprints.json`** | **45** (top-level `{schema_version, description, fingerprints}`) |
 
 **Tests:** ninguno nuevo. F0 no escribe código.
 
 **Estado ROTO esperado:** no aplica (fase de medición). **Pero sí hay una observación obligatoria:** si alguno de los comandos (2) o (3) ya sale **rojo** antes de tocar nada, ese rojo es **ajeno** y queda anotado como tal. Las fases siguientes lo comparan en delta y **no lo arreglan**.
 
-**Criterio de aceptación (binario):** las **ocho** mediciones de la tabla (v2: seis del v1 + `tsc` por C15 + superficie cruda por C1) están anotadas con su valor real y, para cada gate compartido, está anotado si hoy sale verde o rojo. Verificación: la bitácora contiene las ocho filas.
+**Criterio de aceptación (binario):** las **trece** mediciones de la tabla (seis del v1 + `tsc` por C15 + las **cuatro** filas de superficie cruda por C25/C26 + los 4 gates compartidos y los 2 del catálogo de huellas por C30/C24, contados como una fila cada grupo) están anotadas con su valor real y, para cada gate compartido, está anotado si hoy sale verde o rojo. Verificación: la bitácora contiene las trece filas. **Si la fila de superficie cruda no da 40 / 87 / 127 / 12, se anota el valor medido y se ajusta el techo de F4.7 en el mismo commit** — lo que NO se hace es "arreglar" el regex para que dé el número del plan (C25: el v2 mandaba exactamente eso y era un bug del plan, no del código).
 
 **Flag:** ninguna. F0 no cambia comportamiento.
 
@@ -715,7 +787,7 @@ export function userFacingMessage(e: unknown): UserFacingError { ... }
 - **NO** cambia la firma ni el cuerpo de `rawGet`, `rawPost`, `rawPut`. Siguen devolviendo `{ status, ok, data, errorBody }` (frontera con el plan 263, §4).
 - **NO** cambia `reportOutcome`, `isAbortError` ni `reportConnectionFailure` (frontera con el 267).
 - **NO** toca los 7 parsers legacy. F4.5 los congela; migrarlos es trabajo futuro (B-09/B-10, fuera de scope).
-- **NO** cambia ningún verbo de `api.*` (`get`/`post`/`put`/`patch`/`delete`/`postWithHeaders`/`postAbortable`). **Excepción declarada en v2 (C2), y vale solo para F6:** F6 agrega un parámetro **opcional al final** (`opts?: RequestOptions`) a `post`/`put`/`patch`/`delete` y ensancha el tipo del `init` de `get`. Es lo único que hace alcanzable el override de deadline (ver el bloque de corrección de C2 en F6). Aditivo y retrocompatible: ningún llamador existente cambia. `postWithHeaders`, `postAbortable` y los tres `raw*` siguen intactos.
+- **NO** cambia ningún verbo de `api.*` (`get`/`post`/`put`/`patch`/`delete`/`postWithHeaders`/`postAbortable`). **Excepción declarada en v2 (C2) y ampliada en v3 (C23), y vale solo para F6:** F6 agrega un parámetro **opcional al final** (`opts?: RequestOptions`) a `post`/`put`/`patch`/`delete`/`postWithHeaders`/`postAbortable` — los **seis** que enrutan por `request()` — y ensancha el tipo del `init` de `get`. Es lo único que hace alcanzable el override de deadline (ver el bloque de corrección de C2/C23 en F6). Aditivo y retrocompatible: ningún llamador existente cambia. **Los tres `raw*` siguen intactos** (frontera con el plan 263).
 
 **`PageErrorBoundary.tsx`** — una edición, anclada por la cadena literal `"Error inesperado"` (hoy en `:62`):
 
@@ -842,30 +914,30 @@ setError(err instanceof Error ? err.message : String(err));
 
 Es decir: status crudo **+** JSON crudo **+** `feature_disabled` **+** `STACKY_DB_COMPARE_ENABLED`. **Las cuatro cosas que el smoke 5 prohíbe explícitamente.** Y nótese que F5 **empeora la legibilidad** de este string mientras no exista F4.6: el nombre de la flag sigue ahí, solo se mudó de `error` a `detail.flag`.
 
-**Censo verificado el 2026-07-30.** El modismo `X instanceof Error ? X.message : String(X)` aparece **42 veces en 26 archivos** (cero en tests). Comando:
+**Censo verificado el 2026-07-30 y RECONTADO en v3 (C25).** El comando del v2 contaba `instanceof Error` a secas (que incluye guardas que **no** aplanan, como `isBusyError`) y por eso dio 42; el modismo real, con sus **dos** formas de fallback (C26), da **127 en 61 archivos**. Comando canónico — el mismo de F4.7, y **es el que manda**:
 
 ```powershell
-cd "Stacky Agents\frontend\src"; (Get-ChildItem -Recurse -Include *.ts,*.tsx | Select-String -Pattern 'instanceof Error').Count
+cd "Stacky Agents\frontend"; $arch = Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx | Where-Object { $_.FullName -notmatch '__tests__|\.test\.' }
+($arch | Select-String -Pattern 'instanceof\s+Error\s*\?\s*\w+\.message\s*:\s*(String\(|["''])').Count   # esperado 127
 ```
-(la cuenta exacta del modismo completo requiere multilínea; el comando canónico del gate está en F4.7 y es el que manda)
 
-**Alcance de F4.6: las 10 superficies cuyo backend reescribe F5.** Son 14 de las 42 ocurrencias. Lista literal, con el conteo por archivo medido hoy:
+**Alcance de F4.6: las 10 superficies cuyo backend reescribe F5.** Son **12** de las 127 ocurrencias (el v2 decía 14 de 42; las dos cifras estaban mal). Lista literal, con el conteo por archivo **medido en esta corrida**:
 
-| Archivo (relativo a `frontend/src/`) | Ocurrencias |
-|---|---|
-| `components/dbcompare/CompareWizard.tsx` | 3 |
-| `components/dbcompare/DataParitySection.tsx` | 2 |
-| `components/dbcompare/SqlViewer.tsx` | 2 |
-| `components/dbcompare/DemoSandboxPanel.tsx` | 1 |
-| `components/dbcompare/ScriptsPanel.tsx` | 1 |
-| `components/dbcompare/useCompareRun.ts` | 1 |
-| `evolution/FitnessSection.tsx` | 1 |
-| `evolution/KnowledgeSection.tsx` | 1 |
-| `evolution/PlansSection.tsx` | 1 |
-| `pages/EvolutionCenterPage.tsx` | 1 |
-| **Total** | **14** |
+| Archivo (relativo a `frontend/src/`) | Ocurrencias del modismo | Nota |
+|---|---|---|
+| `components/dbcompare/CompareWizard.tsx` | **1** | el v2 decía 3. Tiene **2** `instanceof Error`: el de `:97` (aplanado, el que se migra) y el de **`:30`**, que es `isBusyError` (`err instanceof Error && err.message.startsWith("409")`) — **NO es un aplanado y NO se toca**: es uno de los 7 parsers que F4.5 congela |
+| `components/dbcompare/DataParitySection.tsx` | 2 | |
+| `components/dbcompare/SqlViewer.tsx` | 2 | |
+| `components/dbcompare/DemoSandboxPanel.tsx` | 1 | |
+| `components/dbcompare/ScriptsPanel.tsx` | 1 | |
+| `components/dbcompare/useCompareRun.ts` | 1 | |
+| `evolution/FitnessSection.tsx` | 1 | |
+| `evolution/KnowledgeSection.tsx` | 1 | |
+| `evolution/PlansSection.tsx` | 1 | |
+| `pages/EvolutionCenterPage.tsx` | 1 | |
+| **Total** | **12** | verificado: las 10 rutas existen, y ninguna contiene la variante con fallback literal |
 
-**Los otros 16 archivos (28 ocurrencias) NO se tocan en esta fase.** No es descuido: son superficies cuyo backend F5 no reescribe (tickets, PM, devops, agentes, memoria), migrarlas es alcance de B-09/B-10, y tocarlas aumentaría la colisión con los 4 planes en vuelo de §4. Quedan **congeladas por el ratchet de F4.7**, que es lo que garantiza que nadie las empeore y que el resto se pague por concentración.
+**Los otros 51 archivos (115 ocurrencias) NO se tocan en esta fase.** No es descuido: son superficies cuyo backend F5 no reescribe (tickets, PM, devops, agentes, memoria), migrarlas es alcance de B-09/B-10, y tocarlas aumentaría la colisión con los 4 planes en vuelo de §4. Quedan **congeladas por el ratchet de F4.7**, que es lo que garantiza que nadie las empeore y que el resto se pague por concentración.
 
 **Transformación exacta, sin excepciones.** En cada ocurrencia:
 
@@ -878,15 +950,15 @@ cd "Stacky Agents\frontend\src"; (Get-ChildItem -Recurse -Include *.ts,*.tsx | S
 Reglas:
 1. **Import:** `import { userFacingMessage } from "../../api/gatewayError";` con la profundidad relativa que corresponda al archivo. No usar alias de path (el repo no los tiene configurados).
 2. **Si el sitio ya tiene una rama especial, se conserva.** `CompareWizard.tsx:94-99` tiene `isBusyError(err)` (que parsea `message.startsWith("409")`, uno de los 7 de F4.5): la rama del 409 **queda intacta**, solo cambia el `else`. Es decir: `isBusyError(err) ? "Ya hay una comparación…" : userFacingMessage(err).title`. **No borrar ningún parser de F4.5 en esta fase** — si se borra alguno, hay que bajar su fila en `LEGACY_PARSERS` en el MISMO commit (regla de F4.5).
-3. **Si el `correlationId` está presente, se muestra** como pie discreto `ref. <id>` donde el componente ya pinta el error. Si el componente no tiene lugar para un pie, se omite: **prohibido** concatenarlo al título.
-4. **No cambiar el tipo del estado** (`string | null` sigue siendo `string | null`). No hay refactor de forma en esta fase.
+3. **El `correlationId` NO se renderiza en esta fase, y hay que decirlo (C32).** El v2 mandaba mostrarlo *"como pie discreto `ref. <id>`"* **y** en la regla 4 prohibía cambiar el tipo del estado: con un estado `string | null` no hay dónde poner un segundo campo sin concatenar, y concatenar estaba prohibido por la misma regla. Las dos reglas juntas resolvían siempre a "se omite" sin decirlo, así que un modelo menor concatenaba (violando la 3) o lo omitía sin registrarlo. Regla binaria de v3: **en F4.6 el `correlationId` se descarta**; el único lugar donde este plan lo pinta es `PageErrorBoundary` (F4). Enriquecer los banners de estas 10 superficies con `ref.` es **B-21**, fuera de scope (§7). **Prohibido** concatenarlo al título.
+4. **No cambiar el tipo del estado** (`string | null` sigue siendo `string | null`). No hay refactor de forma en esta fase. Es la razón de la regla 3.
 
 **Tests PRIMERO.** Archivo: `frontend/src/__tests__/plan273ErrorSurface.test.ts` (nombre reservado, verificado libre; test puro de archivos + de función, sin DOM):
 
 | Caso | Afirma |
 |---|---|
 | `las_10_superficies_gateadas_usan_userFacingMessage` | Cada uno de los 10 archivos de la tabla contiene `userFacingMessage(` |
-| `las_10_superficies_gateadas_no_aplanan` | Ninguno de los 10 contiene el modismo `instanceof Error ? ….message : String(` (regex multilínea sobre el fuente). **Este es el gate contra el defecto** |
+| `las_10_superficies_gateadas_no_aplanan` | Ninguno de los 10 contiene el modismo en **ninguna de sus dos formas** (v3, C26): regex `instanceof\s+Error\s*\?\s*\w+\.message\s*:\s*(String\(\|["'])` multilínea sobre el fuente. **Este es el gate contra el defecto.** Prohibir solo la forma `String(` dejaba pasar la variante con literal, que aplana idéntico |
 | `el_banner_del_comparador_no_puede_mostrar_STACKY` | Alimentar `userFacingMessage` con el cuerpo REAL que el backend devolverá tras F5 (`{"ok":false,"error":"feature_disabled","message":"El Comparador de BD está desactivado.","detail":{"flag":"STACKY_DB_COMPARE_ENABLED"}}`, status 403) y afirmar: `title` es exactamente la frase, **no** matchea `/STACKY_[A-Z_]+/`, **no** matchea `/^\d{3}/`, **no** contiene `feature_disabled`, y `flag === "STACKY_DB_COMPARE_ENABLED"` |
 | `la_rama_del_409_del_comparador_sobrevive` | `CompareWizard.tsx` sigue conteniendo `isBusyError` y `message.startsWith("409")` (no se rompió un parser de F4.5 al migrar) |
 
@@ -895,7 +967,7 @@ Comando exacto:
 cd "Stacky Agents\frontend"; npx vitest run src/__tests__/plan273ErrorSurface.test.ts
 ```
 
-**Estado ROTO esperado (ANTES del fix):** `las_10_superficies_gateadas_usan_userFacingMessage` falla **nombrando los 10** archivos; `las_10_superficies_gateadas_no_aplanan` falla **enumerando las 14 ocurrencias con `archivo:línea`** (si enumera menos de 14, el regex multilínea está mal y hay que arreglarlo antes de seguir); `la_rama_del_409…` pasa desde el principio (es un tripwire, y hay que decirlo). `el_banner_del_comparador…` falla por módulo inexistente si se corre antes de F4. Total: **2 de 4 rojos contra el código actual**, y son los que importan.
+**Estado ROTO esperado (ANTES del fix):** `las_10_superficies_gateadas_usan_userFacingMessage` falla **nombrando los 10** archivos; `las_10_superficies_gateadas_no_aplanan` falla **enumerando las 12 ocurrencias con `archivo:línea`** (v3, C25: el v2 decía 14 y agregaba *"si enumera menos de 14, el regex está mal y hay que arreglarlo antes de seguir"* — eso mandaba a perseguir un bug inexistente. El número medido es **12**, con `CompareWizard.tsx` aportando **1**. Si el barrido enumera **13**, el regex está matcheando también el `isBusyError` de `CompareWizard.tsx:30`, que **no** es un aplanado: ahí sí hay que corregir el regex); `la_rama_del_409…` pasa desde el principio (es un tripwire, y hay que decirlo). `el_banner_del_comparador…` falla por módulo inexistente si se corre antes de F4. Total: **2 de 4 rojos contra el código actual**, y son los que importan.
 
 **Criterio de aceptación (binario):** los 4 casos verdes, `npx vitest run src/__tests__/plan273LegacyErrorParsers.test.ts` verde (F4.6 no rompió el contrato ni borró un parser sin bajar el conteo), y `npx tsc --noEmit` sin errores nuevos respecto de F0.
 
@@ -911,7 +983,7 @@ cd "Stacky Agents\frontend"; npx vitest run src/__tests__/plan273ErrorSurface.te
 
 ### F4.7 — [ADICIÓN ARQUITECTO] Ratchet de superficie de error cruda: el aplanado no vuelve nunca
 
-**Objetivo:** congelar en **28** las ocurrencias restantes del modismo que aplana la excepción, con semántica de ratchet que **solo baja**, y hacer que cualquier plan futuro que agregue un aplanado nuevo se ponga rojo. **Valor:** convierte el arreglo puntual de F4.6 en una propiedad permanente del repo. Sin esto, F4.6 es una limpieza que el próximo plan deshace sin que nada grite — y esa es la historia repetida de este repo (`--status-danger-solid`, `nextEnabledState`, el conteo de `PAIRS`). Es la pieza de mayor vida útil de todo el plan y **no cuesta una sola línea de producción**.
+**Objetivo:** congelar en **115** las ocurrencias restantes del modismo que aplana la excepción — **contando sus dos formas de fallback** (v3, C26) —, con semántica de ratchet que **solo baja**, y hacer que cualquier plan futuro que agregue un aplanado nuevo se ponga rojo. **Valor:** convierte el arreglo puntual de F4.6 en una propiedad permanente del repo. Sin esto, F4.6 es una limpieza que el próximo plan deshace sin que nada grite — y esa es la historia repetida de este repo (`--status-danger-solid`, `nextEnabledState`, el conteo de `PAIRS`). Es la pieza de mayor vida útil de todo el plan y **no cuesta una sola línea de producción**.
 
 **Por qué es una adición y no scope creep:** no toca producción, no agrega flag, no agrega trabajo al operador, corre igual en los tres runtimes, reusa el patrón de ratchet que el repo ya tiene en tres lugares (`uiDebtRatchet.test.ts`, `test_plan259_ratchet_script_parity.py`, `LEGACY_PARSERS` de F4.5) en vez de inventar mecanismo, y su criterio es delta puro.
 
@@ -924,33 +996,44 @@ cd "Stacky Agents\frontend"; npx vitest run src/__tests__/plan273ErrorSurface.te
 
 ```ts
 /**
- * Plan 273 F4.7 — RATCHET. El modismo `X instanceof Error ? X.message : String(X)`
+ * Plan 273 F4.7 — RATCHET. El modismo `X instanceof Error ? X.message : <fallback>`
  * pinta al operador el string aplanado de client.ts (`403 FORBIDDEN: {...}`).
- * Medido el 2026-07-30: 42 ocurrencias en 26 archivos. F4.6 migra 14 (las 10
- * superficies con gate de flag) => techo 28.
+ *
+ * LAS DOS FORMAS CUENTAN (v3, C26). El v2 exigia el fallback `String(` y con eso
+ * veia 40 de 127: la forma `: "texto literal"` aplana IDENTICO (pinta el mismo
+ * X.message) y es la MAYORITARIA — 87 ocurrencias ya en el arbol. Un ratchet que
+ * solo mira `String(` se queda verde mientras la superficie crece por la otra
+ * forma, que es precisamente como esta clase de deuda volvio otras veces.
+ *
+ * Medido el 2026-07-30: 127 ocurrencias en 61 archivos (40 con `String(` + 87 con
+ * literal). F4.6 migra 12 (las 10 superficies con gate de flag) => techo 115.
  * ESTE NUMERO SOLO BAJA. Si migras mas sitios a userFacingMessage(), BAJA el techo
  * en el MISMO commit. Si sube, alguien agrego un aplanado nuevo en vez de usar
  * userFacingMessage(): no subas el techo, migra el sitio.
  */
-const MAX_RAW_ERROR_SITES = 28;
-const RAW_IDIOM = /[A-Za-z_$]+\s+instanceof\s+Error\s*\?\s*[A-Za-z_$]+\.message\s*:\s*String\(/g;
+const MAX_RAW_ERROR_SITES = 115;
+const RAW_IDIOM = /[A-Za-z_$]+\s+instanceof\s+Error\s*\?\s*[A-Za-z_$]+\.message\s*:\s*(String\(|["'])/g;
+/** Las dos mitades, solo para el caso `el_censo_cubre_las_dos_variantes`. */
+const RAW_STRING_FORM = /[A-Za-z_$]+\s+instanceof\s+Error\s*\?\s*[A-Za-z_$]+\.message\s*:\s*String\(/g;
+const RAW_LITERAL_FORM = /[A-Za-z_$]+\s+instanceof\s+Error\s*\?\s*[A-Za-z_$]+\.message\s*:\s*["']/g;
 ```
 
 | Caso | Afirma |
 |---|---|
-| `el_censo_no_es_vacio` | El barrido encuentra **>= 20** ocurrencias. **Obligatorio:** un regex que deja de matchear daría 0 y los otros casos pasarían **en falso**. Es el mismo modo de falla que `test_plan259_ratchet_script_parity.py` tapa con `test_las_dos_listas_son_no_vacias` |
+| `el_censo_no_es_vacio` | El barrido encuentra **>= 100** ocurrencias. **Obligatorio:** un regex que deja de matchear daría 0 y los otros casos pasarían **en falso**. Es el mismo modo de falla que `test_plan259_ratchet_script_parity.py` tapa con `test_las_dos_listas_son_no_vacias` |
+| **`el_censo_cubre_las_dos_variantes`** (v3, C26) | `RAW_STRING_FORM` encuentra **>= 20** y `RAW_LITERAL_FORM` encuentra **>= 60**. Sin este caso, un `RAW_IDIOM` que por un paréntesis mal puesto colapsara a una sola forma volvería a congelar el 26% de la superficie y **nada lo diría** |
 | `la_superficie_cruda_no_crece` | `total <= MAX_RAW_ERROR_SITES`, con mensaje que **enumera `archivo:línea` de cada ocurrencia**, no solo el número |
 | `las_10_superficies_gateadas_no_estan_en_el_censo` | Ninguna ocurrencia cae en los 10 archivos de F4.6. Prueba que F4.6 de verdad las migró y que el ratchet no está contando fantasmas |
-| `el_barrido_recorre_todo_src` | El barrido cubre `src/**/*.ts` + `src/**/*.tsx` excluyendo `__tests__` y `*.test.*`, y el conteo de archivos escaneados es **> 300**. Gate anti-glob-roto: un glob que no matchea nada daría 0 archivos y 0 ocurrencias |
+| `el_barrido_recorre_todo_src` | El barrido cubre `src/**/*.ts` + `src/**/*.tsx` excluyendo `__tests__` y `*.test.*`, y el conteo de archivos escaneados es **> 300** (medido hoy: **785** archivos). Gate anti-glob-roto: un glob que no matchea nada daría 0 archivos y 0 ocurrencias |
 
 Comando exacto:
 ```
 cd "Stacky Agents\frontend"; npx vitest run src/__tests__/plan273RawErrorSurfaceRatchet.test.ts
 ```
 
-**Estado ROTO esperado, y es una demostración obligatoria de que el ratchet discrimina.** Correr este archivo **antes** de F4.6, con `MAX_RAW_ERROR_SITES = 28`: `la_superficie_cruda_no_crece` tiene que fallar con **42 > 28** y enumerar las 42. Ese rojo es la prueba de que el barrido ve los sitios reales. Después de F4.6 baja a 28 y pasa. **Segunda demostración:** agregar temporalmente un `setX(e instanceof Error ? e.message : String(e))` en cualquier `.tsx` de producción, verificar que el test pasa a **29 > 28** y nombra el archivo nuevo, y revertir. Sin las dos comprobaciones el ratchet podría estar contando 0 con un regex mal escrito.
+**Estado ROTO esperado, y es una demostración obligatoria de que el ratchet discrimina.** Correr este archivo **antes** de F4.6, con `MAX_RAW_ERROR_SITES = 115`: `la_superficie_cruda_no_crece` tiene que fallar con **127 > 115** y enumerar las 127. Ese rojo es la prueba de que el barrido ve los sitios reales. Después de F4.6 baja a 115 y pasa. **Segunda demostración:** agregar temporalmente un `setX(e instanceof Error ? e.message : String(e))` en cualquier `.tsx` de producción, verificar que el test pasa a **128 > 115** y nombra el archivo nuevo, y revertir. **Tercera demostración (v3, C26):** repetir la segunda con la forma literal — `setX(e instanceof Error ? e.message : "fallo")` — y verificar que el ratchet **también** se pone rojo. Con el regex del v2 este tercer caso quedaba verde. Sin las tres comprobaciones el ratchet podría estar contando de menos con un regex angosto.
 
-**Criterio de aceptación (binario):** los 4 casos verdes tras F4.6, y el rojo pre-F4.6 anotado con el número **42**.
+**Criterio de aceptación (binario):** los 5 casos verdes tras F4.6, y el rojo pre-F4.6 anotado con el número **127** (y el desglose 40 + 87).
 
 **Flag:** ninguna. Es un test.
 
@@ -1086,6 +1169,13 @@ Los 5 casos verdes; los dos gates de ratchet en el **mismo** estado que F0 (lag 
 > **CORRECCIÓN BLOQUEANTE v2 (C2). Leer esto antes de escribir una línea.** El v1 decía que la varianza se cubre "con el override por llamador (`timeoutMs`)". **Ese override no existía y no era construible bajo las propias reglas del v1.** Verificado en `client.ts:213-235`: de los siete verbos de `api`, **solo `api.get` acepta un `init`**; `post`, `put`, `patch` y `delete` construyen el `RequestInit` **adentro** y no reciben nada del llamador; `postWithHeaders` recibe headers; `postAbortable` recibe un `AbortSignal`. Y el "Alcance explícito" de F4 prohibía cambiar cualquier verbo de `api.*`. ⇒ el v1, tal como estaba, imponía un deadline de 20 s **duro y sin escape** a todos los POST, que es justo donde viven las operaciones largas. Además `request()` **no está exportado**, así que el test de esta fase no tenía por dónde inyectar el `fetchImpl` que él mismo exige.
 >
 > **Las tres consecuencias son obligatorias en v2:** (1) los cuatro verbos reciben un parámetro de opciones **estrictamente aditivo**; (2) los endpoints largos se **enumeran** con `timeoutMs: 0` y un gate lo verifica; (3) `request` se exporta para test. La prohibición de F4 se **relaja explícitamente y solo para esto**: agregar un parámetro opcional al final de una firma es retrocompatible byte a byte para los ~cientos de llamadores existentes, y **no** toca `rawGet`/`rawPost`/`rawPut`, que es donde vive la frontera real con el plan 263.
+>
+> **CORRECCIÓN BLOQUEANTE v3 (C23): son SEIS verbos, no cuatro — y el que faltaba es el que escribe en ADO.** El v2 cerró C2 para `post`/`put`/`patch`/`delete` y declaró *"`postWithHeaders` y `postAbortable` NO se tocan (siguen sin override; si alguna vez lo necesitan es otro plan)"*. **Esa frase deja el bug vivo por otro canal.** Verificado `client.ts:224-234`: los dos **enrutan por `request()`**, así que heredan el deadline de 20 s igual que los otros — la diferencia es que **no tienen forma de escaparlo**. Y sus tres call sites no son marginales:
+> - `POST /api/tickets/{id}/finish-work` (`endpoints.ts:329`, vía `postWithHeaders`): el handler es `backend/api/tickets.py:1779-2269` (~490 líneas) y hace **sincrónicamente** tres cosas contra el sistema real del operador — cancela la ejecución activa, publica el comentario HTML en ADO (`publish_from_execution`) y transiciona el `System.State` del work item. Varios round-trips de red.
+> - `POST /api/tickets/by-ado/{id}/create-child-task` (`:360`, vía `postWithHeaders`): **crea una Task en ADO**.
+> - `POST /api/pipeline-generator/preview` (`:4749`, vía `postAbortable`): verificado que hoy es renderizado puro de YAML (`backend/api/pipeline_generator.py:35-49`), así que es **rápido** — pero es cancelable por diseño (plan 99), y si mañana pasa por un modelo el deadline lo mata sin escape.
+>
+> ⇒ A los 20 s la UI aborta `finish-work` y muestra *"La operación tardó más de lo esperado"* **mientras ADO ya cerró el ticket**; el operador reintenta y dispara la segunda publicación y la segunda transición. Es **literalmente el riesgo R16, clasificado CRÍTICO en §6**, por el único verbo que el v2 dejó sin puerta. **En v3 los seis verbos que enrutan por `request()` reciben el parámetro aditivo**, y las dos rutas de `postWithHeaders` entran en la tabla de `timeoutMs: 0` (que pasa de 10 a **12** endpoints).
 
 **Diseño exacto:**
 
@@ -1119,7 +1209,26 @@ export interface RequestOptions extends RequestInit {
 + post: <T,>(path: string, body?: unknown, opts?: RequestOptions) =>
 +   request<T>(path, { ...opts, method: "POST", body: body ? JSON.stringify(body) : undefined }),
 ```
-Ídem `put`, `patch`, `delete`. **`postWithHeaders` y `postAbortable` NO se tocan** (siguen sin override; si alguna vez lo necesitan es otro plan). Y:
+Ídem `put`, `patch`, `delete`. **Y también `postWithHeaders` y `postAbortable` (v3, C23)** — son los dos que faltaban y el override les hace falta HOY:
+
+```diff
+- postWithHeaders: <T,>(path: string, body: unknown, extraHeaders: Record<string, string>) =>
+-   request<T>(path, { method: "POST", body: JSON.stringify(body), headers: extraHeaders }),
++ // Plan 273 F6 (C23): `opts` al FINAL y opcional. Sin esto, finish-work y
++ // create-child-task heredaban el deadline de 20s SIN escape, y a los 20s la UI
++ // aborta mientras ADO ya publico y transiciono => el operador reintenta y
++ // duplica la escritura en su sistema real. Es el R16.
++ postWithHeaders: <T,>(path: string, body: unknown, extraHeaders: Record<string, string>, opts?: RequestOptions) =>
++   request<T>(path, { ...opts, method: "POST", body: JSON.stringify(body), headers: extraHeaders }),
+- postAbortable: <T,>(path: string, body: unknown, signal: AbortSignal) =>
+-   request<T>(path, { method: "POST", body: JSON.stringify(body), signal }),
++ postAbortable: <T,>(path: string, body: unknown, signal: AbortSignal, opts?: RequestOptions) =>
++   request<T>(path, { ...opts, method: "POST", body: JSON.stringify(body), signal }),
+```
+
+**Orden del spread, y no es cosmético:** `...opts` va **primero** en los seis, para que `method`, `body`, `headers` y `signal` que el verbo construye **ganen** sobre cualquier cosa que el llamador ponga en `opts`. Al revés, un `opts` con `method` cambiaría el verbo en silencio. `timeoutMs` y `fetchImpl` viajan igual porque no colisionan con esas cuatro claves.
+
+Y:
 
 ```diff
 - async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -1128,26 +1237,32 @@ export interface RequestOptions extends RequestInit {
 + export async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
 ```
 
-**Los 10 endpoints que van con `timeoutMs: 0`, enumerados (C2).** Sin esta tabla la fase es una regresión: son operaciones de minutos que a los 20 s mostrarían "la operación tardó más de lo esperado" mientras el backend sigue trabajando, y el operador reintentaría **duplicando** el disparo. Todas verificadas hoy en `frontend/src/api/endpoints.ts`:
+**Los 12 endpoints que van con `timeoutMs: 0`, enumerados (C2, ampliado en v3 por C23).** Sin esta tabla la fase es una regresión: son operaciones de minutos que a los 20 s mostrarían "la operación tardó más de lo esperado" mientras el backend sigue trabajando, y el operador reintentaría **duplicando** el disparo. **Los 12 anclajes verificados uno por uno en esta corrida** abriendo `frontend/src/api/endpoints.ts`:
 
-| Endpoint | Ancla (contexto) | Por qué |
-|---|---|---|
-| `POST /api/tickets/sync` | `:237` | Sincronización completa contra ADO/GitLab |
-| `POST /api/agents/run` | `:1153` y `:1229` (**dos** sitios) | Ejecución de agente |
-| `POST /api/packs/start` | `:1495` | Arranque de pack multi-paso |
-| `POST /api/executions/{id}/publish-to-ado` | `:1411` | Publicación en el sistema real del operador |
-| `POST /api/config/import` | `:2199` y `:2206` | Importación de bundle de configuración |
-| `POST /api/drift/run` | `:1834` | Barrido de drift |
-| `POST /api/glossary/scan` | `:1856` | Escaneo de glosario |
-| `POST /api/qa-uat/run` | `:2649` | Corrida QA/UAT |
-| `POST /api/qa-browser/runs` | `:2839` | Corrida de navegador |
-| `POST /api/diag/backup/run` | `:2884` | Backup |
+| Endpoint | Ancla (contexto) | Verbo | Por qué |
+|---|---|---|---|
+| `POST /api/tickets/sync` | `:237` | `api.post` | Sincronización completa contra ADO/GitLab |
+| `POST /api/agents/run` | `:1153` y `:1229` (**dos** sitios) | `api.post` | Ejecución de agente |
+| `POST /api/packs/start` | `:1495` | `api.post` | Arranque de pack multi-paso |
+| `POST /api/executions/{id}/publish-to-ado` | `:1411` | `api.post` | Publicación en el sistema real del operador |
+| `POST /api/config/import` | `:2199` y `:2206` | `api.post` | Importación de bundle de configuración |
+| `POST /api/drift/run` | `:1834` | `api.post` | Barrido de drift |
+| `POST /api/glossary/scan` | `:1856` | `api.post` | Escaneo de glosario |
+| `POST /api/qa-uat/run` | `:2649` | `api.post` | Corrida QA/UAT |
+| `POST /api/qa-browser/runs` | `:2839` | `api.post` | Corrida de navegador |
+| `POST /api/diag/backup/run` | `:2884` | `api.post` | Backup |
+| **`POST /api/tickets/{id}/finish-work`** (v3, C23) | `:329` | **`api.postWithHeaders`** | **Cancela la ejecución activa + publica el comentario en ADO + transiciona el `System.State`, todo sincrónico** (`backend/api/tickets.py:1779-2269`). El aborto a los 20 s aquí es el R16: escritura duplicada en el ADO del operador |
+| **`POST /api/tickets/by-ado/{id}/create-child-task`** (v3, C23) | `:360` | **`api.postWithHeaders`** | **Crea una Task en ADO.** Mismo razonamiento |
 
-**Regla de cierre de la tabla, obligatoria:** además de los 10, antes de cerrar F6 hay que barrer `endpoints.ts` con el criterio *"¿esta operación puede tardar más de 20 s en el equipo del operador?"* y agregar `timeoutMs: 0` a lo que aparezca, anotándolo en la bitácora. **Ante la duda, `timeoutMs: 0`**: un deadline de más es una regresión visible; uno de menos es el comportamiento de hoy. Comando de barrido:
+**Regla de cierre de la tabla, obligatoria (barrido de los CINCO verbos — v3, C29).** Además de los 12, antes de cerrar F6 hay que barrer `endpoints.ts` con el criterio *"¿esta operación puede tardar más de 20 s en el equipo del operador?"* y agregar `timeoutMs: 0` a lo que aparezca, anotándolo en la bitácora. **Ante la duda, `timeoutMs: 0`**: un deadline de más es una regresión visible; uno de menos es el comportamiento de hoy.
+
+El barrido del v2 cubría solo `post|put` y con eso **los GET largos quedaban con deadline de 20 s y sin enumerar** — y el canal de override para `get` ya existe (siempre aceptó `init`), así que era una omisión del barrido, no de diseño. Candidatos verificados hoy que el barrido del v2 no veía: `/api/devops/build/doctor` (`:4516`, sondea el toolchain del equipo), `/api/docs/graph` (`:3583`), `/api/diag/operational-health` (`:2931`), `/api/reports/digest` (`:1721`), los reportes de triage y closure del Comparador (`:4867`, `:4897`). Comando corregido:
 
 ```powershell
-cd "Stacky Agents\frontend"; Select-String -Path src\api\endpoints.ts -Pattern 'api\.(post|put)<' | Select-String -Pattern 'run|sync|start|publish|import|scan|build|graph|compare|migrat|backup|seed|reindex|generate'
+cd "Stacky Agents\frontend"; Select-String -Path src\api\endpoints.ts -Pattern 'api\.(get|post|put|patch|delete|postWithHeaders|postAbortable)<' | Select-String -Pattern 'run|sync|start|publish|import|scan|build|graph|compare|migrat|backup|seed|reindex|generate|doctor|digest|health|report|triage|closure|finish|child'
 ```
+
+Cada resultado se decide **y se anota**: `timeoutMs: 0` o "cabe en 20 s". Un candidato sin decisión anotada deja F6 abierta.
 
 Dentro de `request()`, envolviendo el `fetch` **sin tocar** `reportOutcome` / `isAbortError` / `reportConnectionFailure` (frontera 267):
 
@@ -1185,9 +1300,33 @@ en el catch del fetch:
 | `ufm_de_un_timeout_es_accionable` | `userFacingMessage(new TimeoutError(...))` | `isTimeout === true`; `title` contiene `"tardó"`; **no** matchea `/^\d{3}/` |
 | `el_default_es_20000` | — | `DEFAULT_TIMEOUT_MS === 20000` |
 | `se_limpia_el_timer_en_el_camino_feliz` | `fetchImpl` que resuelve, con `setTimeout`/`clearTimeout` espiados por contadores locales | `clearTimeout` se llamó exactamente una vez |
-| **`los_verbos_aceptan_opts`** (v2, C2) | — | Grep sobre el fuente de `api/client.ts`: `post`, `put`, `patch` y `delete` declaran `opts?: RequestOptions`. **Gate contra el defecto de C2**: sin esto el override no existe y el deadline es inescapable |
-| **`los_10_endpoints_largos_declaran_timeout_cero`** (v2, C2) | — | Grep sobre `api/endpoints.ts`: para cada una de las 10 rutas de la tabla, la llamada correspondiente contiene `timeoutMs: 0`. El mensaje del assert **enumera las que faltan**, una por línea. **Es el gate que impide shippear la regresión** |
-| **`el_conteo_de_timeout_cero_no_baja`** (v2) | — | Las ocurrencias de `timeoutMs: 0` en `endpoints.ts` son **>= 11** (10 rutas, y `/api/agents/run` y `/api/config/import` aparecen dos veces cada una ⇒ 12 sitios; el umbral se fija en la bitácora con el número real medido al implementar). Ratchet: si alguien borra un `timeoutMs: 0`, se pone rojo |
+| **`los_verbos_aceptan_opts`** (v2 C2, ampliado en v3 C23) | — | Grep sobre el fuente de `api/client.ts`: `post`, `put`, `patch`, `delete`, **`postWithHeaders`** y **`postAbortable`** declaran `opts?: RequestOptions`. **Gate contra el defecto de C2 y C23**: sin esto el override no existe para ese verbo y el deadline es inescapable |
+| **`los_12_endpoints_largos_declaran_timeout_cero`** (v2 C2, ampliado en v3 C23) | — | Grep sobre `api/endpoints.ts`: para cada una de las **12** rutas de la tabla, la llamada correspondiente contiene `timeoutMs: 0`. El mensaje del assert **enumera las que faltan**, una por línea. **Es el gate que impide shippear la regresión** |
+| **`el_conteo_de_timeout_cero_no_baja`** (v2) | — | Las ocurrencias de `timeoutMs: 0` en `endpoints.ts` son **>= 14** (12 rutas, y `/api/agents/run` y `/api/config/import` aparecen dos veces cada una ⇒ 14 sitios; el umbral se fija en la bitácora con el número real medido al implementar). Ratchet: si alguien borra un `timeoutMs: 0`, se pone rojo |
+| **`ningun_verbo_enruta_por_request_sin_canal_de_deadline`** — **[ADICIÓN ARQUITECTO v3]** | — | Ver el bloque de abajo. Convierte C23 de "un fix" en una **propiedad permanente**: si un plan futuro agrega un verbo a `api` que llame a `request()` sin `opts`, este caso se pone rojo |
+
+> ### [ADICIÓN ARQUITECTO v3] `ningun_verbo_enruta_por_request_sin_canal_de_deadline` — el inventario de verbos
+>
+> **Por qué existe.** C2 (v1→v2) y C23 (v2→v3) son **el mismo defecto encontrado dos veces**: un verbo de `api` que enruta por `request()`, hereda el deadline y no tiene por dónde escaparlo. El v2 lo arregló para los 4 verbos que miró y lo dejó vivo en los 2 que no. La lección no es "acordarse de los 6": es que **la lista de verbos no está congelada en ninguna parte**, así que el 7º verbo que alguien agregue repite el bug. Este caso congela la invariante.
+>
+> **Diseño** (va en `plan273RequestTimeout.test.ts`, **sin archivo nuevo** ⇒ cero ediciones en los dos scripts del arnés, que están en holgura cero):
+>
+> ```ts
+> // Extrae del fuente de client.ts todo miembro de `export const api = {...}` y
+> // clasifica: ¿llama a request()? ¿declara opts?: RequestOptions?
+> // INVARIANTE: llamar a request() ⇒ declarar opts. Sin excepciones permitidas:
+> // un verbo sin canal de deadline es un timeout inescapable esperando su endpoint largo.
+> ```
+>
+> | Afirma |
+> |---|
+> | El barrido encuentra **exactamente 7** miembros en `export const api = {` (hoy: `get`, `post`, `put`, `patch`, `delete`, `postWithHeaders`, `postAbortable`). Si encuentra menos de 7, el parser está roto y el caso pasaría en falso |
+> | **Los 7** contienen `request<T>(` en su cuerpo (hoy es así: ninguno hace `fetch` directo) |
+> | **Los 7** declaran `opts?: RequestOptions` **o** `init?: RequestOptions` en su firma. El mensaje del assert **nombra el verbo que falta** |
+>
+> **Estado ROTO esperado, y es un gate contra el defecto de verdad:** correr este caso **antes** del fix de F6 tiene que fallar nombrando **los 7** (hoy ninguno declara `opts`, y `get` declara `init?: RequestInit`, no `RequestOptions`). Correrlo con el fix **del v2** (los 4 verbos) tiene que fallar nombrando **`postWithHeaders` y `postAbortable`** — ese rojo es exactamente C23, y verlo es la prueba de que este caso lo habría atrapado antes de shippear. Recién con los 6 corregidos y `get` ensanchado sale verde.
+>
+> **Respeta los rieles:** cero flags, cero trabajo del operador, cero código de producción, idéntico en los 3 runtimes (es un test de texto sobre un archivo), y reusa el patrón de ratchet/inventario que el repo ya tiene en `test_plan259_ratchet_script_parity.py` y en `LEGACY_PARSERS` de F4.5 en vez de inventar mecanismo.
 
 **Nota de implementación de los tests, obligatoria:** usar `timeoutMs` chicos (20–50 ms) y esperas reales cortas. **No** usar fake timers de vitest: interactúan mal con `await` sobre promesas que nunca resuelven y producen tests que cuelgan la corrida.
 
@@ -1196,9 +1335,9 @@ Comando exacto:
 cd "Stacky Agents\frontend"; npx vitest run src/api/__tests__/plan273RequestTimeout.test.ts
 ```
 
-**Estado ROTO esperado:** el gate contra el defecto es el caso 1. Escribirlo **antes** del fix e inyectar el `fetchImpl` que nunca resuelve: el test tiene que **fallar por timeout de vitest** (la promesa no se resuelve nunca porque hoy `request()` no tiene deadline). Ese rojo — el test colgándose hasta el límite del runner, no un `expect` fallando — es la prueba de que el bug existe. Anotarlo tal cual. Los casos 2–8 fallan por módulo/símbolo inexistente. Y los tres casos nuevos de v2 fallan **contra el código actual**: `los_verbos_aceptan_opts` porque hoy `post` es `(path, body?)` sin tercer parámetro (`client.ts:215-216`), y `los_10_endpoints_largos_declaran_timeout_cero` enumerando **las 10**. Si `los_verbos_aceptan_opts` pasa antes del fix, el grep está mal: hoy ningún verbo declara `opts`.
+**Estado ROTO esperado:** el gate contra el defecto es el caso 1. Escribirlo **antes** del fix e inyectar el `fetchImpl` que nunca resuelve: el test tiene que **fallar por timeout de vitest** (la promesa no se resuelve nunca porque hoy `request()` no tiene deadline). Ese rojo — el test colgándose hasta el límite del runner, no un `expect` fallando — es la prueba de que el bug existe. Anotarlo tal cual. Los casos 2–8 fallan por módulo/símbolo inexistente. Y los cuatro casos estructurales fallan **contra el código actual**: `los_verbos_aceptan_opts` porque hoy `post` es `(path, body?)` sin tercer parámetro (verificado `client.ts:215-216`), `los_12_endpoints_largos_declaran_timeout_cero` enumerando **las 12**, y `ningun_verbo_enruta_por_request_sin_canal_de_deadline` enumerando **los 7**. Si `los_verbos_aceptan_opts` pasa antes del fix, el grep está mal: hoy ningún verbo declara `opts`.
 
-**Criterio de aceptación (binario):** los 11 casos verdes, `npx tsc --noEmit` sin errores nuevos respecto de F0, y `npx vitest run src/__tests__/plan273LegacyErrorParsers.test.ts` **verde** (F6 no rompió el contrato del `message`).
+**Criterio de aceptación (binario):** los **12** casos verdes, `npx tsc --noEmit` sin errores nuevos respecto de F0, y `npx vitest run src/__tests__/plan273LegacyErrorParsers.test.ts` **verde** (F6 no rompió el contrato del `message`).
 
 **Flag:** **ninguna, y es una decisión, no un descuido.** Ver §3.6 fila F6: un `STACKY_UI_HTTP_TIMEOUT_MS` por UI sería circular. El override vive como parámetro de función (`timeoutMs`), que es donde la varianza real ocurre.
 
@@ -1219,7 +1358,26 @@ cd "Stacky Agents\frontend"; npx vitest run src/api/__tests__/plan273RequestTime
 - `frontend/src/services/__tests__/plan273GateState.test.ts`
 
 **Archivos a editar:**
-- `frontend/src/App.tsx` — declaraciones de estado de los 7 gates de flag, el efecto de los `probeFlagHealth`, el efecto de redirección, la llamada a `initUiSections`, **el JSX de las 7 pantallas con gate (esqueleto, C3)** y **el montaje del aviso (`Toast` + `setToast`, C3)**.
+- `frontend/src/App.tsx` — y la lista del v2 estaba **incompleta**: ver el censo obligatorio de abajo.
+
+> ### CENSO OBLIGATORIO DE LOS 20 SITIOS DE LECTURA (v3, C22). Leerlo antes de tocar una línea.
+>
+> El v2 nombraba *"declaraciones de estado, el efecto de los `probeFlagHealth`, el efecto de redirección, `initUiSections`, el JSX de las 7 pantallas y el montaje del aviso"*. **Faltaban los 7 botones de la nav v1, los dos arrays de dependencias y el paso de prop** — y el modo de falla de olvidarlos es **silencioso**: `{devopsGate && (<button/>)}` con `devopsGate === "off"` es **truthy** (un string no vacío), así que la nav v1 mostraría **los 7 tabs siempre**, incluidos los de features apagadas; TypeScript **no se queja** (un string es renderizable en JSX) y ningún test del v2 lo miraba. El plan que arregla B-05 (tabs inalcanzables por desborde) le habría agregado **7 tabs permanentes al desborde**.
+>
+> Censo verificado en esta corrida (anclar por símbolo; las líneas son contexto de lectura, §3.5):
+>
+> | # | Sitio | Contexto hoy | Qué hace v3 |
+> |---|---|---|---|
+> | 1-7 | `:76`, `:78`, `:80`, `:83`, `:97`, `:99`, `:100` | `useState(false)` de los 7 gates | ⇒ `useState<GateState>("unknown")` |
+> | 8-14 | `:144`-`:163` (7 de los 8 `probeFlagHealth`) | `setX((prev) => nextEnabledState(prev, v))` | ⇒ `gateStateFromVerdict`. **El 8º (`:166`, `setDeepSearchEnabled`) NO se toca** |
+> | 15 | `:270`-`:276` | 7 ramas `&& !xEnabled` del efecto | ⇒ `shouldRedirectAway(xGate)` |
+> | 16 | **`:277`** | array de deps del efecto, con los 7 booleanos | ⇒ los 7 nombres nuevos. Omitirlo deja el efecto leyendo valores viejos |
+> | 17 | `:279`-`:288` | `computeVisibleTabs({... migradorEnabled, devopsEnabled, ...})` — **propiedades shorthand** | ⇒ **explícitas**: `devopsEnabled: devopsGate === "on"`, las 7 |
+> | 18 | **`:313`-`:319`** | render de las 7 páginas, **con el término `&& xEnabled`** | ⇒ ternario de 3 vías (ver abajo, C21) |
+> | 19 | **`:367`, `:445`, `:453`, `:461`, `:469`, `:477`, `:485`** | **los 7 botones de tab de la nav v1**, `{xEnabled && (<button…>)}` | ⇒ `{xGate === "on" && (…)}`. **Este es el grupo que el v2 no veía** |
+> | 20 | **`:504`** | `incidentInboxEnabled={incidentInboxEnabled}` (prop a un hijo) | ⇒ `incidentInboxEnabled={incidentInboxGate === "on"}`. Este sí lo atrapa `tsc` |
+>
+> **Regla binaria:** después de F7, `Select-String -Path src\App.tsx -Pattern "Enabled"` no debe devolver **ninguna** de las 7 variables viejas (sí devolverá `shellV2Enabled`, `deepSearchEnabled`, `uiShortcutsEnabled` y los nombres de **propiedad** de `computeVisibleTabs` y del prop de `:504`, que **no** se renombran).
 
 **`frontend/src/services/gateState.ts` — contrato exacto (módulo PURO: sin React, sin CSS, sin DOM):**
 
@@ -1267,11 +1425,31 @@ export function isGateResolving(state: GateState): boolean {
 -   initUiSections();
 +   void initUiSections().finally(() => { if (alive) setSectionsReady(true); });
 ```
+
+> **CORRECCIÓN BLOQUEANTE-ADYACENTE v3 (C31): el `return` temprano del v2 apagaba también las 7 ramas de flag.** Verificado `App.tsx:265-276`: las 12 ramas son **una sola cadena `if / else if`**, con las **5 de sección primero** (`:265`-`:269`) y las **7 de flag después** (`:270`-`:276`). El v2 ponía `if (!sectionsReady) return;` **arriba de toda la cadena** ⇒ mientras `initUiSections()` no resolviera, **ninguna** redirección ocurría, incluidas las de un gate legítimamente `"off"`, y el aviso de F7 no se emitía nunca. Si el backend no responde, `sectionsReady` queda `false` **para siempre** y quedan acoplados dos mecanismos independientes (la hidratación del store zustand y el health-check de flags). **La guarda envuelve solo las 5 ramas de sección, y las 7 de flag pasan a su propia cadena:**
+
 ```diff
 - if (tab === "team" && !sections.team) selectTab("tickets");
-+ if (!sectionsReady) return;                    // Plan 273 F7: sin hidratar, no se decide
-+ if (tab === "team" && !sections.team) selectTab("tickets");
+- else if (tab === "pm" && !sections.pm) selectTab("tickets");
+- ... (las 5 de seccion)
+- else if (tab === "migrador" && !migradorEnabled) selectTab("tickets");
+- ... (las 7 de flag, en la MISMA cadena)
++ // Plan 273 F7 (C31): DOS cadenas independientes. La hidratacion del store de
++ // secciones no puede bloquear la decision de los gates de flag, que se resuelven
++ // por otra via (probeFlagHealth) y pueden resolver antes, despues o nunca.
++ if (sectionsReady) {
++   if (tab === "team" && !sections.team) selectTab("tickets");
++   else if (tab === "pm" && !sections.pm) selectTab("tickets");
++   else if (tab === "logs" && !sections.logs) selectTab("tickets");
++   else if (tab === "docs" && !sections.docs) selectTab("tickets");
++   else if (tab === "memory" && !sections.memory) selectTab("tickets");
++ }
++ if (tab === "migrador" && shouldRedirectAway(migradorGate)) { avisar("migrador"); selectTab("tickets"); }
++ else if (tab === "devops" && shouldRedirectAway(devopsGate)) { avisar("devops"); selectTab("tickets"); }
++ ... (las 7, cada una con su aviso)
 ```
+
+**Nota de exclusividad, obligatoria:** al partir la cadena, un `tab` **no puede** caer en las dos mitades a la vez — los 5 nombres de sección y los 7 de flag son **disjuntos** (verificado: `team`/`pm`/`logs`/`docs`/`memory` vs `migrador`/`devops`/`dbcompare`/`costcenter`/`planes`/`evolution`/`incidencias`), así que no hay riesgo de doble `selectTab` ni de doble aviso. `avisar(...)` es el `setToast(...)` de más abajo, factorizado en una función local para no repetir el microcopy 7 veces.
 
 **Corrección a la auditoría, menor pero honesta:** H-01 dice "12 de 18 pantallas". Medido sobre el código: rebotan al montar las **7** de flag más `team` = **8**; `pm`/`logs`/`docs`/`memory` tienen default `true` y solo rebotarían si el backend las declara ocultas. El KPI de §1 usa **10 de 18 → 18 de 18** por eso. La severidad del hallazgo no cambia; el número sí, y este plan usa el medido.
 
@@ -1307,22 +1485,42 @@ Semántica elegida y por qué: un tab con gate `"unknown"` **no** se muestra en 
 
 **El esqueleto del caso `"unknown"` — símbolo exacto y diff (v2, C3).** El v1 declaraba en su tabla de decisión que `"unknown"` muestra *"Esqueleto de carga en la pantalla pedida. **Este es el fix**"*, y el smoke 1 lo espera (*"con un esqueleto de carga breve antes"*), pero **no daba archivo, símbolo, diff ni caso de test**: un modelo menor lo habría omitido y el smoke 1 habría fallado por un artefacto que ninguna fase construía. Verificado que la primitiva existe: **`Skeleton`, `frontend/src/components/ui/Skeleton.tsx:33`**, exportada desde el barrel `components/ui/index.ts:19` junto con `skeletonStyle` y el tipo `SkeletonProps`. Se usa esa, no se construye nada:
 
+> **CORRECCIÓN BLOQUEANTE v3 (C21): el diff del v2 no matchea el archivo y, aplicado, monta páginas de features APAGADAS.** El v2 escribía como línea "antes" `{tab === "devops" && <DevOpsPage ... />}`. **Esa línea no existe.** Verificado `App.tsx:313-319`: las **siete** son de la forma `{tab === "devops" && devopsEnabled && <DevOpsPage subTab={route.subtab ?? null} />}` — con el término del gate en el medio, que el diff del v2 **omite**. Dos consecuencias: (a) el diff no aplica, y un modelo menor que "lo acomode" borra el guard; (b) en su lectura intencionada (`isGateResolving ? Skeleton : Page`) el caso **`"off"` renderiza la página de una feature apagada**, que monta y dispara sus llamadas API — 403 garantizado — antes de que el efecto de redirección alcance a correr. Cambiar "no se muestra" por "se muestra y falla" es peor que el estado actual. **El ternario tiene TRES vías, no dos:**
+
 ```diff
-+ import { Skeleton } from "./components/ui";
++ import { Skeleton } from "./components/ui";   // export default re-exportado por el barrel (components/ui/index.ts:19)
 ...
   {/* Plan 273 F7 (B-01): con el gate sin resolver la ruta NO rebota; se pinta
-      esqueleto en la pantalla pedida hasta que el health conteste. */}
-- {tab === "devops" && <DevOpsPage ... />}
+      esqueleto en la pantalla pedida hasta que el health conteste. Con el gate en
+      "off" no se pinta NADA: el efecto de redireccion se encarga (C21). */}
+- {tab === "devops"      && devopsEnabled && <DevOpsPage subTab={route.subtab ?? null} />}
 + {tab === "devops" && (isGateResolving(devopsGate)
-+   ? <Skeleton />
-+   : <DevOpsPage ... />)}
++   ? <Skeleton lines={3} />
++   : devopsGate === "on" && <DevOpsPage subTab={route.subtab ?? null} />)}
 ```
 
-Se aplica a las **7** pantallas con gate de flag, con el mismo patrón. **No** se toca el interior de ninguna página (frontera §4): el condicional vive en el JSX de `App.tsx`, que es donde ya se decide qué pantalla se pinta.
+Se aplica a las **7** pantallas con gate de flag, con el mismo patrón y **conservando el contenido exacto de los props de cada página** (`:313`-`:319` los tienen distintos: `MigratorPage` y los demás van sin props, `DevOpsPage` lleva `subTab`). **No** se toca el interior de ninguna página (frontera §4): el condicional vive en el JSX de `App.tsx`, que es donde ya se decide qué pantalla se pinta.
+
+**`<Skeleton lines={3} />` y no `<Skeleton />` a secas:** verificado `components/ui/Skeleton.tsx:4-14` que las cinco props son **opcionales** (`width` default `"100%"`, `height` default 14, `lines` default 1), así que las dos formas compilan; `lines={3}` es lo que hace que se lea como una pantalla cargando y no como un guion suelto.
 
 **Microcopy del caso `"off"` real — mecanismo exacto (v2, C3).** Hoy no existe ningún mensaje: la redirección es muda. El v1 decía *"reusar el mecanismo de avisos que ya existe en el shell; no construir un componente nuevo"* — y **eso era una premisa falsa que además prohibía la única salida**. Verificado: lo único global montado en el shell es `UndoToastHost` (`App.tsx:28` y `:516`), que es **específico de undo** (se alimenta de `services/undoManager` y está gateado por `STACKY_UNDO_UNIVERSAL_ENABLED`); `components/Toast.tsx` es un componente con estado **local por página**; `publishActivity` (`services/activityCenter.ts:89`) escribe en el Centro de Actividad, que es un log consultable, **no** un aviso visible. **No hay `useToast` ni store global de avisos.** El mecanismo, entonces, se declara así — reusando piezas existentes, sin componente nuevo:
 
-1. **Aviso visible:** el patrón local que ya usan `pages/EvolutionCenterPage.tsx` y `components/AgentHistoryPage.tsx` — `const [toast, setToast] = useState<ToastState | null>(null)` + `<Toast … />` de `components/Toast.tsx` (props `variant: "success" | "warning" | "error"` y `body`, verificadas en `Toast.tsx:9-24`) — **montado en `App.tsx`**, y el efecto de redirección hace `setToast({ variant: "warning", body: <microcopy> })` en la rama `"off"`.
+1. **Aviso visible:** el patrón local que ya usan `pages/EvolutionCenterPage.tsx` y `components/AgentHistoryPage.tsx` — `const [toast, setToast] = useState<ToastState | null>(null)` + `<Toast … />` de `components/Toast.tsx` — **montado en `App.tsx`**, y el efecto de redirección hace `setToast(...)` en la rama `"off"`.
+
+   > **CORRECCIÓN v3 (C27): los props que el v2 citaba no existen.** El v2 decía *"props `variant` y `body`, verificadas en `Toast.tsx:9-24`"*. Verificado: `:9-22` es el **tipo `ToastState`** (`{variant, title?, body, correlationId?, action?}`), **no** la firma del componente; los props reales son `{ toast: ToastState; onClose: () => void; inStack?: boolean }` (`:24-30`), y `Toast` es **`export default`**. Un modelo menor escribiría `<Toast variant="warning" body="…" />` y **no compilaría**. La forma literal, entonces:
+   >
+   > ```tsx
+   > import Toast, { type ToastState } from "./components/Toast";
+   > // ...
+   > const [toast, setToast] = useState<ToastState | null>(null);
+   > // ...en la rama "off" del efecto de redireccion:
+   > setToast({ variant: "warning", title: `${TAB_META[tab].label} está desactivado.`,
+   >            body: "Esta sección se activa desde Configuración → Flags del arnés. Te llevamos a Tickets mientras tanto." });
+   > // ...y en el JSX del shell, al lado de <UndoToastHost />:
+   > {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+   > ```
+   >
+   > La **negrita** del microcopy del v2 tampoco era expresable (`body` es `string`, no `ReactNode`): la primera frase va en **`title`**, que existe y es opcional, y así queda destacada por el propio componente sin markup.
 2. **Rastro consultable:** además, `publishActivity({ kind: "error", severity: "warning", title: "Sección desactivada", body: <microcopy>, … })`, que es la pieza que ya usa `PageErrorBoundary.tsx:35-42`. Gratis, y hace el aviso auditable después de que el toast se fue.
 3. **`components/ui/` y `components/shell/` tienen presupuesto CERO ABSOLUTO** de hex e inline style (C20, `uiDebtRatchet.test.ts:109-112`): si el aviso necesitara estilo, va por CSS Module, **nunca** `style={{…}}`.
 
@@ -1335,7 +1533,11 @@ El nombre técnico de la flag **no** va en la frase (H-06 / F5): va en el enlace
 **Casos borde:**
 - El gate resuelve `"off"` **mientras** el operador ya está en la pantalla ⇒ redirige con aviso. Correcto: la flag se apagó de verdad.
 - El gate resuelve `"on"` después de que el operador navegó a otra parte ⇒ no se toca la ruta. El efecto depende de `tab`; si `tab` cambió, la rama no aplica.
-- `probeFlagHealth` devuelve `"unknown"` tras los 2 reintentos (backend caído) ⇒ el gate queda `"unknown"` **para siempre** en esa sesión ⇒ la pantalla queda en esqueleto y **no** rebota. Es la decisión correcta y hay que declararla: es preferible un esqueleto honesto ("no sé si esto está disponible") a un rebote mudo que el operador lee como "se perdió". El esqueleto debe traer un texto de reintento; usar el `Skeleton` que ya existe en las primitivas.
+- `probeFlagHealth` devuelve `"unknown"` tras los 2 reintentos (backend caído) ⇒ el gate queda `"unknown"` **para siempre** en esa sesión ⇒ la pantalla queda en esqueleto y **no** rebota. Es la decisión correcta y hay que declararla: es preferible un esqueleto honesto ("no sé si esto está disponible") a un rebote mudo que el operador lee como "se perdió".
+
+  > **CORRECCIÓN v3 (C28): el "texto de reintento" del v2 no tenía mecanismo, y la primitiva correcta existe.** El v2 cerraba este caso con *"el esqueleto debe traer un texto de reintento; usar el `Skeleton` que ya existe en las primitivas"*. Verificado `components/ui/Skeleton.tsx:33`: `Skeleton({width, height, radius, lines, className})` **pinta barras grises y no acepta texto ni acción** — el requisito era insatisfacible con el artefacto que nombraba, que es exactamente el defecto que C3 mató en el v1. Y la primitiva de la casa para esto **existe y el v2 no la nombra**: `frontend/src/components/LoadErrorState.tsx`, señalada por el propio comentario de `Toast.tsx:5` (*"Canal para resultados de ACCIONES (no de cargas: eso es LoadErrorState)"*). **Regla binaria de v3, para no volver a prometer sin mecanismo:**
+  > - **Esqueleto transitorio** (el caso normal, ~1.2 s): `<Skeleton lines={3} />`. Sin texto. Es lo que el smoke 1 espera (*"un esqueleto de carga breve"*).
+  > - **`"unknown"` persistente** (tras los 2 reintentos, backend caído): **fuera del alcance de F7 y declarado como tal.** Reemplazar el esqueleto por un `LoadErrorState` con reintento requiere (a) distinguir "resolviendo" de "no resolvió" — un cuarto estado o un contador de intentos que `probeFlagHealth` hoy no expone — y (b) leer la firma real de `LoadErrorState`. Es **B-24** (regla única de estado de carga, §7). Lo que F7 **sí** entrega es que la pantalla **no rebota**, que es B-01. Fingir que además entrega el reintento sería la promesa sin mecanismo de nuevo.
 - **`deepSearchEnabled` NO se convierte.** Es el noveno `useState(false)` (`App.tsx:102`) pero **no tiene rama en el efecto de redirección**: gatea la búsqueda profunda de la paleta, no un tab. Convertirlo sería alcance inventado. **Queda booleano.**
 - **`shellV2Enabled` NO se convierte.** Es de F1 y tampoco tiene rama de redirección.
 
@@ -1353,13 +1555,16 @@ El nombre técnico de la flag **no** va en la frase (H-06 / F5): va en el enlace
 | **`el_gate_sin_resolver_pinta_esqueleto`** (v2, C3) | Grep sobre `App.tsx`: hay **7** ocurrencias de `isGateResolving(` y el archivo importa `Skeleton` de `./components/ui`. Sin este caso, el esqueleto que el smoke 1 espera no lo construye nadie |
 | **`el_gate_apagado_avisa`** (v2, C3) | Grep sobre `App.tsx`: el efecto de redirección contiene `setToast(` **y** el archivo contiene la cadena literal `"se activa desde Configuración → Flags del arnés"`. Es el gate del riel de §3.1 (*"redirige **y avisa**, no rebota mudo"*), que en el v1 era una promesa sin mecanismo ni test |
 | **`el_aviso_no_nombra_la_flag`** (v2, C3) | El microcopy del punto anterior **no** matchea `/STACKY_[A-Z_]+/`. Coherencia con F5: el nombre técnico va en el enlace, no en la frase |
+| **`ninguna_pantalla_gateada_se_monta_en_off`** (v3, C21) | Grep sobre `App.tsx`: hay **7** ocurrencias de `Gate === "on" &&` **dentro del bloque de render de páginas**, y **cero** ocurrencias del patrón de dos vías `isGateResolving(\w+Gate)\s*\?\s*<Skeleton[^>]*\/>\s*:\s*<` (que es el diff del v2 y deja `"off"` renderizando la página). **Gate contra el defecto de C21.** Verificación de que discrimina: escribir primero el ternario de dos vías del v2 y ver este caso **rojo** |
+| **`ninguna_lectura_de_gate_queda_en_posicion_booleana`** (v3, C22) | Grep sobre `App.tsx`: **cero** matches de `\{\s*(migrador\|devops\|dbCompare\|costCenter\|planes\|evolution\|incidentInbox)Gate\s*&&` — es decir, ningún `GateState` usado como booleano en JSX, que es truthy para `"off"` y `"unknown"`. **Es el único gate contra el modo de falla silencioso de C22** (7 tabs visibles siempre, `tsc` verde). Verificación de que discrimina: dejar a propósito **uno** de los 7 botones de la nav v1 como `{devopsGate && (` y ver el caso rojo nombrando la línea |
+| **`las_dos_cadenas_de_redireccion_estan_separadas`** (v3, C31) | Grep: `App.tsx` contiene `if (sectionsReady) {` **y** la primera rama de flag **no** es un `else if` (no hay `else if (tab === "migrador"`). Gate contra el acoplamiento de C31: con la cadena unida, la hidratación del store bloquea los 7 gates de flag |
 
 Comando exacto:
 ```
 cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/plan273GateState.test.ts
 ```
 
-**Estado ROTO esperado:** los 4 primeros fallan por módulo inexistente. Los **6** de grep fallan **contra el código actual**, y son los que importan: `App_no_redirige_por_gate_booleano` tiene que listar las **7** ramas `&& !devopsEnabled`-style que hoy existen (si lista menos de 7, el regex está mal); `el_gate_sin_resolver_pinta_esqueleto` falla con 0 de 7 `isGateResolving(`; `el_gate_apagado_avisa` falla porque hoy la redirección es muda y `App.tsx` no tiene ningún `setToast(`. Total: **10 casos, 6 rojos contra el código actual.**
+**Estado ROTO esperado:** los 4 primeros fallan por módulo inexistente. Los **9** de grep fallan **contra el código actual**, y son los que importan: `App_no_redirige_por_gate_booleano` tiene que listar las **7** ramas `&& !devopsEnabled`-style que hoy existen (si lista menos de 7, el regex está mal); `el_gate_sin_resolver_pinta_esqueleto` falla con 0 de 7 `isGateResolving(`; `el_gate_apagado_avisa` falla porque hoy la redirección es muda y `App.tsx` **no tiene ningún `setToast(`** (verificado en esta corrida); `ninguna_pantalla_gateada_se_monta_en_off` falla con 0 de 7; `ninguna_lectura_de_gate_queda_en_posicion_booleana` **pasa desde el principio** (hoy no existe ningún `xGate`) — es un tripwire contra el fix mal hecho, no contra el código actual, **y hay que decirlo**; `las_dos_cadenas_de_redireccion_estan_separadas` falla porque hoy `:265-276` es una sola cadena. Total: **13 casos, 8 rojos contra el código actual y 1 tripwire.**
 
 **Demostración adicional obligatoria de que el gate atrapa el bug.** Antes de escribir el fix, implementar `shouldRedirectAway` a propósito con la versión que replica el bug: `return state !== "on"` (que trata `"unknown"` como apagado, exactamente lo que hace el booleano hoy). Correr. Tiene que salir **rojo** el caso `("unknown") ⇒ false`. Ese rojo es la prueba de que el test discrimina entre el fix y el bug — y no es una formalidad: `state !== "on"` es la implementación que un modelo escribe por descuido y que reintroduce H-01 completo pasando todos los demás casos.
 
@@ -1372,7 +1577,7 @@ cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/routesDeepLin
 cd "Stacky Agents\frontend"; npx vitest run src/utils/__tests__/flagHealth.test.ts
 cd "Stacky Agents\frontend"; npx tsc --noEmit
 ```
-Los **10** casos nuevos verdes (7 del v1 + 3 de C3); los cuatro archivos ajenos en el **mismo** estado que F0 (F7 no cambia la firma de `computeVisibleTabs` — verificada en `shellNav.ts:68-83`, con `VisibilityInput` en `:51-60`, C18 —, no toca `routes.ts`, y **no toca `flagHealth.ts`**: `nextEnabledState` sigue existiendo y exportado, porque `setDeepSearchEnabled` lo sigue usando en `App.tsx:166` — verificado).
+Los **13** casos nuevos verdes (7 del v1 + 3 de C3 + 3 de v3: C21, C22 y C31); los cuatro archivos ajenos en el **mismo** estado que **la foto de F0** (v3, C30: F0 ahora los mide; el v2 los comparaba contra una base que no existía). F7 no cambia la firma de `computeVisibleTabs` — verificada en `shellNav.ts:68-83`, con `VisibilityInput` en `:51-60`, C18 —, no toca `routes.ts`, y **no toca `flagHealth.ts`**: `nextEnabledState` sigue existiendo y exportado, porque `setDeepSearchEnabled` lo sigue usando en `App.tsx:166` — verificado en esta corrida: de los 8 `nextEnabledState` de `App.tsx`, F7 convierte 7 y deja ese.
 
 **Flag:** ninguna. Ver §3.6.
 
@@ -1386,7 +1591,16 @@ Los **10** casos nuevos verdes (7 del v1 + 3 de C3); los cuatro archivos ajenos 
 
 **Objetivo:** dejar en `Stacky Agents/docs/sistema/error_fingerprints.json` la huella de la clase de error que este plan mata con test guardián. **Valor:** es la convención del repo para que una clase de error muerta no vuelva sin que nadie lo note, y el v1 no la mencionaba.
 
-**Estado verificado:** el archivo **existe** (53 KB, `schema_version: 1`, **45** entradas). Esquema de una entrada, leído de la primera (`pipeline_status_404`): `{id, title, class, status, log_pattern, log_guarded, killed_by, killed_commit, date_resolved, guard_test, evidence, note}`, con `status ∈ {resolved, open, by_design}`.
+**Estado verificado:** el archivo **existe** (53 KB, top-level `{schema_version: 1, description, fingerprints}`, **45** entradas). Esquema de una entrada, leído de la primera (`pipeline_status_404`): `{id, title, class, status, log_pattern, log_guarded, killed_by, killed_commit, date_resolved, guard_test, evidence, note, **self_test**}`, con `status ∈ {resolved, open, by_design}`.
+
+> ### CORRECCIÓN BLOQUEANTE v3 (C24): la entrada del v2 pone ROJO un gate compartido, y el DoD de F9 no lo miraba.
+>
+> El archivo está guardado por **dos** tests que el v2 no nombraba ni corría. Verificado `backend/tests/test_error_fingerprints_catalog.py`:
+> - `:18` — `_REQUIRED = ("id","title","class","status","log_pattern","log_guarded","killed_by","guard_test","self_test")`, y `:32-35` (`test_campos_obligatorios`) recorre **todas** las entradas exigiendo los 9 campos. **`self_test` es obligatorio y la plantilla del v2 no lo tenía** ⇒ agregar la entrada tal como el v2 la dictaba **rompe el test**.
+> - `:48-51` (`test_patrones_compilan`) — el `log_pattern` tiene que compilar como regex de Python.
+> - `:53-59` (`test_self_test_coherente`) — cada muestra de `self_test["matches"]` **debe** matchear el `log_pattern`, y cada una de `self_test["clean"]` **no debe**.
+>
+> El criterio de aceptación del v2 era *"el caso verde, `json.load` sin excepción, y el conteo 45 → 46"* — ninguna de las tres cosas mira `test_campos_obligatorios`, así que el rojo aparecía **después** de cerrar la fase. Es el patrón "la fase rompe un gate que su propio DoD no mira", que este plan persigue en otras cinco partes. El otro test, `test_error_fingerprints_scan.py`, **no** se ve afectado: su `test_solo_guardadas` filtra por `log_guarded is True` y esta entrada nace con `false` (verificado `:49-54`).
 
 **Honestidad sobre el alcance, y es la razón de que esta fase sea corta:** las huellas de ese archivo son patrones de **log del servidor**, y **6 de los 7 P0 de este plan son del navegador** — no dejan rastro en el log del backend. Solo B-06 tiene una huella genuinamente registrable. **Se registra una entrada, no siete.** Inventar seis huellas sin `log_pattern` real sería ensuciar el archivo para cumplir una formalidad.
 
@@ -1394,22 +1608,36 @@ Los **10** casos nuevos verdes (7 del v1 + 3 de C3); los cuatro archivos ajenos 
 - `Stacky Agents/docs/sistema/error_fingerprints.json` — **una** entrada nueva.
 - `backend/tests/test_plan273_error_message_sin_flags.py` — **un** caso más (no un archivo nuevo: ver §10.1).
 
-**Entrada a agregar** (los campos `killed_commit` y `date_resolved` se completan al commitear F5):
+**Entrada a agregar — JSON literal, con `self_test` (v3, C24)** (los campos `killed_commit` y `date_resolved` se completan al commitear F5). Va **dentro del array `fingerprints`**, no en el top-level:
 
+```json
+{
+  "id": "error_body_nombra_flag_de_entorno",
+  "title": "El cuerpo de error de la API nombra la variable de entorno al operador",
+  "class": "http-error-body-leak",
+  "status": "resolved",
+  "log_pattern": "\"(error|message)\":\\s*\"[^\"]*STACKY_[A-Z_]+",
+  "log_guarded": false,
+  "killed_by": "plan 273 F5 (B-06) + F4.6 (superficie de render)",
+  "killed_commit": "<hash del commit de F5>",
+  "date_resolved": "<fecha>",
+  "guard_test": "tests/test_plan273_error_message_sin_flags.py",
+  "self_test": {
+    "matches": [
+      "\"error\": \"Comparador de BD deshabilitado (STACKY_DB_COMPARE_ENABLED).\"",
+      "\"message\": \"El grafo documental está deshabilitado (STACKY_DOCS_GRAPH_ENABLED).\""
+    ],
+    "clean": [
+      "\"message\": \"El Comparador de BD está desactivado.\"",
+      "\"detail\": {\"flag\": \"STACKY_DB_COMPARE_ENABLED\"}"
+    ]
+  },
+  "evidence": "backend/api/db_compare.py:38; backend/api/migrator.py:101; frontend/src/api/client.ts:208",
+  "note": "24 ocurrencias en 13 archivos al momento de matarlo (14 con clave `error`, 10 con `message`). OJO: sacar el nombre de la clave `error` NO lo saca de la pantalla — viaja igual dentro del JSON crudo que client.ts:208 aplana en Error.message; por eso el guardian real son DOS, este y plan273RawErrorSurfaceRatchet.test.ts."
+}
 ```
-id:            error_body_nombra_flag_de_entorno
-title:         El cuerpo de error de la API nombra la variable de entorno al operador
-class:          http-error-body-leak
-status:        resolved
-log_pattern:   "(error|message)":\s*"[^"]*STACKY_[A-Z_]+
-log_guarded:   false          # el patron se busca en el FUENTE, no en el log
-killed_by:     plan 273 F5 (B-06) + F4.6 (superficie de render)
-killed_commit: <hash del commit de F5>
-date_resolved: <fecha>
-guard_test:    tests/test_plan273_error_message_sin_flags.py
-evidence:      backend/api/db_compare.py:38; backend/api/migrator.py:101; frontend/src/api/client.ts:208
-note:          24 ocurrencias en 13 archivos al momento de matarlo (14 con clave `error`, 10 con `message`). OJO: sacar el nombre de la clave `error` NO lo saca de la pantalla — viaja igual dentro del JSON crudo que client.ts:208 aplana en Error.message; por eso el guardian real son DOS, este y plan273RawErrorSurfaceRatchet.test.ts.
-```
+
+**Las dos muestras de `clean` no son decorativas y hay que entenderlas antes de escribirlas:** la primera es el `message` que F5 deja (sin nombre de flag) y la segunda es **el `detail.flag` al que F5 mueve el nombre**. La segunda es la que importa: prueba que el `log_pattern` **no** matchea la forma nueva, o sea que el patrón distingue "la flag filtrada al operador" de "la flag guardada en su campo estructurado". Si el patrón matcheara `"detail": {"flag": ...}`, la huella se pondría roja **por el propio fix** — otra vez el comentario chocando con su gate. Verificado a mano: el patrón exige `"error"` o `"message"` como clave inmediatamente antes del valor, así que `"flag"` no matchea. **Correr `test_self_test_coherente` es lo que lo prueba, no esta nota.**
 
 **Test (caso a agregar en el archivo de F5):**
 
@@ -1419,7 +1647,13 @@ note:          24 ocurrencias en 13 archivos al momento de matarlo (14 con clave
 
 **Estado ROTO esperado:** el caso falla contra el archivo actual con `KeyError`/lista vacía: la entrada no existe entre las 45. Es un gate contra el defecto legítimo (la ausencia de registro), no un tripwire.
 
-**Criterio de aceptación (binario):** el caso verde, `json.load` del archivo sin excepción, y el conteo de entradas pasa de **45** a **46**.
+**Criterio de aceptación (binario) — corregido en v3 (C24):**
+```
+cd "Stacky Agents\backend"; & "N:\...\venv\Scripts\python.exe" -m pytest tests/test_plan273_error_message_sin_flags.py -q
+cd "Stacky Agents\backend"; & "N:\...\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_catalog.py -q
+cd "Stacky Agents\backend"; & "N:\...\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_scan.py -q
+```
+El caso verde, **los dos gates compartidos del catálogo en el mismo estado que la foto de F0** (medido en esta corrida: los dos VERDES, así que acá "delta cero" significa **verdes**), `json.load` del archivo sin excepción, y el conteo de entradas pasa de **45** a **46**. **Si `test_campos_obligatorios` sale rojo, falta `self_test`** — no relajar el test ni sacar la entrada: completar el campo.
 
 **Flag:** ninguna. Es un archivo de documentación estructurada.
 
@@ -1473,9 +1707,14 @@ note:          24 ocurrencias en 13 archivos al momento de matarlo (14 con clave
 | R13 | **El implementador "mejora" el alcance**: unifica status HTTP (B-09), retira la nav v1 (B-17), corrige `--text-faint` (B-11) | Media | Medio: plan que no cierra y colisiona con planes futuros | §7 nombra cada uno como plan futuro; F5 regla 4 prohíbe tocar status; F7 declara qué **no** convierte (`deepSearch`, `shellV2`, el store de secciones) |
 | **R14** (v2, C13) | **El implementador documenta en un comentario CSS el color que acaba de sacar**, y con eso pone rojo el gate de cero-hex de su propia fase | **Alta** — es el instinto correcto de documentar, y el v1 lo dictaba textualmente | Alto: el gate nuevo nace rojo tras el fix, o peor, se "arregla" relajándolo | Prohibición explícita en F3 + los 4 comentarios ya reescritos perifrásticamente + verificación obligatoria del conteo de hex **después** del fix |
 | **R15** (v2, C14) | **F4 empeora el único archivo de UI que toca:** un `TypeError` de render se muestra como "No se pudo conectar con el servidor." | **Alta** — es el comportamiento del algoritmo del v1, no un descuido | Alto: se pierde el diagnóstico real del crash vivo del 266 | Paso 0 del algoritmo + caso `ufm_un_typeerror_de_render_no_se_disfraza_de_error_de_red` + Demostración 2 obligatoria (ver el rojo sin el paso 0) |
-| **R16** (v2, C2) | **F6 aborta a los 20 s una sincronización legítima** (`/api/tickets/sync` es síncrono dentro del request) y el operador reintenta, **duplicando** el disparo | **Alta** si no se enumeran los endpoints | **Crítico**: escritura duplicada en el sistema real del operador | Tabla de los 10 endpoints con `timeoutMs: 0` + caso `los_10_endpoints_largos_declaran_timeout_cero` + la regla "ante la duda, `timeoutMs: 0`" |
-| **R17** (v2, C1) | **Se declara C3 cerrado con el gate de F5 en verde** mientras `STACKY_*` sigue en pantalla | **Alta** — el gate del backend da 5/5 verde con el defecto vivo | Alto: falso verde en el gate de producción, que es exactamente lo que este repo persigue | F4.6 migra las 14 ocurrencias de las 10 superficies; F4.7 congela el resto; el KPI se reformuló para medir el frontend, no el backend |
+| **R16** (v2, C2) | **F6 aborta a los 20 s una sincronización legítima** (`/api/tickets/sync` es síncrono dentro del request) y el operador reintenta, **duplicando** el disparo | **Alta** si no se enumeran los endpoints | **Crítico**: escritura duplicada en el sistema real del operador | Tabla de los **12** endpoints con `timeoutMs: 0` + caso `los_12_endpoints_largos_declaran_timeout_cero` + la regla "ante la duda, `timeoutMs: 0`" |
+| **R17** (v2, C1) | **Se declara C3 cerrado con el gate de F5 en verde** mientras `STACKY_*` sigue en pantalla | **Alta** — el gate del backend da 5/5 verde con el defecto vivo | Alto: falso verde en el gate de producción, que es exactamente lo que este repo persigue | F4.6 migra las **12** ocurrencias de las 10 superficies; F4.7 congela el resto (**115**); el KPI se reformuló para medir el frontend, no el backend |
 | **R18** (v2, C19) | **Se agrega `--nav-badge-bg` fuera de `:root {…}` (`:3-164`)** y los tres gates de tema pasan verde sin haber verificado nada | Media | Medio: el token queda sin re-apuntar en claro y el anti-drift no lo ve | F3 paso 1 exige el rango + verificación con `Select-String` que debe devolver **dos** líneas |
+| **R19** (v3, C22) | **F7 convierte los 7 estados a `GateState` y olvida los 7 botones de la nav v1**, que leen el gate en posición booleana | **Alta** — el v2 no los listaba y `tsc` **no** los marca | **Crítico silencioso**: `"off"` es truthy ⇒ los 7 tabs se muestran siempre, incluidos los de features apagadas, y el plan que arregla el desborde de la nav v1 lo empeora | Censo obligatorio de los **20** sitios en F7 + caso `ninguna_lectura_de_gate_queda_en_posicion_booleana` + la regla binaria del `Select-String -Pattern "Enabled"` |
+| **R20** (v3, C21) | **Se aplica el ternario de dos vías del v2** y el caso `"off"` monta la página de una feature apagada | **Alta** — es el diff literal del v2 | Alto: la página apagada monta, dispara sus llamadas y muestra 403; peor que no mostrarla | Ternario de **3 vías** escrito en F7 + caso `ninguna_pantalla_gateada_se_monta_en_off` con su demostración en rojo |
+| **R21** (v3, C23) | **F6 aborta a los 20 s un `finish-work`** que ya publicó en ADO y transicionó el work item; el operador reintenta | **Alta** si no se le da override a `postWithHeaders` | **Crítico**: doble publicación y doble transición en el ADO real del operador | Los **seis** verbos reciben `opts` + las 2 rutas en la tabla de `timeoutMs: 0` (12) + **[ADICIÓN ARQUITECTO]** `ningun_verbo_enruta_por_request_sin_canal_de_deadline`, que congela la invariante para el 7º verbo que alguien agregue |
+| **R22** (v3, C25) | **El implementador ve 40 donde el plan dice 42 y "arregla" el regex** hasta que dé 42, siguiendo la instrucción literal del v2 | **Alta** — el v2 lo ordenaba por escrito | Medio-Alto: termina con un regex más ancho que cuenta guardas que no aplanan, y el ratchet queda midiendo otra cosa | Cifras corregidas (**40 / 87 / 127 / 12**), un solo comando recursivo, y la instrucción invertida: si el número no coincide, **gana la medición** y se ajusta el techo |
+| **R23** (v3, C24) | **F9 agrega la huella sin `self_test`** y rompe `test_error_fingerprints_catalog` | **Alta** — la plantilla del v2 no lo tenía | Medio: gate compartido rojo, descubierto después de cerrar la fase | Entrada JSON literal con `self_test` y sus 4 muestras + los dos gates del catálogo en el criterio de aceptación de F9 y en §10.1 |
 
 ---
 
@@ -1541,9 +1780,9 @@ Términos del dominio Stacky que un modelo implementador puede no conocer. Todos
 3. **F2 + F3** — B-05 y B-07, en **un solo commit**: las dos editan `App.module.css` en reglas disjuntas, y hacerlas en dos pasos con sesiones paralelas en el árbol es riesgo sin beneficio. Incluye la reconciliación de **6** pasos de los gates de tema (v2: 3b por C15/C10) y la verificación de cero-hex **con los comentarios ya escritos** (C13).
 4. **F4** — B-02, `GatewayError` + `userFacingMessage` **con el paso 0** (C14), **aditivo**. Incluye las **dos** demostraciones obligatorias (4 rojos del saneamiento + 1 rojo de la regresión del paso 0). Commit propio.
 5. **F4.5** — congelar los 7 parsers legacy. **Antes de F5 y F6.** Puede ir en el commit de F4.
-6. **F4.6 + F4.7** (v2) — migrar las 14 ocurrencias de las 10 superficies gateadas + el ratchet de superficie cruda (42 → 28). **Antes de F5.** Pueden ir en un solo commit.
+6. **F4.6 + F4.7** (v2, cifras corregidas en v3) — migrar las **12** ocurrencias de las 10 superficies gateadas + el ratchet de superficie cruda (**127 → 115**, las dos formas del modismo). **Antes de F5.** Pueden ir en un solo commit.
 7. **F5** — B-06, los 24 cuerpos en 13 archivos (14 forma A + 10 forma B) + registro del test en el `.sh` **y** el `.ps1` + barrido de `errorBody.error`. Commit propio.
-8. **F6** — B-04, timeout + `opts?: RequestOptions` aditivo en los 4 verbos + los 10 endpoints en `timeoutMs: 0` (C2). Commit propio.
+8. **F6** — B-04, timeout + `opts?: RequestOptions` aditivo en los **6** verbos que enrutan por `request()` + los **12** endpoints en `timeoutMs: 0` + el barrido de los 5 verbos + el inventario de verbos de la [ADICIÓN ARQUITECTO] (C2 + C23 + C29). Commit propio.
 9. **F7** — B-01, `GateState` + esqueleto + aviso (C3). Toca el archivo más disputado. Commit propio.
 10. **F9** (v2) — la huella de regresión, con el hash del commit de F5. Commit propio o junto a F8.
 11. **F8** — los 9 smokes de §10 sobre el build final (los 9 deben PASAR), comparados contra la pre-pasada de F0 (los 9 debieron FALLAR). Bitácora en este documento.
@@ -1588,6 +1827,9 @@ cd "Stacky Agents\frontend"; npx vitest run src/utils/__tests__/flagHealth.test.
 cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_plan273_error_message_sin_flags.py -q
 cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_harness_ratchet_meta.py -q
 cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_plan259_ratchet_script_parity.py -q
+# [v3, C24] los DOS gates compartidos del catalogo de huellas que F9 edita
+cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_catalog.py -q
+cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_scan.py -q
 ```
 
 **Condición de cierre de 10.1 — recontada en v2 (C6).** El v1 decía *"los **6** archivos de test nuevos (**43** casos: 3+6+14+3+8+7+5)"*: eran **7** sumandos (⇒ 7 archivos) y la suma da **46**, no 43. Con las fases y casos nuevos del v2, el conteo correcto es:
@@ -1599,17 +1841,19 @@ cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\ven
 | `src/api/__tests__/plan273GatewayError.test.ts` | F4 | **16** (14 + 2 de C14) |
 | `src/__tests__/plan273LegacyErrorParsers.test.ts` | F4.5 | **3** |
 | `src/__tests__/plan273ErrorSurface.test.ts` | F4.6 (v2) | **4** |
-| `src/__tests__/plan273RawErrorSurfaceRatchet.test.ts` | F4.7 (v2) | **4** |
-| `src/api/__tests__/plan273RequestTimeout.test.ts` | F6 | **11** (8 + 3 de C2) |
-| `src/services/__tests__/plan273GateState.test.ts` | F7 | **10** (7 + 3 de C3) |
+| `src/__tests__/plan273RawErrorSurfaceRatchet.test.ts` | F4.7 (v2) | **5** (4 + 1 de C26: `el_censo_cubre_las_dos_variantes`) |
+| `src/api/__tests__/plan273RequestTimeout.test.ts` | F6 | **12** (8 + 3 de C2 + 1 [ADICIÓN ARQUITECTO] de C23) |
+| `src/services/__tests__/plan273GateState.test.ts` | F7 | **13** (7 + 3 de C3 + 3 de v3: C21, C22, C31) |
 | `backend/tests/test_plan273_error_message_sin_flags.py` | F5 + F9 | **6** (5 + 1 de C11) |
-| **Total** | | **9 archivos · 64 casos** (8 frontend + 1 backend) |
+| **Total** | | **9 archivos · 71 casos** (8 frontend + 1 backend) |
 
-**La suma está verificada a mano: 4+6+16+3+4+4+11+10+6 = 64.** Si al implementar el número real difiere, gana el conteo del implementador y se anota la diferencia en la bitácora — pero no se cierra con un total que no coincide con la suma de las tablas de fase.
+**La suma está verificada a mano: 4+6+16+3+4+5+12+13+6 = 71.** Si al implementar el número real difiere, gana el conteo del implementador y se anota la diferencia en la bitácora — pero no se cierra con un total que no coincide con la suma de las tablas de fase.
+
+**Cero archivos de test nuevos respecto del v2** (v3): los 7 casos que este v3 agrega van todos a archivos que el plan ya crea ⇒ **ninguna edición nueva en `run_harness_tests.sh`/`.ps1`**, que siguen en holgura cero (§3.4).
 
 **Un solo archivo de test backend, y es deliberado:** F9 agrega su caso al archivo de F5 en vez de crear uno nuevo, para no tener que registrar un **segundo** archivo en los DOS scripts del arnés con el lag en holgura CERO (§3.4). Un archivo nuevo = dos ediciones más y un riesgo más.
 
-Los **8 gates compartidos** en el mismo estado que F0 (delta cero). `tsc --noEmit` sin errores nuevos **respecto de la línea base que F0 mide** (C15). **Prohibido** cerrar con "todo verde" si algún gate compartido ya estaba rojo en F0: se declara el rojo ajeno con su nombre y se demuestra que no lo empeoró este plan.
+Los **10 gates compartidos** en el mismo estado que F0 (delta cero; v3: los 8 del v2 + los 2 del catálogo de huellas por C24). `tsc --noEmit` sin errores nuevos **respecto de la línea base que F0 mide** (C15). **Prohibido** cerrar con "todo verde" si algún gate compartido ya estaba rojo en F0: se declara el rojo ajeno con su nombre y se demuestra que no lo empeoró este plan.
 
 **Y una condición que no es un comando:** cada fase tiene anotado su **estado ROTO observado**, con el mensaje real del test. Una fase sin rojo observado no está hecha, aunque su test esté verde.
 
@@ -1622,7 +1866,7 @@ Los seis condicionantes del veredicto de la auditoría, con su verificación. **
 | **C1** | Un deep link / reload a una pantalla con gate aterriza en esa pantalla, no en Tickets | F7 (B-01) | Smokes 1, 2 |
 | **C2** | La app no cambia de arquitectura de navegación después del primer paint, y un fallo de health no degrada a la nav vieja | F1 (B-03) | Smokes 3, 4 |
 | **C3** | El operador no ve `"500 INTERNAL SERVER ERROR: {...}"` ni nombres `STACKY_*`; se usa el `message` que el backend redacta | F4 (B-02) + **F4.6 (C1)** + **F4.7 (ratchet)** + F5 (B-06) | Smokes 5, 6 |
-| **C4** | Timeout en el cliente HTTP | F6 (B-04), **con los 10 endpoints largos en `timeoutMs: 0`** | Smoke 7 |
+| **C4** | Timeout en el cliente HTTP | F6 (B-04), **con los 12 endpoints largos en `timeoutMs: 0`** (v3, C23: incluidos `finish-work` y `create-child-task`, que escriben en ADO) | Smoke 7 |
 | **C5** | Ningún tab queda inalcanzable por recorte horizontal de la nav | F2 (B-05) | Smoke 8 |
 | **C6** | Decisión explícita y documentada sobre tema claro y sobre responsive | F3 (B-07) **parcial** | Smoke 9 + decisión escrita (ver nota) |
 
@@ -1684,12 +1928,13 @@ Los seis condicionantes del veredicto de la auditoría, con su verificación. **
 
 Al cerrar, este documento debe contener:
 
-- Los **8** valores de línea base de F0, con su valor real medido (v2: incluidos el conteo de `tsc --noEmit` y las 42 ocurrencias del modismo de aplanado).
+- Los **13** valores de línea base de F0, con su valor real medido (v3: incluidos el conteo de `tsc --noEmit`, las **cuatro** filas de superficie cruda —40 / 87 / 127 / 12—, los 4 gates compartidos de C30 y los 2 del catálogo de huellas de C24).
 - Por cada fase **F1–F7, F4.6, F4.7 y F9**: el **estado roto observado** (mensaje real del test antes del fix) y el comando con el que se vio verde después.
-- **Las tres demostraciones obligatorias de que los gates discriminan**, con su rojo transcrito: los 4 rojos de la versión ingenua de `userFacingMessage` (F4), el rojo del algoritmo **sin el paso 0** (F4, C14), y el `42 > 28` del ratchet antes de F4.6 (F4.7).
+- **Las demostraciones obligatorias de que los gates discriminan**, con su rojo transcrito: los 4 rojos de la versión ingenua de `userFacingMessage` (F4); el rojo del algoritmo **sin el paso 0** (F4, C14); el **`127 > 115`** del ratchet antes de F4.6 y sus dos inyecciones temporales, **una por cada forma del modismo** (F4.7, C26); el rojo del ternario de **dos** vías (F7, C21); el rojo del botón de nav v1 dejado en posición booleana (F7, C22); y el rojo de `ningun_verbo_enruta_por_request_sin_canal_de_deadline` **con el fix del v2 aplicado**, nombrando `postWithHeaders` y `postAbortable` (F6, C23) — ese último es la prueba de que la [ADICIÓN ARQUITECTO] habría atrapado C23 antes de shippear.
 - **El conteo de hex de `App.module.css` DESPUÉS del fix de F3** (debe ser 0; si es 4, son los comentarios — C13).
+- **La decisión anotada por cada candidato del barrido de los 5 verbos de F6** (C29): `timeoutMs: 0` o "cabe en 20 s". Un candidato sin decisión deja F6 abierta.
 - Los 9 smokes, con PASA/FALLA y fecha, **en las dos corridas** (pre-pasada en F0 y build final), con **9 FALLA** en la primera y **9 PASA** en la segunda.
-- **El total real de casos verdes**, comparado contra los **64** de la tabla de §10.1.
+- **El total real de casos verdes**, comparado contra los **71** de la tabla de §10.1.
 - Cualquier anclaje de este documento que no coincidiera con el código al implementar, con el símbolo que se usó en su lugar.
 - El estado de C1–C6, con C6 declarado explícitamente como **parcial** (§10.2 nota).
 - **El número de entrada de `error_fingerprints.json`** (debe pasar de 45 a 46) y el hash de `killed_commit`.

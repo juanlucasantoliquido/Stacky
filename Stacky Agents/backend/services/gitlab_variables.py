@@ -35,10 +35,14 @@ class GitLabVariablesProvider:
             # Con protected:false fijo, una variable con masked:false es indistinguible
             # de una normal ⇒ is_secret vuelve False (limitación honesta del tracker).
             is_secret = bool(v.get("masked") or v.get("protected"))
+            # Plan 260: GitLab SI devuelve "value" en el listado (a diferencia de
+            # ADO). Ausencia de la clave -> DESCONOCIDO (None), nunca True/False
+            # adivinado. Prohibido guardar/loguear/retornar v["value"] crudo.
+            has_value = bool(v.get("value")) if "value" in v else None
             result.append({
                 "key": v.get("key"),
                 "is_secret": is_secret,
-                "has_value": True,  # Si está en la lista, tiene valor
+                "has_value": has_value,  # True=cargado, False=vacio, None=no se sabe
                 "masked": v.get("masked"),
             })
         return result
@@ -54,7 +58,10 @@ class GitLabVariablesProvider:
         return [{
             "key": v.get("key"),
             "is_secret": bool(v.get("masked") or v.get("protected")),
-            "has_value": True,
+            # Plan 260: mismo tri-estado que list_variables() (:22) — es un sitio
+            # DISTINTO (repite _request_paginated), cambiar solo el otro deja el
+            # bug vivo por el camino que usa la matriz (este metodo).
+            "has_value": bool(v.get("value")) if "value" in v else None,
             "masked": v.get("masked"),
             "environment_scope": v.get("environment_scope") or "*",
         } for v in items]

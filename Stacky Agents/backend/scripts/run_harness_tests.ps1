@@ -827,10 +827,21 @@ $HarnessTestFiles = @(
   "tests/test_devops_actions_api.py",
   "tests/test_devops_action_matcher.py",
   "tests/test_devops_action_ratchet.py",
-  "tests/test_plan267_help.py"
-  "tests/test_plan266_summary_shape.py"
-  "tests/test_plan266_harness_runner_paridad.py"
-  "tests/test_plan266_flag_cableado.py"
+  "tests/test_plan267_help.py",
+
+  # Plan 266 - Cero pantalla rota en el comparador de BD (forma garantizada del summary)
+  "tests/test_plan266_summary_shape.py",
+  "tests/test_plan266_harness_runner_paridad.py",
+  "tests/test_plan266_flag_cableado.py",
+
+  # Plan 260 - Ninguna pipeline corre a ciegas (registro incremental, fase por fase)
+  "tests/test_plan260_env_gate_flags.py",
+  "tests/test_plan260_has_value_veraz.py",
+  "tests/test_plan260_declare_core.py",
+  "tests/test_plan260_declare_endpoint.py",
+  "tests/test_plan260_trigger_gate.py",
+  "tests/test_plan260_secret_commit_gate.py",
+  "tests/test_plan260_fingerprints.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

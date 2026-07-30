@@ -13,12 +13,19 @@ Si OFF → guard 404 per-request; el blueprint siempre está registrado.
 """
 from __future__ import annotations
 
+import concurrent.futures as _fut
+import hashlib
 import time
+from dataclasses import replace as _dc_replace
+from pathlib import Path
 
 import config as _config
 from flask import Blueprint, abort, jsonify, request
+from services.ci_env_gate import GATE_BUDGET_S, Readiness, evaluate_readiness
 from services.ci_provider import get_ci_provider, ItemRef
 from services.ci_trigger_rules import normalize_ref, validate_trigger_credentials, should_trigger
+from services.pipeline_env_resolver import resolve
+from services.pipeline_environments import build_matrix, derive_environments, extract_requirements
 from services.tracker_provider import TrackerApiError
 
 # Blueprint con url_prefix="/ci" → registrado en api_bp (url_prefix="/api") → /api/ci/...
@@ -35,6 +42,14 @@ _RECENT_TRIGGERS: dict[tuple[str, str], dict] = {}
 # Cap anti-N+1: contador de polls activos por pipeline_id
 _ACTIVE_POLLS: dict[str, int] = {}
 _MAX_ACTIVE_POLLS_PER_PIPELINE = 5
+
+# Plan 260 (F4, ADICIÓN ARQUITECTO 2) — memoria de veredictos del gate de
+# entornos. Misma ventana de 60s que la idempotencia. NO es un cache de datos
+# del proveedor: es el resultado YA CALCULADO del gate.
+# clave: (provider_name, ref_value, yaml_sha256) -> (Readiness, ts_monotonic)
+_RECENT_READINESS: dict[tuple[str, str, str], tuple] = {}
+_MAX_READINESS = 32
+_READINESS_WINDOW_S = 60.0
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +84,161 @@ def _read_pat_scopes(provider) -> set[str] | None:
 
 
 # ---------------------------------------------------------------------------
+# Plan 260 F4 — gate antes de disparar (§4.5). Ninguna llamada de red que el
+# panel de la matriz no haga ya; el gate corre A PEDIDO, dentro del request.
+# ---------------------------------------------------------------------------
+
+def _yaml_fuente_inventario() -> str | None:
+    """Fuente 2 (import blando, §2.4.3): el YAML de la (única) pipeline
+    registrada en el inventario del Plan 246 para el workspace activo. Si no
+    hay exactamente una, o no se puede leer, degrada a None — NUNCA asume."""
+    try:
+        from runtime_paths import _active_workspace_root  # noqa: PLC0415
+        from services.pipeline_inventory import scan_repo_pipelines  # noqa: PLC0415
+
+        root = _active_workspace_root()
+        if not root:
+            return None
+        entries, _meta = scan_repo_pipelines(str(root))
+        candidatos = [e for e in entries if e.get("yaml_path")]
+        if len(candidatos) != 1:
+            return None
+        ruta = Path(str(root)) / candidatos[0]["yaml_path"]
+        if not ruta.is_file():
+            return None
+        return ruta.read_text(encoding="utf-8")
+    except Exception:  # noqa: BLE001 — import/lectura blanda: nunca rompe el gate
+        return None
+
+
+def _leer_yaml_por_path(yaml_path: str) -> str | None:
+    """(v2, C7) El preview es GET: acepta ?yaml_path= (una RUTA relativa del
+    workspace, nunca el YAML entero por query string — eso lo dejaría en los
+    logs de acceso del servidor, violando KPI-5 por la puerta de atrás)."""
+    if not yaml_path:
+        return None
+    try:
+        from runtime_paths import _active_workspace_root  # noqa: PLC0415
+
+        root = _active_workspace_root()
+        if not root:
+            return None
+        raiz = Path(str(root)).resolve()
+        ruta = (raiz / yaml_path).resolve()
+        if raiz != ruta and raiz not in ruta.parents:
+            return None  # fuera del workspace: no seguir path traversal
+        if not ruta.is_file():
+            return None
+        return ruta.read_text(encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _resolver_yaml_para_gate(*, yaml_text: str | None, yaml_path: str | None) -> str | None:
+    """3 fuentes, PRIMERA que acierta (§4, F4)."""
+    if isinstance(yaml_text, str) and yaml_text.strip():
+        return yaml_text
+    if yaml_path:
+        leido = _leer_yaml_por_path(yaml_path)
+        if leido:
+            return leido
+    return _yaml_fuente_inventario()
+
+
+def _podar_readiness_cache() -> None:
+    """(v3, C12) Poda por ventana + cap duro: sin esto el dict crece una
+    entrada por cada (proveedor, ref, sha) visto y nunca suelta objetos
+    Readiness (que traen `missing`/`reasons`)."""
+    ahora = time.monotonic()
+    vencidas = [k for k, (_r, ts) in _RECENT_READINESS.items()
+               if ahora - ts > _READINESS_WINDOW_S]
+    for k in vencidas:
+        _RECENT_READINESS.pop(k, None)
+    while len(_RECENT_READINESS) > _MAX_READINESS:
+        mas_vieja = min(_RECENT_READINESS, key=lambda k: _RECENT_READINESS[k][1])
+        _RECENT_READINESS.pop(mas_vieja, None)
+
+
+_READINESS_DEGRADADO_VACIO = Readiness(
+    verdict="degradado", pending_count=0, unknown_count=0, pending_fingerprint="",
+    missing=(), reasons=(), resolved=False,
+)
+
+
+def _evaluar_readiness(project: str, ref_value: str, provider, *,
+                       yaml_text: str | None = None, yaml_path: str | None = None) -> Readiness:
+    """Arma la matriz y evalúa el veredicto. NUNCA lanza (try/except total):
+    un bug propio del gate jamás puede romper un disparo."""
+    try:
+        texto = _resolver_yaml_para_gate(yaml_text=yaml_text, yaml_path=yaml_path)
+        if not texto:
+            return _READINESS_DEGRADADO_VACIO
+
+        pipeline_provider = provider.name
+        yaml_sha256 = hashlib.sha256(texto.encode("utf-8")).hexdigest()
+        clave = (provider.name, ref_value, yaml_sha256)
+
+        # (ADICIÓN 2) reuso del veredicto — misma ventana que la idempotencia.
+        cacheada = _RECENT_READINESS.get(clave)
+        if cacheada is not None:
+            readiness_prev, ts = cacheada
+            if time.monotonic() - ts <= _READINESS_WINDOW_S:
+                return _dc_replace(readiness_prev, source="preview_reusado")
+
+        requisitos = extract_requirements(texto, pipeline_provider)
+        entornos = derive_environments(texto, pipeline_provider)
+
+        t0 = time.monotonic()
+        resolved = True
+        resoluciones: dict = {}
+        # (v3, C2 — REVERIFICADO en esta implementación) `with ThreadPoolExecutor`
+        # NO alcanza: su __exit__ vuelve a llamar shutdown(wait=True) y JOINEA
+        # el hilo huérfano igual, aunque ya se haya llamado shutdown(wait=False)
+        # adentro (medido: con `with`, el request tardaba los 3s completos del
+        # doble lento, no los 1.5s del presupuesto). Por eso el executor se
+        # maneja a mano, sin `with`, y se cierra una SOLA vez en el `finally`
+        # con wait=False — así el request nunca espera al hilo huérfano.
+        ex = _fut.ThreadPoolExecutor(max_workers=1)
+        try:
+            f = ex.submit(resolve, requisitos, entornos, pipeline_provider, project, True, texto)
+            try:
+                resoluciones, _deg = f.result(timeout=GATE_BUDGET_S)
+            except _fut.TimeoutError:
+                resolved = False
+        except Exception:  # noqa: BLE001 — red, proveedor sin configurar, lo que sea
+            resolved = False
+        finally:
+            ex.shutdown(wait=False, cancel_futures=True)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+        matriz = build_matrix(requisitos, entornos, resoluciones, pipeline_provider)
+        readiness = evaluate_readiness(matriz, resolved=resolved, source="calculado",
+                                       elapsed_ms=elapsed_ms)
+
+        # (v3, C4) solo se ALMACENA (y solo se reusa) un veredicto resuelto de
+        # verdad y con sha no vacío — un `degradado` jamás se persiste.
+        if readiness.resolved and yaml_sha256:
+            _RECENT_READINESS[clave] = (readiness, time.monotonic())
+            _podar_readiness_cache()
+        return readiness
+    except Exception:  # noqa: BLE001 — el gate JAMAS rompe el trigger
+        return _READINESS_DEGRADADO_VACIO
+
+
+def _serializar_readiness(r: Readiness) -> dict:
+    return {
+        "verdict": r.verdict,
+        "pending_count": r.pending_count,
+        "unknown_count": r.unknown_count,
+        "pending_fingerprint": r.pending_fingerprint,
+        "missing": [{"name": n, "environment": e} for n, e in r.missing],
+        "resolved": r.resolved,
+        "source": r.source,
+        "elapsed_ms": r.elapsed_ms,
+    }
+
+
+# ---------------------------------------------------------------------------
 # POST /<project>/trigger — HITL obligatorio
 # ---------------------------------------------------------------------------
 
@@ -100,6 +270,24 @@ def trigger_pipeline_route(project: str):
     ok, msg = validate_trigger_credentials(provider.name, scopes)
     if not ok:
         return jsonify({"error": msg}), 400  # solo si scope CONOCIDO y faltante
+
+    # Plan 260 F4 — el gate corre DESPUES de tener provider.name (hace falta
+    # para el reuso de veredicto) y ANTES de la idempotencia, para no consumir
+    # la ventana de 60s con un disparo que se va a rechazar.
+    readiness = None
+    if getattr(_config.config, "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED", False):
+        readiness = _evaluar_readiness(project, ref_value, provider,
+                                       yaml_text=body.get("yaml_text"))
+        if readiness.verdict == "bloquea" and body.get("acknowledge_missing") is not True:
+            return jsonify({
+                "error": "faltan %d valor(es) obligatorio(s) para esta pipeline"
+                         % readiness.pending_count,
+                "kind": "env_pending",
+                "missing": [{"name": n, "environment": e} for n, e in readiness.missing],
+                "pending_fingerprint": readiness.pending_fingerprint,
+                "elapsed_ms": readiness.elapsed_ms,
+                "hint": "cargá los valores en Variables, o reintentá con acknowledge_missing=true",
+            }), 409
 
     # Idempotencia
     recent = _recent_triggers(provider.name, ref_value)
@@ -141,10 +329,18 @@ def trigger_pipeline_route(project: str):
                 "pipeline_id": result["id"],
                 "web_url": result.get("web_url"),
                 "source": "stacky",
+                # Plan 260 — aditivo (ENTRY_FIELDS crece 2 claves al final).
+                "env_ack": bool(body.get("acknowledge_missing") is True),
+                "pending_fingerprint": readiness.pending_fingerprint if readiness else None,
             })
         except Exception:  # noqa: BLE001 — el ledger nunca es camino crítico
             from services.stacky_logger import logger as stacky_logger
             stacky_logger.info("ci_run_ledger", "append_failed", pipeline_id=str(result.get("id")))
+
+    # Plan 260 (ADICIÓN 5) — la latencia del gate viaja SIEMPRE que corrió,
+    # también en el 200 del disparo que pasó (no solo en el 409 del bloqueo).
+    if readiness is not None:
+        result = {**result, "readiness": _serializar_readiness(readiness)}
 
     return jsonify(result)
 
@@ -175,13 +371,24 @@ def trigger_preview_route(project: str):
     recent = _recent_triggers(provider.name, ref_value)
     # C5: UNA sola llamada con last_sha (no sha="" dos veces)
     fire, existing = should_trigger(ref_value, last_sha, recent, window_seconds=60)
-    return jsonify({
+
+    payload = {
         "kind": kind,
         "ref": ref_value,
         "last_pipeline": last,
         "would_reuse": (not fire),
         "existing_pipeline_id": existing,
-    })
+    }
+
+    # Plan 260 F4 — campo ADITIVO: sin yaml_path, el preview usa la fuente 2
+    # (inventario) y, si tampoco, degradado. El preview ESCRIBE el veredicto
+    # en _RECENT_READINESS (ADICIÓN 2) para que el trigger posterior lo reuse.
+    if getattr(_config.config, "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED", False):
+        readiness = _evaluar_readiness(project, ref_value, provider,
+                                       yaml_path=request.args.get("yaml_path"))
+        payload["readiness"] = _serializar_readiness(readiness)
+
+    return jsonify(payload)
 
 
 # ---------------------------------------------------------------------------

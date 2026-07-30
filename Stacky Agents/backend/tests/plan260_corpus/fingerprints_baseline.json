@@ -1,0 +1,853 @@
+[
+  {
+    "id": "pipeline_status_404",
+    "title": "404 masivo de /api/v1/pipeline/status",
+    "class": "http-404-poller",
+    "status": "resolved",
+    "log_pattern": "\"GET /api/v1/pipeline/status[^\"]*\" 404",
+    "log_guarded": true,
+    "killed_by": "plan 145 (higiene/observabilidad de logs)",
+    "killed_commit": "f00f161f",
+    "date_resolved": "2026-07-16",
+    "guard_test": "tests/test_plan145_pipeline_status_shim.py",
+    "evidence": "backend/api/__init__.py:130-144; backend/services/local_file_logging.py:68",
+    "note": "C3 — honestidad del gate: la supresion del access-log (local_file_logging.py:68) filtra este path POR PATH, no por status. Esta huella detecta la regresion TOTAL (proceso corriendo codigo pre-145, el caso de los 6.346 404). Una regresion PARCIAL (shim roto con supresion viva) es invisible en el log: la cubre el guard_test pytest, no el smoke.",
+    "self_test": {
+      "matches": [
+        "127.0.0.1 - - [14/Jul/2026 18:00:00] \"GET /api/v1/pipeline/status HTTP/1.1\" 404 -"
+      ],
+      "clean": [
+        "127.0.0.1 - - [16/Jul/2026 10:00:00] \"GET /api/v1/pipeline/status HTTP/1.1\" 200 -"
+      ]
+    }
+  },
+  {
+    "id": "ansi_in_file_log",
+    "title": "Secuencias ANSI en el log de archivo",
+    "class": "log-formatting",
+    "status": "resolved",
+    "log_pattern": "\\x1b\\[[0-9;]*m",
+    "log_guarded": true,
+    "killed_by": "plan 145 (higiene/observabilidad de logs)",
+    "killed_commit": "f00f161f",
+    "date_resolved": "2026-07-16",
+    "guard_test": "tests/test_plan145_ansi_strip.py",
+    "evidence": "backend/services/local_file_logging.py:42,49,52",
+    "self_test": {
+      "matches": [
+        "2026-07-14 18:00:00 INFO \u001b[32mverde\u001b[0m arranque"
+      ],
+      "clean": [
+        "2026-07-16 10:00:00 INFO verde arranque"
+      ]
+    }
+  },
+  {
+    "id": "ado_workitem_type_vs402323",
+    "title": "Tipo de work-item ADO inexistente (VS402323)",
+    "class": "ado-publish",
+    "status": "open",
+    "log_pattern": "VS402323: Work item type \\S+ does not exist",
+    "log_guarded": false,
+    "killed_by": "pendiente — plan del ledger de publicacion transaccional (aun no implementado)",
+    "killed_commit": null,
+    "date_resolved": null,
+    "guard_test": "tests/test_create_child_task_endpoint.py",
+    "evidence": "backend/tests/test_create_child_task_endpoint.py:186-189",
+    "note": "C12 — handoff: cuando el plan del ledger de publicacion transaccional se implemente (mata VS402323 con mapeo de tipos), actualizar esta entrada: status->resolved, killed_commit y date_resolved reales.",
+    "self_test": {
+      "matches": [
+        "ERROR ado_publisher VS402323: Work item type Feature does not exist in project X"
+      ],
+      "clean": [
+        "INFO ado_publisher created work item type Task"
+      ]
+    }
+  },
+  {
+    "id": "muted_500_untyped",
+    "title": "500 mudo / excepcion no atrapada",
+    "class": "error-envelope",
+    "status": "resolved",
+    "log_pattern": "Traceback \\(most recent call last\\)",
+    "log_guarded": false,
+    "killed_by": "plan 149 (excepciones tipadas) + plan 135 (cero errores mudos)",
+    "killed_commit": "5d091726",
+    "date_resolved": "2026-07-16",
+    "guard_test": "tests/test_plan149_typed_errors.py",
+    "evidence": "backend/api/errors.py:53-55; backend/app.py:595-634",
+    "self_test": {
+      "matches": [
+        "Traceback (most recent call last):"
+      ],
+      "clean": [
+        "ERROR api typed 500 [type=internal exec_id=42]"
+      ]
+    }
+  },
+  {
+    "id": "integration_silent_degradation",
+    "title": "Integracion no configurada degradaba silenciosa",
+    "class": "integration",
+    "status": "resolved",
+    "log_pattern": "\"error_type\"\\s*:\\s*\"integration_unavailable\"",
+    "log_guarded": false,
+    "killed_by": "plan 148 (degradacion de integraciones)",
+    "killed_commit": "af938ffe",
+    "date_resolved": "2026-07-16",
+    "guard_test": "tests/test_plan148_integration_degradation.py",
+    "evidence": "backend/api/errors.py:48-50; backend/app.py:142",
+    "self_test": {
+      "matches": [
+        "{\"error_type\": \"integration_unavailable\", \"integration\": \"ado\"}"
+      ],
+      "clean": [
+        "{\"ok\": true}"
+      ]
+    }
+  },
+  {
+    "id": "epic_task_phantom_success",
+    "title": "Exito fantasma: task de epica marcada creada pero inexistente en ADO",
+    "class": "publish-integrity",
+    "status": "resolved",
+    "log_pattern": "task_not_found_in_ado",
+    "log_guarded": false,
+    "killed_by": "G1.1 / plan 135 (cero errores mudos)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-15",
+    "guard_test": "tests/test_harness_health_integrity.py",
+    "evidence": "backend/api/tickets.py:4931,4939,4943; backend/services/harness_health.py:714-730",
+    "self_test": {
+      "matches": [
+        "WARN tickets quarantine reason=task_not_found_in_ado exec_id=7"
+      ],
+      "clean": [
+        "INFO tickets task created ok"
+      ]
+    }
+  },
+  {
+    "id": "claude_cli_zombie_stall",
+    "title": "Claude CLI colgado/zombie",
+    "class": "runtime-liveness",
+    "status": "resolved",
+    "log_pattern": "stall watchdog: \\d+s sin eventos del stream",
+    "log_guarded": false,
+    "killed_by": "plan 144 (trust/estados Claude CLI) + plan 37 (cap de sesion)",
+    "killed_commit": "da6d3609",
+    "date_resolved": "2026-07-16",
+    "guard_test": "tests/test_claude_stall_signal.py",
+    "evidence": "backend/services/claude_code_cli_runner.py:1348-1349,1309; backend/config.py:251",
+    "self_test": {
+      "matches": [
+        "WARN claude R1.1 stall watchdog: 120s sin eventos del stream — terminando"
+      ],
+      "clean": [
+        "INFO claude stream event received"
+      ]
+    }
+  },
+  {
+    "id": "pm_no_snapshot_404",
+    "title": "PM sin snapshot (404 esperado)",
+    "class": "expected-empty-state",
+    "status": "by_design",
+    "log_pattern": "\"error\"\\s*:\\s*\"NO_SNAPSHOT\"",
+    "log_guarded": false,
+    "killed_by": "no aplica — 404 by-design (estado vacio esperado)",
+    "killed_commit": null,
+    "date_resolved": null,
+    "guard_test": "tests/test_pm_endpoints.py",
+    "evidence": "backend/api/pm.py:303-308; frontend/src/pages/PMCommandCenter.tsx:866-868",
+    "self_test": {
+      "matches": [
+        "{\"error\": \"NO_SNAPSHOT\"}"
+      ],
+      "clean": [
+        "{\"snapshots\": []}"
+      ]
+    }
+  },
+  {
+    "id": "flag-leida-del-modulo-config",
+    "title": "Flag leida del MODULO config (rama muerta silenciosa)",
+    "class": "flag-binding",
+    "status": "resolved",
+    "log_pattern": "issue_tracker\\.type=gitlab pero STACKY_GITLAB_ENABLED=false",
+    "log_guarded": false,
+    "killed_by": "plan 218 F0 (D1/D2 - paridad total ADO<->GitLab)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan218_gitlab_reachable.py::test_audit_marca_binding_de_modulo",
+    "evidence": "backend/services/tracker_provider.py:111; backend/services/gitlab_provider.py:34-39; backend/services/flag_binding_audit.py",
+    "note": "Patron: un modulo que hace `import config` (el MODULO) y lee un atributo STACKY_*/GITLAB_*/ADO_* del nombre pelado obtiene SIEMPRE el default de la clase => la rama nunca se ejecuta, sin error visible. log_guarded=false a proposito: con STACKY_GITLAB_ENABLED=false (default de fabrica) este mensaje es LEGITIMO, asi que el smoke de logs alarmaria en falso. El guard real es el pytest, mas el ratchet AST flag_binding_audit.scan() congelado en tests/flag_binding_baseline.json.",
+    "self_test": {
+      "matches": [
+        "TrackerConfigError: issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"
+      ],
+      "clean": [
+        "INFO tracker provider resuelto: gitlab"
+      ]
+    }
+  },
+  {
+    "id": "kwarg-inexistente-en-constructor-de-provider",
+    "title": "Provider construido con un kwarg que su __init__ no declara",
+    "class": "provider-construction",
+    "status": "resolved",
+    "log_pattern": "TypeError:[^\\n]*unexpected keyword argument '(project_name|json)'",
+    "log_guarded": false,
+    "killed_by": "plan 218 F0 (D3/D4 - paridad total ADO<->GitLab)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan218_gitlab_reachable.py::test_gitlab_ci_provider_construye",
+    "evidence": "backend/services/gitlab_ci_provider.py:30; backend/services/gitlab_variables.py:13,28,80,90",
+    "note": "Patron: construir un provider (o llamar a su cliente) con un kwarg que la firma real no declara => TypeError en el PRIMER uso real, invisible mientras el test mockee el provider entero en vez del transporte. El guard es el pytest que construye el provider de verdad y dobla solo GitLabClient (P4).",
+    "self_test": {
+      "matches": [
+        "TypeError: GitLabTrackerProvider.__init__() got an unexpected keyword argument 'project_name'"
+      ],
+      "clean": [
+        "DEBUG GitLabTrackerProvider(project='grupo/proyecto') construido"
+      ]
+    }
+  },
+  {
+    "id": "plan-number-collision-2026-07-25",
+    "title": "Dos documentos distintos NN_PLAN_*.md con el mismo NN en Stacky Agents/docs/",
+    "class": "plan-numbering",
+    "status": "resolved",
+    "log_pattern": "n[uuú]meros de plan duplicados en docs/",
+    "log_guarded": false,
+    "killed_by": "plan 237 F7 (guardia de numeracion anti-colision)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan237_plans_triage.py::test_docs_reales_sin_numeros_duplicados",
+    "evidence": "backend/services/plans_board.py (all_claimed_numbers, plan_number_duplicates, claim_plan_path); docs/237_PLAN_TRIAGE_DE_PLANES_EN_EL_CENTRO_DE_EVOLUCION.md seccion 2.3",
+    "note": "Causa raiz: next_free_number solo miraba el directorio raiz y era un read puro: entre el calculo del numero y la escritura del .md, una sesion paralela podia tomar el mismo numero. El fix tiene tres partes: universo completo de numeros (raiz + subdirectorios + roadmaps + ledger), creacion EXCLUSIVA del archivo con open(..., 'x') (atomica en el filesystem) y duplicados ruidosos en el board + guard test.",
+    "self_test": {
+      "matches": [
+        "AssertionError: numeros de plan duplicados en docs/: [{'number': 237, 'filenames': ['237_PLAN_A.md', '237_PLAN_B.md']}]"
+      ],
+      "clean": [
+        "DEBUG plans_board: numbering.duplicates=[] next_free_number=239"
+      ]
+    }
+  },
+  {
+    "id": "PLAN238-INBOX-CIEGA-SIN-TIPO",
+    "title": "La bandeja de incidencias devuelve lista vacia en un proyecto que si tiene tickets",
+    "class": "provider-degradation",
+    "status": "resolved",
+    "log_pattern": "incident-inbox[^\\n]*untyped_count[\"']?\\s*[:=]\\s*[1-9]",
+    "log_guarded": false,
+    "killed_by": "plan 238 F2 (untyped_count + provider + estado vacio explicativo)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan238_incident_inbox_api.py::test_gitlab_sin_tipo_reporta_untyped_count",
+    "evidence": "backend/services/gitlab_provider.py:55-56,74-91 (el tipo viaja como label type::<x>); backend/services/ado_sync.py:174,307 (unico que persiste work_item_type)",
+    "note": "Sintoma: pantalla vacia sin explicacion. Causa raiz: con un tracker que no es Azure DevOps, Ticket.work_item_type queda NULL y en SQL 'NULL IN (...)' evalua a NULL, asi que la fila se descarta en silencio. La mitigacion NO arregla el sync (fuera de alcance): cuenta esos tickets en untyped_count y la vista explica el motivo en vez de decir 'no hay incidencias'.",
+    "self_test": {
+      "matches": [
+        "GET /api/incident-inbox/items -> items=[] untyped_count: 14 provider=gitlab"
+      ],
+      "clean": [
+        "GET /api/incident-inbox/items -> items=[7] untyped_count: 0 provider=ado"
+      ]
+    }
+  },
+  {
+    "id": "PLAN238-SHELL-ICONO-INEXISTENTE",
+    "title": "Un iconName de TAB_META que no existe en ICON_BY_NAME rompe la barra lateral entera",
+    "class": "shell-navigation",
+    "status": "resolved",
+    "log_pattern": "Element type is invalid[^\\n]*got: undefined|ICON_BY_NAME\\[[^\\]]+\\] is undefined",
+    "log_guarded": false,
+    "killed_by": "plan 238 F7 (test permanente de cobertura de iconos)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-25",
+    "guard_test": "src/components/shell/__tests__/shellIconsCoverage.test.ts",
+    "evidence": "frontend/src/components/shell/AppSidebar.tsx:34 resuelve ICON_BY_NAME[meta.iconName] en runtime; frontend/src/components/shell/shellIcons.ts",
+    "note": "Agregar un tab nuevo con un iconName mal escrito (o no importado de lucide-react) devuelve undefined y React revienta al renderizar, tumbando TODA la barra lateral, no solo ese item. Hasta el plan 238 solo se descubria abriendo el navegador; ahora es un rojo determinista para este tab y para todos los futuros.",
+    "self_test": {
+      "matches": [
+        "Error: Element type is invalid: expected a string (for built-in components) or a class/function (for composite components) but got: undefined."
+      ],
+      "clean": [
+        "DEBUG AppSidebar: 18 tabs renderizados con icono valido"
+      ]
+    }
+  },
+  {
+    "id": "PLAN239-OUTLET-EN-BLANCO",
+    "title": "La sección activa no está en mountedIds y el panel DevOps se ve vacío",
+    "class": "shell-navigation",
+    "status": "resolved",
+    "log_pattern": "",
+    "log_guarded": false,
+    "killed_by": "plan 239 F3.4 (guard `s.id !== activeId` en el outlet + aterrizaje por useEffect)",
+    "killed_commit": "511f2c87",
+    "date_resolved": "2026-07-25",
+    "guard_test": "src/pages/__tests__/DevOpsCockpitRegression.test.ts",
+    "evidence": "frontend/src/pages/DevOpsPage.tsx sembraba mountedIds con DEVOPS_SECTIONS[0].id mientras el outlet cortaba con !mountedIds.has(s.id); cualquier deep-link/pin/flag-off dejaba la pantalla vacía",
+    "note": "Clase general: estado de montaje derivado de una constante en vez de derivado del estado activo. Regla: si un render depende de un Set de ids, la invariante \"lo activo siempre se renderiza\" va en el render, no en quien setea. Hermana de la trampa del inicializador perezoso de useState, que evalúa antes de que llegue la data async."
+  },
+  {
+    "id": "PLAN239-SONDEO-OCULTO-SETINTERVAL",
+    "title": "Un setInterval sigue sondeando el backend con la sección oculta (display:none, sin desmontar)",
+    "class": "polling-leak",
+    "status": "resolved",
+    "log_pattern": "",
+    "log_guarded": false,
+    "killed_by": "plan 239 F6 (ctx.visible + ratchet que cubre refetchInterval Y setInterval)",
+    "killed_commit": "511f2c87",
+    "date_resolved": "2026-07-25",
+    "guard_test": "src/__tests__/devopsPollingRatchet.test.ts",
+    "evidence": "frontend/src/components/devops/TriggerPipelineSection.tsx (dos setInterval) + DeploymentsSection.tsx (refetchInterval), bajo el montaje persistente C10 de DevOpsPage.tsx",
+    "note": "Un ratchet que solo mira refetchInterval declara victoria y deja viva la fuga de setInterval. Regla: el ratchet de sondeo se define por EFECTO (pedir datos periódicamente), no por API."
+  },
+  {
+    "id": "qa_uat_login_glob_false_negative",
+    "title": "Login exitoso reportado como credenciales invalidas",
+    "class": "qa-uat-false-negative",
+    "status": "resolved",
+    "log_pattern": "AUTH_CREDENTIALS_INVALID[\\s\\S]{0,400}FrmAgenda",
+    "log_guarded": true,
+    "killed_by": "plan 240 F1 (predicado de URL en vez de glob en wait_for_url)",
+    "killed_commit": "82dd14be",
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/unit/test_plan240_login_url_predicate.py",
+    "evidence": "Stacky tools/QA UAT Agent/auth_session_factory.py",
+    "note": "wait_for_url recibia un STRING que Playwright interpreta como glob, no como regex: el login era exitoso (aterrizaba en FrmAgenda.aspx) y el arnes lo reportaba como credenciales invalidas. Si la huella reaparece, el predicado volvio a ser un string."
+  },
+  {
+    "id": "qa_uat_nav_session_lost",
+    "title": "Expulsion al login por deep-link sin el payload de sesion",
+    "class": "qa-uat-navigation",
+    "status": "resolved",
+    "log_pattern": "NAV_SESSION_LOST",
+    "log_guarded": true,
+    "killed_by": "plan 241 F5 (menu_resolver + navigation_driver.via_menu)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/unit/test_plan241_menu_resolver.py",
+    "evidence": "Stacky tools/QA UAT Agent/menu_resolver.py; navigation_driver.py",
+    "note": "AgendaWeb pone un payload de query encriptado POR SESION en varios links. Deep-linkear uno de esos sin el payload redirige al login Y ESE REDIRECT DESTRUYE LA SESION, cascando falsos NAV_AUTH_EXPIRED en todos los pasos siguientes. NAV_SESSION_LOST es recuperable con re-auth + reintento; NAV_AUTH_EXPIRED no."
+  },
+  {
+    "id": "qa_uat_app_error_page",
+    "title": "HTTP 200 con cuerpo de error 500 tomado como llegada valida",
+    "class": "qa-uat-false-positive",
+    "status": "resolved",
+    "log_pattern": "APP_ERROR_PAGE",
+    "log_guarded": true,
+    "killed_by": "plan 241 F0 (screen_guard) + F5 (_classify_error)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/unit/test_plan241_screen_guard.py",
+    "evidence": "Stacky tools/QA UAT Agent/screen_guard.py; navigation_driver.py",
+    "note": "FrmJDemanda.aspx devuelve HTTP 200 con un cuerpo '500-Error interno del servidor'. Un waitFor de URL lo daba por llegada valida => FALSO PASS. La llegada se verifica por URL + ancla de contenido, no solo por status."
+  },
+  {
+    "id": "dev_build_ok_narrated_unverified",
+    "title": "\"Build OK\" narrado por el LLM sin que ninguna maquina haya compilado",
+    "class": "false-green-narrated",
+    "status": "resolved",
+    "log_pattern": "dev_build_gate\\.claim_vs_machine_mismatch",
+    "log_guarded": true,
+    "killed_by": "plan 210 (gate de build determinista del Developer)",
+    "killed_commit": "(pendiente al mergear)",
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan210_gate_coverage.py::test_developer_transition_sites_pass_through_gate",
+    "evidence": "backend/services/dev_build_verify.py (gate_final_state/annotate_build_evidence); backend/api/tickets.py (_apply_task_state + rama legacy)",
+    "note": "El deliverable declaraba 'Build OK' en verde y esa prosa disparaba la transicion de estado. Ahora el hecho lo produce la maquina: sin veredicto fresco (ligado a execution_id) el estado degrada a revision y el bloque verde del LLM queda tachado."
+  },
+  {
+    "id": "port_residue_foreign_token",
+    "title": "Residuo de port: token de OTRO cliente en un archivo tocado por el developer",
+    "class": "cross-client-residue",
+    "status": "resolved",
+    "log_pattern": "port_residue\\.foreign_token",
+    "log_guarded": false,
+    "killed_by": "plan 211 (barrido de residuos de port entre clientes)",
+    "killed_commit": "(pendiente al mergear)",
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan211_residue.py::test_high_confidence_server_is_blocking",
+    "evidence": "backend/services/port_residue_scanner.py (build_foreign_token_catalog/scan_files_for_foreign_tokens)",
+    "note": "Al portar trabajo entre clientes quedan el servidor, la ruta o el nombre del cliente viejo. Compila igual, asi que el build verde no lo atrapa. Solo los tokens de alta confianza bloquean; los cortos/comunes avisan, y el operador puede suprimir falsos positivos con client_profile.port_residue.allowlist."
+  },
+  {
+    "id": "build_side_effect_foreign",
+    "title": "Efecto colateral de build: PostBuildEvent/Copy/OutputPath con ruta absoluta o de otro cliente",
+    "class": "build-side-effect",
+    "status": "resolved",
+    "log_pattern": "post_build_inspector\\.(post_build_event|copy_task|foreign_output_path)",
+    "log_guarded": false,
+    "killed_by": "plan 211 (inspector post-build)",
+    "killed_commit": "(pendiente al mergear)",
+    "date_resolved": "2026-07-25",
+    "guard_test": "tests/test_plan211_inspector.py::test_post_build_absolute_is_blocking",
+    "evidence": "backend/services/post_build_inspector.py (inspect_projects)",
+    "note": "El proyecto compila pero su evento post-build copia binarios fuera del proyecto (o a la carpeta de otro cliente). Una ruta absoluta PROPIA solo avisa; una ajena bloquea."
+  },
+  {
+    "id": "model_effort_silent_downgrade",
+    "title": "Elegir Opus/effort no se cumplia: decide() re-clampeaba sin allow_opus y el effort no se degradaba contra el modelo efectivo",
+    "class": "silent-degradation",
+    "status": "resolved",
+    "log_pattern": "solicitado .+ -> ejecutado .+",
+    "log_guarded": false,
+    "killed_by": "plan 212 (F1 allow_opus end-to-end + F2/C6 clamp contra routed_model + F7 solicitado-vs-efectivo)",
+    "killed_commit": "(pendiente al mergear)",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan212_opus_end_to_end.py::test_runner_gate_is_wired_into_decide",
+    "evidence": "backend/services/claude_code_cli_runner.py (allow_opus_for_run, build_model_effort_trace)",
+    "note": "El operador elegia claude-opus-4-8 y el runner corria sonnet-5 sin decirlo: el permiso del endpoint moria antes del router. Ahora el par solicitado/efectivo queda en metadata.model_effort y el drawer lo muestra."
+  },
+  {
+    "id": "state_config_duplicada",
+    "title": "Config de estados duplicada: reglas de flujo en flow_config.json y tracker_state_machine en el perfil, sin nada que avisara cuando se contradecian",
+    "class": "config-drift",
+    "status": "resolved",
+    "log_pattern": "state_not_in_tracker",
+    "log_guarded": false,
+    "killed_by": "plan 216 (state_flow centralizado en el perfil + pestana Estados con chequeo de coherencia)",
+    "killed_commit": "(pendiente al mergear)",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan216_profile_schema.py",
+    "evidence": "backend/services/flow_config_store.py + frontend/src/pages/statesConfigModel.ts (incoherentStatesFor)",
+    "note": "Una regla podia mandar un estado a un rol que no lo declaraba en input_states: el agente se lanzaba sobre un estado que su propia config decia que no atendia. Ahora se avisa y se corrige en un click."
+  },
+  {
+    "id": "ado369_machine_group_en_pool_hosted",
+    "title": "Deploy IIS con tarea machine-group sobre agente hosted (ERROR_SITE_DOES_NOT_EXIST)",
+    "class": "pipeline-semantica-tarea-vs-pool",
+    "status": "resolved",
+    "log_pattern": "ERROR_SITE_DOES_NOT_EXIST",
+    "log_guarded": false,
+    "killed_by": "plan 243 F3 (regla semantica RS002)",
+    "killed_commit": "(pendiente al mergear)",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan243_reglas_semanticas.py::test_ado369_seria_detectado",
+    "evidence": "RSPACIFICO/pipelines/ci-cd-online.yml:9-29; backend/services/cicd_semantic_rules.py",
+    "note": "El YAML era sintacticamente perfecto y habria pasado el lint PL001..PL014 sin una sola marca. La variante machine-group no tiene input de servidor: publica contra el IIS LOCAL del agente, asi que sobre un pool hosted apuntaba a la VM efimera de Microsoft."
+  },
+  {
+    "id": "AUD-REGLA-INERTE",
+    "title": "Regla de auditoria con 0 hits sobre el corpus y sin repro que la dispare",
+    "class": "regla-muda",
+    "status": "guarded",
+    "log_pattern": "",
+    "log_guarded": false,
+    "killed_by": "plan 248 (auditoria de pipelines: repro obligatorio por regla)",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan248_audit_baseline.py::test_toda_regla_dispara_sobre_su_repro",
+    "evidence": "backend/services/cicd_audit_core.py (audit_rule exige repro); backend/tests/fixtures/cicd_nl/audit_baseline.json",
+    "note": "El baseline congelado no puede distinguir una regla que vale 0 porque el corpus esta limpio de una que vale 0 porque esta rota. 5 de las 8 reglas SEC valen 0 por diseno. Sin el repro obligatorio, un typo las deja mudas y el panel muestra verde falso: es el falso verde del plan 241 trasplantado a la seguridad.",
+    "self_test": {
+      "matches": [],
+      "clean": []
+    }
+  },
+  {
+    "id": "GITLAB-EMPTY-PIPELINE",
+    "title": "Pipeline GitLab emitida cuyo unico cuerpo ejecutable es echo 'no-op'",
+    "class": "artefacto-vacio",
+    "status": "resolved",
+    "log_pattern": "",
+    "log_guarded": false,
+    "killed_by": "plan 249 (paridad GitLab del motor inteligente de pipelines)",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan249_reglas_gitlab.py::test_gl011_detecta_el_derivado_vacio",
+    "evidence": "backend/services/pipeline_renderers.py (_spec_to_gitlab_doc no leia task_steps, root_* ni deployments); backend/tests/fixtures/cicd_gitlab/derived/",
+    "note": "Medido: sobre los 9 golden ADO, to_gitlab_yaml(parse_ado_yaml(x)) emitia 0 comandos reales y 51 TaskStep se perdian en silencio. El artefacto salia sintacticamente valido y el lint respondia ok=True: una perdida disfrazada de exito. GL011 es la red permanente.",
+    "self_test": {
+      "matches": [],
+      "clean": []
+    }
+  },
+  {
+    "id": "qa_uat_nav_deviation",
+    "title": "El QAUAT sigue navegando despues de haberse desviado de la ruta",
+    "class": "qa-uat-navigation",
+    "status": "resolved",
+    "log_pattern": "NAV_DEVIATION",
+    "log_guarded": true,
+    "killed_by": "plan 214 F2 (assert_arrival + assertArrival del template + replan switch_human_path)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/unit/test_plan214_nav_deviation.py",
+    "evidence": "Stacky tools/QA UAT Agent/navigation_driver.py; replan_engine.py; templates/playwright_test.spec.ts.j2; qa_uat_pipeline.py",
+    "note": "Un postback de WebForms puede dejar la sesion en la pantalla equivocada mientras el spec sigue clickeando: el run terminaba en un fallo APP confuso muchos pasos despues, sin decir nunca que el problema fue la navegacion. La llegada se asevera EN el paso (ancla del ui_map, o URL si no hay ui_map); el desvio se cuenta en stages.runner.nav_deviations y el replan cambia de human_path en vez de reintentar el mismo camino.",
+    "self_test": {
+      "matches": [
+        "navigation_driver: form_submit - NAV_DEVIATION: expected=FrmDetalleClie.aspx url=http://localhost:35017/AgendaWeb/FrmAgenda.aspx"
+      ],
+      "clean": [
+        "navigation_driver: form_submit OK (attempt 1) -> http://localhost:35017/AgendaWeb/FrmDetalleClie.aspx"
+      ]
+    }
+  },
+  {
+    "id": "client_profile_key_stomp",
+    "title": "Un guardado del panel DevOps pisa otras keys del client-profile",
+    "class": "client-profile-write",
+    "status": "resolved",
+    "log_pattern": "client_profile_key_patch",
+    "log_guarded": true,
+    "killed_by": "plan 98 F5 (saveProfileKey -> PATCH por clave con merge server-side bajo lock)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "backend/tests/test_plan98_profile_key_patch.py; frontend/src/devops/profileKeys.test.ts",
+    "evidence": "backend/api/client_profile.py:323-368 (_PROFILE_WRITE_LOCK); frontend/src/devops/profileKeys.ts",
+    "note": "El riel viejo era GET del perfil ENTERO -> merge en el cliente -> PUT del perfil entero. Cualquier key escrita entre el GET y el PUT por otra pestana o por otra seccion se perdia en silencio, sin error y sin log. Con el PATCH por clave el cliente solo manda el valor de SU key y el merge lo hace el backend bajo lock de proceso. handleAutoDetect de PublicationsSection queda a proposito en el riel viejo porque escribe process_catalog junto con los presets en una sola operacion atomica y process_catalog no esta en PATCHABLE_PROFILE_KEYS."
+  },
+  {
+    "id": "preview_out_of_order_response",
+    "title": "Una respuesta vieja del preview YAML pisa el estado de una mas nueva",
+    "class": "devops-preview-race",
+    "status": "resolved",
+    "log_pattern": "pipeline-generator/preview",
+    "log_guarded": false,
+    "killed_by": "plan 99 F0 (createPreviewFetcher: secuencia monotona + AbortController como cinturon 2)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "frontend/src/devops/previewFetcher.test.ts (casos 5, 6 y 11)",
+    "evidence": "frontend/src/devops/previewFetcher.ts; frontend/src/components/devops/PipelineYamlPreview.tsx",
+    "note": "El refreshPreview viejo no tenia ni secuencia ni abort: con el debounce de 800ms y el backend respondiendo desparejo, un POST lanzado antes podia contestar despues y dejar en pantalla un YAML que ya no correspondia al spec editado. No habia error, no habia log: el operador veia YAML valido pero viejo. El mecanismo es el MISMO que ya usaba PipelineLintPanel (seqRef); F0.bis pinea esa paridad para que no aparezca un tercer mecanismo distinto."
+  },
+  {
+    "id": "preview_structured_400_unreachable",
+    "title": "El branch de errores 400 por campo del preview era inalcanzable",
+    "class": "devops-preview-error",
+    "status": "resolved",
+    "log_pattern": "400 BAD REQUEST",
+    "log_guarded": false,
+    "killed_by": "plan 99 F0 (parsePreviewError parsea el body real del Error plano)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "frontend/src/devops/previewFetcher.test.ts (casos 8 y 9)",
+    "evidence": "frontend/src/api/client.ts:155 (throw new Error(status statusText: text)); frontend/src/devops/previewFetcher.ts (parsePreviewError)",
+    "note": "El codigo viejo hacia if (e && typeof e === object && errors in e) para mostrar los errores por campo. Pero api/client.ts tira SIEMPRE un Error plano con el body embebido en el message, y un Error plano nunca tiene la key errors: el branch era codigo muerto y el 100% de los 400 estructurados se mostraba como un unico chorizo generico. Clase de bug a vigilar: validar la FORMA real de lo que tira el cliente HTTP antes de escribir un branch que la asuma."
+  },
+  {
+    "id": "pipeline_state_lost_on_reload",
+    "title": "El estado del pipeline disparado se pierde al recargar o al cambiar de sub-seccion",
+    "class": "devops-pipeline-monitor",
+    "status": "resolved",
+    "log_pattern": "",
+    "log_guarded": false,
+    "killed_by": "plan 103 F1/F2/F3 (store persistido en localStorage + badge en DevOpsHeaderV2 + hook con backoff)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "frontend/src/devops/pipelineMonitor.test.ts (casos 7-10, persistencia); frontend/src/components/devops/__tests__/pipelineMonitorHook.test.ts",
+    "evidence": "frontend/src/devops/pipelineMonitor.ts; frontend/src/components/devops/useDevopsPipelineMonitor.ts; frontend/src/pages/DevOpsHeaderV2.tsx",
+    "note": "El estado vivia en useState de TriggerPipelineSection: al recargar la pagina o irse a otra sub-seccion se perdia el hilo del pipeline y el operador tenia que volver a buscarlo a mano en el tracker. Ahora el ultimo pipeline se persiste en localStorage y el badge del header lo sigue. Dos trampas que costaron: (a) el sondeo tuvo que gatearse por visibilityState del documento y NO por ctx.visible, porque el hook vive en el shell y no en una seccion; (b) un 429 del cap de polls del backend NO es un fallo del pipeline: se trata subiendo el backoff, nunca pintando el badge de rojo."
+  },
+  {
+    "id": "ui_claims_stale_backend_limitation",
+    "title": "La UI afirma una limitacion que el servidor ya no tiene",
+    "class": "stale-ui-copy",
+    "status": "resolved",
+    "log_pattern": "",
+    "log_guarded": false,
+    "killed_by": "plan 102 F4 (copy corregido en CommitPipelineModal + centinela por grep negativo)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "frontend/src/components/devops/__tests__/oneClickPublish.test.ts (caso 9)",
+    "evidence": "frontend/src/components/devops/CommitPipelineModal.tsx; backend/services/ado_provider.py:146; backend/api/devops.py:55",
+    "note": "CommitPipelineModal decia que el commit a Azure DevOps no estaba implementado y devolvia un error de no-implementado. Dejo de ser cierto con el plan 95 F1.a, que hace el push real. El texto quedo obsoleto y ademas en una rama inalcanzable (ado_commit_supported esta fijo en True). El dano no fue visual: el autor del plan 102 v1 LEYO ese texto, lo creyo, y diseno una bandera adoCommitBlocked que habria bloqueado todos los presets ADO del flujo nuevo mientras el flujo viejo funcionaba. Clase de bug a vigilar: una mentira en la UI se propaga a los planes que la leen como si fuera evidencia. Verificar el comportamiento contra el codigo del servidor, nunca contra un texto de la interfaz."
+  },
+  {
+    "id": "sqlite_table_locked_startup",
+    "title": "database table is locked: tickets durante el arranque",
+    "class": "sqlite-contention",
+    "status": "resolved",
+    "log_pattern": "database table is locked",
+    "log_guarded": true,
+    "killed_by": "plan 253 (concurrencia SQLite)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan253_sqlite_concurrency.py",
+    "evidence": "backend/app.py:369,522,554; backend/db.py:19-31; backend/services/output_watcher.py:303,514; stacky-2026-07-26.log lineas 42 y 160",
+    "note": "El escritor es _startup_sync (176 INSERT), no el DDL de init_db: init_db termina antes de que el watcher arranque. El fix combina WAL + busy_timeout, barrera de escrituras de arranque y reintento por unidad de trabajo. busy_timeout NO cubre SQLITE_LOCKED (database TABLE is locked), solo SQLITE_BUSY.",
+    "self_test": {
+      "matches": [
+        "2026-07-26 00:24:48 ERROR [stacky.output_watcher] output_watcher: error procesando ...: (sqlite3.OperationalError) database table is locked: tickets"
+      ],
+      "clean": [
+        "2026-07-26 00:24:48 INFO [stacky.output_watcher] output_watcher: dir vigilado (existe=True)"
+      ]
+    }
+  },
+  {
+    "id": "syslog_batch_persist_failed",
+    "title": "syslog failed to persist batch por contencion de SQLite",
+    "class": "sqlite-contention",
+    "status": "resolved",
+    "log_pattern": "syslog failed to persist batch",
+    "log_guarded": true,
+    "killed_by": "plan 253 (reintento por unidad de trabajo + reencolado)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-26",
+    "guard_test": "tests/test_plan253_sqlite_concurrency.py",
+    "evidence": "backend/services/stacky_logger.py:373-423",
+    "note": "El reintento va DENTRO de _persist_batch: envolver desde afuera no ve la excepcion. Ademas el batch se reencola UNA vez antes de descartarse, asi que un lock transitorio ya no pierde eventos del operador.",
+    "self_test": {
+      "matches": [
+        "2026-07-18 09:12:03 ERROR [stacky.syslog] syslog failed to persist batch of 1 events"
+      ],
+      "clean": [
+        "2026-07-18 09:12:03 INFO [stacky.syslog] syslog writer started"
+      ]
+    }
+  },
+  {
+    "id": "falso_rojo_downgrade_por_exit_code",
+    "title": "falso ROJO: un ticket ya 'completed' degradado a 'error' por el exit code del CLI",
+    "class": "false-red-downgrade",
+    "status": "resolved",
+    "log_pattern": "ticket_id=\\d+: 'completed' \\S+ 'error'",
+    "log_guarded": true,
+    "killed_by": "plan 254 F1 (guard anti-degradacion ATOMICO dentro de set_status)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan254_falso_rojo.py",
+    "evidence": "backend/services/ticket_status.py:_would_degrade + set_status(guard_downgrade=True)",
+    "note": "Correlacion completa de la huella: 'claude code cli exited with code N' seguido de un TicketStatusEvent completed->error para la misma execution. El regex cubre la mitad que vive en el log; la mitad de BD la cuenta run_reconciliation.red_with_delivered_work. Con el guard activo la linea pasa a ser 'completed' -> 'completed' y esta huella deja de aparecer.",
+    "self_test": {
+      "matches": [
+        "2026-07-25 11:56:03 INFO [stacky.ticket_status] ticket_id=673: 'completed' -> 'error' (exec=161, by=system)"
+      ],
+      "clean": [
+        "2026-07-25 11:56:03 INFO [stacky.ticket_status] ticket_id=673: 'running' -> 'error' (exec=161, by=system)"
+      ]
+    }
+  },
+  {
+    "id": "resume_resolve_limit_filter",
+    "title": "resume muerto: .filter() despues de .limit() reventaba el query y se tragaba a warning",
+    "class": "harness-resume",
+    "status": "resolved",
+    "log_pattern": "harness\\.resume\\.resolve falló \\(arranque en frío\\)",
+    "log_guarded": true,
+    "killed_by": "plan 255 F0(A) (filtro condicional ANTES de order_by/limit + cota al delta)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan255_bugs_mudos.py",
+    "evidence": "backend/harness/resume.py:resolve (bloque del query, ancla `.limit(5)`)",
+    "note": "50 ocurrencias entre 2026-07-17 y 2026-07-26 en los dos runtimes con supports_resume. SQLAlchemy 2.0.36 prohibe .filter() sobre un Query que ya tiene LIMIT/OFFSET; con execution_id (el caso NORMAL del runner) el query reventaba, lo tragaba el except final y el runner arrancaba en frio. El unico sintoma era un WARNING entre miles. La huella INVERSA (que el camino de exito vuelva a aparecer) la vigila el canario `resume_efectivo` de services/dormant_canary.py: un regex no puede alarmar por una AUSENCIA.",
+    "self_test": {
+      "matches": [
+        "2026-07-26 14:14:19 WARNING [harness.resume] harness.resume.resolve falló (arranque en frío): Query.filter() being called on a Query which already has LIMIT or OFFSET applied.  Call filter() before limit() or offset() are applied."
+      ],
+      "clean": [
+        "2026-07-27 09:02:11 INFO [harness.resume] resume claude_code_cli: sesión=abc123def456… contexto cambió 12%"
+      ]
+    }
+  },
+  {
+    "id": "run_incident_dev_nameerror_ado_id",
+    "title": "run_incident_dev no vinculaba la incidencia: NameError de un binding de class-body",
+    "class": "nameerror-scope",
+    "status": "resolved",
+    "log_pattern": "NameError: name 'ado_id' is not defined",
+    "log_guarded": true,
+    "killed_by": "plan 255 F0(B) (usar ticket_ado_id) + F2 sitio 3 (nivel por clase)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan255_bugs_mudos.py",
+    "evidence": "backend/api/agents.py:run_incident_dev (ancla `_istore.find_by_tracker_id`)",
+    "note": "4 ocurrencias el 2026-07-26. La unica asignacion de `ado_id` vivia en el cuerpo de la clase `_TicketSnapshot`, y los bindings de class-body NO son visibles desde la funcion que la contiene. Lo tapaba un except best-effort con logger.info y el endpoint devolvia 202: el operador veia 'aceptado' y la vinculacion con la incidencia nunca ocurria. El patron esta anclado a la firma COMPLETA a proposito: 'NameError' a secas alarmaria por cualquier cosa.",
+    "self_test": {
+      "matches": [
+        "NameError: name 'ado_id' is not defined"
+      ],
+      "clean": [
+        "NameError: name 'ticket_ado_id' is not defined"
+      ]
+    }
+  },
+  {
+    "id": "telemetry_harvest_nameerror_data_dir",
+    "title": "el ledger de cosecha nunca se escribia: faltaba el import de data_dir a nivel modulo",
+    "class": "nameerror-import",
+    "status": "resolved",
+    "log_pattern": "NameError: name 'data_dir' is not defined",
+    "log_guarded": true,
+    "killed_by": "plan 255 F0(C) (from runtime_paths import data_dir a nivel modulo)",
+    "killed_commit": "",
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan255_bugs_mudos.py",
+    "evidence": "backend/services/telemetry_harvest.py:_ledger_path",
+    "note": "El modulo importaba json/logging/os/dataclass/datetime/Path pero NO data_dir; el unico import de runtime_paths era local dentro de otra funcion y traia projects_dir/repo_root. Con la configuracion POR DEFECTO (las dos flags de cosecha nacen en true) el thread plan199-harvest llamaba append_to_ledger -> _ledger_path() y reventaba, tapado por un logger.exception en app.py. El contenido y la higiene del ledger son del plan 258; aca solo que SE ESCRIBE.",
+    "self_test": {
+      "matches": [
+        "NameError: name 'data_dir' is not defined"
+      ],
+      "clean": [
+        "NameError: name 'metadata_dir' is not defined"
+      ]
+    }
+  },
+  {
+    "id": "PLAN256-ARTEFACTO-EN-CUARENTENA-INVISIBLE",
+    "title": "pending-task.json en cuarentena que nadie ve",
+    "class": "artefacto-atascado-sin-superficie",
+    "status": "by_design",
+    "log_pattern": "output_watcher mode_a: pending-task con fallo terminal",
+    "log_guarded": false,
+    "killed_by": "plan 256 (intake sin perdida: cuarentena persistente + tarjeta 'Artefactos en cuarentena')",
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan256_intake_razon.py",
+    "evidence": "backend/services/output_watcher.py:_quarantine_pending_once; backend/api/diag.py:/intake-quarantine",
+    "note": "La linea NO es un bug: es el aviso correcto y trae la razon completa y accionable (se midieron 26 ocurrencias, 0 con la razon vacia). El bug era que solo vivia en un log de 4 MB y en un dict de RAM que el reinicio borraba, asi que epic-28/rf-028 estuvo 11 dias atascado con 25 relogueos y cero visibilidad. El plan 256 persiste la cuarentena en un sidecar <artefacto>.quarantine.json, le pone cause_code y antiguedad, y la muestra en Diagnostico con reintentar/descartar. Si esta firma REAPARECE en volumen sin que la tarjeta 'Artefactos en cuarentena' liste el artefacto, la persistencia se rompio. Diagnosticar SIEMPRE con el log crudo: la firma agregada trunca la linea y fue lo que hizo creer que el mensaje llegaba vacio.",
+    "self_test": {
+      "matches": [
+        "2026-07-16 13:34:24 ERROR [stacky.output_watcher] output_watcher mode_a: pending-task con fallo terminal (se omite hasta corregir el archivo/carpeta) en C:\\outputs\\epic-28\\rf-028\\pending-task.json: intake rechazo el artefacto: el archivo esta vacio o solo tiene espacios."
+      ],
+      "clean": [
+        "2026-07-16 13:34:24 INFO [stacky.output_watcher] output_watcher mode_a: done-marker detectado — cierre inmediato"
+      ]
+    }
+  },
+  {
+    "id": "log_signature_flood",
+    "title": "Una sola firma de WARNING inunda el log del dia",
+    "class": "log-noise-flood",
+    "status": "resolved",
+    "log_pattern": "(sweep_recent_runs: error general|preflight: proyecto activo)[\\s\\S]{0,300}?\\1",
+    "log_guarded": true,
+    "killed_by": "plan 257 (throttle de firmas + flush determinista)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan257_log_antirruido.py",
+    "evidence": "backend/services/local_file_logging.py (_ThrottleFilter / install_throttle_filter); backend/services/ado_edit_learning.py; backend/app.py",
+    "note": "Medido: 854+162=1016 lineas de UNA firma en 2 dias, y 829 de los 1173 warnings del 2026-07-15 (71%). Las dos firmas mas ruidosas quedaron cableadas a log_throttled con ventana de 300 s, asi que verlas DOS veces dentro de 300 caracteres (unas 2 lineas) solo puede pasar si el throttle no esta activo. Alcance honesto: el patron cubre las 2 firmas MEDIDAS, no cualquier firma futura; un regex barato no puede contar repeticiones sobre 5 MB de tail sin degradar el arranque. La cobertura general de firmas nuevas la da el panel de firmas ruidosas y el invariante de cero-perdida (test_invariante_cero_perdida), no este smoke.",
+    "self_test": {
+      "matches": [
+        "2026-07-15 10:00:01 WARNING [services.ado_edit_learning] sweep_recent_runs: error general: boom\n2026-07-15 10:00:01 WARNING [services.ado_edit_learning] sweep_recent_runs: error general: boom"
+      ],
+      "clean": [
+        "2026-07-27 10:00:01 WARNING [services.ado_edit_learning] sweep_recent_runs: error general: boom",
+        "2026-07-27 10:05:01 WARNING [services.ado_edit_learning] [x99 repeticiones en 60s] sweep_recent_runs: error general: boom"
+      ]
+    }
+  },
+  {
+    "id": "log_retention_not_effective",
+    "title": "La retencion de logs es declarativa: quedan archivos mas viejos que el plazo",
+    "class": "log-retention",
+    "status": "resolved",
+    "log_pattern": "stacky-\\d{4}-\\d\\d-\\d\\d(?:\\.\\d+)?\\.log",
+    "log_guarded": false,
+    "killed_by": "plan 257 F2 (purga al arrancar + tarea del loop de mantenimiento)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan257_log_antirruido.py",
+    "evidence": "backend/services/local_file_logging.py (install_file_log_handler purga al arrancar; register_log_maintenance_tasks; _date_from_log_name)",
+    "note": "log_guarded=false A PROPOSITO: la condicion es de SISTEMA DE ARCHIVOS (existe un stacky-*.log con fecha anterior a la retencion configurada) y scan_text solo mira el TEXTO del log, nunca la fecha de los archivos del directorio. El guard real son los tests de purga: test_purga_corre_al_arrancar, test_purga_respeta_retention_days_de_config y test_purga_matchea_partes_numeradas. Antes del 257 la purga solo se disparaba al cruzar la medianoche con el proceso vivo (en un arranque-y-apagado del mismo dia NUNCA corria) y _date_from_log_name devolvia None para las partes numeradas, asi que ni se borraban ni entraban al ZIP de exportacion.",
+    "self_test": {
+      "matches": [
+        "stacky-2026-06-01.3.log",
+        "stacky-2026-06-01.log"
+      ],
+      "clean": [
+        "otro-archivo.txt",
+        "stacky-junio.log"
+      ]
+    }
+  },
+  {
+    "id": "ledger_del_operador_escrito_por_un_test",
+    "title": "Una corrida de tests escribio en un archivo de registro del operador",
+    "class": "test-contamination",
+    "status": "resolved",
+    "log_pattern": "\\[airtight\\] FALLA: la corrida modifico \\d+ artefacto",
+    "log_guarded": false,
+    "killed_by": "plan 258 F1 (ledger_path aisla la ruta en test-mode) + F7 (guard de estanqueidad del arnes)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-27",
+    "guard_test": "tests/test_plan258_estanqueidad_arnes.py",
+    "evidence": "backend/services/ledger_writer.py (ledger_path devuelve stacky-test-ledgers/ cuando el data_dir resuelto es el del operador); backend/scripts/airtight_snapshot.py (--save/--verify por sha256 sobre WATCHED_GLOBS); medido antes del plan: data/ci_runs.jsonl 8 de 8 lineas con project=myproject y data/env_applies.jsonl 10 de 10 con root bajo el tmpdir de pytest",
+    "note": "log_guarded=false A PROPOSITO: la condicion es de SISTEMA DE ARCHIVOS (un .jsonl/.log/.db del operador cambio de sha256 durante una corrida de tests) y scan_text solo mira el TEXTO del log. El guard real es el ciclo airtight_snapshot --save / arnes / --verify, que sale en codigo 1 y NOMBRA cada artefacto con su delta de bytes. El log_pattern huellea la linea que ese guard emite cuando falla, para que tambien se detecte si quedo capturada en un log. Perseguir la contaminacion marcador por marcador (myproject, newsha, el tmpdir de pytest) no escala: build_runs.jsonl aparecio y estuvo desprotegido sin que nadie lo notara; el glob los cubre a todos, presentes y futuros.",
+    "self_test": {
+      "matches": [
+        "[airtight] FALLA: la corrida modifico 3 artefacto(s) del operador:",
+        "[airtight] FALLA: la corrida modifico 1 artefacto(s) del operador:"
+      ],
+      "clean": [
+        "[airtight] OK: la corrida fue ESTANCA (152 artefactos vigilados).",
+        "[airtight] huella guardada: 152 artefactos",
+        "otro-archivo.txt"
+      ]
+    }
+  },
+  {
+    "id": "PLAN270-GITLAB-SYNC-AUSENTE",
+    "title": "El auto-sync post-completacion de GitLab apunta a un modulo inexistente",
+    "class": "import-error",
+    "status": "open",
+    "log_pattern": "No module named 'services\\.gitlab_sync'",
+    "log_guarded": false,
+    "killed_by": "",
+    "guard_test": "",
+    "self_test": {
+      "matches": [
+        "completion_sync: sync de MiProy fallo (best-effort): No module named 'services.gitlab_sync'"
+      ],
+      "clean": [
+        "completion_sync: sync de MiProy fallo (best-effort): No module named 'services.jira_sync'",
+        "completion_sync: sync de MiProy ok"
+      ]
+    },
+    "note": "Documentada, NO guardada. completion_sync.py:111 despacha a services.<tracker>_sync y services/gitlab_sync.py no existe (0 hits en backend/). El plan 270 NO lo mata: su F4 hace un refresco puntual y agnostico que no depende de este modulo."
+  },
+  {
+    "id": "plan259_gitlab_onboarding_off",
+    "title": "Alta/edicion GitLab rechazada por flag de onboarding apagada",
+    "class": "config-flag-off",
+    "status": "resolved",
+    "log_pattern": "(alta|edición) de proyectos GitLab está apagada",
+    "log_guarded": false,
+    "killed_by": "plan 259 (alta de proyecto GitLab de primera clase)",
+    "killed_commit": null,
+    "date_resolved": "2026-07-29",
+    "guard_test": "tests/test_plan259_api_projects_gitlab.py",
+    "self_test": {
+      "matches": [
+        "El alta de proyectos GitLab está apagada (STACKY_PROJECT_GITLAB_ONBOARDING_ENABLED=false)."
+      ],
+      "clean": [
+        "issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false"
+      ]
+    },
+    "evidence": "backend/api/projects.py (rama gitlab de init_project y update_project); antes de este plan el mismo caso caia al else de azure_devops SIN loguear nada",
+    "note": "Antes del plan 259, tracker_type=gitlab en init_project/update_project caia al else de Azure DevOps y CONVERTIA el proyecto en silencio (cero lineas de log: por eso no hay huella del bug viejo, solo del rechazo explicito que lo reemplaza)."
+  },
+  {
+    "id": "plan267-propuesta-permanentemente-bloqueada",
+    "title": "El asistente propone una accion DevOps que nunca se puede ejecutar",
+    "class": "ux-dead-end",
+    "status": "by_design",
+    "log_pattern": "devops_action_propose.*proposal_blocked.*blocked_reason.{0,4}(agent_write_disabled|missing_params|ambiguous|flag_off|no_match)",
+    "log_guarded": true,
+    "killed_by": "plan 267 F8",
+    "killed_commit": null,
+    "date_resolved": "2026-07-29",
+    "guard_test": "tests/test_devops_action_ratchet.py",
+    "self_test": {
+      "matches": [
+        "2026-07-29 10:00:00 WARNING devops_action_propose proposal_blocked action_id=devops.pipeline.trigger blocked_reason=agent_write_disabled",
+        "WARNING devops_action_propose proposal_blocked {\"action_id\": \"devops.deployment.execute\", \"blocked_reason\": \"missing_params\"}"
+      ],
+      "clean": [
+        "2026-07-29 10:00:00 INFO devops_action_propose proposal_ok action_id=devops.logs.tail blocked_reason=",
+        "2026-07-29 10:00:01 INFO devops_action_catalog served count=23"
+      ]
+    },
+    "evidence": "backend/api/devops_actions.py::_log_si_quedo_bloqueada emite la linea con SOLO action_id y blocked_reason (constantes del catalogo, cero datos del operador); backend/services/devops_action_proposal.py::build_proposal decide el blocked_reason; backend/services/devops_action_catalog.py::visible_actions es quien apaga una accion por health_key o por el master flag_enabled",
+    "note": "status=by_design porque la causa 2 es ESPERADA, no un bug: con el interruptor de ejecucion del asistente apagado (su valor de fabrica) toda accion que escribe sale bloqueada a proposito, y la tarjeta lo explica y ofrece el boton que lleva al panel. Causas ordenadas por probabilidad: (1) la accion esta apagada por su propia llave de estado, o el interruptor maestro del panel esta en falso, y entonces ni se ofrece; (2) el interruptor de ejecucion del asistente esta apagado -- esperado; (3) la llave de configuracion que declara la accion ya no existe en el registro, que es lo que caza test_flag_key_existe_en_el_registro de la guarda. log_guarded=True: la linea sale solo cuando blocked_reason no esta vacio."
+  }
+]

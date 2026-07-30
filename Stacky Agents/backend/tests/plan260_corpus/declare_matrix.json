@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {"provider": "azure_devops", "kind": "variable", "declared_secret": false,
+     "provider_devuelve": {"is_secret": false, "value": ""},
+     "has_value": false, "state": "falta",  "source": "declarada_sin_valor",
+     "cuenta_en_pendiente_visible": true, "gate": "bloquea"},
+    {"provider": "azure_devops", "kind": "secret",   "declared_secret": true,
+     "provider_devuelve": {"is_secret": true,  "value": null},
+     "has_value": null,  "state": "manual", "source": "declarada_sin_valor_verificable",
+     "cuenta_en_pendiente_visible": true, "gate": "advierte"},
+    {"provider": "gitlab", "kind": "variable", "declared_secret": false,
+     "provider_devuelve": {"masked": false, "value": ""},
+     "has_value": false, "state": "falta",  "source": "declarada_sin_valor",
+     "cuenta_en_pendiente_visible": true, "gate": "bloquea"},
+    {"provider": "gitlab", "kind": "secret",   "declared_secret": true,
+     "provider_devuelve": {"masked": true,  "value": ""},
+     "has_value": false, "state": "falta",  "source": "declarada_sin_valor",
+     "cuenta_en_pendiente_visible": true, "gate": "bloquea"}
+  ]
+}

@@ -1489,6 +1489,28 @@ class Config:
         "STACKY_PIPELINE_ENV_MATRIX_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # Plan 260 — Ninguna pipeline corre a ciegas: declarar nombres, bloquear el
+    # disparo con faltantes y bloquear el commit de un secreto literal.
+    # Default OFF (EXCEPCIÓN DURA B): es la ÚNICA ruta nueva que ESCRIBE en un
+    # sistema externo real del operador (crea nombres vacíos en su ADO/GitLab
+    # vía el puerto del Plan 94 — services/ci_variables.py). Editable por UI.
+    STACKY_PIPELINE_ENV_DECLARE_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_ENV_DECLARE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # Default ON: solo LEE (mismo resolve() que ya corre /analyze), corre a pedido
+    # dentro del request de disparo (sin loop ni daemon) y solo bloquea con
+    # evidencia POSITIVA de faltantes — nunca por no haber podido verificar.
+    STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Default ON: solo puede IMPEDIR una fuga (nunca escribe nada, no consume
+    # tokens). Apagarlo es la decisión rara, no encenderlo.
+    STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 250 — Edición quirúrgica de pipelines existentes. Default ON.
     # ANALIZA y muestra el diff; NO escribe en ningún lado. Editable por UI.
     STACKY_PIPELINE_NL_EDIT_ENABLED: bool = os.getenv(

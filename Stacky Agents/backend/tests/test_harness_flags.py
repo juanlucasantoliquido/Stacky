@@ -543,6 +543,11 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_PIPELINE_ENV_MATRIX_ENABLED",
     # ── Plan 252 — Paquete de entrega (solo produce un archivo descargable) ──
     "STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED",
+    # ── Plan 260 — Ninguna pipeline corre a ciegas: las 2 que SOLO leen/bloquean.
+    # STACKY_PIPELINE_ENV_DECLARE_ENABLED (la que SI escribe en el proveedor real)
+    # es default OFF por la excepcion dura (B) y por eso NO figura aca. ──
+    "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED",
+    "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED",
     # ── Plan 201 — Taller de Compilación (detección read-only; build auto-gateado) ──
     "STACKY_DEVOPS_BUILD_WORKSHOP_ENABLED",
     # ── Plan 215 — Publicador de Soluciones: bool default ON; catálogo/config/UI

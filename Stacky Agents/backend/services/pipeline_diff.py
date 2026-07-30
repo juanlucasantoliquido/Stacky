@@ -27,6 +27,7 @@ GATE_LINT = "LINT"
 GATE_SEM_AUDIT = "SEM_AUDIT"
 GATE_SEM_NL_STRICT = "SEM_NL_STRICT"
 GATE_PRESERVACION = "G-PRESERVACION"
+GATE_SECRET = "SECRET"          # Plan 260 (v3, C8) — NO existia: publico, cruza el modulo
 
 _INDICE_RE = re.compile(r"\[\d+\]")
 _PASO_KEYS = ("task", "script", "checkout", "powershell", "bash", "pwsh",
@@ -194,8 +195,12 @@ def formato_preservacion(p: Preservation) -> str:
 # ── El review ────────────────────────────────────────────────────────────────
 
 def review_patch(before: str, after: str, hunks: tuple, *, profile: str,
-                 repo_root: Optional[str] = None, verb: str = "") -> EditReview:
-    """Los 4 gates sobre (before, after). Nunca lanza."""
+                 repo_root: Optional[str] = None, verb: str = "",
+                 secret_gate: bool = True) -> EditReview:
+    """Los 5 gates sobre (before, after). Nunca lanza.
+
+    `secret_gate` (Plan 260, v3 C8): la flag se lee AFUERA, en el llamador —
+    este módulo se mantiene sin ninguna referencia al ajuste global del arnés."""
     hunks = tuple(hunks or ())
     gates: list = []
 
@@ -208,6 +213,19 @@ def review_patch(before: str, after: str, hunks: tuple, *, profile: str,
         gate=GATE_LINT, passed=not lint_err, new_errors=lint_err,
         new_warnings=tuple(f for f in nuevos if f.severity == SEV_WARNING),
         resolved=resueltos))
+    # Plan 260 (v4, C4): capturado ACA, antes de que G-SEM reasigne `nuevos` (:220).
+    # Insertar el gate de secretos mas abajo -agrupado con el resto de este plan-
+    # leeria los findings de G-SEM (codigos SEC*/OPT*), que NUNCA matchean
+    # SECRET_BLOCKING_LINT (codigos PL*): el gate quedaria passed=True siempre.
+    nuevos_lint = nuevos
+
+    # ── G-SECRET (delta, SOLO lint: PL012/PL014) ─────────────────────────────
+    from services.ci_env_gate import SECRET_BLOCKING_LINT  # noqa: PLC0415
+
+    _fuga = tuple(f for f in nuevos_lint if f.code in SECRET_BLOCKING_LINT) if secret_gate else ()
+    gates.append(GateDelta(
+        gate=GATE_SECRET, passed=not _fuga, new_errors=_fuga,
+        new_warnings=(), resolved=()))
 
     # ── G-SEM (audit, documento completo, delta) ─────────────────────────────
     razon = "" if repo_root else ("sin `repo_root`: RS006 no se evalua y NO se reporta "

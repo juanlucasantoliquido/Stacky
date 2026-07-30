@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {"caso": "solo_comodin", "entries": [["*", true]], "env": "prod",
+     "gana_scope": "*", "has_value_esperado": true},
+    {"caso": "exacto_gana_al_comodin_cargado", "entries": [["*", true], ["prod", false]],
+     "env": "prod", "gana_scope": "prod", "has_value_esperado": false},
+    {"caso": "comodin_es_fallback_de_otro_entorno", "entries": [["*", true], ["dev", false]],
+     "env": "prod", "gana_scope": "*", "has_value_esperado": true},
+    {"caso": "solo_exacto_sin_comodin", "entries": [["prod", false]],
+     "env": "prod", "gana_scope": "prod", "has_value_esperado": false}
+  ]
+}

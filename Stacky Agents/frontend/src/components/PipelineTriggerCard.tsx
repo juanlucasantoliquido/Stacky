@@ -18,8 +18,17 @@ import {
   HarnessFlags,
   type CIPreviewResponse,
   type CIMonitorResponse,
+  type EnvPendingErrorBody,
 } from "../api/endpoints";
+import {
+  avisoAdvertencia,
+  mensajeDegradado,
+  mensajeDeBloqueo,
+  puedeDisparar,
+  type ReadinessView,
+} from "../devops/triggerGateModel";
 import Toast, { type ToastState } from "./Toast";
+import { Checkbox } from "./ui";
 
 interface Props {
   project: string;
@@ -37,6 +46,7 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
   const [monitorData, setMonitorData] = useState<CIMonitorResponse | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
+  const [ackMissing, setAckMissing] = useState(false);
   const pollCountRef = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
@@ -74,6 +84,7 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
       const data = await CIPipeline.preview(project, ref);
       if (!mountedRef.current) return;
       setPreview(data);
+      setAckMissing(false); // Plan 260 — cada preview nuevo arranca sin el ack tildado
       setModalOpen(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error al obtener preview";
@@ -111,11 +122,40 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
   // ── Trigger HITL ─────────────────────────────────────────────────────────
   const handleTrigger = useCallback(async () => {
     if (!flagEnabled || !preview) return;
+    // Plan 260 — el botón ya queda deshabilitado por puedeDisparar, pero el
+    // candado se repite acá: nunca confiar solo en el disabled del DOM.
+    if (preview.readiness && !puedeDisparar(preview.readiness, ackMissing)) return;
     setTriggerLoading(true);
     try {
       // confirm: true es OBLIGATORIO — riel HITL absoluto
-      const result = await CIPipeline.trigger(project, ref, preview.last_pipeline?.sha ?? "", itemId, true);
+      // Plan 260 — triggerRaw (NO lanza en 409/422): el gate de entornos trae
+      // `missing`/`pending_fingerprint` en el cuerpo, que `trigger` (api.post)
+      // colapsaría a un string plano y perdería (C13/C16 del plan).
+      const res = await CIPipeline.triggerRaw(
+        project, ref, preview.last_pipeline?.sha ?? "", itemId, true, ackMissing,
+      );
       if (!mountedRef.current) return;
+
+      if (!res.ok) {
+        const detalle = res.errorBody as EnvPendingErrorBody | null;
+        if (res.status === 409 && detalle?.kind === "env_pending") {
+          const readiness: ReadinessView = {
+            verdict: "bloquea",
+            pending_count: detalle.missing?.length ?? 0,
+            unknown_count: 0,
+            missing: detalle.missing ?? [],
+            elapsed_ms: detalle.elapsed_ms ?? 0,
+            resolved: true,
+            source: "calculado",
+          };
+          showToast(mensajeDeBloqueo(readiness), "error");
+        } else {
+          showToast(detalle?.message || detalle?.error || "Error al disparar pipeline", "error");
+        }
+        return;
+      }
+
+      const result = res.data!;
       setModalOpen(false);
       if (result.status === "reused" || result.pipeline_id) {
         showToast(`Pipeline reusado: ${result.pipeline_id}`, "info");
@@ -132,7 +172,7 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
     } finally {
       if (mountedRef.current) setTriggerLoading(false);
     }
-  }, [project, ref, itemId, preview, flagEnabled, schedulePoll]);
+  }, [project, ref, itemId, preview, flagEnabled, schedulePoll, ackMissing]);
 
   return (
     <div style={{ border: "1px solid #ccc", borderRadius: 6, padding: "12px 16px", maxWidth: 480 }}>
@@ -193,6 +233,26 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
               </p>
             )}
 
+            {/* Plan 260 F4/F6 — veredicto del gate de entornos (aditivo). Sin
+                estilo inline nuevo: uiDebtRatchet tiene alcance 0 en .tsx y este
+                archivo ya arrastra deuda ajena documentada (no se suma otra). */}
+            {preview.readiness?.verdict === "bloquea" && (
+              <div>
+                <p><strong>{mensajeDeBloqueo(preview.readiness)}</strong></p>
+                <Checkbox
+                  label="Entiendo que faltan valores y quiero disparar igual"
+                  checked={ackMissing}
+                  onChange={(e) => setAckMissing(e.target.checked)}
+                />
+              </div>
+            )}
+            {preview.readiness?.verdict === "advierte" && (
+              <p>{avisoAdvertencia(preview.readiness)}</p>
+            )}
+            {preview.readiness?.verdict === "degradado" && (
+              <p>{mensajeDegradado(preview.readiness)}</p>
+            )}
+
             <p style={{
               fontSize: 13, fontWeight: 600, color: "#b71c1c",
               background: "#ffebee", padding: "6px 8px", borderRadius: 4,
@@ -203,7 +263,9 @@ export default function PipelineTriggerCard({ project, ref, itemId = "" }: Props
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button
                 onClick={handleTrigger}
-                disabled={triggerLoading}
+                disabled={
+                  triggerLoading || (preview.readiness ? !puedeDisparar(preview.readiness, ackMissing) : false)
+                }
                 style={{ background: "#c62828", color: "#fff", border: "none", borderRadius: 4, padding: "8px 18px", cursor: "pointer" }}
               >
                 {triggerLoading ? "Disparando..." : "Disparar"}

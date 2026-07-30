@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { PipelineEnvironments } from "../../api/endpoints";
+import { HarnessFlags, PipelineEnvironments, type DeclarePreviewResponseDto } from "../../api/endpoints";
 import type { DevOpsSectionContext } from "../../pages/DevOpsPage";
 import { Button, SectionHeader, Select, Textarea } from "../ui";
 import {
@@ -15,7 +16,26 @@ import {
   type EnvMatrixResponse,
   type EnvRequirement,
 } from "../../devops/pipelineEnvMatrixModel";
+import {
+  agruparSkipped,
+  avisoContadorNoBaja,
+  avisoMasking,
+  resumenDeclaracion,
+  type DeclarePlanView,
+} from "../../devops/pipelineDeclareModel";
 import styles from "./PipelineEnvMatrixPanel.module.css";
+
+/** Plan 260 F6 — handoff liviano hacia VariablesSection (mismo patrón que
+ *  ALMACEN más abajo: localStorage, sin tocar DevOpsSectionContext). */
+const ALMACEN_DECLARAR = "stacky.devops.envMatrix.declararKey";
+
+function guardarKeyParaDeclarar(key: string, secret: boolean): void {
+  try {
+    window.localStorage.setItem(ALMACEN_DECLARAR, JSON.stringify({ key, secret }));
+  } catch {
+    /* sin persistencia: VariablesSection simplemente no precarga nada */
+  }
+}
 
 /**
  * Plan 251 F5 — la matriz entorno × valor.
@@ -48,8 +68,25 @@ export const PipelineEnvMatrixPanel: React.FC<{ ctx: DevOpsSectionContext }> = (
   const [busy, setBusy] = useState(false);
   const [delta, setDelta] = useState("");
 
+  // Plan 260 F3/F6 — declarar nombres faltantes (HITL: preview -> confirmar).
+  const [declarePreview, setDeclarePreview] = useState<DeclarePreviewResponseDto | null>(null);
+  const [declareError, setDeclareError] = useState("");
+  const [declaring, setDeclaring] = useState(false);
+  const [needsMasking, setNeedsMasking] = useState<string[]>([]);
+
   // C12 — el inventario del plan 246 se lee por type guard: compila con y sin ese plan.
   const inventario = readInventory(ctx);
+
+  // Plan 260 — visible SOLO con STACKY_PIPELINE_ENV_DECLARE_ENABLED (mismo
+  // patrón que PipelineTriggerCard.tsx: leer /api/harness-flags).
+  const { data: flagsData } = useQuery({
+    queryKey: ["harness-flags"],
+    queryFn: () => HarnessFlags.list(),
+    staleTime: 30_000,
+  });
+  const declareEnabled = !!flagsData?.flags?.find(
+    (f) => f.key === "STACKY_PIPELINE_ENV_DECLARE_ENABLED",
+  )?.value;
 
   const analizar = async () => {
     setBusy(true);
@@ -76,12 +113,57 @@ export const PipelineEnvMatrixPanel: React.FC<{ ctx: DevOpsSectionContext }> = (
   );
 
   const irAServidores = () => ctx.setActiveSection?.("servidores");
-  const irAVariables = () => ctx.setActiveSection?.("variables");
+  // Plan 260 — el CTA "Completar" ahora lleva la key preseleccionada.
+  const irAVariables = (r?: EnvRequirement) => {
+    if (r) guardarKeyParaDeclarar(r.name, r.is_secret);
+    ctx.setActiveSection?.("variables");
+  };
+
+  // Plan 260 F3 — SOLO LECTURA: proyecta qué se declararía, sin escribir nada.
+  const previsualizarDeclaracion = async () => {
+    setDeclaring(true);
+    setDeclareError("");
+    try {
+      const res = await PipelineEnvironments.declarePreview({ yaml_text: yamlText, provider });
+      if (!res.ok || !res.data) {
+        setDeclareError(res.errorBody?.error || res.errorBody?.message || "no se pudo previsualizar la declaración");
+        setDeclarePreview(null);
+        return;
+      }
+      setDeclarePreview(res.data);
+    } catch (e) {
+      setDeclareError(e instanceof Error ? e.message : "no se pudo previsualizar la declaración");
+    } finally {
+      setDeclaring(false);
+    }
+  };
+
+  // Plan 260 F3 — HITL: crea, con valor VACÍO, los nombres del plan de arriba.
+  const confirmarDeclaracion = async () => {
+    setDeclaring(true);
+    setDeclareError("");
+    try {
+      const res = await PipelineEnvironments.declare({
+        yaml_text: yamlText, provider, confirm: true,
+      });
+      if (!res.ok || !res.data) {
+        setDeclareError(res.errorBody?.error || res.errorBody?.message || "no se pudo declarar");
+        return;
+      }
+      setDeclarePreview(null);
+      setNeedsMasking(res.data.needs_masking || []);
+      await analizar(); // refresca la matriz: el pendiente visible NO debe bajar
+    } catch (e) {
+      setDeclareError(e instanceof Error ? e.message : "no se pudo declarar");
+    } finally {
+      setDeclaring(false);
+    }
+  };
 
   const cta = (r: EnvRequirement) => {
     if (canCompleteInStacky(r)) {
       return (
-        <Button variant="secondary" size="sm" onClick={irAVariables}>
+        <Button variant="secondary" size="sm" onClick={() => irAVariables(r)}>
           Completar
         </Button>
       );
@@ -136,6 +218,53 @@ export const PipelineEnvMatrixPanel: React.FC<{ ctx: DevOpsSectionContext }> = (
         <>
           <div className={styles.headline}>{headline(matriz)}</div>
           {delta && <div className={styles.delta}>{delta}</div>}
+
+          {declareEnabled && (
+            <div className={styles.declareBox}>
+              {!declarePreview && (
+                <Button variant="secondary" size="sm" disabled={declaring} onClick={() => void previsualizarDeclaracion()}>
+                  {declaring ? "Analizando..." : "Declarar los nombres"}
+                </Button>
+              )}
+              {declareError && <div className={styles.error}>{declareError}</div>}
+              {!declarePreview && needsMasking.length > 0 && (
+                <div className={styles.declareWarn}>{avisoMasking(needsMasking)}</div>
+              )}
+              {declarePreview && (
+                <>
+                  <div className={styles.declareSummary}>
+                    {resumenDeclaracion(declarePreview.plan as DeclarePlanView)}
+                  </div>
+                  <div className={styles.declareWarn}>
+                    {avisoContadorNoBaja(
+                      declarePreview.pendiente_visible_actual,
+                      declarePreview.pendiente_visible_proyectado,
+                    )}
+                  </div>
+                  {declarePreview.plan.skipped.length > 0 && (
+                    <ul className={styles.declareSkipped}>
+                      {[...agruparSkipped(declarePreview.plan as DeclarePlanView)].map(([motivo, keys]) => (
+                        <li key={motivo}>{keys.join(", ")}: {motivo}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className={styles.declareActions}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={declaring || declarePreview.plan.items.length === 0}
+                      onClick={() => void confirmarDeclaracion()}
+                    >
+                      {declaring ? "Declarando..." : "Confirmar"}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setDeclarePreview(null)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className={styles.chips}>
             {matriz.environments.map((env) => (

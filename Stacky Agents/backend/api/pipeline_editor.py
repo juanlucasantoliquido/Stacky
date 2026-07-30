@@ -127,8 +127,12 @@ def _compilar(yaml_text: str, intent: EditIntent, perfil: str, repo_root):
     res = apply_ops(yaml_text, ops)
     if not res.ok:
         return None, (), None, tuple(res.errors)
-    review = review_patch(yaml_text, res.text, res.hunks, profile=perfil,
-                          repo_root=repo_root, verb=intent.verb)
+    # Plan 260 (v3, C8) — la flag se lee ACA (el llamador), nunca en
+    # pipeline_diff.py (que declara "PURO salvo repo_root" y no importa config).
+    review = review_patch(
+        yaml_text, res.text, res.hunks, profile=perfil, repo_root=repo_root,
+        verb=intent.verb,
+        secret_gate=getattr(_cfg(), "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED", False))
     return res.text, res.hunks, review, ()
 
 

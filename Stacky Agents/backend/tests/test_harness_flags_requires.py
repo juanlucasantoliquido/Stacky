@@ -323,6 +323,10 @@ _REQUIRES_MAP_FROZEN = {
     # Plan 266: la forma garantizada del summary cuelga del master del Comparador
     # (profundidad 1: STACKY_DB_COMPARE_ENABLED no declara `requires`, no hay cadena).
     "STACKY_DB_COMPARE_SUMMARY_SHAPE_ENABLED": "STACKY_DB_COMPARE_ENABLED",
+    # Plan 260: las 3 cuelgan del master del panel DevOps o del disparo (profundidad 1).
+    "STACKY_PIPELINE_ENV_DECLARE_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",
+    "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED": "STACKY_PIPELINE_TRIGGER_ENABLED",
+    "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",
 }
 
 

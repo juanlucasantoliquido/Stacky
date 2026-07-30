@@ -935,6 +935,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED",    # Plan 270 — aviso visual, no cambia nada
     "STACKY_PLANS_ESTADO_FALLBACK_ENABLED",     # Plan 263 — calculo puro en memoria, solo lectura
     "STACKY_PLANS_NORMALIZE_PREVIEW_ENABLED",   # Plan 263 — vista previa, no escribe nada
+    "STACKY_CONSOLE_FULLSCREEN_ENABLED",    # Plan 265
+    "STACKY_CONSOLE_RICH_RENDER_ENABLED",   # Plan 265
+    "STACKY_CONSOLE_REPO_PANEL_ENABLED",    # Plan 265
+    "STACKY_CONSOLE_AUDIT_LOG_ENABLED",     # Plan 265
 }
 
 

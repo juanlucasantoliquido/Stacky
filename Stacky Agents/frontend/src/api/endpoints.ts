@@ -5944,3 +5944,51 @@ export const Ledgers = {
     return (res.errorBody ?? {}) as LedgerPurgeResult;
   },
 };
+
+// ── Plan 265 F4 — Panel de Repositorio de la consola (SOLO LECTURA) ─────────
+// Objeto NUEVO: no se toca ningún objeto existente (§4.bis). Ambas rutas son
+// gateadas por STACKY_CONSOLE_REPO_PANEL_ENABLED y pueden devolver 404
+// feature_disabled: se leen con rawGet, nunca con api.get (que lanza).
+export interface GitRepoFile {
+  path: string;
+  status: string;
+}
+export interface GitStatusResponse {
+  ok: boolean;
+  available: boolean;
+  files: GitRepoFile[];
+  reason: string | null;
+}
+export interface GitDiffResponse {
+  ok: boolean;
+  available: boolean;
+  diff: string;
+  truncated: boolean;
+  masked: number;
+  reason: string | null;
+}
+export const GitReadonly = {
+  status: (workspace: string) =>
+    rawGet<GitStatusResponse>(`/api/git/status?workspace=${encodeURIComponent(workspace)}`),
+  diff: (workspace: string, path: string) =>
+    rawGet<GitDiffResponse>(
+      `/api/git/diff?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(path)}`
+    ),
+};
+
+// ── Plan 265 F7 — Bitácora de acciones de consola (SOLO LECTURA) ────────────
+export interface ConsoleAuditEntry {
+  ts: number;
+  execution_id: number;
+  action: string;
+  detail: Record<string, unknown>;
+}
+export const Console = {
+  audit: (limit = 200) =>
+    rawGet<ConsoleAuditEntry[]>(`/api/executions/console-audit?limit=${limit}`),
+  /** Historial vía rawGet (D6): `Executions.history` usa `api.get`, que LANZA
+   *  ante el 404 `feature_disabled` de STACKY_EXECUTION_HISTORY_ENABLED OFF —
+   *  tumbaría la consola entera. Este camino nunca lanza. */
+  historyRaw: (limit = 20) =>
+    rawGet<ExecutionHistoryItem[]>(`/api/executions/history?limit=${limit}`),
+};

@@ -851,7 +851,12 @@ $HarnessTestFiles = @(
   # Plan 263 - tablero de planes denso: ningun plan sin estado
   "tests/test_plan263_estado_fallback.py",
   "tests/test_plan263_estado_guard.py",
-  "tests/test_plan263_migration.py"
+  "tests/test_plan263_migration.py",
+
+  # Plan 265 - Consola DevOps pantalla completa (panel de repo, secretos, bitacora)
+  "tests/test_plan265_git_readonly.py",
+  "tests/test_plan265_secret_mask.py",
+  "tests/test_plan265_console_audit.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

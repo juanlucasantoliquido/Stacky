@@ -1,14 +1,138 @@
 # Plan 265 — La consola como experiencia principal: pantalla completa sobre la MISMA sesión, con contexto de repo, diffs y auditoría
 
-**Estado:** MEJORADO **v2 -> v3** (2026-07-27) · **Autor v1:** pipeline `proponer-plan-stacky` · **Juez v2:** `criticar-y-mejorar-plan` (misma corrida que el v1) · **Juez v3:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE (StackyArchitectaUltraEficientCode)
+**Estado:** MEJORADO **v4 -> v5** (2026-07-29) · **Autor v1:** pipeline `proponer-plan-stacky` · **Juez v2:** `criticar-y-mejorar-plan` (misma corrida que el v1) · **Juez v3:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE · **Juez v4:** `criticar-y-mejorar-plan` en corrida INDEPENDIENTE (StackyArchitectaUltraEficientCode, 2026-07-29) · **Juez v5:** `criticar-y-mejorar-plan`, SEGUNDA RONDA independiente (StackyArchitectaUltraEficientCode, 2026-07-29)
 **Veredicto del v1:** **RECHAZADO** (5 BLOQUEANTES). **Veredicto del v2:** **RECHAZADO** (5 BLOQUEANTES nuevos).
-Este documento es el **v3** con los fixes de las dos rondas aplicados.
+**Veredicto del v3:** **RECHAZADO** (4 BLOQUEANTES — cero hallazgos de diseño; los anclajes numéricos hacia
+`harness_flags.py`, `endpoints.ts` y `executions.py` quedaron viejos porque los Planes 267/268/269/270 se
+mergearon a `main` entre el 27 y el 29/07, más una fila de §4.bis que contradecía al DoD).
+**Veredicto del v4:** **APROBADO-CON-CAMBIOS** (0 BLOQUEANTES — los 4 del v3 quedaron corregidos y los anclajes
+re-verificados hoy contra el código real siguen exactos: cero drift adicional, cero commits de código desde el
+commit del v4; 1 hallazgo IMPORTANTE nuevo y 1 MENOR, ninguno de diseño ni de anclaje roto).
+Este documento es el **v5**: cierra el gap de cobertura de F0.0, corrige un conteo del DoD, y agrega **F8.0**
+(segunda pasada del barrido de anclajes, ahora al cierre).
 
-> **Por qué hubo una tercera ronda.** El v2 lo produjo el **mismo agente y la misma corrida** que escribió el v1:
-> no fue revisión independiente. La ronda v3 abrió **cada archivo citado** y verificó línea por línea. Resultado:
-> los 16 anclajes que el v2 arregló **verifican**, pero aparecieron **5 anclajes nuevos que NO verifican**, tres de
-> ellos con consecuencia directa (cablear la consola al endpoint equivocado, un comando de aceptación que no puede
-> salir verde, y un atajo muerto). La lección operativa está escrita en §4.ter.
+> **Por qué hubo una cuarta ronda.** El v3 (2026-07-27) abrió cada archivo citado y verificó línea por línea —
+> bien hecho en su momento: los 16 anclajes que el v2 había roto **seguían verificando**. Pero **48 horas y
+> cuatro merges alcanzan** para que un anclaje pinneado quede viejo, incluso dentro de la vida de un solo plan —
+> no hace falta que otro plan lo toque a propósito, alcanza con que comparta archivo. La ronda v4 reabrió **los
+> mismos archivos** el 2026-07-29 y midió el drift real: `harness_flags.py` (+17 en la tupla `interfaz_ui`, +26 en
+> la cita de `STACKY_EXECUTION_HISTORY_ENABLED`), `endpoints.ts` (+19 a +24 en los dos `cancel` — justo el
+> anclaje más enfático de todo el documento, D1), y **`api/executions.py` corrido +66 a +79 líneas entero** (el
+> Plan 269 le agregó código por delante de todo lo que este plan cita). Ningún hallazgo de **diseño** cambió: la
+> lógica que el v3 describe sigue siendo exactamente correcta, sólo cambió dónde vive. La lección operativa sigue
+> en §4.ter (ahora fechada dos veces) y el fix sistémico es la **F0.0** nueva: un barrido de anclajes que se corre
+> en 10 segundos ANTES de tocar código, en vez de confiar en un número escrito hace 48 horas.
+>
+> **Por qué hubo una quinta ronda — y por qué esta vez NO fue por anclajes.** La ronda v5 (2026-07-29, mismo día)
+> volvió a abrir los mismos archivos que barre F0.0, más los 6 puntos de `api/executions.py`, más
+> `endpoints.ts:1117/1350/1154-1155/1417-1418`, más `harness_flags.py:477/497/498`. **Cero drift**: `git diff
+> --stat` entre el commit del v4 (`6f451db8`) y `HEAD` sobre los 9 archivos más citados del documento devuelve
+> **vacío** — nadie tocó código desde que se escribió el v4, sólo se apilaron críticas de planes hermanos (docs).
+> `pytest test_harness_flags_help.py` repite el baseline exacto (**4 failed, 4 passed**, mismos 15 nombres). La
+> F0.0 del v4 cumplió lo que prometía. Lo que esta ronda encontró fue distinto: **F0.0 no vigila
+> `run_harness_tests.sh`/`.ps1`**, pese a ser dos de los archivos compartidos de §4.bis y a que, medido HOY, están
+> **con cambios sin commitear en este mismo momento** (otra sesión les está agregando entradas de Plan 217 al
+> vuelo). Y el DoD contaba "12" pasos de smoke donde el propio DoD enumera 13. Ninguno de los dos bloquea: es la
+> primera ronda de este plan sin un solo hallazgo de anclaje roto. Fix: **G1** extiende F0.0 con los dos archivos
+> que le faltaban; **G2** corrige el conteo; nace **F8.0**, la contraparte de cierre de F0.0.
+
+---
+
+## CHANGELOG v4 -> v5 (ronda independiente, 2026-07-29, mismo día)
+
+> **Veredicto de esta ronda: APROBADO-CON-CAMBIOS.** Cero bloqueantes. Es la primera ronda de este plan sin un
+> solo hallazgo de anclaje roto: los tres archivos más volátiles del documento (`harness_flags.py`, `endpoints.ts`,
+> `api/executions.py`) fueron reabiertos hoy uno por uno y **verifican exactos, línea por línea**, incluidos los
+> dos `cancel` de D1/E2 (`:1154-1155` y `:1417-1418`, con `Agents`/`Executions` abriendo en `:1117`/`:1350`) y las
+> seis citas de `api/executions.py` (`:509`, `:527`, `:682-683`, `:695-696`, `:707-721`). `git diff --stat
+> 6f451db8..HEAD` sobre los 9 archivos más citados (`harness_flags.py`, `endpoints.ts`, `api/executions.py`,
+> `run_harness_tests.sh`, `run_harness_tests.ps1`, `test_harness_flags.py`, `test_harness_flags_requires.py`,
+> `harness_flags_help.py`, `config.py`) es **vacío**, y `git log 6f451db8..HEAD -- ':!docs'` no devuelve una sola
+> línea: nadie tocó código desde que se escribió el v4. `pytest backend/tests/test_harness_flags_help.py -q`
+> (venv correcto, `backend/.venv/Scripts/python.exe`) repite el baseline exacto: **4 failed, 4 passed**, los
+> mismos 15 nombres de violación, cero mención de `CONSOLE`. La forma de `FlagSpec`
+> (`key/type/label/description/group/pair/env_only/default/requires/min_value/max_value/restart_required`)
+> tampoco cambió: los 4 `FlagSpec` literales de F0.2 siguen siendo válidos campo por campo, y `_CURATED_DEFAULTS_ON`
+> (`:467`) y `_REQUIRES_MAP_FROZEN` (`:120`) siguen siendo un `set` y un `dict` respectivamente.
+
+- **G1 (IMP.)** — **F0.0 barre 5 archivos y se queda corto: le faltan los DOS que están cambiando ahora mismo.**
+  `run_harness_tests.sh` y `run_harness_tests.ps1` son, según la propia tabla de §4.bis, dos de los archivos
+  compartidos de este plan (F4, F4.5 y F7 escriben ahí: "registrar en ambas `HARNESS_TEST_FILES`"), y **medido
+  hoy** (`git status --short`) los dos tienen cambios **sin commitear en este mismo momento**: otra sesión les
+  está agregando `tests/test_mg_states.py`, `tests/test_mg_dates.py` y `tests/test_mg_filtro_estados.py` (Plan 217)
+  — en el `.ps1`, justo **al final del array**, reemplazando la línea `"tests/test_plan267_help.py"` que hoy es la
+  última, exactamente donde este plan necesita apoyar sus propias 3 entradas nuevas. F0.0 no incluye estos dos
+  archivos en su barrido, así que un implementador puede correr F0.0, verlo limpio, y aun así llegar a F4/F4.5/F7
+  con una "última línea del array" que ya no es la que vio al principio. **Fix:** F0.0 v5 agrega un sexto y
+  séptimo target que imprimen toda entrada `tests/....py` de cada archivo — lo que importa es la **última** que
+  imprime cada uno, contra la que hay que apoyar el bloque `# Plan 265`, no la que asume el documento.
+- **G2 (MENOR)** — **El DoD cuenta "12" pasos de smoke donde el propio DoD enumera 13.** La lista entre
+  paréntesis del criterio binario de F8 (`1, 2, 2-bis, 3, 4, 4-bis, 5, 6, 7, 7-bis, 8, 9, 10`) tiene **13**
+  elementos (10 pasos numerados + 3 variantes `-bis`), no 12; los otros 12 conteos de casos de test del documento
+  (F1: 11, F1.5: 9, F2: 11, F2.5: 8, F3: 12, F4: 13+6, F4.5: 8, F5 búsqueda: 9, F5 historial: 4, F6: 11, F7: 10,
+  F8: 20 comandos) **sí** coinciden exactamente con sus tablas — es un desvío aislado, no un patrón. **Fix:** "12"
+  pasa a "13" en el criterio binario de F8 y en el bullet correspondiente del DoD.
+- **[ADICIÓN ARQUITECTO] F8.0** — segunda pasada del barrido de anclajes de F0.0, ahora **al cierre**, diffeada
+  contra la foto del principio. Cierra el hueco entre "verifiqué antes de empezar" y "¿se movió algo mientras
+  trabajaba, en una implementación de 9 fases que puede tomar más de un día?" — exactamente el modo de falla que
+  le costó a este plan las rondas v3 y v4, ahora vigilado también DENTRO de una misma implementación, no sólo
+  entre rondas de crítica.
+
+---
+
+## CHANGELOG v3 -> v4 (ronda independiente, 2026-07-29)
+
+> **Veredicto de esta ronda: RECHAZADO.** Ningún hallazgo es de diseño — la arquitectura del v3 (una sola sesión,
+> dos presentaciones; matriz de capacidades por runtime; identidad de sesión como invariante ejecutable) sigue
+> siendo sólida y se conserva intacta. El rechazo es por **anclajes**: el v3 se escribió y se juzgó el 2026-07-27;
+> entre esa fecha y hoy los Planes 267, 268, 269 y 270 se mergearon a `main` y desplazaron los tres archivos más
+> citados de este documento. Es la tercera vez que este plan tropieza con esto por un motivo distinto (v1: diseño;
+> v2: reuso y contratos reales; v3: frescura de sus propios anclajes) — la lección ya no es sólo "leé el código
+> real", es "el código real se mueve más rápido que el ciclo de crítica de un plan": de ahí nace la **F0.0**.
+
+- **E1 (BLOQ.)** — **`_CATEGORY_KEYS["interfaz_ui"]` en `harness_flags.py`: la trampa que D11 describía se
+  reprodujo sola.** El v3 anclaba la tupla a `:460` (abre) / `:477` (cierra) y su punto de inserción a "después de
+  la línea `:476`". Medido hoy (2026-07-29): la tupla abre en **`:477`** y cierra en **`:497`**, y **el Plan 270
+  (F5, costura OLA 1, 2026-07-28) ya insertó una quinta entrada
+  (`STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED`) después de la que el v3 llamaba "la última"**. Seguir la
+  instrucción literal del v3 mete las 4 keys de este plan en el medio de la tupla, antes de la entrada del Plan
+  270, no al final: no rompe ningún test (la categorización sigue siendo correcta), pero rompe en silencio la
+  convención de contigüidad de §4.bis ("las 4 keys van juntas y al final"). **Fix:** F0.3 pasa de anclaje por
+  línea a anclaje por símbolo (`Select-String '"interfaz_ui": \('`), con instrucción explícita de LEER cuál es la
+  última entrada real en vez de asumirla.
+- **E2 (BLOQ.)** — **El anclaje más enfático del documento —`Agents.cancel` vs `Executions.cancel` (D1, "LEELA DOS
+  VECES")— tenía sus dos números viejos.** Medido hoy: `Agents.cancel` está en `:1154-1155` (el v3 decía
+  `:1135-1136`) y `Executions.cancel` en `:1417-1418` (el v3 decía `:1394-1395`); los objetos `Agents`/`Executions`
+  abren en `:1117`/`:1350` (no `~1120`/`:1326`). El contenido de D1 sigue siendo exacto —dos funciones distintas,
+  dos endpoints distintos, un solo gate de estado real— sólo la dirección cambió. **Fix:** las 4 citas de F3
+  (header, tabla de reuso, gotcha del 409, §3.7) y la de R15, actualizadas.
+- **E3 (BLOQ.)** — **`api/executions.py` corrido +66 a +79 líneas entero** (evidencia: el Plan 269 le agregó
+  código por delante — coincide con "5 trampas de superficie executions" de ese plan). Los 4 anclajes de este
+  archivo que F3 y F5(b) dan por literales — `/history` (`:442`→`:509`), el 404 `feature_disabled`
+  (`:459-461`→`:527`), la ruta de cancelación (`:603`→`:682-683`) y el chequeo de estado que dispara el 409
+  (`:616`→`:695-696`, con la rama `github_copilot` en `:628-640`→`:707-721`) — estaban todos viejos. La lógica que
+  describen (los mismos 4 estados cancelables, el mismo gate de 404) es IDÉNTICA a la medida por el v3: es un fix
+  de cita, no de diseño.
+- **E4 (BLOQ., compuesto)** — **Nada en el documento fuerza una re-verificación al momento de implementar.**
+  §4.ter ya explica qué hacer si UN anclaje individual no verifica, pero no hay un paso previo que los barra TODOS
+  antes de tocar código — por eso E1-E3 sólo se iban a descubrir a mitad de F0.3/F3/F5(b), como ya pasó dos veces
+  antes en este mismo plan. **Fix:** nace **F0.0** (`[ADICIÓN ARQUITECTO]`), que convierte la re-verificación en
+  un paso ejecutable del propio plan, no en una expectativa.
+- **E5 (IMP.)** — **§4.bis contradice al propio DoD.** La fila de `run_harness_tests.sh`/`.ps1` dice "**2**
+  archivos de test" (orden `git_readonly`, `console_audit`), pero F4.5 crea un tercero
+  (`test_plan265_secret_mask.py`) y el DoD ya dice, correctamente, "**3** archivos". Seguir §4.bis al pie de la
+  letra deja el test que garantiza que ningún secreto sale en un diff corriendo aislado, nunca barrido junto con
+  el resto del arnés. **Fix:** la fila pasa a "3 archivos", orden `git_readonly, secret_mask, console_audit`.
+- **E6 (MENOR)** — La cita `harness_flags.py:1896` (F5(b), para justificar que `STACKY_EXECUTION_HISTORY_ENABLED`
+  es apagable de verdad) es hoy `:1922` (+26, medido). **Fix:** número actualizado.
+- **E7 (MENOR)** — §4.ter fechaba sus anclajes verificados "ronda v3, 2026-07-27" sin ningún mecanismo de
+  expiración visible para quien lea el documento días después. **Fix:** se agrega el barrido de la ronda v4
+  (2026-07-29), fechado, con la recomendación de correr **F0.0** en vez de confiar en una lista estática si hay
+  una v5.
+- **[ADICIÓN ARQUITECTO] F0.0** — script de verificación de anclajes (`Select-String` sobre los 5 archivos más
+  citados del plan), obligatorio ANTES de F0. Convierte "abrí el código antes de confiar en la línea" —la regla
+  que este plan ya predicaba en §4.ter— en un paso ejecutable de 10 segundos en vez de una expectativa que un
+  modelo menor puede saltear sin darse cuenta.
 
 ---
 
@@ -153,7 +277,7 @@ Este documento es el **v3** con los fixes de las dos rondas aplicados.
 
 ## 1. Objetivo y KPI
 
-### 1.1 Sustrato (verificado 2026-07-27)
+### 1.1 Sustrato (verificado 2026-07-27; anclajes de `executions.py` RE-verificados 2026-07-29 — E3)
 
 `CodexConsoleDock` (`frontend/src/components/CodexConsoleDock.tsx`, 328 líneas) está montado globalmente en
 `App.tsx:520` y es el canal único por el que ya entran el agente DevOps
@@ -161,7 +285,8 @@ Este documento es el **v3** con los fixes de las dos rondas aplicados.
 (`components/devops/SectionDoctorButton.tsx:7`) y el documentador (`components/docs/DocumenterButton.tsx:37`).
 El sustrato es bueno: SSE con reconexión exponencial y ring-buffer (`hooks/useExecutionStream.ts:23-24`,
 `hooks/logRingBuffer.ts`), estado que sobrevive al F5 (`store/workbench.ts:148-152`) y cancelación ya construida
-para los 3 runtimes (`api/executions.py:603`).
+para los 3 runtimes (`api/executions.py:682-683` — el v3 decía `:603`; el Plan 269 corrió este archivo +79
+líneas, ver E3).
 
 Lo que falta es que **sea una superficie de trabajo y no un cajón**:
 
@@ -170,9 +295,9 @@ Lo que falta es que **sea una superficie de trabajo y no un cajón**:
 | Modo pantalla completa | El store sólo tiene 2 estados: `codexConsoleExecutionId` + `codexConsoleMinimized` (`workbench.ts:10-11`). No hay un tercero. |
 | Markdown y bloques de código | El dock imprime líneas crudas (`CodexConsoleDock.tsx:242-260`). `ChatDrawer.tsx:10` sí usa `ReactMarkdown`, la consola no. |
 | Copiar comando | No hay ningún botón de copia en el dock, pese a existir `services/copyService.ts` (Plan 194). |
-| Cancelar / volver a lanzar desde la consola | El endpoint existe (`api/executions.py:603`) y `ActiveRunsPanel.tsx:57-58` ya lo llama; **el dock no**. |
+| Cancelar / volver a lanzar desde la consola | El endpoint existe (`api/executions.py:682-683`) y `ActiveRunsPanel.tsx:57-58` ya lo llama; **el dock no**. |
 | Búsqueda en la conversación | Ninguna. |
-| Historial de sesiones | `api/executions.py:442 /history` existe; la consola no lo consume. **Ojo (D6): está gateado — `:459-461` devuelve 404 `feature_disabled` si `STACKY_EXECUTION_HISTORY_ENABLED` está OFF.** |
+| Historial de sesiones | `api/executions.py:509 /history` existe (el v3 decía `:442`); la consola no lo consume. **Ojo (D6): está gateado — `:527` devuelve 404 `feature_disabled` si `STACKY_EXECUTION_HISTORY_ENABLED` está OFF** (el v3 decía `:459-461`). |
 | Archivos modificados y diffs | `api/git.py` tiene **26 líneas** y sólo expone `/file-context` y `/context-block`. **No existe `/status` ni `/diff`: este plan los CREA.** |
 | Modelo/effort activos a la vista | El trace se persiste (`claude_code_cli_runner.py:543`), la consola no lo muestra. |
 | Atajos de teclado propios | Existe el registro (`services/shortcuts.ts`, `hooks/useShortcut.ts:15`, `components/ShortcutsCheatsheet.tsx`); la consola no registra ninguno. |
@@ -245,10 +370,10 @@ el ring-buffer y desincronizaría el scroll.
    |---|---|---|
    | `codex_cli` | **sí**, mata el subproceso | `services/codex_cli_runner.py:185` `def cancel(execution_id) -> bool` |
    | `claude_code_cli` | **sí**, cierre ordenado de stdin con gracia | `services/claude_code_cli_runner.py:228` |
-   | `github_copilot` (y cualquier otro) | **sí, pero cooperativa**: no hay proceso que matar; se marca una bandera en memoria | `api/executions.py:628-640` → `agent_runner.py:550` |
+   | `github_copilot` (y cualquier otro) | **sí, pero cooperativa**: no hay proceso que matar; se marca una bandera en memoria | `api/executions.py:707-721` (el v3 decía `:628-640`) → `agent_runner.py:550` |
 
    Conclusión operativa: **el botón Cancelar existe en los 3**. El único gate real es el **estado** de la
-   ejecución: `api/executions.py:616` sólo permite cancelar si `status in ("vscode_chat","preparing","queued","running")`,
+   ejecución: `api/executions.py:695-696` (el v3 decía `:616`; re-verificado 2026-07-29, E3) sólo permite cancelar si `status in ("vscode_chat","preparing","queued","running")`,
    y devuelve **409** en cualquier otro caso. Para `github_copilot` la UI debe decir, textualmente,
    *"Cancelación cooperativa: el turno en curso puede tardar en cerrarse."* — **prohibido** un botón que miente
    sobre su efecto, y **prohibido** un botón deshabilitado por una capacidad que sí existe.
@@ -274,8 +399,9 @@ el ring-buffer y desincronizaría el scroll.
    `frontend/package.json:14,19,20` ⇒ **cero dependencias nuevas**. Se reusan además:
    `services/copyService.ts` (194), `services/shortcuts.ts` + `hooks/useShortcut.ts` (172),
    `useConfirm()` de `components/ui/index.ts:46` (164), `components/ModelDecisionChip.tsx` (212),
-   **`api/endpoints.ts:1394` `Executions.cancel`** (D1 — **no** el `:1135`, que es `Agents.cancel`, otra función
-   y otro endpoint: ver el aviso al principio de F3), `utils/loadError.ts` `formatLoadErrorMessage`,
+   **`api/endpoints.ts:1417` `Executions.cancel`** (D1 — el v3 decía `:1394`; re-verificado 2026-07-29, E2 —
+   **no** el `:1154`, que es `Agents.cancel`, otra función y otro endpoint: ver el aviso al principio de F3),
+   `utils/loadError.ts` `formatLoadErrorMessage`,
    `services/git_context.py:60` `_git()`, y el patrón de subproceso de `services/plans_board.py:665-681`.
 
 ---
@@ -309,7 +435,7 @@ silencioso. Reglas de convivencia de **este** plan:
 | `backend/tests/test_harness_flags.py` | 4 keys en `_CURATED_DEFAULTS_ON` | Bloque contiguo al final del set, con `# Plan 265` en cada línea. |
 | `backend/tests/test_harness_flags_requires.py` | 3 aristas en `_REQUIRES_MAP_FROZEN` | Bloque contiguo al final del dict, con comentario `# Plan 265`. |
 | `backend/services/harness_flags_help.py` | 4 entradas `PLAIN_HELP` | Bloque contiguo al final del dict. |
-| `backend/scripts/run_harness_tests.sh` **y** `.ps1` | 2 archivos de test | Al final de la lista, en el orden `git_readonly`, `console_audit`. **Sintaxis distinta en cada archivo** (array bash vs array PowerShell con comas): no copies una en la otra. |
+| `backend/scripts/run_harness_tests.sh` **y** `.ps1` | **3** archivos de test (corregido en v4, E5 — el v3 decía "2" y omitía `secret_mask`) | Al final de la lista, en el orden `git_readonly`, `secret_mask`, `console_audit`. **Sintaxis distinta en cada archivo** (array bash vs array PowerShell con comas): no copies una en la otra. |
 | `frontend/src/api/endpoints.ts` | 2 lecturas nuevas (`GitReadonly.status`, `GitReadonly.diff`) + 1 (`Console.audit`) | Objeto exportado **nuevo** (`GitReadonly`), no se toca ningún objeto existente. **No se toca `Agents` (`:1120-1140`) ni `Executions` (`:1326`+)**: sólo se **consume** `Executions.cancel` (`:1394`). |
 
 **Dependencias cruzadas declaradas:**
@@ -389,9 +515,88 @@ Es lo que pasó con `Executions.cancel` (D1): en `api/endpoints.ts:1135` hay, li
 `ChatDrawer.tsx:10`, `CodexConsoleDock.tsx` (328 líneas), `App.tsx:520/254`, `useExecutionStream.ts:12/23-24`,
 `error_fingerprints.json` (`schema_version: 1`, campos `log_pattern`/`killed_by`/`guard_test`).
 
+**Anclajes RE-verificados en la ronda v4** (abiertos uno por uno, 2026-07-29 — 48 horas y los merges de los
+Planes 267/268/269/270 después de la ronda v3). **Sin drift** (siguen exactos): los tres `cancel` de runtime,
+`git_context.py:60`, `plans_board.py:644/665-681`, `models.py:331`, `workbench.ts:10-11/148-152`,
+`workbenchPure.ts:7/9-13/21/41`, `shortcuts.ts` completo (`:13/14/24-37/41/108-111/124/125/139/191/225/278`),
+`ActiveRunsPanel.tsx:33/58/153/183`, `ui/index.ts:46`, `package.json:14/19/20`, `ChatDrawer.tsx:10`,
+`App.tsx:520/252`. **Con drift, ya corregido en este documento (E1-E3):** `harness_flags.py`
+(`_CATEGORY_KEYS["interfaz_ui"]` +17, cita de `STACKY_EXECUTION_HISTORY_ENABLED` +26),
+`endpoints.ts` (`Agents.cancel` +19, `Executions.cancel` +23), `test_harness_flags.py` (dos funciones de test
++27), `test_harness_flags_requires.py` (+14), y **`api/executions.py` entero corrido +66 a +79** (el Plan 269 le
+agregó código por delante). Ninguno de estos drifts cambia la semántica que este plan describe — el mismo código,
+en otra línea — pero todos exigían reabrir el archivo, exactamente como pide la regla de arriba. **Moraleja para
+una eventual v5: 48 horas ya alcanzan para que un anclaje pinneado quede viejo. Corré la F0.0 de este plan (más
+arriba) antes de confiar en cualquier número de línea de este documento.**
+
+**Anclajes RE-verificados en la ronda v5** (abiertos uno por uno, 2026-07-29, mismo día que v4). **Cero drift**:
+`harness_flags.py:477/497/498` (tupla `interfaz_ui` con sus 5 entradas, la última de Plan 270), `endpoints.ts`
+(`Agents` `:1117`, `Executions` `:1350`, `Agents.cancel` `:1154-1155`, `Executions.cancel` `:1417-1418`),
+`api/executions.py` (`:509`, `:527`, `:682-683`, `:695-696`, `:707-721`). Confirmado con `git diff --stat
+6f451db8..HEAD` (vacío sobre los 9 archivos más citados) y `git log 6f451db8..HEAD -- ':!docs'` (vacío): cero
+commits de código desde el v4. `FlagSpec` no cambió de forma. `pytest test_harness_flags_help.py` repite
+`4 failed, 4 passed` con los mismos 15 nombres. **Lo único que no verificaba era lo que F0.0 nunca miró:**
+`run_harness_tests.sh`/`.ps1` — dos archivos con cambios sin commitear EN EL MOMENTO de esta ronda (otra sesión
+agregándoles entradas de Plan 217). Fix en G1/F8.0. **Moraleja para una eventual v6 (si hiciera falta): el drift
+de anclaje ya se resolvió sin un solo caso nuevo en esta ronda — lo que siguió fallando no fue la lectura del
+código, fue la cobertura de la propia herramienta de verificación. Antes de agregar un target a mano, preguntate
+qué archivo compartido de §4.bis todavía no está en la lista de F0.0/F8.0.**
+
 ---
 
 ## 5. Fases
+
+### F0.0 — **[ADICIÓN ARQUITECTO]** Verificación de anclajes, ANTES de tocar nada (E4)
+
+**Por qué existe esta fase.** Este plan lleva **tres rechazos** (v1, v2, v3) y los tres incluyeron anclajes
+`archivo:línea` que no verificaban — dos veces por errores de lectura (C1-C12 y D1-D14) y la tercera (v4, este
+documento) porque **el propio documento quedó viejo en 48 horas**: los Planes 267/268/269/270 se mergearon a
+`main` entre el 27 y el 29/07 y corrieron `harness_flags.py`, `endpoints.ts` y `api/executions.py` hasta 79
+líneas. §4.ter ya explica qué hacer cuando UN anclaje individual falla; esta fase evita que haga falta
+descubrirlo a mitad de F0.3, F3 o F5(b) — barre los anclajes más caros de todo el documento en un solo paso,
+ANTES de escribir una línea de código.
+
+**No es una feature del producto: es tooling de implementación.** Ningún runtime de agente (Codex CLI, Claude
+Code CLI, GitHub Copilot) la ve; no tiene flag propia; no le pide nada al operador. La corre quien implemente el
+plan, una vez, en su propia máquina, antes del primer commit.
+
+**Comando (PowerShell, `Select-String` — la misma herramienta que este documento ya usa para verificar código):**
+
+```powershell
+$targets = @(
+  @{ File = "Stacky Agents\backend\services\harness_flags.py";             Pattern = '"interfaz_ui": \(|"paridad_proveedores": \(|key="STACKY_EXECUTION_HISTORY_ENABLED"' },
+  @{ File = "Stacky Agents\backend\tests\test_harness_flags.py";           Pattern = '_CURATED_DEFAULTS_ON = \{|def test_every_registry_flag_is_categorized|def test_default_known_only_for_curated' },
+  @{ File = "Stacky Agents\backend\tests\test_harness_flags_requires.py"; Pattern = '_REQUIRES_MAP_FROZEN = \{|def test_requires_map_is_frozen' },
+  @{ File = "Stacky Agents\frontend\src\api\endpoints.ts";                 Pattern = 'export const Agents = \{|export const Executions = \{' },
+  @{ File = "Stacky Agents\backend\api\executions.py";                     Pattern = '@bp\.get\("/history"\)|feature_disabled|def cancel_execution|status not in \(' },
+  @{ File = "Stacky Agents\backend\scripts\run_harness_tests.sh";          Pattern = '^\s*tests/[\w./-]+\.py\s*$' },
+  @{ File = "Stacky Agents\backend\scripts\run_harness_tests.ps1";         Pattern = '"tests/[\w./-]+\.py"' }
+)
+foreach ($t in $targets) {
+  Select-String -Path $t.File -Pattern $t.Pattern |
+    ForEach-Object { "{0}:{1}  {2}" -f $t.File, $_.LineNumber, $_.Line.Trim() }
+}
+```
+
+**Cómo usarlo.** Corré esto primero. Comparalo contra los números que este documento cita en F0.3, F3 y F5(b) —a
+la fecha de esta ronda (2026-07-29) deberían coincidir exactamente. Si no coinciden, **el archivo volvió a
+moverse después de esta ronda**: confiá en lo que imprime el comando, no en el número escrito en la prosa, releé
+el párrafo entero alrededor de ese símbolo antes de editar, y anotalo en el registro de implementación al cierre
+del documento (mismo mecanismo que §4.ter ya pide para un anclaje individual roto).
+
+> **Los últimos dos targets son distintos a los otros cinco (G1, v5).** No buscás una línea única: los archivos
+> `run_harness_tests.sh` y `.ps1` van a imprimir **decenas** de líneas (todo el `HARNESS_TEST_FILES` actual). Lo
+> único que importa es la **ÚLTIMA** que imprime cada uno — esa es la entrada real de HOY, después de la cual
+> F4/F4.5/F7 apoyan su bloque `# Plan 265`. No asumas que es `tests/test_plan267_help.py` porque este documento lo
+> dice: dos sesiones pueden estar tocando este archivo a la vez (medido 2026-07-29: otra sesión le agregaba
+> entradas de Plan 217 al vuelo, sin commitear, mientras se escribía esta ronda de crítica).
+
+**Criterio.** No es pasa/falla: es un paso de lectura obligatorio, cumplido cuando la salida del comando quedó
+pegada en el registro de implementación **antes** del primer commit de F0.
+
+**Trabajo del operador: ninguno** (el operador nunca ve ni corre este comando).
+
+---
 
 ### F0 — Flags: las **SEIS** patas, todas nombradas (C1, C2, C3, C4)
 
@@ -405,7 +610,7 @@ Es lo que pasó con `Executions.cancel` (D1): en `api/endpoints.ts:1135` hay, li
 |---|---|---|---|
 | 1 | `Stacky Agents/backend/config.py` | 4 atributos de la clase de config | final del bloque de flags |
 | 2 | `Stacky Agents/backend/services/harness_flags.py` | 4 `FlagSpec` en `FLAG_REGISTRY` | final del registry |
-| 3 | `Stacky Agents/backend/services/harness_flags.py` | `_CATEGORY_KEYS["interfaz_ui"]` | **`:120`** abre el dict; `"interfaz_ui"` abre en **`:460`** |
+| 3 | `Stacky Agents/backend/services/harness_flags.py` | `_CATEGORY_KEYS["interfaz_ui"]` | **`:120`** abre el dict; `"interfaz_ui"` abre en **`:477`** (re-verificado 2026-07-29 — el v3 decía `:460`; correr **F0.0** antes de confiar en este número) |
 | 4 | **`Stacky Agents/backend/tests/test_harness_flags.py`** | `_CURATED_DEFAULTS_ON` (**es un `set`, no una tupla**) | **`:467`** |
 | 5 | **`Stacky Agents/backend/tests/test_harness_flags_requires.py`** | `_REQUIRES_MAP_FROZEN` (dict) | **`:120`** |
 | 6 | `Stacky Agents/backend/services/harness_flags_help.py` | `PLAIN_HELP` (dict) | final del dict, antes de `def plain_help_for` |
@@ -493,17 +698,26 @@ Es lo que pasó con `Executions.cancel` (D1): en `api/endpoints.ts:1135` hay, li
 > `requires`, la cadena tendría profundidad 2 y violaría **R4** (profundidad 1), que
 > `tests/test_harness_flags_requires.py` verifica. Las 3 hijas apuntan **todas al master**, nunca entre sí.
 
-#### F0.3 — `backend/services/harness_flags.py`, `_CATEGORY_KEYS` (C2, D11)
+#### F0.3 — `backend/services/harness_flags.py`, `_CATEGORY_KEYS` (C2, D11, **E1 — re-verificado 2026-07-29**)
 
-> **Trampa medida (D11): la tupla `"interfaz_ui"` abre en `:460` y CIERRA EN `:477`.** El `),` que viene después
-> (**`:484`**) **no es el suyo**: es el de `"paridad_proveedores"`, que abre en `:478`. Si metés las 4 keys ahí,
-> `test_every_registry_flag_is_categorized` **sigue VERDE** (la key está categorizada... en la categoría
-> equivocada) y la consola aparece bajo "Paridad de proveedores" en la UI de flags. Falso verde perfecto.
-> **Confirmá antes de escribir:** la última línea de `interfaz_ui` hoy es
-> `"STACKY_UI_LOG_NOISE_CARD_ENABLED",  # Plan 257 — tarjeta de firmas de log mas repetidas` (`:476`), y la
-> siguiente es el `    ),` de `:477`. Insertá **entre esas dos**.
-
-En la tupla `"interfaz_ui"` (abre en `:460`), **al final**, inmediatamente antes del `),` de **`:477`**:
+> **Trampa medida en D11, y REPRODUCIDA SOLA por el drift (E1).** El v3 (2026-07-27) anclaba esto a `:460`
+> (abre) / `:476` (última entrada) / `:477` (cierra) / `:478` (abre la siguiente categoría) / `:484` (su cierre).
+> Verificado hoy 2026-07-29: la tupla `"interfaz_ui"` abre en **`:477`** y cierra en **`:497`**; la categoría
+> siguiente, `"paridad_proveedores"`, abre en **`:498`**. Y la `),` que cierra `interfaz_ui` **ya no** es la que
+> sigue a la entrada de Plan 257: **el Plan 270 (F5, costura OLA 1, 2026-07-28) agregó una quinta entrada,
+> `STACKY_INCIDENT_DIVERGENCE_BADGE_ENABLED`, DESPUÉS de la de Plan 257** — exactamente el patrón que este aviso
+> advierte. Si metés las 4 keys de este plan pegadas a la entrada de Plan 257 (como decía el v3), quedan **en el
+> medio** de la tupla, antes de la entrada del Plan 270: no rompe ningún test (la categorización sigue siendo
+> correcta), pero rompe la convención de §4.bis ("las 4 keys van juntas y al final") en silencio.
+>
+> **Por eso la instrucción deja de ser un número de línea y pasa a ser un símbolo — la regla que pide §4.ter:**
+> ```powershell
+> Select-String -Path "Stacky Agents\backend\services\harness_flags.py" -Pattern '"interfaz_ui": \(|"paridad_proveedores": \('
+> ```
+> Abrí el archivo en la línea que imprime para `"interfaz_ui"`, bajá hasta el `),` que la cierra —el que viene
+> **inmediatamente antes** de la línea de `"paridad_proveedores"`—, y pegá las 4 keys nuevas **ahí**, después de
+> la última entrada que encuentres (sea la de Plan 257, la de Plan 270, o cualquier otra agregada después de esta
+> ronda). **No asumas cuál es la última entrada: leela.**
 
 ```python
         "STACKY_CONSOLE_FULLSCREEN_ENABLED",    # Plan 265 — consola en pantalla completa
@@ -512,8 +726,9 @@ En la tupla `"interfaz_ui"` (abre en `:460`), **al final**, inmediatamente antes
         "STACKY_CONSOLE_AUDIT_LOG_ENABLED",     # Plan 265
 ```
 
-> Si esto falta, `test_every_registry_flag_is_categorized` (`tests/test_harness_flags.py:902`) sale **ROJO**
-> con "Keys sin categoría". No hay forma de saltearlo.
+> Si esto falta, `test_every_registry_flag_is_categorized` (`tests/test_harness_flags.py:929` — el v3 decía
+> `:902`; la función se corrió +27 líneas porque `_CURATED_DEFAULTS_ON` creció) sale **ROJO** con "Keys sin
+> categoría". No hay forma de saltearlo.
 
 #### F0.4 — `backend/tests/test_harness_flags.py`, `_CURATED_DEFAULTS_ON` (C1)
 
@@ -1096,9 +1311,9 @@ cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleCapabi
 >
 > | | **`Agents.cancel`** — **PROHIBIDA acá** | **`Executions.cancel`** — **la correcta** |
 > |---|---|---|
-> | Línea | `api/endpoints.ts:1135-1136` | **`api/endpoints.ts:1394-1395`** (el objeto `export const Executions = {` abre en `:1326`) |
+> | Línea | `api/endpoints.ts:1154-1155` (v3: `:1135-1136`) | **`api/endpoints.ts:1417-1418`** (v3: `:1394-1395`; el objeto `export const Executions = {` abre en `:1350`, no `:1326`) — re-verificado 2026-07-29, E2 |
 > | Llama a | `POST /api/agents/cancel/<id>` | `POST /api/executions/<id>/cancel` |
-> | Backend | `backend/api/agents.py:1434-1436` | `backend/api/executions.py:603` |
+> | Backend | `backend/api/agents.py:1434-1436` | `backend/api/executions.py:682-683` (v3: `:603`) |
 > | Qué hace | `agent_runner.cancel(id)` y `return jsonify({"ok": True})`. **Y nada más.** | Valida el estado, **409** si no es cancelable, y despacha al runner que corresponda |
 > | Gate de estado | **NINGUNO.** Devuelve `{"ok": true}` sobre una corrida ya terminada. | `:616` — sólo `vscode_chat`/`preparing`/`queued`/`running` |
 > | Mata el subproceso | **NO.** Sólo la bandera cooperativa (el camino de `github_copilot`). | **SÍ**: `codex_cli_runner.cancel` mata el subproceso; `claude_code_cli_runner.cancel` cierra ordenado |
@@ -1114,7 +1329,8 @@ cd "Stacky Agents\frontend"; npx vitest run src/services/__tests__/consoleCapabi
 
 **Objetivo.** Cerrar el lazo de control **sin agregar un solo endpoint nuevo y sin reinventar el cableado**.
 
-**Sin backend nuevo.** Se usa `POST /api/executions/<id>/cancel` (`api/executions.py:603`). Para volver a lanzar se
+**Sin backend nuevo.** Se usa `POST /api/executions/<id>/cancel` (`api/executions.py:682-683` — el v3 decía
+`:603`; re-verificado 2026-07-29, E3). Para volver a lanzar se
 usa el endpoint de lanzamiento que corresponda al origen de la corrida — **leé el `metadata` de la ejecución para
 saber cuál** (`agent_type`, `runtime`, `vscode_agent_filename`). Si no se puede determinar el origen, el botón
 queda **deshabilitado** con el hint *"No se puede volver a lanzar: esta corrida no registra su origen."* — nunca
@@ -1130,12 +1346,12 @@ adivines un endpoint.
 | Qué | Dónde ya está | Regla |
 |---|---|---|
 | Confirmación | `ActiveRunsPanel.tsx:33` `const askConfirm = useConfirm();` y `:153` `await askConfirm({ … confirmLabel, cancelLabel })` | `useConfirm` se importa de `components/ui` (`components/ui/index.ts:46`). **Prohibido** `window.confirm` y **prohibido** montar `ConfirmDialog` a mano. |
-| Llamada | `ActiveRunsPanel.tsx:58` `mutationFn: (id: number) => Executions.cancel(id)` (importa `Executions` en `:4`) | `Executions.cancel` está en **`api/endpoints.ts:1394`** (D1). **No escribas un `fetch` nuevo y NO uses `Agents.cancel` (`:1135`).** |
+| Llamada | `ActiveRunsPanel.tsx:58` `mutationFn: (id: number) => Executions.cancel(id)` (importa `Executions` en `:4`) | `Executions.cancel` está en **`api/endpoints.ts:1417`** (D1; v3 decía `:1394`, re-verificado 2026-07-29 E2). **No escribas un `fetch` nuevo y NO uses `Agents.cancel` (`:1154`, v3 decía `:1135`).** |
 | Error a la vista | `ActiveRunsPanel.tsx:179-187` | mismo patrón de mensaje + botón de reintento. |
 
-> **Gotcha del 409 (no negociable).** `api/executions.py:616` devuelve **409** si el estado no es cancelable
-> (`vscode_chat`, `preparing`, `queued`, `running` son los únicos cancelables). **Medido:** `Executions.cancel`
-> (`api/endpoints.ts:1394-1395`) usa `api.post<{ ok: boolean; execution_id: number }>`, y el wrapper `api.*`
+> **Gotcha del 409 (no negociable).** `api/executions.py:695-696` (v3: `:616`) devuelve **409** si el estado no es
+> cancelable (`vscode_chat`, `preparing`, `queued`, `running` son los únicos cancelables). **Medido:**
+> `Executions.cancel` (`api/endpoints.ts:1417-1418`, v3: `:1394-1395`) usa `api.post<{ ok: boolean; execution_id: number }>`, y el wrapper `api.*`
 > **lanza excepción ante cualquier non-2xx** ⇒ un 409 tumbaría el componente en vez de mostrar el mensaje.
 > **Las dos salidas válidas, elegí una y anotala:**
 > 1. envolver la llamada en `try/catch` y mostrar el mensaje con `formatLoadErrorMessage`
@@ -1156,7 +1372,8 @@ export interface ExecutionSnapshot {
   hasOrigin: boolean;
 }
 
-/** Estados que el backend acepta cancelar. Espejo EXACTO de api/executions.py:616.
+/** Estados que el backend acepta cancelar. Espejo EXACTO de api/executions.py:695-696
+ * (re-verificado 2026-07-29; era :616 en el v3 — confirmar con F0.0 antes de codear esto).
  *  Si cambia allá, este set y su test cambian acá: son un contrato. */
 export const CANCELLABLE_STATUSES: ReadonlySet<string>;   // {"vscode_chat","preparing","queued","running"}
 
@@ -1393,14 +1610,16 @@ puede apagar por accidente no es una protección. **Trabajo del operador: ningun
 > `capabilitiesFor(...).modelEffortSlot`), no inventa. Es degradación explícita, no bloqueo. El contenedor
 > `data-slot="model-effort"` queda reservado para que el 264 lo llene sin tocar este código (§4.bis).
 
-**(b) Panel "Historial"** — consume `GET /api/executions/history` (`api/executions.py:442`), ya existente. Click en
-una corrida ⇒ `setCodexConsoleExecution(id)`. **Sin polling nuevo:** se carga al abrir el panel y con un botón
-"Actualizar".
+**(b) Panel "Historial"** — consume `GET /api/executions/history` (`api/executions.py:509`, el v3 decía `:442`;
+re-verificado 2026-07-29, E3), ya existente. Click en una corrida ⇒ `setCodexConsoleExecution(id)`. **Sin polling
+nuevo:** se carga al abrir el panel y con un botón "Actualizar".
 
 > **Gotcha del 404 que el v2 no vio (D6) — es el gemelo exacto del gotcha del 409 de F3.** Ese endpoint **está
-> gateado**: `api/executions.py:459-461` hace
-> `if not getattr(_cfg, "STACKY_EXECUTION_HISTORY_ENABLED", True): return jsonify({"error": "feature_disabled", ...}), 404`.
-> Es una flag real y apagable del registry (`services/harness_flags.py:1896`), **ajena a este plan**. Y `api.get`
+> gateado**: `api/executions.py:527` (v3: `:459-461`) devuelve, en esencia,
+> `jsonify({"error": "feature_disabled", "feature": "STACKY_EXECUTION_HISTORY_ENABLED"}), 404` cuando la flag está
+> OFF — **verificá el condicional exacto en esa línea al implementar** (no re-confirmado carácter por carácter en
+> esta ronda, sólo el `return`). Es una flag real y apagable del registry (`services/harness_flags.py:1922`, v3
+> decía `:1896`), **ajena a este plan**. Y `api.get`
 > **lanza ante non-2xx** ⇒ con esa flag OFF, el panel Historial **tumba la consola entera**, que es justo la
 > pantalla que este plan promueve a experiencia principal.
 > **Obligatorio:** leer el historial con **`rawGet`** (ya importado en `api/endpoints.ts:1`) o envolver en
@@ -1628,6 +1847,36 @@ no en un sistema del operador; es registro, no acción).
 
 ---
 
+### F8.0 — **[ADICIÓN ARQUITECTO]** Segunda pasada del barrido de anclajes, AHORA al cierre (G1, G2)
+
+**Por qué existe esta fase.** F0.0 prueba que los anclajes son correctos **antes** de tocar código. No prueba
+nada sobre **durante**: este plan tiene 9 fases entre F0.0 y F8, y las rondas v3→v4→v5 de este mismo documento ya
+demostraron, con evidencia repetida, que unas pocas horas y unos pocos merges alcanzan para mover los tres
+archivos más citados. Una implementación real de este tamaño puede tomar más de un día. Sin un cierre que se
+pregunte "¿se movió algo mientras yo trabajaba?", el plan queda expuesto exactamente al mismo modo de falla que
+le costó las rondas v3 y v4 — sólo que esta vez sería DURANTE la propia implementación, no entre rondas de
+crítica.
+
+**Comando — el MISMO bloque de F0.0, ya extendido con los 2 targets de G1 (7 targets, no 5).** Correlo de nuevo
+tal cual, y guardá la salida aparte (por ejemplo `f8_0_cierre.txt`).
+
+**Cómo usarlo.** Comparalo (un `diff` de texto, o a ojo, línea por línea) contra la salida que F0.0 pegó en el
+registro de implementación al principio. Dos resultados posibles:
+
+- **Idéntico:** no se movió nada mientras implementabas. Anotá "F8.0: sin cambios respecto a F0.0" en el registro.
+- **Distinto:** algo se movió — puede ser tu propio código (tus 4 keys, tus 3 archivos de test nuevos entrando al
+  barrido de `run_harness_tests.*`). Lo que hay que confirmar, leyendo la diferencia línea por línea, es que
+  ningún símbolo que tu código ya escrito referencia quedó apuntando al lugar equivocado (este plan referencia
+  todo por símbolo/nombre en el código final; los números de línea son sólo ayuda para el implementador humano).
+  Si algo no cuadra, aplicá la regla de §4.ter: parás y lo anotás — no lo "arreglás" adivinando.
+
+**Criterio.** Igual que F0.0: no es pasa/falla, es un paso de lectura obligatorio, cumplido cuando la comparación
+quedó pegada en el registro de implementación **antes** del `git commit` final de F8.
+
+**Trabajo del operador: ninguno** (el operador nunca ve ni corre este comando — igual que F0.0).
+
+---
+
 ### F8 — Cierre y verificación consolidada
 
 ```powershell
@@ -1694,7 +1943,7 @@ registro de implementación al final de este documento:
 6. Cancelar ⇒ aparece el diálogo de confirmación; confirmar ⇒ la corrida pasa a cancelada.
 7. Cancelar una corrida **ya terminada** ⇒ mensaje de error a la vista, **la consola no se rompe** (el 409 no
    sube como excepción).
-7-bis. **Apagar `STACKY_EXECUTION_HISTORY_ENABLED`** (flag AJENA, `harness_flags.py:1896`) y abrir el panel
+7-bis. **Apagar `STACKY_EXECUTION_HISTORY_ENABLED`** (flag AJENA, `harness_flags.py:1922`, v3 decía `:1896`) y abrir el panel
    Historial ⇒ **aparece el motivo escrito y la consola NO se rompe** (D6). Volver a encenderla.
 8. `GET /api/executions/console-audit` ⇒ la acción `cancel` está registrada.
 9. **Paridad:** repetir los pasos 2, 4 y 6 con una corrida de **cada uno de los 3 runtimes**
@@ -1704,8 +1953,9 @@ registro de implementación al final de este documento:
 10. Apagar `STACKY_CONSOLE_FULLSCREEN_ENABLED` ⇒ el dock sigue funcionando **exactamente** como antes.
 
 **Criterio binario.** **20 comandos exit 0** + el snippet de F0.8 en `OK 4/4` + `test_harness_flags_help.py` con el
-**baseline idéntico** (`4 failed, 4 passed`, sin `CONSOLE`) + los **12** pasos del smoke (1, 2, 2-bis, 3, 4, 4-bis,
-5, 6, 7, 7-bis, 8, 9, 10) con resultado esperado anotado.
+**baseline idéntico** (`4 failed, 4 passed`, sin `CONSOLE`) + los **13** pasos del smoke (1, 2, 2-bis, 3, 4, 4-bis,
+5, 6, 7, 7-bis, 8, 9, 10) con resultado esperado anotado (v5, G2 — son 13, no 12: 10 numerados + 3 variantes
+`-bis`) + **F8.0 corrida y diffeada contra F0.0, pegada en el registro** (v5, ADICIÓN ARQUITECTO).
 **Trabajo del operador: ninguno.**
 
 ---
@@ -1720,7 +1970,7 @@ registro de implementación al final de este documento:
 | **R4** | El panel de repo cuelga la UI en un repo grande. | Media | Timeout duro de 5 s, cota de 200 KB de diff, `truncated` visible. Sin repositorio degrada a `available: False`. Sin polling: refresco sólo por acción o por fin de corrida. |
 | **R5** | Los atajos nuevos pisan atajos existentes (Plan 172) o el `Escape` del diálogo (Plan 164). | **Alta** | Colisiones resueltas **en el plan** con los combos medidos, y verificadas por **dos** gates: test 3 (same-scope, `detectCollisions`) y **test 3-bis (cross-scope, agrupando por combo solo)** — porque `detectCollisions` incluye `scope` en su clave y **no puede** ver la colisión de `Escape` global vs `page` (D4). `Ctrl+F` descartado a favor de `Ctrl+Shift+F`; `Enter`/`Shift+Enter`/`Escape` fuera del registro global. `src/services/shortcuts.test.ts` corre como regresión. |
 | **R5-bis** | **Un atajo nace muerto**: se registra un combo sin Ctrl y no dispara nunca con foco en un input. | **Alta** (pasó en el v1 con `Enter` y en el v2 con `Escape`) | **F6 test 9 (ratchet de atajos muertos)**: `comboAllowedInEditable(combo) === true` para **toda** entrada de `CONSOLE_SHORTCUT_DEFS`, sin allowlist. Regla de diseño: lo que va al registro lleva Ctrl; lo que no, va a un `onKeyDown` local. Paso 4-bis del smoke. |
-| **R15** | **La consola se cablea a `Agents.cancel` (`endpoints.ts:1135`)** y "cancela" corridas que siguen vivas, devolviendo `{"ok": true}`. | **Alta** (el v2 anclaba exactamente esa línea) | Aviso en cabecera de F3 con la tabla comparativa de los dos `cancel`; anclaje corregido a `:1394`; **F3 test 11** grepea los archivos de consola y falla si aparece `Agents.cancel` o `/api/agents/cancel`; paso 9 del smoke verifica que el proceso de Codex murió de verdad. |
+| **R15** | **La consola se cablea a `Agents.cancel` (`endpoints.ts:1154`, v3: `:1135`)** y "cancela" corridas que siguen vivas, devolviendo `{"ok": true}`. | **Alta** (el v2 anclaba exactamente esa línea, y el v3 quedó viejo por drift — E2) | Aviso en cabecera de F3 con la tabla comparativa de los dos `cancel`; anclaje corregido a `:1417` (re-verificado 2026-07-29); **F3 test 11** grepea los archivos de consola y falla si aparece `Agents.cancel` o `/api/agents/cancel`; paso 9 del smoke verifica que el proceso de Codex murió de verdad. |
 | **R16** | **Choque de contratos de confirmación con el Plan 267**, que declara "un solo contrato de confirmación" y prohíbe un segundo mecanismo. | Media | §4.bis: reparto escrito — acciones **de corrida** con `useConfirm` (265, igual que `ActiveRunsPanel`), acciones **DevOps** con `confirmGateway` (267). El 265 no importa `entityActions.ts` y `consoleActions.ts` queda puro para que el 267 lo absorba en una capa si decide hacerlo. |
 | **R17** | **Una flag ajena OFF tumba la consola entera** (`STACKY_EXECUTION_HISTORY_ENABLED` ⇒ 404 y `api.get` lanza). | Media | F5(b): `rawGet` + `historyPanelState` con degradación y motivo visible; 4 tests; paso 7-bis del smoke con la flag apagada de verdad. |
 | **R6** | La bitácora crece sin techo o rompe una acción del operador. | Media | Rotación a 5 MB con máximo 2 archivos; `record_console_action` **nunca lanza** y devuelve `False` ante cualquier error. |
@@ -1753,7 +2003,7 @@ registro de implementación al final de este documento:
   confirmación de acciones **de corrida** usa `useConfirm`, que es lo que ya hace `ActiveRunsPanel` (§4.bis).
 - **No** se arreglan las **79 keys** del registry sin entrada en `PLAIN_HELP` ni las 15 violaciones de jerga: es
   deuda ajena medida en F0.8, y este plan la deja **exactamente igual** (ni una entrada más, ni una menos).
-- **No** se usa `Agents.cancel` (`api/endpoints.ts:1135`) por ningún camino.
+- **No** se usa `Agents.cancel` (`api/endpoints.ts:1154`, v3 decía `:1135`) por ningún camino.
 
 ---
 
@@ -1761,6 +2011,7 @@ registro de implementación al final de este documento:
 
 **Orden (estricto):**
 
+0. **F0.0** — verificación de anclajes (nueva en v4, E4) — corré esto primero y pegá la salida en el registro.
 1. **F0** — flags (los **seis** lugares).
 2. **F1** — store + presentación + migración v3→v4 (ojo con `WorkbenchPersistV4`, D5).
 2-bis. **F1.5** — identidad de sesión (**gate duro**: si el test 1 de F1.5 falla, no sigas; es la tesis del plan).
@@ -1773,16 +2024,21 @@ registro de implementación al final de este documento:
 8. **F5** — contexto, historial y búsqueda.
 9. **F6** — atajos (después de F5, porque el atajo de búsqueda necesita la búsqueda).
 10. **F7** — bitácora.
-11. **F8** — cierre.
+11. **F8** — cierre: **F8.0** primero (segunda pasada de F0.0, diffeada contra la foto inicial — v5, G1), después
+    los 20 comandos + el smoke de 13 pasos.
 
 **Definición de Hecho (DoD):**
 
+- [ ] **F0.0 corrida y su salida pegada en el registro de implementación**, antes del primer commit de F0 (E4).
+- [ ] **F8.0 corrida y su salida diffeada contra la de F0.0, pegada en el registro**, antes del `git commit` final
+      de F8 (v5, ADICIÓN ARQUITECTO). Si hay diferencias, cada una revisada contra el código ya escrito (§4.ter).
 - [ ] Los **20** comandos de F8 salen **exit 0**, cero rojos nuevos.
 - [ ] El **snippet de F0.8** (4 keys `STACKY_CONSOLE_*` contra las 10 reglas) imprime **`OK 4/4`** y sale exit 0.
 - [ ] `test_harness_flags_help.py` sigue en su **baseline medido**: **`4 failed, 4 passed`**, los mismos 4 nombres
       de la tabla de F0.8, y **ninguna línea de error menciona `CONSOLE`**. (No se exige exit 0: es deuda ajena.)
-- [ ] Los **12** pasos del smoke manual ejecutados y **anotados con su resultado real** (incluidos 2-bis, 4-bis
-      y 7-bis, que son los tres casos que el v2 no tenía).
+- [ ] Los **13** pasos del smoke manual ejecutados y **anotados con su resultado real** (incluidos 2-bis, 4-bis
+      y 7-bis, que son los tres casos que el v2 no tenía; v5/G2 corrige el conteo de "12" a "13" — la enumeración
+      ya los listaba a los 13, sólo el número resumen estaba mal).
 - [ ] **KPI-1**: `normalizePresentation` cubre los 3 estados; test verde.
 - [ ] **KPI-2 — ahora automático (D12)**: los **9 casos de F1.5** verdes, en particular el test 1 (las 9
       transiciones conservan el token de sesión) y el test 8 (el token **distingue** sesiones distintas — sin él,
@@ -1831,3 +2087,75 @@ registro de implementación al final de este documento:
 - [ ] `git commit` con **pathspec explícito** (`git commit -- "<ruta>" ...`). Prohibido `git add -A`,
       `reset`, `amend`, `stash`, `rebase`, `checkout` y `--no-verify` — hay sesiones paralelas vivas sobre este
       árbol. El `push` es manual.
+
+---
+
+## Registro de implementación (2026-07-29, worktree `wt-plan-265`, rama `feat/plan-265-consola-devops-fullscreen`)
+
+**F0.0 — salida pegada (targets 1-5, antes de tocar código).** Coincide exacto con lo citado por la v5,
+con UN drift propio no anticipado por la ronda de crítica: `test_default_known_only_for_curated` mide
+`:1001` (la v5 en su prosa de F0.4 citaba `:974`; el símbolo es inequívoco, se usó el símbolo por §4.ter).
+Los targets 6-7 (G1, `.sh`/`.ps1`) confirmaron que **ambos arrays terminan hoy en
+`tests/test_plan267_help.py`** (`.sh:913`, `.ps1:830`) — sin la divergencia entre sesiones que advertía G1;
+ahí se apoyaron las 3 entradas nuevas de F4/F4.5/F7.
+
+**F8.0 — salida diffeada contra F0.0 (al cierre, antes del commit final).** Todo el drift observado
+queda **100% explicado por el propio código de este plan**, sin un solo cambio de terceros:
+- `harness_flags.py`: `"paridad_proveedores"` `:498→:502` (+4, mis 4 keys en `_CATEGORY_KEYS`);
+  `STACKY_EXECUTION_HISTORY_ENABLED` `:1922→:1926` (+4, arrastre del mismo cambio, vive después en el archivo).
+- `test_harness_flags.py`: `test_every_registry_flag_is_categorized` `:929→:933` (+4, mis 4 keys en
+  `_CURATED_DEFAULTS_ON`); `test_default_known_only_for_curated` `:1001→:1005` (+4, arrastre).
+- `test_harness_flags_requires.py`: `test_requires_map_is_frozen` `:326→:331` (+5, mi bloque de 2 comentarios
+  + 3 aristas en `_REQUIRES_MAP_FROZEN`).
+- `api/executions.py`: los 4 anclajes (`:509/:527/:683/:695→:510/:528/:684/:696`, todos +1, por el
+  `from services import console_audit` agregado antes de todos ellos).
+- `endpoints.ts`: **cero drift** en `Agents`/`Executions` (`:1117`/`:1350` sin cambio) — `GitReadonly`/`Console`
+  se agregaron al final del archivo, como exige §4.bis.
+- `run_harness_tests.sh`/`.ps1`: +3 líneas cada uno (mis 3 archivos de test), mismo orden
+  `git_readonly, secret_mask, console_audit` después de `test_plan267_help.py` en ambos.
+Conclusión: **nada se movió mientras se implementaba, salvo el propio código de este plan.**
+
+**Fases — archivo:línea real (rama `feat/plan-265-consola-devops-fullscreen`):**
+
+| Fase | Estado | Archivos reales | Tests (comando → resultado) |
+|---|---|---|---|
+| F0 | IMPLEMENTADA | `backend/config.py` (+13), `backend/services/harness_flags.py` (FLAG_REGISTRY +55, `_CATEGORY_KEYS` +4), `backend/tests/test_harness_flags.py` (+4), `backend/tests/test_harness_flags_requires.py` (+5), `backend/services/harness_flags_help.py` (+24) | `test_harness_flags.py` 56 passed · `test_harness_flags_requires.py` 9 passed · gate F0.8 propio `OK 4/4` · `test_harness_flags_help.py` **4 failed, 4 passed** (baseline idéntico, sin `CONSOLE`) |
+| F1 | IMPLEMENTADA | `frontend/src/services/consolePresentation.ts` (nuevo), `store/workbenchPure.ts` (`WorkbenchPersistV4`), `store/workbench.ts` (`codexConsolePresentation` + setter + `partialize`) | `consolePresentation.test.ts` 12 passed · `workbenchPure.test.ts` 12 passed (9 previos + 3 nuevos) |
+| F1.5 | IMPLEMENTADA | `frontend/src/services/consoleSession.ts` (nuevo); `workbench.ts` setter delega en `applyPresentation` | `consoleSession.test.ts` 9 passed |
+| F2 | IMPLEMENTADA | `frontend/src/services/consoleRender.ts` (nuevo); render rico cableado en `components/CodexConsoleFull.tsx` | `consoleRender.test.ts` 11 passed · gate clipboard `grep -c navigator.clipboard CodexConsoleDock.tsx` = 0 |
+| F2.5 | IMPLEMENTADA | `frontend/src/services/consoleCapabilities.ts` (nuevo) | `consoleCapabilities.test.ts` 8 passed (test 3 = gate de paridad de los 3 runtimes) |
+| F3 | IMPLEMENTADA | `frontend/src/services/consoleActions.ts` (nuevo, usa `Executions.cancel` `:1417-1418`, jamás `Agents.cancel` `:1154-1155`); cableado en `CodexConsoleFull.tsx` con `useConfirm` | `consoleActions.test.ts` 12 passed (test 11 = gate D1 leyendo el texto fuente) |
+| F4 | IMPLEMENTADA | `backend/services/console_repo.py` (nuevo), `backend/api/git.py` (+30, rutas `/status` `/diff`), `frontend/src/services/consoleRepoPanel.ts` (nuevo), panel en `CodexConsoleFull.tsx` | `test_plan265_git_readonly.py` 13 passed (test 11 = gate de escritura) · `consoleRepoPanel.test.ts` 6 passed |
+| F4.5 | IMPLEMENTADA | `backend/services/console_secret_mask.py` (nuevo); cableado en `console_repo.py::repo_diff` (orden diff→mask→truncado) y en `console_audit.py` | `test_plan265_secret_mask.py` 8 passed (test 7 = orden verificado con `repo_diff` real) |
+| F5 | IMPLEMENTADA | `frontend/src/services/consoleHistoryPanel.ts` (nuevo, D6), `consoleSearch.ts` (nuevo); `endpoints.ts` `Console.historyRaw` (rawGet, nunca `api.get`); paneles Contexto/Historial + búsqueda en `CodexConsoleFull.tsx` | `consoleHistoryPanel.test.ts` 4 passed · `consoleSearch.test.ts` 10 passed |
+| F6 | IMPLEMENTADA | `frontend/src/services/consoleShortcuts.ts` (nuevo, 3 combos con Ctrl); registrados vía `useShortcut` en `CodexConsoleDock.tsx` | `consoleShortcuts.test.ts` 12 passed (test 9 = ratchet de atajos muertos) · `shortcuts.test.ts` 31 passed (regresión Plan 172) |
+| F7 | IMPLEMENTADA | `backend/services/console_audit.py` (nuevo), endpoint `GET /api/executions/console-audit` en `api/executions.py` (+9); **cableado real**: `cancel_execution` llama `record_console_action(action="cancel")` (único handler inequívoco; "relaunch"/"copy_all"/"open_full"/"close" quedan con la allowlist lista pero SIN un segundo call-site de escritura, para no violar KPI-5 = 0 endpoints de escritura — ver "Pendiente" abajo) | `test_plan265_console_audit.py` 10 passed (test 9 = AST, gate de "nunca restringe") |
+| F8.0 | IMPLEMENTADA | ver arriba | comparación pegada arriba |
+| F8 | IMPLEMENTADA | — | **19/20** comandos exit 0 (ver "Hallazgo" abajo) |
+
+**Hallazgo — 1 de los 20 comandos de F8 sale rojo, y es deuda ajena confirmada, no de este plan.**
+`npx vitest run src/__tests__/uiDebtRatchet.test.ts` falla por
+`components/ExecutionDetailDrawer.module.css` (23 hex medidos vs 21 del baseline, **Plan 254**,
+commit `92e593f2`) y `components/RunReconciliationCard.module.css` (1 hex vs 0, **Plan 269**, commit
+`64088830`). Verificado con `git diff --stat -- <ambos archivos>` y `git status --porcelain` sobre
+`uiDebtBaseline.json`: **las 3 salidas están vacías** — ninguno de los 3 archivos fue tocado por este
+plan. Es la misma categoría que `test_harness_flags_help.py` (F0.8): una deuda ajena preexistente que
+este plan **no usa como gate propio y no intenta arreglar** (fuera de su scope declarado). Los archivos
+nuevos de este plan (`CodexConsoleFull.tsx`, `CodexConsoleFull.module.css`) miden **0** hex y **0**
+`style={{` — confirmado con grep directo.
+
+**Pendiente / gap declarado (F7).** El plan asume que "relaunch"/"copy_all"/"open_full"/"close" también
+quedan auditados, pero KPI-5 (0 endpoints de escritura) y la ausencia de un handler de backend único para
+esas 4 acciones (relanzar depende del origen; copiar/abrir/cerrar son puramente de cliente) significan que,
+tal como está el árbol HOY, solo **"cancel"** tiene un call-site de escritura real (`cancel_execution`).
+La allowlist y el resto del mecanismo (rotación, enmascarado, aislamiento, "nunca restringe") están
+completos y probados; conectar los otros 4 verbos requiere una decisión de diseño (¿qué endpoint dispara
+"relaunch"? ¿se best-effort desde el cliente sin exponer escritura?) que este documento no explicita y que
+no se resolvió por cuenta propia para no adivinar contra la regla de §4.ter.
+
+**Smoke manual (13 pasos) — PENDIENTE, es trabajo del operador.** El repo no tiene RTL ni jsdom: la
+verificación visual de la consola en pantalla completa (KPI-2 visual, KPI-6 aviso de secretos, paridad de
+los 3 runtimes con una corrida real de cada uno, etc.) no se puede automatizar y queda para que el
+operador la corra siguiendo los 13 pasos de la sección F8 de este documento.
+
+**Commits:** `7e105cb5` (F0.0..F8, 41 archivos) — ver también el commit siguiente con este registro.

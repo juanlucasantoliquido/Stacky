@@ -79,7 +79,9 @@ class DestinationWriter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def post_comment(self, item_iid: str, body: str) -> dict:
+    def post_comment(self, item_iid: str, body: str, created_at: Optional[str] = None) -> dict:
+        """`created_at` (ISO 8601) backdatea la nota. La API v4 lo acepta en
+        `POST /issues/:iid/notes` con permisos de admin u owner del proyecto."""
         raise NotImplementedError
 
     @abstractmethod
@@ -92,6 +94,35 @@ class DestinationWriter(ABC):
 
     @abstractmethod
     def create_issue_link(self, source_iid: str, target_iid: str, link_type: str) -> dict:
+        raise NotImplementedError
+
+    @abstractmethod
+    def ensure_milestone(self, title: str) -> Optional[int]:
+        """Devuelve el `milestone_id` del milestone con ese título, creándolo si
+        no existe. `None` si no se pudo resolver.
+
+        Existe porque `field_mapping.version.target_version_as = "milestone"`
+        prometía "Milestone GitLab (se crea si no existe)" y nada lo hacía: el
+        `milestone` calculado por `migrator_mg_core` caía en el mismo `fields`
+        inerte que el `state`. Medido en el proyecto 310: **17 tickets** traen
+        `target_version`, así que el gap era real, no teórico."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def apply_item_state(
+        self, item_iid: str, desired_state: str, updated_at: Optional[str] = None
+    ) -> dict:
+        """Cierra o reabre un issue del destino. `desired_state` ∈
+        {`opened`, `closed`} — el vocabulario de `field_mapping.status.
+        <X>.gitlab_state`, NO el `state_event` de la API (la traducción a
+        `close`/`reopen` es responsabilidad de la implementación).
+
+        Este método es la pieza que faltaba para que el `gitlab_state` que
+        `migrator_mg_core._build_payload` calcula llegue efectivamente a
+        GitLab: `create_item` no lo puede aplicar porque `TrackerItem`/
+        `GitLabTrackerProvider.create_item` no tienen slot para el estado
+        (`gitlab_provider.py:296-320` solo envía title/description/labels/
+        assignee/parent). Ver `migrator_mg_states.py`."""
         raise NotImplementedError
 
     @abstractmethod
@@ -131,6 +162,35 @@ class GitLabDestinationWriter(DestinationWriter):
         #    __init__ (gitlab_client.py:62), nunca vía el módulo config.
         os.environ["GITLAB_TOKEN"] = token
 
+        # 1b. CA bundle del destino, ANTES de instanciar el provider.
+        #
+        # `services/gitlab_client.py` usa `requests` sin pasar `verify`, así que
+        # contra una instancia con certificado interno/self-signed la corrida
+        # muere con `SSLError: CERTIFICATE_VERIFY_FAILED` en la PRIMERA lectura
+        # del destino. Pasó de verdad: la re-migración de Ripley abortó ahí,
+        # después de haber borrado las 52 issues, dejando el proyecto vacío.
+        # (`validate` no lo detecta porque `effective_target()` no toca la red.)
+        #
+        # `requests` respeta `REQUESTS_CA_BUNDLE` del entorno, así que alcanza
+        # con exportarlo — sin tocar el cliente compartido. Se usa un BUNDLE y no
+        # `verify=False` a propósito: verificar el certificado real es más seguro
+        # que ignorar la verificación, y deja de funcionar si alguien intercepta
+        # el tráfico, que es exactamente lo que uno quiere.
+        ca_bundle = getattr(destination_config, "ca_bundle", "") or ""
+        if ca_bundle:
+            ruta = os.path.abspath(ca_bundle)
+            if not os.path.isfile(ruta):
+                raise FileNotFoundError(
+                    f"destination.ca_bundle apunta a '{ca_bundle}' (resuelto a "
+                    f"'{ruta}') y no existe. Sin el bundle, `requests` no puede "
+                    "verificar el certificado del GitLab destino y la corrida "
+                    "aborta en la primera lectura."
+                )
+            os.environ["REQUESTS_CA_BUNDLE"] = ruta
+            logging.getLogger(_LOGGER_NAME).info(
+                "REQUESTS_CA_BUNDLE apuntado a %s", ruta
+            )
+
         # 2. Destino EXPLÍCITO por parámetro. El Plan 218 F0/F4 amplió la
         #    firma del provider con `base_url=`/`group=` y corrigió sus
         #    lecturas para que vayan a `config.config` (la INSTANCIA) en vez
@@ -140,6 +200,9 @@ class GitLabDestinationWriter(DestinationWriter):
         #    por parámetro es además más robusto que depender de cualquier
         #    global — no vuelve a romperse si el seam cambia otra vez.
         self._destination_config = destination_config
+        self._logger = logging.getLogger(_LOGGER_NAME)
+        #  `{titulo: milestone_id | None}` — ver `ensure_milestone`.
+        self._milestone_cache: "dict[str, Optional[int]]" = {}
         # 3. Instanciar DIRECTO (no vía tracker_provider.get_tracker_provider,
         #    que exige STACKY_GITLAB_ENABLED).
         self._provider = GitLabTrackerProvider(
@@ -150,6 +213,27 @@ class GitLabDestinationWriter(DestinationWriter):
     # ── DestinationWriter ───────────────────────────────────────────────
 
     def create_item(self, payload: dict) -> dict:
+        # Camino de FIDELIDAD DE FECHA: `created_at` sólo se puede setear en el
+        # POST de creación (la API v4 NO lo acepta en el PUT), y
+        # `GitLabTrackerProvider.create_item` (`gitlab_provider.py:296-320`) no
+        # tiene forma de pasarlo: arma su `create_body` con title/description/
+        # labels/assignee_ids y nada más. Por eso, cuando el payload trae
+        # `created_at`, este writer hace el POST directo replicando ese mismo
+        # body y agregando el campo, en vez de delegar.
+        #
+        # Requisito verificado contra ESTA instancia (GitLab 18.0.2 CE): el
+        # schema GraphQL declara `CreateIssueInput.createdAt` como "Available
+        # only for admins and project owners", y el token del operador es Owner
+        # del proyecto 127 (`permissions.project_access.access_level = 50`).
+        # Si la instancia lo rechazara, `create_item_con_fecha` degrada al
+        # camino normal en vez de abortar la migración.
+        # El camino directo se usa si hay QUE SETEAR algo que el provider no
+        # sabe pasar: `created_at` (solo aceptado en el POST) o `milestone_id`.
+        if payload.get("created_at") or payload.get("milestone"):
+            return self._create_item_con_fecha(payload)
+        return self._create_item_via_provider(payload)
+
+    def _create_item_via_provider(self, payload: dict) -> dict:
         known_top_level = {"title", "description", "labels", "assignee"}
         item = TrackerItem(
             item_type="issue",
@@ -169,8 +253,132 @@ class GitLabDestinationWriter(DestinationWriter):
         )
         return self._provider.create_item(item)
 
-    def post_comment(self, item_iid: str, body: str) -> dict:
-        return self._provider.post_comment(item_iid, body)
+    def ensure_milestone(self, title: str) -> Optional[int]:
+        """`GET /projects/:id/milestones?title=` y, si no existe, `POST`.
+
+        Se cachea por título: los 17 tickets con versión del proyecto 310 se
+        agrupan en pocos milestones, y sin caché cada uno costaría un GET.
+        """
+        limpio = (title or "").strip()
+        if not limpio:
+            return None
+        if limpio in self._milestone_cache:
+            return self._milestone_cache[limpio]
+
+        proj_path = self._provider._client._project_path()
+        try:
+            existentes, _ = self._provider._client._request(
+                "GET",
+                f"/projects/{proj_path}/milestones",
+                params={"title": limpio},
+            )
+            if isinstance(existentes, list) and existentes:
+                mid = int(existentes[0].get("id"))
+                self._milestone_cache[limpio] = mid
+                return mid
+
+            creado, _ = self._provider._client._request(
+                "POST", f"/projects/{proj_path}/milestones", json_body={"title": limpio}
+            )
+            mid = int((creado or {}).get("id"))
+            self._milestone_cache[limpio] = mid
+            self._logger.info("milestone creado: %r -> id=%s", limpio, mid)
+            return mid
+        except Exception as exc:
+            # Un milestone no vale abortar la migración de un issue: se declara y
+            # el issue se crea sin él (la versión igual queda en la metadata).
+            self._logger.warning(
+                "no se pudo resolver el milestone %r: %s. El issue se crea sin milestone.",
+                limpio, exc,
+            )
+            self._milestone_cache[limpio] = None
+            return None
+
+    def _create_item_con_fecha(self, payload: dict) -> dict:
+        """POST directo a `/issues` con `created_at`, replicando fielmente el
+        body de `GitLabTrackerProvider.create_item:299-307` (incluido el label
+        de tipo y la resolución del assignee por username, que se reusan del
+        provider para no divergir de él).
+
+        Si GitLab rechaza el `created_at` (403/400 por permisos insuficientes),
+        se reintenta UNA vez por el camino normal: perder la fecha de creación es
+        una degradación aceptable y declarada; perder el issue no lo es.
+        """
+        proj_path = self._provider._client._project_path()
+        labels = list(payload.get("labels") or []) + [self._provider._type_label("issue")]
+        create_body: dict = {
+            "title": payload.get("title", ""),
+            "description": payload.get("description", ""),
+            "labels": ",".join(labels),
+        }
+        if payload.get("created_at"):
+            create_body["created_at"] = payload["created_at"]
+        if payload.get("milestone"):
+            milestone_id = self.ensure_milestone(str(payload["milestone"]))
+            if milestone_id:
+                create_body["milestone_id"] = milestone_id
+        assignee = _normalize_assignee(payload.get("assignee"))
+        if assignee:
+            assignee_id = self._provider._resolve_assignee_id(assignee)
+            if assignee_id:
+                create_body["assignee_ids"] = [assignee_id]
+
+        try:
+            body, _ = self._provider._client._request(
+                "POST", f"/projects/{proj_path}/issues", json_body=create_body
+            )
+        except Exception as exc:
+            self._logger.warning(
+                "create_item: GitLab rechazó created_at=%r (%s). Se reintenta SIN "
+                "backdating: la fecha real queda solo en el bloque de metadata de "
+                "la descripción.",
+                payload.get("created_at"), exc,
+            )
+            sin_fecha = {k: v for k, v in payload.items() if k != "created_at"}
+            if sin_fecha.get("milestone"):
+                # El provider tampoco sabe pasar el milestone: se reintenta el
+                # POST directo sin `created_at` pero conservandolo.
+                try:
+                    return self._create_item_con_fecha(sin_fecha)
+                except Exception:
+                    pass
+            return self._create_item_via_provider(sin_fecha)
+
+        result = self._provider._normalize_issue(body)
+        parent = payload.get("dest_parent_gitlab_iid")
+        if parent:
+            self._provider._link_parent(
+                str(body.get("iid") or body.get("id") or ""), parent
+            )
+        return result
+
+    def post_comment(self, item_iid: str, body: str, created_at: Optional[str] = None) -> dict:
+        """Con `created_at` hace el POST directo para backdatear la nota.
+
+        `GitLabTrackerProvider.post_comment` no expone ese campo, y la API v4 sí
+        lo acepta en `POST /projects/:id/issues/:iid/notes` — "requires
+        administrator or project/group owner rights", que el token cumple. Sin
+        `created_at` se delega al provider, camino sin cambios.
+        """
+        if not created_at:
+            return self._provider.post_comment(item_iid, body)
+
+        proj_path = self._provider._client._project_path()
+        try:
+            resultado, _ = self._provider._client._request(
+                "POST",
+                f"/projects/{proj_path}/issues/{item_iid}/notes",
+                json_body={"body": body, "created_at": created_at},
+            )
+            return resultado if isinstance(resultado, dict) else {}
+        except Exception as exc:
+            self._logger.warning(
+                "post_comment: GitLab rechazó created_at=%r en el issue %s (%s). "
+                "Se reintenta SIN backdating: la fecha real ya está en el cuerpo "
+                "de la nota.",
+                created_at, item_iid, exc,
+            )
+            return self._provider.post_comment(item_iid, body)
 
     def upload_attachment(self, file_path: str, filename: str) -> dict:
         return self._provider.upload_attachment(file_path, filename)
@@ -199,6 +407,73 @@ class GitLabDestinationWriter(DestinationWriter):
                 "link_type": link_type,
             },
         )
+        return body if isinstance(body, dict) else {}
+
+    def apply_item_state(
+        self, item_iid: str, desired_state: str, updated_at: Optional[str] = None
+    ) -> dict:
+        """`PUT /projects/:id/issues/:iid` con `state_event` (+ `updated_at`).
+
+        Deliberadamente NO reusa `GitLabTrackerProvider.update_item_state`
+        (`gitlab_provider.py:243-294`) aunque ese método ya sepa emitir
+        `state_event`: además de cerrar, **reescribe los labels del issue** con
+        el state map interno de Stacky (`:275-282` filtra los `stacky::*` y
+        agrega `mapping["label"]`). Aplicado a una issue migrada, eso
+        contaminaría el esquema `status::`/`category::`/`priority::` de la
+        migración y borraría trazabilidad. Además su `logical_state` es el
+        vocabulario de Stacky (`functional`/`accepted`/`rejected`/
+        `in_progress`), no `opened`/`closed`.
+
+        Se replica el patrón de acceso al cliente HTTP interno que ya usa
+        `create_issue_link` (mismo módulo), que a su vez replica
+        `gitlab_provider._link_parent:122-126`.
+
+        El cuerpo lleva ÚNICAMENTE `state_event`: cualquier campo extra en un
+        `PUT` de GitLab lo sobrescribe, así que mandar `labels` o `description`
+        acá sería una vía silenciosa de pisar datos ya migrados.
+        """
+        normalized = (desired_state or "").strip().lower()
+        if normalized == "closed":
+            state_event = "close"
+        elif normalized == "opened":
+            state_event = "reopen"
+        else:
+            raise ValueError(
+                f"apply_item_state: desired_state={desired_state!r} inválido; "
+                "se esperaba 'opened' o 'closed'."
+            )
+
+        cuerpo: dict = {"state_event": state_event}
+        if updated_at:
+            # `updated_at` SÍ lo acepta el PUT ("requires administrator or
+            # project owner rights"). Va en el MISMO PUT que el cierre y por eso
+            # esta pasada tiene que ser la ÚLTIMA escritura del pipeline:
+            # cualquier nota o adjunto posterior volvería a poner `updated_at` en
+            # `now()` y perderíamos la fidelidad recién ganada.
+            cuerpo["updated_at"] = updated_at
+
+        proj_path = self._provider._client._project_path()
+        try:
+            body, _ = self._provider._client._request(
+                "PUT",
+                f"/projects/{proj_path}/issues/{item_iid}",
+                json_body=cuerpo,
+            )
+        except Exception:
+            if not updated_at:
+                raise
+            # El cierre importa más que la fidelidad de `updated_at`: si la
+            # instancia rechaza el backdating, se reintenta con el PUT mínimo.
+            self._logger.warning(
+                "apply_item_state: GitLab rechazó updated_at=%r en el issue %s. "
+                "Se reintenta con el PUT mínimo (solo state_event).",
+                updated_at, item_iid,
+            )
+            body, _ = self._provider._client._request(
+                "PUT",
+                f"/projects/{proj_path}/issues/{item_iid}",
+                json_body={"state_event": state_event},
+            )
         return body if isinstance(body, dict) else {}
 
     def fetch_states(self) -> list[str]:
@@ -244,6 +519,11 @@ class DryRunGitLabWriter(DestinationWriter):
         self._destination_config = destination_config
         self.simulated_ops: list[dict] = []
         self._counter = 0
+        #  `{iid: "opened"|"closed"}` de los cambios de estado simulados, para
+        #  que `fetch_open_items` los refleje (ver `apply_item_state`).
+        self._simulated_states: dict[str, str] = {}
+        #  `{titulo: id_ficticio}` de los milestones simulados.
+        self._simulated_milestones: "dict[str, int]" = {}
         self._logger = logging.getLogger(_LOGGER_NAME)
 
     def _next_fake_id(self) -> str:
@@ -256,10 +536,17 @@ class DryRunGitLabWriter(DestinationWriter):
         self.simulated_ops.append({"op": "create_item", "payload": payload, "iid": fake_iid})
         return {"iid": fake_iid}
 
-    def post_comment(self, item_iid: str, body: str) -> dict:
+    def post_comment(self, item_iid: str, body: str, created_at: Optional[str] = None) -> dict:
         fake_id = self._next_fake_id()
-        self._logger.info("[SIMULACRO] habría comentado en issue %s", item_iid)
-        self.simulated_ops.append({"op": "post_comment", "item_iid": item_iid, "body": body, "id": fake_id})
+        self._logger.info(
+            "[SIMULACRO] habría comentado en issue %s%s",
+            item_iid,
+            f" con created_at={created_at}" if created_at else " (sin backdating)",
+        )
+        self.simulated_ops.append({
+            "op": "post_comment", "item_iid": item_iid, "body": body,
+            "created_at": created_at, "id": fake_id,
+        })
         return {"id": fake_id}
 
     def upload_attachment(self, file_path: str, filename: str) -> dict:
@@ -293,6 +580,43 @@ class DryRunGitLabWriter(DestinationWriter):
         )
         return {"id": fake_id}
 
+    def ensure_milestone(self, title: str) -> Optional[int]:
+        limpio = (title or "").strip()
+        if not limpio:
+            return None
+        if limpio not in self._simulated_milestones:
+            self._simulated_milestones[limpio] = 9000 + len(self._simulated_milestones)
+            self._logger.info("[SIMULACRO] habria creado el milestone %r", limpio)
+            self.simulated_ops.append({"op": "ensure_milestone", "title": limpio})
+        return self._simulated_milestones[limpio]
+
+    def apply_item_state(
+        self, item_iid: str, desired_state: str, updated_at: Optional[str] = None
+    ) -> dict:
+        normalized = (desired_state or "").strip().lower()
+        if normalized not in ("opened", "closed"):
+            # Mismo contrato que la implementación real: un estado inválido
+            # falla IGUAL en simulacro, para que el dry-run no dé por bueno
+            # algo que la corrida real rechazaría.
+            raise ValueError(
+                f"apply_item_state: desired_state={desired_state!r} inválido; "
+                "se esperaba 'opened' o 'closed'."
+            )
+        self._logger.info(
+            "[SIMULACRO] habría puesto el issue %s en estado %s%s",
+            item_iid, normalized,
+            f" con updated_at={updated_at}" if updated_at else "",
+        )
+        self.simulated_ops.append({
+            "op": "apply_item_state", "item_iid": str(item_iid),
+            "state": normalized, "updated_at": updated_at,
+        })
+        # Se recuerda el estado simulado para que `fetch_open_items` lo refleje:
+        # así una segunda pasada de estados en el mismo dry-run ve el cambio y
+        # no vuelve a "aplicarlo" (ejercita la idempotencia sin tocar GitLab).
+        self._simulated_states[str(item_iid)] = normalized
+        return {"iid": str(item_iid), "state": normalized}
+
     def fetch_states(self) -> list[str]:
         return []
 
@@ -303,8 +627,20 @@ class DryRunGitLabWriter(DestinationWriter):
         # así `hydrate_map_from_destination_mg` (F5) puede ejercitarse en
         # un dry-run end-to-end sin tocar GitLab real ni requerir un
         # segundo fake distinto solo para probar la rehidratación.
+        #
+        # `state` se incluye porque `migrator_mg_states.fetch_destination_states`
+        # lo necesita. Default `"opened"`: un issue recién creado por la API de
+        # GitLab nace abierto, así que ése es el estado fiel del simulacro.
+        # LIMITACIÓN DECLARADA: el simulacro solo conoce los issues que ÉL
+        # simuló crear — no ve las issues que ya existen en GitLab. Por eso
+        # `execute --dry-run` no puede anticipar qué cerraría de una migración
+        # previa; para eso hay que leer el destino real.
         return [
-            {"iid": op["iid"], "description": (op.get("payload") or {}).get("description", "")}
+            {
+                "iid": op["iid"],
+                "description": (op.get("payload") or {}).get("description", ""),
+                "state": self._simulated_states.get(str(op["iid"]), "opened"),
+            }
             for op in self.simulated_ops
             if op.get("op") == "create_item"
         ]

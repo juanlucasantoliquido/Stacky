@@ -67,6 +67,11 @@ from .migrator_mg_map import (
     save_plan_snapshot,
 )
 from .migrator_mg_report import generate_report
+from .migrator_mg_states import (
+    apply_state_changes,
+    fetch_destination_states,
+    plan_state_changes,
+)
 from .migrator_mg_verify import MgVerificationResult, verify_migration
 from . import secret_backend
 
@@ -201,6 +206,7 @@ def _field_mapping_to_dict(fm: FieldMappingConfig) -> dict:
             "fixed_in_version_as": fm.version.fixed_in_version_as,
             "affects_version_as": fm.version.affects_version_as,
         },
+        "resolution": {"label_prefix": fm.resolution.label_prefix},
         "relationships": dict(fm.relationships),
         "custom_fields": {"mode": fm.custom_fields.mode},
     }
@@ -465,7 +471,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
         field_mapping_raw = _field_mapping_to_dict(config.field_mapping)
         user_mapping_raw = _user_mapping_to_dict(config.user_mapping)
 
-        plan = plan_migration(origin_adapter, existing_map, field_mapping_raw, user_mapping_raw)
+        plan = plan_migration(
+            origin_adapter, existing_map, field_mapping_raw, user_mapping_raw,
+            # Sin el offset, las fechas salen sin zona y GitLab las lee como
+            # UTC: 3 h de corrimiento en los ~3900 timestamps migrados.
+            tz_offset=config.origin.timezone_offset,
+        )
         plan_hash = compute_plan_hash(plan)
         plan_id = config.destination.project_path
         save_plan_snapshot(conn, plan_id, plan_hash, _plan_to_snapshot_dict(plan))
@@ -530,7 +541,12 @@ def cmd_execute(args: argparse.Namespace) -> int:
             row["mantis_issue_id"]: row["status"]
             for row in get_full_mapping(conn, config.destination.project_path)
         }
-        plan = plan_migration(origin_adapter, existing_map, field_mapping_raw, user_mapping_raw)
+        plan = plan_migration(
+            origin_adapter, existing_map, field_mapping_raw, user_mapping_raw,
+            # Sin el offset, las fechas salen sin zona y GitLab las lee como
+            # UTC: 3 h de corrimiento en los ~3900 timestamps migrados.
+            tz_offset=config.origin.timezone_offset,
+        )
         plan_hash = compute_plan_hash(plan)
 
         plan_id = config.destination.project_path
@@ -619,6 +635,58 @@ def cmd_execute(args: argparse.Namespace) -> int:
             all_relationships, writer, mapping_lookup, config.field_mapping.relationships
         )
 
+        # ── TERCERA pasada: aplicar el ESTADO (cerrar / reabrir) ──────────
+        # Va DESPUÉS de crear issues, notas, adjuntos y relaciones, a
+        # propósito: cerrar primero haría que las notas y adjuntos se
+        # agreguen sobre un issue ya cerrado, y un reintento de nota podría
+        # dejar el issue reabierto. Ver `migrator_mg_states.py` para por qué
+        # esta pasada NO se alimenta de `plan.ops` (los issues ya migrados no
+        # generan ops, así que jamás se repararían).
+        state_result = plan_state_changes(
+            origin_adapter.fetch_all_issues(),
+            _field_mapping_to_dict(config.field_mapping).get("status") or {},
+            mapping_lookup,
+            fetch_destination_states(writer),
+            tz_offset=config.origin.timezone_offset,
+        )
+        if not config.origin.timezone_offset:
+            print(
+                "[execute] AVISO de fidelidad: origin.timezone_offset está vacío. "
+                "Las fechas de Mantis se envían sin offset y GitLab las interpreta "
+                "como UTC, con un corrimiento igual al offset real de la instancia "
+                "Mantis. Declaralo (ej. \"-04:00\") para fidelidad exacta."
+            )
+        if state_result.changes:
+            print(
+                f"[execute] Estados a aplicar: {state_result.to_close} a cerrar, "
+                f"{state_result.to_reopen} a reabrir "
+                f"(ya correctos: {state_result.already_ok})"
+            )
+            for ch in state_result.changes:
+                print(
+                    f"[execute]   mantis {ch.mantis_issue_id} (status={ch.mantis_status}) "
+                    f"-> issue #{ch.gitlab_iid}: {ch.current_state} -> {ch.desired_state}"
+                )
+            apply_state_changes(
+                state_result, writer, mantis_project_id=mantis_project_id
+            )
+            print(
+                f"[execute] Estados aplicados: {state_result.applied}, "
+                f"fallidos: {len(state_result.failed)}"
+            )
+        else:
+            print(
+                f"[execute] Estados: nada para cambiar (ya correctos: "
+                f"{state_result.already_ok}, sin migrar todavía: "
+                f"{len(state_result.not_migrated)})"
+            )
+        if state_result.unmapped_status:
+            print(
+                "[execute] ADVERTENCIA: status de Mantis sin mapeo explícito "
+                f"(cayeron a _unmapped_fallback) en {len(state_result.unmapped_status)} "
+                f"ticket(s): {state_result.unmapped_status[:20]}"
+            )
+
         run_id = f"run-{int(time.time())}"
         if config.options.verify_after_execute:
             origin_issues_raw = origin_adapter.fetch_all_issues()
@@ -682,7 +750,12 @@ def cmd_resume(args: argparse.Namespace) -> int:
             row["mantis_issue_id"]: row["status"]
             for row in get_full_mapping(conn, config.destination.project_path)
         }
-        plan = plan_migration(origin_adapter, existing_map, field_mapping_raw, user_mapping_raw)
+        plan = plan_migration(
+            origin_adapter, existing_map, field_mapping_raw, user_mapping_raw,
+            # Sin el offset, las fechas salen sin zona y GitLab las lee como
+            # UTC: 3 h de corrimiento en los ~3900 timestamps migrados.
+            tz_offset=config.origin.timezone_offset,
+        )
 
         mantis_project_id = str(config.origin.project_ids[0])
 

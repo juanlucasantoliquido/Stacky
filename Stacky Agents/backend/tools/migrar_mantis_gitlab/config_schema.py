@@ -13,6 +13,7 @@ lanza `ConfigValidationError` con mensaje claro, nunca un KeyError crudo.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -40,6 +41,13 @@ class OriginConfig:
     extraction_mode: str = "auto"
     include_resolved_closed: bool = True
     csv_export_fallback: bool = True
+    # Offset horario de la instancia Mantis, ej. "-04:00". Mantis muestra sus
+    # fechas en su TZ local y NO la declara en el HTML; si se manda a GitLab un
+    # ISO sin offset, GitLab lo interpreta como UTC e introduce un corrimiento
+    # igual al offset real. Default "" = sin offset (GitLab asumirá UTC), que es
+    # el comportamiento previo y queda declarado en el reporte. No se adivina el
+    # DST: es el offset que el operador declare.
+    timezone_offset: str = ""
 
 
 # ── Destination ──────────────────────────────────────────────────────────
@@ -59,6 +67,13 @@ class DestinationConfig:
     auth: DestinationAuthConfig
     preserve_authorship_mode: str = "metadata_only"
     epics_strategy: str = "auto"
+    # Ruta a un PEM con la cadena de certificados del GitLab destino. Necesario
+    # cuando la instancia usa un certificado interno/self-signed: `requests`
+    # (que usa `services/gitlab_client.py`) falla con
+    # CERTIFICATE_VERIFY_FAILED y la corrida aborta antes de escribir nada.
+    # Se exporta como REQUESTS_CA_BUNDLE. Preferido sobre desactivar la
+    # verificacion: VERIFICA el certificado en vez de ignorarlo.
+    ca_bundle: str = ""
 
 
 # ── User mapping ─────────────────────────────────────────────────────────
@@ -119,6 +134,12 @@ class FieldMappingConfig:
     version: VersionMapping
     relationships: dict[str, str]
     custom_fields: CustomFieldsMapping
+    # Resolución de Mantis (corregida / duplicada / no se corregirá / ...). Se
+    # extrae del HISTORIAL del ticket, no de su ficha. Con default para no
+    # romper los configs que no la declaren.
+    resolution: LabelPrefixMapping = field(
+        default_factory=lambda: LabelPrefixMapping(label_prefix="mantis-resolution::")
+    )
 
 
 # ── Options ──────────────────────────────────────────────────────────────
@@ -238,7 +259,28 @@ def _validate_origin(raw: Optional[dict]) -> OriginConfig:
         extraction_mode=raw.get("extraction_mode", "auto"),
         include_resolved_closed=bool(raw.get("include_resolved_closed", True)),
         csv_export_fallback=bool(raw.get("csv_export_fallback", True)),
+        timezone_offset=_validate_timezone_offset(raw.get("timezone_offset", "")),
     )
+
+
+def _validate_timezone_offset(raw: object) -> str:
+    """Valida `origin.timezone_offset`. Vacío está permitido (= sin offset).
+
+    Se valida ACÁ y no en el momento de mandar la fecha: un offset mal escrito
+    tiene que abortar el `validate`, no hacer fallar el issue 40 de 52 en medio
+    de una corrida real."""
+    if raw in (None, ""):
+        return ""
+    if not isinstance(raw, str):
+        raise ConfigValidationError("'origin.timezone_offset' debe ser un string, ej. '-04:00'.")
+    texto = raw.strip()
+    if texto.upper() == "Z":
+        return "Z"
+    if not re.match(r"^[+-]\d{2}:?\d{2}$", texto):
+        raise ConfigValidationError(
+            f"'origin.timezone_offset' = {raw!r} inválido. Se espera 'Z', '-04:00' o '-0400'."
+        )
+    return texto
 
 
 def _validate_destination(raw: Optional[dict]) -> DestinationConfig:
@@ -270,6 +312,7 @@ def _validate_destination(raw: Optional[dict]) -> DestinationConfig:
             auth_file=auth_file, secret_backend=auth_raw.get("secret_backend", "auto")
         ),
         preserve_authorship_mode=raw.get("preserve_authorship_mode", "metadata_only"),
+        ca_bundle=str(raw.get("ca_bundle") or ""),
         epics_strategy=raw.get("epics_strategy", "auto"),
     )
 
@@ -386,6 +429,11 @@ def _validate_field_mapping(raw: Optional[dict]) -> FieldMappingConfig:
         version=version,
         relationships=dict(relationships),
         custom_fields=custom_fields,
+        resolution=_validate_label_prefix_mapping(
+            raw.get("resolution") or {},
+            default_prefix="mantis-resolution::",
+            where="field_mapping.resolution",
+        ),
     )
 
 

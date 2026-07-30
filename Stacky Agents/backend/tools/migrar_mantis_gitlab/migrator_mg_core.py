@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 from .mapping.category_map import map_category
+from .mapping.date_map import extraer_fecha_nota, extraer_fechas_issue
 from .mapping.custom_field_map import map_custom_fields
 from .mapping.priority_severity_map import UnmappedPriorityError, map_priority, map_severity
 from .mapping.status_map import map_status
@@ -42,6 +43,13 @@ from .mapping.version_map import map_version
 
 # Marker de idempotencia propio (§5 del plan, fila `id`; NO el de ADO).
 _MG_MARKER_TEMPLATE = "<!-- stacky-migrated:mantis:{project_id}:{issue_id} -->"
+
+# Nombres canónicos (inglés) de los status de Mantis que implican ticket cerrado.
+# Coinciden con los IDs 80/90 de `services/mantis_client._STANDARD_STATUS_IDS`.
+# Se usan SOLO para decidir si el bloque de metadata debe declarar la fecha de
+# cierre; quién cierra la issue en GitLab es `field_mapping.status.<X>.
+# gitlab_state`, que manda y es configurable por cliente.
+_MG_STATUS_CERRADOS = frozenset({"resolved", "closed"})
 # Markers propios de comentarios y adjuntos: la idempotencia de cada op se
 # resuelve por marker (§11), así que cada nota/adjunto necesita el suyo —
 # si no, re-ejecutar duplicaría comentarios en los issues ya migrados.
@@ -133,15 +141,27 @@ def _extract_parent_id(relationships: list[dict[str, Any]]) -> Optional[str]:
 
 
 def _build_authorship_block(issue: dict) -> str:
-    """§6 del plan: GitLab atribuye todo issue al dueño del token y no deja
-    setear `created_at` sin admin de instancia, así que el autor original,
-    el asignado y las fechas de Mantis se conservan como bloque de metadata
-    al inicio de la descripción. Sin esto se pierde QUIÉN reportó cada
-    ticket y CUÁNDO."""
+    """Bloque de metadata al inicio de la descripción: autor, asignado y fechas
+    de Mantis, con el TEXTO ORIGINAL tal como lo muestra Mantis.
+
+    Este bloque es el **piso de fidelidad** y no se elimina ni cuando el
+    backdating de `created_at` funciona: los campos nativos de GitLab pueden
+    quedar mal por permisos, por un error de parseo de fecha, o directamente no
+    ser seteables (`closed_at` no lo es en ninguna versión de la API v4). El
+    texto crudo del origen sobrevive acá pase lo que pase.
+
+    Para tickets cerrados/resueltos en Mantis se agrega una línea explícita de
+    fecha de cierre, porque `closed_at` de GitLab NO es seteable por API y va a
+    mostrar la fecha de la migración. Sin esta línea, esa fecha se leería como un
+    dato real. Se declara como APROXIMACIÓN: la fecha exacta del cambio de estado
+    vive en la tabla de historial de Mantis, que hoy el adapter no parsea."""
     reporter = str(issue.get("reporter") or "").strip()
     handler = str(issue.get("handler") or "").strip()
     submitted = str(issue.get("date_submitted") or "").strip()
-    updated = str(issue.get("last_modified") or issue.get("last_updated") or "").strip()
+    updated = str(
+        issue.get("last_modified") or issue.get("last_updated") or ""
+    ).strip()
+    status = str(issue.get("status") or "").strip().lower()
 
     lineas: list[str] = []
     if reporter:
@@ -152,6 +172,31 @@ def _build_authorship_block(issue: dict) -> str:
         lineas.append(f"**Fecha de creación (Mantis):** {submitted}")
     if updated:
         lineas.append(f"**Última modificación (Mantis):** {updated}")
+    resolucion = str(issue.get("resolution") or "").strip()
+    if resolucion:
+        lineas.append(f"**Resolución en Mantis:** {resolucion}")
+    if status in _MG_STATUS_CERRADOS:
+        # `date_closed` es la fecha REAL de cierre, sacada del historial de Mantis
+        # (última transición de estado a resolved/closed). `last_modified` sólo se
+        # usa como respaldo declarado: cambia con cualquier edición posterior al
+        # cierre, así que no es la fecha de cierre — es una aproximación.
+        cerrado = str(issue.get("date_closed") or "").strip()
+        if cerrado:
+            detalle = f"**{cerrado}** (fecha real, del historial de Mantis)"
+        elif updated:
+            detalle = (
+                f"~{updated} (APROXIMACIÓN: es la última modificación, no la fecha "
+                "de cierre; el historial de Mantis no fue parseable para este ticket)"
+            )
+        else:
+            detalle = "(el origen no informó fecha)"
+        lineas.append(
+            f"**Cerrado en Mantis:** estado `{status}` — {detalle}. "
+            "El `closed_at` de este issue en GitLab es la fecha de la migración: "
+            "`closed_at` no es un parámetro aceptado por la API v4 (verificado "
+            "contra GitLab 18.0.2), GitLab lo escribe él mismo al cambiar el "
+            "estado. Ver 30_HOMOLOGACION_MANTIS_GITLAB.md §9.2."
+        )
     if not lineas:
         return ""
     return "\n".join(f"> {linea}" for linea in lineas)
@@ -181,7 +226,13 @@ def _build_description(issue: dict, custom_fields_mode: str) -> str:
     return "\n\n".join(parts)
 
 
-def _build_payload(issue: dict, field_mapping: dict, user_mapping: dict, warnings: list[str]) -> dict:
+def _build_payload(
+    issue: dict,
+    field_mapping: dict,
+    user_mapping: dict,
+    warnings: list[str],
+    tz_offset: str = "",
+) -> dict:
     """Transforma un issue Mantis crudo a un payload de creación GitLab
     aplicando los `mapping/*.py` puros del batch anterior (F3). Nunca
     aborta por un valor sin mapear — cualquier gap se degrada a un
@@ -228,6 +279,20 @@ def _build_payload(issue: dict, field_mapping: dict, user_mapping: dict, warning
         category_cfg = field_mapping.get("category") or {}
         labels.append(map_category(category, category_cfg.get("label_prefix", "category::")))
 
+    # RESOLUCIÓN de Mantis. Es lo que distingue un ticket CORREGIDO de uno
+    # RECHAZADO (duplicado / no se corregirá / no se requieren cambios) — matiz
+    # que antes se perdía por completo: `resolution` no estaba mapeada en ningún
+    # lado. NO afecta el estado del issue (eso lo decide `status`, ver §3.1 de
+    # 30_HOMOLOGACION_MANTIS_GITLAB.md): sólo aporta trazabilidad.
+    resolucion = str(issue.get("resolution") or "").strip()
+    if resolucion:
+        resolucion_cfg = field_mapping.get("resolution") or {}
+        prefijo = resolucion_cfg.get("label_prefix", "mantis-resolution::")
+        # `open` es el valor por defecto de Mantis para todo ticket sin resolver:
+        # etiquetarlo sería ruido en cada issue abierto.
+        if resolucion.lower() != "open":
+            labels.append(f"{prefijo}{resolucion}")
+
     tags_cfg = field_mapping.get("tags") or {}
     labels.extend(map_tags(issue.get("tags") or [], tags_cfg.get("label_prefix", "tag::")))
 
@@ -254,7 +319,22 @@ def _build_payload(issue: dict, field_mapping: dict, user_mapping: dict, warning
     marker = _MG_MARKER_TEMPLATE.format(project_id=_get_project_id(issue), issue_id=issue_id)
     description = f"{description}\n\n{marker}" if description else marker
 
-    return {
+    # FECHAS. `created_at` es el ÚNICO campo de fecha de la issue que la API v4
+    # deja setear, y sólo en el POST de creación (no en el PUT) — verificado
+    # contra GitLab 18.0.2: `CreateIssueInput.createdAt` existe en el schema
+    # GraphQL ("only for admins and project owners") y `UpdateIssueInput` no
+    # tiene ni `updatedAt` ni `closedAt`. Si el parseo de la fecha falla, se
+    # OMITE el campo y se avisa: nunca se sustituye por `now()`, porque una
+    # fecha inventada es peor que una fecha ausente (la real igual sobrevive en
+    # el bloque de metadata de la descripción).
+    # `tz_offset` NO es opcional en la práctica: sin él el ISO sale sin offset y
+    # GitLab lo interpreta como UTC, con un corrimiento igual al offset real de la
+    # instancia Mantis (3 h para Argentina). Con 1008 issues y 2888 notas eso son
+    # ~3900 timestamps desplazados. Se detectó auditando los payloads ANTES de
+    # migrar: el volcado mostraba `created_at='2025-11-21T11:52:00'` pelado
+    # mientras el config declaraba `-03:00`.
+    fechas = extraer_fechas_issue(issue, tz_offset)
+    payload: dict = {
         "title": issue.get("summary", ""),
         "description": description,
         "state": gitlab_state,
@@ -262,6 +342,20 @@ def _build_payload(issue: dict, field_mapping: dict, user_mapping: dict, warning
         "milestone": version_result["milestone"],
         "assignee": assignee,
     }
+    if fechas["created_at_iso"]:
+        payload["created_at"] = fechas["created_at_iso"]
+    elif fechas["created_at_raw"]:
+        warnings.append(
+            f"issue {issue_id}: no se pudo interpretar la fecha de creación de Mantis "
+            f"{fechas['created_at_raw']!r}; el issue se crea sin backdating "
+            "(la fecha queda en el bloque de metadata)"
+        )
+    # `updated_at` NO va acá: la API sólo lo acepta en el PUT, y el PUT tiene que
+    # ser la ÚLTIMA escritura del pipeline (si no, una nota o un adjunto
+    # posterior lo vuelve a poner en `now()`). Lo aplica la pasada de estados.
+    if fechas["updated_at_iso"]:
+        payload["updated_at"] = fechas["updated_at_iso"]
+    return payload
 
 
 # ── plan_migration (invariante READ-ONLY) ─────────────────────────────────
@@ -272,6 +366,7 @@ def plan_migration(
     existing_map: dict[str, str],
     field_mapping: dict,
     user_mapping: dict,
+    tz_offset: str = "",
 ) -> MgMigrationPlan:
     """Lee TODO del origen Mantis (solo métodos `fetch_*` de `origin_adapter`,
     que cumple `adapters.base.MantisReadAdapter`) y arma el plan SIN escribir
@@ -331,7 +426,9 @@ def plan_migration(
             warnings.append(f"issue {issue_id}: no se pudieron obtener relaciones")
 
         parent_id = _extract_parent_id(relationships)
-        payload = _build_payload(issue_completo, field_mapping, user_mapping, warnings)
+        payload = _build_payload(
+            issue_completo, field_mapping, user_mapping, warnings, tz_offset
+        )
         marker = _MG_MARKER_TEMPLATE.format(project_id=_get_project_id(issue), issue_id=issue_id)
 
         ops.append(
@@ -359,6 +456,12 @@ def plan_migration(
                     payload={
                         "body": _build_comment_body(comment),
                         "private": bool(comment.get("private")),
+                        # `created_at` de la nota SÍ lo acepta
+                        # `POST /issues/:iid/notes` (admin u owner del proyecto).
+                        # `None` si Mantis no dio fecha o no se pudo parsear: el
+                        # executor omite el campo y la fecha original igual queda
+                        # en el encabezado del cuerpo (`_build_comment_body`).
+                        "created_at": extraer_fecha_nota(comment, tz_offset),
                     },
                     marker=_MG_NOTE_MARKER_TEMPLATE.format(
                         project_id=_get_project_id(issue),

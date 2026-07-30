@@ -82,6 +82,21 @@ def hydrate_map_from_destination_mg(
     GitLab directamente, sin depender del checkpoint local."""
     marker_re = _build_marker_regex(mantis_project_id)
 
+    # Estados que significan "a este ticket le FALTAN operaciones". La
+    # rehidratación NO debe pisarlos con `done`: encontrar el issue en GitLab
+    # prueba que el ISSUE existe, no que sus notas/adjuntos se hayan migrado.
+    #
+    # Sin esta salvaguarda, reanudar una corrida cortada deja HUECOS silenciosos:
+    # la corrida 1 crea el issue y falla una nota (ticket -> `partial`); al
+    # reanudar, la rehidratación lo sube a `done`, y entonces `plan_migration`
+    # (`migrator_mg_core.py:304-306`) saltea el ticket COMPLETO — las notas que
+    # faltaban no se re-planifican nunca y nada avisa.
+    _PENDIENTES = {"partial", "failed", "pending"}
+    estados_previos = {
+        row["mantis_issue_id"]: row["status"]
+        for row in get_full_mapping(conn, project_path)
+    }
+
     for item in writer.fetch_open_items():
         description = item.get("description") or item.get("description_html") or ""
         match = marker_re.search(description)
@@ -90,13 +105,18 @@ def hydrate_map_from_destination_mg(
 
         mantis_issue_id = match.group(1)
         gitlab_iid = str(item.get("iid") or item.get("id") or "")
+        previo = estados_previos.get(mantis_issue_id)
+        # Se conserva el estado pendiente; el `gitlab_iid` se actualiza igual,
+        # porque es el dato que evita la creación duplicada en
+        # `_apply_create_item`.
+        nuevo_status = previo if previo in _PENDIENTES else "done"
         upsert_mapping(
             conn,
             project_path=project_path,
             mantis_project_id=mantis_project_id,
             mantis_issue_id=mantis_issue_id,
             gitlab_iid=gitlab_iid,
-            status="done",
+            status=nuevo_status,
         )
 
     return {row["mantis_issue_id"]: row["status"] for row in get_full_mapping(conn, project_path)}
@@ -115,6 +135,30 @@ def _apply_create_item(
     issue_id = op.mantis_issue_id
 
     if live_map.get(issue_id) == "done":
+        result.skipped += 1
+        return
+
+    # SEGUNDA barrera de idempotencia, imprescindible para reanudar sin duplicar.
+    #
+    # El escenario: la corrida 1 crea el issue (queda `done`) y después una de
+    # SUS notas falla — el `except` de `execute_migration` marca el ticket como
+    # `partial`, no `done`. Al reanudar, `plan_migration` NO saltea los `partial`
+    # (solo los `done`), así que vuelve a emitir la op `create_item`… y con el
+    # chequeo de arriba como única barrera, `live_map` diría `partial` ≠ `done` y
+    # se crearía un SEGUNDO issue para el mismo ticket de Mantis.
+    #
+    # La prueba de que el issue ya existe no es el `status` (que refleja si
+    # FALTAN ops) sino el `gitlab_iid`: si hay uno mapeado, el issue está creado.
+    # En ese caso se saltea la creación pero NO el resto del plan, así que las
+    # notas y adjuntos que faltaban SÍ se reintentan (son idempotentes por su
+    # propio marcador).
+    iid_existente = get_gitlab_iid(
+        conn,
+        project_path=project_path,
+        mantis_project_id=mantis_project_id,
+        mantis_issue_id=issue_id,
+    )
+    if iid_existente:
         result.skipped += 1
         return
 
@@ -183,7 +227,10 @@ def _apply_post_comment(
 
     body = (op.payload or {}).get("body", "")
     full_body = f"{body}\n\n{op.marker}" if op.marker not in body else body
-    writer.post_comment(dest_iid, full_body)
+    # `created_at` viaja en el payload del plan (ISO 8601 o None). Backdatea la
+    # nota para que la timeline del issue en GitLab respete el orden real de
+    # Mantis en vez de apilar las 137 notas en el minuto de la migración.
+    writer.post_comment(dest_iid, full_body, created_at=(op.payload or {}).get("created_at"))
     result.applied += 1
 
 

@@ -42,6 +42,10 @@ class _FakeWriter(DestinationWriter):
     def __init__(self, *, fail_titles: "set[str] | None" = None) -> None:
         self.created: list[dict] = []
         self.comments: list[tuple[str, str]] = []
+        self.comment_dates: list = []
+        self.milestones: list = []
+        self.updated_at_calls: list = []
+        self.states: dict[str, str] = {}
         self._counter = 0
         self._fail_titles = fail_titles or set()
 
@@ -54,8 +58,13 @@ class _FakeWriter(DestinationWriter):
         self.created.append({**payload, "iid": iid})
         return {"iid": iid}
 
-    def post_comment(self, item_iid: str, body: str) -> dict:
+    def post_comment(self, item_iid: str, body: str, created_at: "str | None" = None) -> dict:
+        # `created_at` es parte del contrato desde que el executor backdatea las
+        # notas. Sin este parámetro el fake lanzaba TypeError, que el `except` de
+        # `execute_migration` capturaba como un `failed` cualquiera: el test
+        # seguía verde mientras NINGUNA nota se aplicaba. Falso verde clásico.
         self.comments.append((item_iid, body))
+        self.comment_dates.append(created_at)
         return {"id": f"comment-{len(self.comments)}"}
 
     def upload_attachment(self, file_path: str, filename: str) -> dict:
@@ -67,11 +76,29 @@ class _FakeWriter(DestinationWriter):
     def create_issue_link(self, source_iid: str, target_iid: str, link_type: str) -> dict:
         return {"id": "link-1"}
 
+    def ensure_milestone(self, title):
+        self.milestones.append(title)
+        return 9001
+
+    def apply_item_state(
+        self, item_iid: str, desired_state: str, updated_at: "str | None" = None
+    ) -> dict:
+        self.updated_at_calls.append(updated_at)
+        self.states[str(item_iid)] = desired_state
+        return {"iid": str(item_iid), "state": desired_state}
+
     def fetch_states(self) -> list[str]:
         return []
 
     def fetch_open_items(self) -> list[dict]:
-        return [{"iid": c["iid"], "description": c.get("description", "")} for c in self.created]
+        return [
+            {
+                "iid": c["iid"],
+                "description": c.get("description", ""),
+                "state": self.states.get(str(c["iid"]), "opened"),
+            }
+            for c in self.created
+        ]
 
     def comment_exists(self, item_iid: str, marker: str) -> bool:
         return any(iid == item_iid and marker in body for iid, body in self.comments)
@@ -271,7 +298,7 @@ class _StubFetchOnlyWriter(DestinationWriter):
     def create_item(self, payload):
         raise AssertionError("hydrate no debe escribir nada")
 
-    def post_comment(self, item_iid, body):
+    def post_comment(self, item_iid, body, created_at=None):
         raise AssertionError("hydrate no debe escribir nada")
 
     def upload_attachment(self, file_path, filename):
@@ -281,6 +308,12 @@ class _StubFetchOnlyWriter(DestinationWriter):
         raise AssertionError("hydrate no debe escribir nada")
 
     def create_issue_link(self, source_iid, target_iid, link_type):
+        raise AssertionError("hydrate no debe escribir nada")
+
+    def ensure_milestone(self, title):
+        raise AssertionError("hydrate no debe escribir nada")
+
+    def apply_item_state(self, item_iid, desired_state, updated_at=None):
         raise AssertionError("hydrate no debe escribir nada")
 
     def fetch_states(self):

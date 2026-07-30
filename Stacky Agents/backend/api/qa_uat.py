@@ -85,7 +85,34 @@ _QA_UAT_FLAG_KEYS = (
     "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED",
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED",
     "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",
+    # ── Plan 262 F2 — recuperación en caliente. Sin estas 9 la config nace
+    # invisible para el tool (trampa documentada del plan 240 C13).
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_RUN",
+    "STACKY_QA_UAT_RECOVERY_MAX_PER_CASE",
+    "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S",
+    "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S",
+    "STACKY_QA_UAT_ROUTE_ALLOWLIST",
+    "STACKY_QA_UAT_SAFE_ROUTE",
+    "AGENDA_WEB_BASE_URL",
+    "QA_NAV_RETRIES",
 )
+
+
+def _spec_by_key() -> dict:
+    """Plan 262 F2 — mapa key -> FlagSpec para exportar según el TIPO declarado.
+
+    Import legal en un módulo de api/: services/ nunca importa api/, la dirección
+    inversa es la normal. Se resuelve perezosamente para no encarecer el import.
+    """
+    global _SPEC_BY_KEY_CACHE
+    if _SPEC_BY_KEY_CACHE is None:
+        from services.harness_flags import FLAG_REGISTRY
+        _SPEC_BY_KEY_CACHE = {s.key: s for s in FLAG_REGISTRY}
+    return _SPEC_BY_KEY_CACHE
+
+
+_SPEC_BY_KEY_CACHE: dict | None = None
 
 
 def _export_qa_uat_flags() -> dict:
@@ -103,9 +130,24 @@ def _export_qa_uat_flags() -> dict:
     from config import config as _cfg
 
     exported: dict = {}
+    _specs = _spec_by_key()
     with _FLAG_EXPORT_LOCK:
         for _k in _QA_UAT_FLAG_KEYS:
-            val = "true" if bool(getattr(_cfg, _k, False)) else "false"
+            _spec = _specs.get(_k)
+            _ftype = getattr(_spec, "type", "bool") if _spec is not None else "bool"
+            if _ftype == "bool":
+                val = "true" if bool(getattr(_cfg, _k, False)) else "false"
+            else:
+                # Plan 262 F2: int/float/csv/str se exportan TAL CUAL. Coaccionarlos a
+                # booleano destruye el valor (int("true") -> ValueError en el hilo
+                # del pipeline, que termina rotulado PIPELINE_CRASH).
+                raw = getattr(_cfg, _k, None)
+                if raw is None:
+                    continue                      # BORDE: sin atributo, no se exporta basura
+                if isinstance(raw, (list, tuple)):
+                    val = ",".join(str(x) for x in raw)
+                else:
+                    val = str(raw)
             os.environ[_k] = val
             exported[_k] = val
     return exported

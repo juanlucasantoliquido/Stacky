@@ -9,10 +9,9 @@ Guardarrailes NO negociables (todos verificados ANTES de ejecutar nada):
   5. Jamas en deploy/frozen: si STACKY_DEPLOY_MODE esta seteada o el ejecutable
      corre congelado (sys.frozen), rechaza.
 
-FLAG: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED, default OFF por EXCEPCION DURA #3
-(prerequisito no garantizado en instalacion default: IIS Express instalado +
-applicationhost.config del cliente + solucion compilada). Con OFF el comportamiento
-es byte-identico al de hoy (BLOCKED/APP_NOT_RUNNING).
+FLAG: STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED, default ON desde el barrido 2026-07-27
+(config.py). Con OFF el comportamiento es byte-identico al previo al plan 240
+(BLOCKED/APP_NOT_RUNNING sin intentar arrancar nada).
 """
 from __future__ import annotations
 

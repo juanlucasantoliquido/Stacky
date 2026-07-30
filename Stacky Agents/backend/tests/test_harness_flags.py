@@ -902,6 +902,10 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED",    # Plan 240 — prohibido el PASS vacío
     "STACKY_QA_UAT_STRICT_DISCRIMINATION_ENABLED", # Plan 241 — aserciones que saben fallar
     "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED",           # Plan 241 — épicas por agregación
+    # Plan 262 — recuperación en caliente. SOLO la bool: las 8 claves de valor no
+    # declaran default= (su default efectivo vive en config.py), así que
+    # default_is_known() es False para ellas y NO van en este set.
+    "STACKY_QA_UAT_HOT_RECOVERY_ENABLED",          # Plan 262 — recuperación en caliente
     # ── Costura de flags de la OLA 1 (paquete P0, 2026-07-28) ───────────────
     # Las 14 flags default ON de los planes 259, 267, 268, 269 y 270.
     # La 15ª del bloque, STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED (Plan 267), NO

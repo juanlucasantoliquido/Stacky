@@ -1227,8 +1227,8 @@ class Config:
     STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED: bool = os.getenv(
         "STACKY_QA_UAT_FUNCTIONAL_VERDICT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
-    # Default OFF por EXCEPCION DURA #3 (prerequisito no garantizado: IIS Express +
-    # applicationhost.config del cliente + solucion compilada).
+    # Default ON desde el barrido default-ON 2026-07-27. Con OFF el pipeline no intenta
+    # arrancar IIS Express: devuelve BLOCKED/APP_NOT_RUNNING (comportamiento pre-plan-240).
     STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED: bool = os.getenv(
         "STACKY_QA_UAT_AUTOSTART_AGENDA_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
@@ -1238,6 +1238,37 @@ class Config:
     STACKY_QA_UAT_EPIC_ROLLUP_ENABLED: bool = os.getenv(
         "STACKY_QA_UAT_EPIC_ROLLUP_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 262 — Recuperacion en caliente del QA UAT ────────────────────────
+    # Los defaults EFECTIVOS de las 8 claves de valor viven ACA (sus FlagSpec no
+    # declaran default=, o default_is_known las volveria "curadas").
+    STACKY_QA_UAT_HOT_RECOVERY_ENABLED: bool = os.getenv(
+        "STACKY_QA_UAT_HOT_RECOVERY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_QA_UAT_RECOVERY_MAX_PER_RUN: int = int(
+        os.getenv("STACKY_QA_UAT_RECOVERY_MAX_PER_RUN", "6") or 6
+    )
+    STACKY_QA_UAT_RECOVERY_MAX_PER_CASE: int = int(
+        os.getenv("STACKY_QA_UAT_RECOVERY_MAX_PER_CASE", "1") or 1
+    )
+    STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S: float = float(
+        os.getenv("STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S", "5.0") or 5.0
+    )
+    STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S: float = float(
+        os.getenv("STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S", "2.0") or 2.0
+    )
+    STACKY_QA_UAT_ROUTE_ALLOWLIST: str = os.getenv("STACKY_QA_UAT_ROUTE_ALLOWLIST", "")
+    STACKY_QA_UAT_SAFE_ROUTE: str = os.getenv("STACKY_QA_UAT_SAFE_ROUTE", "")
+    # Plan 262 C4 — ENV-FIRST OBLIGATORIO. _export_qa_uat_flags asigna de forma
+    # INCONDICIONAL (os.environ[k] = val) y su docstring prohibe setdefault. Con un
+    # default hardcodeado, todo run lanzado desde la UI pisaria la URL del operador
+    # con el puerto 35017, el chequeo pegaria contra la direccion equivocada y el
+    # veredicto seria "la aplicacion esta caida" — el bug exacto que el plan mata.
+    # Con os.getenv, config ADOPTA el valor del entorno y el export es idempotente.
+    AGENDA_WEB_BASE_URL: str = os.getenv(
+        "AGENDA_WEB_BASE_URL", "http://localhost:35017/AgendaWeb/"
+    )
+    # Plan 262 F6/C9 — default 3 = el EFECTIVO de hoy (uat_test_runner.py:343).
+    QA_NAV_RETRIES: int = int(os.getenv("QA_NAV_RETRIES", "3") or 3)
     # ── Plan 70 — Desacople consumers TrackerProvider ─────────────────────────
     # ON: api/tickets.py enruta los ~18 call sites por el puerto TrackerProvider
     # (get_tracker_provider) en vez de por _ado_client_for_ticket; cae al fallback

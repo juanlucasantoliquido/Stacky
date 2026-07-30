@@ -911,6 +911,7 @@ HARNESS_TEST_FILES=(
   tests/test_devops_action_matcher.py
   tests/test_devops_action_ratchet.py
   tests/test_plan267_help.py
+  tests/test_plan262_recovery_flags.py
 )
 
 pass=0

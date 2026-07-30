@@ -1,5 +1,6 @@
 import React, { type ReactNode } from "react";
 import { publishActivity } from "../services/activityCenter"; // Plan 152 F6a
+import { userFacingMessage } from "../api/gatewayError"; // Plan 273 F4 (B-02)
 import styles from "./PageErrorBoundary.module.css";
 
 /**
@@ -59,11 +60,20 @@ export default class PageErrorBoundary extends React.Component<Props, State> {
           <div className={styles.icon} aria-hidden="true">💥</div>
           <h2 className={styles.title}>Esta pestaña falló al renderizar</h2>
           <p className={styles.message}>
-            {this.state.error?.message || "Error inesperado"}
+            {/* Plan 273 F4 (B-02): el operador ve la frase del backend, no el string
+                aplanado `403 FORBIDDEN: {...}`. Para un crash de RENDER (que es lo
+                que este boundary recibe de verdad) el paso 0 de userFacingMessage
+                devuelve el message real: no se disfraza de error de red. */}
+            {userFacingMessage(this.state.error).title}
           </p>
           <p className={styles.hint}>
             El resto de la aplicación sigue funcionando. Podés reintentar o cambiar de pestaña.
           </p>
+          {userFacingMessage(this.state.error).correlationId && (
+            <p className={styles.hint}>
+              ref. {userFacingMessage(this.state.error).correlationId}
+            </p>
+          )}
           <button type="button" className={styles.action} onClick={this.handleRetry}>
             ↻ Reintentar
           </button>

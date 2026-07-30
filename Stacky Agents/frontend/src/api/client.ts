@@ -3,6 +3,8 @@ import {
   reportConnectionSuccess,
   reportConnectionFailure,
 } from "../services/connectionMonitor";
+// Plan 273 F4 (B-02) — el error de api.* deja de aplanar el cuerpo estructurado.
+import { GatewayError } from "./gatewayError";
 
 const BASE = (import.meta as any).env?.VITE_API_BASE ?? "";
 
@@ -205,7 +207,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   reportOutcome(res);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+    // Plan 273 F4 (B-02): GatewayError conserva `message` BYTE A BYTE (7 sitios
+    // lo parsean) y agrega status/errorBody/correlation_id como campos.
+    throw new GatewayError(res.status, res.statusText, text);
   }
   return res.json() as Promise<T>;
 }

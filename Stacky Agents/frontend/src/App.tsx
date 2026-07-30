@@ -32,6 +32,12 @@ import CodexConsoleDock from "./components/CodexConsoleDock";
 import ActiveRunsPanel from "./components/ActiveRunsPanel";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import { probeFlagHealth, nextEnabledState } from "./utils/flagHealth";
+// Plan 273 F7 (B-01) — la maquina de tres estados del gate de tab.
+import {
+  type GateState, shouldRedirectAway, gateStateFromVerdict, isGateResolving, isGateOn,
+} from "./services/gateState";
+import { Skeleton } from "./components/ui";
+import Toast, { type ToastState } from "./components/Toast";
 import { toggleNavTab } from "./services/uiGuards";
 import { initPreferences } from "./services/preferences";
 import { initUiSections } from "./services/uiSections";
@@ -54,7 +60,11 @@ import AppSidebar from "./components/shell/AppSidebar";
 import {
   computeVisibleTabs, parseCollapsed, SIDEBAR_COLLAPSED_KEY,
   SHELL_V2_DEFAULT, // Plan 273 F1 (B-03) — espejo del default del backend
+  TAB_META,         // Plan 273 F7 (B-01) — el nombre HUMANO del tab para el aviso
 } from "./components/shell/shellNav";
+// Plan 273 F7 (B-01) — rastro consultable del gate apagado (misma pieza que usa
+// PageErrorBoundary): el toast se va, el Centro de Actividad queda.
+import { publishActivity } from "./services/activityCenter";
 // Plan 165 F3 — fuente única del contrato de rutas (type Tab/TAB_PATHS/parseo).
 import { parseRoute, serializeRoute, TAB_PATHS, type Tab, type RouteState } from "./services/routes";
 import styles from "./App.module.css";
@@ -72,16 +82,24 @@ export default function App() {
   useEffect(() => { tabRef.current = tab; }, [tab]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+  // Plan 273 F7 (B-01): la hidratacion del store de secciones. NO se convierte el
+  // store a tri-estado (seria un refactor de un store compartido, colision
+  // innecesaria): alcanza con no decidir por seccion hasta que hidrato.
+  const [sectionsReady, setSectionsReady] = useState(false);
+  // Plan 273 F7 (B-01): el aviso del gate apagado. Antes la redireccion era MUDA y
+  // el operador leia "se perdio la pantalla". Se reusa el Toast de la casa
+  // (components/Toast.tsx), montado en el shell.
+  const [toast, setToast] = useState<ToastState | null>(null);
   const sections = useUiSectionsStore((s) => s.sections);
   // Plan 74: tab migrador visible solo si el flag está ON en el backend
-  const [migradorEnabled, setMigradorEnabled] = useState(false);
+  const [migradorGate, setMigradorGate] = useState<GateState>("unknown");
   // Plan 87: tab DevOps visible solo si el flag está ON en el backend
-  const [devopsEnabled, setDevopsEnabled] = useState(false);
+  const [devopsGate, setDevopsGate] = useState<GateState>("unknown");
   // Plan 122: tab Comparador BD visible solo si el flag está ON en el backend
-  const [dbCompareEnabled, setDbCompareEnabled] = useState(false);
+  const [dbCompareGate, setDbCompareGate] = useState<GateState>("unknown");
   // Plan 142: tab Centro de Costos visible solo si el flag está ON en el backend
   // (default ON, C1 — pero se prueba en vivo igual que migrador/devops/dbcompare).
-  const [costCenterEnabled, setCostCenterEnabled] = useState(false);
+  const [costCenterGate, setCostCenterGate] = useState<GateState>("unknown");
   // Plan 139: App Shell v2 (sidebar agrupada) — flag leída una sola vez al montar.
   // Plan 273 F1 (B-03): el default del frontend ESPEJA el del backend
   // (STACKY_UI_SHELL_V2_ENABLED = "true", backend/config.py). Arrancar en false
@@ -99,10 +117,10 @@ export default function App() {
     });
   };
   // Plan 128: tab Planes visible solo si el flag está ON en el backend
-  const [planesEnabled, setPlanesEnabled] = useState(false);
+  const [planesGate, setPlanesGate] = useState<GateState>("unknown");
   // Plan 167: tab Evolución visible solo si el flag está ON en el backend
-  const [evolutionEnabled, setEvolutionEnabled] = useState(false);
-  const [incidentInboxEnabled, setIncidentInboxEnabled] = useState(false); // Plan 238
+  const [evolutionGate, setEvolutionGate] = useState<GateState>("unknown");
+  const [incidentInboxGate, setIncidentInboxGate] = useState<GateState>("unknown"); // Plan 238
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
@@ -138,34 +156,39 @@ export default function App() {
 
   useEffect(() => {
     initPreferences();
-    initUiSections();
+    let alive = true;
+    // Plan 273 F7 (B-01): la hidratacion del store de secciones pasa a ser
+    // OBSERVABLE. Antes era fire-and-forget y el efecto de redireccion decidia
+    // con los defaults, asi que `team` (default oculto) rebotaba al montar.
+    void initUiSections().finally(() => {
+      if (alive) setSectionsReady(true);
+    });
     // Plan 135 F6: solo un JSON válido con flag_enabled===true|false es
     // veredicto. Fallo de red/parseo => retry (≤2, backoff) y, si persiste,
     // "unknown" que CONSERVA el estado previo (nextEnabledState) en vez de
     // ocultar el tab toda la sesión. La desactivación real de la flag
     // (JSON ok con flag_enabled=false) sigue ocultando el tab, igual que hoy.
-    let alive = true;
     void probeFlagHealth("/api/migrator/health").then((v) => {
-      if (alive) setMigradorEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setMigradorGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/devops/health").then((v) => {
-      if (alive) setDevopsEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setDevopsGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/db-compare/health").then((v) => {
-      if (alive) setDbCompareEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setDbCompareGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/metrics/cost-center/health").then((v) => {
-      if (alive) setCostCenterEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setCostCenterGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/plans-board/health").then((v) => {
-      if (alive) setPlanesEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setPlanesGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/evolution/health").then((v) => {
-      if (alive) setEvolutionEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setEvolutionGate((prev) => gateStateFromVerdict(prev, v));
     });
     // Plan 238 — gate de la bandeja de incidencias (default ON del lado backend).
     void probeFlagHealth("/api/incident-inbox/status").then((v) => {
-      if (alive) setIncidentInboxEnabled((prev) => nextEnabledState(prev, v));
+      if (alive) setIncidentInboxGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/search/health").then((v) => {
       if (alive) setDeepSearchEnabled((prev) => nextEnabledState(prev, v));
@@ -274,29 +297,69 @@ export default function App() {
   // fallback a "tickets" (la vista índice) para no quedar en blanco. Incluye
   // "team" (Mi Equipo), que ahora es ocultable y default oculto: si el deep-link
   // "/team" apunta a un equipo oculto, rebota a tickets.
+  // Plan 273 F7 (B-01): DOS CADENAS INDEPENDIENTES, y la separacion es el fix de
+  // C31. Las 5 ramas de seccion dependen de la hidratacion del store zustand; las
+  // 7 de flag se resuelven por probeFlagHealth, que es otra via y puede resolver
+  // antes, despues o nunca. Con una sola cadena, `if (!sectionsReady) return`
+  // arriba apagaba TAMBIEN las 7 de flag: si el backend no responde,
+  // `sectionsReady` queda false para siempre y ningun gate apagado redirige.
+  // Los 5 nombres de seccion y los 7 de flag son DISJUNTOS, asi que un `tab` no
+  // puede caer en las dos mitades: no hay doble selectTab ni doble aviso.
   useEffect(() => {
-    if (tab === "team" && !sections.team) selectTab("tickets");
-    else if (tab === "pm" && !sections.pm) selectTab("tickets");
-    else if (tab === "logs" && !sections.logs) selectTab("tickets");
-    else if (tab === "docs" && !sections.docs) selectTab("tickets");
-    else if (tab === "memory" && !sections.memory) selectTab("tickets");
-    else if (tab === "migrador" && !migradorEnabled) selectTab("tickets");
-    else if (tab === "devops" && !devopsEnabled) selectTab("tickets");
-    else if (tab === "dbcompare" && !dbCompareEnabled) selectTab("tickets");
-    else if (tab === "costcenter" && !costCenterEnabled) selectTab("tickets");
-    else if (tab === "planes" && !planesEnabled) selectTab("tickets");
-    else if (tab === "evolution" && !evolutionEnabled) selectTab("tickets");
-    else if (tab === "incidencias" && !incidentInboxEnabled) selectTab("tickets"); // Plan 238
-  }, [tab, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled, evolutionEnabled, incidentInboxEnabled]);
+    const avisarYSalir = (t: Tab) => {
+      const label = TAB_META[t as keyof typeof TAB_META]?.label ?? t;
+      setToast({
+        variant: "warning",
+        title: `${label} está desactivado.`,
+        body: "Esta sección se activa desde Configuración → Flags del arnés. Te llevamos a Tickets mientras tanto.",
+      });
+      // Rastro consultable despues de que el toast se fue (misma pieza que usa
+      // PageErrorBoundary). El nombre tecnico de la flag NO va en la frase: va en
+      // el enlace a Flags, via detail.flag (coherencia con F5).
+      publishActivity({
+        key: `gate-off:${t}`,
+        kind: "error",
+        // El plan decia `severity: "warning"`, pero la union de la casa
+        // (activityReducer.ts:14) es "info" | "success" | "attention" | "error":
+        // "attention" es el equivalente — un aviso, no una falla.
+        severity: "attention",
+        title: "Sección desactivada",
+        body: `${label} está desactivado.`,
+        ts: Date.now(),
+      });
+      selectTab("tickets");
+    };
+    if (sectionsReady) {
+      if (tab === "team" && !sections.team) selectTab("tickets");
+      else if (tab === "pm" && !sections.pm) selectTab("tickets");
+      else if (tab === "logs" && !sections.logs) selectTab("tickets");
+      else if (tab === "docs" && !sections.docs) selectTab("tickets");
+      else if (tab === "memory" && !sections.memory) selectTab("tickets");
+    }
+    if (tab === "migrador" && shouldRedirectAway(migradorGate)) avisarYSalir("migrador");
+    else if (tab === "devops" && shouldRedirectAway(devopsGate)) avisarYSalir("devops");
+    else if (tab === "dbcompare" && shouldRedirectAway(dbCompareGate)) avisarYSalir("dbcompare");
+    else if (tab === "costcenter" && shouldRedirectAway(costCenterGate)) avisarYSalir("costcenter");
+    else if (tab === "planes" && shouldRedirectAway(planesGate)) avisarYSalir("planes");
+    else if (tab === "evolution" && shouldRedirectAway(evolutionGate)) avisarYSalir("evolution");
+    else if (tab === "incidencias" && shouldRedirectAway(incidentInboxGate)) avisarYSalir("incidencias");
+  }, [tab, sectionsReady, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorGate, devopsGate, dbCompareGate, costCenterGate, planesGate, evolutionGate, incidentInboxGate]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
       team: !!sections.team, pm: !!sections.pm, logs: !!sections.logs,
       docs: !!sections.docs, memory: !!sections.memory,
     },
-    migradorEnabled, devopsEnabled, dbCompareEnabled, costCenterEnabled, planesEnabled,
-    evolutionEnabled,
-    incidentInboxEnabled, // Plan 238
+    // Plan 273 F7: un tab se MUESTRA solo si el gate resolvio ON. Con `unknown` no
+    // aparece (evita que aparezca y desaparezca), PERO su ruta NO rebota: la nav
+    // crece hacia arriba y el deep link sobrevive. Son cosas independientes.
+    migradorEnabled: isGateOn(migradorGate),
+    devopsEnabled: isGateOn(devopsGate),
+    dbCompareEnabled: isGateOn(dbCompareGate),
+    costCenterEnabled: isGateOn(costCenterGate),
+    planesEnabled: isGateOn(planesGate),
+    evolutionEnabled: isGateOn(evolutionGate),
+    incidentInboxEnabled: isGateOn(incidentInboxGate), // Plan 238
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -323,13 +386,27 @@ export default function App() {
       {tab === "memory"   && sections.memory && <MemoryPage />}
       {tab === "diagnostics" && <DiagnosticsPage />}
       {tab === "history"     && <ExecutionHistoryPage exec={route.exec ?? null} />}
-      {tab === "migrador"    && migradorEnabled && <MigratorPage />} {/* Plan 74 */}
-      {tab === "devops"      && devopsEnabled && <DevOpsPage subTab={route.subtab ?? null} />} {/* Plan 87 + 239 */}
-      {tab === "dbcompare"   && dbCompareEnabled && <DbComparePage />} {/* Plan 122 */}
-      {tab === "costcenter"  && costCenterEnabled && <CostCenterPage />} {/* Plan 142 */}
-      {tab === "planes"      && planesEnabled && <PlansBoardPage />} {/* Plan 128 */}
-      {tab === "evolution"   && evolutionEnabled && <EvolutionCenterPage />} {/* Plan 167 */}
-      {tab === "incidencias" && incidentInboxEnabled && <IncidentInboxPage />} {/* Plan 238 */}
+      {tab === "migrador" && (isGateResolving(migradorGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(migradorGate) && <MigratorPage />)} {/* Plan 74 */}
+      {tab === "devops" && (isGateResolving(devopsGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(devopsGate) && <DevOpsPage subTab={route.subtab ?? null} />)} {/* Plan 87 + 239 */}
+      {tab === "dbcompare" && (isGateResolving(dbCompareGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(dbCompareGate) && <DbComparePage />)} {/* Plan 122 */}
+      {tab === "costcenter" && (isGateResolving(costCenterGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(costCenterGate) && <CostCenterPage />)} {/* Plan 142 */}
+      {tab === "planes" && (isGateResolving(planesGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(planesGate) && <PlansBoardPage />)} {/* Plan 128 */}
+      {tab === "evolution" && (isGateResolving(evolutionGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(evolutionGate) && <EvolutionCenterPage />)} {/* Plan 167 */}
+      {tab === "incidencias" && (isGateResolving(incidentInboxGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(incidentInboxGate) && <IncidentInboxPage />)} {/* Plan 238 */}
     </>
   );
 
@@ -377,7 +454,7 @@ export default function App() {
             >
               📋 Tickets ADO
             </button>
-            {incidentInboxEnabled && (
+            {isGateOn(incidentInboxGate) && (
               <button
                 className={`${styles.navTab} ${tab === "incidencias" ? styles.active : ""}`}
                 onClick={() => selectTab("incidencias")}
@@ -455,7 +532,7 @@ export default function App() {
             >
               📋 Historial
             </button>
-            {migradorEnabled && (
+            {isGateOn(migradorGate) && (
               <button
                 className={`${styles.navTab} ${tab === "migrador" ? styles.active : ""}`}
                 onClick={() => selectTab("migrador")}
@@ -463,7 +540,7 @@ export default function App() {
                 Migrador
               </button>
             )}
-            {devopsEnabled && (
+            {isGateOn(devopsGate) && (
               <button
                 className={`${styles.navTab} ${tab === "devops" ? styles.active : ""}`}
                 onClick={() => selectTab("devops")}
@@ -471,7 +548,7 @@ export default function App() {
                 DevOps
               </button>
             )}
-            {dbCompareEnabled && (
+            {isGateOn(dbCompareGate) && (
               <button
                 className={`${styles.navTab} ${tab === "dbcompare" ? styles.active : ""}`}
                 onClick={() => selectTab("dbcompare")}
@@ -479,7 +556,7 @@ export default function App() {
                 Comparador BD
               </button>
             )}
-            {costCenterEnabled && (
+            {isGateOn(costCenterGate) && (
               <button
                 className={`${styles.navTab} ${tab === "costcenter" ? styles.active : ""}`}
                 onClick={() => selectTab("costcenter")}
@@ -487,7 +564,7 @@ export default function App() {
                 💰 Centro de Costos
               </button>
             )}
-            {planesEnabled && (
+            {isGateOn(planesGate) && (
               <button
                 className={`${styles.navTab} ${tab === "planes" ? styles.active : ""}`}
                 onClick={() => selectTab("planes")}
@@ -495,7 +572,7 @@ export default function App() {
                 🧭 Planes
               </button>
             )}
-            {evolutionEnabled && (
+            {isGateOn(evolutionGate) && (
               <button
                 className={`${styles.navTab} ${tab === "evolution" ? styles.active : ""}`}
                 onClick={() => selectTab("evolution")}
@@ -514,7 +591,7 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         onNavigate={navigateTo}
         deepSearchEnabled={deepSearchEnabled}
-        incidentInboxEnabled={incidentInboxEnabled}
+        incidentInboxEnabled={isGateOn(incidentInboxGate)}
         onOpenShortcuts={() => setCheatsheetOpen(true)}
       />
       <ShortcutsCheatsheet
@@ -527,6 +604,10 @@ export default function App() {
       {/* Plan 185 — host global de toasts de "Deshacer" (undo universal con
           gracia). Capa 2 esquina inferior derecha; ver tabla 197 §6.11. */}
       <UndoToastHost />
+      {/* Plan 273 F7 (B-01): aviso del gate apagado. Toast es export default y sus
+          props son {toast, onClose, inStack?} — NO `variant`/`body` sueltos, que es
+          la forma del tipo ToastState (C27). */}
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
       {/* Consola flotante de runtimes CLI (Codex / Claude): muestra la actividad
           en vivo y permite responderle al agente. Se activa al lanzar un run CLI. */}

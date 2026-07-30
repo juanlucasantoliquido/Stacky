@@ -47,6 +47,23 @@ export class GatewayError extends Error {
   }
 }
 
+/**
+ * Plan 273 F6 (B-04) — el deadline del cliente se agoto. Es una clase propia y no
+ * un AbortError porque "el servidor no respondio" y "el operador cancelo" son
+ * cosas distintas para el operador, y los dos producen el mismo DOMException.
+ */
+export class TimeoutError extends Error {
+  readonly path: string;
+  readonly timeoutMs: number;
+
+  constructor(path: string, timeoutMs: number) {
+    super(`Timeout de ${timeoutMs} ms en ${path}`);
+    this.name = "TimeoutError";
+    this.path = path;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export interface UserFacingError {
   title: string;
   detail?: string;
@@ -121,6 +138,12 @@ function isNetworkError(e: Error): boolean {
  * El saneamiento se aplica SIEMPRE, incluido el camino del paso 0.
  */
 export function userFacingMessage(e: unknown): UserFacingError {
+  // Paso 3 — timeout del cliente (F6). Va antes del paso 0 porque TimeoutError ES
+  // un Error y el paso 0 devolveria su message tecnico ("Timeout de 20000 ms en
+  // /api/x"), que no es texto para el operador.
+  if (e instanceof TimeoutError) {
+    return { title: "La operación tardó más de lo esperado.", isTimeout: true };
+  }
   if (e instanceof GatewayError) {
     const s = sanitize(e.errorBody?.message);
     const flag = e.flag ?? s.flag;

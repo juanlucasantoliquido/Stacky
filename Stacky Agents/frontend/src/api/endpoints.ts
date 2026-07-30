@@ -234,7 +234,7 @@ export const Tickets = {
   pipeline: (id: number) =>
     api.get<TicketPipelineResponse>(`/api/tickets/${id}/pipeline`),
   sync: (project?: string | null) =>
-    api.post<TicketSyncResult>("/api/tickets/sync", project ? { project } : {}),
+    api.post<TicketSyncResult>("/api/tickets/sync", project ? { project } : {}, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   // P7: sync con rate limiting y campos extendidos
   syncV2: (trigger: "manual" | "auto_poll" | "startup" = "manual", project?: string | null) =>
     fetch(`${apiBase}/api/tickets/sync-v2`, {
@@ -329,7 +329,12 @@ export const Tickets = {
     api.postWithHeaders<FinishWorkResponse>(
       `/api/tickets/${id}/finish-work`,
       payload,
-      { "X-Completion-Source": "manual_ui" }
+      { "X-Completion-Source": "manual_ui" },
+      // Plan 273 F6 (C23): cancela la ejecucion activa + publica el comentario en
+      // ADO + transiciona el System.State, todo sincronico. Abortar a los 20s
+      // mostraria "tardo mas de lo esperado" mientras ADO YA cerro, y el reintento
+      // duplicaria la escritura en el sistema real del operador.
+      { timeoutMs: 0 }
     ),
 
   // ── Fase 2: pending-tasks y create-child-task ──────────────────────────────
@@ -360,7 +365,9 @@ export const Tickets = {
     api.postWithHeaders<CreateChildTaskResponse>(
       `/api/tickets/by-ado/${epicAdoId}/create-child-task`,
       payload,
-      { "X-Completion-Source": "manual_ui" }
+      { "X-Completion-Source": "manual_ui" },
+      // Plan 273 F6 (C23): crea una Task en el ADO real del operador.
+      { timeoutMs: 0 }
     ),
 
   /**
@@ -1150,7 +1157,7 @@ export const Agents = {
     context_blocks: ContextBlock[];
     chain_from?: number[];
     project?: string;
-  }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload),
+  }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   cancel: (executionId: number) =>
     api.post<{ ok: true }>(`/api/agents/cancel/${executionId}`),
   estimate: (payload: {
@@ -1226,7 +1233,7 @@ export const Agents = {
      * devuelve HTTP 400 con error=missing_vscode_agent_filename si se omite.
      */
     vscode_agent_filename?: string;
-  }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload),
+  }) => api.post<{ execution_id: number; status: string }>("/api/agents/run", payload, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   openChat: (payload: {
     ticket_id: number;
     context_blocks: ContextBlock[];
@@ -1408,7 +1415,7 @@ export const Executions = {
   humanReview: (id: number, body: { verdict: "approved" | "rejected" | "approved_with_notes"; note?: string }) =>
     api.post<AgentExecution>(`/api/executions/${id}/human-review`, body),
   publish: (id: number, target: "comment" | "task" = "comment") =>
-    api.post<{ ok: true; ado_url: string }>(`/api/executions/${id}/publish-to-ado`, { target }),
+    api.post<{ ok: true; ado_url: string }>(`/api/executions/${id}/publish-to-ado`, { target }, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   sendCodexInput: (id: number, text: string) =>
     api.post<{ ok: boolean; mode: "stdin" | "resume"; execution_id: number; session_id?: string }>(
       `/api/executions/${id}/input`,
@@ -1492,7 +1499,7 @@ export const Similarity = {
 export const Packs = {
   list: () => api.get<PackDefinition[]>("/api/packs"),
   start: (payload: { pack_id: string; ticket_id: number; options?: Record<string, unknown> }) =>
-    api.post<PackRun>("/api/packs/start", payload),
+    api.post<PackRun>("/api/packs/start", payload, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   byId: (id: number) => api.get<PackRun>(`/api/packs/runs/${id}`),
   advance: (id: number) => api.post<PackRun>(`/api/packs/runs/${id}/advance`),
   pause: (id: number) => api.post<PackRun>(`/api/packs/runs/${id}/pause`),
@@ -1718,7 +1725,8 @@ export const Reports = {
     if (params?.project) p.set("project", params.project);
     if (params?.narrate) p.set("narrate", "1"); // Plan 117 — narrativa local opt-in
     const qs = p.toString();
-    return api.get<DigestReport>(`/api/reports/digest${qs ? `?${qs}` : ""}`);
+    return api.get<DigestReport>(`/api/reports/digest${qs ? `?${qs}` : ""}`,
+      /* plan 273 F6 (C29, barrido de los 5 verbos): genera el digest agregando N dias de corridas. */ { timeoutMs: 0 });
   },
   /** URL de descarga directa (Content-Disposition attachment lo maneja el backend). */
   digestDownloadUrl: (params: { fmt: "md" | "html"; days?: number; project?: string }) => {
@@ -1831,7 +1839,7 @@ export const Drift = {
       `/api/drift/alerts${unacknowledgedOnly ? "?unacknowledged=true" : ""}`
     ),
   run: (windowDays = 7) =>
-    api.post<{ alerts_generated: number; alerts: any[] }>("/api/drift/run", { window_days: windowDays }),
+    api.post<{ alerts_generated: number; alerts: any[] }>("/api/drift/run", { window_days: windowDays }, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   ack: (id: number) => api.post<{ ok: true }>(`/api/drift/alerts/${id}/ack`),
 };
 
@@ -1853,7 +1861,7 @@ export const Glossary = {
       `/api/glossary/candidates?status=${status}`
     ),
   scan: (project?: string, days = 30) =>
-    api.post<{ new_candidates: number }>("/api/glossary/scan", { project, days }),
+    api.post<{ new_candidates: number }>("/api/glossary/scan", { project, days }, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   promote: (id: number, definition: string) =>
     api.post<{ entry_id: number }>(`/api/glossary/candidates/${id}/promote`, { definition }),
   reject: (id: number) => api.post<{ ok: true }>(`/api/glossary/candidates/${id}/reject`),
@@ -2196,7 +2204,7 @@ export const ConfigTransfer = {
       sections ? { sections } : {}
     ),
   importAll: (bundle: ConfigBundle, mode: "dry-run" | "merge" | "overwrite") =>
-    api.post<ConfigImportResult>(`/api/config/import?mode=${mode}`, { bundle }),
+    api.post<ConfigImportResult>(`/api/config/import?mode=${mode}`, { bundle }, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
   export: (project: string, sections?: string[]) =>
     api.post<{ ok: boolean; bundle: ConfigBundle; filename: string; error?: string }>(
       `/api/projects/${encodeURIComponent(project)}/config/export`,
@@ -2205,7 +2213,8 @@ export const ConfigTransfer = {
   import: (project: string, bundle: ConfigBundle, mode: "dry-run" | "merge" | "overwrite") =>
     api.post<ConfigImportResult>(
       `/api/projects/${encodeURIComponent(project)}/config/import?mode=${mode}`,
-      { bundle }
+      { bundle },
+      /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }
     ),
   events: (project: string, limit = 100) =>
     api.get<{ ok: boolean; events: ConfigTransferEvent[] }>(
@@ -2646,7 +2655,7 @@ export interface DataLineageResult {
 export const QaUat = {
   /** Launch the QA UAT pipeline for a ticket. Returns execution_id. */
   run: (payload: { ticket_id: number; mode?: string; headed?: boolean; timeout_ms?: number }) =>
-    api.post<QaUatRunResponse>("/api/qa-uat/run", payload),
+    api.post<QaUatRunResponse>("/api/qa-uat/run", payload, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
 
   /** Poll a QA UAT execution result (alias: getRunResult). */
   status: (executionId: number | string) =>
@@ -2836,7 +2845,7 @@ export const QaUat = {
 
 export const QaBrowser = {
   startRun: (payload: QaBrowserStartPayload) =>
-    api.post<QaBrowserRunResponse>("/api/qa-browser/runs", payload),
+    api.post<QaBrowserRunResponse>("/api/qa-browser/runs", payload, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
 };
 
 // ── Operación local: diagnóstico, logs rotativos y backup ───────────────────
@@ -2881,7 +2890,7 @@ export const LocalDiagnostics = {
     api.get<LocalDiagnosticsResponse>("/api/diag/local"),
 
   runBackup: (): Promise<BackupRunResponse> =>
-    api.post<BackupRunResponse>("/api/diag/backup/run", {}),
+    api.post<BackupRunResponse>("/api/diag/backup/run", {}, /* plan 273 F6: operacion de minutos, sin deadline */ { timeoutMs: 0 }),
 
   exportLogsUrl: () => `${apiBase}/api/diag/logs/export`,
 };
@@ -3580,7 +3589,8 @@ export const Docs = {
     if (project) query.set("project", project);
     if (opts?.refresh) query.set("refresh", "1");
     const qs = query.toString();
-    return api.get<DocGraphResponse>(`/api/docs/graph${qs ? `?${qs}` : ""}`);
+    return api.get<DocGraphResponse>(`/api/docs/graph${qs ? `?${qs}` : ""}`,
+      /* plan 273 F6 (C29, barrido de los 5 verbos): construye el grafo sobre todo el corpus documental. */ { timeoutMs: 0 });
   },
 
   /** Plan 113 — lanza el Documentador 1-click en background. 404 si la flag OFF, 409 si busy. */
@@ -4018,7 +4028,8 @@ export const Migrator = {
 
   /** Genera un plan de migración (dry-run). */
   plan: (stacky_project: string, epic_policy = "auto"): Promise<MigrationPlanResponse> =>
-    api.post<MigrationPlanResponse>("/api/migrator/plan", { stacky_project, epic_policy }),
+    api.post<MigrationPlanResponse>("/api/migrator/plan", { stacky_project, epic_policy },
+      /* plan 273 F6 (C29, barrido de los 5 verbos): scrapea Mantis y arma el plan completo. */ { timeoutMs: 0 }),
 
   /** Ejecuta el plan con confirmación HITL. */
   execute: (
@@ -4027,12 +4038,20 @@ export const Migrator = {
     plan_hash: string,
     confirmed = true
   ): Promise<MigrationExecuteResponse> =>
-    api.post<MigrationExecuteResponse>("/api/migrator/execute", {
-      stacky_project,
-      plan_id,
-      plan_hash,
-      confirmed,
-    }),
+    api.post<MigrationExecuteResponse>(
+      "/api/migrator/execute",
+      {
+        stacky_project,
+        plan_id,
+        plan_hash,
+        confirmed,
+      },
+      // Plan 273 F6 (C29, barrido de los 5 verbos): MIGRACION COMPLETA y
+      // SINCRONICA — devuelve {applied, skipped, failed, orphaned} y escribe en el
+      // GitLab REAL del operador. Abortar a los 20s y reintentar duplicaria
+      // incidencias. El plan no la tenia en su tabla de 12; salio del barrido.
+      { timeoutMs: 0 },
+    ),
 
   /** Descarga el mapa de migración (JSON). */
   mapping: (stacky_project: string): Promise<{ ok: boolean; rows: MigrationMappingRow[] }> =>
@@ -4513,7 +4532,8 @@ export const DevOpsBuildWorkshop = {
   catalog: () => api.get<BuildWorkshopCatalogResponse>("/api/devops/build/catalog"),
   track: (slug: string, tracked: boolean) =>
     api.post<{ catalog: BuildWorkshopCatalog }>("/api/devops/build/track", { slug, tracked }),
-  doctor: () => api.get<{ toolchain: BuildWorkshopToolchain }>("/api/devops/build/doctor"),
+  doctor: () => api.get<{ toolchain: BuildWorkshopToolchain }>("/api/devops/build/doctor",
+    /* plan 273 F6 (C29, barrido de los 5 verbos): sondea el toolchain del equipo invocando ejecutables externos. */ { timeoutMs: 0 }),
   compile: (slugs: string[], unified: boolean) =>
     api.post<BuildWorkshopCompileResponse>("/api/devops/build/compile", {
       slugs,

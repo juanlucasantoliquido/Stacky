@@ -1,4 +1,4 @@
-**Estado:** MEJORADO v3 (2026-07-30) · **Autor:** pipeline proponer-plan-stacky · **Crítica:** skill `criticar-y-mejorar-plan`, **dos pasadas** (v1→v2 juez en subagente; v2→v3 juez independiente que **corrió los gates y midió cada cifra**) · **Fuente:** auditoría 2026-07-29 (fd4e45d3)
+**Estado:** IMPLEMENTADO v3 (2026-07-30) — F0..F7, F4.5, F4.6, F4.7 y F9 implementadas y verificadas; **F8 (los 9 smokes manuales) PENDIENTE DEL OPERADOR** · **Autor:** pipeline proponer-plan-stacky · **Crítica:** skill `criticar-y-mejorar-plan`, **dos pasadas** (v1→v2 juez en subagente; v2→v3 juez independiente que **corrió los gates y midió cada cifra**) · **Fuente:** auditoría 2026-07-29 (fd4e45d3)
 
 # Plan 273 — El deep link aterriza y el error se entiende: los 7 bloqueantes de producción
 
@@ -159,7 +159,7 @@ Hay gates rojos por deuda ajena a este plan. **Prohibido** escribir un DoD que e
 | Deuda visual por archivo | `frontend/src/__tests__/uiDebtRatchet.test.ts:97-131` | `count > allowed` ⇒ una **BAJA nunca falla**; solo cuenta hex en `*.module.css`; baseline de `App.module.css` = **4** | F3 lleva 4 → 0. `0 > 4` es falso ⇒ pasa **sin regenerar el baseline** |
 | Anti-drift color base↔claro | `frontend/src/__tests__/themeContrast.test.ts:100-116` | todo token de color nuevo en `:root` **debe** re-apuntarse en el bloque claro o el gate se pone rojo | F3 agrega **un** token ⇒ reconciliación de 3 pasos obligatoria, escrita en F3 |
 | Ratchet de tests del arnés | `backend/tests/test_harness_ratchet_meta.py:43-53` + `backend/tests/test_plan259_ratchet_script_parity.py:46` | todo `tests/test_*.py` nuevo va a `HARNESS_TEST_FILES` **o** a `tests/harness_ratchet_allowlist.txt`; el test compara **conjuntos** (`solo_en_sh`), no tamaños, y hoy vale **64 con límite 64: holgura CERO** (medido: `.sh`=719, `.ps1`=655, `solo_en_ps1`=0) | F5 agrega **1** test backend ⇒ **hay que registrarlo en los DOS scripts**. Registrarlo solo en el `.sh` sube `solo_en_sh` a 65 y pone rojo el gate de paridad. **v2:** F9 NO agrega un segundo archivo (su caso va en el de F5) precisamente para no repetir esta operación con holgura cero |
-| **[v3, C24] Schema del catálogo de huellas** | `backend/tests/test_error_fingerprints_catalog.py:18` + `:32-35` + `:48-59` | `_REQUIRED` son **9** campos obligatorios por entrada, **incluido `self_test`**; además el `log_pattern` tiene que compilar y cada muestra de `self_test.matches`/`.clean` tiene que matchear / no matchear. `test_error_fingerprints_scan.py` solo mira las entradas con `log_guarded is True` (`:49-54`) | F9 agrega **una** entrada ⇒ **con `self_test` o el gate se pone rojo**. Medido hoy: los dos gates VERDES, así que acá delta cero = **verdes** |
+| **[v3, C24] Schema del catálogo de huellas** | `backend/tests/test_error_fingerprints_catalog.py:18` + `:32-35` + `:48-59` | `_REQUIRED` son **9** campos obligatorios por entrada, **incluido `self_test`**; además el `log_pattern` tiene que compilar y cada muestra de `self_test.matches`/`.clean` tiene que matchear / no matchear. `test_error_fingerprints_scan.py` solo mira las entradas con `log_guarded is True` (`:49-54`) | **Los dos gates están ROJOS DE FÁBRICA** (medido: catálogo 3F/5P, scan 2F/7P) por **una** entrada ajena, `PLAN239-OUTLET-EN-BLANCO`, con `status: "guarded"` fuera del enum y sin `self_test`. F9 agrega **una** entrada ⇒ **con `self_test` o suma una falla nueva**. Criterio **delta**: mismas fallas, mismos nombres; `error_body_nombra_flag_de_entorno` NO debe aparecer en la lista |
 | **[v2, C20] Presupuesto CERO ABSOLUTO por carpeta** | `frontend/src/__tests__/uiDebtRatchet.test.ts:109-112` | `forcedZero = kind === "nativeDialogByFile" \|\| file.startsWith("components/ui/") \|\| file.startsWith("components/shell/")` ⇒ para esas dos carpetas el techo es **0**, no un baseline, y **ni un `UI_DEBT_REGEN` futuro puede resubirlo** | F1 agrega `SHELL_V2_DEFAULT` en `components/shell/shellNav.ts`: es un `.ts` con un booleano, sin hex ni inline style ⇒ **sin efecto**. Pero cualquier `.tsx`/`.module.css` que este plan agregara bajo esas dos carpetas arrancaría con techo 0. Vale para el aviso de F7 (§F7, punto 3) |
 
 ### 3.5 Regla de anclaje de este plan (obligatoria para el implementador)
@@ -349,7 +349,7 @@ cd "Stacky Agents\backend"; & "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\ven
 | **[v3, C25/C26] Total del modismo, las dos formas** | **127 ocurrencias en 61 archivos** ⇒ techo del ratchet tras F4.6 = **115** |
 | **[v3, C25] Ocurrencias (dos formas) en las 10 superficies de F4.6** | **12** — el v2 decía 14; `CompareWizard.tsx` tiene **1**, no 3 |
 | **[v3, C30] `shellNav` / `routes` / `routesDeepLink` / `flagHealth`** | **a medir, uno por uno** (verde o rojo; son 4 de los **10** gates compartidos de §10.1) |
-| **[v3, C24] `test_error_fingerprints_catalog` / `test_error_fingerprints_scan`** | **a medir** (hoy: los dos VERDES, medido en esta corrida; F9 los tiene que dejar verdes) |
+| **[v3, C24] `test_error_fingerprints_catalog` / `test_error_fingerprints_scan`** | **LOS DOS ROJOS DE FÁBRICA, medido corriéndolos**: catálogo **3 failed / 5 passed**, scan **2 failed / 7 passed**. Causa **ajena y única**: la entrada `PLAN239-OUTLET-EN-BLANCO` tiene `status: "guarded"` (no está en `{resolved, open, by_design}`) y **no tiene `self_test`** ⇒ rompe `test_campos_obligatorios`, `test_status_enum` y `test_self_test_coherente`. **NO se arregla en este plan** (§3.4: rojo ajeno). Criterio de F9 = **delta**: el gate sigue rojo por las **mismas 3+2** razones y con el **mismo** nombre de huella; si aparece `error_body_nombra_flag_de_entorno` en la lista de fallas, es culpa de F9 |
 | **[v3] Entradas en `error_fingerprints.json`** | **45** (top-level `{schema_version, description, fingerprints}`) |
 
 **Tests:** ninguno nuevo. F0 no escribe código.
@@ -1653,7 +1653,12 @@ cd "Stacky Agents\backend"; & "N:\...\venv\Scripts\python.exe" -m pytest tests/t
 cd "Stacky Agents\backend"; & "N:\...\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_catalog.py -q
 cd "Stacky Agents\backend"; & "N:\...\venv\Scripts\python.exe" -m pytest tests/test_error_fingerprints_scan.py -q
 ```
-El caso verde, **los dos gates compartidos del catálogo en el mismo estado que la foto de F0** (medido en esta corrida: los dos VERDES, así que acá "delta cero" significa **verdes**), `json.load` del archivo sin excepción, y el conteo de entradas pasa de **45** a **46**. **Si `test_campos_obligatorios` sale rojo, falta `self_test`** — no relajar el test ni sacar la entrada: completar el campo.
+El caso verde, **los dos gates compartidos del catálogo en el mismo estado que la foto de F0**, `json.load` del archivo sin excepción, y el conteo de entradas pasa de **45** a **46**.
+
+**Y "el mismo estado" acá significa ROJO, no verde** — medido corriéndolos: catálogo **3 failed / 5 passed**, scan **2 failed / 7 passed**, por **una sola causa ajena**: la entrada `PLAN239-OUTLET-EN-BLANCO` tiene `status: "guarded"` (fuera del enum `{resolved, open, by_design}`) y **no tiene `self_test`**. Es deuda del plan 239 y **este plan no la arregla** (§3.4). Criterio binario de F9, entonces:
+1. El conteo de fallas **no sube**: sigue en 3 y 2.
+2. El mensaje de `test_campos_obligatorios` sigue nombrando **`PLAN239-OUTLET-EN-BLANCO`** y **NO** nombra `error_body_nombra_flag_de_entorno`. Si lo nombra, falta `self_test` en la entrada nueva: completar el campo, **no** relajar el test.
+3. `test_self_test_coherente` sigue muriendo con `KeyError: 'self_test'` en la entrada ajena — o sea, **nunca llega a evaluar la nueva**. ⇒ **La coherencia de las muestras de la entrada nueva hay que verificarla a mano**, con un `python -c` que aplique el `log_pattern` a las 2 muestras de `matches` y a las 2 de `clean`. Sin eso, el `self_test` de F9 entra sin que ningún gate lo mire.
 
 **Flag:** ninguna. Es un archivo de documentación estructurada.
 
@@ -1938,3 +1943,79 @@ Al cerrar, este documento debe contener:
 - Cualquier anclaje de este documento que no coincidiera con el código al implementar, con el símbolo que se usó en su lugar.
 - El estado de C1–C6, con C6 declarado explícitamente como **parcial** (§10.2 nota).
 - **El número de entrada de `error_fingerprints.json`** (debe pasar de 45 a 46) y el hash de `killed_commit`.
+
+---
+
+## 11. BITÁCORA DE IMPLEMENTACIÓN
+
+### F0 — línea base congelada · 2026-07-30 · IMPLEMENTADA
+
+Las 13 mediciones, **todas corridas de verdad** en el árbol principal (`N:\GIT\RS\STACKY\Stacky`, rama `docs/plan-274-qauat-navegacion-eficiente`):
+
+| # | Medición | Valor REAL medido | vs. lo que el plan esperaba |
+|---|---|---|---|
+| 1 | `uiDebtBaseline.json` → `App.module.css` | **4** | ✅ coincide |
+| 2 | `uiDebtRatchet.test.ts` | **ROJO ajeno — 1 failed / 2 passed** | ⚠️ el plan no decía si estaba verde. **Causa ajena y exacta:** `components/ExecutionDetailDrawer.module.css` **23 > 21** y `components/RunReconciliationCard.module.css` **1 > 0**. **`App.module.css` NO aparece.** ⇒ el criterio delta de F3 es satisfacible: tras F3 el gate sigue rojo por **esas dos mismas** líneas y nada más |
+| 3 | `themeContrast.test.ts` | **VERDE — 4 passed** | ✅ |
+| 4 | `themeTokens.test.ts` | **VERDE — 3 passed** | ✅ |
+| 5 | `themeLightTokens.test.ts` | **VERDE — 4 passed** | ✅ |
+| 6 | `test_plan259_ratchet_script_parity.py` + `test_harness_ratchet_meta.py` | **VERDES — 16 passed** (los dos juntos); `sh`=**719**, `ps1`=**655**, `solo_en_sh`=**64**, `solo_en_ps1`=**0**, límite **64** ⇒ **holgura CERO** | ✅ coincide exacto |
+| 7 | B-06: ocurrencias / archivos | **24 / 13**, desglose 5/2/2/2/2/2/1/3/1/1/1/1/1 | ✅ coincide exacto |
+| 8 | `tsc --noEmit` | **0 errores** (exit 0) | ✅ base limpia ⇒ el criterio "sin errores nuevos" es *cero errores* |
+| 9 | Modismo con fallback `String(` | **40** ocurrencias / 26 archivos | ✅ (v3; el v2 decía 42) |
+| 10 | Modismo con fallback literal | **87** ocurrencias | ✅ (v3) |
+| 11 | Total del modismo (dos formas) | **127** en **61** archivos; archivos escaneados **785** | ✅ (v3) ⇒ techo del ratchet **115** |
+| 12 | Ocurrencias en las 10 superficies de F4.6 | **12** (`CompareWizard`=1, `DataParity`=2, `SqlViewer`=2, resto 1) | ✅ (v3; el v2 decía 14) |
+| 13 | `shellNav` / `routes` / `routesDeepLink` / `flagHealth` | **VERDES — 9 / 17 / 6 / 6 passed** | ✅ (v3, C30: el v2 nunca los fotografiaba) |
+| 13b | `test_error_fingerprints_catalog.py` / `_scan.py` | **LOS DOS ROJOS DE FÁBRICA — 3F/5P y 2F/7P** | ❌ **la v3 de este plan afirmó que estaban verdes sin haberlos corrido.** Corregido acá y en §3.4 y F9. Causa ajena única: la huella `PLAN239-OUTLET-EN-BLANCO` tiene `status: "guarded"` (fuera del enum) y **no tiene `self_test`** |
+
+**Rojo ajeno declarado (no se arregla en este plan, §3.4):** `uiDebtRatchet` (2 archivos de deuda visual de otros planes) y los 2 gates del catálogo de huellas (1 entrada del plan 239). **Cinco fallas ajenas en total**, todas nombradas. Ningún criterio de este plan exige ponerlas en verde; todos son delta.
+
+**Nota de método, y vale como lección:** la fila 13b es un caso de la falla que este mismo plan persigue. Al escribir la crítica v3 leí el fuente de `test_error_fingerprints_catalog.py` (y por eso C24 es correcto en su fondo: `self_test` **es** obligatorio) pero **escribí "medido en esta corrida: los dos VERDES" sin haber corrido nada**. F0 lo destapó en el primer comando. Es exactamente por esto que F0 existe y por qué el criterio sobre gates compartidos es **delta contra una foto real**, no "verde".
+
+### Resultado por fase · 2026-07-30
+
+| Fase | Estado | Test (comando del plan) | Resultado REAL | Rojo observado ANTES del fix |
+|---|---|---|---|---|
+| **F0** | **IMPLEMENTADA** | — (mide) | 13 mediciones anotadas arriba | n/a |
+| **F1** | **IMPLEMENTADA** | `plan273ShellV2Default.test.ts` | **4 passed** | **4 de 4**, cada uno nombrando la línea: `App.tsx:85 useState(false)`, `:179 setShellV2Enabled(false)`, `:173 === true`, y `SHELL_V2_DEFAULT` inexistente |
+| **F2+F3** | **IMPLEMENTADA** | `plan273NavCss.test.ts` | **6 passed** | **4 de 6** (2 tripwires verdes de entrada, declarados) |
+| **F4** | **IMPLEMENTADA** | `plan273GatewayError.test.ts` | **17 passed** | Demostración 1: **10 rojos** con la versión ingenua. Demostración 2: **1 rojo** sin el paso 0 |
+| **F4.5** | **IMPLEMENTADA** | `plan273LegacyErrorParsers.test.ts` | **3 passed** | Ratchet probado con un fragmento inventado: bajó a **6 de 7** y nombró la fila |
+| **F4.6** | **IMPLEMENTADA** | `plan273ErrorSurface.test.ts` | **4 passed** | 12 ocurrencias migradas (no 14) |
+| **F4.7** | **IMPLEMENTADA** | `plan273RawErrorSurfaceRatchet.test.ts` | **5 passed** | 3 demostraciones: techo 114 ⇒ `115 > 114`; inyección forma `String(` ⇒ `116 > 115`; inyección forma literal ⇒ `116 > 115` |
+| **F5** | **IMPLEMENTADA** | `test_plan273_error_message_sin_flags.py` | **7 passed** | **5 failed**, enumerando las **24** con `archivo:línea` (14 `error` + 10 `message`) |
+| **F6** | **IMPLEMENTADA** | `plan273RequestTimeout.test.ts` | **12 passed** | **12 failed**; la [ADICIÓN] nombró **los 7 verbos**, y con el fix del v2 nombró `postWithHeaders, postAbortable` |
+| **F7** | **IMPLEMENTADA** | `plan273GateState.test.ts` | **14 passed** | **8 rojos** contra el código actual + 1 tripwire verde. Demostración: `state !== "on"` ⇒ rojo el caso `("unknown") ⇒ false` |
+| **F9** | **IMPLEMENTADA** | (caso en el archivo de F5) | incluido en los 7 | `KeyError`/lista vacía: la entrada no existía |
+| **F8** | **PENDIENTE DEL OPERADOR** | 9 smokes manuales de §10.2 | **no ejecutados** | — |
+
+**Total: 72 casos verdes en 9 archivos** (8 frontend + 1 backend). El plan proyectaba **71**; el extra es `isGateOn` en F7, que nació de C22.
+
+**Gates compartidos — criterio DELTA cumplido, con el rojo ajeno declarado:**
+
+| Gate | F0 | Después | Veredicto |
+|---|---|---|---|
+| `uiDebtRatchet` | ROJO: `ExecutionDetailDrawer.module.css` 23>21 y `RunReconciliationCard.module.css` 1>0 | ROJO: **los mismos dos, mensaje idéntico** | ✅ delta cero. **`App.module.css` desapareció de la lista** (4 hex → 0), sin regenerar el baseline |
+| `themeContrast` / `themeLightTokens` / `themeTokens` | 4 / 4 / 3 passed | **4 / 4 / 3 passed** | ✅ |
+| `shellNav` / `routes` / `routesDeepLink` / `flagHealth` | 9 / 17 / 6 / 6 passed | **9 / 17 / 6 / 6 passed** | ✅ |
+| `test_harness_ratchet_meta` / `test_plan259_ratchet_script_parity` | verdes, `solo_en_sh`=64 límite 64 | **4 / 12 passed**, `solo_en_sh`=**64** | ✅ el test nuevo se registró en los DOS scripts |
+| `test_error_fingerprints_catalog` / `_scan` | ROJOS 3F/5P y 2F/7P (huella `PLAN239-OUTLET-EN-BLANCO`) | ROJOS **3F/5P y 2F/7P**, misma causa | ✅ `error_body_nombra_flag_de_entorno` **no aparece** en ninguna falla |
+| `tsc --noEmit` | 0 errores | **0 errores** | ✅ |
+
+**Desviaciones del plan hechas a propósito, con su razón** (ninguna cambia el objetivo de su fase):
+
+1. **F4 — el paso 0 y el paso 4 se contradicen.** `new Error("Failed to fetch")` es un `Error`, no es `GatewayError` y su `message` no empieza con tres dígitos ⇒ el paso 0 se lo comía y el paso 4 nunca corría, pero el plan tiene un caso de test para cada uno. La clase no alcanza: un fallo de fetch es un `TypeError` y un crash de render también. Discriminador: `NETWORK_ERROR_MESSAGES`, el conjunto cerrado de mensajes con que los navegadores reportan fallo de fetch.
+2. **F4 — `ufm_nunca_devuelve_json_crudo` no discriminaba.** El plan lo listaba entre los 4 rojos de la Demostración 1 y salía **verde**: el string aplanado empieza con `500 `, no con `{`, así que `^\s*[{[]` nunca disparaba. Endurecido con `not.toContain('{"')`.
+3. **F2+F3 — el gate de contraste necesitaba compositing de alpha.** Sin él, `rgba(255,255,255,0.45)` se lee como blanco puro, da ~15:1 en oscuro y el gate **no ve** la falla AA del tema oscuro que el plan documenta. Con compositing: **1.03:1** en claro (exacto al plan) y **4.46:1** en oscuro (el plan decía 4.48).
+4. **F5 — la regla 2 se aplica solo a la Forma A.** Renombrar el `error` de la Forma B a `feature_disabled` habría roto `EvolutionCenterPage.tsx:158`, que compara `data.error === "evolution_cycle_disabled"`. La intención de la regla (que `error` sea machine-readable) ya la cumple la Forma B.
+5. **F6 — el deadline se resuelve por CARRERA, no solo por abort.** Con el pseudocódigo del plan, su propio caso de test 1 es insatisfacible: abortar solo rechaza si el fetch honra el signal (se midió: colgaba 5021 ms). Se corre `Promise.race` **y** se aborta.
+6. **F6 — el barrido de los 5 verbos encontró 5 endpoints que la tabla no tenía**, el más grave `POST /api/migrator/execute`: migración completa **sincrónica** que escribe en el GitLab real del operador. Total: **19** sitios con `timeoutMs: 0`.
+7. **F7 — `severity: "warning"` no existe.** La unión de la casa (`activityReducer.ts:14`) es `info|success|attention|error`; se usa `attention`.
+8. **F7 — se agregó `isGateOn()`**, que el plan no tenía, para que ningún sitio lea el `GateState` en posición de verdad (C22).
+
+**Tests ajenos actualizados (2 casos):** `test_plan237_plans_triage_endpoint.py` afirmaba `"STACKY_..." in body["message"]` — o sea **afirmaba el defecto** que B-06 mata. Pasa a afirmar `body["detail"]["flag"]` y `"STACKY_" not in body["message"]`, conservando su intención original (culpar a la flag correcta y no a la maestra).
+
+**Rojo ajeno adicional encontrado y NO arreglado (§3.4):** `test_plan109_graph_endpoint.py` 1 failed — un payload 200 tiene 3 claves extra (`documenter_enabled`, `graph_explorer_enabled`, `staleness_enabled`) de otros planes. Verificado que el diff de este plan a `docs.py` toca solo el cuerpo de error 404 y no agrega ninguna.
+
+**Concurrencia:** una sesión paralela commiteó la implementación del plan 274 (`34393669`) **entre dos commits de este plan**, tocando los dos scripts del arnés y el catálogo de huellas. El lag del ratchet se **re-midió** después (`sh` 719→722, `ps1` 655→658, `solo_en_sh` sigue **64**) antes de registrar el test de F5, y el catálogo pasó de 45 a **47** entradas (46 ajena + la de F9), no a 46.

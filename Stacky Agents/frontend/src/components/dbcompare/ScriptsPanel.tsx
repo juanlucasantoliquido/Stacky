@@ -3,6 +3,7 @@ import { DbCompare } from "../../api/endpoints";
 import { buildScriptRows, pairingBadge, type Manifest, type ScriptPairRow } from "./scriptsLogic";
 import { SqlViewer } from "./SqlViewer";
 import styles from "./dbcompare.module.css";
+import { userFacingMessage } from "../../api/gatewayError"; // Plan 273 F4.6
 
 interface Props {
   runId: string;
@@ -46,7 +47,7 @@ export function ScriptsPanel({ runId }: Props) {
       }
       setManifest(r.manifest);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(userFacingMessage(err).title);
     } finally {
       setLoading(false);
     }

@@ -44,6 +44,7 @@ import KnowledgeSection from "../evolution/KnowledgeSection";
 import PlansSection from "../evolution/PlansSection"; // Plan 237
 import { canEvaluateProposal } from "../evolution/fitnessModel";
 import styles from "./EvolutionCenterPage.module.css";
+import { userFacingMessage } from "../api/gatewayError"; // Plan 273 F4.6
 
 interface LedgerEvent {
   ts: string;
@@ -102,7 +103,7 @@ export default function EvolutionCenterPage() {
       setOverview(ov as OverviewDto);
       setProposals(((pr as { proposals?: ProposalDto[] }).proposals) ?? []);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
+      setLoadError(userFacingMessage(e).title);
     } finally {
       setLoading(false);
     }

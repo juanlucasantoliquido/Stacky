@@ -44,61 +44,44 @@ from services.tracker_provider import TrackerItem, TrackerQuery
 _LOGGER_NAME = "migrar_mantis_gitlab.destination_writer"
 
 
-def habilitar_pin_de_certificado_hoja() -> bool:
-    """Permite que un certificado NO auto-firmado presente en el bundle actúe
-    como ancla de confianza (`X509_V_FLAG_PARTIAL_CHAIN`).
+def verificar_pin_de_certificado_hoja(ca_bundle: str) -> bool:
+    """Valida, ANTES de empezar la corrida, que el bundle sirva como ancla.
 
-    POR QUÉ HACE FALTA: `srvcgit01.imsolutions.local` presenta SOLO su
+    PLAN 276 F2.3 — ANTES esto habilitaba `VERIFY_X509_PARTIAL_CHAIN` parcheando
+    `urllib3.util.ssl_.create_urllib3_context`, que es GLOBAL al proceso. Ese
+    parche se eliminó de `services/tls_pinning.py`: el pin de hoja vive ahora en
+    el `ssl_context` del `_AdaptadorOpenSSL` que `services/gitlab_client.py`
+    monta SOLO en la sesión de GitLab, así que el migrador lo recibe gratis por
+    usar ese cliente. Hay UNA sola implementación
+    (`services.tls_openssl_context.crear_contexto_openssl`) y este módulo NO
+    define la suya.
+
+    Lo que queda acá es el chequeo TEMPRANO, que es valioso por sí mismo: una
+    corrida del migrador ya murió por TLS **después de 1009 issues**. Construir
+    el contexto ahora hace que un bundle roto se vea en el segundo 0.
+
+    POR QUÉ HACE FALTA EL PIN: `srvcgit01.imsolutions.local` presenta SOLO su
     certificado hoja (cadena de 1 elemento, verificado en vivo: `chain.Build`
     de .NET devuelve `PartialChain`), y su emisora (`CN=imsolutions.local`,
-    `O=PFSTechSL`) no está ni en el bundle ni en el almacén de Windows. Con
-    la verificación por defecto, OpenSSL busca la emisora, no la encuentra y
-    falla con `unable to get local issuer certificate` — que es exactamente
-    lo que pasaba: `ca-bundle-migrador.pem` contiene la HOJA, no la CA, así
-    que el bundle NO servía para verificar el destino.
+    `O=PFSTechSL`) no está ni en el bundle ni en el almacén de Windows. Con la
+    verificación por defecto, OpenSSL busca la emisora, no la encuentra y falla
+    con `unable to get local issuer certificate`: `ca-bundle-migrador.pem`
+    contiene la HOJA, no la CA.
 
-    Esto NO debilita la verificación: la hoja pineada tiene que coincidir
-    EXACTAMENTE con la que presenta el servidor (es pinning, más estricto
-    que confiar en una CA que puede emitir para cualquier host), el
-    `check_hostname` sigue activo, y un host cuyo certificado no esté en el
-    bundle sigue siendo rechazado (verificado con un control negativo).
+    Returns:
+        True si el contexto se pudo construir con el pin puesto.
 
-    Se parchea el punto de creación del contexto de urllib3 porque
-    `services/gitlab_client.py` usa `requests.request(...)` a nivel módulo
-    (no una `Session`), así que no hay dónde montar un `HTTPAdapter` propio
-    sin tocar el cliente compartido. Se parchean AMBOS módulos: `urllib3.
-    connection` importa el nombre por valor (`from .util.ssl_ import
-    create_urllib3_context`), así que parchear solo `urllib3.util.ssl_` no
-    tendría efecto sobre las conexiones reales.
+    Raises:
+        CaBundleInvalido: si el bundle declarado no existe o no se puede leer.
     """
-    import ssl as _ssl
+    import ssl
 
-    import urllib3.connection as _u3conn
-    import urllib3.util.ssl_ as _u3ssl
+    from services.tls_openssl_context import crear_contexto_openssl
 
-    if getattr(_u3ssl, "_mg_partial_chain_patched", False):
+    ctx = crear_contexto_openssl(ca_bundle)
+    if ctx is None:
         return False
-
-    _original = _u3ssl.create_urllib3_context
-
-    def _con_partial_chain(*args, **kwargs):
-        ctx = _original(*args, **kwargs)
-        try:
-            ctx.verify_flags |= _ssl.VERIFY_X509_PARTIAL_CHAIN
-        except (AttributeError, ValueError):
-            # Python sin el flag: se deja el contexto tal cual (falla ruidosa
-            # en el handshake, nunca una verificación silenciosamente laxa).
-            pass
-        return ctx
-
-    _u3ssl.create_urllib3_context = _con_partial_chain
-    _u3conn.create_urllib3_context = _con_partial_chain
-    _u3ssl._mg_partial_chain_patched = True
-    logging.getLogger(_LOGGER_NAME).info(
-        "Verificación TLS con pin de certificado hoja habilitada "
-        "(VERIFY_X509_PARTIAL_CHAIN); la verificación sigue activa."
-    )
-    return True
+    return bool(ctx.verify_flags & ssl.VERIFY_X509_PARTIAL_CHAIN)
 
 
 class DestinationMismatchError(RuntimeError):
@@ -257,10 +240,15 @@ class GitLabDestinationWriter(DestinationWriter):
             )
             # El bundle pinea la HOJA de srvcgit01 (su CA emisora no existe en
             # ningún almacén de esta máquina), y una hoja no auto-firmada no
-            # sirve como ancla salvo con PARTIAL_CHAIN. Sin esto, TODA lectura
+            # sirve como ancla salvo con PARTIAL_CHAIN. Sin eso, TODA lectura
             # y escritura contra el GitLab destino muere con
             # `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`.
-            habilitar_pin_de_certificado_hoja()
+            #
+            # Plan 276 F2.3: el pin ya NO se aplica parcheando urllib3 (era
+            # global y debilitaba ADO/Jira/LLM). Viaja en el ssl_context del
+            # adapter que monta GitLabClient. Acá solo se VALIDA temprano, que es
+            # lo que evita descubrir un bundle roto después de 1009 issues.
+            verificar_pin_de_certificado_hoja(ruta)
 
         # 2. Destino EXPLÍCITO por parámetro. El Plan 218 F0/F4 amplió la
         #    firma del provider con `base_url=`/`group=` y corrigió sus

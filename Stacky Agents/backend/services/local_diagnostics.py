@@ -105,15 +105,41 @@ def _check_tracker() -> dict:
     tracker_type = (tracker.get("type") or "azure_devops").strip().lower()
     label = {
         "azure_devops": "Azure DevOps",
+        "gitlab": "GitLab",
         "jira": "Jira",
         "mantis": "Mantis",
     }.get(tracker_type, tracker_type or "Tracker")
+
+    # Plan 276 F4 — el rótulo DEJA DE AFIRMAR EL VEREDICTO. "GitLab alcanzable"
+    # era el NOMBRE del check, no su resultado: se pintaba igual con el listado
+    # roto y sin haber hecho ningún ping. Ahora el rótulo enumera lo que se mide y
+    # el veredicto vive en `status`.
+    estricto = bool(getattr(config, "STACKY_TRACKER_PROBE_STRICT_ENABLED", True))
+    if tracker_type == "gitlab" and estricto:
+        detalle = _probe_gitlab(active, tracker)
+        rotulo = f"Tracker {label}: TLS / credenciales / proyecto / ítems"
+        cuatro_ok = bool(
+            detalle.get("tls") and detalle.get("auth") and detalle.get("proyecto_legible")
+        )
+        detalle.update({"project": active, "tracker_type": tracker_type})
+        if cuatro_ok:
+            # `items == 0` NO es un error (un proyecto puede estar vacío), pero se
+            # MUESTRA: es el número que el operador va a comparar con su GitLab.
+            return _result(
+                "tracker", rotulo, "ok",
+                f"TLS OK, credenciales OK, proyecto legible. {detalle.get('items', 0)} ítem(s) "
+                f"abierto(s) en {active}.",
+                detalle,
+            )
+        return _result("tracker", rotulo, "error", _mensaje_de_falla_gitlab(detalle, active), detalle)
 
     try:
         if tracker_type == "jira":
             _probe_jira(active, tracker)
         elif tracker_type == "mantis":
             _probe_mantis(active, tracker)
+        elif tracker_type == "gitlab":
+            _probe_gitlab(active, tracker)
         else:
             _probe_ado(active)
         return _result("tracker", f"{label} alcanzable", "ok", f"Credenciales válidas para {active}.")
@@ -125,6 +151,25 @@ def _check_tracker() -> dict:
             f"No se pudo validar {label}: {exc}",
             {"project": active, "tracker_type": tracker_type},
         )
+
+
+def _mensaje_de_falla_gitlab(detalle: dict, project_name: str) -> str:
+    """Nombra la PIEZA que falló, no un genérico. Plan 276 F4/regla antifalso-verde #8."""
+    if not detalle.get("tls"):
+        return (
+            f"TLS contra el GitLab de '{project_name}' NO cerró. Revisá el campo "
+            f"'Certificado de la empresa' del proyecto. {detalle.get('error_lectura') or ''}"
+        ).strip()
+    if not detalle.get("auth"):
+        return (
+            f"El TLS anduvo pero las credenciales de '{project_name}' no sirven. Revisá el "
+            f"archivo de credenciales del proyecto. {detalle.get('error_lectura') or ''}"
+        ).strip()
+    return (
+        f"TLS y credenciales OK, pero el proyecto '{detalle.get('proyecto') or project_name}' "
+        f"no se pudo leer. Verificá el campo 'Proyecto' (grupo/proyecto). "
+        f"{detalle.get('error_lectura') or ''}"
+    ).strip()
 
 
 def _probe_ado(project_name: str) -> None:
@@ -167,6 +212,80 @@ def _probe_mantis(project_name: str, tracker: dict) -> None:
         verify_ssl=bool(tracker.get("verify_ssl", True)),
     )
     client.list_projects()
+
+
+def _probe_gitlab(project_name: str, tracker: dict) -> dict:
+    """Sonda GitLab del diagnóstico local — CUATRO sub-veredictos (Plan 276 F4).
+
+    Devuelve `{tls, auth, proyecto_legible, items, proyecto}` y NO lanza: el
+    veredicto lo decide quien llama. Antes hacía un único `GET /user` y lanzaba;
+    ese diseño es el que producía "GitLab alcanzable" en verde con el listado
+    roto, porque `GET /user` responde 200 con cualquier token válido aunque el
+    campo 'Proyecto' esté mal escrito.
+
+    Es la ÚNICA sonda GitLab del repo: `services/connection_doctor.py` delega acá
+    en vez de mantener una copia (antes tenía una que omitía `auth_path`).
+
+    `auth_path` es obligatorio en la práctica: el token vive en
+    `backend/projects/<N>/auth/gitlab_auth.json` y `GitLabClient` sólo lo busca en
+    las rutas derivadas de ese argumento o en `auth/gitlab_auth.json` relativo al
+    CWD (`services/gitlab_client.py:97-102`). Sin pasarlo, un proyecto GitLab
+    perfectamente configurado falla con TrackerConfigError.
+    """
+    from services.gitlab_client import GitLabClient
+    from services.project_context import resolve_project_context
+    from services.tracker_provider import TrackerApiError
+
+    ctx = resolve_project_context(project_name)
+    proyecto = str(tracker.get("project") or tracker.get("project_path") or "")
+    client = GitLabClient(
+        base_url=str(tracker.get("base_url") or tracker.get("url") or ""),
+        project=proyecto,
+        auth_path=(ctx.auth_path if ctx else None) or tracker.get("auth_file") or "auth/gitlab_auth.json",
+        # GitLab interno con certificado propio: sin bundle el handshake muere.
+        # Si el proyecto no declara uno, `preparar_verificacion` cae a
+        # STACKY_GITLAB_CA_BUNDLE / REQUESTS_CA_BUNDLE y si no, a la
+        # verificación estándar.
+        ca_bundle=tracker.get("ca_bundle") or None,
+    )
+
+    # Plan 276 F4 — CUATRO sub-veredictos. `GET /user` da 200 con cualquier token
+    # válido AUNQUE el proyecto esté mal escrito: no alcanza como criterio (regla
+    # antifalso-verde #2). El listado del proyecto es lo único que prueba que el
+    # operador va a ver algo.
+    detalle: dict = {
+        "tls": False, "auth": False, "proyecto_legible": False,
+        "items": 0, "proyecto": proyecto,
+    }
+
+    try:
+        user, _ = client._request("GET", "/user")
+        detalle["tls"] = True
+        detalle["auth"] = bool(isinstance(user, dict) and user.get("id"))
+    except TrackerApiError as exc:
+        # Hubo respuesta HTTP ⇒ el TLS anduvo. Solo kind="tls" prueba lo contrario.
+        detalle["tls"] = exc.kind != "tls"
+        detalle["auth"] = False
+        detalle["error_lectura"] = f"{exc.kind}: {exc}"
+        return detalle
+    except Exception as exc:  # noqa: BLE001 — cualquier otro fallo es TLS/red no tipado
+        detalle["error_lectura"] = str(exc)
+        return detalle
+
+    try:
+        issues, headers = client._request(
+            "GET", f"/projects/{client._project_path()}/issues", params={"per_page": 1}
+        )
+        detalle["proyecto_legible"] = True
+        total = None
+        if hasattr(headers, "get"):
+            total = headers.get("X-Total") or headers.get("x-total")
+        detalle["items"] = int(total) if total else len(issues or [])
+    except TrackerApiError as exc:
+        detalle["error_lectura"] = f"{exc.kind}: {exc}"
+    except Exception as exc:  # noqa: BLE001
+        detalle["error_lectura"] = str(exc)
+    return detalle
 
 
 def _check_gh_auth() -> dict:

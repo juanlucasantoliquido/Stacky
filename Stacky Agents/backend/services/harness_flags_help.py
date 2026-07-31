@@ -23,6 +23,25 @@ class PlainHelp:
 
 
 PLAIN_HELP: dict[str, PlainHelp] = {
+    # ── Plan 276 — GitLab propio de la empresa, de punta a punta ──────────
+    "STACKY_GITLAB_TLS_ADAPTER_ENABLED": PlainHelp(
+        what="Usa el certificado de la empresa solo para hablar con el GitLab interno, sin cambiar cómo se verifica el resto de los servicios.",
+        on_effect="Si la activás: Stacky puede conectarse al GitLab de la empresa aunque su certificado no lo conozca nadie más, y las demás conexiones siguen igual.",
+        off_effect="Si la apagás: la conexión al GitLab interno vuelve a cortarse con un error de certificado, aunque hayas cargado el archivo correcto.",
+        example="Como tener una llave especial para una sola puerta del edificio, sin cambiar las cerraduras de las demás.",
+    ),
+    "STACKY_TRACKER_PROBE_STRICT_ENABLED": PlainHelp(
+        what="Al probar la conexión con el sistema de tickets, revisa cuatro cosas por separado y avisa cuál falló.",
+        on_effect="Si la activás: la prueba solo sale en verde cuando las cuatro cosas andan, y si algo falla te dice exactamente qué.",
+        off_effect="Si la apagás: vuelve la prueba de una sola respuesta, que puede decir 'todo bien' aunque la lista de tickets venga vacía.",
+        example="Como un control técnico que revisa frenos, luces, ruedas y dirección por separado en vez de decir solo 'aprobado'.",
+    ),
+    "STACKY_GITLAB_SYNC_ENABLED": PlainHelp(
+        what="Hace que el botón Sincronizar traiga los tickets abiertos del GitLab de la empresa a Stacky.",
+        on_effect="Si la activás: cuando apretás Sincronizar, los tickets aparecen en el tablero y en el gráfico. Nunca borra nada: lo que ya se cerró queda marcado como cerrado.",
+        off_effect="Si la apagás: al apretar Sincronizar te avisa que este sistema de tickets todavía no se puede traer, y el tablero queda vacío.",
+        example="Como bajar los mails al correo de tu computadora: aparecen los nuevos y no se borra ninguno de los viejos.",
+    ),
     # ── Plan 264 ──────────────────────────────────────────────────────────
     "STACKY_RUNTIME_CAPABILITIES_ENABLED": PlainHelp(
         what="Una sola tabla que dice qué modelos y qué niveles de esfuerzo acepta cada herramienta, y a qué degrada cada combinación.",

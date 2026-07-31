@@ -40,6 +40,51 @@ export interface UseTicketSyncResult {
 export const DEFAULT_INTERVAL_MS = 45_000;
 const MAX_BACKOFF_MS = 5 * 60_000; // 5 minutos
 
+/** Plan 276 F6 — payload de `POST /api/tickets/sync-v2` tal como lo lee este hook.
+ *  `available` lo pone el envelope de capacidad degradada (plan 218): un tracker que
+ *  NO soporta sincronización responde 200 con `available:false`. */
+export type TicketSyncPayload = TicketSyncResult & {
+  idempotent?: boolean;
+  available?: boolean;
+};
+
+/** Plan 276 F6 — clasifica la respuesta del sync en las 4 situaciones reales.
+ *
+ * `available: false` se evalúa PRIMERO y a propósito: el envelope de capacidad
+ * degradada devuelve `{ok: true, available: false}`, así que preguntar por `ok`
+ * antes clasificaría una carencia DECLARADA como éxito. Ése es el peor modo de
+ * falla del sistema: "sincronizado hace 2s", cero tickets y cero error.
+ */
+export function clasificarRespuestaDeSync(
+  data: { ok?: boolean; synced_at?: string; available?: boolean; error?: string },
+): "exito" | "carencia" | "rate_limited" | "error" {
+  if (data.available === false) return "carencia";
+  if (data.ok || data.synced_at) return "exito";
+  if (data.error === "rate_limited") return "rate_limited";
+  return "error";
+}
+
+/** Plan 276 F6/C3 — decide si hay que refetchear las queries de tickets.
+ *
+ * Un sync MANUAL invalida SIEMPRE, aunque el backend responda idempotente: el
+ * operador acaba de pedir explícitamente "traeme los tickets" y la causa más
+ * común de un idempotente manual es que las filas YA ESTÁN en la BD y la vista
+ * está desactualizada. No refetchear ahí deja la pantalla vacía con los datos
+ * cargados, que es indistinguible de "el sync no anda".
+ *
+ * Es una LECTURA de la BD local: no quema tokens en reposo (categoría A no
+ * aplica: no hay loop, no hay modelo) y no escribe en ningún sistema del
+ * operador (categoría B no aplica). Va ON, sin flag nueva.
+ */
+export function debeRefrescarQueriesDeTickets(
+  data: { idempotent?: boolean; created?: number; updated?: number; removed?: number },
+  trigger: "manual" | "auto_poll" | "startup",
+): boolean {
+  if (trigger === "manual") return true;
+  if (data.idempotent === true) return false;
+  return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
+}
+
 export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSyncResult {
   const {
     intervalMs = DEFAULT_INTERVAL_MS,
@@ -67,12 +112,9 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
   // secondsSinceSync/isStale ni fuerza re-render por segundo; solo expone
   // lastSyncedAt, del que la hoja deriva "hace Xs"/stale localmente.
 
-  const shouldRefreshTicketQueries = (
-    data: TicketSyncResult & { idempotent?: boolean }
-  ): boolean => {
-    if (data.idempotent === true) return false;
-    return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
-  };
+  // Plan 276 F6/C3 — `shouldRefreshTicketQueries` vivía acá como CLOSURE sin
+  // export: era intesteable sin montar el componente y en este repo no hay RTL ni
+  // jsdom. Ahora es `debeRefrescarQueriesDeTickets`, a nivel de módulo y exportada.
 
   // Mutacion de sync
   const syncMutation = useMutation({
@@ -94,20 +136,28 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
         catch { throw new Error(`Respuesta no-JSON del servidor (HTTP ${r.status})`); }
       });
     },
-    onSuccess: (data: TicketSyncResult & { idempotent?: boolean }) => {
-      if (data.ok || data.synced_at) {
+    onSuccess: (data: TicketSyncPayload) => {
+      const clase = clasificarRespuestaDeSync(data);
+      if (clase === "carencia") {
+        // Plan 276 F6 — `available: false` es una carencia declarada, NUNCA un
+        // éxito: sin esta guarda la UI muestra "sincronizado hace 2s" con cero
+        // tickets y cero error.
+        setSyncError(
+          data.message || "El tracker de este proyecto no soporta sincronización."
+        );
+      } else if (clase === "exito") {
         const syncedAt = data.synced_at ?? new Date().toISOString();
         setLastSyncedAt(syncedAt);
         lastSyncedAtRef.current = syncedAt;
         setSyncError(null);
         consecutiveErrorsRef.current = 0;
         setConsecutiveErrors(0);
-        if (shouldRefreshTicketQueries(data)) {
+        if (debeRefrescarQueriesDeTickets(data, lastTriggerRef.current)) {
           queryClient.invalidateQueries({ queryKey: ["ticket-sync", activeProjectName] });
           queryClient.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
           queryClient.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
         }
-      } else if (data.error === "rate_limited") {
+      } else if (clase === "rate_limited") {
         // Rate limited — no es error, solo esperar
         setSyncError(null);
       } else {

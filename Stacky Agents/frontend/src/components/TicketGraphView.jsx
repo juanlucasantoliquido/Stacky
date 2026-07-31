@@ -11,6 +11,8 @@ import {
   runtimeRequiresVsCodeAgent,
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
+// Plan 276 F7 — los rótulos siguen al tracker del proyecto activo, no dicen "ADO" siempre.
+import { accionSincronizar } from "../lib/trackerLabels";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 
 // Feature #4 (mejora post-SDD): la inferencia LLM (Tickets.adoPipelineStatus)
@@ -605,6 +607,8 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
 
 export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map(), memoryBadges = {} }) {
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  // Plan 276 F7 — tracker del proyecto activo, para el rótulo del botón de sync.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
 
   // LLM inference removida: inferMap queda vacío, los handlers son no-op
   // para mantener la firma de props de los componentes hijos sin reescribirlos.
@@ -646,7 +650,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
           </div>
         )}
         <button className={styles.syncBtn} onClick={onSync} disabled={isSyncing}>
-          {isSyncing ? "↻ Sincronizando…" : "⟳ Sincronizar ADO"}
+          {isSyncing ? "↻ Sincronizando…" : `⟳ ${accionSincronizar(trackerType)}`}
         </button>
       </div>
 
@@ -694,7 +698,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
       )}
 
       {totalTickets === 0 && (
-        <div className={styles.empty}>No hay tickets. Hacé clic en Sincronizar ADO.</div>
+        <div className={styles.empty}>{`No hay tickets. Hacé clic en ${accionSincronizar(trackerType)}.`}</div>
       )}
     </div>
   );

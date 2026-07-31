@@ -23,6 +23,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
+import config  # Plan 276 F4 — binding por MÓDULO ⇒ se lee config.config.X
 from runtime_paths import backend_root
 from services.gitlab_client import GitLabClient  # importado a nivel módulo para parchear en tests
 from services.silent_failure_counter import note_swallowed  # Plan 255 F1
@@ -81,6 +82,10 @@ _MANAGED_KEYS = [
     "STACKY_GITLAB_ENABLED",
     "STACKY_GITLAB_EPICS_NATIVE",
     "STACKY_GITLAB_CI_INFERENCE",
+    # Ruta al CA bundle para GitLab internos cuya CA no está en el almacén de
+    # la máquina. Es una RUTA, no un secreto: va en _MANAGED_KEYS y NO en
+    # _SECRET_KEYS, para que el operador pueda verificarla desde la UI.
+    "STACKY_GITLAB_CA_BUNDLE",
     # Plan 257 F4 — nivel de detalle del registro de actividad. NO es una
     # FlagSpec a proposito (C14): el hot-apply del panel de flags solo hace
     # setattr sobre config y no ejecutaria ningun efecto, asi que la interfaz
@@ -271,6 +276,15 @@ def test_global_tracker_connection():
 
     _TIMEOUT = 12
 
+    # Plan 276 F4 — `ok` se inicializa ACÁ, antes de la cadena de ramas, y no
+    # dentro de la rama GitLab. TRAMPA: el `return jsonify(...)` del final es
+    # COMPARTIDO por todos los tipos de tracker, así que cambiar `"ok": True` por
+    # `"ok": ok` sin esta línea produce un NameError para ADO/Jira/Mantis. Las
+    # ramas no-GitLab reportan OK si no lanzaron (su forma de fallar es un
+    # `return` temprano o una excepción); la rama GitLab lo sobrescribe con el
+    # veredicto de sus sub-checks.
+    ok = True
+
     try:
         if t_type == "azure_devops":
             org = _merge("organization", "ADO_ORG")
@@ -338,8 +352,15 @@ def test_global_tracker_connection():
             if not base or not proj:
                 return jsonify({"ok": False, "error": "Falta GITLAB_URL o GITLAB_PROJECT"})
 
+            # Sin el bundle, un GitLab interno muere con SSLError aunque el
+            # proyecto ya lo tenga configurado y andando. `auth_path` NO se
+            # cablea acá a propósito: esta ruta es GLOBAL y GITLAB_TOKEN está
+            # excluido de ella por ser secreto, así que caer al token del
+            # proyecto activo daría un verde que no prueba lo que el botón dice.
+            ca_bundle = _merge("gitlab_ca_bundle", "STACKY_GITLAB_CA_BUNDLE") or None
+
             try:
-                c = GitLabClient(base_url=base, project=proj)
+                c = GitLabClient(base_url=base, project=proj, ca_bundle=ca_bundle)
             except _TrackerConfigError as e:
                 return jsonify({"ok": False, "error": str(e)})
 
@@ -355,8 +376,13 @@ def test_global_tracker_connection():
             try:
                 c._request("GET", f"/projects/{c._project_path()}/issues", params={"per_page": 1})
                 checks["read"] = True
-            except Exception:
-                pass
+            except Exception as exc_read:
+                # Plan 276 F4 — este `except` se TRAGABA el fallo del listado (era
+                # un `pass`), y como el `ok` calculado abajo se descartaba, el
+                # operador recibía "conexion OK" con el listado roto. Ese fue,
+                # literalmente, el falso verde que costó una jornada.
+                checks["read"] = False
+                checks["read_error"] = str(exc_read)
 
             try:
                 uid = user.get("id")
@@ -368,14 +394,30 @@ def test_global_tracker_connection():
             except Exception:
                 checks["write_permission"] = None  # desconocido
 
-            ok = bool(checks["auth"] and checks["read"])
+            # `write_permission` NO vota (decisión explícita del plan 276 F4): un
+            # token de SOLO LECTURA es una configuración válida para leer issues y
+            # verlos en el grafo. Si votara, un token read-only pondría el check en
+            # rojo con el sistema funcionando — el mismo falso veredicto que este
+            # plan vino a matar, con el signo invertido. Se muestra, no decide.
+            # Y `None` significa "no pude averiguarlo", nunca "no tenés permiso".
+            if bool(getattr(config.config, "STACKY_TRACKER_PROBE_STRICT_ENABLED", True)):
+                ok = bool(checks["auth"] and checks["read"])
             msg = f"GitLab -- conexion {'OK' if ok else 'PARCIAL'}. Checks: {checks}"
 
         else:
             return jsonify({"ok": False, "error": f"Tipo de tracker desconocido: {t_type}"}), 400
 
         logger.info("test-global-connection [%s]: %s", t_type, msg)
-        return jsonify({"ok": True, "message": msg, "tracker_type": t_type})
+        # Plan 276 F4 — `ok` deja de ser un True hardcodeado que descartaba el
+        # veredicto ya calculado. `checks` viaja al frontend para que el operador
+        # vea CUÁL sub-check falló; en las ramas no-GitLab no existe y va None
+        # (aditivo, sin romper consumidores).
+        return jsonify({
+            "ok": ok,
+            "message": msg,
+            "tracker_type": t_type,
+            "checks": locals().get("checks"),
+        })
 
     except (urllib.error.HTTPError, urllib.error.URLError) as exc:
         err = str(exc)

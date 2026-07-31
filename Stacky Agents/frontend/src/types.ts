@@ -280,6 +280,8 @@ export interface Project {
   gitlab_project?: string;
   gitlab_group?: string;
   gitlab_auth_file?: string;
+  /** Ruta a un bundle .pem para GitLab con certificado interno (opcional). */
+  gitlab_ca_bundle?: string;
   /** Runtime */
   active: boolean;
   initialized: boolean;
@@ -334,6 +336,8 @@ export interface InitProjectPayload {
   gitlab_project?: string;
   gitlab_group?: string;
   gitlab_auth_file?: string;
+  /** Ruta a un bundle .pem para GitLab con certificado interno (opcional). */
+  gitlab_ca_bundle?: string;
   // Plan 259 F5.a — sin `gitlab_token` en el tipo base, `patch("gitlab_token", …)`
   // de EditProjectModal (tipado `keyof InitProjectPayload`) NO compila.
   gitlab_token?: string;

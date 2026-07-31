@@ -246,7 +246,10 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
             "las sub-consultas de resource_state_events / resource_label_events están "
             "silenciadas: sin historial de estado ni de etiquetas",
         ),
-        "tracker.sync.full": _a("api/tickets.py:692"),
+        # Plan 276 F5.4 — deja de mentir: el sync completo EXISTE para GitLab.
+        # Antes era `_a("api/tickets.py:692")` (ausente), que era la deuda que
+        # `api/tickets.py` delegaba a un "Plan 220" que nunca se escribió.
+        "tracker.sync.full": _f("services/gitlab_sync.py:sync_gitlab_tickets"),
         "tracker.sync.incremental": _a(),
         "tracker.epics.list": _a(),
         "tracker.epics.create_native": _p(

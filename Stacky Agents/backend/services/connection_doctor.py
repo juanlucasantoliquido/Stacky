@@ -250,14 +250,19 @@ def _token_url(tracker_type: str, tracker: dict) -> str:
     return ""
 
 
-def _probe_gitlab(tracker: dict) -> None:
-    """Sonda GitLab propia (el bug de local_diagnostics._check_tracker:80 manda gitlab
-    a _probe_ado; acá NO se replica). Mismo cliente/constructor que api/global_config.py."""
-    from services.gitlab_client import GitLabClient
-    base = str(tracker.get("base_url") or tracker.get("url") or "")
-    proj = str(tracker.get("project") or tracker.get("project_path") or "")
-    client = GitLabClient(base_url=base, project=proj)
-    client._request("GET", "/user")
+def _probe_gitlab(tracker: dict, project_name: str | None = None) -> None:
+    """Delega en la sonda GitLab única de `services/local_diagnostics.py`.
+
+    Antes esto era una copia propia. Nació para esquivar un bug de
+    `local_diagnostics._check_tracker` (ruteaba gitlab al `else` de Azure DevOps),
+    pero arrastraba uno propio: construía `GitLabClient` SIN `auth_path`, así que
+    no encontraba el token por proyecto y moría con TrackerConfigError. Ambos
+    defectos están corregidos y la sonda vive en un solo lugar: mantener dos
+    motores divergentes fue exactamente lo que dejó el bug vivo.
+    """
+    from services.local_diagnostics import _probe_gitlab as _probe
+
+    _probe(project_name or "", tracker)
 
 
 def probe_tracker() -> dict:
@@ -280,7 +285,7 @@ def probe_tracker() -> dict:
             from services.local_diagnostics import _probe_mantis
             _probe_mantis(active, tracker)
         elif tracker_type == "gitlab":
-            _probe_gitlab(tracker)
+            _probe_gitlab(tracker, active)
         else:
             from services.local_diagnostics import _probe_ado
             _probe_ado(active)

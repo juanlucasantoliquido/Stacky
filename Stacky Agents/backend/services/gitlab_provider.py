@@ -52,6 +52,7 @@ class GitLabTrackerProvider:
         base_url: Optional[str] = None,
         group: Optional[str] = None,
         auth_path: Optional[str] = None,
+        ca_bundle: Optional[str] = None,
     ):
         # D2 (Plan 218 F0): las 4 lecturas iban al MÓDULO config y devolvían
         # siempre el default ⇒ _group y _epics_native quedaban muertos.
@@ -60,7 +61,12 @@ class GitLabTrackerProvider:
         # GitLabTrackerProvider(project="x") sigue funcionando igual.
         base = base_url or (getattr(config.config, "GITLAB_URL", "") or "")
         proj = project or (getattr(config.config, "GITLAB_PROJECT", "") or "")
-        self._client = GitLabClient(base_url=base, project=proj, auth_path=auth_path)
+        # El `ca_bundle` viaja hasta acá porque este es el cliente que LISTA
+        # TICKETS. Cablearlo solo en la sonda de diagnóstico dejaba el check en
+        # verde y la lista de issues vacía por SSLError (RIPLEY, 2026-07-30).
+        self._client = GitLabClient(
+            base_url=base, project=proj, auth_path=auth_path, ca_bundle=ca_bundle
+        )
         self._project = proj
         self._group = group or (getattr(config.config, "STACKY_GITLAB_GROUP", "") or "")
         self._epics_native = bool(getattr(config.config, "STACKY_GITLAB_EPICS_NATIVE", False))
@@ -93,6 +99,15 @@ class GitLabTrackerProvider:
         # parent: si tiene epic_iid (GitLab Premium) o _link_parent_id inyectado
         parent = body.get("epic", {}) or {}
         parent_id = str(parent.get("iid") or parent.get("id") or "") or None
+        # Plan 276 F5.1 (P1-6) — el tipo sale de la label `type::<x>` que este
+        # mismo provider escribe al crear (`_type_label`). Sin esto el campo no se
+        # emitía, `api/tickets.py` clasificaba por `work_item_type == "epic"` y
+        # TODO caía en `orphans`: el grafo nunca mostraba una jerarquía.
+        tipo = "Issue"
+        for etiqueta in labels:
+            if isinstance(etiqueta, str) and etiqueta.lower().startswith("type::"):
+                tipo = etiqueta.split("::", 1)[1].strip().capitalize() or "Issue"
+                break
         return {
             "id": str(body.get("id") or ""),
             "iid": str(body.get("iid") or ""),
@@ -103,6 +118,7 @@ class GitLabTrackerProvider:
             "assignees": assignee_names,
             "web_url": body.get("web_url") or "",
             "updated_at": body.get("updated_at") or "",
+            "work_item_type": tipo,
             "parent": parent_id,
         }
 

@@ -144,8 +144,16 @@ def get_tracker_provider(project: Optional[str] = None):
             return GitLabTrackerProvider(
                 project=tgt.project_path, base_url=tgt.base_url,
                 group=tgt.group, auth_path=tgt.auth_path,
+                ca_bundle=tgt.ca_bundle,
             )
-        return GitLabTrackerProvider(project=project)   # ruta legacy, byte-idéntica
+        # Plan 276 F8.1 — la ruta legacy TAMBIÉN necesita el bundle: sin él, apagar
+        # STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED devuelve el SSLError entero
+        # contra un GitLab con certificado interno. Era el único camino del repo que
+        # construía este provider sin certificado y no tenía ningún test.
+        return GitLabTrackerProvider(
+            project=project,
+            ca_bundle=(getattr(config.config, "STACKY_GITLAB_CA_BUNDLE", "") or None),
+        )
 
     if ttype == "azure_devops":
         from services.ado_provider import AdoTrackerProvider

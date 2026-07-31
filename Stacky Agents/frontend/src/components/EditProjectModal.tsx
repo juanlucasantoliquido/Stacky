@@ -6,7 +6,11 @@ import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import { Field, Input, Select, Textarea, Checkbox, firstErrorFieldId } from "./ui";
 import useOptimisticPending from "../hooks/useOptimisticPending";
 import usePlan259Flags from "../hooks/usePlan259Flags";
-import { showInfoButton } from "../projects/newProjectGitlabModel";
+import {
+  normalizeGitlabProjectPath,
+  normalizeGitlabUrl,
+  showInfoButton,
+} from "../projects/newProjectGitlabModel";
 import SetupGuideDialog from "./SetupGuideDialog";
 import styles from "./NewProjectModal.module.css";
 
@@ -45,6 +49,7 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
     gitlab_project:       project.gitlab_project ?? "",
     gitlab_group:         project.gitlab_group ?? "",
     gitlab_auth_file:     project.gitlab_auth_file ?? "",
+    gitlab_ca_bundle:     project.gitlab_ca_bundle ?? "",
   });
   const { pending: saving, run, pendingClass } = useOptimisticPending();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -224,7 +229,16 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
       technical: docsPath("technical").trim(),
       functional: docsPath("functional").trim(),
     };
-    return { ...form, docs_paths };
+    const base = { ...form, docs_paths };
+    if (base.tracker_type !== "gitlab") return base;
+    // Plan 276 F8.2 — MISMA normalización que el alta (NewProjectModal.buildPayload):
+    // sin esto el alta limpiaba la URL y la primera edición la volvía a romper,
+    // devolviendo el namespace pegado a la base_url (→ HTTP 404 en toda la API).
+    return {
+      ...base,
+      gitlab_url: normalizeGitlabUrl(base.gitlab_url ?? ""),
+      gitlab_project: normalizeGitlabProjectPath(base.gitlab_project ?? ""),
+    };
   }
 
   async function browseAgentsDir() {
@@ -789,6 +803,27 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
                 Es un archivo JSON con la forma <code>{'{"token": "..."}'}</code> . Si lo dejás vacío,
                 Stacky usa <code>auth/gitlab_auth.json</code> dentro de la carpeta del proyecto y
                 guarda ahí el token cifrado.
+              </p>
+              <Field label="Certificado de la empresa (opcional)" labelClassName={styles.label}>
+                {(ctl) => (
+                  <Input
+                    {...ctl}
+                    className={styles.input}
+                    type="text"
+                    placeholder="Ej: C:\certs\ca-bundle-migrador.pem"
+                    value={form.gitlab_ca_bundle ?? ""}
+                    onChange={(e) => patch("gitlab_ca_bundle", e.target.value)}
+                  />
+                )}
+              </Field>
+              <p className={styles.note}>
+                Solo hace falta si tu GitLab es interno y su certificado no está en el
+                almacén de la máquina: sin esto la conexión falla con{" "}
+                <code>CERTIFICATE_VERIFY_FAILED</code>. Poné la ruta a un archivo{" "}
+                <code>.pem</code>; ya hay uno en{" "}
+                <code>Stacky Agents/deployment/ca-bundle-migrador.pem</code>. Dejalo vacío
+                para GitLab.com o si el certificado ya es de confianza. La verificación
+                nunca se desactiva.
               </p>
             </div>
           )}

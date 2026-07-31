@@ -26,9 +26,18 @@ export function validateGitlabFields(f: GitlabFormValues): Record<string, string
   return errs;
 }
 
-/** Quita la barra final y un /api/v4 pegado; no toca nada más. */
+/** Plan 276 F8.3 — Quita la barra final, un /api/vN pegado y CUALQUIER path: la
+ *  base_url es solo el origen.
+ *
+ *  La versión anterior solo sacaba la barra final y un `/api/v4`, así que el
+ *  namespace copiado del navegador (`https://host/grupo/proyecto`) quedaba PEGADO
+ *  a la base y todas las llamadas salían a `.../grupo/proyecto/api/v4/...` → 404.
+ *  Un valor sin esquema se devuelve tal cual: `validateGitlabFields` ya lo rechaza
+ *  y acá no corresponde inventar un origen. */
 export function normalizeGitlabUrl(raw: string): string {
-  return (raw ?? "").trim().replace(/\/+$/, "").replace(/\/api\/v4$/i, "");
+  const limpio = (raw ?? "").trim().replace(/\/+$/, "").replace(/\/api\/v[0-9]+$/i, "");
+  const m = limpio.match(/^(https?:\/\/[^/]+)(\/.*)?$/i);
+  return m ? m[1] : limpio;
 }
 
 /** 'https://gitlab.com/acme/api/-/issues' → 'acme/api'. Un path ya limpio queda igual. */

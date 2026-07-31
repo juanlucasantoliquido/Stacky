@@ -638,6 +638,7 @@ def initialize_gitlab_project(
     display_name: str = "",
     group: str = "",
     auth_file: str = "",
+    ca_bundle: str = "",
     docs_paths: dict | None = None,
     agents_dir: str | None = None,
 ) -> dict:
@@ -652,6 +653,11 @@ def initialize_gitlab_project(
     ese campo como ruta editable; pisarlo con el default sería la misma
     degradación silenciosa que este plan viene a matar.
     Solo cuando el proyecto no tiene ninguno se usa DEFAULT_GITLAB_AUTH_FILE.
+
+    `ca_bundle` NO sigue esa regla: acá vacío significa BORRAR. La preservación
+    del valor cuando el campo no viaja en un PATCH parcial ya la resuelve
+    `_resolve_text_field` en `api/projects.py`, así que aplicar además un
+    fallback al valor previo haría imposible quitar el bundle desde la UI.
     """
     previous = (get_project_config(name) or {}).get("issue_tracker") or {}
     resolved_auth = (
@@ -667,6 +673,8 @@ def initialize_gitlab_project(
     }
     if group:
         tracker["group"] = group.strip()
+    if (ca_bundle or "").strip():
+        tracker["ca_bundle"] = ca_bundle.strip()
 
     return initialize_project(
         name=name,

@@ -37,6 +37,8 @@ import {
   runtimeRequiresVsCodeAgent,
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
+// Plan 276 F7 — los rótulos siguen al tracker del proyecto activo, no dicen "ADO" siempre.
+import { accionSincronizar, nombreDeTracker, tituloDeTickets } from "../lib/trackerLabels";
 import { canResolveWithAgent } from "../incidents/devResolverModel";
 import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
@@ -937,6 +939,8 @@ export default function TicketBoard() {
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const activeProject = useWorkbench((s) => s.activeProject);
   const activeProjectName = activeProject?.name ?? null;
+  // Plan 276 F7 — tracker del proyecto activo, para los rótulos de la pantalla.
+  const trackerType = activeProject?.tracker_type ?? null;
   const { data: memoryBadges = {} } = useQuery<Record<string, StackyMemoryTicketBadge>>({
     queryKey: ["memory-ticket-badges", activeProjectName],
     queryFn: () => Memory.ticketBadges(activeProjectName),
@@ -1079,7 +1083,7 @@ export default function TicketBoard() {
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <span className={styles.logo}>📋</span>
-          <h1 className={styles.title}>Tickets ADO</h1>
+          <h1 className={styles.title}>{tituloDeTickets(trackerType)}</h1>
           {viewMode === "tree" && (
             <span className={styles.count}>{totalHierarchy} grupos</span>
           )}
@@ -1174,9 +1178,9 @@ export default function TicketBoard() {
             className={styles.syncBtn}
             onClick={triggerSync}
             disabled={isSyncingV2}
-            title="Sincronizar tickets desde ADO"
+            title={`Sincronizar tickets desde ${nombreDeTracker(trackerType)}`}
           >
-            {isSyncingV2 ? "↻ Sincronizando…" : "⟳ Sincronizar ADO"}
+            {isSyncingV2 ? "↻ Sincronizando…" : `⟳ ${accionSincronizar(trackerType)}`}
           </button>
         </div>
       </header>
@@ -1290,8 +1294,8 @@ export default function TicketBoard() {
             {!isHierarchyLoading && !hierarchyUnavailable && filteredEpics.length === 0 && filteredOrphans.length === 0 && (
               <EmptyState
                 variant="tickets"
-                message="No hay tickets para este proyecto. Sincronizá con ADO para traerlos."
-                actionLabel="Sincronizar ADO"
+                message={`No hay tickets para este proyecto. Sincronizá con ${nombreDeTracker(trackerType)} para traerlos.`}
+                actionLabel={accionSincronizar(trackerType)}
                 onAction={triggerSync}
               />
             )}

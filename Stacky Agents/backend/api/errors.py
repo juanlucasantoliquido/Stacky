@@ -79,7 +79,12 @@ def capability_unavailable_envelope(exc) -> dict:
     nunca un 500 que el operador tiene que interpretar.
     """
     payload = exc.to_payload()
-    payload.setdefault("ok", True)
+    # Plan 276 F6 — una capacidad AUSENTE no es un éxito. El status HTTP sigue
+    # siendo 200 (riel del plan 218: no reventar con un 500 que el operador tiene
+    # que interpretar), pero `ok` deja de contradecir a `available`. Con el
+    # `ok:true` de antes, `useTicketSync` tomaba la rama de éxito y la UI mostraba
+    # "sincronizado hace 2s" con cero tickets y cero error.
+    payload["ok"] = bool(payload.get("available", False))
     payload["message"] = str(exc)
     return payload
 

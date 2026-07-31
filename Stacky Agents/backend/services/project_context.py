@@ -73,6 +73,10 @@ class TrackerTarget:
     organization: str | None
     group: str | None
     auth_path: str | None
+    # Ampliación ADITIVA (default None): sin esto el bundle llegaba solo a la sonda
+    # de diagnóstico y el listador de tickets moría con SSLError contra un GitLab
+    # cuya CA no está en el almacén de la máquina.
+    ca_bundle: str | None = None
 
 
 def _normalize_project_name(name: str | None) -> str | None:
@@ -243,6 +247,7 @@ def build_tracker_target(project_name: str | None = None) -> TrackerTarget:
     project_path = (getattr(ctx, "tracker_project", None) or "").strip()
     base_url = getattr(ctx, "base_url", None)
     group = getattr(ctx, "tracker_group", None)
+    ca_bundle = None
 
     if tracker_type == "gitlab":
         # B1: `_tracker_project_for` cae al NOMBRE Stacky cuando el proyecto no declara
@@ -255,6 +260,10 @@ def build_tracker_target(project_name: str | None = None) -> TrackerTarget:
             cfg = _config_for_project_name(activo) if activo else None
         declarado = ((cfg or {}).get("issue_tracker") or {}).get("project")
         project_path = (declarado or "").strip()
+        # El bundle se declara POR PROYECTO. Si falta, `preparar_verificacion`
+        # cae a STACKY_GITLAB_CA_BUNDLE / REQUESTS_CA_BUNDLE y, sin ninguno, a
+        # la verificación estándar: acá NO se inventa un fallback.
+        ca_bundle = (((cfg or {}).get("issue_tracker") or {}).get("ca_bundle") or "").strip() or None
 
         if not base_url:
             base_url = (getattr(_config.config, "GITLAB_URL", "") or "").strip() or None
@@ -270,6 +279,7 @@ def build_tracker_target(project_name: str | None = None) -> TrackerTarget:
         organization=getattr(ctx, "organization", None),
         group=group,
         auth_path=getattr(ctx, "auth_path", None),
+        ca_bundle=ca_bundle,
     )
 
 

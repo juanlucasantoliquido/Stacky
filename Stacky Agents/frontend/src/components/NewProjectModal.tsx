@@ -52,6 +52,7 @@ const EMPTY: InitProjectPayload = {
   gitlab_url: "",
   gitlab_project: "",
   gitlab_group: "",
+  gitlab_ca_bundle: "",
   gitlab_token: "",
   gitlab_enable_engine: true,
 };
@@ -847,6 +848,26 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
                       />
                     )}
                   </Field>
+                  <Field label="Certificado de la empresa (opcional)" labelClassName={styles.label} id="np-gitlab_ca_bundle">
+                    {(ctl) => (
+                      <Input
+                        {...ctl}
+                        className={styles.input}
+                        type="text"
+                        placeholder="Ej: C:\certs\ca-bundle-migrador.pem"
+                        value={form.gitlab_ca_bundle ?? ""}
+                        onChange={(e) => patch("gitlab_ca_bundle", e.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <p className={styles.note}>
+                    Solo hace falta si tu GitLab es interno y su certificado no está en el
+                    almacén de la máquina: sin esto la conexión falla con{" "}
+                    <code>CERTIFICATE_VERIFY_FAILED</code>. Poné la ruta a un archivo{" "}
+                    <code>.pem</code>; ya hay uno en{" "}
+                    <code>Stacky Agents/deployment/ca-bundle-migrador.pem</code>. Dejalo
+                    vacío para GitLab.com. La verificación nunca se desactiva.
+                  </p>
                 </div>
               </details>
 

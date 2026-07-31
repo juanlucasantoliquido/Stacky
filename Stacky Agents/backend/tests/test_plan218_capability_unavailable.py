@@ -2,6 +2,16 @@
 
 Degradación DECLARADA: una capacidad que el proveedor activo no tiene se manifiesta
 como un 200 accionable, nunca como un 500 mudo ni como un silencio.
+
+ACTUALIZADO POR EL PLAN 276 F5, con el motivo por escrito: estos casos usaban
+`gitlab` como ejemplo de proveedor SIN `tracker.sync.full`. El plan 276 IMPLEMENTÓ
+ese sync para GitLab (`services/gitlab_sync.py`), así que gitlab ya no sirve como
+ejemplo de capacidad ausente — usarlo dejaría el test verde por el motivo
+equivocado (de hecho `test_flag_off_restaura_excepcion_legacy` pasaba de casualidad:
+el 500 venía del sync fallando al resolver el contexto, no de la degradación).
+Se cambió a `jira`, que SIGUE sin la capacidad, con lo cual la INTENCIÓN de cada
+caso (una carencia declarada se ve como carencia) se conserva intacta y vuelve a
+probar lo que dice probar.
 """
 from __future__ import annotations
 
@@ -44,15 +54,18 @@ def client():
 def test_endpoint_de_sync_devuelve_200_con_available_false(client, monkeypatch):
     monkeypatch.setattr(config_module.config, "STACKY_CAPABILITY_DEGRADATION_ENABLED", True)
 
-    with patch("api.tickets._provider_for_ticket", return_value=_FakeProvider("gitlab")):
+    with patch("api.tickets._provider_for_ticket", return_value=_FakeProvider("jira")):
         resp = client.post("/api/tickets/sync")
 
     assert resp.status_code == 200, resp.get_data(as_text=True)
     body = resp.get_json()
     assert body["available"] is False
     assert body["capability"] == "tracker.sync.full"
-    assert body["provider"] == "gitlab"
+    assert body["provider"] == "jira"
     assert body["workaround"], "la degradación debe decirle al operador qué hacer"
+    # Plan 276 F6 — `ok` ya no contradice a `available`: una capacidad AUSENTE no
+    # es un éxito. El status HTTP sigue siendo 200 (riel del plan 218).
+    assert body["ok"] is False, f"`ok:true` con `available:false` es un falso verde: {body}"
 
 
 def test_endpoint_de_sync_ado_no_cambia(client, monkeypatch):
@@ -80,7 +93,7 @@ def test_flag_off_restaura_excepcion_legacy(client, monkeypatch):
     """
     monkeypatch.setattr(config_module.config, "STACKY_CAPABILITY_DEGRADATION_ENABLED", False)
 
-    with patch("api.tickets._provider_for_ticket", return_value=_FakeProvider("gitlab")):
+    with patch("api.tickets._provider_for_ticket", return_value=_FakeProvider("jira")):
         resp = client.post("/api/tickets/sync")
 
     assert resp.status_code == 500

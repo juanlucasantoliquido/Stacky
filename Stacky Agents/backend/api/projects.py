@@ -32,6 +32,7 @@ Campos adicionales para GitLab (Plan 259 F2):
     "gitlab_group": "acme",                    # opcional, solo para epicas nativas
     "gitlab_token": "TOKEN_AQUI",              # se guarda CIFRADO (DPAPI), nunca se devuelve
     "gitlab_auth_file": "",                    # vacio = conservar el actual (v2, C4)
+    "gitlab_ca_bundle": "",                    # .pem para GitLab con cert interno; vacio = borrar
     "gitlab_enable_engine": true }             # tildado: enciende el motor al crear (F7)
   Se guardan como issue_tracker.{base_url, project, group, auth_file}: son las
   claves que ya leen services/project_context.py. Usar otros nombres dejaria el
@@ -183,6 +184,7 @@ def _project_to_dict(cfg: dict, active_name: str | None) -> dict:
         "gitlab_project":    tracker.get("project", "")  if t_type == "gitlab" else "",
         "gitlab_group":      tracker.get("group", "")    if t_type == "gitlab" else "",
         "gitlab_auth_file":  tracker.get("auth_file", "") if t_type == "gitlab" else "",
+        "gitlab_ca_bundle":  tracker.get("ca_bundle", "") if t_type == "gitlab" else "",
         "active":            cfg["name"] == active_name,
         "initialized":       True,
         "has_credentials":   _has_credentials(cfg["name"], t_type),
@@ -462,6 +464,7 @@ def init_project():
 
             # v2 C4: vacío = "conservá el que ya tenga", NO "poné el default".
             gitlab_auth_file = (data.get("gitlab_auth_file") or "").strip()
+            gitlab_ca_bundle = (data.get("gitlab_ca_bundle") or "").strip()
 
             cfg = initialize_gitlab_project(
                 name=name,
@@ -471,6 +474,7 @@ def init_project():
                 project_path=gitlab_project,
                 group=gitlab_group,
                 auth_file=gitlab_auth_file,
+                ca_bundle=gitlab_ca_bundle,
                 docs_paths=docs_paths,
                 agents_dir=agents_dir,
             )
@@ -644,6 +648,8 @@ def update_project(project_name: str):
             # v2 C4: el modal de edicion YA expone este campo como ruta editable.
             # Hardcodearlo pisaria en silencio lo que el operador escribio.
             gitlab_auth_file = _resolve_text_field(data, "gitlab_auth_file", tracker.get("auth_file", ""))
+            # Vacío EXPLÍCITO borra el bundle; ausente lo conserva (_resolve_text_field).
+            gitlab_ca_bundle = _resolve_text_field(data, "gitlab_ca_bundle", tracker.get("ca_bundle", ""))
             gitlab_token   = (data.get("gitlab_token") or "").strip()
             new_cfg = initialize_gitlab_project(
                 name=project_name,
@@ -653,6 +659,7 @@ def update_project(project_name: str):
                 project_path=gitlab_project,
                 group=gitlab_group,
                 auth_file=gitlab_auth_file,
+                ca_bundle=gitlab_ca_bundle,
                 docs_paths=docs_paths,
                 agents_dir=agents_dir,
             )

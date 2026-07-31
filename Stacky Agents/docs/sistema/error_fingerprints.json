@@ -963,8 +963,12 @@
       "killed_by": "plan 271 (F1+F2: el motor A honra tracker_state_machine.<rol>.next_state_ok)",
       "guard_test": "backend/tests/test_plan271_role_fallback.py",
       "self_test": {
-        "matches": ["action=completion.matrix_transition reason=no_matrix_cell source=config"],
-        "clean": ["action=completion.matrix_transition reason=ok source=role"]
+        "matches": [
+          "action=completion.matrix_transition reason=no_matrix_cell source=config"
+        ],
+        "clean": [
+          "action=completion.matrix_transition reason=ok source=role"
+        ]
       }
     },
     {
@@ -977,8 +981,12 @@
       "killed_by": "plan 271 (F3-bis-3 + F9: transition_failed cableado en los dos escritores)",
       "guard_test": "backend/tests/test_plan271_razon_del_catalogo.py",
       "self_test": {
-        "matches": ["final_state_outcome {\"applied\": false, \"reason\": \"unknown\"}"],
-        "clean": ["final_state_outcome {\"applied\": false, \"reason\": \"transition_failed\"}"]
+        "matches": [
+          "final_state_outcome {\"applied\": false, \"reason\": \"unknown\"}"
+        ],
+        "clean": [
+          "final_state_outcome {\"applied\": false, \"reason\": \"transition_failed\"}"
+        ]
       }
     },
     {
@@ -1018,6 +1026,31 @@
       },
       "evidence": "backend/api/db_compare.py:38; backend/api/migrator.py:101; frontend/src/api/client.ts:208",
       "note": "24 ocurrencias en 13 archivos al momento de matarlo (14 con clave `error`, 10 con `message`). OJO: sacar el nombre de la clave `error` NO lo saca de la pantalla — viaja igual dentro del JSON crudo que client.ts:208 aplana en Error.message; por eso el guardian real son DOS, este y plan273RawErrorSurfaceRatchet.test.ts."
+    },
+    {
+      "id": "gitlab_sslerror_bajo_truststore_hoja_invisible",
+      "title": "SSLError contra un GitLab interno con el bundle correcto (truststore ignora la HOJA)",
+      "class": "tls-verify-failed",
+      "status": "resolved",
+      "log_pattern": "(CERTIFICATE_VERIFY_FAILED|unable to get local issuer certificate)",
+      "log_guarded": true,
+      "killed_by": "plan 276 (GitLab self-hosted de punta a punta: TLS que coexiste, sync real y tickets en el grafo)",
+      "killed_commit": "PENDIENTE-COMMIT-PLAN-276",
+      "date_resolved": "2026-07-31",
+      "guard_test": "backend/tests/test_plan276_tls_context.py::test_el_bundle_llega_a_openssl_incluida_la_hoja",
+      "evidence": "backend/app.py:24-28 (truststore.inject_into_ssl es global al proceso); truststore/_windows.py:366-371 (VERIFY_X509_PARTIAL_CHAIN NO se consulta) y :385-403 (busca los certs del verify= con get_ca_certs); backend/services/tls_openssl_context.py (el remedio)",
+      "note": "LA CLASE DE ERROR ENTERA, y por que el diagnostico se va por el camino equivocado. truststore.inject_into_ssl() reemplaza ssl.SSLContext para TODO el proceso y la verificacion pasa a Windows CryptoAPI, que (a) NO consulta VERIFY_X509_PARTIAL_CHAIN, con lo cual el pin de hoja queda INERTE, y (b) busca los certificados del verify= con ssl_context.get_ca_certs(), que OMITE los que no son CA. El certificado que hace falta contra srvcgit01 es exactamente una HOJA. Medido: ca-bundle-migrador.pem -> cert_store_stats()={'x509':119,'x509_ca':118} pero get_ca_certs()=118 (sin la hoja); srvcgit01-hoja.pem -> get_ca_certs()=0, con lo cual truststore ni siquiera intenta el segundo camino. Y truststore re-lanza el error ORIGINAL de Windows (_windows.py:404-406), asi que el mensaje NO menciona el bundle aunque el bundle si haya viajado: de ahi las horas perdidas buscando un problema de cableado que no existia (el cableado estaba completo en sus 8 patas). DOS TRAMPAS AL ARREGLARLO: (1) el fallo de un HTTPAdapter ingenuo es RecursionError, no un error de TLS, porque urllib3 setea context.verify_mode y el setter de ssl.py resuelve el nombre SSLContext desde el modulo ya pisado por truststore; (2) el gate del bundle NUNCA puede ser get_ca_certs() porque es ciego a las hojas: es cert_store_stats(). REMEDIO: contexto OpenSSL genuino montado SOLO en la sesion de GitLab; truststore sigue intacto para Azure DevOps, Jira, las APIs de modelos y gitlab.com (que llega firmado por Zscaler y NECESITA truststore).",
+      "self_test": {
+        "matches": [
+          "SSLError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1028)",
+          "HTTPSConnectionPool(host='srvcgit01.imsolutions.local', port=443): CERTIFICATE_VERIFY_FAILED"
+        ],
+        "clean": [
+          "GET /api/v4/version -> 401 (TLS sano, falta el token)",
+          "Contexto OpenSSL genuino para GitLab: 119 certs (118 CA, 1 hoja)",
+          "sync-v2: ok=true created=53"
+        ]
+      }
     }
   ]
 }

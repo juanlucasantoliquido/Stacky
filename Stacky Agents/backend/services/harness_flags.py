@@ -535,6 +535,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_SETUP_GUIDE_VERIFY_ENABLED",         # Plan 259 F4/F6 — "Verificar ahora"
         "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED",  # Plan 270 F1/F2 — enrutar el estado al tracker real
         "STACKY_TICKET_STATE_WRITEBACK_ENABLED",       # Plan 270 F4 — re-leer y refrescar la copia local
+        # Plan 276 — GitLab self-hosted de punta a punta (TLS + sync + veredicto)
+        "STACKY_GITLAB_TLS_ADAPTER_ENABLED",     # Plan 276 F1/F2 — contexto OpenSSL genuino por conexión
+        "STACKY_TRACKER_PROBE_STRICT_ENABLED",   # Plan 276 F4 — 4 sub-veredictos en vez de un nombre
+        "STACKY_GITLAB_SYNC_ENABLED",            # Plan 276 F5 — sync GitLab → BD de Stacky
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5464,6 +5468,55 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "200 con {available:false, capability, reason, workaround} en vez de reventar con "
             "un 500 mudo. Mejora estabilidad y DX; no agrega prerequisitos ni reduce seguridad. "
             "Con OFF vuelve la excepción legacy."
+        ),
+        group="global",
+    ),
+    # ── Plan 276 — GitLab self-hosted de punta a punta ────────────────────────
+    # Las 3 nacen default ON y están curadas en _CURATED_DEFAULTS_ON. Ninguna cae
+    # en las categorías de excepción: no hay loop/daemon/barrido ni llamada a
+    # modelo (A no aplica) y no escriben en ningún sistema del operador ni le
+    # sacan una decisión (B no aplica).
+    FlagSpec(
+        key="STACKY_GITLAB_TLS_ADAPTER_ENABLED",
+        type="bool",
+        default=True,  # default ON (corrige una conexión rota; es solo lectura; curada en _CURATED_DEFAULTS_ON)
+        label="Certificado interno de GitLab por conexión",
+        description=(
+            "Plan 276 — Monta un contexto OpenSSL genuino con el certificado del proyecto SOLO en "
+            "la sesión de GitLab. Hace falta porque truststore (obligatorio por la inspección TLS "
+            "de la red corporativa) verifica por el almacén de Windows e ignora el pin de "
+            "certificado hoja, así que un GitLab interno muere en el handshake aunque el "
+            "certificado viaje bien. Azure DevOps, Jira y las APIs de modelos NO se tocan. "
+            "Con OFF vuelve el verify=<bundle> de hoy."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_TRACKER_PROBE_STRICT_ENABLED",
+        type="bool",
+        default=True,  # default ON (solo lectura: leer, calcular y mostrar; curada en _CURATED_DEFAULTS_ON)
+        label="Veredicto estricto del check de tracker",
+        description=(
+            "Plan 276 — 'Probar conexión' reporta cuatro sub-veredictos por separado (TLS, "
+            "credenciales, proyecto legible, cantidad de ítems) y sale verde solo si los cuatro "
+            "pasan. Mata el falso verde que ya costó una jornada: check en verde con el listado "
+            "roto, porque el rótulo afirmaba 'alcanzable' sin haber hecho ping. Con OFF vuelve el "
+            "veredicto único de hoy."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_SYNC_ENABLED",
+        type="bool",
+        default=True,  # default ON (escribe en la BD de Stacky, no en un sistema del operador, y es on-demand; curada en _CURATED_DEFAULTS_ON)
+        label="Sincronizar issues de GitLab",
+        description=(
+            "Plan 276 — El botón 'Sincronizar' de un proyecto GitLab trae los issues abiertos a la "
+            "tabla de tickets de Stacky, que es lo único que puede hacer que el grafo deje de estar "
+            "vacío (salda la deuda que api/tickets.py delegaba a un 'Plan 220' que nunca se "
+            "escribió). Escribe en la BD de Stacky, NUNCA en el GitLab del operador, nunca borra "
+            "(un issue que desaparece se marca cerrado) y es on-demand: sin polling ni sync de "
+            "fondo. Con OFF vuelve la carencia declarada y el grafo queda vacío."
         ),
         group="global",
     ),

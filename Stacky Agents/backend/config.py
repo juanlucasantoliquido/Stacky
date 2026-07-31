@@ -1325,6 +1325,36 @@ class Config:
     STACKY_GITLAB_EPICS_NATIVE: bool = os.getenv(
         "STACKY_GITLAB_EPICS_NATIVE", "false"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 276 — GitLab self-hosted de punta a punta ────────────────────────
+    # Las 3 nacen ON: ninguna cae en las categorías de excepción. (A) no aplica:
+    # no hay loop, daemon, barrido ni llamada a modelo — nada gasta en reposo.
+    # (B) no aplica: no escriben en ningún sistema del operador (el sync escribe
+    # en la BD de Stacky, no en su GitLab) y no le sacan ninguna decisión (todo
+    # se dispara con el botón "Sincronizar").
+    #
+    # ON: la sesión de GitLab monta un HTTPAdapter con un contexto OpenSSL
+    # genuino y el bundle del proyecto, inmune a truststore.inject_into_ssl()
+    # (app.py:24-28), que verifica por Windows CryptoAPI e ignora
+    # VERIFY_X509_PARTIAL_CHAIN. OFF: vuelve el verify=<bundle> de hoy, que bajo
+    # truststore muere con SSLError contra un GitLab con certificado interno.
+    STACKY_GITLAB_TLS_ADAPTER_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_TLS_ADAPTER_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # ON: el check de tracker reporta 4 sub-veredictos por separado (TLS,
+    # credenciales, proyecto legible, cantidad de ítems) y sale verde solo si los
+    # cuatro pasan. OFF: vuelve el veredicto único de hoy, que da OK con el
+    # listado roto porque el rótulo afirma "alcanzable" sin haber hecho ping.
+    STACKY_TRACKER_PROBE_STRICT_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_PROBE_STRICT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    # ON: "Sincronizar" en un proyecto GitLab trae los issues abiertos a la tabla
+    # tickets (la deuda que api/tickets.py delegaba a un "Plan 220" que nunca se
+    # escribió). Escribe en la BD de Stacky, nunca en el GitLab del operador, y
+    # es on-demand: no hay polling ni sync de fondo. OFF: vuelve la carencia
+    # declarada (CapabilityUnavailable) y el grafo queda vacío.
+    STACKY_GITLAB_SYNC_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_SYNC_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
     # ON: Stacky aplica el estado-en-progreso (al iniciar) y el estado-final
     # (al completar) desde client_profile.tracker_state_machine.<agent_type>,

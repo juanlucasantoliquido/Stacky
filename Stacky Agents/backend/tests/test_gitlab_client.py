@@ -94,7 +94,12 @@ def test_pagination_follows_x_next_page(monkeypatch):
         body, hdrs = pages[idx]
         return _make_resp(200, json_body=body, headers=hdrs)
 
-    with patch("requests.request", side_effect=fake_request):
+    # Plan 276 F2: el transporte pasó de `requests.request` (función de módulo) a
+    # `self._session.request`, para que el contexto TLS del adapter montado en el
+    # prefijo de GitLab tenga efecto. Se mockea el NUEVO seam: mockear el viejo
+    # dejaría el test verde contra código que ya no se ejecuta (falso verde) —
+    # de hecho acá daba un fallo de DNS real.
+    with patch("requests.Session.request", side_effect=fake_request):
         results = client._request_paginated("/issues")
 
     assert len(results) == 3
@@ -124,7 +129,7 @@ def test_retry_honors_retry_after_on_429(monkeypatch):
             )
         return _make_resp(200, json_body={"id": 42}, headers={"Content-Type": "application/json"})
 
-    with patch("requests.request", side_effect=fake_request), \
+    with patch("requests.Session.request", side_effect=fake_request), \
          patch("time.sleep"):
         body, _ = client._request("GET", "/projects/123")
 
@@ -158,7 +163,7 @@ def test_error_mapping_taxonomy(monkeypatch):
                 text=f"error {_sc}",
             )
 
-        with patch("requests.request", side_effect=fake_request), \
+        with patch("requests.Session.request", side_effect=fake_request), \
              patch("time.sleep"):
             with pytest.raises(TrackerApiError) as exc_info:
                 client._request("GET", "/test")

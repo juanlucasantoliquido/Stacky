@@ -465,6 +465,15 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 276 — GitLab self-hosted de punta a punta ──────────────────────
+    # Las 3 nacen ON. Ninguna cae en las categorías de excepción: (A) no hay
+    # loop, daemon, barrido ni llamada a modelo — nada gasta en reposo; (B) no
+    # escriben en ningún sistema del operador (el sync escribe en la BD de
+    # Stacky, nunca en su GitLab; y nunca borra: marca cerrado) ni le sacan
+    # ninguna decisión (todo se dispara con el botón "Sincronizar").
+    "STACKY_GITLAB_TLS_ADAPTER_ENABLED",        # Plan 276 F1/F2 — corrige una conexión rota; solo lectura
+    "STACKY_TRACKER_PROBE_STRICT_ENABLED",      # Plan 276 F4 — leer, calcular y mostrar
+    "STACKY_GITLAB_SYNC_ENABLED",               # Plan 276 F5 — on-demand, escribe en la BD de Stacky
     "STACKY_RUNTIME_CAPABILITIES_ENABLED",      # Plan 264
     "STACKY_CODEX_EFFORT_PARITY_ENABLED",       # Plan 264
     "STACKY_RUN_SELECTION_PREFS_ENABLED",       # Plan 264

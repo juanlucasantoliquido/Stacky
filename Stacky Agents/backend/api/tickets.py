@@ -709,15 +709,50 @@ def _sync_via_provider_or_ado(project_name: str | None) -> dict:
     """
     from services.tracker_provider import TrackerQuery, CapabilityUnavailable
     provider = _provider_for_ticket(project_name=project_name)
+    # Plan 276 F5.3 — el sync no puede depender de STACKY_TICKETS_PROVIDER_ENABLED
+    # (default False): con esa flag OFF un proyecto GitLab caía al branch ADO y moría
+    # con AdoConfigError("El proyecto no usa Azure DevOps") — un error de Azure
+    # DevOps en un proyecto GitLab. Se resuelve el provider SOLO para trackers
+    # no-ADO; para Azure DevOps este bloque no ejecuta ni una línea y el camino
+    # queda byte-idéntico.
+    #
+    # OJO (v2/C9): el gate de ESTE bloque es el TIPO DE TRACKER, no
+    # STACKY_GITLAB_SYNC_ENABLED. Esa flag decide qué se HACE con el provider (más
+    # abajo), no si se resuelve: si gateara la resolución, apagarla haría caer un
+    # proyecto GitLab al branch ADO en vez de levantar CapabilityUnavailable.
+    if provider is None:
+        ctx_sync = resolve_project_context(project_name)          # ya importado a nivel de módulo
+        tipo = (getattr(ctx_sync, "tracker_type", None) or "azure_devops").strip().lower()
+        if ctx_sync is not None and tipo != "azure_devops":
+            try:
+                provider = get_tracker_provider(project_name)     # ya importado a nivel de módulo
+            except TrackerConfigError as exc:
+                # v2/C1: NO se traga. Tragarlo (el patrón de _provider_for_ticket,
+                # correcto DONDE NACIÓ porque ahí None significa "caé a ADO")
+                # devuelve un AdoConfigError de Azure DevOps en un proyecto GitLab:
+                # nombra el proveedor equivocado y el operador no tiene forma de
+                # saber que le falta un master switch.
+                raise TrackerConfigError(
+                    f"El proyecto usa el tracker '{tipo}' pero no se pudo construir su "
+                    f"cliente: {exc}. Si dice STACKY_GITLAB_ENABLED=false, encendé "
+                    f"'STACKY_GITLAB_ENABLED' en Configuración global -> GitLab "
+                    f"(es config de operador y se administra por UI)."
+                ) from exc
     if provider is not None and getattr(provider, "name", "azure_devops") != "azure_devops":
         # Path no-ADO: GitLab u otro tracker.
         # El dominio SIEMPRE levanta el error tipado (así `backend/api/` queda sin un
         # solo NotImplementedError). Quien decide la forma HTTP —200 accionable vs 500
         # legacy— es el endpoint, según STACKY_CAPABILITY_DEGRADATION_ENABLED.
+        # Plan 276 F5 — la deuda del "Plan 220" fantasma queda saldada para GitLab.
+        if provider.name == "gitlab" and bool(
+            getattr(config.config, "STACKY_GITLAB_SYNC_ENABLED", True)
+        ):
+            from services.gitlab_sync import sync_gitlab_tickets
+            return sync_gitlab_tickets(project_name, provider=provider)
         raise CapabilityUnavailable(
             "tracker.sync.full", provider.name,
             reason="el sync de ítems de este tracker todavía no está implementado",
-            workaround="Plan 220 lo implementa; mientras tanto usá un proyecto Azure DevOps.",
+            workaround="Plan 276 implementó el sync de GitLab; este tracker todavía no lo tiene.",
         )
     # Path ADO: usar sync_tickets legacy (byte-identico con flag OFF)
     return sync_tickets(client=_ado_client_for_ticket(project_name=project_name))
@@ -5975,6 +6010,10 @@ def sync_from_ado_v2():
     _sync_in_progress_by_project.add(sync_scope)
     t_start = _sync_time.monotonic()
 
+    # Plan 276 F6 — necesario para el `except` de abajo: el nombre tiene que existir
+    # en el momento de manejar la excepción.
+    from services.tracker_provider import CapabilityUnavailable as _CapabilityUnavailable
+
     try:
         # Plan 70 F10 — branch provider/GAP-A
         result = _sync_via_provider_or_ado(project_name=project_name)
@@ -5985,6 +6024,19 @@ def sync_from_ado_v2():
     except AdoApiError as e:
         _sync_in_progress_by_project.discard(sync_scope)
         return _ado_sync_error_response(e, route_label="sync-v2", project_name=project_name)
+    except _CapabilityUnavailable:
+        # Plan 276 F6 — una carencia DECLARADA no puede caer en el `except
+        # Exception` de abajo y salir como 500 "unexpected": eso esconde el hueco
+        # y anula la degradación del plan 218. Se re-lanza para que la traduzca
+        # el handler de app.py (200 + available:false).
+        raise
+    except TrackerConfigError as e:
+        # Plan 276 F6/C1 — config de tracker mal resuelta (típicamente el master
+        # switch STACKY_GITLAB_ENABLED apagado). Mismo trato que AdoConfigError:
+        # 400 con el mensaje ACCIONABLE, nunca un 500 "unexpected". useTicketSync
+        # rutea {ok:false, message} a setSyncError, así que el operador LO VE.
+        logger.warning("sync-v2 — config de tracker: %s", e)
+        return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
     except Exception as e:
         _sync_in_progress_by_project.discard(sync_scope)
         logger.exception("ADO sync-v2 — fallo inesperado")

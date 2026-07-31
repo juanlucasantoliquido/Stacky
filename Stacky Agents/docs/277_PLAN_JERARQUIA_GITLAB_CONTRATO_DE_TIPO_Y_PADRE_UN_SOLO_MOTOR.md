@@ -1,7 +1,39 @@
-**Estado:** v1 (SIN CRITICAR) · **Autor:** StackyArchitectaUltraEficientCode · **Fecha:** 2026-07-31
+**Estado:** **v2 (MEJORADO — criticado el 2026-07-31)** · **Autor:** StackyArchitectaUltraEficientCode · **Fecha:** 2026-07-31
+**Veredicto de la crítica v1:** **RECHAZADO** (4 hallazgos BLOQUEANTES) ⇒ corregidos en esta v2. Detalle en el changelog de abajo.
 **Origen:** pedido del operador del 2026-07-31 — *"en ADO manejo una jerarquía que empieza en la épica «Violeta Lugo»; de ahí se desprenden las tareas y dentro de ellas los comentarios. Quiero replicar ese esquema en GitLab. Si no defino la jerarquía, todo termina siendo issues y no los puedo distinguir."*
 **Advertencia sobre este header:** el campo `Estado:` **NO es evidencia**. Verificá con `git log --all --grep="plan-277"` y con los comandos de F0.
 **Predecesor directo:** plan 276 (GitLab self-hosted de punta a punta), rama `docs/plan-276`, commit `57d678af`. Este plan **asume 276 implementado** y lo declara prerequisito duro medido en F0.
+
+---
+
+## CHANGELOG v1 → v2
+
+Todos los hallazgos se verificaron **abriendo los archivos reales y ejecutando los comandos**, no leyendo el plan. Los conteos de test de abajo están **medidos en vivo** el 2026-07-31 con `backend\.venv` (py 3.13.5).
+
+**BLOQUEANTES corregidos:**
+
+- **C1 — El plan introducía una regresión en `incident_context.py` y su propio diff era inaplicable.** El código real de `:240` es `any("epic" in str(lbl).lower() for lbl in labels)`: compara contra el substring **`"epic"`**, *no* contra `type::` (el literal `type::` ahí vive **solo en el comentario de `:238`**). Como este plan escribe **`epic::<iid>` en los HIJOS**, `"epic" in "epic::42"` → **True** ⇒ tras F3/F5 **todo hijo se clasificaría como épica** en `fetch_epic_catalog` (`:215`), contaminando `build_epic_catalog_block` (`:254`). La v1 además ordenaba *"no se cambia la semántica de substring"*, congelando el bug. **F2 Diff 3 reescrito**: delega en el contrato y se le exige el test que siembra `["epic::42"]`.
+- **C2 — `_rebuild_tickets_table_if_needed` (`db.py`) destruía en silencio las 2 columnas de F4.** Esa función corre **al final** de `_migrate_add_columns`, tiene un `CREATE TABLE tickets__new (...)` con **lista de columnas hardcodeada** (17, sin las nuevas), copia, hace `DROP TABLE tickets` y renombra. La v1 editaba `db.py` solo para sumar 2 filas a `migrations` y **nunca mencionaba el rebuild** ⇒ pérdida silenciosa de la clasificación manual del operador, contradiciendo el propio R6 (*"la local nunca se borra"*). **F4 Diff 2-bis agregado** con las 3 listas a tocar y su test de supervivencia.
+- **C3 — F4 era inimplementable en la UI: las 2 columnas nuevas nunca salían por la API.** `Ticket.to_dict()` (`models.py:68`) emite un dict **explícito** y `get_hierarchy` arma `d = t.to_dict()` (`:637`). La v1 no tocaba `to_dict()` ⇒ el control de F4 abriría **siempre vacío** y el PATCH no haría echo-back. **F4 Diff 5 agregado**, con la restricción dura de **no** tocar `_legacy_payload()` (contrato de "16 claves EXACTAS, byte-idéntico").
+- **C4 — El gate de cierre F8 daba rojo con una implementación correcta.** `exit 6` comparaba `epics+children+orphans` contra *"filas GitLab en la BD"*, pero `_ticket_project_filter` (`api/tickets.py:348-355`) filtra **solo por proyecto de Stacky, no por `tracker_type`**: la respuesta mezcla ADO y GitLab. En cualquier proyecto con filas ADO el único árbitro de "hecho" fallaba por construcción. **F8 paso 6 reescrito** + se corre su aritmética ya en F0 (paso 7), contra el "antes".
+
+**IMPORTANTES corregidos:**
+
+- **C5 — El criterio delta de F7 era ciego a lo único que F7 entrega.** Medido: `test_harness_flags_help.py` = **4 failed, 4 passed** (el número de la v1 era correcto), pero uno de los rojos es `test_plain_help_covers_all_registry_keys`, que **ya** falla por keys sin ayuda: registrar las 4 flags **sin escribir una línea de ayuda** deja el conteo en 4 y **pasa el criterio**. Ahora el delta se compara por **conjunto de nombres de test**, más un gate propio de `PLAIN_HELP`. Se documenta además la `JARGON_DENYLIST` real (prohíbe *token, endpoint, gate, backend, frontend, regex, prompt, runtime*…).
+- **C6 — Conteo de regresión equivocado.** Medido por archivo: `test_plan276_gitlab_sync.py` = **17 passed** (la v1 pedía 16 dos veces), `test_plan276_hierarchy_gitlab.py` = **5**, `test_plan74_migrator_verify.py` = **4**, `test_plan74_migrator_epics.py` = **6**. Además: correr los 4 en **una sola** invocación de pytest produce **5 errors** por contaminación cruzada; **por archivo, verde**. Se fija "un comando por archivo" como regla.
+- **C7 — F6 Diff 2 era pseudocódigo.** Tenía prosa española dentro del bloque `python` (`{ado_id de todo lo que se upserteó}`), un `... mismo upsert ...` que son **48 líneas reales** (`gitlab_sync.py:110-158`) y la variable `parents_vistos` que nunca se manda crear. Ahora F2 **extrae** `_upsert_ticket_gitlab(...)` y F6 la **reusa** — si no, el plan que existe para matar "N motores" paría dos upserts divergentes.
+- **C8 — La mitigación de R2 no arreglaba la colisión que describe.** `ado_id_to_ticket[t.ado_id] = d` (`api/tickets.py:640`) indexa por `ado_id` a secas sobre **todos** los trackers: con colisión, el segundo **pisa** al primero y en el 2º loop ambos resuelven al MISMO `d` ⇒ un ticket **desaparece** y el otro sale **duplicado**. Exigir `tracker_type` igual en el enlace actúa *después* de que el índice ya se corrompió. Ahora el índice es **`(tracker_type, ado_id)`**.
+- **C9 — El ALTER de F4 se traga sus errores.** `db.py:304-312` envuelve cada `ALTER` en `try/except Exception: pass`; los tests de F4 corren sobre sqlite temporal y siempre pasan, así que **nada** verifica la BD real de 181 MB. Se agrega un `PRAGMA table_info` con exit code propio al gate de F8.
+- **C13 — El censo de "4 motores" contaba comentarios.** Medido: `grep "type::"` en los 4 archivos da **11** coincidencias y solo **4** son código; en `incident_context.py` la **única** coincidencia es un comentario. Peor: tras F2 el número **sube**, porque los diffs de este plan agregan comentarios que dicen `type::`. El censo pasa a medirse **por símbolo/AST**.
+
+**MENORES corregidos:** deriva de anclajes (`parent_ado_id` está en `models.py:56`, no `:57`; el `PRAGMA` de `db.py` en `:306` y el `ALTER` en `:309`); `TicketGraphView.jsx` es **JSX sin tipos** y `npx tsc --noEmit` **no** lo cubre (se declara); la huella de error de R1 ahora trae el objeto literal.
+
+**[ADICIÓN ARQUITECTO] — dos adiciones de alto valor (detalle en F2-bis y F6):**
+
+1. **`tests/test_plan277_un_solo_motor.py`** — meta-test por **AST** que convierte el KPI *"4 motores → 1"* en un **gate ejecutable** y bloquea de raíz el motor nº 5. Es la única forma de medir ese KPI sin premiar comentarios (C13) y sin caer en el `grep` sobre closure que este repo ya sufrió.
+2. **`motivo_huerfano`** en cada elemento de `orphans`, **dentro de la respuesta que ya existe** — sin endpoint nuevo, sin query nueva, sin trabajo del operador. Todo el plan nace de que el operador *no puede distinguir* nada: decirle **por qué** cada ticket quedó suelto (*"su etiqueta `epic::99` apunta a un issue que no está en la BD"*) es la diferencia entre "no anda" y "falta esto".
+
+**Anclajes verificados y CORRECTOS en la v1** (se dejan tal cual): `gitlab_provider.py:76-77, 95-116, 100, 107, 145-168, 167-168, 205-207, 242, 305, 312, 325, 334, 19-25`; `api/tickets.py:646-654, 648-651, 7089/7090/7091`; `migrator_verify.py:14, 46-48, 69-77`; `migrator_epics.py:62`; `models.py:55`; `config.py:1209-1210, 1355-1356`; `harness_flags.py:541, 546-547, 5509`; `harness_flags_help.py:39-44`; `workItemTypeColor.ts:12-14, 53-57`; y los ratchets, **776 (`.sh`) vs 712 (`.ps1`), delta 64 — exacto**.
 
 # Plan 277 — La jerarquía de GitLab deja de ser plana: un solo contrato de tipo y padre, que se escribe igual que se lee
 
@@ -38,7 +70,7 @@ Medible con los comandos de cada fase, sin telemetría nueva. Los valores "hoy" 
 |---|---|---|
 | Tickets GitLab que caen en `orphans` en `GET /api/tickets/hierarchy` | **100 %** (por construcción: las 2 fuentes están vacías) | **≤ 100 % − (los que tengan contrato)**, y **0 %** para los clasificados |
 | Épicas visibles en el grafo de un proyecto GitLab | **0** | **≥ 1** (*"Violeta Lugo"*) |
-| Motores distintos que interpretan la etiqueta `type::` | **4** (`gitlab_provider.py:102-111`, `migrator_verify.py:69-77`, `migrator_epics.py:62`, `incident_context.py:239`) | **1** (`services/gitlab_hierarchy.py`) |
+| Motores distintos que clasifican por etiqueta | **4** (`gitlab_provider.py:102-111`, `migrator_verify.py:69-77`, `migrator_epics.py:62`, `incident_context.py:240`) | **1** (`services/gitlab_hierarchy.py`) — **medido por AST**, no por `grep` (v2/C13: el `grep` cuenta comentarios y **sube** después de F2, porque los diffs de este plan agregan comentarios que dicen `type::`). Gate: `tests/test_plan277_un_solo_motor.py` |
 | Mecanismos capaces de expresar "este ticket es hijo de aquel" en GitLab CE | **0** (`epic` es Premium; el fallback de issue-links es **simétrico** y además silenciado) | **1**, direccional y verificable (`epic::<iid>`) |
 | Rutas del write path que fallan en silencio al enlazar un padre | **1** (`gitlab_provider.py:167-168`, `except Exception: pass`) | **0** |
 | Tipos de la etiqueta que sobreviven al parser de `migrator_verify` | Los que matchean `type::(\w+)` — **`type::user story` NO matchea** aunque `create_item:314` lo escribe así | **100 %** de los canónicos, normalizados |
@@ -85,9 +117,11 @@ Es decir: **el repo ya decidió que en GitLab Free una épica es un issue con la
 | 1 | `services/gitlab_provider.py:102-111` | `for etiqueta in labels: if startswith("type::") → split.capitalize()` | Toma **la primera** del array — y el orden de `labels` en la API de GitLab **no está garantizado**. |
 | 2 | `services/migrator_verify.py:69-77` | `re.match(r"type::(\w+)", label)` → `.capitalize()` | `\w+` **no matchea espacios**: `type::user story` (que `create_item:314` escribe tal cual con `item.item_type="User Story"`) se pierde. |
 | 3 | `services/migrator_epics.py:62` | escribe `("type::epic",)` | Único que **escribe** minúscula canónica. |
-| 4 | `services/incident_context.py:239` | comparación por **substring**, con comentario propio explicando por qué | Un `type::epic` matchearía una búsqueda de `type::epi`. |
+| 4 | `services/incident_context.py:240` | `any("epic" in str(lbl).lower() for lbl in labels)` — substring de **`"epic"`**, *no* de `type::` | **El peor de los cuatro, y el que la v1 leyó mal.** No mira el prefijo en absoluto: le alcanza con que la palabra `epic` aparezca en **cualquier** etiqueta. El literal `type::` de ese archivo vive **solo en el comentario de `:238`**. |
 
 Cuatro lecturas del mismo dato, tres reglas distintas de normalización, cero tests que las comparen entre sí. Es el patrón de "dos motores de probe" que ya costó 8 planes en este mismo eje.
+
+> **⚠️ REGRESIÓN QUE ESTE PLAN CREARÍA SI NO SE ARREGLA EL MOTOR 4 (v2/C1).** El contrato escribe **`epic::<iid>` en los HIJOS**. Y `"epic" in "epic::42"` es **`True`**. Es decir: en cuanto F3/F5 empiecen a etiquetar padres, **cada hijo se clasificaría como épica** en `fetch_epic_catalog` (`incident_context.py:215`), que alimenta `build_epic_catalog_block` (`:254`) — el catálogo de épicas que ve el agente. La v1 ordenaba explícitamente *"no se cambia la semántica de substring"*, lo que **congelaba el bug y lo convertía en regresión activa**. Por eso el diff 3 de F2 **cambia la semántica** y trae su propio test con el caso `["epic::42"]` sembrado.
 
 ### 2.4 El write path **no puede** expresar un padre en CE
 
@@ -193,6 +227,9 @@ epic::<iid>      en el HIJO        →  de qué ticket cuelga (iid del issue pad
 - **Todo test de "no está" guarda primero.** Un `assert x not in y` que nunca vio `x` guardado pasa por accidente. Los tests de precedencia **siembran el caso contrario** y verifican que fue desplazado.
 - **Los gates de conteo corren dos veces.** Idempotencia real, no `created == 0` (que también pasa si el sync se rompió).
 - **`pytest -k` sin match da exit 0.** Todos los comandos de este plan son **por archivo** y declaran el número exacto de casos esperados.
+- **Un comando de pytest por archivo, nunca varios archivos en una invocación (v2/C6).** Medido el 2026-07-31: correr los 4 archivos de regresión de este plan en **una sola** llamada da **5 errors** en `test_plan276_hierarchy_gitlab.py` por contaminación cruzada de sesión SQLAlchemy; **corridos por archivo, los 4 dan verde**. El ratchet ya invoca `pytest $f -q` archivo por archivo (`backend/scripts/run_harness_tests.ps1:933`), así que **no** consolides los comandos "para que sea más rápido": estarías fabricando un rojo ajeno.
+- **Un gate compartido que ya está rojo NO se juzga por conteo, sino por CONJUNTO (v2/C5).** `test_harness_flags_help.py` tiene 4 fallos preexistentes y **uno de ellos es exactamente el que cubriría lo que este plan agrega**. Un criterio "el mismo número de fallos" pasa igual si no se escribe nada. El criterio es: **mismos nombres de test fallidos** + un gate propio y positivo de lo que la fase entrega.
+- **Un censo de "cuántos motores hay" NO se mide con `grep` de substring (v2/C13).** El substring cuenta comentarios y docstrings, y este plan **agrega** comentarios que contienen `type::` ⇒ el número subiría después de arreglarlo. Se mide por **símbolo/AST**: quién importa el contrato y quién todavía tiene lógica propia.
 
 ### 3.5 Las 4 flags nuevas, con su default y su justificación
 
@@ -233,11 +270,31 @@ $PY = ".\.venv\Scripts\python.exe"
 
 **Paso 2 — Los 6 prerequisitos de visibilidad de 276 F0.8.** Correr el preflight de ese plan tal cual. **Debe pasar los 6**, en particular `STACKY_GITLAB_ENABLED=true` (default de fábrica `false`, `config.py:1209-1210`).
 
-**Paso 3 — Censo de los 4 motores de `type::` (el número del KPI).**
+**Paso 3 — Censo de los 4 motores (el número del KPI) — POR SÍMBOLO, no por `grep` (v2/C13).**
+
+> **Por qué NO sirve `Select-String -Pattern 'type::'`** (lo que pedía la v1): cuenta comentarios y docstrings. Medido el 2026-07-31 da **11** coincidencias en los 4 archivos, de las cuales solo **4** son código; en `incident_context.py` la **única** coincidencia (`:238`) es **un comentario** y el código de ahí ni siquiera menciona `type::`. Y como los diffs de F2 **agregan** comentarios que dicen `type::`, ese número **subiría** al arreglarlo: un gate que premia el defecto.
+
 ```powershell
-Select-String -Path services\gitlab_provider.py,services\migrator_verify.py,services\migrator_epics.py,services\incident_context.py -Pattern 'type::' | Measure-Object | Select-Object -ExpandProperty Count
+& $PY - <<'PY'
+import ast, pathlib
+ARCH = ["services/gitlab_provider.py", "services/migrator_verify.py",
+        "services/migrator_epics.py", "services/incident_context.py"]
+for ruta in ARCH:
+    arbol = ast.parse(pathlib.Path(ruta).read_text(encoding="utf-8"))
+    # Solo literales de string en CÓDIGO: ast ya descartó comentarios, y los
+    # docstrings son el primer stmt Expr de módulo/clase/función -> se excluyen.
+    docs = {id(n.body[0].value) for n in ast.walk(arbol)
+            if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.body and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)
+            and isinstance(n.body[0].value.value, str)}
+    lits = [n.value for n in ast.walk(arbol)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs]
+    marcas = sorted({l for l in lits if "type::" in l or "epic::" in l or l == "epic"})
+    importa = "gitlab_hierarchy" in pathlib.Path(ruta).read_text(encoding="utf-8")
+    print(f"{ruta:42} literales_de_clasificacion={marcas}  importa_contrato={importa}")
+PY
 ```
-Anotar el número. **Se espera ≥ 4 archivos distintos.** Al terminar F2 el único que **interpreta** debe ser `gitlab_hierarchy.py`.
+**Se espera hoy: los 4 archivos con `importa_contrato=False` y al menos un literal de clasificación cada uno** — incluido `incident_context.py`, cuyo literal es **`'epic'`** (no `'type::'`). Al terminar F2, los 4 deben quedar en `importa_contrato=True` y **sin literales de clasificación propios**. Ese es el KPI, y su gate ejecutable es `tests/test_plan277_un_solo_motor.py` (F2-bis).
 
 **Paso 4 — La foto del defecto: 100 % huérfanos.** Con el backend levantado y el proyecto GitLab sincronizado:
 ```powershell
@@ -271,7 +328,30 @@ PY
 ```
 **Se espera `con type::=0  con epic::=0  con epic nativo=0`** en RIPLEY (los issues los creó el migrador del plan 217, no Stacky). Ese cero **es la justificación de F4**: sin clasificación local, el contrato no tiene de dónde leer nada y el plan no le cambia nada al operador.
 
-**Criterio de aceptación (binario):** los 6 pasos corridos, con las salidas pegadas en el commit de F0. El paso 4 **debe** mostrar `epics=0` y `children=0`; si muestra otra cosa, el "antes" de este plan es distinto al que asume y hay que re-leer §1 antes de seguir.
+**Paso 7 — La aritmética del gate de cierre, corrida CONTRA EL DEFECTO (v2/C4).** El gate de F8 compara el total del grafo contra un conteo de la BD. Esa comparación tiene que cerrar **hoy**, antes de tocar una línea — si no cierra ahora, tampoco va a cerrar después y el rojo no significaría nada:
+```powershell
+& $PY - <<'PY'
+from db import session_scope
+from models import Ticket
+from api.tickets import _ticket_project_filter
+PROY = "RIPLEY"
+with session_scope() as s:
+    f = _ticket_project_filter(PROY)
+    q = s.query(Ticket)
+    if f is not None: q = q.filter(f)
+    filas = q.all()
+    total = len(filas)
+    por_tracker = {}
+    for t in filas:
+        por_tracker[t.tracker_type or "(null)"] = por_tracker.get(t.tracker_type or "(null)", 0) + 1
+print(f"filas del proyecto (TODOS los trackers) = {total}   desglose = {por_tracker}")
+PY
+```
+**Anotar `total` y el desglose.** Debe coincidir **exactamente** con `epics + children + orphans` del paso 4.
+
+> **POR QUÉ ESTE PASO EXISTE (era el error de la v1).** `get_hierarchy` filtra con `_ticket_project_filter` (`api/tickets.py:348-355`), que compara **solo** `stacky_project_name` / `project`: **no filtra por `tracker_type`**. O sea que la respuesta del grafo mezcla **ADO y GitLab** del mismo proyecto de Stacky. La v1 hacía que F8 saliera con `exit 6` cuando el total **no igualaba las filas GitLab** — comparación imposible en cuanto exista **una sola** fila ADO, con lo cual el único árbitro de "el plan está hecho" habría dado rojo sobre una implementación perfecta. El desglose de este paso es el que hace que la comparación de F8 sea la correcta.
+
+**Criterio de aceptación (binario):** los **7** pasos corridos, con las salidas pegadas en el commit de F0. El paso 4 **debe** mostrar `epics=0` y `children=0`; si muestra otra cosa, el "antes" de este plan es distinto al que asume y hay que re-leer §1 antes de seguir. El paso 7 **debe** cerrar la igualdad con el paso 4.
 **Flag:** ninguna (F0 no cambia comportamiento).
 **Impacto por runtime:** ninguno — F0 es medición. **Trabajo del operador: ninguno** (lo corre el implementador).
 
@@ -294,7 +374,9 @@ reglas de normalización distintas y cero tests que las compararan:
   - services/gitlab_provider.py:102-111   (primer label del array; orden NO garantizado)
   - services/migrator_verify.py:69-77     (regex type::(\\w+); pierde `type::user story`)
   - services/migrator_epics.py:62         (escribe "type::epic")
-  - services/incident_context.py:239      (comparación por substring)
+  - services/incident_context.py:240      (substring de "epic" a secas: NI SIQUIERA
+                                           mira el prefijo, así que `epic::42` -que
+                                           marca a un HIJO- le daba True)
 
 FUNCIONES PURAS. Este módulo NO hace I/O: ni HTTP, ni BD, ni lectura de config.
 Es la condición que hace que su test corra igual en los 3 runtimes y en CI sin red.
@@ -505,7 +587,34 @@ imprime `PURO OK` (el módulo no hace I/O; es lo que garantiza la paridad de run
 ```
 Y se **borra** `_TYPE_LABEL_RE` (`:14`) si no queda otro uso (verificar con `Select-String -Path services\migrator_verify.py -Pattern '_TYPE_LABEL_RE'` ⇒ debe dar **0** tras el cambio).
 
-**Diff 3 — `services/incident_context.py:239`**: la comparación por substring pasa a usar `PREFIJO_TIPO` del contrato en vez del literal `"type::"`. Cambio mínimo: importar la constante y usarla. **No se cambia la semántica de substring** (el comentario de ese archivo explica por qué es substring); solo deja de tener el literal duplicado.
+**Diff 3 — `services/incident_context.py:234-240`: se CAMBIA la semántica, porque la actual convierte a este plan en una regresión (v2/C1).**
+
+El código real —leelo antes de tocarlo— es:
+```python
+labels = it.get("labels") or []
+# C6 — el label real que Stacky crea en GitLab es "type::epic"
+# (gitlab_provider._type_label), por eso substring y no igualdad.
+is_epic = any("epic" in str(lbl).lower() for lbl in labels)
+```
+No compara contra `type::`: compara contra **`"epic"` a secas**. Y este plan escribe **`epic::<iid>` en los hijos** ⇒ `"epic" in "epic::42"` → `True` ⇒ **todo hijo pasaría a contar como épica** en `fetch_epic_catalog` (`:215`) y contaminaría `build_epic_catalog_block` (`:254`).
+
+```diff
+         else:
+             labels = it.get("labels") or []
+-            # C6 — el label real que Stacky crea en GitLab es "type::epic"
+-            # (gitlab_provider._type_label), por eso substring y no igualdad.
+-            is_epic = any("epic" in str(lbl).lower() for lbl in labels)
++            # Plan 277 F2 — ANTES: `any("epic" in lbl.lower())`, substring de la
++            # palabra suelta. Con el contrato de este plan eso es un BUG ACTIVO:
++            # la etiqueta de PADRE es `epic::<iid>` y va en los HIJOS, así que
++            # cada hijo matcheaba y se contaba como épica. Ahora decide el
++            # contrato, que distingue `type::epic` (es una épica) de `epic::42`
++            # (cuelga de la épica 42).
++            from services.gitlab_hierarchy import tipo_desde_labels
++            is_epic = tipo_desde_labels(labels) == "Epic"
+```
+
+> **Nota de compatibilidad, medida:** el único productor de `type::epic` hoy es `migrator_epics.py:62`, que escribe exactamente ese token — así que la lectura nueva **sigue reconociendo** todo lo que la vieja reconocía por la vía legítima. Lo que deja de reconocer son los falsos positivos (`epic::42`, y cualquier etiqueta libre que contenga la palabra). Eso es el arreglo, no una pérdida.
 
 **Diff 4 — `services/gitlab_sync.py`**: agregar el guard de la flag y persistir el origen. En el bucle, después de `tipo = item.get("work_item_type") or "Issue"`:
 
@@ -518,9 +627,27 @@ Y se **borra** `_TYPE_LABEL_RE` (`:14`) si no queda otro uso (verificar con `Sel
 +                parent_ado_id = _a_int(item.get("parent"))
 -            parent_ado_id = _a_int(item.get("parent"))
 ```
-(`gitlab_sync.py` **no importa `config` hoy**: agregar `import config` al head, con el comentario `# importado a nivel módulo para poder parchear en tests`, igual que `gitlab_provider.py:25`.)
+(`gitlab_sync.py` **no importa `config` hoy** —verificado: sus imports están en `:27-36`—: agregar `import config` al head, con el comentario `# importado a nivel módulo para poder parchear en tests`, igual que `gitlab_provider.py:25`.)
 
-**Tests PRIMERO — `tests/test_plan277_read_path.py`, 12 casos:**
+**Diff 5 — EXTRAER el upsert a una función, porque F6 lo necesita entero (v2/C7).**
+
+El cuerpo del bucle de `sync_gitlab_tickets` que hace la búsqueda por la terna, el `INSERT` y el `UPDATE` ocupa **`services/gitlab_sync.py:110-158`** (48 líneas: búsqueda por `(stacky_project_name, tracker_type, external_id)`, alta con `Ticket(...)`, y comparación campo a campo antes del update). F6 tiene que ejecutar **exactamente ese mismo upsert** para los padres que trae por separado. La v1 lo resolvía con un `... mismo upsert por la terna, mismo mapeo ...` dentro de un bloque de código — es decir, dejaba que el implementador lo copiara. **Dos copias de un upsert es exactamente la enfermedad de "N motores" que este plan existe para curar.**
+
+Extraer, **sin cambiar comportamiento**, con esta firma literal:
+```python
+def _upsert_ticket_gitlab(session, item: dict, *, ctx, ahora: datetime) -> str:
+    """Alta/actualización de UNA fila de GitLab por la terna. Plan 277 F2.
+
+    Extraído tal cual del bucle de `sync_gitlab_tickets` (antes gitlab_sync.py:110-158)
+    para que F6 traiga los padres faltantes por el MISMO camino. No cambia una sola
+    regla: misma clave de upsert, mismo mapeo de campos, misma comparación previa.
+
+    Returns: "created" | "updated" | "noop"
+    """
+```
+El bucle principal pasa a llamarla y a contar por su valor de retorno. **Criterio binario de que la extracción no cambió nada:** `test_plan276_gitlab_sync.py` sigue en **17 passed** (medido, ver abajo) — ese archivo cubre el upsert por la terna (`test_16_el_upsert_machea_por_la_terna_no_por_ado_id`) y es el que detecta una extracción mal hecha.
+
+**Tests PRIMERO — `tests/test_plan277_read_path.py`, 15 casos** (v2: +3 — dos por la regresión de `incident_context` y uno por la extracción del upsert):
 
 | # | Caso | Gate |
 |---|---|---|
@@ -536,21 +663,55 @@ Y se **borra** `_TYPE_LABEL_RE` (`:14`) si no queda otro uso (verificar con `Sel
 | 10 | Con la flag en `False`, `work_item_type` **sigue** saliendo del contrato | La flag gatea el **padre**, no el tipo (el tipo ya existía en 276 y apagarlo sería una regresión) |
 | 11 | `Select-String` sobre `migrator_verify.py` con patrón `_TYPE_LABEL_RE` da **0** | La regex vieja se borró de verdad |
 | 12 | Un proyecto **ADO** pasa por `sync_tickets` sin tocar ninguna línea nueva (monkeypatchear `clasificar_issue` y afirmar que **no** se llamó) | Backward-compat de ADO, byte-idéntico |
+| **13** | **`fetch_epic_catalog` con `labels=["epic::42"]` → ese ítem NO entra al catálogo** — y, **sembrado en el mismo test**, `labels=["type::epic"]` **sí** entra | **v2/C1: la regresión que este plan crearía.** El assert de ausencia solo vale si el test vio primero el caso positivo entrar; si no, "no está" también pasa cuando el catálogo quedó vacío por otro motivo |
+| 14 | `fetch_epic_catalog` con `fields={"System.WorkItemType":"Epic"}` (camino ADO) sigue entrando | Que el arreglo del substring no toque el camino de ADO, que va por otra rama (`incident_context.py:235`) |
+| 15 | `_upsert_ticket_gitlab` devuelve `"created"` la 1ª vez, `"noop"` la 2ª con el mismo payload, y `"updated"` si cambió un campo | v2/C7: la extracción no cambió el comportamiento, y los 3 valores de retorno existen (F6 depende de ellos) |
 
-**Comando:**
+**Comando (uno por archivo — v2/C6: consolidarlos fabrica un rojo ajeno):**
 ```powershell
-& $PY -m pytest tests\test_plan277_read_path.py -q                       # 12 passed
-& $PY -m pytest tests\test_plan276_gitlab_sync.py -q                     # 16 passed, sin regresión
-& $PY -m pytest tests\test_plan276_hierarchy_gitlab.py -q                # 5 passed, sin regresión
-& $PY -m pytest tests\test_plan74_migrator_verify.py -q                  # sin regresión — F2 le cambia el CUERPO a
+& $PY -m pytest tests\test_plan277_read_path.py -q                       # 15 passed
+& $PY -m pytest tests\test_plan276_gitlab_sync.py -q                     # 17 passed  <- MEDIDO 2026-07-31 (la v1 decía 16)
+& $PY -m pytest tests\test_plan276_hierarchy_gitlab.py -q                # 5 passed   <- MEDIDO
+& $PY -m pytest tests\test_plan74_migrator_verify.py -q                  # 4 passed   <- MEDIDO. F2 le cambia el CUERPO a
                                                                           # _infer_type_from_labels, que este archivo cubre.
-                                                                          # Verificado que existe; anotar el conteo previo.
+& $PY -m pytest tests\test_plan74_migrator_epics.py -q                   # 6 passed   <- MEDIDO
 ```
-**Criterio de aceptación (binario):** 12 + 16 + 5 passed, y el censo del paso 3 de F0 baja: `Select-String -Path services\migrator_verify.py -Pattern 'type::\(' ` en **0 coincidencias**.
+> **Los 4 conteos de regresión están MEDIDOS en vivo, no estimados** (2026-07-31, `backend\.venv`, py 3.13.5). La v1 pedía **16** para `test_plan276_gitlab_sync.py` y el archivo tiene **17**: un implementador honesto habría visto 17, concluido que rompió algo, y "arreglado" hasta romperlo de verdad. Si tu corrida da otro número, **no lo ajustes al plan**: verificá contra `git log` que el archivo no cambió desde esta fecha.
+
+**Criterio de aceptación (binario):** 15 + 17 + 5 + 4 + 6 passed (cada uno en su propia invocación), y el censo por AST del paso 3 de F0 muestra los **4** archivos en `importa_contrato=True` y **sin literales de clasificación propios**.
 
 **Ratchet:** registrar `tests/test_plan277_read_path.py` en los dos scripts.
 **Flag:** `STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED`, **default True** (§3.5).
 **Impacto por runtime:** idéntico en los 3 — parseo de strings + SQLAlchemy. **Fallback:** con la flag OFF, comportamiento **idéntico al plan 276** (sin padre por etiqueta), no una degradación nueva.
+**Trabajo del operador: ninguno.**
+
+---
+
+### F2-bis — [ADICIÓN ARQUITECTO] El KPI "4 motores → 1" se vuelve un gate ejecutable
+
+**Objetivo:** que "un solo motor" sea una **condición verificable en cada corrida del arnés**, no una afirmación del changelog. **Valor:** este plan nace porque una convención vivió en 4 copias divergentes durante 8 planes sin que nada lo detectara. Consolidarlas hoy sin dejar un gate garantiza que en 3 planes haya un motor nº 5 — y el `grep` de substring **no puede** ser ese gate (v2/C13: cuenta comentarios y sube cuando arreglás el código).
+
+**Archivos a crear:** `Stacky Agents/backend/tests/test_plan277_un_solo_motor.py`
+**Archivos a editar:** ninguno.
+
+**Qué asserta, exactamente (4 casos):**
+
+| # | Caso | Gate |
+|---|---|---|
+| 1 | Los 4 módulos (`gitlab_provider`, `migrator_verify`, `migrator_epics`, `incident_context`) **importan** `services.gitlab_hierarchy` — detectado por `ast.Import`/`ast.ImportFrom`, incluidos los imports locales dentro de funciones | Que la consolidación de F2/F3 ocurrió de verdad |
+| 2 | Ninguno de esos 4 módulos contiene, **en código** (literales `ast.Constant` que no sean docstring), un string con `type::`, `epic::` ni el literal suelto `"epic"` — **salvo** `migrator_epics.py:62`, que es el **escritor** legítimo y está en una allowlist de UNA entrada, nombrada y justificada en el propio test | Que no quede lógica de clasificación propia. Al ser AST, los comentarios y docstrings de este plan **no** cuentan |
+| 3 | `services/gitlab_hierarchy.py` **no importa** ninguno de los 4 (sin ciclos) y no importa `requests`, `db` ni `config` | Que el contrato siga siendo puro: es lo que hace que corra igual en los 3 runtimes |
+| 4 | **Sembrado en el propio test:** se parsea un módulo sintético con `is_epic = any("epic" in l for l in labels)` y se verifica que el detector del caso 2 **lo marca** | Un detector que no vio nunca un positivo pasa por accidente. Este caso prueba que el gate **detecta** el motor nº 5, no solo que hoy no hay ninguno |
+
+**Comando:**
+```powershell
+& $PY -m pytest tests\test_plan277_un_solo_motor.py -q                   # 4 passed
+```
+**Criterio de aceptación (binario):** **4 passed**. El caso 4 es el que hace que este gate valga: sin él, sería un test que pasa porque no busca nada.
+
+**Ratchet:** registrar `tests/test_plan277_un_solo_motor.py` en **los dos** scripts.
+**Flag:** ninguna (es un meta-test del arnés, no cambia comportamiento del producto).
+**Impacto por runtime:** idéntico en los 3 — `ast` de la librería estándar, cero I/O de red, cero BD. **Fallback:** no aplica.
 **Trabajo del operador: ninguno.**
 
 ---
@@ -663,7 +824,7 @@ Y se **borra** `_TYPE_LABEL_RE` (`:14`) si no queda otro uso (verificar con `Sel
 **Comando:**
 ```powershell
 & $PY -m pytest tests\test_plan277_write_path.py -q                      # 9 passed
-& $PY -m pytest tests\test_plan74_migrator_epics.py -q                   # sin regresión (el archivo EXISTE, verificado)
+& $PY -m pytest tests\test_plan74_migrator_epics.py -q                   # 6 passed  <- MEDIDO 2026-07-31
 ```
 **Criterio de aceptación (binario):** 9 passed, y `Select-String -Path services\gitlab_provider.py -Pattern 'except Exception:\s*$' -Context 0,1 | Select-String 'pass'` en **0 coincidencias** dentro de `_link_parent`.
 
@@ -681,7 +842,7 @@ Y se **borra** `_TYPE_LABEL_RE` (`:14`) si no queda otro uso (verificar con `Sel
 **Archivos a editar:** `Stacky Agents/backend/models.py`, `Stacky Agents/backend/db.py`, `Stacky Agents/backend/services/gitlab_sync.py`, `Stacky Agents/backend/api/tickets.py`
 **Archivos a crear:** `Stacky Agents/backend/tests/test_plan277_clasificacion_local.py`
 
-**Diff 1 — dos columnas nuevas en `models.Ticket`** (después de `parent_ado_id`, `models.py:57`):
+**Diff 1 — dos columnas nuevas en `models.Ticket`** (después de `parent_ado_id`, que está en **`models.py:56`** — `:57` es `last_synced_at`; corregido en v2):
 ```diff
      parent_ado_id: Mapped[int | None] = mapped_column(Integer)
 +    # Plan 277 F4 — clasificación LOCAL de Stacky. Se usa SOLO cuando el tracker
@@ -698,7 +859,47 @@ Y se **borra** `_TYPE_LABEL_RE` (`:14`) si no queda otro uso (verificar con `Sel
 +        ("tickets", "local_work_item_type", "VARCHAR(40)"),
 +        ("tickets", "local_parent_iid", "INTEGER"),
 ```
-> **Es ADD COLUMN sobre la BD del operador.** Es aditivo, idempotente (`PRAGMA table_info` antes de cada ALTER, `db.py:305-309`), no borra ni reescribe nada y es el mecanismo que este repo ya usa para **15 columnas**. No cae en la excepción (B): (B) es *"DDL/DML contra una BD **suya**"* en el sentido de las bases de sus sistemas (el comparador de BD, `STACKY_SQL_EXEC_ENABLED`); esta es **la BD de Stacky**. Aun así: **hacer copia del archivo `.db` antes de la primera corrida** es parte del DoD.
+> **Es ADD COLUMN sobre la BD del operador.** Es aditivo, idempotente (`PRAGMA table_info` en `db.py:306`, `ALTER` en `:309`), no borra ni reescribe nada y es el mecanismo que este repo ya usa para **15 columnas**. No cae en la excepción (B): (B) es *"DDL/DML contra una BD **suya**"* en el sentido de las bases de sus sistemas (el comparador de BD, `STACKY_SQL_EXEC_ENABLED`); esta es **la BD de Stacky**. Aun así: **hacer copia del archivo `.db` antes de la primera corrida** es parte del DoD.
+>
+> **⚠️ Y el ALTER se traga sus propios errores (v2/C9).** El loop de `db.py:304-312` envuelve cada `ALTER` en `try / except Exception: pass`. Si falla —BD bloqueada, permisos, disco— **no hay ninguna señal** y las columnas simplemente no existen; el error recién aparece río abajo, como un `OperationalError` incomprensible en el sync. Los casos 1-2 de abajo corren sobre sqlite temporal y **siempre** van a pasar, así que **no dicen nada** de la BD real de 181 MB. Por eso el gate de F8 verifica las columnas con `PRAGMA table_info` **contra la BD real**, con exit code propio.
+
+**Diff 2-bis — `db.py`, `_rebuild_tickets_table_if_needed`: SIN ESTO, LAS DOS COLUMNAS SE DESTRUYEN EN SILENCIO (v2/C2 — BLOQUEANTE).**
+
+> **Leé esto antes de tocar `db.py`.** `_migrate_add_columns` **no termina** en el loop de `ALTER`: su última línea llama a `_rebuild_tickets_table_if_needed(conn)`. Esa función tiene un **`CREATE TABLE tickets__new (...)` con la lista de columnas HARDCODEADA** (17 columnas, terminando en `assigned_to_ado`), copia con un `INSERT ... SELECT` que también las lista **una por una**, y después hace **`DROP TABLE tickets`** + `ALTER TABLE tickets__new RENAME TO tickets`. Se dispara cuando la tabla tiene `sqlite_autoindex_tickets_1` o **le falta** `ux_tickets_stacky_tracker_external` — exactamente el perfil de una BD vieja como la del operador.
+>
+> Resultado si no se toca: las 2 columnas se agregan por `ALTER` y **acto seguido el rebuild las borra**, junto con **toda la clasificación manual que el operador haya cargado**. Sin error, sin log. Eso contradice de frente al riesgo R6 de este mismo plan (*"la local nunca se borra"*) y al riel de "no degradar". La v1 editaba `db.py` **solo** para sumar 2 filas a `migrations` y nunca miraba esta función.
+
+Hay que agregar las 2 columnas en **los tres lugares** de esa función (si falta uno, SQLite falla con `X values for Y columns` o pierde el dato):
+```diff
+             CREATE TABLE tickets__new (
+                 ...
+                 stacky_status VARCHAR(30),
+-                assigned_to_ado VARCHAR(200)
++                assigned_to_ado VARCHAR(200),
++                local_work_item_type VARCHAR(40),      -- Plan 277 F4
++                local_parent_iid INTEGER               -- Plan 277 F4
+             )
+```
+```diff
+             INSERT INTO tickets__new (
+                 id, ado_id, external_id, project, stacky_project_name, tracker_type,
+                 title, description, ado_state, ado_url, priority, work_item_type,
+-                parent_ado_id, last_synced_at, created_at, stacky_status, assigned_to_ado
++                parent_ado_id, last_synced_at, created_at, stacky_status, assigned_to_ado,
++                local_work_item_type, local_parent_iid
+             )
+             SELECT
+                 ...
+                 stacky_status,
+-                assigned_to_ado
++                assigned_to_ado,
++                local_work_item_type,
++                local_parent_iid
+             FROM tickets
+```
+> **Orden obligatorio:** el rebuild corre **después** del loop de `ALTER`, así que cuando llega, las columnas ya existen y el `SELECT` las encuentra. No cambies ese orden.
+>
+> **[Deuda declarada, no arreglada acá]** Este rebuild va a volver a morder a la **próxima** columna que alguien agregue. Arreglarlo de raíz (derivar la lista de `Ticket.__table__.columns` en vez de hardcodearla) está **fuera de scope** de este plan: toca el camino de migración de la BD del operador y merece su propio plan con su propio backup. Queda anotado en §6.
 
 **Diff 3 — el sync respeta la precedencia** (`services/gitlab_sync.py`, dentro del bucle, **antes** del upsert):
 ```python
@@ -748,9 +949,27 @@ def set_local_hierarchy(ticket_id: int):
 
 > **POR QUÉ LA VALIDACIÓN 3 NO ES TEÓRICA — es un crash alcanzable, hoy.** En `api/tickets.py:648-651`, si `t.parent_ado_id == t.ado_id`, entonces `d` y `ado_id_to_ticket[t.parent_ado_id]` **son el mismo objeto**, y `d["children"].append(d)` crea una **auto-referencia**. `jsonify` sobre esa estructura levanta `ValueError: Circular reference detected` ⇒ **500 en `GET /api/tickets/hierarchy`**, es decir: la pantalla entera del grafo se cae por un solo dato. Con `epic::<iid>` escrito a mano en GitLab, o con este endpoint sin validar, es alcanzable en un click. **La validación acá no alcanza** (la etiqueta puede venir de GitLab): F6 agrega además la **guarda defensiva en el endpoint del grafo**.
 
-**Frontend** — `Stacky Agents/frontend/src/components/TicketGraphView.jsx` y `Stacky Agents/frontend/src/pages/TicketBoard.tsx`: en la tarjeta de un ticket **de un proyecto GitLab**, un control "Tipo" (select con los 8 canónicos) y "Padre" (input de `iid` con el título del padre resuelto al lado). Solo visible si `tracker_type === "gitlab"` **y** la flag está ON. La lógica de validación va en **`.ts` puro** (`Stacky Agents/frontend/src/lib/jerarquiaLocal.ts`) porque **no hay RTL/jsdom**; el render se cubre con smoke manual.
+**Diff 5 — `models.py`, `Ticket.to_dict()`: SIN ESTO EL CONTROL DE F4 ABRE SIEMPRE VACÍO (v2/C3 — BLOQUEANTE).**
 
-**Tests PRIMERO — `tests/test_plan277_clasificacion_local.py`, 14 casos:**
+> **La v1 agregaba dos columnas que nunca salían por la API.** `Ticket.to_dict()` (`models.py:68`) **no serializa el modelo**: arma un dict **explícito, clave por clave**. Y `get_hierarchy` construye cada nodo con `d = t.to_dict()` (`api/tickets.py:637`). Con la v1, `local_work_item_type` y `local_parent_iid` **no viajaban al frontend**: el select de "Tipo" no podría mostrar el valor ya elegido, el input de "Padre" abriría en blanco, y el `200 {"ok": true, "ticket": {...}}` del PATCH no haría echo-back de lo que el operador acaba de guardar. Es la gotcha conocida de este repo: **sin echo-back el control abre vacío y el operador borra sin querer lo que había puesto.**
+
+```diff
+         canonico = {
+             ...
+             "parent_external_id": self.parent_ado_id,
++            # Plan 277 F4 — clasificación LOCAL de Stacky. Van SOLO acá (ver abajo).
++            "local_work_item_type": self.local_work_item_type,
++            "local_parent_iid": self.local_parent_iid,
+             "last_synced_at": ...,
+```
+
+> **PROHIBIDO tocar `_legacy_payload()` (`models.py`, justo arriba de `to_dict`).** Su docstring declara *"Las **16 claves EXACTAS** que este método emitía antes del Plan 218 F5 … con la flag apagada, `to_dict()` devuelve esto y nada más (P11 — **byte-idéntico**)"*. Agregarle una clave **rompe su contrato de no-regresión**. Consecuencia que hay que asumir y declarar en la UI: con `STACKY_CANONICAL_VOCABULARY_ENABLED=False` (default `True`) los dos campos **no vienen**, así que el control de F4 se renderiza **solo si la clave está presente en el payload** — nunca asumiendo su existencia. Esa condición es el caso 17 de abajo.
+
+**Frontend** — `Stacky Agents/frontend/src/components/TicketGraphView.jsx` y `Stacky Agents/frontend/src/pages/TicketBoard.tsx`: en la tarjeta de un ticket **de un proyecto GitLab**, un control "Tipo" (select con los 8 canónicos) y "Padre" (input de `iid` con el título del padre resuelto al lado), **precargados con `local_work_item_type` / `local_parent_iid` del payload**. Visible si `tracker_type === "gitlab"` **y** la flag está ON **y** la clave `local_work_item_type` está presente en el ticket (ver el aviso de `_legacy_payload` arriba). La lógica de validación y la de "¿muestro el control?" van en **`.ts` puro** (`Stacky Agents/frontend/src/lib/jerarquiaLocal.ts`) porque **no hay RTL/jsdom**; el render se cubre con smoke manual.
+
+> **`TicketGraphView.jsx` es `.jsx`, sin tipos (v2, menor).** El `npx tsc --noEmit` del DoD **no lo cubre**. Su única verificación real es el smoke manual de 10 pasos; no lo cuentes como cubierto por el type-check.
+
+**Tests PRIMERO — `tests/test_plan277_clasificacion_local.py`, 18 casos** (v2: +4 — uno por el rebuild que borraba las columnas, tres por el echo-back que faltaba):
 
 | # | Caso | Gate |
 |---|---|---|
@@ -767,10 +986,14 @@ def set_local_hierarchy(ticket_id: int):
 | 12 | Con `STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED=False`: el sync **ignora** las columnas locales aunque tengan valor, y el PATCH devuelve **403** con `{"error":"flag_off"}` nombrando la flag | Kill-switch real (una flag registrada pero muerta pasa el gate del registro y no hace nada) |
 | 13 | El PATCH **no** hace ninguna llamada HTTP a GitLab (monkeypatchear `GitLabClient._request` y afirmar 0 llamadas) | **Es la promesa central de F4**: no toca el sistema del operador |
 | 14 | Segunda corrida del sync sin cambios: `created=0, updated=0` **y conteo de filas idéntico** | Idempotencia (los 3 asserts juntos: solos, cada uno pasa por accidente) |
+| **15** | **Sembrar una fila con `local_work_item_type="Epic"` y `local_parent_iid=42`, correr `_rebuild_tickets_table_if_needed(conn)` forzando el rebuild (borrando el índice `ux_tickets_stacky_tracker_external`), y verificar que los DOS valores SOBREVIVEN** | **v2/C2: el `DROP TABLE tickets` que borraba la clasificación del operador.** Es un assert de **presencia** con el dato sembrado antes — no de ausencia |
+| 16 | `to_dict()` con `STACKY_CANONICAL_VOCABULARY_ENABLED=True` **contiene** `local_work_item_type` y `local_parent_iid` con el valor sembrado | v2/C3: el echo-back existe |
+| 17 | `_legacy_payload()` sigue teniendo **exactamente 16 claves** y **no** contiene las dos nuevas | Que el arreglo de C3 no rompa el contrato byte-idéntico del plan 218 F5 |
+| 18 | `GET /api/tickets/hierarchy` devuelve los dos campos en cada ticket GitLab | Que el control de F4 tenga de dónde precargarse (es el consumidor real, `api/tickets.py:637`) |
 
 **Comando:**
 ```powershell
-& $PY -m pytest tests\test_plan277_clasificacion_local.py -q             # 14 passed
+& $PY -m pytest tests\test_plan277_clasificacion_local.py -q             # 18 passed
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
 npx vitest run src\__tests__\plan277JerarquiaLocal.test.ts               # 6 passed
 ```
@@ -859,30 +1082,73 @@ Endpoints: `GET /api/tickets/hierarchy/backfill/plan?project=<n>` (200, read-onl
 **Archivos a editar:** `Stacky Agents/backend/api/tickets.py` (`:615-656`), `Stacky Agents/backend/services/gitlab_sync.py`
 **Archivos a crear:** `Stacky Agents/backend/tests/test_plan277_grafo_jerarquia.py`
 
-**Diff 1 — la guarda anti-ciclo en `get_hierarchy` (`api/tickets.py:646-654`):**
+**Diff 1 — el índice deja de colisionar, la guarda anti-ciclo, y el motivo del huérfano (`api/tickets.py:635-656`):**
+
+> **PRIMERO: el índice está mal construido HOY y la mitigación que proponía la v1 no lo arreglaba (v2/C8).** `ado_id_to_ticket[t.ado_id] = d` (`:640`) indexa por **`ado_id` a secas** sobre *todos* los tickets del proyecto — y `_ticket_project_filter` (`:348-355`) **no filtra por `tracker_type`**, así que en la misma bolsa conviven ADO y GitLab. Con una colisión de `ado_id`, el segundo ticket **pisa** al primero en el dict; después, en el 2º loop, **ambos** `t` resuelven al **mismo** objeto `d` ⇒ ese `d` se agrega dos veces (**duplicado** en la respuesta) y el ticket pisado **desaparece del grafo**. La v1 proponía exigir `t.tracker_type == padre.tracker_type` en el enlace hijo→padre: eso actúa **después** de que el índice ya se corrompió, así que no evita ni el duplicado ni la desaparición. `Ticket.tracker_type` existe (`models.py:49`, `String(40)`, nullable con default `"azure_devops"`), así que la clave compuesta es viable hoy.
+
 ```diff
-     for t in all_tickets:
-         d = ado_id_to_ticket[t.ado_id]
-         wi_type = (t.work_item_type or "").lower()
-         if wi_type == "epic":
-             epics.append(d)
--        elif t.parent_ado_id and t.parent_ado_id in ado_id_to_ticket:
-+        # Plan 277 F6 — `parent_ado_id == ado_id` hace `d["children"].append(d)`:
-+        # una AUTO-REFERENCIA que revienta jsonify con "Circular reference
-+        # detected" ⇒ 500 y pantalla del grafo caída por UN dato. Es alcanzable
-+        # con una etiqueta `epic::<propio iid>` escrita a mano en GitLab, así que
-+        # validar solo en el endpoint de F4 no alcanza.
-+        elif (
-+            t.parent_ado_id
-+            and t.parent_ado_id != t.ado_id
-+            and t.parent_ado_id in ado_id_to_ticket
-+            and not _crea_ciclo(t.ado_id, t.parent_ado_id, all_tickets)
-+        ):
-             ado_id_to_ticket[t.parent_ado_id]["children"].append(d)
-         else:
-             orphans.append(d)
++        # Plan 277 F6 — la clave es (tracker, ado_id), NO ado_id solo. El filtro de
++        # proyecto (:348-355) NO filtra por tracker: ADO y GitLab comparten bolsa y
++        # sus ids son namespaces distintos (el iid de GitLab se repite entre
++        # proyectos). Con `ado_id` pelado, el 2º ticket PISA al 1º en el dict y en
++        # el loop de abajo los dos resuelven al MISMO `d`: uno sale duplicado y el
++        # otro desaparece del grafo.
++        def _clave(tk) -> tuple:
++            return ((tk.tracker_type or "azure_devops").strip().lower(), tk.ado_id)
++
+-        ado_id_to_ticket: dict[int, dict] = {}
++        ado_id_to_ticket: dict[tuple, dict] = {}
+         for t in all_tickets:
+             d = t.to_dict()
+             d["pipeline_summary"] = get_pipeline_summary(t.id)
+             d["children"] = []
+-            ado_id_to_ticket[t.ado_id] = d
++            ado_id_to_ticket[_clave(t)] = d
+ 
+         for t in all_tickets:
+-            d = ado_id_to_ticket[t.ado_id]
++            d = ado_id_to_ticket[_clave(t)]
+             wi_type = (t.work_item_type or "").lower()
++            # El padre se busca SIEMPRE dentro del mismo tracker.
++            clave_padre = ((t.tracker_type or "azure_devops").strip().lower(), t.parent_ado_id)
+             if wi_type == "epic":
+                 epics.append(d)
+-            elif t.parent_ado_id and t.parent_ado_id in ado_id_to_ticket:
++            # Plan 277 F6 — `parent_ado_id == ado_id` hace `d["children"].append(d)`:
++            # una AUTO-REFERENCIA que revienta jsonify con "Circular reference
++            # detected" ⇒ 500 y pantalla del grafo caída por UN dato. Es alcanzable
++            # con una etiqueta `epic::<propio iid>` escrita a mano en GitLab, así que
++            # validar solo en el endpoint de F4 no alcanza.
++            elif (
++                t.parent_ado_id
++                and t.parent_ado_id != t.ado_id
++                and clave_padre in ado_id_to_ticket
++                and not _crea_ciclo(t, all_tickets)
++            ):
+-                ado_id_to_ticket[t.parent_ado_id]["children"].append(d)
++                ado_id_to_ticket[clave_padre]["children"].append(d)
+             else:
++                # [ADICIÓN ARQUITECTO] — decir POR QUÉ quedó suelto (ver abajo).
++                d["motivo_huerfano"] = _motivo_huerfano(t, ado_id_to_ticket)
+                 orphans.append(d)
 ```
-`_crea_ciclo(ado_id, parent_id, tickets)` — helper nuevo en el mismo archivo: recorre la cadena de padres con un `set` de visitados y **tope duro de 50 saltos**; devuelve `True` si vuelve a `ado_id` o si agota el tope. Un ticket cuyo padre haría ciclo cae en `orphans` **con un warning logueado** — se pierde el enlace, nunca la pantalla.
+`_crea_ciclo(ticket, tickets)` — helper nuevo en el mismo archivo: recorre la cadena de padres **por la clave compuesta**, con un `set` de visitados y **tope duro de 50 saltos**; devuelve `True` si vuelve al ticket de partida o si agota el tope. Un ticket cuyo padre haría ciclo cae en `orphans` **con un warning logueado** — se pierde el enlace, nunca la pantalla.
+
+**[ADICIÓN ARQUITECTO] — `motivo_huerfano`: el grafo deja de decir solo "no anda".**
+
+Todo este plan existe porque el operador **no puede distinguir** qué es cada cosa. Que un ticket aparezca en `orphans` no le dice **por qué**: ¿no tiene etiqueta?, ¿la tiene y apunta a un issue que no está en la BD?, ¿el padre es de otro tracker?, ¿hay un ciclo? Son cuatro causas con cuatro remedios **distintos**, y hoy las cuatro se ven igual.
+
+`_motivo_huerfano(ticket, indice) -> str` devuelve **una** de estas constantes, en este orden de evaluación:
+
+| Valor | Cuándo | Qué tiene que hacer el operador |
+|---|---|---|
+| `"sin_padre_declarado"` | `parent_ado_id is None` | Clasificarlo con el control de F4, o etiquetarlo en GitLab |
+| `"auto_padre"` | `parent_ado_id == ado_id` | Corregir la etiqueta `epic::` del issue: se apunta a sí mismo |
+| `"ciclo"` | `_crea_ciclo(...)` dio `True` | Romper la cadena: dos tickets se declaran padre mutuamente |
+| `"padre_ausente_en_bd"` | tiene padre, **no** está en el índice | Sincronizar de nuevo (F6 diff 2 lo trae solo), o el padre está cerrado/es de otro proyecto |
+| `"padre_de_otro_tracker"` | el `ado_id` del padre existe pero con **otro** `tracker_type` | Colisión de ids: el padre real no está; revisar la etiqueta |
+
+**Por qué respeta todos los rieles:** es una **función pura sobre datos que el endpoint ya tiene en la mano** — cero queries nuevas, cero requests, cero llamadas a modelo, cero trabajo del operador, y **cero superficie nueva** (viaja dentro de la respuesta que ya existe, como clave aditiva; ningún consumidor actual se rompe porque nadie la lee todavía). Es human-in-the-loop puro: no decide nada, **le da al operador el dato que le falta para decidir**.
 
 **Diff 2 — traer los padres que faltan (`services/gitlab_sync.py`, al final del bucle):**
 ```python
@@ -890,21 +1156,44 @@ Endpoints: `GET /api/tickets/hierarchy/backfill/plan?project=<n>` (200, read-onl
 # listado, así que sus hijos apuntan a un `parent_ado_id` que no está en la BD y
 # el endpoint del grafo los manda a `orphans` (api/tickets.py:648-651). Se piden
 # UNO A UNO, y solo, los iid que las etiquetas nombraron y no llegaron.
+_TOPE_PADRES = 50
+
+# `parents_vistos: set[int]` se declara ANTES del bucle principal, junto a los
+# contadores, y se puebla DENTRO del bucle en la misma línea donde se calcula
+# `parent_ado_id`:  if parent_ado_id: parents_vistos.add(parent_ado_id)
 if _sync_parents_habilitado():
     referenciados = {p for p in parents_vistos if p}
-    presentes = {ado_id de todo lo que se upserteó} | {ado_id ya en BD del proyecto}
-    faltantes = sorted(referenciados - presentes)[:_TOPE_PADRES]   # _TOPE_PADRES = 50
+    # `presentes` = los ado_id de ESTE proyecto y ESTE tracker que ya están en la
+    # BD después del bucle principal (incluye lo recién insertado: el upsert ya
+    # hizo flush en la misma sesión).
+    presentes = {
+        fila_id
+        for (fila_id,) in session.query(Ticket.ado_id).filter(
+            Ticket.stacky_project_name == ctx.stacky_project_name,
+            Ticket.tracker_type == _TRACKER,
+        )
+    }
+    faltantes_todos = sorted(referenciados - presentes)
+    faltantes = faltantes_todos[:_TOPE_PADRES]
     for iid in faltantes:
         try:
-            body = provider.get_item(str(iid))     # ya existe: gitlab_provider.py:205-208
+            body = provider.get_item(str(iid))     # ya existe: gitlab_provider.py:205-207
         except Exception as exc:
-            padres_fallidos += 1; logger.warning(...); continue
-        ... mismo upsert por la terna, mismo mapeo ...
+            padres_fallidos += 1
+            logger.warning("Plan 277: no se pudo traer el padre iid=%s: %s", iid, exc)
+            continue
+        # MISMO upsert que el bucle principal: la función extraída en F2 diff 5.
+        # NO copiar el bloque: dos upserts divergentes es el bug que este plan cura.
+        _upsert_ticket_gitlab(session, body, ctx=ctx, ahora=ahora)
         padres_traidos += 1
-    if len(referenciados - presentes) > _TOPE_PADRES:
+    padres_omitidos_por_tope = max(0, len(faltantes_todos) - _TOPE_PADRES)
+    if padres_omitidos_por_tope:
         logger.warning("Plan 277: %d padres faltantes exceden el tope de %d; se trajeron los primeros %d.",
-                       len(referenciados - presentes), _TOPE_PADRES, _TOPE_PADRES)
+                       len(faltantes_todos), _TOPE_PADRES, _TOPE_PADRES)
 ```
+> **`body` viene del provider crudo, no normalizado.** `provider.get_item` devuelve `_normalize_issue(body)` (`gitlab_provider.py:205-207`), o sea **ya pasó por el contrato de F2** y trae `work_item_type` / `parent` / `origen_*`. Es el mismo shape que consume el bucle principal, que es justamente lo que hace que `_upsert_ticket_gitlab` se pueda reusar tal cual. **Verificá esa firma antes de escribir la fase**; si devolviera el body crudo, hay que normalizarlo acá.
+>
+> **Un padre traído puede tener padre a su vez.** Este bloque hace **una sola pasada**: si la épica cerrada que se trae cuelga de otra épica también ausente, esa segunda **no** se busca. Es una decisión, no un olvido — evita una recursión de N requests sobre el sistema del operador. El hijo queda colgando de su padre inmediato y el abuelo aparece como `padre_ausente_en_bd` en el motivo del huérfano, que es exactamente la señal que el operador necesita.
 > **EL TOPE SE LOGUEA SIEMPRE QUE RECORTA.** Una cota silenciosa se lee como "trajimos todos" cuando no fue así. `padres_traidos`, `padres_fallidos` y `padres_omitidos_por_tope` se suman al dict de retorno (aditivo).
 
 **Diff 3 — los rótulos de tipo, en el frontend.** `Stacky Agents/frontend/src/utils/workItemTypeColor.ts` gana las 3 fases del contrato:
@@ -930,7 +1219,7 @@ if _sync_parents_habilitado():
 ```
 y `formatWorkItemTypeLabel` (`:53-57`) consulta ese mapa **antes** de devolver el crudo (conservando el prefijo `INCIDENT_ICON` para `issue`/`bug`, que ya existe por a11y).
 
-**Tests PRIMERO — `tests/test_plan277_grafo_jerarquia.py`, 10 casos:**
+**Tests PRIMERO — `tests/test_plan277_grafo_jerarquia.py`, 12 casos** (v2: +2 por `motivo_huerfano`, y el caso 10 endurecido con conteo de apariciones):
 
 | # | Caso | Gate |
 |---|---|---|
@@ -943,16 +1232,20 @@ y `formatWorkItemTypeLabel` (`:53-57`) consulta ese mapa **antes** de devolver e
 | 7 | 60 padres faltantes → se traen **50** y se loguea el recorte con el número real | La cota que no miente |
 | 8 | `get_item` de un padre falla → `padres_fallidos=1`, el sync **termina** y devuelve el resto | Un padre roto no tumba la corrida |
 | 9 | Proyecto ADO: el bloque de padres no ejecuta (assert de que `get_item` no se llamó) | Backward-compat |
-| 10 | Un proyecto con tickets ADO **y** GitLab con `ado_id` colisionando: un hijo GitLab **no** cuelga de un padre ADO | La colisión de namespaces del riesgo R2 |
+| **10** | Un proyecto con tickets ADO **y** GitLab con `ado_id` colisionando: un hijo GitLab **no** cuelga de un padre ADO, **y además los DOS tickets colisionados aparecen exactamente UNA vez** en la unión `epics + children + orphans` (contar por `(tracker_type, ado_id)`) | **v2/C8.** La v1 solo pedía "no cuelga del padre equivocado", que pasa igual con el índice roto: la parte que detecta el `dict` que se pisa es el **conteo de apariciones** |
+| **11** | Un huérfano por cada causa (`sin_padre_declarado`, `auto_padre`, `ciclo`, `padre_ausente_en_bd`, `padre_de_otro_tracker`) devuelve **su** valor de `motivo_huerfano`, y los 5 son distintos entre sí | [ADICIÓN ARQUITECTO]: un `motivo` que devuelve siempre lo mismo es peor que no tenerlo |
+| 12 | Un ticket que **sí** cuelga de su épica **no** trae la clave `motivo_huerfano` | Que el motivo sea del huérfano, no ruido en todos lados |
 
-**Comando:**
+**Comando (uno por archivo):**
 ```powershell
-& $PY -m pytest tests\test_plan277_grafo_jerarquia.py -q                 # 10 passed
-& $PY -m pytest tests\test_plan276_hierarchy_gitlab.py -q                # 5 passed, sin regresión
+& $PY -m pytest tests\test_plan277_grafo_jerarquia.py -q                 # 12 passed
+& $PY -m pytest tests\test_plan276_hierarchy_gitlab.py -q                # 5 passed, sin regresión (MEDIDO)
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
 npx vitest run src\utils\__tests__\workItemTypeColor.test.ts             # sin regresión + 4 casos nuevos
 ```
-**Criterio de aceptación (binario):** 10 + 5 passed, el test de colores sin regresión, y el caso 1 verificado **serializando** la respuesta.
+**Criterio de aceptación (binario):** 12 + 5 passed, el test de colores sin regresión, y el caso 1 verificado **serializando** la respuesta.
+
+> **Ojo con `test_plan276_hierarchy_gitlab.py`:** sus 5 casos cubren `get_hierarchy`, que es **exactamente** lo que el diff 1 reescribe (incluido `test_el_filtro_por_proyecto_no_mezcla_tickets_de_ado`). Es el detector natural de un cambio de índice mal hecho. Corrélo **en su propia invocación**: medido el 2026-07-31, corrido en la misma llamada que `test_plan276_gitlab_sync.py` da **5 errors** por contaminación cruzada, y ese rojo no es tuyo.
 
 **Ratchet:** registrar el test backend en los dos scripts.
 **Flag:** `STACKY_GITLAB_SYNC_PARENTS_ENABLED`, **default True** (§3.5). La guarda anti-ciclo **no lleva flag**: es corrección de un crash.
@@ -983,11 +1276,21 @@ npx vitest run src\utils\__tests__\workItemTypeColor.test.ts             # sin r
 & $PY -m pytest tests\test_harness_flags.py -q
 & $PY -m pytest tests\test_harness_flags_help.py -q
 ```
-> **`test_harness_flags_help` tiene 4 fallos PREEXISTENTES** ajenos a este plan. El criterio es **delta**: correrlo **antes** de tocar nada, anotar el número exacto de fallos, y exigir **el mismo número** después. Un gate compartido rojo de fábrica no se juzga por "verde/rojo" sino por "no empeoró".
+> **⚠️ EL CRITERIO DELTA POR *NÚMERO* ES CIEGO A LO ÚNICO QUE ESTA FASE ENTREGA (v2/C5).**
+> Medido el 2026-07-31: `test_harness_flags_help.py` da **`4 failed, 4 passed`** — el número de la v1 era correcto. Pero **uno de esos 4 rojos es `test_plain_help_covers_all_registry_keys`**, que hace `assert sorted(REGISTRY_KEYS - set(PLAIN_HELP)) == []` y **ya está rojo** porque hay keys sin ayuda. Es decir: si registrás las 4 flags y **no escribís una sola línea de `PlainHelp`**, ese test **sigue fallando igual** y el conteo **sigue siendo 4** ⇒ el criterio de la v1 se cumple **sin haber hecho la superficie #4**. La fase quedaba con su entregable principal sin gate.
+>
+> **El criterio corregido son tres cosas, no una:**
+> 1. **Delta por CONJUNTO, no por número**: anotá los **nombres** de los tests fallidos antes de tocar nada (hoy: `test_plain_help_covers_all_registry_keys`, `test_plain_help_fields_non_empty_and_bounded`, `test_plain_help_on_off_start_with_si`, `test_plain_help_avoids_jargon_denylist`) y exigí **el mismo conjunto** después. Un nombre nuevo = regresión tuya.
+> 2. **Gate propio y POSITIVO** de lo que la fase entrega (el segundo `-c` de abajo): las 4 keys en `PLAIN_HELP` con los 4 campos no vacíos.
+> 3. **Respetá la denylist de jerga**, que es CONGELADA y está en `tests/test_harness_flags_help.py:17-19`. Prohíbe, entre otras: **`token`, `endpoint`, `gate`, `backend`, `frontend`, `regex`, `prompt`, `runtime`, `LLM`, `stdin`, `stdout`, `MCP`, `hook`, `frontmatter`** — y además prohíbe citar keys `SCREAMING_SNAKE` y referencias a fases (`F1`, `F2`…). Escribí la ayuda de estas 4 flags en castellano llano **sin ninguna de esas palabras**: decí *"la lista de tickets de la empresa"*, no *"el endpoint de GitLab"*. Como el test de la denylist **ya está rojo**, una violación tuya **no cambiaría el conteo**: la única defensa es escribirla bien la primera vez.
 
-**Criterio de aceptación (binario):** `test_harness_flags.py` en verde; `test_harness_flags_help.py` con **exactamente los mismos fallos** que en la corrida previa (número anotado en el commit); y
+**Criterio de aceptación (binario):** `test_harness_flags.py` en verde; `test_harness_flags_help.py` con **exactamente el mismo CONJUNTO de nombres** de test fallidos que en la corrida previa (los 4 de arriba, anotados en el commit); y
 ```powershell
 & $PY -c "from services.harness_flags import FLAG_REGISTRY as R; ks={f.key for f in R}; n=[k for k in ['STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED','STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED','STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED','STACKY_GITLAB_SYNC_PARENTS_ENABLED'] if k not in ks]; assert not n, n; print('4 flags registradas OK')"
+```
+**y — el gate que faltaba en la v1 — la superficie #4 verificada de forma POSITIVA:**
+```powershell
+& $PY -c "from services.harness_flags_help import PLAIN_HELP as H; ks=['STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED','STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED','STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED','STACKY_GITLAB_SYNC_PARENTS_ENABLED']; falt=[k for k in ks if k not in H]; assert not falt, ('sin ayuda llana: %s' % falt); vac=[k for k in ks for c in (H[k].what,H[k].on_effect,H[k].off_effect,H[k].example) if not (c or '').strip()]; assert not vac, ('campos vacios: %s' % vac); import re; jer=[w for k in ks for c in (H[k].what,H[k].on_effect,H[k].off_effect,H[k].example) for w in ('MCP','TF-IDF','LLM','stdin','stdout','endpoint','frontmatter','prompt','token','regex','backend','frontend','gate','hook','runtime') if re.search(r'\b%s\b' % re.escape(w), c, re.I)]; assert not jer, ('jerga prohibida: %s' % sorted(set(jer))); print('4 ayudas llanas OK, sin jerga')"
 ```
 **Ratchet:** no aplica (no hay archivo de test nuevo).
 **Flag:** las 4 (esta fase **es** su registro).
@@ -1002,13 +1305,18 @@ npx vitest run src\utils\__tests__\workItemTypeColor.test.ts             # sin r
 **Archivos a crear:** `Stacky Agents/backend/scripts/smoke_plan277_jerarquia.ps1` y `Stacky Agents/backend/scripts/smoke_plan277_jerarquia.sh` (**los dos**: los ratchets divergen y el `.ps1` es el que corre en esta máquina)
 
 **Qué hace, en orden, y sale ≠ 0 en cualquier fallo:**
-1. Verifica que las 4 flags están en el registro (el `-c` de F7). Si falta una ⇒ **exit 2**.
-2. Dispara el sync del proyecto (`POST /api/tickets/sync`) y lee la respuesta. Si no es 200 ⇒ **exit 3**, imprimiendo el body.
-3. `GET /api/tickets/hierarchy?project=<n>` y calcula `epics`, `children`, `orphans`.
-4. **Serializa la respuesta con `ConvertTo-Json -Depth 20` / `json.dumps`.** Si levanta ⇒ **exit 4** (es el gate del ciclo de F6; un 200 no prueba que la estructura sea serializable río abajo).
-5. **exit 5** si `epics == 0` — la meta del operador no se cumplió.
-6. **exit 6** si `epics + children + orphans` **≠** el conteo de filas GitLab en la BD. Es el gate de que el grafo no pierde tickets por el camino.
-7. Imprime la tabla final: `epics / children / orphans / total` y, por cada épica, su título e hijos. **exit 0**.
+1. Verifica que las 4 flags están en el registro **y** que las 4 tienen ayuda llana no vacía (los **dos** `-c` de F7). Si falta una ⇒ **exit 2**.
+2. **Verifica contra la BD REAL que las 2 columnas de F4 existen** (`PRAGMA table_info(tickets)` ⇒ `local_work_item_type` y `local_parent_iid`). Si falta alguna ⇒ **exit 7**. *(v2/C9: el `ALTER` de `db.py:304-312` se traga sus errores con `except Exception: pass`, y los tests de F4 corren sobre sqlite temporal, así que este es el **único** punto donde se comprueba que la migración de verdad ocurrió en la base del operador.)*
+3. Dispara el sync del proyecto (`POST /api/tickets/sync`) y lee la respuesta. Si no es 200 ⇒ **exit 3**, imprimiendo el body.
+4. `GET /api/tickets/hierarchy?project=<n>` y calcula `epics`, `children`, `orphans`.
+5. **Serializa la respuesta con `ConvertTo-Json -Depth 20` / `json.dumps`.** Si levanta ⇒ **exit 4** (es el gate del ciclo de F6; un 200 no prueba que la estructura sea serializable río abajo).
+6. **exit 5** si `epics == 0` — la meta del operador no se cumplió.
+7. **exit 6** si `epics + children + orphans` **≠ el total de filas del proyecto en la BD contando TODOS los trackers** (el número del paso 7 de F0), **o** si algún par `(tracker_type, ado_id)` aparece **más de una vez** en la unión de las tres listas.
+8. Imprime la tabla final: `epics / children / orphans / total`, el **desglose por `tracker_type`**, el **conteo de `orphans` agrupado por `motivo_huerfano`**, y por cada épica su título e hijos. **exit 0**.
+
+> **POR QUÉ EL PASO 7 CAMBIÓ (v2/C4 — era un BLOQUEANTE).** La v1 comparaba contra *"el conteo de filas **GitLab** en la BD"*. Pero `get_hierarchy` filtra con `_ticket_project_filter` (`api/tickets.py:348-355`), que compara **solo** `stacky_project_name` / `project` y **no filtra por `tracker_type`**: la respuesta mezcla ADO y GitLab del mismo proyecto de Stacky. Con **una sola** fila ADO en el proyecto, `epics+children+orphans` > filas GitLab ⇒ **`exit 6` garantizado sobre una implementación perfecta**. Y este script es, por §8, el único árbitro de si el plan está hecho. La comparación correcta es contra el **total del proyecto**, que es justamente lo que F0 paso 7 midió **antes** de tocar código.
+>
+> **Y el chequeo de duplicados es la otra mitad (v2/C8):** el total podía cerrar igual con el índice roto —un ticket duplicado compensa numéricamente al que desapareció—. Contar apariciones por `(tracker_type, ado_id)` es lo que distingue "no se perdió nada" de "se perdió uno y se duplicó otro".
 
 ```powershell
 # uso
@@ -1031,7 +1339,9 @@ if ($LASTEXITCODE -ne 0) { "FALLÓ con código $LASTEXITCODE" }
 | # | Riesgo | Probabilidad | Mitigación (dónde) |
 |---|---|---|---|
 | **R1** | **Auto-referencia ⇒ 500 en el grafo.** `parent_ado_id == ado_id` hace `d["children"].append(d)` y `jsonify` levanta `Circular reference detected`: se cae la pantalla entera por un dato. Alcanzable con una etiqueta escrita a mano en GitLab. | **Alta** — es el `elif` de `api/tickets.py:648` tal como está hoy | Validación en F4 (400/409) **y** guarda defensiva en F6 (el dato malo puede venir de GitLab, no solo del endpoint) **y** el test que **serializa** la respuesta |
-| **R2** | **Colisión de `ado_id` entre trackers.** `ado_id_to_ticket` se indexa por `ado_id` sobre todos los tickets del filtro de proyecto. Un proyecto migrado de ADO a GitLab conserva filas viejas cuyo `ado_id` puede coincidir con un `iid` de GitLab ⇒ un hijo GitLab colgaría de un padre ADO. | Media (solo en proyectos migrados) | Caso 10 de F6 lo fija. **Mitigación mínima declarada:** en `get_hierarchy`, el enlace hijo→padre exige además `t.tracker_type == padre.tracker_type`. Es un cambio de 1 línea y va **dentro** del diff 1 de F6 |
+| **R2** | **Colisión de `ado_id` entre trackers — y es PEOR de lo que decía la v1.** `ado_id_to_ticket[t.ado_id] = d` (`api/tickets.py:640`) indexa por `ado_id` a secas sobre todos los tickets del filtro de proyecto, que **no filtra por tracker** (`:348-355`, verificado). Con una colisión, el 2º ticket **pisa** al 1º en el dict y en el 2º loop **ambos resuelven al mismo `d`**: uno sale **duplicado** y el otro **desaparece del grafo**. No es solo "cuelga del padre equivocado". | Media (proyectos migrados de ADO a GitLab) | **v2:** el índice pasa a ser **`(tracker_type, ado_id)`** en el diff 1 de F6 — la mitigación de la v1 (`t.tracker_type == padre.tracker_type` en el enlace) actuaba **después** de que el índice ya se había corrompido y no evitaba ni el duplicado ni la desaparición. Casos 10 de F6 (con **conteo de apariciones**) y paso 7 de F8 |
+| **R10** | **El rebuild de `db.py` borra las columnas de F4 sin decir nada.** `_rebuild_tickets_table_if_needed` corre al final de `_migrate_add_columns`, tiene la lista de columnas **hardcodeada** y hace `DROP TABLE tickets`. Se pierde la clasificación manual del operador. | Baja-Media (solo dispara en BDs sin `ux_tickets_stacky_tracker_external` — pero ese es el perfil de una BD vieja como la de 181 MB) | **v2:** diff 2-bis de F4 (las 2 columnas en los 3 lugares de la función) + **caso 15 de F4**, que siembra los valores, **fuerza** el rebuild y exige que sobrevivan. Más la copia del `.db` del DoD |
+| **R11** | **Las 2 columnas nunca llegan a la UI** porque `to_dict()` arma un dict explícito: el control de F4 abre vacío y el operador borra sin querer lo que había cargado. | **Alta** si no se hace (era el estado de la v1) | **v2:** diff 5 de F4 (solo en el payload canónico, **nunca** en `_legacy_payload`, que tiene contrato de 16 claves byte-idénticas) + casos 16-18 |
 | **R3** | **`labels` vs `add_labels`.** Un implementador que use `{"labels": "..."}` en el PUT **reemplaza el set entero** y borra las etiquetas del operador. Es destrucción de datos irreversible sobre su sistema. | Media (es la clave "natural" de la API) | Caso 6 de F5 (assert sobre el body) + el `Select-String` del criterio de aceptación + la advertencia en el docstring |
 | **R4** | **El contrato se escribe pero nadie lo lee** (lo que ya pasó con los issue-links). | Baja tras F2/F3 | El gate de F8 lee **por HTTP** lo que F3 escribió; el caso 4 de F3 verifica que el mecanismo viejo se retiró |
 | **R5** | **Etiquetas con `::` en Premium se vuelven scoped y se excluyen mutuamente**, borrando una `type::` anterior al agregar otra. | Baja (efecto **deseado**) | La regla 2 del contrato hace la lectura determinista con o sin exclusión mutua; F0 paso 5 mide la edición antes de empezar |
@@ -1051,6 +1361,8 @@ if ($LASTEXITCODE -ne 0) { "FALLÓ con código $LASTEXITCODE" }
 5. **Migrar los comentarios de fase del plan 77 a tickets hijos.** Las dos formas coexisten a propósito: 77 = un issue con 3 comentarios; 277 = una épica con 3 hijos. Este plan **alinea el vocabulario** para que sean interoperables; convertir una en otra es otro trabajo.
 6. **Jira y Mantis.** El contrato vive en `gitlab_hierarchy.py` y es específico de GitLab. Los otros trackers siguen exactamente como hoy.
 7. **Paginación de más de 50 padres faltantes.** F6 recorta y **lo dice**. Subir el tope es config, no código.
+8. **Arreglar de raíz `_rebuild_tickets_table_if_needed` (`db.py`) — deuda declarada en v2.** Este plan agrega sus 2 columnas a las 3 listas hardcodeadas de esa función (F4 diff 2-bis) para no perder datos, pero **no** la reescribe. La solución de fondo —derivar las columnas de `Ticket.__table__.columns` en vez de listarlas a mano— toca el camino de migración de la BD del operador (un `DROP TABLE` real) y merece su propio plan con su propio backup y sus propios tests. **Mientras tanto, la trampa sigue viva para la próxima columna que alguien agregue**: quede escrito acá.
+9. **Recursión de abuelos en F6.** El bloque de padres faltantes hace **una sola pasada**: si la épica cerrada que trae cuelga a su vez de otra ausente, esa no se busca. Decisión consciente para no disparar N requests contra el sistema del operador; el faltante se ve como `padre_ausente_en_bd` en `motivo_huerfano`.
 
 ---
 
@@ -1072,16 +1384,17 @@ if ($LASTEXITCODE -ne 0) { "FALLÓ con código $LASTEXITCODE" }
 
 ## 8. Orden de implementación
 
-1. **F0** — Medir el "antes" y abortar si falta el plan 276. **Nada de código.** Pegar las 6 salidas en el commit.
+1. **F0** — Medir el "antes" y abortar si falta el plan 276. **Nada de código.** Pegar las **7** salidas en el commit (la 7ª es la aritmética del gate de cierre, corrida **contra el defecto**).
 2. **F1** — `services/gitlab_hierarchy.py` + sus 24 tests. Es el cimiento: todo lo demás lo importa.
-3. **F7 (parcial)** — Registrar `STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED` en las 4 superficies **ahora**, porque F2 la lee. Las otras 3 flags, cuando llegue su fase.
-4. **F2** — Read path: `_normalize_issue` + los 3 motores consolidados + 12 tests. Después de esto, un issue **con** etiquetas ya arma jerarquía.
-5. **F3** — Write path: `_type_label`, `_link_parent`, `create_item` + 9 tests. Cierra el lazo escribir↔leer.
-6. **F4** — Columnas + endpoint + UI + 14 tests + smoke de 10 pasos. **Es la fase que le sirve al operador hoy.** Registrar su flag.
-7. **F6** — Guarda anti-ciclo, padres faltantes, colores + 10 tests. Va **antes** que F5 porque protege de un crash y F5 no es urgente.
-8. **F5** — Backfill a GitLab + 11 tests + smoke de 6 pasos. Registrar su flag (**OFF**). Es lo último que se construye porque es lo único que escribe afuera.
-9. **F7 (completo)** — Cerrar el registro de las 4 flags y correr el delta de `test_harness_flags_help`.
-10. **F8** — El gate ejecutable. **Si sale ≠ 0, el plan no está hecho**, sin importar cuántas fases figuren cerradas.
+3. **F7 (parcial)** — Registrar `STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED` en las 4 superficies **ahora**, porque F2 la lee. Las otras 3 flags, cuando llegue su fase. **Escribí su `PlainHelp` en el mismo commit** — si la dejás para después, ningún gate te la va a reclamar (v2/C5).
+4. **F2** — Read path: `_normalize_issue`, los 3 motores consolidados (**incluido el cambio de semántica de `incident_context`, v2/C1**) y la extracción de `_upsert_ticket_gitlab` + 15 tests. Después de esto, un issue **con** etiquetas ya arma jerarquía.
+5. **F2-bis** — `tests/test_plan277_un_solo_motor.py` (4 tests). Va **pegado a F2**: es lo que prueba que la consolidación ocurrió, y si se pospone deja de escribirse.
+6. **F3** — Write path: `_type_label`, `_link_parent`, `create_item` + 9 tests. Cierra el lazo escribir↔leer.
+7. **F4** — Columnas + **el rebuild de `db.py`** + `to_dict()` + endpoint + UI + 18 tests + smoke de 10 pasos. **Es la fase que le sirve al operador hoy.** Registrar su flag. **Copia del `.db` ANTES de la primera corrida.**
+8. **F6** — Índice por `(tracker_type, ado_id)`, guarda anti-ciclo, `motivo_huerfano`, padres faltantes, colores + 12 tests. Va **antes** que F5 porque protege de un crash y F5 no es urgente.
+9. **F5** — Backfill a GitLab + 11 tests + smoke de 6 pasos. Registrar su flag (**OFF**). Es lo último que se construye porque es lo único que escribe afuera.
+10. **F7 (completo)** — Cerrar el registro de las 4 flags, correr el delta **por conjunto de nombres** de `test_harness_flags_help` y los **dos** `-c` (registro + ayuda llana sin jerga).
+11. **F8** — El gate ejecutable. **Si sale ≠ 0, el plan no está hecho**, sin importar cuántas fases figuren cerradas.
 
 ---
 
@@ -1089,24 +1402,40 @@ if ($LASTEXITCODE -ne 0) { "FALLÓ con código $LASTEXITCODE" }
 
 El plan 277 está hecho cuando **todas** estas líneas son verdaderas y están verificadas con su comando:
 
-- [ ] **F0 corrido y pegado**: los 6 pasos, con `epics=0` y `children=0` documentados como el "antes".
+- [ ] **F0 corrido y pegado**: los **7** pasos, con `epics=0` y `children=0` documentados como el "antes", y el paso 7 cerrando la igualdad con el paso 4.
 - [ ] **Copia del `.db`** del operador hecha antes de la primera corrida con las columnas nuevas.
 - [ ] `tests/test_plan277_contrato_jerarquia.py` ⇒ **24 passed**, y el módulo pasa el check de pureza (sin `requests`, sin `session_scope`, sin `config`).
-- [ ] `tests/test_plan277_read_path.py` ⇒ **12 passed**.
+- [ ] `tests/test_plan277_read_path.py` ⇒ **15 passed**.
+- [ ] `tests/test_plan277_un_solo_motor.py` ⇒ **4 passed** *(incluye el caso 4, que prueba que el detector **detecta**)*.
 - [ ] `tests/test_plan277_write_path.py` ⇒ **9 passed**.
-- [ ] `tests/test_plan277_clasificacion_local.py` ⇒ **14 passed**.
+- [ ] `tests/test_plan277_clasificacion_local.py` ⇒ **18 passed**.
 - [ ] `tests/test_plan277_backfill_labels.py` ⇒ **11 passed**.
-- [ ] `tests/test_plan277_grafo_jerarquia.py` ⇒ **10 passed**.
+- [ ] `tests/test_plan277_grafo_jerarquia.py` ⇒ **12 passed**.
 - [ ] `src/__tests__/plan277JerarquiaLocal.test.ts` ⇒ **6 passed**; `workItemTypeColor.test.ts` sin regresión + 4 casos nuevos.
-- [ ] **Sin regresión** en `test_plan276_gitlab_sync.py` (16), `test_plan276_hierarchy_gitlab.py` (5), `test_plan74_migrator_verify.py`, `test_plan74_migrator_epics.py` y `test_harness_flags.py`. Los cuatro primeros **existen hoy** (verificado) y los dos de `plan74` cubren código que F2/F3 modifican.
-- [ ] `test_harness_flags_help.py` con **el mismo número exacto** de fallos preexistentes que antes de tocar nada (número anotado en el commit).
-- [ ] **Las 4 flags** en las 4 superficies; la única OFF (`STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED`) con su categoría **(B)** escrita en la línea del default.
-- [ ] **Los 8 archivos de test/script nuevos registrados en LOS DOS ratchets** (`.ps1` y `.sh`).
-- [ ] **Un solo motor**: `Select-String -Path services\migrator_verify.py -Pattern '_TYPE_LABEL_RE'` en **0**.
+- [ ] **Sin regresión**, cada uno **en su propia invocación de pytest** (juntos dan 5 errors por contaminación — medido): `test_plan276_gitlab_sync.py` (**17** — MEDIDO 2026-07-31, la v1 decía 16), `test_plan276_hierarchy_gitlab.py` (**5**), `test_plan74_migrator_verify.py` (**4**), `test_plan74_migrator_epics.py` (**6**) y `test_harness_flags.py`. Los cuatro primeros **existen hoy** y los dos de `plan74` cubren código que F2/F3 modifican.
+- [ ] `test_harness_flags_help.py` con **el mismo CONJUNTO de nombres** de test fallidos que antes de tocar nada (hoy: `covers_all_registry_keys`, `fields_non_empty_and_bounded`, `on_off_start_with_si`, `avoids_jargon_denylist` — anotados en el commit). **El conteo solo no vale** (v2/C5).
+- [ ] **Las 4 flags** en las 4 superficies; la única OFF (`STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED`) con su categoría **(B)** escrita en la línea del default; **y el `-c` de ayuda llana pasa** (4 keys en `PLAIN_HELP`, 4 campos no vacíos, cero jerga de la denylist).
+- [ ] **Los 9 archivos de test/script nuevos registrados en LOS DOS ratchets** (`.ps1` y `.sh` — divergen: **776** vs **712** líneas con `test_`/`pytest`, medido 2026-07-31).
+- [ ] **Un solo motor**, medido **por AST** y no por `grep`: `tests/test_plan277_un_solo_motor.py` en verde, y `Select-String -Path services\migrator_verify.py -Pattern '_TYPE_LABEL_RE'` en **0**.
+- [ ] **`incident_context.py` ya NO clasifica por el substring `"epic"`** (v2/C1) y su caso 13 de F2 pasa con `["epic::42"]` sembrado.
+- [ ] **Las 2 columnas de F4 están en las 3 listas de `_rebuild_tickets_table_if_needed`** y el caso 15 de F4 (rebuild forzado) las ve sobrevivir.
+- [ ] **`to_dict()` emite `local_work_item_type` y `local_parent_iid`**, y `_legacy_payload()` **sigue teniendo exactamente 16 claves**.
 - [ ] **Cero `except Exception: pass`** dentro de `_link_parent`.
 - [ ] **Cero `"labels"`** (solo `"add_labels"`) en `gitlab_hierarchy_backfill.py`.
 - [ ] **Smoke manual de F4** (10 pasos) corrido, con captura del paso 8 (el hijo colgando de *"Violeta Lugo"*).
 - [ ] **Smoke manual de F5** (6 pasos) corrido, con la verificación de que el issue **conservó** sus etiquetas previas.
-- [ ] **`smoke_plan277_jerarquia.ps1` sale 0** contra RIPLEY, con `epics ≥ 1`, salida pegada en el commit.
-- [ ] `& $PY -m compileall backend` sin errores y `npx tsc --noEmit` en **0**.
-- [ ] La huella del error `Circular reference detected` de R1 registrada en `docs/sistema/error_fingerprints.json` (convención del repo, igual que 276 §10).
+- [ ] **`smoke_plan277_jerarquia.ps1` sale 0** contra RIPLEY, con `epics ≥ 1`, las 2 columnas verificadas en la **BD real**, cero duplicados por `(tracker_type, ado_id)`, y salida pegada en el commit.
+- [ ] `& $PY -m compileall backend` sin errores y `npx tsc --noEmit` en **0** — recordando que **`TicketGraphView.jsx` no está cubierto por tsc** y su gate real es el smoke manual.
+- [ ] La huella del error `Circular reference detected` de R1 registrada en `docs/sistema/error_fingerprints.json`, con este objeto literal:
+  ```json
+  {
+    "id": "flask-jsonify-circular-reference-hierarchy",
+    "patron": "ValueError: Circular reference detected",
+    "sintoma": "GET /api/tickets/hierarchy devuelve 500 y la pantalla del grafo queda en blanco",
+    "causa": "parent_ado_id == ado_id hace d['children'].append(d) en api/tickets.py:648-654",
+    "plan": "277",
+    "commit": "<hash del commit de F6>",
+    "fecha": "2026-07-31",
+    "guard_test": "backend/tests/test_plan277_grafo_jerarquia.py::caso_1_auto_referencia_no_rompe_el_endpoint"
+  }
+  ```

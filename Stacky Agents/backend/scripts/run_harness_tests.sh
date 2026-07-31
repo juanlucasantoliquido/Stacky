@@ -240,6 +240,10 @@ HARNESS_TEST_FILES=(
   tests/test_plan276_hierarchy_gitlab.py
   tests/test_plan276_config_gaps.py
   tests/test_plan276_client_limits.py
+  # — Plan 277 · Jerarquía de GitLab: un solo contrato de tipo y padre —
+  tests/test_plan277_contrato_jerarquia.py
+  tests/test_plan277_read_path.py
+  tests/test_plan277_un_solo_motor.py
   # — Plan 117 · Insights locales de ejecuciones (IA local) —
   tests/test_plan117_insights_flags.py
   tests/test_plan117_insights_core.py

@@ -30,6 +30,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+import config  # importado a nivel módulo para poder parchear en tests
 from db import session_scope
 from models import Ticket
 from services.project_context import resolve_project_context
@@ -50,6 +51,91 @@ def _a_int(valor) -> Optional[int]:
         return int(str(valor).strip())
     except (TypeError, ValueError):
         return None
+
+
+def _upsert_ticket_gitlab(session, item: dict, *, ctx, ahora: datetime) -> str:
+    """Alta/actualización de UNA fila de GitLab por la terna. Plan 277 F2.
+
+    Extraído tal cual del bucle de `sync_gitlab_tickets` (antes gitlab_sync.py:110-158)
+    para que F6 traiga los padres faltantes por el MISMO camino. No cambia una sola
+    regla: misma clave de upsert, mismo mapeo de campos, misma comparación previa.
+
+    Recibe el `item` CRUDO y no los campos ya mapeados —a propósito—: si el mapeo
+    quedara afuera, F6 tendría que copiarlo, y dos copias de un mapeo es exactamente
+    la enfermedad de "N motores" que este plan existe para curar. Por el mismo
+    motivo el guard de la flag vive acá adentro y no en el bucle.
+
+    El llamador conserva el guard de identidad (`external_id`/`ado_id` no nulos):
+    es él quien lleva la cuenta de salteados y el set de `vistos_external`.
+
+    Returns: "created" | "updated" | "noop"
+    """
+    external_id = _a_int(item.get("id"))
+    ado_id = _a_int(item.get("iid"))
+
+    titulo = (item.get("title") or "")[:_TITULO_MAX]
+    estado = item.get("state") or "opened"
+    tipo = item.get("work_item_type") or "Issue"
+
+    # Plan 277 F2 — con el contrato apagado el sync se comporta EXACTO como en
+    # 276: sin padre por etiqueta. La flag gatea SOLO el padre y NUNCA el tipo,
+    # porque `work_item_type` ya lo poblaba el plan 276 y apagarlo sería una
+    # regresión, no un rollback.
+    if not bool(getattr(config.config, "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED", True)):
+        parent_ado_id = None
+    else:
+        parent_ado_id = _a_int(item.get("parent"))
+
+    # LA BÚSQUEDA VA POR LA TERNA. `tracker_type` y `stacky_project_name`
+    # van en el WHERE, no solo en el INSERT: sin el primero, un proyecto
+    # Stacky que antes fue ADO machearía filas del tracker viejo y las
+    # pisaría; sin el segundo, dos proyectos Stacky apuntando al mismo
+    # GitLab se contaminarían.
+    fila = (
+        session.query(Ticket)
+        .filter(
+            Ticket.stacky_project_name == ctx.stacky_project_name,
+            Ticket.tracker_type == _TRACKER,
+            Ticket.external_id == external_id,
+        )
+        .first()
+    )
+
+    if fila is None:
+        session.add(
+            Ticket(
+                ado_id=ado_id,
+                external_id=external_id,
+                project=ctx.tracker_project,
+                stacky_project_name=ctx.stacky_project_name,
+                tracker_type=_TRACKER,
+                title=titulo,
+                description=item.get("description") or "",
+                ado_state=estado,
+                ado_url=(item.get("web_url") or "")[:400],
+                work_item_type=tipo,
+                parent_ado_id=parent_ado_id,
+                last_synced_at=ahora,
+            )
+        )
+        return "created"
+
+    cambio = (
+        fila.title != titulo
+        or fila.ado_state != estado
+        or fila.work_item_type != tipo
+        or fila.parent_ado_id != parent_ado_id
+    )
+    fila.ado_id = ado_id
+    fila.project = ctx.tracker_project
+    fila.title = titulo
+    fila.description = item.get("description") or ""
+    fila.ado_state = estado
+    fila.ado_url = (item.get("web_url") or "")[:400]
+    fila.work_item_type = tipo
+    fila.parent_ado_id = parent_ado_id
+    fila.last_synced_at = ahora
+    return "updated" if cambio else "noop"
 
 
 def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
@@ -102,62 +188,15 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
 
             vistos_external.add(external_id)
 
-            titulo = (item.get("title") or "")[:_TITULO_MAX]
-            estado = item.get("state") or "opened"
-            tipo = item.get("work_item_type") or "Issue"
-            parent_ado_id = _a_int(item.get("parent"))
-
-            # LA BÚSQUEDA VA POR LA TERNA. `tracker_type` y `stacky_project_name`
-            # van en el WHERE, no solo en el INSERT: sin el primero, un proyecto
-            # Stacky que antes fue ADO machearía filas del tracker viejo y las
-            # pisaría; sin el segundo, dos proyectos Stacky apuntando al mismo
-            # GitLab se contaminarían.
-            fila = (
-                session.query(Ticket)
-                .filter(
-                    Ticket.stacky_project_name == stacky_name,
-                    Ticket.tracker_type == _TRACKER,
-                    Ticket.external_id == external_id,
-                )
-                .first()
+            # Plan 277 F2 — el upsert vive en `_upsert_ticket_gitlab` para que F6
+            # traiga los padres faltantes por el MISMO camino. Acá solo se cuenta
+            # por su valor de retorno.
+            resultado_fila = _upsert_ticket_gitlab(
+                session, item, ctx=ctx, ahora=datetime.utcnow()
             )
-
-            if fila is None:
-                session.add(
-                    Ticket(
-                        ado_id=ado_id,
-                        external_id=external_id,
-                        project=tracker_project,
-                        stacky_project_name=stacky_name,
-                        tracker_type=_TRACKER,
-                        title=titulo,
-                        description=item.get("description") or "",
-                        ado_state=estado,
-                        ado_url=(item.get("web_url") or "")[:400],
-                        work_item_type=tipo,
-                        parent_ado_id=parent_ado_id,
-                        last_synced_at=datetime.utcnow(),
-                    )
-                )
+            if resultado_fila == "created":
                 creados += 1
-                continue
-
-            cambio = (
-                fila.title != titulo
-                or fila.ado_state != estado
-                or fila.work_item_type != tipo
-                or fila.parent_ado_id != parent_ado_id
-            )
-            fila.ado_id = ado_id
-            fila.project = tracker_project
-            fila.title = titulo
-            fila.description = item.get("description") or ""
-            fila.ado_state = estado
-            fila.ado_url = (item.get("web_url") or "")[:400]
-            fila.work_item_type = tipo
-            fila.parent_ado_id = parent_ado_id
-            fila.last_synced_at = datetime.utcnow()
-            if cambio:
+            elif resultado_fila == "updated":
                 actualizados += 1
 
         # Lo que dejó de venir en el listado de ABIERTOS se marca cerrado. NO se

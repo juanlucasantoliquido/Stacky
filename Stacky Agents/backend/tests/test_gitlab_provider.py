@@ -141,7 +141,16 @@ def test_normalize_issue_shape():
     assert result["iid"] == "3"
     assert result["state"] == "opened"
     assert result["assignees"] == ["dev1"]
-    assert result["parent"] == "5"
+    assert result["work_item_type"] == "Bug"
+    # Plan 277 F2 (§3.2) — CAMBIO DECLARADO. Antes este assert era
+    # `result["parent"] == "5"`: el `epic` nativo de Premium se copiaba a `parent`.
+    # Es incorrecto y tapaba la causa real: el iid del epic vive en el namespace
+    # del GRUPO y `parent_ado_id` se compara contra `Ticket.ado_id`, que lleva el
+    # iid del PROYECTO ⇒ ese padre nunca resolvía. El padre sale SOLO de la
+    # etiqueta `epic::<iid>` (que este payload no tiene); el nativo se conserva
+    # aparte, para diagnóstico y deep-link.
+    assert result["parent"] is None
+    assert result["parent_native_epic_iid"] == 5
 
 
 def test_get_authenticated_user_shape():

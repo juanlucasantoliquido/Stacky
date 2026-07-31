@@ -1355,6 +1355,16 @@ class Config:
     STACKY_GITLAB_SYNC_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_SYNC_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 277 — Un solo contrato de tipo y padre para GitLab ──────────────
+    # ON: al leer un issue de GitLab, el tipo sale de la etiqueta `type::<tipo>` y
+    # el padre de `epic::<iid>`, con UNA sola normalización (services/
+    # gitlab_hierarchy.py). Solo parsea etiquetas que YA vienen en el payload:
+    # cero llamadas al GitLab del operador, cero escritura en su sistema.
+    # OFF: vuelve la lectura divergente de hoy (el primer label del array, con el
+    # orden que no garantiza la API) y todo issue termina siendo huérfano.
+    STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
     # ON: Stacky aplica el estado-en-progreso (al iniciar) y el estado-final
     # (al completar) desde client_profile.tracker_state_machine.<agent_type>,

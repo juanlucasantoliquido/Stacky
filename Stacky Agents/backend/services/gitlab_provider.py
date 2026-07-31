@@ -16,6 +16,7 @@ Fases implementadas:
 from __future__ import annotations
 
 import base64
+import logging
 import re
 import urllib.parse
 from typing import Optional
@@ -23,6 +24,11 @@ from typing import Optional
 from services.tracker_provider import TrackerItem, TrackerQuery, TrackerApiError, TrackerConfigError
 from services.gitlab_client import GitLabClient  # importado a nivel módulo para poder parchear en tests
 import config  # importado a nivel módulo para poder parchear en tests
+
+# Plan 277 F2 — el módulo NO tenía logger. Es la única infraestructura nueva que
+# agrega la fase: los avisos del contrato (multi-tipo, multi-padre, token
+# desconocido) tienen que ser visibles o el defecto vuelve a ser silencioso.
+logger = logging.getLogger(__name__)
 
 
 def _unknown_state_guard_enabled() -> bool:
@@ -74,7 +80,21 @@ class GitLabTrackerProvider:
     # ── Helpers internos ──────────────────────────────────────────────────────
 
     def _type_label(self, item_type: str) -> str:
-        return f"type::{item_type}"
+        """La etiqueta de tipo que se ESCRIBE en GitLab. Plan 277: sale del contrato.
+
+        Antes componía el item_type CRUDO (`type::User Story`, con espacio y
+        mayúsculas). Eso lo perdía el lector del migrador (`migrator_verify`, que
+        parseaba con `type::(\\w+)`) y no coincidía con el token canónico, así que
+        Stacky escribía una etiqueta que Stacky no sabía volver a leer.
+
+        Adelantado desde F3 porque el gate de F2-bis (un solo motor) exige que este
+        archivo no conserve NINGÚN literal de clasificación propio, y este era el
+        último. Es literal el diff 1 de F3; el comportamiento de los 4 call sites
+        vivos (`epic`, `issue`, `task`, `bug`) es idéntico: ya son tokens canónicos.
+        """
+        from services.gitlab_hierarchy import etiqueta_de_tipo   # import local: evita ciclo
+
+        return etiqueta_de_tipo(item_type)
 
     def _query_to_gitlab_params(self, q: TrackerQuery) -> dict:
         params: dict = {}
@@ -96,18 +116,17 @@ class GitLabTrackerProvider:
         assignees = body.get("assignees") or []
         assignee_names = [a.get("username") for a in assignees if a.get("username")]
         labels = body.get("labels") or []
-        # parent: si tiene epic_iid (GitLab Premium) o _link_parent_id inyectado
-        parent = body.get("epic", {}) or {}
-        parent_id = str(parent.get("iid") or parent.get("id") or "") or None
-        # Plan 276 F5.1 (P1-6) — el tipo sale de la label `type::<x>` que este
-        # mismo provider escribe al crear (`_type_label`). Sin esto el campo no se
-        # emitía, `api/tickets.py` clasificaba por `work_item_type == "epic"` y
-        # TODO caía en `orphans`: el grafo nunca mostraba una jerarquía.
-        tipo = "Issue"
-        for etiqueta in labels:
-            if isinstance(etiqueta, str) and etiqueta.lower().startswith("type::"):
-                tipo = etiqueta.split("::", 1)[1].strip().capitalize() or "Issue"
-                break
+        # Plan 277 F2 — la clasificación sale del CONTRATO, no de este archivo.
+        # Lo de antes tenía dos defectos medidos: (1) el `epic` de Premium NUNCA
+        # viene en CE ⇒ parent_id salía siempre None ⇒ todo caía en `orphans`
+        # (api/tickets.py:646-654); (2) "la primera etiqueta del array" es NO
+        # DETERMINISTA — el orden de `labels` que devuelve la API no está
+        # garantizado, así que dos corridas idénticas podían clasificar distinto.
+        from services.gitlab_hierarchy import clasificar_issue   # import local: evita ciclo
+
+        veredicto = clasificar_issue(body)
+        for aviso in veredicto["avisos"]:
+            logger.warning("Plan 277 contrato (issue iid=%s): %s", body.get("iid"), aviso)
         return {
             "id": str(body.get("id") or ""),
             "iid": str(body.get("iid") or ""),
@@ -118,8 +137,16 @@ class GitLabTrackerProvider:
             "assignees": assignee_names,
             "web_url": body.get("web_url") or "",
             "updated_at": body.get("updated_at") or "",
-            "work_item_type": tipo,
-            "parent": parent_id,
+            "work_item_type": veredicto["work_item_type"],
+            # CAMBIO DE TIPO DECLARADO (§3.2): `parent` pasa de str|None a int|None
+            # y sale SOLO de la etiqueta `epic::<iid>`. El `epic` nativo de Premium
+            # vive en el namespace del GRUPO y no machea contra Ticket.ado_id (que
+            # lleva el iid del PROYECTO): escribirlo acá producía un padre que nunca
+            # resolvía y tapaba la causa real. Se conserva aparte, para diagnóstico.
+            "parent": veredicto["parent_iid"],
+            "parent_native_epic_iid": veredicto["parent_native_epic_iid"],
+            "origen_tipo": veredicto["origen_tipo"],
+            "origen_padre": veredicto["origen_padre"],
         }
 
     def _state_map_for_gitlab(self) -> dict:

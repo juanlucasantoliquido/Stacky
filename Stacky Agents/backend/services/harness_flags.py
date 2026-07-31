@@ -539,6 +539,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_GITLAB_TLS_ADAPTER_ENABLED",     # Plan 276 F1/F2 — contexto OpenSSL genuino por conexión
         "STACKY_TRACKER_PROBE_STRICT_ENABLED",   # Plan 276 F4 — 4 sub-veredictos en vez de un nombre
         "STACKY_GITLAB_SYNC_ENABLED",            # Plan 276 F5 — sync GitLab → BD de Stacky
+        # Plan 277 — Jerarquía de GitLab con un solo contrato de tipo y padre
+        "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",  # Plan 277 F1/F2 — un solo motor de type::/epic::
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5517,6 +5519,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "escribió). Escribe en la BD de Stacky, NUNCA en el GitLab del operador, nunca borra "
             "(un issue que desaparece se marca cerrado) y es on-demand: sin polling ni sync de "
             "fondo. Con OFF vuelve la carencia declarada y el grafo queda vacío."
+        ),
+        group="global",
+    ),
+    # ── Plan 277 — Jerarquía de GitLab: un solo contrato de tipo y padre ──────
+    FlagSpec(
+        key="STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",
+        type="bool",
+        default=True,  # default ON (solo parsea etiquetas que ya vienen en el payload; no toca el GitLab del operador; curada en _CURATED_DEFAULTS_ON)
+        label="Contrato de tipo y padre de GitLab",
+        description=(
+            "Plan 277 — El tipo de cada issue sale de la etiqueta 'type::<tipo>' y su padre de "
+            "'epic::<iid>', con UNA sola normalización (services/gitlab_hierarchy.py) en vez de "
+            "los cuatro motores divergentes de hoy. Mata el no-determinismo de tomar 'el primer "
+            "label del array' (la API de GitLab no garantiza ese orden) y el motivo real de que "
+            "todo issue termine huérfano en el grafo. Solo lectura del payload que ya se bajó: "
+            "cero llamadas extra y cero escritura en el GitLab del operador. Con OFF vuelve la "
+            "lectura divergente de hoy."
         ),
         group="global",
     ),

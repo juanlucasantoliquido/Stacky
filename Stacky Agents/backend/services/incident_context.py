@@ -235,9 +235,16 @@ def fetch_epic_catalog(provider, limit: int = 50) -> list[dict]:
                 is_epic = fields.get("System.WorkItemType") == "Epic"
             else:
                 labels = it.get("labels") or []
-                # C6 — el label real que Stacky crea en GitLab es "type::epic"
-                # (gitlab_provider._type_label), por eso substring y no igualdad.
-                is_epic = any("epic" in str(lbl).lower() for lbl in labels)
+                # Plan 277 F2 — ANTES: `any("epic" in str(lbl).lower())`, substring
+                # de la palabra suelta. Con el contrato de este plan eso pasa a ser
+                # un BUG ACTIVO: la etiqueta de PADRE es `epic::<iid>` y va en los
+                # HIJOS, así que cada hijo matchearía y se contaría como épica acá
+                # (`fetch_epic_catalog`) y contaminaría `build_epic_catalog_block`.
+                # Ahora decide el contrato, que distingue la etiqueta que dice "soy
+                # una épica" de la que dice "cuelgo de la épica 42".
+                from services.gitlab_hierarchy import tipo_desde_labels
+
+                is_epic = tipo_desde_labels(labels) == "Epic"
             if not is_epic:
                 continue
             item_id = it.get("iid") or it.get("id")

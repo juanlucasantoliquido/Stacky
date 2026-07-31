@@ -42,6 +42,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: al apretar Sincronizar te avisa que este sistema de tickets todavía no se puede traer, y el tablero queda vacío.",
         example="Como bajar los mails al correo de tu computadora: aparecen los nuevos y no se borra ninguno de los viejos.",
     ),
+    # ── Plan 277 — Un solo modo de leer qué es cada ticket y de quién cuelga ──
+    "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED": PlainHelp(
+        what="Hace que Stacky lea de una sola manera qué es cada ticket de GitLab y de cuál otro ticket cuelga.",
+        on_effect="Si la activás: cada ticket que llega queda con su tipo bien puesto y colgado del ticket que corresponde, siempre igual, sin importar en qué orden vengan sus marcas de color.",
+        off_effect="Si la apagás: vuelve la lectura vieja, que elige el tipo según el orden en que llegan las marcas y deja a casi todos los tickets sin ninguno arriba.",
+        example="Como acordar que en todas las carpetas la solapa de color dice el tema y la pestaña con número dice de qué carpeta grande cuelga: se leen igual siempre, las ordene quien las ordene.",
+    ),
     # ── Plan 264 ──────────────────────────────────────────────────────────
     "STACKY_RUNTIME_CAPABILITIES_ENABLED": PlainHelp(
         what="Una sola tabla que dice qué modelos y qué niveles de esfuerzo acepta cada herramienta, y a qué degrada cada combinación.",

@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from services.tracker_provider import TrackerQuery
 
 _MARKER_RE = re.compile(r"<!--\s*stacky-migrated:ado:[\w:]+\s*-->")
-_TYPE_LABEL_RE = re.compile(r"type::(\w+)")
 
 
 @dataclass(frozen=True)
@@ -67,11 +66,15 @@ def verify_migration(plan, dest_provider, *, stacky_project: str, db) -> Verific
 
 
 def _infer_type_from_labels(labels: list[str]) -> str | None:
-    """Extrae el tipo del label type::X."""
-    for label in labels:
-        m = _TYPE_LABEL_RE.match(label.strip())
-        if m:
-            t = m.group(1)
-            # Capitalizar para coincidir con ADO
-            return t.capitalize() if t else None
-    return None
+    """Extrae el tipo de la etiqueta de tipo. Plan 277 F2: delega en el contrato.
+
+    Se conserva el NOMBRE y la FIRMA porque tiene llamador vivo (`:48`); lo único
+    que cambia es el cuerpo.
+
+    La regex propia perdía los tokens con espacio —exactamente los que
+    `gitlab_provider.create_item` escribía cuando el item_type traía uno— y
+    capitalizaba con una regla distinta de la del provider. Un solo motor.
+    """
+    from services.gitlab_hierarchy import tipo_desde_labels   # import local: evita ciclo
+
+    return tipo_desde_labels(labels)

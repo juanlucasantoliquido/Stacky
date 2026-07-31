@@ -10,6 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+# Plan 277 F2-bis — este módulo es el ESCRITOR legítimo de la etiqueta de tipo.
+# Escribirla a mano lo convertía en uno de los 4 motores divergentes; ahora la
+# compone el contrato. Import a nivel módulo: `gitlab_hierarchy` es puro (no toca
+# red, BD ni config) y no importa nada de `services`, así que no hay ciclo.
+from services.gitlab_hierarchy import etiqueta_de_tipo
+
 EpicStrategy = Literal["premium_native", "free_degrade"]
 
 
@@ -59,6 +65,8 @@ def _free_degrade_decision(reason: str) -> EpicDecision:
     return EpicDecision(
         strategy="free_degrade",
         item_type_for_create="issue",
-        extra_labels=("type::epic",),
+        # Plan 277 F2-bis: mismo valor de siempre ("type::epic"), compuesto por el
+        # contrato en vez de escrito a mano. Su test lo verifica por igualdad.
+        extra_labels=(etiqueta_de_tipo("Epic"),),
         reason=reason,
     )

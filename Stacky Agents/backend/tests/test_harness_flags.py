@@ -474,6 +474,12 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_GITLAB_TLS_ADAPTER_ENABLED",        # Plan 276 F1/F2 — corrige una conexión rota; solo lectura
     "STACKY_TRACKER_PROBE_STRICT_ENABLED",      # Plan 276 F4 — leer, calcular y mostrar
     "STACKY_GITLAB_SYNC_ENABLED",               # Plan 276 F5 — on-demand, escribe en la BD de Stacky
+    # ── Plan 277 — Jerarquía de GitLab con un solo contrato ─────────────────
+    # Nace ON: ninguna excepción aplica. (A) no hay loop, daemon ni llamada a
+    # modelo — solo parsea etiquetas que YA vinieron en el payload del sync que
+    # el operador disparó; (B) no escribe en el GitLab del operador (el veredicto
+    # se guarda en la BD de Stacky) ni le saca ninguna decisión.
+    "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",  # Plan 277 F1/F2 — un solo motor de type::/epic::
     "STACKY_RUNTIME_CAPABILITIES_ENABLED",      # Plan 264
     "STACKY_CODEX_EFFORT_PARITY_ENABLED",       # Plan 264
     "STACKY_RUN_SELECTION_PREFS_ENABLED",       # Plan 264

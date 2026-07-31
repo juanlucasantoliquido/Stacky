@@ -16,6 +16,8 @@ import type { PipelineProfileDto } from "../devops/pipelineProfileModel";
 import type { AuditReport } from "../devops/pipelineAuditModel";
 // Plan 256 — Artefactos apartados por el intake (contrato congelado del backend).
 import type { QuarantineItem } from "../incidents/quarantineModel";
+// Plan 277 F5 — el diff de etiquetas a publicar en GitLab (tipo del .ts puro).
+import type { PlanBackfill } from "../lib/jerarquiaLocal";
 export type { RawResponse, GatewayErrorBody };
 import type {
   CostBreakdownResponse,
@@ -320,6 +322,27 @@ export const Tickets = {
     payload: { work_item_type?: string | null; parent_iid?: number | null },
   ) =>
     api.patch<{ ok: boolean; ticket: Ticket }>(`/api/tickets/${id}/hierarchy`, payload),
+  /**
+   * Plan 277 F5 — el DIFF de qué etiquetas se agregarían en GitLab. READ-ONLY y sin
+   * flag: ver una comparación no necesita permiso. No escribe nada.
+   */
+  backfillPlan: (project?: string | null) =>
+    api.get<PlanBackfill>(
+      `/api/tickets/hierarchy/backfill/plan${project ? `?project=${encodeURIComponent(project)}` : ""}`,
+    ),
+  /**
+   * Plan 277 F5 — ESCRIBE en el GitLab del operador (un PUT aditivo por issue).
+   * `ado_ids` es explícito y obligatorio: no existe "todos". Lanza GatewayError con
+   * 403 cuando la flag de escritura está apagada — traducilo con `userFacingMessage`.
+   */
+  backfillApply: (project: string | null | undefined, ado_ids: number[]) =>
+    api.post<{
+      ok: boolean;
+      escritos: number;
+      omitidos: number;
+      fallidos: { ado_id: number; error: string }[];
+      pendientes: number[];
+    }>(`/api/tickets/hierarchy/backfill/apply`, { project: project ?? null, ado_ids }),
   /**
    * Cierre manual fallback de un ticket (Fase 4).
    * Envía X-Completion-Source: manual_ui para trazabilidad en SystemLogs.

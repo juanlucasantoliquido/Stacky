@@ -121,3 +121,125 @@ export function valorInicialPadre(ticket: TicketJerarquiaLocal | null | undefine
   const iid = ticket?.local_parent_iid;
   return iid == null ? "" : String(iid);
 }
+
+/* ── Plan 277 F5 — publicar la clasificación local COMO ETIQUETAS en GitLab ──
+ *
+ * Misma disciplina que arriba: acá vive lo verificable (qué se puede tocar, qué se
+ * preselecciona, qué dice el aviso) y en el componente queda solo el render. Lo que
+ * esta lógica protege es concreto: el botón de publicar dispara la ÚNICA escritura
+ * del plan en el sistema real del operador.
+ */
+
+/** La flag que gatea la ESCRITURA. Ver el diff no la necesita: es read-only. */
+export const FLAG_PUBLICAR_ETIQUETAS = "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED";
+
+export interface CambioBackfill {
+  ado_id: number;
+  iid: number;
+  title: string;
+  url: string;
+  agregar: string[];
+  ya_tiene: string[];
+  conflicto: boolean;
+  error?: string;
+}
+
+export interface PlanBackfill {
+  proyecto: string;
+  total: number;
+  cambios: CambioBackfill[];
+  con_conflicto: number;
+}
+
+/**
+ * ¿Este ítem del diff se puede publicar?
+ *
+ * Las DOS condiciones: que no esté en conflicto (GitLab ya dice otra cosa y manda) y
+ * que haya algo que agregar. La segunda es la que hace idempotente a la segunda
+ * corrida: un issue que ya tiene la etiqueta no vuelve a viajar.
+ *
+ * El servidor rechaza igual los dos casos: esto NO es la defensa, es no hacerle
+ * perder el viaje al operador ni ofrecerle un botón que no va a hacer nada.
+ */
+export function esPublicable(cambio: CambioBackfill | null | undefined): boolean {
+  if (!cambio || cambio.conflicto) return false;
+  return (cambio.agregar?.length ?? 0) > 0;
+}
+
+/** Preselección: todo lo publicable. Lo que está en conflicto NUNCA se preselecciona. */
+export function seleccionInicialBackfill(plan: PlanBackfill | null | undefined): number[] {
+  return (plan?.cambios ?? []).filter(esPublicable).map((c) => c.ado_id);
+}
+
+/** Marca/desmarca un ítem. Lo no publicable no entra ni aunque se lo pida. */
+export function alternarSeleccion(
+  seleccion: number[],
+  cambio: CambioBackfill,
+): number[] {
+  if (seleccion.includes(cambio.ado_id)) return seleccion.filter((x) => x !== cambio.ado_id);
+  if (!esPublicable(cambio)) return seleccion;
+  return [...seleccion, cambio.ado_id];
+}
+
+export interface EstadoBotonPublicar {
+  habilitado: boolean;
+  rotulo: string;
+  /** Por qué está deshabilitado. Vacío cuando se puede apretar. */
+  hint: string;
+}
+
+/**
+ * El estado del botón "Publicar etiquetas en GitLab".
+ *
+ * Con la flag apagada el botón se deshabilita y el aviso NOMBRA la flag y dónde
+ * encenderla: un control gris sin explicación manda al operador a leer código, que es
+ * el defecto que ya documentó este repo con los tabs que nacían apagados.
+ */
+export function estadoBotonPublicar(
+  flagOn: boolean,
+  seleccion: number[],
+  publicando = false,
+): EstadoBotonPublicar {
+  if (!flagOn) {
+    return {
+      habilitado: false,
+      rotulo: "Publicar etiquetas en GitLab",
+      hint:
+        `Está apagado. Encendé ${FLAG_PUBLICAR_ETIQUETAS} en el panel de flags del ` +
+        `arnés. Ver qué cambiaría no necesita esa flag: eso ya funciona.`,
+    };
+  }
+  if (publicando) {
+    return { habilitado: false, rotulo: "Publicando…", hint: "" };
+  }
+  if (seleccion.length === 0) {
+    return {
+      habilitado: false,
+      rotulo: "Publicar etiquetas en GitLab",
+      hint: "Elegí al menos un ticket. Nunca se publica todo por defecto.",
+    };
+  }
+  return {
+    habilitado: true,
+    rotulo: `Publicar etiquetas en GitLab (${seleccion.length})`,
+    hint: "",
+  };
+}
+
+/** Resumen del diff para el encabezado: qué se toca y qué no. */
+export function resumenBackfill(plan: PlanBackfill | null | undefined): {
+  total: number;
+  publicables: number;
+  conflictos: number;
+  sinCambios: number;
+} {
+  const cambios = plan?.cambios ?? [];
+  const publicables = cambios.filter(esPublicable).length;
+  const conflictos = cambios.filter((c) => c.conflicto).length;
+  return {
+    total: cambios.length,
+    publicables,
+    conflictos,
+    sinCambios: cambios.length - publicables - conflictos,
+  };
+}

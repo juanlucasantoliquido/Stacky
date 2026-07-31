@@ -1051,6 +1051,30 @@
           "sync-v2: ok=true created=53"
         ]
       }
+    },
+    {
+      "id": "flask-jsonify-circular-reference-hierarchy",
+      "title": "GET /api/tickets/hierarchy devuelve 500 y la pantalla del grafo queda en blanco",
+      "class": "json-serializacion-ciclo",
+      "status": "resolved",
+      "log_pattern": "ValueError: Circular reference detected",
+      "log_guarded": true,
+      "killed_by": "plan 277 (jerarquia de GitLab: un solo contrato de tipo y padre)",
+      "killed_commit": "0899db66",
+      "date_resolved": "2026-07-31",
+      "guard_test": "backend/tests/test_plan277_grafo_jerarquia.py::test_01_auto_padre_da_200_y_la_respuesta_es_serializable",
+      "evidence": "backend/api/tickets.py:759-792 (el armado del grafo) y :647-691 (_crea_ciclo, el corte); backend/api/tickets.py:629-644 (_clave: la identidad es (tracker_type, ado_id), no ado_id pelado)",
+      "note": "parent_ado_id == ado_id hace d['children'].append(d) al armar la jerarquia. EL DANO TIENE DOS FORMAS Y NO CONVIENE CONFUNDIRLAS (medido al implementar F6): (a) SIN colision de indice el nodo del ciclo queda colgado de si mismo y NO es alcanzable desde epics ni desde orphans, asi que jsonify nunca lo visita: NO hay 500 y el ticket DESAPARECE de la respuesta en silencio (un ciclo A<->B se lleva a los dos); (b) si ADEMAS colisiona el indice -el bug que arregla _clave, porque el iid de GitLab se repite entre proyectos y ADO y GitLab conviven en la misma bolsa- el MISMO dict puede estar en epics y contenerse a si mismo, y ahi si jsonify levanta el ValueError => 500 y la pantalla entera en blanco por UN dato. Las dos formas son alcanzables con una etiqueta epic:: escrita a mano en GitLab, asi que validar solo en el PATCH de clasificacion local no alcanza. REMEDIO: identidad compuesta (tracker_type, ado_id) + deteccion de ciclos acotada a 50 saltos; el ticket con ciclo cae en orphans con su motivo y se pierde el ENLACE, nunca la pantalla.",
+      "self_test": {
+        "matches": [
+          "TypeError/ValueError al serializar: ValueError: Circular reference detected",
+          "  File \"flask/json/provider.py\", line 180, in dumps\nValueError: Circular reference detected"
+        ],
+        "clean": [
+          "127.0.0.1 - - [31/Jul/2026 12:00:00] \"GET /api/tickets/hierarchy?project=RIPLEY HTTP/1.1\" 200 -",
+          "Plan 277: el ticket 41 (tracker=gitlab, ado_id=52) declara al padre 52 y esa cadena cierra un ciclo; se deja suelto para no tumbar el grafo."
+        ]
+      }
     }
   ]
 }

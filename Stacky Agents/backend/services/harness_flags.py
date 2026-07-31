@@ -543,6 +543,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",  # Plan 277 F1/F2 — un solo motor de type::/epic::
         "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",  # Plan 277 F4 — clasificacion local en la BD de Stacky
         "STACKY_GITLAB_SYNC_PARENTS_ENABLED",  # Plan 277 F6 — traer los padres ausentes del listado de abiertos
+        "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED",  # Plan 277 F5 — publicar etiquetas EN el GitLab del operador (OFF)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5574,6 +5575,31 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "quedan sueltos."
         ),
         group="global",
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED",
+        type="bool",
+        # SIN `default=`: el default EFECTIVO es el de config.py ("false"). Declararlo
+        # acá —aunque sea `default=False`— la haría `default_is_known` (el chequeo es
+        # literalmente `spec.default is not None`) y pondría roja a
+        # test_default_known_only_for_curated, que exige que el conjunto de flags con
+        # default declarado sea EXACTAMENTE _CURATED_DEFAULTS_ON. Mismo trato que su
+        # precedente STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED (:3588).
+        # default OFF — excepcion (B): PUT add_labels contra el GitLab del operador (gitlab_hierarchy_backfill.ejecutar_backfill)
+        label="Publicar las etiquetas de jerarquía en GitLab",
+        description=(
+            "Plan 277 — Publica en el GitLab de la empresa, como etiquetas reales, la "
+            "clasificación que el operador hizo dentro de Stacky: 'type::<tipo>' y "
+            "'epic::<iid>'. Es la ÚNICA ruta del plan que escribe en su sistema, sobre issues "
+            "que Stacky no creó, y por eso nace apagada. Solo AGREGA ('add_labels'): nunca "
+            "manda el juego completo de etiquetas —que lo reemplazaría y borraría las del "
+            "operador— ni quita ninguna; escribe SOLO los ítems que el operador eligió uno "
+            "por uno; corta ante el primer fallo sin reintentar; y un issue cuyo tipo remoto "
+            "difiere del local se marca en conflicto y NO se toca (manda GitLab). Con OFF, "
+            "ver el diff sigue funcionando: lo read-only no lleva flag."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
     ),
     # ── Plan 238 — Bandeja de incidencias abiertas dentro de Tickets ADO ──────
     FlagSpec(

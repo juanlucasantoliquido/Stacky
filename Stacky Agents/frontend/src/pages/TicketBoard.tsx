@@ -21,6 +21,7 @@ import EpicFromBriefModal from "../components/EpicFromBriefModal";
 import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
 // Plan 277 F4 — clasificación local de jerarquía (se auto-oculta fuera de GitLab).
 import JerarquiaLocalControl from "../components/JerarquiaLocalControl";
+import PublicarEtiquetasGitLab from "../components/PublicarEtiquetasGitLab";  // Plan 277 F5
 import LoadErrorState from "../components/LoadErrorState";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
@@ -1293,6 +1294,16 @@ export default function TicketBoard() {
             what="los tickets"
             error={ticketsError}
             onRetry={() => { void refetchTickets(); }}
+          />
+        )}
+        {/* Plan 277 F5 — publicar en GitLab las etiquetas de la clasificación local.
+            Vive al lado de las vistas de jerarquía porque es lo que publica JUSTO lo
+            que esas vistas muestran. Se auto-oculta si el proyecto no es GitLab. */}
+        {(viewMode === "tree" || viewMode === "graph") && (
+          <PublicarEtiquetasGitLab
+            projectName={activeProjectName}
+            trackerType={trackerType}
+            onPublicado={() => { void refetchHierarchy(); }}
           />
         )}
         {/* Vista jerárquica */}

@@ -247,6 +247,9 @@ HARNESS_TEST_FILES=(
   tests/test_plan277_write_path.py
   tests/test_plan277_clasificacion_local.py
   tests/test_plan277_grafo_jerarquia.py
+  tests/test_plan277_backfill_labels.py
+  # Gate de cierre de F8 (los DOS scripts; no son pytest: se corren a mano contra el
+  # backend vivo — scripts/smoke_plan277_jerarquia.ps1 y .sh).
   # — Plan 117 · Insights locales de ejecuciones (IA local) —
   tests/test_plan117_insights_flags.py
   tests/test_plan117_insights_core.py

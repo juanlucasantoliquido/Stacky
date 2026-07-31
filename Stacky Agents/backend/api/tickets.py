@@ -819,10 +819,24 @@ def _padre_efectivo(fila: Ticket) -> int | None:
 def _haria_ciclo(session, ticket: Ticket, parent_iid: int) -> bool:
     """¿Colgar `ticket` de `parent_iid` cierra un ciclo en la cadena de padres?
 
-    POR QUÉ NO ES TEÓRICO: en `get_hierarchy` (arriba), si un ticket es su propio
-    ancestro, `d["children"].append(d)` arma una AUTO-REFERENCIA y `jsonify` levanta
-    `ValueError: Circular reference detected` ⇒ **500** y la pantalla del grafo
-    entera en blanco. Un solo dato malo tumba la vista completa.
+    POR QUÉ NO ES TEÓRICO, y qué pasa EXACTAMENTE (medido al implementar F6; el texto
+    anterior de esta función prometía el 500 en los dos casos y era falso): en
+    `get_hierarchy` (arriba), si un ticket es su propio ancestro,
+    `d["children"].append(d)` arma una AUTO-REFERENCIA, y el daño tiene DOS formas:
+
+      - SIN colisión de índice —el auto-padre suelto y el ciclo A↔B— el nodo queda
+        colgado de sí mismo y por eso NO es alcanzable desde `epics` ni desde
+        `orphans`: `jsonify` nunca lo visita, la respuesta SERIALIZA BIEN y no hay
+        500. El ticket simplemente DESAPARECE de la respuesta, en silencio. Un ciclo
+        A↔B se lleva a los dos.
+      - Solo si ADEMÁS colisiona el índice (el bug que arregla `_clave`) el MISMO
+        dict puede estar en `epics` y contenerse a sí mismo: ahí sí `jsonify` levanta
+        `ValueError: Circular reference detected` ⇒ **500** y la pantalla del grafo
+        entera en blanco por UN dato.
+
+    Las dos formas son igual de graves para el operador —en la primera pierde el
+    ticket sin ningún error— y las dos se cortan acá. Ver `_crea_ciclo` (`:647`), que
+    es la misma defensa del lado de la lectura.
 
     El recorrido va acotado a `_MAX_SALTOS_JERARQUIA`; agotarlo cuenta como ciclo
     (una cadena de más de 50 niveles no es un caso legítimo y no vale colgar el
@@ -972,6 +986,87 @@ def set_local_hierarchy(ticket_id: int):
         payload = t.to_dict()     # echo-back: el control abre con lo que se guardó
 
     return jsonify({"ok": True, "ticket": payload}), 200
+
+
+# ── Plan 277 F5 — publicar la clasificación local COMO ETIQUETAS en GitLab ───
+
+_FLAG_BACKFILL_ETIQUETAS = "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED"
+
+
+@bp.get("/hierarchy/backfill/plan")
+def hierarchy_backfill_plan():
+    """Plan 277 F5 — el DIFF: qué etiquetas se le agregarían a qué issues.
+
+    READ-ONLY y SIN FLAG, a propósito: ver una comparación no puede necesitar permiso,
+    y obligar a encender el kill-switch de escritura para poder MIRAR forzaría al
+    operador a dejarlo prendido. Es la partición del precedente
+    `STACKY_PIPELINE_NL_EDIT_ENABLED` (ver el diff) / `..._COMMIT_ENABLED` (empujarlo).
+
+    200 {"proyecto","total","cambios":[...],"con_conflicto"}
+    502 {"ok": false, "error": "tracker_config", ...}  -> el proyecto no se pudo resolver
+    """
+    from services.gitlab_hierarchy_backfill import planificar_backfill
+
+    proyecto = _request_project_name()
+    try:
+        return jsonify(planificar_backfill(proyecto)), 200
+    except (ProjectContextError, TrackerConfigError) as exc:
+        return _error("tracker_config", str(exc), 502)
+
+
+@bp.post("/hierarchy/backfill/apply")
+def hierarchy_backfill_apply():
+    """Plan 277 F5 — ESCRIBE en el GitLab del operador. Gateado por la flag OFF.
+
+    Body: {"project": str, "ado_ids": [int]}
+      - `ado_ids` es OBLIGATORIO y explícito: no existe "todos". Una lista vacía no
+        toca nada (y no es un error: es el estado inicial de la pantalla).
+    Respuestas:
+      200 {"ok": true, "escritos", "omitidos", "fallidos", "pendientes"}
+      400 {"ok": false, "error": "validation", ...}
+      403 {"ok": false, "error": "flag_off", "flag": ..., "message": ...}
+      502 {"ok": false, "error": "tracker_config", ...}
+    """
+    if not bool(getattr(config.config, _FLAG_BACKFILL_ETIQUETAS, False)):
+        return jsonify({
+            "ok": False,
+            "error": "flag_off",
+            "flag": _FLAG_BACKFILL_ETIQUETAS,
+            "message": (
+                f"Publicar etiquetas en GitLab está apagado. Encendé "
+                f"{_FLAG_BACKFILL_ETIQUETAS} en el panel de flags del arnés. Ver qué "
+                f"cambiaría no necesita esta flag: eso ya funciona."
+            ),
+        }), 403
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _error("validation", "El cuerpo tiene que ser un objeto JSON.", 400)
+
+    crudos = body.get("ado_ids")
+    if not isinstance(crudos, list):
+        return _error(
+            "validation",
+            "'ado_ids' tiene que ser una lista de números de ticket. No hay forma de "
+            "pedir 'todos': cada ítem que se escribe en GitLab se elige a mano.",
+            400,
+        )
+    ado_ids = []
+    for crudo in crudos:
+        try:
+            ado_ids.append(int(str(crudo).strip()))
+        except (TypeError, ValueError):
+            return _error("validation", f"'ado_ids' trae un valor no numérico: {crudo!r}.", 400)
+
+    proyecto = body.get("project") or _request_project_name()
+
+    from services.gitlab_hierarchy_backfill import ejecutar_backfill
+
+    try:
+        resultado = ejecutar_backfill(proyecto, ado_ids)
+    except (ProjectContextError, TrackerConfigError) as exc:
+        return _error("tracker_config", str(exc), 502)
+    return jsonify({"ok": True, **resultado}), 200
 
 
 @bp.get("")

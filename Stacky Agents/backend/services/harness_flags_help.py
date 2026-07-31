@@ -61,6 +61,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: los tickets que cuelgan de uno ya cerrado siguen apareciendo sueltos, aunque la marca de quién los agrupa esté bien puesta.",
         example="Como ordenar una pila de hojas cuando la carpeta que las agrupa está guardada en el archivo: vas, la traés, y recién ahí cada hoja suelta encuentra su lugar.",
     ),
+    "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED": PlainHelp(
+        what="Deja publicar en el sistema de tickets de la empresa las marcas de tipo y de agrupación que pusiste dentro de Stacky.",
+        on_effect="Si la activás: se habilita el botón para publicarlas; primero ves la lista de qué se le agregaría a cada ticket, elegís cuáles y recién ahí se escribe. Solo AGREGA: lo que el ticket ya tenía queda intacto.",
+        off_effect="Si la apagás (viene apagada de fábrica): el botón queda deshabilitado y no se escribe nada en el sistema de la empresa; ver la lista de qué cambiaría sigue disponible.",
+        example="Como pegarle una etiqueta nueva a una carpeta del archivo compartido: ahora la ven todos, y las etiquetas que la carpeta ya tenía siguen en su lugar.",
+    ),
     # ── Plan 264 ──────────────────────────────────────────────────────────
     "STACKY_RUNTIME_CAPABILITIES_ENABLED": PlainHelp(
         what="Una sola tabla que dice qué modelos y qué niveles de esfuerzo acepta cada herramienta, y a qué degrada cada combinación.",

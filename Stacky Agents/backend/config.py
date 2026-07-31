@@ -1383,6 +1383,18 @@ class Config:
     STACKY_GITLAB_SYNC_PARENTS_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_SYNC_PARENTS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # Default OFF — EXCEPCIÓN (B): es la ÚNICA ruta del plan 277 que ESCRIBE en un
+    # sistema real del operador. Hace `PUT /projects/:id/issues/:iid` con `add_labels`
+    # contra el GitLab de la empresa, sobre issues que Stacky no creó
+    # (services/gitlab_hierarchy_backfill.py::ejecutar_backfill).
+    # ON: el operador puede publicar como etiquetas reales la clasificación que hizo
+    # dentro de Stacky, viendo antes el diff y eligiendo ítem por ítem.
+    # OFF (default): ver el diff sigue disponible —es read-only y no lleva flag—; lo
+    # único que no ocurre es la escritura. Misma partición ON/OFF que el precedente
+    # STACKY_PIPELINE_NL_EDIT_ENABLED / ..._COMMIT_ENABLED (config.py:1680-1690).
+    STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
     # ON: Stacky aplica el estado-en-progreso (al iniciar) y el estado-final
     # (al completar) desde client_profile.tracker_state_machine.<agent_type>,

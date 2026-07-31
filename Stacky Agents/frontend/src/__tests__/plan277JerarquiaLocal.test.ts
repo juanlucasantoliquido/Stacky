@@ -7,11 +7,19 @@
  */
 import { describe, it, expect } from "vitest";
 import {
+  FLAG_PUBLICAR_ETIQUETAS,
   TIPOS_CANONICOS_JERARQUIA,
+  alternarSeleccion,
   debeMostrarControlJerarquia,
+  esPublicable,
+  estadoBotonPublicar,
+  resumenBackfill,
   rotuloDeTipo,
+  seleccionInicialBackfill,
   validarPadre,
   valorInicialPadre,
+  type CambioBackfill,
+  type PlanBackfill,
 } from "../lib/jerarquiaLocal";
 
 const GITLAB = {
@@ -96,5 +104,75 @@ describe("Plan 277 F4 — catálogo de tipos y precarga", () => {
     // Precarga: el control abre con lo que el operador ya guardó (echo-back).
     expect(valorInicialPadre({ ...GITLAB, local_parent_iid: 42 })).toBe("42");
     expect(valorInicialPadre(GITLAB)).toBe("");
+  });
+});
+
+// ── Plan 277 F5 — publicar las etiquetas EN GitLab ──────────────────────────
+
+const _c = (over: Partial<CambioBackfill>): CambioBackfill => ({
+  ado_id: 1,
+  iid: 1,
+  title: "t",
+  url: "u",
+  agregar: [],
+  ya_tiene: [],
+  conflicto: false,
+  ...over,
+});
+
+const PLAN: PlanBackfill = {
+  proyecto: "RIPLEY",
+  total: 4,
+  cambios: [
+    _c({ ado_id: 10, iid: 10, agregar: ["type::epic"] }),                    // publicable
+    _c({ ado_id: 11, iid: 11, conflicto: true, ya_tiene: ["type::bug"] }),   // GitLab manda
+    _c({ ado_id: 12, iid: 12, agregar: [], ya_tiene: ["type::epic"] }),      // ya está
+    _c({ ado_id: 13, iid: 13, agregar: ["epic::10"] }),                      // publicable
+  ],
+  con_conflicto: 1,
+};
+
+describe("Plan 277 F5 — qué se puede publicar y qué no", () => {
+  it("caso 7: el conflicto y el 'ya está' no son publicables ni preseleccionables", () => {
+    // POSITIVO SEMBRADO: los dos que sí tienen algo que agregar pasan.
+    expect(esPublicable(PLAN.cambios[0])).toBe(true);
+    expect(esPublicable(PLAN.cambios[3])).toBe(true);
+
+    expect(esPublicable(PLAN.cambios[1])).toBe(false);  // conflicto: manda GitLab
+    expect(esPublicable(PLAN.cambios[2])).toBe(false);  // idempotencia: nada que agregar
+    expect(esPublicable(null)).toBe(false);
+
+    expect(seleccionInicialBackfill(PLAN)).toEqual([10, 13]);
+    expect(seleccionInicialBackfill(null)).toEqual([]);
+
+    // Marcar a mano lo que está en conflicto NO lo mete en la selección.
+    expect(alternarSeleccion([], PLAN.cambios[1])).toEqual([]);
+    expect(alternarSeleccion([], PLAN.cambios[0])).toEqual([10]);
+    expect(alternarSeleccion([10, 13], PLAN.cambios[0])).toEqual([13]);
+
+    expect(resumenBackfill(PLAN)).toEqual({
+      total: 4, publicables: 2, conflictos: 1, sinCambios: 1,
+    });
+  });
+
+  it("caso 8: con la flag apagada el botón queda deshabilitado y el aviso la nombra", () => {
+    const off = estadoBotonPublicar(false, [10]);
+    expect(off.habilitado).toBe(false);
+    expect(off.hint).toContain(FLAG_PUBLICAR_ETIQUETAS);
+    expect(FLAG_PUBLICAR_ETIQUETAS).toBe("STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED");
+
+    // Encendida pero sin nada elegido: tampoco se puede. "Nunca todos por defecto".
+    const vacio = estadoBotonPublicar(true, []);
+    expect(vacio.habilitado).toBe(false);
+    expect(vacio.hint).toContain("al menos un");
+
+    // Encendida y con selección: recién ahí se habilita, y dice cuántos.
+    const on = estadoBotonPublicar(true, [10, 13]);
+    expect(on.habilitado).toBe(true);
+    expect(on.rotulo).toContain("(2)");
+    expect(on.hint).toBe("");
+
+    // Mientras escribe no se puede volver a apretar (evita el doble envío).
+    expect(estadoBotonPublicar(true, [10], true).habilitado).toBe(false);
   });
 });

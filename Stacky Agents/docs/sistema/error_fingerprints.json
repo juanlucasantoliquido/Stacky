@@ -1035,7 +1035,7 @@
       "log_pattern": "(CERTIFICATE_VERIFY_FAILED|unable to get local issuer certificate)",
       "log_guarded": true,
       "killed_by": "plan 276 (GitLab self-hosted de punta a punta: TLS que coexiste, sync real y tickets en el grafo)",
-      "killed_commit": "PENDIENTE-COMMIT-PLAN-276",
+      "killed_commit": "5d7329f7",
       "date_resolved": "2026-07-31",
       "guard_test": "backend/tests/test_plan276_tls_context.py::test_el_bundle_llega_a_openssl_incluida_la_hoja",
       "evidence": "backend/app.py:24-28 (truststore.inject_into_ssl es global al proceso); truststore/_windows.py:366-371 (VERIFY_X509_PARTIAL_CHAIN NO se consulta) y :385-403 (busca los certs del verify= con get_ca_certs); backend/services/tls_openssl_context.py (el remedio)",

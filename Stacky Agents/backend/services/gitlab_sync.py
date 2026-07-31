@@ -41,6 +41,11 @@ logger = logging.getLogger(__name__)
 _TITULO_MAX = 500      # Ticket.title es String(500) y es NOT NULL
 _TRACKER = "gitlab"
 
+# Plan 277 F6 — tope duro de padres traídos de a uno en una corrida. No es "por si
+# acaso": son N requests contra el GitLab del operador y la cota es lo que impide
+# que un proyecto con etiquetas rotas dispare cientos.
+_TOPE_PADRES = 50
+
 
 # Plan 277 F4 — los 4 contadores de la clasificación local. Son ADITIVOS al dict de
 # retorno: `fetched/created/updated/removed/skipped` no cambian, así que el consumidor
@@ -74,6 +79,28 @@ def _clasificacion_local_habilitada() -> bool:
     return bool(
         getattr(config.config, "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED", True)
     )
+
+
+def _sync_parents_habilitado() -> bool:
+    """Plan 277 F6 — STACKY_GITLAB_SYNC_PARENTS_ENABLED (default True).
+
+    Mismo patrón que la flag de arriba: `config` es el MÓDULO y la instancia de
+    flags es `config.config`.
+    """
+    return bool(getattr(config.config, "STACKY_GITLAB_SYNC_PARENTS_ENABLED", True))
+
+
+def _padre_del_item(item: dict) -> Optional[int]:
+    """El padre que el contrato declara para este item, o None con la flag apagada.
+
+    UN SOLO LUGAR lee esta decisión: la usa el upsert (para escribir la columna) y
+    el bucle del sync (para juntar los padres referenciados). Dos lecturas separadas
+    divergirían en el primer cambio y F6 saldría a pedir padres que el upsert después
+    descarta.
+    """
+    if not bool(getattr(config.config, "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED", True)):
+        return None
+    return _a_int(item.get("parent"))
 
 
 def _sumar(contadores: Optional[dict], clave: str) -> None:
@@ -125,10 +152,7 @@ def _upsert_ticket_gitlab(
     # 276: sin padre por etiqueta. La flag gatea SOLO el padre y NUNCA el tipo,
     # porque `work_item_type` ya lo poblaba el plan 276 y apagarlo sería una
     # regresión, no un rollback.
-    if not bool(getattr(config.config, "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED", True)):
-        parent_ado_id = None
-    else:
-        parent_ado_id = _a_int(item.get("parent"))
+    parent_ado_id = _padre_del_item(item)
 
     # LA BÚSQUEDA VA POR LA TERNA. `tracker_type` y `stacky_project_name`
     # van en el WHERE, no solo en el INSERT: sin el primero, un proyecto
@@ -237,6 +261,11 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
 
     creados = actualizados = salteados = cerrados = 0
     vistos_external: set[int] = set()
+    # Plan 277 F6 — los iid que las etiquetas de padre nombraron durante el bucle.
+    # Se declara ACÁ (no adentro) porque el bloque que trae los faltantes corre
+    # después, y se puebla en la misma línea donde se calcula el padre del item.
+    parents_vistos: set[int] = set()
+    padres_traidos = padres_fallidos = padres_omitidos_por_tope = 0
     # Plan 277 F4 — los 4 contadores arrancan SIEMPRE en 0, incluso con la flag
     # apagada: el consumidor lee claves fijas y una clave que aparece y desaparece
     # es peor que una en cero.
@@ -261,6 +290,10 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
                 continue
 
             vistos_external.add(external_id)
+
+            parent_del_item = _padre_del_item(item)
+            if parent_del_item:
+                parents_vistos.add(parent_del_item)
 
             # Plan 277 F2 — el upsert vive en `_upsert_ticket_gitlab` para que F6
             # traiga los padres faltantes por el MISMO camino. Acá solo se cuenta
@@ -292,6 +325,69 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
                 fila.last_synced_at = datetime.utcnow()
                 cerrados += 1
 
+        # ── Plan 277 F6 — traer los padres que el listado de ABIERTOS no trajo ──
+        # La query es `state="open"`: una épica CERRADA no viene, así que sus hijos
+        # apuntan a un `parent_ado_id` que no está en la BD y el grafo los manda a
+        # `orphans`. Se piden UNO A UNO, y solo, los iid que las etiquetas nombraron
+        # y no llegaron.
+        #
+        # VA DESPUÉS del bloque de cerrados a propósito: un padre traído acá NO está
+        # en `vistos_external` (no vino en el listado), así que si corriera antes el
+        # bloque de arriba lo contaría como `removed` y le pisaría el estado.
+        #
+        # UNA SOLA PASADA, también a propósito: si el padre traído cuelga a su vez de
+        # otra épica ausente, esa NO se busca. Es una decisión —evita una recursión de
+        # N requests contra el sistema del operador—: el hijo queda colgando de su
+        # padre inmediato y el abuelo aparece como `padre_ausente_en_bd` en el motivo
+        # del huérfano, que es exactamente la señal que el operador necesita.
+        if _sync_parents_habilitado():
+            # `session_scope` usa `autoflush=False` (db.py:39): sin este flush la
+            # query de abajo NO ve lo que el bucle acaba de insertar con `add()` y
+            # el sync saldría a pedir padres que ya están en la base.
+            session.flush()
+            referenciados = {p for p in parents_vistos if p}
+            presentes = {
+                fila_id
+                for (fila_id,) in session.query(Ticket.ado_id).filter(
+                    Ticket.stacky_project_name == stacky_name,
+                    Ticket.tracker_type == _TRACKER,
+                )
+            }
+            faltantes_todos = sorted(referenciados - presentes)
+            faltantes = faltantes_todos[:_TOPE_PADRES]
+            padres_omitidos_por_tope = max(0, len(faltantes_todos) - _TOPE_PADRES)
+            # EL TOPE SE LOGUEA SIEMPRE QUE RECORTA, con el número real: una cota
+            # silenciosa se lee como "trajimos todos" cuando no fue así.
+            if padres_omitidos_por_tope:
+                logger.warning(
+                    "Plan 277: %d padres faltantes exceden el tope de %d; se traen los "
+                    "primeros %d y quedan %d sin traer.",
+                    len(faltantes_todos), _TOPE_PADRES, _TOPE_PADRES,
+                    padres_omitidos_por_tope,
+                )
+            ahora_padres = datetime.utcnow()
+            for iid in faltantes:
+                try:
+                    # `get_item` devuelve `_normalize_issue(body)` (gitlab_provider.py
+                    # :280-283): YA pasó por el contrato y trae work_item_type/parent,
+                    # el mismo shape que consume el bucle principal. Por eso el upsert
+                    # se reusa tal cual.
+                    body = provider.get_item(str(iid))
+                except Exception as exc:
+                    # Un padre roto NO tumba la corrida: se cuenta, se avisa y sigue.
+                    padres_fallidos += 1
+                    logger.warning(
+                        "Plan 277: no se pudo traer el padre iid=%s: %s", iid, exc
+                    )
+                    continue
+                # MISMO upsert que el bucle principal (F2 lo extrajo para esto). NO se
+                # copia el bloque: dos upserts divergentes es el bug que el plan cura.
+                _upsert_ticket_gitlab(
+                    session, body, ctx=ctx, ahora=ahora_padres,
+                    contadores=contadores_local,
+                )
+                padres_traidos += 1
+
     resultado = {
         "fetched": len(items),
         "created": creados,
@@ -301,6 +397,11 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
         "stacky_project_name": stacky_name,
         # Plan 277 F4 — ADITIVO: las 5 claves de arriba conservan su significado.
         **contadores_local,
+        # Plan 277 F6 — también ADITIVO. `padres_traidos` NO se suma a `created`:
+        # `created` sigue significando "issues abiertos del listado".
+        "padres_traidos": padres_traidos,
+        "padres_fallidos": padres_fallidos,
+        "padres_omitidos_por_tope": padres_omitidos_por_tope,
     }
     logger.info("Plan 276 sync GitLab '%s': %s", project_name, resultado)
     return resultado

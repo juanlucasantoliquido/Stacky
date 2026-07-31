@@ -55,6 +55,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el control desaparece, lo que ya habías marcado queda guardado pero deja de aplicarse, y si algo intenta guardarlo te avisa que esta opción está apagada.",
         example="Como ponerle una etiqueta tuya a una carpeta del archivo compartido: la ves vos y ordena tu vista, pero no le cambiás nada a la carpeta que usan los demás.",
     ),
+    "STACKY_GITLAB_SYNC_PARENTS_ENABLED": PlainHelp(
+        what="Al sincronizar, va a buscar de a uno los tickets de los que cuelgan otros y que no vinieron en la lista porque ya estaban cerrados.",
+        on_effect="Si la activás: al terminar de sincronizar, los tickets que colgaban de uno ya cerrado aparecen colgados donde corresponde. Pide como mucho 50 por vez y avisa si quedaron más afuera.",
+        off_effect="Si la apagás: los tickets que cuelgan de uno ya cerrado siguen apareciendo sueltos, aunque la marca de quién los agrupa esté bien puesta.",
+        example="Como ordenar una pila de hojas cuando la carpeta que las agrupa está guardada en el archivo: vas, la traés, y recién ahí cada hoja suelta encuentra su lugar.",
+    ),
     # ── Plan 264 ──────────────────────────────────────────────────────────
     "STACKY_RUNTIME_CAPABILITIES_ENABLED": PlainHelp(
         what="Una sola tabla que dice qué modelos y qué niveles de esfuerzo acepta cada herramienta, y a qué degrada cada combinación.",

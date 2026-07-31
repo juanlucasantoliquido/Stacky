@@ -485,6 +485,12 @@ _CURATED_DEFAULTS_ON = {
     # GitLab del operador, y lejos de sacarle una decisión ES su decisión, ítem
     # por ítem. Precedente idéntico: STACKY_GITLAB_SYNC_ENABLED.
     "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",  # Plan 277 F4 — clasificación local
+    # Plan 277 F6 — nace ON por el mismo criterio: (A) no hay loop, daemon ni
+    # llamada a modelo — es un GET acotado, con tope duro de 50, por los iid que
+    # las etiquetas YA nombraron, dentro del sync que el operador disparó; (B) es
+    # solo lectura sobre GitLab y escribe en la BD de Stacky, nunca en la del
+    # operador. Con OFF vuelve el comportamiento de hoy, no una regresión.
+    "STACKY_GITLAB_SYNC_PARENTS_ENABLED",  # Plan 277 F6 — traer los padres ausentes
     "STACKY_RUNTIME_CAPABILITIES_ENABLED",      # Plan 264
     "STACKY_CODEX_EFFORT_PARITY_ENABLED",       # Plan 264
     "STACKY_RUN_SELECTION_PREFS_ENABLED",       # Plan 264

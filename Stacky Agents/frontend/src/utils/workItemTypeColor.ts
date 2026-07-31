@@ -12,6 +12,23 @@ const WORK_ITEM_TYPE_COLORS: Record<string, string> = {
   task:    "#3B82F6", // azul — Task / User Story
   bug:     "#EF4444", // rojo — Bug
   feature: "#10B981", // verde — Feature
+  // Plan 277 — las 3 fases del contrato de jerarquía. Los tokens son ASCII sin
+  // acento (regla 1 del contrato); el ACENTO va solo en el rótulo visible.
+  funcional:      "#F59E0B", // ámbar — Análisis Funcional
+  tecnico:        "#06B6D4", // cian  — Análisis Técnico
+  implementacion: "#3B82F6", // azul  — Implementación (comparte familia con task, es su ejecución)
+};
+
+/**
+ * Plan 277 — Rótulo visible por tipo. El token que se guarda en la base es ASCII
+ * sin acento (lo exige el contrato de etiquetas); el acento vive solo acá, que es
+ * lo único que ve el operador.
+ */
+const WORK_ITEM_TYPE_LABELS: Record<string, string> = {
+  epic:           "Épica",
+  funcional:      "Análisis Funcional",
+  tecnico:        "Análisis Técnico",
+  implementacion: "Implementación",
 };
 
 /** Color por defecto cuando el tipo no está en el mapa. */
@@ -49,9 +66,14 @@ export function isIncidentWorkItemType(workItemType: string | null | undefined):
  * Etiqueta a mostrar en el badge de tipo. Las incidencias se prefijan con el
  * ícono para que el distintivo no dependa solo del color (daltonismo, temas de
  * alto contraste, capturas en blanco y negro).
+ *
+ * Plan 277 — se consulta WORK_ITEM_TYPE_LABELS ANTES de devolver el crudo, para
+ * que el operador lea "Análisis Técnico" y no el token `tecnico`. El prefijo de
+ * incidencia se conserva: sigue aplicándose sobre el rótulo que corresponda.
  */
 export function formatWorkItemTypeLabel(workItemType: string | null | undefined): string {
   const raw = (workItemType ?? "").trim();
   if (!raw) return "";
-  return isIncidentWorkItemType(raw) ? `${INCIDENT_ICON} ${raw}` : raw;
+  const label = WORK_ITEM_TYPE_LABELS[raw.toLowerCase()] ?? raw;
+  return isIncidentWorkItemType(raw) ? `${INCIDENT_ICON} ${label}` : label;
 }

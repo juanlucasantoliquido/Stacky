@@ -542,6 +542,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Plan 277 — Jerarquía de GitLab con un solo contrato de tipo y padre
         "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",  # Plan 277 F1/F2 — un solo motor de type::/epic::
         "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",  # Plan 277 F4 — clasificacion local en la BD de Stacky
+        "STACKY_GITLAB_SYNC_PARENTS_ENABLED",  # Plan 277 F6 — traer los padres ausentes del listado de abiertos
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5554,6 +5555,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "queda guardada igual (se cuenta como superseded, nunca se borra). Con OFF el control "
             "no se renderiza, el sync ignora esas columnas aunque tengan valor y la escritura "
             "responde 403 nombrando esta flag."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_SYNC_PARENTS_ENABLED",
+        type="bool",
+        default=True,  # default ON (un GET acotado y con tope duro por los padres que las etiquetas ya nombraron; escribe en la BD de Stacky y es on-demand; curada en _CURATED_DEFAULTS_ON)
+        label="Traer los padres que faltan al sincronizar GitLab",
+        description=(
+            "Plan 277 — El sync pide los issues ABIERTOS, así que una épica ya cerrada no viene "
+            "en el listado y todos sus hijos quedan sueltos en el grafo aunque su etiqueta de "
+            "padre sea correcta. Con esta flag, al terminar el sync se piden UNO A UNO —y solo— "
+            "los que las etiquetas nombraron y no llegaron, con tope duro de 50 por corrida y un "
+            "aviso cuando el tope recorta. Es solo lectura sobre GitLab, escribe en la BD de "
+            "Stacky, no hace polling ni barrido, y si un pedido falla se cuenta y la corrida "
+            "sigue. Con OFF vuelve el comportamiento de hoy: los hijos de una épica cerrada "
+            "quedan sueltos."
         ),
         group="global",
     ),

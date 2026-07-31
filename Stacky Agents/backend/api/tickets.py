@@ -612,6 +612,109 @@ def _check_finish_manifest_gate(execution_id: int | None) -> dict | None:
     }
 
 
+# ── Plan 277 F6 — el grafo no se cae, no miente y dice POR QUÉ ───────────────
+
+_TRACKER_POR_DEFECTO = "azure_devops"      # el default de Ticket.tracker_type (models.py)
+
+# Los 5 motivos por los que un ticket queda suelto. Son cuatro causas con cuatro
+# remedios DISTINTOS que hoy se ven todas igual ("no anda"); el operador no puede
+# decidir sin saber cuál es.
+MOTIVO_SIN_PADRE = "sin_padre_declarado"
+MOTIVO_AUTO_PADRE = "auto_padre"
+MOTIVO_CICLO = "ciclo"
+MOTIVO_PADRE_AUSENTE = "padre_ausente_en_bd"
+MOTIVO_PADRE_OTRO_TRACKER = "padre_de_otro_tracker"
+
+
+def _clave(tk) -> tuple:
+    """La identidad de un ticket en el grafo: `(tracker, ado_id)`, NUNCA `ado_id`.
+
+    `_ticket_project_filter` (`:348-355`) NO filtra por `tracker_type`: ADO y GitLab
+    conviven en la misma bolsa y sus ids son namespaces distintos (el iid de GitLab
+    se repite entre proyectos). Indexando por `ado_id` pelado, el 2º ticket PISA al
+    1º en el dict y en el loop de armado los dos resuelven al MISMO nodo: uno sale
+    DUPLICADO en la respuesta y el otro DESAPARECE del grafo.
+    """
+    return ((tk.tracker_type or _TRACKER_POR_DEFECTO).strip().lower(), tk.ado_id)
+
+
+def _clave_de_padre(tk) -> tuple:
+    """La clave del padre declarado. El padre se busca SIEMPRE dentro del mismo
+    tracker: un `parent_ado_id` de GitLab no puede resolver contra un id de ADO."""
+    return ((tk.tracker_type or _TRACKER_POR_DEFECTO).strip().lower(), tk.parent_ado_id)
+
+
+def _crea_ciclo(ticket, tickets, *, indice=None) -> bool:
+    """¿La cadena de padres de `ticket` vuelve sobre sí misma?
+
+    POR QUÉ NO ES TEÓRICO, y qué pasa EXACTAMENTE (medido, Plan 277 F6): si un
+    ticket es su propio ancestro, `get_hierarchy` arma `d["children"].append(d)`.
+    El daño tiene DOS formas y conviene no confundirlas:
+
+      - Sin la colisión de índice, el nodo del ciclo queda colgado de sí mismo y por
+        eso NO es alcanzable desde `epics` ni desde `orphans`: `jsonify` nunca lo
+        visita y no hay 500 — el ticket simplemente DESAPARECE de la respuesta, en
+        silencio. Un ciclo A↔B se lleva a los dos.
+      - Si además el índice colisiona (el bug que arregla `_clave`), el MISMO dict
+        puede estar en `epics` y contenerse a sí mismo: ahí sí `jsonify` levanta
+        `ValueError: Circular reference detected` ⇒ **500** y la pantalla del grafo
+        entera en blanco por UN dato.
+
+    Las dos formas son alcanzables con una etiqueta de padre escrita a mano en
+    GitLab, así que validar solo en el PATCH de F4 no alcanza.
+
+    Recorre por la CLAVE COMPUESTA (mismo motivo que `_clave`) con un `set` de
+    visitados y un tope duro de `_MAX_SALTOS_JERARQUIA` saltos; agotar el tope
+    cuenta como ciclo (una cadena de más de 50 niveles no es un caso legítimo y no
+    vale colgar el request para averiguarlo).
+
+    `indice` es el mapa `clave -> Ticket` ya construido por el llamador. Es opcional
+    para que la función sea invocable con la lista sola, pero el endpoint lo pasa:
+    reconstruirlo en cada llamada haría el armado del grafo O(n²).
+    """
+    if indice is None:
+        indice = {_clave(tk): tk for tk in tickets}
+    tracker = (ticket.tracker_type or _TRACKER_POR_DEFECTO).strip().lower()
+    visitados = {_clave(ticket)}
+    actual = ticket.parent_ado_id
+    for _ in range(_MAX_SALTOS_JERARQUIA):
+        if not actual:
+            return False
+        clave = (tracker, actual)
+        if clave in visitados:
+            return True
+        visitados.add(clave)
+        arriba = indice.get(clave)
+        if arriba is None:
+            return False        # el padre no está en la BD: no hay cadena que cerrar
+        actual = arriba.parent_ado_id
+    return True
+
+
+def _motivo_huerfano(
+    ticket, indice, *, hay_ciclo: bool = False, ado_ids_presentes=None
+) -> str:
+    """Por qué este ticket quedó suelto. Función PURA sobre datos que el endpoint ya
+    tiene en la mano: cero queries, cero requests, cero llamadas a modelo.
+
+    Orden de evaluación (los dos últimos NO son intercambiables: `padre_ausente_en_bd`
+    es "el id del padre no existe bajo NINGÚN tracker", y solo si existe bajo otro se
+    devuelve `padre_de_otro_tracker` — al revés, el segundo sería inalcanzable).
+    """
+    padre = ticket.parent_ado_id
+    if not padre:
+        return MOTIVO_SIN_PADRE
+    if padre == ticket.ado_id:
+        return MOTIVO_AUTO_PADRE
+    if hay_ciclo:
+        return MOTIVO_CICLO
+    if ado_ids_presentes is None:
+        ado_ids_presentes = {ado for (_tracker, ado) in indice}
+    if padre not in ado_ids_presentes:
+        return MOTIVO_PADRE_AUSENTE
+    return MOTIVO_PADRE_OTRO_TRACKER
+
+
 @bp.get("/hierarchy")
 def get_hierarchy():
     """Devuelve todos los tickets organizados en jerarquía Epic → hijos.
@@ -619,10 +722,15 @@ def get_hierarchy():
     Response:
       {
         "epics": [ { ...ticket, "children": [ {...ticket}, ... ] } ],
-        "orphans": [ {...ticket} ]    // tickets sin parent o cuyo parent no está en BD
+        "orphans": [ {...ticket, "motivo_huerfano": str} ]
       }
 
     Incluye pipeline_summary (solo BD local, sin LLM) para cada ticket.
+
+    Plan 277 F6 — `motivo_huerfano` viaja SOLO en los huérfanos, como clave aditiva:
+    ningún consumidor actual se rompe (nadie la lee todavía) y un ticket que sí
+    cuelga de su épica no la trae, para que el motivo sea del huérfano y no ruido en
+    todos lados.
     """
     project_filter = _ticket_project_filter(_request_project_name())
     with session_scope() as session:
@@ -631,27 +739,57 @@ def get_hierarchy():
             q = q.filter(project_filter)
         all_tickets = q.order_by(Ticket.ado_id).all()
 
-        ado_id_to_ticket: dict[int, dict] = {}
+        # Plan 277 F6 — la clave es `(tracker, ado_id)`, NO `ado_id` solo (ver `_clave`).
+        ado_id_to_ticket: dict[tuple, dict] = {}
+        por_clave: dict[tuple, Ticket] = {}
         for t in all_tickets:
             d = t.to_dict()
             d["pipeline_summary"] = get_pipeline_summary(t.id)
             d["children"] = []
-            ado_id_to_ticket[t.ado_id] = d
+            ado_id_to_ticket[_clave(t)] = d
+            por_clave[_clave(t)] = t
+
+        # Los ado_id presentes en CUALQUIER tracker. Es lo que distingue "el padre no
+        # está en la base" de "el padre está, pero es de otro tracker" en el motivo.
+        ado_ids_presentes = {ado for (_tracker, ado) in ado_id_to_ticket}
 
         epics: list[dict] = []
         orphans: list[dict] = []
 
         for t in all_tickets:
-            d = ado_id_to_ticket[t.ado_id]
+            d = ado_id_to_ticket[_clave(t)]
             wi_type = (t.work_item_type or "").lower()
+            clave_padre = _clave_de_padre(t)
 
             if wi_type == "epic":
                 epics.append(d)
-            elif t.parent_ado_id and t.parent_ado_id in ado_id_to_ticket:
-                # tiene parent en BD → agregar como hijo
-                ado_id_to_ticket[t.parent_ado_id]["children"].append(d)
-            else:
-                orphans.append(d)
+                continue
+
+            hay_ciclo = False
+            if (
+                t.parent_ado_id
+                and t.parent_ado_id != t.ado_id
+                and clave_padre in ado_id_to_ticket
+            ):
+                hay_ciclo = _crea_ciclo(t, all_tickets, indice=por_clave)
+                if not hay_ciclo:
+                    # tiene parent en BD, en el MISMO tracker y sin ciclo → es hijo
+                    ado_id_to_ticket[clave_padre]["children"].append(d)
+                    continue
+                # Se pierde el ENLACE, nunca la pantalla: el ticket cae en orphans.
+                logger.warning(
+                    "Plan 277: el ticket %s (tracker=%s, ado_id=%s) declara al padre %s "
+                    "y esa cadena cierra un ciclo; se deja suelto para no tumbar el grafo.",
+                    t.id, t.tracker_type, t.ado_id, t.parent_ado_id,
+                )
+
+            d["motivo_huerfano"] = _motivo_huerfano(
+                t,
+                ado_id_to_ticket,
+                hay_ciclo=hay_ciclo,
+                ado_ids_presentes=ado_ids_presentes,
+            )
+            orphans.append(d)
 
         return jsonify({"epics": epics, "orphans": orphans})
 

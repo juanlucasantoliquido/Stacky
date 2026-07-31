@@ -1374,6 +1374,15 @@ class Config:
     STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ON: después de traer los issues abiertos, el sync pide UNO A UNO los padres
+    # que las etiquetas nombraron y no vinieron en el listado (típicamente épicas
+    # ya cerradas), con tope duro de ítems. Solo lectura sobre GitLab, escribe en
+    # la BD de Stacky y va dentro del sync que el operador ya disparó.
+    # OFF: los hijos de una épica cerrada quedan sueltos en el grafo — que es el
+    # comportamiento de hoy, no una regresión.
+    STACKY_GITLAB_SYNC_PARENTS_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_SYNC_PARENTS_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
     # ON: Stacky aplica el estado-en-progreso (al iniciar) y el estado-final
     # (al completar) desde client_profile.tracker_state_machine.<agent_type>,

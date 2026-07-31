@@ -47,8 +47,22 @@ _BACKEND = Path(__file__).resolve().parent.parent
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-_BASE_API = "http://localhost:5000"
 _TIMEOUT = 120
+
+
+def _base_api_por_defecto() -> str:
+    """El puerto sale de la CONFIG, no de un literal.
+
+    El plan hardcodeaba `localhost:5000`; el valor real de esta instalación es
+    `config.PORT` (medido: 5050). Un smoke que apunta al puerto equivocado da un
+    rojo FALSO — y un gate que da rojos falsos se termina desactivando.
+    """
+    try:
+        from config import config
+
+        return f"http://localhost:{getattr(config, 'PORT', 5000)}"
+    except Exception:  # noqa: BLE001
+        return "http://localhost:5000"
 
 
 def _http(metodo: str, url: str, cuerpo: dict | None = None) -> tuple[int, dict]:
@@ -171,7 +185,8 @@ def correr(proyecto: str | None, base_api: str) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Gate de visibilidad del Plan 276")
     ap.add_argument("--project", default=None, help="nombre del proyecto Stacky")
-    ap.add_argument("--base-api", default=_BASE_API, help="URL del backend de Stacky")
+    ap.add_argument("--base-api", default=_base_api_por_defecto(),
+                    help="URL del backend de Stacky (default: config.PORT)")
     args = ap.parse_args()
     return correr(args.project, args.base_api.rstrip("/"))
 
